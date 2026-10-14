@@ -35,8 +35,8 @@ export const TERMS_SECTIONS: LegalSection[] = [
     id: "what-it-is", heading: "What Burnticker is",
     paragraphs: [
       "Burnticker is a launchpad for Solana memecoins whose coins burn on public results. Each coin has one locked rule. When a result settles that rule, the coin's own trading fees buy it back on its own pool, and a program burns what they bought.",
-      "The platform never trades, never takes an order and never pays anything to anyone. It holds no coins and no money for anyone.",
-      "Coins trade on Raydium, an outside Solana trading service. This site links to it and has no control over it.",
+      "The platform never trades, never takes an order and never pays anything to a coin's holders. It holds no coins and no money for anyone. The only money it sends to people is the bounty for a security report, paid from the bounty wallet.",
+      "Coins trade on Raydium, an outside Solana trading service. This site links to it, and a coin page's swap panel builds a swap that your own wallet signs and sends straight to the coin's Raydium curve or pool. This site has no control over Raydium.",
     ],
   },
   {

@@ -2,7 +2,7 @@ import { withoutDenials } from "@/lib/burnticker/denials";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 import { LIVE_NOW, gameSeries, isPairOutcome, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
@@ -345,7 +345,7 @@ export function upfrontLines(raises: readonly string[]): string[] {
     "Creators earn no fee revenue. The creator's share of the fees goes to the coin's own burn pool.",
     `Nothing burns until the coin graduates: buyers on its curve have to put in the raise you pick, ${list}, and then its pool is registered. A result that comes first is recorded and waits.`,
     `For now a burn pool spends from at most ${PRE_AUDIT_CAP_SOL_TEXT} SOL. Only the platform's multisig can raise that cap, after a public 48-hour wait, and SOL above it stays in the coin's pool.`,
-    "When the rule ends, whatever is left goes to $DEFICIT's burn, or to the rival coin for a linked pair.",
+    `When the rule ends on a result, whatever is left goes to $DEFICIT's burn, or to the rival coin for a linked pair. ${CHAMPION_EXPLAINER_LINE}`,
     "Creating a coin costs a small amount of SOL from your wallet. The review shows the estimate before you sign.",
   ];
 }

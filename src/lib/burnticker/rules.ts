@@ -680,6 +680,12 @@ export function winnerTakesBurnText(r: Pick<BurnRule, "pair" | "market">): strin
 }
 
 /** The onEnd clause in words ("" without one); `endDate` names the day the rule ends when it is known (a one-shot's settlement date). */
+/**
+ * Walkthrough 13: the champion path's series in the statement, without importing the sports source into this module (the SDK's closure
+ * keeps rules.ts free of src/lib/burnticker/sources and config). A team's WINS over a whole season in a league whose schedule can tell a
+ * champion (espn.ts CHAMPION_KNOWN: MLB, the NBA, the NHL, the NFL); test/burntickerWalkthrough13.test.ts pins it to espn.ts championSeries.
+ */
+export const CHAMPION_SERIES_RE = /^espn\.team:(mlb|nba|nhl|nfl)-[A-Z0-9]{2,6}\.\d{1,7}-win-s\d{4}$/;
 export function onEndText(r: Pick<BurnRule, "onEnd" | "set" | "pair" | "kind" | "binary" | "scalar">, endDate: string | null = null): string {
   if (!r.onEnd) return "";
   const sink = endSinkOf(r);
@@ -687,6 +693,11 @@ export function onEndText(r: Pick<BurnRule, "onEnd" | "set" | "pair" | "kind" | 
     const weeks0 = r.onEnd.windDownDays % 7 === 0 ? `${r.onEnd.windDownDays / 7 === 4 ? "four" : r.onEnd.windDownDays / 7} weeks` : `${r.onEnd.windDownDays} days`;
     const where = sink === "pair-winner" ? "the winning coin's burn pool when the partner coin won the last result and is still live, and $DEFICIT's burn pool otherwise" : sink === "mint" ? `$${r.onEnd.ticker}'s burn pool (coin ${r.onEnd.mint}) when that coin is live then, and $DEFICIT's burn pool otherwise` : "$DEFICIT's burn pool (the platform's flagship coin)";
     if (sink === "incinerator") return ` When the rule ends with a result${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}, whatever SOL is left in the burn pool is sent to Solana's incinerator (${INCINERATOR_ADDRESS}), which nothing can spend from, and so is any fee income that arrives after that; no coin is swapped for it, nothing is refunded and nobody is paid. When the rule ends void (a voided market or a cancelled season), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
+    // walkthrough 13: the champion path (describe.ts championPathRule, endSinkKeeper championVerdict) is in the statement too; the coin's
+    // description said it and the keeper does it, but the locked rule's statement sent every result end to the sink
+    const full = r as Partial<BurnRule>;
+    const champion = (sink === "flagship" || sink === "mint") && full.oracle === "catalogue" && !full.inverse && !full.set && CHAMPION_SERIES_RE.test(full.series ?? "");
+    if (champion) return ` When the season ends and the team won the championship (its last game is a win this coin burned on), whatever is left in the burn pool burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires. When the rule ends with any other result, whatever is left in the burn pool moves to ${where} and burns that coin, and so does any fee income that arrives after that; nothing is refunded and nobody is paid. When the rule ends void (a voided market, a voided pair or a cancelled season), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
     return ` When the rule ends with a result${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}, whatever is left in the burn pool moves to ${where} and burns that coin, and so does any fee income that arrives after that; nothing is refunded and nobody is paid. When the rule ends void (a voided market, a voided pair or a cancelled season), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
   }
   const lg = r.set && r.set.forwardBps > 0 ? ` and ${Math.round(r.set.forwardBps) / 100}% of the leftover burns the winning coin of set ${r.set.id} once the program's forward_to_winner instruction is live (queued, not deployed); when it is not — or there is no winning coin, or it is not graduated — all of it stays here`: "";

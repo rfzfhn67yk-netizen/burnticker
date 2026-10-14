@@ -77,7 +77,7 @@ export function raceFromEvent(e: GammaEvent, refuse: (titles: string[]) => strin
   return {
     slug: e.slug, title: e.title.replace(/\s+/g, " ").trim(), url: `https://polymarket.com/event/${e.slug}`, ...base, settlesOn: e.endDate ? e.endDate.slice(0, 10) : null, description: e.description,
     outcomes, hiddenPlaceholders: live.length - shown.length, sos: ref,
-    settlement: `Polymarket's on-chain payout, checked against ${c.state && ref !== sosFor(null) ? `the ${st} Secretary of State's certified results` : `${st ? `${st}'s ` : ""}certified results from the state election office`}`,
+    settlement: `Polymarket's on-chain payout, checked against ${c.state && ref !== sosFor(null) ? `the ${st} Secretary of State's certified results` : st ? `${st}'s certified results from the state election office` : "each state's certified results from its election office"}`,
     refused: refuse([e.title, ...shown.map((m) => m.question)]),
   };
 }
@@ -102,6 +102,8 @@ export function outcomeSettlesNote(r: Race, o: RaceOutcome): string {
 export function candidateMappingLine(r: Pick<Race, "type" | "stateName" | "district" | "state">, o: Pick<RaceOutcome, "label" | "question" | "partyMarket">, ticker: string | null = null): string {
   const who = o.label.replace(/\s*\([A-Z]\)$/, "").trim(), coin = ticker ? `$${ticker}` : "This coin";
   const party = /Democrat/i.test(o.question) ? "Democratic" : /Republican/i.test(o.question) ? "Republican" : null;
+  // walkthrough 13: a party-control outcome is labelled with the party itself ("Democratic Party"): there is no nominee to follow
+  if (o.partyMarket && party && /\bparty$/i.test(who)) return `${coin} settles on the ${party} Party's market for the ${raceNoun(r)} (“${o.question}”). It burns if that market settles YES.`;
   if (o.partyMarket && party) return `${coin} is named for ${who}, but it settles on the ${party} Party's market for the ${raceNoun(r)} (“${o.question}”). If the party replaces ${who} as its nominee, the coin follows the new nominee.`;
   return `${coin} settles on ${who}'s own market (“${o.question}”). If ${who} does not win, withdraws or is replaced, that market settles NO and the coin burns nothing.`;
 }

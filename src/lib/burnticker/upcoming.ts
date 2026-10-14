@@ -1,4 +1,5 @@
 import { shortDay } from "@/lib/burnticker/cardView";
+import { sourcePublisher } from "@/lib/burnticker/coinSourceLine";
 
 /**
  * NEXT RESULTS (website-14, ChatGPT product idea 3; page /burnticker/upcoming and a strip on the home page). For each coin this site
@@ -80,8 +81,8 @@ export function upcomingNotice(u: UpcomingSet | null | undefined, listed = 0): s
 }
 const tickers = (o: readonly UpcomingOmitted[]) => { const t = o.map((x) => `$${x.ticker}`); return t.length <= 1 ? (t[0] ?? "a coin") : `${t.slice(0, -1).join(", ")} and ${t[t.length - 1]}`; };
 
-/** Words for a source, by oracle id. The event-contract venue is described, never named. */
-const SOURCE: Record<string, string> = { kalshi: "A prediction market's settled result", polymarket: "Polymarket's settled result, read on Polygon", catalogue: "The source's own published data" };
+/** Words for a source: the publisher by name (walkthrough 13: never "the source's own published data"; coinSourceLine.ts sourcePublisher). */
+const sourceWords = (oracle: string, selectorKey: string): string => sourcePublisher(oracle, selectorKey);
 
 interface StatusLike {
   ticker: string; name: string; cluster: string; status: string; oracle: string; selectorKey: string; seriesTitle: string | null;
@@ -115,13 +116,14 @@ export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike
   const st = settlementOf(receipts, s.cluster);
   const close = s.next.nextCloseTime, check = s.next.nextCheckAt;
   const schedule = close ? `The market is scheduled to close at ${hhmmUtc(close)}. The result counts once the source settles it, on the source's own timing.`
-    : check ? `This site next checks the source at ${hhmmUtc(check)}. The source publishes on its own schedule.`
+    // walkthrough 13: the check time is said once, in Denver time, by the list (NextResults.tsx), not here in UTC as well
+    : check ? "The source publishes on its own schedule, and this site reads it again at the next check."
     : "This rule has no scheduled result that this site knows of.";
   const latestSrc = [...receipts].reverse().find((r) => r.settlementSourceUrl)?.settlementSourceUrl ?? null;
   return {
     ticker: s.ticker, name: s.name, href: `/burnticker/t/${encodeURIComponent(key)}`, network: s.cluster === "devnet" ? "devnet" : "mainnet", mint,
     event: s.next.nextMarket ? `${s.seriesTitle ?? s.profile?.oneLiner ?? s.selectorKey}, market ${s.next.nextMarket}` : s.seriesTitle ?? s.profile?.oneLiner ?? s.selectorKey,
-    source: SOURCE[s.oracle] ?? "The source named in the rule", sourceUrl: latestSrc, schedule, nextAt: close ?? check, status: st.status, statusText: st.text, receiptHref: st.receiptHref,
+    source: sourceWords(s.oracle, s.selectorKey), sourceUrl: latestSrc, schedule, nextAt: close ?? check, status: st.status, statusText: st.text, receiptHref: st.receiptHref,
   };
 }
 

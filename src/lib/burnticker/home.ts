@@ -127,7 +127,7 @@ const REHEARSAL_UNREAD = "This site could not read $REHEARSAL's pool just now.";
 /** A curve with no raise read: "— raised", and the reason. Never a typed 85 (LAUNCHPAD-PATH §75). */
 const noCurve = (why: string): CardView["curve"] => ({ raised: null, of: null, pct: null, done: false, why });
 /** The keeper's status.json, when it is the live schema. */
-type KeeperStatus = { schema?: string; burned?: { total: string; pctOfSupply: number; count: number }; curve?: { phase: "curve" | "migrating" | "graduated"; raised: string; threshold: string; quote: string; progressPct: number } | null; readiness?: Readiness; addresses?: { mint: string | null } };
+type KeeperStatus = { schema?: string; burned?: { total: string; pctOfSupply: number; count: number }; curve?: { phase: "curve" | "migrating" | "graduated"; raised: string; threshold: string; quote: string; progressPct: number; marketCap?: string | null } | null; readiness?: Readiness; addresses?: { mint: string | null } };
 const keeperLive = (k: KeeperFiles | null): KeeperStatus | null => { const s = k?.status as KeeperStatus | null | undefined; return s && s.schema === "burnkeeper.status/v1" ? s : null; };
 
 export function featuredCoins(root = process.cwd(), samples: SampleList | null = null, coins: readonly HomeCoin[] | null = [], keeper: KeeperFiles | null = null, now = Date.now(), rehearsalCurve: RehearsalCurve = null): CardView[] {
@@ -168,9 +168,13 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       : readable ? curveCell({ phase: live!.phase ?? null, progressPct: live!.progressPct ?? null, raised: live!.raised, threshold: live!.threshold, quote: live!.quote }, null)
       : kc ? curveCell({ phase: kc.phase, progressPct: kc.progressPct, raised: kc.raised, threshold: kc.threshold, quote: kc.quote }, null)
       : noCurve(ks ? "The keeper's files do not carry a curve reading yet." : unreadWhy),
-    mcap: !created ? cell(null, "The coin is not created yet.") : readable && live!.marketCap ? cell(mcapText(live!.marketCap, live!.quote, live!.phase ?? null), CARD_MEANINGS.mcap) : cell(null, readable ? (live!.phase === "graduated" ? NOT_READ.mcapPool : NOT_READ.mcapNotRead) : ks ? NOT_READ.mcapNotRead : unreadWhy),
+    // walkthrough 13: before $DEFICIT is registered here, its keeper's curve reading carries the market cap (the coin page showed it, the card did not)
+    mcap: !created ? cell(null, "The coin is not created yet.") : readable && live!.marketCap ? cell(mcapText(live!.marketCap, live!.quote, live!.phase ?? null), CARD_MEANINGS.mcap)
+      : !readable && kc?.marketCap ? cell(mcapText(kc.marketCap, kc.quote, kc.phase), CARD_MEANINGS.mcap) : cell(null, readable ? (live!.phase === "graduated" ? NOT_READ.mcapPool : NOT_READ.mcapNotRead) : ks ? NOT_READ.mcapNotRead : unreadWhy),
     holders: !created ? cell(null, "The coin is not created yet.") : readable && typeof live!.holders === "number" ? cell(groupDigits(live!.holders), null) : cell(null, NOT_READ.holders),
-    createdAt: readable ? live!.launchedAt ?? null : null, createdWhy: created ? (readable ? null : ks ? "The keeper's files do not give a creation time." : unreadWhy) : "The coin is not created yet.",
+    // walkthrough 13: the create date is in config/burnticker/current-status.json (deficit.launch.date) even before the registry has the coin
+    createdAt: readable ? live!.launchedAt ?? null : created ? d.launch.date ?? null : null,
+    createdWhy: created ? (readable || d.launch.date ? null : ks ? "The keeper's files do not give a creation time." : unreadWhy) : "The coin is not created yet.",
     burned,
     mint: deficit?.address ? { address: deficit.address, label: created ? "Mint address" : "Reserved mint address (coin not created yet)" } : null,
     // review 2 §2: one served $DEFICIT destination — its own site until the coin is created and registered here

@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
-import { CARD_LABELS, CARD_MEANINGS, CARD_ROWS, NOT_READ, ageText, cardViewFromIndex, groupDigits, initialsOf, longDay, pctOfSupply, shortDay, type CardView } from "@/lib/burnticker/cardView";
+import { CARD_LABELS, CARD_MEANINGS, CARD_ROWS, NOT_READ, NEXT_WHEN_PUBLISHED, nextCheckWhy, ageText, cardViewFromIndex, groupDigits, initialsOf, longDay, pctOfSupply, shortDay, type CardView } from "@/lib/burnticker/cardView";
 import { activityEvents, featuredCoins, homeData, homeStats, homeStatusLine, memoBurn, NO_EVENTS_LINE, UNAVAILABLE, type HomeCoin } from "@/lib/burnticker/home";
 import { checkReceiptHref } from "@/lib/burnticker/coinPage";
 import os from "node:os";
@@ -48,7 +48,7 @@ describe("one card order (review item 5, brief rule 10; website-13: Claude site 
   test("a registered coin: raised of the raise read from the curve, the market cap read from the curve, a dash with a reason for the rest", () => {
     const base = { ticker: "RAYS", name: "Rays", mint: "M", oneLiner: "burns when the Rays lose", status: "live", imageUrl: null, burned: "1234.5", burns: 2, nextCheckAt: "2026-10-20T00:00:00Z", nextCloseTime: null, lastBurnAt: "2026-10-10T00:00:00Z", launchedAt: "2026-10-01T00:00:00Z", pairId: null, phase: "curve" as const, progressPct: 42, raised: "35.7", threshold: "85", quote: "SOL", pctOfSupply: 0.12, marketCap: "61.25", holders: null };
     const v = cardViewFromIndex(base, "85");
-    assert.equal(v.rule, "Burns when the Rays lose"); assert.deepEqual(v.nextSettle, { text: "Oct 20", why: null });
+    assert.equal(v.rule, "Burns when the Rays lose"); assert.deepEqual(v.nextSettle, { text: NEXT_WHEN_PUBLISHED, why: nextCheckWhy("Oct 20") }); // walkthrough 13: a keeper check is not the result time
     assert.deepEqual(v.curve, { raised: "35.7", of: "85 SOL", pct: 42, done: false, why: null });
     assert.deepEqual(v.mcap, { text: "61.25 SOL (curve-implied)", why: CARD_MEANINGS.mcap }); // site polish: a curve market cap says so
     assert.deepEqual(v.holders, { text: null, why: NOT_READ.holders }, "no indexer, no number");

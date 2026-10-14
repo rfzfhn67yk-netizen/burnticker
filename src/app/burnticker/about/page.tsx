@@ -96,7 +96,8 @@ export default function AboutPage() {
         <h2 id="about-deficit" className="text-lg font-medium">The first coin, $DEFICIT</h2>
         <p className="text-neutral-200">{d ? d.oneSentence : "$DEFICIT burns when the U.S. national debt rises."} The devnet rehearsal coin ran the same rule text at 1% for each unit.</p>
         <p className="text-neutral-400">We replayed the rule over the real Treasury figures from January 2025 to October 8, 2026. It would have counted 235 burn days and 6,490 units. This is a look back, and it predicts nothing. The second publisher, FRED, reports this debt only once a quarter. It can confirm the quarter ends but not each daily reading.</p>
-        <p className="text-neutral-400">Its rules are locked and its mint address is fixed. The coin is created when the operator runs the create, and its card on the coin list says which state it is in.</p>
+        {/* walkthrough 13: the create date from the status file once the coin exists (it was created on 2026-10-13), never "is created when" */}
+        <p className="text-neutral-400">{d?.launch.date ? `Its rules were locked on chain before it was created on mainnet on ${d.launch.date}. Its card on the coin list says where it stands now.` : "Its rules are locked and its mint address is fixed. The coin is created when the operator runs the create, and its card on the coin list says which state it is in."}</p>
         <p><a className="underline" href={DEFICIT_SITE}>The $DEFICIT page</a></p>
       </section>
 

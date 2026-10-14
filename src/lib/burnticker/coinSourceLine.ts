@@ -11,10 +11,31 @@ import { isSingleSourceSeries, SINGLE_SOURCE_PUBLISHER } from "@/lib/burnticker/
 export const SOURCE_DETAILS_UNAVAILABLE = "The source details are unavailable right now.";
 export const PUBLISHER_DECIDES = "The publisher decides when the result is available.";
 
+/**
+ * Walkthrough 13 (2026-10-14): a coin's status carries its selector key with the oracle in front ("catalogue:espn.team:nfl-PHI…"), so the
+ * $PHINFLWIN page said "The source details are unavailable right now". The series is the key without that prefix.
+ */
+export function seriesOfSelector(selectorKey: string | null | undefined): string | null {
+  if (!selectorKey) return null;
+  return selectorKey.replace(/^(catalogue|polymarket|kalshi|derby):(?=[a-z])/i, "");
+}
+
+/** Who publishes the result a coin waits for, for the next-results list (never "the source's own published data"). */
+export function sourcePublisher(oracle: string, rawSelectorKey: string | null | undefined): string {
+  if (oracle === "kalshi") return "A prediction market's settled result";
+  if (oracle === "polymarket") return "Polymarket's settled result, read on Polygon";
+  const key = seriesOfSelector(rawSelectorKey);
+  if (key && parseEspnSeries(key)) return "Polymarket's on-chain payout for the game where a market exists, otherwise TheSportsDB's licensed final score";
+  if (key && isSingleSourceSeries(key)) return `${SINGLE_SOURCE_PUBLISHER[key.split(":")[0]]}'s own published data`;
+  if (key && /^treasury\./.test(key)) return "U.S. Treasury, Debt to the Penny";
+  return "The publisher named in the rule";
+}
+
 /** The trigger row's note when no receipt links its source yet. */
-export function coinSourceNote(oracle: string, selectorKey: string | null | undefined): string {
+export function coinSourceNote(oracle: string, rawSelectorKey: string | null | undefined): string {
   if (oracle === "kalshi") return "Read from the prediction market that settles it.";
   if (oracle === "polymarket") return "Read from Polymarket, with each result read on Polygon.";
+  const selectorKey = seriesOfSelector(rawSelectorKey);
   const sports = selectorKey ? parseEspnSeries(selectorKey) : null;
   if (sports) return `Each game settles on ${SPORTS_PROVENANCE.settlement}. The second source that must agree is ${leagueProvenance(sports.league).confirmation}.`;
   if (selectorKey && isSingleSourceSeries(selectorKey)) return `Read from ${SINGLE_SOURCE_PUBLISHER[selectorKey.split(":")[0]]}'s own published data.`;

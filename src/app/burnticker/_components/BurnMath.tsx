@@ -27,7 +27,7 @@ export function BurnMath({ defaultPercent = "1" }: { defaultPercent?: string }) 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-sm" id="math" aria-label="Burn arithmetic" data-burn-math>
       <h2 className="font-medium">How a burn is computed</h2>
-      <p className="text-xs text-neutral-400">A share of the spendable burn pool buys the coin and every token bought is burned. It is not a fixed share of the token supply. Hypothetical inputs go in the fields below. The first values come from the real devnet receipt of 2026-10-06. That rehearsal coin spent 1% of the burn pool per unit, and the rule proposed for $DEFICIT on mainnet is 2%. Holders&apos; balances are never touched. Only tokens the program bought are burned.</p>
+      <p className="text-xs text-neutral-400">A share of the spendable burn pool buys the coin and every token bought is burned. It is not a fixed share of the token supply. Hypothetical inputs go in the fields below. The first values come from the real devnet receipt of 2026-10-06. That rehearsal coin spent 1% of the burn pool per unit, and the rule locked for $DEFICIT on mainnet is 2%. Holders&apos; balances are never touched. Only tokens the program bought are burned.</p>
       <div className="mt-2 grid gap-2 sm:grid-cols-5 text-xs text-neutral-400">
         {field("riseB", "Debt rise ($B)", riseB, setRiseB)}
         {field("pct", "Per unit (%)", pct, setPct)}

@@ -274,7 +274,7 @@ describe("item 9: $REHEARSAL in one sentence, and its pool read like any coin's 
     const card = featuredCoins(scratchRoot("planned"), null, [], null, NOW).find((v) => v.id === "rehearsal")!;
     assert.equal(card.note, REHEARSAL_SENTENCE);
     assert.ok(read("config/burnticker/transparency.json").includes(`"text": "${REHEARSAL_SENTENCE} It was created`));
-    assert.ok(read("config/burnticker/current-status.json").includes(`$REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it.`));
+    assert.ok(read("config/burnticker/current-status.json").includes(`$REHEARSAL is a test coin the operator made on Oct 11 to check fees and signing. It is kept off the coin list and shown on the Test coins page`)); // walkthrough 13: a full sentence, and where it is listed
     assert.match(read("src/app/burnticker/t/[ticker]/page.tsx"), /<p data-rehearsal-sentence>\{REHEARSAL_SENTENCE\}<\/p>/);
     const everywhere = [read("src/lib/burnticker/home.ts"), read("src/app/burnticker/t/[ticker]/page.tsx"), read("config/burnticker/transparency.json"), read("config/burnticker/current-status.json")].join("\n");
     assert.doesNotMatch(everywhere, /It can only burn if outside buyers fill its curve|because it is not listed with the coins|throwaway coin, disclosed as one/);

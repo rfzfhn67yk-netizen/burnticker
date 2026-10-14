@@ -287,7 +287,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 @media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}.sh-actions{margin-left:8px}}
 @media (max-width:899px){
   body{padding-bottom:calc(62px + env(safe-area-inset-bottom) + 12px)}
-  .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--sh-bg);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
+  .sh-tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--sh-bg);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
   .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;min-width:44px;font:700 12px/1 var(--sh-mono);letter-spacing:.03em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
   .sh-tabbar a span:first-child{display:block;line-height:0}
   .sh-icon{width:20px;height:20px;display:block}
@@ -446,7 +446,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
         <div class="s" id="lastDelta">The Treasury posts each business day's figure the next afternoon, Eastern Time.</div>
       </div>
       <div class="cell">
-        <div class="k">Next possible burn</div>
+        <div class="k" id="nextLabel">Next feed check</div>
         <div class="v mono num" id="next">—</div>
         <div class="s" id="nextSub">The keeper checks the feed at 16:30 and 20:00 ET. A burn needs a full $1B of new debt.</div>
       </div>
@@ -529,7 +529,7 @@ burn  = every token the swap delivered</pre>
     <h2><span>§6</span>Who pays for the burn</h2>
     <div class="flow">
       <div class="f"><div class="t">1. Trading fees</div><p>Every trade of $DEFICIT pays a creator fee on the launch venue. Eligible trading fees fund the coin's burn pool. On the curve, that is the creator fee. After graduation, it is Raydium's creator fee plus 80% of the SOL side of the locked pool's liquidity fees. In all, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.</p></div>
-      <div class="f"><div class="t">2. The fee pool</div><p>Fees are claimed into the burn pool. The pool is an account of the on-chain program, and the program has no instruction that withdraws from it. Any seed deposit is shown with its transaction. Nobody can withdraw the pool, and the program never sells.</p><p class="addr" id="feeWallet"></p></div>
+      <div class="f"><div class="t">2. The fee pool</div><p>Fees are claimed into the burn pool. The pool is an account of the on-chain program. No instruction pays it out to a person or to the operator: the program spends it only on buying $DEFICIT and burning what it bought, and it never sells. Any seed deposit is shown with its transaction. The program itself can still be upgraded through the operator's Squads vault, and the Burnticker trust page says who can approve an upgrade.</p><p class="addr" id="feeWallet"></p></div>
       <div class="f"><div class="t">3. The swap</div><p>On a day with units, the program spends 1 − 0.98<sup>units</sup> of the pool buying $DEFICIT on the token's Raydium CPMM pool. If that amount is under the floor of about $1, the program buys nothing and the pool keeps the money.</p></div>
       <div class="f"><div class="t">4. The burn</div><p>Every token received is burned in the same instruction, with the memo. Holders' balances are never touched. There is no delegate, no transfer hook and no mint authority.</p><p class="addr" id="mintAddr"></p></div>
     </div>
@@ -757,7 +757,8 @@ burn  = every token the swap delivered</pre>
       $("next").textContent = (h ? h + "h " : "") + m + "m " + s + "s";
     }
     tick(); clock = setInterval(tick, 1000);
-    $("nextSub").textContent = "The next feed check is at " + new Date(at).toLocaleString() + ". A burn needs a full $1B of new debt since " + (status && status.feed.lastRecordDate ? status.feed.lastRecordDate : "the last reading") + ".";
+    var onCurve = !!(status && status.curve && status.curve.phase && status.curve.phase !== "graduated");
+    $("nextSub").textContent = "The next feed check is at " + new Date(at).toLocaleString(undefined, { timeZoneName: "short" }) + ". A burn needs a full $1B of new debt since " + (status && status.feed.lastRecordDate ? status.feed.lastRecordDate : "the last reading") + "." + (onCurve ? " Nothing can burn yet: the curve has to graduate and its pool has to be registered first." : "");
   }
 
   // ------------------------------------------------------------------ receipts

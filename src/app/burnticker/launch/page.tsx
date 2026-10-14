@@ -830,11 +830,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (flow === "team" && team) return teamTickerForRule(rule, team.code ?? team.abbr);
     if (flow === "single" && guide.follow === "team" && team) return teamTicker(team.abbr, { league: leagueSeries, window: "title" });
     if (flow === "pair" && pairGen) return pairGen.a.ticker;
+    // walkthrough 13: an election pair's first coin keeps the ticker electionPairIdentity gave it ($DEMVREP beside $REPVDEM); the team
+    // generator below turned the side word "Democrats" into $DEMOVREPU on the review
+    if (flow === "pair" && elPick) return electionPairIdentity(elPick.a.label, elPick.b.label).tickers.a;
     if (flow === "pair" && sideA && sideB) return pairTickers(sideA.code ?? sideA.abbr, sideB.code ?? sideB.abbr).a;
     // walkthrough snag 13: the debt coin has one ticker from every path ($DEBT itself is reserved for the flagship's rule)
     if (rule.oracle === "catalogue" && rule.series === "treasury.debt") return rule.inverse ? "FLATDEBT" : "DEBTUP";
     return null;
-  }, [rule, flow, team, guide.follow, leagueSeries, sideA, sideB, pairGen]);
+  }, [rule, flow, team, guide.follow, leagueSeries, sideA, sideB, pairGen, elPick]);
   // the subject a typed name belongs to: the flow and the thing picked (never the name itself, never the share or the end)
   const subjectKey = [flow, guide.follow ?? "", rule?.oracle ?? "", rule?.market ?? rule?.series ?? "", team?.abbr ?? "", sideA?.abbr ?? "", sideB?.abbr ?? ""].join("|");
   useEffect(() => {

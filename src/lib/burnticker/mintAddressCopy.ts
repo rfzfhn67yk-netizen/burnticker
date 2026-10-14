@@ -20,7 +20,7 @@ export const MINT_SKIP_NOTE = "Waiting is the default. A plain address works the
 export const MINT_PLAIN_LINE = "This launch uses a plain address.";
 export const MINT_FAILED_LINE = "This browser could not run the address search. You can launch with a plain address instead.";
 /** The general line (the launch review and the sign card). */
-export const MINT_ADDRESS_NOTE = "Coins made here get an address that ends in burn or BURN.";
+export const MINT_ADDRESS_NOTE = "Coins made here since October 14, 2026 get an address that ends in burn or BURN, unless the creator chooses a plain one.";
 /** The trust page's "How this was built" sentence: dated, and the skip named. */
 export const MINT_ADDRESS_TRUST = "Coins made here from October 14, 2026 get an address that ends in burn or BURN. The address is found in the creator's own browser, and its key never reaches this site. A creator who does not want to wait can choose a plain address instead.";
 

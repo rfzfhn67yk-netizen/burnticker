@@ -105,6 +105,9 @@ export const NOT_READ = {
   curveNotRead: "This site has not read the coin's curve.",
   nextNone: "This rule has no scheduled result.",
 } as const;
+/** Walkthrough 13: a card whose next time is only the keeper's next read of the source (not a market close) says so. */
+export const NEXT_WHEN_PUBLISHED = "When published";
+export const nextCheckWhy = (day: string): string => `The publisher decides when the next result is out. This site next reads the source on ${day}.`;
 
 /** website-17 item 2: what the rank line under "Burned" means (hover text). A rank is a line on a scoreboard and nothing more. */
 export const RANK_MEANING = "The coin's place on the scoreboard by confirmed receipts, read from the coin registry. A rank pays nothing and unlocks nothing.";
@@ -261,7 +264,8 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
     rank: t.rank ?? null,
     progress: t.readiness ? progressOf(t.readiness, { raiseSol: t.threshold ? Number(t.threshold) : null, raisedSol: t.raised ? Number(t.raised) : null }) : null,
     progressWhy: t.readiness ? null : "This site did not read where this coin stands.",
-    nextSettle: next ? { text: `${shortDay(next)}`, why: null } : { text: null, why: NOT_READ.nextNone },
+    // walkthrough 13 (private review 10's "Next result" item, on the card too): a market close is the result's time; a keeper check is not
+    nextSettle: t.nextCloseTime ? { text: `${shortDay(t.nextCloseTime)}`, why: null } : next ? { text: NEXT_WHEN_PUBLISHED, why: nextCheckWhy(shortDay(next) ?? next.slice(0, 10)) } : { text: null, why: NOT_READ.nextNone },
     curve, mcap,
     holders: typeof t.holders === "number" ? { text: groupDigits(t.holders), why: null } : { text: null, why: t.holdersNote || NOT_READ.holders },
     createdAt: t.launchedAt, createdWhy: t.launchedAt ? null : "This coin is not launched yet.",
