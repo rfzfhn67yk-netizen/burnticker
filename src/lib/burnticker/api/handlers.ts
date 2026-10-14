@@ -549,7 +549,7 @@ interface PairSideInput { /** round 5: side B's own pinned token (burnTarget.ts 
  * (buildPairBundles); refusals and the tier rule apply per side, and both drafts plus the pair row are registered together. A rule that
  * carries a `pair` field must come through that flow.
  */
-export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
+export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; /** 2026-10-14: a pair's side B mint public key (the launch page grinds both); only with `mint` */ mintB?: string | null; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
   const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
   // NO BURN POOL IS EVER LEFT BEHIND (owner, 2026-10-10): every new launch carries the onEnd clause unless the rule names its own —
@@ -557,6 +557,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (input.rule && typeof input.rule === "object" && !Array.isArray(input.rule) && (input.rule as { onEnd?: unknown }).onEnd === undefined) input.rule = { ...(input.rule as object), onEnd: defaultOnEndFor(input.rule) };
   const problems = launchProblems(input);
   if (o.mint !== undefined && o.mint !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(o.mint)) problems.push("The mint must be the public key of a new mint keypair that you made.");
+  if (o.mintB !== undefined && o.mintB !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(o.mintB)) problems.push("Side B's mint must be the public key of a new mint keypair that you made.");
+  if (o.mint && o.mintB && o.mint === o.mintB) problems.push("The two coins need two different mints.");
   // website-14 (LAUNCHPAD-PATH §75): on mainnet the graduation raise is 40, 60 or 85 SOL, nothing else (launchBundle.ts raiseProblem)
   const raiseOff = raiseProblem(input.raiseSol, p.cluster);
   if (raiseOff) return { error: fail(400, raiseOff, { code: "raise-not-preset", problems }) };
@@ -579,7 +581,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // the end-sink picker: a rule naming a coin to take the rest is checked against the live coins on this network (endSinks.ts); an
   // unreadable registry leaves the list empty, so the named coin is refused (fail closed)
   const sinks = locked.rule.onEnd?.mint ? (() => { try { return liveSinks(p.registry, p.cluster); } catch { return []; } })() : null;
-  { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: o.mint ? [o.mint] : [], partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
+  { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: [o.mint, o.mintB].filter((x): x is string => !!x), partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   // sources-7 (QA walkthrough 11 H6): a season rule on a team whose season is over, from the platform's schedule port (one bounded read)
   { const so = await seasonOverFor(locked.rule, p.seasonSchedule); if (so) return { error: fail(so.status, so.message, { code: so.code, next: so.next, problems: [so.message] }) }; }
   const list = loadRefuseList();
@@ -718,7 +720,10 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     return token;
   };
   if (b.pair) {
-    if (o.mint) return { error: fail(400, "A rivalry pair is launched through the pair steps on the launch page, with two new mints. The public API takes one coin at a time.") };
+    // 2026-10-14: the launch page sends both mints' public keys (side A in `mint`, side B in `pair.mint`); one without the other is the
+    // public API's single-coin call, which never takes a pair
+    if (!!o.mint !== !!o.mintB) return { error: fail(400, "A rivalry pair is launched through the pair steps on the launch page, with two new mints. The public API takes one coin at a time.") };
+    if (o.mintB && p.registry.token(o.mintB)) return { error: fail(409, `The mint ${o.mintB} is already registered.`, { code: "mint-taken" }) };
     // WIRING-MEDIA-RECOVERY item 235: a restart after side A's create landed on chain must not make a second A. A draft this creator
     // registered for the same side-A ticker and name whose mint exists on chain is that A: the new plan is refused, naming the mint.
     { const prior = await createdSideA(p, input); if (prior) return { error: fail(409, `Side A, $${input.ticker}, was already created on chain from an earlier plan as mint ${prior}. A new plan would create a second $${input.ticker}. Finish that pair from the launch history, or pick a different ticker and name.`, { code: "pair-side-a-created", mint: prior }) }; }
@@ -738,7 +743,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const bRefusals = nameRefusals(list, side.name, side.ticker);
     { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
-    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null }); if (g) return { error: fail(g.status, `Side B is refused. ${g.error}`, g.extra) }; }
+    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}) }); if (g) return { error: fail(g.status, `Side B is refused. ${g.error}`, g.extra) }; }
     // two candidates: both markets must be named outcomes of the one race the body names (Polymarket's own index of open races)
     if (settled?.shape === "candidates" && settled.bundle.race) {
       if (p.polymarketDiscovery === false) return { error: fail(503, POLYMARKET_UNAVAILABLE) };
@@ -757,7 +762,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const pairVoidBy = settled ? defaultVoidBy() : await oneShotVoidBy(p, locked) ?? undefined;
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
-      const probe = await buildPairBundles({ a: input, b: { ...side, description: "", burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, metadataUri: () => "ar://pending-upload-at-launch" });
+      const ownMints: { mint?: string; mintB?: string } = o.mint && o.mintB ? { mint: o.mint, mintB: o.mintB } : {};
+      const probe = await buildPairBundles({ a: input, b: { ...side, description: "", burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: () => "ar://pending-upload-at-launch" });
       const lockedB = lockRule(JSON.parse(probe.b.rules.text)), lockedA = lockRule(JSON.parse(probe.a.rules.text));
       // a settled-event pair's side B is described from ITS OWN event (candidate B's market, read here; team B's win in the game), never
       // side A's words (website-23: "$ROGEVELSA burns if the Democrats win"); its context is the body's pair.descCtx
@@ -777,7 +783,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       // an uploaded image is shown from its pinned Arweave copy, per side
       const shownImage = (tk: string, url: string | null, up: unknown) => (up ? pins.get(tk)?.imageUri ?? url : url);
       input.imageUrl = shownImage(input.ticker, input.imageUrl, uploaded); side.imageUrl = shownImage(side.ticker, side.imageUrl, upB.up);
-      const pair = await buildPairBundles({ a: input, b: { ...side, burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
+      const pair = await buildPairBundles({ a: input, b: { ...side, burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
       // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab
       // pool — under the pair curve the pool is the CPMM pool its graduation creates, registered later (policy 2).

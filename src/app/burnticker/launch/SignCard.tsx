@@ -9,6 +9,8 @@ import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 import { archivePlanRecord, chainReadDeps } from "@/lib/burnticker/launchRecovery";
 import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
+import { matchesSuffix } from "@/lib/burnticker/vanityMint";
+import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
 
 /**
  * THE SIGNING CARD (2026-10-11): the one component that signs every launch — a single LaunchLab coin, two coins, a pair-curve set — from
@@ -134,6 +136,9 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         })}
         {plan.confirms.map((c) => <li key={c.mint} className="text-neutral-500">{confirmed.includes(c.mint) ? "✓" : "·"} ${c.ticker} recorded as launched</li>)}
       </ol>
+      {/* 2026-10-14 (owner): the address each coin gets, shown before anything is signed (the one this browser found, ending in burn) */}
+      <ul className="space-y-0.5 text-xs text-neutral-300" aria-label="Coin addresses" data-mint-addresses>{plan.confirms.map((c) => <li key={c.mint} className="break-all" data-mint-address={c.mint}>${c.ticker}&apos;s address is <code className="text-amber-200">{c.mint}</code></li>)}</ul>
+      {plan.confirms.length > 0 && plan.confirms.every((c) => matchesSuffix(c.mint)) && <p className="text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p>}
       <p className="text-xs text-neutral-500" data-no-opening-purchase>{NO_OPENING_PURCHASE_SENTENCE}</p>
       {notes.length > 0 && <ul className="list-disc pl-5 text-xs text-neutral-500">{notes.map((x) => <li key={x}>{x}</li>)}</ul>}
       {allLive ? (
