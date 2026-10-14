@@ -1,5 +1,6 @@
 // Public API v1 (1.14.0): the read-only pre-wallet review (src/lib/burnticker/launchReview.ts; launch audit 5 L02 / L06).
 import { fail, ok, readJson, runV1 } from "@/lib/burnticker/api/http";
+import { withLaunchFailureAlert } from "@/lib/burnticker/api/launchFailAlert";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { oneShotVoidBy } from "@/lib/burnticker/api/handlers";
 import { settledPairInput } from "@/lib/burnticker/launchPreflight";
@@ -34,7 +35,7 @@ async function gameFor(rule: unknown): Promise<{ eventId: string; startsAt: stri
 
 /** Builds nothing, pins nothing, registers nothing, reads no chain (one Gamma read for a one-market Polymarket rule): works in preview and open modes; a closed host refuses. */
 export async function POST(req: Request) {
-  return runV1("reviewLaunch", req, async () => {
+  return runV1("reviewLaunch", req, withLaunchFailureAlert(platform().registry, "reviewLaunch", req, async () => {
     if (launchModeFromEnv(process.env) === "closed") { const r = globalRefusal(process.env)!; return fail(r.status, r.body.error, { code: r.body.code, preview: false }); }
     const body = await readJson(req);
     if (!body) return fail(400, "invalid JSON body");
@@ -86,5 +87,5 @@ export async function POST(req: Request) {
       tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson })), reserved });
     } catch { tickers = []; }
     return ok({ ...r.review, existing, tickers });
-  });
+  }));
 }

@@ -189,6 +189,12 @@ export const searchUrl = (q: string, status: "open" | "closed" | "all", limit: n
 export const eventPageUrl = (slug: string): string => `${POLYMARKET_SITE}/event/${slug}`;
 /** A top-level tag's open events, most traded first (the wizard's Browse path: the Polymarket group under a Kalshi category). */
 export const eventsByTagUrl = (slug: string, limit: number): string => `${GAMMA_API}/events?tag_slug=${encodeURIComponent(slug)}&closed=false&active=true&order=volume&ascending=false&limit=${limit}`;
+/**
+ * A tag's events (open or closed) whose end date falls in a window: the game-market lookup (launch night 2026-10-13: the text search
+ * "Chiefs vs Raiders" is capped at 10 hits, and older Chiefs–Raiders games crowded out the week's moneyline, so every Chiefs coin
+ * failed its launch check). A game event's end date is the game's start, so a window around the start finds it.
+ */
+export const eventsInWindowUrl = (slug: string, minIso: string, maxIso: string, limit = 100): string => `${GAMMA_API}/events?tag_slug=${encodeURIComponent(slug)}&end_date_min=${encodeURIComponent(minIso)}&end_date_max=${encodeURIComponent(maxIso)}&limit=${limit}`;
 
 // ---- resolution (pure) ----------------------------------------------------------------------------------------------------------
 
@@ -534,6 +540,11 @@ export class PolymarketClient implements OracleAdapter {
   }
 
   /** Open events of one tag (Browse), as search hits: binary markets only, the refuse list applied, the tags as recurring selectors. */
+  /** A tag's events, open and closed, ending inside [minIso, maxIso] (the game-market lookup; every market of each event kept). */
+  async eventsInWindow(slug: string, minIso: string, maxIso: string): Promise<{ events: PolyEventHit[]; tags: PolyTagHit[] }> {
+    return searchHits(parseEventsBody(await this.get(eventsInWindowUrl(slug, minIso, maxIso))), { refuse: this.refuse, status: "all", perEvent: 40 });
+  }
+
   async eventsByTag(slug: string, limit = 8): Promise<{ events: PolyEventHit[]; tags: PolyTagHit[] }> {
     return searchHits(parseEventsBody(await this.get(eventsByTagUrl(slug, Math.min(24, Math.max(1, limit))))), { refuse: this.refuse, status: "open", perEvent: 6 });
   }

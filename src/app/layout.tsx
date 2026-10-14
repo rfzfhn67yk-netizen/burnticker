@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Courier_Prime, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/app/burnticker/_components/SiteHeader";
+import { DeployNotice } from "@/app/burnticker/_components/DeployNotice";
 import { SiteFooter, CompactFooter } from "@/app/burnticker/_components/SiteFooter";
 import { FooterSwitch } from "@/app/burnticker/_components/FooterSwitch";
 import { TabBar } from "@/app/burnticker/_components/TabBar";
@@ -63,6 +64,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bt-body">
         <a className="bt-skip" href="#bt-content">Skip to content</a>
+        {/* the update strip (deploy-burnticker-host.sh writes /deploying.json for the length of a deploy) */}
+        <DeployNotice />
         {/* the one wallet provider for the whole app (website-13): the header's Connect wallet, Your coins and the launch wizard share it */}
         <ShellWalletProviders cluster={hostCluster(process.env)}>
           <SiteHeader />

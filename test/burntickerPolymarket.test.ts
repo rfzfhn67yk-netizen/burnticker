@@ -299,7 +299,7 @@ describe("the keeper, the API and the SDK (on the fakes)", () => {
     const tag = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "NFLNO", name: "nfl no", rule: PM_NFL_MONEYLINE, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
     assert.equal(tag.status, 200, (await tag.text()).slice(0, 300));
     const unknown = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "NOPE", name: "nope", rule: { ...PM_BUCS, market: `0x${"ab".repeat(32)}` }, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
-    assert.equal(unknown.status, 502);
+    assert.equal(unknown.status, 503, "an unreachable source answers 503 on the wire (a 502 would be replaced by Cloudflare's own page; launch night 2026-10-13)");
   });
   test("SDK: polymarket.search / backtest through the API; verifyReceipt re-reads the payout vector on the caller's machine", async () => {
     const bt = new Burnticker({ apiBase: API, fetch: routeFetch });
