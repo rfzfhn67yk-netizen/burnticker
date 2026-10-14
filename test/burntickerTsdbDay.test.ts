@@ -10,7 +10,7 @@ const side = (abbr: string, name: string, nickname: string, location: string) =>
 const KC_AT_LV = { eventId: "401", league: "nfl", seasonType: 2, startsAt: "2026-10-04T20:25:00Z", date: "2026-10-04", name: "Chiefs at Raiders", completed: true, state: "post", detail: "Final", home: side("LV", "Las Vegas Raiders", "Raiders", "Las Vegas"), away: side("KC", "Kansas City Chiefs", "Chiefs", "Kansas City") } as unknown as Game;
 const DAY_ROW = { idEvent: "2475433", strEvent: "Las Vegas Raiders vs Kansas City Chiefs", strHomeTeam: "Las Vegas Raiders", strAwayTeam: "Kansas City Chiefs", intHomeScore: "27", intAwayScore: "30", dateEvent: "2026-10-04", idHomeTeam: "134932", idAwayTeam: "134931", strSeason: "2026" };
 const OTHER_ROW = { idEvent: "2600737", strEvent: "Portland Winterhawks vs Spokane Chiefs", strHomeTeam: "Portland Winterhawks", strAwayTeam: "Spokane Chiefs", intHomeScore: "1", intAwayScore: "3", dateEvent: "2026-10-04" };
-const LOOKUP_ROW = { ...DAY_ROW, strTime: "20:25:00", strTimestamp: "2026-10-04T20:25:00", strStatus: "FT", strPostponed: "no", strLeague: "NFL" };
+const LOOKUP_ROW = { ...DAY_ROW, strTime: "20:25:00", strTimestamp: "2026-10-04T20:25:00", strStatus: "FT", strPostponed: "no", strLeague: "NFL", idLeague: "4391", strSport: "American Football" };
 
 function fakeClient(answers: Record<string, unknown>, calls: string[] = []): EspnClient {
   return { tsdbRead: async (_key: string, v2: string) => { calls.push(v2); if (!(v2 in answers)) throw new Error(`HTTP 404 ${v2}`); return answers[v2]; } } as unknown as EspnClient;

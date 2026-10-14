@@ -90,7 +90,7 @@ describe("the three-way game market (soccer)", () => {
 
 const MARKET: GameMarket = { conditionId: H, question: "Arsenal FC vs. Leeds United FC", outcomes: ["Yes", "No"], url: "https://polymarket.com/event/epl-ars-lee-2026-10-10", threeWay: { home: H, draw: D, away: A, homeName: "Arsenal FC", awayName: "Leeds United FC" } };
 const YES: GamePayout = { resolved: true, outcome: 0 }, NO: GamePayout = { resolved: true, outcome: 1 }, SPLIT: GamePayout = { resolved: true, outcome: null }, OPEN: GamePayout = { resolved: false, outcome: null };
-const tsdbRow = (h: number, a: number, status = "FT") => ({ idEvent: "2400001", strEvent: "Arsenal vs Leeds United", strHomeTeam: "Arsenal", strAwayTeam: "Leeds United", intHomeScore: String(h), intAwayScore: String(a), dateEvent: "2026-10-10", strTimestamp: "2026-10-10T11:30:00", strStatus: status });
+const tsdbRow = (h: number, a: number, status = "FT") => ({ idEvent: "2400001", strEvent: "Arsenal vs Leeds United", strHomeTeam: "Arsenal", strAwayTeam: "Leeds United", idLeague: "4328", intHomeScore: String(h), intAwayScore: String(a), dateEvent: "2026-10-10", strTimestamp: "2026-10-10T11:30:00", strStatus: status });
 function client(answers: Record<string, unknown>): EspnClient {
   const read = async (url: string) => { if (!(url in answers)) throw new Error(`HTTP 404 ${url}`); return answers[url]; };
   return { tsdbRead: async (_k: string, v2: string) => read(v2), get: async (url: string) => read(url) } as unknown as EspnClient;
@@ -161,7 +161,7 @@ describe("settleGame on a three-way payout", () => {
 
   test("the two-sided path is unchanged: an NFL moneyline reads one payout and names the team", async () => {
     const KC_AT_LV = { ...game("nfl", side("LV", "Las Vegas Raiders", "home"), side("KC", "Kansas City Chiefs", "away"), "2026-10-04T20:25:00Z") };
-    const row = { idEvent: "2475433", strEvent: "Las Vegas Raiders vs Kansas City Chiefs", strHomeTeam: "Las Vegas Raiders", strAwayTeam: "Kansas City Chiefs", intHomeScore: "27", intAwayScore: "30", dateEvent: "2026-10-04", strTimestamp: "2026-10-04T20:25:00", strStatus: "FT" };
+    const row = { idEvent: "2475433", strEvent: "Las Vegas Raiders vs Kansas City Chiefs", strHomeTeam: "Las Vegas Raiders", strAwayTeam: "Kansas City Chiefs", idLeague: "4391", intHomeScore: "27", intAwayScore: "30", dateEvent: "2026-10-04", strTimestamp: "2026-10-04T20:25:00", strStatus: "FT" };
     const read: string[] = [];
     const d: GameDeps = { tsdbKey: "k", apiSportsKey: null, market: async () => ({ conditionId: "0xe605", question: "Chiefs vs. Raiders", outcomes: ["Chiefs", "Raiders"], url: "https://polymarket.com/event/nfl-kc-lv-2026-10-04" }), payout: async (id) => { read.push(id); return { resolved: true, outcome: 0 }; } };
     const v = await settleGame(client({ [tsdbV2DayUrl("2026-10-04")]: { filter: [row] }, [tsdbV2EventUrl("2475433")]: { lookup: [row] } }), KC_AT_LV, d);

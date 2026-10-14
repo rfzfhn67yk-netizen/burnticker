@@ -336,7 +336,7 @@ const coreWords = (s: string): string[] => teamNameKey(s).split(" ").filter((w) 
  * provider's name, in teamNameKey form, → our abbreviation (the pin's abbreviation, never the display code).
  */
 export const PROVIDER_NAME_ALIASES: Partial<Record<LeagueId, Record<string, string>>> = {
-  "ita.1": { "inter milan": "INT", inter: "INT" }, "ger.1": { koln: "KOE", "1 fc koln": "KOE" }, "bra.1": { "atletico mineiro": "CAM", "athletico paranaense": "CAP" },
+  "ita.1": { "inter milan": "INT", inter: "INT" }, "fra.1": { "paris sg": "PSG" }, "ger.1": { koln: "KOE", "1 fc koln": "KOE" }, "bra.1": { "atletico mineiro": "CAM", "athletico paranaense": "CAP" },
   "esp.1": { "athletic bilbao": "ATH", "deportivo alaves": "ALA" }, "usa.1": { "new york red bulls": "RBNY", "los angeles fc": "LAFC" },
 };
 /** Words that make a different club when added to a name ("Dundee United", "Manchester City", "Real Madrid Castilla"). */
@@ -443,6 +443,36 @@ export const tsdbV1Urls = (key: string, league: LeagueId, year: number): string[
 };
 /** A URL as it may be logged or shown: a v1 key in the path is replaced. */
 export const redactKey = (url: string): string => url.replace(/(thesportsdb\.com\/api\/v1\/json\/)[^/]+/, "$1<key>");
+/**
+ * THESPORTSDB'S SCORE ORDER (season rehearsal 2026-10-13, bug 4). Some rows put the scores in the order of the event's name while the
+ * team fields name the other order: `{"strEvent":"Ohio vs Ohio State","strHomeTeam":"Ohio State","strAwayTeam":"Ohio","intHomeScore":"9",
+ * "intAwayScore":"37"}` (Ohio State won 37–9 at home), `{"strEvent":"Duke vs Texas","strHomeTeam":"Texas","strAwayTeam":"Duke",
+ * "intHomeScore":"75","intAwayScore":"60"}` (Duke won 75–60). Read from the box over the 2025 season schedules: 630 of 1,708 college
+ * football rows and 29 of 3,000 men's college basketball rows are written this way (and one NFL preseason row, the Hall of Fame game
+ * "Los Angeles Chargers vs Detroit Lions" 34–7 with Detroit in the home field); every other league writes the event name in the field
+ * order. The team fields are right (they say who was at home) and the scores follow the event's name. So:
+ *   "fields"   the event's name lists the home field then the away field (or names neither order in a league that never reverses:
+ *              "Paris Saint-Germain" where the field says "Paris SG"): intHomeScore is the home field's;
+ *   "event"    the event's name lists the AWAY field first: intHomeScore is the away field's score;
+ *   "unknown"  a college row whose event name matches neither order ("Brown vs Georgetown" with "Robert Morris" in the home field):
+ *              which score is whose cannot be told, and settlement holds the game (gameSettle.ts finalFromTsdb).
+ */
+export const TSDB_REVERSING: ReadonlySet<LeagueId> = new Set<LeagueId>(["cfb", "mcbb", "wcbb"]);
+export function tsdbScoreOrder(league: LeagueId, e: Record<string, unknown>): "fields" | "event" | "unknown" {
+  const h = String(e.strHomeTeam ?? ""), a = String(e.strAwayTeam ?? "");
+  const parts = String(e.strEvent ?? "").split(/\s+vs\.?\s+/i);
+  const same = (x: string, y: string) => { const kx = normName(x), ky = normName(y); if (kx && kx === ky) return true; const tx = ourTeam(league, x), ty = ourTeam(league, y); return !!tx && !!ty && tx.abbr === ty.abbr; };
+  if (parts.length === 2 && h && a) {
+    const straight = same(parts[0], h) && same(parts[1], a), crossed = same(parts[0], a) && same(parts[1], h);
+    if (straight !== crossed) return straight ? "fields" : "event";
+  }
+  return TSDB_REVERSING.has(league) ? "unknown" : "fields";
+}
+/** A TheSportsDB row's scores by its team fields (home field, away field), read in the row's score order (tsdbScoreOrder). */
+export function tsdbFieldScores(league: LeagueId, e: Record<string, unknown>): { home: number | null; away: number | null; order: "fields" | "event" | "unknown" } {
+  const order = tsdbScoreOrder(league, e), h = num(e.intHomeScore), a = num(e.intAwayScore);
+  return order === "event" ? { home: a, away: h, order } : { home: h, away: a, order };
+}
 export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[] {
   const lists = body && typeof body === "object" ? (Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][]) : [];
   const nbaRound = (e: Record<string, unknown>) => { const r = Number(e.intRound ?? 0); return Number.isFinite(r) ? r : 0; };
@@ -454,7 +484,8 @@ export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[]
   const post = (e: Record<string, unknown>) => (league === "nba" || league === "nfl" ? nbaRound(e) >= 100 && nbaRound(e) < 500 : /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer");
   return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent) && keep(e)).map((e) => {
     const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? "")), startsAt = String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`).replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
-    return mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : TSDB_LIVE_RE.test(String(e.strStatus ?? "")) ? "in" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, num(e.intHomeScore)), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, num(e.intAwayScore)));
+    const sc = tsdbFieldScores(league, e);   // bug 4: a college row's scores can follow the event's name, not the team fields
+    return mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : TSDB_LIVE_RE.test(String(e.strStatus ?? "")) ? "in" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, sc.home), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, sc.away));
   });
 }
 /**
