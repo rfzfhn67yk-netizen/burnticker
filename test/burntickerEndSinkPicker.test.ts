@@ -20,7 +20,9 @@ import { teamSeries } from "@/lib/burnticker/sources/espn";
 
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { CREATOR, POST_HEADERS, API, callRoute, makeWorld, type World } from "./burntickerApiHelpers.ts";
-import { ONE_SHOT as ONE } from "./burntickerHelpers.ts";
+import { ONE_SHOT } from "./burntickerHelpers.ts";
+// review 10 F1: a single one-shot burns 100 % on a host without burn dispersal (the bundle route refuses a smaller share)
+const ONE = { ...ONE_SHOT, binary: { onYes: { fractionOfPool: 1 }, onNo: null } };
 process.env.BURNTICKER_END_SINK_PICKER = "1"; // the picker is a host option (off by default since 2026-10-13); these tests exercise it on
 
 const cfg = loadCopyLintConfig();

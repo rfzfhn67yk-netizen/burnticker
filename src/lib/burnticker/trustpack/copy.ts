@@ -7,13 +7,17 @@
  */
 import { operatorShareClause } from "@/lib/burnticker/feeShareLine";
 
+/** Private review 10 (2026-10-14): what the keys can and cannot do with funds, said specifically (the checker page and CHECK-THIS-YOURSELF.md). */
+export const POWERS_SCOPE = "These keys cannot withdraw a burn pool to a personal wallet. A finished rule's remainder can be forwarded to its end sink (the winner or $DEFICIT) by the keeper's signed reading; reading signers decide qualifying results; the upgrade authority can replace the program.";
+
 export const CHECK_COPY = {
   title: "Check this yourself",
   intro: "Check the money flows, operator powers and a real burn receipt against the source records. Every line says where to look, so you never have to take our word for anything. The receipt verifier runs in your browser and asks the chain and the original data source directly.",
   moneyTitle: "Where money can go",
-  moneyIntro: "This table lists every instruction in both programs and the only place each one can move SOL or tokens. Neither program has an instruction that withdraws, sweeps or sends funds out.",
+  // private review 10: specific, not absolute (end-sink forwards, reading signers and the upgrade authority are real powers)
+  moneyIntro: `This table lists every instruction in both programs and the only place each one can move SOL or tokens. ${POWERS_SCOPE}`,
   powersTitle: "Who can do what",
-  powersIntro: "The Powers Registers are generated from the programs' own interface files. Under the current instruction permissions, no instruction in either program gives any key a power over funds. Upgrade authority is a separate power: the Squads vault can replace the program code.",
+  powersIntro: `The Powers Registers are generated from the programs' own interface files. ${POWERS_SCOPE} The upgrade authority is the Squads vault.`,
   lockedTitle: "What is locked",
   notDoneTitle: "What is not done yet",
   notDoneIntro: "These are the open gaps, stated plainly. Each one is also on the trust page and on the operator's to-do list (docs/burnticker/TODO-OWNER.md).",

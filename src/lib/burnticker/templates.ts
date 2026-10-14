@@ -8,7 +8,7 @@ import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE, descr
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { nwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
-import { DEFAULT_SHARE, pctLabel, presetRowLabel } from "@/lib/burnticker/launchPresets";
+import { DEFAULT_SHARE, pctLabel, presetRowLabel, SHARE_PRESETS } from "@/lib/burnticker/launchPresets";
 import type { LaunchType } from "@/lib/burnticker/launchAvailability";
 import { raceEndSentence, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { fightLead, fightName, fightTickers } from "@/lib/burnticker/derby/tile";
@@ -57,7 +57,7 @@ export function settingsLine(t: Pick<Template, "shape" | "type" | "id">): string
   if (t.id === "flippening") return `Fixed on the web: one reading a day at 00:00 UTC. You pick a run of 7, 14 or 30 days. The two coins are linked, so the burn uses the whole pool: ${presetRowLabel("linkedOneShot")}.`;
   // website-26 (WIRING-FEATURES item 14): the tile offers three run lengths (derby/spec.ts DERBY_RUN_PRESETS)
   if (t.type === "derby") return "Fixed on the web: one reading a day at 00:00 UTC. You pick a run of 7, 14 or 30 days and the share per burn.";
-  if (t.shape === "one-shot") return `It burns once. You pick ${presetRowLabel("oneShot")} of the pool.`;
+  if (t.shape === "one-shot") return SHARE_PRESETS.oneShot.length === 1 ? "It burns once, using the whole pool." : `It burns once. You pick ${presetRowLabel("oneShot")} of the pool.`;
   if (t.type === "pairs" || t.type === "matchup") return `Each coin burns once. The two coins are linked, so the coin that burns uses its whole pool and takes the other coin's: ${presetRowLabel("linkedOneShot")}.${t.type === "matchup" ? " You pick one game or the season. The season burns a share per game instead." : ""}`;
   if (t.shape === "pair") return `You pick one game or the season, and the share per burn.`;
   return `You pick the share per burn: ${RROW}.`;

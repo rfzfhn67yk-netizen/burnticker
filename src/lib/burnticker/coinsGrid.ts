@@ -17,7 +17,7 @@ export const GRID_TABS: { id: GridTab; label: string; rule: string }[] = [
   { id: "graduated", label: "Moved to trading pool", rule: "Coins that left their curve for their own Raydium pool." },
   { id: "pairs", label: "Pairs", rule: "Two coins that share one matchup." },
   // website-14 (product idea 7): the browser-local watchlist (watchlist.ts); nothing about it leaves the browser
-  { id: "following", label: "Following", rule: "Coins you follow in this browser. The list is kept on this device only." },
+  { id: "following", label: "Following", rule: "Coins you follow." },
 ];
 
 /** How old an index read may be before the grid says so (the index is cached for at most a minute; five means something is wrong). */

@@ -249,7 +249,7 @@ describe("private review 8 F1: follows are keyed by network and mint, never by t
     assert.deepEqual(r.ambiguous, [{ kind: "coins", ticker: "LAD", candidates: [`mainnet:${A}`, `mainnet:${C}`] }]);
     assert.deepEqual(dropLegacy(r.list, "coins", "lad").legacy.coins, []);
     for (const t of [watchAmbiguous("LAD", 2), WATCH_FORGET, WATCH_NOTE]) clean(t, t);
-    assert.equal(WATCH_NOTE, "Your followed coins are saved only in this browser. No wallet or account is needed.");
+    assert.equal(WATCH_NOTE, "Your follows stay in this browser. No wallet is needed.");
   });
   test("every surface passes the key: the card, the next results, the coins grid and the static home", () => {
     assert.match(read("src/app/burnticker/_components/CoinCard.tsx"), /<FollowButton watchKey=\{v\.watchKey\} ticker=\{v\.ticker\} \/>/);

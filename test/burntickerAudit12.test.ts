@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { buildLaunchReview, type LaunchReview } from "@/lib/burnticker/launchReview";
 import { buildPairBundles, FakeLaunchLab, preparedRulesCheck, preparePairRules, pairVoidByOffline, defaultVoidBy } from "@/lib/burnticker/launchBundle";
 import { FakeBurnProgram } from "@/lib/burnticker/program";
-import { LINKED_ONE_SHOT_REFUSAL } from "@/lib/burnticker/linkedShare";
+import { LINKED_ONE_SHOT_REFUSAL, ONE_SHOT_SHARE_REFUSAL } from "@/lib/burnticker/linkedShare";
 import { LINKED_ONE_SHOT_LINE, SHARE_PRESETS, presetProblem, presetRowLabel, sharePresetsForRule } from "@/lib/burnticker/launchPresets";
 import { dialsFor } from "@/lib/burnticker/dials";
 import { migrateLinkedShare } from "@/lib/burnticker/launchDraft";
@@ -55,7 +55,9 @@ describe("audit 12 item 1: a linked one-shot pair is 100 % only", () => {
     assert.deepEqual([d.bounds.min, d.bounds.max, d.linkedOneShot], [1, 1, true]);
     assert.equal(dialsFor(game).linkedOneShot, false);
     assert.equal(presetProblem(candidatesPairRule(EAGLES_CID, 0.5), { linked: true }), LINKED_ONE_SHOT_REFUSAL);
-    assert.equal(presetProblem(candidatesPairRule(EAGLES_CID, 0.5)), null, "a single candidate coin may burn 50 %");
+    // review 10 F1: a single candidate coin may burn 50 % only on a host with burn dispersal
+    assert.equal(presetProblem(candidatesPairRule(EAGLES_CID, 0.5)), ONE_SHOT_SHARE_REFUSAL);
+    assert.equal(presetProblem(candidatesPairRule(EAGLES_CID, 0.5), { dispersal: true }), null, "a single candidate coin may burn 50 % with dispersal");
   });
 
   test("the review refuses 50 % on every linked one-shot shape with the plain sentence, once; a single one-shot at 50 % is fine", async () => {
@@ -185,7 +187,8 @@ describe("audit 12 item 3: the one-game words follow what is built", () => {
   });
   test("a single game still offers its own one-shot shares (sources-6 form)", () => {
     const r = firstPartyRule(gameSeries("mlb", "401000001", "LAD", "loss"), 0.5);
-    assert.deepEqual(sharePresetsForRule(r), [1, 0.5]);
+    assert.deepEqual(sharePresetsForRule(r), [1], "review 10 F1: 100 % only without burn dispersal");
+    assert.deepEqual(sharePresetsForRule(r, { dispersal: true }), [1, 0.5]);
   });
 });
 

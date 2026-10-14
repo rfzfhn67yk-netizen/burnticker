@@ -1,4 +1,4 @@
-import { LINKED_ONE_SHOT_REFUSAL } from "@/lib/burnticker/linkedShare";
+import { LINKED_ONE_SHOT_REFUSAL, ONE_SHOT_SHARE_REFUSAL } from "@/lib/burnticker/linkedShare";
 import { sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { endSelfOnLossProblem, endSinkOf, isOneShot, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
@@ -54,7 +54,8 @@ export interface RuleCtx { kalshiEnabled?: boolean; now?: number; /** the launch
   /** two teams in one game: the body's pair names the other team (`pair.opp`) */ game?: { opp: string | null } | null;
   /** end-sink picker (endSinks.ts): the live coins on this network a rule may name in onEnd.mint; absent = not checked here */ sinks?: readonly SinkCoin[] | null;
   /** this launch's own mints, and the other side of this coin's pair: neither may take the rest */ own?: readonly string[]; partners?: readonly string[];
-  /** round 5: the host's burn program is round 5 (BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5); false refuses the incinerator end */ programRound5?: boolean }
+  /** round 5: the host's burn program is round 5 (BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5); false refuses the incinerator end */ programRound5?: boolean;
+  /** review 10 F1: the host runs burn dispersal (BURNTICKER_DISPERSAL=1); anything but true refuses a single one-shot under 100 % with an end sink */ dispersal?: boolean }
 
 /**
  * THE RIVALRY SERIES' OWN REFUSALS (sources/espn.ts window `meetings`). A head-to-head season series is launched only as a pair, one coin
@@ -173,6 +174,9 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
   out.push(...candidatesRefusals(r, ctx), ...gamePairRefusals(r, ctx));
   // audit 12 item 1: a linked pair on a rule that resolves once moves the whole pool; any other share is refused, never rewritten to 100 %
   if (ctx.pair && isOneShot(r) && !linkedFull(r)) out.push({ status: 400, code: "linked-pair-full-pool", message: LINKED_ONE_SHOT_REFUSAL });
+  // review 10 F1 (2026-10-14): a single one-shot under 100 % with an end sink cannot finish its share on the coin before the end is recorded
+  // and the rest forwarded, unless the keeper can spend the carried amount without a reading (crank_carried, burn dispersal). Fail closed.
+  else if (!ctx.pair && isOneShot(r) && !linkedFull(r) && endSinkOf(r) !== null && (ctx.dispersal !== true || !!r.burnTarget)) out.push({ status: 400, code: "one-shot-share-needs-dispersal", message: ONE_SHOT_SHARE_REFUSAL });
   // round 5: the incinerator end sink exists only on the round-5 program (initialize_token pins EndSink kind INCINERATOR)
   if (endSinkOf(r) === "incinerator" && ctx.programRound5 === false) out.push({ status: 503, code: "incinerator-not-live", message: INCINERATOR_WAITING });
   // the owner rule of 2026-10-13: the losing path never burns this coin (rules.ts endSelfOnLossProblem); said once beside a pair's own refusal

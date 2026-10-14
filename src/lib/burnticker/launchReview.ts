@@ -25,6 +25,7 @@ import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx, sideBDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX, descriptionRoom, descriptionRoomProblem } from "@/lib/burnticker/creatorProfile";
 import { nameProblem } from "@/lib/burnticker/launchFields";
+import { dispersalEnabled } from "@/lib/burnticker/dispersal";
 import { LINKED_ONE_SHOT_LINE, presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
 import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_UNAVAILABLE_LINE, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
@@ -198,6 +199,11 @@ export const WIND_DOWN_LINE = `When the rule ends, the coin's own burn pool burn
 
 /** A4: the burn dial, said exactly (the share is of the burn budget, never of the supply). */
 export const budgetLine = (share: string): string => `Each result spends ${share} of the coin's available burn budget, which is the SOL in its burn pool. The tokens bought with it are burned, so the number of tokens burned varies.`;
+/**
+ * REVIEW 10 F1 (2026-10-14): the review's promise for a coin that burns once with a share under 100 % (offered only on a host with burn
+ * dispersal): the keeper spends the whole share on the coin before the end is recorded and the rest moves (multiKeeper.owedBeforeEnd).
+ */
+export const ONE_SHOT_SHARE_FIRST_LINE = "This coin burns once, so the whole share is spent on this coin before the rest of the pool moves on at the end.";
 /** The states a prerequisite chain can be in, so no reader assumes every qualifying result burns at once. */
 export const PREREQUISITE_STATES = [
   "Waiting: the curve has not raised enough yet, or the pool is not registered yet. Results are still recorded.",
@@ -294,7 +300,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const now = o.now ?? Date.now();
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): every rule refusal the bundle route makes, as problems
   const settled = settledPairInput(body.pair);
-  for (const x of ruleRefusals(locked, { programRound5: burnRealFromEnv(env), kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks: o.sinks ?? null })) problems.push(x.message);
+  for (const x of ruleRefusals(locked, { programRound5: burnRealFromEnv(env), dispersal: dispersalEnabled(env), kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks: o.sinks ?? null })) problems.push(x.message);
   // sources-7 H7: a coin against its own staked or wrapped form (derby/spec.ts wrapperPairProblem), as the tile and admission refuse it
   { const d = locked.rule.derby; if (d?.selector === "coinvs") { const w = wrapperPairProblem(d.a, d.b); if (w) problems.push(w); } }
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
@@ -368,7 +374,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // audit 6 item 8: the bundle route takes any share inside the rule's bounds, so a share off the web launcher's preset row is a warning
   // audit 12 item 1: a linked one-shot pair's row is 100 % only; a share off it is refused by ruleRefusals, so it is not repeated here
   const linkedOneShot = !!pair && shareShapeOf(locked.rule, { linked: true }) === "linkedOneShot";
-  const pp = linkedOneShot ? null : presetProblem(locked.rule);
+  const pp = linkedOneShot ? null : presetProblem(locked.rule, { dispersal: dispersalEnabled(env) });
   // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none
   const raiseSol = body.raiseSol === undefined || body.raiseSol === null ? DEFAULT_RAISE_SOL : String(body.raiseSol);
   const rp = raiseProblem(raiseSol, cluster);
@@ -466,7 +472,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const share = shareOf(asBuilt);
   const shareText = share === null ? "a vault amount" : pctLabel(share);
   const warnings = Array.isArray(body.warnings) ? (body.warnings as unknown[]).filter((w): w is string => typeof w === "string" && w.length <= 300).slice(0, 6) : [];
-  if (pp) warnings.push(pp);
+  if (pp && !problems.includes(pp)) warnings.push(pp);
   // audit 7 items 7 and 11: the one-time result's own due date (the picked game, never "the next meeting"), and the warning when it is near
   const oneTime = text.windowKind === "one-shot";
   const game = oneTime && o.game && gameOfRule(locked.rule, [o.game]) ? o.game : null;
@@ -530,7 +536,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       line: `The curve is complete once buyers have put in ${raiseSol} SOL, and the coin moves to its Raydium pool, which starts with roughly ${raiseSol} SOL.${isRaisePreset(raiseSol) ? "" : " This raise is not one of the three choices, so it is only accepted off mainnet."}`,
     } : null,
     prerequisiteStates: PREREQUISITE_STATES,
-    budget: share === null ? "This rule moves a fixed vault amount instead of a share of the burn budget." : budgetLine(shareText),
+    budget: share === null ? "This rule moves a fixed vault amount instead of a share of the burn budget." : `${budgetLine(shareText)}${share < 1 && shareShapeOf(asBuilt) === "oneShot" ? ` ${ONE_SHOT_SHARE_FIRST_LINE}` : ""}`,
     recovery,
     governance: reviewGovernance(o.root ?? process.cwd(), cluster, o.timeLockSecs ?? null),
     signing: !typeAvailable ? typeReason : !launchState.canSign ? launchState.signingSentence : problems.length ? "This draft has problems to fix before it can be signed." : null,

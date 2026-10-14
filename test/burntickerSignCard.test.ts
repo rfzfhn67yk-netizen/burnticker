@@ -35,8 +35,8 @@ const coin = (ticker: string, rule: unknown) => ({ creator: CREATOR, ticker, nam
 const PATHS: [string, string, unknown][] = [
   ["the sentence search (a feed card)", "DEBTWATCH", DEBT_RULE],
   ["Team coin", "RAYSWINS", firstPartyRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 }), 0.02)],
-  ["Matchup (one side, this game)", "TBGAME", firstPartyRule(gameSeries("mlb", "401999999", "TB", "loss"), 0.1)],
-  ["Any result / Elections (one market, resolves once)", "EAGLEMKT", polyRule(EAGLES_CID, 0.1)],
+  ["Matchup (one side, this game)", "TBGAME", firstPartyRule(gameSeries("mlb", "401999999", "TB", "loss"), 1)],   // review 10 F1: one-shots are 100 % without burn dispersal
+  ["Any result / Elections (one market, resolves once)", "EAGLEMKT", polyRule(EAGLES_CID, 1)],
   ["a template (A public number)", "DEBTTPL", { ...DEBT_RULE, scalar: { ...(DEBT_RULE as { scalar: object }).scalar, perUnit: { fractionOfPool: 0.05 } } }],
 ];
 

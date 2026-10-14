@@ -23,6 +23,7 @@ import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
 import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { ReviewCard } from "./ReviewCard";
+import { electionPairIdentity } from "@/lib/burnticker/electionPairLabels";
 import { launchErrorMessage, LaunchRequestError, PAIR_CURVE_REVIEW_LINE, postPairLaunch, venueFor, venueFrom409, type LaunchErrorBody, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { STATIONS, nwsSeries, parseNwsSeries, stationOptionLabel } from "@/lib/burnticker/sources/nws";
@@ -1266,15 +1267,17 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     const [a, b] = esel.map((id) => r.outcomes.find((o) => o.conditionId === id));
     if (!a || !b || a.conditionId === b.conditionId) return;
     const sur = (o: ElOutcome) => o.label.replace(/\s*\([A-Z]\)$/, "").trim().split(/\s+/).pop() ?? o.label;
-    const tk = pairTickers(sur(a), sur(b)), nm = pairNames(sur(a), sur(b));
-    const side = (o: ElOutcome, t: string): Side => ({ abbr: sur(o), marketTicker: o.conditionId, label: o.label, nickname: sur(o), name: o.label, ticker: t });
+    // private review 10 F2: party control is "Democrats vs Republicans" ($DEMVREP / $REPVDEM), never "Party vs Party"; one surname twice
+    // takes a first initial, then the full name (electionPairLabels.ts)
+    const id = electionPairIdentity(a.label, b.label), tk = id.tickers, nm = id.names;
+    const side = (o: ElOutcome, t: string, w: string): Side => ({ abbr: w, marketTicker: o.conditionId, label: o.label, nickname: w, name: o.label, ticker: t });
     markOrigin("browse"); setOrigin(null);
     // snag 8: a market that is not about the person by name is said in one honest sentence (the party's market settles it)
     // website-22 (audit 10 item 6): the warning names the coin by the ticker on screen when it is shown, never the one generated here
     const honest = (o: ElOutcome, side: "A" | "B") => (o.mapping ? mappingWarning(o.mapping, side) : fold(o.question).includes(fold(sur(o))) ? null : partyMarketWarning(o.question, sur(o), side));
     setSrcWarnings([honest(a, "A"), honest(b, "B")].filter((x): x is string => !!x));
     setElPick({ race: r, a, b });
-    setGame({ eventTicker: r.slug, seriesTicker: "elections", title: r.title, subTitle: null, category: "Politics", expectedAt: r.settlesOn, closeTime: null, markets: [], matchedSides: [], pair: { a: side(a, tk.a), b: side(b, tk.b), tieMarket: null }, refused: [] });
+    setGame({ eventTicker: r.slug, seriesTicker: "elections", title: r.title, subTitle: null, category: "Politics", expectedAt: r.settlesOn, closeTime: null, markets: [], matchedSides: [], pair: { a: side(a, tk.a, id.words.a), b: side(b, tk.b, id.words.b), tieMarket: null }, refused: [] });
     setSwap(false); setPairMode("game"); setDraft(null); setFlavour(null); setFlavourB(null);
     setSrcSuggest({ name: null, ticker: null });
     if (nameAuto) { setName(nm.a); setNameB(nm.b); }

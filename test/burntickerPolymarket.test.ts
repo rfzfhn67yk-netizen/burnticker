@@ -290,7 +290,7 @@ describe("the keeper, the API and the SDK (on the fakes)", () => {
   test("v1 launch: a Polymarket one-shot builds a bundle (refuse list on the question, binary check); a tag series passes the weekly density check", async () => {
     // (the second coin on the same market is $TAMPA, not $BUCS2: since the growth batch a copycat suffix of an existing ticker is refused — lookalike.ts)
     const mint = () => Keypair.generate().publicKey.toBase58();
-    const res = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "TAMPA", name: "tampa bay one shot", rule: PM_BUCS, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
+    const res = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "TAMPA", name: "tampa bay one shot", rule: { ...PM_BUCS, binary: { onYes: { fractionOfPool: 1 }, onNo: null } }, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });   // review 10 F1: 100 % without burn dispersal
     const body = await res.json() as { review: { seriesTitle: string; receiptFormat: string; disclosure: { eventContract: string } } };
     assert.equal(res.status, 200, JSON.stringify(body).slice(0, 300));
     assert.equal(body.review.seriesTitle, "Buccaneers vs. Cowboys");
@@ -298,14 +298,14 @@ describe("the keeper, the API and the SDK (on the fakes)", () => {
     assert.match(body.review.disclosure.eventContract, /Polymarket/);
     const tag = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "NFLNO", name: "nfl no", rule: PM_NFL_MONEYLINE, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
     assert.equal(tag.status, 200, (await tag.text()).slice(0, 300));
-    const unknown = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "NOPE", name: "nope", rule: { ...PM_BUCS, market: `0x${"ab".repeat(32)}` }, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
+    const unknown = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "NOPE", name: "nope", rule: { ...PM_BUCS, binary: { onYes: { fractionOfPool: 1 }, onNo: null }, market: `0x${"ab".repeat(32)}` }, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
     // launch night 2026-10-13: an unreadable upstream is answered 503 (Cloudflare replaces a 502 with its own page), the sentence intact
     assert.equal(unknown.status, 503);
     assert.equal(unknown.headers.get("retry-after"), "15");
     assert.match(((await unknown.json()) as { error: string }).error, /could not be read from Polymarket/);
     // launch walkthrough 2026-10-13: the launch page's own route (the one the owner's launch used) answers the same way, never 502
     const { POST: pagePost } = await import("../src/app/api/burnticker/launch/route.ts");
-    const page = await pagePost(new Request(`http://${HOST}/api/burnticker/launch`, { method: "POST", headers: { ...POST_HEADERS, host: HOST }, body: JSON.stringify({ creator: CREATOR, ticker: "NOPE", name: "nope", rule: { ...PM_BUCS, market: `0x${"ab".repeat(32)}` }, acknowledgements: { ruleLocked: true, noReturns: true } }) }));
+    const page = await pagePost(new Request(`http://${HOST}/api/burnticker/launch`, { method: "POST", headers: { ...POST_HEADERS, host: HOST }, body: JSON.stringify({ creator: CREATOR, ticker: "NOPE", name: "nope", rule: { ...PM_BUCS, binary: { onYes: { fractionOfPool: 1 }, onNo: null }, market: `0x${"ab".repeat(32)}` }, acknowledgements: { ruleLocked: true, noReturns: true } }) }));
     const pageBody = await page.text();
     assert.equal(page.status, 503, pageBody.slice(0, 300));
     assert.equal(page.headers.get("retry-after"), "15");
