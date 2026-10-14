@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, ScheduleUnavailable, espnSeriesTitle, gamesFor, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
-import { CROSS_LABEL, countedOfficialOf, envGameDeps, operatorsFor, settleGame, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
+import { CROSS_LABEL, countedOfficialOf, envGameDeps, operatorsFor, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { FecClient, fecSettled, parseFecSeries } from "@/lib/burnticker/sources/fec";
 import { ALREADY_DECIDED_SENTENCE, gameEligibility } from "@/lib/burnticker/oneShotEligibility";
 import { NwsClient, crossCheck, iemFor, nwsSeriesTitle, nwsSettled, parseNwsSeries, qualifies, stationByCode, type NwsSeries } from "@/lib/burnticker/sources/nws";
@@ -74,21 +74,16 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
       if (s.kind === "game" && games[0].completed) return { ...none, problem: { code: "already-decided", reason: gameEligibility(games[0]).reason! } };
       const next = games.find((g) => !g.completed && Date.parse(g.startsAt) > nowMs - SETTLE_AFTER_START_MS) ?? null;
       const nextAt = next?.startsAt ?? null, nextBasis = next ? `the next game's start (schedule): ${next.name}` : "no scheduled game listed";
-      const done = games.filter((g) => g.completed && Date.parse(g.startsAt) + SETTLE_AFTER_START_MS <= nowMs);
-      const lastGame = done[done.length - 1] ?? null;
-      if (!lastGame) {
-        // no game played yet: a primary must exist for the next one (its market, or the licensed final)
+      // owner 2026-10-13: NO PAST GAME IS READ AT LAUNCH ("no passed events should apply, only new events"). The readers are proven on
+      // the next game: its market (or the licensed final once the game is played) plus a second operator. Nothing before launch counts,
+      // and the first game after launch is where the two reads are compared.
+      {
         const m = next && d.market ? await d.market(next).catch(() => null) : null;
         if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: "no primary: no moneyline market for the next game and BURNTICKER_THESPORTSDB_KEY (TheSportsDB commercial license) is not set" } };
         const ops = operatorsFor(s.league, d, !!m);
         if (ops.length < 2) return { ...none, nextAt, nextBasis, problem: { code: "cross-read-unreadable", reason: `only one operator can read these games (${ops.join(", ")}): a second independent read is needed` } };
-        return { ...none, basis: "no completed game yet: both reads are compared at the first one", nextAt, nextBasis, problem: null };
+        return { ...none, basis: next ? `readers for the next game (${next.name}): ${ops.join(" and ")}; games before launch never count, and both reads are compared at the first game after launch` : "no game listed yet; both reads are compared at the first game after launch", nextAt, nextBasis, problem: null };
       }
-      const v = await settleGame(c, lastGame, d);
-      if (v.kind === "held") return { ...none, nextAt, nextBasis, basis: v.why, problem: { code: /no primary/.test(v.why) ? "primary-unreadable" : /only one operator/.test(v.why) ? "cross-read-unreadable" : "disagreement", reason: `${lastGame.name}: ${v.why}` } };
-      if (v.kind === "awaiting") return { ...none, nextAt, nextBasis, basis: v.why, problem: { code: "cross-read-unreadable", reason: `${lastGame.name}: ${v.why}` } };
-      const last = { id: lastGame.date, value: `${lastGame.name}: ${v.winner} (settled on: ${v.settledOn})`, at: lastGame.startsAt };
-      return { last, crossLast: { id: lastGame.date, value: `confirmed by ${v.confirmedBy}`, at: lastGame.startsAt }, agreement: true, basis: `${lastGame.date}: ${v.detail}`, nextAt, nextBasis, problem: null };
     },
   };
 }

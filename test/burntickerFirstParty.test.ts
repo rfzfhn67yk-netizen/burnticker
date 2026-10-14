@@ -133,8 +133,9 @@ describe("the creation preflight passes team coins, matchups and weather rules (
     const team = await preflightSelector(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
     assert.equal(team.ok, true, JSON.stringify(team.refusal));
     assert.equal(team.primary.operator, "Polymarket / UMA (Conditional Tokens on Polygon)", "the on-chain payout is primary A");
-    assert.equal(team.crossRead?.id, "mlb.statsapi"); assert.equal(team.agreement, true);
-    assert.match(team.primary.lastReading?.value ?? "", /settled on: on-chain payout/);
+    // owner 2026-10-13: no past game is read at launch; the readers are proven on the next game and compared at the first one after launch
+    assert.equal(team.crossRead?.id, "mlb.statsapi"); assert.equal(team.agreement, null);
+    assert.equal(team.primary.lastReading, null); assert.match(team.agreementBasis, /readers for the next game/);
     const wx = await preflightSelector(nativeRule(nwsSeries("high", "DEN", 85)), { now: ESPN_NOW });
     assert.equal(wx.ok, true, JSON.stringify(wx.refusal)); assert.equal(wx.crossRead?.operator, "Iowa Environmental Mesonet (Iowa State University)"); assert.equal(wx.agreement, true);
     setNativeClients({ espn: null, nws: null, games: null });
@@ -147,9 +148,11 @@ describe("the creation preflight passes team coins, matchups and weather rules (
     const url = tsdbV2Url(["New York Yankees", "Tampa Bay Rays"]);
     setNativeClients({ espn: espnFixtureClient({ [url]: ev("3", "4") }), games: fakeGameDeps({ marketFor: () => false, tsdbKey: "TEST" }) });
     const ok = await preflightSelector(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
-    assert.equal(ok.ok, true, JSON.stringify(ok.refusal)); assert.match(ok.primary.lastReading?.value ?? "", /settled on: TheSportsDB/);
+    assert.equal(ok.ok, true, JSON.stringify(ok.refusal)); assert.equal(ok.primary.lastReading, null, "launch reads no past game (owner 2026-10-13)");
+    assert.match(ok.agreementBasis, /TheSportsDB and MLB's official feed/);
+    // a score that disagrees is the keeper's hold at the first game after launch (settleGame), never a launch-time refusal any more
     setNativeClients({ espn: espnFixtureClient({ [url]: ev("3", "5") }), games: fakeGameDeps({ marketFor: () => false, tsdbKey: "TEST" }) });
-    assert.equal((await preflightSelector(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW })).refusal?.code, "disagreement");
+    assert.equal((await preflightSelector(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW })).ok, true);
     setNativeClients({ espn: null, games: null });
   });
 
@@ -159,7 +162,7 @@ describe("the creation preflight passes team coins, matchups and weather rules (
     setNativeClients({ espn: espnFixtureClient(), games: fakeGameDeps({ marketFor: () => false }) });
     assert.equal((await preflightSelector(TB, { now: ESPN_NOW })).refusal?.code, "primary-unreadable", "no market and no TheSportsDB key: never read from ESPN");
     setNativeClients({ games: fakeGameDeps({ winner: () => "New York Yankees" }) });
-    assert.equal((await preflightSelector(TB, { now: ESPN_NOW })).refusal?.code, "disagreement");
+    assert.equal((await preflightSelector(TB, { now: ESPN_NOW })).ok, true, "a past game's disagreement is not read at launch (owner 2026-10-13); the keeper holds it at the first game after launch");
     setNativeClients({ games: fakeGameDeps() });
     const nfl = await preflightSelector(nativeRule(teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
     assert.equal(nfl.refusal?.code, "primary-unreadable"); assert.match(nfl.refusal!.reason, /schedule needs the licensed key/, "no TheSportsDB key: no NFL schedule, never ESPN");

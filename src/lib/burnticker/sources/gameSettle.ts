@@ -76,6 +76,39 @@ const tsdbStart = (e: Record<string, unknown>): string | null => (e.strTimestamp
 
 /** v1's event search (a key v2 refuses; espn.ts tsdbRead): "Arsenal_vs_Coventry_City". */
 export const tsdbV1SearchUrl = (key: string, names: [string, string]): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/searchevents.php?e=${encodeURIComponent(`${names[0]} vs ${names[1]}`.replace(/ /g, "_"))}`;
+/**
+ * TheSportsDB's DAY LISTING (launch night 2026-10-13: v2 search/event answered "No data found" for every league and name form tried
+ * — Chiefs/Raiders, Dodgers/Brewers — so every game would have been held). filter/events/day/{date} lists the day's events with teams
+ * and scores but no status; lookup/event/{id} carries the status (FT) and the kickoff time. v1 (a key v2 refuses): eventsday.php and
+ * lookupevent.php carry everything in one row.
+ */
+export const tsdbV2DayUrl = (date: string): string => `https://www.thesportsdb.com/api/v2/json/filter/events/day/${encodeURIComponent(date)}`;
+export const tsdbV1DayUrl = (key: string, date: string): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/eventsday.php?d=${encodeURIComponent(date)}`;
+export const tsdbV2EventUrl = (id: string): string => `https://www.thesportsdb.com/api/v2/json/lookup/event/${encodeURIComponent(id)}`;
+export const tsdbV1EventUrl = (key: string, id: string): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/lookupevent.php?id=${encodeURIComponent(id)}`;
+const tsdbRows = (body: unknown): Record<string, unknown>[] => (body && typeof body === "object" ? Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][] : []).flat().filter((e) => typeof e === "object" && !!e && "idEvent" in e);
+/** The day listing's row for this game: both teams match by name and the date is the game's UTC date or the day before. */
+export function tsdbDayMatch(g: Game, body: unknown): Record<string, unknown> | null {
+  const prev = new Date(Date.parse(`${g.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const rows = tsdbRows(body).filter((e) => (e.dateEvent === g.date || e.dateEvent === prev) && sideMatches(String(e.strHomeTeam ?? ""), g.home) && sideMatches(String(e.strAwayTeam ?? ""), g.away));
+  const same = rows.filter((e) => e.dateEvent === g.date);
+  return nearestStart(same.length ? same : rows, g.startsAt, tsdbStart) ?? null;
+}
+/** The game's TheSportsDB row through the day listing, then the event lookup for its status when the listing has none. Null: not listed. */
+export async function tsdbFinalByDay(client: EspnClient, key: string, g: Game): Promise<Final | null> {
+  for (const date of [g.date, new Date(Date.parse(`${g.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10)]) {
+    const url = tsdbV2DayUrl(date);
+    const row = tsdbDayMatch(g, await client.tsdbRead(key, url, (k) => [tsdbV1DayUrl(k, date)]));
+    if (!row) continue;
+    let full = row;
+    if (!row.strStatus && row.idEvent) {
+      const lookedUp = tsdbRows(await client.tsdbRead(key, tsdbV2EventUrl(String(row.idEvent)), (k) => [tsdbV1EventUrl(k, String(row.idEvent))]).catch(() => null))[0];
+      if (lookedUp) full = { ...row, ...lookedUp };
+    }
+    return finalFromTsdb(g, { events: [full] }, url);
+  }
+  return null;
+}
 export const tsdbV2Url = (names: [string, string]): string => `https://www.thesportsdb.com/api/v2/json/search/event/${encodeURIComponent(`${names[0]} vs ${names[1]}`.replace(/ /g, "_").toLowerCase())}`;
 /** TheSportsDB v2 search/event: the event list under whichever key the API uses; the game's date (or the day before, UTC) and a final status. */
 export function finalFromTsdb(g: Game, body: unknown, url: string): Final | null {
@@ -208,7 +241,9 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
     try {
       // v2 with the key in the header; a key v2 refuses is read through v1 (espn.ts tsdbRead), the key never logged
       let f: Final | null = null, any = false, err: Error | null = null;
-      for (const names of tsdbNamePairs(g)) {
+      // the day listing first (2026-10-13: v2 search/event finds nothing for any league); the name search stays as the fallback
+      try { f = await tsdbFinalByDay(client, d.tsdbKey, g); any = true; } catch (e) { err = e as Error; }
+      for (const names of f ? [] : tsdbNamePairs(g)) {
         let body: unknown;
         try { body = await client.tsdbRead(d.tsdbKey, tsdbV2Url(names), (k) => [tsdbV1SearchUrl(k, names)]); any = true; } catch (e) { err = e as Error; continue; }
         f = finalFromTsdb(g, body, tsdbV2Url(names));
