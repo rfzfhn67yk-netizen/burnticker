@@ -109,6 +109,11 @@ export function sideSummary(s: Pick<TokenStatusJson, "ticker" | "name" | "mint" 
 /** The fee-flow sentence every coin page carries (the app's coin page, t/[ticker]/page.tsx, prints the same words). */
 export const FEE_FLOW_LINE = `Creator fees go to the burn pool and are burned. The liquidity is locked forever. ${OPERATOR_SHARE_LINE}`;
 
+/** A draft's lifecycle line: the launch was prepared but never signed, so nothing exists on chain (never "This coin is live."). */
+export const NOT_CREATED_LINE = "This coin is not created yet. Nothing is on chain.";
+/** An expired draft's lifecycle line. */
+export const EXPIRED_DRAFT_LINE = "This draft expired before it was created. Nothing is on chain.";
+
 /** The lifecycle block from the registry (pure over its reads): ended, wind-down progress, the last sweep, the page's one line. */
 export function lifecycleFrom(reg: Pick<Registry, "ruleEnd" | "receipts" | "getStatus">, t: Pick<TokenRow, "mint" | "status">, rule: Pick<LockedRule["rule"], "onEnd" | "binary" | "scalar" | "kind">, poolLamports: bigint | null = null): LifecycleJson {
   const end = reg.ruleEnd(t.mint);
@@ -119,7 +124,10 @@ export function lifecycleFrom(reg: Pick<Registry, "ruleEnd" | "receipts" | "getS
   const days = rule.onEnd?.windDownDays ?? null;
   const done = wd.filter((b) => b.status === "confirmed" || b.status === "skipped").length;
   const poolNote = poolLamports !== null && poolLamports >= BigInt(10_000_000) ? `Its burn pool holds ${rawToTokens(poolLamports, 9)} SOL.` : "Its burn pool is close to empty.";
-  const line = t.status === "retired" ? `This coin is retired.${lastSweep ? ` Its pool was last swept on ${lastSweep}.` : ""} ${poolNote}`
+  // launch night 2026-10-13: a draft (a prepared launch that was never signed) or an expired draft is not a coin yet, never "live"
+  const line = t.status === "draft" ? NOT_CREATED_LINE
+    : t.status === "expired" ? EXPIRED_DRAFT_LINE
+    : t.status === "retired" ?`This coin is retired.${lastSweep ? ` Its pool was last swept on ${lastSweep}.` : ""} ${poolNote}`
     : end?.mode === "drain" ? `This coin is spending its whole burn pool, one day at a time, up to the cap for each run. It has done so on ${dr.length === 1 ? "one day" : `${dr.length} days`} so far.`
     : end ? `This coin is winding down. It is on day ${Math.max(1, wd.length)} of ${days ?? "an unknown number"}.`
     : "This coin is live.";

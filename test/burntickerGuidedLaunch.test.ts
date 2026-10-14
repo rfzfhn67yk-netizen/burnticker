@@ -107,15 +107,16 @@ describe("the four questions", () => {
   });
 
   test("owner: the page opens at the top with a saved draft offered in one line, never restored by itself; Start over clears the store", () => {
-    const mount = page.slice(page.indexOf("  useEffect(() => {\n    let s: Record<string, unknown> | null = null;"), page.indexOf("    setReady(true);"));
-    assert.doesNotMatch(mount, /restoreFrom\(/, "the mount effect never applies a draft");
-    assert.match(mount, /setSavedDraft\(s\)/);
+    const mount = page.slice(page.indexOf("  useEffect(() => {\n    // launch night 2026-10-13"), page.indexOf("    setReady(true);"));
+    // launch night 2026-10-13: the mount applies a draft only for "Start a new launch from the review" (?resume=review); otherwise it offers
+    assert.equal((mount.match(/restoreFrom\(/g) ?? []).length, 1, "the mount effect applies a draft only on ?resume=review");
+    assert.match(mount, /else if \(resumeReview && offer\) restoreFrom\(offer\);\n\s+else if \(offer\) setSavedDraft\(offer\);/);
     // website-20 (audit 6 item 4): every step change, the guided phases included, starts at the top with the heading focused
     assert.match(page, /const y = restoreScroll\.current; restoreScroll\.current = null; window\.scrollTo\(\{ top: y \?\? 0 \}\);[\s\S]{0,260}\[data-step-heading\][\s\S]{0,120}\}, \[step, guide\.phase, guide\.pairKind\]\);/);
-    assert.match(page, /You have a draft: \{String\(savedDraft\.name \|\| savedDraft\.ticker \|\| "unnamed"\)\}\. <button type="button" data-nav className="underline" onClick=\{resumeDraft\}>Resume<\/button>/);
+    assert.match(page, /data-saved-draft>\{savedDraftLine\(savedDraft\)\} <button type="button" data-nav className="underline" onClick=\{resumeDraft\}>Resume<\/button>/);
     assert.match(page, /const startOver = \(force = false\) => \{ if \(!force && needsConfirm\) \{ setConfirmOver\(true\); return; \} setPrevFollow\(null\); setConfirmOver\(false\); try \{ sessionStorage\.removeItem\(STORE\);/);
     assert.match(page, /const needsConfirm = !!guide\.follow \|\| step !== "choose" \|\| \(!nameAuto && !!name\.trim\(\)\) \|\| \(!tickerAuto && !!ticker\.trim\(\)\) \|\| !!profile\.image \|\| !!profileB\.image;/);
-    assert.match(page, /const linked = wantPair \|\| q0\.get\("derby"\) === "1" \|\| !!q0\.get\("template"\) \|\| !!q0\.get\("like"\) \|\| !!q0\.get\("league"\);\n\s+if \(linked\) \{ try \{ sessionStorage\.removeItem\(STORE\); \}/, "snag 6: a link never reopens a saved draft");
+    assert.match(page, /const linked = wantPair \|\| q0\.get\("derby"\) === "1" \|\| !!q0\.get\("template"\) \|\| !!q0\.get\("like"\) \|\| !!q0\.get\("league"\);\n[\s\S]{0,300}if \(linked\) \{ try \{ sessionStorage\.removeItem\(STORE\); \}/, "snag 6: a link never reopens a saved draft");
   });
 });
 

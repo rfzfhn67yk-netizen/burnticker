@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
+import { currentBuildId } from "@/lib/burnticker/buildVersionServer";
+import { VersionCheck } from "../_components/VersionCheck";
 
 // website brief §8: the launch page's title, description and canonical (a server layout); the wallet providers stay client-side.
 // website-12 (Claude audit 2 item 1): the description reads the one launch-state record at request time, never a typed "closed".
@@ -17,5 +19,6 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function LaunchLayout({ children }: { children: ReactNode }) {
   // website-13 (2026-10-12): the one wallet provider is the shell's (ShellWalletProviders, mounted by the root layout); SignCard reads it
   // audit 7 item 16: Skip to content, first in the tab order (globals.css .bt-skip shows it on focus), lands on the wizard's <main>
-  return <><a className="bt-skip" href="#launch-main" data-skip-link>Skip to content</a>{children}</>;
+  // launch night 2026-10-13: the build this page was rendered from; VersionCheck compares it with the host's current one (buildVersion.ts)
+  return <><a className="bt-skip" href="#launch-main" data-skip-link>Skip to content</a><VersionCheck served={currentBuildId()} />{children}</>;
 }

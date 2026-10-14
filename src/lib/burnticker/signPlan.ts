@@ -286,6 +286,15 @@ export interface SendDeps {
   /** where each signed transaction is written before it is sent (browserPlanStorage in the card) */
   storage?: PlanStorage | null;
   /**
+   * launch night 2026-10-13: whether a blockhash can still land (Connection.isBlockhashValid(…, { commitment: "confirmed" }).value).
+   * Absent → a slow wallet is never re-asked before the send; a "Blockhash not found" refusal still is.
+   */
+  isBlockhashValid?(blockhash: string): Promise<boolean>;
+  /** a sentence for the creator while the run goes on (the wallet is asked to sign a rebuilt step) */
+  onNotice?(text: string): void;
+  /** the clock (tests); Date.now by default */
+  now?(): number;
+  /**
    * launch recovery 255: the transaction history for one signature (Connection.getTransaction(sig, { maxSupportedTransactionVersion: 0,
    * commitment: "confirmed" }) → null, or its meta.err). Absent → an expired step is never proven unlanded, so it is never rebuilt.
    */
@@ -351,6 +360,21 @@ const accountsExistSentence = (i: number, n: number, sig: string) => `Step ${i +
 export const staysSentSentence = (r: Reconciled, i: number, n: number, sig: string): string => (r === "accounts-exist" ? accountsExistSentence(i, n, sig) : r === "uncertain" ? uncertainSentence(i, n, sig) : sentSentence(i, n, sig));
 /** Whether a reconciled pending send stays as sent (nothing rebuilt). */
 export const staysSent = (r: Reconciled): boolean => r !== "confirmed" && r !== "failed" && r !== "never-landed";
+/**
+ * launch night 2026-10-13: a blockhash fetched more than this long before the wallet returned is checked on chain before the send (a
+ * blockhash lives about 60 to 90 seconds; Phantom's warning screens can take longer). An expired one is rebuilt and signed again.
+ */
+export const STALE_BLOCKHASH_MS = 45_000;
+/** How many times one step is built again with a fresh blockhash and offered to the wallet before the run stops. */
+export const RESIGN_MAX = 2;
+const BLOCKHASH_REFUSED = /blockhash not found/i;
+/** Only a definite "no" counts as expired; a check that throws leaves the send to go ahead (a refusal then rebuilds it anyway). */
+async function blockhashExpired(d: Pick<SendDeps, "isBlockhashValid">, blockhash: string): Promise<boolean> {
+  try { return (await d.isBlockhashValid!(blockhash)) === false; } catch { return false; }
+}
+/** Said to the creator while the wallet is asked again. */
+export const resignSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} waited in the wallet longer than the network allows, so it was prepared again. Nothing was sent. Approve it in your wallet once more.`;
+export const resignExhaustedSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} was not sent because the wallet took longer than the network allows, ${RESIGN_MAX + 1} times in a row. Nothing was sent. Press the button to try again, and approve the request in your wallet within a minute.`;
 /** A send error that proves the transaction never left the RPC node (preflight / blockhash refused); anything else may have landed. */
 const SEND_REFUSED = /simulation failed|preflight|blockhash not found|insufficient funds/i;
 
@@ -399,16 +423,27 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
     try { lut = await d.lookupTable(); } catch (e) { return stop(signatures.length, "not-sent", `Step ${signatures.length + 1} of ${n} failed. The error was: ${String((e as Error)?.message ?? e).slice(0, 240)}`); }
   }
 
+  const now = d.now ?? (() => Date.now());
   for (let i = signatures.length; i < n; i++) {
-    let bh: { blockhash: string; lastValidBlockHeight: number }, raw: Uint8Array, pending: PendingSend;
+    let bh!: { blockhash: string; lastValidBlockHeight: number }, raw!: Uint8Array, pending!: PendingSend, sig = "";
+    // launch night 2026-10-13: a wallet that takes longer than the blockhash lives (Phantom's warning screens) gets the step built again
+    // with a fresh blockhash and is asked to sign once more, up to RESIGN_MAX times, instead of a send that fails "Blockhash not found"
+    let resigns = 0;
+    for (;;) {
     try {
       bh = await d.latestBlockhash();
+      const fetchedAt = now();
       const built = buildStepTx(plan.steps[i], creator, plan.keys, bh.blockhash, lut);
       // launch integrity 253: a copy of what the wallet is handed (a wallet may sign the object in place), checked against what comes back
       const handed = { message: built.message.serialize(), signatures: built.signatures.map((s) => Uint8Array.from(s)) };
       const signed = await d.signTransaction(built);
       const changed = walletReturnProblem(handed, signed, plan.steps[i], plan);
       if (changed) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because ${changed}`);
+      // the integrity check above ran first; only then is the blockhash's age looked at (a stale one is re-checked on chain)
+      if (now() - fetchedAt > STALE_BLOCKHASH_MS && d.isBlockhashValid && (await blockhashExpired(d, bh.blockhash))) {
+        if (resigns >= RESIGN_MAX) return stop(i, "not-sent", resignExhaustedSentence(i, n));
+        resigns++; d.onNotice?.(resignSentence(i, n)); continue;
+      }
       raw = signed.serialize();
       if (raw.length > PACKET_LIMIT) throw new Error(`the signed transaction is ${raw.length} bytes, over the ${PACKET_LIMIT.toLocaleString("en-US")}-byte limit`);
       const first = signed.signatures[0];
@@ -419,7 +454,6 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       const m = (e as Error).message ?? String(e);
       return stop(i, "not-sent", /reject|denied|cancel/i.test(m) ? `Step ${i + 1} of ${n} was not signed in the wallet` : `Step ${i + 1} of ${n} failed. The error was: ${m.slice(0, 200)}`);
     }
-    let sig: string;
     try {
       // launch recovery 254: the submitted transaction's own signature is its identity. Whatever the RPC answers (another signature, an
       // empty or malformed string) is a provider inconsistency: the stored signature and bytes stay, and that transaction is confirmed
@@ -427,11 +461,20 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       sig = pending.signature;
     } catch (e) {
       const m = (e as Error).message ?? String(e);
-      if (SEND_REFUSED.test(m)) { rec.pending = null; save(); return stop(i, "not-sent", `Step ${i + 1} of ${n} failed. The error was: ${m.slice(0, 200)}`); }
+      if (SEND_REFUSED.test(m)) {
+        rec.pending = null; save();
+        // "Blockhash not found": the node refused it, so nothing left; build it again with a fresh blockhash and ask the wallet once more
+        if (BLOCKHASH_REFUSED.test(m) && resigns < RESIGN_MAX) { resigns++; d.onNotice?.(resignSentence(i, n)); continue; }
+        return stop(i, "not-sent", `Step ${i + 1} of ${n} failed. The error was: ${m.slice(0, 200)}`);
+      }
       const r = settledStop(pending, await settle(pending)); // the node may have forwarded it: settle against the original
       if (r) return r;
-      continue;
+      sig = "";
+      break;
     }
+    break;
+    }
+    if (!sig) continue;
     let c: { err: unknown };
     try { c = await d.confirm(sig, bh); } catch {
       const r = settledStop(pending, await settle(pending)); // lost confirmation: never drop the signature

@@ -9,6 +9,7 @@ import { WALLET_COPY, meState, shortAddress, wantsConnect } from "@/lib/burntick
 import { ANALYTICS_COPY } from "@/lib/burnticker/creatorBenefits";
 import { WEEK_MEANING } from "@/lib/burnticker/coinRank";
 import { LaunchChecklist } from "../_components/LaunchChecklist";
+import { DRAFTS_HEADING, meCoinView, splitMeCoins, stateChip } from "@/lib/burnticker/meCoins";
 
 /**
  * THE CREATOR DASHBOARD (2026-10-10; gated by the shell's wallet since website-13, 2026-10-12): "Your coins" is the one page a connected
@@ -56,7 +57,7 @@ export default function CreatorDashboard() {
   const rankOf = (t: string) => (sum ? sum.coins.find((x) => x.ticker === t)?.rank ?? null : null);
   const weekText = sum ? sum.coins.map((x) => x.summary).join("\n") : "";
   const copyWeek = async () => { try { await navigator.clipboard.writeText(weekText); setCopied("week"); setTimeout(() => setCopied(null), 2000); } catch { setCopied(null); } };
-  const copy = async (c: Coin) => { try { await navigator.clipboard.writeText(c.todayPost.text); setCopied(c.ticker); setTimeout(() => setCopied(null), 2000); } catch { setCopied(null); } };
+  const copy = async (c: Coin) => { try { await navigator.clipboard.writeText(c.todayPost.text); setCopied(c.mint); setTimeout(() => setCopied(null), 2000); } catch { setCopied(null); } };
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-5 text-sm">
@@ -87,11 +88,15 @@ export default function CreatorDashboard() {
           <div className="flex flex-wrap items-center gap-3"><button className="rounded border border-neutral-700 px-2 py-1 hover:border-amber-400" onClick={() => void copyWeek()}>{copied === "week" ? "Copied" : ANALYTICS_COPY.copySummary}</button><span className="text-neutral-500">{WEEK_MEANING}</span></div>
         </section>
       )}
-      {d && d.coins.length > 0 && (
-        <ul className="grid gap-3 md:grid-cols-2" aria-label="your coins">
-          {d.coins.map((c) => (
-            <li key={c.mint} className={card + " space-y-2"}>
-              <div className="flex flex-wrap items-center gap-2"><Link className="font-mono text-base underline" href={c.page}>${c.ticker}</Link><span className="text-neutral-400">{c.name}</span><span className="bt-chip">{c.state}</span>{c.badge && <span className="bt-chip bt-chip-window">{c.badge}</span>}</div>
+      {d && d.coins.length > 0 && (() => {
+        // launch night 2026-10-13 (meCoins.ts): created coins first; a draft (prepared, never signed) has its own card that says it is not
+        // created, with no wind-down, no settlement facts and no post to copy
+        const { created, drafts } = splitMeCoins(d.coins);
+        return (<>
+        {created.length > 0 && <ul className="grid gap-3 md:grid-cols-2" aria-label="your coins">
+          {created.map((c) => (
+            <li key={c.mint} className={card + " space-y-2"} data-coin-state={c.state}>
+              <div className="flex flex-wrap items-center gap-2"><Link className="font-mono text-base underline" href={c.page}>${c.ticker}</Link><span className="text-neutral-400">{c.name}</span><span className="bt-chip">{stateChip(c.state)}</span>{c.badge && <span className="bt-chip bt-chip-window">{c.badge}</span>}</div>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                 <dt className="text-neutral-500">queued units</dt><dd>{c.queuedUnits}</dd>
                 <dt className="text-neutral-500">next settlement</dt><dd>{c.nextSettlementAt ? `${denver(c.nextSettlementAt)} (Denver)` : "none scheduled"}</dd>
@@ -108,11 +113,25 @@ export default function CreatorDashboard() {
               {/* website-26 (WIRING-FEATURES item 10): the six post-launch steps and what comes next, and who does it */}
               <LaunchChecklist mint={c.mint} />
               <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Today&apos;s post {c.todayPost.lintOk ? "passes the wording check." : <span className="text-red-400">fails the wording check because of {c.todayPost.hits.join(", ")}.</span>}</summary><pre className="mt-1 whitespace-pre-wrap rounded bg-neutral-950 p-2 text-neutral-300">{c.todayPost.text}</pre></details>
-              <button className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400 disabled:opacity-40" disabled={!c.todayPost.lintOk} onClick={() => void copy(c)}>{copied === c.ticker ? "copied ✓" : "copy today's post"}</button>
+              <button className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400 disabled:opacity-40" disabled={!c.todayPost.lintOk} onClick={() => void copy(c)}>{copied === c.mint ? "copied ✓" : "copy today's post"}</button>
             </li>
           ))}
-        </ul>
-      )}
+        </ul>}
+        {drafts.length > 0 && <section className="space-y-2" aria-label={DRAFTS_HEADING} data-me-drafts>
+          <h2 className="font-medium">{DRAFTS_HEADING}</h2>
+          <ul className="grid gap-3 md:grid-cols-2">
+            {drafts.map((c) => { const v = meCoinView(c, d.coins); return (
+              <li key={c.mint} className={card + " space-y-2 text-xs"} data-coin-state={c.state}>
+                <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-base">${c.ticker}</span><span className="text-neutral-400">{c.name}</span><span className="bt-chip">{v.chip}</span></div>
+                {v.lines.map((l) => <p key={l} className="text-neutral-300">{l}</p>)}
+                {v.launchLink && <p><Link className="underline" href="/burnticker/launch">{DRAFT_ROUTE_LINE}</Link></p>}
+                <p className="break-all font-mono text-neutral-500">Draft mint {c.mint}</p>
+              </li>
+            ); })}
+          </ul>
+        </section>}
+        </>);
+      })()}
     </main>
   );
 }

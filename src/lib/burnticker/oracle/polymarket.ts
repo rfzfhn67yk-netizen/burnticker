@@ -321,16 +321,29 @@ export function filterOutcomes<T extends Pick<PolyMarketHit, "question" | "outco
   return { shown, matched: hit.length, total: markets.length, nextOffset: offset + limit < hit.length ? offset + limit : null };
 }
 
+/**
+ * Whether a market's own outcome name shares a word with the query (case and accents ignored; words of 4+ letters, so "win" or "the" in a
+ * long question do not count). A query with no such word names nothing. Pure.
+ */
+export function outcomeNamer(q: string): (m: Pick<GammaMarket, "question"> & { groupItemTitle?: string | null }) => boolean {
+  const norm = (x: string | null | undefined) => (x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const words = norm(q).split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+  if (!words.length) return () => false;
+  return (m) => { const name = norm(m.groupItemTitle ?? null); if (!name) return false; const have = new Set(name.split(/[^a-z0-9]+/)); return words.some((w) => have.has(w)); };
+}
 /** Events → search hits (binary markets only, head-to-head and moneyline first, at most `perEvent`), tags aggregated into recurring selectors. */
-export function searchHits(events: readonly GammaEvent[], o: { refuse?: TitleRefuser | null; perEvent?: number; status?: "open" | "closed" | "all" } = {}): { events: PolyEventHit[]; tags: PolyTagHit[] } {
+export function searchHits(events: readonly GammaEvent[], o: { refuse?: TitleRefuser | null; perEvent?: number; status?: "open" | "closed" | "all"; /** launch night 2026-10-13: the words searched; an outcome they name comes first */ query?: string } = {}): { events: PolyEventHit[]; tags: PolyTagHit[] } {
   const status = o.status ?? "open";
+  const named = outcomeNamer(o.query ?? "");
   const out: PolyEventHit[] = [];
   const tagMap = new Map<string, PolyTagHit & { moneyline: boolean }>();
   for (const e of events) {
     if (status === "open" && e.closed) continue;
     if (status === "closed" && !e.closed) continue;
     const bin = e.markets.filter(isBinary).filter((m) => status !== "open" || (!m.closed && !m.inactive));
-    const rank = (m: GammaMarket) => (m.sportsMarketType === "moneyline" ? 0 : HEAD_TO_HEAD.test(m.question) ? 1 : 2);
+    // launch night 2026-10-13 (hunt): "Eagles Super Bowl" listed the first 12 of 32 champion outcomes alphabetically, Eagles not among
+    // them, and then said "type the name you want": an outcome the searched words name is listed first
+    const rank = (m: GammaMarket) => (named(m) ? -1 : m.sportsMarketType === "moneyline" ? 0 : HEAD_TO_HEAD.test(m.question) ? 1 : 2);
     const markets = [...bin].sort((a, b) => rank(a) - rank(b) || (a.endDate ?? "9").localeCompare(b.endDate ?? "9")).slice(0, o.perEvent ?? 12).map(marketHit);
     const refused = o.refuse?.([e.title, ...bin.slice(0, 20).map((m) => m.question)]) ?? [];
     out.push({ slug: e.slug, title: e.title, url: eventPageUrl(e.slug), endDate: e.endDate, closed: e.closed, tags: e.tags, markets, marketCount: bin.length, selector: { oracle: "polymarket", series: `event:${e.slug}`, market: null }, refused });
@@ -548,7 +561,7 @@ export class PolymarketClient implements OracleAdapter {
     // audit 12 item 13: a search for one event's own slug lists ALL of its outcomes (up to EVENT_ALL_OUTCOMES), so a "Show all" on a long
     // event (30 thresholds, 31 dates) is that search, never "type the name you want"
     const one = events.length === 1 && events[0].slug === query;
-    return { ...searchHits(events, { refuse: this.refuse, status: one ? "all" : status, ...(one ? { perEvent: EVENT_ALL_OUTCOMES } : {}) }), markets: [] };
+    return { ...searchHits(events, { refuse: this.refuse, status: one ? "all" : status, query, ...(one ? { perEvent: EVENT_ALL_OUTCOMES } : {}) }), markets: [] };
   }
 
   /** Open events of one tag (Browse), as search hits: binary markets only, the refuse list applied, the tags as recurring selectors. */

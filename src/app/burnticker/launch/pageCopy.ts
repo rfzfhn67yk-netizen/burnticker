@@ -52,3 +52,21 @@ export const NAME_MAX_LINE = "A name has at most 32 characters, so the field sto
 export const JUMP_CONFIRM_LINE = "Going back to the first step clears the answers after it, and the draft goes with them.";
 export const JUMP_CONFIRM_YES = "Go back and clear them";
 export const JUMP_CONFIRM_NO = "Stay here";
+
+/**
+ * Launch night 2026-10-13 item 4: a league button's own name is the league ("NFL"), so screen readers and automation find it by the name
+ * on it; the second-source fact is its tooltip, said as one sentence with one period. The source's crossRead is either a name ("MLB's
+ * official feed") or a whole sentence that already ends with a period.
+ */
+export const NO_SECOND_CHECK = "no second check";
+/** Launch night 2026-10-13 (hunt): the share line for two separate coins, each spending from its own pool. */
+export const pairBudgetLine = (line: string): string => line.replace("of the burn pool buying and burning this coin", "of its own burn pool, buying and burning that coin").replace(/^Each result that fires the rule/, "Each result that fires a coin's rule");
+/** Launch night 2026-10-13 (hunt): the team list's two empty states, said only once the list for this league has answered. */
+export const TEAMS_NONE_LINE = "No teams found for this league right now.";
+export const TEAMS_UNREAD_LINE = "The teams for this league could not be read just now. Pick the league again in a moment.";
+export const leagueButtonName = (label: string, crossRead: string | null | undefined): string => (crossRead ? label : `${label}, ${NO_SECOND_CHECK}`);
+export function leagueButtonTitle(crossRead: string | null | undefined): string {
+  const c = (crossRead ?? "").trim();
+  if (!c) return "This league has no second source to check results, so a coin on it is refused.";
+  return /[.!?]$/.test(c) ? c : `Results are checked against ${c}.`;
+}

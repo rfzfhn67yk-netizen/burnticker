@@ -56,6 +56,15 @@ export const crossName = (cross: string | null | undefined): string => {
   const k = (cross ?? "").split(":")[0];
   return k === "jup" ? "Jupiter" : k === "dexscreener" ? "DexScreener" : k === "redstone" ? "RedStone" : "a second source";
 };
+/**
+ * launch night 2026-10-13 (hunt): a picked reference coin's source in whole sentences ("BONK Pyth feed, Jupiter's quote … is read" ran a
+ * label into a sentence; "pool TWAP" was shorthand).
+ */
+export const refSourceLine = (pyth: boolean, crossLine: string | null, cross: string): string => {
+  const first = pyth ? "Read from its Pyth feed." : "Read from its pool, averaged over time.";
+  const second = crossLine ? (/[.!?]$/.test(crossLine.trim()) ? crossLine.trim() : `${crossLine.trim()}.`) : `Checked against ${cross}.`;
+  return `${first} ${second}`;
+};
 
 /** The Coin vs Coin draft in sessionStorage, version 1 (intent audit 5 item 19). */
 export const CVC_STORE = "burnticker.launch.cvc.v1";
@@ -100,7 +109,7 @@ function CoinPicker({ label, value, onPick, exclude, initial, locked = false }: 
   }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
   if (value) return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-sm flex items-center justify-between gap-2">
-      <div><div className="text-xs text-neutral-400">{label}</div><div className="font-semibold">{value.symbol} <span className="text-xs text-neutral-500 font-normal">{value.source === "pyth" ? "Pyth feed" : "pool TWAP"}, {value.crossLine ?? `checked against ${crossName(value.underlying?.cross)}`}</span></div></div>
+      <div><div className="text-xs text-neutral-400">{label}</div><div className="font-semibold">{value.symbol} <span className="text-xs text-neutral-500 font-normal">{refSourceLine(value.source === "pyth", value.crossLine ?? null, crossName(value.underlying?.cross))}</span></div></div>
       {!locked && <button className="text-xs underline" data-decision="what" aria-label={`Change the ${lower1(label)}`} onClick={() => onPick(null)}>change</button>}
     </div>
   );

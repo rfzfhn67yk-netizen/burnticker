@@ -39,7 +39,7 @@ export function readinessOf(i: ReadinessInput): Readiness {
   const g = typeof i.graduationSol === "number" && i.graduationSol > 0 ? i.graduationSol : null;
   const reached = g === null ? "The curve reached its raise" : `The curve reached ${n2(g)} SOL`;
   const R = (state: ReadinessState, label: string, detail: string, ok: boolean | null = null): Readiness => ({ state, step: READINESS_ORDER.indexOf(state) + 1, label, detail, ok });
-  if (!i.launched) return R("not-launched", "Not launched", "No coin is registered on this site yet. There is no curve, reading or receipt to show.");
+  if (!i.launched) return R("not-launched", "Not launched", "This coin's launch was prepared but never signed, so nothing is on chain yet. There is no curve, reading or receipt to show.");
   // a confirmed burn proves the pool was verified even when the program account was not read here
   const pv = i.poolVerified ?? (i.latest?.status === "confirmed" ? true : null);
   if (pv !== true) {

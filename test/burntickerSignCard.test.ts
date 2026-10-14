@@ -412,7 +412,8 @@ describe("an abandoned plan after a reload (F4 residual): confirmed / pending re
     const card = read("src/app/burnticker/launch/SignCard.tsx");
     assert.match(card, /st === "abandoned" && <span[^>]*>· \{stepStatusText\("abandoned"\)\}/);
     assert.match(card, /stopped\?\.state === "abandoned" \? \(\s*<button[^>]*data-decision="new-plan"[^>]*onClick=\{startNewPlan\}>Start a new plan<\/button>/);
-    assert.match(card, /const startNewPlan = \(\) => \{ archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(window\.location\.pathname\); \}/);
+    // launch night 2026-10-13: back to the review with the kept draft (launchDraftStore.ts resumeReviewHref)
+    assert.match(card, /const startNewPlan = \(\) => \{ archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(resumeReviewHref\(window\.location\.pathname\)\); \}/);
     assert.match(card, /planAbandoned\(plan, stored\)/);
     assert.ok(!/odds|price|chance/i.test(card.replace(/\/\*[\s\S]*?\*\//g, "")));
   });

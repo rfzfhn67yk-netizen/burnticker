@@ -111,7 +111,8 @@ describe("234 a new plan keeps a read-only history of signatures and mints, neve
   });
   test("the card's Start a new plan archives before it returns to the review", () => {
     const card = code(read("src/app/burnticker/launch/SignCard.tsx"));
-    assert.match(card, /const startNewPlan = \(\) => \{ archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(window\.location\.pathname\); \}/);
+    // launch night 2026-10-13: back to the review with the kept draft (launchDraftStore.ts resumeReviewHref)
+    assert.match(card, /const startNewPlan = \(\) => \{ archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(resumeReviewHref\(window\.location\.pathname\)\); \}/);
   });
 });
 

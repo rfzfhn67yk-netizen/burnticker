@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { browserPlanStorage, listStoredLaunches, recordFailureSentence, recoverStoredLaunch, storedLaunchSentence, withPlanLock, PLAN_LOCKED_SENTENCE, type StoredLaunch } from "@/lib/burnticker/signPlan";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
+import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
 import { afterRecoveryCheck, archivePlanRecord, chainReadDeps, readLaunchHistory, recoveryErrorSentence, storedLaunchAction, RECOVERY_BUTTON, START_NEW_LINE, type LaunchHistoryEntry, type RecoveryView } from "@/lib/burnticker/launchRecovery";
 
 /**
@@ -43,7 +44,7 @@ export function LaunchRecovery() {
     } finally { setBusy(null); }
   };
   /** the one real next step for an entry whose keys are gone: keep it in the history and go back to the review */
-  const startNew = (s: StoredLaunch) => { archivePlanRecord(storage, s.key); window.location.assign(window.location.pathname); };
+  const startNew = (s: StoredLaunch) => { archivePlanRecord(storage, s.key); window.location.assign(resumeReviewHref(window.location.pathname)); };
   const open = view.items.length > 0;
   return (
     <section className={`rounded-lg border p-3 text-sm space-y-2 ${open ? "border-amber-500/40 bg-amber-500/5" : "border-neutral-800"}`} aria-label={open ? "Unfinished launch from this tab" : "Launches from this tab"} data-launch-recovery>
