@@ -43,7 +43,7 @@ first day after deploy, the status lines measure it.
 
 | id | provider | documented limit (source, read 2026-10-13) | where the code calls it | calls per cycle today (estimate) | budget (keeper unless noted) |
 |---|---|---|---|---|---|
-| `helius` | Helius RPC, Developer plan, one plan with two keys (keeper and site; OPS-EDGE.md). Env `BURNTICKER_RPC_URL`, `BURNKEEPER_RPC_URL`, the proxy `/api/burnticker/rpc` | 10,000,000 credits/month, RPC 50/s, getProgramAccounts 25/s, DAS 10/s. Credits: a standard, archival or send call costs 1; getProgramAccounts and DAS cost 10 (helius.dev/pricing, helius.dev/docs/billing/credits, /rate-limits) | Keeper: `scripts/burnticker-keeper.mts` Connections (program client, market reader); `alerts.ts` rpcBalanceLamports; `lockFeesChain.ts`, `programClient.ts`, `market.ts` through those Connections. $DEFICIT keeper: `scripts/burn-keeper.mts` Connection. Site: `server.ts` Connections (program, LaunchLab, market, launch verifier), `rpc/route.ts` (browser proxy), `burn-target/route.ts`, `trustpack/receiptCheck.ts` jsonRpc (mintRegistration, currentStatus, trust pack), `sources/copycats.ts` (DAS searchAssets) | Platform keeper, each 60 s cycle, per live coin: about 10 to 14 reads in `publishAll` (getTokenSupply ×2, the fee PDA's getBalance, the TokenConfig, the lock-fee pool lookup 2 to 4, market reads 3 per 30 s cache, pair coins 2 to 3 more). Each crank adds about 10 to 20 (blockhash, simulate, send, then a confirm poll of 2 a second for up to 120 s). The ops check every 5 min adds 2 getBalance. That is about 17,000 credits per live coin per day. $DEFICIT keeper: about 5 to 8 per cycle (at most one cycle every 15 min), plus a send path per burn. Site: 1 per proxied browser call, plus page reads (market cached 30 s) | keeper 0.6 share: **120,000 credits/day, 18 req/s**. web 0.3: 60,000/day, 9/s. deficit 0.1: 20,000/day, 3/s. **The keeper's day budget covers about 7 live coins at today's publish cadence.** See Findings. |
+| `helius` | Helius RPC, Developer plan, one plan with two keys (keeper and site; OPS-EDGE.md). Env `BURNTICKER_RPC_URL`, `BURNKEEPER_RPC_URL`, the proxy `/api/burnticker/rpc` | 10,000,000 credits/month, RPC 50/s, getProgramAccounts 25/s, DAS 10/s. Credits: a standard, archival or send call costs 1; getProgramAccounts and DAS cost 10 (helius.dev/pricing, helius.dev/docs/billing/credits, /rate-limits) | Keeper: `scripts/burnticker-keeper.mts` Connections (program client, market reader); `alerts.ts` rpcBalanceLamports; `lockFeesChain.ts`, `programClient.ts`, `market.ts` through those Connections. $DEFICIT keeper: `scripts/burn-keeper.mts` Connection. Site: `server.ts` Connections (program, LaunchLab, market, launch verifier), `rpc/route.ts` (browser proxy), `burn-target/route.ts`, `trustpack/receiptCheck.ts` jsonRpc (mintRegistration, currentStatus, trust pack), `sources/copycats.ts` (DAS searchAssets) | Platform keeper, each 60 s cycle, with the read cache (`keeperReadCache.ts`, 2026-10-13): one getMultipleAccounts for every published coin (per 20 coins), then 1 read per live coin (getTokenLargestAccounts) on a quiet cycle. Every 5 minutes a coin also re-reads its holders' owners (1) and its LP lock (3 before graduation, 5 to 7 after). Average about 1.8 reads per coin per cycle before graduation and 2.6 after, about 2,600 to 3,700 credits per coin per day. Before the cache it was 13 to 19 per coin per cycle (see Findings). Pair coins add 2 to 3 pair reads. Each crank adds about 10 to 20 (blockhash, simulate, send, then a confirm poll of 2 a second for up to 120 s). The ops check every 5 min adds 2 getBalance. $DEFICIT keeper: about 5 to 8 per cycle (at most one cycle every 15 min), plus a send path per burn. Site: 1 per proxied browser call, plus page reads (market cached 30 s) | keeper 0.6 share: **120,000 credits/day, 18 req/s**. web 0.3: 60,000/day, 9/s. deficit 0.1: 20,000/day, 3/s. **With the read cache the keeper's day budget covers about 30 graduated or 45 pre-graduation live coins** (it covered about 7 before). See Findings. |
 | `helius-send` | Helius sendTransaction | 5/s on the Developer plan (helius.dev/docs/billing/rate-limits) | Every Helius body containing `sendTransaction` (`takeRpc`) | 1 per crank, claim or registration | keeper 1.8/s, web 0.9/s, deficit 0.3/s (essential: never held) |
 | `solana-public` | Solana public RPC (`api.mainnet-beta`, `api.devnet`) | 100 requests per 10 s per IP; 40 per 10 s per IP for one method (solana.com/docs/references/clusters). The tighter method limit is taken: 4/s | The derby's pool reads when `BURNTICKER_DERBY_RPC_URL` is unset (keeper and `server.ts`); the $DEFICIT keeper's `--devnet` default; the catalogue's one on-chain source (`sources/onchain.ts`); the trust pack's devnet sample | Per derby sample: about 2 to 4 reads per pool | keeper 1.2/s (103,680/day by the rate) |
 | `thesportsdb` | TheSportsDB v1/v2 (licensed key `BURNTICKER_THESPORTSDB_KEY`) | Premium 100/min; Business 120/min; Free 30/min (thesportsdb.com/pricing). The repo does not say which plan was bought (OPS-EDGE.md says "about $9 (check)"), so Premium's 100/min is used | `sources/espn.ts` EspnClient.get / tsdbRead; `sources/gameSettle.ts` through EspnClient | 1 to 3 GETs per team coin per hourly poll (cached 10 min); 1 per schedule read on the site | keeper 0.6: 36/min (51,840/day by the rate); web 0.4: 24/min |
@@ -96,10 +96,39 @@ These fall back to the house default (`established: false` in the code):
 
 ## Findings
 
-- **Helius is the binding budget.** The keeper's publish loop reads each live coin's chain state every minute, about 17,000
-  credits per coin per day. At 120,000 credits a day (60% of the plan × the keeper's 0.6 share) the keeper goes on hold at about
-  7 live coins. With more coins than that, the budget holds the keeper's RPC reads late in the UTC day, and pages and cranks stop
-  until midnight UTC. Before that happens, either slow the publish loop's chain reads (cache supply, the fee PDA and the TokenConfig
-  for 5 minutes) or move to a larger plan. The `api budget helius` status line shows the real figure from day one.
+- **Helius is the binding budget, and the keeper's read cache fixed its per-coin cost (2026-10-13).** Before it, the keeper read
+  every live coin's chain state one account at a time every minute, and that held the keeper at about 7 live coins. Now the publish
+  loop and the claim_lock_fees step read through `src/lib/burnticker/keeperReadCache.ts`. Each coin's supply, TokenConfig, LP lock
+  and vault are kept for 5 minutes, and its fee PDA balance and market read for 60 seconds. The TokenConfig, fee PDA, mint, vault and
+  LaunchLab pool of every published coin are read in one getMultipleAccounts call per 20 coins through the budgeted Connection. The
+  keeper's own sends drop a coin's entries at once: each reading, crank, claim, registration and dispersal piece is written to the
+  registry's signatures table before it is sent, and the keeper compares those rows after every cycle. The lock-fee port also drops
+  its coin before it builds a claim or a registration. What is published does not change: `test/burntickerReadCache.test.ts`
+  compares status.json byte for byte with and without the cache, and compares the batch's decoding with the per-coin reads.
+
+  Helius calls per live coin per cycle (one call = one credit). "Before" was counted on the real client over a fake Connection in that
+  test (a coin before graduation: 10 publish reads), plus the claim step from the code. "Quiet" is a cycle with no TTL running out.
+
+  | read | where (before) | before, per cycle | after, quiet cycle | after, every 5 min |
+  |---|---|---|---|---|
+  | supply (getTokenSupply) | `keeperReadCache.ts` coinChainReads (was `burnticker-keeper.mts` publishAll): chain.supplyRaw and the market's totalSupplyRaw; `programClient.ts` supplyRaw | 2 | 0 (batch) | 0 (batch) |
+  | fee PDA (getBalance) | publishAll chain.feePdaLamports; `programClient.ts` feePdaBalanceLamports | 1 | 0 (batch) | 0 (batch) |
+  | vault, vault mode only (getAccountInfo + getTokenAccountBalance) | publishAll chain.vaultRaw; `programClient.ts` vaultBalanceRaw | 2 | 0 (batch) | 0 (batch) |
+  | TokenConfig (getAccountInfo) | `program.ts` programPageBlock, port.config(); `programAdapter.ts` config() | 1 | 0 (batch) | 0 (batch) |
+  | LP lock for the page (TokenConfig, FeeKeyRecord, CPMM pool; after graduation also the lock and the Fee Key balance) | `lpLockPage.ts` lpLockBlock, `lockFeesChain.ts` state() and locate() | 3, or 5 after graduation | 0 | 0 (the claim step's read serves it) |
+  | LP lock for the claim step (the same lookup, plus blockhash and simulate for the accrual once registered) | `multiKeeper.ts` runCycle, `lockFeesKeeper.ts` claimLockFeesFor, port.state() | 3, or 5 to 7 after graduation | 0 | 3, or 5 to 7 |
+  | LaunchLab pool (getAccountInfo) | `market.ts` readMarket | 1 | 0 (batch) | 0 (batch) |
+  | top holders (getTokenLargestAccounts) | `market.ts` readMarket | 1 | 1 | 1 |
+  | holders' owners (getMultipleParsedAccounts) | `market.ts` readMarket | 1 | 0 | 1 |
+  | batch (getMultipleAccounts), per 20 coins | `keeperReadCache.ts` connectionBatchReader | none | 1 per cycle in all | 1 per cycle in all |
+  | **per coin per cycle** | | **13 before graduation, 17 to 19 after (vault mode +2)** | **1** | **5 before graduation, 7 to 9 after** |
+  | **per coin per day (1,440 cycles)** | | **about 18,700 to 27,400 credits** | | **average about 1.8 to 2.6 per cycle: about 2,600 to 3,700 credits** |
+
+  The batch costs about 1,440 credits a day for every 20 coins. The keeper's 120,000 credits a day now cover about 45 live coins before
+  graduation, or about 30 after (less the ops check's 576 getBalance a day and each crank's 10 to 20). Before the cache they covered 6
+  and 4. Not cached: the crank path (`executePending` reads the TokenConfig fresh before every step), the pair reads (`pairCtxFor`,
+  `pairGates`, `pairUnlinkStep`, about 2 to 3 per pair coin), and the derby sampler. A coin with receipts waiting for their day to close
+  also reads its TokenConfig once per cycle in `executePending` (`multiKeeper.ts` line 378) and in the fence (`ops/readingFence.ts`).
+  The `api budget helius` status line shows the real figure from the first day.
 - The confirm loops poll `getSignatureStatuses` and `getBlockHeight` once a second for up to 120 s per send. They are essential,
   so they pass a hold, but they still count.

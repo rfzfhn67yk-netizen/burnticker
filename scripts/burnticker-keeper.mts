@@ -34,23 +34,21 @@ import { loadRefuseList, refusalsFor } from "../src/lib/burnticker/oracle/refuse
 import { CatalogueAdapter, feedById } from "../src/lib/burnticker/catalogue/index.ts";
 import os from "node:os";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { FakeBurnProgram, programPageBlock, type BurnProgramClient } from "../src/lib/burnticker/program.ts";
+import { FakeBurnProgram, type BurnProgramClient } from "../src/lib/burnticker/program.ts";
 import { ProgramBurnClient } from "../src/lib/burnticker/programClient.ts";
 import { clusterOfGenesis } from "../src/lib/burnKeeper/solana.ts";
 import { SOL_MINT, usdPrice } from "../src/lib/burnKeeper/jupiterSwap.ts";
 import type { KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
 import { cosignerFromEnv } from "../src/lib/burnticker/attesters/cosign.ts";
-import { lpLockBlock } from "../src/lib/burnticker/lpLockPage.ts";
-import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairCounterpartFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
+import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
 import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib/burnticker/trust.ts";
 import { CrankFailureTracker, devFeeDelta, recordBalanceSample, registryAlertRows, registryAlertSink, rpcBalanceLamports, runBurntickerAlertCheck, sinkFromEnv } from "../src/lib/burnticker/alerts.ts";
 import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
 import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts";
-import { readMarket, type MarketReader } from "../src/lib/burnticker/market.ts";
+import type { MarketReader } from "../src/lib/burnticker/market.ts";
 import { nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
 import { envGameDeps, polymarketGameReaders } from "../src/lib/burnticker/sources/gameSettle.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
-import { DECIMALS, TOTAL_SUPPLY } from "../src/lib/burnticker/rules.ts";
 import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG } from "../src/lib/burnKeeper/pairCurveCrank.ts";
 import type { Keypair } from "@solana/web3.js";
 import { DerbyAdapter } from "../src/lib/burnticker/derby/adapter.ts";
@@ -65,7 +63,7 @@ import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/b
 import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 // BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
 import { dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
-import { DISPERSAL_STATE_KEY, dispersalLines } from "../src/lib/burnticker/dispersalKeeper.ts";
+import { cachedMarketReader, cachedPublishProgram, coinChainReads, connectionBatchReader, KeeperReadCache, signatureFingerprints, withLockFees, type BatchReader, type MultipleAccountsReader } from "../src/lib/burnticker/keeperReadCache.ts";
 import { budgetStatusLines, budgetedRpcConfig, configureApiBudget, statusTableStore } from "../src/lib/burnticker/apiBudget.ts";
 
 const args = process.argv.slice(2);
@@ -134,6 +132,14 @@ const KALSHI_ON = kalshiEnabled(process.env), POLY_DISCOVERY = polymarketDiscove
 /** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */
 const ops = new KeeperOps({ registry, siteDir: SITE, cluster, env: process.env, log, uploader: uploaderFromEnv(process.env, cluster), snapshots: !DRY, signer: built.chain ? { publicKey: built.chain.payer.publicKey.toBase58(), secretKey: built.chain.payer.secretKey } : null });
 const marketReader: MarketReader | null = RPC ? (new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })) as unknown as MarketReader) : null;
+// THE READ CACHE (2026-10-13, keeperReadCache.ts, docs/burnticker/API-BUDGETS.md): the publish loop reads each coin's chain state through
+// a per-coin cache (5 min for supply, the TokenConfig, the LP lock and the vault; 60 s for the fee PDA and the market read) and one batched
+// getMultipleAccounts per cycle; the cycle's claim_lock_fees step shares the LP lock entry. The keeper's own sends drop the coin's entries.
+const readCache = new KeeperReadCache({ now: () => Date.now() });
+const publishProgram = cachedPublishProgram(program, readCache);
+if (program.lockFees) deps.program = withLockFees(program, publishProgram.lockFees!);
+const batchReader: BatchReader | null = built.chain ? connectionBatchReader(built.chain.connection as unknown as MultipleAccountsReader, new PublicKey(program.programId), (m) => program.vaultFor(m)) : null;
+const cachedMarket: MarketReader | null = marketReader ? cachedMarketReader(marketReader, readCache, (poolId) => registry.tokens().find((x) => x.poolId === poolId)?.mint ?? null) : null;
 
 async function publishAll(now: number): Promise<void> {
   const statuses: TokenStatusJson[] = [];
@@ -143,7 +149,10 @@ async function publishAll(now: number): Promise<void> {
   const siteKeys = siteKeysOf(all.map((t) => ({ ticker: t.ticker, mint: t.mint, status: t.status, launchedAt: t.launchTx ? t.baselineAt : null })));
   // 2026-10-13: a draft (never created on chain) or an expired draft gets no public page and no index row; the site keys still see every
   // row, so a ticker a draft shares with a live coin keeps the live coin's keys. (Three launch-probe drafts had reached tokens.html.)
-  for (const t of all.filter((t) => t.status !== "draft" && t.status !== "expired")) {
+  const published = all.filter((t) => t.status !== "draft" && t.status !== "expired");
+  // THE BATCH (keeperReadCache.ts): every published coin's TokenConfig, fee PDA, mint, vault and pool in one getMultipleAccounts call per 20 coins
+  await readCache.prefetch(batchReader, published.map((t) => { let vault = false; try { vault = registry.lockedRule(t).mode === "vault"; } catch { vault = false; } return { mint: t.mint, vault, poolId: t.poolId }; }), log);
+  for (const t of published) {
     try {
       const locked = registry.lockedRule(t);
       const readings = registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
@@ -156,12 +165,12 @@ async function publishAll(now: number): Promise<void> {
         : locked.rule.oracle === "polymarket" ? (POLY_DISCOVERY ? await polymarket.seriesInfo(locked.rule.market ?? locked.rule.series!).catch(() => null) : null) : null;
       const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
       const feedState = registry.feedState(t.selectorKey);
+      // the chain fields through the read cache (keeperReadCache.ts): the batch filled supply, the fee PDA, the TokenConfig, the vault
+      // and the pool before this loop; the LP lock and the holders' owners are kept for 5 minutes; the keeper's own sends drop a coin
+      const reads = await coinChainReads({ registry, program: publishProgram, cluster, t, mode: locked.mode, marketReader: cachedMarket, now });
       const input = { token: t, locked, readings, receipts: registry.receipts(t.mint), attesters: registry.attesters(t.mint), state, feedState,
-        chain: { cluster, programId: program.programId, supplyRaw: await program.supplyRaw(t.mint), feePdaLamports: await program.feePdaBalanceLamports(t.mint), vaultRaw: locked.mode === "vault" ? await program.vaultBalanceRaw(t.mint) : null, program: await programPageBlock(program, t.mint, registry.lastProgramTx(t.mint, "reading"), dispersalLines(registry.getStatus(DISPERSAL_STATE_KEY(t.mint)))) },
-        now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0, operator, lifecycle: lifecycleFrom(registry, t, locked.rule, null), pair: await pairCounterpartFrom(registry, (m) => program.supplyRaw(m), t, async (m) => { try { return (await program.port(m).config())?.poolRegistered ?? null; } catch { return null; } }, program.pairForward ? (a, b) => program.pairForward!.port(a, b).links() : undefined),
-        // the coin card's curve progress + top holders (read-only, the same RPC); without an RPC status.json says "not read" and the card shows —
-        lp: await lpLockBlock(registry, program, cluster, t.mint),
-        market: marketReader && t.status !== "draft" && t.status !== "expired" ? await readMarket(marketReader, { cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: (await program.supplyRaw(t.mint).catch(() => null)) ?? BigInt(TOTAL_SUPPLY) * BigInt(10) ** BigInt(DECIMALS), decimals: DECIMALS }, now).catch(() => null) : null };
+        chain: reads.chain, now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0, operator, lifecycle: lifecycleFrom(registry, t, locked.rule, null), pair: reads.pair,
+        lp: reads.lp, market: reads.market };
       const receipts = buildReceiptsJson(input);
       const status = buildTokenStatus(input, receipts);
       publishTokenSite(SITE, status, receipts, readings, t.rulesJson, siteKeys.get(t.mint) ?? [t.ticker]);
@@ -219,9 +228,12 @@ while (!stopping) {
   if (built.chain && pairCurveEnabled(process.env) && gate.sendsAllowed) {
     try {
       const pc = await crankPairCurves({ ctx: { connection: built.chain.connection, cluster: built.chain.cluster, burnReceiptsProgramId: new PublicKey(PROGRAM_ID!), allowMainnet: process.env.BURNTICKER_MAINNET === "1" }, cranker: built.chain.payer, dryRun: deps.dryRun, log, isUnlinked: (ma, mb) => { const pr = registry.pairOf(ma); return !!pr && (pr.mintA === mb || pr.mintB === mb) && registry.getStatus(`pair.unlinked.${pr.pairId}`) !== null; }, alert: (kind, key, text, meta) => { registry.recordAlert({ kind, key, text, meta }); } });
+      if (pc.acted.length) readCache.invalidateAll();   // a pair-curve crank (graduation, registration, void) writes no registry signature: re-read every coin
       if (pc.acted.length || pc.errors.length) log(`pair curve: ${pc.scanned} pair(s) scanned, ${pc.acted.length} cranked${pc.errors.length ? ` · errors: ${pc.errors.slice(0, 3).join(" | ")}` : ""}`);
     } catch (e) { log(`pair curve crank failed: ${(e as Error).message.slice(0, 200)}`); }
   } else if (pairCurveEnabled(process.env) && !built.real) log(`  [pair-curve] ${PAIR_CURVE_FLAG} is set but the program client is the fake — nothing cranked`);
+  // the read cache drops every coin this cycle changed (its report, and any new or confirmed signature in the registry)
+  try { const dropped = readCache.afterCycle(cycleReport, signatureFingerprints(registry.db)); if (dropped.length) log(`  [read-cache] ${dropped.length} coin(s) re-read after this cycle's sends`); } catch (e) { readCache.invalidateAll(); log(`  [read-cache] invalidation failed, every coin re-read: ${(e as Error).message.slice(0, 160)}`); }
   try { await publishAll(Date.now()); } catch (e) { log(`publish failed: ${(e as Error).message.slice(0, 200)}`); }
   await ops.afterCycle(cycleReport, paused, ALERTS ? sink : null);
   try { const w = writeOwnTokensGenerated(registry, process.env.OWN_TOKENS_GENERATED_PATH?.trim() || undefined); if (w.changed) log(`  [refuse-list] ${w.file} rewritten: ${w.count} platform token(s) — the arms re-read it on their next candidate`); } catch (e) { log(`  [refuse-list] not written: ${(e as Error).message.slice(0, 160)}`); }
