@@ -6,5 +6,7 @@ test("the keeper's publish loop skips drafts and expired drafts, and keeps every
   const s = fs.readFileSync("scripts/burnticker-keeper.mts", "utf8");
   assert.match(s, /const all = registry\.tokens\(\);/);
   assert.match(s, /siteKeysOf\(all\.map/);
-  assert.match(s, /for \(const t of all\.filter\(\(t\) => t\.status !== "draft" && t\.status !== "expired"\)\) \{/);
+  // 2026-10-13 (read cache): the filtered list also feeds the batch read, so it is named before the loop
+  assert.match(s, /const published = all\.filter\(\(t\) => t\.status !== "draft" && t\.status !== "expired"\);/);
+  assert.match(s, /for \(const t of published\) \{/);
 });
