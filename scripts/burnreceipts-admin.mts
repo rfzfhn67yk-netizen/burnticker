@@ -6,6 +6,9 @@
 //
 // Commands:
 //   initialize-token           --mint <keypath|pubkey> --creator <keypath|pubkey> --admin <pubkey> [--rules config/burnkeeper/deficit.rules.json]
+//                              (--mint-keypair <path> is the same as --mint <keypath>; a new coin's mint ends in burn or BURN since
+//                              2026-10-14: grind it with scripts/burnticker-grind-mint.mts; a plain one is warned, never refused, so the
+//                              coins made before then keep working)
 //                              [--attester <pubkey>]... [--quorum 1] [--launchlab-platform <pubkey>] [--floor-lamports 1000000]
 //                              [--twap-window 1200] [--twap-deviation-bps 300] [--fixed-pool <pubkey>]
 //                              [--end-sink flagship:<min lamports> | mint:<mint>:<min> | pair-winner:<partner>:<min>]   (§45: pins the
@@ -77,6 +80,7 @@
 // simulation (error, logs, compute units), the resulting accounts decoded (TokenConfig / PlatformConfig / balances), and the signature
 // if sent. Progress lines go to stderr.
 
+import { matchesSuffix } from "@/lib/burnticker/vanityMint";
 import fs from "node:fs";
 import path from "node:path";
 import { Connection, Keypair, PublicKey, TransactionMessage, VersionedTransaction, type TransactionInstruction, ComputeBudgetProgram } from "@solana/web3.js";
@@ -266,7 +270,9 @@ const mintArg = (): PublicKey => pubkeyOf(opt("mint"), "--mint") ?? die("--mint 
 const tokenWatch = (mint: PublicKey): Watch[] => [{ address: configPda(programId, mint), kind: "TokenConfig" }, { address: feePda(programId, mint), kind: "lamports" }];
 
 if (CMD === "initialize-token") {
+  if (opt("mint-keypair") && !opt("mint")) args.push("--mint", opt("mint-keypair")!);
   const mint = (await party("mint"))!;
+  if (!matchesSuffix(mint.publicKey.toBase58())) console.error(`note: the mint ${mint.publicKey.toBase58()} does not end in burn or BURN. Coins made since 2026-10-14 should (scripts/burnticker-grind-mint.mts).`);
   const creator = (await party("creator"))!;
   const admin = pubkeyOf(opt("admin"), "--admin") ?? die("--admin <pubkey> is required (the Squads vault PDA — the config authority)");
   const rulesFile = opt("rules") ?? "config/burnkeeper/deficit.rules.json";

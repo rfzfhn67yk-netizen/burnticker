@@ -1,5 +1,6 @@
 "use client";
 
+import { MINT_ADDRESS_TRUST } from "@/lib/burnticker/mintAddressCopy";
 import { HostDiagnostics } from "../_components/HostDiagnostics";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
@@ -107,6 +108,7 @@ export default function TrustPage() {
       <section className={card}><h2 className="font-medium">How this was built</h2>
         <p>{x.howBuilt.statement}</p>
         <p className="text-amber-400 mt-1">{x.howBuilt.firmAuditStatement}</p>
+        <p className="mt-1" data-mint-suffix>{MINT_ADDRESS_TRUST}</p>
         <table className="w-full text-xs mt-2"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Review</th><th className="p-2">Status</th><th className="p-2">Full report</th></tr></thead><tbody>{x.howBuilt.reviews.map((r) => { const present = x.howBuilt.reportsPresent.find((p) => p.id === r.id)?.present ?? false; return <tr key={r.id} className="border-t border-neutral-800 align-top"><td className="p-2">{r.reviewer}</td><td className="p-2">{r.status}</td><td className="p-2">{r.reportPath && present ? link(r.reportPath) : <span className="text-neutral-500">No report yet. Reports are published in {link(x.howBuilt.reviewsDir)}.</span>}</td></tr>; })}
           <tr className="border-t border-neutral-800 align-top"><td className="p-2">Free tools: {x.howBuilt.tooling.join(", ")}</td><td className="p-2">{x.howBuilt.toolingStatus}</td><td className="p-2 text-neutral-500">Their output is published in {link(x.howBuilt.reviewsDir)}.</td></tr>
           <tr className="border-t border-neutral-800 align-top"><td className="p-2">A public bounty of {x.howBuilt.bounty.rangeSol[0]} to {x.howBuilt.bounty.rangeSol[1]} SOL, paid from {x.howBuilt.bounty.fundedFrom}</td><td className="p-2">{x.howBuilt.bounty.status}</td><td className="p-2 text-neutral-500">The terms are in {x.howBuilt.bounty.termsPath}. {x.howBuilt.bounty.contact ? `Reports go to ${x.howBuilt.bounty.contact}.` : "The contact address is not set yet."}</td></tr></tbody></table>

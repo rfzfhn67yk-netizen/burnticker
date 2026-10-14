@@ -8,6 +8,9 @@
 // launch — the token (buyback mode by default; --vault-share for the vesting-vault alternative):
 //   --cluster devnet|mainnet      required; checked against the RPC's genesis hash (--rpc overrides the default endpoint)
 //   --mint-keypair <path>         the PRE-GENERATED mint keypair (solana-keygen JSON, mode 600, outside the repo). Read, never printed.
+//                                 Its address must end in burn or BURN (owner, 2026-10-14): grind it with scripts/burnticker-grind-mint.mts
+//                                 (or solana-keygen grind --ends-with burn:1 --ends-with BURN:1). A plain one is warned in a dry run and
+//                                 refused for --send unless --allow-plain-mint says the owner means it.
 //   --program <pubkey>            the deployed burn_receipts program (default env BURNTICKER_PROGRAM_ID; else the IDL's address,
 //                                 warned, refused for --send; the retired localnet test key GV9CMj… is always refused). The creator is derived from it:
 //   --creator <pubkey|file>       DEFAULT = THE BURN PROGRAM'S FEE PDA FOR THE MINT (["fee", mint]; review H-2). Recorded, not a signer.
@@ -40,6 +43,7 @@
 // the fee split in bps per 1 SOL before and after graduation, every instruction decoded, the simulation, and the signatures if sent).
 // Progress lines go to stderr.
 
+import { matchesSuffix } from "@/lib/burnticker/vanityMint";
 import fs from "node:fs";
 import { PINNED_URI_RE, decodeMetadataAccount, launchGate } from "../src/lib/burnticker/launchGate.ts";
 import path from "node:path";
@@ -171,7 +175,7 @@ if (MODE === "platform") {
 // ---------------------------------------------------------------------------------------------------------------------------------
 // launch
 // ---------------------------------------------------------------------------------------------------------------------------------
-const mintPath = opt("mint-keypair") ?? die("--mint-keypair <path> is required (pre-generate it: solana-keygen new --no-bip39-passphrase -o <path>; chmod 600)");
+const mintPath = opt("mint-keypair") ?? die("--mint-keypair <path> is required (grind it so the address ends in burn: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/burnticker-grind-mint.mts --out <path>)");
 const mintKp = await loadKey(mintPath, "--mint-keypair");
 const simulateAs = pubkeyArg(opt("simulate-as"), "--simulate-as");
 const payerKey = opt("payer") ? await loadKey(opt("payer")!, "--payer") : null;
@@ -200,6 +204,11 @@ if (!creatorIsFeePda) {
   if (SEND && !flag("allow-foreign-creator")) problems.push("refusing to --send with a creator other than the fee PDA (pass --allow-foreign-creator only if you really mean it)");
 }
 if (vestingSigner && !vestingSigner.publicKey.equals(creator)) die("--vesting-signer is not the creator's key");
+// 2026-10-14 (owner): every coin made on the platform has a mint address that ends in burn or BURN, the operator's launches included
+if (!matchesSuffix(mintKp.publicKey.toBase58())) {
+  const m = `the mint ${mintKp.publicKey.toBase58()} does not end in burn or BURN. Grind one with scripts/burnticker-grind-mint.mts (or solana-keygen grind --ends-with burn:1 --ends-with BURN:1).`;
+  if (SEND && !flag("allow-plain-mint")) problems.push(`${m} Refusing to --send without --allow-plain-mint.`); else warnings.push(m);
+}
 if (creator.equals(payer)) warnings.push("the creator is the payer — creator fees would go to the payer, not the burn pool");
 const rulesFile = opt("rules") ?? "config/burnkeeper/deficit.rules.json";
 const rules = loadRules(rulesFile);

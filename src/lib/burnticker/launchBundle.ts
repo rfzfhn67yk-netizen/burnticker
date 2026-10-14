@@ -208,6 +208,11 @@ export interface LaunchDeps {
   /** The caller's own mint PUBLIC key (base58); the bundle then carries no secret (mintSecretKey: null). Exclusive with mintKeypair. */
   mint?: string;
   /**
+   * 2026-10-14: a pair's side B mint PUBLIC key (buildPairBundles only), with `mint` for side A. The launch page grinds both in the
+   * browser so their addresses end in burn; with both given, A's initialize_token names B's mint as before and no secret is made here.
+   */
+  mintB?: string;
+  /**
    * @deprecated ignored for the creator since the blind review's H-2 (2026-10-09): LaunchLab's recorded creator is ALWAYS the burn
    * program's fee PDA for the mint (src/lib/burnKeeper/burnPool.ts). Kept so older callers compile; the keeper is an attester only.
    */
@@ -456,13 +461,19 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   // On chain the pair is linked through initialize_token (LaunchLab pairs): A names B's mint (A is PROVISIONAL), B names A back with
   // partnerFirst inside the 7-day pairing window. So side A is never built alone: B's draft — its rule and its mint — exists before A's
   // initialize_token is composed. A caller-supplied mint public key (deps.mint) cannot pre-name B: those bundles pair in the registry only.
+  if (deps.mintB !== undefined && (deps.mint === undefined || !PUBKEY_RE.test(deps.mintB))) throw new Error("pair: side B's mint public key needs side A's too, and both must be Solana public keys");
+  if (deps.mintB !== undefined && deps.mintB === deps.mint) throw new Error("pair: the two coins need two different mints");
   const kpB = deps.mint === undefined ? Keypair.generate() : null;
+  // the partner B's mint when it is known before A is built: a fresh keypair here, or the caller's own public key (mintB)
+  const mintBKnown = kpB ? kpB.publicKey.toBase58() : deps.mintB !== undefined ? new PublicKey(deps.mintB).toBase58() : null;
   // r3 (M-1): the program pairs two coins only with the SAME attester set and quorum (same keys, same order) — both sides are built from
   // the one deps.attesters / deps.quorum below; refuse a set the program would refuse anyway.
   if (new Set(deps.attesters).size !== deps.attesters.length) throw new Error("pair: both coins need one attester set of distinct keys (the program refuses PairAttestersDiffer otherwise)");
-  const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...deps, ...(kpB ? { pairMint: kpB.publicKey.toBase58(), partnerFirst: false } : {}) });
+  const { mintB: _ownB, ...depsA } = deps;
+  void _ownB;
+  const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...depsA, ...(mintBKnown ? { pairMint: mintBKnown, partnerFirst: false } : {}) });
   const ruleB = sideB(a.mint);
-  const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: kpB ?? undefined, ...(kpB ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });
+  const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...depsA, ...(deps.mintB !== undefined ? { mint: deps.mintB } : {}), mintKeypair: kpB ?? undefined, ...(mintBKnown ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });
   return { pairId, a, b, selector, notes: [
     ...(race ? [`candidates pair ${pairId}: ${input.a.ticker} on market ${race.markets[0]} and ${input.b.ticker} on market ${race.markets[1]}, two outcomes of the race ${race.slug}; the race counts once both markets are final: exactly one YES → that coin burns its own pool and the other's pool forwards to it; otherwise both pools go to $DEFICIT's burn at the end`] : []),
     ...(game ? [`one-game pair ${pairId}: ${input.a.ticker} on ${game.series[0]} and ${input.b.ticker} on ${game.series[1]}; the game counts once both results are final: the winning team's coin burns its whole budget and the other coin's pool forwards to it; a draw sends both pools to $DEFICIT's burn at the end; a cancelled game ends void`] : []),

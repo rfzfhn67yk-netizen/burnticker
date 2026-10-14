@@ -56,7 +56,12 @@ export async function POST(req: Request) {
     if (!on && wants) return NextResponse.json({ error: "the pair curve is not enabled on this host (BURNTICKER_PAIR_CURVE_ENABLED)", code: "pair-curve-unavailable" }, { status: 409 });
   }
   if (body.action === "launched") { const r = await markLaunched(p, String(body.mint ?? ""), String(body.launchTx ?? "")); return edgeJson(r.body, r.status); }
-  const r = await prepareLaunch(p, body, { register: true });
+  // 2026-10-14 (owner): the launch page grinds each mint in the browser so its address ends in burn, and sends only the PUBLIC key:
+  // `mint` (side A or the one coin) and `pair.mint` (side B). The secret never reaches this host; the bundle then carries none.
+  // A request without them (an older page) still gets a fresh keypair here, as before.
+  const own = typeof body.mint === "string" ? body.mint : undefined;
+  const ownB = body.pair && typeof (body.pair as { mint?: unknown }).mint === "string" ? (body.pair as { mint: string }).mint : undefined;
+  const r = await prepareLaunch(p, body, { register: true, ...(own !== undefined ? { mint: own } : {}), ...(ownB !== undefined ? { mintB: ownB } : {}) });
   // launch walkthrough 2026-10-13: a refusal answered 502 (the launch check could not read a source) reached the page as Cloudflare's
   // own error page, so the page said "The launch request failed (502)"; edgeJson sends it as 503 with the sentence intact
   if ("error" in r) return edgeJson(r.error.body, r.error.status, r.error.headers ?? {});

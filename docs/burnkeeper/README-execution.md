@@ -182,3 +182,23 @@ The platform keeper runs it every cycle (60 s); the $DEFICIT keeper wakes at the
 |---|---|
 | `BURNTICKER_DISPERSAL=1` | turn dispersal on in both keepers. Leave unset until `crank_carried` is deployed (the deployed program rejects the instruction). |
 | `BURNTICKER_PRIVATE_SEND_URL` | optional: a Jito block-engine (or equivalent JSON-RPC `sendTransaction`) endpoint; every program-port send and rebroadcast goes there instead of the RPC. Logged as scheme and host only. Unset: sends go through the RPC as before. |
+
+## Mint addresses that end in burn (owner decision 2026-10-14)
+
+Every coin made on the platform from 2026-10-14 has a mint address whose last four characters are `burn` or `BURN`. Coins made
+before that day ($DEFICIT, REHEARSAL, $PHINFLWIN) keep their plain addresses and are never described as ending in burn.
+
+- **The launch page** finds the address in the creator's browser, in Web Workers (`src/app/burnticker/launch/vanity.worker.ts`,
+  `src/lib/burnticker/vanityMint.ts`), from the name step on. Only the public key is sent with the launch request (`mint`, and
+  `pair.mint` for side B); the secret stays in the page and signs the create transaction there. The server builds the bundle for that
+  public key and carries no secret. After 60 seconds the creator may choose a plain address instead.
+- **Operator launches** grind the mint first, outside the repository:
+
+      node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/burnticker-grind-mint.mts --out ~/keys/<ticker>-mint.json
+
+  It prints the public key only and writes a solana-keygen JSON file (mode 600, never over an existing file). The Solana CLI does the
+  same with `solana-keygen grind --ends-with burn:1 --ends-with BURN:1`. Then pass the file as `--mint-keypair` to
+  `scripts/burnkeeper-launch.mts` (a plain mint is warned in a dry run and refused for `--send` without `--allow-plain-mint`) and as
+  `--mint` (or `--mint-keypair`) to `scripts/burnreceipts-admin.mts initialize-token` (warned, never refused, so older coins still work).
+- **Cost:** one hit per 58^4 / 2 ≈ 5.66 million keys. On the 10-core Apple M5: Node's native Ed25519 on 9 to 10 workers ≈ 190,000
+  keys a second (≈ 30 s per address); the pure-JavaScript fallback ≈ 42,000 a second on 10 workers (≈ 2 to 3 minutes).

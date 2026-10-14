@@ -60,6 +60,8 @@ export interface ReviewCardProps {
   ready: boolean;
   creator: string | null;
   onLaunch: () => void;
+  /** 2026-10-14 (owner): the burn-ending mint address search (MintSearch.tsx) and its one line, just above Launch. */
+  mintSearch?: ReactNode;
   /** website-14 (product idea 6): the coins already registered with this rule (DuplicateNotice.tsx), under the sentence. */
   duplicate?: ReactNode;
   /** Launch audit 5 L06: the pre-wallet summary (PreWalletSummary.tsx); since website-15 item 12 it is collapsed BELOW the button. */
@@ -456,6 +458,7 @@ export function ReviewCard(p: ReviewCardProps) {
       {p.problems.length > 0 && <p className="min-w-0 break-words text-red-400">Can&apos;t launch this rule: {p.problems.join("; ")}</p>}
       {p.error && <p className="min-w-0 break-words text-red-400" role="alert">{p.error}</p>}
       {p.cost && <p className="min-w-0 break-words text-sm text-neutral-200" data-cost-line>{p.cost}{p.costNote && <span className="block text-xs text-neutral-400" data-cost-note>{p.costNote}</span>}</p>}
+      {p.mintSearch}
       <div className="space-y-1 pt-1">
         {fieldProblems.length > 0 && problemList("Not ready to launch", problemsId)}
         {p.blocked && <p id={blockedId} className="min-w-0 break-words text-xs text-amber-300" data-wallet-blocked>{p.blocked}</p>}
