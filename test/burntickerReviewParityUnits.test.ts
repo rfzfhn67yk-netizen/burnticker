@@ -82,8 +82,8 @@ describe("audit 7 item 3: link fields", () => {
 describe("audit 6 items 2, 3, 6, 11, 27", () => {
   test("one team ticker: league tags where a code is shared", () => {
     const t = (l: string, a: string) => teamTicker(a, { league: l, window: "season", outcome: "win" });
-    assert.equal(t("mlb", "LAD"), "LAD");
-    assert.deepEqual(["mlb", "nba", "nfl", "wnba", "usa.1"].map((l) => t(l, "ATL")), ["ATLMLB", "ATLNBA", "ATLNFL", "ATLWNBA", "ATLMLS"]);
+    assert.equal(t("mlb", "LAD"), "LADWIN");
+    assert.deepEqual(["mlb", "nba", "nfl", "wnba", "usa.1"].map((l) => t(l, "ATL")), ["ATLMLBWIN", "ATLNBAWIN", "ATLNFLWIN", "ATLWNBAWIN", "ATLMLSWIN"]);
     assert.notEqual(t("mlb", "ARI"), t("nfl", "ARI"));
     for (const w of ["season", "post", "next", "perpetual", "title", "game"] as const) for (const inverse of [false, true]) assert.match(teamTicker("ATL", { league: "wnba", window: w, inverse, games: 10 }), /^[A-Z0-9]{2,10}$/);
   });

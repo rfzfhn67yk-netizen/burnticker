@@ -356,16 +356,17 @@ describe("item 15: the stat strip and the activity line (Claude site audit 3 ite
     assert.match(home, /put\("burned", group\(s\.devnet\.burnedTokens\) \+ " \(devnet\)"\); put\("burns", group\(s\.devnet\.burns\) \+ " \(devnet\)"\)/);
     assert.doesNotMatch(home, /The devnet practice burns in the line above are not counted/);
   });
-  test("mainnet rows from real records lead the line: $REHEARSAL created (its create signature) and $DEFICIT's reserved mint, no date claimed", async () => {
+  test("mainnet rows from real records lead the line: $REHEARSAL created (its create signature) and, since 2026-10-13, $DEFICIT created (its create signature); no reserved row any more", async () => {
     const { mainnetRecordEvents, homeData } = await import("@/lib/burnticker/home");
     const { EVENT_LABEL } = await import("@/lib/burnticker/activity");
     const ev = mainnetRecordEvents();
-    const created = ev.find((e) => e.kind === "created")!, reserved = ev.find((e) => e.kind === "reserved")!;
+    const created = ev.find((e) => e.kind === "created" && e.ticker === "REHEARSAL")!, deficit = ev.find((e) => e.kind === "created" && e.ticker === "DEFICIT")!;
     assert.equal(created.text, "$REHEARSAL created on mainnet, Oct 11"); assert.equal(created.network, "mainnet"); assert.match(created.href, /^https:\/\/explorer\.solana\.com\/tx\/3fJdoqa2/);
-    assert.equal(reserved.text, "$DEFICIT mint address reserved"); assert.equal(reserved.at, null);
+    assert.equal(deficit.text, "$DEFICIT created on mainnet, Oct 13"); assert.equal(deficit.at, "2026-10-13"); assert.match(deficit.href, /^https:\/\/explorer\.solana\.com\/tx\/2YyZVB96/);
+    assert.ok(!ev.some((e) => e.kind === "reserved"), "the coin is created, so no reserved row");
     assert.equal(EVENT_LABEL.created, "Created"); assert.equal(EVENT_LABEL.reserved, "Mint reserved");
     const first = homeData([], process.cwd()).events.slice(0, 2).map((e) => e.kind);
-    assert.deepEqual(first, ["created", "reserved"], "mainnet first");
+    assert.deepEqual(first, ["created", "created"], "mainnet first");
     const launched = scratchRoot("launched");
     assert.ok(!mainnetRecordEvents(launched).some((e) => e.kind === "reserved"), "no reserved row once the coin is created");
   });

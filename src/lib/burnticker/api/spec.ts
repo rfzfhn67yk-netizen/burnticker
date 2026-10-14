@@ -16,6 +16,7 @@ import { TRUSTPACK_ENDPOINTS, TRUSTPACK_SCHEMAS } from "@/lib/burnticker/trustpa
 import { PRODUCT_ENDPOINTS, PRODUCT_SCHEMAS } from "@/lib/burnticker/api/productSpec";
 import { BADGE_ENDPOINTS, BADGE_SCHEMAS } from "@/lib/burnticker/api/badgeSpec";
 import { OPS_ENDPOINTS, OPS_SCHEMAS } from "@/lib/burnticker/ops/spec";
+import { FEATURES_ENDPOINTS, FEATURES_SCHEMAS } from "@/lib/burnticker/api/featuresSpec";
 
 export type Bucket = "read" | "heavy" | "write";
 type Schema = Record<string, unknown>;
@@ -31,7 +32,7 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.17.0";
+export const API_VERSION = "1.18.0";
 export const API_PREFIX = "/api/burnticker/v1";
 /** The human-readable docs page (src/app/burnticker/docs). */
 export const API_DOCS_PATH = "/burnticker/docs";
@@ -64,6 +65,7 @@ export const SCHEMAS: Record<string, Schema> = {
   ...PRODUCT_SCHEMAS,
   ...BADGE_SCHEMAS,
   ...OPS_SCHEMAS,
+  ...FEATURES_SCHEMAS,
   Error: obj({ error: str, code: str, problems: arr(str), retryAfterSec: int }, ["error"]),
   ApiIndex: obj({ name: str, version: str, openapi: str, docs: str }, ["name", "version", "openapi", "docs"], { description: "since 1.16.0: the base path's own answer" }),
   // LP LOCKED FOREVER (since 1.8.0; owner decision 2026-10-10): graduation LP is 100 % locked with Raydium's LP lock, the Fee Key NFT is
@@ -238,6 +240,8 @@ export const SCHEMAS: Record<string, Schema> = {
     prerequisites: arr(str), authority: str, operator: str, warnings: arr(str), problems: { ...arr(str), description: "since 1.15.0: exactly the refusals the bundle route makes for this body (launchPreflight.ts), so an empty list means the bundle would be built on an open host" },
     end: obj({ kind: { enum: ["perpetual", "self", "flagship", "pair-winner", "champion"] }, result: str, void: nstr }, ["kind", "result"], { description: "since 1.15.0: how the rule ends, the result end and the void end stated apart" }),
     projection: obj({ available: bool, weeks: { anyOf: [{ type: "integer" }, { type: "null" }] }, from: nstr, to: nstr, rows: arr(obj({ share: { type: "number" }, triggers: int, units: { type: "number" }, spentPct: { type: "number" } })), lines: arr(str), reason: nstr, drain: nstr }, ["available", "rows", "lines"], { description: "since 1.15.0: the 1, 2 and 5% projection from the source's saved sample, or the reason there is none" }),
+    backtest: nullable(ref("LastSeasonBacktest")),
+    simulation: ref("Simulation"),
     meetings: nullable(obj({ flow: { type: "object" }, descriptionB: str }, ["flow", "descriptionB"], { description: "a pair on every game between two teams this season: where the money goes per game and at the season's end, and side B's generated description (absent for any other review)" })),
     settled: nullable(obj({ shape: { enum: ["candidates", "game"] }, sentence: str, flow: { type: "object" }, descriptionB: str }, ["shape", "sentence", "flow"], { description: "a settled-event pair (two candidates in one race, or two teams in one game; a linked LaunchLab pair): its one sentence, where the money goes, and side B's generated description (absent for any other review)" })),
   }, ["schema", "network", "mode", "signable", "rule", "coins", "transactions", "costs", "problems"], { description: "Since 1.14.0: the read-only pre-wallet review — network, launch type and availability, the canonical rule and its hash, names and tickers, allocation, the fee split per 1 SOL, the transactions and their signers, estimated SOL, prerequisites, who can change what, and every problem. Nothing is built, pinned, registered or read from chain." }),
@@ -320,6 +324,7 @@ export const ENDPOINTS: Endpoint[] = [
   ...PRODUCT_ENDPOINTS,
   ...BADGE_ENDPOINTS,
   ...OPS_ENDPOINTS,
+  ...FEATURES_ENDPOINTS,
   { operationId: "getCatalogue", method: "GET", path: "/catalogue", tag: "sources", summary: "Every resolution source with its tier", description: "The configured first-party sources (tiers 3–5, with the last fixture reading, a preview and the public selection config), the on-chain facts, and the market/assertion stubs (shown, not launchable). Kalshi series are searched live through /kalshi/search.", params: [], request: null, response: "Catalogue", errors: [429], cacheSec: 300, bucket: "read" },
   { operationId: "getSourcePreview", method: "GET", path: "/sources/{id}/preview", tag: "sources", summary: "What a catalogue rule would have burned over the source's saved sample", description: "The source fixes unit, direction, baseline and carry; you choose only the mapping (fractionOfPool for buyback, or tokens for vault mode).", params: [{ name: "id", in: "path", required: true, description: "source id, e.g. treasury.debt or wiki.views:Bitcoin", schema: str }, { name: "fractionOfPool", in: "query", required: false, description: "buyback mapping per unit, 0.01–0.25 (default 0.02); the answer carries `projection`, the same 1, 2 and 5% projection as the launch review", schema: num }, { name: "tokens", in: "query", required: false, description: "vault mapping per unit (switches the preview to vault mode)", schema: int }], request: null, response: "SourcePreview", errors: [400, 404, 429], cacheSec: 300, bucket: "read" },
   { operationId: "searchKalshiEvents", method: "GET", path: "/kalshi/events", tag: "kalshi", summary: "Search Kalshi events such as games, contests and people, or list a series' upcoming events", description: "Event-level search: `q` is matched against event title, event ticker, market labels and suffixes, with a team-alias table (city, nickname, abbreviation: eagles / philadelphia / PHI; jaguars / jacksonville / JAC / JAX). Scans `series` when given, else the league series of the teams the query names, else the headline game leagues plus series whose titles share a word with the query. Events are cached 10 minutes per series. `?series=KXNFLGAME` alone lists its upcoming events; no parameters returns the league chooser. Two-team games carry both sides and both selector modes. Tickers and labels only — no prices.", params: [{ name: "q", in: "query", required: false, description: "a team, person, contest or ticker", schema: str }, { name: "series", in: "query", required: false, description: "scan only this series", schema: str }, { name: "status", in: "query", required: false, description: "open (default), closed or settled", schema: { enum: ["open", "closed", "settled"] } }], request: null, response: "KalshiEvents", errors: [429, 502, 503], cacheSec: 60, bucket: "heavy" },

@@ -1,5 +1,5 @@
 import type { Latest } from "@/lib/burnticker/latestOnly";
-import { defaultName, defaultTicker } from "@/lib/burnticker/derby/tile";
+import { defaultName, defaultTicker, fightName, fightTickers } from "@/lib/burnticker/derby/tile";
 import { pairNames, pairTickers } from "@/lib/burnticker/guidedLaunch";
 
 /**
@@ -100,9 +100,11 @@ export function editedFrom(v: unknown): EditedFields {
  * The names and tickers after a pick: every field the creator has not typed in follows the picked coins (both picked: the matchup's
  * "WIFVBONK" and "WIF vs BONK, WIF side"; one picked: "TEAMWIF" and "Team WIF"); a typed field is left alone.
  */
-export function generatedNames(a: { symbol: string } | null, b: { symbol: string } | null, cur: PairNameFields, edited: EditedFields): PairNameFields {
+export function generatedNames(a: { symbol: string } | null, b: { symbol: string } | null, cur: PairNameFields, edited: EditedFields, o: { flip?: boolean } = {}): PairNameFields {
   const gen: Partial<PairNameFields> = {};
-  if (a && b) { const t = pairTickers(a.symbol, b.symbol), n = pairNames(a.symbol, b.symbol); Object.assign(gen, { a: n.a, b: n.b, ta: t.a, tb: t.b }); }
+  // cheap-features item 15: a daily race's sides carry the fight ($WIFWINS / $BONKWINS); the flippening keeps $SOLVETH / $ETHVSOL
+  if (a && b && !o.flip) { const t = fightTickers(a.symbol, b.symbol); Object.assign(gen, { a: fightName(a.symbol), b: fightName(b.symbol), ta: t.a, tb: t.b }); }
+  else if (a && b) { const t = pairTickers(a.symbol, b.symbol), n = pairNames(a.symbol, b.symbol); Object.assign(gen, { a: n.a, b: n.b, ta: t.a, tb: t.b }); }
   else { if (a) Object.assign(gen, { a: defaultName(a.symbol), ta: defaultTicker(a.symbol) }); if (b) Object.assign(gen, { b: defaultName(b.symbol), tb: defaultTicker(b.symbol) }); }
   const out = { ...cur };
   for (const k of ["a", "b", "ta", "tb"] as const) if (!edited[k] && gen[k] !== undefined) out[k] = gen[k]!;

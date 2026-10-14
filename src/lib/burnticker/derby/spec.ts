@@ -299,8 +299,15 @@ export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | 
   const head = `$${tickerA} burns ${pctText(fraction)} ${windowText(d.window)} ${verb} (${src}, ${boundary(d.window)})`;
   const ab = tickerB ? `${head}, and $${tickerB}'s share for that ${day} goes to $${tickerA}'s burn. On a ${day} ${d.b.symbol} out-gains ${d.a.symbol}${by}, $${tickerB} burns and takes $${tickerA}'s share.` : `${head}.`;
   // "Runs for N days" (the owner, 2026-10-10: "in the coin vs coin it reads as seasons for the duration")
-  return `${ab} ${derbyReadOnlySentence(d)} Runs for ${d.season.days} days, then winds down.`;
+  // cheap-features item 15 (owner 2026-10-13): a two-coin daily race ends on its tally of winning days, so the end is said as a result
+  return `${ab} ${derbyReadOnlySentence(d)} ${tickerB ? raceEndSentence(d.season.days) : `Runs for ${d.season.days} days, then winds down.`}`;
 }
+
+/** Cheap-features item 14: the run lengths the web launcher offers beside the share presets (the API takes any length up to 366 days). */
+export const DERBY_RUN_PRESETS = [7, 14, 30] as const;
+export const runPresetLabel = (days: number): string => `${days} days`;
+/** Cheap-features item 15: a daily race's end, said as a result. */
+export const raceEndSentence = (days: number): string => `Runs for ${days} days. At the end, the side with more winning days takes the rest.`;
 /** The reference coins are inputs only (the owner, 2026-10-13). */
 export const derbyReadOnlySentence = (d: Pick<CoinVsSpec, "a" | "b">): string => `${d.a.symbol} and ${d.b.symbol} are only read, never traded or burned.`;
 
@@ -363,3 +370,13 @@ export function wrapperPairProblem(a: Pick<DerbyUnderlying, "symbol">, b: Pick<D
 }
 
 export const flipAlreadyAheadSentence = (a: string, b: string): string => `${a} already closes above ${b} in size, so there is nothing to flip. A flippening can launch only while ${a} is the smaller of the two.`;
+
+/** Cheap-features item 12: a derby pair's live scoreboard (built by derby/page.ts derbyScoreboard; a pure type, so the page types can name it). */
+export interface DerbyScoreboard {
+  tickers: { a: string; b: string };
+  daysWon: { a: number; b: number }; ties: number; withheld: number;
+  streak: { side: "A" | "B" | null; days: number };
+  forwardedSol: { toA: string; toB: string };
+  run: { day: number; of: number; over: boolean };
+  line: string;
+}

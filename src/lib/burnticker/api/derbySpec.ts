@@ -31,6 +31,7 @@ export const DERBY_SCHEMAS: Record<string, Schema> = {
     pairId: str, selector: { enum: ["coinvs", "price"] }, series: str, window: str, measure: str, flip: bool, symbols: obj({ a: str, b: nstr }, ["a"]),
     season: obj({ start: str, days: int, endsOn: str, over: bool, windows: int, windowsDone: int }, ["start", "days", "endsOn", "over"]),
     score: obj({ a: int, b: int, ties: int, withheld: int, dayNumber: int }, ["a", "b", "ties", "withheld", "dayNumber"]),
+    scoreboard: { ...obj({ tickers: obj({ a: str, b: str }), daysWon: obj({ a: int, b: int }, ["a", "b"]), ties: int, withheld: int, streak: obj({ side: { enum: ["A", "B", null] }, days: int }, ["side", "days"]), forwardedSol: obj({ toA: str, toB: str }, ["toA", "toB"]), run: obj({ day: int, of: int, over: bool }, ["day", "of", "over"]), line: str }, ["daysWon", "streak", "forwardedSol", "run", "line"]), description: "since 1.18.0: the live scoreboard both coin pages and the share card show" },
     forwarded: { ...obj({ aToB: str, bToA: str, windows: int }, ["aToB", "bToA", "windows"]), description: "since 1.10.0 (winner takes the burn): the SOL each side's lost windows moved to the other side's burn pool, and how many windows forwarded" },
     days: arr(ref("DerbyDay")), retired: obj({ a: nstr, b: nstr }), note: str,
   }, ["pairId", "selector", "series", "season", "score", "days"], { description: "A Burn Derby pair: the running score (the receipts' tally), the day-by-day strip with both readings and proof links, the season end" }),

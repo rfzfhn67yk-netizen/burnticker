@@ -66,6 +66,32 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/current-status` | 60 s | read | (API 1.13.0, website brief §4; `src/lib/burnticker/currentStatus.ts`) the one current-status summary: phase, network deployment, programs (devnet bytes = build, upgrade authority read from chain), attesters and quorum, each Squads vault's time lock read from chain beside the planned value, settlement providers, per-finding review status, open release requirements, design vs historical |
 | GET | `/` | 300 s | read | the base path itself (1.16.0): `{ name, version, openapi, docs }`, so the address the site footer prints answers |
 | GET | `/openapi.json` | 3600 s | read | the OpenAPI 3.1 document |
+| GET | `/coins/{mint}/calendar` | 300 s | heavy | (API 1.18.0, cheap-features item 2; `src/lib/burnticker/calendar.ts`) a coin's next scheduled readings, at most five: a team coin's next games inside its window (the league's own schedule), a Treasury coin's next business days, else the status record's next check and market end. A reading is a time a result can arrive, not a burn |
+| GET | `/coins/{mint}/calendar.ics` | 300 s | heavy | (1.18.0) the same entries as an iCalendar file (`text/calendar`, RFC 5545, `content-disposition: attachment`) |
+| GET | `/coins/{mint}/checklist` | 30 s | read | (1.18.0, item 10; `checklist.ts`) created, trading, graduated, pool verified, first reading, first burn (each `done` true / false / null = not read), the next action and who does it, and `shareImage` |
+| GET | `/leaderboard` | 60 s | read | (1.18.0, item 3; `leaderboard.ts`) most burned, biggest single burn, longest streak, newest receipt: ten rows each, read from the receipts, launched coins only, memoised per minute |
+| GET | `/digest?day=YYYY-MM-DD` | 300 s | read | (1.18.0, item 8; `digest.ts`) one UTC day (default today): results read, confirmed burns, new coins, graduations this site registered, and plain lines; `scripts/burnticker-posts.mts digest --digest-file=FILE` turns a saved answer into one queued post |
+| GET | `/ops/post-queue?state=` | — | read | (1.18.0, item 9; `postApproval.ts`) operator only (the operator's network and `x-action-pin`): the owner's post queue with each post `waiting` or `used`. Never posts |
+| POST | `/ops/post-queue/used` `{ id, note? }` | — | read | (1.18.0) operator only: appends a "used" mark to `data/launch/post-queue-used.jsonl`; the queue file is never changed and nothing posts |
+
+## Cheap-features pass (API 1.18.0, 2026-10-13)
+
+- **The receipt share card and the embeddable widget** (items 1 and 7; `src/lib/burnticker/receiptCard.ts`): `GET /burnticker/img/receipt/<MINT>.png`
+  (or `.svg`; a ticker one coin holds also answers) is a 1200 × 630 card in the receipt style: the coin's own generated image, the
+  ticker, the rule's sentence, the latest burn and the burn count (a Coin vs Coin coin draws its pair's scoreboard instead). It is the
+  coin page's Open Graph and X image, and the stable URL by mint is the one to embed:
+  `<img src="https://burnticker.com/burnticker/img/receipt/<MINT>.png" alt="..." width="600" height="315">`. Cached five minutes; the
+  server renders each (coin, newest burn) once. Outside `/v1`, so it carries no rate-limit headers.
+- **The review** (`POST /launch/review`) carries `backtest` (item 5: a team rule counted over the team's previous season from the
+  league's own schedule, `available: false` with the reason otherwise) and `simulation` (item 6: the result, a tie, a void, no result
+  and no graduation for a hypothetical 1 SOL burn pool and an 85 SOL trading pool, both coins for a pair; `src/lib/burnticker/simulator.ts`,
+  client-safe, for other amounts).
+- **Generated team tickers say the side** (item 4): `$LADWIN`, `$LADLOSS`, `$LADDRAW`, `$LADNOWIN`; a long one shortens the window first
+  (`$LADWINN5`). Registered tickers and pair tickers do not change.
+- **Coin vs Coin** (items 12 to 15): `GET /derby/{id}` pair blocks carry `scoreboard` (days won, the current streak, SOL moved to the
+  winning side, run day N of M, one line); a coin page's `status.derbyScoreboard` carries the same. Run-length presets are 7, 14 and 30
+  days (`DERBY_RUN_PRESETS`; the API takes 1 to 366). A two-coin daily race's sentence ends "At the end, the side with more winning days
+  takes the rest.", and its generated tickers carry the fight (`$WIFWINS` / `$BONKWINS`).
 
 ### `POST /launch/bundle`
 

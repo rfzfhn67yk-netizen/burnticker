@@ -78,8 +78,8 @@ describe("ChatGPT A1 / Claude 1: one typed launch-state record (siteLaunchState)
   test("2. public creation open: today the hosted signing cannot complete, so the button stays off and says so; with signing wired, it can sign", () => {
     for (const s of [siteLaunchState({ ...MAIN, [CREATOR_LAUNCHES_FLAG]: "1" }), viaCatalogue({ ...MAIN, [CREATOR_LAUNCHES_FLAG]: "1" })]) {
       assert.deepEqual([s.mode, s.wizard, s.canSign, s.sentence, s.signingSentence], ["open", true, false, SITE_SENTENCE.reviewOnly, SIGNING_UNAVAILABLE]);
-      // the blockers are the host's live wiring (launch-10): on this bare mainnet fixture the owner's allowance and the lookup table are among them
-      assert.ok(s.hostedSigning.blockers.length >= 2 && s.hostedSigning.blockers.some((b) => /mainnet yet/.test(b)) && s.hostedSigning.blockers.some((b) => /lookup table/.test(b)), s.hostedSigning.blockers.join(" | "));
+      // the blockers are the host's live wiring (launch-10): on this bare mainnet fixture the owner's allowance is among them (the mainnet lookup table is pinned in networks.ts since 2026-10-13, so it is no longer a blocker)
+      assert.ok(s.hostedSigning.blockers.length >= 1 && s.hostedSigning.blockers.some((b) => /mainnet yet/.test(b)) && !s.hostedSigning.blockers.some((b) => /lookup table/.test(b)), s.hostedSigning.blockers.join(" | "));
       noContradiction(s, "open, review only");
     }
     const wired = siteLaunchStateFromCatalogue({ cluster: "mainnet", launches: { ...catalogueLaunches({ ...MAIN, [CREATOR_LAUNCHES_FLAG]: "1" }), hostedSigning: { complete: true, blockers: [] } } });

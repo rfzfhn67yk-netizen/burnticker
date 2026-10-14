@@ -77,16 +77,16 @@ describe("the featured cards (review items 12 and 13; Codex review 5 F4)", () =>
   test("fixed order: $DEFICIT featured, $REHEARSAL tagged as the mainnet rehearsal, the devnet coin tagged devnet; all in the test group", () => {
     assert.deepEqual(f.map((c) => [c.id, c.ticker, c.tags[0].tone, c.group]), [["deficit", "DEFICIT", "featured", "test"], ["rehearsal", "REHEARSAL", "rehearsal", "test"], ["deficit-devnet", "DEFICIT", "devnet", "test"]]);
   });
-  test("$DEFICIT before the create: rules locked, not created, its reserved mint shown as an address only, no receipt, its own site as the link", () => {
+  test("$DEFICIT after the create (2026-10-13): own-tokens says launched, the card drops the not-created tag, the mint is a plain address, no typed curve", () => {
     const own = JSON.parse(read("config/own-tokens.json")) as { tokens: { symbol: string; address: string; status: string }[] };
     const d = own.tokens.find((t) => t.symbol === "DEFICIT")!;
-    assert.equal(d.status, "planned");
-    assert.match(f[0].note!, /rules are locked, and the coin is not created yet/);
-    assert.deepEqual(f[0].mint, { address: "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj", label: "Reserved mint address (coin not created yet)" });
-    assert.equal(f[0].receipt, null); assert.equal(f[0].burned.text, null, "before the create: a dash with a reason, not a claim"); assert.equal(f[0].href, DEFICIT_SITE);
-    // website-14 (§75): no curve before the create, so no raise either: never a typed 85
+    assert.equal(d.status, "launched");
+    assert.deepEqual(f[0].tags.map((t) => t.label), ["Featured"]);
+    assert.match(f[0].note!, /rules were locked before it was created/);
+    assert.deepEqual(f[0].mint, { address: "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj", label: "Mint address" });
+    // with no registry row and no keeper files in this test, every live figure is unavailable with a reason, never a claim
+    assert.equal(f[0].receipt, null); assert.equal(f[0].burned.text, "Unavailable");
     assert.deepEqual([f[0].curve.raised, f[0].curve.of], [null, null]); assert.doesNotMatch(JSON.stringify(f[0].curve), /85/);
-    assert.doesNotMatch(JSON.stringify(f[0]), /solscan|explorer|raydium/i, "no mint link before the coin exists");
   });
   test("F4: after the create, the card merges the registry's state: burns, share of supply, curve, and its newest receipt's own check", () => {
     const root = scratchRoot("launched");
@@ -173,7 +173,7 @@ describe("the platform strip and the one-line status (Claude site audit 2 items 
     // the committed file (no chain read): what it says, nothing it does not
     const fromFile = homeData([], process.cwd()).statusLine!;
     // legitimacy pass: the dated counts follow (the reviews published and the releases since Oct 10, read from the files)
-    assert.match(fromFile, /^Burnticker is in pre-launch\. Its programs have been on mainnet since Oct 11, 2026\. One key signs every reading\. \d+ reviews are published, and there have been \d+ releases since Oct 10\.$/);
+    assert.match(fromFile, /^Burnticker is in soft launch\. Its programs have been on mainnet since Oct 11, 2026\. One key signs every reading\. \d+ reviews are published, and there have been \d+ releases since Oct 10\.$/);
     clean(line!, "status line"); clean(fromFile, "status line from the file");
     const home = read("site/burnticker/index.html");
     assert.match(home, /data-status-line/); assert.doesNotMatch(home, /data-current-status|<h2 id="status-h">Current status/);

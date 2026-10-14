@@ -70,12 +70,12 @@ describe("the four empty states (website brief §1/§7)", () => {
 });
 
 describe("$DEFICIT before launch (website brief §1)", () => {
-  test("the pre-launch data comes from the locked rules file and current-status.json: 2 % per $1B, its sha256, no launch date, the served site canonical", async () => {
+  test("the pre-launch data comes from the locked rules file and current-status.json: 2 % per $1B, its sha256, the 2026-10-13 launch date, the served site canonical", async () => {
     const { deficitPrelaunch } = await import("@/lib/burnticker/deficitPrelaunch");
     const d = deficitPrelaunch();
     assert.equal(d.dial.percent, "2%"); assert.equal(d.dial.unitLabel, "$1B");
     assert.equal(d.rulesSha256, "8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9", "the mainnet rule the owner picked on 2026-10-10");
-    assert.equal(d.canonical, "https://deficit.burnticker.com/"); assert.equal(d.launch.date, null);
+    assert.equal(d.canonical, "https://deficit.burnticker.com/"); assert.equal(d.launch.date, "2026-10-13");
     assert.equal(d.rehearsal.demo.checkHref, EXPLORE_VERIFIED_BURN.href);
     clean(`${d.oneSentence} ${d.launch.note} ${d.rehearsal.note} ${d.rehearsal.demo.summary}`, "pre-launch copy");
   });

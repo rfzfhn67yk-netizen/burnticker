@@ -36,6 +36,8 @@ import { rpcUrlFor } from "@/lib/burnticker/networks";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "@/lib/burnticker/venues";
 import { espnClient, nativeSourceById, setNativeClients } from "@/lib/burnticker/sources/native";
 import type { SeasonSchedule } from "@/lib/burnticker/seasonOver";
+import type { TeamSeasonReader } from "@/lib/burnticker/lastSeason";
+import { coinDerbyScoreboard } from "@/lib/burnticker/derby/page";
 import { derbyTitle } from "@/lib/burnticker/api/handlers";
 
 /**
@@ -49,6 +51,8 @@ export interface Platform {
   cluster: "devnet" | "mainnet" | "localnet"; publishDir: string; devFeeWallet: string | null; keeperPubkey: string | null; platformId: string | null; stubs: string[];
   /** Reads each coin's LaunchLab curve and top holders (market.ts) — present only with BURNTICKER_RPC_URL; without it the cards show "—". */
   market?: MarketReader | null;
+  /** cheap-features items 2 and 5: one team's games for a season (the coin calendar and last season's count). Absent: nothing is read. */
+  teamSeason?: TeamSeasonReader | null;
   /** BURNTICKER_KALSHI_ENABLED (venues.ts): false turns off every Kalshi-facing surface; undefined = on. */
   kalshiEnabled?: boolean;
   /** Burn Derby (2026-10-10): the fetch for cross-reads / Jupiter search (tests inject fixtures; production = global fetch). */
@@ -129,7 +133,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   // Team coins: games settle on their Polymarket on-chain payout where a moneyline market exists, else TheSportsDB (gameSettle.ts).
   setNativeClients({ games: { ...envGameDeps(env), ...(polymarketDiscoveryEnabled(env) ? polymarketGameReaders(polymarket) : { market: null, payout: null }) } });
   cached = {
-    registry, derbyPools, derbyHermes, seasonSchedule: (league, days) => espnClient().upcoming(league, days),
+    registry, derbyPools, derbyHermes, seasonSchedule: (league, days) => espnClient().upcoming(league, days), teamSeason: (league, team, year) => espnClient().season(league, team, year),
     oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, kalshi, polymarket, program, launchLab, cluster,
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
     allowMainnet, devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
@@ -226,6 +230,8 @@ export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), 
   const input = await tokenPageInput(p, t, now, opts);
   const receipts = buildReceiptsJson(input);
   const status = buildTokenStatus(input, receipts);
+  // cheap-features item 12: a Coin vs Coin coin carries its pair's live scoreboard (registry only, no chain read)
+  if (t.selectorKey.startsWith("derby:")) status.derbyScoreboard = coinDerbyScoreboard(p.registry, t.mint, now);
   // website-15 item 13: an image taken down on request (config/burnticker/image-takedowns.json) is no longer shown; the receipt art is
   if (status.profile && imageTakenDown(t.mint)) status.profile = { ...status.profile, imageUrl: null };
   return { status, receipts, readings: input.readings, rulesText: t.rulesJson, stubs: p.stubs };

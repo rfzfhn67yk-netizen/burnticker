@@ -39,7 +39,9 @@ export const PUBLIC_REPO = "https://github.com/rfzfhn67yk-netizen/burnticker";
 const REPO_FILE = (p: string) => `${PUBLIC_REPO}/blob/main/${p}`;
 const REPO_TREE = (p: string) => `${PUBLIC_REPO}/tree/main/${p}`;
 
-export interface Draft { format: PostFormat; account: Account; subject: string; posts: string[] }
+/** Cheap-features item 8 (2026-10-13): the daily digest post, built from a saved GET /v1/digest answer (digest.ts digestDraft); outside the six fixed formats because it needs that input. */
+export const DIGEST_FORMAT = "digest" as const;
+export interface Draft { format: PostFormat | typeof DIGEST_FORMAT; account: Account; subject: string; posts: string[] }
 export interface QueuedPost extends Draft {
   schema: typeof QUEUE_SCHEMA; id: string; queuedAt: string; source: string; xLength: number[]; warnings: string[];
   status: "awaiting-owner"; note: string;

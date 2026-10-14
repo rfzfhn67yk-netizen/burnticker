@@ -95,13 +95,13 @@ describe("season boundaries from frozen ESPN schedules", () => {
     assert.deepEqual(recordWindowEnd(d, [tok("a", true)], { window: { ...ended.window, ended: false } }), []);
   });
 
-  test("ticker suggestions are the one team ticker (tickers.ts): $TBMLB, $PHINFL, $LAL, $TBMLBALL perpetual", () => {
+  test("ticker suggestions are the one team ticker (tickers.ts): $TBMLBWIN, $PHINFLWIN, $LALWIN, $TBMLWINALL perpetual", () => {
     const tk = (code: string) => describeRule(nativeRule(code), { ticker: "" }).ticker;
-    assert.equal(tk(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), "TBMLB");
-    assert.equal(tk(teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 })), "PHINFL");
-    assert.equal(tk(teamSeries("nba", "LAL", "win", { kind: "season", year: 2027 })), "LAL");
-    assert.equal(tk(teamSeries("mlb", "TB", "win", { kind: "perpetual" })), "TBMLBALL");
-    assert.equal(tk(teamSeries("eng.1", "ARS", "win", { kind: "season", year: 2026 })), "ARSEPL");
+    assert.equal(tk(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), "TBMLBWIN");
+    assert.equal(tk(teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 })), "PHINFLWIN");
+    assert.equal(tk(teamSeries("nba", "LAL", "win", { kind: "season", year: 2027 })), "LALWIN");
+    assert.equal(tk(teamSeries("mlb", "TB", "win", { kind: "perpetual" })), "TBMLWINALL");
+    assert.equal(tk(teamSeries("eng.1", "ARS", "win", { kind: "season", year: 2026 })), "ARSEPLWIN");
     assert.equal(seasonLabel("nba", 2027), "2026–27"); assert.equal(seasonLabel("eng.1", 2026), "2026–27"); assert.equal(seasonLabel("mlb", 2026), "2026");
     assert.equal(seasonYearAt("nba", ESPN_NOW), 2027); assert.equal(seasonYearAt("eng.1", ESPN_NOW), 2026); assert.equal(seasonYearAt("cfb", Date.parse("2027-01-05T00:00:00Z")), 2026);
   });

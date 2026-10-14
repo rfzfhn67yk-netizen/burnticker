@@ -32,6 +32,8 @@ import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, burnTargetShapeProblems, createAfterPinText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import type { SeasonOverRefusal } from "@/lib/burnticker/seasonOver";
+import type { LastSeasonBacktest } from "@/lib/burnticker/lastSeason";
+import { simulateResults, type Simulation } from "@/lib/burnticker/simulator";
 import { wrapperPairProblem } from "@/lib/burnticker/derby/spec";
 import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, decimalSolToLamports, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
 
@@ -119,6 +121,18 @@ export interface LaunchReview {
    * keeper's own unit engine and burnMath's compounding), or the reason there is none.
    */
   projection: Projection;
+  /**
+   * Cheap-features item 5: a team coin's count over the team's previous season (lastSeason.ts), read by the review route from the
+   * schedule readers. Null for a rule that is not a team rule, or when the route did not read it; `available: false` carries the reason.
+   * When available, a page shows `backtest.lines` where it would otherwise say the backtest is unavailable.
+   */
+  backtest: LastSeasonBacktest | null;
+  /**
+   * Cheap-features item 6: the result simulator's math (simulator.ts) for a hypothetical 1 SOL burn pool and an 85 SOL trading pool:
+   * the result, a tie, a void, no result and no graduation, for both coins of a pair. A page that lets the reader change the SOL calls
+   * simulateResults itself (client-safe) with the locked rule.
+   */
+  simulation: Simulation;
   /**
    * ChatGPT audit 7 items 7 and 11: when a one-time result is due (the game the rule names, or the market's end), how many days away, the
    * graduation warning when that is within dueWarningDays, and what an unplayed game does. Null for a rule that repeats.
@@ -252,6 +266,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
   /** sources-7 H6: the season-over refusal (seasonOver.ts seasonOverFor, read by the route); refused as a problem, never only a warning */ seasonOver?: SeasonOverRefusal | null;
   /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null;
+  /** cheap-features item 5: last season's count for a team rule (lastSeason.ts lastSeasonBacktest, read by the route) */ lastSeason?: LastSeasonBacktest | null;
   /** the end-sink picker (endSinks.ts): the live coins a rule may name in onEnd.mint (the route reads the registry); absent = not checked */ sinks?: readonly SinkCoin[] | null } = {}): { review: LaunchReview } | { problems: string[] } {
   const env = o.env ?? process.env;
   const cluster = hostCluster(env);
@@ -495,6 +510,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     dispute: locked.rule.oracle === "polymarket" && locked.rule.market ? (o.stated ? statedSentences(o.stated, o.stated.finalAfter) : DISPUTE_DEFAULT) : null,
     end: { kind: end.kind, result: end.result, void: end.void },
     projection,
+    backtest: o.lastSeason ?? null,
+    simulation: simulateResults(locked.rule, { ticker: tk(0), pair: sides.length > 1 ? { tickerA: tk(0), tickerB: tk(1), winnerTakesBurn: !!pair } : null }),
     timing,
     ...(o.seasonOver ? { seasonOver: { message: o.seasonOver.message, next: o.seasonOver.next } } : {}),
     ...(meetingsPair ? { meetings: meetingsBlock } : {}),

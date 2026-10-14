@@ -6,6 +6,7 @@ import { sampleReceipts } from "@/lib/burnticker/trustpack/samples";
 import { memoBurn } from "@/lib/burnticker/home";
 import { coinPreview, receiptPreview, DEFAULT_OG, type SharePreview } from "@/lib/burnticker/sharePreview";
 import { lookupCoin, registryCoinKey } from "@/lib/burnticker/coinLookup";
+import { receiptCardPath } from "@/lib/burnticker/receiptCardServe";
 
 /**
  * The share previews' data (website-14, product idea 9): a registered coin's status and receipts (the verified ones only count toward
@@ -24,7 +25,7 @@ export async function coinSharePreview(key: string, now = Date.now()): Promise<S
     const ok = d.receipts.filter((r) => r.status === "confirmed" && r.verify.verified);
     const total = ok.reduce((a, r) => a + Number(r.burned ?? 0), 0);
     const supply = Number(d.status.supply.initial);
-    return coinPreview({ ticker: d.status.ticker, name: d.status.name, rule: d.status.profile?.oneLiner ?? d.status.seriesTitle ?? d.status.selectorKey, cluster: d.status.cluster, verifiedBurned: String(total), verifiedCount: ok.length, pctOfSupply: supply > 0 ? (total / supply) * 100 : null, badgeUrl: d.status.status === "draft" ? null : `${ORIGIN}/api/burnticker/v1/badge/${encodeURIComponent(registryCoinKey(p.registry, t))}.png` });
+    return coinPreview({ ticker: d.status.ticker, name: d.status.name, rule: d.status.profile?.oneLiner ?? d.status.seriesTitle ?? d.status.selectorKey, cluster: d.status.cluster, verifiedBurned: String(total), verifiedCount: ok.length, pctOfSupply: supply > 0 ? (total / supply) * 100 : null, badgeUrl: d.status.status === "draft" ? null : `${ORIGIN}${receiptCardPath(t.mint)}` });
   } catch { return null; }
 }
 
@@ -56,7 +57,7 @@ export async function receiptSharePreview(signature: string, cluster: string, no
 export function previewMetadata(p: SharePreview, path: string): Metadata {
   return {
     title: p.title, description: p.description,
-    openGraph: { type: "website", siteName: "Burnticker", title: p.title, description: p.description, url: path, images: [{ url: p.imageUrl, alt: p.imageAlt, ...(p.imageUrl === DEFAULT_OG.url ? { width: 1200, height: 630 } : {}) }] },
+    openGraph: { type: "website", siteName: "Burnticker", title: p.title, description: p.description, url: path, images: [{ url: p.imageUrl, alt: p.imageAlt, ...(p.imageUrl === DEFAULT_OG.url || p.imageUrl.includes("/burnticker/img/receipt/") ? { width: 1200, height: 630 } : {}) }] },
     twitter: { card: "summary_large_image", title: p.title, description: p.description, images: [p.imageUrl] },
   };
 }

@@ -26,7 +26,7 @@ export const PROGRAM_IDS: Record<Network, { burn_receipts: string; pair_curve: s
  */
 export const LOOKUP_TABLES: Record<Network, { address: string | null; authority: string | null }> = {
   devnet: { address: null, authority: null },
-  mainnet: { address: null, authority: null },
+  mainnet: { address: "8DZaHFo6UnJk5br29BcRQZmdEKRpzKJTCyz1dRsHhJ2T", authority: null },
 };
 
 export type LookupTablePin = { address: string | null; authority: string | null };
