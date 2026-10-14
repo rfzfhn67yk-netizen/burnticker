@@ -20,7 +20,7 @@ const NOW = Date.parse("2026-11-10T00:00:00Z");
 
 describe("the source: champion or not, from the team's last game of an ended season", () => {
   test("won its last postseason game: champion; lost it: not; no postseason: not; a tie or no score: cannot tell", () => {
-    assert.deepEqual([...CHAMPION_KNOWN].sort(), ["mlb", "nba", "nhl"]);
+    assert.deepEqual([...CHAMPION_KNOWN].sort(), ["mlb", "nba", "nfl", "nhl"], "the NFL joined on 2026-10-13 (owner: the Super Bowl end)");
     const won = windowStatus(S, SEASON, NOW);
     assert.equal(won.ended, true); assert.equal(won.champion, true); assert.equal(won.championDate, "2026-10-28");
     const lost = windowStatus(S, [SEASON[0], game("2026-10-28", 3, 1, 2)], NOW);
@@ -31,9 +31,10 @@ describe("the source: champion or not, from the team's last game of an ended sea
     assert.equal(unscored.champion, null);
     assert.equal(windowStatus(S, SEASON, Date.parse("2026-10-29T00:00:00Z")).champion, undefined, "before the season is over there is no verdict");
   });
-  test("only an MLB, NBA or NHL wins coin for a whole season takes the path; the NFL source cannot tell a champion", () => {
+  test("only an MLB, NBA, NHL or NFL wins coin for a whole season takes the path; soccer, a loss coin and a postseason-only coin do not", () => {
     assert.ok(championSeries(teamSeries("nba", "LAL", "win", { kind: "season", year: 2027 })));
-    for (const x of [teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 }), teamSeries("mlb", "LAD", "loss", { kind: "season", year: 2026 }), teamSeries("mlb", "LAD", "win", { kind: "post", year: 2026 }), teamSeries("eng.1", "ARS", "win", { kind: "season", year: 2026 })]) assert.equal(championSeries(x), null, x);
+    assert.ok(championSeries(teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 })), "the NFL since 2026-10-13");
+    for (const x of [teamSeries("mlb", "LAD", "loss", { kind: "season", year: 2026 }), teamSeries("mlb", "LAD", "win", { kind: "post", year: 2026 }), teamSeries("eng.1", "ARS", "win", { kind: "season", year: 2026 })]) assert.equal(championSeries(x), null, x);
   });
 });
 
@@ -73,9 +74,10 @@ describe("the keeper: the end waits until the source and the coin agree", () => 
     const missed = world([{ eventId: "2026-09-27", units: 1, status: "confirmed" }]);
     recordWindowEnd(missed.d, [tok], ended(windowStatus(S, [game("2026-09-27", 2, 5, 3)], NOW)));
     assert.match(missed.marks[0].reason, /^did not win the championship/, "a last regular-season win is not a contradiction");
-    const nfl = world([], { rule: { ...firstPartyRule(teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 }), 0.02), onEnd: { ...DEFAULT_ON_END } } as BurnRule });
-    recordWindowEnd(nfl.d, [tok], { window: { perpetual: false, ended: true, endsAt: "2027-01-10T00:00:00Z", reason: "the team's last game of the window was 2027-01-10" } });
-    assert.equal(nfl.marks[0].reason, "the coin's window ended: the team's last game of the window was 2027-01-10");
+    // a soccer coin is off the path (the league crowns the table leader; the NFL joined the path on 2026-10-13)
+    const off = world([], { rule: { ...firstPartyRule(teamSeries("eng.1", "ARS", "win", { kind: "season", year: 2026 }), 0.02), onEnd: { ...DEFAULT_ON_END } } as BurnRule });
+    recordWindowEnd(off.d, [tok], { window: { perpetual: false, ended: true, endsAt: "2027-05-24T00:00:00Z", reason: "the team's last game of the window was 2027-05-24" } });
+    assert.equal(off.marks[0].reason, "the coin's window ended: the team's last game of the window was 2027-05-24");
   });
   test("championVerdict and endOutcomeOf: a champion's end is the wind-down outcome on chain; a not-champion end is resolved", () => {
     const reg = { receipts: () => [] } as never;

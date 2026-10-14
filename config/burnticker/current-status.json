@@ -127,6 +127,12 @@
       "status": "available, since the TheSportsDB license key was set up on the host on 2026-10-11"
     },
     {
+      "category": "Prediction markets, one-shot coins (a bill signed, an announcement, a date)",
+      "primary": "Polymarket's on-chain payout, made through Conditional Tokens on Polygon",
+      "check": "no independent second reader: Polymarket's own Gamma copy of the payout, and UMA's dispute window, which must pass before the payout is final. The coin page shows the market's stated resolution source. Where that source is itself published (a bill signing in the Federal Register, a certified election result), the plan is a first-party feed with the payout as the check",
+      "status": "live design; single-source, and said on the coin page"
+    },
+    {
       "category": "Elections, one-shot results",
       "primary": "Polymarket's on-chain payout, made through Conditional Tokens on Polygon",
       "check": "the state's certified result",
