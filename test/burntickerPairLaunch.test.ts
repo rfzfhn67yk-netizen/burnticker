@@ -92,6 +92,14 @@ describe("plain messages", () => {
     for (const m of msgs) { assert.ok(!/BURNTICKER_|RPC_URL|\bcode\b|409|429|503/.test(m), m); assert.ok(lintCopy(m, cfg).ok, m); }
     assert.equal(venueFrom409(new LaunchRequestError(429, "rate-limited", "x")), null);
   });
+  test("launch walkthrough 2026-10-13: a 503 carrying the server's sentence shows that sentence, not the generic line", () => {
+    const cfg = loadCopyLintConfig();
+    const m = launchErrorMessage(503, { code: "preflight", error: "The check run before launch refused this coin: the last game's result could not be confirmed by a second source yet" });
+    assert.equal(m, "The check run before launch refused this coin: the last game's result could not be confirmed by a second source yet. Nothing was sent.");
+    assert.ok(lintCopy(m, cfg).ok, m);
+    assert.equal(launchErrorMessage(503, { error: "  " }), "The launch service is not available right now. Nothing was sent; try again later.");
+    assert.match(launchErrorMessage(503, { code: "launch-unverifiable", error: "x" }), /cannot confirm launches yet/);
+  });
 });
 
 describe("signing the pair-curve set", () => {

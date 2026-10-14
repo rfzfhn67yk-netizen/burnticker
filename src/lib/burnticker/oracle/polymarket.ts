@@ -79,6 +79,8 @@ export interface GammaMarket {
   customLiveness?: number | null;
   /** Gamma's history of UMA states for this market ("proposed", "disputed", "resolved"), oldest first. */
   umaStatuses?: string[];
+  /** A game market's scheduled start (Gamma "gameStartTime"); an MLB game market's end date is a week after the game (walkthrough 2026-10-13). */
+  gameStartTime?: string | null;
 }
 
 /** A Gamma market row (from /markets, /public-search or nested in /events) → the fields the adapter reads; null when not a market. */
@@ -97,6 +99,7 @@ export function parseGammaMarket(raw: unknown, ctx: { eventSlug?: string | null;
     negRisk: m.negRisk === true, sportsMarketType: str(m.sportsMarketType), groupItemTitle: str(m.groupItemTitle), inactive: m.active === false, outcomeFigures: figures,
     yesPrice: closed ? null : bid !== null && ask !== null ? (bid + ask) / 2 : last ?? num(figures[0]),
     description: str(m.description) ?? ctx.eventDescription ?? null, customLiveness: num(m.customLiveness), umaStatuses: list(m.umaResolutionStatuses),
+    ...(normaliseTime(m.gameStartTime) ? { gameStartTime: normaliseTime(m.gameStartTime) } : {}),
   };
 }
 
@@ -194,6 +197,11 @@ export const eventsByTagUrl = (slug: string, limit: number): string => `${GAMMA_
  * "Chiefs vs Raiders" is capped at 10 hits, and older Chiefs–Raiders games crowded out the week's moneyline, so every Chiefs coin
  * failed its launch check). A game event's end date is the game's start, so a window around the start finds it.
  */
+/**
+ * A tag's events whose scheduled start falls in a window (Gamma start_time_min / start_time_max; walkthrough 2026-10-13). An MLB game
+ * event ends a week after the game (mlb-cle-tb-2026-10-12 ends 2026-10-20), so the end-date window above never finds it; the start does.
+ */
+export const eventsStartingUrl = (slug: string, minIso: string, maxIso: string, limit = 100): string => `${GAMMA_API}/events?tag_slug=${encodeURIComponent(slug)}&start_time_min=${encodeURIComponent(minIso)}&start_time_max=${encodeURIComponent(maxIso)}&limit=${limit}`;
 export const eventsInWindowUrl = (slug: string, minIso: string, maxIso: string, limit = 100): string => `${GAMMA_API}/events?tag_slug=${encodeURIComponent(slug)}&end_date_min=${encodeURIComponent(minIso)}&end_date_max=${encodeURIComponent(maxIso)}&limit=${limit}`;
 
 // ---- resolution (pure) ----------------------------------------------------------------------------------------------------------
@@ -274,6 +282,8 @@ export interface PolyMarketHit {
   resolutionSource?: StatedSource;
   /** The dispute window before the payout can be final (sources/polyStated.ts). */
   finalAfter?: FinalAfter;
+  /** A game market's scheduled start (Gamma gameStartTime), when Gamma gives one: the game-market lookup matches on it (gameSettle.ts). */
+  gameStartTime?: string;
 }
 export interface PolyEventHit { slug: string; title: string; url: string; endDate: string | null; closed: boolean; tags: { slug: string; label: string }[]; markets: PolyMarketHit[]; marketCount: number; selector: { oracle: "polymarket"; series: string; market: null }; refused: string[] }
 export interface PolyTagHit { slug: string; label: string; events: number; series: string[] }
@@ -281,7 +291,7 @@ export interface PolyTagHit { slug: string; label: string; events: number; serie
 const HEAD_TO_HEAD = /^[^:]+ vs\.? [^:]+$/;
 export function marketHit(m: GammaMarket): PolyMarketHit {
   const { yes, no } = sideLabels(m);
-  return { conditionId: m.conditionId, question: m.question, yes, no, endDate: m.endDate, closed: m.closed, sportsMarketType: m.sportsMarketType, selector: { oracle: "polymarket", series: null, market: m.conditionId }, outcome: m.groupItemTitle, ...polyStated(m) };
+  return { conditionId: m.conditionId, question: m.question, yes, no, endDate: m.endDate, closed: m.closed, sportsMarketType: m.sportsMarketType, selector: { oracle: "polymarket", series: null, market: m.conditionId }, outcome: m.groupItemTitle, ...polyStated(m), ...(m.gameStartTime ? { gameStartTime: m.gameStartTime } : {}) };
 }
 
 /** A market's stated source and dispute window (sources-2): what the review card and the coin page show beside the on-chain payout. */
@@ -543,6 +553,11 @@ export class PolymarketClient implements OracleAdapter {
   /** A tag's events, open and closed, ending inside [minIso, maxIso] (the game-market lookup; every market of each event kept). */
   async eventsInWindow(slug: string, minIso: string, maxIso: string): Promise<{ events: PolyEventHit[]; tags: PolyTagHit[] }> {
     return searchHits(parseEventsBody(await this.get(eventsInWindowUrl(slug, minIso, maxIso))), { refuse: this.refuse, status: "all", perEvent: 40 });
+  }
+
+  /** A tag's events, open and closed, whose scheduled start is inside [minIso, maxIso] (the game-market lookup's first read). */
+  async eventsStarting(slug: string, minIso: string, maxIso: string): Promise<{ events: PolyEventHit[]; tags: PolyTagHit[] }> {
+    return searchHits(parseEventsBody(await this.get(eventsStartingUrl(slug, minIso, maxIso))), { refuse: this.refuse, status: "all", perEvent: 40 });
   }
 
   async eventsByTag(slug: string, limit = 8): Promise<{ events: PolyEventHit[]; tags: PolyTagHit[] }> {

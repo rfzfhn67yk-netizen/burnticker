@@ -165,7 +165,7 @@ describe("the creation preflight passes team coins, matchups and weather rules (
     assert.equal((await preflightSelector(TB, { now: ESPN_NOW })).ok, true, "a past game's disagreement is not read at launch (owner 2026-10-13); the keeper holds it at the first game after launch");
     setNativeClients({ games: fakeGameDeps() });
     const nfl = await preflightSelector(nativeRule(teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
-    assert.equal(nfl.refusal?.code, "primary-unreadable"); assert.match(nfl.refusal!.reason, /schedule needs the licensed key/, "no TheSportsDB key: no NFL schedule, never ESPN");
+    assert.equal(nfl.refusal?.code, "primary-unreadable"); assert.match(nfl.refusal!.reason, /the NFL schedule cannot be read on this site right now/, "no TheSportsDB key: no NFL schedule, never ESPN"); assert.doesNotMatch(nfl.refusal!.reason, /BURNTICKER_/, "no setting name reaches the page");
     const { operatorsFor } = await import("@/lib/burnticker/sources/gameSettle");
     const none = { tsdbKey: null, apiSportsKey: null, market: null, payout: null };
     assert.deepEqual(operatorsFor("eng.1", { ...none, tsdbKey: "K" }, false), ["TheSportsDB"], "a soccer game without a market and without API-Sports: one operator → refused");

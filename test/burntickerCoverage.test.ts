@@ -211,7 +211,8 @@ describe("the creation preflight", () => {
     const c = await prepareLaunch(w.p, { ...base, ticker: "COVU", rule: catalogueRule("fred.UNRATE") }, { register: false, preflight: { strict: true, deps: { now: NOW, fetchImpl: fetchOf({ [UNRATE_URL]: body("fred.UNRATE"), [LNS_URL]: body("bls.LNS14000000") }) } } });
     assert.ok("ok" in c, JSON.stringify((c as { error?: unknown }).error)); assert.equal(c.ok.preflight!.agreement, true);
     const lone = await prepareLaunch(w.p, { ...base, ticker: "COVL", rule: catalogueRule("ll2.launches") }, { register: false, preflight: { strict: true, deps: { now: NOW, fetchImpl: fetchOf({ "https://ll.thespacedevs.com/": body("ll2.launches") }) } } });
-    assert.ok("error" in lone); assert.match((lone.error.body as { error: string }).error, /^The check run before launch refused this coin: .*no independent second source/);
+    // launch walkthrough 2026-10-13: a feed with no second publisher is refused by the rule check itself (the review says it before a wallet connects), with the same outcome as the live preflight
+    assert.ok("error" in lone); assert.equal(lone.error.status, 400); assert.equal((lone.error.body as { code: string }).code, "no-cross-read"); assert.match((lone.error.body as { error: string }).error, /^Coins cannot launch on "Orbital launches \(Launch Library 2\)" yet, because no second publisher reports the same number/);
     // Off (the suite's default): the pipeline is unchanged and carries no preflight.
     const off = await prepareLaunch(w.p, { ...base, ticker: "COVO", rule: BRONCOS }, { register: false });
     assert.ok("ok" in off); assert.equal(off.ok.preflight, null);
@@ -265,5 +266,23 @@ describe("the API, the document and the CI gate", () => {
     assert.equal(coverageExitCode(matrix), 0);
     for (const c of matrix.categories) assert.ok(![...c.primaries, ...c.crossReads].some((s) => /kalshi/i.test(`${s.id} ${s.operator} ${s.domain}`)), c.id);
     assert.equal(matrix.categories.find((c) => c.id === "economics")!.verdict, "settleable");
+  });
+});
+
+describe("launch walkthrough 2026-10-13: the review refuses what the bundle's preflight always refuses", () => {
+  test("a feed with no second publisher, or an aggregator, is a rule refusal with a plain sentence; open feeds pass", async () => {
+    const { ruleRefusals } = await import("@/lib/burnticker/launchPreflight");
+    const { lockRule } = await import("@/lib/burnticker/rules");
+    const { lintCopy, loadCopyLintConfig } = await import("@/lib/launch/copyLint");
+    const cfg = loadCopyLintConfig();
+    const codes = (series: string) => ruleRefusals(lockRule(catalogueRule(series)), { now: NOW }).map((x) => x.code);
+    for (const s of ["wiki.views:Bitcoin", "steam.players:730", "fedreg.eo", "fedreg.finalRules", "ll2.launches", "noaa.flares", "jpl.neo"]) assert.deepEqual(codes(s), ["no-cross-read"], s);
+    for (const s of ["ethereum.baseFeeBurn", "defillama.tvl:raydium"]) assert.deepEqual(codes(s), ["not-primary"], s);
+    // a cross-read pair and the single-publisher disaster feeds are untouched
+    for (const s of ["treasury.debt", "fred.UNRATE", "bitcoin.blockHeight", "usgs.quakes:6", "nifc.acres"]) assert.deepEqual(codes(s), [], s);
+    for (const s of ["wiki.views:Bitcoin", "ethereum.baseFeeBurn"]) {
+      const m = ruleRefusals(lockRule(catalogueRule(s)), { now: NOW })[0].message.replace(/"[^"]+"/, "\"the source\"");
+      assert.ok(lintCopy(m, cfg).ok, m);
+    }
   });
 });

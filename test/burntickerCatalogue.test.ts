@@ -94,7 +94,7 @@ describe("sources.json: every configured source", () => {
     const r = await a.settledSince(validateRule(DEBT_RULE), "2026-10-05");
     assert.deepEqual(r.events.map((e) => e.id), ["2026-10-06", "2026-10-07", "2026-10-08"]);
     assert.equal((await a.impliedChance()).chance, null);
-    await assert.rejects(a.settledSince(validateRule({ ...DEBT_RULE, series: "eia.gasoline", scalar: { unit: 0.05, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" } }), null), /Coins cannot launch on "U\.S\. regular gasoline retail price, weekly \(EIA\)" yet\. The reason is: needs a key/);
+    await assert.rejects(a.settledSince(validateRule({ ...DEBT_RULE, series: "eia.gasoline", scalar: { unit: 0.05, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" } }), null), /Coins cannot launch on "U\.S\. regular gasoline retail price, weekly \(EIA\)" yet, because the publisher requires an access key/);
     assert.equal((await a.searchSeries("egg"))[0].ticker, "bls.eggs");
   });
 });
@@ -147,5 +147,26 @@ describe("onchain and the stubs", () => {
     assert.equal(ctfOutcome([BigInt(0), BigInt(0)], BigInt(0)), null, "not reported yet");
     assert.equal(umaOutcome({ settled: true, settlementResolution: true }), "yes");
     assert.equal(umaOutcome({ settled: false, settlementResolution: true }), null);
+  });
+});
+
+describe("launch walkthrough 2026-10-13: a source that is not open says why in plain English", () => {
+  test("every configured not-launchable note becomes a sentence with no setting name, file note or shorthand, and passes the copy lint", async () => {
+    const { plainLaunchableWhy } = await import("@/lib/burnticker/catalogue");
+    const { lintCopy, loadCopyLintConfig } = await import("@/lib/launch/copyLint");
+    const cfg = loadCopyLintConfig();
+    const shut = catalogue().filter((f) => !f.launchable.ok && f.unit);
+    assert.ok(shut.length >= 5, "the catalogue lists some sources that are not open");
+    for (const f of shut) {
+      const r = { schema: "burnticker.rules/v1", oracle: "catalogue", series: f.id, market: null, filter: {}, kind: "scalar", binary: null, scalar: { unit: f.unit!.size, perUnit: { fractionOfPool: 0.02 }, baseline: f.baseline, direction: f.direction }, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null };
+      const line = feedRuleProblems(f, r as never).find((x) => x.startsWith("Coins cannot launch on"))!;
+      assert.ok(line, f.id);
+      const ours = line.replace(`"${f.title}"`, "\"the source\"");   // the source's own title is not our sentence
+      assert.doesNotMatch(ours, /[A-Z]{2,}_[A-Z_]*KEY|fixture|The reason is:|say-so|cross-read|RPC|\(free|—/, `${f.id}: ${ours}`);
+      assert.ok(lintCopy(ours, cfg).ok, `${lintCopy(ours, cfg).hits.map((h) => h.phrase).join(", ")}: ${ours}`);
+    }
+    assert.equal(plainLaunchableWhy("needs a key: BEA_API_KEY (free registration)"), "the publisher requires an access key that this site does not have yet");
+    assert.equal(plainLaunchableWhy("a settlement cross-read, not a launch source: bls.eggs is the primary for this fact"), "it is only used to check another source. Launch on bls.eggs instead");
+    assert.equal(plainLaunchableWhy("something new."), "something new");
   });
 });

@@ -144,4 +144,38 @@ describe("NBA settlement does not depend on the dead feed", () => {
     assert.notEqual(p.refusal?.code, "primary-unreadable", JSON.stringify(p.refusal));
     assert.notEqual(p.refusal?.code, "no-cross-read", JSON.stringify(p.refusal));
   });
+
+  test("launch walkthrough 2026-10-13: with one source the refusal is a plain sentence the page can show, never operator jargon", async () => {
+    const { preflightSelector } = await import("@/lib/burnticker/coverage/preflight");
+    const { lintCopy, loadCopyLintConfig } = await import("@/lib/launch/copyLint");
+    setNativeClients({ espn: client([]), games: deps({ market: false }) });
+    const r = await preflightSelector(nativeRule(teamSeries("nba", "PHI", "win", { kind: "season", year: 2026 })), { now: NOW });
+    assert.equal(r.refusal?.code, "cross-read-unreadable");
+    assert.match(r.refusal!.reason, /^only one source can confirm the games of Philadelphia 76ers right now, and every result needs two sources that agree\. The second would be the Polymarket market for .+ on [A-Z][a-z]{2} \d{1,2}, and none was found\. Polymarket usually lists a game a few days before it starts, so please try again then\.$/);
+    const cfg = loadCopyLintConfig();
+    const shown = `The check run before launch refused this coin: ${r.refusal!.reason}`;
+    assert.ok(lintCopy(shown, cfg).ok, shown);
+    assert.doesNotMatch(shown, /operator|BURNTICKER_|≠|—|: a second|independent read/);
+  });
+});
+
+describe("the launch check's sports sentences (GAME_LINES)", () => {
+  test("every sentence passes the copy lint and names no setting, operator or symbol", async () => {
+    const { GAME_LINES } = await import("@/lib/burnticker/sources/native");
+    const { lintCopy, loadCopyLintConfig } = await import("@/lib/launch/copyLint");
+    const cfg = loadCopyLintConfig();
+    const g = { eventId: "1", league: "nfl", startsAt: "2026-10-04T20:25:00Z", date: "2026-10-04", name: "Kansas City Chiefs at Las Vegas Raiders", completed: true, state: "post", detail: "", home: { abbr: "LV", name: "Las Vegas Raiders", nickname: "Raiders", score: 27, homeAway: "home", record: null }, away: { abbr: "KC", name: "Kansas City Chiefs", nickname: "Chiefs", score: 30, homeAway: "away", record: null } } as Game;
+    const lines = [
+      GAME_LINES.scheduleOff("NFL"), GAME_LINES.scheduleUnread("Kansas City Chiefs"), GAME_LINES.gameNotListed("Kansas City Chiefs"),
+      GAME_LINES.noSourceNext("Atlanta Hawks", { ...g, name: "Atlanta Hawks at Orlando Magic", date: "2026-10-21" }, "nba"), GAME_LINES.noSourceNext("Chelsea", null, "eng.1"),
+      GAME_LINES.oneSourceNext("Atlanta Hawks", { ...g, name: "Atlanta Hawks at Orlando Magic", date: "2026-10-21" }, "nba"), GAME_LINES.oneSourceNext("Chelsea", null, "eng.1"),
+    ];
+    assert.equal(lines[5], "only one source can confirm the games of Atlanta Hawks right now, and every result needs two sources that agree. The second would be the Polymarket market for Atlanta Hawks at Orlando Magic on Oct 21, and none was found. Polymarket usually lists a game a few days before it starts, so please try again then.");
+    assert.doesNotMatch(lines[6], /usually lists/, "soccer's markets are not matched, so the page never promises they will be");
+    for (const l of lines) {
+      const shown = `The check run before launch refused this coin: ${l}`;
+      assert.ok(lintCopy(shown, cfg).ok, `${lintCopy(shown, cfg).hits.map((h) => h.phrase).join(", ")}: ${shown}`);
+      assert.doesNotMatch(l, /operator|BURNTICKER_|≠|—|→|HTTP/, l);
+    }
+  });
 });
