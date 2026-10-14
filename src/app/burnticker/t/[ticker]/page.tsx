@@ -18,7 +18,7 @@ import { targetActionSentence, targetTrustCopy } from "@/lib/burnticker/burnTarg
 import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnReal";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
-import { COIN_TAB_LABEL, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersShareLine, initialTab, marketFacts, raydiumLink, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
+import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersShareLine, initialTab, marketFacts, raydiumLink, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
 import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
@@ -51,7 +51,7 @@ import { coinLinks } from "@/lib/burnticker/tradeLinks";
  * rewrites them; src/lib/burnticker/coinPage.ts holds the order). The header: image, name, $TICKER, the mint with a copy button and the
  * creator's links. ON TOP: the chart (GeckoTerminal's embed of the pool that trades now when one is indexed, else Burnticker's own
  * readings chart with burn markers) and beside it ONE outbound link, "Trade on Raydium", to this coin on Raydium. Burnticker never
- * takes an order or holds funds; the swap panel (TradePanel.tsx, 2026-10-14) sends swaps straight to the coin's Raydium pool. Beside the link: a static read of the pool (the curve as SOL raised of the
+ * takes an order or holds funds; the swap panel (TradePanel.tsx, 2026-10-14) sends swaps straight to the coin's own Raydium curve or pool. Beside the link: a static read of the pool (the curve as SOL raised of the
  * graduation threshold) and the readiness state, which says in plain words that burns begin after graduation and pool registration.
  * THEN THE TABS, in this order: "Burn log" (the receipts, each with "Check receipt" to the in-browser verifier, and verify-it-yourself),
  * "Rule" (the locked rule text, its hash, the dial, the window and the end, the fees, signers and addresses), and "Holders" only when
@@ -157,7 +157,7 @@ export default function TokenPage() {
     { key: "next", label: nextRow.label, value: nextRow.value, note: nextRow.note, more: SETTLEMENT_LINK },
     { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? `SOL set aside for this coin's burns. ${s.pool.reserveSol} SOL of it is kept back for fees.` : "Tokens set aside for this coin's burns." },
     { key: "burned", label: "Burned so far", value: `${fmt(s.burned.total)} of ${fmt(s.supply.initial)} tokens`, note: `${s.burned.pctOfSupply.toFixed(2)}% of the supply, in ${count(s.burned.count, "burn")}.` },
-    { key: "last", label: "Last receipt", value: latest ? latest.settledAt.slice(0, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? afterGraduation : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
+    { key: "last", label: "Last receipt", value: latest ? latest.settledAt.slice(0, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? FIRST_BURN_AFTER_GRADUATION : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
     { key: "pending", label: "Waiting", value: s.health.pending === 0 ? "Nothing waiting" : count(s.health.pending, "receipt"), note: s.health.pending ? "A burn can wait for the pool's checks or a spend floor. The unspent funds stay in the burn pool." : null },
   ];
 
@@ -220,7 +220,7 @@ export default function TokenPage() {
             <p className="mb-2 text-xs text-neutral-400" data-fees-before-trade>Each trade pays {s.fees.curve.totalBps / 100}% on the curve and {s.fees.postGraduation.totalBps / 100}% in the Raydium pool. Raydium shows how far your trade moves the pool, and your slippage setting, before you sign.</p>
             {trade ? <a href={trade.url} rel="noopener" target="_blank" className="bt-launch-btn block text-center" data-trade-link>{trade.label} ↗</a>
               : <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">{m?.trade.note ?? "The trade link appears once the coin is launched."}</p>}
-            <p className="mt-2 text-xs text-neutral-500">Burnticker never takes an order or holds funds: a swap goes straight to the coin's Raydium pool. {trade ? `This link opens Raydium, set to $${s.ticker}.` : ""}</p>
+            <p className="mt-2 text-xs text-neutral-500">Burnticker never takes an order or holds funds: a swap goes straight to the coin's own Raydium curve or pool. {trade ? `This link opens Raydium, set to $${s.ticker}.` : ""}</p>
           </section>
 
           {/* a static read of the pool, from the API: the curve as SOL raised of the graduation threshold, or the pool it trades in now */}

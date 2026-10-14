@@ -221,7 +221,7 @@
     {
       "id": "quorum-1",
       "status": "live design",
-      "text": "At launch the operator's keeper key is the only attester (quorum 1). The program checks the signatures and the quorum. It does not check the reading itself. A second, independent attester is required before strangers can launch."
+      "text": "At launch the operator's keeper key is the only attester (quorum 1). The program checks the signatures and the quorum. It does not check the reading itself. Creator launches opened on 2026-10-13 before a second, independent attester was added, so today one operator key signs every reading."
     },
     {
       "id": "switchboard-down",

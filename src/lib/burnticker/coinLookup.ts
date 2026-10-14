@@ -79,6 +79,17 @@ export function coinPageFound(rawKey: string, lookup: (key: string) => CoinLooku
   return served === null;
 }
 
+/**
+ * Walkthrough 13 (2026-10-14): $DEFICIT by its mint answered 404, because $DEFICIT is served from its own keeper's files (the page at
+ * /burnticker/t/DEFICIT) and is not a registry row on this host. Its created mint (config/own-tokens.json) now opens that page. Null for
+ * any other key, and for $DEFICIT once the registry knows it (the registry's own lookup answers then).
+ */
+export function deficitMintTarget(rawKey: string, deficitMint: string | null | undefined, registryKnows: boolean): string | null {
+  const key = decode(rawKey).trim();
+  if (!deficitMint || registryKnows || key !== deficitMint) return null;
+  return "/burnticker/t/DEFICIT";
+}
+
 /** The coin page's title when the share preview does not set one: the coin's name and ticker, or the ticker as written. */
 export function coinPageTitle(rawKey: string, l: CoinLookup | null): string {
   if (l?.kind === "one") return `${l.token.name} ($${l.token.ticker}) on Burnticker`;

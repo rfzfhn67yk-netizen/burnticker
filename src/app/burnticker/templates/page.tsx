@@ -14,6 +14,16 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Templates", description: "The twelve rule shapes a Burnticker coin can take, each with an example and a link that opens the create screen ready for it.", alternates: { canonical: "/burnticker/templates" } }; // audit 7 item 27: a canonical URL
 
+/**
+ * Walkthrough 13: the example's sentences after the first, for "How it settles", without the ones the card's pair line already says
+ * (the matchup and two-candidate cards printed "After a draw…" and "If neither candidate wins…" twice).
+ */
+function settlesRest(t: { example: string; pairLine?: string | null }): string {
+  const rest = t.example.slice(leadSentence(t.example).length).trim();
+  if (!rest || !t.pairLine) return rest;
+  return rest.split(/(?<=\.)\s+/).filter((s) => !t.pairLine!.includes(s)).join(" ");
+}
+
 /** THE TEMPLATES GALLERY (2026-10-10): the twelve canonical rule shapes (src/lib/burnticker/templates.ts), each with its example and "Start from this". */
 export default function TemplatesPage() {
   const shapeLabel = { recurring: "recurring", "one-shot": "one-shot", pair: "two coins" } as const;
@@ -53,7 +63,7 @@ export default function TemplatesPage() {
             {/* website-18 (the owner: "be more brief"): the example's first sentence on the card; the settlement source one tap away */}
             <p className="mt-2 text-sm text-neutral-200" data-template-example>{leadSentence(t.example)}</p>
             {t.pairLine && <p className="mt-1 text-xs text-amber-200" aria-label="pair rule">{t.pairLine}</p>}
-            <details className="mt-2 text-xs text-neutral-500" data-template-settles><summary className="cursor-pointer">How it settles</summary><p className="mt-1">{t.example.slice(leadSentence(t.example).length).trim()}{t.example.slice(leadSentence(t.example).length).trim() ? " " : ""}It settles on {t.settles}.</p></details>
+            <details className="mt-2 text-xs text-neutral-500" data-template-settles><summary className="cursor-pointer">How it settles</summary><p className="mt-1">{settlesRest(t)}{settlesRest(t) ? " " : ""}It settles on {t.settles}.</p></details>
             {/* launch audit 5 L10: what "Start from this" opens, said before the click */}
             <p className="mt-1 text-xs text-neutral-400" data-template-lands={t.lands}>{t.operatorOnly ? `${t.operatorOnly} ` : ""}{t.lands === "review" ? "This opens step 3, how it burns, with exactly this example filled in." : `This opens the launch page so you can ${t.choices}.`} <span data-template-settings>{settingsLine(t)}</span></p>
             {unavailable(t) ? <details className="mt-auto pt-3 text-xs text-amber-300" data-pairs-blocked={isPair(t) ? "" : undefined}><summary className="cursor-pointer">{unavailable(t)}</summary><p className="mt-1 text-neutral-300">{isPair(t) ? site.pairs.detail : site.types[t.type].reason}</p></details>

@@ -36,7 +36,7 @@
   },
   "phase": {
     "label": "soft launch ($DEFICIT created on mainnet)",
-    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night. $REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it."
+    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night. $REHEARSAL is a test coin the operator made on Oct 11 to check fees and signing. It is kept off the coin list and shown on the Test coins page, linked from the Trust page, so you can see it exists, not so you trade it."
   },
   "networks": {
     "devnet": {
@@ -286,7 +286,7 @@
     },
     {
       "id": "second-attester",
-      "text": "Add an independent second signer before strangers can launch.",
+      "text": "Add an independent second signer. Creator launches opened on 2026-10-13 without one, so until it is added one operator key signs every reading.",
       "status": "open"
     },
     {

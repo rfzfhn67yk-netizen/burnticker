@@ -68,7 +68,7 @@ export default function NextResults() {
               <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
                 <div><dt className="text-neutral-500">The result it waits for</dt><dd className="text-neutral-100">{r.event}</dd></div>
                 <div><dt className="text-neutral-500">Who publishes it</dt><dd className="text-neutral-100">{r.sourceUrl ? <a className="underline" href={r.sourceUrl} rel="noopener" target="_blank">{r.source}</a> : r.source}</dd></div>
-                <div><dt className="text-neutral-500">The source&apos;s schedule</dt><dd className="text-neutral-200">{r.schedule}{r.nextAt ? ` The next check is at ${denver(r.nextAt)}.` : ""}</dd></div>
+                <div><dt className="text-neutral-500">The source&apos;s schedule</dt><dd className="text-neutral-200">{r.schedule}{r.nextAt ? (/^The market is scheduled to close/.test(r.schedule) ? ` In Denver time, the close is ${denver(r.nextAt)}.` : ` The next check is at ${denver(r.nextAt)}.`) : ""}</dd></div>
                 <div><dt className="text-neutral-500">The latest result</dt><dd><span className="mr-1 bt-chip" data-settlement={r.status}>{SETTLEMENT_LABEL[r.status]}</span><span className="text-neutral-200">{r.statusText}</span>{r.receiptHref && <> <Link className="underline" href={r.receiptHref}>Check its receipt</Link></>}</dd></div>
               </dl>
             </li>

@@ -1,10 +1,12 @@
 import { feedHref } from "@/lib/burnticker/feeds";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import fs from "node:fs";
+import path from "node:path";
 import { coinSharePreview, previewMetadata } from "@/lib/burnticker/sharePreviewServe";
 import { platform } from "@/lib/burnticker/server";
-import { coinPageFound, coinPageTitle, lookupCoin, registryCoinKey, type CoinLookup } from "@/lib/burnticker/coinLookup";
+import { coinPageFound, coinPageTitle, deficitMintTarget, lookupCoin, registryCoinKey, type CoinLookup } from "@/lib/burnticker/coinLookup";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { loadTransparency } from "@/lib/burnticker/trust";
 
@@ -39,8 +41,22 @@ function servedPages(): { tickers: string[]; mints: string[] } | null {
  * QA walkthrough 11 M13 (2026-10-13): a ticker or mint this site does not know is a real 404 (coinLookup.ts coinPageFound decides;
  * $DEFICIT's pre-launch page, rehearsal coins and an unreadable registry keep the page). notFound() is called outside any try.
  */
+/** $DEFICIT's created mint from config/own-tokens.json; null when unreadable or not created yet. */
+function deficitMint(): string | null {
+  try {
+    const own = JSON.parse(fs.readFileSync(path.join(process.cwd(), "config", "own-tokens.json"), "utf8")) as { tokens: { symbol: string; address: string | null; status: string }[] };
+    const d = own.tokens.find((t) => t.symbol === "DEFICIT");
+    return d && d.status === "launched" ? d.address : null;
+  } catch { return null; }
+}
+
 export default async function Layout({ children, params }: { children: ReactNode; params: Promise<{ ticker: string }> }) {
   const { ticker } = await params;
+  // walkthrough 13: $DEFICIT by its mint opens its page (served from its keeper's files, not a registry row); redirect() is outside any try
+  let known = false;
+  try { known = lookupCoin(platform().registry, ticker).kind !== "none"; } catch { known = false; }
+  const target = deficitMintTarget(ticker, deficitMint(), known);
+  if (target) redirect(target);
   const found = coinPageFound(ticker, (k) => lookupCoin(platform().registry, k), servedPages());
   if (!found) notFound();
   return children;

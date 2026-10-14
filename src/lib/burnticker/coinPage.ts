@@ -100,6 +100,8 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
 
 /** The plain line a coin on its bonding curve shows under the curve: burns wait for graduation and the pool's registration. */
 export const BURNS_AFTER_GRADUATION = "Burns begin only after the bonding curve fills, the coin moves to its Raydium pool, and that pool is registered with the burn program.";
+/** Walkthrough 13: the short form for the fact list's "Last receipt" row (the full line already sits under the curve and in the burn log). */
+export const FIRST_BURN_AFTER_GRADUATION = "The first burn comes after graduation.";
 /** The same line with the raise that fills the curve, read from the curve or the configured threshold (website-13; never a typed 85). */
 export function burnsAfterGraduation(raise: string | null, quote = "SOL"): string {
   return raise ? `Burns begin only after the bonding curve fills at ${raise} ${quote} raised, the coin moves to its Raydium pool, and that pool is registered with the burn program.` : BURNS_AFTER_GRADUATION;

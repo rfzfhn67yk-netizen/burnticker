@@ -268,7 +268,7 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
   /* audit 6 item 21: the page ends above the tab bar (60 px plus its 2 px border) and the phone's safe area, so no footer link or
      button sits under it; the bar itself is opaque */
   body.bt-body { padding-bottom: calc(var(--bt-tabbar-h) + env(safe-area-inset-bottom) + 12px); }
-  .bt-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: var(--bt-bg); border-top: 2px dashed var(--bt-line); padding-bottom: env(safe-area-inset-bottom); }
+  .bt-tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: var(--bt-bg); border-top: 2px dashed var(--bt-line); padding-bottom: env(safe-area-inset-bottom); }
   /* audit 7 item 21: labels at 12 px, each tab a full-height hit area of at least 44 px */
   .bt-tabbar-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 60px; min-width: 44px; font: 700 12px/1 var(--font-mono); letter-spacing: .03em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; }
   .bt-tabbar-glyph { font-size: 18px; line-height: 1; }

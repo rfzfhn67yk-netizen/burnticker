@@ -61,7 +61,7 @@ export function DeficitPrelaunch({ fallbackSite }: { fallbackSite: string }) {
           <dl className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div><dt className="text-neutral-500">unit</dt><dd className="font-mono">{d.dial.unitLabel} of debt</dd></div>
             <div><dt className="text-neutral-500">per unit</dt><dd className="font-mono">{d.dial.percent} of the burn pool</dd></div>
-            <div><dt className="text-neutral-500">launch date</dt><dd>{d.keeper ? "created, date not in the keeper's files" : d.launch.date ?? "not announced"}</dd></div>
+            <div><dt className="text-neutral-500">launch date</dt><dd>{d.launch.date ?? (d.keeper ? "created, date not recorded" : "not announced")}</dd></div>
             <div><dt className="text-neutral-500">network</dt><dd>{d.keeper ? "mainnet" : "not launched on mainnet"}</dd></div>
           </dl>
           <p className="mt-2 text-xs text-neutral-400">{d.keeper ? "" : `${d.launch.note} `}Holders&apos; balances are never touched: burns destroy only tokens the program bought with the burn pool.</p>

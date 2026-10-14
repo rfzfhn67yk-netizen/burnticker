@@ -9,7 +9,7 @@ import { FOOTER_COPY } from "@/lib/burnticker/siteNav.mjs";
 
 /** The site's standing not-advice sentence (the footer's last), so the panel and the footer can never say it two ways. */
 export const NOT_ADVICE_SENTENCE: string = FOOTER_COPY.notAdvice.split(/(?<=\.)\s+/).pop() ?? FOOTER_COPY.notAdvice;
-export const SWAP_NOTICE = `${NOT_ADVICE_SENTENCE} This swap goes straight to the coin's Raydium pool; the site holds nothing.`;
+export const SWAP_NOTICE = `${NOT_ADVICE_SENTENCE} This swap goes straight to the coin's own Raydium curve or pool; the site holds nothing.`;
 
 export const SWAP_COPY = {
   title: "Swap",

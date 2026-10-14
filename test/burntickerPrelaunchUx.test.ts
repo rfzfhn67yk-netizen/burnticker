@@ -35,7 +35,7 @@ test("BT-16: each homepage card carries a readable state label; 1% and 2% sit be
   assert.doesNotMatch(home, /Illustrative example/, "no illustrative module left without its label");
   assert.match(home, /\.tag\{display:inline-block;font:700 10px\/1/, "labels on the static home's cards");
   assert.match(read("src/app/burnticker/about/page.tsx"), /The devnet rehearsal coin ran the same rule text at 1% for each unit\./);
-  assert.match(read("src/app/burnticker/_components/BurnMath.tsx"), /That rehearsal coin spent 1% of the burn pool per unit, and the rule proposed for \$DEFICIT on mainnet is 2%/);
+  assert.match(read("src/app/burnticker/_components/BurnMath.tsx"), /That rehearsal coin spent 1% of the burn pool per unit, and the rule locked for \$DEFICIT on mainnet is 2%/); // walkthrough 13: the mainnet rule is locked, not proposed
 });
 
 test("BT-17: the intro leads with three plain steps (the How it works strip under the one-line hero)", () => {

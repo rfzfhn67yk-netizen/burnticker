@@ -113,7 +113,7 @@ describe("M13: an unknown coin page is a real 404", () => {
   });
   test("the layout calls notFound() on that decision, outside any try", () => {
     const src = fs.readFileSync(new URL("../src/app/burnticker/t/[ticker]/layout.tsx", import.meta.url), "utf8");
-    assert.match(src, /import \{ notFound \}/); assert.ok(src.includes("next/navigation"), "the layout imports notFound from the navigation module");
+    assert.match(src, /import \{ notFound(, redirect)? \}/); assert.ok(src.includes("next/navigation"), "the layout imports notFound from the navigation module");
     assert.match(src, /const found = coinPageFound\(/);
     assert.match(src, /if \(!found\) notFound\(\);/);
     assert.doesNotMatch(src.slice(src.indexOf("export default")), /try \{[^}]*notFound/);

@@ -139,7 +139,7 @@ export function devFeeLineFor(venue: "launchlab" | "pair-curve" | null = null): 
   return `${curve} ${OPERATOR_SHARE_LINE} LaunchLab rates; pair-curve pairs differ.`;
 }
 export const DEV_FEE_LINE = devFeeLineFor(null);
-export const USE_OF_FEES = `${DEV_FEE_LINE} The operator's part of the liquidity fees is fixed in code, and the coin side of those fees is burned. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.`;
+export const USE_OF_FEES = `${DEV_FEE_LINE} The operator's part of the liquidity fees is fixed in code, and the coin side of those fees is burned. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own, apart from a disclosed 0.1 SOL purchase of the $REHEARSAL test coin when it was created. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.`;
 /**
  * The attester line on the trust page (review 2 §2, 2026-10-11): the present fact, not a schedule — Switchboard ended its services and no
  * independent second attester exists. `dueBy` (14 days after the first launch) stays as the owner's internal check-in date only.
