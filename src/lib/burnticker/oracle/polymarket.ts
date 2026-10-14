@@ -309,6 +309,7 @@ export const payoutIsFinal = (chain: Pick<ConditionResolution, "resolved"> | nul
 export const EVENT_ALL_OUTCOMES = 200;
 /** Audit 12 item 13: the within-event filter lives in outcomeFilter.ts (client-safe, the launch page imports it). */
 export { filterOutcomes } from "@/lib/burnticker/oracle/outcomeFilter";
+import { ladderKeys } from "@/lib/burnticker/oracle/outcomeFilter";
 
 /**
  * Whether a market's own outcome name shares a word with the query (case and accents ignored; words of 4+ letters, so "win" or "the" in a
@@ -333,7 +334,9 @@ export function searchHits(events: readonly GammaEvent[], o: { refuse?: TitleRef
     // launch night 2026-10-13 (hunt): "Eagles Super Bowl" listed the first 12 of 32 champion outcomes alphabetically, Eagles not among
     // them, and then said "type the name you want": an outcome the searched words name is listed first
     const rank = (m: GammaMarket) => (named(m) ? -1 : m.sportsMarketType === "moneyline" ? 0 : HEAD_TO_HEAD.test(m.question) ? 1 : 2);
-    const markets = [...bin].sort((a, b) => rank(a) - rank(b) || (a.endDate ?? "9").localeCompare(b.endDate ?? "9")).slice(0, o.perEvent ?? 12).map(marketHit);
+    // walkthrough 13: a ladder (every outcome a number or a date) lists by its rung, not in Gamma's order
+    const lk = ladderKeys(bin.map((m) => m.groupItemTitle ?? "")), rung = new Map(bin.map((m, i) => [m, lk?.[i] ?? 0]));
+    const markets = [...bin].sort((a, b) => rank(a) - rank(b) || (lk ? rung.get(a)! - rung.get(b)! : (a.endDate ?? "9").localeCompare(b.endDate ?? "9"))).slice(0, o.perEvent ?? 12).map(marketHit);
     const refused = o.refuse?.([e.title, ...bin.slice(0, 20).map((m) => m.question)]) ?? [];
     out.push({ slug: e.slug, title: e.title, url: eventPageUrl(e.slug), endDate: e.endDate, closed: e.closed, tags: e.tags, markets, marketCount: bin.length, selector: { oracle: "polymarket", series: `event:${e.slug}`, market: null }, refused });
     for (const t of e.tags) {

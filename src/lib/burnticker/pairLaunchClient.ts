@@ -89,7 +89,7 @@ export { base58ToBytes, type SendDeps, type SendResult, type ConfirmResult } fro
 
 /** Why the pair-curve set cannot be signed in this browser, or [] when it can. */
 export const pairCurveSignProblems = (pc: PairCurveLaunchBundle, creator: string | null, keys: { a: string; b: string } | null): string[] => planProblems(pairCurvePlan(pc, keys), creator);
-/** One pair-curve transaction, built and signed by the mint keypair(s) it names (the wallet signs after). */
+/** One pair-curve transaction, built and signed by the mint keypair(s) it names (tests; the live runner has the wallet sign first, then the keys). */
 export const buildPairCurveTx = (t: PairCurveLaunchBundle["transactions"][number], creator: string, keys: { a: string; b: string } | null, recentBlockhash: string): VersionedTransaction =>
   buildStepTx({ label: t.label, signers: [...t.signers], instructions: t.instructions }, creator, { mintA: keys?.a, mintB: keys?.b }, recentBlockhash);
 /** The three transactions in order (signAndSendPlan); `prior` resumes at the failed step. */

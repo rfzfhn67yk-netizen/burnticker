@@ -229,6 +229,8 @@ export function endExplainer(): string[] {
 }
 /** The end sentences of the settled-event pairs (endText's result lines). */
 export const CANDIDATES_END_RESULT = "When both markets are final and one candidate won, the other candidate's coin sends the rest of its pool, and any fees that arrive later, to the winning coin's burn, and the winning coin burns down what is left on itself. If neither candidate won, or a market settled 50-50, the rest goes to $DEFICIT's burn. Then the coin retires.";
+/** Walkthrough 13 (2026-10-14): the same end for a race between two PARTIES (pairFundsFlow.ts isPartySubject), said with "party". */
+export const PARTIES_END_RESULT = "When both markets are final and one party won, the other party's coin sends the rest of its pool, and any fees that arrive later, to the winning coin's burn, and the winning coin burns down what is left on itself. If neither party won, or a market settled 50-50, the rest goes to $DEFICIT's burn. Then the coin retires.";
 export const GAME_END_RESULT = "When the game is final, the losing team's coin sends the rest of its pool, and any fees that arrive later, to the winning team's coin's burn, and the winning coin burns down what is left on itself. After a draw, the rest goes to $DEFICIT's burn. Then the coin retires.";
 export const GAME_CANCELLED_SENTENCE = "If the game is cancelled, nothing moves between the two coins.";
 /**
@@ -245,7 +247,7 @@ const isDailyRace = (r: BurnRule): boolean => r.oracle === "derby" && r.derby?.s
 export const MEETINGS_END_RESULT = "When both teams' seasons are over, the coin of the team that won fewer of the games between them sends the rest of its pool, and any fees that arrive later, to the other coin's burn pool, or to $DEFICIT's burn if that coin is not live. The coin of the team that won more burns down what is left on itself. Then the coin retires.";
 const isMeetingsSeries = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e?.kind === "team" && e.window.kind === "meetings"; };
 export interface EndText { kind: "perpetual" | "self" | "flagship" | "pair-winner" | "champion" | "mint" | "incinerator"; result: string; void: string | null; line: string }
-export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText {
+export function endText(r: BurnRule, o: { team?: string | null; party?: boolean } = {}): EndText {
   const days = r.onEnd?.windDownDays ?? 28;
   const over = days === 28 ? "over four weeks" : `over ${days} days`;
   const mk = (kind: EndText["kind"], result: string, voidEnd: string | null): EndText => ({ kind, result, void: voidEnd, line: [result, voidEnd].filter(Boolean).join(" ") });
@@ -256,7 +258,7 @@ export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText 
   if (!sink) return mk("self", `When the rule ends, the coin's own burn pool burns down what is left ${over}, then the coin retires. A retired coin's pool keeps burning any fees it still receives. This end only burns this coin and sends nothing to another coin.`, null);
   if (sink === "incinerator") return mk("incinerator", INCINERATOR_END_RESULT, VOID);
   if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", MEETINGS_END_RESULT, `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
-  if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", CANDIDATES_END_RESULT, VOID);
+  if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", o.party ? PARTIES_END_RESULT : CANDIDATES_END_RESULT, VOID);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
   // qa-12 L2: a two-coin daily race ends on its season tally (derby/adapter.ts recordTally; endSinkKeeper's pair winner burns itself down)
   if (sink === "pair-winner" && isDailyRace(r)) { const unit = r.derby?.selector === "coinvs" && r.derby.window === "weekly" ? "weeks" : "days"; return mk("pair-winner", raceEndResult(unit), raceLevelSentence(over, unit)); }

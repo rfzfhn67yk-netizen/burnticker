@@ -245,7 +245,7 @@ describe("the launch state and the page wiring", () => {
     assert.match(page, /withEndChoice\(r, endA\)/); assert.match(page, /withEndChoice\(ruleB0, endB\)/);
     assert.match(page, /burnSol: site\.burnSol\.available/);
     assert.match(page, /\$\{V1\}\/sinks\?network=\$\{realNet\}/);
-    assert.match(page, /label: FACT_LABELS\.ends, [^\n]*extra: endChoiceBlock/);
+    assert.match(page, /label: FACT_LABELS\.ends, [^\n]*extra: endChoiceReview/);
     assert.match(page, /const snapshot = JSON\.stringify\(\{ guide,[^\n]*cardSet, endA, endB, nameAuto, tickerAuto, editedFor, ownImage, note \}\);/);
     for (const k of ["prepareIfCurrent(sentRev", "setEditedFor(", "reviewMatchesDraft(reviewSlot, curRev.current)"]) assert.ok(page.includes(k), k);
     assert.match(picker, /role="radiogroup"/); assert.match(picker, /data-sink-search/); assert.match(picker, /s\.rule/);

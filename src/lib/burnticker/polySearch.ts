@@ -1,6 +1,7 @@
 import { fold, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
 import { eventIdentity } from "@/lib/burnticker/eventIdentity";
 import type { GammaEvent, GammaMarket } from "@/lib/burnticker/oracle/polymarket";
+import { ladderOrder } from "@/lib/burnticker/oracle/outcomeFilter";
 
 /**
  * POLYMARKET IN THE SENTENCE SEARCH (2026-10-10, the owner's $SPIDER case: "spider" landed him on the Any-market regex screen). The old
@@ -120,7 +121,7 @@ export function matchPolymarket(s: SplitQuery, events: readonly GammaEvent[], re
   const eventsOut: EventMatch[] = [];
   if (s.phrase) for (const e of evs) {
     if (!titleHasPhrase(e)) continue;
-    const outs = e.markets.filter(live);
+    const outs = ladderOrder(e.markets.filter(live), outcomeLabel);   // walkthrough 13: a ladder lists by its rung
     if (outs.length < 3) continue;   // a yes/no event is a market card, not a picker
     const entityHere = entityTokens.length > 0 && markets.some((x) => x.event.slug === e.slug);
     if (entityHere) continue;        // the market card already is the exact answer

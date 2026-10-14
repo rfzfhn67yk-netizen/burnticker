@@ -205,6 +205,7 @@ describe("6: a wallet slower than the blockhash gets the step rebuilt and signed
     const b = bundle("SLOW");
     const mintKp = Keypair.fromSecretKey(Buffer.from(b.mintSecretKey!, "base64"));
     const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; let x = BigInt("0x" + Buffer.from(mintKp.secretKey).toString("hex")), s = ""; while (x > BigInt(0)) { s = A[Number(x % BigInt(58))] + s; x /= BigInt(58); }
+    for (const byte of mintKp.secretKey) { if (byte !== 0) break; s = "1" + s; } // leading zero bytes are leading "1"s (a 1-in-256 flake otherwise)
     return launchlabPlan([{ ...b, mintSecretKey: s }]);
   };
   test("past 45 s and expired on chain: rebuilt with a fresh blockhash, the wallet asked again with a sentence, then sent", async () => {

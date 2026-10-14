@@ -18,7 +18,7 @@ import { targetActionSentence, targetTrustCopy } from "@/lib/burnticker/burnTarg
 import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnReal";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
-import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersShareLine, initialTab, marketFacts, raydiumLink, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
+import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersShareLine, initialTab, marketFacts, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
 import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
@@ -137,7 +137,6 @@ export default function TokenPage() {
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const rows = [...d.receipts].reverse();
   const venue = s.oracle === "kalshi" ? "the prediction market that settles it" : s.oracle === "polymarket" ? "Polymarket, with each result read on Polygon" : "its source";
-  const trade = raydiumLink(m?.trade);
   const facts = ruleFacts(d.rulesText, s.rules.oneShot);
   // website-24 (WIRING-ROUND5): a coin that burns a real token (its rule's pinned field): receipts read memo v3, the trust section says
   // what such a burn can and cannot do
@@ -173,7 +172,7 @@ export default function TokenPage() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <h1 className="text-2xl font-semibold leading-tight">{s.name} <span className="font-mono text-lg text-neutral-400">${s.ticker}</span></h1>
             {/* owner 2026-10-14: the primary "Trade on Raydium" button beside the ticker (tradeLinks.ts; built here, so it shows even when the pool read failed) */}
-            <div data-header-trade><TradeButtons links={coinLinks({ cluster: s.cluster, mint: s.mint, phase: m?.phase ?? null, status: s.status })} ticker={s.ticker} compact /></div>
+            <div data-header-trade><TradeButtons links={coinLinks({ cluster: s.cluster, mint: s.mint, phase: m?.phase ?? null, status: s.status })} ticker={s.ticker} compact primaryOnly /></div>
           </div>
           <p className="text-neutral-300">{prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey}</p>
           <p className="text-xs"><Link className="underline" href={creatorHref(s.addresses.creator)} data-created-by>{createdBy(shortAddress(s.addresses.creator))}</Link></p>
@@ -214,14 +213,10 @@ export default function TokenPage() {
         </section>
 
         <aside className="space-y-3 lg:self-start" aria-label="Trade and pool">
-          {/* swap-1 (2026-10-14): the in-site swap panel (TradePanel.tsx); it renders nothing unless the coin is live on this host's network */}
-          <TradePanel ticker={s.ticker} mint={s.mint} status={s.status} cluster={s.cluster} graduatedPool={m?.phase === "graduated" ? m.graduatedPool : null} poolBurnBps={s.fees.postGraduation.legs.filter((l) => l.label.startsWith("burn pool")).reduce((a, l) => a + l.bps, 0)} links={m?.trade.links ?? []} />
-          <section className={card} aria-label="Trade">
-            <p className="mb-2 text-xs text-neutral-400" data-fees-before-trade>Each trade pays {s.fees.curve.totalBps / 100}% on the curve and {s.fees.postGraduation.totalBps / 100}% in the Raydium pool. Raydium shows how far your trade moves the pool, and your slippage setting, before you sign.</p>
-            {trade ? <a href={trade.url} rel="noopener" target="_blank" className="bt-launch-btn block text-center" data-trade-link>{trade.label} ↗</a>
-              : <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">{m?.trade.note ?? "The trade link appears once the coin is launched."}</p>}
-            <p className="mt-2 text-xs text-neutral-500">Burnticker never takes an order or holds funds: a swap goes straight to the coin's own Raydium curve or pool. {trade ? `This link opens Raydium, set to $${s.ticker}.` : ""}</p>
-          </section>
+          {/* swap-1 (2026-10-14): the in-site swap panel (TradePanel.tsx); the swap shows only for a coin live on this host's network.
+              walkthrough 13 (owner 2026-10-14, "fix the layout calls"): the panel's small link row is the page's one place for the full set
+              of trade links, with the fee sentence above it; the header keeps the one primary "Trade on Raydium" button; no third card. */}
+          <TradePanel ticker={s.ticker} mint={s.mint} status={s.status} cluster={s.cluster} graduatedPool={m?.phase === "graduated" ? m.graduatedPool : null} poolBurnBps={s.fees.postGraduation.legs.filter((l) => l.label.startsWith("burn pool")).reduce((a, l) => a + l.bps, 0)} links={m?.trade.links ?? []} feesNote={`Each trade pays ${s.fees.curve.totalBps / 100}% on the curve and ${s.fees.postGraduation.totalBps / 100}% in the Raydium pool. Burnticker never takes an order or holds funds.`} linksNote={m?.trade.note ?? "The trade links appear once the coin is launched."} />
 
           {/* a static read of the pool, from the API: the curve as SOL raised of the graduation threshold, or the pool it trades in now */}
           <section className={card} aria-label="Pool">

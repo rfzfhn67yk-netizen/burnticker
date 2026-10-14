@@ -119,7 +119,7 @@ describe("item 1: the queued-units counter (LAUNCHPAD-PATH §73), from the keepe
     const f = featuredCoins(root, null, [], { status: keeperStatus(), burns: keeperBurns, error: null }, NOW)[0];
     assert.equal(f.burned.text, "0 $DEFICIT, 15 units queued"); assert.equal(f.burned.why, "The debt has risen $22.35 billion since launch. 15 units are queued.");
     assert.deepEqual([f.curve.raised, f.curve.of], ["31.5", "85 SOL"]);
-    assert.equal(f.progress!.from, "on-curve"); assert.match(f.progress!.next, /^Next, the curve has to raise 53\.5 more SOL to reach its 85 SOL raise and graduate\. 15 units are queued for that moment\.$/);
+    assert.equal(f.progress!.from, "on-curve"); assert.match(f.progress!.next, /^31\.5 of 85 SOL raised; 53\.5 more to graduate\. 15 units are queued for that moment\.$/);
     // unread keeper files after the create: Unavailable (F4), never a queue or a zero
     const u = featuredCoins(root, null, [], null, NOW)[0];
     assert.equal(u.burned.text, "Unavailable"); assert.equal(u.curve.of, null);
@@ -212,7 +212,7 @@ describe("item 4: six steps, a view of readiness.ts (no second model)", () => {
     const cases: [ReadinessInput, number, RegExp][] = [
       [{ ...base, launched: false }, 0, /^Next, the coin has to be created\.$/],
       // website-15 item 6: a coin on its curve has done "Created" and "Trading on curve"; graduation is the next unmet milestone
-      [base, 2, /^Next, the curve has to raise 20 more SOL to reach its 60 SOL raise and graduate\.$/],
+      [base, 2, /^40 of 60 SOL raised; 20 more to graduate\.$/],
       [{ ...base, phase: "graduated" }, 3, /registered with the burn program and verified/],
       [{ ...base, poolVerified: true }, 4, /at least one unit/],
       [{ ...base, poolVerified: true, latest: { status: "skipped", units: 1, skippedReason: "under the floor", waitReason: null } }, 4, /spend floor/],

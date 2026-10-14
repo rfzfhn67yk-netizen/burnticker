@@ -144,7 +144,7 @@ describe("website-21: the review", () => {
   test("the page sends `pair`, renders review.meetings.flow, states the one end and the 30-day deadline, and offers no game/season switch", () => {
     assert.match(page, /\? \{ pair: \{ ticker: tickerB\.toUpperCase\(\), name: nameB, creatorDescription: profileB\.description, links: creatorLinks/);
     assert.match(page, /\{reviewMeetings\?\.flow && <FundsFlowView flow=\{reviewMeetings\.flow\} open \/>\}/);
-    assert.match(card, /export function FundsFlowView\(\{ flow, open = false \}: \{ flow: FundsFlow; open\?: boolean \}\)/);
+    assert.match(card, /export function FundsFlowView\(\{ flow, open = false, saidAbove = null \}: \{ flow: FundsFlow; open\?: boolean; saidAbove\?: string \| null \}\)/);
     assert.match(page, /meetingsOn \? <EndSection title=\{MEETINGS_END_LABEL\} sentences=\{\[MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE\]\} options=\{\[\]\} \/>/);
     assert.match(steps, /\{title && <p className="font-medium text-amber-200" data-end-title>\{title\}<\/p>\}/);
     assert.match(page, /const facts = meetingsOn \? null :/, "never winnerTakesBurnFacts or matchupFacts for this option");

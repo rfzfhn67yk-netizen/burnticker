@@ -9,6 +9,8 @@
 export const RELEASE_LINES = {
   first: "The first public release of the repository.",
   sameSource: "The same source as the release before it was published again.",
+  /** walkthrough 13 (2026-10-14): a run of republishes of one source, said once on one entry (history.ts collapseRepublishes) */
+  sameSourceTimes: (n: number): string => (n <= 1 ? "The same source as the release before it was published again." : `The same source as the release before it was published again, ${n} times in a row.`),
   program: "The burn program's build changed.",
   programNotRecorded: "The program build was not recorded for this release.",
   idl: "The program's interface file changed.",

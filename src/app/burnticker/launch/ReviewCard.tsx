@@ -176,11 +176,12 @@ export function PairDiagram({ kind, text = null }: { kind: "independent" | "link
  * website-21 (WIRING-RIVALRY-SERIES): a funds flow the review answered (review.meetings.flow, pairFundsFlow.ts meetingsFundsFlow), rendered
  * the way PairFundsFlow.tsx renders pairFundsFlow: the one line, then the steps, every outcome and the never line behind a disclosure.
  */
-export function FundsFlowView({ flow, open = false }: { flow: FundsFlow; open?: boolean }) {
+export function FundsFlowView({ flow, open = false, saidAbove = null }: { flow: FundsFlow; open?: boolean; saidAbove?: string | null }) {
+  // walkthrough 13 (2026-10-14): the one line is left out when the page already said that same sentence just above (the settled pair's line)
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs" aria-label="Where the money goes" data-pair-funds-flow={flow.version} data-meetings-flow>
       <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">{flow.versionLabel}</p>
-      <p className="mt-1 text-sm text-neutral-100">{flow.oneLiner}</p>
+      {flow.oneLiner !== saidAbove && <p className="mt-1 text-sm text-neutral-100">{flow.oneLiner}</p>}
       <details className="mt-2" open={open}><summary className="cursor-pointer text-neutral-300">Where the money goes, and what happens on a draw, a missing result or a time-out</summary>
         <dl className="mt-2 space-y-1">{flow.steps.map((s) => <div key={s.title}><dt className="inline font-medium text-neutral-200">{s.title}: </dt><dd className="inline text-neutral-300">{s.text}</dd></div>)}</dl>
         <ul className="mt-2 list-disc pl-5 space-y-1 text-neutral-300">{flow.outcomes.map((o) => <li key={o.when}><b className="text-neutral-200">{o.when}:</b> {o.then}</li>)}</ul>

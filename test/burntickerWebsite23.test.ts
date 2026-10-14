@@ -119,9 +119,9 @@ describe("website-23: the sentences", () => {
     assert.match(page, /if \(meetingsOn \|\| settledPick\) return;/);
   });
   test("the review: the pair line, the facts for one game, the money path, coin B's description and the 30-day deadline", () => {
-    assert.match(page, /pairLine=\{settledPick \? reviewSettled\?\.sentence \?\? settledPairSentence\(settledPick\.shape\) :/);
+    assert.match(page, /pairLine=\{settledPick \? reviewSettled\?\.sentence \?\? settledLine :/);
     assert.match(page, /settledPick\?\.shape === "game" \? gamePairFacts\(\{ a: ticker, b: tickerB, teamA: A, teamB: B, tie: tieWord \}\) : matchupFacts\(/);
-    assert.match(page, /\{reviewSettled\?\.flow && <FundsFlowView flow=\{reviewSettled\.flow\} open \/>\}/);
+    assert.match(page, /\{reviewSettled\?\.flow && <FundsFlowView flow=\{reviewSettled\.flow\} open saidAbove=\{reviewSettled\.sentence \?\? settledLine\} \/>\}/);
     // website-24: coin B's description is the review's own (review.settled.descriptionB, written from pair.descCtx = the page's ctxB)
     assert.match(page, /\{settledPick && reviewSettled\?\.descriptionB && <section [^\n]*\{reviewSettled\.descriptionB\}<\/p><\/section>\}/);
     assert.match(page, /const descB = meetingsOn \? \(reviewMeetings\?\.descriptionB \?\? finalDescriptionB\) : settledPick \? \(reviewSettled\?\.descriptionB \|\| finalDescriptionB\) : finalDescriptionB;/);

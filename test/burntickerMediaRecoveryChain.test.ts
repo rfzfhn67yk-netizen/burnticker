@@ -11,7 +11,7 @@ import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 const cfg = loadCopyLintConfig();
 const BH = "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi";
 const creatorKp = Keypair.generate(), CREATOR = creatorKp.publicKey.toBase58();
-const b58 = (bytes: Uint8Array) => { const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B = BigInt(58); let x = BigInt("0x" + Buffer.from(bytes).toString("hex")), s = ""; while (x > Z) { s = A[Number(x % B)] + s; x /= B; } return s; };
+const b58 = (bytes: Uint8Array) => { const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B = BigInt(58); let x = BigInt("0x" + Buffer.from(bytes).toString("hex")), s = ""; while (x > Z) { s = A[Number(x % B)] + s; x /= B; } for (const b of bytes) { if (b !== 0) break; s = "1" + s; } return s; };
 const bundle = (ticker: string): LaunchlabBundleLike => {
   const mint = Keypair.generate(), m = mint.publicKey.toBase58();
   const ix = (signer: string) => ({ programId: "11111111111111111111111111111111", label: "test", dataBase64: Buffer.from([2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]).toString("base64"), keys: [{ pubkey: CREATOR, isSigner: true, isWritable: true }, { pubkey: signer, isSigner: true, isWritable: true }] });

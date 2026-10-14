@@ -8,7 +8,8 @@ export const TEST_COINS_COPY = {
   title: "Test coins",
   heading: "Test coins",
   description: "Coins the operator made to test the platform. They are listed here so you can see they exist, not so you trade them.",
-  intro: "The operator made these coins to test the platform on mainnet. They are left off the coin list, the home page, search, the leaderboard and the sitemap. They are listed here so you can see they exist, not so you trade them. Each one keeps its own page.",
+  // walkthrough 13 (2026-10-14): each coin's own line says REHEARSAL_SENTENCE ("not so you trade it"), so the intro does not say it again
+  intro: "The operator made these coins to test the platform on mainnet. They are left off the coin list, the home page, search, the leaderboard and the sitemap, and each one keeps its own page.",
   linkLabel: "Test coins",
   linkText: "The coins the operator made to test the platform, which the coin list leaves out.",
   mint: "Mint address",

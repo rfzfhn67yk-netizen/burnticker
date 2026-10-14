@@ -93,7 +93,7 @@ describe("review 2 F6 — one factual pair sentence, checked against the engine"
     assert.doesNotMatch(home, /neither pool can pay/i);
     assert.doesNotMatch(home, /winning side burns part of its own pool/i);
     // the review card (launch page + the Coin vs Coin tile pass PAIR_REVIEW_LINE), Derby, the pair pages (Next + static twin)
-    assert.match(read("src/app/burnticker/launch/page.tsx"), /pairLine=\{settledPick \? reviewSettled\?\.sentence \?\? settledPairSentence\(settledPick\.shape\) : pairOn && !ruleB \? PAIR_REVIEW_LINE : null\}/);
+    assert.match(read("src/app/burnticker/launch/page.tsx"), /pairLine=\{settledPick \? reviewSettled\?\.sentence \?\? settledLine : pairOn && !ruleB \? PAIR_REVIEW_LINE : null\}/);
     assert.match(read("src/app/burnticker/launch/CoinVsCoinTile.tsx"), /pairLine=\{PAIR_REVIEW_LINE\}/);
     const derby = read("src/app/burnticker/derby/page.tsx");
     assert.match(derby, /\{PAIR_BURN_SENTENCE\}/);

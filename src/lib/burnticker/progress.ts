@@ -42,6 +42,8 @@ export const PROGRESS_NEXT: Record<(typeof PROGRESS_STEPS)[number], string> = {
 export const progressNow = (done: number): string => (done <= 0 ? "Not created" : done >= PROGRESS_STEPS.length ? "Burned" : `Next: ${PROGRESS_NEXT[PROGRESS_STEPS[done]]}`);
 
 const n2 = (x: number) => (Math.round(x * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
+/** Below this much SOL raised, the curve is said as not started (walkthrough 13). */
+export const CURVE_STARTED_SOL = 0.01;
 
 export interface ProgressFacts {
   /** SOL raised on the curve and the coin's own raise, when read */
@@ -65,7 +67,8 @@ export function progressOf(r: Readiness, f: ProgressFacts = {}): ProgressView {
   switch (r.state) {
     case "not-launched": next = "Next, the coin has to be created."; break;
     case "on-curve":
-      next = raise !== null && raised !== null ? `Next, the curve has to raise ${n2(Math.max(0, raise - raised))} more SOL to reach its ${n2(raise)} SOL raise and graduate.`
+      // walkthrough 13 (2026-10-14): "has to raise 85 more SOL to reach its 85 SOL raise" read oddly at 0.00000004 SOL raised
+      next = raise !== null && raised !== null ? (raised < CURVE_STARTED_SOL ? `The curve has not started filling. It graduates at ${n2(raise)} SOL raised.` : `${n2(raised)} of ${n2(raise)} SOL raised; ${n2(Math.max(0, raise - raised))} more to graduate.`)
         : raise !== null ? `Next, the curve has to reach its ${n2(raise)} SOL raise and graduate.`
         : "Next, the curve has to reach its raise and graduate.";
       next += queued;

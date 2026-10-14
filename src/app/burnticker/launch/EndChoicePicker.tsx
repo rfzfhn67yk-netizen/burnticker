@@ -13,7 +13,7 @@ export const PICK_FIRST_LINE = "Pick a coin from the list. Until you do, the res
  * path's own end (the champion path burns the rest here) is stated above the choices, never offered for the losing path. Presentational:
  * the launch page owns the choice and applies it to the rule.
  */
-export function EndChoicePicker({ model, value, onChange, sinks, who = null, locked = false, side }: { model: EndChoiceModel; value: EndChoice; onChange: (c: EndChoice) => void; sinks: SinkCoin[] | null; /** an independent pair names the coin ("$LADL") */ who?: string | null; locked?: boolean; side: "a" | "b" }) {
+export function EndChoicePicker({ model, value, onChange, sinks, who = null, locked = false, side, hideWinning = false }: { model: EndChoiceModel; /** walkthrough 13: the review says the winning path in the end sentences above, so the picker there leaves it out */ hideWinning?: boolean; value: EndChoice; onChange: (c: EndChoice) => void; sinks: SinkCoin[] | null; /** an independent pair names the coin ("$LADL") */ who?: string | null; locked?: boolean; side: "a" | "b" }) {
   const [q, setQ] = useState("");
   const name = `end-choice-${side}`;
   const shown = sinks ? searchSinks(sinks, q) : [];
@@ -22,7 +22,7 @@ export function EndChoicePicker({ model, value, onChange, sinks, who = null, loc
   return (
     <fieldset disabled={locked} className="m-0 min-w-0 space-y-2 border-0 p-0" data-end-choice={side}>
       <legend className="text-xs font-medium text-neutral-400">{who ? `${who}: ${endChoiceLabel(model).toLowerCase()}` : endChoiceLabel(model)}</legend>
-      {model.winning && <p className="text-xs text-neutral-200" data-end-winning>{model.winning}</p>}
+      {model.winning && !hideWinning && <p className="text-xs text-neutral-200" data-end-winning>{model.winning}</p>}
       <div className="min-w-0 space-y-1" role="radiogroup" aria-label={endChoiceLabel(model)}>
         {model.options.map((o) => (
           <label key={o.kind} className="flex min-w-0 cursor-pointer items-start gap-2 rounded border border-neutral-800 px-2 py-1.5 text-sm" data-end-option={o.kind}>

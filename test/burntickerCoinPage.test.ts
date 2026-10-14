@@ -70,12 +70,13 @@ describe("coinPage.ts: the order and the small facts", () => {
 
 describe("the coin page (t/[ticker])", () => {
   const src = code(COIN);
-  test("on top: the chart, then one outbound link and no order panel", () => {
-    const chart = src.indexOf('<section aria-label="Chart"'), trade = src.indexOf('aria-label="Trade"'), tabs = src.indexOf('role="tablist"');
-    assert.ok(chart > 0 && chart < trade && trade < tabs, "chart, then the trade link, then the tabs");
-    assert.equal((src.match(/data-trade-link/g) ?? []).length, 1, "exactly one trade link");
-    assert.match(src, /const trade = raydiumLink\(m\?\.trade\)/);
-    assert.doesNotMatch(src, /m\.trade\.links\.map/, "the API's other venues are not listed");
+  test("on top: the chart, then the trade row under the swap panel, and no order panel", () => {
+    // walkthrough 13 (owner 2026-10-14): one primary button (the header's) and one row with the full set (the swap panel's); no third card
+    const chart = src.indexOf('<section aria-label="Chart"'), trade = src.indexOf("<TradePanel "), tabs = src.indexOf('role="tablist"');
+    assert.ok(chart > 0 && chart < trade && trade < tabs, "chart, then the trade row, then the tabs");
+    assert.equal((src.match(/data-trade-link/g) ?? []).length, 0, "the page itself draws no trade button; the header's TradeButtons does");
+    assert.doesNotMatch(src, /aria-label="Trade"/, "no separate Trade card");
+    assert.doesNotMatch(src, /m\.trade\.links\.map/, "the API's venues are listed once, by the swap panel's row");
     assert.doesNotMatch(src, /\b(buy|sell)\b/i, "no buy or sell control or word on the page");
     assert.doesNotMatch(src, /<input|<form/, "nothing takes an order");
   });
@@ -145,7 +146,10 @@ describe("the coin page's market facts (website-13, ChatGPT audit 6 A10): read o
     assert.equal(f.fees.value, "1.25% on the curve, 0.3% in the pool");
     for (const r of marketFacts(base)) for (const t of [r.label, r.value ?? "", r.note ?? ""]) if (r.key !== "mint" && r.key !== "creator") assert.ok(lintCopy(t, loadCopyLintConfig()).ok || r.key === "mcap" && t === "Market cap", `${r.key}: ${t}`);
     const src = fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8");
-    assert.ok(src.indexOf("data-fees-before-trade") < src.indexOf("data-trade-link"), "the fees and the slippage note sit before the Raydium link");
+    // walkthrough 13: the fee sentence rides into the swap panel's trade row, above its links
+    assert.match(src, /feesNote=\{`Each trade pays \$\{s\.fees\.curve\.totalBps \/ 100\}% on the curve/);
+    const panel = fs.readFileSync("src/app/burnticker/t/[ticker]/TradePanel.tsx", "utf8");
+    assert.ok(panel.indexOf("data-fees-before-trade") > 0 && panel.indexOf("data-fees-before-trade") < panel.indexOf("SWAP_COPY.otherVenues}: "), "the fees sit before the links");
     assert.doesNotMatch(src.replace(/^\s*(\/\/|\*|\/\*).*$/gm, ""), /priceUsd|\bprice\b/i);
   });
   test("a draft says not applicable; a graduated coin says the pool is not read for its market cap", () => {

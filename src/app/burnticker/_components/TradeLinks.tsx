@@ -14,9 +14,10 @@ import { useLaunchAvailability } from "./useLaunchAvailability";
  *                   mounted by the sign card (launch/SignCard.tsx) inside its "Your coin is live and recorded" block.
  */
 
-export function TradeButtons({ links, mint, compact = false, ticker }: { links: CoinLinks | null | undefined; mint?: string | null; compact?: boolean; ticker?: string }) {
+export function TradeButtons({ links, mint, compact = false, ticker, primaryOnly = false }: { links: CoinLinks | null | undefined; mint?: string | null; compact?: boolean; ticker?: string; primaryOnly?: boolean }) {
   if (!links) return null;
-  const rest = allLinks(links).filter((l) => l !== links.primary);
+  // primaryOnly: the coin page header (walkthrough 13): the one primary button; the full set sits once, under the swap panel
+  const rest = primaryOnly ? [] : allLinks(links).filter((l) => l !== links.primary);
   if (!links.primary && !rest.length) return links.note && !compact ? <p className="text-xs text-neutral-500" data-trade-note>{links.note}</p> : null;
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 ${compact ? "text-xs" : "text-sm"}`} data-trade-links>
