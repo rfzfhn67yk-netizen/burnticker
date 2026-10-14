@@ -8,6 +8,7 @@ import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 import { archivePlanRecord, chainReadDeps } from "@/lib/burnticker/launchRecovery";
+import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
 
 /**
  * THE SIGNING CARD (2026-10-11): the one component that signs every launch — a single LaunchLab coin, two coins, a pair-curve set — from
@@ -29,13 +30,14 @@ import { archivePlanRecord, chainReadDeps } from "@/lib/burnticker/launchRecover
  * so pinning a table needs no code release; until that answer arrives, or if it fails, nothing can be signed. The plan never carries an
  * opening purchase (hostedLaunch.ts): the creator trades on the curve after the create like anyone else.
  */
-export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true }: { plan: SignPlan; creator: string | null; title: string; notes?: string[]; coinHref: (ticker: string) => string; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean }) {
+export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true, onLive }: { plan: SignPlan; creator: string | null; title: string; notes?: string[]; coinHref: (ticker: string) => string; /** launch night 2026-10-13: every coin is live and recorded (the page drops its saved draft) */ onLive?: () => void; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean }) {
   const wallet = useWallet();
   const { connection } = useConnection();
   // recovery: what an earlier run (this tab, before a reload) left in storage for these drafts. Read in the initial state — the card
   // only ever renders in the browser, after the bundle request — so the first paint already shows a sent step and its signature.
   const [storage] = useState(() => browserPlanStorage());
   const [stored] = useState(() => loadPlanRecord(storage, plan));
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false), [done, setDone] = useState<string[]>(() => stored?.confirmed ?? []), [confirmed, setConfirmed] = useState<string[]>(() => stored?.recorded ?? []);
   const abandonedAtMount = planAbandoned(plan, stored) && (stored?.confirmed.length ?? 0) < plan.steps.length;
   const [err, setErr] = useState<string | null>(() => (stored?.pending ? sentRecoverySentence(stored.pending, plan.steps.length, stored.confirmed) : stored && abandonedAtMount ? abandonedSentence({ ...stored, confirms: plan.confirms, steps: plan.steps.length }) : null));
@@ -58,8 +60,9 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   const problems = [...planProblems(plan, creator), ...pinProblems, ...planSizeProblems(plan.steps, creator, network), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet && !v0?.has(0) ? ["this wallet cannot sign version-0 transactions"] : [])];
   /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
   // launch audit 234: the replaced plan's signatures and mints stay readable in this tab's history (never a key)
-  const startNewPlan = () => { archivePlanRecord(storage, planStorageKey(plan)); window.location.assign(window.location.pathname); };
+  const startNewPlan = () => { archivePlanRecord(storage, planStorageKey(plan)); window.location.assign(resumeReviewHref(window.location.pathname)); };
   const allLive = plan.confirms.length > 0 && plan.confirms.every((c) => confirmed.includes(c.mint));
+  useEffect(() => { if (allLive) onLive?.(); }, [allLive]); // eslint-disable-line react-hooks/exhaustive-deps
   const n = plan.steps.length;
   // launch audit 230: once live, the card stays as a completion card with an Open link per coin (no timed redirect)
   // launch audit 250: `busy` is React state, so two presses in one render, or a card mounted again mid-run, both read false; the plan
@@ -71,7 +74,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   };
   const run = async () => {
     if (!creator || !wallet.signTransaction) return;
-    setBusy(true); setErr(null);
+    setBusy(true); setErr(null); setNotice(null);
     try {
       const r = await signAndSendPlan(plan, creator, {
         latestBlockhash: () => connection.getLatestBlockhash("confirmed"),
@@ -79,6 +82,9 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         lookupTable: () => verifiedLookupTable(connection, network, pin),
         sendRaw: (raw) => connection.sendRawTransaction(raw, { preflightCommitment: "confirmed" }),
         confirm: async (sig, bh) => (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value,
+        // launch night 2026-10-13: a wallet slower than the blockhash's life gets the step rebuilt and is asked again (signPlan.ts)
+        isBlockhashValid: async (b) => (await connection.isBlockhashValid(b, { commitment: "confirmed" })).value,
+        onNotice: (t) => setNotice(t),
         // launch recovery 255: status, height, the transaction history and the accounts a step creates, before anything is called unlanded
         ...chainReadDeps(connection),
         storage,
@@ -145,6 +151,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         </button>
       )}
       {!allLive && <p className="text-xs text-neutral-500" data-session-scope>{SESSION_SCOPE_LINE}</p>}
+      {notice && busy && <p className="text-xs text-amber-300" role="status" data-resign-notice>{notice}</p>}
       {err && <p className="text-xs text-red-400">{err}</p>}
     </div>
   );

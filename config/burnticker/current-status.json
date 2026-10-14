@@ -35,7 +35,7 @@
   },
   "phase": {
     "label": "soft launch ($DEFICIT created on mainnet)",
-    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. $DEFICIT, the operator’s first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. The only other coin on mainnet is $REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. Public creator launches are still closed."
+    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night. $REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it."
   },
   "networks": {
     "devnet": {

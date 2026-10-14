@@ -306,7 +306,7 @@ export function whichCoinLine(a: string, b: string | null, linked = false): stri
 /** "What costs SOL": the creator pays to create; burns are paid from the coin's own fees. */
 export function costLine(totalSol: string | null, coins: 1 | 2): string {
   const make = totalSol ? `About ${totalSol} SOL from your wallet to create ${coins === 2 ? "both coins" : "the coin"}.` : `Creating ${coins === 2 ? "the two coins" : "the coin"} costs a small amount of SOL from your wallet, shown once the estimate is read.`;
-  return `${make} Burns are paid from the coin's own trading fees, never from you.`;
+  return `${make} Burns are paid from ${coins === 2 ? "each coin's" : "the coin's"} own trading fees, never from you.`;
 }
 /** "Creates 1 coin" / "Creates 2 coins" (pass A item 3). */
 export const createsLine = (n: 1 | 2): string => (n === 2 ? "Creates 2 coins" : "Creates 1 coin");
@@ -410,6 +410,12 @@ export type EndChoiceKind = "deficit" | "coin" | "burn-sol";
 export interface EndChoice { kind: EndChoiceKind; mint?: string; ticker?: string }
 export const END_CHOICE_DEFAULT: EndChoice = { kind: "deficit" };
 export const END_CHOICE_LABEL = "Where the rest goes if this coin does not win";
+/**
+ * launch night 2026-10-13 (hunt): a coin with no winning path (a losses coin, a coin on a number, one outcome) has nothing to "win", so its
+ * choice is headed by when it applies: the rule's end. The champion path keeps END_CHOICE_LABEL.
+ */
+export const END_CHOICE_LABEL_ENDS = "Where the rest goes when the rule ends";
+export const endChoiceLabel = (model: Pick<EndChoiceModel, "winning">): string => (model.winning ? END_CHOICE_LABEL : END_CHOICE_LABEL_ENDS);
 export const END_CHOICE_LINES = {
   self: "The rest burns this coin.",
   coin: "The rest goes to another coin's burn.",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { checklistNextLine } from "@/lib/burnticker/checklist";
 
 /** The checklist's heading and the words for a step this site could not read (never ticked). */
 export const CHECKLIST_HEADING = "After launch";
@@ -9,8 +10,8 @@ export const CHECKLIST_NOT_READ = "not read";
 interface Step { id: string; label: string; done: boolean | null; detail: string }
 interface Answer { steps: Step[]; next: { action: string; who: string } | null; line: string }
 
-/** "Next: <action> (<who>)", or the checklist's own line when nothing is next. */
-export const checklistNextLine = (a: Pick<Answer, "next" | "line">): string => (a.next ? `Next: ${a.next.action.replace(/\.$/, "")} (${a.next.who}).` : a.line);
+/** "Next: <action> This step is up to <who>." (checklist.ts checklistNextLine; the who is never glued onto the action's last sentence). */
+export { checklistNextLine };
 
 /**
  * WEBSITE-26 (WIRING-FEATURES item 10): a coin's post-launch checklist, from GET /api/burnticker/v1/coins/<MINT>/checklist. Six ticks in

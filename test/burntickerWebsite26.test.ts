@@ -154,9 +154,11 @@ describe("WIRING-FEATURES: the new pages, never on the home page", () => {
     const { checklistOf } = await import("@/lib/burnticker/checklist");
     const a = checklistOf({ ticker: "X", mint: "M", status: "live", launched: true, phase: null, poolRegistered: null, readings: 0, burns: 0 });
     assert.equal(a.steps.length, 6);
-    // the same helper as the component (kept in sync by hand: the component file holds JSX the test runner does not load)
-    const next = a.next ? `Next: ${a.next.action.replace(/\.$/, "")} (${a.next.who}).` : a.line;
-    assert.match(cl, /a\.next \? `Next: \$\{a\.next\.action\.replace\(\/\\\.\$\/, ""\)\} \(\$\{a\.next\.who\}\)\.` : a\.line/);
+    // launch night 2026-10-13: the helper lives in checklist.ts (the who is its own sentence, never "(the creator)" glued to the action)
+    const { checklistNextLine } = await import("@/lib/burnticker/checklist");
+    const next = checklistNextLine(a);
+    assert.match(cl, /import \{ checklistNextLine \}/); assert.match(cl, /lib\/burnticker\/checklist";/);
+    assert.doesNotMatch(next, /\(the creator\)|\(traders|\(the keeper\)/);
     clean(next);
   });
 });

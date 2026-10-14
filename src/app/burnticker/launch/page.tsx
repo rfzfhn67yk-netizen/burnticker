@@ -39,10 +39,12 @@ import { SINGLE_REAL_PICKS, SIDE_REAL_OFF, realBlockers, realField, realReviewNo
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileFieldId, type ProfileUpdate, type ProfileValue } from "./ProfileFields";
 import { NAME_STEP_BLOCKED, fieldRuleSentence, isLintLine, noteIssue, profileIssues, serverFieldProblems } from "./fieldChecks";
-import { JUMP_CONFIRM_LINE, JUMP_CONFIRM_NO, JUMP_CONFIRM_YES, NAMES_REMADE_LINE, humanDay, winPairNames } from "./pageCopy";
+import { JUMP_CONFIRM_LINE, JUMP_CONFIRM_NO, JUMP_CONFIRM_YES, NAMES_REMADE_LINE, NO_SECOND_CHECK, pairBudgetLine, TEAMS_NONE_LINE, TEAMS_UNREAD_LINE, humanDay, leagueButtonName, leagueButtonTitle, winPairNames } from "./pageCopy";
 import { teamAdvancedDefaults } from "@/lib/burnticker/creatorCopy";
 import { nameProblem, tickerProblem, wxThresholdProblem } from "@/lib/burnticker/launchFields";
 import { composeRule, fieldsFromRule, launchBody } from "@/lib/burnticker/launchDraft";
+import { VERSION_CHECK_EVENT } from "@/lib/burnticker/buildVersion";
+import { DRAFT_STORE, KEPT_STORE, RESUME_PARAM, RESUME_REVIEW, isReviewedDraft, pickOffer, savedDraftLine } from "@/lib/burnticker/launchDraftStore";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { LaunchGate } from "./LaunchGate";
 import { CreatorOnboarding } from "../_components/CreatorOnboarding";
@@ -137,7 +139,12 @@ interface EventHit { eventTicker: string; seriesTicker: string; title: string; s
 
 /** The web UI's shares come from launchPresets.ts (docs/burnticker/ui-conventions.md § Presets, not dials); the API takes any share. */
 const PUB = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-const STORE = "burnticker.launch.v2";
+const STORE = DRAFT_STORE;
+/** The draft to offer (launchDraftStore.ts pickOffer): the named one in progress, else the kept one that reached the review. */
+const readOffer = (): Record<string, unknown> | null => {
+  const read = (k: string): Record<string, unknown> | null => { try { const v = JSON.parse(sessionStorage.getItem(k) ?? "null") as unknown; return v && typeof v === "object" ? v as Record<string, unknown> : null; } catch { return null; } };
+  return pickOffer(read(STORE), read(KEPT_STORE));
+};
 const V1 = "/api/burnticker/v1";
 // snag 19: the year whenever it is not this year, and the zone named ("MDT"), so a date can never be read as the wrong one
 const denver = (iso: string | null) => { if (!iso) return "—"; const d = new Date(iso); if (Number.isNaN(d.getTime())) return "—"; const other = d.getUTCFullYear() !== new Date().getUTCFullYear(); return new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", weekday: "short", month: "short", day: "numeric", ...(other ? { year: "numeric" as const } : {}), hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(d); };
@@ -235,6 +242,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // team / pair pickers
   const [leagues, setLeagues] = useState<League[]>([]), [leagueErr, setLeagueErr] = useState<string | null>(null);
   const [leagueSeries, setLeagueSeries] = useState<string | null>(null), [leagueQ, setLeagueQ] = useState(""), [scheduleNote, setScheduleNote] = useState<string | null>(null);
+  // launch night 2026-10-13: which league's list the last answer was for, and whether the read failed ("No teams found" showed while the
+  // list was still being read, and for a read that failed)
+  const [teamsFor, setTeamsFor] = useState<{ key: string; failed: boolean } | null>(null);
   const [teams, setTeams] = useState<Team[]>([]), [teamsBusy, setTeamsBusy] = useState(false), [teamQ, setTeamQ] = useState("");
   const [team, setTeam] = useState<Team | null>(null), [winLose, setWinLose] = useState<"win" | "lose">("win");
   const [games, setGames] = useState<EventHit[]>([]), [gamesBusy, setGamesBusy] = useState(false), [gameQ, setGameQ] = useState("");
@@ -415,14 +425,18 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       set("uq", setUq); set("origin", setOrigin); set("editedFor", setEditedFor); set("eventInfo", setEventInfo); set("srcWarnings", setSrcWarnings); set("bq", setBq); set("wx", setWx); set("draft", setDraft); set("flavour", setFlavour); set("flavourB", setFlavourB); set("cardCtx", setCardCtx); set("cardYear", setCardYear); set("cardSet", setCardSet); set("nameAuto", setNameAuto); set("tickerAuto", setTickerAuto); set("ownImage", setOwnImage); set("note", setNote);
   };
   useEffect(() => {
-    let s: Record<string, unknown> | null = null;
-    try { s = JSON.parse(sessionStorage.getItem(STORE) ?? "null"); } catch { s = null; }
+    // launch night 2026-10-13 (launchDraftStore.ts): the draft offered is the named one in progress, else the kept one that reached the review
+    const offer = readOffer();
     const q0 = new URLSearchParams(window.location.search);
     const wantPair = q0.get("pair") === "1";
     // snag 6: a link that names what to open (a derby pair, a template, a Matchup, "launch one like this") never reopens a saved draft
     const linked = wantPair || q0.get("derby") === "1" || !!q0.get("template") || !!q0.get("like") || !!q0.get("league");
+    // "Start a new launch from the review" (the recovery notice, the signing card): the kept draft opens on its review, rule, name and ticker intact
+    const resumeReview = !linked && q0.get(RESUME_PARAM) === RESUME_REVIEW;
     if (linked) { try { sessionStorage.removeItem(STORE); } catch { /* ignore */ } }
-    else if (s && (s.step !== "choose" || (s.guide as { phase?: string } | undefined)?.phase !== "follow")) setSavedDraft(s);
+    else if (resumeReview && offer) restoreFrom(offer);
+    else if (offer) setSavedDraft(offer);
+    if (resumeReview) { try { window.history.replaceState(window.history.state, "", window.location.pathname); } catch { /* ignore */ } }
     if (wantPair) { setFlow("pair"); setStep("pick"); setGuide({ follow: "rivalry", phase: "which", pairKind: "teams" }); }
     // website-20 item 119: a league page's team link opens step 2 of the team path on that league, with that team picked once its list loads
     if (q0.get("league")) { setGuide({ follow: "team", phase: "which", pairKind: null }); setFlow("team"); setStep("team"); setLeagueSeries(q0.get("league")); setPendingTeam(q0.get("team")); setDeepSeasonOver(q0.get("season") === "over" ? q0.get("team") : null); }
@@ -474,7 +488,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   }, []);
   const snapshot = JSON.stringify({ guide, raiseSol, elPick, rivalA, rivalB, rivalGame, rivalSeason, profileText: { description: profile.description, x: profile.x, telegram: profile.telegram, website: profile.website, hadImage: !!profile.image }, profileBText: { description: profileB.description, x: profileB.x, telegram: profileB.telegram, website: profileB.website, hadImage: !!profileB.image }, profileBadge: profile.badge, eventInfo, uq, origin, srcWarnings, bq, wx, flow, step, leagueSeries, team, winLose, game, swap, pairMode, meetingsYear, pick, filter, kind, mode, onYes, onNoEnabled, onNo, unit, perUnit, baseline, direction, tokensYes, vaultShare, burnOn, fraction, name, ticker, description, imageUrl, link, xUrl, tg, cat, nameB, tickerB, descB, imageB, firstBuy, pasted, q2, draft, flavour, flavourB, cardCtx, cardYear, cardSet, endA, endB, nameAuto, tickerAuto, editedFor, ownImage, note });
   // nothing is stored until something is chosen, so an untouched first screen never replaces a saved draft
-  useEffect(() => { if (ready && (step !== "choose" || guide.phase !== "follow")) { try { sessionStorage.setItem(STORE, snapshot); } catch { /* private mode: no memory, no harm */ } } }, [ready, snapshot]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // launch night 2026-10-13: a draft that reached the review is also kept in its own slot, which only another reviewed draft replaces
+  const launched = useRef(false);
+  useEffect(() => { if (ready && !launched.current && (step !== "choose" || guide.phase !== "follow")) { try { sessionStorage.setItem(STORE, snapshot); if (isReviewedDraft(JSON.parse(snapshot))) sessionStorage.setItem(KEPT_STORE, snapshot); } catch { /* private mode: no memory, no harm */ } } }, [ready, snapshot]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const y = restoreScroll.current; restoreScroll.current = null; window.scrollTo({ top: y ?? 0 });
     // audit 6 item 4 (pass D item 40): the new step's heading takes focus, without scrolling past the top
@@ -494,19 +510,20 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // name, a ticker or an image of the creator's own would be lost
   // website-20 pass A item 10: once anything is chosen, Start over asks first (it is the secondary action beside Back)
   const needsConfirm = !!guide.follow || step !== "choose" || (!nameAuto && !!name.trim()) || (!tickerAuto && !!ticker.trim()) || !!profile.image || !!profileB.image;
-  const startOver = (force = false) => { if (!force && needsConfirm) { setConfirmOver(true); return; } setPrevFollow(null); setConfirmOver(false); try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(CVC_STORE); } catch { /* ignore */ } try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ } window.scrollTo({ top: 0 }); onReset(); };
+  const startOver = (force = false) => { if (!force && needsConfirm) { setConfirmOver(true); return; } setPrevFollow(null); setConfirmOver(false); try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); sessionStorage.removeItem(CVC_STORE); } catch { /* ignore */ } try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ } window.scrollTo({ top: 0 }); onReset(); };
   // owner, 2026-10-12: "Launch a coin" again while on this page shows step 1, with the draft kept and offered (launchStart.ts)
   useEffect(() => {
     const h = () => {
-      let s: Record<string, unknown> | null = null;
-      try { s = JSON.parse(sessionStorage.getItem(STORE) ?? "null"); } catch { s = null; }
-      if (s && (s.step !== "choose" || (s.guide as { phase?: string } | undefined)?.phase !== "follow")) setSavedDraft(s);
+      const s = readOffer();
+      if (s) setSavedDraft(s);
       setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); setConfirmOver(false); setOrigin(null);
       window.scrollTo({ top: 0 });
     };
     window.addEventListener(LAUNCH_START_EVENT, h);
     return () => window.removeEventListener(LAUNCH_START_EVENT, h);
   }, []);
+  /** launch night 2026-10-13: once every coin is live and recorded, the draft that made them is no longer offered */
+  const dropDraft = () => { launched.current = true; try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); } catch { /* ignore */ } setSavedDraft(null); };
   const resumeDraft = () => { if (savedDraft) restoreFrom(savedDraft); setSavedDraft(null); window.scrollTo({ top: 0 }); };
 
   // site audit #18: the one shared catalogue read (catalogueClient.ts) — the header's availability uses the same promise
@@ -533,6 +550,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const mark = (k: "search" | "card" | "create" | "review" | "launch") => { if (!stepTimes.current[k] || k === "launch" || k === "review") stepTimes.current[k] = Date.now(); };
   useEffect(() => { if (uq.trim()) mark("search"); }, [uq]);
   useEffect(() => { if (step === "review") { mark("create"); mark("review"); } }, [step]);
+  // launch night 2026-10-13: the review asks whether this page is still the site's current version (VersionCheck.tsx)
+  useEffect(() => { if (step === "review" && guide.phase === "review") window.dispatchEvent(new Event(VERSION_CHECK_EVENT)); }, [step, guide.phase]);
   // launch telemetry for the owner's before/after (productStore.ts): screens shown and decisions made from landing to Launch
   const flowStats = useRef({ screens: 1, decisions: 0, what: false, edited: false });
   const firstStep = useRef(true);
@@ -586,9 +605,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   useEffect(() => {
     if ((flow !== "team" && !(flow === "pair" && guide.follow === "rivalry")) || !leagueSeries) return; setTeamsBusy(true); setTeams([]);
     let live = true;
+    const teamsKey = `${leagueSeries}|${teamsDivision}`;
     // sources-6 (QA 9 #28, #29): the list is alphabetical as served; college football lists the FBS unless "Show all divisions" asks for all
     getJson<{ teams: SportsTeam[]; scheduleNote?: string | null; scheduleDetail?: string | null; division?: { shown: string; line: string | null } }>(`${V1}/sports/teams?league=${leagueSeries}${teamsDivision === "all" ? "&division=all" : ""}`).then((j) => { if (!live) throw new Error("stale"); return j; }).then((j) => (setScheduleNote(j.scheduleNote ?? null), setScheduleDetail(j.scheduleDetail ?? null), setDivisionLine(j.division?.line ?? null), j)).then((j) => setTeams(j.teams.map((t) => ({ abbr: t.abbr, code: t.code ?? t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league: t.league, filter: t.series.win, collisions: [], series: t.series, recordText: t.record ?? null, record: recordOf(t.record), seasonWarning: t.season?.status === "over" || t.season?.status === "none-listed" ? t.season.warning : null, seasonOver: t.season?.status === "over",
-      next: t.next ? { eventTicker: t.next.eventId, marketTicker: t.next.eventId, title: t.next.title, expectedAt: t.next.startsAt, opponent: t.next.opponent, when: t.next.when ?? null } : null })))).catch(() => { if (live) setTeams([]); }).finally(() => { if (live) setTeamsBusy(false); });
+      next: t.next ? { eventTicker: t.next.eventId, marketTicker: t.next.eventId, title: t.next.title, expectedAt: t.next.startsAt, opponent: t.next.opponent, when: t.next.when ?? null } : null })))).then(() => { if (live) setTeamsFor({ key: teamsKey, failed: false }); }).catch(() => { if (live) { setTeams([]); setTeamsFor({ key: teamsKey, failed: true }); } }).finally(() => { if (live) setTeamsBusy(false); });
     return () => { live = false; };
   }, [flow, leagueSeries, guide.follow, teamsDivision]);
   useEffect(() => {
@@ -1227,7 +1247,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           <div key={sp} className="space-y-1">
             <div className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">{sp}{sp === "baseball" && <FieldHelp id="league-pick" />}</div>
             <div className="flex flex-wrap gap-2">{ls.map((l) => (
-              <button data-decision="what" key={l.id} aria-pressed={leagueSeries === l.id} onClick={() => { setLeagueSeries(l.id); setTeamQ(""); setGameQ(""); }} title={l.crossRead ? `Checked against ${l.crossRead}.` : "This league has no second source to check results, so a coin on it is refused."} className={`rounded-full border px-3 py-1.5 text-sm ${leagueSeries === l.id ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{l.label}{!l.crossRead && <span className="ml-1 text-[10px] text-red-400">no second check</span>}</button>
+              <button data-decision="what" key={l.id} aria-pressed={leagueSeries === l.id} onClick={() => { setLeagueSeries(l.id); setTeamQ(""); setGameQ(""); }} aria-label={leagueButtonName(l.label, l.crossRead)} title={leagueButtonTitle(l.crossRead)} className={`rounded-full border px-3 py-1.5 text-sm ${leagueSeries === l.id ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{l.label}{!l.crossRead && <span className="ml-1 text-[10px] text-red-400" aria-hidden="true">{NO_SECOND_CHECK}</span>}</button>
             ))}</div>
           </div>
         );
@@ -1350,7 +1370,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       {confirmJump && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-300" role="alert" data-jump-confirm>{JUMP_CONFIRM_LINE} <button type="button" data-nav className="underline" onClick={() => { const was = guide.follow; setConfirmJump(false); startOver(true); setPrevFollow(was); }}>{JUMP_CONFIRM_YES}</button> <button type="button" data-nav className="ml-2 underline" onClick={() => setConfirmJump(false)}>{JUMP_CONFIRM_NO}</button></p>}
       {confirmOver && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-300" role="alert" data-start-over-confirm>Start over clears every choice on this draft. <button type="button" data-nav className="underline" onClick={() => startOver(true)}>Start over</button> <button type="button" data-nav className="ml-2 underline" onClick={() => setConfirmOver(false)}>Keep going</button></p>}
       {savedDraft && step === "choose" && guide.phase === "follow" && (
-        <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="status" data-saved-draft>You have a draft: {String(savedDraft.name || savedDraft.ticker || "unnamed")}. <button type="button" data-nav className="underline" onClick={resumeDraft}>Resume</button> <button type="button" data-nav className="ml-2 underline" onClick={() => startOver(true)}>Discard it</button></p>
+        <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="status" data-saved-draft>{savedDraftLine(savedDraft)} <button type="button" data-nav className="underline" onClick={resumeDraft}>Resume</button> <button type="button" data-nav className="ml-2 underline" onClick={() => startOver(true)}>Discard it</button></p>
       )}
       {(guide.follow || step === "choose") && step !== "launch" ? (
         <GuidedTop phase={guide.follow ? guide.phase : "follow"} answers={guideAnswers} onJump={jumpTo} onBack={guide.follow ? back : null} onStartOver={() => startOver()} confirm={null} />
@@ -1394,7 +1414,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             <div className={card + " space-y-3"}>
               <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium outline-none" tabIndex={-1} data-step-heading>{whichHeading("team")}</h2><FieldHelp id="team-search" /><input data-decision="what" data-help="team-search" aria-label="Search teams in this league" className={input + " w-full sm:w-64"} placeholder={teams.length ? `${teams.slice(0, 3).map((t) => t.nickname ?? t.name).join(", ")}…` : "Type a team name"} value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
               {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}{leagueSeries === "cfb" && <p className="text-xs text-neutral-400" data-division>{teamsDivision === "fbs" ? divisionLine : null} <button type="button" data-nav className="underline" onClick={() => setTeamsDivision((d) => (d === "all" ? "fbs" : "all"))}>{teamsDivision === "all" ? "Show the FBS only" : "Show all divisions"}</button></p>}
-              {!teamsBusy && !teams.length && <p className="text-sm text-neutral-500">No teams found for this league right now.</p>}
+              {!teamsBusy && !teams.length && teamsFor?.key === `${leagueSeries}|${teamsDivision}` && <p className="text-sm text-neutral-500" role={teamsFor.failed ? "alert" : undefined}>{teamsFor.failed ? TEAMS_UNREAD_LINE : TEAMS_NONE_LINE}</p>}
               <div className="grid gap-2 sm:grid-cols-2">{teams.filter(teamFilter).map((t) => (
                 <button data-decision="what" key={t.abbr} aria-label={t.name} aria-pressed={team?.abbr === t.abbr} onClick={() => chooseTeam(t)} className={`flex items-center gap-3 rounded-lg border p-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${team?.abbr === t.abbr ? "border-amber-400" : "border-neutral-800"}`}>
                   {badge(t.code ?? t.abbr)}
@@ -1778,7 +1798,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           setDial("inverse", pt === "fade" ? "on" : "off");
         };
         // website-22 (audit 10 item 2): the unit is the active rule's own, never a source picked on another path
-        const budget = budgetCopy(rule, shareValue, unitPhrase(activeUnit(rule, pick)));
+        const budget0 = budgetCopy(rule, shareValue, unitPhrase(activeUnit(rule, pick)));
+        // launch night 2026-10-13 (hunt): two separate coins each spend from their own pool ("this coin" read as one coin for both)
+        const budget = pairOn && ruleB && endPickable ? { ...budget0, line: pairBudgetLine(budget0.line) } : budget0;
         const preview = <><p>{sentence}</p>{!sentence.includes(" once, when ") && <p className="mt-1 text-xs text-neutral-300">{budget.line}</p>}{renderWarnings(srcWarnings, ticker, tickerB).map((w) => <p key={w} className="mt-1 text-xs text-amber-200" data-preview-warning>{w}</p>)}</>;
         const nextBtn = (label: string, to: GuidedPhase) => <StickyAction><button type="button" data-nav className={primary + " w-full sm:w-auto"} onClick={() => setGuide((g) => ({ ...g, phase: to }))}>{label}</button></StickyAction>;
         const pairKindNow = guide.follow === "rivalry" ? (elPick ? "candidates" as const : "teams" as const) : null;
@@ -2027,7 +2049,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const two = !!(pcOut || pairOut);
         return (
           <section className="space-y-3 text-sm">
-            <SignCard plan={plan} creator={creator || null} title={two ? `Launch $${st.a} and $${st.b}` : `Launch $${st.a}`} coinHref={(t) => `/burnticker/t/${t}`} />
+            <SignCard plan={plan} creator={creator || null} title={two ? `Launch $${st.a} and $${st.b}` : `Launch $${st.a}`} coinHref={(t) => `/burnticker/t/${t}`} onLive={dropDraft} />
             <p className="text-xs text-neutral-500">The drafts are registered; they go live once the launch transaction{two ? "s are" : " is"} confirmed and read back from the chain.</p>
           </section>
         );

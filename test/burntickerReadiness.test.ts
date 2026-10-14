@@ -22,7 +22,7 @@ describe("readinessOf: one state per situation", () => {
   });
   test("each of the seven states, in order", () => {
     const cases: [ReadinessInput, string, RegExp][] = [
-      [{ ...base, launched: false }, "not-launched", /No coin is registered/],
+      [{ ...base, launched: false }, "not-launched", /prepared but never signed, so nothing is on chain/],
       [base, "on-curve", /12\.35 of 85 SOL raised.*nothing can burn before the curve graduates.*seed gift/],
       [{ ...base, raisedSol: null, phase: null }, "on-curve", /could not read the curve, so the SOL raised is not shown/],
       // website-14 (§75): a raise this site did not read is never printed as a typed 85

@@ -75,7 +75,7 @@ describe("audit 10 items 1 and 2: the source's words follow the active rule", ()
     // the budget row: the stale unit never reaches a team coin's label
     assert.equal(budgetCopy(team, 0.02, unitPhrase(activeUnit(team, debtPick))).label, "Share of the burn pool per result");
     assert.match(budgetCopy(debt, 0.02, unitPhrase(activeUnit(debt, debtPick))).label, /per \$1B change/);
-    assert.match(page, /const budget = budgetCopy\(rule, shareValue, unitPhrase\(activeUnit\(rule, pick\)\)\);/);
+    assert.match(page, /const budget0 = budgetCopy\(rule, shareValue, unitPhrase\(activeUnit\(rule, pick\)\)\);/);
     assert.match(page, /const own = pickDescribesRule\(rule, pick\);\n    if \(own && pick\?\.oracle === "polymarket"\)/);
     assert.doesNotMatch(page, /unitPhrase\(pick\?\.source\?\.unit/);
   });
@@ -293,7 +293,7 @@ describe("QA 9 items 24, 36, 37, 41 and 43, audit 10 items 16, 20, 22 and 24", (
     assert.equal(whichAnswer("Detroit daily high ≥ 90 °F (NWS)"), "Detroit daily high ≥ 90 °F");
     assert.equal(whichAnswer("Will X win? (resolves once)"), "Will X win?");
     assert.doesNotMatch(page, /\.slice\(0, 28\)/, "never cut mid-word or mid-bracket");
-    assert.match(tile, /\{value\.crossLine \?\? `checked against \$\{crossName\(value\.underlying\?\.cross\)\}`\}/); assert.doesNotMatch(tile, /cross-read \{value\.underlying/);
+    assert.match(tile, /\{refSourceLine\(value\.source === "pyth", value\.crossLine \?\? null, crossName\(value\.underlying\?\.cross\)\)\}/); assert.doesNotMatch(tile, /cross-read \{value\.underlying/);
     assert.match(read("src/lib/burnticker/search.ts"), /replace\(\/, then the rest\/, "\. Then the rest"\)/, "sources-6 fixed it in search.ts");
     assert.equal(teamLine([null, "Next game: not available."]), "Next game: not available.", "QA 9 item 6: no dangling dot");
     assert.equal(teamLine(["40–42 this season", "next: vs BOS"]), "40–42 this season · next: vs BOS");

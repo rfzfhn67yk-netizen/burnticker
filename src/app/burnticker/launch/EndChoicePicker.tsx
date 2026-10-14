@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { END_CHOICE_LABEL, SELF_ON_LOSS_LINE, SINK_NONE_LINE, SINK_NO_MATCH_LINE, SINK_PICKER_LABEL, SINK_SEARCH_PLACEHOLDER, pickedSinkLine, type EndChoice, type EndChoiceModel } from "@/lib/burnticker/guidedLaunch";
+import { endChoiceLabel, SELF_ON_LOSS_LINE, SINK_NONE_LINE, SINK_NO_MATCH_LINE, SINK_PICKER_LABEL, SINK_SEARCH_PLACEHOLDER, pickedSinkLine, type EndChoice, type EndChoiceModel } from "@/lib/burnticker/guidedLaunch";
 import { searchSinks, type SinkCoin } from "@/lib/burnticker/endSinks";
 
 /** Until a coin is picked, the rule keeps $DEFICIT's burn (guidedLaunch.ts withEndChoice). */
@@ -21,9 +21,9 @@ export function EndChoicePicker({ model, value, onChange, sinks, who = null, loc
   const gone = picked && sinks && !sinks.some((s) => s.mint === picked.mint);
   return (
     <fieldset disabled={locked} className="m-0 min-w-0 space-y-2 border-0 p-0" data-end-choice={side}>
-      <legend className="text-xs font-medium text-neutral-400">{who ? `${who}: ${END_CHOICE_LABEL.toLowerCase()}` : END_CHOICE_LABEL}</legend>
+      <legend className="text-xs font-medium text-neutral-400">{who ? `${who}: ${endChoiceLabel(model).toLowerCase()}` : endChoiceLabel(model)}</legend>
       {model.winning && <p className="text-xs text-neutral-200" data-end-winning>{model.winning}</p>}
-      <div className="min-w-0 space-y-1" role="radiogroup" aria-label={END_CHOICE_LABEL}>
+      <div className="min-w-0 space-y-1" role="radiogroup" aria-label={endChoiceLabel(model)}>
         {model.options.map((o) => (
           <label key={o.kind} className="flex min-w-0 cursor-pointer items-start gap-2 rounded border border-neutral-800 px-2 py-1.5 text-sm" data-end-option={o.kind}>
             <input type="radio" name={name} className="mt-1" checked={value.kind === o.kind} onChange={() => onChange(o.kind === "coin" && picked ? picked : { kind: o.kind })} />

@@ -139,8 +139,16 @@ function liquidityRow(i: FactInput, live: boolean): { value: string; note: strin
 }
 const pctOf = (bps: number) => `${Math.round(bps) / 100}%`;
 /** A lifecycle date row: the day with a link to its transaction when read, else the read's own reason. */
+/**
+ * launch night 2026-10-13: a fact row's day in Denver time ("Oct 13, 2026"), the operator's and the site's clock. The UTC date slice
+ * showed an evening launch in Denver as the next day. An unreadable time stays as given.
+ */
+export function denverDay(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", year: "numeric", month: "short", day: "numeric" }).format(d);
+}
 function dateRow(key: string, label: string, d: DateReadJson, cluster: string): FactRow {
-  if (d.state === "read") return { key, label, value: d.at.slice(0, 10), note: null, href: `https://explorer.solana.com/tx/${d.signature}${cluster === "mainnet" ? "" : `?cluster=${cluster}`}` };
+  if (d.state === "read") return { key, label, value: denverDay(d.at), note: null, href: `https://explorer.solana.com/tx/${d.signature}${cluster === "mainnet" ? "" : `?cluster=${cluster}`}` };
   return { key, label, value: d.state === "none" ? NOT_LAUNCHED : NOT_READ_HERE, note: d.reason };
 }
 export function marketFacts(i: FactInput): FactRow[] {
@@ -158,7 +166,7 @@ export function marketFacts(i: FactInput): FactRow[] {
     { key: "liquidity", label: "Liquidity", ...liquidityRow(i, live) },
     { key: "holders", label: "Holders", value: typeof i.holdersCount === "number" ? i.holdersCount.toLocaleString("en-US") : NOT_READ_HERE, note: typeof i.holdersCount === "number" ? null : i.holdersNote },
     { key: "creator", label: "Creator", value: i.creator, note: "The wallet that launched the coin.", href: i.creatorUrl },
-    { key: "launched", label: "Launched", value: i.launchedAt ? `${i.launchedAt.slice(0, 10)}` : NOT_LAUNCHED, note: i.launchedAt ? null : notLaunched },
+    { key: "launched", label: "Launched", value: i.launchedAt ? denverDay(i.launchedAt) : NOT_LAUNCHED, note: i.launchedAt ? null : notLaunched },
     ...(i.dates ? [dateRow("graduated", "Graduated", i.dates.graduated, i.cluster), dateRow("registered", "Pool registered", i.dates.registered, i.cluster)] : []),
     { key: "fees", label: "Fees per trade", value: `${pctOf(i.feesCurveBps)} on the curve, ${pctOf(i.feesPoolBps)} in the pool`, note: "Raydium shows how far your trade moves the pool, and your slippage setting, before you sign. Burnticker takes no order." },
     { key: "freshness", label: "Read at", value: i.readAt ? `${i.readAt.slice(0, 16).replace("T", " ")} UTC` : NOT_READ_HERE, note: i.readAt ? null : "This site has not read the pool." },

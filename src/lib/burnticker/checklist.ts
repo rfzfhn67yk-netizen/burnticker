@@ -38,6 +38,16 @@ const NEXT: Record<ChecklistStepId, { action: string; who: string }> = {
   "first-burn": { action: "The keeper runs the burn after a result the rule burns on is signed.", who: "the keeper" },
 };
 
+/** A later step of a coin that was never created. */
+export const AFTER_CREATE = "This comes after the coin is created.";
+
+/**
+ * "Next: <action> This step is up to <who>." The who is its own sentence (launch night 2026-10-13: "(the creator)" was appended after the
+ * action's last sentence, "The draft is kept for 24 hours (the creator).", so it read as part of that sentence). The checklist's own line
+ * when nothing is next. Shared by the "Your coins" card and the coin page (LaunchChecklist.tsx).
+ */
+export const checklistNextLine = (a: { next: { action: string; who: string } | null; line: string }): string => (a.next ? `Next: ${a.next.action} This step is up to ${a.next.who}.` : a.line);
+
 export function checklistOf(i: ChecklistInput): Checklist {
   const burned = i.burns > 0;
   const created = i.launched;
@@ -45,7 +55,9 @@ export function checklistOf(i: ChecklistInput): Checklist {
   const pool: boolean | null = burned ? true : i.poolRegistered;
   const graduated: boolean | null = pool === true ? true : i.phase === "graduated" || i.phase === "migrating" ? true : i.phase === "curve" ? false : created ? null : false;
   const reading = i.readings > 0 || burned;
-  const step = (id: ChecklistStepId, done: boolean | null, detail: string): ChecklistStep => ({ id, label: CHECKLIST_LABELS[id], done, detail });
+  // launch night 2026-10-13: a coin that was never created has no curve, pool or reading to describe; every later step waits for the
+  // launch (a draft said "The curve has not reached its raise yet" and "could not read the burn program")
+  const step = (id: ChecklistStepId, done: boolean | null, detail: string): ChecklistStep => (!created && id !== "created" && id !== "trading" ? { id, label: CHECKLIST_LABELS[id], done: false, detail: AFTER_CREATE } : { id, label: CHECKLIST_LABELS[id], done, detail });
   const steps: ChecklistStep[] = [
     step("created", created, created ? "The launch transaction landed and the coin is registered on this site." : i.status === "expired" ? "The draft expired before a launch transaction landed." : "The coin is a draft. Nothing is on chain yet."),
     step("trading", trading, trading ? "The coin trades on its LaunchLab curve, or on its pool after graduation." : "The coin trades once the launch lands."),

@@ -166,7 +166,7 @@ describe("launch-intent audit 5", () => {
     assert.match(tile, /export const CVC_STORE = "burnticker\.launch\.cvc\.v1";/);
     assert.match(tile, /const d: CvcDraft = \{ v: 1, a, b, names, fraction, shares, flip, raiseSol, edited, profA: words\(profA\), profB: words\(profB\), images: \{ a: !!profA\.image, b: !!profB\.image \} \};/);
     assert.match(tile, /if \(!d \|\| d\.v !== 1\) return;/);
-    assert.match(page, /sessionStorage\.removeItem\(STORE\); sessionStorage\.removeItem\(CVC_STORE\);/);
+    assert.match(page, /sessionStorage\.removeItem\(STORE\); sessionStorage\.removeItem\(KEPT_STORE\); sessionStorage\.removeItem\(CVC_STORE\);/);
   });
   test("20: one Start over confirmation for every path", () => {
     assert.match(page, /\{confirmOver && <p className="[^"]*" role="alert" data-start-over-confirm>/);

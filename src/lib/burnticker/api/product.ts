@@ -89,7 +89,8 @@ export async function v1Creator(p: Platform, wallet: string, now = Date.now()): 
       ticker: s.ticker, name: s.name, mint: s.mint, page: `/burnticker/t/${encodeURIComponent(registryCoinKey(p.registry, t))}`, state: stateOf(s), badge: s.profile?.badge ?? null,
       queuedUnits: queued, nextSettlementAt: s.next.nextCheckAt, lastReading: last ? { id: last.id, value: last.value, at: last.at } : null,
       agreement: { reads, methods: last?.method ?? null, held: s.feed.lastError }, receipts: rs.filter((r) => r.status === "confirmed").length,
-      windDown: s.lifecycle?.line ?? null, pairId: s.pair?.pairId ?? null, todayPost: { text: post, lintOk: lint.ok, hits: lint.hits.map((h) => h.phrase) },
+      // launch night 2026-10-13: a draft was never created, so it has no wind-down (the line said "This coin is live." on a draft card)
+      windDown: t.status === "draft" || t.status === "expired" ? null : s.lifecycle?.line ?? null, pairId: s.pair?.pairId ?? null, todayPost: { text: post, lintOk: lint.ok, hits: lint.hits.map((h) => h.phrase) },
     });
   }
   const pairs = [...new Set(coins.map((c) => c.pairId).filter((x): x is string => !!x))].map((id) => { const pr = p.registry.pair(id); return pr ? { pairId: id, page: `/burnticker/p/${id}`, sides: coins.filter((c) => c.pairId === id).map((c) => c.ticker), voided: coins.some((c) => c.pairId === id && c.state === "voided") } : null; }).filter((x): x is NonNullable<typeof x> => !!x);
