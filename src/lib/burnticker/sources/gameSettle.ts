@@ -1,6 +1,6 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { LEAGUES, NBA_OFFICIAL_ANSWERS, outcomeHits, SETTLE_AFTER_START_MS, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHits, SETTLE_AFTER_START_MS, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome } from "@/lib/burnticker/sources/espn";
 
 /**
  * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10). NO ESPN READS: the game list comes from the league's free official schedule (MLB
@@ -24,7 +24,7 @@ import { LEAGUES, NBA_OFFICIAL_ANSWERS, outcomeHits, SETTLE_AFTER_START_MS, asMe
  * winner (API-Sports' teams.home.winner / teams.away.winner). Owner decision 2026-10-12 (website-20 item 78): a level game decided on
  * penalties counts as a WIN for the declared winner and a LOSS for the other side, never a draw; espn.ts outcomeOf reads it the same way.
  */
-export interface Final { home: number; away: number; done: boolean; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null; /** the feed marks the game decided in extra time (AET) */ aet?: boolean }
+export interface Final { home: number; away: number; done: boolean; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null; /** the feed marks the game decided in extra time (AET) */ aet?: boolean; /** the row cannot be read the right way round (which score is whose): settleGame holds the game */ unresolved?: string }
 /**
  * A game's Polymarket market. A two-sided moneyline (every sport but soccer) is one condition whose two outcomes name the two teams.
  * A SOCCER game is THREE yes/no markets inside one event ("Will Arsenal FC win on 2026-10-10?", "Will Arsenal FC vs. Leeds United FC
@@ -60,8 +60,12 @@ export const crossAvailable = (league: LeagueId, d: Pick<GameDeps, "apiSportsKey
 const n = (v: unknown): number | null => { const x = Number(v); return v === null || v === undefined || v === "" || !Number.isFinite(x) ? null : x; };
 // QA pass 9 #5: the same normal form as the schedule's team match ("&" read as "and", periods and accents ignored)
 const norm = teamNameKey;
-/** A provider's team name matches a side when it contains the side's nickname, short name, location or full name (or the reverse). */
-export const sideMatches = (name: string, s: GameSide): boolean => { const a = norm(name); return [s.name, s.nickname, s.short ?? "", s.location ?? "", s.abbr].filter((k) => k && k.length >= 3).some((k) => { const b = norm(k); return a === b || a.includes(b) || b.includes(a); }); };
+/**
+ * A provider's team name matches a side when it contains the side's nickname, short name, location or full name (or the reverse). An
+ * EMPTY name matches nothing (season rehearsal 2026-10-13, bug 1: TheSportsDB's day listing holds every sport, a cycling or darts row has
+ * no teams, and `"".includes` is true for every key, so "Hamburg Cyclassics" matched Arsenal at Manchester United).
+ */
+export const sideMatches = (name: string, s: GameSide): boolean => { const a = norm(name); if (!a) return false; return [s.name, s.nickname, s.short ?? "", s.location ?? "", s.abbr].filter((k) => k && k.length >= 3).some((k) => { const b = norm(k); return a === b || a.includes(b) || b.includes(a); }); };
 
 /**
  * DOUBLEHEADERS (semantics-verify item 80, 2026-10-12): two games between the same teams on one day are two fixtures. Each reader picks
@@ -94,46 +98,107 @@ export const tsdbV1DayUrl = (key: string, date: string): string => `https://www.
 export const tsdbV2EventUrl = (id: string): string => `https://www.thesportsdb.com/api/v2/json/lookup/event/${encodeURIComponent(id)}`;
 export const tsdbV1EventUrl = (key: string, id: string): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/lookupevent.php?id=${encodeURIComponent(id)}`;
 const tsdbRows = (body: unknown): Record<string, unknown>[] => (body && typeof body === "object" ? Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][] : []).flat().filter((e) => typeof e === "object" && !!e && "idEvent" in e);
-/** The day listing's row for this game: both teams match by name and the date is the game's UTC date or the day before. */
+/**
+ * Which of the game's sides a provider's team name is, by OUR TEAM TABLE first (season rehearsal 2026-10-13, bug 1: name containment alone
+ * read "Los Angeles Angels" as the Lakers' "Los Angeles" and "Philadelphia Phillies" as the Union). A side our table knows (abbr not
+ * "TBD") matches only the name our table reads as that same team; a side our table does not know (an FCS opponent, a club outside a
+ * competition's frozen list) matches a non-empty name our table does not know either, by the name match.
+ */
+export function sideIs(league: LeagueId, name: string, s: GameSide): boolean {
+  if (!norm(name)) return false;
+  const t = ourTeam(league, name);
+  if (s.abbr && s.abbr !== "TBD") return !!t && t.abbr === s.abbr;
+  return !t && sideMatches(name, s);
+}
+/** How a provider row's home/away fields sit against the game: the same way, crossed (the row's home team is our away side), or neither. */
+export function rowOrientation(g: Game, homeName: string, awayName: string): "same" | "crossed" | null {
+  const same = sideIs(g.league, homeName, g.home) && sideIs(g.league, awayName, g.away), crossed = sideIs(g.league, homeName, g.away) && sideIs(g.league, awayName, g.home);
+  return same === crossed ? null : same ? "same" : "crossed";
+}
+const dayBefore = (date: string): string => new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+/** A row of the game's own TheSportsDB league, or a row that does not say (a v2 day listing row carries no league; its event lookup does). */
+const leagueOk = (g: Game, e: Record<string, unknown>): boolean => { const want = TSDB_LEAGUE[g.league]; return !want || e.idLeague === undefined || e.idLeague === null || e.idLeague === "" || String(e.idLeague) === want; };
+/**
+ * The day listing's CANDIDATE rows for this game: the game's UTC date or the day before, both team fields non-empty and both teams this
+ * game's by our team table (sideIs), the same way round or crossed. Rows that name a league (v1 rows, lookups) must name the game's.
+ * The game's date first.
+ */
+export function tsdbDayCandidates(g: Game, body: unknown): Record<string, unknown>[] {
+  const prev = dayBefore(g.date);
+  const rows = tsdbRows(body).filter((e) => (e.dateEvent === g.date || e.dateEvent === prev) && leagueOk(g, e) && rowOrientation(g, String(e.strHomeTeam ?? ""), String(e.strAwayTeam ?? "")) !== null);
+  return [...rows.filter((e) => e.dateEvent === g.date), ...rows.filter((e) => e.dateEvent !== g.date)];
+}
+/** The day listing's row for this game without the event lookups (the candidates' nearest start where the rows carry one, else the first). */
 export function tsdbDayMatch(g: Game, body: unknown): Record<string, unknown> | null {
-  const prev = new Date(Date.parse(`${g.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-  const rows = tsdbRows(body).filter((e) => (e.dateEvent === g.date || e.dateEvent === prev) && sideMatches(String(e.strHomeTeam ?? ""), g.home) && sideMatches(String(e.strAwayTeam ?? ""), g.away));
-  const same = rows.filter((e) => e.dateEvent === g.date);
+  const rows = tsdbDayCandidates(g, body), same = rows.filter((e) => e.dateEvent === g.date);
   return nearestStart(same.length ? same : rows, g.startsAt, tsdbStart) ?? null;
 }
-/** The game's TheSportsDB row through the day listing, then the event lookup for its status when the listing has none. Null: not listed. */
+/** A candidate is the game only when its start (from the event lookup) is within this of the schedule's start. */
+export const TSDB_START_WINDOW_MS = 12 * 3_600_000;
+/**
+ * The game's TheSportsDB row through the day listing (season rehearsal 2026-10-13, bugs 1 and 2). The v2 listing carries neither the
+ * league nor a start time, so EVERY candidate (tsdbDayCandidates) is looked up (lookup/event/{id}; the client caches each URL, so an id is
+ * read once per process), and only a looked-up row of the game's own league (idLeague = TSDB_LEAGUE) that started within 12 hours of the
+ * schedule's start can be the game; of those the nearest start wins (an MLB doubleheader, or a West Coast night game and the next
+ * afternoon's game on one UTC date: Rays at Giants 2025-08-17, rows 2176956 at 01:05Z and 2176973 at 20:05Z). Null: not listed.
+ */
 export async function tsdbFinalByDay(client: EspnClient, key: string, g: Game): Promise<Final | null> {
-  for (const date of [g.date, new Date(Date.parse(`${g.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10)]) {
+  const want = TSDB_LEAGUE[g.league] ?? null;
+  for (const date of [g.date, dayBefore(g.date)]) {
     const url = tsdbV2DayUrl(date);
-    const row = tsdbDayMatch(g, await client.tsdbRead(key, url, (k) => [tsdbV1DayUrl(k, date)]));
-    if (!row) continue;
-    let full = row;
-    if (!row.strStatus && row.idEvent) {
-      const lookedUp = tsdbRows(await client.tsdbRead(key, tsdbV2EventUrl(String(row.idEvent)), (k) => [tsdbV1EventUrl(k, String(row.idEvent))]).catch(() => null))[0];
-      if (lookedUp) full = { ...row, ...lookedUp };
+    const cands = tsdbDayCandidates(g, await client.tsdbRead(key, url, (k) => [tsdbV1DayUrl(k, date)]));
+    const full: Record<string, unknown>[] = [];
+    for (const row of cands) {
+      const id = String(row.idEvent ?? "");
+      const complete = !!(row.strStatus && row.strTimestamp && row.idLeague);
+      const lookedUp = complete || !id ? null : tsdbRows(await client.tsdbRead(key, tsdbV2EventUrl(id), (k) => [tsdbV1EventUrl(k, id)]).catch(() => null))[0];
+      const r = lookedUp ? { ...row, ...lookedUp } : row;
+      if (want && String(r.idLeague ?? "") !== want) continue;   // a row whose league is unknown or another league's is never the game
+      if (rowOrientation(g, String(r.strHomeTeam ?? ""), String(r.strAwayTeam ?? "")) === null) continue;
+      const t = Date.parse(tsdbStart(r) ?? "");
+      if (!Number.isFinite(t) || Math.abs(t - Date.parse(g.startsAt)) > TSDB_START_WINDOW_MS) continue;
+      full.push(r);
     }
-    return finalFromTsdb(g, { events: [full] }, url);
+    const best = nearestStart(full, g.startsAt, tsdbStart);
+    if (best) return finalFromTsdb(g, { events: [best] }, url);
   }
   return null;
 }
 export const tsdbV2Url = (names: [string, string]): string => `https://www.thesportsdb.com/api/v2/json/search/event/${encodeURIComponent(`${names[0]} vs ${names[1]}`.replace(/ /g, "_").toLowerCase())}`;
 /** TheSportsDB v2 search/event: the event list under whichever key the API uses; the game's date (or the day before, UTC) and a final status. */
+/**
+ * TheSportsDB's final for the game from a list of rows (the day listing's chosen row, or the v2 name search): the game's date (or the day
+ * before, UTC), both teams the game's by our team table and of the game's league where the row names one. The row's scores are read by
+ * its team fields in its own score order (espn.ts tsdbFieldScores, bug 4: college rows whose scores follow the event's name) and then put
+ * on our sides, crossed when the row's home team is our away side. A college row whose score order cannot be told is `unresolved`.
+ */
 export function finalFromTsdb(g: Game, body: unknown, url: string): Final | null {
   const lists = body && typeof body === "object" ? Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][] : [];
-  const evs = lists.flat().filter((e) => typeof e === "object" && e && "dateEvent" in e);
-  const prev = new Date(Date.parse(`${g.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-  const sameDay = evs.filter((x) => x.dateEvent === g.date), dayBefore = evs.filter((x) => x.dateEvent === prev);
-  const e = nearestStart(sameDay.length ? sameDay : dayBefore, g.startsAt, tsdbStart);
+  const evs = lists.flat().filter((e) => typeof e === "object" && e && "dateEvent" in e && leagueOk(g, e) && rowOrientation(g, String(e.strHomeTeam ?? ""), String(e.strAwayTeam ?? "")) !== null);
+  const prev = dayBefore(g.date);
+  const sameDay = evs.filter((x) => x.dateEvent === g.date), before = evs.filter((x) => x.dateEvent === prev);
+  const e = nearestStart(sameDay.length ? sameDay : before, g.startsAt, tsdbStart);
   if (!e) return null;
   const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? ""));
-  const h = n(e.intHomeScore), a = n(e.intAwayScore);
-  return { home: h ?? 0, away: a ?? 0, done: done && h !== null && a !== null, detail: `TheSportsDB ${e.strEvent ?? ""} ${h ?? "?"}–${a ?? "?"} (${e.strStatus ?? "?"})`, url, pens: /^(AP|PEN)\b/i.test(String(e.strStatus ?? "")), declared: null, aet: /^AET\b/i.test(String(e.strStatus ?? "")) };
+  const sc = tsdbFieldScores(g.league, e), crossed = rowOrientation(g, String(e.strHomeTeam ?? ""), String(e.strAwayTeam ?? "")) === "crossed";
+  const h = crossed ? sc.away : sc.home, a = crossed ? sc.home : sc.away;
+  const how = sc.order === "event" ? ", scores in the event name's order" : "", side = crossed ? ", home and away crossed" : "";
+  const unresolved = sc.order === "unknown" ? `TheSportsDB's row ${e.idEvent ?? ""} (${e.strEvent ?? ""}: ${e.strHomeTeam ?? ""} home, ${e.strAwayTeam ?? ""} away) names its teams in neither order, so which score is whose cannot be told — held` : undefined;
+  return { home: h ?? 0, away: a ?? 0, done: done && h !== null && a !== null, detail: `TheSportsDB ${e.strEvent ?? ""} ${n(e.intHomeScore) ?? "?"}–${n(e.intAwayScore) ?? "?"} (${e.strStatus ?? "?"}${how}${side})`, url, pens: /^(AP|PEN)\b/i.test(String(e.strStatus ?? "")), declared: null, aet: /^AET\b/i.test(String(e.strStatus ?? "")), unresolved };
 }
+/**
+ * MLB StatsAPI's final for the game (season rehearsal 2026-10-13, bug 3). The day page lists games by their LOCAL date, so a night game
+ * whose UTC date is D sits on page D-1 and page D may hold the same teams' NEXT game. Only a listing that is this game counts: the same
+ * gamePk (the schedule's event id when the schedule came from StatsAPI), or both teams by name, and in either case a start within 6 hours
+ * of the schedule's. Nothing within 6 hours: null, so crossFinal reads the next candidate page, never the nearest other game.
+ */
+export const MLB_START_WINDOW_MS = 6 * 3_600_000;
 export function finalFromMlb(g: Game, body: unknown, url: string): Final | null {
-  const games = (((body as { dates?: { games?: unknown[] }[] } | null)?.dates ?? []).flatMap((d) => d.games ?? [])) as { gameDate?: string; status?: { abstractGameState?: string }; teams?: { home?: { team?: { name?: string }; score?: number }; away?: { team?: { name?: string }; score?: number } } }[];
-  const hits = games.filter((x) => sideMatches(String(x.teams?.home?.team?.name ?? ""), g.home) && sideMatches(String(x.teams?.away?.team?.name ?? ""), g.away));
-  const near = hits.filter((x) => Math.abs(Date.parse(String(x.gameDate)) - Date.parse(g.startsAt)) < 6 * 3_600_000);
-  const hit = nearestStart(near.length ? near : hits, g.startsAt, (x) => x.gameDate);
+  const games = (((body as { dates?: { games?: unknown[] }[] } | null)?.dates ?? []).flatMap((d) => d.games ?? [])) as { gamePk?: number; gameDate?: string; status?: { abstractGameState?: string }; teams?: { home?: { team?: { name?: string }; score?: number }; away?: { team?: { name?: string }; score?: number } } }[];
+  const pk = /^\d+$/.test(g.eventId) ? g.eventId : null;
+  const hits = games.filter((x) => (pk !== null && String(x.gamePk ?? "") === pk) || (sideMatches(String(x.teams?.home?.team?.name ?? ""), g.home) && sideMatches(String(x.teams?.away?.team?.name ?? ""), g.away)));
+  const near = hits.filter((x) => Math.abs(Date.parse(String(x.gameDate)) - Date.parse(g.startsAt)) < MLB_START_WINDOW_MS);
+  const hit = nearestStart(near, g.startsAt, (x) => x.gameDate);
   if (!hit) return null;
   const h = n(hit.teams?.home?.score), a = n(hit.teams?.away?.score);
   return { home: h ?? 0, away: a ?? 0, done: hit.status?.abstractGameState === "Final" && h !== null && a !== null, detail: `MLB StatsAPI ${a ?? "?"}–${h ?? "?"} (${hit.status?.abstractGameState ?? "?"})`, url };
@@ -198,10 +263,18 @@ async function firstFinal(client: EspnClient, urls: string[], parse: (body: unkn
   if (!any && err) throw err;
   return null;
 }
+/**
+ * The StatsAPI day pages that can list the game (bug 3): its UTC date, the day before (a US night game's local date), and the day after
+ * when it starts within 4 hours of midnight UTC (a game played east of UTC, local date ahead of UTC).
+ */
+export function mlbDays(g: Pick<Game, "date" | "startsAt">): string[] {
+  const t = Date.parse(g.startsAt), next = new Date(Date.parse(`${g.date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  return [g.date, dayBefore(g.date), ...(Number.isFinite(t) && new Date(t).getUTCHours() >= 20 ? [next] : [])];
+}
 export async function crossFinal(client: EspnClient, g: Game, d: GameDeps, which: CrossId | null = null): Promise<{ id: CrossId; final: Final | null }> {
   const id = which ?? crossIdOf(g.league);
-  const prevDay = new Date(Date.parse(`${g.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-  if (id === "mlb.statsapi") return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${day}`), (b, u) => finalFromMlb(g, b, u)) };
+  const prevDay = dayBefore(g.date);
+  if (id === "mlb.statsapi") return { id, final: await firstFinal(client, mlbDays(g).map((day) => `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${day}`), (b, u) => finalFromMlb(g, b, u)) };
   if (id === "nhl.score") return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => `https://api-web.nhle.com/v1/score/${day}`), (b, u) => finalFromNhl(g, b, u)) };
   if (id === "nba.cdn") return { id, final: await firstFinal(client, [NBA_SCHEDULE_URL], (b, u) => finalFromNba(g, b, u)) };
   if (!d.apiSportsKey) throw new Error("cross-read missing: BURNTICKER_APISPORTS_KEY (a second licensed provider) is not set");
@@ -287,6 +360,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
         if (f) break;
       }
       if (!any && err) throw err;
+      if (f?.unresolved) return { kind: "held", why: f.unresolved };
       if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url, pens: f.pens, declared: f.declared, aet: f.aet });
       else pending.push(f ? `TheSportsDB has the game but not final: ${f.detail}` : "TheSportsDB has no final for the game yet");
     } catch (e) { errors.push(`TheSportsDB: ${(e as Error).message.slice(0, 80)}`); }
