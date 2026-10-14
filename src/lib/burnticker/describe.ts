@@ -423,7 +423,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
       // the champion path: every win through the postseason, then the rest burns here (champion) or goes to $DEFICIT's burn
       const L = seasonLabel(s.league, w.year);
       return mk(`${nick} ${L} ${Noun}`, tk("season"), oneLiner,
-        `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the postseason. ${sliced(r) ? `Each burn buys $${t} on Raydium in slices sized to the pool's liquidity.` : `Each burn buys $${t} on Raydium, with a receipt on chain.`} ${settle}`,
+        `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the ${L} postseason. ${sliced(r) ? `Each burn buys $${t} on Raydium in slices sized to the pool's liquidity.` : `Each burn buys $${t} on Raydium, with a receipt on chain.`} ${settle}`,
         `This coin covers the ${L} season only. ${championEndSentences(ref, sinkTickerOf(r)).join(" ")}`, "season", "recurring");
     }
     if (w.kind === "season") {

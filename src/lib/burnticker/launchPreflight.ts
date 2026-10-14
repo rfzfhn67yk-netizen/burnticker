@@ -1,6 +1,7 @@
+import { LINKED_ONE_SHOT_REFUSAL } from "@/lib/burnticker/linkedShare";
 import { sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
-import { endSelfOnLossProblem, endSinkOf, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { endSelfOnLossProblem, endSinkOf, isOneShot, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { feedById, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
 import { oneShotEligibility, type Eligibility } from "@/lib/burnticker/oneShotEligibility";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -142,6 +143,8 @@ export function settledPairInput(pair: unknown): SettledPairInput | null {
 export const candidatesSinkProblems = settledPairSinkProblems;
 
 /** The rule refusals, in the order the bundle route meets them. The first one is the bundle's answer; the review lists them all. */
+/** Every mapping of the rule spends the whole pool (a vault amount is not a share and is refused elsewhere). */
+const linkedFull = (r: BurnRule): boolean => (r.kind === "binary" ? [r.binary?.onYes, r.binary?.onNo] : [r.scalar?.perUnit]).every((m) => !m || m.fractionOfPool === undefined || m.fractionOfPool === 1);
 export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRefusal[] {
   const r = locked.rule, out: PreflightRefusal[] = [];
   const now = ctx.now ?? Date.now();
@@ -161,6 +164,8 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
     }
   } else if (r.oracle !== "kalshi" && r.oracle !== "polymarket" && r.oracle !== "derby") out.push({ status: 400, code: "oracle-off", message: `Coins cannot launch on the ${r.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.` });
   out.push(...candidatesRefusals(r, ctx), ...gamePairRefusals(r, ctx));
+  // audit 12 item 1: a linked pair on a rule that resolves once moves the whole pool; any other share is refused, never rewritten to 100 %
+  if (ctx.pair && isOneShot(r) && !linkedFull(r)) out.push({ status: 400, code: "linked-pair-full-pool", message: LINKED_ONE_SHOT_REFUSAL });
   // round 5: the incinerator end sink exists only on the round-5 program (initialize_token pins EndSink kind INCINERATOR)
   if (endSinkOf(r) === "incinerator" && ctx.programRound5 === false) out.push({ status: 503, code: "incinerator-not-live", message: INCINERATOR_WAITING });
   // the owner rule of 2026-10-13: the losing path never burns this coin (rules.ts endSelfOnLossProblem); said once beside a pair's own refusal

@@ -55,7 +55,7 @@ describe("B: the Team path", () => {
     // website-19 (intent audit item 7): the whole lead sentence (describe.ts leadSentence), never a split on ". "
     assert.match(page, /teamPath \? `\$\{text\.lead\} \$\{text\.windowSentence\.replace\(\/\^This coin covers \[\^\.\]\*\\\.\\s\*\/, ""\)\}`/);
     const sentence = `${t.lead} ${t.windowSentence.replace(/^This coin covers [^.]*\.\s*/, "")}`;
-    assert.equal(sentence, "This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn.");
+    assert.equal(sentence, "This coin burns 2% of its pool every game the Dodgers win, through the last game of the 2026 postseason. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn.");
   });
   test("everything else sits under one closed Advanced disclosure that lists the defaults; the image stays above it", () => {
     assert.match(card, /<details className="[^"]*" data-advanced>\s*<summary[^>]*>\{ADVANCED_LABEL\}<\/summary>/);

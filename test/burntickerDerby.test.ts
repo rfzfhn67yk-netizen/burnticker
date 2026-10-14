@@ -169,11 +169,16 @@ describe("WIF vs SHIB through the keeper and the program", () => {
     assert.match(tiePost, /^Day 3 · WIF 1 – SHIB 1 · tie · no burn/);
     assert.match(derbyDayText({ pair: j, day: j.days[3], days: j.days, tickers: { a: "TEAMWIF", b: "TEAMSHIB" }, fraction: 0.01 }), /reading withheld — the cross-read disagreed · no burn/);
     // Season over (10-12 00:00 UTC): the rule ENDED and the wind-down starts that day — 17 units of 1 % a day (≥ 99 % in 28 days).
-    assert.match(w.registry.ruleEnd(w.a.mint)!.reason, /season over/);
+    // audit 12: the race ends on its season tally (the side with more winning days), read the UTC day after the season, never on the
+    // last day alone (here a tie): until that reading the rule has not ended
+    assert.equal(w.registry.ruleEnd(w.a.mint), null);
     w.clock.now = B(13) + 3600_000;
-    await runCycle(w.deps);
+    for (let i = 0; i < 3; i++) await runCycle(w.deps);
+    assert.match(w.registry.ruleEnd(w.a.mint)!.reason, /season over[\s\S]*WIF won more days over the season \(WIF 2, SHIB 1\)/);
+    const tally = w.adapter.store.window(`derby:${coinvsRule(SEASON).series}`, "tally-2026-10-12")!;
+    assert.deepEqual([tally.status, tally.result, tally.value], ["decided", "yes", "1"]);
     const wd = w.registry.receipts(w.a.mint).filter((r) => r.kind === "winddown");
-    assert.deepEqual(wd.map((r) => `${r.eventId}:${r.units}`), ["winddown-2026-10-12:17", "winddown-2026-10-13:17"]);
+    assert.deepEqual(wd.map((r) => `${r.eventId}:${r.units}`), ["winddown-2026-10-13:17"]);
     assert.equal(w.registry.token(w.a.mint)!.status, "live", "still winding down");
     // Four weeks on, the pool is spent (the $1 floor stops the tail) and both coins retire.
     w.clock.now = B(12) + 31 * 86_400_000;

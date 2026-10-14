@@ -6,7 +6,7 @@ import { PublicKey } from "@solana/web3.js";
 import { openRegistry, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { FakeBurnProgram } from "@/lib/burnticker/program";
 import { buildPairBundles, buildLaunchBundle, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
-import { lockRule, type BurnRule } from "@/lib/burnticker/rules";
+import { lockRule, isOneShot, withFullFraction, type BurnRule } from "@/lib/burnticker/rules";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { derbySeriesId, type CoinVsSpec, type DerbySpec, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { hermesBoundaryUrl, HERMES_URL, pointFromHermes, type PythRead } from "@/lib/burnticker/derby/pyth";
@@ -87,7 +87,8 @@ export async function derbyWorld(spec: DerbySpec, o: { tickers?: [string, string
   program.now = () => clock.now;
   const logs: string[] = [];
   const [ta, tb] = o.tickers ?? ["TEAMWIF", "TEAMSHIB"];
-  const rule = o.rule ?? coinvsRule(spec as CoinVsSpec);
+  // audit 12 item 1: a linked one-shot pair (the flippening) is built at 100 % only; the builder refuses any other share
+  const rule0 = o.rule ?? coinvsRule(spec as CoinVsSpec), rule = isOneShot(rule0) ? withFullFraction(rule0) : rule0;
   const pr = await buildPairBundles({ a: { creator: CREATOR, ticker: ta, name: ta, description: "a derby side", imageUrl: null, links: [{ label: "X", url: "https://x.com/dogwifcoin" }], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, b: { ticker: tb, name: tb, description: "the other side", imageUrl: null, links: [] }, voidBy: o.voidBy ?? "2026-11-30" },
     { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
   const reg = (bundle: typeof pr.a, ticker: string, links: { label: string; url: string }[]) => {

@@ -1,5 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { RULES_SCHEMA } from "@/lib/burnticker/wizard";
+import { applyDial, dialsFor } from "@/lib/burnticker/dials";
+import { linkedShareMigratedNotice, shareOf } from "@/lib/burnticker/launchPresets";
 
 /**
  * THE WIZARD'S DRAFT, ONE TYPED PATH FROM THE CARD TO THE REQUEST (ChatGPT launch audit 5, L01, 2026-10-11). A search card, a Browse
@@ -54,4 +56,29 @@ export function composeRule(pick: DraftPick | null, d: DraftFields): BurnRule | 
 /** The single-coin request body POST /api/burnticker/launch receives (pressing Launch is the acknowledgement). */
 export function launchBody(o: { creator: string; ticker: string; name: string; description: string; descCtx: unknown; note: string; rule: BurnRule; timings?: Record<string, number>; raiseSol?: string }): Record<string, unknown> {
   return { creator: o.creator, firstBuySol: "0", ...(o.raiseSol ? { raiseSol: o.raiseSol } : {}), acknowledgements: { ruleLocked: true, noReturns: true }, ...(o.timings ? { timings: o.timings } : {}), ticker: o.ticker.toUpperCase(), name: o.name, description: o.description, descCtx: o.descCtx, note: o.note, imageUrl: null, links: [], rule: o.rule };
+}
+
+/**
+ * AUDIT 12 item 1 (2026-10-13): a saved launch-page draft (the page's session snapshot) whose LINKED pair resolves once (two candidates
+ * `elPick`, one game `pairMode: "game"`) and carries a share other than 100 % is moved to 100 % when it is resumed, with a notice that says
+ * what changed; nothing else in it is touched. A draft that needs no change comes back as it was, with no notice. Pure, client-safe.
+ */
+export function migrateLinkedShare<T extends Record<string, unknown>>(saved: T): { draft: T; notice: string | null } {
+  const linked = saved.flow === "pair" && (!!saved.elPick || saved.pairMode === "game");
+  if (!linked) return { draft: saved, notice: null };
+  let from: number | null = null;
+  const fix = (r: unknown): unknown => {
+    if (!r || typeof r !== "object") return r;
+    const rule = r as BurnRule;
+    let one = false; try { one = dialsFor(rule).bounds.max >= 1; } catch { return r; }
+    const f = shareOf(rule);
+    if (!one || f === null || f === 1) return r;
+    from = from ?? f;
+    return applyDial(rule, "fraction", 1);
+  };
+  const out: Record<string, unknown> = { ...saved };
+  const d = saved.draft as { key?: string; a?: unknown; b?: unknown } | null | undefined;
+  if (d && typeof d === "object") out.draft = { ...d, a: fix(d.a), b: d.b ? fix(d.b) : d.b ?? null };
+  if (typeof saved.fraction === "number" && saved.fraction !== 1) { from = from ?? saved.fraction; out.fraction = 1; }
+  return from === null ? { draft: saved, notice: null } : { draft: out as T, notice: linkedShareMigratedNotice(from) };
 }

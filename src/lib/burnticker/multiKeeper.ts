@@ -131,9 +131,9 @@ export function recordWindowEnd(d: Pick<KeeperDeps, "registry" | "dryRun" | "log
     // Every reading of the series (each meeting too) is planned first, so a level series' end never skips its last meetings.
     if (w.series !== undefined && d.registry.readings(t.selectorKey, t.baselineAt).some((x) => !d.registry.receipt(t.mint, x.id))) { d.log(`  [end] $${t.ticker}: the season series is over; its last results${w.series?.endDay ? `, the season-end result (${w.series.endDay}) included,` : ""} are planned first, then the end is recorded`); continue; }
     // website-18 THE CHAMPION PATH (describe.ts championPathRule): the end waits until the source and the coin's own receipt agree on
-    // whether the team won the championship; a champion's coin winds down on itself, any other end forwards the rest to $DEFICIT
+    // whether the team won the championship; a champion's coin winds down on itself, any other end forwards the rest to the sink pinned at launch ($DEFICIT unless the coin named another)
     if (championPathRule(rule)) {
-      const v = championVerdict(d.registry, t, w);
+      const v = championVerdict(d.registry, t, w, rule);
       if ("hold" in v) { d.log(`  [end] $${t.ticker}: the season is over, but ${v.hold}; the end waits and nothing moves`); continue; }
       reason = v.reason;
     }

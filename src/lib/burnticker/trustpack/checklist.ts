@@ -60,7 +60,7 @@ export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowC
   pair_curve: { buy: "trade", sell: "trade", graduate: "graduate", close_pair: "close", init_pair: "rent", void_pair: "none", claim_developer_fee: "devClaim", lock_lp: "lock", burn_lp: "lpBurnFallback" },
 };
 
-export interface MoneyRow { program: ProgramName; instruction: string; class: string; signers: string; outflow: string; outflowClass: OutflowClass; funds: string }
+export interface MoneyRow { program: ProgramName; instruction: string; class: string; signers: string; outflow: string; outflowClass: OutflowClass; funds: string; /** private review 9: an instruction the published source adds in round 5, not on the deployed round-4 program yet */ sourceOnly: boolean }
 export interface PowerRow { program: ProgramName; instruction: string; holder: string; can: string; timelock: string | null; funds: string; /** website-15 item 11: the register's label and internal review ids, for a title or footnote, never the cell */ note: string | null }
 
 /**
@@ -86,7 +86,10 @@ export interface CheckItem { id: string; title: string; text: string; where: str
 export interface Checklist {
   schema: "burnticker.check/v1"; generatedFrom: string[];
   programs: { name: ProgramName; programId: string; idlSha256: string; register: string; privileged: number; overFunds: "none" }[];
-  money: MoneyRow[]; nonPowers: { program: ProgramName; text: string }[];
+  money: MoneyRow[];
+  /** private review 9 (editorial): where the instruction list comes from, the published source, beside what is deployed (with the commit) */
+  moneySource: string;
+  nonPowers: { program: ProgramName; text: string }[];
   powers: PowerRow[]; upgradeAuthority: { program: ProgramName; holder: string; sunset: string }[]; external: { program: ProgramName; power: string; holder: string; effect: string }[];
   locked: CheckItem[]; notDone: CheckItem[];
   build: VerifiedBuild;
@@ -97,6 +100,15 @@ const at = (file: string, key: string) => `${file}, under ${key}`;
 
 export function loadRegister(root: string, p: ProgramName): Register {
   return JSON.parse(fs.readFileSync(path.join(root, REGISTER_FILES[p]), "utf8")) as Register;
+}
+
+/**
+ * Private review 9 (editorial): the checker said "48 instructions" as if all were deployed. The list is the published source's (the
+ * programs' registers, round 5); the deployed programs are the round-4 build of the commit verified-build.json records.
+ */
+export function moneySourceLine(money: readonly Pick<MoneyRow, "sourceOnly">[], build: Pick<VerifiedBuild, "sourceCommit">): string {
+  const n5 = money.filter((m) => m.sourceOnly).length, commit = String(build.sourceCommit ?? "").slice(0, 10);
+  return `These ${money.length} instructions are the published source's (the programs' registers, round 5).${n5 ? ` ${n5} of them are new in round 5 and are not on the deployed programs yet.` : ""} The deployed programs are the round-4 build of commit ${commit || "(not recorded)"}, checked in section 5.`;
 }
 
 export function buildChecklist(root = process.cwd()): Checklist {
@@ -111,7 +123,7 @@ export function buildChecklist(root = process.cwd()): Checklist {
     for (const ix of regs[name].instructions) {
       const cls = OUTFLOW_BY_INSTRUCTION[name][ix.name];
       if (!cls) throw new Error(`${REGISTER_FILES[name]}: instruction ${ix.name} has no outflow class in checklist.ts OUTFLOW_BY_INSTRUCTION`);
-      money.push({ program: name, instruction: ix.name, class: ix.class, signers: ix.signers.map((s) => s.role).join(" + "), outflow: OUTFLOW[cls], outflowClass: cls, funds: splitReviewRefs(ix.funds ?? "None.").text });
+      money.push({ program: name, instruction: ix.name, class: ix.class, signers: ix.signers.map((s) => s.role).join(" + "), outflow: OUTFLOW[cls], outflowClass: cls, funds: splitReviewRefs(ix.funds ?? "None.").text, sourceOnly: /^Round 5\b/.test(ix.can) });
       if (ix.class === "privileged") { const c = splitReviewRefs(ix.can); powers.push({ program: name, instruction: ix.name, holder: ix.signers.map((s) => s.role).join(" + "), can: c.text, timelock: ix.timelock, funds: ix.funds, note: c.note }); }
     }
   }
@@ -150,7 +162,7 @@ export function buildChecklist(root = process.cwd()): Checklist {
     schema: "burnticker.check/v1",
     generatedFrom: [REGISTER_FILES.burn_receipts, REGISTER_FILES.pair_curve, TRANSPARENCY_FILE, VERIFIED_BUILD_FILE, OPERATOR_FILE],
     programs: (["burn_receipts", "pair_curve"] as ProgramName[]).map((n) => ({ name: n, programId: regs[n].program.address_in_idl, idlSha256: regs[n].program.idl_sha256, register: REGISTER_FILES[n], privileged: regs[n].privileged_powers.length, overFunds: "none" as const })),
-    money, nonPowers: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].non_powers.map((text) => ({ program: n, text }))),
+    money, moneySource: moneySourceLine(money, build), nonPowers: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].non_powers.map((text) => ({ program: n, text }))),
     powers, upgradeAuthority: (["burn_receipts", "pair_curve"] as ProgramName[]).map((n) => ({ program: n, holder: regs[n].upgrade_authority.holder_at_launch, sunset: regs[n].upgrade_authority.sunset })),
     external: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].external_powers.map((e) => ({ program: n, power: e.power, holder: e.holder, effect: splitReviewRefs(e.effect ?? e.can ?? "").text }))),
     locked, notDone, build,
@@ -164,7 +176,7 @@ export function checklistMarkdown(c: Checklist): string {
   L.push("# Check this yourself", "", "This is a skeptic's checklist, written against ourselves.", "");
   L.push(`This file is GENERATED by \`node --import ./test/alias-hook.mjs scripts/burnticker-trustpack.mts check-doc --write\` from ${c.generatedFrom.map((f) => `\`${f}\``).join(", ")}. Do not edit it by hand. The page \`/burnticker/check\` and \`GET /api/burnticker/v1/check\` show the same data.`, "");
   L.push("Nothing here asks you to take our word. Every line names the file or the account that says it. The page also has a receipt verifier that runs in your browser. It fetches the transaction and the program's accounts from the public Solana RPC, and the source values from the Treasury API. Then it works out the units and the spend again.", "");
-  L.push("## 1. Where money can go", "", "This table lists every instruction of both programs and the only place each one can move SOL or tokens. Neither program has an instruction to withdraw, sweep or send funds out.", "");
+  L.push("## 1. Where money can go", "", "This table lists every instruction of both programs and the only place each one can move SOL or tokens. Neither program has an instruction to withdraw, sweep or send funds out.", "", c.moneySource, "");
   L.push("| Program | Instruction | Who signs | Where money can go | The register's words |", "|---|---|---|---|---|");
   for (const m of c.money) L.push(`| ${m.program} | \`${m.instruction}\` | ${esc(m.signers)} | **${esc(m.outflow)}** | ${esc(m.funds)} |`);
   L.push("", "What does not exist, in the registers' own words:", "");

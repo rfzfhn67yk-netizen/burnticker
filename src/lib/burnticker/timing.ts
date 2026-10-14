@@ -33,9 +33,16 @@ export const UNPLAYED_GAME_LINE = "If the game is not played, the result is void
 export const dueSoonLine = (days: number): string => `This result is due within ${days} ${days === 1 ? "day" : "days"}. A coin burns only after it graduates: if the result comes first, it is recorded and the burn waits until the coin graduates and its pool is registered.`;
 
 /** Days until a due date (rounded up, never negative), and the warning when it is within the window. */
-export function dueTiming(dueIso: string | null, now: number, warnDays = DUE_WARNING_DAYS_DEFAULT): { dueAt: string | null; dueWithinDays: number | null; warning: string | null } {
+/**
+ * Audit 12 item 8: a scheduled close that has already passed is not "due": the market may still be waiting for its result (the source has
+ * not settled it), so it is said as that, never as a future date. Whether such a market can still take a coin is the source's own state
+ * (an unresolved market stays listed); this line only stops the review calling a past time "due".
+ */
+export const CLOSE_PASSED_LINE = "The scheduled close has passed and the result is not published yet. The market is waiting for its result. A coin made now burns only after it graduates, so the result may well come first: it is recorded, and the burn waits until the coin graduates and its pool is registered.";
+export function dueTiming(dueIso: string | null, now: number, warnDays = DUE_WARNING_DAYS_DEFAULT): { dueAt: string | null; dueWithinDays: number | null; warning: string | null; closePassed?: boolean } {
   const t = dueIso ? Date.parse(dueIso) : NaN;
   if (!Number.isFinite(t)) return { dueAt: null, dueWithinDays: null, warning: null };
+  if (t < now) return { dueAt: new Date(t).toISOString(), dueWithinDays: 0, warning: CLOSE_PASSED_LINE, closePassed: true };
   const days = Math.max(0, Math.ceil((t - now) / 86_400_000));
   return { dueAt: new Date(t).toISOString(), dueWithinDays: days, warning: days <= warnDays ? dueSoonLine(days) : null };
 }

@@ -1,3 +1,4 @@
+import { withoutDenials } from "@/lib/burnticker/denials";
 import type { BurnRule, LockedRule } from "@/lib/burnticker/rules";
 import { descriptionFooter } from "@/lib/burnticker/rules";
 import { badgeFromText, describeRule, type DescribeCtx } from "@/lib/burnticker/describe";
@@ -27,7 +28,8 @@ export function creatorTextProblems(o: { name: string; ticker: string; note: str
     if (!text.trim()) continue;
     // sources-7 round 2 (WIRING-WEBSITE25-REQUESTS H5): ONE plain sentence per field (creatorWording.ts), the one the name step says, never
     // a line per hit with the rule id and a cut quote
-    const hits = lintCopy(text, cfg, { scope: "creator" }).hits;
+    // audit 12 item 9: an explicit denial ("Not affiliated with any team.") is not a claim (denials.ts)
+    const hits = lintCopy(withoutDenials(text), cfg, { scope: "creator" }).hits;
     const reason = creatorFieldSentence(field, text, hits);
     if (reason) out.push({ field, category: hits[0].category, rule: hits[0].rule, phrase: [...new Set(hits.map((h) => h.phrase.trim()))].join(", "), reason, categories: [...new Set(hits.map((h) => h.category))], rules: [...new Set(hits.map((h) => h.rule))] });
   }

@@ -1,4 +1,5 @@
 import { isSingleSourceSeries } from "@/lib/burnticker/singleSource";
+import { gameCardCopy } from "@/lib/burnticker/pairForms";
 import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import fs from "node:fs";
 import path from "node:path";
@@ -248,12 +249,15 @@ async function championshipCard(t: EspnTeam, d: SearchDeps, ti: TeamIntent = { y
 function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Suggestion | null {
   const g = games.find((x) => !x.completed && Date.parse(x.startsAt) > nowMs && x.home.abbr !== "TBD" && x.away.abbr !== "TBD" && x.home.abbr && x.away.abbr);
   if (!g) return null;
-  const side = (s: Game["home"]): MatchupSide => ({ abbr: s.abbr, name: s.name, nickname: s.nickname || s.abbr, ticker: teamTicker(s.abbr, { league: t.league, window: "game", outcome: "loss" }), series: gameSeries(t.league, g.eventId, s.abbr, "loss") });
+  // audit 12 item 3: "Use this" opens the linked one-game pair (each coin on its own team's win, the winner takes the burn), so the card
+  // carries those series and says that form (pairForms.ts), never "the losing team's coin burns"
+  const side = (s: Game["home"]): MatchupSide => ({ abbr: s.abbr, name: s.name, nickname: s.nickname || s.abbr, ticker: teamTicker(s.abbr, { league: t.league, window: "game", outcome: "win" }), series: gameSeries(t.league, g.eventId, s.abbr, "win") });
+  const copy = gameCardCopy(g.name, "game-linked");
   const a = side(g.away), b = side(g.home);
   return {
     ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "pair",
-    title: `Two coins on ${g.name}: the losing team's coin burns`, subtitle: g.detail || g.startsAt, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league],
-    nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game", howSettles: "One coin per team; each burns once if its team loses. A tie burns neither.",
+    title: copy.title, subtitle: g.detail || g.startsAt, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league],
+    nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game", howSettles: copy.howSettles,
     matchup: { league: t.league, eventId: g.eventId, title: g.name, startsAt: g.startsAt, a, b }, score: 2.8,
   };
 }

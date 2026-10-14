@@ -55,7 +55,8 @@ export const PAIRS_BLOCKER = "On mainnet this site has not turned on the program
  * test/burntickerWebsite24.test.ts pins the name to the library's constant. Until then the launch page hides the choice and says this line.
  */
 export const BURN_REAL_LAYOUT_ENV = "BURNTICKER_INITIALIZE_TOKEN_LAYOUT";
-export const BURN_REAL_WAITING = "A coin that burns a real token, such as WIF or BONK, instead of itself waits for the round-5 program, which is not deployed on this site.";
+// audit 12 item 15: said plainly, with no release name; the page shows it only where a burn target could be set (WIRING-AUDIT12)
+export const BURN_REAL_WAITING = "Burning a real token, such as WIF or BONK, instead of the coin's own is not offered on this site yet. Every coin made here burns its own token.";
 export const burnRealFromEnv = (env: Env = process.env): boolean => (env[BURN_REAL_LAYOUT_ENV] ?? "").trim() === "r5";
 /** BURNTICKER_END_SINK_PICKER=1 offers "the rest goes to another coin's burn"; anything else keeps $DEFICIT as the only sink choice. */
 export const sinkPickerFromEnv = (env: Env = process.env): boolean => /^(1|true|on|yes)$/i.test((env.BURNTICKER_END_SINK_PICKER ?? "").trim());
@@ -93,7 +94,7 @@ export function availabilityFromEnv(env: Env = process.env, cluster: string | nu
     { id: "nws", label: "National Weather Service daily climate reports", available: true, reason: null },
     { id: "feeds", label: "Public data publishers (Treasury, BLS, FRED, …)", available: true, reason: null },
     { id: "pair-curve", label: "Pair curve (registered pairs on mainnet)", available: pairCurve, reason: pairCurve ? null : "the pair curve is turned off on this site" },
-    { id: "burn-real", label: "Coins that burn a real token instead of themselves (the round-5 program)", available: burnRealFromEnv(env), reason: burnRealFromEnv(env) ? null : BURN_REAL_WAITING },
+    { id: "burn-real", label: "Coins that burn a real token instead of themselves", available: burnRealFromEnv(env), reason: burnRealFromEnv(env) ? null : BURN_REAL_WAITING },
     // owner decision 2026-10-13 evening: a sink coin has a beneficiary, $DEFICIT has none; the picker stays off until the list is curated
     { id: "end-sink-picker", label: "Sending the rest to another coin's burn", available: sinkPickerFromEnv(env), reason: sinkPickerFromEnv(env) ? null : "The rest of a losing coin goes to $DEFICIT's burn on this site." },
   ];

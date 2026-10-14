@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useHome } from "../_components/useHome";
 import { useWatchlist } from "../_components/useWatchlist";
 import { FollowButton } from "../_components/FollowButton";
 import { EmptyState } from "../_components/EmptyState";
 import { SETTLEMENT_LABEL, upcomingNotice, type UpcomingRow } from "@/lib/burnticker/upcoming";
-import { WATCH_NOTE, coinWatchKey } from "@/lib/burnticker/watchlist";
+import { WATCH_FORGET, WATCH_NOTE, coinWatchKey, fetchCoinInventory, watchAmbiguous, type CoinInventory } from "@/lib/burnticker/watchlist";
 
 /**
  * NEXT RESULTS (website-14, product idea 3; src/lib/burnticker/upcoming.ts). For each coin, the result its rule waits for, the source,
@@ -23,9 +23,12 @@ export default function NextResults() {
   // website-15 (code review 6 P2 2): ready, partial or unavailable; a failure is never an empty list
   const set = data?.upcoming ?? null;
   const all: UpcomingRow[] = Array.isArray(set?.rows) ? set!.rows : [];
-  // private review 8 F1: a followed result is a coin key (network and mint), never a ticker
-  const listed = useMemo(() => (data ? all.filter((r) => r.mint).map((r) => ({ ticker: r.ticker, network: r.network, mint: r.mint! })) : null), [data, all]);
-  const watch = useWatchlist(listed);
+  // private review 8 F1: a followed result is a coin key (network and mint), never a ticker. Private review 9 F1: an old ticker follow is
+  // migrated only against the COMPLETE inventory of coins (every status, watchlist.ts resolveLegacyFrom), never these filtered rows; until
+  // it is read, or when it cannot be, nothing migrates and the old follow stays
+  const [inventory, setInventory] = useState<CoinInventory | null>(null);
+  useEffect(() => { let live = true; void fetchCoinInventory().then((x) => { if (live) setInventory(x); }); return () => { live = false; }; }, []);
+  const watch = useWatchlist(inventory ? inventory.coins : null);
   const keyOf = (r: UpcomingRow) => coinWatchKey(r.network, r.mint);
   const rows = all.filter((r) => { const k = keyOf(r); return !only || (!!k && watch.list.results.includes(k)); });
   const notice = data ? upcomingNotice(set) : null;
@@ -40,6 +43,15 @@ export default function NextResults() {
           <span>{WATCH_NOTE}</span>
         </div>
       </header>
+      {/* private review 9 F1: an old follow that two or more coins could mean stays visible until the visitor picks one or forgets it */}
+      {watch.ambiguous.filter((a) => a.kind === "results").map((a) => (
+        <div key={a.ticker} className="rounded-md border border-amber-700/60 p-3 text-xs" role="status" data-watch-ambiguous={a.ticker}>
+          <p>{watchAmbiguous(a.ticker, a.candidates.length)}</p>
+          <ul className="mt-2 space-y-1">{all.filter((r) => r.ticker.toUpperCase() === a.ticker && keyOf(r)).map((r) => <li key={keyOf(r)!} className="flex flex-wrap items-center gap-2"><a className="underline" href={r.href}>{r.name}</a><span className="font-mono text-neutral-500">{r.mint}</span><FollowButton watchKey={keyOf(r)!} ticker={r.ticker} kind="results" label={`the next result for this $${r.ticker}`} /></li>)}</ul>
+          {a.candidates.length > all.filter((r) => r.ticker.toUpperCase() === a.ticker && keyOf(r)).length && <p className="mt-1 text-neutral-400">Some coins with this ticker have no pending result, so they are not listed here. They are on the coins page.</p>}
+          <button type="button" className="bt-watch mt-2" onClick={() => watch.forget("results", a.ticker)}>{WATCH_FORGET}</button>
+        </div>
+      ))}
       {!data && !error && <EmptyState kind="loading" body="Reading the next results." />}
       {error && <EmptyState kind="unavailable" body="The next results could not be read just now. Try again in a moment." details={error} />}
       {failed && <EmptyState kind="unavailable" body={notice!} details={set?.omitted.map((o) => `$${o.ticker}: ${o.reason}`).join(" ") || undefined} />}

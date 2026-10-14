@@ -6,7 +6,7 @@
 import { test, describe, before } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair } from "@solana/web3.js";
-import { invertMapping, lockRule, oracleDisclosure, POLYMARKET_DISCLOSURE, ruleStatement, validateRule, descriptionFooter, type BurnRule } from "@/lib/burnticker/rules";
+import { invertMapping, withFullFraction, lockRule, oracleDisclosure, POLYMARKET_DISCLOSURE, ruleStatement, validateRule, descriptionFooter, type BurnRule } from "@/lib/burnticker/rules";
 import {
   chainResult, gammaResult, globMatch, impliedChanceFromMarkets, normaliseTime, parseGammaMarket, parseMarketsBody, parsePolySeries, polySelectorMatches, proofOf, resolvePolymarket,
   rpcFixtureFetch, searchHits, settledMarketUrl, marketsByTagUrl, POLYGONSCAN_CTF, type GammaMarket,
@@ -128,7 +128,7 @@ describe("rules and selectors", () => {
     assert.notEqual(lockRule(a).sha256, lockRule(b).sha256);
     const { FakeBurnProgram } = await import("@/lib/burnticker/program");
     const deps = { program: new FakeBurnProgram("devnet"), launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m: string) => `https://x/${m}.json` };
-    const input = { creator: CREATOR, ticker: "BUCS", name: "Bucs", description: "", imageUrl: null, links: [], rule: PM_BUCS, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" as const };
+    const input = { creator: CREATOR, ticker: "BUCS", name: "Bucs", description: "", imageUrl: null, links: [], rule: withFullFraction(PM_BUCS as BurnRule) /* audit 12: a linked one-market pair is 100 % only */, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" as const };
     const pair = await buildPairBundles({ a: input, b: { ticker: "BOYS", name: "Boys", description: "", imageUrl: null, links: [] } }, deps);
     assert.equal(pair.selector, BUCS_CID);
     const ra = lockRule(JSON.parse(pair.a.rules.text)).rule, rb = lockRule(JSON.parse(pair.b.rules.text)).rule;

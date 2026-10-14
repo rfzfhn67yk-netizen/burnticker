@@ -37,6 +37,9 @@ import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burntick
 import type { LifecycleDatesJson, PoolMarketJson, StatedJson } from "@/lib/burnticker/pageTypes";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { CHOOSER_COPY, chooserRows, isMintKey, type CoinCandidate } from "@/lib/burnticker/coinKey";
+import type { DerbyScoreboard } from "@/lib/burnticker/derby/spec";
+import { BurnCalendar, ReceiptEmbed, ScoreboardCard } from "./CoinFeatures";
+import { LEADERBOARD_TITLE, receiptAlt } from "../../_components/featureCopy";
 
 /**
  * THE COIN PAGE (LAUNCHPAD-PATH §6; re-ordered by website-11 on 2026-10-12 for the owner's review items 6 and 8, as the website brief
@@ -56,7 +59,7 @@ interface Receipt { eventId: string; settledAt: string; oracle: string; market: 
 /** status.json `lp` (LP locked forever, 2026-10-10; src/lib/burnticker/lockFees.ts LpLockJson). */
 interface LpBlock { policy: string; lockProgram: string; feeKey: string | null; feeKeyOwner: string | null; lockedLiquidity: string | null; lockedPct: number; split: { burnBps: number; operatorBps: number }; operatorTreasury: string | null; lastClaim: { at: string; line: string; txUrl: string | null } | null; totals: { claims: number; sol: string; toBurnPool: string; toOperator: string }; urls: { lockProgram: string | null; feeKey: string | null; feeKeyOwner: string | null; lockedLiquidity: string | null; operatorTreasury: string | null }; line: string; note: string | null }
 interface Reading { id: string; at: string; result: string | null; value: string | null; title: string | null }
-interface Data { status: Status & { lifecycle?: { line: string } | null; stated?: StatedJson | null }; receipts: Receipt[]; readings: Reading[]; rulesText: string; stubs: string[] }
+interface Data { status: Status & { lifecycle?: { line: string } | null; stated?: StatedJson | null; /** website-26 (WIRING-FEATURES item 12) */ derbyScoreboard?: DerbyScoreboard | null }; receipts: Receipt[]; readings: Reading[]; rulesText: string; stubs: string[] }
 
 const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? `.${f}` : ""); };
 const short = (a: string) => (a.length > 12 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
@@ -155,7 +158,7 @@ export default function TokenPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-5 space-y-5 text-sm">
-      <p className="text-xs"><Link className="underline" href="/burnticker">← Coins</Link></p>
+      <p className="text-xs"><Link className="underline" href="/burnticker">← Coins</Link> <span className="text-neutral-500">·</span> <Link className="underline text-neutral-400" href="/burnticker/leaderboard" data-leaderboard-link>{LEADERBOARD_TITLE}</Link></p>
 
       {/* ---- header: image, name, ticker, mint + copy, links ---- */}
       <header className="flex gap-4">
@@ -181,6 +184,8 @@ export default function TokenPage() {
       </header>
 
       {s.pair && <Link href={s.pair.pageUrl} className={card + " block"}><span className="text-xs text-neutral-400">This coin is one side of a rivalry pair. Burns so far:</span> <span className="font-mono">${s.ticker} {s.pair.tally.burnsThis} : {s.pair.tally.burnsOther} ${s.pair.counterpart.ticker}</span> <span className="text-xs underline">Open the pair page</span></Link>}
+      {/* website-26 (WIRING-FEATURES item 12): a Coin vs Coin coin's live scoreboard */}
+      {s.derbyScoreboard && <ScoreboardCard s={s.derbyScoreboard} card={card} />}
 
       {/* ---- TOP (review item 6 as the website brief rewrites it): the chart, and one outbound link to the coin's own pool. No order panel. ---- */}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -305,6 +310,8 @@ export default function TokenPage() {
             </details>
           ); })()}
         </section>
+        {/* website-26 (WIRING-FEATURES item 2): the next readings under the rule, and "Add to calendar" (.ics) */}
+        {s.status !== "draft" && s.status !== "expired" && <BurnCalendar mint={s.mint} card={card} />}
         {s.disclosure.eventContract && <p className={card + " border-l-4 border-l-orange-500 text-xs"}>{s.disclosure.eventContract}</p>}
         {/* No burn pool is ever left behind (2026-10-10): the fee flow. The coin's lifecycle line is in "The end" above. */}
         <p className="text-xs text-neutral-400">Creator fees go to the burn pool and are burned. The liquidity is locked forever. {postGraduationShareLine(s.fees.postGraduation)}</p>
@@ -330,6 +337,8 @@ export default function TokenPage() {
       )}
 
       {s.status !== "draft" && s.status !== "expired" && <section className={card + " text-xs"} aria-label={SHARE_COPY.heading}><h2 className="font-medium text-sm">{SHARE_COPY.heading}</h2><div className="mt-2"><ShareBlock ticker={s.ticker} id={key} /></div></section>}
+      {/* website-26 (WIRING-FEATURES item 7): the receipt card as a copyable embed, by mint, closed by default */}
+      {s.status !== "draft" && s.status !== "expired" && <ReceiptEmbed mint={s.mint} alt={receiptAlt({ ticker: s.ticker, sentence: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, latest: latest ? { tokens: latest.burned ?? "0", day: latest.settledAt.slice(0, 10) } : null, scoreboard: s.derbyScoreboard?.line ?? null })} />}
       <HostDiagnostics stubs={d.stubs} />
     </main>
   );
