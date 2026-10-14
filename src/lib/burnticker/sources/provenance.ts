@@ -78,6 +78,7 @@ export function scheduleProblem(league: LeagueId, kind: "needs-licence" | "unrea
   const label = LEAGUES[league]?.label ?? league;
   const src = league === "nba" && !countedOfficialOf(league) ? "the NBA's feed or TheSportsDB" : leagueProvenance(league).schedule.replace(/ \((free|licensed)\)$/, "");
   return kind === "needs-licence"
-    ? { line: `${label}'s schedule comes from TheSportsDB's licensed feed, which is not linked on this host: teams are listed without their next game.`, detail }
-    : { line: `${label}'s next games could not be read from ${src} just now: teams are listed without their next game. This affects only the schedule shown here; settlement does not use this read.`, detail };
+    // qa-12 L4: the missing key is said plainly (the key's name stays in `detail`, behind a disclosure)
+    ? { line: `${label}'s schedule is not available on this site right now, so teams are shown without their next game.`, detail }
+    : { line: `${label}'s next games could not be read from ${src} just now, so teams are shown without their next game. This only affects the schedule shown here: settlement does not use this read.`, detail };
 }

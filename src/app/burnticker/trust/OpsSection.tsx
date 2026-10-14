@@ -3,6 +3,7 @@
 import { EmptyState } from "../_components/EmptyState";
 import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { RepoText } from "../_components/RepoText";
+import { denverTime } from "@/lib/burnticker/denverTime";
 
 /**
  * TRUST OPS ON THE TRUST PAGE (2026-10-10 night): which keeper is active, an attesters line per coin, the latest registry snapshot on
@@ -21,7 +22,7 @@ export default function OpsSection({ card, repo }: { card: string; repo?: string
   return (<>
     <section className={card}><h2 className="font-medium">Which keeper is active</h2>
       <p className="text-xs">{t.activeSummary} The <a className="underline" href={t.statusPage}>status page</a> has more detail.</p>
-      <ul className="text-xs mt-1">{t.keepers.map((k) => <li key={k.source}>{k.source}{k.url ? <> (<code>{k.url}</code>)</> : null}: {k.reachable ? <>{k.role ?? "unknown role"}, <span className={k.active ? "text-emerald-400" : "text-neutral-400"}>{k.active ? "active" : "passive"}</span>. Host <code>{k.hostIdHash ?? "unknown"}</code>. Last cycle {k.lastCycleAt ?? "not recorded"}.{k.takeoverAt ? <> It took over at {k.takeoverAt}{k.takeoverValid === false ? ", and the signature does NOT verify." : ", with a signed note."}</> : null}{k.reason ? <span className="text-neutral-500"> {k.reason}</span> : null}</> : <span className="text-amber-400">{k.error ?? k.reason ?? "It cannot be reached."}</span>}</li>)}</ul>
+      <ul className="text-xs mt-1">{t.keepers.map((k) => <li key={k.source}>{k.source}{k.url ? <> (<code>{k.url}</code>)</> : null}: {k.reachable ? <>{k.role ?? "unknown role"}, <span className={k.active ? "text-emerald-400" : "text-neutral-400"}>{k.active ? "active" : "passive"}</span>. Host <code>{k.hostIdHash ?? "unknown"}</code>. Last cycle {k.lastCycleAt ? denverTime(k.lastCycleAt) : "not recorded"}.{k.takeoverAt ? <> It took over at {denverTime(k.takeoverAt)}{k.takeoverValid === false ? ", and the signature does NOT verify." : ", with a signed note."}</> : null}{k.reason ? <span className="text-neutral-500"> {k.reason}</span> : null}</> : <span className="text-amber-400">{k.error ?? k.reason ?? "It cannot be reached."}</span>}</li>)}</ul>
     </section>
     <section className={card}><h2 className="font-medium">Attesters per coin</h2>
       {t.attesters.length === 0 ? <p className="text-xs text-neutral-500">There are no coins yet.</p> : <ul className="text-xs">{t.attesters.map((a) => <li key={a.ticker}>${a.ticker}: {a.line}</li>)}</ul>}

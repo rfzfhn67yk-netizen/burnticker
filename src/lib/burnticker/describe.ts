@@ -226,6 +226,16 @@ export function endExplainer(): string[] {
 export const CANDIDATES_END_RESULT = "When both markets are final and one candidate won, the other candidate's coin sends the rest of its pool, and any fees that arrive later, to the winning coin's burn, and the winning coin burns down what is left on itself. If neither candidate won, or a market settled 50-50, the rest goes to $DEFICIT's burn. Then the coin retires.";
 export const GAME_END_RESULT = "When the game is final, the losing team's coin sends the rest of its pool, and any fees that arrive later, to the winning team's coin's burn, and the winning coin burns down what is left on itself. After a draw, the rest goes to $DEFICIT's burn. Then the coin retires.";
 export const GAME_CANCELLED_SENTENCE = "If the game is cancelled, nothing moves between the two coins.";
+/**
+ * THE END OF A TWO-COIN DAILY RACE (qa-12 L2, what the keeper does): one more reading once every day of the run is recorded, the season
+ * tally (derby/adapter.ts recordTally). The coin with more winning days wins it and burns its share for it once more; the other coin's
+ * rest moves to the winner's burn while the two are linked, else to $DEFICIT's burn; the winner burns down what is left on itself
+ * (endSinkKeeper PAIR WINNER). Level on winning days is a void reading: nothing moves and each coin burns down what is left on itself.
+ */
+export const raceEndResult = (unit: "days" | "weeks" = "days"): string => `When the run ends, the coin with more winning ${unit} burns its share once more. The other coin sends the rest of its pool, and any fees that arrive later, to the winning coin's burn while the two are linked, or to $DEFICIT's burn if they are not. The winning coin burns down what is left on itself. Then the coin retires.`;
+export const RACE_END_RESULT = raceEndResult("days");
+export const raceLevelSentence = (over = "over four weeks", unit: "days" | "weeks" = "days"): string => `If both coins won the same number of ${unit}, nothing moves between them, and each coin burns down what is left on itself ${over}.`;
+const isDailyRace = (r: BurnRule): boolean => r.oracle === "derby" && r.derby?.selector === "coinvs" && !r.derby.flip;
 /** The season-end sentence of a rivalry series coin (endText's result line). */
 export const MEETINGS_END_RESULT = "When both teams' seasons are over, the coin of the team that won fewer of the games between them sends the rest of its pool, and any fees that arrive later, to the other coin's burn pool, or to $DEFICIT's burn if that coin is not live. The coin of the team that won more burns down what is left on itself. Then the coin retires.";
 const isMeetingsSeries = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e?.kind === "team" && e.window.kind === "meetings"; };
@@ -243,6 +253,8 @@ export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText 
   if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", MEETINGS_END_RESULT, `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", CANDIDATES_END_RESULT, VOID);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
+  // qa-12 L2: a two-coin daily race ends on its season tally (derby/adapter.ts recordTally; endSinkKeeper's pair winner burns itself down)
+  if (sink === "pair-winner" && isDailyRace(r)) { const unit = r.derby?.selector === "coinvs" && r.derby.window === "weekly" ? "weeks" : "days"; return mk("pair-winner", raceEndResult(unit), raceLevelSentence(over, unit)); }
   if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
   if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team", sinkTickerOf(r)); return mk("champion", `${won} ${lost}`, VOID); }
   // end-sink picker: the coin the creator named, and end.rs's fall-through when that coin is not live at the end

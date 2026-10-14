@@ -47,6 +47,7 @@
     "src/lib/burnticker/oracle/browse.ts",
     "src/lib/burnticker/oracle/events.ts",
     "src/lib/burnticker/oracle/kalshi.ts",
+    "src/lib/burnticker/oracle/outcomeFilter.ts",
     "src/lib/burnticker/oracle/polymarket.ts",
     "src/lib/burnticker/oracle/types.ts",
     "src/lib/burnticker/pageTypes.ts",

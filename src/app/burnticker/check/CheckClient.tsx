@@ -19,6 +19,8 @@ interface Item { id: string; title: string; text: string; where: string; status?
 interface Check {
   programs: { name: string; programId: string; register: string; privileged: number; overFunds: string }[];
   money: { program: string; instruction: string; class: string; signers: string; outflow: string; outflowClass: string; funds: string }[];
+  /** private review 9 / WIRING-AUDIT12: the list is the published source (round 5); which instructions are not deployed; the deployed commit */
+  moneySource?: string;
   nonPowers: { program: string; text: string }[];
   powers: { program: string; instruction: string; holder: string; can: string; timelock: string | null; note?: string | null }[];
   upgradeAuthority: { program: string; holder: string; sunset: string }[];
@@ -52,6 +54,7 @@ export default function CheckPage() {
           <h2 className="font-medium">{CHECK_COPY.moneyTitle}</h2>
           <p className="text-xs text-neutral-300">{CHECK_COPY.moneyIntro}</p>
           {/* site audit #14 (2026-10-11): the verifier result stays first; the ~40-row instruction table is collapsed by default */}
+          {c.moneySource && <p className="mt-2 text-xs text-neutral-300" data-money-source>{c.moneySource}</p>}
           <details className="mt-2 text-xs" data-money-table><summary className="cursor-pointer text-neutral-300">Show all {c.money.length} instructions of both programs and where each one can move money</summary>
           <div className="overflow-x-auto mt-2 max-w-full"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Program</th><th className="p-2">Instruction</th><th className="p-2">Who signs</th><th className="p-2">Where money can go</th></tr></thead>
             <tbody>{c.money.map((m) => <tr key={`${m.program}-${m.instruction}`} className="border-t border-neutral-800 align-top"><td className="p-2 text-neutral-500">{m.program}</td><td className="p-2"><code>{m.instruction}</code></td><td className="p-2">{m.signers}</td><td className="p-2"><span className={flowTone[m.outflowClass] ?? ""}>{m.outflow}</span><details className="text-neutral-500"><summary className="cursor-pointer">What the register says</summary>{m.funds}</details></td></tr>)}</tbody></table></div>

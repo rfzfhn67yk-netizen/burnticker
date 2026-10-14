@@ -140,7 +140,7 @@ describe("H8: both coins of a two-team pair regenerate together, and the names s
     assert.match(page, /if \(pairMode === "season"\) return seasonPairNames\(/);
     assert.match(page, /setEditedFor\(null\); if \(editedFor !== null\) setNamesRemade\(true\);/);
     assert.match(page, /onTicker: \(v: string\) => \{ setTickerB\(v\); setTickerAuto\(false\); setEditedFor\(subjectKey\); noteEdit\(\); \}/);
-    assert.match(page, /\{namesRemade && <p [^>]*data-names-remade>\{NAMES_REMADE_LINE\}<\/p>\}/);
+    assert.match(page, /\{namesRemade && <p [^>]*data-names-remade>\{namesRemadeLine\(pairOn \? 2 : 1\)\}<\/p>\}/, "WIRING-AUDIT12 item 10: one coin or two");
     plain(NAMES_REMADE_LINE);
   });
 });

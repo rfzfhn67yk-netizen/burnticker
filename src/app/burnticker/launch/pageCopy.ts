@@ -1,5 +1,5 @@
 import { fitName } from "@/lib/burnticker/launchFields";
-import { shortTeamName } from "@/lib/burnticker/guidedLaunch";
+import { namesRemadeLine, shortTeamName } from "@/lib/burnticker/guidedLaunch";
 
 /**
  * website-25: short sentences the launch pages say that are not field checks. Plain English, lint-clean (test/burntickerWebsite25.test.ts).
@@ -30,7 +30,10 @@ export function winPairNames(a: { abbr: string; code?: string | null; nickname: 
   return { a: one(a, b), b: one(b, a) };
 }
 /** H8: said once on the name step when a new rule replaced names the creator had typed (both coins, names and tickers alike). */
-export const NAMES_REMADE_LINE = "You changed what the coins follow, so both coins got new names and tickers for the new rule. The ones you typed described the old rule. Type your own again if you like.";
+// WIRING-AUDIT12 item 10: the page says namesRemadeLine(1 or 2) by the number of coins; this is the two-coin wording
+export const NAMES_REMADE_LINE = namesRemadeLine(2);
+/** WIRING-AUDIT12 item 8: the chip on a market or event past its scheduled close (the search's closePassed). */
+export const CLOSE_PASSED_CHIP = "Past its scheduled close, waiting for its result";
 
 /** QA 11 M6: a calendar day said the way people read it ("Wed, Nov 4, 2026"), never ISO; the input as it is when it is not a date. */
 export function humanDay(iso: string): string {

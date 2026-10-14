@@ -915,7 +915,10 @@ export const linkFieldProblem = (label: string, raw: string): string | null => (
 export const PAIR_COST_EXCLUSIONS = "The estimate covers creating both coins. It leaves out the account that links the two coins, whose rent is not measured yet, and any fee your wallet adds.";
 
 /** Audit 10 item 24: the share is a share of the coin's burn pool (its budget for burns), never of the coin's supply; said once on the review. */
-export const shareOfBudgetLine = (share: number): string => `The burn pool is the coin's budget for burns, so ${pctLabel(share)} is never a share of the coin's supply.`;
+// qa-12 L7: a one-shot coin's 100% reads as the whole pool on its one result, not as an odd "100% is never a share"
+export const shareOfBudgetLine = (share: number): string => share >= 1
+  ? "The coin spends its whole burn pool, the SOL set aside for burns, on that one result. This is not the coin's supply."
+  : `${pctLabel(share)} is a share of the coin's burn pool, the SOL set aside for burns, not of the coin's supply.`;
 
 /** Audit 10 item 24: the words beside the small pair diagram on the review. */
 export const PAIR_DIAGRAM_LABEL = { independent: "Two separate coins. Each burns from its own pool, and no SOL moves between them.", linked: "A linked pair. The coin whose rule fires also takes the other coin's share for that result, and only that coin burns." } as const;

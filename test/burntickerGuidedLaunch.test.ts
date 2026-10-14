@@ -109,8 +109,9 @@ describe("the four questions", () => {
   test("owner: the page opens at the top with a saved draft offered in one line, never restored by itself; Start over clears the store", () => {
     const mount = page.slice(page.indexOf("  useEffect(() => {\n    // launch night 2026-10-13"), page.indexOf("    setReady(true);"));
     // launch night 2026-10-13: the mount applies a draft only for "Start a new launch from the review" (?resume=review); otherwise it offers
-    assert.equal((mount.match(/restoreFrom\(/g) ?? []).length, 1, "the mount effect applies a draft only on ?resume=review");
-    assert.match(mount, /else if \(resumeReview && offer\) restoreFrom\(offer\);\n\s+else if \(offer\) setSavedDraft\(offer\);/);
+    // WIRING-AUDIT12 P1-1: the draft is applied through resumeFrom (migrateLinkedShare, then restoreFrom)
+    assert.equal((mount.match(/resumeFrom\(/g) ?? []).length, 1, "the mount effect applies a draft only on ?resume=review");
+    assert.match(mount, /else if \(resumeReview && offer\) resumeFrom\(offer\);\n\s+else if \(offer\) setSavedDraft\(offer\);/);
     // website-20 (audit 6 item 4): every step change, the guided phases included, starts at the top with the heading focused
     assert.match(page, /const y = restoreScroll\.current; restoreScroll\.current = null; window\.scrollTo\(\{ top: y \?\? 0 \}\);[\s\S]{0,260}\[data-step-heading\][\s\S]{0,120}\}, \[step, guide\.phase, guide\.pairKind\]\);/);
     assert.match(page, /data-saved-draft>\{savedDraftLine\(savedDraft\)\} <button type="button" data-nav className="underline" onClick=\{resumeDraft\}>Resume<\/button>/);
@@ -197,7 +198,8 @@ describe("one-shots, budgets and the end before graduation", () => {
     assert.deepEqual(SHARE_PRESETS.oneShot, [1, 0.5]); assert.equal(DEFAULT_SHARE.oneShot, 1);
     assert.equal(dialsFor(poly()).bounds.max, 1); assert.equal(dialsFor(firstPartyRule("ll2.launch:abc", 1) as BurnRule).bounds.max, 1);
     assert.equal(dialsFor(firstPartyRule(gameSeries("mlb", "401999999", "LAD", "loss"), 0.02) as BurnRule).bounds.max, 1, "QA pass 9 #3: a single game is a one-shot (the keeper drains it after its result)");
-    assert.match(tile, /shares=\{\{ options: \[\.\.\.\(flip \? SHARE_PRESETS\.oneShot : SHARE_PRESETS\.recurring\)\]/);
+    // WIRING-AUDIT12 P1-1: the flippening is a linked pair, so its row is 100 % only (a single one-shot keeps 100 / 50)
+    assert.match(tile, /const shareRow = flip \? SHARE_PRESETS\.linkedOneShot : SHARE_PRESETS\.recurring;/); assert.match(tile, /shares=\{\{ options: \[\.\.\.shareRow\]/);
     assert.deepEqual(oneShotSentences({ share: 1, happened: "the Dodgers won the World Series", subject: "they" }), ["This coin burns its whole pool once, when Polymarket's payout says the Dodgers won the World Series.", "The burn lands in slices sized to the pool's liquidity.", "If they do not, the rest goes to $DEFICIT's burn."]);
     assert.equal(oneShotSentences({ share: 0.5, happened: "x", subject: "it" })[0], "This coin burns 50% of its pool once, when Polymarket's payout says x.");
     assert.equal(budgetCopy(poly(), 1, null).line, "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity.");

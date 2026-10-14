@@ -9,7 +9,7 @@ import { useLaunchAvailability } from "./_components/useLaunchAvailability";
 import { useHome } from "./_components/useHome";
 import { useWatchlist } from "./_components/useWatchlist";
 import { useScrollEdges } from "./_components/useScrollEdges";
-import { WATCH_FORGET, WATCH_NOTE, coinWatchKey, watchAmbiguous, type ListedCoin } from "@/lib/burnticker/watchlist";
+import { WATCH_FORGET, WATCH_NOTE, coinWatchKey, fetchCoinInventory, watchAmbiguous, type CoinInventory } from "@/lib/burnticker/watchlist";
 import { SEASONS_LINKS } from "./_components/nav";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
@@ -70,9 +70,11 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const s = q.trim().toLowerCase();
   const featured: CardView[] = useMemo(() => (home.data?.featured ?? []).filter((v) => !s || `${v.ticker} ${v.name} ${v.rule} ${v.mint?.address ?? ""}`.toLowerCase().includes(s)), [home.data, s]);
   const listable = useMemo(() => (ix?.tokens ?? []).filter((t) => t.status !== "expired"), [ix]);
-  // private review 8 F1: follows are by network and mint; old ticker follows resolve against the listed coins only when one coin matches
-  const listedCoins: ListedCoin[] | null = useMemo(() => (ix ? listable.map((t) => ({ ticker: t.ticker, network: ix.cluster, mint: t.mint })) : null), [ix, listable]);
-  const watch = useWatchlist(listedCoins);
+  // private review 8 F1: follows are by network and mint. Private review 9 F1 (WIRING-AUDIT12): an old ticker follow resolves only against
+  // the COMPLETE inventory of coins (every status, expired ones included), never the listable rows; until it is read nothing migrates
+  const [inventory, setInventory] = useState<CoinInventory | null>(null);
+  useEffect(() => { let live = true; void fetchCoinInventory().then((x) => { if (live) setInventory(x); }); return () => { live = false; }; }, []);
+  const watch = useWatchlist(inventory?.coins ?? null);
   // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
   const sharedSet = useMemo(() => sharedTickers(listable), [listable]);
   const coins = useMemo(() => tabCoins(tab, listable.filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), (t) => { const k = coinWatchKey(ix?.cluster, t.mint); return !!k && watch.list.coins.includes(k); }), [listable, tab, s, watch.list.coins, ix?.cluster]);

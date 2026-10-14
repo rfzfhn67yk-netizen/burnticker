@@ -133,6 +133,8 @@ export interface ReviewCardProps {
   publicProfile?: { coins: PublicProfileCoin[]; edit: (side: "a" | "b", field: ProfileFieldKey) => void } | null;
   /** website-22 (audit 10 item 24): the small diagram of how two coins burn, beside the pair's facts. */
   pairDiagram?: "independent" | "linked" | null;
+  /** WIRING-AUDIT12 item 4: the diagram's words from the pair's actual shape (guidedLaunch.ts pairDiagramLabel); the fixed label otherwise. */
+  pairDiagramText?: string | null;
   /** website-22 (audit 10 item 17): what the estimate beside the launch button leaves out. */
   costNote?: string | null;
 }
@@ -150,8 +152,8 @@ const blockerText = (b: Blocker): string => (typeof b === "string" ? b : b.text)
 export const lpDisclosure = (venue: LaunchVenue): string => lpDisclosureFor(venue, LP_LINE, PAIR_LP_LINE);
 
 /** website-22 (audit 10 item 24): two separate pools, or a linked pair where the coin whose rule fires takes the burn. Decorative; the label says it. */
-export function PairDiagram({ kind }: { kind: "independent" | "linked" }) {
-  const label = PAIR_DIAGRAM_LABEL[kind];
+export function PairDiagram({ kind, text = null }: { kind: "independent" | "linked"; text?: string | null }) {
+  const label = text ?? PAIR_DIAGRAM_LABEL[kind];
   return (
     <figure className="flex min-w-0 items-center gap-3" data-pair-diagram={kind}>
       <svg viewBox="0 0 120 56" width="120" height="56" role="img" aria-label={label} className="shrink-0 text-neutral-400">
@@ -206,6 +208,8 @@ export { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX }
 export const RAISE_LABEL = "SOL raised before graduation";
 /** Labels of the note and the step-4 sections. */
 export const ACK_LINE = "By launching, you confirm the rule as written. You also confirm that you make no promises to anyone about this coin. The rule is stored with the coin, and no instruction in the program can change it.";
+/** qa-12 L6: a pair's acknowledgement covers both coins and both rules. */
+export const ACK_LINE_PAIR = "By launching, you confirm both rules as written. You also confirm that you make no promises to anyone about either coin. Each rule is stored with its coin, and no instruction in the program can change it.";
 const okTicker = (t: string) => /^[A-Z0-9]{2,10}$/.test(t);
 /**
  * website-18 (the owner: "it feels overcomplicated to set up"): on the Team path every choice after the team sits in ONE disclosure,
@@ -381,7 +385,7 @@ export function ReviewCard(p: ReviewCardProps) {
           {p.event.criteria && <p className="mt-1 whitespace-pre-wrap text-neutral-400">{p.event.criteria.length > 600 ? `${p.event.criteria.slice(0, 600)}… The full rules are on the market page.` : p.event.criteria}</p>}
         </div>
       )}
-      {p.pairDiagram && <PairDiagram kind={p.pairDiagram} />}
+      {p.pairDiagram && <PairDiagram kind={p.pairDiagram} text={p.pairDiagramText ?? null} />}
       {/* website-23 (WIRING-SETTLED-PAIRS): a settled-event pair says its one sentence (review.settled.sentence) above its four facts */}
       {p.pairFacts && p.pairLine && <p className="min-w-0 break-words text-sm text-amber-200" data-pair-line data-settled-line>{p.pairLine}</p>}
       {p.pairFacts ? (mode === "review"
@@ -473,7 +477,7 @@ export function ReviewCard(p: ReviewCardProps) {
         <details className="min-w-0" data-terms open={mode === "review"}>
           <summary className="cursor-pointer text-neutral-300">What you confirm by launching</summary>
           <p className="mt-1 break-words text-neutral-400" data-lp-line>{RECEIPTS_LINE} {lpDisclosure(p.venue ?? (many ? "independent" : "single"))}</p>
-          <p className="mt-1 break-words text-neutral-400">{ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
+          <p className="mt-1 break-words text-neutral-400" data-ack-line>{many ? ACK_LINE_PAIR : ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
         </details>
       </div>
     </section>

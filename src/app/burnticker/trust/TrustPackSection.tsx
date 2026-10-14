@@ -3,6 +3,7 @@
 import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import Link from "next/link";
 import { TRUSTPACK_SECTION_COPY } from "@/lib/burnticker/trustpack/copy";
+import { denverTime } from "@/lib/burnticker/denverTime";
 
 /**
  * THE TRUST PAGE'S "CHECK IT YOURSELF" SECTION (trust pack, 2026-10-10): links to /burnticker/check, /burnticker/fees/ledger and
@@ -15,7 +16,7 @@ interface Op { cluster: string; neverBuys: { line: string; status: string } }
 const PAGES = [
   { href: "/burnticker/check", title: "Check this yourself", what: "It shows where money can go, who can do what, what is locked and what is not done. It also lists the build hashes and has a receipt checker that runs in your browser." },
   { href: "/burnticker/fees/ledger", title: "Fee ledger", what: "It lists every lamport the developer fee wallet received, read from the chain and grouped by month. It also shows what the fee pays for." },
-  { href: "/burnticker/operator", title: "Who runs this", what: "It says who runs this. It lists every operator wallet, the signed statement and the monitor that watches the operator's wallets for platform coins." },
+  { href: "/burnticker/operator", title: "Who runs this", what: "It names the operator and lists every operator wallet, the signed statement and the monitor that watches those wallets for platform coins." },
 ];
 
 export default function TrustPackSection({ card }: { card: string }) {
@@ -34,8 +35,8 @@ export default function TrustPackSection({ card }: { card: string }) {
         ? <ul className="text-xs space-y-0.5" data-bounty><li><code className="break-all">{b.wallet}</code> (mainnet)</li>
             {/* UX report 3 item 5: the recorded funding and the live read are two separate facts; neither stands in for the other */}
             <li>recorded funding (owner statement): {b.recordedFunding ? `${b.recordedFunding.sol} SOL on ${b.recordedFunding.date}` : "none recorded"}</li>
-            <li>funding transaction: {b.recordedFunding?.transactions?.length ? b.recordedFunding.transactions.map((x) => <a key={x.signature} className="underline mr-2" href={x.explorerUrl} target="_blank" rel="noreferrer"><code>{x.signature.slice(0, 12)}…</code> ({(Number(x.lamports) / 1e9).toFixed(4)} SOL{x.blockTime ? `, ${x.blockTime.slice(0, 16).replace("T", " ")} UTC` : ""})</a>) : "none found"}</li>
-            <li>live balance: {b.balanceLamports !== null ? `${(Number(b.balanceLamports) / 1e9).toFixed(4)} SOL (read from a mainnet node${b.balanceReadAt ? ` at ${b.balanceReadAt.slice(11, 16)} UTC` : ""})` : `unavailable${b.error ? ` (${b.error})` : ""}`}</li>
+            <li>funding transaction: {b.recordedFunding?.transactions?.length ? b.recordedFunding.transactions.map((x) => <a key={x.signature} className="underline mr-2" href={x.explorerUrl} target="_blank" rel="noreferrer"><code>{x.signature.slice(0, 12)}…</code> ({(Number(x.lamports) / 1e9).toFixed(4)} SOL{x.blockTime ? `, ${denverTime(x.blockTime)}` : ""})</a>) : "none found"}</li>
+            <li>live balance: {b.balanceLamports !== null ? `${(Number(b.balanceLamports) / 1e9).toFixed(4)} SOL (read from a mainnet node${b.balanceReadAt ? ` at ${denverTime(b.balanceReadAt)}` : ""})` : `unavailable${b.error ? ` (${b.error})` : ""}`}</li>
             {b.reconciliation && <li className={b.reconciliation.differenceLamports !== null && b.reconciliation.differenceLamports !== "0" ? "text-amber-300" : "text-neutral-400"}>{b.reconciliation.line}</li>}</ul>
         : <p className="text-xs text-amber-400">{TRUSTPACK_SECTION_COPY.bountyTodo}</p>}
       {b && (b.reports.paid.length + b.reports.rejected.length === 0

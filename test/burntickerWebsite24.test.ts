@@ -182,10 +182,11 @@ describe("the coin page: receipts, held lines and the trust section", () => {
 
 describe("the page wiring and the words", () => {
   test("the choice is hidden until round 5; the waiting line from the launch state stands in its place", () => {
-    assert.match(page, /<CoinVsCoinTile burnReal=\{site\.burnReal\} network=\{site\.cluster \?\? cluster\}/);
-    assert.match(tile, /const realChoices = !a \|\| !b \? null : !realOn \? \(burnReal\?\.line \? <p [^>]*data-burn-real-waiting>\{burnReal\.line\}<\/p> : null\)/);
+    assert.match(page, /<CoinVsCoinTile recordKeyed=\{recordKeyed\} burnReal=\{site\.burnReal\} network=\{site\.cluster \?\? cluster\}/);
+    // WIRING-AUDIT12 item 15: only where a target could be set, inside "What is not offered yet"
+    assert.match(tile, /const realChoices = !a \|\| !b \? null : !realOn \? \(burnReal\?\.line && \(pickA \|\| pickB\) \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{burnReal\.line\}<\/p><\/details> : null\)/);
     assert.match(page, /const realOneOffered = site\.burnReal\.available && !pairOn && !!rule0 && !rule0\.vault;/);
-    assert.match(page, /: site\.burnReal\.line \? <p [^>]*data-burn-real-waiting>\{site\.burnReal\.line\}<\/p> : null;/);
+    assert.match(page, /: site\.burnReal\.line \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{site\.burnReal\.line\}<\/p><\/details> : null;/);
     // default off; one switch per Coin vs Coin side, the suggested tokens for a single coin
     assert.match(tile, /useState<SideReal>\(SIDE_REAL_OFF\), \[realB, setRealB\] = useState<SideReal>\(SIDE_REAL_OFF\)/);
     assert.match(tile, /<BurnRealChoice side="a" who=\{`\$\$\{TA\}`\} picks=\{\[pickA\]\}/);

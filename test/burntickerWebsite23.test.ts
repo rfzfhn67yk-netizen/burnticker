@@ -141,9 +141,10 @@ describe("website-23: the sentences", () => {
     assert.match(pairPage, /const settledLineOf = \(statement: string\): string \| null => \(\/ Candidates pair \/\.test\(statement\) \? CANDIDATES_PAIR_SENTENCE : \/ One-game pair \/\.test\(statement\) \? GAME_PAIR_SENTENCE : null\);/);
     assert.match(pairPage, /: settledLineOf\(d\.a\.status\.rules\.statement\) \? <span data-settled-pair-line>/);
   });
-  test("the single-game share row stays 100 / 50 %", () => {
+  test("the single-game share row: a linked pair on one result, 100 % only (WIRING-AUDIT12 P1-1)", () => {
     const g = walk(GAME).rules.a;
     assert.equal(g.binary?.onYes?.fractionOfPool ?? (g.scalar?.perUnit as { fractionOfPool?: number } | undefined)?.fractionOfPool, 1);
-    assert.match(page, /const shareOptions = oneShotRule \? SHARE_PRESETS\.oneShot : SHARE_PRESETS\.recurring;/);
+    // WIRING-AUDIT12 P1-1: the row comes from sharePresetsForRule; one game is a linked pair, so its row is 100 % only
+    assert.match(page, /const shareOptions = rule \? sharePresetsForRule\(rule, \{ linked: linkedPair \}\) : SHARE_PRESETS\.recurring;/);
   });
 });

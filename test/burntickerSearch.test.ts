@@ -171,9 +171,9 @@ describe("the API: /search, /elections, /elections/pair, /sports — schemas, no
     const g = await get("/sports/games?league=mlb&q=dodgers", "listSportsGames") as { games: { eventId: string; a: { abbr: string }; b: { abbr: string }; series: { aLoss: string; bLoss: string } }[] };
     assert.equal(g.games[0].eventId, "849809"); assert.equal(g.games[0].series.aLoss, "espn.game:mlb-849809-LAD-loss"); assert.equal(g.games[0].series.bLoss, "espn.game:mlb-849809-MIL-loss");
     const nfl = await get("/sports/teams?league=nfl&q=eagles", "listSportsTeams") as { teams: { abbr: string; next: unknown }[]; scheduleNote: string | null };
-    assert.equal(nfl.teams[0].abbr, "PHI"); assert.equal(nfl.teams[0].next, null); assert.match(nfl.scheduleNote ?? "", /licensed feed, which is not linked on this host/); assert.match((nfl as { scheduleDetail?: string }).scheduleDetail ?? "", /schedule needs the licensed key/, "the technical reason rides apart from the sentence (L05)");
+    assert.equal(nfl.teams[0].abbr, "PHI"); assert.equal(nfl.teams[0].next, null); assert.match(nfl.scheduleNote ?? "", /schedule is not available on this site right now/); assert.match((nfl as { scheduleDetail?: string }).scheduleDetail ?? "", /schedule needs the licensed key/, "the technical reason rides apart from the sentence (L05)");
     const nflGames = await get("/sports/games?league=nfl", "listSportsGames") as { games: unknown[]; scheduleNote: string | null };
-    assert.equal(nflGames.games.length, 0); assert.match(nflGames.scheduleNote ?? "", /licensed feed, which is not linked on this host/);
+    assert.equal(nflGames.games.length, 0); assert.match(nflGames.scheduleNote ?? "", /schedule is not available on this site right now/);
     await get("/sports/games?league=xfl", "listSportsGames", 400);
     setNativeClients({ espn: null, nws: null });
   });

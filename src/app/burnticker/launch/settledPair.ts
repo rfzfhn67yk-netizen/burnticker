@@ -41,3 +41,15 @@ export function settledAsShown(r: BurnRule, side: "A" | "B", p: SettledPick, bot
   if (p.shape === "candidates") return { ...r, pair: { ...base, race: { slug: p.race, markets: [both.a.market ?? "", both.b.market ?? ""] } } } as BurnRule;
   return { ...r, pair: { ...base, game: { series: [both.a.series ?? "", both.b.series ?? ""] } } } as BurnRule;
 }
+
+/**
+ * WIRING-AUDIT12 item 5: a race whose two markets are PARTY outcomes (Polymarket's state Senate races: "Will the Democratic Party win…?")
+ * is named by the parties, never the nominees, so the review says PARTIES_PAIR_SENTENCE and the money path names the parties. Null unless
+ * both markets are party markets of two different parties; then the names the page sends as `pair.names`.
+ */
+export function partyPairNames(a: { question: string; partyMarket?: boolean }, b: { question: string; partyMarket?: boolean }): { a: string; b: string } | null {
+  const party = (q: string) => (/Democrat/i.test(q) ? "the Democratic Party" : /Republican/i.test(q) ? "the Republican Party" : null);
+  if (!a.partyMarket || !b.partyMarket) return null;
+  const pa = party(a.question), pb = party(b.question);
+  return pa && pb && pa !== pb ? { a: pa, b: pb } : null;
+}

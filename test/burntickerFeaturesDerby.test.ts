@@ -63,7 +63,7 @@ describe("14 and 15: run lengths, fight tickers and the end said as a result", (
   test("a two-coin daily race's review sentence ends on the tally; a single coin and the flippening keep their ends", () => {
     const wif = RIVALRY_TEMPLATES[0].a, bonk = RIVALRY_TEMPLATES[0].b;
     const spec = { selector: "coinvs" as const, a: wif, b: bonk, window: "daily" as const, measure: "pct" as const, season: { start: "2026-10-14", days: 14 }, flip: false };
-    assert.match(derbySentence(spec, "WIFWINS", "BONKWINS", 0.02), /Runs for 14 days\. At the end, the side with more winning days takes the rest\.$/);
+    assert.match(derbySentence(spec, "WIFWINS", "BONKWINS", 0.02), /Runs for 14 days\. At the end, the coin with more winning days burns once more and takes the rest of the other coin's pool\. If both won the same number of days, each burns down what is left on itself\.$/);
     assert.match(derbySentence(spec, "WIFWINS", null, 0.02), /Runs for 14 days, then winds down\.$/);
     assert.match(derbySentence({ ...spec, measure: "mcap", flip: true }, "A", "B", 1), /then winds down\.$/);
   });
