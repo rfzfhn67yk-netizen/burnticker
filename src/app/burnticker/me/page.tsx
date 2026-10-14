@@ -10,6 +10,9 @@ import { ANALYTICS_COPY } from "@/lib/burnticker/creatorBenefits";
 import { WEEK_MEANING } from "@/lib/burnticker/coinRank";
 import { LaunchChecklist } from "../_components/LaunchChecklist";
 import { DRAFTS_HEADING, meCoinView, splitMeCoins, stateChip } from "@/lib/burnticker/meCoins";
+import { TradeButtons } from "../_components/TradeLinks";
+import { useLaunchAvailability } from "../_components/useLaunchAvailability";
+import { coinLinks } from "@/lib/burnticker/tradeLinks";
 
 /**
  * THE CREATOR DASHBOARD (2026-10-10; gated by the shell's wallet since website-13, 2026-10-12): "Your coins" is the one page a connected
@@ -31,6 +34,8 @@ const denver = (iso: string | null) => (iso ? new Intl.DateTimeFormat("en-US", {
 export default function CreatorDashboard() {
   const wallet = useWallet();
   const openList = useOpenWalletList();
+  // owner 2026-10-14: each created coin's card carries its trade link, on this host's network (devnet coins get the explorer only)
+  const host = useLaunchAvailability().cluster ?? "mainnet";
   const [pasted, setPasted] = useState("");
   // audit 3 item 103: the lookup is a form: the address is checked on blur and on submit, a wrong one says what is expected, and the
   // lookup's state is said beside the button (the registry is read only for a well-formed address)
@@ -97,6 +102,7 @@ export default function CreatorDashboard() {
           {created.map((c) => (
             <li key={c.mint} className={card + " space-y-2"} data-coin-state={c.state}>
               <div className="flex flex-wrap items-center gap-2"><Link className="font-mono text-base underline" href={c.page}>${c.ticker}</Link><span className="text-neutral-400">{c.name}</span><span className="bt-chip">{stateChip(c.state)}</span>{c.badge && <span className="bt-chip bt-chip-window">{c.badge}</span>}</div>
+              <div data-me-trade><TradeButtons links={coinLinks({ cluster: host, mint: c.mint, phase: null, status: "live" })} mint={c.mint} ticker={c.ticker} compact /></div>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                 <dt className="text-neutral-500">queued units</dt><dd>{c.queuedUnits}</dd>
                 <dt className="text-neutral-500">next settlement</dt><dd>{c.nextSettlementAt ? `${denver(c.nextSettlementAt)} (Denver)` : "none scheduled"}</dd>

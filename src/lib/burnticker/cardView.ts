@@ -5,6 +5,7 @@ import type { StatedJson } from "@/lib/burnticker/pageTypes";
 import { coinPageHref } from "@/lib/burnticker/coinKey";
 import { cardAge } from "@/lib/burnticker/cardAge.mjs";
 import { coinWatchKey } from "@/lib/burnticker/watchlist";
+import { coinLinks, type CoinLinks } from "@/lib/burnticker/tradeLinks";
 /**
  * ONE COIN CARD, ONE FIELD ORDER (website-10, 2026-10-12; rebuilt by website-13 the same day for Claude site audit 2 item 7 and ChatGPT
  * audit 6 A10 / A11, with the owner's decision to show the market cap). Every surface that lists coins prints the same rows in the same
@@ -75,6 +76,8 @@ export interface CardView {
   receiptWhy: string | null;
   /** the coin's follow key, network and mint (watchlist.ts coinWatchKey; private review 8 F1); null when the card cannot be followed */
   watchKey?: string | null;
+  /** owner 2026-10-14: where to trade the coin and look it up (tradeLinks.ts coinLinks); absent or null when there is nothing to link */
+  trade?: CoinLinks | null;
   /** what each empty row says instead of a dash (emptyLabels below); set by the home API for the static page, computed by the app */
   empty?: Partial<Record<"progress" | "nextSettle" | "curve" | "mcap" | "holders" | "age" | "burned", string>>;
 }
@@ -265,6 +268,7 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
     burned: { text: `${groupDigits(t.burned)} $${t.ticker}${pct === null ? "" : `, ${pctOfSupply(pct)}`}`, why: t.burns > 0 ? `${t.burns} burn${t.burns === 1 ? "" : "s"} so far.` : "No burn has confirmed yet." },
     mint: null,
     href: page,
+    trade: coinLinks({ cluster, mint: t.mint, phase: t.phase, status: t.status }),
     receipt: t.burns > 0 ? { href: `${page}#receipts` } : null,
     receiptWhy: t.burns > 0 ? null : "This coin has no receipt yet.",
   };

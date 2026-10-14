@@ -132,6 +132,10 @@ CREATE INDEX IF NOT EXISTS lock_fee_claims_by_mint ON lock_fee_claims (mint, at)
 -- winner's burn pool (the program's facts from its memo / event, read after confirmation). Append-only.
 CREATE TABLE IF NOT EXISTS pair_forwards (signature TEXT PRIMARY KEY, pair_id TEXT NOT NULL, record_date INTEGER NOT NULL, loser_mint TEXT NOT NULL, winner_mint TEXT NOT NULL, units INTEGER NOT NULL, pool_lamports TEXT NOT NULL, lamports TEXT NOT NULL, sol_lamports TEXT NOT NULL, wsol_lamports TEXT NOT NULL, at INTEGER NOT NULL, slot INTEGER);
 CREATE UNIQUE INDEX IF NOT EXISTS pair_forwards_once ON pair_forwards (pair_id, record_date, loser_mint);
+-- TEST COINS (owner 2026-10-14: "hide the test coins"): the operator marks a disclosed test launch made through the site. A marked coin is
+-- left off every browse surface (coins list, home, search, leaderboard, sitemap, tokens.html) and listed on /burnticker/test-coins; its
+-- own page stays reachable by link. Its own table, so no column is added to tokens; testCoins.ts holds the rule.
+CREATE TABLE IF NOT EXISTS token_flags (mint TEXT PRIMARY KEY, test INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS token_meta (mint TEXT PRIMARY KEY, creator_note TEXT NOT NULL DEFAULT '', metadata_uri TEXT, metadata_tx TEXT, metadata_sha256 TEXT, image_uri TEXT, image_tx TEXT, image_sha256 TEXT, hosted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
 `;
 
@@ -339,6 +343,14 @@ export class Registry {
   /** website-19 (owner, 2026-10-12: tickers are not unique): every token holding a ticker that is not expired, newest first. */
   tokensByTicker(ticker: string): TokenRow[] { return (this.db.prepare("SELECT * FROM tokens WHERE ticker=? AND status <> 'expired' ORDER BY created_at DESC").all(ticker.toUpperCase()) as Row[]).map(toToken); }
   tokens(status?: TokenStatus): TokenRow[] { return (status ? this.db.prepare("SELECT * FROM tokens WHERE status=? ORDER BY created_at").all(status) : this.db.prepare("SELECT * FROM tokens ORDER BY created_at").all()).map((r) => toToken(r as Row)); }
+  /** The operator's test mark for a coin (testCoins.ts): on hides it from browse surfaces, off lists it again. Upsert; the note says why. */
+  setTokenTest(mint: string, test: boolean, note = "", now = Date.now()): void {
+    this.db.prepare("INSERT INTO token_flags (mint, test, note, at) VALUES (?,?,?,?) ON CONFLICT(mint) DO UPDATE SET test=excluded.test, note=excluded.note, at=excluded.at").run(mint, test ? 1 : 0, note, now);
+  }
+  /** Every coin the operator marked test, with the note and when. */
+  testTokens(): { mint: string; note: string; at: number }[] {
+    return (this.db.prepare("SELECT mint, note, at FROM token_flags WHERE test=1 ORDER BY at").all() as Row[]).map((r) => ({ mint: String(r.mint), note: String(r.note ?? ""), at: Number(r.at) }));
+  }
   setTokenStatus(mint: string, status: TokenStatus): void { this.db.prepare("UPDATE tokens SET status=? WHERE mint=?").run(status, mint); }
   /**
    * The launch landed: record the tx and go live — ONE atomic draft → live transition. The same signature again is a no-op (the

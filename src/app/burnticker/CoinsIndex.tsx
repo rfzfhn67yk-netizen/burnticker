@@ -14,7 +14,7 @@ import { SEASONS_LINKS } from "./_components/nav";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
 import { CARD_MEANINGS, cardViewFromIndex, featuredLine, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
-import { GRID_TABS, gridState, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
+import { FIRST_PARTY_CARD_IDS, GRID_TABS, cardMatches, firstPartyCards, gridState, searchKey, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
 import { sharedTickers } from "@/lib/burnticker/coinKey";
 
@@ -67,8 +67,11 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   };
   const pick = (t: GridTab) => { setTab(t); try { sessionStorage.setItem("bt-coins-tab", t); } catch { /* ignore */ } };
 
-  const s = q.trim().toLowerCase();
-  const featured: CardView[] = useMemo(() => (home.data?.featured ?? []).filter((v) => !s || `${v.ticker} ${v.name} ${v.rule} ${v.mint?.address ?? ""}`.toLowerCase().includes(s)), [home.data, s]);
+  const s = searchKey(q);
+  // owner 2026-10-14: the operator's created coins ($DEFICIT) lead the coin list (coinsGrid.ts firstPartyCards); the rest of the
+  // featured cards stay in their own group below
+  const firstParty = (v: CardView) => FIRST_PARTY_CARD_IDS.includes(v.id) && !v.tags.some((t) => t.label === "Not created yet");
+  const featured: CardView[] = useMemo(() => (home.data?.featured ?? []).filter((v) => !firstParty(v) && cardMatches(v, s)), [home.data, s]);
   const listable = useMemo(() => (ix?.tokens ?? []).filter((t) => t.status !== "expired"), [ix]);
   // private review 8 F1: follows are by network and mint. Private review 9 F1 (WIRING-AUDIT12): an old ticker follow resolves only against
   // the COMPLETE inventory of coins (every status, expired ones included), never the listable rows; until it is read nothing migrates
@@ -77,15 +80,18 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const watch = useWatchlist(inventory?.coins ?? null);
   // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
   const sharedSet = useMemo(() => sharedTickers(listable), [listable]);
-  const coins = useMemo(() => tabCoins(tab, listable.filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), (t) => { const k = coinWatchKey(ix?.cluster, t.mint); return !!k && watch.list.coins.includes(k); }), [listable, tab, s, watch.list.coins, ix?.cluster]);
+  const coins = useMemo(() => tabCoins(tab, listable.filter((t) => t.status !== "draft").filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), (t) => { const k = coinWatchKey(ix?.cluster, t.mint); return !!k && watch.list.coins.includes(k); }), [listable, tab, s, watch.list.coins, ix?.cluster]);
   const pairs = useMemo(() => (ix?.pairs ?? []).filter((p) => !s || `${p.a.ticker} ${p.b.ticker} ${p.a.name} ${p.b.name} ${p.seriesTitle ?? ""}`.toLowerCase().includes(s)), [ix, s]);
   const audit = auditBadgeView(ix?.audit ?? null);
   const launch = useLaunchAvailability();
   // website-17 wiring item 3: the earned slots lead the public grid in rule order, each tagged with its rule's label; the rest keep their order
   const slots = home.data?.featuredSlots ?? [];
+  const lead = firstPartyCards(home.data?.featured ?? [], tab, s, (v) => !!v.watchKey && watch.list.coins.includes(v.watchKey));
   const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet)).map((v) => { const sl = slots.find((x) => x.ticker === v.ticker); return sl && v.group === "public" ? { ...v, tags: [{ label: sl.label, tone: "featured" as const }, ...v.tags] } : v; })
     .sort((a, b) => { const r = (v: CardView) => { const k = v.group === "public" ? slots.findIndex((x) => x.ticker === v.ticker) : -1; return k < 0 ? slots.length : k; }; return r(a) - r(b); });
-  const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : cards.length, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });
+  // the operator's own created coins first, then the registry's
+  const allcards: CardView[] = [...lead, ...cards];
+  const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : allcards.length, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });
   const rule = GRID_TABS.find((t) => t.id === tab)!.rule;
 
   return (
@@ -117,7 +123,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
             {state.note && <p className="mb-2 text-xs text-amber-300" role="status">{state.note}</p>}
             {tab !== "pairs" && <p className="mb-2 text-xs text-neutral-400" data-featured-rules>{FEATURED_RULES_LINE}</p>}
             {tab !== "pairs" ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{cards.map((v) => <ViewCard key={v.id} v={v} now={now} />)}</div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{allcards.map((v) => <ViewCard key={v.id} v={v} now={now} />)}</div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 {pairs.map((p) => (
@@ -138,8 +144,9 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
         </div>
       </section>
 
-      {/* A10: demos and rehearsals are a separate group from the coins anyone can trade; the tabs never filter it */}
-      <section className="space-y-3" aria-labelledby="bt-featured-h" data-group="test">
+      {/* A10: demos and rehearsals are a separate group from the coins anyone can trade; the tabs never filter it. Owner 2026-10-14:
+          with $DEFICIT in the list and test coins hidden, a mainnet host has nothing left here, and the group is not shown */}
+      {(!home.data || home.error || featured.length > 0 || (home.data.featured.some((v) => !firstParty(v)) && !!s)) && <section className="space-y-3" aria-labelledby="bt-featured-h" data-group="test">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="bt-featured-h" className="text-lg font-semibold">Featured coin and test receipts</h2>
           <details className="text-xs text-neutral-400"><summary className="cursor-pointer">What the card rows mean</summary>
@@ -152,7 +159,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
           : !home.data ? <SkeletonGrid n={3} label="Loading the featured coins." />
           : featured.length === 0 ? <EmptyState compact kind="no-activity" body={s ? `No featured coin matches "${q.trim()}".` : "No featured coin is listed."} />
           : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{featured.map((v) => <ViewCard key={v.id} v={v} now={now} />)}</div>}
-      </section>
+      </section>}
 
       <SeasonsStrip seasons={seasons} />
 

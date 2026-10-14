@@ -82,7 +82,7 @@ describe("trade links and the chart: deep links only, mainnet only", () => {
     const curve = tradeLinks("mainnet", MINT, "curve", "live");
     assert.deepEqual(curve.links.map((l) => l.id), ["launchlab", "jupiter"]); assert.match(curve.links[0].url, /^https:\/\/raydium\.io\/launchpad\/token\/\?mint=CMHX/);
     const grad = tradeLinks("mainnet", MINT, "graduated", "live");
-    assert.deepEqual(grad.links.map((l) => l.label), ["Trade on Raydium", "Open in Jupiter"]); assert.match(grad.links[0].url, /outputMint=CMHX/); assert.equal(grad.links[1].url, `https://jup.ag/swap/SOL-${MINT}`);
+    assert.deepEqual(grad.links.map((l) => l.label), ["Trade on Raydium", "Swap on Jupiter"]); assert.match(grad.links[0].url, /outputMint=CMHX/); assert.equal(grad.links[1].url, `https://jup.ag/swap/SOL-${MINT}`);
     assert.deepEqual(tradeLinks("devnet", MINT, "curve", "live").links, []); assert.match(tradeLinks("devnet", MINT, "curve", "live").note!, /only serve mainnet/);
     assert.match(tradeLinks("mainnet", MINT, null, "draft").note!, /not launched/);
     const cfg = loadCopyLintConfig();

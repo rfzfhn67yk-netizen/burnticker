@@ -26,9 +26,9 @@ export const LEADERBOARD_LABELS: Leaderboard["labels"] = {
   longestStreak: "Longest streak",
   newestReceipt: "Newest receipt",
 };
-export const LEADERBOARD_NOTE = "Counted from the receipts this site records. A receipt is a record of what the rule burned, and nothing is won. Tokens are whole tokens of each coin, so two coins' amounts are not comparable as money.";
+export const LEADERBOARD_NOTE = "Counted from the receipts this site records. A receipt is a record of what the rule burned, and nothing is won. Tokens are whole tokens of each coin, so two coins' amounts are not comparable as money. Only coins registered on this site are counted. $DEFICIT runs on its own keeper, so its receipts are on its own page, not here. Test coins are left out.";
 
-type Reader = Pick<Registry, "tokens" | "receipts">;
+type Reader = Pick<Registry, "tokens" | "receipts"> & Partial<Pick<Registry, "testTokens">>;
 const burned = (r: ReceiptRow): bigint => (r.status === "confirmed" ? r.burnRaw ?? ZERO : ZERO);
 const group = (s: string): string => { const [w, f] = s.split("."); return `${w.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${f ? `.${f.slice(0, 2)}` : ""}`; };
 const tokens = (raw: bigint): string => rawToTokens(raw, 6);
@@ -46,7 +46,9 @@ export function streaksOf(rows: readonly ReceiptRow[]): { longest: number; curre
 
 /** Builds the four lists (pure over the registry rows). */
 export function buildLeaderboard(reg: Reader, now = Date.now(), pageOf: (t: TokenRow) => string = (t) => `/burnticker/t/${encodeURIComponent(t.mint)}`): Leaderboard {
-  const coins = reg.tokens().filter((t) => t.status !== "draft" && t.status !== "expired");
+  // owner 2026-10-14: a coin the operator marked test (testCoins.ts) is left off the lists
+  const tests = new Set((() => { try { return reg.testTokens?.() ?? []; } catch { return []; } })().map((x) => x.mint));
+  const coins = reg.tokens().filter((t) => t.status !== "draft" && t.status !== "expired" && !tests.has(t.mint));
   const most: (LeaderRow & { raw: bigint })[] = [], big: (LeaderRow & { raw: bigint })[] = [], streak: (LeaderRow & { n: number })[] = [], newest: (LeaderRow & { key: string })[] = [];
   for (const t of coins) {
     const rows = reg.receipts(t.mint);

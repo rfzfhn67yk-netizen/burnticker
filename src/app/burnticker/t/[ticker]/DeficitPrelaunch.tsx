@@ -14,6 +14,8 @@ import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
 import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burnticker/exportLinks";
+import { TradeButtons } from "../../_components/TradeLinks";
+import { coinLinks } from "@/lib/burnticker/tradeLinks";
 
 /**
  * /burnticker/t/DEFICIT BEFORE THE COIN IS REGISTERED ON THIS HOST (website brief 2026-10-11 §1). A useful page instead of "no token":
@@ -21,7 +23,9 @@ import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burntick
  * rehearsal receipt with a verify action, and the served $DEFICIT site as the canonical page (rel=canonical + the visible link).
  * Data: GET /api/burnticker/deficit-prelaunch (deficitPrelaunch.ts — the locked rules file and config/burnticker/current-status.json).
  */
-type Full = Data & { queue?: DeficitQueue; keeper?: { readiness: Readiness | null; curve: { phase: "curve" | "migrating" | "graduated"; raised: string; threshold: string } | null; events: ActivityEvent[] } | null };
+type Full = Data & { queue?: DeficitQueue; keeper?: { readiness: Readiness | null; curve: { phase: "curve" | "migrating" | "graduated"; raised: string; threshold: string } | null; events: ActivityEvent[] } | null;
+  /** owner 2026-10-14: the created coin's mint (config/own-tokens.json), for the trade link; null before the create */
+  mint?: string | null };
 
 export function DeficitPrelaunch({ fallbackSite }: { fallbackSite: string }) {
   const [d, setD] = useState<Full | null>(null);
@@ -34,6 +38,7 @@ export function DeficitPrelaunch({ fallbackSite }: { fallbackSite: string }) {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">$DEFICIT</h1>
         <p className="text-neutral-300">{d?.keeper ? "The first Burnticker coin: it burns when the U.S. national debt rises. It is created, and this site has not registered it yet, so the figures below come from its keeper's published files." : "The first Burnticker coin: it burns when the U.S. national debt rises. This site has not read it on this network, so it shows no rule account, reading or receipt here."}</p>
+        {d?.mint && <div data-header-trade><TradeButtons links={coinLinks({ cluster: "mainnet", mint: d.mint, phase: d.keeper?.curve?.phase ?? null, status: "live" })} mint={d.mint} ticker="DEFICIT" /></div>}
         <p className="text-xs text-neutral-400">The $DEFICIT page itself is <a className="underline" href={d?.servedAt ?? fallbackSite}>{(d?.servedAt ?? fallbackSite).replace(/^https:\/\//, "").replace(/\/$/, "")}</a>.</p>
       </header>
       {!d && !err && <EmptyState kind="loading" body="Reading the $DEFICIT rule file." />}

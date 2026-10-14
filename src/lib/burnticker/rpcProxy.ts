@@ -11,6 +11,8 @@ export const RPC_PROXY_METHODS: ReadonlySet<string> = new Set([
   "getMinimumBalanceForRentExemption", "getAddressLookupTable", "getSignatureStatuses", "getTransaction", "getSignaturesForAddress",
   "getTokenAccountBalance", "getTokenAccountsByOwner", "getParsedTokenAccountsByOwner", "simulateTransaction", "sendTransaction",
   "getFeeForMessage", "getRecentPrioritizationFees", "isBlockhashValid", "getEpochInfo", "getProgramAccounts",
+  // swap-1 (2026-10-14): the coin page's swap panel checks the connection is on the coin's network before it sends (swap/chain.ts)
+  "getGenesisHash",
 ]);
 export const RPC_PROXY_MAX_BODY = 200_000;
 

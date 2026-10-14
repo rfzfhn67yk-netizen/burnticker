@@ -41,6 +41,7 @@ import { SOL_MINT, usdPrice } from "../src/lib/burnKeeper/jupiterSwap.ts";
 import type { KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
 import { cosignerFromEnv } from "../src/lib/burnticker/attesters/cosign.ts";
 import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
+import { testCoinKeys } from "../src/lib/burnticker/testCoins.ts";
 import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib/burnticker/trust.ts";
 import { CrankFailureTracker, devFeeDelta, recordBalanceSample, registryAlertRows, registryAlertSink, rpcBalanceLamports, runBurntickerAlertCheck, sinkFromEnv } from "../src/lib/burnticker/alerts.ts";
 import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
@@ -178,7 +179,9 @@ async function publishAll(now: number): Promise<void> {
     } catch (e) { log(`  [publish] $${t.ticker}: ${(e as Error).message.slice(0, 160)}`); }
   }
   const audit = readAudit(SITE);
-  publishPlatformIndex(SITE, statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null, receiptsByTicker, siteKeys);
+  // owner 2026-10-14: a test coin keeps its own page but has no row in the index (testCoins.ts)
+  const tests = testCoinKeys(process.cwd(), registry);
+  publishPlatformIndex(SITE, statuses.filter((s) => !tests.mints.has(s.mint)), now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null, receiptsByTicker, siteKeys);
 }
 
 let stopping = false;

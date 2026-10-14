@@ -1,4 +1,4 @@
-import type { IndexCoin } from "@/lib/burnticker/cardView";
+import type { CardView, IndexCoin } from "@/lib/burnticker/cardView";
 import { curveProgressSentence, dataStateSentence } from "@/lib/burnticker/readiness";
 
 /**
@@ -43,6 +43,23 @@ export function tabCoins<T extends Coin>(tab: GridTab, list: readonly T[], isFol
   if (tab === "graduated") return list.filter((t) => t.phase === "graduated");
   if (tab === "following") return list.filter(isFollowed);
   return [];
+}
+
+/**
+ * THE OPERATOR'S OWN COINS IN THE LIST (owner 2026-10-14: "I don't see the $DEFICIT coin"). $DEFICIT is not in this site's registry (its
+ * own keeper runs it), so the index never lists it; its featured card (home.ts featuredCoins) leads the coin list instead, once it is
+ * created. It leads "New" and, when this browser follows it, "Following". The search matches the ticker (with or without "$"), the name,
+ * the rule and the mint address (a prefix is enough).
+ */
+export const FIRST_PARTY_CARD_IDS: readonly string[] = ["deficit"];
+export const searchKey = (q: string): string => q.trim().toLowerCase().replace(/^\$/, "");
+export const cardMatches = (v: Pick<CardView, "ticker" | "name" | "rule" | "mint">, q: string): boolean => {
+  const s = searchKey(q);
+  return !s || `${v.ticker} ${v.name} ${v.rule} ${v.mint?.address ?? ""}`.toLowerCase().includes(s);
+};
+export function firstPartyCards(featured: readonly CardView[], tab: GridTab, query: string, isFollowed: (v: CardView) => boolean = () => false): CardView[] {
+  if (tab !== "new" && tab !== "following") return [];
+  return featured.filter((v) => FIRST_PARTY_CARD_IDS.includes(v.id) && !v.tags.some((t) => t.label === "Not created yet") && cardMatches(v, query) && (tab === "new" || isFollowed(v)));
 }
 
 /** How many coins in a list had their curve read (a phase or a percentage), and how many did not. */

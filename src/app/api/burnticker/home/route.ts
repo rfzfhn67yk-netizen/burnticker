@@ -16,6 +16,7 @@ import { rankLines } from "@/lib/burnticker/coinRank";
 import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { coinKey, sharedTickers } from "@/lib/burnticker/coinKey";
+import { isTestCoin, testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +38,11 @@ export async function GET() {
   let coins: HomeCoin[] | null = [];
   // website-17 wiring item 3: the earned featured slots, from each coin's own receipts, creation time and readiness (featuredSlots.ts)
   const slotInputs: FeaturedInput[] = [];
+  // owner 2026-10-14: test coins (testCoins.ts) are left off the home: no card, no activity row, no next-result row
+  const tests = testCoinKeys(process.cwd(), p.registry);
   try {
     // owner decision 2026-10-12: a mainnet host lists no registry row on the devnet cluster (devnetHide.ts)
-    const tokens = publicRegistryRows(p.registry.tokens(), p.cluster);
+    const tokens = withoutTestCoins(publicRegistryRows(p.registry.tokens(), p.cluster), tests);
     registered = tokens.length;
     // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
     const shared = sharedTickers(tokens);
@@ -79,12 +82,12 @@ export async function GET() {
   // website-15 item 9: $REHEARSAL's LaunchLab pool, read like any coin's curve (one account read on a mainnet host with an RPC)
   let rehearsalCurve: RehearsalCurve = null;
   const rh = rehearsalCreate();
-  if (rh && p.market && p.cluster === "mainnet") rehearsalCurve = await readKeeperCurve(p.market, { cluster: "mainnet", mint: rh.mint, poolId: rh.poolId }, now);
+  if (rh && !isTestCoin(tests, { mint: rh.mint }) && p.market && p.cluster === "mainnet") rehearsalCurve = await readKeeperCurve(p.market, { cluster: "mainnet", mint: rh.mint, poolId: rh.poolId }, now);
   // website-17 wiring items 2 and 3: each coin's rank line (never a guessed rank) and the earned featured slots
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: ranks.get(c.ticker)?.line ?? null }));
   const slots = coins === null ? null : featuredSlots(slotInputs, now);
-  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster), featuredSlots: slots, cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
+  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
 }
 
 function homeCoinOf(s: Parameters<typeof buildPlatformIndex>[0][number]): HomeCoin {

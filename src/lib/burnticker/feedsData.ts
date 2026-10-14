@@ -5,6 +5,7 @@ import { coinKey, sharedTickers } from "@/lib/burnticker/coinKey";
 import { sampleReceipts } from "@/lib/burnticker/trustpack/samples";
 import { deficitRuleSchedule, readKeeperFiles, type KeeperFiles } from "@/lib/burnticker/deficitQueue";
 import { hidesDevnet, publicEvents, publicRegistryRows } from "@/lib/burnticker/devnetHide";
+import { testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
 import { upcomingFromKeeper, upcomingFromStatus, type UpcomingRow } from "@/lib/burnticker/upcoming";
 
 /**
@@ -24,7 +25,7 @@ export async function collectFeedData(p: Platform, now = Date.now(), root = proc
   const tickers = new Set<string>([DEFICIT_TICKER]);
   const listed: { ticker: string; mint: string }[] = [];
   try {
-    const all = publicRegistryRows(p.registry.tokens(), p.cluster);
+    const all = withoutTestCoins(publicRegistryRows(p.registry.tokens(), p.cluster), testCoinKeys(root, p.registry));
     const shared = sharedTickers(all.filter((t) => t.status !== "draft"));
     for (const t of all) {
       if (t.status === "draft" || t.status === "expired") continue;

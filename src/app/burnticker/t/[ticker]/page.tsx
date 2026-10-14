@@ -40,14 +40,17 @@ import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { CHOOSER_COPY, chooserRows, isMintKey, type CoinCandidate } from "@/lib/burnticker/coinKey";
 import type { DerbyScoreboard } from "@/lib/burnticker/derby/spec";
 import { BurnCalendar, ReceiptEmbed, ScoreboardCard } from "./CoinFeatures";
+import { TradePanel } from "./TradePanel";
 import { LEADERBOARD_TITLE, receiptAlt } from "../../_components/featureCopy";
+import { TradeButtons } from "../../_components/TradeLinks";
+import { coinLinks } from "@/lib/burnticker/tradeLinks";
 
 /**
  * THE COIN PAGE (LAUNCHPAD-PATH §6; re-ordered by website-11 on 2026-10-12 for the owner's review items 6 and 8, as the website brief
  * rewrites them; src/lib/burnticker/coinPage.ts holds the order). The header: image, name, $TICKER, the mint with a copy button and the
  * creator's links. ON TOP: the chart (GeckoTerminal's embed of the pool that trades now when one is indexed, else Burnticker's own
  * readings chart with burn markers) and beside it ONE outbound link, "Trade on Raydium", to this coin on Raydium. Burnticker never
- * takes an order, so there is no buy or sell panel. Beside the link: a static read of the pool (the curve as SOL raised of the
+ * takes an order or holds funds; the swap panel (TradePanel.tsx, 2026-10-14) sends swaps straight to the coin's Raydium pool. Beside the link: a static read of the pool (the curve as SOL raised of the
  * graduation threshold) and the readiness state, which says in plain words that burns begin after graduation and pool registration.
  * THEN THE TABS, in this order: "Burn log" (the receipts, each with "Check receipt" to the in-browser verifier, and verify-it-yourself),
  * "Rule" (the locked rule text, its hash, the dial, the window and the end, the fees, signers and addresses), and "Holders" only when
@@ -166,7 +169,11 @@ export default function TokenPage() {
         <CoinThumb src={prof?.imageUrl ?? null} ticker={s.ticker} size={72} generated />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-1.5"><VenueChip oracle={s.oracle} />{m?.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}{s.status !== "live" && <span className="bt-chip bt-chip-draft">{s.status}</span>}{prof?.badge && <span className="bt-chip bt-chip-window" title="the coin's window, fixed in its rule">{prof.badge}</span>}<span className="text-xs text-neutral-500">{s.cluster}, {s.launchedAt ? `launched ${ago(s.launchedAt, now)}` : "not launched"}</span></div>
-          <h1 className="text-2xl font-semibold leading-tight">{s.name} <span className="font-mono text-lg text-neutral-400">${s.ticker}</span></h1>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <h1 className="text-2xl font-semibold leading-tight">{s.name} <span className="font-mono text-lg text-neutral-400">${s.ticker}</span></h1>
+            {/* owner 2026-10-14: the primary "Trade on Raydium" button beside the ticker (tradeLinks.ts; built here, so it shows even when the pool read failed) */}
+            <div data-header-trade><TradeButtons links={coinLinks({ cluster: s.cluster, mint: s.mint, phase: m?.phase ?? null, status: s.status })} ticker={s.ticker} compact /></div>
+          </div>
           <p className="text-neutral-300">{prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey}</p>
           <p className="text-xs"><Link className="underline" href={creatorHref(s.addresses.creator)} data-created-by>{createdBy(shortAddress(s.addresses.creator))}</Link></p>
           {s.stated && <p className="text-xs text-neutral-400" data-stated>{statedSentences(s.stated, s.stated.finalAfter)}</p>}
@@ -206,11 +213,13 @@ export default function TokenPage() {
         </section>
 
         <aside className="space-y-3 lg:self-start" aria-label="Trade and pool">
+          {/* swap-1 (2026-10-14): the in-site swap panel (TradePanel.tsx); it renders nothing unless the coin is live on this host's network */}
+          <TradePanel ticker={s.ticker} mint={s.mint} status={s.status} cluster={s.cluster} graduatedPool={m?.phase === "graduated" ? m.graduatedPool : null} poolBurnBps={s.fees.postGraduation.legs.filter((l) => l.label.startsWith("burn pool")).reduce((a, l) => a + l.bps, 0)} links={m?.trade.links ?? []} />
           <section className={card} aria-label="Trade">
             <p className="mb-2 text-xs text-neutral-400" data-fees-before-trade>Each trade pays {s.fees.curve.totalBps / 100}% on the curve and {s.fees.postGraduation.totalBps / 100}% in the Raydium pool. Raydium shows how far your trade moves the pool, and your slippage setting, before you sign.</p>
             {trade ? <a href={trade.url} rel="noopener" target="_blank" className="bt-launch-btn block text-center" data-trade-link>{trade.label} ↗</a>
               : <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">{m?.trade.note ?? "The trade link appears once the coin is launched."}</p>}
-            <p className="mt-2 text-xs text-neutral-500">Burnticker never takes an order and has no swap of its own. {trade ? `This link opens Raydium, set to $${s.ticker}.` : ""}</p>
+            <p className="mt-2 text-xs text-neutral-500">Burnticker never takes an order or holds funds: a swap goes straight to the coin's Raydium pool. {trade ? `This link opens Raydium, set to $${s.ticker}.` : ""}</p>
           </section>
 
           {/* a static read of the pool, from the API: the curve as SOL raised of the graduation threshold, or the pool it trades in now */}

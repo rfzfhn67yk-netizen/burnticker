@@ -365,8 +365,10 @@ describe("item 15: the stat strip and the activity line (Claude site audit 3 ite
     assert.equal(deficit.text, "$DEFICIT created on mainnet, Oct 13"); assert.equal(deficit.at, "2026-10-13"); assert.match(deficit.href, /^https:\/\/explorer\.solana\.com\/tx\/2YyZVB96/);
     assert.ok(!ev.some((e) => e.kind === "reserved"), "the coin is created, so no reserved row");
     assert.equal(EVENT_LABEL.created, "Created"); assert.equal(EVENT_LABEL.reserved, "Mint reserved");
-    const first = homeData([], process.cwd()).events.slice(0, 2).map((e) => e.kind);
-    assert.deepEqual(first, ["created", "created"], "mainnet first");
+    // owner 2026-10-14: $REHEARSAL is a test coin (testCoins.ts), so its row stays in the records but leaves the home's line
+    const line = homeData([], process.cwd()).events;
+    assert.equal(line[0].kind, "created", "mainnet first"); assert.equal(line[0].ticker, "DEFICIT");
+    assert.ok(!line.some((e) => e.ticker === "REHEARSAL"));
     const launched = scratchRoot("launched");
     assert.ok(!mainnetRecordEvents(launched).some((e) => e.kind === "reserved"), "no reserved row once the coin is created");
   });
