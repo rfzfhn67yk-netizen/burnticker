@@ -447,6 +447,8 @@ export async function kalshiCategories(p: Platform, q: { category?: string | nul
  * the hits as recurring selectors (`tag:<slug>`, `tag:<slug>/moneyline` where the hits are games). The refuse list marks refused events;
  * a refused market is never offered. No prices, odds or volume are returned (venues.ts).
  */
+/** Audit 12 item 8: beside the search's closing-soon filter, what a market marked closePassed is (not hidden: it may still be open). */
+export const CLOSE_PASSED_SEARCH_NOTE = "A market marked as past its scheduled close is still listed by Polymarket and waiting for its result. It is not hidden by the 48-hour filter, because it may still take a coin; its result may come before a new coin graduates.";
 export async function polymarketSearch(p: Platform, q: { q?: string | null; status?: string | null; closingSoon?: string | null }, now = Date.now()): Promise<ApiResult> {
   const query = (q.q ?? "").trim();
   const status = q.status === "closed" || q.status === "all" ? q.status : "open";
@@ -458,9 +460,12 @@ export async function polymarketSearch(p: Platform, q: { q?: string | null; stat
     // would not graduate before the result); closingSoon=1 lists them, each marked. A market past its end date and not yet resolved is left to the market's own state
     const soon = (endDate: string | null) => status === "open" && !!endDate && Number.isFinite(Date.parse(endDate)) && Date.parse(endDate) >= now && Date.parse(endDate) - now < CLOSING_SOON_HOURS * 3_600_000;
     const show = /^(1|true|yes)$/i.test(q.closingSoon ?? "");
-    const markets = r.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate) })), events = r.events.map((e) => ({ ...e, closingSoon: soon(e.endDate), markets: e.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate) })) }));
+    // audit 12 item 8: a scheduled close already past (still listed by the source, so not settled yet) is marked as its own state, never
+    // shown as an upcoming close; the source's state decides whether it is open, this only labels it
+    const passed = (endDate: string | null) => status === "open" && !!endDate && Number.isFinite(Date.parse(endDate)) && Date.parse(endDate) < now;
+    const markets = r.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate), closePassed: passed(m.endDate) })), events = r.events.map((e) => ({ ...e, closingSoon: soon(e.endDate), closePassed: passed(e.endDate), markets: e.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate), closePassed: passed(m.endDate) })) }));
     const keptM = show ? markets : markets.filter((m) => !m.closingSoon), keptE = show ? events : events.filter((e) => !e.closingSoon);
-    return ok({ query, status, venue: "polymarket", events: keptE, markets: keptM, hiddenClosingSoon: markets.length - keptM.length + events.length - keptE.length, tags: r.tags, note: "Only yes-or-no markets are listed. YES is a market's first outcome and NO is its second. The result is read from the on-chain payout on Polygon. No prices, odds or volume are returned." });
+    return ok({ query, status, venue: "polymarket", events: keptE, markets: keptM, hiddenClosingSoon: markets.length - keptM.length + events.length - keptE.length, closePassedNote: CLOSE_PASSED_SEARCH_NOTE, tags: r.tags, note: "Only yes-or-no markets are listed. YES is a market's first outcome and NO is its second. The result is read from the on-chain payout on Polygon. No prices, odds or volume are returned." });
   } catch (e) {
     return fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
   }

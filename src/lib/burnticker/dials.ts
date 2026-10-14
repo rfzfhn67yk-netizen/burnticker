@@ -22,12 +22,14 @@ import { INVERSE_CHOICE, KEEPER_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnti
 
 export type DialId = "fraction" | "side" | "window" | "games" | "threshold" | "unit" | "direction" | "baseline" | "league" | "forward" | "inverse";
 /** What a window change needs besides the rule: the moment (a next-N window starts today) and the season in progress. */
-export interface DialCtx { nowMs?: number; seasonYear?: number | null; /** an outcome-list market's set (the championship card knows it) */ set?: { id: string; outcome: string } | null }
+export interface DialCtx { nowMs?: number; seasonYear?: number | null; /** an outcome-list market's set (the championship card knows it) */ set?: { id: string; outcome: string } | null; /** audit 12 item 1: the rule is one side of a LINKED pair (two candidates, one game, one market, the flippening); a one-shot one then burns 100 % only */ linked?: boolean }
 /** rules.ts DEFAULT_ON_END, copied so this file stays client-safe (rules.ts reads node:crypto); a test pins the two equal. */
 export const ON_END_DEFAULT = { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } as const;
 /** One-shot rules may spend up to 100 % (rules.ts ONE_SHOT_MAX_FRACTION); recurring ones 1–25 % (owner, 2026-10-12). */
 export const ONE_SHOT_FRACTION = { min: 0.01, max: 1, step: 0.01 } as const;
 export const FRACTION = { min: 0.01, max: 0.25, step: 0.005 } as const;
+/** audit 12 item 1: a linked one-shot pair moves the whole pool, so its dial has one value (launchBundle.ts refuses any other). */
+export const LINKED_ONE_SHOT_FRACTION = { min: 1, max: 1, step: 1 } as const;
 export interface DialSet {
   ids: DialId[];
   fraction: number;
@@ -36,8 +38,10 @@ export interface DialSet {
   threshold: { value: number; label: string; step: number; min: number; max: number } | null;
   /** The unit the source fixes, shown read-only when it is not a dial. */
   fixedUnit: string | null;
-  /** The fraction dial's bounds: 1–25 % recurring, 1–100 % one-shot. */
+  /** The fraction dial's bounds: 1–25 % recurring, 1–100 % one-shot, exactly 100 % on a linked one-shot pair. */
   bounds: { min: number; max: number; step: number };
+  /** audit 12 item 1: true on one side of a linked pair whose rule resolves once (its share row is 100 % only). */
+  linkedOneShot: boolean;
   /** League mode (rules.ts `set`, opt-in, off by default): a team coin of a league season, or an outcome of a market with a set. */
   league: { on: boolean; id: string; outcome: string; forwardBps: number } | null;
   /** The fade side (sources-2): offered on recurring first-party feed rules; null where the rule cannot take it (inverse.ts). */
@@ -54,7 +58,7 @@ const yearOf = (e: Extract<EspnSeries, { kind: "team" }>, c: DialCtx) => (e.wind
 // website-19: the one-shot presets (100 or 50 %) wherever the keeper drains a 100 % one-shot (rules.ts isOneShot: a market, a named launch,
 // a milestone, the flippening, and since QA pass 9 #3 a single game, which the keeper now drains after its result). The first snow keeps the 1–25 % bounds: the keeper does not drain it, so a 100 % share
 // would leave most of the pool to the end sink after one capped burn run.
-const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e ? e.kind === "game" : (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? "")) || (r.oracle === "derby" && (r as { derby?: { flip?: boolean } }).derby?.flip === true) || (r.oracle === "derby" && (r as { derby?: { selector?: string; once?: boolean } }).derby?.selector === "high" && (r as { derby?: { once?: boolean } }).derby?.once === true) || (r.kind === "binary" && !!r.market); };
+export const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e ? e.kind === "game" : (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? "")) || (r.oracle === "derby" && (r as { derby?: { flip?: boolean } }).derby?.flip === true) || (r.oracle === "derby" && (r as { derby?: { selector?: string; once?: boolean } }).derby?.selector === "high" && (r as { derby?: { once?: boolean } }).derby?.once === true) || (r.kind === "binary" && !!r.market); };
 /** The set a rule can join: a team coin's league season (id <league>-<year>-<win|loss>, outcome <ABBR>.<ESPN id>), or the market's set. */
 export function leagueSetFor(r: BurnRule, c: DialCtx = {}): { id: string; outcome: string } | null {
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
@@ -68,7 +72,7 @@ export function dialsFor(r: BurnRule, c: DialCtx = {}): DialSet {
   const ls = leagueSetFor(r, c);
   // the fade side is offered whenever the rule could take it with league mode off (turning league mode on switches it off)
   const invOk = inverseRefusal({ ...r, set: undefined }) === null;
-  const out: DialSet = { ids: ["fraction"], fraction: fractionOf(r), side: null, window: null, threshold: null, fixedUnit: null, bounds: oneShot ? ONE_SHOT_FRACTION : FRACTION, league: ls ? { on: !!r.set, id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: r.set?.forwardBps ?? 10_000 } : null,
+  const out: DialSet = { ids: ["fraction"], fraction: fractionOf(r), side: null, window: null, threshold: null, fixedUnit: null, bounds: oneShot ? (c.linked ? LINKED_ONE_SHOT_FRACTION : ONE_SHOT_FRACTION) : FRACTION, linkedOneShot: oneShot && c.linked === true, league: ls ? { on: !!r.set, id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: r.set?.forwardBps ?? 10_000 } : null,
     inverse: invOk ? { on: r.inverse === true, options: [{ value: "off", label: INVERSE_CHOICE.off }, { value: "on", label: INVERSE_CHOICE.on }] } : null };
   if (ls) out.ids.push("league");
   if (invOk) out.ids.push("inverse");

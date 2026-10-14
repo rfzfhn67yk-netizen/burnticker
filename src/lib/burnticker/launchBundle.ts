@@ -5,8 +5,10 @@ import { base58Encode } from "@/lib/burnKeeper/solana";
 import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type GlobalConfigView, type LaunchInput as SdkLaunchInput, type PlatformView } from "@/lib/burnKeeper/launch";
 import { CURVE_FEES, postGraduationFeesFor, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, LP_LOCKED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
-import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, isMeetingsRule, meetingsMirrorId, gameMirrorId, GAME_WIN_SERIES_RE, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, defaultOnEndFor, PAIR_CLAUSE, isOneShot, type BurnRule, PAIR_ORACLES, pairIdFor, isMeetingsRule, meetingsMirrorId, gameMirrorId, GAME_WIN_SERIES_RE, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { isRaisePreset, RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
+import { LINKED_ONE_SHOT_REFUSAL as LINKED_ONE_SHOT_REFUSAL_TEXT } from "@/lib/burnticker/linkedShare";
+import { isoDate, seasonEndMs } from "@/lib/burnticker/derby/spec";
 import { nameProblem } from "@/lib/burnticker/launchFields";
 import { DESCRIPTION_TOTAL_LIMIT, isWebLink, linksProblems } from "@/lib/burnticker/creatorProfile";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
@@ -328,6 +330,17 @@ export interface PairLaunchInput {
 
 /** The default voidBy for a pair: 30 days after launch (UTC date). */
 export const defaultVoidBy = (now = Date.now()): string => new Date(now + 30 * 86_400_000).toISOString().slice(0, 10);
+/**
+ * Audit 12 item 2: the void date the bundle route gives a pair (handlers.ts prepareLaunch), when it is known without a network read: the
+ * 30-day date for a settled-event pair and for a pair that repeats, the day before the season ends for the flippening. Null for a
+ * one-market pair, whose date is the market's own end date (the route reads it; the review route passes it in).
+ */
+export function pairVoidByOffline(rule: Pick<BurnRule, "oracle" | "market" | "derby">, o: { settled: boolean; now?: number }): string | null {
+  if (o.settled) return defaultVoidBy(o.now);
+  if (rule.oracle === "derby" && rule.derby?.selector === "coinvs" && rule.derby.flip) return isoDate(seasonEndMs(rule.derby) - 86_400_000);
+  if ((rule.oracle === "kalshi" || rule.oracle === "polymarket") && rule.market) return null;
+  return defaultVoidBy(o.now);
+}
 
 /** A head-to-head series pair always ends on the pair-winner sink (the rest goes to the series winner); a rule without the end sink is refused. */
 export const MEETINGS_END_SINK_REFUSAL = "A head-to-head season pair sends whatever is left at the end to the coin of the team that won more of their games, so its rule must keep the end sink (onEnd.endSink).";
@@ -343,7 +356,29 @@ export interface PairBundles { pairId: string; a: LaunchBundle; b: LaunchBundle;
  * wallet signs A's bundle, then B's. SEAM FOR THE PROGRAM BUILDER: if burn_receipts' TokenConfig has no counterpart field, the link
  * lives in each side's rules.json (pairId; B's counterpartMint) and in the registry's pairs table — nothing else needs it.
  */
-export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps): Promise<PairBundles> {
+/**
+ * AUDIT 12 item 1: a linked pair on a rule that resolves once (one market, the flippening, two candidates, one game) moves the whole pool:
+ * the winning coin burns all of its own pool and takes the other coin's. 100 % is the only share; any other is refused, never rewritten.
+ */
+export { LINKED_ONE_SHOT_REFUSAL } from "@/lib/burnticker/linkedShare";
+/** True when every mapping of the rule spends the whole pool (the share a linked one-shot pair takes). */
+export const linkedShareIsFull = (r: Pick<BurnRule, "kind" | "binary" | "scalar">): boolean => {
+  const ms = r.kind === "binary" ? [r.binary?.onYes, r.binary?.onNo] : [r.scalar?.perUnit];
+  return ms.every((m) => !m || m.fractionOfPool === undefined || m.fractionOfPool === 1);
+};
+
+/** What preparePairRules needs: side A's ticker and rule, side B's ticker and own pin, and the linking choices. */
+/** A stand-in public key used only to validate side B's draft before side A's mint exists (never built, never shown). */
+const PENDING_MINT = "11111111111111111111111111111111";
+export interface PairRulesInput { a: { ticker: string; rule: unknown }; b: { ticker: string; burnTarget?: BurnTargetField | null }; pairId?: string; voidBy?: string; now?: number; race?: PairLaunchInput["race"]; game?: PairLaunchInput["game"] }
+export interface PreparedPairRules { pairId: string; selector: string; ruleA: BurnRule; sideB: (counterpartMintA: string | null) => BurnRule; race: { slug: string; markets: [string, string] } | null; game: { series: [string, string] } | null }
+/**
+ * THE ONE PREPARATION PATH FOR A PAIR'S TWO RULES (audit 12 item 2, 2026-10-13). The review and the bundle both call this, so the rules
+ * the review shows are the rules the wallet signs: the pair clause, the void date, winner takes the burn, the race or the game, side B's
+ * own pin. `sideB(mint)` takes side A's mint: the bundle passes the new mint; the review passes null, the one field not known before the
+ * coins are made (preparedRulesCheck compares everything else).
+ */
+export function preparePairRules(input: PairRulesInput): PreparedPairRules {
   if (input.a.ticker === input.b.ticker) throw new Error("pair: the two sides need different tickers");
   const probe = validateRule({ ...(input.a.rule as object), pair: null });
   // the rivalry series (sources/espn.ts window `meetings`): the one catalogue source that pairs; side B reads the mirror series
@@ -363,13 +398,61 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
     if (probe.oracle !== "polymarket" || !probe.market) throw new Error("pair: two candidates in one race read two Polymarket outcome markets, one per coin");
     if (probe.onEnd && probe.onEnd.endSink !== true) throw new Error(CANDIDATES_END_SINK_REFUSAL);
   }
+  // Winner takes the burn (2026-10-11): a one-shot pair moves the whole pool, both sides at 100 %. Audit 12 item 1: a share other than
+  // 100 % is refused here, never rewritten (the page offers 100 % only; launchPreflight.ts refuses it before anything is built).
+  if (isOneShot(probe) && !linkedShareIsFull(probe)) throw new Error(LINKED_ONE_SHOT_REFUSAL_TEXT);
   const selector = probe.market ?? `${probe.series}${probe.filter.tickerIncludes ? `:${probe.filter.tickerIncludes}` : ""}`;
   const pairId = input.pairId ?? pairIdFor(input.a.ticker, input.b.ticker, race ? race.slug : selector);
   // Both or neither: the clause is part of BOTH sides' canonical rules (invertMapping carries it to side B), so each hash locks it.
   // …and the onEnd wind-down (no burn pool is ever left behind), unless the caller's rule already names its own.
-  // Winner takes the burn (2026-10-11): a one-shot pair moves the whole pool — both sides at 100 % (the loser forwards all of it).
-  const probeFull = isOneShot(probe) ? withFullFraction(probe) : probe;
-  const ruleA = validateRule({ ...probeFull, onEnd: probe.onEnd ?? { ...DEFAULT_ON_END }, pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now), winnerTakesBurn: true, ...(race ? { race } : {}), ...(game ? { game } : {}) } });
+  const ruleA = validateRule({ ...probe, onEnd: probe.onEnd ?? defaultOnEndFor(probe), pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now), winnerTakesBurn: true, ...(race ? { race } : {}), ...(game ? { game } : {}) } });
+  // Round 5 (WIRING-ROUND5 item 1): each side carries its OWN pinned token. Side A's never reaches side B (every branch below starts
+  // from ruleA, so it is stripped here); side B's comes from input.b.burnTarget and is part of side B's hashed rule.
+  const { burnTarget: _sideATarget, ...ruleABase } = ruleA;
+  void _sideATarget;
+  const sideB = (mintA0: string | null): BurnRule => {
+    // the review's draft of side B has no side A mint yet: it is validated with a stand-in (side B must name one), then shown with it empty
+    const mintA = mintA0 ?? PENDING_MINT;
+    // a head-to-head series: side B counts ITS team's results on the mirror series (direction up), so each coin reads its own team
+    // two candidates: side B reads candidate B's own market with the same YES mapping (never the inverted one)
+    const ruleB0 = mirror ? { ...ruleABase, series: mirror, pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: mintA } }
+      : race ? { ...ruleABase, market: race.markets[1], pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: mintA } }
+      : game ? { ...ruleABase, series: game.series[1], pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: mintA } }
+      : invertMapping(ruleA, mintA, pairId);
+    const v = validateRule(input.b.burnTarget ? { ...ruleB0, burnTarget: input.b.burnTarget } : ruleB0);
+    return mintA0 === null ? { ...v, pair: { ...v.pair!, counterpartMint: null } } : v;
+  };
+  return { pairId, selector, ruleA, sideB, race, game };
+}
+
+/**
+ * THE PREPARED RULES, RE-CHECKED BEFORE THE WALLET (audit 12 item 2). The review's `prepared` block holds each side's canonical text and
+ * fingerprint as preparePairRules made them; side B's names side A's mint, which exists only once the bundle is built, so it is held with
+ * that field empty. Given the bundle's own rules (and side A's new mint), this returns every difference in plain words; an empty list
+ * means the wallet is asked to sign exactly what the review showed.
+ */
+export interface PreparedSide { side: "A" | "B"; text: string; sha256: string; final: boolean; pending: string[] }
+export function preparedRulesCheck(prepared: { sides: readonly PreparedSide[] }, built: { a: { text: string; sha256: string; mint: string }; b?: { text: string; sha256: string } | null }): string[] {
+  const out: string[] = [];
+  const say = (side: "A" | "B") => `Coin ${side}'s rule changed after the review. Check the review again before signing.`;
+  for (const p of prepared.sides) {
+    const got = p.side === "A" ? built.a : built.b ?? null;
+    if (!got) { out.push(`Coin ${p.side} is missing from the prepared launch. Check the review again before signing.`); continue; }
+    let want = p.text;
+    if (p.pending.includes("pair.counterpartMint")) {
+      try { const r = JSON.parse(p.text) as BurnRule; want = lockRule({ ...r, pair: { ...r.pair!, counterpartMint: built.a.mint } }).text; } catch { out.push(say(p.side)); continue; }
+    }
+    if (p.pending.includes("pair.voidBy")) {
+      // the void date was read by the bundle route; every other field must match
+      try { const w = JSON.parse(want) as BurnRule, g = JSON.parse(got.text) as BurnRule; want = lockRule({ ...w, pair: { ...w.pair!, voidBy: g.pair?.voidBy ?? w.pair?.voidBy } }).text; } catch { out.push(say(p.side)); continue; }
+    }
+    if (want !== got.text || lockRule(JSON.parse(got.text)).sha256 !== got.sha256) out.push(say(p.side));
+  }
+  return out;
+}
+
+export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps): Promise<PairBundles> {
+  const { pairId, selector, ruleA, sideB, race, game } = preparePairRules({ a: { ticker: input.a.ticker, rule: input.a.rule }, b: { ticker: input.b.ticker, burnTarget: input.b.burnTarget }, pairId: input.pairId, voidBy: input.voidBy, now: input.now, race: input.race, game: input.game });
   // On chain the pair is linked through initialize_token (LaunchLab pairs): A names B's mint (A is PROVISIONAL), B names A back with
   // partnerFirst inside the 7-day pairing window. So side A is never built alone: B's draft — its rule and its mint — exists before A's
   // initialize_token is composed. A caller-supplied mint public key (deps.mint) cannot pre-name B: those bundles pair in the registry only.
@@ -378,17 +461,7 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   // the one deps.attesters / deps.quorum below; refuse a set the program would refuse anyway.
   if (new Set(deps.attesters).size !== deps.attesters.length) throw new Error("pair: both coins need one attester set of distinct keys (the program refuses PairAttestersDiffer otherwise)");
   const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...deps, ...(kpB ? { pairMint: kpB.publicKey.toBase58(), partnerFirst: false } : {}) });
-  // a head-to-head series: side B counts ITS team's results on the mirror series (direction up), so each coin reads its own team
-  // two candidates: side B reads candidate B's own market with the same YES mapping (never the inverted one)
-  // Round 5 (WIRING-ROUND5 item 1): each side carries its OWN pinned token. Side A's never reaches side B (every branch below starts
-  // from ruleA, so it is stripped here); side B's comes from input.b.burnTarget and is part of side B's hashed rule.
-  const { burnTarget: _sideATarget, ...ruleABase } = ruleA;
-  void _sideATarget;
-  const ruleB0 = mirror ? { ...ruleABase, series: mirror, pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: a.mint } }
-    : race ? { ...ruleABase, market: race.markets[1], pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: a.mint } }
-    : game ? { ...ruleABase, series: game.series[1], pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: a.mint } }
-    : invertMapping(ruleA, a.mint, pairId);
-  const ruleB = validateRule(input.b.burnTarget ? { ...ruleB0, burnTarget: input.b.burnTarget } : ruleB0);
+  const ruleB = sideB(a.mint);
   const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: kpB ?? undefined, ...(kpB ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });
   return { pairId, a, b, selector, notes: [
     ...(race ? [`candidates pair ${pairId}: ${input.a.ticker} on market ${race.markets[0]} and ${input.b.ticker} on market ${race.markets[1]}, two outcomes of the race ${race.slug}; the race counts once both markets are final: exactly one YES → that coin burns its own pool and the other's pool forwards to it; otherwise both pools go to $DEFICIT's burn at the end`] : []),

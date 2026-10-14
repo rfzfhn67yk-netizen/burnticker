@@ -98,7 +98,7 @@ describe("three decisions to a coin", () => {
 
   test("Coin vs Coin: 'Runs for' days, never 'season'; the preview is the generated art without live rows", () => {
     const tile = read(TILE), card = read("src/app/burnticker/_components/CoinCard.tsx");
-    assert.ok(!/Season \(days\)/.test(tile)); assert.match(tile, /seasonDays = 30/);
+    assert.ok(!/Season \(days\)/.test(tile)); assert.match(tile, /\[seasonDays, setSeasonDays\] = useState<number>\(30\)/, "website-26: 7, 14 or 30 days, 30 by default");
     assert.match(tile, /preview\.svg\?r=/, "the generated receipt art, never NO IMAGE");
     // since 2026-10-12 the prelaunch card returns early with only the art, name, $TICKER, badge and rule row: no curve, burns or receipt rows
     assert.match(card, /if \(prelaunch\) \{\s*return \(/);

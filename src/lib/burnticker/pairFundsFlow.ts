@@ -93,18 +93,27 @@ export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a:
  * forward_on_end sends whatever is left, and later fees, to the winner while it is live and still paired (partner_won), else to $DEFICIT;
  * with no single winner no PairResult exists and both ends go to $DEFICIT. `names` are the two candidates or the two teams.
  */
+/**
+ * Audit 12 item 5: a race whose two markets are PARTY outcomes ("Democratic Party", "Republican Party"; Polymarket's state Senate races)
+ * settles on the party's result, whoever the nominee is, so every sentence names the parties, never the candidates. True when both
+ * names are parties.
+ */
+/** The candidates sentence said for two party outcomes (the settlement subject is the party, whoever its nominee is). */
+export const PARTIES_PAIR_SENTENCE = "Two markets, one race, one party each: the coin of the party that wins burns its own pool on the result and takes the other coin's pool at the end. The result is the party's, whoever its nominee is. If neither party wins, both pools go to $DEFICIT's burn.";
+export const isPartySubject = (names: { a: string; b: string }): boolean => /\bpart(y|ies)\b/i.test(names.a) && /\bpart(y|ies)\b/i.test(names.b);
 export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a: string; b: string }, names: { a: string; b: string }, o: { fees?: SplitLike | null } = {}): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
   const game = shape === "game";
+  const party = !game && isPartySubject(names);
   const nameA = game ? teamRefByName(names.a) : names.a, nameB = game ? teamRefByName(names.b) : names.b;
   return {
-    version: "winner-takes-the-burn", versionLabel: game ? "Rule version: winner takes the burn, two teams in one game" : "Rule version: winner takes the burn, two candidates in one race",
-    oneLiner: game ? GAME_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE,
+    version: "winner-takes-the-burn", versionLabel: game ? "Rule version: winner takes the burn, two teams in one game" : party ? "Rule version: winner takes the burn, two parties in one race" : "Rule version: winner takes the burn, two candidates in one race",
+    oneLiner: game ? GAME_PAIR_SENTENCE : party ? PARTIES_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE,
     steps: [
       { title: "Where fees come from", text: pairFeesText(o.fees) },
       { title: game ? "When the game is final" : "When both markets are final", text: game
         ? `The result counts once, when a second source agrees on it. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.`
-        : `The race counts once, when both candidates' markets are final. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.` },
+        : `The race counts once, when both ${party ? "parties'" : "candidates'"} markets are final. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.` },
       { title: "At the end", text: `The losing coin sends whatever is left in its burn pool, and any fees that arrive later, to the winning coin's burn pool. The winning coin burns down what is left on itself. If there was no single winner, each coin sends what is left to $DEFICIT's burn.` },
     ],
     outcomes: game ? [
@@ -114,7 +123,7 @@ export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a:
       { when: "The winning coin has no live trading pool", then: "The losing coin's pool goes to $DEFICIT's burn instead." },
       { when: "One coin never reaches its trading pool within 30 days", then: "The pair is void. Nothing moves between the two coins, and each coin burns down what is left on itself." },
     ] : [
-      { when: "A third candidate wins, so both markets settle NO", then: "Nothing moves between the two coins. At the end each pool goes to $DEFICIT's burn." },
+      { when: party ? "Another party wins, so both markets settle NO" : "A third candidate wins, so both markets settle NO", then: "Nothing moves between the two coins. At the end each pool goes to $DEFICIT's burn." },
       { when: "A market settles 50-50", then: "There is no single winner. Nothing moves between the two coins, and at the end each pool goes to $DEFICIT's burn." },
       { when: "One market is final and the other is not", then: "Both coins wait. The race counts once, when both are final." },
       { when: "The winning coin has no live trading pool", then: "The losing coin's pool goes to $DEFICIT's burn instead." },

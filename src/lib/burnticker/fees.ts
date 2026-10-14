@@ -3,7 +3,7 @@ import { feeSplit as liveFeeSplit, PPM, ppmToBps, type AmmConfigView, type Globa
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCKED_PCT, LP_POLICY_LINE, feeKeysPda, operatorTreasuryRecord } from "@/lib/burnticker/lockFees";
 import { CPMM_CONFIG_ID, CPMM_TIER, cpmmTierLabel, postGraduationBps, type CpmmCluster } from "@/lib/burnticker/cpmmTier";
-import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
+import { PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 
 /**
  * BURNTICKER FEE SPLIT — the one place the DESIGNED numbers live (the owner, 2026-10-09; sources: docs/burnkeeper/fees.md, read from
@@ -127,7 +127,18 @@ export const OPERATOR_CONTACT_TODO = "TODO_CONTACT_ADDRESS";
  */
 export const OPERATOR_SHARE_LINE = postGraduationShareLine(POST_GRADUATION_FEES);
 /** The fee disclosure in one line, the footer's DEV FEE row on every page (site-polish-2); USE_OF_FEES below is it plus the use. */
-export const DEV_FEE_LINE = `Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume. ${OPERATOR_SHARE_LINE}`;
+/**
+ * Private review 9 (editorial): the footer's fee sentence, qualified by venue. The curve fee is the same on both venues; after graduation a
+ * LaunchLab coin's pool and a pair-curve coin's pool split each swap differently (a pair's pool has no creator fee for the burn pool), so
+ * the shares are said per venue. One function: `venue` null (the footer, the whitepaper, the static pages) says both.
+ */
+export function devFeeLineFor(venue: "launchlab" | "pair-curve" | null = null): string {
+  const curve = `Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume.`;
+  if (venue === "launchlab") return `${curve} ${OPERATOR_SHARE_LINE}`;
+  if (venue === "pair-curve") return `${curve} ${PAIR_OPERATOR_SHARE_LINE}`;
+  return `${curve} ${OPERATOR_SHARE_LINE} LaunchLab rates; pair-curve pairs differ.`;
+}
+export const DEV_FEE_LINE = devFeeLineFor(null);
 export const USE_OF_FEES = `${DEV_FEE_LINE} The operator's part of the liquidity fees is fixed in code, and the coin side of those fees is burned. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.`;
 /**
  * The attester line on the trust page (review 2 §2, 2026-10-11): the present fact, not a schedule — Switchboard ended its services and no

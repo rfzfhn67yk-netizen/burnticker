@@ -94,6 +94,10 @@ export interface ReviewCardProps {
   tickerChecks?: TickerCheck[] | null;
   /** website-19 (snag 11): extra plain lines under the rule sentence, such as a result due before graduation. */
   notes?: string[] | null;
+  /** website-26 (WIRING-FEATURES item 11): a daily race's fight line (derby/tile.ts fightLead), the card's first line; null otherwise. */
+  lead?: string | null;
+  /** website-26 (WIRING-FEATURES item 6): the result simulator (SimulatorDisclosure, closed), under the rule summary. */
+  simulator?: ReactNode;
   /**
    * website-20 (audit 6 item 12, the owner's mobile rule): "full" = every control on one card (the free-text path, as before); "name" = step 4
    * of the guided launch, the name, ticker, image, description and links only, with `next`; "review" = step 5, the five facts with an Edit
@@ -303,6 +307,7 @@ export function ReviewCard(p: ReviewCardProps) {
   );
   return (
     <section className="min-w-0 max-w-full overflow-hidden rounded-xl border border-amber-400/60 bg-neutral-900 p-3 sm:p-4 space-y-3 text-sm" aria-label="Review" data-review-card data-mode={mode}>
+      {p.lead && <p className="min-w-0 break-words text-base font-medium text-amber-200" data-fight-lead>{p.lead}</p>}
       {mode === "review" && p.facts && p.facts.length > 0 && (
         <dl className="min-w-0 divide-y divide-neutral-800 rounded-lg border border-neutral-800" data-review-facts>
           {p.facts.map((f) => (
@@ -313,6 +318,7 @@ export function ReviewCard(p: ReviewCardProps) {
           ))}
         </dl>
       )}
+      {mode === "review" && p.simulator}
       {/* launch integrity 252: names, tickers, shares, raise, the profile and every other material choice are locked while the launch is
           prepared (busy); the editor latch is untouched, so an open editor stays open, only disabled, until done */}
       <fieldset disabled={p.busy} className="m-0 min-w-0 space-y-3 border-0 p-0" data-review-inputs>
@@ -363,6 +369,7 @@ export function ReviewCard(p: ReviewCardProps) {
       </div>}
       {mode === "full" && p.namePrompt && <p className="text-xs text-amber-300" role="status">{p.namePrompt}</p>}
       {mode !== "review" && <p className="min-w-0 break-words text-base text-neutral-100" data-summary>{p.sentence}</p>}
+      {mode === "full" && p.simulator}
       {p.notes && p.notes.length > 0 && <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-neutral-300" data-review-notes>{p.notes.map((x) => <li key={x}>{x}</li>)}</ul>}
       {p.dispute && !p.event?.stated && <p className="min-w-0 break-words text-xs text-neutral-300" data-dispute>{p.dispute}</p>}
       {p.duplicate}

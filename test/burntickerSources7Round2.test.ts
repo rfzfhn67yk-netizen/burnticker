@@ -111,13 +111,14 @@ describe("round 2, H5: one sentence per field, and the review's fieldProblems", 
 });
 
 describe("round 2: the filter help and the unpaired one-game sentence", () => {
-  test("the filter help no longer names solar flares; the unpaired one-game option says each coin burns on its own team's loss", () => {
+  // audit 12 item 3 (2026-10-13): picking one game builds the LINKED pair, so the option now says that form (it said two unlinked coins)
+  test("the filter help no longer names solar flares; the one-game option says the linked pair it builds", () => {
     assert.doesNotMatch(edgeCase(115)!, /solar/i);
     lint(edgeCase(115)!);
     const w = patternWords("once", { follow: "rivalry", pairKind: "teams", rivalryScope: "game" });
-    assert.equal(w.label, "Their next game only");
-    assert.match(w.sentence, /each coin burns once if its own team lost/);
-    assert.match(w.sentence, /not linked/);
+    assert.equal(w.label, "Their next game only, winner takes the burn");
+    assert.match(w.sentence, /the winning team's coin burns its whole pool and takes the losing team's coin's pool/);
+    assert.match(w.sentence, /are linked/);
     lint(w.sentence);
   });
 });

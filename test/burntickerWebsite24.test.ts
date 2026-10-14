@@ -43,7 +43,7 @@ describe("the launch state says whether round 5 is deployed (never a date)", () 
     assert.deepEqual(siteLaunchState({ ...ENV }).burnReal, { available: false, line: BURN_REAL_WAITING });
     assert.deepEqual(siteLaunchState({ ...ENV, [BURN_REAL_LAYOUT_ENV]: "r5" }).burnReal, { available: true, line: null });
     plain(BURN_REAL_WAITING);
-    assert.match(BURN_REAL_WAITING, /waits for the round-5 program/);
+    assert.match(BURN_REAL_WAITING, /not offered on this site yet/); assert.doesNotMatch(BURN_REAL_WAITING, /round/);   // audit 12 item 15: no release names
   });
   test("the catalogue carries it to the browser; a missing or stale reading is waiting (fail closed)", () => {
     const on = { cluster: "devnet", launches: catalogueLaunches({ ...ENV, [BURN_REAL_LAYOUT_ENV]: "r5" }) };

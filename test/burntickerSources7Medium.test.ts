@@ -73,9 +73,9 @@ describe("M2: the wrong sentences", () => {
   });
   test("a one-game rivalry on a later game names that game, not 'their next game'", () => {
     const later = patternWords("once", { follow: "rivalry", pairKind: "teams", rivalryScope: "game", gameLabel: "Sat, May 1, 2027" });
-    assert.equal(later.label, "Their game on Sat, May 1, 2027 only");
+    assert.equal(later.label, "Their game on Sat, May 1, 2027 only, winner takes the burn");   // audit 12 item 3: the linked pair it builds
     assert.match(later.sentence, /^When their game on Sat, May 1, 2027 is final/);
-    assert.equal(patternWords("once", { follow: "rivalry", pairKind: "teams", rivalryScope: "game" }).label, "Their next game only");
+    assert.equal(patternWords("once", { follow: "rivalry", pairKind: "teams", rivalryScope: "game" }).label, "Their next game only, winner takes the burn");
   });
 });
 

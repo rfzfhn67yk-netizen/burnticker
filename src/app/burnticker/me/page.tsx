@@ -8,6 +8,7 @@ import { WalletButton, useOpenWalletList } from "../_components/WalletButton";
 import { WALLET_COPY, meState, shortAddress, wantsConnect } from "@/lib/burnticker/walletShell";
 import { ANALYTICS_COPY } from "@/lib/burnticker/creatorBenefits";
 import { WEEK_MEANING } from "@/lib/burnticker/coinRank";
+import { LaunchChecklist } from "../_components/LaunchChecklist";
 
 /**
  * THE CREATOR DASHBOARD (2026-10-10; gated by the shell's wallet since website-13, 2026-10-12): "Your coins" is the one page a connected
@@ -104,6 +105,8 @@ export default function CreatorDashboard() {
                   <dt className="text-neutral-500">{ANALYTICS_COPY.follows}</dt><dd>{ANALYTICS_COPY.followsNone}</dd>
                 </>}
               </dl>
+              {/* website-26 (WIRING-FEATURES item 10): the six post-launch steps and what comes next, and who does it */}
+              <LaunchChecklist mint={c.mint} />
               <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Today&apos;s post {c.todayPost.lintOk ? "passes the wording check." : <span className="text-red-400">fails the wording check because of {c.todayPost.hits.join(", ")}.</span>}</summary><pre className="mt-1 whitespace-pre-wrap rounded bg-neutral-950 p-2 text-neutral-300">{c.todayPost.text}</pre></details>
               <button className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400 disabled:opacity-40" disabled={!c.todayPost.lintOk} onClick={() => void copy(c)}>{copied === c.ticker ? "copied ✓" : "copy today's post"}</button>
             </li>

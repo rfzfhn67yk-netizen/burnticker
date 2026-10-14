@@ -357,6 +357,7 @@ export class DerbyAdapter implements OracleAdapter {
           const row = await this.decideCoinvs(key, spec, w);
           if (row.status === "withheld") refusals.push(`${w.id}: ${row.reason}`);
         }
+        this.recordTally(key, spec, now);
       }
       return { events: this.eventsOf(key, sinceIso, spec), awaitingFinal, refusals, settlementSourceUrl: HERMES_URL };
     }
@@ -407,10 +408,40 @@ export class DerbyAdapter implements OracleAdapter {
     return { events: this.slotEvents(t, state, spec.slot, sinceIso), awaitingFinal, refusals, settlementSourceUrl: HERMES_URL };
   }
 
+  /**
+   * THE DAILY RACE'S SEASON TALLY (audit 12, end-sink picker report, 2026-10-13). A daily race ends on the pair-winner sink, and the end's
+   * PairResult is the one dated at the coin's last reading. Without this reading that was the LAST DAY's winner, so one arbitrary day
+   * decided where the rest of both pools went. Like the rivalry series' season-end reading (sources/gameSettle.ts), the race now records one
+   * more reading once every window of the season is recorded: the side with more winning days (YES for side A, NO for side B), dated the
+   * UTC day after the season ends, so its PairResult is the end's. Like that reading it is a result: the winner burns its share for it and
+   * the other coin's share for it moves to the winner. Level on winning days → a void reading (no burn), and the end is void: each coin
+   * burns down what is left on itself. Withheld and tied days count for neither side. The flippening keeps its one decisive result.
+   */
+  static tallyId = (spec: Pick<CoinVsSpec, "season">): string => `tally-${isoDate(seasonEndMs(spec))}`;
+  private tallySpan(spec: CoinVsSpec): DerbyWindowSpan { const startMs = seasonEndMs(spec); return { id: DerbyAdapter.tallyId(spec), startMs, endMs: startMs + DAY_MS }; }
+  /** The season's winning days per side, from the recorded windows (the tally itself excluded). */
+  tallyOf(key: string, spec: CoinVsSpec): { a: number; b: number } {
+    const ids = new Set(seasonWindows(spec).map((w) => w.id));
+    const rows = this.store.windows(key).filter((r) => ids.has(r.windowId) && r.status === "decided");
+    return { a: rows.filter((r) => r.result === "yes").length, b: rows.filter((r) => r.result === "no").length };
+  }
+  private recordTally(key: string, spec: CoinVsSpec, now: number): void {
+    const w = this.tallySpan(spec);
+    if (this.store.window(key, w.id) || now < w.endMs + this.grace) return;
+    if (seasonWindows(spec).some((x) => !this.store.window(key, x.id))) return;
+    const t = this.tallyOf(key, spec), result: "yes" | "no" | "void" = t.a > t.b ? "yes" : t.b > t.a ? "no" : "void";
+    const note = result === "void" ? `the season ended level: ${spec.a.symbol} and ${spec.b.symbol} won ${t.a} days each` : `${result === "yes" ? spec.a.symbol : spec.b.symbol} won more days over the season (${spec.a.symbol} ${t.a}, ${spec.b.symbol} ${t.b})`;
+    const doc = JSON.parse(canonical({ schema: "burnticker.derby-tally/v1", selectorKey: key, season: spec.season, days: { a: t.a, b: t.b }, result, note })) as Record<string, unknown>;
+    const sha = sha256Hex(canonical(doc));
+    this.store.decide({ selectorKey: key, windowId: w.id, status: "decided", eventId: `${w.id}:${proof16(sha)}`, at: windowAt(w), result, value: String(t.a - t.b), reason: note, proofSha256: sha, proof: doc }, this.d.now());
+    this.log(`${key}: season tally ${result.toUpperCase()} — ${note}`);
+  }
+
   /** A decided coin-vs-coin window → the registry reading. */
   private eventsOf(key: string, sinceIso: string | null, spec: CoinVsSpec): SettledEvent[] {
     return this.store.windows(key).filter((r) => r.status === "decided" && r.eventId && (!sinceIso || r.at > sinceIso)).map((r) => {
       const doc = r.proof as { a?: { changePct?: string } | null; b?: { changePct?: string } | null; decision?: { margin?: string; crossMargin?: string } } | null;
+      if (r.windowId.startsWith("tally-")) return { id: r.eventId!, at: r.at, result: r.result, value: r.value, title: `${spec.a.symbol} vs ${spec.b.symbol} season tally: ${r.reason ?? ""}`, sourceUrl: this.sourceUrlFor(spec.a, spec.b, Date.parse(r.at) + 1000), method: "derby season tally: the side with more winning days", proof: r.proofSha256 ? `${DERBY_PROOF_PREFIX}${r.proofSha256}` : null };
       const title = spec.flip ? `${spec.a.symbol} vs ${spec.b.symbol} flippening ${r.windowId}: ${r.result === "yes" ? `${spec.a.symbol} passed ${spec.b.symbol}` : "season ended without it"}` : `${spec.a.symbol} ${doc?.a?.changePct ?? "?"}% vs ${spec.b.symbol} ${doc?.b?.changePct ?? "?"}% (${r.windowId})`;
       return { id: r.eventId!, at: r.at, result: r.result, value: r.value, title, sourceUrl: this.sourceUrlFor(spec.a, spec.b, windowSpan(spec.window, r.windowId).endMs), method: `derby ${spec.measure}${spec.flip ? " flippening" : ""}: margin ${doc?.decision?.margin ?? r.value} (cross ${doc?.decision?.crossMargin ?? "—"})`, proof: r.proofSha256 ? `${DERBY_PROOF_PREFIX}${r.proofSha256}` : null };
     });
@@ -599,7 +630,13 @@ export class DerbyAdapter implements OracleAdapter {
       }
       if (now < seasonEndMs(d) + this.grace) return null;
       const missing = seasonWindows(d).filter((w) => !this.store.window(t.selectorKey, w.id));
-      return missing.length ? null : `season over (${d.season.days} days from ${d.season.start})`;
+      if (missing.length) return null;
+      // audit 12: the race ends on its season tally (recordTally), never on the last day alone
+      const tally = this.store.window(t.selectorKey, DerbyAdapter.tallyId(d));
+      if (!tally) return null;
+      // …and only once the tally is a reading with this coin's receipt, so the end is dated at it (its PairResult decides the leftover)
+      if (tally.eventId && !this.d.registry.receipt(t.mint, tally.eventId)) return null;
+      return tally.result === "void" ? `void: the season ended level on winning days (${d.season.days} days from ${d.season.start}), so neither coin takes the rest` : `season over (${d.season.days} days from ${d.season.start}): ${tally.reason}`;
     }
     let tt: Tournament;
     try { tt = this.tournament(d.tournamentId); } catch { return null; }
@@ -627,6 +664,7 @@ export class DerbyAdapter implements OracleAdapter {
       return { reason: why, atMs: lastW ? lastW.endMs + FLIP_FINAL_RETRY_DAYS * DAY_MS : this.d.now() };
     }
     if (d?.selector === "high") { const w = this.store.windows(t.selectorKey).filter((r) => r.status === "decided" && r.eventId !== null).pop(); const last = highLastDay(d); return { reason: why, atMs: d.once && w ? Date.parse(w.at) + 1000 : last ? dayMs(last) + DAY_MS : this.d.now() }; }
+    if (d?.selector === "coinvs") return { reason: why, atMs: seasonEndMs(d) + DAY_MS };   // the tally's day (recordTally)
     if (d && d.selector !== "bracket") return { reason: why, atMs: seasonEndMs(d) };
     if (d?.selector === "bracket") {
       const tt = this.tournament(d.tournamentId), st = this.bracket(tt), r = st.eliminatedIn.get(d.slot);

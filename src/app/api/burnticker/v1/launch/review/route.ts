@@ -1,6 +1,9 @@
 // Public API v1 (1.14.0): the read-only pre-wallet review (src/lib/burnticker/launchReview.ts; launch audit 5 L02 / L06).
 import { fail, ok, readJson, runV1 } from "@/lib/burnticker/api/http";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
+import { oneShotVoidBy } from "@/lib/burnticker/api/handlers";
+import { settledPairInput } from "@/lib/burnticker/launchPreflight";
+import type { LockedRule } from "@/lib/burnticker/rules";
 import { statedCtx } from "@/lib/burnticker/coinText";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { tickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
@@ -56,12 +59,21 @@ export async function POST(req: Request) {
     // sources-7 H6: a season rule on a team whose season is over is refused (seasonOver.ts), from the platform's schedule port
     const seasonOver = await seasonOverFor((body as { rule?: unknown }).rule, platform().seasonSchedule);
     const game = await gameFor((body as { rule?: unknown }).rule);
+    // audit 12 item 2: a one-market pair's void date is the market's own end date, read as the bundle route reads it (handlers.ts
+    // oneShotVoidBy, at most 4 seconds), so the review's side A rule is the exact one; no read leaves it labelled a draft
+    let pairVoidBy: string | null = null;
+    const pairSide = (body as { pair?: unknown }).pair;
+    if (pairSide && typeof pairSide === "object" && !settledPairInput(pairSide) && rule && (rule.oracle === "polymarket" || rule.oracle === "kalshi") && typeof rule.market === "string" && rule.market) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      pairVoidBy = await Promise.race([oneShotVoidBy(platform(), { rule } as unknown as LockedRule), new Promise<null>((res) => { timer = setTimeout(() => res(null), 4_000); })]);
+      clearTimeout(timer);
+    }
     // cheap-features item 5: a team rule counted over the team's previous season (one schedule read, at most 3 seconds, never required)
     const lastSeason = await lastSeasonBacktest((body as { rule?: unknown }).rule, platform().teamSeason);
     // the end-sink picker: the live coins on this network a rule may name to take the rest (endSinks.ts); unreadable = none
     let sinks: SinkCoin[] = [];
     try { const p = platform(); sinks = liveSinks(p.registry, p.cluster); } catch { sinks = []; }
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason });
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];

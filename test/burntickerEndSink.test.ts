@@ -46,7 +46,8 @@ function seedSeason(w: DerbyWorld, tie = false): void {
 }
 /** The end date's result: [winner, loser] mints (null winner = a tie / draw). */
 async function ends(w: DerbyWorld): Promise<{ winner: string | null; loser: string | null }> {
-  const r = await w.program.pairForward.port(w.a.mint, w.b.mint).result(20261005);
+  // audit 12: the end's result is the season tally's, dated the UTC day after the season (derby/adapter.ts recordTally)
+  const r = await w.program.pairForward.port(w.a.mint, w.b.mint).result(20261006);
   const winner = r?.winner ?? null;
   return { winner, loser: winner === null ? null : winner === w.a.mint ? w.b.mint : w.a.mint };
 }
@@ -57,12 +58,12 @@ describe("the keeper: a RESOLVED end forwards what is left to the end sink", () 
     // both coins pinned PAIR_WINNER (winner-takes-the-burn pair, partner named in the create), minimum = the rule's sweep threshold
     for (const [m, other] of [[w.a.mint, w.b.mint], [w.b.mint, w.a.mint]]) assert.deepEqual(await port(w, m).endSink(), { kind: "pair-winner", sinkMint: other, minForwardLamports: BigInt(50_000_000) });
     seedSeason(w);
-    w.clock.now = B(6) + 3 * 3600_000;
+    w.clock.now = B(7) + 3 * 3600_000;
     for (let i = 0; i < 3; i++) await runCycle(w.deps);
     const { winner, loser } = await ends(w);
     assert.equal(winner, w.a.mint, "WIF out-gained SHIB on the only day");
     const re = await port(w, loser!).ruleEnd();
-    assert.deepEqual({ outcome: re?.outcome, recordDate: re?.recordDate, forwards: re?.forwards }, { outcome: "resolved", recordDate: 20261005, forwards: 1 });
+    assert.deepEqual({ outcome: re?.outcome, recordDate: re?.recordDate, forwards: re?.forwards }, { outcome: "resolved", recordDate: 20261006, forwards: 1 });
     assert.ok(re!.forwardedLamports > BigInt(4) * SOL, `${re!.forwardedLamports}`);
     const rec = JSON.parse(w.registry.getStatus(`rule.endfwd.${loser}`)!);
     assert.equal(rec.to, winner); assert.equal(rec.intended, winner);
@@ -80,7 +81,7 @@ describe("the keeper: a RESOLVED end forwards what is left to the end sink", () 
     assert.equal(w.program.fake(winner!).endState.state, "live");
     assert.ok(w.registry.receipts(winner!).some((r) => r.kind === "winddown"), "the winner burns down what is left, its partner's leftover included");
     // …through to its own retirement and the self-burn sweep (the winning coin is the sink)
-    for (let d = 7; d <= 40; d++) { w.clock.now = B(6) + (d - 6) * DAY + 3 * 3600_000; await runCycle(w.deps); }
+    for (let d = 8; d <= 41; d++) { w.clock.now = B(6) + (d - 6) * DAY + 3 * 3600_000; await runCycle(w.deps); }
     assert.equal(w.registry.token(winner!)!.status, "retired");
     assert.equal(await port(w, winner!).ruleEnd(), null, "the winner never records an end");
   });
@@ -88,7 +89,7 @@ describe("the keeper: a RESOLVED end forwards what is left to the end sink", () 
   test("the trickle follows the sink: under the minimum nothing moves; over it, at most once a week; the end is never recorded twice", async () => {
     const w = await sinkWorld();
     seedSeason(w);
-    w.clock.now = B(6) + 3 * 3600_000; for (let i = 0; i < 3; i++) await runCycle(w.deps);
+    w.clock.now = B(7) + 3 * 3600_000; for (let i = 0; i < 3; i++) await runCycle(w.deps);
     const { loser } = await ends(w);
     const forwards = async () => (await port(w, loser!).ruleEnd())!.forwards;
     assert.equal(await forwards(), 1);
@@ -104,29 +105,22 @@ describe("the keeper: a RESOLVED end forwards what is left to the end sink", () 
     assert.equal(w.registry.signatures(loser!, "rule-end:resolved").length, 1, "the end is recorded once");
   });
 
-  test("a tie on the last day (no winner): both coins record RESOLVED ends and forward to $DEFICIT; while the flagship is not live the forward waits and nothing retires", async () => {
+  // audit 12 (end-sink picker report): a daily race level on winning days ends VOID on its season tally: nothing moves between the coins
+  // and nothing goes to $DEFICIT; each coin burns down what is left on itself
+  test("a season level on winning days (no winner): the tally reading is void, both coins record VOID ends, forward nothing and wind down on themselves", async () => {
     const w = await sinkWorld();
-    w.program.fake(w.flagship).cfg = { ...w.program.fake(w.flagship).cfg, poolRegistered: false };
     seedSeason(w, true);
     const flag0 = fee(w, w.flagship);
-    w.clock.now = B(6) + 3 * 3600_000; for (let i = 0; i < 3; i++) await runCycle(w.deps);
-    assert.equal((await ends(w)).winner, null, "a tie");
+    w.clock.now = B(7) + 3 * 3600_000; for (let i = 0; i < 3; i++) await runCycle(w.deps);
+    assert.equal((await ends(w)).winner, null, "level");
     for (const m of [w.a.mint, w.b.mint]) {
       const re = await port(w, m).ruleEnd();
-      assert.equal(re?.outcome, "resolved"); assert.equal(re?.forwards, 0);
-      assert.equal(w.registry.token(m)!.status, "live");
+      assert.equal(re?.outcome, "void"); assert.equal(re?.forwards ?? 0, 0);
+      assert.match(w.registry.ruleEnd(m)!.reason, /^void: the season ended level on winning days/);
     }
-    assert.ok(w.logs.some((l) => /forward to the end sink waits \(flagship-not-live\)/.test(l)));
-    w.program.fake(w.flagship).registerPool();
-    await runCycle(w.deps);
-    let moved = BigInt(0);
-    for (const m of [w.a.mint, w.b.mint]) {
-      const re = (await port(w, m).ruleEnd())!;
-      assert.equal(re.forwards, 1); moved += re.forwardedLamports;
-      assert.equal(JSON.parse(w.registry.getStatus(`rule.endfwd.${m}`)!).to, w.flagship);
-      assert.equal(w.registry.token(m)!.status, "retired");
-    }
-    assert.equal(fee(w, w.flagship) - flag0, moved, "every forwarded lamport landed in the flagship's burn pool");
+    w.clock.now += DAY; await runCycle(w.deps);
+    for (const m of [w.a.mint, w.b.mint]) assert.ok(w.registry.receipts(m).some((r) => r.kind === "winddown"), "each coin burns down on itself");
+    assert.equal(fee(w, w.flagship), flag0, "nothing reaches $DEFICIT");
   });
 });
 

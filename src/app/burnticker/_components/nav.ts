@@ -15,7 +15,8 @@ const MATCH: Record<string, string[]> = {
   // the Learn pages: the trust page owns its check and fee-ledger pages
   "/burnticker/trust": ["/burnticker/check", "/burnticker/fees", "/burnticker/verify", "/burnticker/history", "/burnticker/devnet"],
   // a coin page and a pair page belong to Coins (website-11 merge note, 2026-10-12: a pair page lit SEASONS)
-  "/burnticker": ["/burnticker/t/", "/burnticker/p/"],
+  // website-26: the leaderboard and the daily digest sit under Coins (never on the home page)
+  "/burnticker": ["/burnticker/t/", "/burnticker/p/", "/burnticker/leaderboard", "/burnticker/digest"],
   // "Seasons" lands on the per-league index (the owner, 2026-10-10: the landing door and the nav go to the same place); the all-seasons
   // scoreboard (/burnticker/rivalries), the Derby, league pages and pair pages belong to it
   [SEASONS_HREF]: ["/burnticker/rivalries", "/burnticker/derby"],

@@ -111,7 +111,7 @@ describe("248 per-field edited flags", () => {
     assert.deepEqual(editedFrom(true), { a: true, b: true, ta: true, tb: true }, "an older stored draft keeps every field it had");
     assert.deepEqual(editedFrom(undefined), NONE_EDITED);
     const c = code(tile);
-    assert.match(c, /setNames\(\(n\) => generatedNames\(a, b, n, edited\)\)/);
+    assert.match(c, /setNames\(\(n\) => generatedNames\(a, b, n, edited, \{ flip \}\)\)/, "website-26: the tile passes { flip }");
     assert.match(c, /setEdited\(\(e\) => \(\{ \.\.\.e, ta: true \}\)\)/);
   });
 });

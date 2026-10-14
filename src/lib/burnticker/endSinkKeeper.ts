@@ -72,7 +72,18 @@ const endDayOf = (atMs: number): number => u32(isoDay(atMs - 1));
 export const CHAMPION_END_LINE = "won the championship: the rest burns on this coin";
 export const championEndReason = (date: string): string => `${CHAMPION_END_LINE} (the last game was ${date})`;
 export const NOT_CHAMPION_END_LINE = "did not win the championship: the rest goes to $DEFICIT's burn";
-export const notChampionEndReason = (why: string): string => `${NOT_CHAMPION_END_LINE} (${why})`;
+/**
+ * Audit 12 (end-sink picker report): the not-champion line names the sink the coin pinned at launch, never "$DEFICIT" for a coin that named
+ * another coin or the incinerator. NOT_CHAMPION_END_LINE stays the $DEFICIT wording (and the prefix every form starts with).
+ */
+export const NOT_CHAMPION_PREFIX = "did not win the championship";
+export function notChampionEndLine(rule?: { onEnd?: { endSink?: unknown; mint?: string; ticker?: string } | null } | null): string {
+  const e = rule?.onEnd;
+  if (e?.endSink === "incinerator") return `${NOT_CHAMPION_PREFIX}: the rest is sent to Solana's incinerator`;
+  if (e?.endSink === true && e.mint && e.ticker) return `${NOT_CHAMPION_PREFIX}: the rest goes to $${e.ticker}'s burn, or to $DEFICIT's burn if $${e.ticker} is not live then`;
+  return NOT_CHAMPION_END_LINE;
+}
+export const notChampionEndReason = (why: string, rule?: Parameters<typeof notChampionEndLine>[0]): string => `${notChampionEndLine(rule)} (${why})`;
 export const isChampionEnd = (reason: string): boolean => reason.startsWith(CHAMPION_END_LINE);
 /** The words the keeper writes for an end outcome: the champion line for a champion's end, else the outcome itself. */
 const endLabel = (outcome: EndOutcome, reason: string): string => (isChampionEnd(reason) ? CHAMPION_END_LINE : outcome);
@@ -85,12 +96,12 @@ const endCode = (outcome: EndOutcome, reason: string): EndOutcome | "champion" =
  * receipt for the last game's day must agree: a champion's last game is a win, so it has a burn receipt that day; an eliminated team's last
  * postseason game is a loss, so it has none.
  */
-export function championVerdict(reg: Pick<Registry, "receipts">, t: Pick<TokenRow, "mint">, w: { reason: string; champion?: boolean | null; championDate?: string | null }): { reason: string } | { hold: string } {
+export function championVerdict(reg: Pick<Registry, "receipts">, t: Pick<TokenRow, "mint">, w: { reason: string; champion?: boolean | null; championDate?: string | null }, rule?: Parameters<typeof notChampionEndLine>[0]): { reason: string } | { hold: string } {
   if (w.champion !== true && w.champion !== false) return { hold: "the source cannot tell yet whether the team won the championship" };
   const won = w.championDate ? reg.receipts(t.mint).some((b) => b.eventId === w.championDate && b.units > 0 && b.status !== "void" && b.status !== "voided") : false;
   if (w.champion) return won ? { reason: championEndReason(w.championDate!) } : { hold: `the schedule says the team won its last game${w.championDate ? ` (${w.championDate})` : ""}, but the coin has no burn recorded for it yet` };
   if (won) return { hold: `the schedule says the team lost its last game (${w.championDate}), but the coin recorded a win that day` };
-  return { reason: notChampionEndReason(w.reason) };
+  return { reason: notChampionEndReason(w.reason, rule) };
 }
 
 /** Resolved or void, from the same facts detectRuleEnd used. A champion's end is "void" on chain: the program's wind-down on the coin. */

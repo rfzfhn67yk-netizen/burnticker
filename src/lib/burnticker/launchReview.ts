@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import { burnRealFromEnv } from "@/lib/burnticker/launchAvailability";
 import path from "node:path";
-import { endSelfOnLossProblem, lockRule, ruleStatement, isMeetingsRule, gameMirrorId, withFullFraction, DEFAULT_ON_END, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
-import { allocationFor, raiseLamportsOf, raiseProblem } from "@/lib/burnticker/launchBundle";
+import { rulesSha256 } from "@/lib/burnKeeper/rules";
+import { canonicalJson, endSelfOnLossProblem, lockRule, ruleStatement, isMeetingsRule, gameMirrorId, withFullFraction, defaultOnEndFor, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { allocationFor, raiseLamportsOf, raiseProblem, preparePairRules, pairVoidByOffline, type PreparedSide } from "@/lib/burnticker/launchBundle";
 import { pairCurveEnabled } from "@/lib/burnKeeper/pairCurveCrank";
 import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS as PAIR_DEV_FEE_BPS, FEE_BPS as PAIR_FEE_BPS } from "@/lib/pairCurve/pricing";
 import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS } from "@/lib/burnticker/fees";
@@ -17,17 +18,17 @@ import type { LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
 import { linksProblems, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { meetingsMirror, noPlayoffs, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
-import { meetingsFundsFlow, settledPairFundsFlow, type FundsFlow } from "@/lib/burnticker/pairFundsFlow";
+import { PARTIES_PAIR_SENTENCE, isPartySubject, meetingsFundsFlow, settledPairFundsFlow, type FundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { settledPairInput, type SettledPairInput } from "@/lib/burnticker/launchPreflight";
 import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule, type ScheduledGame } from "@/lib/burnticker/timing";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx, sideBDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX, descriptionRoom, descriptionRoomProblem } from "@/lib/burnticker/creatorProfile";
 import { nameProblem } from "@/lib/burnticker/launchFields";
-import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
+import { LINKED_ONE_SHOT_LINE, presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
 import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_UNAVAILABLE_LINE, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
-import { EVENT_LEVEL_REFUSAL, eventLevelRule, graduationExplainer } from "@/lib/burnticker/guidedLaunch";
+import { EVENT_LEVEL_REFUSAL, afterGraduationEnd, eventLevelRule, graduationExplainer } from "@/lib/burnticker/guidedLaunch";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, burnTargetShapeProblems, createAfterPinText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
@@ -108,9 +109,17 @@ export interface LaunchReview {
    * website-19 (ChatGPT launch-intent audit item 8): every rule the creator is asked to sign, each with its coin, its transaction number
    * and its fingerprint. A two-coin Matchup lists both locked rules; a registered pair lists side A's rule and says side B's is derived.
    */
-  rules: { side: "A" | "B"; ticker: string; name: string; step: number; text: string; sha256: string; derived: boolean }[];
+  rules: { side: "A" | "B"; ticker: string; name: string; step: number; text: string; sha256: string; derived: boolean; /** audit 12 item 2: the text is what the wallet signs ("final"), or a draft with `pending` fields */ final: boolean; label: "final" | "draft"; pending: string[] }[];
   /** website-19 (walkthrough snag 16): the dispute-window sentence on every one-market Polymarket review, whichever path built it. */
   dispute: string | null;
+  /**
+   * AUDIT 12 item 2 (2026-10-13): every rule exactly as the bundle builds it (launchBundle.ts preparePairRules, the one preparation path):
+   * the pair clause, the void date, winner takes the burn, the race or the game and the full share are all in. `final` is true when the
+   * text is byte for byte what the wallet signs; otherwise `pending` names the fields filled in when the launch is prepared (side B of a
+   * linked pair names side A's new mint; a one-market pair's void date is read from the market). The page passes this block and the
+   * prepared bundle's rules to launchBundle.ts preparedRulesCheck before it opens the wallet.
+   */
+  prepared: { final: boolean; label: "final" | "draft"; sides: PreparedSide[]; pairId: string | null; voidBy: string | null; note: string };
   /**
    * ChatGPT audit 6 item 3: how the rule ends, the two ends stated apart (describe.ts endText): `result` when it ends on a result (the rest
    * goes to the sink pinned at creation), `void` when it is voided or the season is cancelled (the wind-down on this coin), or null.
@@ -137,7 +146,7 @@ export interface LaunchReview {
    * ChatGPT audit 7 items 7 and 11: when a one-time result is due (the game the rule names, or the market's end), how many days away, the
    * graduation warning when that is within dueWarningDays, and what an unplayed game does. Null for a rule that repeats.
    */
-  timing: { dueAt: string | null; dueLabel: string | null; dueWithinDays: number | null; warning: string | null; unplayed: string | null } | null;
+  timing: { dueAt: string | null; dueLabel: string | null; dueWithinDays: number | null; warning: string | null; unplayed: string | null; /** audit 12 item 4: where the rest goes once a result recorded before graduation has burned, from the pinned end sink (guidedLaunch.ts afterGraduationEnd) */ afterGraduation: string } | null;
   /**
    * A rivalry series pair (every game between two teams this season; rules.ts isMeetingsRule): where the money goes per game and at the
    * season's end (pairFundsFlow.ts meetingsFundsFlow) and side B's own generated description (its rule reads the mirror series). Absent
@@ -264,6 +273,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   /** audit 6 item 8: whether this host serves Kalshi (the platform's flag; default from the env) */ kalshiEnabled?: boolean;
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
+  /** audit 12 item 2: a one-market pair's void date as the bundle route reads it (handlers.ts oneShotVoidBy); absent, side A's text is a draft */ pairVoidBy?: string | null;
   /** sources-7 H6: the season-over refusal (seasonOver.ts seasonOverFor, read by the route); refused as a problem, never only a warning */ seasonOver?: SeasonOverRefusal | null;
   /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null;
   /** cheap-features item 5: last season's count for a team rule (lastSeason.ts lastSeasonBacktest, read by the route) */ lastSeason?: LastSeasonBacktest | null;
@@ -275,7 +285,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   /** One field problem: in the flat list (side B prefixed on a two-coin review) and in fieldProblems. */
   const onField = (side: "A" | "B", field: LaunchReview["fieldProblems"][number]["field"], text: string, two: boolean) => { problems.push(two || side === "B" ? `Coin ${side}. ${text}` : text); fieldProblems.push({ side, field, text }); };
   if (!body.rule || typeof body.rule !== "object" || Array.isArray(body.rule)) return { problems: ["rule is required (a burnticker.rules/v1 object)"] };
-  const raw = (body.rule as { onEnd?: unknown }).onEnd === undefined ? { ...(body.rule as object), onEnd: { ...DEFAULT_ON_END } } : body.rule;
+  // audit 12 item 2: the same default end clause the bundle route adds (handlers.ts prepareLaunch: defaultOnEndFor)
+  const raw = (body.rule as { onEnd?: unknown }).onEnd === undefined ? { ...(body.rule as object), onEnd: defaultOnEndFor(body.rule) } : body.rule;
   // website-19 (intent audit 2, item 1): an event-level market is refused in plain words before anything else
   if (eventLevelRule(raw as BurnRule)) return { problems: [EVENT_LEVEL_REFUSAL] };
   let locked: LockedRule;
@@ -290,7 +301,20 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // audit 6 test A: a registered pair locks side A's rule with a pair clause (handlers.ts buildPairBundles); a source that cannot pair
   // (an ESPN team, a feed) is refused there, so the review says so here
   // a settled-event pair is probed as built (its race or its game locked in the pair field; rules.ts raceProblems / gameProblems)
-  if (pair) { try { lockRule(settled ? settledAsBuilt(locked.rule, settled).a : { ...(raw as object), pair: { pairId: "review-pair", side: "A", counterpartMint: null } }); } catch (e) { problems.push((e as Error).message.replace(/^rule: /, "")); } }
+  // AUDIT 12 item 2: the pair's two rules from THE ONE PREPARATION PATH the bundle uses (launchBundle.ts preparePairRules), so the texts
+  // and fingerprints below are the ones the wallet signs; side B's counterpart mint (side A's new mint) is the one field left empty
+  let prepared: ReturnType<typeof preparePairRules> | null = null;
+  let pairVoidBy: string | null = null;
+  if (pair) {
+    pairVoidBy = o.pairVoidBy ?? pairVoidByOffline(locked.rule, { settled: !!settled, now });
+    try {
+      prepared = preparePairRules({ a: { ticker: String(body.ticker ?? "").toUpperCase() || "A", rule: locked.rule }, b: { ticker: String((pair as { ticker?: unknown }).ticker ?? "").toUpperCase() || "B", burnTarget: null }, voidBy: pairVoidBy ?? undefined, now, ...(settled?.bundle ?? {}) });
+    } catch (e) {
+      const m = (e as Error).message.replace(/^rule: /, "");
+      // said once: the share refusal is in ruleRefusals, the ticker clash among the field problems below
+      if (!problems.includes(m) && !/^pair: the two sides need different tickers/.test(m)) problems.push(m);
+    }
+  }
   const second = pair ?? (body.companion && typeof body.companion === "object" ? body.companion : null);
   const ticker = String(body.ticker ?? "").toUpperCase(), name = String(body.name ?? "");
   const note = typeof body.note === "string" ? body.note.trim() : "";
@@ -325,7 +349,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   let companionLocked: LockedRule | null = null;
   const cr = !pair && body.companion && typeof body.companion === "object" ? (body.companion as { rule?: unknown }).rule : undefined;
   if (cr && typeof cr === "object" && !Array.isArray(cr)) {
-    try { companionLocked = lockRule((cr as { onEnd?: unknown }).onEnd === undefined ? { ...(cr as object), onEnd: { ...DEFAULT_ON_END } } : cr); } catch (e) { problems.push(`Coin B. ${(e as Error).message}`); }
+    try { companionLocked = lockRule((cr as { onEnd?: unknown }).onEnd === undefined ? { ...(cr as object), onEnd: defaultOnEndFor(cr) } : cr); } catch (e) { problems.push(`Coin B. ${(e as Error).message}`); }
     // an independent pair: coin B picks its own end, checked as coin A's is (the losing path leaves the coin; a named coin is live)
     if (companionLocked) {
       const self = endSelfOnLossProblem(companionLocked.rule); if (self) problems.push(`Coin B. ${self}`);
@@ -342,7 +366,9 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       else pinB = raw as BurnTargetField;
     } }
   // audit 6 item 8: the bundle route takes any share inside the rule's bounds, so a share off the web launcher's preset row is a warning
-  const pp = presetProblem(locked.rule);
+  // audit 12 item 1: a linked one-shot pair's row is 100 % only; a share off it is refused by ruleRefusals, so it is not repeated here
+  const linkedOneShot = !!pair && shareShapeOf(locked.rule, { linked: true }) === "linkedOneShot";
+  const pp = linkedOneShot ? null : presetProblem(locked.rule);
   // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none
   const raiseSol = body.raiseSol === undefined || body.raiseSol === null ? DEFAULT_RAISE_SOL : String(body.raiseSol);
   const rp = raiseProblem(raiseSol, cluster);
@@ -364,8 +390,10 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // a rivalry series pair is described as the pair the bundle builds (buildPairBundles: winner takes the burn, the pair-winner end sink)
   const meetingsPair = !!pair && isMeetingsRule(locked.rule);
   // a settled-event pair, as buildPairBundles builds side A: 100 % (a one-shot pair), winner takes the burn, the race or the game locked
-  const settledPair = settled ? settledAsBuilt(locked.rule, settled) : null;
-  const asBuilt: BurnRule = meetingsPair ? { ...locked.rule, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } : settledPair ? settledPair.a : locked.rule;
+  // audit 12 item 2: side B as prepared (side A's mint left empty), with its own pinned token
+  const preparedB: BurnRule | null = (() => { if (!prepared) return null; try { const b = prepared.sideB(null); return pinB ? { ...b, burnTarget: pinB } : b; } catch { return null; } })();
+  const settledPair = settled ? (prepared && preparedB ? { a: prepared.ruleA, b: preparedB } : settledAsBuilt(locked.rule, settled)) : null;
+  const asBuilt: BurnRule = prepared ? prepared.ruleA : meetingsPair ? { ...locked.rule, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } : settledPair ? settledPair.a : locked.rule;
   const text = describeRule(asBuilt, { ticker: ticker || "TICKER", ...ctx });
   // the description the bundle pins: the generated paragraph, then the creator's own text, within the bundle's ceiling
   // sources-7 H2: said as the room the rule's paragraph leaves (the Name step's own sentence), never "shorten your text" when there is none
@@ -435,7 +463,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     costNote = "This is an estimate. Your wallet shows the exact amount before you approve. The reserve stays in the coin's burn pool, and the rent stays with the new accounts.";
   }
   for (const x of pins) { lines.push({ label: `Rent for the account that pins ${x.symbol}'s pool to $${x.ticker}, which is ${x.bytes} bytes.`, sol: x.rentSol, kind: "rent" }); total += pinRent; }
-  const share = shareOf(locked.rule);
+  const share = shareOf(asBuilt);
   const shareText = share === null ? "a vault amount" : pctLabel(share);
   const warnings = Array.isArray(body.warnings) ? (body.warnings as unknown[]).filter((w): w is string => typeof w === "string" && w.length <= 300).slice(0, 6) : [];
   if (pp) warnings.push(pp);
@@ -445,7 +473,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // QA pass 9 #17: an event outcome's due date is the market's own end date from the server's read when the page sent none
   const dueIso = game ? game.startsAt : oneTime ? (ctx as { endsAt?: string | null }).endsAt ?? o.stated?.endsAt ?? null : null;
   const due = dueTiming(dueIso, now, dueWarningDays(env));
-  const timing = oneTime ? { dueAt: due.dueAt, dueLabel: game ? gameDueLabel(game) : null, dueWithinDays: due.dueWithinDays, warning: due.warning, unplayed: espn?.kind === "game" ? UNPLAYED_GAME_LINE : null } : null;
+  const timing = oneTime ? { dueAt: due.dueAt, dueLabel: game ? gameDueLabel(game) : null, dueWithinDays: due.dueWithinDays, warning: due.warning, unplayed: espn?.kind === "game" ? UNPLAYED_GAME_LINE : null, afterGraduation: afterGraduationEnd(asBuilt) } : null;
   if (timing?.warning) warnings.push(timing.warning);
   // QA pass 9 #16: a weather threshold that fires on almost every day, or almost never, at its station says so (the station's history)
   const wxFreq = locked.rule.oracle === "catalogue" && locked.rule.series ? weatherFrequency(locked.rule.series, !!locked.rule.inverse) : null;
@@ -468,11 +496,21 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     ];
   recovery.push("If a send is uncertain, this tab keeps the signature and checks the chain before anything is sent again. After a reload, the unfinished launch is listed at the top of this page.");
   const launchState = siteLaunchState(env);
+  // audit 12 item 2: the prepared texts. Side A is final unless its void date waits for the market's read; side B of a linked pair waits
+  // for side A's mint only (preparedRulesCheck fills it from the bundle and compares the rest byte for byte)
+  const lockedA: LockedRule = prepared ? lockRule(prepared.ruleA) : locked;
+  // side B's draft is not a valid rule on its own (side B must name side A's mint), so its text is the canonical spelling with that field empty
+  const lockedB: { text: string; sha256: string } | null = preparedB ? (() => { const text = canonicalJson(preparedB); return { text, sha256: rulesSha256(text) }; })() : null;
+  const sideA: PreparedSide = { side: "A", text: lockedA.text, sha256: lockedA.sha256, final: !(pair && !pairVoidBy), pending: pair && !pairVoidBy ? ["pair.voidBy"] : [] };
+  const sideBPrep: PreparedSide | null = pair ? { side: "B", text: lockedB?.text ?? "", sha256: lockedB?.sha256 ?? "", final: false, pending: ["pair.counterpartMint", ...(pairVoidBy ? [] : ["pair.voidBy"])] } : null;
+  const preparedSides: PreparedSide[] = [sideA, ...(sideBPrep ? [sideBPrep] : []), ...(companionLocked ? [{ side: "B" as const, text: companionLocked.text, sha256: companionLocked.sha256, final: true, pending: [] }] : [])];
+  const finalOf = (p: PreparedSide | null) => ({ final: !!p?.final, label: (p?.final ? "final" : "draft") as "final" | "draft", pending: p?.pending ?? [] });
+  const preparedNote = !pair ? "These are the exact rules the wallet signs." : `Coin A's rule is ${sideA.final ? "exact" : "a draft until the market's end date is read"}. Coin B's rule is exact except for one field, coin A's address, which exists only once the coins are made. The page checks both rules again just before your wallet opens.`;
   const signable = model.mode === "open" && typeAvailable && problems.length === 0;
   const review: LaunchReview = {
     schema: "burnticker.launch-review/v1", network: cluster, mode: model.mode, type, typeAvailable, typeReason,
     signable,
-    rule: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule, { seriesTitle: o.seriesTitle ?? null, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), sentence: text.lead, share: shareText, presets: `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, end) },
+    rule: { text: lockedA.text, sha256: lockedA.sha256, sha12: lockedA.sha12, statement: ruleStatement(lockedA.rule, { seriesTitle: o.seriesTitle ?? null, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), sentence: text.lead, share: shareText, presets: linkedOneShot ? LINKED_ONE_SHOT_LINE : `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, end) },
     coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null, profile: { description: i === 0 ? creatorText : creatorTextB }, descriptionRoom: i === 0 ? descriptionRoom(text.paragraph) : paragraphB ? descriptionRoom(paragraphB) : DESCRIPTION_MAX, suggestedTicker: i === 0 ? text.ticker || null : tickerB })),
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), teamAllocationPct: 0, lpLockedPct: LP_LOCKED_PCT },
     feesPerSol: venue === "pair-curve" ? [perPc(PAIR_CURVE_FEES.curve), perPc(PAIR_CURVE_FEES.post)] : [per(CURVE_FEES), per(postGraduationFeesFor(cluster))],
@@ -503,10 +541,11 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     fieldProblems,
     graduation: graduationLines(cluster),
     rules: [
-      { side: "A" as const, ticker: tk(0), name, step: 1, text: locked.text, sha256: locked.sha256, derived: false },
-      ...(companionLocked ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: stepB, text: companionLocked.text, sha256: companionLocked.sha256, derived: false }] : []),
-      ...(pair ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: stepB, text: "", sha256: "", derived: true }] : []),
+      { side: "A" as const, ticker: tk(0), name, step: 1, text: lockedA.text, sha256: lockedA.sha256, derived: false, ...finalOf(sideA) },
+      ...(companionLocked ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: stepB, text: companionLocked.text, sha256: companionLocked.sha256, derived: false, final: true, label: "final" as const, pending: [] }] : []),
+      ...(pair ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: stepB, text: lockedB?.text ?? "", sha256: lockedB?.sha256 ?? "", derived: true, ...finalOf(sideBPrep) }] : []),
     ],
+    prepared: { final: preparedSides.every((x) => x.final), label: preparedSides.every((x) => x.final) ? "final" : "draft", sides: preparedSides, pairId: prepared?.pairId ?? null, voidBy: pairVoidBy ?? (prepared ? prepared.ruleA.pair?.voidBy ?? null : null), note: preparedNote },
     dispute: locked.rule.oracle === "polymarket" && locked.rule.market ? (o.stated ? statedSentences(o.stated, o.stated.finalAfter) : DISPUTE_DEFAULT) : null,
     end: { kind: end.kind, result: end.result, void: end.void },
     projection,
@@ -515,7 +554,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     timing,
     ...(o.seasonOver ? { seasonOver: { message: o.seasonOver.message, next: o.seasonOver.next } } : {}),
     ...(meetingsPair ? { meetings: meetingsBlock } : {}),
-    ...(settled && settledPair ? { settled: { shape: settled.shape, sentence: settledPairSentence(settled.shape), flow: settledPairFundsFlow(settled.shape, { a: ticker || "A", b: String(pair?.ticker ?? "").toUpperCase() || "B" }, settledNames(pair?.names, sides), { fees: postGraduationFeesFor(cluster) }), descriptionB: settledDescB } } : {}),
+    ...(settled && settledPair ? { settled: { shape: settled.shape, sentence: settled.shape === "candidates" && isPartySubject(settledNames(pair?.names, sides)) ? PARTIES_PAIR_SENTENCE : settledPairSentence(settled.shape), flow: settledPairFundsFlow(settled.shape, { a: ticker || "A", b: String(pair?.ticker ?? "").toUpperCase() || "B" }, settledNames(pair?.names, sides), { fees: postGraduationFeesFor(cluster) }), descriptionB: settledDescB } } : {}),
   };
   return { review };
 }

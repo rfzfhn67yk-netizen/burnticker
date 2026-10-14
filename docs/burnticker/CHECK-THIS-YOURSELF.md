@@ -10,6 +10,8 @@ Nothing here asks you to take our word. Every line names the file or the account
 
 This table lists every instruction of both programs and the only place each one can move SOL or tokens. Neither program has an instruction to withdraw, sweep or send funds out.
 
+These 50 instructions are the published source's (the programs' registers, round 5). 7 of them are new in round 5 and are not on the deployed programs yet. The deployed programs are the round-4 build of commit 29f6f5de19, checked in section 5.
+
 | Program | Instruction | Who signs | Where money can go | The register's words |
 |---|---|---|---|---|
 | burn_receipts | `apply_attester_change` | anyone | **none** | None. |

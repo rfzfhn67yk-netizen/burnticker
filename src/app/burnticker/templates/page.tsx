@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { TEMPLATES, settingsLine } from "@/lib/burnticker/templates";
+import { RIVALRY_TEMPLATES, TEMPLATES, settingsLine } from "@/lib/burnticker/templates";
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import { endExplainer, leadSentence } from "@/lib/burnticker/describe";
 import { hostCluster, siteLaunchState } from "@/lib/burnticker/launchAvailability";
@@ -62,6 +62,21 @@ export default function TemplatesPage() {
           </li>
         ); })}
       </ul>
+      {/* website-26 (WIRING-FEATURES item 13): three Coin vs Coin pairs with both reference coins already picked; the link opens the Name step */}
+      <section className="space-y-2" aria-labelledby="rivalries-h" data-rivalry-templates>
+        <h2 id="rivalries-h" className="text-lg font-semibold">Ready-made rivalries</h2>
+        <p className="max-w-3xl text-sm text-neutral-400">Both reference coins are already picked. The link opens the step where you name the two new coins.</p>
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="ready-made rivalries">
+          {RIVALRY_TEMPLATES.map((r) => { const blocked = !site.pairs.available ? site.pairs.line : !site.types.derby.available ? `${site.types.derby.label} launches are not available on this site.` : null; return (
+            <li key={r.id} className={`flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 p-4${blocked ? " border-dashed" : ""}`} data-rivalry={r.id}>
+              <h3 className="font-medium">{r.title}</h3>
+              <p className="mt-2 text-sm text-neutral-200">{leadSentence(r.example)}</p>
+              <details className="mt-2 text-xs text-neutral-500"><summary className="cursor-pointer">How it runs</summary><p className="mt-1">{r.example.slice(leadSentence(r.example).length).trim()}</p></details>
+              {blocked ? <p className="mt-auto pt-3 text-xs text-amber-300">{blocked}</p> : site.wizard && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href={r.href} data-rivalry-link>{r.cta} →</Link>}
+            </li>
+          ); })}
+        </ul>
+      </section>
       {/* website-17 item 7: the example tickets, after the real templates */}
       <ExampleTickets site={site} />
     </main>

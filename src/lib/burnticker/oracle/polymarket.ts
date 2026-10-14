@@ -288,6 +288,22 @@ export function polyStated(m: GammaMarket): { resolutionSource: StatedSource; fi
  */
 export const payoutIsFinal = (chain: Pick<ConditionResolution, "resolved"> | null): boolean => !!chain && chain.resolved === true;
 
+/** Audit 12 item 13: the most outcomes one event's own search lists (the page pages or filters them; see filterOutcomes). */
+export const EVENT_ALL_OUTCOMES = 200;
+/**
+ * Audit 12 item 13: a within-event filter over an event's outcomes, by the outcome's own name or its question (case and accents ignored),
+ * keeping their order; `limit` and `offset` page it. Returns the page, the number that matched and the total, so the page can say
+ * "12 of 30 shown" and offer the next page. Pure.
+ */
+export function filterOutcomes<T extends Pick<PolyMarketHit, "question" | "outcome" | "endDate">>(markets: readonly T[], q: string, o: { limit?: number; offset?: number } = {}): { shown: T[]; matched: number; total: number; nextOffset: number | null } {
+  const norm = (s: string | null | undefined) => (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const words = norm(q).split(/\s+/).filter(Boolean);
+  const hit = words.length ? markets.filter((m) => { const h = `${norm(m.outcome as string | null | undefined)} ${norm(m.question)} ${m.endDate ?? ""}`; return words.every((w) => h.includes(w)); }) : [...markets];
+  const offset = Math.max(0, o.offset ?? 0), limit = Math.max(1, o.limit ?? 12);
+  const shown = hit.slice(offset, offset + limit);
+  return { shown, matched: hit.length, total: markets.length, nextOffset: offset + limit < hit.length ? offset + limit : null };
+}
+
 /** Events → search hits (binary markets only, head-to-head and moneyline first, at most `perEvent`), tags aggregated into recurring selectors. */
 export function searchHits(events: readonly GammaEvent[], o: { refuse?: TitleRefuser | null; perEvent?: number; status?: "open" | "closed" | "all" } = {}): { events: PolyEventHit[]; tags: PolyTagHit[] } {
   const status = o.status ?? "open";
@@ -511,7 +527,10 @@ export class PolymarketClient implements OracleAdapter {
     const events: GammaEvent[] = [];
     if (/^[a-z0-9]+(-[a-z0-9]+){2,}$/.test(query)) { const e = await this.eventBySlug(query).catch(() => null); if (e) events.push(e); }
     if (!events.length && query.length >= 2) events.push(...parseEventsBody(await this.get(searchUrl(query, status, Math.min(20, o.limit ?? 10)))));
-    return { ...searchHits(events, { refuse: this.refuse, status: events.length === 1 && events[0].slug === query ? "all" : status }), markets: [] };
+    // audit 12 item 13: a search for one event's own slug lists ALL of its outcomes (up to EVENT_ALL_OUTCOMES), so a "Show all" on a long
+    // event (30 thresholds, 31 dates) is that search, never "type the name you want"
+    const one = events.length === 1 && events[0].slug === query;
+    return { ...searchHits(events, { refuse: this.refuse, status: one ? "all" : status, ...(one ? { perEvent: EVENT_ALL_OUTCOMES } : {}) }), markets: [] };
   }
 
   /** Open events of one tag (Browse), as search hits: binary markets only, the refuse list applied, the tags as recurring selectors. */

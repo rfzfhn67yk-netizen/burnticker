@@ -1,6 +1,8 @@
+import { withoutDenials } from "@/lib/burnticker/denials";
 import type { BurnRule } from "@/lib/burnticker/rules";
+import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 import { LIVE_NOW, gameSeries, meetingsPairSeries, noPlayoffs, parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
@@ -39,7 +41,8 @@ export const GUIDED_STEPS: readonly { id: GuidedStepId; question: string; short:
   { id: "review", question: "Review and launch", short: "Review" },
 ];
 /** Step 2's heading, named for what is being chosen (pass A item 6). */
-export function whichHeading(follow: FollowId | null, pairKind: "teams" | "candidates" | null = null): string {
+export function whichHeading(follow: FollowId | null, pairKind: "teams" | "candidates" | null = null, /** audit 12 item 10: the coin comparison's mode; a record close follows one coin and makes one */ coinsMode: "race" | "record" | null = null): string {
+  if (follow === "coins" && coinsMode === "record") return "Choose the coin whose record close is read";
   if (follow === "team") return "Choose a team";
   if (follow === "market") return "Choose a market outcome";
   if (follow === "number") return "Choose a published number";
@@ -261,18 +264,31 @@ export function patternWords(id: PatternId, o: { follow: FollowId; subject?: str
   if (o.follow === "team" && s) {
     const won = o.outcome === "loss" ? "loss" : o.outcome === "draw" ? "draw" : "win";
     if (id === "every") return { label: `After each ${s} ${won}`, sentence: `The coin spends a share of its burn pool after each game the ${s} ${won === "win" ? "win" : won === "loss" ? "lose" : "draw"}.` };
-    if (id === "fade") return { label: `After each ${s} game without a ${won}`, sentence: `The coin spends a share of its burn pool after each game the ${s} play and do not ${won === "win" ? "win" : won === "loss" ? "lose" : "draw"}.` };
+    // audit 12 item 6: the fade side counts GAME DAYS (describe.ts: "A day with two games counts once"), so the option says so, with the
+    // doubleheader cases, before it is picked
+    if (id === "fade") return { label: `After each ${s} game day without a ${won}`, sentence: fadeDaySentence(`the ${s}`, won) };
     if (id === "once") return { label: `If the ${s} win the title`, sentence: `The coin spends its burn pool once, if the market on the ${s} winning the title pays out YES.` };
   }
   if (o.follow === "rivalry" && o.pairKind === "teams") {
     if (id === "every") return { label: "Each time its own team loses", sentence: "Each coin spends a share of its own burn pool after each game its team loses, this season." };
-    if (id === "fade") return { label: "Each game its own team does not lose", sentence: "Each coin spends a share of its own burn pool after each game its team wins or ties, this season." };
-    if (id === "once") return o.gameLabel ? { label: `Their game on ${o.gameLabel} only`, sentence: `When their game on ${o.gameLabel} is final, each coin burns once if its own team lost. The two coins are not linked, so no SOL moves between them.` } : { label: "Their next game only", sentence: "When their next listed game is final, each coin burns once if its own team lost. The two coins are not linked, so no SOL moves between them." };
+    if (id === "fade") return { label: "Each game day its own team does not lose", sentence: `${fadeDaySentence("its own team", "loss", "Each coin")} This counts every game day this season.` };
+    // audit 12 item 3: picking one game builds the LINKED pair (the page's game mode, gamePairRule), so the option says so (pairForms.ts)
+    if (id === "once") { const c = pairFormCopy("game-linked", { gameLabel: o.gameLabel ?? null }); return { label: c.label, sentence: c.sentence }; }
   }
   if (o.follow === "market" && id === "fade") return { label: MARKET_NO_LABEL, sentence: MARKET_NO_SENTENCE };
   // website-22 (audit 10 item 22): a one-time market's two sides are its YES and its NO payout, each once
   if (o.follow === "market" && id === "once") return { label: MARKET_YES_LABEL, sentence: MARKET_YES_SENTENCE };
   return { label: PATTERNS[id].label, sentence: PATTERNS[id].sentence };
+}
+
+/**
+ * Audit 12 item 6: what a fade-side team coin counts, said before it is picked. The keeper reads one result per game DAY: a day burns once
+ * if none of that day's games was the outcome, so a doubleheader with one win and one loss burns nothing on a win-fade coin, two losses
+ * burn once, a tie is not a win (or a loss), and a day with no game played (a cancellation, an off day) burns nothing.
+ */
+export function fadeDaySentence(team: string, outcome: "win" | "loss" | "draw", subject = "The coin"): string {
+  const w = outcome === "win" ? "win" : outcome === "loss" ? "loss" : "draw", v = outcome === "win" ? "win" : outcome === "loss" ? "lose" : "draw";
+  return `${subject} spends a share of its burn pool once for each day ${team} ${team.startsWith("its ") ? `plays and does not ${v}` : `play and do not ${v}`}. A day with two games counts once: it burns only if neither game is a ${w}.${outcome === "draw" ? "" : ` A tie is not a ${w}.`} A day with no game played, or only a cancelled one, burns nothing.`;
 }
 
 /** The five things the review always shows (the owner's mobile rule, 2026-10-12), in this order. */
@@ -289,6 +305,28 @@ export function costLine(totalSol: string | null, coins: 1 | 2): string {
 }
 /** "Creates 1 coin" / "Creates 2 coins" (pass A item 3). */
 export const createsLine = (n: 1 | 2): string => (n === 2 ? "Creates 2 coins" : "Creates 1 coin");
+/**
+ * Audit 12 item 10: the coins a follow choice makes, said by mode. Coin comparison makes two coins for a race or the flippening and ONE for
+ * a record close, so its entry card says both before a mode is picked; every other choice is its FOLLOW_CHOICES count.
+ */
+export function createsLineFor(follow: FollowId, coinsMode: "race" | "record" | null = null): string {
+  if (follow === "coins") return coinsMode === "record" ? createsLine(1) : coinsMode === "race" ? createsLine(2) : "Creates 1 or 2 coins";
+  return createsLine(FOLLOW_CHOICES.find((c) => c.id === follow)?.coins ?? 1);
+}
+/** Audit 12 item 10: the note after a change of what the coin follows renamed the coin(s), with the right count. */
+export const namesRemadeLine = (n: 1 | 2): string => n === 2
+  ? "You changed what the coins follow, so both coins got new names and tickers for the new rule. The ones you typed described the old rule. Type your own again if you like."
+  : "You changed what the coin follows, so it got a new name and ticker for the new rule. The ones you typed described the old rule. Type your own again if you like.";
+/**
+ * Audit 12 item 11: the record-close choice says whether it can start on this site BEFORE the creator sets it up. A record close needs past
+ * daily closes: Pyth gives them only to a site with a Pyth access key, otherwise only closes this site saved itself count. Nothing is
+ * guessed: without the key the choice says so and points at the comparisons that work today.
+ */
+export function recordCloseAvailability(o: { keyed: boolean }): { available: boolean; line: string; alternative: string | null } {
+  return o.keyed
+    ? { available: true, line: "Past daily closes can be read on this site, so a record close can start once its reference coin's closes are complete.", alternative: null }
+    : { available: false, line: "A record close needs past daily closes. This site has no Pyth access key set up, so it can only use closes it saved itself, and a new record close usually cannot start yet.", alternative: "Two coins raced on their daily feeds, or the flippening, work today." };
+}
 
 /** The burn-pool cap in force by default (capInForce.ts; the test pins it to the program's constant and its 48-hour wait). */
 export const PRE_AUDIT_CAP_SOL_TEXT = "25";
@@ -390,7 +428,8 @@ export function endChoiceModel(rule0: BurnRule, o: { burnSol?: boolean; sinkPick
   // a rule sent without onEnd gets the default end (the $DEFICIT sink) from the server (handlers.ts defaultOnEndFor); a league-mode rule does not
   const rule = rule0.onEnd || rule0.set ? rule0 : ({ ...rule0, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } } as BurnRule);
   const sink = describeEndSink(rule);
-  const offered = (sink === "flagship" || sink === "mint") && !rule.set && windowKindOf(rule) !== "perpetual";
+  // website-26 (WIRING-END-SINKS): a rule already on the incinerator end keeps the choice on screen, so the creator can pick again
+  const offered = (sink === "flagship" || sink === "mint" || sink === "incinerator") && !rule.set && windowKindOf(rule) !== "perpetual";
   if (!offered) return { offered: false, winning: null, options: [] };
   const winning = championPathRule(rule) ? `If ${o.team ?? "the team"} win the championship, the rest burns this coin.` : null;
   return {
@@ -404,17 +443,18 @@ export function endChoiceModel(rule0: BurnRule, o: { burnSol?: boolean; sinkPick
   };
 }
 /** The choice a rule already carries (a draft read back). */
-export const endChoiceOf = (rule: BurnRule | null): EndChoice => (rule?.onEnd?.mint && rule.onEnd.ticker ? { kind: "coin", mint: rule.onEnd.mint, ticker: rule.onEnd.ticker } : END_CHOICE_DEFAULT);
+export const endChoiceOf = (rule: BurnRule | null): EndChoice => (rule?.onEnd?.mint && rule.onEnd.ticker ? { kind: "coin", mint: rule.onEnd.mint, ticker: rule.onEnd.ticker } : rule?.onEnd?.endSink === "incinerator" ? { kind: "burn-sol" } : END_CHOICE_DEFAULT);
 /**
  * The rule with the choice applied. Only where endChoiceModel offers it; any other rule comes back unchanged. "coin" without a picked coin
- * is $DEFICIT until one is picked. "burn-sol" sets `burnSol` on the end, the field the round-5 sink reads (the review refuses it until then).
+ * is $DEFICIT until one is picked. "burn-sol" sets `endSink: "incinerator"` on the end (round 5; rules.ts END SINKS), keeping windDownDays
+ * and sweepThresholdLamports; the review refuses it with INCINERATOR_WAITING on a host whose program is older.
  */
 export function withEndChoice(rule: BurnRule, c: EndChoice): BurnRule {
   if (!endChoiceModel(rule, { burnSol: true }).offered) return rule;
   const base = rule.onEnd ?? { windDownDays: 28, sweepThresholdLamports: 50_000_000 };
   const { mint: _m, ticker: _t, ...rest } = base as typeof base & { mint?: string; ticker?: string; burnSol?: true };
   delete (rest as { burnSol?: true }).burnSol;
-  const onEnd = c.kind === "coin" && c.mint && c.ticker ? { ...rest, endSink: true as const, mint: c.mint, ticker: c.ticker } : c.kind === "burn-sol" ? { ...rest, endSink: true as const, burnSol: true } : { ...rest, endSink: true as const };
+  const onEnd = c.kind === "coin" && c.mint && c.ticker ? { ...rest, endSink: true as const, mint: c.mint, ticker: c.ticker } : c.kind === "burn-sol" ? { ...rest, endSink: "incinerator" as const } : { ...rest, endSink: true as const };
   return { ...rule, onEnd } as BurnRule;
 }
 
@@ -423,8 +463,27 @@ export function withEndChoice(rule: BurnRule, c: EndChoice): BurnRule {
  * burn runs once the coin's pool exists and is registered, and only then is the end recorded (endSinkKeeper.ts waits while results are
  * still queued), so the rest goes to $DEFICIT after that burn.
  */
-export function beforeGraduationLine(when: string | null): string {
-  return `${when ? `This result is due around ${when}. ` : ""}A coin burns only after it graduates. If the result comes first, it is recorded, and the burn waits until the coin graduates and its pool is registered. Then the rest of the pool goes to $DEFICIT's burn.`;
+export function beforeGraduationLine(when: string | null, rule?: BurnRule | null, linked?: "game" | "candidates" | "pair" | null): string {
+  return `${when ? `This result is due around ${when}. ` : ""}A coin burns only after it graduates. If the result comes first, it is recorded, and the burn waits until the coin graduates and its pool is registered. ${afterGraduationEnd(rule ?? null, linked ?? null)}`;
+}
+/**
+ * PRIVATE REVIEW 9 F2 / AUDIT 12 item 4 (2026-10-13): where the rest goes once that waiting burn has run, from the rule's own pinned end
+ * sink (the same model as the review's "When it ends"), never "$DEFICIT" for every one-shot. A linked pair says each case: one side wins,
+ * a draw or neither, a void. A coin with no rule passed keeps the plain $DEFICIT sentence.
+ */
+export function afterGraduationEnd(rule: BurnRule | null, linked: "game" | "candidates" | "pair" | null = null): string {
+  // `linked` names the pair shape when the page holds side A before the bundle adds its pair field (the review's prepared rule has it)
+  const sink = linked && rule?.onEnd?.endSink === true ? "pair-winner" : rule ? describeEndSink(rule) : "flagship";
+  const shape = linked ?? (rule?.pair ? ((rule.pair as { game?: unknown }).game ? "game" : (rule.pair as { race?: unknown }).race ? "candidates" : "pair") : null);
+  if (sink === "pair-winner") {
+    if (shape === "game") return "Then the losing team's coin's pool goes to the winning team's coin's burn. After a draw, both pools go to $DEFICIT's burn. A cancelled game moves nothing between the two coins, and each burns down what is left on itself.";
+    if (shape === "candidates") return "Then the losing candidate's coin's pool goes to the winning candidate's coin's burn. If neither candidate wins, both pools go to $DEFICIT's burn. A voided market moves nothing between the two coins, and each burns down what is left on itself.";
+    return "Then the other coin's pool goes to the burn of the coin whose rule fired. A void moves nothing between the two coins, and each burns down what is left on itself.";
+  }
+  if (sink === "mint" && rule) return `Then the rest of the pool goes to ${sinkTickerOf(rule)}'s burn, or ${namedSinkFallback(sinkTickerOf(rule))}. A voided result moves nothing, and the coin burns down what is left on itself.`;
+  if (sink === "incinerator") return `Then the SOL left in the pool is sent to ${INCINERATOR_WORDS}. A voided result moves nothing, and the coin burns down what is left on itself.`;
+  if (sink === null && rule) return "Then the coin burns down what is left on itself and retires.";
+  return `Then the rest of the pool goes to $DEFICIT's burn.${rule ? " A voided result moves nothing, and the coin burns down what is left on itself." : ""}`;
 }
 
 /**
@@ -625,7 +684,7 @@ export const MEETINGS_NONE_LINE = "The league's schedule lists no game between t
 /** rules.ts DEFAULT_ON_END, copied (rules.ts is not client-safe); test/burntickerRivalrySeriesReview.test.ts pins the two equal. */
 export const MEETINGS_ON_END = { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } as const;
 /** The two rules of a rivalry series pair: side A on its team's series, side B on the mirror; both end on the pair-winner sink. */
-export function meetingsPairRules(league: LeagueId, a: string, b: string, year: number, fraction = DEFAULT_SHARE.recurring): { a: BurnRule; b: BurnRule } {
+export function meetingsPairRules(league: LeagueId, a: string, b: string, year: number, fraction: number = DEFAULT_SHARE.recurring): { a: BurnRule; b: BurnRule } {
   const s = meetingsPairSeries(league, a, b, year);
   return { a: { ...firstPartyRule(s.a, fraction), onEnd: { ...MEETINGS_ON_END } }, b: { ...firstPartyRule(s.b, fraction), onEnd: { ...MEETINGS_ON_END } } };
 }
@@ -849,6 +908,14 @@ export const shareOfBudgetLine = (share: number): string => `The burn pool is th
 
 /** Audit 10 item 24: the words beside the small pair diagram on the review. */
 export const PAIR_DIAGRAM_LABEL = { independent: "Two separate coins. Each burns from its own pool, and no SOL moves between them.", linked: "A linked pair. The coin whose rule fires also takes the other coin's share for that result, and only that coin burns." } as const;
+/**
+ * Audit 12 item 4: the diagram's words from the pair's actual shape. A linked pair on one result moves the WHOLE pool (never "the share for
+ * that result"); a linked pair that repeats moves the other coin's share for each result; two separate coins move nothing.
+ */
+export function pairDiagramLabel(rule: BurnRule | null, linked: boolean): string {
+  if (!linked) return PAIR_DIAGRAM_LABEL.independent;
+  return rule && dialsFor(rule).bounds.max >= 1 ? "A linked pair on one result. The coin whose rule fires burns its whole pool and takes the other coin's whole pool, and only that coin burns." : PAIR_DIAGRAM_LABEL.linked;
+}
 
 /**
  * Audit 10 item 10 and QA 9 item 12: every reason the launch button is off, in one list on the review. Each reason is said once.
@@ -862,7 +929,7 @@ export function reviewBlockers(o: { fields?: string[]; profile?: string[]; note?
 /** The note's quick local read (the server's lint is the one that counts), as a sentence beside the field and in the review's list. */
 export function noteProblemOf(note: string): string | null {
   if (/https?:\/\/|www\.|\.(com|io|xyz|fun)\b/i.test(note)) return "The note cannot have links.";
-  if (/\b(official|endorsed|partner(ed|ship)?|affiliated|backed|guaranteed|insured|audited|verified|licensed|sponsored)\b/i.test(note)) return "The note cannot claim an affiliation or an endorsement.";
+  if (/\b(official|endorsed|partner(ed|ship)?|affiliated|backed|guaranteed|insured|audited|verified|licensed|sponsored)\b/i.test(withoutDenials(note))) return "The note cannot claim an affiliation or an endorsement.";
   return null;
 }
 

@@ -11,6 +11,8 @@ import { prepareLaunch, sportsTeams, sportsRivalry, search, catalogueSources } f
 import { meetingsPairNames, meetingsPairRules, reviewBlockers, candidatesPairRule, gamePairRule } from "@/lib/burnticker/guidedLaunch";
 import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE } from "@/lib/burnticker/describe";
 import { buildLaunchReview, type LaunchReview } from "@/lib/burnticker/launchReview";
+import { preparedRulesCheck } from "@/lib/burnticker/launchBundle";
+import { LINKED_ONE_SHOT_REFUSAL } from "@/lib/burnticker/linkedShare";
 import { LEAGUES, teamsOf, teamSeries, gameSeries, seasonYearAt, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { teamTicker, teamTickerForRule } from "@/lib/burnticker/guidedLaunch";
@@ -98,6 +100,23 @@ async function setup(p: Parameters<typeof prepareLaunch>[0], label: string, body
   }
   if ("review" in rv) { const raw = body.rule as { onEnd?: unknown }; checkReview(label, lockRule(raw.onEnd === undefined ? { ...raw, onEnd: { ...DEFAULT_ON_END } } : raw).rule, rv.review, o); }
   return { review: "review" in rv ? rv.review : null, refused: bundleRefuses };
+}
+
+/**
+ * AUDIT 12 item 2: one canonical preparation path. The review (built at the bundle's own clock, so the 30-day void date is the same day)
+ * and the bundle route's pair bundles carry the same rules: side A byte for byte, side B with side A's mint filled in.
+ */
+async function reviewEqualsBuild(p: Parameters<typeof prepareLaunch>[0], label: string, body: Record<string, unknown>): Promise<void> {
+  setups++;
+  const rv = buildLaunchReview(body as never, { env: ENV });
+  if (!("review" in rv)) { fail("review==build: review refused", `${label}: ${rv.problems.join(" | ")}`); return; }
+  const built = await prepareLaunch(p, { creator: CREATOR, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, description: "", links: [], ...body }, { register: false });
+  if (!("pair" in built)) { fail("review==build: bundle refused", `${label}: ${"error" in built ? String((built.error.body as { error?: string }).error) : "single"}`); return; }
+  const a = built.pair.bundles.a, b = built.pair.bundles.b;
+  const diff = preparedRulesCheck(rv.review.prepared, { a: { text: a.rules.text, sha256: a.rules.sha256, mint: a.mint }, b: { text: b.rules.text, sha256: b.rules.sha256 } });
+  if (diff.length) fail("review==build: prepared rules differ from the bundle", `${label}: ${diff.join(" ")}`);
+  if (rv.review.rules[0]?.sha256 !== a.rules.sha256 || !rv.review.rules[0]?.final) fail("review==build: side A's fingerprint is not the signed one", label);
+  if (rv.review.rule.sha256 !== a.rules.sha256) fail("review==build: the exact rule is not the signed one", label);
 }
 
 test("TEST A: review ↔ bundle parity over ≥ 5,000 setups", { timeout: 600_000 }, async () => {
@@ -269,6 +288,9 @@ test("TEST A: review ↔ bundle parity over ≥ 5,000 setups", { timeout: 600_00
     if (lv.review.problems.length) fail("linked game: problems", `${g.eventId} ${me.abbr}: ${lv.review.problems.join(" | ")}`);
     if (lv.review.venue !== "launchlab") fail("linked game: not LaunchLab", `${g.eventId}: ${lv.review.venue}`);
     if (lv.review.settled?.sentence !== GAME_PAIR_SENTENCE || lv.review.end.kind !== "pair-winner") fail("linked game: sentence or end", `${g.eventId}: ${lv.review.settled?.sentence} / ${lv.review.end.kind}`);
+    // AUDIT 12 item 2: review == build. The rules the review shows (with the pairing metadata: clause, void date, winner takes the burn,
+    // the game, the full share) are byte for byte the bundle's, side B's counterpart mint aside (filled from the bundle's side A mint)
+    await reviewEqualsBuild(p, `linked game ${g.eventId} ${me.abbr}`, { rule: linkedRule, ticker: `${me.abbr}GM`.slice(0, 10), name: `${me.nickname || me.abbr} Game`.slice(0, 32), raiseSol: "85", pair: { ticker: `${them.abbr}GM`.slice(0, 10), name: `${them.nickname || them.abbr} Game`.slice(0, 32), opp: them.abbr, description: "", imageUrl: null, links: [] } });
   }
 
   // ---- 8 (audit 7). election pairs and market one-shots: two candidates' markets, due soon / not soon --------------------------------
@@ -287,7 +309,10 @@ test("TEST A: review ↔ bundle parity over ≥ 5,000 setups", { timeout: 600_00
       if (warned !== days <= 14) fail("one-shot due-soon warning wrong", `${label}: warned=${warned}`);
       if (label.startsWith("election pair")) {
         if (rv.review.venue !== "launchlab" || rv.review.settled?.sentence !== CANDIDATES_PAIR_SENTENCE || rv.review.end.kind !== "pair-winner") fail("election pair: not the linked LaunchLab pair", `${label}: ${rv.review.venue} ${rv.review.end.kind}`);
-        if (rv.review.problems.length) fail("election pair: problems", `${label}: ${rv.review.problems.join(" | ")}`);
+        // audit 12 item 1: a linked pair on one result burns 100 % only; 50 % is refused with the plain sentence, never rewritten
+        if (f === 1 && rv.review.problems.length) fail("election pair: problems", `${label}: ${rv.review.problems.join(" | ")}`);
+        if (f !== 1 && !(rv.review.problems.length === 1 && rv.review.problems[0] === LINKED_ONE_SHOT_REFUSAL)) fail("election pair: a share other than 100% is not refused once", `${label}: ${rv.review.problems.join(" | ")}`);
+        if (f === 1 && (!rv.review.prepared.sides.every((x) => x.text.includes('"winnerTakesBurn": true') && x.text.includes('"race"') && x.text.includes('"clause": "both-or-neither"')) || rv.review.rules.length !== 2 || rv.review.rules.some((x) => !x.text || !x.sha256))) fail("election pair: prepared rules miss the pairing", label);
         continue;
       }
       checkReview(label, lockRule({ ...a.rule, onEnd: { ...DEFAULT_ON_END } }).rule, rv.review);

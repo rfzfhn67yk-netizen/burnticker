@@ -86,6 +86,33 @@ export function resolveLegacy(w: Watchlist, listed: readonly ListedCoin[]): { li
   return { list: out, changed, ambiguous };
 }
 
+/**
+ * PRIVATE REVIEW 9 F1 (2026-10-13): an old ticker follow is migrated only against the COMPLETE inventory of coin identities (network and
+ * mint, every status: draft, live, retired, expired, and coins whose page could not be read). A page's own rows are filtered, so with two
+ * $LAD coins and one of them retired, the filtered list showed one $LAD and the old follow moved to it for good, the ambiguity lost.
+ * `inventory` null (not read, or the read failed) defers: nothing is migrated and the old follow stays as it is. Pure.
+ */
+export interface CoinInventory { complete: true; coins: readonly ListedCoin[] }
+export function resolveLegacyFrom(w: Watchlist, inventory: CoinInventory | null): { list: Watchlist; changed: boolean; ambiguous: AmbiguousFollow[] } {
+  if (!inventory || inventory.complete !== true) return { list: w, changed: false, ambiguous: [] };
+  return resolveLegacy(w, inventory.coins);
+}
+/** The inventory a server returns: every registry row's ticker, network and mint, whatever its status (the route applies the host's devnet rule). */
+export function coinInventory(rows: readonly { ticker: string; mint: string; cluster?: string | null }[]): CoinInventory {
+  return { complete: true, coins: rows.map((r) => ({ ticker: r.ticker, network: r.cluster === "devnet" ? "devnet" : "mainnet", mint: r.mint })) };
+}
+/** Reads the complete inventory in the browser (GET /api/burnticker/inventory); null when it cannot be read, so migration waits. */
+export async function fetchCoinInventory(fetchImpl: typeof fetch = fetch): Promise<CoinInventory | null> {
+  try {
+    const r = await fetchImpl("/api/burnticker/inventory");
+    if (!r.ok) return null;
+    const j = await r.json() as { complete?: unknown; coins?: unknown };
+    if (j.complete !== true || !Array.isArray(j.coins)) return null;
+    const coins = (j.coins as unknown[]).filter((c): c is ListedCoin => !!c && typeof (c as ListedCoin).ticker === "string" && typeof (c as ListedCoin).mint === "string" && typeof (c as ListedCoin).network === "string");
+    return { complete: true, coins };
+  } catch { return null; }
+}
+
 export function readWatchlist(): Watchlist {
   try { return parseWatchlist(window.localStorage.getItem(WATCH_KEY)); } catch { return empty(); }
 }

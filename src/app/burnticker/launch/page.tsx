@@ -59,6 +59,7 @@ import { TEMPLATES, TEMPLATE_START, weatherTemplateDraft, type TemplateId } from
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { fold, meaningful, queryTokens } from "@/lib/burnticker/textMatch";
 import { EndChoicePicker } from "./EndChoicePicker";
+import { SimulatorDisclosure } from "./SimulatorDisclosure";
 import { END_CHOICE_DEFAULT, endChoiceModel, withEndChoice, type EndChoice } from "@/lib/burnticker/guidedLaunch";
 import type { SinkCoin } from "@/lib/burnticker/endSinks";
 import { EndSection, FollowStep, GuidedTop, PatternStep, RivalryKindStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
@@ -338,7 +339,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [elPick, setElPick] = useState<{ race: ElRace; a: ElOutcome; b: ElOutcome } | null>(null);
   // the owner's live walkthrough (2026-10-12): a rivalry pair of any two teams in a league, then one game or the season
   // website-20 item 60: the entry link's own words (a template, a derby pair), kept after the address drops its parameters
-  const [entry, setEntry] = useState<{ template: string | null; a: string; b: string; kind?: string | null } | null>(null);
+  const [entry, setEntry] = useState<{ template: string | null; a: string; b: string; kind?: string | null; rivalry?: string | null } | null>(null);
   // items 154 and 155: a retry for the schedule read, and the one line that explains a cleared team
   const [pendingTeam, setPendingTeam] = useState<string | null>(null);
   // website-25 (WIRING-SOURCES7 H6): a league page link for a team whose season is over (?season=over), and the next season the creator
@@ -444,6 +445,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       else if (st.derby) { setGuide({ follow: "coins", phase: "which", pairKind: null }); setEntry({ template: tpl, a: u.get("a") ?? "", b: u.get("b") ?? "", kind: u.get("kind") }); }
       // website-22 (QA 9 item 9): a search template opens step 1 with its words in the search line, scrolled to and focused
       else { setFlow("team"); setStep("choose"); if (st.search) { setUq(st.search); setFocusSearch(true); } }
+      // website-26 (WIRING-FEATURES item 13): a pre-made rivalry rides on the derby entry; the tile picks both coins and opens Name
+      const rivalryParam = u.get("rivalry");
+      if (st.derby && rivalryParam) setEntry((e) => (e ? { ...e, rivalry: rivalryParam } : e));
     } else if (like) {
       // "Launch one like this" (a coin or pair page): the same rule shape, the team / race / feed re-pickable, the dials copied
       try { sessionStorage.removeItem(STORE); } catch { /* ignore */ }
@@ -1853,7 +1857,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const meetingsEndFact = `${MEETINGS_END_LABEL}. ${MEETINGS_END_LINE} ${MEETINGS_DEADLINE_LINE}`;
         // the end-sink picker: each coin's choice of where its rest goes when it does not win (both coins of an independent pair)
         const teamRef = team?.nickname ? `the ${team.nickname}` : null;
-        const choiceA = endPickable && rule ? endChoiceModel(rule, { burnSol: site.burnSol.available, sinkPicker: site.sinkPicker.available, team: teamRef }) : null;
+        // website-26 (WIRING-END-SINKS): the incinerator is a single coin's choice (a pair rule with it is refused), shown only while the
+        // launch state says the host has it (burnSol, off until round 5 is deployed); "another coin's burn" only while sinkPicker is on
+        const choiceA = endPickable && rule ? endChoiceModel(rule, { burnSol: site.burnSol.available && !(pairOn && ruleB), sinkPicker: site.sinkPicker.available, team: teamRef }) : null;
         const choiceB = endPickable && pairOn && ruleB ? endChoiceModel(ruleB, { burnSol: site.burnSol.available, sinkPicker: site.sinkPicker.available }) : null;
         const endChoiceBlock = choiceA?.offered || choiceB?.offered ? (
           <div className={`grid min-w-0 gap-3 ${choiceA?.offered && choiceB?.offered ? "md:grid-cols-2" : ""}`} data-end-choices>
@@ -1945,7 +1951,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             <ReviewCard
               mode={guide.follow ? "review" : "full"}
               facts={reviewFacts}
-              endSection={meetingsOn ? <EndSection title={MEETINGS_END_LABEL} sentences={[MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE]} options={[]} /> : settledPick ? <EndSection title={SETTLED_END_LABEL} sentences={[...end.sentences, SETTLED_DEADLINE_LINE]} options={[]} /> : <EndSection sentences={endLines} options={end.options} choice={endChoiceBlock} />}
+              endSection={meetingsOn ? <EndSection title={MEETINGS_END_LABEL} sentences={[MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE]} options={[]} /> : settledPick ? <EndSection title={SETTLED_END_LABEL} sentences={[...end.sentences, SETTLED_DEADLINE_LINE]} options={[]} /> : <EndSection sentences={endLines} options={end.options.filter((o) => o.available || (o.kind === "named-coin" ? site.sinkPicker.available : o.kind === "incinerator" ? site.burnSol.available && !two : true))} choice={endChoiceBlock} />}
               authority={authority}
               edgeNotes={edgeNotes}
               upfront={upfrontLines(RAISE_PRESETS_SOL)}
@@ -1986,12 +1992,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               graduation={rv?.graduation ?? null}
               tickerChecks={reviewCurrent ? rv?.tickers ?? null : null}
               notes={notes}
+              simulator={reviewCurrent && rv?.simulation ? <SimulatorDisclosure simulation={rv.simulation} rule={rule} /> : null}
               namePrompt={!pairOn && text?.name === "Event Coin" ? "This question does not give a clear coin name: please name the coin (and check the ticker) before you launch." : null}
             />
             {/* website-15 item 4 (Claude site audit 3 item 2): a failed back-test says so in one line; the reason sits behind Details */}
             {/* WIRING-PARITY audit 6 #11: what the rule would have spent on past readings, at 1, 2 and 5 %, or why there is no projection */}
-            {reviewCurrent && rv?.projection && <details className="text-xs text-neutral-300" data-projection><summary className="cursor-pointer">How much it would have spent before</summary>{rv.projection.available ? rv.projection.lines.map((x) => <p key={x} className="mt-1">{x}</p>) : <p className="mt-1">{rv.projection.reason}</p>}</details>}
-            {btErr && btFor === btKey && !rv?.projection && <div className="text-xs text-amber-300" role="status" data-backtest-unavailable><p>{BACKTEST_UNAVAILABLE}</p><details className="text-neutral-500"><summary className="cursor-pointer">Details</summary><p className="break-words font-mono">{btErr}</p></details></div>}
+            {/* website-26 (WIRING-FEATURES item 5): a team coin's last season (review.backtest) where the projection is unavailable */}
+            {reviewCurrent && rv?.projection && <details className="text-xs text-neutral-300" data-projection><summary className="cursor-pointer">How much it would have spent before</summary>{rv.projection.available ? rv.projection.lines.map((x) => <p key={x} className="mt-1">{x}</p>) : rv.backtest?.available ? rv.backtest.lines.map((x) => <p key={x} className="mt-1" data-last-season>{x}</p>) : <><p className="mt-1">{rv.projection.reason}</p>{rv.backtest?.reason && <details className="mt-1 text-neutral-500" data-last-season-unavailable><summary className="cursor-pointer">Details</summary><p className="break-words">{rv.backtest.reason}</p></details>}</>}</details>}
+            {btErr && btFor === btKey && !rv?.projection && <div className="text-xs text-amber-300" role="status" data-backtest-unavailable><p>{BACKTEST_UNAVAILABLE}</p><details className="text-neutral-500"><summary className="cursor-pointer">Details</summary><p className="break-words font-mono">{btErr}</p>{rv?.backtest?.reason && <p className="break-words">{rv.backtest.reason}</p>}</details></div>}
             {/* website brief §2: the funds flow before a registered pair launches (pairs made now are winner-takes-the-burn) */}
             {reviewMeetings?.flow && <FundsFlowView flow={reviewMeetings.flow} open />}
             {/* website-23: a settled-event pair's money path and coin B's description, as the review answered them (review.settled) */}

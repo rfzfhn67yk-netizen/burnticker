@@ -494,7 +494,7 @@ describe("a one-shot loser's end-of-rule days forward to the live winner", () =>
     await runCycle(w.deps); await runCycle(w.deps);
     const fa = w.program.fake(w.a.mint);
     const last = fa.cfg.lastRecordDate;
-    assert.ok(last >= 20261011, String(last));
+    assert.ok(last >= 20261010, String(last));   // audit 12: the end now waits for the season tally (the day after), so no end reading yet
     const ctxB = (await pairCtxFor(w.registry, w.program, w.b, w.clock.now))!;   // B's view: the winner is A
     assert.equal(await winnerFlatReading(w.deps, ctxB, last), "exists");
     const D = 20261013;
