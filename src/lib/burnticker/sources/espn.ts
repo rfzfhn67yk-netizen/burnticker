@@ -418,7 +418,9 @@ export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[]
   // TheSportsDB's round 500 is the PRESEASON in every league it lists (header note): never a game, a meeting or part of a season window.
   // NBA only: a December game with a round number is the NBA Cup final, which does not count in the standings; 100 to 499 is the playoffs
   const keep = (e: Record<string, unknown>) => nbaRound(e) !== TSDB_PRESEASON_ROUND && (league !== "nba" || !(nbaRound(e) >= 100 && String(e.dateEvent ?? e.strTimestamp ?? "").slice(5, 7) === "12"));
-  const post = (e: Record<string, unknown>) => (league === "nba" ? nbaRound(e) >= 100 && nbaRound(e) < 500 : /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer");
+  // NFL (owner 2026-10-13, the Super Bowl end): TheSportsDB numbers the NFL's regular season 1–18 and the playoffs 100–499 (the 2025 season read
+  // from the box: 125 / 150 / 160 for the three playoff rounds, 200 for the Super Bowl), the same scheme as the NBA's playoffs
+  const post = (e: Record<string, unknown>) => (league === "nba" || league === "nfl" ? nbaRound(e) >= 100 && nbaRound(e) < 500 : /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer");
   return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent) && keep(e)).map((e) => {
     const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? "")), startsAt = String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`).replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
     return mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : TSDB_LIVE_RE.test(String(e.strStatus ?? "")) ? "in" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, num(e.intHomeScore)), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, num(e.intAwayScore)));
@@ -625,11 +627,13 @@ export interface WindowStatus {
  * THE LEAGUES WHOSE SCHEDULE CAN TELL A CHAMPION FROM AN ELIMINATED TEAM (website-18). In a single-elimination postseason every team but
  * one loses its last game, so "the team won its last postseason game and nothing more was listed" means it won the title. That needs a
  * schedule that marks postseason games exactly: MLB StatsAPI (game types F, D, L, W), the NHL feed (game type 3) and the NBA feed (game
- * ids 004 and 005), or for the NBA TheSportsDB's round number (100 to 499, the header note). TheSportsDB marks the postseason by its round label, which is not exact for the NFL or the WNBA; college football and
+ * ids 004 and 005), or for the NBA and the NFL TheSportsDB's round number (100 to 499, the header note; the NFL added 2026-10-13 by the
+ * owner's decision, its 2025 season read from the box: rounds 1–18, then 125 / 150 / 160 and 200 for the Super Bowl, a single-elimination
+ * bracket). TheSportsDB's round label is not exact for the WNBA; college football and
  * basketball have bowls, the NIT and conference tournaments, where many teams win their last game; soccer leagues crown the table
  * leader. Those leagues are left out: their season coins keep the plain end (the rest goes to $DEFICIT's burn).
  */
-export const CHAMPION_KNOWN: ReadonlySet<LeagueId> = new Set<LeagueId>(["mlb", "nba", "nhl"]);
+export const CHAMPION_KNOWN: ReadonlySet<LeagueId> = new Set<LeagueId>(["mlb", "nba", "nhl", "nfl"]);
 /**
  * The champion path's series: a team coin on a team's WINS for a whole season (regular season and playoffs), in a league whose schedule
  * can tell a champion (CHAMPION_KNOWN). Null for anything else. The rule-level test (an end sink to the flagship, not the fade side) is

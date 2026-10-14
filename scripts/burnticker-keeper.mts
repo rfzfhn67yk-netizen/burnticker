@@ -130,7 +130,9 @@ async function publishAll(now: number): Promise<void> {
   const receiptsByTicker: Record<string, ReturnType<typeof buildReceiptsJson>> = {};
   const all = registry.tokens();
   const siteKeys = siteKeysOf(all.map((t) => ({ ticker: t.ticker, mint: t.mint, status: t.status, launchedAt: t.launchTx ? t.baselineAt : null })));
-  for (const t of all) {
+  // 2026-10-13: a draft (never created on chain) or an expired draft gets no public page and no index row; the site keys still see every
+  // row, so a ticker a draft shares with a live coin keeps the live coin's keys. (Three launch-probe drafts had reached tokens.html.)
+  for (const t of all.filter((t) => t.status !== "draft" && t.status !== "expired")) {
     try {
       const locked = registry.lockedRule(t);
       const readings = registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
