@@ -69,6 +69,25 @@ export function releaseLines(r: Omit<Release, "lines">, prev: Omit<Release, "lin
   return out;
 }
 
+/**
+ * REPUBLISHES SAID ONCE (walkthrough 13, 2026-10-14: the changelog repeated "The same source as the release before it was published
+ * again." on entry after entry). Consecutive releases (oldest first, as parseChangelog returns them) that each republish the same source
+ * collapse into one entry, the newest of the run (its date and public commit), whose line counts the run ("…, 3 times in a row."). Every
+ * other release passes through unchanged, with `times` 1.
+ */
+export function collapseRepublishes(releases: readonly Release[]): (Release & { times: number })[] {
+  const out: (Release & { times: number })[] = [];
+  for (const r of releases) {
+    const again = r.lines.includes(RELEASE_LINES.sameSource);
+    const last = out[out.length - 1];
+    if (again && last && last.source === r.source && last.lines.some((l) => l.startsWith(RELEASE_LINES.sameSource.slice(0, -1)))) {
+      const times = last.times + 1;
+      out[out.length - 1] = { ...r, times, lines: r.lines.map((l) => (l === RELEASE_LINES.sameSource ? RELEASE_LINES.sameSourceTimes(times) : l)) };
+    } else out.push({ ...r, times: 1 });
+  }
+  return out;
+}
+
 export function readReleases(root = process.cwd()): Release[] | null {
   try { return parseChangelog(fs.readFileSync(path.join(root, CHANGELOG_FILE), "utf8")); } catch { return null; }
 }

@@ -730,8 +730,10 @@ burn  = every token the swap delivered</pre>
       $("pool").textContent = s.buyback.feePoolSol == null ? "—" : fmtSol(s.buyback.feePoolSol);
       $("poolSub").innerHTML = "<b>" + fmtSol(s.buyback.spentSolMonth) + "</b> spent this month and " + fmtSol(s.buyback.spentSolTotal) + " in all." + (s.buyback.skippedDays ? " " + s.buyback.skippedDays + (s.buyback.skippedDays === 1 ? " day was" : " days were") + " under the $" + s.buyback.floorUsd + " floor." : "");
     }
+    // walkthrough 13 (2026-10-14): "all receipts ✓" over zero receipts is vacuously true, so the tick waits for a first receipt
+    var nReceipts = s.burned && s.burned.count ? s.burned.count : 0;
     var ok = s.health && !s.health.lastError && s.health.unverified === 0;
-    $("health").innerHTML = '<span class="pulse' + (ok ? "" : " off") + '"></span>' + (ok ? "all receipts ✓" : (s.health.unverified ? s.health.unverified + " unverified" : "error"));
+    $("health").innerHTML = '<span class="pulse' + (ok && nReceipts > 0 ? "" : " off") + '"></span>' + (ok ? (nReceipts > 0 ? "all receipts ✓" : "no receipts yet") : (s.health && s.health.unverified ? s.health.unverified + " unverified" : "error"));
     $("healthSub").textContent = (s.feed.lastPollAt ? "Last feed check at " + new Date(s.feed.lastPollAt).toLocaleString() + "." : "No feed check yet.") + (s.feed.lastPollOutcome ? " The result was " + s.feed.lastPollOutcome + "." : "") + (s.health.lastError ? " The last error was " + s.health.lastError + "." : "");
     $("gen").textContent = new Date(s.generatedAt).toLocaleString();
     if (s.rules) { $("sha").textContent = "sha256: " + s.rules.sha256; $("statement").textContent = s.rules.statement; }

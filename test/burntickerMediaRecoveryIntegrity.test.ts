@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
-import { buildStepTx, failureSentence, launchlabPlan, memoryPlanStorage, signAndSendPlan, walletReturnProblem, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
+import { buildStepTx, failureSentence, launchlabPlan, memoryPlanStorage, signAndSendPlan, simulationFailureText, walletReturnProblem, type SendDeps, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
 import { createLatest } from "@/lib/burnticker/latestOnly";
 import { draftRevision } from "@/lib/burnticker/launchReviewSync";
 import { fingerprintFor, prepareIfCurrent, profileRevision, startFingerprint, STALE_PREPARE_SENTENCE } from "@/lib/burnticker/preparedLaunch";
@@ -17,7 +17,7 @@ const code = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8").replace(
 const cfg = loadCopyLintConfig();
 const BH = "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", BH2 = "4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofM";
 const creatorKp = Keypair.generate(), CREATOR = creatorKp.publicKey.toBase58();
-const b58 = (bytes: Uint8Array) => { const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B = BigInt(58); let x = BigInt("0x" + Buffer.from(bytes).toString("hex")), s = ""; while (x > Z) { s = A[Number(x % B)] + s; x /= B; } return s; };
+const b58 = (bytes: Uint8Array) => { const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B = BigInt(58); let x = BigInt("0x" + Buffer.from(bytes).toString("hex")), s = ""; while (x > Z) { s = A[Number(x % B)] + s; x /= B; } for (const b of bytes) { if (b !== 0) break; s = "1" + s; } return s; };
 const ix = (signer: string, data = 1) => ({ programId: "11111111111111111111111111111111", label: "test", dataBase64: Buffer.from([2, 0, 0, 0, data, 0, 0, 0, 0, 0, 0, 0]).toString("base64"), keys: [{ pubkey: CREATOR, isSigner: true, isWritable: true }, { pubkey: signer, isSigner: true, isWritable: true }] });
 const bundle = (ticker: string): LaunchlabBundleLike => {
   const mint = Keypair.generate(), m = mint.publicKey.toBase58();
@@ -44,7 +44,9 @@ describe("253 [FIX] the wallet's transaction must be the one built here", () => 
     ["changes an instruction", () => buildStepTx({ ...step, instructions: [ix(b.mint, 9)] }, CREATOR, plan.keys, BH), /changed the transaction's instructions or accounts/],
     ["changes the fee payer", () => { const other = Keypair.generate(); const t = buildStepTx({ ...step, instructions: [{ ...ix(b.mint), keys: [{ pubkey: other.publicKey.toBase58(), isSigner: true, isWritable: true }, { pubkey: CREATOR, isSigner: true, isWritable: true }, { pubkey: b.mint, isSigner: true, isWritable: true }] }] }, other.publicKey.toBase58(), plan.keys, BH); return t; }, /changed who pays the fee/],
     ["changes the blockhash", () => buildStepTx(step, CREATOR, plan.keys, BH2), /changed the transaction's blockhash/],
-    ["drops the mint signature", (tx) => { tx.signatures[1] = new Uint8Array(64); return tx; }, /removed or changed the \$AYE mint key's signature/],
+    // Phantom ticket 438485 (2026-10-14): the wallet now signs FIRST and sees no mint signature, so a wallet cannot "drop" one; a wallet
+    // that returns the transaction without the mint's signer slot at all is still refused
+    ["removes the mint signer", () => buildStepTx({ ...step, signers: ["creator"], instructions: [{ ...ix(b.mint), keys: [{ pubkey: CREATOR, isSigner: true, isWritable: true }] }] }, CREATOR, plan.keys, BH, null, false), /changed who signs the transaction|changed the transaction's instructions or accounts/],
     ["returns an unrelated transaction", () => buildStepTx(plan.steps[1], CREATOR, plan.keys, BH), /changed who signs the transaction|changed the transaction's instructions or accounts/],
   ];
   for (const [label, tamper, why] of cases) test(`a wallet that ${label}: refused, nothing sent, nothing stored as sent`, async () => {
@@ -58,6 +60,17 @@ describe("253 [FIX] the wallet's transaction must be the one built here", () => 
   test("a wallet that only adds its own signature: sent as before", async () => {
     const { r, sends } = await run(plan, (tx) => tx);
     assert.deepEqual([r.error, sends], [null, 2]);
+  });
+  test("a wallet that replaces a mint signature the page had already added: refused (the pure check)", () => {
+    const built = buildStepTx(step, CREATOR, plan.keys, BH);
+    const snap = { message: built.message.serialize(), signatures: built.signatures.map((s) => Uint8Array.from(s)) };
+    const tampered = VersionedTransaction.deserialize(built.serialize()); tampered.sign([creatorKp]); tampered.signatures[1] = new Uint8Array(64);
+    assert.match(walletReturnProblem(snap, tampered, step, plan)!, /removed or changed the \$AYE mint key's signature/);
+  });
+  test("the shipped order: the wallet is handed an unsigned transaction, signs it, and the mint key signs after (ticket 438485)", async () => {
+    let seen = -1;
+    const { r, sends } = await run(plan, (tx) => { seen = tx.signatures.filter((s) => s.some((x) => x !== 0)).length; return tx; });
+    assert.deepEqual([r.error, sends, seen], [null, 2, 0]);
   });
   test("the pure check names each difference", () => {
     const built = buildStepTx(step, CREATOR, plan.keys, BH);
@@ -134,5 +147,34 @@ describe("252 [FIX] a response for an older draft is discarded; the signing scre
     assert.match(t, /locked=\{busy \|\| !!prepared\}/);
     const card = code("src/app/burnticker/launch/ReviewCard.tsx");
     assert.match(card, /<fieldset disabled=\{p\.busy\}[^>]*data-review-inputs/);
+  });
+});
+
+// ---- Phantom ticket 438485 (2026-10-14): a dry run before the wallet signs --------------------------------------------------------
+describe("438485 a failed dry run stops the step before the wallet is asked", () => {
+  const b = bundle("DRY"), plan = launchlabPlan([b]);
+  const runWith = async (simulate: NonNullable<SendDeps["simulate"]>) => {
+    let sends = 0, walletAsked = 0;
+    const store = memoryPlanStorage();
+    const r = await signAndSendPlan(plan, CREATOR, {
+      latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }),
+      signTransaction: async (tx) => { walletAsked++; tx.sign([creatorKp]); return tx; },
+      simulate,
+      lookupTable: async () => null,
+      sendRaw: async () => { sends++; return `sig${sends}`; },
+      confirm: async () => ({ err: null }),
+      storage: store,
+    });
+    return { r, sends, walletAsked };
+  };
+  test("the chain reports a failure: refused, the wallet never sees it, nothing sent", async () => {
+    const { r, sends, walletAsked } = await runWith(async () => simulationFailureText({ InstructionError: [1, { Custom: 6001 }] }, ["Program log: Instruction: Create", "Program log: Error: insufficient SOL for the seed"]));
+    assert.deepEqual([sends, walletAsked, r.failedAt, r.state], [0, 0, 0, "not-sent"]);
+    assert.match(r.error!, /dry run of it failed on chain: .*Custom.*6001.*insufficient SOL/);
+    assert.ok(lintCopy(r.error!, cfg).ok, r.error!);
+  });
+  test("the dry run passes, or the RPC cannot perform it: the launch proceeds", async () => {
+    assert.deepEqual((await runWith(async () => null)).sends, 2);
+    assert.deepEqual((await runWith(async () => { throw new Error("rpc down"); })).sends, 2);
   });
 });

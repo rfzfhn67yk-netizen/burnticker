@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { readReleases, RELEASES_SINCE } from "@/lib/burnticker/history";
+import { collapseRepublishes, readReleases, RELEASES_SINCE } from "@/lib/burnticker/history";
 import { CHANGELOG_COPY } from "@/lib/burnticker/historyCopy";
 import { longDay } from "@/lib/burnticker/cardView";
 import { CHANGELOG_FILE } from "@/lib/burnticker/trust";
@@ -27,7 +27,8 @@ export default function ChangelogPage() {
       </PageHeader>
       {!releases ? <EmptyState kind="unavailable" body={CHANGELOG_COPY.unavailable} /> : releases.length === 0 ? <EmptyState kind="no-activity" /> : (
         <ol className="bt-list" aria-label={CHANGELOG_COPY.title}>
-          {[...releases].reverse().map((r, k) => (
+          {/* walkthrough 13: a run of republishes of one source is one entry with a count (history.ts collapseRepublishes) */}
+          {collapseRepublishes(releases).reverse().map((r, k) => (
             <li key={`${r.source}-${k}`} className="bt-panel" data-release={r.source}>
               <p className="bt-eyebrow"><time dateTime={r.date}>{longDay(r.date) ?? r.date}</time></p>
               <ul className="bt-bullets">{r.lines.map((l) => <li key={l}>{l}</li>)}</ul>

@@ -252,7 +252,7 @@ describe("swap panel: copy", () => {
     assert.equal(NOT_ADVICE_SENTENCE, "Nothing on this site is investment advice.");
     assert.ok(FOOTER_COPY.notAdvice.endsWith(NOT_ADVICE_SENTENCE));
     assert.equal(SWAP_NOTICE, "Nothing on this site is investment advice. This swap goes straight to the coin's own Raydium curve or pool; the site holds nothing.");
-    assert.equal(feeLine({ totalBps: 100, burnPoolBps: 50, feeText: "0.01", burnPoolText: "0.005", unit: "SOL" }), "1% of the swap (0.01 SOL). Of that, 0.5% (0.005 SOL) goes to this coin's burn pool, which pays for its burns.");
+    assert.equal(feeLine({ totalBps: 100, burnPoolBps: 50, feeText: "0.01", burnPoolText: "0.005", unit: "SOL" }), "The swap pays a 1% fee (0.01 SOL). Half of it (0.5% of the swap, 0.005 SOL) goes to this coin's burn pool, which pays for its burns.");
   });
   test("the panel is its own component, mounted once on the coin page, with no key handling", () => {
     const page = fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8"), panel = fs.readFileSync("src/app/burnticker/t/[ticker]/TradePanel.tsx", "utf8");

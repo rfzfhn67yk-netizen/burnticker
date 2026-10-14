@@ -414,7 +414,9 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   }
   const espn = locked.rule.oracle === "catalogue" && locked.rule.series ? parseEspnSeries(locked.rule.series) : null;
   const teamName = espn ? teamByAbbr(espn.league, espn.abbr)?.nickname ?? null : null;
-  const end = endText(asBuilt, { team: teamName ? `the ${teamName}` : null });
+  // walkthrough 13: a race between two parties ends in party words (describe.ts PARTIES_END_RESULT)
+  const partyRace = settled?.shape === "candidates" && isPartySubject(settledNames(pair?.names, sides));
+  const end = endText(asBuilt, { team: teamName ? `the ${teamName}` : null, party: partyRace });
   const alloc = allocationFor(locked);
   const per = (s: typeof CURVE_FEES) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });
   const perPc = (s: typeof PAIR_CURVE_FEES.curve | typeof PAIR_CURVE_FEES.post) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });

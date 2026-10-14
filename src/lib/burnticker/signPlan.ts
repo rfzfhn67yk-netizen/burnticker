@@ -14,7 +14,9 @@ import type { SerializedIx } from "@/lib/burnticker/program";
  *   confirms   which step's signature confirms which draft with POST /api/burnticker/launch { action: "launched" } — the transaction the
  *              mint itself signed (LaunchLab: initialize_token + create; pair curve: create mint A / create mint B, never init_pair)
  *
- * Rules: a step is built, signed by its keys, then by the wallet, written to storage, sent and confirmed before the next; the first
+ * Rules: a step is built, signed by the wallet FIRST and then by its keys (Phantom's dApp review, ticket 438485, 2026-10-14: Lighthouse
+ *   flags a transaction that arrives with other signatures already on it; wallet first, then partialSign), written to storage, sent and
+ *   confirmed before the next; the first
  * failure stops the run (a half-signed set is never sent) and a second press resumes at the failed step (a confirmed step is never sent
  * twice; a sent step whose confirmation was lost is looked up by its original signature, never blindly rebuilt — review-2 F4). Client-safe.
  */
@@ -72,7 +74,7 @@ export const LAMPORTS_PER_SIGNATURE = 5_000;
  * coin is 1,262 bytes as a legacy transaction, over the 1,232-byte limit): the fixed accounts are loaded from `lookupTable` — the
  * network's table, verified by lookupTable.ts verifiedLookupTable before this is called; null compiles without one (tests).
  */
-export function buildStepTx(step: SignStep, creator: string, keys: Record<string, string | null | undefined>, recentBlockhash: string, lookupTable: AddressLookupTableAccount | null = null): VersionedTransaction {
+export function buildStepTx(step: SignStep, creator: string, keys: Record<string, string | null | undefined>, recentBlockhash: string, lookupTable: AddressLookupTableAccount | null = null, signKeys = true): VersionedTransaction {
   const instructions = step.instructions.map((ix) => new TransactionInstruction({ programId: new PublicKey(ix.programId), keys: ix.keys.map((k) => ({ pubkey: new PublicKey(k.pubkey), isSigner: k.isSigner, isWritable: k.isWritable })), data: Buffer.from(ix.dataBase64, "base64") }));
   const signers = step.signers.filter((s) => s !== "creator").map((s) => {
     const k = keys[s];
@@ -85,8 +87,31 @@ export function buildStepTx(step: SignStep, creator: string, keys: Record<string
   }
   const size = wireSize(tx);
   if (size > PACKET_LIMIT) throw new Error(`${step.label}: the transaction is ${size} bytes, over the ${PACKET_LIMIT.toLocaleString("en-US")}-byte limit`);
+  if (signKeys && signers.length) tx.sign(signers);
+  return tx;
+}
+
+/**
+ * Adds the step's own key signatures (the mint keys) to a transaction the wallet has already signed — Phantom's recommended order
+ * (wallet first, then partialSign; ticket 438485). The keys are checked against the public keys the plan expects before signing
+ * (planProblems), and the wallet's returned message was checked byte for byte (walletReturnProblem) before this is called, so the
+ * signatures are made over exactly the bytes this page built.
+ */
+export function signStepKeys(tx: VersionedTransaction, step: SignStep, keys: Record<string, string | null | undefined>): VersionedTransaction {
+  const signers = step.signers.filter((s) => s !== "creator").map((s) => {
+    const k = keys[s];
+    if (!k) throw new Error(`${step.label} needs the ${s} key`);
+    return Keypair.fromSecretKey(base58ToBytes(k));
+  });
   if (signers.length) tx.sign(signers);
   return tx;
+}
+
+/** One sentence for a failed dry run: the chain's error plus the last program log line that explains it, when there is one. */
+export function simulationFailureText(err: unknown, logs?: string[] | null): string {
+  const e = typeof err === "string" ? err : JSON.stringify(err);
+  const why = (logs ?? []).filter((l) => /Error|failed|insufficient/i.test(l)).at(-1);
+  return why ? `${e} (${why.replace(/^Program log: /, "").slice(0, 160)})` : e;
 }
 
 /** The signed wire size (signatures are fixed-width, so an unsigned transaction measures the same). */
@@ -98,8 +123,8 @@ const sameBytes = (a: Uint8Array | undefined, b: Uint8Array | undefined) => !!a 
 /**
  * LAUNCH INTEGRITY 253: what is wrong with the transaction a wallet hands back, or null when it is the one built here plus the wallet's
  * signature. The rule is exact, by design: the wallet may only fill its own signature slot. Its message bytes (fee payer, blockhash,
- * signers, accounts, instructions, lookup tables) must equal what it was handed, and every key signature this page added (the mint keys)
- * must still be there, byte for byte. A changed message would void those signatures anyway, so no supported wallet can change it and
+ * signers, accounts, instructions, lookup tables) must equal what it was handed, and every key signature this page had already added
+ * (the mint keys; none in the shipped order, where the wallet signs first and the keys sign after) must still be there, byte for byte. A changed message would void those signatures anyway, so no supported wallet can change it and
  * still produce a transaction that lands; a wallet that tries (an added instruction, a different fee payer) is refused before the send.
  * Equal message bytes plus the page's own signature bytes means the mint signatures still verify (they were made over those bytes here).
  * The wallet's own signature is checked only for presence; a bad one is refused by the network, which charges nothing for it.
@@ -123,7 +148,9 @@ export function walletReturnProblem(handed: { message: Uint8Array; signatures: U
   for (const s of step.signers) {
     if (s === "creator") continue;
     const at = index.indexOf(plan.expect[s] ?? "");
-    if (at < 0 || !hasSignature(handed.signatures[at]) || !sameBytes(returned.signatures[at], handed.signatures[at])) return `the wallet removed or changed ${plan.labels[s] ?? s}'s signature`;
+    if (at < 0) return `the wallet removed or changed ${plan.labels[s] ?? s}'s signature`;
+    if (!hasSignature(handed.signatures[at])) continue; // not signed yet: the key signs after the wallet (signStepKeys)
+    if (!sameBytes(returned.signatures[at], handed.signatures[at])) return `the wallet removed or changed ${plan.labels[s] ?? s}'s signature`;
   }
   return null;
 }
@@ -271,6 +298,12 @@ export function reconcilePending(p: { lastValidBlockHeight: number }, status: Ch
 export interface SendDeps {
   latestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }>;
   signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction>;
+  /**
+   * Phantom's dApp guidance (ticket 438485, 2026-10-14): a transaction that fails on chain trips the wallet's warning, so each step is
+   * dry-run (simulateTransaction, sigVerify false) BEFORE the wallet is asked to sign. Returns why the dry run failed, or null when it
+   * passed; a dry run the RPC could not perform (throws) does not stop the launch — only a failure the chain reported does. Optional.
+   */
+  simulate?(tx: VersionedTransaction): Promise<string | null>;
   /**
    * The network's lookup table, VERIFIED (lookupTable.ts verifiedLookupTable: the pinned address, every entry at its index, authority the
    * operations key or frozen) — it throws "lookup table mismatch — nothing was sent" otherwise, and the run stops before anything is
@@ -433,12 +466,19 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
     try {
       bh = await d.latestBlockhash();
       const fetchedAt = now();
-      const built = buildStepTx(plan.steps[i], creator, plan.keys, bh.blockhash, lut);
+      // Phantom ticket 438485: the wallet signs first (the transaction it sees carries no other signature), the mint keys sign after
+      const built = buildStepTx(plan.steps[i], creator, plan.keys, bh.blockhash, lut, false);
       // launch integrity 253: a copy of what the wallet is handed (a wallet may sign the object in place), checked against what comes back
       const handed = { message: built.message.serialize(), signatures: built.signatures.map((s) => Uint8Array.from(s)) };
+      if (d.simulate) {
+        let dry: string | null = null;
+        try { dry = await d.simulate(built); } catch { dry = null; }
+        if (dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry}`);
+      }
       const signed = await d.signTransaction(built);
       const changed = walletReturnProblem(handed, signed, plan.steps[i], plan);
       if (changed) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because ${changed}`);
+      signStepKeys(signed, plan.steps[i], plan.keys);
       // the integrity check above ran first; only then is the blockhash's age looked at (a stale one is re-checked on chain)
       if (now() - fetchedAt > STALE_BLOCKHASH_MS && d.isBlockhashValid && (await blockhashExpired(d, bh.blockhash))) {
         if (resigns >= RESIGN_MAX) return stop(i, "not-sent", resignExhaustedSentence(i, n));

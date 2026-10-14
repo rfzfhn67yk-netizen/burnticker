@@ -62,6 +62,16 @@ export function firstPartyCards(featured: readonly CardView[], tab: GridTab, que
   return featured.filter((v) => FIRST_PARTY_CARD_IDS.includes(v.id) && !v.tags.some((t) => t.label === "Not created yet") && cardMatches(v, query) && (tab === "new" || isFollowed(v)));
 }
 
+/**
+ * THE "LIVE COINS" TOTAL (walkthrough 13, 2026-10-14: "Live coins 1" while $DEFICIT and $PHINFLWIN were both live). The index counts the
+ * registry only; the operator's created coins that lead the list ($DEFICIT, not a registry row) are live coins shown too, so each created
+ * first-party card anyone can trade adds one, unless the index already lists its ticker.
+ */
+export function liveCoinsTotal(indexLive: number, featured: readonly CardView[], indexTickers: readonly string[]): number {
+  const listed = new Set(indexTickers.map((t) => t.toUpperCase()));
+  return indexLive + featured.filter((v) => FIRST_PARTY_CARD_IDS.includes(v.id) && v.group === "public" && !v.tags.some((t) => t.label === "Not created yet") && !listed.has(v.ticker.toUpperCase())).length;
+}
+
 /** How many coins in a list had their curve read (a phase or a percentage), and how many did not. */
 export function curveCoverage(list: readonly Coin[]): { read: number; unread: number } {
   const onCurve = list.filter((t) => t.phase !== "graduated");

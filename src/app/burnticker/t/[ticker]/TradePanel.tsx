@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { balanceLine, capLine, curveSplitLine, DEFAULT_SLIPPAGE_BPS, feeLine, holdsLine, REFUSAL, SLIPPAGE_CHOICES_BPS, SWAP_COPY, SWAP_NOTICE } from "@/lib/burnticker/swap/copy";
+import { balanceLine, capLine, DEFAULT_SLIPPAGE_BPS, feeLine, holdsLine, REFUSAL, SLIPPAGE_CHOICES_BPS, SWAP_COPY, SWAP_NOTICE } from "@/lib/burnticker/swap/copy";
 import { formatAmount, parseAmount } from "@/lib/burnticker/swap/math";
 import { balanceRefusal, buildSwap, coinRefusal, feeBps, marketRefusal, quoteSwap, requoteRefusal, walletRefusal, type Balances, type Market, type Network, type Quote, type Side } from "@/lib/burnticker/swap/plan";
 import { connectionOn, explorerTxUrl, readBalances, readMarket, simulateSignSend } from "@/lib/burnticker/swap/chain";
@@ -26,6 +26,10 @@ export interface TradePanelProps {
   /** the burn pool's basis points of each CPMM swap, from the page's fee table (fees.ts postGraduationFeesFor) */
   poolBurnBps: number;
   links: { id: string; label: string; url: string }[];
+  /** the page's fee sentence (curve and pool fees), printed above the other venues */
+  feesNote?: string;
+  /** what the page says when there are no links yet (a draft, an unread pool) */
+  linksNote?: string | null;
 }
 
 const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
@@ -36,22 +40,26 @@ const STEP_TEXT: Record<Exclude<Step, "idle">, string> = { quoting: SWAP_COPY.qu
 export function TradePanel(p: TradePanelProps) {
   const [guard, setGuard] = useState<SwapGuard | null | "failed">(null);
   useEffect(() => { fetch("/api/burnticker/swap-guard").then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then((j: SwapGuard) => setGuard(j)).catch(() => setGuard("failed")); }, []);
-  if (guard === null) return null;
+  // walkthrough 13 (owner 2026-10-14, "fix the layout calls"): this row is the coin page's ONE place for the full set of trade links
+  // (the header keeps only the primary button), so it renders even when the swap itself does not (loading, another network, a draft)
+  const alternatives = (p.links.length > 0 || p.feesNote || p.linksNote) ? (
+    <div className="text-xs" data-swap-alternatives>
+      {p.feesNote && <p className="mb-1 text-neutral-400" data-fees-before-trade>{p.feesNote}</p>}
+      {p.links.length > 0 ? <p><span className="text-neutral-500">{SWAP_COPY.otherVenues}: </span>
+        {p.links.map((l, i) => <span key={l.id}>{i > 0 && <span className="text-neutral-500"> · </span>}<a className="underline" href={l.url} rel="noopener" target="_blank">{l.label}</a></span>)}</p>
+        : p.linksNote ? <p className="text-neutral-400" data-trade-note>{p.linksNote}</p> : null}
+    </div>
+  ) : null;
   // the panel never appears for a coin that is not live on this host's own network
-  const refusal = guard === "failed" ? null : coinRefusal({ mint: p.mint, status: p.status, cluster: p.cluster, hostCluster: guard.cluster, testMints: guard.testMints });
-  if (refusal && refusal !== REFUSAL.testCoin) return null;
+  const refusal = guard === null || guard === "failed" ? null : coinRefusal({ mint: p.mint, status: p.status, cluster: p.cluster, hostCluster: guard.cluster, testMints: guard.testMints });
+  if (guard === null || (refusal && refusal !== REFUSAL.testCoin)) return alternatives ? <section className={card} aria-label={SWAP_COPY.otherVenues}>{alternatives}</section> : null;
   return (
     <section className={card} aria-label={SWAP_COPY.title} data-swap-panel>
       <p className="mb-2 text-[11px] text-neutral-400" data-swap-notice>{SWAP_NOTICE}</p>
       {refusal ? <p className="text-xs text-neutral-300" data-swap-refusal>{refusal}</p>
         : guard === "failed" ? <p className="text-xs text-neutral-300" data-swap-refusal>{REFUSAL.guardUnavailable}</p>
         : <Swap {...p} network={p.cluster as Network} operatorWallets={guard.operatorWallets} />}
-      {p.links.length > 0 && (
-        <div className="mt-3 border-t border-neutral-800 pt-2 text-xs" data-swap-alternatives>
-          <span className="text-neutral-500">{SWAP_COPY.otherVenues}: </span>
-          {p.links.map((l, i) => <span key={l.id}>{i > 0 && <span className="text-neutral-500"> · </span>}<a className="underline" href={l.url} rel="noopener" target="_blank">{l.label}</a></span>)}
-        </div>
-      )}
+      {alternatives && <div className="mt-3 border-t border-neutral-800 pt-2">{alternatives}</div>}
     </section>
   );
 }
@@ -157,7 +165,7 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1" data-swap-quote>
           <dt className="text-neutral-500">{side === "sol-in" ? SWAP_COPY.tokensOut : SWAP_COPY.solOut}</dt><dd className="font-mono">{fmtOut(quote.amountOut)}</dd>
           <dt className="text-neutral-500">{SWAP_COPY.minimumOut}</dt><dd className="font-mono">{fmtOut(minOut)}</dd>
-          {fees && <><dt className="text-neutral-500">{SWAP_COPY.fee}</dt><dd data-swap-fee>{feeLine({ totalBps: fees.totalBps, burnPoolBps: fees.burnPoolBps ?? p.poolBurnBps, feeText: quote.feeUnit === "SOL" ? sol(quote.feeRaw) : tok(quote.feeRaw), burnPoolText: quote.feeUnit === "SOL" ? sol(quote.burnPoolRaw) : tok(quote.burnPoolRaw), unit: quote.feeUnit === "SOL" ? "SOL" : `$${p.ticker}` })}{market?.kind === "curve" && ` ${curveSplitLine(fees.raydiumBps, fees.platformBps)}`}</dd></>}
+          {fees && <><dt className="text-neutral-500">{SWAP_COPY.fee}</dt><dd data-swap-fee>{feeLine({ totalBps: fees.totalBps, burnPoolBps: fees.burnPoolBps ?? p.poolBurnBps, feeText: quote.feeUnit === "SOL" ? sol(quote.feeRaw) : tok(quote.feeRaw), burnPoolText: quote.feeUnit === "SOL" ? sol(quote.burnPoolRaw) : tok(quote.burnPoolRaw), unit: quote.feeUnit === "SOL" ? "SOL" : `$${p.ticker}`, rest: market?.kind === "curve" ? { raydiumBps: fees.raydiumBps, platformBps: fees.platformBps } : null })}</dd></>}
         </dl>
       )}
       {quote?.capped && <p className="text-neutral-300">{capLine(sol(quote.amountIn))}</p>}

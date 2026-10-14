@@ -104,7 +104,7 @@ describe("plain messages", () => {
 
 describe("signing the pair-curve set", () => {
   const creator = Keypair.generate(), mintA = Keypair.generate(), mintB = Keypair.generate();
-  const b58 = (k: Keypair) => { const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B = BigInt(58); let n = BigInt("0x" + Buffer.from(k.secretKey).toString("hex")), s = ""; while (n > Z) { s = A[Number(n % B)] + s; n /= B; } for (const x of k.secretKey) { if (x) break; s = "1" + s; } return s; };
+  const b58 = (k: Keypair) => { const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B = BigInt(58); let n = BigInt("0x" + Buffer.from(k.secretKey).toString("hex")), s = ""; while (n > Z) { s = A[Number(n % B)] + s; n /= B; } for (const x of k.secretKey) { if (x) break; s = "1" + s; } for (const b of k.secretKey) { if (b !== 0) break; s = "1" + s; } return s; };
   const keys = { a: b58(mintA), b: b58(mintB) };
   const ix = (signer: Keypair | null) => { const t = SystemProgram.transfer({ fromPubkey: creator.publicKey, toPubkey: signer?.publicKey ?? creator.publicKey, lamports: 1 }); if (signer) t.keys.push({ pubkey: signer.publicKey, isSigner: true, isWritable: false }); return { programId: t.programId.toBase58(), keys: t.keys.map((k) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })), dataBase64: Buffer.from(t.data).toString("base64"), label: "test" }; };
   const pc = { version: "burnticker.pair-curve-launch/v1", ready: true, pending: ["Metaplex metadata for the two mints is not in this bundle yet"], badge: { id: "pair-curve", label: "Pair curve", text: "" }, pairId: "p", pair: "x", vault: "v", mints: { a: mintA.publicKey.toBase58(), b: mintB.publicKey.toBase58() }, params: {} as PairCurveLaunchBundle["params"], fees: "", notes: [],
@@ -118,7 +118,7 @@ describe("signing the pair-curve set", () => {
     assert.ok(pairCurveSignProblems({ ...pc, ready: false, pending: ["side A: the initialize_token instruction is a placeholder"] }, creator.publicKey.toBase58(), keys).some((p) => /placeholder/.test(p)));
   });
 
-  test("in order: each mint transaction carries its mint signature before the wallet signs; confirmed one by one; tx 1 / tx 2 confirm the drafts", async () => {
+  test("in order: the wallet signs first and sees no mint signature (Phantom ticket 438485); the mint key signs after; confirmed one by one; tx 1 / tx 2 confirm the drafts", async () => {
     const log: string[] = [], sent: string[] = [];
     const deps = {
       latestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 100 }),
@@ -130,7 +130,7 @@ describe("signing the pair-curve set", () => {
     };
     const r = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), keys, deps);
     assert.deepEqual(r, { signatures: sent, failedAt: null, error: null }); assert.equal(sent.length, 3);
-    assert.deepEqual(log, ["wallet sees 1 mint sig(s)", "send true", `confirm ${sent[0]}`, "wallet sees 1 mint sig(s)", "send true", `confirm ${sent[1]}`, "wallet sees 0 mint sig(s)", "send true", `confirm ${sent[2]}`]);
+    assert.deepEqual(log, ["wallet sees 0 mint sig(s)", "send true", `confirm ${sent[0]}`, "wallet sees 0 mint sig(s)", "send true", `confirm ${sent[1]}`, "wallet sees 0 mint sig(s)", "send true", `confirm ${sent[2]}`]);
     // the half-signed refusal: a mint transaction without its key never reaches the wallet or the chain
     const none: string[] = [];
     const noKeys = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), null, { ...deps, signTransaction: async (tx) => { none.push("wallet"); return tx; }, sendRaw: async () => { none.push("send"); return "x"; } });

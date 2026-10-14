@@ -46,11 +46,27 @@ export const DEFAULT_SLIPPAGE_BPS = 200;
 
 const pct = (bps: number): string => `${Math.round(bps) / 100}%`;
 
-/** The fee line: the whole fee, then the burn pool's share, which is the reason to swap in this coin's own pool. */
-export function feeLine(i: { totalBps: number; burnPoolBps: number; feeText: string; burnPoolText: string; unit: string }): string {
-  return `${pct(i.totalBps)} of the swap (${i.feeText} ${i.unit}). Of that, ${pct(i.burnPoolBps)} (${i.burnPoolText} ${i.unit}) goes to this coin's burn pool, which pays for its burns.`;
+/** How much of the fee the burn pool's share is, in words ("Half of it"), so the line never reads as a cut taken from the fee twice. */
+export function shareOfFee(partBps: number, totalBps: number): string {
+  if (totalBps <= 0 || partBps >= totalBps) return "All of it";
+  const r = partBps / totalBps;
+  const words: [number, string][] = [[1 / 2, "Half of it"], [1 / 4, "A quarter of it"], [3 / 4, "Three quarters of it"], [1 / 3, "A third of it"], [2 / 3, "Two thirds of it"], [1 / 5, "A fifth of it"]];
+  for (const [f, w] of words) if (Math.abs(r - f) < 1e-9) return w;
+  return "Part of it";
 }
-export const curveSplitLine = (raydiumBps: number, platformBps: number): string => `The rest goes to Raydium (${pct(raydiumBps)}) and to Burnticker's developer fee (${pct(platformBps)}).`;
+const restParts = (r: { raydiumBps: number; platformBps: number }): string => (r.platformBps > 0 ? `Raydium (${pct(r.raydiumBps)}) and Burnticker (${pct(r.platformBps)})` : `Raydium (${pct(r.raydiumBps)})`);
+
+/**
+ * The fee line: the whole fee, then the burn pool's share of it, which is the reason to swap in this coin's own pool. Walkthrough 13
+ * (2026-10-14): "1% of the swap. Of that, 0.5%" read as half of the fee, so the share is said in words and as a share of the swap. On
+ * the curve, `rest` names where the other legs go, in the same sentence.
+ */
+export function feeLine(i: { totalBps: number; burnPoolBps: number; feeText: string; burnPoolText: string; unit: string; rest?: { raydiumBps: number; platformBps: number } | null }): string {
+  const head = `The swap pays a ${pct(i.totalBps)} fee (${i.feeText} ${i.unit}). ${shareOfFee(i.burnPoolBps, i.totalBps)} (${pct(i.burnPoolBps)} of the swap, ${i.burnPoolText} ${i.unit}) goes to this coin's burn pool`;
+  return i.rest ? `${head}; the rest goes to ${restParts(i.rest)}.` : `${head}, which pays for its burns.`;
+}
+/** The curve's other legs on their own sentence. */
+export const curveSplitLine = (raydiumBps: number, platformBps: number): string => `The rest goes to ${restParts({ raydiumBps, platformBps })}.`;
 
 export const REFUSAL = {
   draft: "This coin is a draft. It has no pool to swap in yet.",

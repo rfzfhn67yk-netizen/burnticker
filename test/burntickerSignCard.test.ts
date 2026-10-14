@@ -59,7 +59,7 @@ const fakeDeps = (log: string[], over: Partial<{ refuseAt: number; chainErrAt: n
 };
 
 describe("one signing plan for every launch path", () => {
-  for (const [label, ticker, rule] of PATHS) test(`${label}: Launch → bundle → the mint key signs, then the wallet → sent → "launched" with that transaction`, async () => {
+  for (const [label, ticker, rule] of PATHS) test(`${label}: Launch → bundle → the wallet signs first, then the mint key (Phantom ticket 438485) → sent → "launched" with that transaction`, async () => {
     await makeWorld(); limiter.reset();
     const r = await legacy(coin(ticker, rule));
     assert.equal(r.status, 200, JSON.stringify(r.json).slice(0, 300));
@@ -74,7 +74,7 @@ describe("one signing plan for every launch path", () => {
     const log: string[] = [];
     const s = await signAndSendPlan(plan, CREATOR, fakeDeps(log));
     assert.equal(s.error, null);
-    assert.ok(log[0].startsWith("wallet signs (1 key"), "the mint key signed before the wallet saw it");
+    assert.ok(log[0].startsWith("wallet signs (0 key"), "the wallet sees no other signature (Phantom ticket 438485); the mint key signs after");
     assert.deepEqual(planConfirmations(plan, s.signatures), [{ mint: b.mint, launchTx: s.signatures[plan.confirms[0].step] }]);
   });
 
@@ -93,7 +93,7 @@ describe("one signing plan for every launch path", () => {
 /** A two-step LaunchLab bundle with a real fresh mint key: "create" (creator + mint) then "first buy" (creator). */
 const bundle = (): LaunchlabBundleLike => {
   const mint = Keypair.generate();
-  const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B58 = BigInt(58); let x = BigInt("0x" + Buffer.from(mint.secretKey).toString("hex")), secret = ""; while (x > Z) { secret = A[Number(x % B58)] + secret; x /= B58; }
+  const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B58 = BigInt(58); let x = BigInt("0x" + Buffer.from(mint.secretKey).toString("hex")), secret = ""; while (x > Z) { secret = A[Number(x % B58)] + secret; x /= B58; } for (const b of mint.secretKey) { if (b !== 0) break; secret = "1" + secret; }
   const ix = (signer: string) => ({ programId: "11111111111111111111111111111111", label: "test", dataBase64: Buffer.from([2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]).toString("base64"), keys: [{ pubkey: CREATOR, isSigner: true, isWritable: true }, { pubkey: signer, isSigner: true, isWritable: true }] });
   return { mint: mint.publicKey.toBase58(), ticker: "TEST", ready: true, pending: [], mintSecretKey: secret, transactions: [{ label: "create", signers: ["creator", "mint"], instructions: [ix(mint.publicKey.toBase58())] }, { label: "first buy", signers: ["creator"], instructions: [ix(CREATOR)] }] };
 };

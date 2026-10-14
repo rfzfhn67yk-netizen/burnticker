@@ -376,11 +376,11 @@ export interface EndOption { kind: EndKind; label: string; available: boolean; r
  */
 /** Item 58: what a coin with no end date really does (the end sink it carries is never reached). */
 export const PERPETUAL_END_LINE = "This coin has no end. It keeps burning on every result that qualifies, for as long as its pool holds SOL, so nothing is ever left over to send anywhere.";
-export function endSentences(rule: BurnRule, o: { team?: string | null } = {}): { kind: EndKind; sentences: string[]; options: EndOption[] } {
+export function endSentences(rule: BurnRule, o: { team?: string | null; party?: boolean } = {}): { kind: EndKind; sentences: string[]; options: EndOption[] } {
   const sink = describeEndSink(rule);
   const kind: EndKind = sink === "pair-winner" ? "pair-winner" : sink === "flagship" ? "flagship" : sink === "mint" ? "named-coin" : sink === "incinerator" ? "incinerator" : "self";
   // ChatGPT audit 6 item 3: the sentences are describe.ts endText's, the same the review API's endsLine and the coin description say
-  const e = endText(rule, { team: o.team ?? null });
+  const e = endText(rule, { team: o.team ?? null, party: o.party });
   const sentences = [...e.result.split(/(?<=\.)\s+(?=[A-Z$])/), ...(e.void ? [e.void] : [])];
   // website-20 item 58: a coin with no end never reaches its end sink, so no end is offered as "this coin's end"
   if (windowKindOf(rule) === "perpetual" && kind !== "pair-winner") return { kind: "self", sentences, options: [] };
@@ -538,14 +538,16 @@ export function matchupFacts(o: { a: string; b: string; oneLinerA: string; oneLi
  * when both markets are final; the winner's coin burns its own pool and takes the loser's pool at the end; no single winner sends both
  * pools to $DEFICIT's burn.
  */
-export function candidateFacts(o: { a: string; b: string; candA: string; candB: string }): { kind: "winner-takes-the-burn"; trigger: string; burned: string; pays: string; moves: string; example: string } {
+export function candidateFacts(o: { a: string; b: string; candA: string; candB: string; party?: boolean }): { kind: "winner-takes-the-burn"; trigger: string; burned: string; pays: string; moves: string; example: string } {
   const A = `$${o.a || "A"}`, B = `$${o.b || "B"}`;
+  // walkthrough 13: a race between two parties says "party", never "candidate"
+  const who = o.party ? "party" : "candidate";
   return {
     kind: "winner-takes-the-burn",
     trigger: `${A} follows the market for ${o.candA}, and ${B} the market for ${o.candB}. The race counts once, when both markets are final.`,
-    burned: "Only the winning candidate's coin is burned. The other coin's supply is untouched.",
+    burned: `Only the winning ${who}'s coin is burned. The other coin's supply is untouched.`,
     pays: "The winning coin spends its whole burn pool on itself. The other coin's pool goes to the winning coin's burn at the end.",
-    moves: `SOL moves from the losing coin's burn pool to the winning coin's. If neither candidate wins, or a market settles 50-50, nothing moves between them and both pools go to $DEFICIT's burn. Nothing is paid to holders.`,
+    moves: `SOL moves from the losing coin's burn pool to the winning coin's. If neither ${who} wins, or a market settles 50-50, nothing moves between them and both pools go to $DEFICIT's burn. Nothing is paid to holders.`,
     example: `For example, if ${o.candA} wins, ${A} burns its own pool on itself, and ${B}'s pool goes to ${A}'s burn too.`,
   };
 }
