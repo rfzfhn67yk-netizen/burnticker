@@ -306,18 +306,37 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
  * PRIMARY A's readers over the Polymarket client: Gamma search by the two teams (closed and open), a moneyline market whose two outcomes
  * name the two teams and whose end falls within a day of the game; the payout from the CTF on Polygon (readChain).
  */
-export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "open" | "closed" | "all"; limit?: number }): Promise<{ events: { url: string; markets: { conditionId: string; question: string; yes: string; no: string; endDate: string | null; sportsMarketType: string | null }[] }[] }>; readChain(conditionId: string): Promise<{ resolved: boolean; outcome: number | null }> }): Pick<GameDeps, "market" | "payout"> {
+/** Polymarket's tag slug per league (Gamma /events?tag_slug=): read 2026-10-13 against the live index; a league not here uses the text search only. */
+export const POLY_LEAGUE_TAG: Partial<Record<LeagueId, string>> = { nfl: "nfl", mlb: "mlb", nba: "nba", nhl: "nhl", wnba: "wnba", cfb: "cfb", "eng.1": "epl", "esp.1": "la-liga", "ger.1": "bundesliga", "fra.1": "ligue-1", "ita.1": "serie-a", "usa.1": "mls" };
+
+type GameHits = { events: { url: string; markets: { conditionId: string; question: string; yes: string; no: string; endDate: string | null; sportsMarketType: string | null }[] }[] };
+export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "open" | "closed" | "all"; limit?: number }): Promise<GameHits>; eventsInWindow?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; readChain(conditionId: string): Promise<{ resolved: boolean; outcome: number | null }> }): Pick<GameDeps, "market" | "payout"> {
+  type Hit = { url: string; markets: { conditionId: string; question: string; yes: string; no: string; endDate: string | null; sportsMarketType: string | null }[] };
+  const pick = (events: readonly Hit[], g: Game): GameMarket | null => {
+    for (const e of events) for (const m of e.markets) {
+      if (m.sportsMarketType && m.sportsMarketType !== "moneyline") continue;
+      const names = [m.yes, m.no];
+      const both = names.some((x) => sideMatches(x, g.home)) && names.some((x) => sideMatches(x, g.away));
+      const near = m.endDate ? Math.abs(Date.parse(m.endDate) - Date.parse(g.startsAt)) < 2 * 86_400_000 : false;
+      if (both && near) return { conditionId: m.conditionId, question: m.question, outcomes: [m.yes, m.no], url: e.url };
+    }
+    return null;
+  };
   return {
     market: async (g) => {
-      const r = await poly.search(`${g.away.nickname || g.away.name} vs ${g.home.nickname || g.home.name}`, { status: "all", limit: 10 });
-      for (const e of r.events) for (const m of e.markets) {
-        if (m.sportsMarketType && m.sportsMarketType !== "moneyline") continue;
-        const names = [m.yes, m.no];
-        const both = names.some((x) => sideMatches(x, g.home)) && names.some((x) => sideMatches(x, g.away));
-        const near = m.endDate ? Math.abs(Date.parse(m.endDate) - Date.parse(g.startsAt)) < 2 * 86_400_000 : false;
-        if (both && near) return { conditionId: m.conditionId, question: m.question, outcomes: [m.yes, m.no], url: e.url };
+      // launch night 2026-10-13: the league's events in a window around the game's start first (the text search is capped at 10 hits and
+      // older meetings of the same two teams crowd out the week's game: "Chiefs vs Raiders" missed nfl-kc-lv-2026-10-04)
+      const tag = POLY_LEAGUE_TAG[g.league];
+      if (tag && poly.eventsInWindow) {
+        const start = Date.parse(g.startsAt);
+        if (Number.isFinite(start)) {
+          const r = await poly.eventsInWindow(tag, new Date(start - 36 * 3600_000).toISOString(), new Date(start + 48 * 3600_000).toISOString()).catch(() => null);
+          const hit = r ? pick(r.events, g) : null;
+          if (hit) return hit;
+        }
       }
-      return null;
+      const r = await poly.search(`${g.away.nickname || g.away.name} vs ${g.home.nickname || g.home.name}`, { status: "all", limit: 10 });
+      return pick(r.events, g);
     },
     payout: async (id) => { const c = await poly.readChain(id); return { resolved: c.resolved, outcome: c.outcome }; },
   };

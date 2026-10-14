@@ -21,25 +21,28 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  * thrown: the keeper never stops for its phone.
  */
 
-export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused";
+export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
   "bt-pin-failed": "pin-failed",
   "bt-snapshot-failed": "pin-failed",
   "bt-crank-failed": "crank-refused",
+  "bt-launch-failed": "launch-failed",
 };
 export const PUSH_TITLE: Record<PushKind, string> = {
   "keeper-refused": "Burnticker keeper refused to start",
   "signer-disagree": "Burnticker reading held",
   "pin-failed": "Burnticker upload failed",
   "crank-refused": "Burnticker burn run failing",
+  "launch-failed": "Burnticker launch failed",
 };
 export const PUSH_LEAD: Record<PushKind, string> = {
   "keeper-refused": "The keeper stopped before its first cycle. Nothing is read or burned until it starts again.",
   "signer-disagree": "A reading is held because the second signer did not agree with the keeper. Nothing burns for it until someone looks.",
   "pin-failed": "An upload to Arweave failed. A launch that needs it is refused, and a snapshot that needs it is not pinned.",
   "crank-refused": "A burn run has failed three times in a row.",
+  "launch-failed": "Someone's launch request failed on the site with a server error, a pin failure or a launch-check refusal. The sentence below is what they saw.",
 };
 
 export const PUSH_PER_KIND_MS = 60 * 60_000;

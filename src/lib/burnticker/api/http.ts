@@ -59,7 +59,9 @@ export function clientKey(req: Request): string {
 }
 
 const json = (r: ApiResult, extra: Record<string, string>): Response =>
-  new Response(JSON.stringify(r.body, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), { status: r.status, headers: { "content-type": "application/json; charset=utf-8", "x-burnticker-api": API_VERSION, ...extra, ...(r.headers ?? {}) } });
+  // launch night 2026-10-13: Cloudflare replaces an origin 502 (and 504) with its own error page, so the page never saw the refusal
+  // sentence ("The launch request failed (502)"). An upstream-unreadable answer is sent as 503 with Retry-After; the body is unchanged.
+  new Response(JSON.stringify(r.body, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), { status: r.status === 502 || r.status === 504 ? 503 : r.status, headers: { ...(r.status === 502 || r.status === 504 ? { "retry-after": "15" } : {}), "content-type": "application/json; charset=utf-8", "x-burnticker-api": API_VERSION, ...extra, ...(r.headers ?? {}) } });
 
 /** Runs one v1 operation with the spec's rate limit, cache and POST discipline. */
 export async function runV1(operationId: string, req: Request, handler: () => Promise<ApiResult>, now = Date.now()): Promise<Response> {
