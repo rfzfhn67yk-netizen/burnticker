@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { edgeJson } from "@/lib/burnticker/api/http";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { checkTargetAdmission, TARGET_MIN_WSOL_RESERVE_LAMPORTS } from "@/lib/burnReceipts/burnTarget";
 import { admissionLine, burnTargetShapeProblems } from "@/lib/burnticker/burnTarget";
@@ -32,6 +33,6 @@ export async function GET(req: Request) {
       floorLamports: TARGET_MIN_WSOL_RESERVE_LAMPORTS[network].toString(),
     });
   } catch (e) {
-    return NextResponse.json({ ok: false, problems: [`the network could not be read: ${(e as Error).message.slice(0, 120)}`] }, { status: 502 });
+    return edgeJson({ ok: false, problems: [`the network could not be read: ${(e as Error).message.slice(0, 120)}`] }, 502);
   }
 }

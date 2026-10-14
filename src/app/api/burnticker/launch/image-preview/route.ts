@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { edgeJson } from "@/lib/burnticker/api/http";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { decodeCreatorImage } from "@/lib/burnticker/creatorProfile";
 import { badgeCreatorImage } from "@/lib/burnticker/creatorBadge";
@@ -22,6 +23,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ contentType: b.ok.contentType, base64: Buffer.from(b.ok.bytes).toString("base64"), bytes: b.ok.bytes.length, side: b.ok.side });
   } catch (e) {
     console.error("[burnticker/image-preview] the mark could not be added:", e);
-    return NextResponse.json({ error: "The preview could not be made just now.", code: "preview-unavailable" }, { status: 502 });
+    return edgeJson({ error: "The preview could not be made just now.", code: "preview-unavailable" }, 502);
   }
 }

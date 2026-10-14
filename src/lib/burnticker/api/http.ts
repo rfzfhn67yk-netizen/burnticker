@@ -58,10 +58,20 @@ export function clientKey(req: Request): string {
   return clientKeyFromHeaders(req.headers);
 }
 
+/**
+ * Launch night 2026-10-13: Cloudflare replaces an origin 502 (and 504) with its own error page, so the page never saw the refusal
+ * sentence ("The launch request failed (502)"). An upstream-unreadable answer is sent as 503 with Retry-After; the body is unchanged.
+ * The launch walkthrough (2026-10-13) found the page's own launch route (/api/burnticker/launch, the one the owner's launch used) and the
+ * launch page's back-test, image preview and burn-target reads still answering 502: every one of them goes through edgeJson now.
+ */
+export const edgeStatus = (status: number): number => (status === 502 || status === 504 ? 503 : status);
+export const edgeRetryHeaders = (status: number): Record<string, string> => (status === 502 || status === 504 ? { "retry-after": "15" } : {});
+/** A JSON answer from one of the site's own (non-v1) routes, with a 502 or 504 sent as 503 so Cloudflare passes the body through. */
+export const edgeJson = (body: unknown, status = 200, headers: Record<string, string> = {}): Response =>
+  new Response(JSON.stringify(body, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), { status: edgeStatus(status), headers: { ...edgeRetryHeaders(status), "content-type": "application/json; charset=utf-8", ...headers } });
+
 const json = (r: ApiResult, extra: Record<string, string>): Response =>
-  // launch night 2026-10-13: Cloudflare replaces an origin 502 (and 504) with its own error page, so the page never saw the refusal
-  // sentence ("The launch request failed (502)"). An upstream-unreadable answer is sent as 503 with Retry-After; the body is unchanged.
-  new Response(JSON.stringify(r.body, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), { status: r.status === 502 || r.status === 504 ? 503 : r.status, headers: { ...(r.status === 502 || r.status === 504 ? { "retry-after": "15" } : {}), "content-type": "application/json; charset=utf-8", "x-burnticker-api": API_VERSION, ...extra, ...(r.headers ?? {}) } });
+  new Response(JSON.stringify(r.body, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), { status: edgeStatus(r.status), headers: { ...edgeRetryHeaders(r.status), "content-type": "application/json; charset=utf-8", "x-burnticker-api": API_VERSION, ...extra, ...(r.headers ?? {}) } });
 
 /** Runs one v1 operation with the spec's rate limit, cache and POST discipline. */
 export async function runV1(operationId: string, req: Request, handler: () => Promise<ApiResult>, now = Date.now()): Promise<Response> {

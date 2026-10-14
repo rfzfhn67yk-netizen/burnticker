@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { edgeJson } from "@/lib/burnticker/api/http";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { platform } from "@/lib/burnticker/server";
 import { runBacktest } from "@/lib/burnticker/api/handlers";
@@ -20,6 +21,6 @@ export async function POST(req: Request) {
     return NextResponse.json(r.body, { status: r.status });
   } catch (e) {
     console.error("[burnticker/backtest] the back-test route failed:", e);
-    return NextResponse.json({ error: "The back-test could not run just now.", code: "backtest-unavailable" }, { status: 502 });
+    return edgeJson({ error: "The back-test could not run just now.", code: "backtest-unavailable" }, 502);
   }
 }

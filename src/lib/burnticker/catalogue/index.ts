@@ -180,8 +180,29 @@ export function feedRuleProblems(feed: Feed, rule: BurnRule): string[] {
   if (rule.scalar.unit !== feed.unit!.size) p.push(`The unit must be ${feed.unit!.size} (${feed.unit!.label}) for "${feed.title}".`);
   if (rule.scalar.direction !== feed.direction) p.push(`The direction must be "${feed.direction}" for "${feed.title}".`);
   if (rule.scalar.baseline !== feed.baseline) p.push(`The baseline must be ${JSON.stringify(feed.baseline)} for "${feed.title}".`);
-  if (!feed.launchable.ok) p.push(`Coins cannot launch on "${feed.title}" yet. The reason is: ${feed.launchable.why}`);
+  if (!feed.launchable.ok) p.push(`Coins cannot launch on "${feed.title}" yet, because ${plainLaunchableWhy(feed.launchable.why)}.`);
   return p;
+}
+
+/**
+ * A source's "not launchable" note as the end of a sentence a creator reads (launch walkthrough 2026-10-13: the review answered "The reason
+ * is: needs a key: BEA_API_KEY (free registration)" and "the fixture is a 6 KB excerpt of the 3 MB page"). The catalogue keeps the
+ * operator's note; the refusal says what it means. An unrecognised note is passed through without its trailing full stop.
+ */
+export function plainLaunchableWhy(why: string | null | undefined): string {
+  const w = (why ?? "").trim();
+  if (!w) return "it is not open for new coins on this site";
+  if (/^needs a key\b/i.test(w)) return "the publisher requires an access key that this site does not have yet";
+  const cross = /^a settlement cross-read, not a launch source: (\S+) is the primary/i.exec(w);
+  if (cross) return `it is only used to check another source. Launch on ${cross[1]} instead`;
+  if (/owner confirms|owner's say-so/i.test(w)) return "it needs the operator's approval first";
+  if (/fixture is a .*excerpt|markup can change/i.test(w)) return "its page cannot be read reliably enough to settle a coin";
+  if (/requires a .*login|no public endpoint/i.test(w)) return "it has no public page this site can read";
+  if (/no RPC/i.test(w)) return "this site has no connection to that network set up";
+  if (/already has its result/i.test(w)) return "this one-time event already has its result, and a coin only counts results that come after its launch";
+  if (/terms need its written consent/i.test(w)) return "the publisher's terms need its written consent before a coin settles on its data";
+  if (/terms do not cover this use/i.test(w)) return "the publisher's terms do not allow this use";
+  return w.replace(/\.$/, "");
 }
 
 export function feedSummary(f: Feed): SeriesSummary {

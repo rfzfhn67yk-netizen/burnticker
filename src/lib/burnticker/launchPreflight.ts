@@ -3,6 +3,7 @@ import { sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { endSelfOnLossProblem, endSinkOf, isOneShot, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { feedById, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
+import { catalogueSettleRefusal } from "@/lib/burnticker/coverage/settleable";
 import { oneShotEligibility, type Eligibility } from "@/lib/burnticker/oneShotEligibility";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { KALSHI_UNAVAILABLE } from "@/lib/burnticker/venues";
@@ -159,7 +160,13 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
       else {
         const fp = feedRuleProblems(feed, r);
         if (fp.length) out.push({ status: 400, code: "source-rule", message: fp.join("; ") });
-        else { const elig = sampleEligibility(feed, now); if (elig.decided) out.push({ status: 400, code: "already-decided", message: elig.reason! }); }
+        else {
+          const elig = sampleEligibility(feed, now);
+          if (elig.decided) out.push({ status: 400, code: "already-decided", message: elig.reason! });
+          // launch walkthrough 2026-10-13: a feed the creation preflight can never pass (not a primary, no second publisher) is said here,
+          // so the review refuses it before a wallet connects instead of the bundle refusing it after
+          else { const s = catalogueSettleRefusal(feed); if (s) out.push({ status: 400, code: s.code, message: s.message }); }
+        }
       }
     }
   } else if (r.oracle !== "kalshi" && r.oracle !== "polymarket" && r.oracle !== "derby") out.push({ status: 400, code: "oracle-off", message: `Coins cannot launch on the ${r.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.` });

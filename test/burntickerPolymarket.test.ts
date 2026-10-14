@@ -19,7 +19,7 @@ import { buildLaunchBundle, buildPairBundles, FakeLaunchLab } from "@/lib/burnti
 import { polymarketSourceReading, verifyReceiptCore } from "@/lib/burnticker/verify";
 import { endpoint, buildOpenApi } from "@/lib/burnticker/api/spec";
 import { Burnticker, verifyReceipt } from "../packages/burnticker-sdk/src/index.ts";
-import { API, ATTESTER, CREATOR, POST_HEADERS, callRoute, makeWorld, routeFetch, validateSchema, type World } from "./burntickerApiHelpers.ts";
+import { API, ATTESTER, CREATOR, HOST, POST_HEADERS, callRoute, makeWorld, routeFetch, validateSchema, type World } from "./burntickerApiHelpers.ts";
 import { NOW } from "./burntickerHelpers.ts";
 import { BUCS_CID, CHAIN, EAGLES_CID, GAMMA_TABLE, PM_BUCS, PM_NFL_MONEYLINE, PM_OPEN, PM_RESOLVED, PM_SEARCH, PM_TAG_CLOSED, PM_TAG_OPEN, polyClient } from "./burntickerPolyHelpers.ts";
 import { gammaFixtureFetch } from "@/lib/burnticker/oracle/polymarket";
@@ -299,7 +299,17 @@ describe("the keeper, the API and the SDK (on the fakes)", () => {
     const tag = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "NFLNO", name: "nfl no", rule: PM_NFL_MONEYLINE, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
     assert.equal(tag.status, 200, (await tag.text()).slice(0, 300));
     const unknown = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "NOPE", name: "nope", rule: { ...PM_BUCS, market: `0x${"ab".repeat(32)}` }, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
-    assert.equal(unknown.status, 503, "an unreachable source answers 503 on the wire (a 502 would be replaced by Cloudflare's own page; launch night 2026-10-13)");
+    // launch night 2026-10-13: an unreadable upstream is answered 503 (Cloudflare replaces a 502 with its own page), the sentence intact
+    assert.equal(unknown.status, 503);
+    assert.equal(unknown.headers.get("retry-after"), "15");
+    assert.match(((await unknown.json()) as { error: string }).error, /could not be read from Polymarket/);
+    // launch walkthrough 2026-10-13: the launch page's own route (the one the owner's launch used) answers the same way, never 502
+    const { POST: pagePost } = await import("../src/app/api/burnticker/launch/route.ts");
+    const page = await pagePost(new Request(`http://${HOST}/api/burnticker/launch`, { method: "POST", headers: { ...POST_HEADERS, host: HOST }, body: JSON.stringify({ creator: CREATOR, ticker: "NOPE", name: "nope", rule: { ...PM_BUCS, market: `0x${"ab".repeat(32)}` }, acknowledgements: { ruleLocked: true, noReturns: true } }) }));
+    const pageBody = await page.text();
+    assert.equal(page.status, 503, pageBody.slice(0, 300));
+    assert.equal(page.headers.get("retry-after"), "15");
+    assert.match((JSON.parse(pageBody) as { error: string }).error, /could not be read from Polymarket/);
   });
   test("SDK: polymarket.search / backtest through the API; verifyReceipt re-reads the payout vector on the caller's machine", async () => {
     const bt = new Burnticker({ apiBase: API, fetch: routeFetch });

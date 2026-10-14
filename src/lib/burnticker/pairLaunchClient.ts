@@ -36,6 +36,9 @@ export function launchErrorMessage(status: number, body: LaunchErrorBody | null,
     return `Too many launch requests from this connection. Try again in ${wait}.`;
   }
   if (status === 503 && code === "launch-unverifiable") return "This site cannot confirm launches yet (no chain connection is set up on the server). Your coins stay drafts; nothing was lost.";
+  // launch walkthrough 2026-10-13: a 503 that carries the server's own sentence (a launch check that could not read a source, sent as 503
+  // so Cloudflare passes it through) shows that sentence, not the generic line: the creator needs to know which check stopped the coin
+  if (status === 503 && typeof body?.error === "string" && body.error.trim()) return `${body.error.trim().replace(/\.?$/, ".")} Nothing was sent.`;
   if (status === 503) return "The launch service is not available right now. Nothing was sent; try again later.";
   if (status === 409) return body?.error ? `${body.error}.` : "That launch conflicts with an existing coin.";
   return body?.error ?? `The launch request failed (${status}).`;

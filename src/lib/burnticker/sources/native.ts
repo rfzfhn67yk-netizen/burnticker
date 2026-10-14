@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, ScheduleUnavailable, espnSeriesTitle, gamesFor, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
-import { CROSS_LABEL, countedOfficialOf, envGameDeps, operatorsFor, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
+import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, ScheduleUnavailable, espnSeriesTitle, gamesFor, parseEspnSeries, teamByAbbr, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
+import { CROSS_LABEL, POLY_LEAGUE_TAG, countedOfficialOf, envGameDeps, operatorsFor, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { FecClient, fecSettled, parseFecSeries } from "@/lib/burnticker/sources/fec";
 import { ALREADY_DECIDED_SENTENCE, gameEligibility } from "@/lib/burnticker/oneShotEligibility";
 import { NwsClient, crossCheck, iemFor, nwsSeriesTitle, nwsSettled, parseNwsSeries, qualifies, stationByCode, type NwsSeries } from "@/lib/burnticker/sources/nws";
@@ -48,6 +48,23 @@ export const espnClient = (): EspnClient => (espn ??= new EspnClient());
 export const nwsClient = (): NwsClient => (nws ??= new NwsClient());
 export const fecClient = (): FecClient => (fec ??= new FecClient());
 
+/**
+ * THE LAUNCH CHECK'S SPORTS SENTENCES (launch walkthrough 2026-10-13). The page shows a refusal after "The check run before launch
+ * refused this coin:", so each reason is plain English a creator can act on: no operator jargon, no setting names, no symbols. The
+ * technical reason stays in `basis`.
+ */
+const gameDay = (g: { date: string }): string => new Date(`${g.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+/** Leagues whose game markets the lookup can match (a two-sided moneyline under a league tag; soccer's three yes-or-no markets are not matched). */
+const listsGamesAhead = (league: EspnSeries["league"]): boolean => !!POLY_LEAGUE_TAG[league] && !LEAGUES[league].draws;
+const AHEAD = " Polymarket usually lists a game a few days before it starts, so please try again then.";
+export const GAME_LINES = {
+  scheduleOff: (league: string): string => `the ${league} schedule cannot be read on this site right now, so a coin on it cannot be checked. Please try again later.`,
+  scheduleUnread: (team: string): string => `the schedule for ${team} could not be read just now. Please try again in a few minutes.`,
+  gameNotListed: (team: string): string => `this game is not on the schedule for ${team}.`,
+  noSourceNext: (team: string, next: Game | null, league: EspnSeries["league"]): string => `no source can settle the next game for ${team} yet, because Polymarket has not listed a market for ${next ? `${next.name} on ${gameDay(next)}` : "it"} and this site has no licensed final scores.${listsGamesAhead(league) ? AHEAD : ""}`,
+  oneSourceNext: (team: string, next: Game | null, league: EspnSeries["league"]): string => `only one source can confirm the games of ${team} right now, and every result needs two sources that agree. The second would be the Polymarket market for ${next ? `${next.name} on ${gameDay(next)}` : "the next game"}, and none was found.${listsGamesAhead(league) ? AHEAD : ""}`,
+};
+
 function espnSource(id: string, s: EspnSeries): NativeSource {
   const t = teamByAbbr(s.league, s.abbr)!, off = countedOfficialOf(s.league), crossLabel = off ? `${CROSS_LABEL[off]} and each other` : "each other (the on-chain payout and TheSportsDB)";
   const deps = () => gameDeps();
@@ -68,8 +85,8 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
       const c = espnClient(), d = deps();
       const none = { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "" };
       let games;
-      try { games = await gamesFor(c, s); } catch (e) { return { ...none, problem: { code: "primary-unreadable", reason: e instanceof ScheduleUnavailable ? (e as Error).message : `the game list could not be read: ${(e as Error).message.slice(0, 120)}` } }; }
-      if (s.kind === "game" && !games.length) return { ...none, problem: { code: "primary-unreadable", reason: `game ${s.eventId} is not listed for ${t.name}` } };
+      try { games = await gamesFor(c, s); } catch (e) { return { ...none, problem: { code: "primary-unreadable", reason: e instanceof ScheduleUnavailable ? GAME_LINES.scheduleOff(LEAGUES[s.league].label) : GAME_LINES.scheduleUnread(t.name) } }; }
+      if (s.kind === "game" && !games.length) return { ...none, problem: { code: "primary-unreadable", reason: GAME_LINES.gameNotListed(t.name) } };
       // the intent audit (oneShotEligibility.ts): a single game that is already final has its result; a new coin on it is refused
       if (s.kind === "game" && games[0].completed) return { ...none, problem: { code: "already-decided", reason: gameEligibility(games[0]).reason! } };
       const next = games.find((g) => !g.completed && Date.parse(g.startsAt) > nowMs - SETTLE_AFTER_START_MS) ?? null;
@@ -79,9 +96,9 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
       // and the first game after launch is where the two reads are compared.
       {
         const m = next && d.market ? await d.market(next).catch(() => null) : null;
-        if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: "no primary: no moneyline market for the next game and BURNTICKER_THESPORTSDB_KEY (TheSportsDB commercial license) is not set" } };
+        if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: GAME_LINES.noSourceNext(t.name, next, s.league) } };
         const ops = operatorsFor(s.league, d, !!m);
-        if (ops.length < 2) return { ...none, nextAt, nextBasis, problem: { code: "cross-read-unreadable", reason: `only one operator can read these games (${ops.join(", ")}): a second independent read is needed` } };
+        if (ops.length < 2) return { ...none, nextAt, nextBasis, problem: { code: "cross-read-unreadable", reason: GAME_LINES.oneSourceNext(t.name, next, s.league) } };
         return { ...none, basis: next ? `readers for the next game (${next.name}): ${ops.join(" and ")}; games before launch never count, and both reads are compared at the first game after launch` : "no game listed yet; both reads are compared at the first game after launch", nextAt, nextBasis, problem: null };
       }
     },

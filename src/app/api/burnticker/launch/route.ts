@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { platform } from "@/lib/burnticker/server";
 import { markLaunched, prepareLaunch } from "@/lib/burnticker/api/handlers";
-import { clientKey, limiter } from "@/lib/burnticker/api/http";
+import { clientKey, edgeJson, limiter } from "@/lib/burnticker/api/http";
 import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
 import { recordLaunchTimings } from "@/lib/burnticker/api/product";
@@ -55,9 +55,11 @@ export async function POST(req: Request) {
     if (on && !wants) return NextResponse.json({ error: "rivalry pairs on this host launch through the pair curve (both coins graduate together or neither does); send venue: \"pair-curve\" and sign the pair-curve transaction set — two independent LaunchLab launches are not offered", code: "pair-curve-required" }, { status: 409 });
     if (!on && wants) return NextResponse.json({ error: "the pair curve is not enabled on this host (BURNTICKER_PAIR_CURVE_ENABLED)", code: "pair-curve-unavailable" }, { status: 409 });
   }
-  if (body.action === "launched") { const r = await markLaunched(p, String(body.mint ?? ""), String(body.launchTx ?? "")); return NextResponse.json(r.body, { status: r.status }); }
+  if (body.action === "launched") { const r = await markLaunched(p, String(body.mint ?? ""), String(body.launchTx ?? "")); return edgeJson(r.body, r.status); }
   const r = await prepareLaunch(p, body, { register: true });
-  if ("error" in r) return NextResponse.json(r.error.body, { status: r.error.status });
+  // launch walkthrough 2026-10-13: a refusal answered 502 (the launch check could not read a source) reached the page as Cloudflare's
+  // own error page, so the page said "The launch request failed (502)"; edgeJson sends it as 503 with the sentence intact
+  if ("error" in r) return edgeJson(r.error.body, r.error.status, r.error.headers ?? {});
   recordLaunchTimings(p, body, "pair" in r ? [r.pair.tokens.a?.mint, r.pair.tokens.b?.mint] : [r.ok.token?.mint]);   // time-to-launch (productStore.ts)
   // RIVALRY PAIR (`pair: { ticker, name, … }` for side B): both bundles, both drafts and the pair row.
   if ("pair" in r) {
