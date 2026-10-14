@@ -29,6 +29,8 @@ export function drainLine(share: number, unit: DrainUnit = "result", n = 5): str
 /** How many units take half the pool at `share` (compounding as the program does): ln 0.5 / ln(1 − share), rounded up. */
 export const unitsToHalf = (share: number): number => (share > 0 && share < 1 ? Math.ceil(Math.log(0.5) / Math.log(1 - share)) : share >= 1 ? 1 : Infinity);
 /** The unit of a team coin's burn, from its outcome and side (the fade side counts games without the outcome). */
-export function teamDrainUnit(outcome: "win" | "loss" | "draw", fade = false): DrainUnit {
+export function teamDrainUnit(outcome: "win" | "loss" | "draw" | "windraw" | "drawloss" | "winloss", fade = false): DrainUnit {
+  // two of the three results (espn.ts PairOutcome): "per win or draw … after 5 wins or draws"
+  if (outcome === "windraw" || outcome === "drawloss" || outcome === "winloss") { const one = outcome === "windraw" ? "win or draw" : outcome === "drawloss" ? "draw or loss" : "win or loss"; return { one, many: outcome === "windraw" ? "wins or draws" : outcome === "drawloss" ? "draws or losses" : "wins or losses" }; }
   return fade ? { one: `game without a ${outcome}`, many: `games without a ${outcome}` } : { one: outcome, many: outcome === "loss" ? "losses" : `${outcome}s` };
 }

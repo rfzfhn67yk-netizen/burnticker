@@ -183,7 +183,8 @@ describe("WIRING-SOURCES7 page items", () => {
     assert.match(card, /\{t\.suggestions\.length > 0 && coin && <p/);
   });
   test("M2/M4: the drain line names the unit of the pattern, and the review's drain warning shows on the Burns step", () => {
-    assert.match(page, /teamDrainUnit\(teamOutcome === "loss" \? "loss" : teamOutcome === "draw" \? "draw" : "win", !!rule\.inverse\)/);
+    // 2026-10-13: the outcome passes through whole (two of the three results included: drain.ts teamDrainUnit)
+    assert.match(page, /teamDrainUnit\(teamOutcome \?\? "win", !!rule\.inverse\)/);
     assert.match(page, /\.find\(\(w\) => \/half the pool would be gone\/\.test\(w\)\)/);
     assert.match(page, /patternWords\(o\.id, \{ [^}]*gameLabel \}\)/);
   });

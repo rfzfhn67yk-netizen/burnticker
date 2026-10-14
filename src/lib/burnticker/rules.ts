@@ -1,6 +1,6 @@
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { derbySeriesId, derbySpecProblems, derbyStatement, isDerbySeries, type DerbySpec } from "@/lib/burnticker/derby/spec";
-import { inverseRefusal, KEEPER_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { inverseRefusal, KEEPER_ONE_SHOT_RE, PAIR_OUTCOME_SERIES_RE } from "@/lib/burnticker/inverse";
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 
 /**
@@ -46,6 +46,8 @@ export const PAIR_ORACLES: readonly OracleId[] = ["kalshi", "polymarket", "derby
  * espn.ts isMeetingsSeriesId (rules.ts does not import the sports tables); every other catalogue pair stays refused.
  */
 export const MEETINGS_SERIES_RE = /^espn\.team:[a-z0-9.]+-[A-Z0-9]{2,6}\.\d{1,7}-win-m\d{4}\.[A-Z0-9]{2,6}\.\d{1,7}$/;
+/** A head-to-head window on any outcome but `win` (refused: the rivalry series reads a signed win count). */
+const MEETINGS_PAIR_RE = /^espn\.team:[a-z0-9.]+-[A-Z0-9]{2,6}\.\d{1,7}-(windraw|drawloss|winloss)-m\d{4}\./;
 /** The other side's series of a rivalry series id, by its spelling alone (espn.ts meetingsMirror is the same with the team tables). */
 export function meetingsMirrorId(series: string): string | null {
   const m = /^espn\.team:([a-z0-9.]+)-([A-Z0-9]{2,6})\.(\d{1,7})-win-m(\d{4})\.([A-Z0-9]{2,6})\.(\d{1,7})$/.exec(series);
@@ -430,6 +432,10 @@ export function validateRule(raw: unknown): BurnRule {
     if (!series || !isCatalogueSeries(series)) p.push("catalogue: series must be a source id like treasury.debt or wiki.views:<Article> (config/burnticker/sources.json)");
     if (market !== null) p.push("catalogue: market must be null");
     if (r.kind !== "scalar") p.push('catalogue: kind must be "scalar" (the feed fixes the unit)');
+    // two of a game's three results (espn.ts PairOutcome, owner 2026-10-13) only exist where a game can end in a draw: the soccer leagues,
+    // whose ESPN ids all carry a dot ("eng.1", "uefa.champions"); a league id without one (nba, nfl, mlb, nhl, college) has no draws
+    // (pinned in test/burntickerThreeWayOutcomes.test.ts). The catalogue (parseEspnSeries) refuses the same ids at launch and registration.
+    if (series && PAIR_OUTCOME_SERIES_RE.test(series) && (/^espn\.(team|game):[a-z0-9]+-/.test(series) || MEETINGS_PAIR_RE.test(series))) p.push("catalogue: a coin on two of the three results (win or draw, draw or loss, win or loss) needs a league with draws, and not a head-to-head series");
   }
   const filter = (r.filter ?? {}) as SelectorFilter;
   if (typeof filter !== "object" || Array.isArray(filter)) p.push("filter must be an object");

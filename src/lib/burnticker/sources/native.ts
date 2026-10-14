@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, ScheduleUnavailable, espnSeriesTitle, gamesFor, parseEspnSeries, teamByAbbr, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
+import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, ScheduleUnavailable, espnSeriesTitle, gamesFor, outcomeWords, parseEspnSeries, teamByAbbr, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
 import { CROSS_LABEL, POLY_LEAGUE_TAG, countedOfficialOf, envGameDeps, operatorsFor, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { FecClient, fecSettled, parseFecSeries } from "@/lib/burnticker/sources/fec";
 import { ALREADY_DECIDED_SENTENCE, gameEligibility } from "@/lib/burnticker/oneShotEligibility";
@@ -54,8 +54,8 @@ export const fecClient = (): FecClient => (fec ??= new FecClient());
  * technical reason stays in `basis`.
  */
 const gameDay = (g: { date: string }): string => new Date(`${g.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-/** Leagues whose game markets the lookup can match (a two-sided moneyline under a league tag; soccer's three yes-or-no markets are not matched). */
-const listsGamesAhead = (league: EspnSeries["league"]): boolean => !!POLY_LEAGUE_TAG[league] && !LEAGUES[league].draws;
+/** Leagues whose game markets the lookup can match under a league tag (a two-sided moneyline, or soccer's three yes-or-no markets: gameSettle.ts threeWayOf). */
+const listsGamesAhead = (league: EspnSeries["league"]): boolean => !!POLY_LEAGUE_TAG[league];
 const AHEAD = " Polymarket usually lists a game a few days before it starts, so please try again then.";
 export const GAME_LINES = {
   scheduleOff: (league: string): string => `the ${league} schedule cannot be read on this site right now, so a coin on it cannot be checked. Please try again later.`,
@@ -75,7 +75,7 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
     unit: s.kind === "team" && s.window.kind === "meetings"
       // the rivalry series (espn.ts window `meetings`): a signed reading per game day, and one season-end reading
       ? { size: 1, label: "1 win against the rival", definition: `each ${t.name} win against ${teamByAbbr(s.league, s.window.opp)?.name ?? s.window.opp} this season (a loss reads −1, a draw 0), ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final; when both seasons are over, one more reading: +1 if ${t.name} won more of the games between them, −1 if fewer, none if level` }
-      : { size: 1, label: s.kind === "team" ? `1 ${s.outcome}` : `the ${s.outcome}`, definition: `each ${t.name} ${s.outcome} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
+      : { size: 1, label: s.kind === "team" ? `1 ${outcomeWords(s.outcome).noun}` : `the ${outcomeWords(s.outcome).noun}`, definition: `each ${t.name} ${outcomeWords(s.outcome).noun} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
     flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : s.league === "nba" ? "the game list comes from the NBA's feed when it answers, else from TheSportsDB under licence (needs BURNTICKER_THESPORTSDB_KEY)" : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent sources must read every game and agree (a source check; one operator attester signs the reading)"],
     launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",

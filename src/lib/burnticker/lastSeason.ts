@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { drainPct, spentFraction } from "@/lib/burnticker/drain";
-import { LEAGUES, isMeetingOf, outcomeOf, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, type Game, type LeagueId, type MeetingsSeries } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, isMeetingOf, outcomeHits, outcomeOf, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, type Game, type LeagueId, type MeetingsSeries } from "@/lib/burnticker/sources/espn";
 import { firingOf } from "@/lib/burnticker/simulator";
 
 /**
@@ -46,8 +46,8 @@ export function countLastSeason(rule: BurnRule, games: readonly Game[], year: nu
   if (w.kind === "meetings") pool = pool.filter((g) => isMeetingOf(e as MeetingsSeries, g));
   const results = pool.map((g) => outcomeOf(g, e.abbr, e.teamId)).filter((x): x is NonNullable<typeof x> => x !== null);
   if (!results.length) return none(`No completed game was found for this team in the ${season} season${w.kind === "post" ? "'s postseason" : ""}, so there is nothing to count.`, { league, year, season });
-  const want = e.outcome === "draw" ? "tie" : e.outcome;
-  const hit = (r: string) => (r === want || (e.outcome === "draw" && r === "draw"));
+  // the coin's set: its one outcome, or two of the three results (espn.ts outcomeHits; a tie is a draw)
+  const hit = (r: NonNullable<ReturnType<typeof outcomeOf>>) => outcomeHits(e.outcome, r);
   const burns = results.filter((r) => (rule.inverse ? !hit(r) : hit(r))).length;
   const f = firingOf(rule).share;
   const spent = f !== null && f > 0 && f < 1 ? Math.round(spentFraction(Array.from({ length: burns }, () => 1), f) * 10_000) / 100 : null;

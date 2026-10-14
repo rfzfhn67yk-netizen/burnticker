@@ -26,7 +26,7 @@ export function fitName(candidates: string | readonly string[], max = NAME_MAX_B
   const last = list[list.length - 1] ?? "";
   const words: string[] = [];
   for (const w of last.split(" ")) { if (utf8Bytes([...words, w].join(" ")) > max) break; words.push(w); }
-  while (words.length > 1 && /^(vs\.?|v|of|the|a|an|and|for|on|in|by|to|at|—|-|&)$/i.test(words[words.length - 1])) words.pop();
+  while (words.length > 1 && /^(vs\.?|v|of|the|a|an|and|or|for|on|in|by|to|at|—|-|&)$/i.test(words[words.length - 1])) words.pop();
   const out = words.join(" ").replace(/[,:;—&-]+$/, "").trim();
   if (out) return out;
   // one word longer than the limit: whole characters up to the limit (never half of a multi-byte character)

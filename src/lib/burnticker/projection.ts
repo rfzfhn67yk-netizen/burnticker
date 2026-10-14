@@ -39,7 +39,7 @@ function withShare(rule: BurnRule, share: number): BurnRule {
 export function drainUnitFor(rule: BurnRule): DrainUnit {
   const series = rule.oracle === "catalogue" ? rule.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;
-  if (e) return teamDrainUnit(e.outcome === "loss" ? "loss" : e.outcome === "draw" ? "draw" : "win", !!rule.inverse && e.kind === "team");
+  if (e) return teamDrainUnit(e.outcome, !!rule.inverse && e.kind === "team");
   const native = series ? nativeSourceById(series) : null;
   if (native) return native.unit.label.replace(/^1 /, "") || "result";
   const feed = series ? feedById(series) : null;

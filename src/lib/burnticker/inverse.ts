@@ -36,6 +36,9 @@ export const KEEPER_ONE_SHOT_RE = /^(espn\.game|ll2\.launch|github\.milestone|yo
  */
 export const NEXT_EVENT_ONE_SHOT_RE = /^(usgs\.quakenext|nhc\.next|spc\.tornadoday|nifc\.firesize|usgs\.volcanowarning|defillama\.tvlnext):/;
 
+/** A team or game series on two of the three results (espn.ts PairOutcome; repeated here as a pattern so this file stays import-free). */
+export const PAIR_OUTCOME_SERIES_RE = /^espn\.(team|game):[a-z0-9.]+-.*-(windraw|drawloss|winloss)(-|$)/;
+
 /** The plain choice the review card shows (WIRING-SOURCES.md). */
 export const INVERSE_CHOICE = { off: "Burn when it happens", on: "Burn on the days it does not happen" } as const;
 
@@ -46,6 +49,8 @@ export function inverseRefusal(r: Pick<BurnRule, "oracle" | "kind" | "series" | 
   if (r.market !== null || CATALOGUE_ONE_SHOT_RE.test(r.series ?? "")) return "A rule that resolves once cannot be inverted. Its other outcome already burns nothing.";
   if (r.pair) return "A rivalry pair cannot be inverted. The other coin already takes the other side.";
   if (r.set !== undefined && r.set !== null) return "League mode cannot be combined with burning when the condition does not happen.";
+  // two of a soccer game's three results (espn.ts PairOutcome): the other side is the one result left, which is its own coin
+  if (PAIR_OUTCOME_SERIES_RE.test(r.series ?? "")) return "A coin that burns on two of the three results cannot be flipped. Pick the one result that is left instead.";
   return null;
 }
 export const canInvert = (r: Parameters<typeof inverseRefusal>[0]): boolean => inverseRefusal(r) === null;

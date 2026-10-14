@@ -4,7 +4,7 @@ import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
 import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
-import { LIVE_NOW, gameSeries, meetingsPairSeries, noPlayoffs, parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LIVE_NOW, gameSeries, isPairOutcome, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 import { DESCRIPTION_MAX, descriptionRoomProblem, linkProblem } from "@/lib/burnticker/creatorProfile";
@@ -256,12 +256,17 @@ export const derbyShareLine = (daily: number, flip: number): string => `Each mod
  * THE PATTERN WORDS FOR THE THING PICKED (pass B item 12, audit 6 item 16): "After each Dodgers win", never "each day or reading" on a team
  * coin. Generic words stay for the paths with no subject to name.
  */
-export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: "win" | "loss" | "draw" | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null; /** sources-7 M2: the picked game's date ("Sat, May 1, 2027") when it is not their next listed game */ gameLabel?: string | null }): { label: string; sentence: string } {
+export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: Outcome | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null; /** sources-7 M2: the picked game's date ("Sat, May 1, 2027") when it is not their next listed game */ gameLabel?: string | null }): { label: string; sentence: string } {
   const s = o.subject;
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "meetings" && id === "winner") return { label: PATTERNS.winner.label, sentence: MEETINGS_WINNER_LINE };
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "game" && id === "winner") return { label: PATTERNS.winner.label, sentence: GAME_PAIR_SENTENCE };
   if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "winner") return { label: PATTERNS.winner.label, sentence: CANDIDATES_PAIR_SENTENCE };
-  if (o.follow === "team" && s) {
+  if (o.follow === "team" && s && isPairOutcome(o.outcome) && id === "every") {
+    // two of a soccer game's three results (espn.ts PairOutcome): "After each Arsenal win or draw"; the fade side is not offered for it
+    const w = outcomeWords(o.outcome);
+    return { label: `After each ${s} ${w.noun}`, sentence: `The coin spends a share of its burn pool after each game the ${s} ${w.verb}.` };
+  }
+  if (o.follow === "team" && s && !isPairOutcome(o.outcome)) {
     const won = o.outcome === "loss" ? "loss" : o.outcome === "draw" ? "draw" : "win";
     if (id === "every") return { label: `After each ${s} ${won}`, sentence: `The coin spends a share of its burn pool after each game the ${s} ${won === "win" ? "win" : won === "loss" ? "lose" : "draw"}.` };
     // audit 12 item 6: the fade side counts GAME DAYS (describe.ts: "A day with two games counts once"), so the option says so, with the

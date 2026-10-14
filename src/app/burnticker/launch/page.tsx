@@ -23,7 +23,7 @@ import { ReviewCard } from "./ReviewCard";
 import { launchErrorMessage, LaunchRequestError, PAIR_CURVE_REVIEW_LINE, postPairLaunch, venueFor, venueFrom409, type LaunchErrorBody, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { STATIONS, nwsSeries, parseNwsSeries, stationOptionLabel } from "@/lib/burnticker/sources/nws";
-import { applyDial, dialsFor, ON_END_DEFAULT, type DialId } from "@/lib/burnticker/dials";
+import { applyDial, dialsFor, ON_END_DEFAULT, TEAM_RESULTS_LABEL, type DialId } from "@/lib/burnticker/dials";
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { LaunchRecovery } from "./LaunchRecovery";
@@ -54,7 +54,7 @@ import type { ExistingCoin } from "@/lib/burnticker/duplicateRule";
 import { PairFundsFlow } from "../_components/PairFundsFlow";
 import { FundsFlowView, type Blocker, type LaunchVenue, type ProfileFieldKey } from "./ReviewCard";
 import { championPathRule, describeRule, shortDate, windowKindOf, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
-import { LIVE_NOW, parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, LIVE_NOW, parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import { TEMPLATES, TEMPLATE_START, weatherTemplateDraft, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { fold, meaningful, queryTokens } from "@/lib/burnticker/textMatch";
@@ -1800,10 +1800,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           // website-25 (WIRING-SOURCES7 H6): a team whose season is over offers no season pattern until the creator moves to the next season
           const so = reviewCurrent ? (shownReview.review as (LaunchReview & { seasonOver?: { message: string; next: { series: string; year: number; label: string } } | null }) | null)?.seasonOver ?? null : null;
           const teamOver = guide.follow === "team" && !!team && (!!team.seasonOver || deepSeasonOver === team.abbr) && !(seasonSwap && seasonSwap.abbr === team.abbr);
-          const options0 = guide.follow === "disaster" ? po.options : po.options.map((o) => ({ ...o, ...patternWords(o.id, { follow: guide.follow!, subject, outcome: teamOutcome === "loss" ? "loss" : teamOutcome === "draw" ? "draw" : "win", pairKind: pairKindNow, rivalryScope, gameLabel }) }));
+          const options0 = guide.follow === "disaster" ? po.options : po.options.map((o) => ({ ...o, ...patternWords(o.id, { follow: guide.follow!, subject, outcome: teamOutcome ?? "win", pairKind: pairKindNow, rivalryScope, gameLabel }) }));
           const options = teamOver ? options0.map((o) => (o.id === "every" || o.id === "fade" ? { ...o, available: false, reason: SEASON_OVER_LINE } : o)) : options0;
           // website-25 (WIRING-SOURCES7 M2): "per game without a win" on the fade side (drain.ts teamDrainUnit), never "per win"
-          const drain = !oneShotRule && shareValue > SLICED_ABOVE ? drainLine(shareValue, guide.follow === "team" && team ? teamDrainUnit(teamOutcome === "loss" ? "loss" : teamOutcome === "draw" ? "draw" : "win", !!rule.inverse) : "result") : null;
+          const drain = !oneShotRule && shareValue > SLICED_ABOVE ? drainLine(shareValue, guide.follow === "team" && team ? teamDrainUnit(teamOutcome ?? "win", !!rule.inverse) : "result") : null;
           // WIRING-SOURCES7 M4: the review's drain warning (projection.ts drainWarning), said here as the share changes
           const drainWarn = reviewCurrent ? ((shownReview.review as { warnings?: string[] } | null)?.warnings ?? []).find((w) => /half the pool would be gone/.test(w)) ?? null : null;
           const seasonBlocked = (guide.follow === "team" && !!so) || (teamOver && curPattern !== "once");
@@ -1842,11 +1842,20 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               </div>
             );
           })() : null;
+          // owner 2026-10-13: a soccer team coin picks which results burn, one of win, draw or loss or any two of them (espn.ts
+          // PairOutcome; the side dial's options, dials.ts). Shown on the plain side only: the fade side is its own pattern, and a coin on two
+          // results cannot take it (inverse.ts), so picking two results there would be refused.
+          const teamE = guide.follow === "team" && team && rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null;
+          const resultsExtra = teamE?.kind === "team" && teamE.window.kind !== "meetings" && curPattern === "every" && !rule.inverse && LEAGUES[teamE.league].sport === "soccer" && curDials?.side ? (
+            <label className="block text-xs text-neutral-400" data-team-results>{TEAM_RESULTS_LABEL}<FieldHelp id="team-results" />
+              <select data-decision="what" data-help="team-results" aria-label={TEAM_RESULTS_LABEL} className={input + " mt-1 block w-auto"} value={curDials.side.value} onChange={(e) => { flowStats.current.decisions++; setDial("side", e.target.value); }}>{curDials.side.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+            </label>
+          ) : null;
           // website-24 (WIRING-ROUND5): what the coin burns, itself (the default) or a real token; the waiting line until round 5 is deployed
           const realExtra = pairOn || !rule || rule.vault ? null : realOneOffered
             ? <BurnRealChoice side="one" who={`$${ticker.toUpperCase() || "TICKER"}`} picks={SINGLE_REAL_PICKS} value={realOne} onChange={setRealOne} network={realNet} locked={busy} />
             : site.burnReal.line ? <p className="text-xs text-neutral-400" data-burn-real-waiting>{site.burnReal.line}</p> : null;
-          return <PatternStep drain={drain} preview={preview} options={options} value={curPattern} onPick={pickPattern} shares={shareOptions} share={shareValue} onShare={setShare} pairLabel={pairOn && !!ruleB} math={budget.math} notice={patternNotice} extra={hazardExtra || realExtra || seasonExtra || drainWarn ? <>{seasonExtra}{drainWarn && <p className="text-xs text-amber-300" role="status" data-drain-warning>{drainWarn}</p>}{hazardExtra}{realExtra}</> : null} next={seasonBlocked ? <StickyAction><button type="button" data-nav disabled className={primary + " w-full sm:w-auto"}>Next</button></StickyAction> : nextBtn("Next", "name")} />;
+          return <PatternStep drain={drain} preview={preview} options={options} value={curPattern} onPick={pickPattern} shares={shareOptions} share={shareValue} onShare={setShare} pairLabel={pairOn && !!ruleB} math={budget.math} notice={patternNotice} extra={hazardExtra || realExtra || seasonExtra || drainWarn || resultsExtra ? <>{seasonExtra}{resultsExtra}{drainWarn && <p className="text-xs text-amber-300" role="status" data-drain-warning>{drainWarn}</p>}{hazardExtra}{realExtra}</> : null} next={seasonBlocked ? <StickyAction><button type="button" data-nav disabled className={primary + " w-full sm:w-auto"}>Next</button></StickyAction> : nextBtn("Next", "name")} />;
         }
         // the end, stated on the review (the server adds the default end, with the $DEFICIT sink, to a rule sent without one)
         // website-21: a rivalry series pair ends as built (the pair-winner sink): the rest goes to the series winner, and no other end is offered
