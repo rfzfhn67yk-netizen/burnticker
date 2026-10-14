@@ -14,6 +14,7 @@ import { REDSTONE_LATEST_URL } from "@/lib/burnticker/derby/cross";
 import { bracketState, matchKey, roundCount, slotMatchOn, slotPoints, tournamentEnd, type BracketState, type MatchDayResult, type Tournament } from "@/lib/burnticker/derby/bracket";
 import { derbyStore, type DerbyStore, type WindowRow } from "@/lib/burnticker/derby/store";
 import { addDay as highAddDay, buildHighBaseline, decideHigh, HIGH_HISTORY_MAX_DAYS, highNoKeyReason, highDays, highLastDay, recordBefore, type DayClose, type HighSpec } from "@/lib/burnticker/derby/high";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE DERBY ORACLE ADAPTER + THE KEEPER'S DERBY PASS (2026-10-10). The multi-token keeper treats `derby:` selector keys like any other:
@@ -568,7 +569,7 @@ export class DerbyAdapter implements OracleAdapter {
       if (!u.redstone || now < lastB || now - lastB > TOL_MS || this.store.samples(redstoneKey(u.redstone), "redstone", lastB, lastB + TOL_MS).length) continue;
       try {
         let body = cache.get(REDSTONE_LATEST_URL);
-        if (body === undefined) { const res = await this.d.fetchImpl(REDSTONE_LATEST_URL, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) }); if (!res.ok) throw new Error(`RedStone HTTP ${res.status}`); body = await res.json(); cache.set(REDSTONE_LATEST_URL, body); }
+        if (body === undefined) { await takeOrThrow(sourceForUrl(REDSTONE_LATEST_URL)); const res = await this.d.fetchImpl(REDSTONE_LATEST_URL, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) }); if (!res.ok) throw new Error(`RedStone HTTP ${res.status}`); body = await res.json(); cache.set(REDSTONE_LATEST_URL, body); }
         const r = await redstonePrimary(body, u.redstone, REDSTONE_LATEST_URL);
         if (!r.ok) { errors.push(`${u.symbol}: ${r.reason}`); continue; }
         // The packages must be from this boundary (signed at most 5 minutes before it), never a stale gateway answer.

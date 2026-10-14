@@ -108,6 +108,20 @@ pub fn format_forward(prefix: &str, from: &Pubkey, to: &Pubkey, record_date: u32
     )
 }
 
+/// Burn dispersal (crank_carried, 2026-10-13): a piece of the carried spend bought and burned without a new reading.
+///   `<PREFIX>|carried|through=<YYYY-MM-DD>|spent=<lamports>|got=<tokens>|burn=<tokens>|left=<lamports still carried>|swap=<pool 12>|rules=sha256:<12>|v1`
+/// `through=` is the crank cursor: the last processed reading whose carried spend this piece drains.
+#[allow(clippy::too_many_arguments)]
+pub fn format_carried(prefix: &str, through: u32, spent: u64, got_raw: u64, burn_raw: u64, left: u64, swap_ref: &str, rules_sha256: &[u8; 32], decimals: u8) -> String {
+    format!(
+        "{prefix}|carried|through={}|spent={spent}|got={}|burn={}|left={left}|swap={swap_ref}|rules=sha256:{}|v1",
+        format_date(through),
+        raw_to_tokens(got_raw, decimals),
+        raw_to_tokens(burn_raw, decimals),
+        hex12(rules_sha256)
+    )
+}
+
 /// The incinerator end sink's receipt: `<PREFIX>|endburn|to=1nc1nerator1|lamports=N|v1` (the SOL itself, sent to Solana's incinerator).
 pub fn format_end_burn(prefix: &str, lamports: u64) -> String {
     let t = crate::constants::INCINERATOR_ID.to_string();

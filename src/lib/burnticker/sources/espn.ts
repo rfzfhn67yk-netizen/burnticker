@@ -6,6 +6,7 @@ import { TEAM_IDS } from "@/lib/burnticker/sources/teamColors";
 import { PROVIDER_TEAM_IDS } from "@/lib/burnticker/sources/providerTeams";
 import { FBS_TEAM_IDS } from "@/lib/burnticker/sources/fbs";
 import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { type: "json" };
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * TEAMS, LEAGUES, SERIES AND SCHEDULES FOR TEAM COINS (the file keeps its old name; since 2026-10-10 NOTHING here reads ESPN). The team
@@ -541,6 +542,7 @@ export class EspnClient {
     if (hit && this.now() - hit.at < this.ttl) return hit.body;
     const run = async () => {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts): waits for its bucket; a spent day budget skips the read
       this.lastAt = this.now(); this.requests.push(redactKey(url));
       const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers } });
       if (!res.ok) throw new Error(`HTTP ${res.status} for ${redactKey(url).slice(0, 120)}`);

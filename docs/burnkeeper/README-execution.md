@@ -161,3 +161,24 @@ and the vault allocation), and the attested value is a **counter**:
   signs with ONE key per process by default (`maxLocalAttesters`), until an off-machine attester exists.
 - **Burnticker on devnet**: a counter token end to end (initialize_token from the launch bundle → a settled Kalshi day → reading → crank),
   and a decision on rules with per-outcome fractions (program change or launch-time refusal, which is what happens today).
+
+## Burn dispersal (owner decision 2026-10-13; built, not deployed)
+
+A reading's crank spends at most 2 % of the pool's WSOL reserve and carries the rest (`carried_spend_lamports`). The program's new
+permissionless `crank_carried(max_spend_lamports)` (round 5, `instructions/crank_carried.rs`; refused while a reading waits for its own
+crank) spends a piece of that carried amount without a new reading. Both keepers drain it the same way (`src/lib/burnticker/dispersal.ts`
+plans, `src/lib/burnticker/dispersalKeeper.ts` executes):
+
+- pieces of at most min(2 % of the reserve, 1.227 % of the reserve: a ≤ 2.5 % constant-product move), an even split of the carried amount;
+- at random times (seeded) at least 20 minutes apart inside a 6-hour window; what does not fit rolls into the next window until zero; a new
+  reading's carried spend joins the plan (the rest of the window is re-planned from the chain's carried amount);
+- each piece is its own transaction, written ahead of its send, with its own receipt (the program's `carried` memo, kept in the
+  registry's / ledger's status table `dispersal:<mint>`); the page line reads "spent X of Y SOL for the reading of <date>; remainder being spent";
+- `bt-burn-behind` (pushed as "Burnticker burn behind") once per reading not fully spent 24 hours after it landed.
+
+The platform keeper runs it every cycle (60 s); the $DEFICIT keeper wakes at the next piece's time.
+
+| Env | Meaning |
+|---|---|
+| `BURNTICKER_DISPERSAL=1` | turn dispersal on in both keepers. Leave unset until `crank_carried` is deployed (the deployed program rejects the instruction). |
+| `BURNTICKER_PRIVATE_SEND_URL` | optional: a Jito block-engine (or equivalent JSON-RPC `sendTransaction`) endpoint; every program-port send and rebroadcast goes there instead of the RPC. Logged as scheme and host only. Unset: sends go through the RPC as before. |

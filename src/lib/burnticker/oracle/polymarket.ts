@@ -4,6 +4,7 @@ import type { EventResult, SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { finalAfter, statedSource, type FinalAfter, type StatedSource } from "@/lib/burnticker/sources/polyStated";
 import { DEFAULT_POLYGON_RPCS, POLYGON_CHAIN_ID, POLYMARKET_CTF, readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE POLYMARKET ORACLE (2026-10-10; the owner: "do both" — Polymarket as a full second adjudicated oracle, tier 1, beside Kalshi).
@@ -405,6 +406,7 @@ export class PolymarketClient implements OracleAdapter {
       const wait = this.lastAt + this.minInterval - this.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.lastAt = this.now();
+      await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts)
       this.requests.push(url);
       const ac = new AbortController(); const t = setTimeout(() => ac.abort(), this.timeoutMs);
       try {

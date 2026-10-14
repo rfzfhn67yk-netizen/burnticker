@@ -63,6 +63,10 @@ import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
 import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
+// BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
+import { dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
+import { DISPERSAL_STATE_KEY, dispersalLines } from "../src/lib/burnticker/dispersalKeeper.ts";
+import { budgetStatusLines, budgetedRpcConfig, configureApiBudget, statusTableStore } from "../src/lib/burnticker/apiBudget.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -80,6 +84,12 @@ const FEE_WALLET = process.env.BURNTICKER_FEE_WALLET?.trim() || null;
 const isPubkey = (s: string | null): s is string => !!s && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 
 const registry = openRegistry(DB);
+// THE REQUEST BUDGET (src/lib/burnticker/apiBudget.ts, docs/burnticker/API-BUDGETS.md; owner 2026-10-13): every provider read waits for
+// its bucket and counts against the keeper's share of the day (the count lives in the registry's status table, so a restart keeps it);
+// a spent day puts that provider on hold until midnight UTC, logged once, with a bt-api-budget alert (and one at 80%).
+const budget = configureApiBudget({ role: "keeper", store: statusTableStore(registry.db), log,
+  alert: (a) => { if (registry.recordAlert({ kind: a.kind, key: a.key, text: a.text, meta: a.meta })) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`); } });
+process.on("exit", () => { try { budget.flush(); } catch { /* closing */ } });
 const kalshi = new KalshiClient();
 // Polymarket (2026-10-10): Gamma for discovery, the Polygon CTF payout vector for results; the refuse list over every market question.
 const polygonRpcs = (process.env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
@@ -91,7 +101,7 @@ const PROGRAM_ID = process.env.BURNTICKER_PROGRAM_ID?.trim() || null;
 /** The real client when the program id, an RPC and the keeper's key exist; the fake otherwise (nothing sent). */
 async function buildProgram(): Promise<{ program: BurnProgramClient; real: boolean; why: string; chain?: { connection: Connection; cluster: "mainnet" | "devnet" | "localnet"; payer: Keypair } }> {
   if (!PROGRAM_ID || !RPC) return { program: new FakeBurnProgram(cluster), real: false, why: !PROGRAM_ID ? "no BURNTICKER_PROGRAM_ID" : "no BURNTICKER_RPC_URL" };
-  const connection = new Connection(RPC, "confirmed");
+  const connection = new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" }));
   const actual = clusterOfGenesis(await connection.getGenesisHash());
   if (actual === "mainnet" && process.env.BURNTICKER_MAINNET !== "1") throw new Error("the RPC is mainnet: refused unless BURNTICKER_MAINNET=1 (after the audit)");
   if (actual === "testnet") throw new Error("burn_receipts has no testnet deployment");
@@ -111,10 +121,11 @@ const program = built.program;
 log(`claim_lock_fees crank: ${program.lockFees ? `on (fee-keys PDA ${program.lockFees.feeKeysPda()}, operator treasury ${program.lockFees.operatorTreasury() ?? "NOT PINNED on this cluster — claims wait, the fees stay in the lock"})` : "off (no lock-fee client)"}`);
 // BURN DERBY (2026-10-10): Pyth on Solana (keyless) / Hermes (BURNTICKER_PYTH_API_KEY), pool TWAPs and mint supplies are MAINNET facts
 // (BURNTICKER_DERBY_RPC_URL, else the public RPC), cross-reads from Jupiter / DexScreener / RedStone. Withheld windows raise an alert.
-const derbyPools = connectionPoolPort(new Connection(process.env.BURNTICKER_DERBY_RPC_URL?.trim() || "https://api.mainnet-beta.solana.com", { commitment: "confirmed", disableRetryOnRateLimit: true }));
+const derbyPools = connectionPoolPort(new Connection(process.env.BURNTICKER_DERBY_RPC_URL?.trim() || "https://api.mainnet-beta.solana.com", budgetedRpcConfig({ commitment: "confirmed", disableRetryOnRateLimit: true })));
 const derby = new DerbyAdapter({ registry, hermes: process.env.BURNTICKER_PYTH_API_KEY?.trim() ? HermesClient.fromEnv(process.env) : null, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), log,
   alert: (key, text) => { registry.recordAlert({ kind: "derby-withheld", key, text, meta: null }); } });
 const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, derby: { sample: (t) => derby.sample(t), plan: () => derby.plan(), ended: (t) => derby.ended(t) }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE), kalshiEnabled: kalshiEnabled(process.env) };
+if (dispersalEnabled(process.env)) { deps.dispersal = true; log("burn dispersal: on (BURNTICKER_DISPERSAL=1): carried amounts are spent in crank_carried pieces over 6-hour windows"); }
 // signer-2 (2026-10-12): the second reading signer on its own host — unset BURNTICKER_COSIGNER_URL = no cosigner, nothing changes.
 const cosigner = cosignerFromEnv(process.env);
 if (cosigner) { deps.cosigner = cosigner; log(`second signer: ${process.env.BURNTICKER_COSIGNER_URL?.trim().replace(/\/\/[^/@]*@/, "//")} (each reading is co-signed there or held)`); }
@@ -122,7 +133,7 @@ const operator = operatorPowersSummary(loadPowersRegister());
 const KALSHI_ON = kalshiEnabled(process.env), POLY_DISCOVERY = polymarketDiscoveryEnabled(process.env);
 /** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */
 const ops = new KeeperOps({ registry, siteDir: SITE, cluster, env: process.env, log, uploader: uploaderFromEnv(process.env, cluster), snapshots: !DRY, signer: built.chain ? { publicKey: built.chain.payer.publicKey.toBase58(), secretKey: built.chain.payer.secretKey } : null });
-const marketReader: MarketReader | null = RPC ? (new Connection(RPC, { commitment: "confirmed", disableRetryOnRateLimit: true }) as unknown as MarketReader) : null;
+const marketReader: MarketReader | null = RPC ? (new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })) as unknown as MarketReader) : null;
 
 async function publishAll(now: number): Promise<void> {
   const statuses: TokenStatusJson[] = [];
@@ -146,7 +157,7 @@ async function publishAll(now: number): Promise<void> {
       const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
       const feedState = registry.feedState(t.selectorKey);
       const input = { token: t, locked, readings, receipts: registry.receipts(t.mint), attesters: registry.attesters(t.mint), state, feedState,
-        chain: { cluster, programId: program.programId, supplyRaw: await program.supplyRaw(t.mint), feePdaLamports: await program.feePdaBalanceLamports(t.mint), vaultRaw: locked.mode === "vault" ? await program.vaultBalanceRaw(t.mint) : null, program: await programPageBlock(program, t.mint, registry.lastProgramTx(t.mint, "reading")) },
+        chain: { cluster, programId: program.programId, supplyRaw: await program.supplyRaw(t.mint), feePdaLamports: await program.feePdaBalanceLamports(t.mint), vaultRaw: locked.mode === "vault" ? await program.vaultBalanceRaw(t.mint) : null, program: await programPageBlock(program, t.mint, registry.lastProgramTx(t.mint, "reading"), dispersalLines(registry.getStatus(DISPERSAL_STATE_KEY(t.mint)))) },
         now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0, operator, lifecycle: lifecycleFrom(registry, t, locked.rule, null), pair: await pairCounterpartFrom(registry, (m) => program.supplyRaw(m), t, async (m) => { try { return (await program.port(m).config())?.poolRegistered ?? null; } catch { return null; } }, program.pairForward ? (a, b) => program.pairForward!.port(a, b).links() : undefined),
         // the coin card's curve progress + top holders (read-only, the same RPC); without an RPC status.json says "not read" and the card shows —
         lp: await lpLockBlock(registry, program, cluster, t.mint),
@@ -177,13 +188,16 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
     recordBalanceSample(registry, balances);
   }
   const r = await runBurntickerAlertCheck({ registry, siteDir: SITE, now, paused, balances, crankStreaks: tracker.snapshot(), sink });
+  budget.flush();
+  const budgetLines = budgetStatusLines(budget.lines());
+  for (const l of budgetLines) log(`  [${l}]`);
   for (const a of r.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);
   for (const a of await ops.alerts(sink, now)) log(`  [alert] ${a.slice(0, 160)}`);
   try { const p = await runPushCheck({ registry, env: process.env, now, log }); for (const m of p.sent) log(`  [push] ${m.kind}: ${m.title}`); } catch (e) { log(`  [push] check failed: ${(e as Error).message.slice(0, 160)}`); }
   const launched = registry.tokens("live").map((t) => Date.parse(t.baselineAt)).filter((x) => Number.isFinite(x));
   let alerts: { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }[] | null = null;
   try { alerts = registryAlertRows(registry, now); } catch { alerts = null; }
-  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook }));
+  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines }));
 }
 
 log(`burnticker keeper starting — ${registry.tokens("live").length} live token(s) · ledger ${DB} · site ${SITE} · ${cluster}${DRY ? " · DRY RUN" : ""} · program ${program.programId} (${built.real ? `REAL: ${built.why}` : `FAKE — ${built.why}; nothing is sent`}) · ${ops.banner()} · alerts ${ALERTS ? `every ${ALERT_EVERY_MS / 60_000} min${RPC ? " with balances" : " (no BURNTICKER_RPC_URL: balances unknown)"}${webhook.configured ? " → webhook" : " (no BURNTICKER_ALERT_WEBHOOK: local only)"}${pushConfigFromEnv(process.env) ? " + phone push" : ""}` : "off (--once)"}`);
@@ -211,6 +225,7 @@ while (!stopping) {
   try { await publishAll(Date.now()); } catch (e) { log(`publish failed: ${(e as Error).message.slice(0, 200)}`); }
   await ops.afterCycle(cycleReport, paused, ALERTS ? sink : null);
   try { const w = writeOwnTokensGenerated(registry, process.env.OWN_TOKENS_GENERATED_PATH?.trim() || undefined); if (w.changed) log(`  [refuse-list] ${w.file} rewritten: ${w.count} platform token(s) — the arms re-read it on their next candidate`); } catch (e) { log(`  [refuse-list] not written: ${(e as Error).message.slice(0, 160)}`); }
+  budget.flush();
   if (ALERTS && Date.now() - lastAlertAt >= ALERT_EVERY_MS) { lastAlertAt = Date.now(); try { await opsCheck(lastAlertAt, paused); } catch (e) { log(`  [alert] check failed: ${(e as Error).message.slice(0, 160)}`); } }
   if (ONCE) break;
   await new Promise((r) => setTimeout(r, 60_000));

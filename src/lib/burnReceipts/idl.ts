@@ -1853,6 +1853,265 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "crank_carried",
+      "docs": [
+        "Burn dispersal (2026-10-13): spend a piece of the carried spend without a new reading (crank_carried.rs has the rules)."
+      ],
+      "discriminator": [
+        22,
+        231,
+        40,
+        25,
+        176,
+        176,
+        1,
+        229
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "platform",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true
+        },
+        {
+          "name": "fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_wsol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "fee_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "wsol_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "fee_tokens",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "fee_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "wsol_mint",
+          "address": "So11111111111111111111111111111111111111112"
+        },
+        {
+          "name": "pool_state",
+          "writable": true
+        },
+        {
+          "name": "amm_config"
+        },
+        {
+          "name": "cpmm_authority"
+        },
+        {
+          "name": "wsol_vault",
+          "writable": true
+        },
+        {
+          "name": "token_vault",
+          "writable": true
+        },
+        {
+          "name": "observation_state",
+          "writable": true
+        },
+        {
+          "name": "cpmm_program",
+          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "memo_program",
+          "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "max_spend_lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "crank_no_units",
       "discriminator": [
         25,
@@ -5426,6 +5685,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "CarriedSpent",
+      "discriminator": [
+        157,
+        133,
+        152,
+        254,
+        164,
+        165,
+        162,
+        230
+      ]
+    },
+    {
       "name": "CrankerAllowlistCleared",
       "discriminator": [
         200,
@@ -6510,6 +6782,31 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6130,
       "name": "LostPathBurnsSelf",
       "msg": "initialize_token_r5: a buyback coin's not-resolved (lost) end must go to another coin, the flagship, the pair winner or the incinerator, never to its own wind-down: pin an end sink"
+    },
+    {
+      "code": 6131,
+      "name": "ReadingPending",
+      "msg": "crank_carried: a submitted reading is still waiting for its own crank (crank it first; it carries the owed spend in its target)"
+    },
+    {
+      "code": 6132,
+      "name": "NothingCarried",
+      "msg": "crank_carried: nothing is carried (or the requested piece is zero)"
+    },
+    {
+      "code": 6133,
+      "name": "SpendAboveCap",
+      "msg": "crank_carried: the requested piece is above the per-crank cap (2 % of the pool's WSOL reserve)"
+    },
+    {
+      "code": 6134,
+      "name": "BelowFloor",
+      "msg": "crank_carried: the piece is under the rule's floor and is not the whole remainder"
+    },
+    {
+      "code": 6135,
+      "name": "RuleNotLive",
+      "msg": "crank_carried: the rule has ended; the end paths handle the fuel"
     }
   ],
   "types": [
@@ -6983,6 +7280,58 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "new_cap_lamports",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CarriedSpent",
+      "docs": [
+        "crank_carried (burn dispersal): a piece of the carried spend bought and burned without a new reading. `through_date` = the crank",
+        "cursor (the last processed reading whose carried spend this drains)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "through_date",
+            "type": "u32"
+          },
+          {
+            "name": "max_spend_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_cap_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "carried_in_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "spent_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "got",
+            "type": "u64"
+          },
+          {
+            "name": "burned",
+            "type": "u64"
+          },
+          {
+            "name": "carried_out_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
           }
         ]
       }

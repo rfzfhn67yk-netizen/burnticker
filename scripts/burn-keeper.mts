@@ -45,13 +45,16 @@ import { readCpmmMarket, readKeeperCurve, type CpmmReader } from "../src/lib/bur
 import { loadRules, solToLamports, tokensToRaw, rawToTokens, type LoadedRules } from "../src/lib/burnKeeper/rules.ts";
 import { fetchDebtHistoryRows, fetchDebtToPenny, validateDebtResponse, type FeedValidation } from "../src/lib/burnKeeper/feeds/treasury.ts";
 import { openLedger, type Ledger } from "../src/lib/burnKeeper/ledger.ts";
+import { openRegistry, REGISTRY_FILE } from "../src/lib/burnticker/registry.ts";
 import { executePending, feedKey, ingest, tokenKey, type BuybackPort, type ChainPort, type KeeperCtx } from "../src/lib/burnKeeper/cycle.ts";
 import { cosignerFromEnv } from "../src/lib/burnticker/attesters/cosign.ts";
 import { associatedTokenAddress, clusterOfGenesis, clusterRefusal, explorerUrl, type Cluster } from "../src/lib/burnKeeper/solana.ts";
 import { solanaBuyback, solanaChain, type SolanaChain } from "../src/lib/burnKeeper/solanaChain.ts";
 import { cpmmProgramFor, launchLabProgramFor } from "../src/lib/burnKeeper/launchlab.ts";
 import { burnProgramIdFromEnv, burnPoolFor } from "../src/lib/burnKeeper/burnPool.ts";
-import { executeProgramPending, executionModeFromEnv, legacyRefusal, type ProgramCycleReport, type ProgramPort } from "../src/lib/burnKeeper/programChain.ts";
+import { deficitDispersalLines, executeDispersal, executeProgramPending, executionModeFromEnv, legacyRefusal, type ProgramCycleReport, type ProgramPort } from "../src/lib/burnKeeper/programChain.ts";
+// BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
+import { dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
 import { solanaProgramPort } from "../src/lib/burnKeeper/programAdapter.ts";
 import { fetchTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
 import { launchLabPoolId, WSOL_MINT } from "../src/lib/burnKeeper/launchlab.ts";
@@ -61,6 +64,7 @@ import { buildBurnsJson, buildStatus, publishSite, renderIndexHtml, toJson } fro
 import { buybackScenariosMarkdown, paceTable, replay, replayMarkdown, vaultPace } from "../src/lib/burnKeeper/replay.ts";
 import { attesterGate } from "../src/lib/burnKeeper/attesters/gate.ts";
 import { attesterConfigFromEnv, parseAttesterEnv, switchboardAttester } from "../src/lib/burnKeeper/attesters/switchboard.ts";
+import { budgetStatusLines, budgetedRpcConfig, configureApiBudget, statusTableStore } from "../src/lib/burnticker/apiBudget.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -148,6 +152,17 @@ const PAUSE_FILE = path.join("data", "PAUSE-burnkeeper");
 const rpcUrl = process.env.BURNKEEPER_RPC_URL?.trim() || (DEVNET ? "https://api.devnet.solana.com" : "");
 const mintS = process.env.BURNKEEPER_MINT?.trim(), vaultS = process.env.BURNKEEPER_VAULT?.trim();
 const ledger: Ledger = openLedger(DB);
+// THE REQUEST BUDGET (src/lib/burnticker/apiBudget.ts, docs/burnticker/API-BUDGETS.md; owner 2026-10-13): this keeper's share of the
+// Helius plan and of the Treasury API, counted per UTC day in the ledger's status table (a restart keeps it). A spent day holds that
+// provider's reads until midnight UTC (logged once). The bt-api-budget alert goes into the platform registry when it is on this host
+// (BURNTICKER_DB or data/burnticker.db; never created here), where the platform keeper's push check sends it to the owner's phone.
+const budget = configureApiBudget({ role: "deficit", store: statusTableStore(ledger.db), log, alert: (a) => {
+  log(`  [alert] ${a.kind}: ${a.text}`);
+  const regFile = process.env.BURNTICKER_DB?.trim() || REGISTRY_FILE;
+  if (!fs.existsSync(regFile)) return;
+  try { const reg = openRegistry(regFile); try { reg.recordAlert({ kind: a.kind, key: a.key, text: a.text, meta: a.meta }); } finally { reg.close(); } } catch (e) { log(`  [alert] not recorded in the registry: ${(e as Error).message.slice(0, 120)}`); }
+} });
+process.on("exit", () => { try { budget.flush(); } catch { /* closing */ } });
 
 /** Public addresses of every other wallet this machine knows (`<key>.address` files beside the signers) + the treasury default. */
 function otherWalletAddresses(selfPath: string): Set<string> {
@@ -224,7 +239,7 @@ async function connect(): Promise<Runtime> {
       chain: { vaultBalanceRaw: async () => (BUYBACK ? BigInt(0) : alloc), findMemoOnChain: async () => null, signatureStatuses: async (s) => s.map(() => null), blockHeight: async () => 0, buildSigned: none, simulate: none, send: none, confirm: none },
       buyback: BUYBACK ? { feeBalanceLamports: async () => assumePool, solUsd: async () => assumeSolUsd, buildSwap: none, swapReceivedRaw: none } : null };
   }
-  const connection = new Connection(rpcUrl, "confirmed");
+  const connection = new Connection(rpcUrl, budgetedRpcConfig({ commitment: "confirmed" }));
   const cluster = clusterOfGenesis(await connection.getGenesisHash());
   const refusal = clusterRefusal({ cluster, devnetFlag: DEVNET, env: process.env, rulesSha256: loaded.sha256, mode: loaded.rules.mode, rulesMint: loaded.rules.mint });
   if (refusal) throw new Error(refusal);
@@ -277,7 +292,14 @@ function buildAttester(rt: Runtime) {
   return gate;
 }
 
-const state = { feedRetryAt: 0, feedFailures: 0, lastPoll: null as { at: number; outcome: string } | null, lastError: null as string | null, stopping: false, lastProgram: null as ProgramCycleReport | null };
+const state = { feedRetryAt: 0, feedFailures: 0, lastPoll: null as { at: number; outcome: string } | null, lastError: null as string | null, stopping: false, lastProgram: null as ProgramCycleReport | null, nextDispersalAt: null as number | null };
+const DISPERSAL = dispersalEnabled(process.env);
+/** bt-burn-behind lands in the platform registry (where the phone push reads alerts) when it exists on this host; else only the log. */
+const BT_DB = process.env.BURNTICKER_DB?.trim() || REGISTRY_FILE;
+const dispersalAlert = (a: { kind: "bt-burn-behind"; key: string; text: string; meta: Record<string, unknown> | null }): void => {
+  if (!fs.existsSync(BT_DB)) return;
+  try { const r = openRegistry(BT_DB); try { r.recordAlert(a); } finally { r.close(); } } catch (e) { log(`  [alert] bt-burn-behind not recorded in ${BT_DB}: ${(e as Error).message.slice(0, 120)}`); }
+};
 
 async function pollFeed(now: number): Promise<void> {
   const last = ledger.lastReading(T, F);
@@ -322,7 +344,7 @@ async function publish(rt: Runtime, now: number): Promise<void> {
     const cfg = await rt.program.config().catch(() => null);
     try { feeLamports = await rt.program.feePdaLamports(); } catch { /* unknown */ }
     try { supplyRaw = await rt.program.supplyRaw(); } catch { /* from the ledger */ }
-    program = { programId: rt.program.programId, configAddress: rt.program.configAddress, feePda: rt.program.feePda, config: cfg, feePdaLamports: feeLamports, programReadings: ledger.programReadings(T, F), keeperAttesterKeys: rt.program.attesterKeys(), lastHealth: state.lastProgram?.health ?? null, lastClaims: state.lastProgram?.claims ?? null };
+    program = { programId: rt.program.programId, configAddress: rt.program.configAddress, feePda: rt.program.feePda, config: cfg, feePdaLamports: feeLamports, programReadings: ledger.programReadings(T, F), keeperAttesterKeys: rt.program.attesterKeys(), lastHealth: state.lastProgram?.health ?? null, lastClaims: state.lastProgram?.claims ?? null, ...(DISPERSAL ? { dispersal: deficitDispersalLines(ledger, rt.program.mint) } : {}) };
   } else if (EXECUTION === "program") program = { programId: PROGRAM_ID?.toBase58() ?? "unset", configAddress: "—", feePda: "—", config: null, feePdaLamports: null, programReadings: ledger.programReadings(T, F), keeperAttesterKeys: [] };
   if (rt.chain && rt.cluster !== "none") {
     try { vaultRaw = await rt.chain.vaultBalanceRaw(); } catch { /* shown as unknown */ }
@@ -366,6 +388,14 @@ async function cycle(rt: Runtime, pollNow: boolean): Promise<void> {
         state.lastError = err && err.outcome === "error" ? `${err.recordDate}: ${err.why}` : refused ? `${refused.recordDate}: ${refused.why}` : null;
         for (const r of rep.cranks) if (r.outcome === "confirmed" && rt.cluster !== "none") log(`  [burn] ${r.recordDate}: ${rawToTokens(r.burnRaw, loaded.rules.decimals)} burned by the program · ${explorerUrl(rt.cluster, r.signature)}`);
       } catch (e) { state.lastError = (e as Error).message.slice(0, 300); log(`  [program] ${state.lastError}`); }
+      // BURN DISPERSAL: after the reading cranks; the loop below also wakes at the next piece's time.
+      if (DISPERSAL && loaded.rules.mode === "buyback") {
+        try {
+          const d = await executeDispersal({ ...ctx, now: () => Date.now() }, rt.program, { alert: dispersalAlert });
+          state.nextDispersalAt = d.nextDueAt;
+          if (d.action === "landed" && d.signature && rt.cluster !== "none") log(`  [dispersal] a carried piece burned · ${explorerUrl(rt.cluster, d.signature)}`);
+        } catch (e) { log(`  [dispersal] ${(e as Error).message.slice(0, 200)}`); state.nextDispersalAt = Date.now() + 10 * 60_000; }
+      }
     }
   } else if (pending.length && rt.chain) {
     if (fs.existsSync(PAUSE_FILE) && !DRY) log(`  [burn] ${PAUSE_FILE} present — ${pending.length} burn(s) held, nothing sent`);
@@ -399,10 +429,12 @@ async function main(): Promise<void> {
     const now = Date.now();
     const due = now >= nextPoll || (state.feedRetryAt > 0 && now >= state.feedRetryAt);
     await cycle(rt, due);
+    budget.flush();
+    for (const l of budgetStatusLines(budget.lines())) log(`  [${l}]`);
     if (due) nextPoll = nextPollAt(Date.now(), loaded.rules.schedule.polls, loaded.rules.schedule.timeZone);
     if (ONCE) break;
     const first = ledger.pendingBurns(T, F)[0];
-    const wakes = [nextPoll, state.feedRetryAt || Infinity, first ? Math.max(Date.now() + 15_000, first.nextAttemptAt ?? Date.now() + 60_000) : Infinity, Date.now() + 15 * 60_000];
+    const wakes = [nextPoll, state.feedRetryAt || Infinity, first ? Math.max(Date.now() + 15_000, first.nextAttemptAt ?? Date.now() + 60_000) : Infinity, Date.now() + 15 * 60_000, state.nextDispersalAt !== null ? Math.max(Date.now() + 15_000, state.nextDispersalAt) : Infinity];
     const until = Math.min(...wakes);
     while (!state.stopping && Date.now() < until) await new Promise((r) => setTimeout(r, Math.min(5_000, Math.max(0, until - Date.now()))));
   }

@@ -179,6 +179,22 @@ pub struct SpendCapBound {
     pub carried_out_lamports: u64,
 }
 
+/// crank_carried (burn dispersal): a piece of the carried spend bought and burned without a new reading. `through_date` = the crank
+/// cursor (the last processed reading whose carried spend this drains).
+#[event]
+pub struct CarriedSpent {
+    pub config: Pubkey,
+    pub through_date: u32,
+    pub max_spend_lamports: u64,
+    pub reserve_cap_lamports: u64,
+    pub carried_in_lamports: u64,
+    pub spent_lamports: u64,
+    pub got: u64,
+    pub burned: u64,
+    pub carried_out_lamports: u64,
+    pub cranker: Pubkey,
+}
+
 #[event]
 pub struct LaunchLabCreatorFeeClaimed {
     pub config: Pubkey,

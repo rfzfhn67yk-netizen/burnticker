@@ -44,6 +44,7 @@ type Payload =
   | { kind: "reading"; recordDate: number; prevDate: number; value: bigint; keys: string[] }
   | { kind: "crank"; crank: "no_units" | "vault" | "buyback" | "target"; recordDate: number }
   | { kind: "forward"; recordDate: number }
+  | { kind: "carried"; maxSpend: bigint }
   | { kind: "other" };
 
 const Z = BigInt(0);
@@ -148,7 +149,7 @@ export class FakeProgram implements ProgramPort {
   deposit(lamports: bigint): void { this.feeLamports += lamports; }
 
   // ---- reads ----
-  async config() { return { ...this.cfg, attesters: [...this.cfg.attesters] }; }
+  async config() { return { ...this.cfg, attesters: [...this.cfg.attesters], ruleEnded: this.endState.state !== "live" }; }
   async reading(d: number) { const r = this.readings.get(d); return r ? { ...r } : null; }
   attesterKeys() { return [...this.heldKeys]; }
   async feePdaLamports() { return this.feeLamports; }
@@ -210,6 +211,7 @@ export class FakeProgram implements ProgramPort {
   private execute(p: Payload, commit: boolean): { err: string } | { memo: string | null } {
     if (p.kind === "reading") return this.execReading(p, commit);
     if (p.kind === "crank") return this.execCrank(p.recordDate, p.crank, commit);
+    if (p.kind === "carried") return this.execCarried(p.maxSpend, commit);
     return { memo: null };
   }
   private execReading(p: Extract<Payload, { kind: "reading" }>, commit: boolean): { err: string } | { memo: string | null } {
@@ -310,6 +312,56 @@ export class FakeProgram implements ProgramPort {
     this.cfg = { ...this.cfg, crankCursor: D, totalBurned: this.cfg.totalBurned + burned, totalSpentLamports: this.cfg.totalSpentLamports + spent, burns: this.cfg.burns + (burned > Z ? 1 : 0), carriedSpendLamports: carriedOut, poolUntradeableSince: outcome === "burned" ? null : this.cfg.poolUntradeableSince, poolUntradeableLastSeen: outcome === "burned" ? null : !this.poolTradable ? nowS : this.cfg.poolUntradeableLastSeen };
     return { memo: formatBuybackMemo({ ...this.head(r), pool: basis.toString(), spent: spent.toString(), got: rawToTokens(got, this.decimals), burn: rawToTokens(burned, this.decimals), swap: spent > Z ? (r.pool ?? this.cfg.pool!).slice(0, 12) : "none", version: "v2" }) };
   }
+
+  /**
+   * crank_carried (burn dispersal) as the program runs it: refuses while a reading waits (ReadingPending), with nothing carried or a zero
+   * piece (NothingCarried), above 2 % of the reserve (SpendAboveCap), under the floor unless it is the whole remainder (BelowFloor);
+   * TWAP / tradability as crank_buyback. Spends min(carried, max, basis), burns everything held, writes the `carried` memo.
+   * `poolMovesOnBuy` (off by default) adds each spend to the pool's WSOL reserve, as a real constant-product pool would.
+   */
+  poolMovesOnBuy = false;
+  private execCarried(maxSpend: bigint, commit: boolean): { err: string } | { memo: string | null } {
+    const c = this.cfg;
+    if (c.mode !== "buyback") return { err: "WrongMode" };
+    if (this.burnTarget) return { err: "BurnTargetSet" };
+    if (this.endState.state !== "live") return { err: "RuleNotLive" };
+    if (!c.poolRegistered) return { err: "PoolNotRegistered" };
+    if (c.hasBaseline && c.crankCursor !== c.lastRecordDate) return { err: "ReadingPending" };
+    if (c.carriedSpendLamports <= Z || maxSpend <= Z) return { err: "NothingCarried" };
+    if (!this.poolTradable) return { err: "PoolNotTradable" };
+    const cap = reserveSpendCap(this.poolReserveWsol, MAX_SPEND_RESERVE_BPS);
+    if (maxSpend > cap) return { err: "SpendAboveCap" };
+    const poolActual = spendablePool(this.feeLamports, c.reserveLamports, this.wsol + this.strayWsolLamports);
+    const basis = this.capLamports !== null && poolActual > this.capLamports ? this.capLamports : poolActual;
+    let spend = c.carriedSpendLamports < maxSpend ? c.carriedSpendLamports : maxSpend;
+    if (basis < spend) spend = basis;
+    if (spend <= Z) return { err: "NothingCarried" };
+    if (spend < c.floorLamports && spend !== c.carriedSpendLamports) return { err: "BelowFloor" };
+    if (this.twap === "unavailable") return { err: "TwapUnavailable" };
+    if (this.twap === "deviation") return { err: "TwapDeviation" };
+    if (!commit) return { memo: null };
+    if (this.strayWsolLamports > Z) { this.wsol += this.strayWsolLamports; this.strayWsolLamports = Z; }
+    const got = (spend * this.tokensPerSol) / big(1_000_000_000);
+    const fromLamports = spend > this.wsol ? spend - this.wsol : Z;
+    this.feeLamports -= fromLamports; this.wsol = this.wsol + fromLamports - spend;
+    this.feeTokens += got;
+    if (this.poolMovesOnBuy) this.poolReserveWsol += spend;
+    const burned = this.feeTokens;
+    this.feeTokens = Z; this.supply -= burned;
+    const left = c.carriedSpendLamports - spend;
+    this.cfg = { ...this.cfg, totalBurned: c.totalBurned + burned, totalSpentLamports: c.totalSpentLamports + spend, burns: c.burns + (burned > Z ? 1 : 0), carriedSpendLamports: left };
+    return { memo: `${c.memoPrefix}|carried|through=${formatDate(c.crankCursor)}|spent=${spend}|got=${rawToTokens(got, this.decimals)}|burn=${rawToTokens(burned, this.decimals)}|left=${left}|swap=${(c.pool ?? "none").slice(0, 12)}|rules=sha256:${this.rulesSha256.slice(0, 12)}|v1` };
+  }
+  async planCarried(maxSpendLamports: bigint): Promise<{ build: () => Promise<SignedTx> } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" }> {
+    const c = this.cfg;
+    if (c.mode !== "buyback" || this.burnTarget) return { status: "not-buyback" };
+    if (this.endState.state !== "live") return { status: "rule-ended" };
+    if (!c.poolRegistered) return { status: "waiting-for-pool" };
+    if (c.hasBaseline && c.crankCursor !== c.lastRecordDate) return { status: "reading-pending" };
+    if (c.carriedSpendLamports <= Z) return { status: "nothing-carried" };
+    return { build: async () => this.mk({ kind: "carried", maxSpend: maxSpendLamports }) };
+  }
+  async poolSolReserve(): Promise<bigint | null> { return this.cfg.poolRegistered ? this.poolReserveWsol : null; }
 
   /** crank_target_burn as the program runs it (crank_buyback refuses a target coin with BurnTargetSet; a self coin refuses the target crank). */
   private execTarget(D: number, r: ProgramReadingView, kind: string, commit: boolean): { err: string } | { memo: string | null } {

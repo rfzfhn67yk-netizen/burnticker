@@ -23,6 +23,7 @@ import { championPathRule } from "@/lib/burnticker/describe";
 import { askCosigner, type Cosigner } from "@/lib/burnticker/attesters/cosign";
 import type { Cosignature, ReadingInput } from "@/lib/burnKeeper/programPort";
 import { parseTargetMemo } from "@/lib/burnReceipts/memo";
+import { DISPERSAL_STATE_KEY, runDispersal, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -87,13 +88,19 @@ export interface KeeperDeps {
    * On unless explicitly false — false exists only so a test can show the double count the fence prevents.
    */
   fence?: boolean;
+  /**
+   * BURN DISPERSAL (owner decision 2026-10-13; dispersal.ts / dispersalKeeper.ts): BURNTICKER_DISPERSAL=1. After each coin's cranks, the
+   * carried spend is bought in small crank_carried pieces at random times over 6-hour windows until it is zero; a reading not fully
+   * spent 24 h after it landed raises bt-burn-behind. Off (undefined/false) until crank_carried is deployed.
+   */
+  dispersal?: boolean;
 }
 
 export interface FetchReport { key: string; written: number; refusals: string[]; awaitingFinal: number; error: string | null; skipped: boolean }
 export type ExecOutcome =
   | { mint: string; eventId: string; outcome: "confirmed"; signature: string; burnRaw: bigint; adopted: boolean }
   | { mint: string; eventId: string; outcome: "skipped" | "exhausted" | "waiting" | "error" | "dry-run"; why: string };
-export interface CycleReport { fetched: FetchReport[]; planned: { mint: string; eventId: string; status: string }[]; executed: ExecOutcome[]; errors: string[]; /** claim_lock_fees per coin this cycle (LP locked forever, 2026-10-10); absent on a keeper without the client. */ lpFees?: LockFeesOutcome[]; /** The foreign-reading fence this cycle (absent with `fence: false`); any hold ran the rest of the cycle as a dry run. */ fence?: FenceReport }
+export interface CycleReport { /** burn dispersal per coin this cycle (absent when off) */ dispersal?: (DispersalReport & { mint: string })[]; fetched: FetchReport[]; planned: { mint: string; eventId: string; status: string }[]; executed: ExecOutcome[]; errors: string[]; /** claim_lock_fees per coin this cycle (LP locked forever, 2026-10-10); absent on a keeper without the client. */ lpFees?: LockFeesOutcome[]; /** The foreign-reading fence this cycle (absent with `fence: false`); any hold ran the rest of the cycle as a dry run. */ fence?: FenceReport }
 
 const oracleFor = (d: KeeperDeps, key: string): OracleAdapter => {
   if (key.startsWith("catalogue:")) return d.oracles.catalogue;
@@ -868,6 +875,7 @@ export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): 
   // Retired coins stay in the loop when their rule ended under onEnd: the wind-down's last cranks and the retired-coin sweep.
   const tokens = [...live, ...d.registry.tokens("retired").filter((t) => gates.get(t.mint)?.gate.state === "voided" || d.registry.ruleEnd(t.mint) !== null)];
   const planned: CycleReport["planned"] = [], executed: ExecOutcome[] = [], lpFees: LockFeesOutcome[] = [];
+  const dispersal: (DispersalReport & { mint: string })[] = [];
   // WINNER TAKES THE BURN (2026-10-11): each pair coin's pair context (its counterpart, the pair port, whether forwards apply).
   const ctxs = new Map<string, PairCtx | null>();
   for (const t of tokens) { try { ctxs.set(t.mint, await pairCtxFor(d.registry, d.program, t, d.now())); } catch (e) { ctxs.set(t.mint, null); errors.push(`$${t.ticker}: pair context: ${(e as Error).message.slice(0, 160)}`); } }
@@ -918,6 +926,14 @@ export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): 
     try { planned.push(...await planRuleEnd(d, t, locked, gate, ctx)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); }
     await fenceStep(t);
     try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
+    // BURN DISPERSAL: after the reading cranks (a waiting reading always cranks first; the program refuses crank_carried until it has).
+    if (d.dispersal && locked.mode === "buyback") {
+      try {
+        const key = DISPERSAL_STATE_KEY(t.mint);
+        const r = await runDispersal({ port: d.program.port(t.mint), mint: t.mint, ticker: t.ticker, load: () => d.registry.getStatus(key), save: (j) => d.registry.setStatus(key, j, d.now()), log: d.log, now: d.now, dryRun: !!d.dryRun, alert: (a) => { d.registry.recordAlert(a, d.now()); } });
+        dispersal.push({ mint: t.mint, ...r });
+      } catch (e) { errors.push(`$${t.ticker}: dispersal: ${(e as Error).message.slice(0, 160)}`); }
+    }
   }
   try { await pairUnmatchedAlerts(d.registry, d.program, d.now(), d.log); } catch (e) { errors.push(`pair links: ${(e as Error).message.slice(0, 160)}`); }
   // unlink_pair on the program's terminal evidence (round 3); d.pairUnlink === false only observes.
@@ -926,5 +942,5 @@ export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): 
   for (const r of lpFees) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} lock-fees: ${r.why}`);
   if (fence.held.length) for (const h of fence.held) errors.push(`fence: $${h.ticker}: ${h.why}`);
   if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }
-  return { fetched, planned, executed, errors, ...(d.program.lockFees ? { lpFees } : {}), ...(fenceOn ? { fence } : {}) };
+  return { fetched, planned, executed, errors, ...(d.program.lockFees ? { lpFees } : {}), ...(fenceOn ? { fence } : {}), ...(d.dispersal ? { dispersal } : {}) };
 }

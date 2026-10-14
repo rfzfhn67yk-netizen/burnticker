@@ -39,6 +39,7 @@ import type { SeasonSchedule } from "@/lib/burnticker/seasonOver";
 import type { TeamSeasonReader } from "@/lib/burnticker/lastSeason";
 import { coinDerbyScoreboard } from "@/lib/burnticker/derby/page";
 import { derbyTitle } from "@/lib/burnticker/api/handlers";
+import { budgetedRpcConfig, configureApiBudget, statusTableStore } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE APP'S WIRING (2026-10-09): one place that opens the registry, builds the oracle clients, and chooses the program / LaunchLab
@@ -103,7 +104,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const rpc = (env.BURNTICKER_RPC_URL ?? "").trim();
   let program: BurnProgramClient;
   if (programId && rpc) {
-    program = new ProgramBurnClient({ connection: new Connection(rpc, "confirmed"), programId: new PublicKey(programId), cluster, payer: null, launchLabPlatform: (env.BURNTICKER_PLATFORM_ID ?? "").trim() ? new PublicKey((env.BURNTICKER_PLATFORM_ID ?? "").trim()) : null, admin: (env.BURNTICKER_ADMIN ?? "").trim() ? new PublicKey((env.BURNTICKER_ADMIN ?? "").trim()) : null, solUsd: async () => { const px = await usdPrice(SOL_MINT); if (px === null) throw new Error("SOL price unavailable (Jupiter price API)"); return px; } });
+    program = new ProgramBurnClient({ connection: new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" })), programId: new PublicKey(programId), cluster, payer: null, launchLabPlatform: (env.BURNTICKER_PLATFORM_ID ?? "").trim() ? new PublicKey((env.BURNTICKER_PLATFORM_ID ?? "").trim()) : null, admin: (env.BURNTICKER_ADMIN ?? "").trim() ? new PublicKey((env.BURNTICKER_ADMIN ?? "").trim()) : null, solUsd: async () => { const px = await usdPrice(SOL_MINT); if (px === null) throw new Error("SOL price unavailable (Jupiter price API)"); return px; } });
     stubs.push(`burn_receipts program ${programId}: read-only client (this host holds no key; the keeper signs readings and cranks)`);
   } else {
     program = new FakeBurnProgram(cluster);
@@ -113,7 +114,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   // launch-10 (2026-10-12): the real LaunchLab client on a host with an RPC, the program id and the platform id (launchLabChain.ts);
   // the fake elsewhere (tests, RPC-less hosts, BURNTICKER_LAUNCHLAB_CLIENT=fake). Mainnet launches stay refused unless the host sets
   // BURNTICKER_ALLOW_MAINNET_LAUNCHES (hostedLaunch.ts; prepareLaunch passes it to the builder as allowMainnet).
-  const ll = launchLabFromEnv(env, { cluster, reader: rpc ? (new Connection(rpc, "confirmed") as unknown as LaunchLabAccountReader) : null });
+  const ll = launchLabFromEnv(env, { cluster, reader: rpc ? (new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" })) as unknown as LaunchLabAccountReader) : null });
   const launchLab = ll.client;
   stubs.push(ll.stub);
   const allowMainnet = cluster === "mainnet" && mainnetLaunchesAllowed(env);
@@ -122,12 +123,16 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const polymarket = polymarketClient(env);
   // Bonding curve + top holders for the coin cards: read-only account reads over the same RPC (no key). Without one: "—" and the reason.
   // disableRetryOnRateLimit: a rate-limited RPC fails the read fast ("could not be read") instead of stalling every page on backoff.
-  const market: MarketReader | null = rpc ? (new Connection(rpc, { commitment: "confirmed", disableRetryOnRateLimit: true }) as unknown as MarketReader) : null;
+  const market: MarketReader | null = rpc ? (new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })) as unknown as MarketReader) : null;
   if (!rpc) stubs.push("LaunchLab curve progress and top holders: no BURNTICKER_RPC_URL on this host (cards show —)");
   if (!polymarketDiscoveryEnabled(env)) stubs.push("Polymarket discovery: off on this host (BURNTICKER_POLYMARKET_DISCOVERY_ENABLED=0); settlement reads the on-chain payout regardless");
   const registry = openRegistry((env.BURNTICKER_DB ?? "").trim() || REGISTRY_FILE);
+  // THE REQUEST BUDGET (apiBudget.ts, 2026-10-13): the site's share of every provider's limit, its day counts in the registry's status
+  // table (a restart keeps them), a bt-api-budget alert at 80% and at a hold. Enforced in production; counting only elsewhere (tests).
+  configureApiBudget({ role: "web", store: statusTableStore(registry.db), enforce: process.env.NODE_ENV === "production", log: (s) => console.log(s),
+    alert: (a) => { try { registry.recordAlert({ kind: a.kind, key: a.key, text: a.text, meta: a.meta }); } catch { /* an alert never stops a read */ } } });
   // Burn Derby (2026-10-10): Pyth / pools / supplies are MAINNET facts whatever cluster the coins live on — a read-only port, no key.
-  const derbyPools = connectionPoolPort(new Connection((env.BURNTICKER_DERBY_RPC_URL ?? "").trim() || "https://api.mainnet-beta.solana.com", { commitment: "confirmed", disableRetryOnRateLimit: true }));
+  const derbyPools = connectionPoolPort(new Connection((env.BURNTICKER_DERBY_RPC_URL ?? "").trim() || "https://api.mainnet-beta.solana.com", budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })));
   const derbyHermes = (env.BURNTICKER_PYTH_API_KEY ?? "").trim() ? HermesClient.fromEnv(env) : null;
   const derby = new DerbyAdapter({ registry, hermes: derbyHermes, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now() });
   // Team coins: games settle on their Polymarket on-chain payout where a moneyline market exists, else TheSportsDB (gameSettle.ts).
@@ -141,7 +146,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     pinDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) : undefined,
     // Review-2 F3: the verifier decodes initialize_token and reads the TokenConfig (and the Pair) — it needs the program ids it checks
     // against; without BURNTICKER_PROGRAM_ID it refuses every confirmation (fail closed).
-    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, "confirmed") as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null,
+    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" })) as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null,
   };
   if (!rpc) stubs.push("launch confirmation: no BURNTICKER_RPC_URL on this host, so a launch transaction cannot be read and drafts are not taken live");
   else if (!programId) stubs.push("launch confirmation: no BURNTICKER_PROGRAM_ID on this host, so initialize_token and the TokenConfig cannot be checked and drafts are not taken live");
@@ -236,3 +241,6 @@ export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), 
   if (status.profile && imageTakenDown(t.mint)) status.profile = { ...status.profile, imageUrl: null };
   return { status, receipts, readings: input.readings, rulesText: t.rulesJson, stubs: p.stubs };
 }
+
+/** The web server's request budget, configured with its registry store (platform() does it once); routes that read a provider call this first. */
+export function ensureWebApiBudget(): void { try { platform(); } catch { /* the default budget (enforcing in production, in memory) still applies */ } }

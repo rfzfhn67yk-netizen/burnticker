@@ -1,5 +1,6 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ResolvedSelector } from "@/lib/burnticker/oracle/types";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE NWS DAILY CLIMATE ADAPTER (tier 4, first-party, public domain; 2026-10-10 — Weather & Climate gets a first-party source). It reads
@@ -150,6 +151,7 @@ export class NwsClient {
     const hit = this.cache.get(url); if (hit && this.now() - hit.at < ttl) return hit.body;
     const run = async () => {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts)
       this.lastAt = this.now(); this.requests.push(url);
       const res = await this.fetchImpl(url, { headers: { accept: "application/geo+json", "user-agent": NWS_UA } });
       if (!res.ok) throw new Error(`NWS HTTP ${res.status} for ${url.slice(0, 100)}`);

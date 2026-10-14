@@ -13,6 +13,7 @@ import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { explorerUrl, rpcUrlFor } from "@/lib/burnticker/networks";
 import fs from "node:fs";
 import path from "node:path";
+import { budgetedFetch } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE TRUST PACK'S API HANDLERS (1.5.0, 2026-10-10): GET /v1/check, /v1/check/receipts, /v1/check/receipts/{signature}, /v1/fees/ledger,
@@ -40,7 +41,7 @@ export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSou
   const result = await checkReceiptTx({
     signature, cluster: "devnet", programId: DEVNET_PROGRAM_ID, rpc: o.rpc ?? jsonRpc(PUBLIC_RPC.devnet),
     rulesText: s ? samples.rules[s.rulesPath] ?? null : null,
-    fetchSource: o.fetchSource === undefined ? ((u: string) => fetch(u, { headers: { accept: "application/json", "user-agent": "burnticker-check/1 (receipt verification)" } })) : o.fetchSource,
+    fetchSource: o.fetchSource === undefined ? budgetedFetch((u: string) => fetch(u, { headers: { accept: "application/json", "user-agent": "burnticker-check/1 (receipt verification)" } })) : o.fetchSource,
   });
   return ok({ ...result, ranOn: "server (the same code the /burnticker/check page runs in your browser)", sample: s ?? null });
 }

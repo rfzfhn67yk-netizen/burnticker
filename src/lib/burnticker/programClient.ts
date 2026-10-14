@@ -125,7 +125,7 @@ export class ProgramBurnClient implements BurnProgramClient {
     if (have) return have;
     const readOnly = (what: string) => async (): Promise<never> => { throw new Error(`read-only program client (no payer key): cannot ${what}`); };
     const base = solanaProgramPort({ connection: this.o.connection, programId: this.o.programId, mint: new PublicKey(mint), cluster: this.o.cluster, payer: this.o.payer ?? ({ publicKey: PublicKey.default } as Keypair), attesters: this.o.attesters ?? (this.o.payer ? [this.o.payer] : []), allowMainnet: this.o.allowMainnet, launchLabProgram: this.o.launchLabProgram, cpmmProgram: this.o.cpmmProgram, log: this.o.log });
-    const p: ProgramPort = this.o.payer ? base : { ...base, buildReading: readOnly("sign a reading"), planCrank: readOnly("crank"), claimCreatorFees: readOnly("claim"), checkPoolHealth: readOnly("check pool health"), send: readOnly("send") };
+    const p: ProgramPort = this.o.payer ? base : { ...base, buildReading: readOnly("sign a reading"), planCrank: readOnly("crank"), planCarried: readOnly("crank"), claimCreatorFees: readOnly("claim"), checkPoolHealth: readOnly("check pool health"), send: readOnly("send") };
     this.ports.set(mint, p);
     return p;
   }

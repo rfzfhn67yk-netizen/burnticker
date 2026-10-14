@@ -1,6 +1,7 @@
 import crypto from "node:crypto"; import { safeCreatorLink } from "@/lib/burnticker/creatorProfile";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { renderCoinSvg } from "@/lib/burnticker/coinArt";
+import { takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * NOTHING ABOUT A COIN CAN CHANGE AFTER LAUNCH (2026-10-10). LaunchLab creates the Metaplex metadata with is_mutable = false, so the
@@ -49,6 +50,7 @@ export class IrysUploader implements PinUploader {
     let chain = Uploader(Solana).withWallet(this.o.payer);
     if (this.o.cluster !== "mainnet") chain = chain.withRpc(this.o.rpcUrl ?? "https://api.devnet.solana.com").devnet();
     const client = await chain;
+    await takeOrThrow("irys");   // the request budget (apiBudget.ts): a spent day refuses the upload (the launch is refused, as for any upload failure)
     const r = await client.upload(Buffer.from(body), { tags: [{ name: "Content-Type", value: contentType }, ...tags] });
     // 2026-10-13: Irys bundles free uploads to Arweave on its own schedule (the 10-12 $DEFICIT pin was still unseeded a day later, so
     // arweave.net answered 404 while gateway.irys.xyz served it). The gateway URL is the same id, served at once and from Arweave once

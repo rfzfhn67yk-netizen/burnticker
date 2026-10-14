@@ -3,6 +3,7 @@ import type { SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import type { ResolutionSource, Tier } from "@/lib/burnticker/sources/types";
 import { addDays, isoDay } from "@/lib/burnticker/sources/attestedHttp";
+import { budgetedFetch, takeRpc } from "@/lib/burnticker/apiBudget";
 
 /**
  * COPYCAT LAUNCHES AS AN EVENT (the owner's idea, 2026-10-09: a coin that burns as copycats of it are launched). The reading for a
@@ -135,6 +136,7 @@ export interface CreatorPort { creationOf(mint: string): Promise<{ creator: stri
 /** Keyless public RPC: page `getSignaturesForAddress` to the oldest signature (≤ `maxPages` × 1000), then read the fee payer and blockTime. */
 export function rpcCreatorPort(rpcUrl: string, fetchImpl: FetchLike, maxPages = 5): CreatorPort {
   const call = async (method: string, params: unknown[]): Promise<unknown> => {
+    await takeRpc(rpcUrl, { method });   // the request budget (apiBudget.ts)
     const res = await fetchImpl(rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) } as never);
     if (!res.ok) throw new Error(`RPC ${method}: HTTP ${res.status}`);
     const j = (await res.json()) as { result?: unknown; error?: { message?: string } };
@@ -196,7 +198,7 @@ export function copycatSource(cfg: CopycatSourceConfig, o: CopycatSourceOptions 
   const key = env[cfg.indexer.primary.envKey]?.trim() || null;
   const tier: Tier = key ? cfg.tier : 5;
   const summary: SeriesSummary = { oracle: "catalogue", ticker: cfg.id, title: cfg.title, category: `tier ${tier}`, frequency: cfg.cadence, settlementSource: { name: cfg.sourceName, url: cfg.sourceUrl }, tags: cfg.flags };
-  const f = o.fetchImpl ?? (fetch as unknown as FetchLike);
+  const f = budgetedFetch(o.fetchImpl ?? (fetch as unknown as FetchLike));   // every indexer read takes from the request budget (by host)
   const getJson = async (url: string): Promise<unknown> => { const r = await f(url, { headers: { accept: "application/json", "user-agent": "burnticker/0.1 (copycat count; polite polling)" } } as never); if (!r.ok) throw new Error(`HTTP ${r.status} from ${new URL(url).host}`); return r.json(); };
   async function candidates(): Promise<{ candidates: CopycatCandidate[]; via: string[]; errors: string[] }> {
     const out: CopycatCandidate[] = [], via: string[] = [], errors: string[] = [];

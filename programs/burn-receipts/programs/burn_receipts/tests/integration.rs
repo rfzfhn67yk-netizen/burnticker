@@ -727,6 +727,7 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
             "claim_lock_fees",
             "clear_cranker_allowlist",
             "crank_buyback",
+            "crank_carried",
             "crank_no_units",
             "crank_target_burn",
             "crank_vault",

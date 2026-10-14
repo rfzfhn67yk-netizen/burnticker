@@ -11,6 +11,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *   signer-disagree   a reading is held because the second signer disagreed (multiKeeper.ts cosigner-disagree)
  *   pin-failed        an Arweave upload failed: a launch's metadata (api/handlers.ts bt-pin-failed) or the daily snapshot (bt-snapshot-failed)
  *   crank-refused     a burn run failed three times in a row (alerts.ts bt-crank-failed)
+ *   burn-behind       a reading's spend is not fully spent 24 hours after it landed (burn dispersal: dispersalKeeper.ts bt-burn-behind)
+ *   api-budget        a provider passed 80% of a process's day budget or was put on hold (apiBudget.ts bt-api-budget)
  *   keeper-stale      the public status file is stale for more than two hours: pushed by scripts/ops/keeper-status-check.sh, which runs
  *                     every minute from the publish timer and so still works when the keeper is down (listed here for the runbook)
  *
@@ -21,7 +23,7 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  * thrown: the keeper never stops for its phone.
  */
 
-export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed";
+export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -29,6 +31,8 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-snapshot-failed": "pin-failed",
   "bt-crank-failed": "crank-refused",
   "bt-launch-failed": "launch-failed",
+  "bt-burn-behind": "burn-behind",
+  "bt-api-budget": "api-budget",
 };
 export const PUSH_TITLE: Record<PushKind, string> = {
   "keeper-refused": "Burnticker keeper refused to start",
@@ -36,6 +40,8 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "pin-failed": "Burnticker upload failed",
   "crank-refused": "Burnticker burn run failing",
   "launch-failed": "Burnticker launch failed",
+  "burn-behind": "Burnticker burn behind",
+  "api-budget": "Burnticker data budget running low",
 };
 export const PUSH_LEAD: Record<PushKind, string> = {
   "keeper-refused": "The keeper stopped before its first cycle. Nothing is read or burned until it starts again.",
@@ -43,6 +49,8 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "pin-failed": "An upload to Arweave failed. A launch that needs it is refused, and a snapshot that needs it is not pinned.",
   "crank-refused": "A burn run has failed three times in a row.",
   "launch-failed": "Someone's launch request failed on the site with a server error, a pin failure or a launch-check refusal. The sentence below is what they saw.",
+  "burn-behind": "A reading's burn is not fully spent a day after it landed. The keeper keeps spending the rest in small pieces; the line below says how much is left.",
+  "api-budget": "One of the outside services the keeper or the site reads from has used most of its daily allowance, or all of it. When it is all used, reads from that service stop until midnight UTC and start again on their own.",
 };
 
 export const PUSH_PER_KIND_MS = 60 * 60_000;

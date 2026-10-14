@@ -2,6 +2,7 @@ import { assertClean, type CopyLintConfig } from "@/lib/launch/copyLint";
 import type { DerbyDayJson, DerbyPairJson, DerbyTournamentJson } from "@/lib/burnticker/derby/page";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { handleFromLink, JUP_SEARCH_URL, tokensFromJupiter } from "@/lib/burnticker/derby/cross";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE DERBY DAY POST (2026-10-10). One line a day, a report filled from the pair's derby block — never retyped:
@@ -64,6 +65,7 @@ export function bracketRoundText(t: Pick<DerbyTournamentJson, "id" | "title" | "
 export async function jupiterHandle(fetchImpl: FetchLike, mint: string | null): Promise<string | null> {
   if (!mint) return null;
   try {
+    await takeOrThrow(sourceForUrl(JUP_SEARCH_URL));   // the request budget (apiBudget.ts)
     const res = await fetchImpl(`${JUP_SEARCH_URL}?query=${mint}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return null;
     const t = tokensFromJupiter(await res.json()).find((x) => x.id === mint);

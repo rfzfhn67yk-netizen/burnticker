@@ -1,5 +1,6 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ResolvedSelector } from "@/lib/burnticker/oracle/types";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE FEC ADAPTER (tier 4, first-party, public domain; owner-approved 2026-10-10 for election pairs). Campaign receipts per filed report
@@ -63,6 +64,7 @@ export class FecClient {
     if (this.cache.has(pathQ)) return this.cache.get(pathQ);
     const run = async () => {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      await takeOrThrow(sourceForUrl(FEC_API));   // the request budget (apiBudget.ts)
       this.lastAt = this.now(); this.requests.push(pathQ);
       const res = await this.fetchImpl(`${FEC_API}${pathQ}${pathQ.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(this.key)}`, { headers: { accept: "application/json", "user-agent": "burnticker/0.1" } });
       if (!res.ok) throw new Error(`FEC HTTP ${res.status} for ${pathQ.slice(0, 100)}`);

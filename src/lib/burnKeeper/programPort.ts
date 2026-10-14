@@ -34,6 +34,8 @@ export interface ProgramConfigView {
   /** Round 5: true when the coin burns a TARGET token (crank_target_burn; a target reading's `burned`/`got` are the target's units and
    *  `owed` the coin's own tokens burned). Absent on older ports = false. */
   burnsTarget?: boolean;
+  /** LAUNCHPAD-PATH §45: the rule ended (resolved or void) — crank_carried refuses then. Absent on older ports = live. */
+  ruleEnded?: boolean;
 }
 
 /** One Reading account. `outcome` by name (pending / no-units / burned / below-floor / short / exhausted). */
@@ -80,6 +82,13 @@ export interface ProgramPort {
   checkPoolHealth(): Promise<{ signature: string | null; note: string }>;
   feePdaLamports(): Promise<bigint | null>;
   supplyRaw(): Promise<bigint | null>;
+  /**
+   * BURN DISPERSAL (2026-10-13; src/lib/burnticker/dispersal.ts): crank_carried for a piece of at most `maxSpendLamports` of the carried
+   * spend, signed only on build() — or why there is none. Optional: a port without it (an older client) never disperses.
+   */
+  planCarried?(maxSpendLamports: bigint): Promise<{ build: () => Promise<SignedTx> } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" }>;
+  /** The registered CPMM pool's WSOL reserve net of owed fees (the per-crank cap and the price move are measured on it), or null. */
+  poolSolReserve?(): Promise<bigint | null>;
   /**
    * Adapter-specific refusals that also mean "not now" (e.g. the SyncNative-before-crank error the next client treats as retryable),
    * on top of WAIT_REASONS. Optional.

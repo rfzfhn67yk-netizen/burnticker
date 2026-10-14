@@ -2,6 +2,7 @@ import type { BurnRule, Direction } from "@/lib/burnticker/rules";
 import { canonicalDecimal, numToDec, type CarryPolicy, type SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import type { FactSpec, ResolutionSource, Tier } from "@/lib/burnticker/sources/types";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE GENERIC ATTESTED-HTTP ADAPTER (2026-10-09): a feed is a CONFIG ENTRY (config/burnticker/sources.json), not a class. The entry
@@ -403,6 +404,7 @@ export async function fetchBody(cfg: HttpSourceConfig, nowMs: number, fetchImpl:
   const token = cfg.tokenEnv ? (env[cfg.tokenEnv] ?? "").trim() : "";
   const one = async (u: string, format: HttpSourceConfig["request"]["format"], post: boolean): Promise<unknown> => {
     const url = expandUrl(u, nowMs).split("{key}").join(encodeURIComponent(key ?? ""));
+    await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts), by host, before the timeout starts
     const ac = new AbortController(); const t = setTimeout(() => ac.abort(), timeoutMs);
     try {
       const res = await fetchImpl(url, { signal: ac.signal, headers: { accept: format === "json" ? "application/json" : "*/*", "user-agent": "burnticker/0.1 (event-indexed burn receipts; polite polling)", ...(cfg.request.headers ?? {}), ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(post ? { method: "POST", body: cfg.request.body === undefined ? undefined : expandUrl(cfg.request.body, nowMs) } : {}) } as never);

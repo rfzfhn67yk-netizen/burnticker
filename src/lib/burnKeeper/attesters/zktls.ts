@@ -1,5 +1,6 @@
 import { keccak256, recoverMessageAddress, stringToBytes } from "viem";
 import { decimalToCents, type AttestedReading } from "@/lib/burnKeeper/attesters/types";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * zkTLS ATTESTATION — PROTOTYPE (2026-10-09). For a tier-5 source (a page, not an API: LAUNCHPAD-PATH §2, §14) the attester is a
@@ -49,6 +50,7 @@ export const RECLAIM_ATTESTORS_URL = "https://api.reclaimprotocol.org/api/attest
 type FetchLike = (url: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 export async function fetchReclaimAttestors(fetchImpl: FetchLike = fetch as unknown as FetchLike, timeoutMs = 15_000): Promise<string[]> {
+  await takeOrThrow(sourceForUrl(RECLAIM_ATTESTORS_URL));   // the request budget (apiBudget.ts)
   const ac = new AbortController(); const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
     const res = await fetchImpl(RECLAIM_ATTESTORS_URL, { signal: ac.signal, headers: { accept: "application/json" } });

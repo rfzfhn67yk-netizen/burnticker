@@ -265,4 +265,14 @@ pub enum BurnError {
     NotIncineratorSink,
     #[msg("initialize_token_r5: a buyback coin's not-resolved (lost) end must go to another coin, the flagship, the pair winner or the incinerator, never to its own wind-down: pin an end sink")]
     LostPathBurnsSelf,
+    #[msg("crank_carried: a submitted reading is still waiting for its own crank (crank it first; it carries the owed spend in its target)")]
+    ReadingPending,
+    #[msg("crank_carried: nothing is carried (or the requested piece is zero)")]
+    NothingCarried,
+    #[msg("crank_carried: the requested piece is above the per-crank cap (2 % of the pool's WSOL reserve)")]
+    SpendAboveCap,
+    #[msg("crank_carried: the piece is under the rule's floor and is not the whole remainder")]
+    BelowFloor,
+    #[msg("crank_carried: the rule has ended; the end paths handle the fuel")]
+    RuleNotLive,
 }

@@ -17,6 +17,8 @@
 //!   link_pair / submit_pair_result / forward_to_winner   LAUNCHPAD-PATH §40, winner takes the burn: pair two coins (pair_curve Pair
 //!                          witness; or both initialize_token calls name each other), attest a period's winner (quorum of each
 //!                          coin's attesters), move the loser's fuel for that period to the winner's fee PDA
+//!   crank_carried          permissionless, buyback (burn dispersal): a piece (≤ the 2 % cap, caller-chosen) of the carried spend →
+//!                          the same swap and guards → burn all held → `carried` memo; only while no reading waits for its crank
 //!   crank_vault            permissionless: burn from the vault (shortfall carried) → memo v1
 //!   crank_no_units         permissionless: process a zero-unit reading that is next in line
 //!   propose_attesters / cancel_attester_change / renounce_admin    admin only (48 h timelock on proposals)
@@ -136,6 +138,11 @@ pub mod burn_receipts {
 
     pub fn crank_buyback(ctx: Context<CrankBuyback>, record_date: u32) -> Result<()> {
         instructions::crank_buyback::handle_crank_buyback(ctx, record_date)
+    }
+
+    /// Burn dispersal (2026-10-13): spend a piece of the carried spend without a new reading (crank_carried.rs has the rules).
+    pub fn crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64) -> Result<()> {
+        instructions::crank_carried::handle_crank_carried(ctx, max_spend_lamports)
     }
 
     pub fn crank_vault(ctx: Context<CrankVault>, record_date: u32) -> Result<()> {

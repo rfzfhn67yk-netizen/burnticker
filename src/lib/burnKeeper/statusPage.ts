@@ -64,6 +64,8 @@ export interface ProgramStatusInput {
   keeperAttesterKeys: readonly string[];
   lastHealth?: string | null;
   lastClaims?: readonly string[] | null;
+  /** Burn dispersal (2026-10-13): "spent X of Y SOL for the reading of <date>; remainder being spent", one per reading not fully spent. */
+  dispersal?: readonly string[];
 }
 
 export interface StatusInput {
@@ -135,7 +137,7 @@ export interface ProgramStatusJson {
     readings?: { recordDate: string; value: string; units: number | null; signature: string | null; txUrl: string | null }[];
     held: { recordDate: string; status: string; why: string | null } | null;
   };
-  queue: { lastOnChain: string | null; crankCursor: string | null; readingsNotOnChain: number; awaitingCrank: number; carriedSpendSol: string; carriedRemainderUsd: string; waits: { recordDate: string; reason: string }[]; partials: { recordDate: string; note: string }[] };
+  queue: { lastOnChain: string | null; crankCursor: string | null; readingsNotOnChain: number; awaitingCrank: number; carriedSpendSol: string; carriedRemainderUsd: string; waits: { recordDate: string; reason: string }[]; partials: { recordDate: string; note: string }[]; /** burn dispersal lines; absent when off */ dispersal?: string[] };
   pool: { registered: boolean; address: string | null; url: string | null; untradeableSince: string | null; lastCheck: string | null };
   totals: { burned: string; spentSol: string; shortfall: string; readings: number; burns: number };
   lastClaims: string[];
@@ -386,6 +388,7 @@ export function buildProgramStatus(p: ProgramStatusInput, burns: readonly BurnRo
       waits: pendingRows.filter((b) => b.waitReason).map((b) => ({ recordDate: b.recordDate, reason: b.waitReason! })),
       partials: burns.filter((b) => b.execution === "program" && (((b.spendLamports ?? ZERO) > ZERO && (b.carriedOutLamports ?? ZERO) > ZERO) || (b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports)))
         .map((b) => ({ recordDate: b.recordDate, note: [(b.carriedOutLamports ?? ZERO) > ZERO && (b.spendLamports ?? ZERO) > ZERO ? `${sol(b.carriedOutLamports)} SOL carried (2% reserve cap)` : null, b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports ? `burn-pool cap: ${sol(b.poolLamports)} of ${sol(b.poolActualLamports)} SOL` : null].filter(Boolean).join("; ") })),
+      ...(p.dispersal && p.dispersal.length ? { dispersal: [...p.dispersal] } : {}),
     },
     pool: { registered: !!c?.poolRegistered, address: c?.pool ?? null, url: c?.pool ? addr(c.pool) : null, untradeableSince: c?.poolUntradeableSince ? new Date(c.poolUntradeableSince * 1000).toISOString() : null, lastCheck: p.lastHealth ?? null },
     totals: { burned: rawToTokens(c?.totalBurned ?? ZERO, decimals), spentSol: sol(c?.totalSpentLamports ?? ZERO) ?? "0", shortfall: rawToTokens(c?.shortfall ?? ZERO, decimals), readings: c?.readings ?? 0, burns: c?.burns ?? 0 },
@@ -407,7 +410,7 @@ export function renderProgramHtml(p: ProgramStatusJson | null): string {
 <p>Last reading on chain: ${a.lastReading ? `${esc(a.lastReading.recordDate)} — $${esc(a.lastReading.value)}${a.lastReading.units !== null ? `, ${a.lastReading.units} unit(s)` : ""} · ${link(a.lastReading.txUrl, a.lastReading.signature ? `${a.lastReading.signature.slice(0, 12)}…` : null)}` : "none yet"}.${a.held ? ` <span class="bad">${esc(a.held.recordDate)} is held (${esc(a.held.status)}): ${esc(a.held.why)}</span>` : ""}</p>
 <h3>Queue</h3>
 <p>Last reading on chain ${esc(q.lastOnChain ?? "—")} · processed through ${esc(q.crankCursor ?? "—")} · ${q.readingsNotOnChain} burn day(s) not yet attested · ${q.awaitingCrank} attested and waiting for a crank · spend carried into the next crank: ${esc(q.carriedSpendSol)} SOL · remainder carried toward the next unit: $${esc(q.carriedRemainderUsd)}.</p>
-${q.waits.length ? `<ul>${q.waits.map((w) => `<li>${esc(w.recordDate)}: ${esc(w.reason)}</li>`).join("")}</ul>` : ""}${q.partials.length ? `<p class="muted">Partial days (the program carried the rest): ${q.partials.map((x) => `${esc(x.recordDate)} — ${esc(x.note)}`).join("; ")}.</p>` : ""}
+${q.waits.length ? `<ul>${q.waits.map((w) => `<li>${esc(w.recordDate)}: ${esc(w.reason)}</li>`).join("")}</ul>` : ""}${q.partials.length ? `<p class="muted">Partial days (the program carried the rest): ${q.partials.map((x) => `${esc(x.recordDate)} — ${esc(x.note)}`).join("; ")}.</p>` : ""}${q.dispersal?.length ? `<p class="muted">The carried spending is bought in small pieces at random times over six-hour windows, so no single purchase moves the pool much. ${q.dispersal.map((l) => `${esc(l.charAt(0).toUpperCase() + l.slice(1))}.`).join(" ")}</p>` : ""}
 <h3>Pool</h3>
 <p>${p.pool.registered ? `Registered CPMM pool ${link(p.pool.url, p.pool.address)} — ${p.pool.untradeableSince ? `<span class="bad">untradeable since ${esc(p.pool.untradeableSince)}</span> (anyone may replace_pool 7 days after)` : "tradeable"}${p.pool.lastCheck ? ` · last check: ${esc(p.pool.lastCheck)}` : ""}.` : "No pool registered yet: the token trades on its LaunchLab curve; after graduation anyone calls register_pool with the migrated CPMM pool (its creator must be the fee PDA)."}</p>
 <p class="muted">Program totals: ${esc(p.totals.readings)} readings, ${esc(p.totals.burns)} burns, ${fmtTokens(p.totals.burned)} burned, ${esc(p.totals.spentSol)} SOL spent${p.totals.shortfall !== "0" ? `, shortfall ${fmtTokens(p.totals.shortfall)}` : ""}.</p>`;
