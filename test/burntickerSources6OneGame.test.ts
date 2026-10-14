@@ -45,12 +45,12 @@ async function world(g: G, ruleSeries: (id: string) => string, fraction = 1) {
 }
 
 describe("QA pass 9 #3: a single game is a one-shot", () => {
-  test("the rule model: one-shot, 100 % allowed, presets 100 / 50 with 100 the default", () => {
+  test("the rule model: one-shot, 100 % allowed, presets 100 (50 only with burn dispersal, review 10 F1) with 100 the default", () => {
     const r = nativeRule(gameSeries("nba", "0022500001", "PHI", "loss"), { fractionOfPool: 1 });
     assert.equal(isOneShot(r), true);
     assert.doesNotThrow(() => validateRule(r));
     assert.equal(dialsFor(r).bounds.max, 1);
-    assert.deepEqual(SHARE_PRESETS.oneShot, [1, 0.5]); assert.equal(DEFAULT_SHARE.oneShot, 1);
+    assert.deepEqual(SHARE_PRESETS.oneShot, [1]); assert.deepEqual(SHARE_PRESETS.oneShotDispersal, [1, 0.5]); assert.equal(DEFAULT_SHARE.oneShot, 1);
   });
   test("the result fires the rule: the whole budget burns (a drain), then the end", async () => {
     // BOS beats PHI at Philadelphia: the PHI-loss coin's rule fires

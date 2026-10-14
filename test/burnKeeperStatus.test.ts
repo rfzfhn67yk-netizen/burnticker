@@ -171,4 +171,12 @@ describe("BUYBACK mode status (the primary mechanic)", () => {
     const copy = html.replace(/<script>[\s\S]*?<\/script>/g, "");
     for (const bad of [/to the moon/i, /\bguarantee/i, /\breturns?\b/i, /price will (rise|go up|increase)/i, /\bprofit/i, /\binvest/i]) assert.doesNotMatch(copy, bad);
   });
+  test("private review 10: unknown seed metadata is 'not published here', never 'no seed deposit'", async () => {
+    const i = await buybackScenario();
+    const j = { ...i, funding: { creatorFeeSource: null, seedTx: null, seedSol: null } };
+    const burns = buildBurnsJson(j);
+    const html = renderIndexHtml(buildStatus(j, burns), burns, j.readings);
+    assert.match(html, /Seed funding details have not been published here\./);
+    assert.doesNotMatch(html, /no seed deposit/);
+  });
 });

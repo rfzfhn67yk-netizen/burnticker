@@ -199,6 +199,8 @@ export const championPathRule = (r: BurnRule): boolean => r.oracle === "catalogu
 /** The champion path's two end sentences, one per outcome (the review card and the locked description say both). */
 export const championEndSentences = (ref: string, sink: string = "$DEFICIT"): [string, string] => [`If ${ref} win the championship, the rest of the pool burns here.`, sink === "$DEFICIT" ? "If they do not, the rest goes to $DEFICIT's burn." : `If they do not, the rest goes to ${sink}'s burn; ${namedSinkFallback(sink)}.`];
 export const PERPETUAL_SENTENCE = "This coin has no end date and does not retire.";
+/** Private review 10: the end explainer's general line (never "has no end date and never retires"). */
+export const PERPETUAL_RULE_LINE = "A rule without an end date keeps running.";
 
 /**
  * THE ONE END-OF-RULE TEXT (ChatGPT audit 6 item 3, 2026-10-12: in 280 of 725 accepted setups the review's end line said "burns $DEFICIT"
@@ -220,7 +222,7 @@ export const PERPETUAL_SENTENCE = "This coin has no end date and does not retire
 export function endExplainer(): string[] {
   const base = { schema: "burnticker.rules/v1", oracle: "polymarket", series: null, market: "0x" + "0".repeat(64), filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: 1 }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, pair: null, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } } as unknown as BurnRule;
   const one = endText(base), pair = endText({ ...base, pair: { pairId: "x", side: "A", counterpartMint: null, winnerTakesBurn: true } } as unknown as BurnRule);
-  return [one.result, `In a winner-takes-the-burn pair: ${pair.result.replace(/^When/, "when")}`, one.void!, PERPETUAL_SENTENCE.replace("This coin has", "A coin with no end date has").replace(" and does not retire", " and never retires")];
+  return [one.result, `In a winner-takes-the-burn pair: ${pair.result.replace(/^When/, "when")}`, one.void!, PERPETUAL_RULE_LINE];
 }
 /** The end sentences of the settled-event pairs (endText's result lines). */
 export const CANDIDATES_END_RESULT = "When both markets are final and one candidate won, the other candidate's coin sends the rest of its pool, and any fees that arrive later, to the winning coin's burn, and the winning coin burns down what is left on itself. If neither candidate won, or a market settled 50-50, the rest goes to $DEFICIT's burn. Then the coin retires.";

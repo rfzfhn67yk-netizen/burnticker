@@ -61,6 +61,7 @@ import { launchLabPoolId, WSOL_MINT } from "../src/lib/burnKeeper/launchlab.ts";
 import { LaunchpadPool } from "@raydium-io/raydium-sdk-v2";
 import { backoffMs, nextPollAt } from "../src/lib/burnKeeper/schedule.ts";
 import { buildBurnsJson, buildStatus, publishSite, renderIndexHtml, toJson } from "../src/lib/burnKeeper/statusPage.ts";
+import { seedDisclosure } from "../src/lib/burnKeeper/seedRecord.ts";
 import { buybackScenariosMarkdown, paceTable, replay, replayMarkdown, vaultPace } from "../src/lib/burnKeeper/replay.ts";
 import { attesterGate } from "../src/lib/burnKeeper/attesters/gate.ts";
 import { attesterConfigFromEnv, parseAttesterEnv, switchboardAttester } from "../src/lib/burnKeeper/attesters/switchboard.ts";
@@ -352,7 +353,8 @@ async function publish(rt: Runtime, now: number): Promise<void> {
     try { feeLamports = rt.buyback ? await rt.buyback.feeBalanceLamports() : null; } catch { /* shown as unknown */ }
   }
   // "Where the money came from" (buyback): public facts the owner sets once — the creator-fee source and the seed deposit.
-  const funding = BUYBACK ? { creatorFeeSource: process.env.BURNKEEPER_CREATOR_FEE_SOURCE?.trim() || null, seedTx: process.env.BURNKEEPER_SEED_TX?.trim() || null, seedSol: process.env.BURNKEEPER_SEED_SOL?.trim() || null } : null;
+  // private review 10: without the env, the seed comes from the launch record for this mint (seedRecord.ts), never "no seed deposit"
+  const funding = BUYBACK ? { creatorFeeSource: process.env.BURNKEEPER_CREATOR_FEE_SOURCE?.trim() || null, ...seedDisclosure(process.env, mintS ?? null, path.join(import.meta.dirname, "..")) } : null;
   // website-14 (LAUNCHPAD-PATH §75): the coin's own raise and progress, read from its LaunchLab pool, so no page prints a typed 85
   let curve: Awaited<ReturnType<typeof readKeeperCurve>> = null;
   if (rt.connection && mintS && (rt.cluster === "mainnet" || rt.cluster === "devnet")) curve = await readKeeperCurve(rt.connection, { cluster: rt.cluster, mint: mintS, poolId: process.env.BURNKEEPER_LAUNCHLAB_POOL?.trim() || null }, now);

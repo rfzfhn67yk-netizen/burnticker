@@ -8,7 +8,7 @@
     { "id": "rpc", "label": "Solana RPC", "cadence": "monthly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_RPC", "note": "the keeper's and the pages' chain reads; the public endpoints are rate-limited" },
     { "id": "domains", "label": "Domains (burnticker.com)", "cadence": "yearly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_DOMAINS", "note": "registration and renewal" },
     { "id": "email", "label": "Mail for contact@ and security@burnticker.com", "cadence": "monthly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_EMAIL", "note": "custom-domain mail" },
-    { "id": "dexscreener", "label": "DexScreener Enhanced Token Info ($DEFICIT)", "cadence": "one-off", "usd": 299, "placeholder": false, "todo": null, "note": "paid on launch morning so the token's listing shows the site, the X account and the rule; not paid yet" },
+    { "id": "dexscreener", "label": "DexScreener Enhanced Token Info ($DEFICIT)", "cadence": "one-off", "usd": 299, "placeholder": false, "todo": null, "note": "planned for launch morning so the token's listing shows the site, the X account and the rule. Payment status not recorded here." },
     { "id": "attester-2", "label": "Second attester operator", "cadence": "monthly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_ATTESTER2", "note": "who runs it and at what cost is an open owner decision" },
     { "id": "bounty", "label": "Bug bounty (set aside, not spent until a report is paid)", "cadence": "one-off", "usd": null, "placeholder": true, "todo": null, "note": "the bounty wallet, funded with 5 SOL on 2026-10-11 and topped up from the developer fee; its balance is read live in SOL on the trust page, so no dollar figure here" }
   ]

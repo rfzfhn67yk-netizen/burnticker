@@ -33,6 +33,34 @@ its partner's leftover lands in its pool, and its own leftover burns it through 
 own coin first ("burns everything"), then records the end and forwards only the trickle. League sets are a later round (`set` and
 `endSink` cannot be combined; league-mode coins keep the wind-down). Vault-mode coins have no burn pool and get no sink.
 
+## A one-shot under 100 % finishes its share before the end (review 10 F1, 2026-10-14)
+
+The bug: a single one-shot coin at 50 % with a 5 SOL burn pool and a 50 SOL swap reserve (1 SOL per-crank cap). The result's reading
+asks for 2.5 SOL, spends 1 SOL and carries 1.5 SOL. The keeper then recorded the end and forwarded all 4 SOL left to the sink in the
+same cycle, and `forward_on_end` cleared the carried 1.5 SOL. The promised 50 % never finished on the coin. Only the 100 % one-shot took
+the drain path.
+
+What the program allows: `crank_buyback` refuses a reading with 0 units (`NoUnits`), and a new reading with a unit on a one-shot would
+spend another 50 % of the pool, so a round-4 program cannot spend a carried amount without breaking the rule. `crank_carried` (round 5)
+spends it without a reading, but only while the rule is live (`RuleNotLive` once `submit_rule_end` has landed).
+
+The policy (keeper, `multiKeeper.owedBeforeEnd`): for a coin with an EndSink whose one-shot settled RESOLVED with units at a share
+under 100 %, the end is not recorded and nothing is forwarded while the chain shows a carried amount after the result's crank.
+
+- With burn dispersal on (`BURNTICKER_DISPERSAL=1`, a program with `crank_carried`): the dispersal step spends the carried amount in
+  pieces; when the chain shows nothing carried, the end is recorded and only what is left moves to the sink. In the example: 2.5 SOL is
+  burned on the coin, then 2.5 SOL is forwarded.
+- Without it (the round-4 program today, or a coin with a burn target, which `crank_carried` refuses): the end waits, nothing is
+  forwarded, the status key `rule.endowed.<mint>` records the owed amount, and a `bt-burn-behind` alert (key `<mint>:end-owed`) says so
+  once a day. Turning dispersal on after round 5 lands finishes the share and then forwards.
+- Not held: 100 % (the drain), a VOID end (the wind-down on the coin), a pair loser, a result below the floor (the program carries
+  nothing), a coin without an EndSink (its hashed wind-down spends the carried amount), and an end already on chain.
+
+The launcher (`launchPresets.ts`): single and linked one-shots offer 100 % only. The 50 % row (`oneShotDispersal`) is offered only with
+`ShareCtx.dispersal`, and the preflight (`launchPreflight.ts`, code `one-shot-share-needs-dispersal`) refuses a single one-shot under
+100 % with an end sink unless the host runs burn dispersal, and always for a coin with a burn target. The review and the guided budget
+row say the share is spent on the coin before the rest moves on. Tests: `test/burntickerOneShotShare.test.ts`.
+
 ## Round 5 additions (owner, 2026-10-13; built on the round-5 branch, not deployed)
 
 **Burn the SOL itself (the incinerator end sink).** A fourth sink a creator can pick: `onEnd.endSink: "incinerator"` in the hashed rule

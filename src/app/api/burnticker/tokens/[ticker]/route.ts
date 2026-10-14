@@ -13,10 +13,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ ticker: 
   const { ticker } = await params;
   const p = platform();
   const l = lookupCoin(p.registry, ticker);
-  if (l.kind === "many") return NextResponse.json(sharedTickerBody(p.registry, l), { status: 300 });
-  if (l.kind === "none") return NextResponse.json({ error: ticker.length >= 32 ? `no token with the mint ${ticker}` : `no token $${ticker.toUpperCase()}` }, { status: 404 });
+  // 2026-10-14: a 300 (and a 404) carried no cache header, so Chrome kept serving a cached chooser for a ticker whose draft had since
+  // stopped shadowing the launched coin; every answer here is per request and must say so
+  const NO_STORE = { "cache-control": "no-store" };
+  if (l.kind === "many") return NextResponse.json(sharedTickerBody(p.registry, l), { status: 300, headers: NO_STORE });
+  if (l.kind === "none") return NextResponse.json({ error: ticker.length >= 32 ? `no token with the mint ${ticker}` : `no token $${ticker.toUpperCase()}` }, { status: 404, headers: NO_STORE });
   const t = l.token;
   const data = await tokenPageData(p, t);
   if (new URL(req.url).searchParams.get("format") === "rules") return new Response(data.rulesText, { headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `inline; filename="rules.json"` } });
-  return NextResponse.json({ status: data.status, receipts: data.receipts, readings: data.readings.map((r) => ({ id: r.id, at: r.at, result: r.result, value: r.value, title: r.title, sourceUrl: r.sourceUrl, settlementSourceUrl: r.settlementSourceUrl, method: r.method, attestedBy: r.attestedBy })), rulesText: data.rulesText, stubs: data.stubs });
+  return NextResponse.json({ status: data.status, receipts: data.receipts, readings: data.readings.map((r) => ({ id: r.id, at: r.at, result: r.result, value: r.value, title: r.title, sourceUrl: r.sourceUrl, settlementSourceUrl: r.settlementSourceUrl, method: r.method, attestedBy: r.attestedBy })), rulesText: data.rulesText, stubs: data.stubs }, { headers: NO_STORE });
 }

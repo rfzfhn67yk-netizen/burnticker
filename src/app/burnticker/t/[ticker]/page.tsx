@@ -37,6 +37,7 @@ import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
 import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burnticker/exportLinks";
 import type { LifecycleDatesJson, PoolMarketJson, StatedJson } from "@/lib/burnticker/pageTypes";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
+import { coinSourceNote, nextTimeRow } from "@/lib/burnticker/coinSourceLine";
 import { CHOOSER_COPY, chooserRows, isMintKey, type CoinCandidate } from "@/lib/burnticker/coinKey";
 import type { DerbyScoreboard } from "@/lib/burnticker/derby/spec";
 import { BurnCalendar, ReceiptEmbed, ScoreboardCard } from "./CoinFeatures";
@@ -135,7 +136,7 @@ export default function TokenPage() {
   const key = isMintKey(ticker) ? ticker : s.ticker;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const rows = [...d.receipts].reverse();
-  const venue = s.oracle === "kalshi" ? "the prediction market that settles it" : s.oracle === "polymarket" ? "Polymarket, with each result read on Polygon" : "the source's own published data";
+  const venue = s.oracle === "kalshi" ? "the prediction market that settles it" : s.oracle === "polymarket" ? "Polymarket, with each result read on Polygon" : "its source";
   const trade = raydiumLink(m?.trade);
   const facts = ruleFacts(d.rulesText, s.rules.oneShot);
   // website-24 (WIRING-ROUND5): a coin that burns a real token (its rule's pinned field): receipts read memo v3, the trust section says
@@ -150,10 +151,10 @@ export default function TokenPage() {
   // ChatGPT audit 6 A10: the market facts this site read, and Burnticker's own facts, equally legible; a dash with a reason for the rest
   const market = marketFacts({ cluster: s.cluster, status: s.status, mint: s.mint, mintUrl: s.addresses.mintUrl, creator: s.addresses.creator, creatorUrl: s.addresses.creatorUrl, launchedAt: s.launchedAt, phase: m?.phase ?? null, curve: m?.curve ?? null, curveNote: m?.curveNote ?? null, graduatedPool: m?.graduatedPool ?? null, holdersCount: m?.holders.count ?? null, holdersNote: m?.holders.countNote ?? "This site has not read the holders.", pool: m?.pool ?? null, poolNote: m?.poolNote ?? null, dates: m?.dates ?? null, feesCurveBps: s.fees.curve.totalBps, feesPoolBps: s.fees.postGraduation.totalBps, readAt: m?.readAt ?? null });
   const latest = [...d.receipts].filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
-  const nextAt = s.next.nextCloseTime ?? s.next.nextCheckAt;
+  const nextRow = nextTimeRow(s.next.nextCloseTime, s.next.nextCheckAt);
   const burnFacts: FactRow[] = [
-    { key: "trigger", label: "What fires the rule", value: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, note: latest?.settlementSourceUrl ? "The source of the latest result is linked." : `Read from ${venue}.`, href: latest?.settlementSourceUrl ?? null },
-    { key: "next", label: "Next result", value: nextAt ? `${nextAt.slice(0, 16).replace("T", " ")} UTC` : "None scheduled", note: nextAt ? "Times are in UTC. The source publishes the result after this." : "This rule has no scheduled result this site knows of.", more: SETTLEMENT_LINK },
+    { key: "trigger", label: "What fires the rule", value: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, note: latest?.settlementSourceUrl ? "The source of the latest result is linked." : coinSourceNote(s.oracle, s.selectorKey), href: latest?.settlementSourceUrl ?? null },
+    { key: "next", label: nextRow.label, value: nextRow.value, note: nextRow.note, more: SETTLEMENT_LINK },
     { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? `SOL set aside for this coin's burns. ${s.pool.reserveSol} SOL of it is kept back for fees.` : "Tokens set aside for this coin's burns." },
     { key: "burned", label: "Burned so far", value: `${fmt(s.burned.total)} of ${fmt(s.supply.initial)} tokens`, note: `${s.burned.pctOfSupply.toFixed(2)}% of the supply, in ${count(s.burned.count, "burn")}.` },
     { key: "last", label: "Last receipt", value: latest ? latest.settledAt.slice(0, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? afterGraduation : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },

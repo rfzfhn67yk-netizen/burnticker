@@ -196,7 +196,8 @@ export function patternOptions(i: PatternInput): { options: PatternOption[]; pre
 
 /**
  * THE SHARE PRESETS PER PATTERN (launchPresets.ts holds the numbers): a recurring rule 1, 2 or 5 % per unit, default 2 %; a one-shot its
- * whole pool, or half of it (owner, 2026-10-12: a "Dodgers win the World Series" coin was offered 2 / 5 / 10 %).
+ * whole pool (owner, 2026-10-12: a "Dodgers win the World Series" coin was offered 2 / 5 / 10 %). Half of it only on a host with burn
+ * dispersal (review 10 F1: the share has to finish on the coin before the end sink takes the rest; launchPresets.ts oneShotDispersal).
  */
 export const sharePresetsFor = (oneShot: boolean): readonly number[] => (oneShot ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring);
 export const defaultShareFor = (oneShot: boolean): number => (oneShot ? DEFAULT_SHARE.oneShot : DEFAULT_SHARE.recurring);
@@ -224,7 +225,7 @@ export function budgetCopy(rule: BurnRule, share: number, unit: string | null): 
   const act = sym ? `swapping SOL for ${sym} and burning it` : "buying and burning this coin";
   if (isOneShotRule(rule)) {
     if (sym) return { label: "Share of the burn pool, once", line: `${share >= 1 ? "This coin spends its whole pool once" : `This coin spends ${p} of its pool once`}, when the result is in, ${act}. The burn lands in slices sized to the SOL in ${sym}'s pinned Raydium pool.`, math: null };
-    return { label: "Share of the burn pool, once", line: share >= 1 ? "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity." : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity.`, math: null };
+    return { label: "Share of the burn pool, once", line: share >= 1 ? "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity." : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity. The rest of the pool moves on only after this share has been spent on this coin.`, math: null };
   }
   // QA pass 9 #18 and #20 (2026-10-13): the fade side is said for what the rule reads (a game day, a day with none of the events, or a
   // number that did not move), and a unit of one is a noun ("each earthquake", never "each 1 earthquake")

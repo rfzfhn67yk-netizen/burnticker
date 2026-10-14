@@ -180,7 +180,7 @@ describe("How burns are settled (owner, 2026-10-12): every number derived from t
     for (const n of [`every ${f.marketPollMin} minutes`, `every ${f.feedPollMin} minutes`, `${f.guardMinMin} to ${f.guardMaxMin} minutes`, `${f.spendCapPct}% of the pool's SOL reserve`, `about ${f.umaHours} hours`, "4:30 p.m. and 8:00 p.m."]) assert.ok(sec.includes(n), n);
     assert.ok(sec.includes(`https://burnticker.com${SETTLEMENT_PATH}`)); assert.match(read("site/burnticker/whitepaper.html"), /3\.5 How burns are settled/);
     assert.ok(LEARN_NAV.findIndex((l) => l.href === SETTLEMENT_PATH) === LEARN_NAV.findIndex((l) => l.label === "Docs and API") + 1);
-    assert.match(read("src/app/burnticker/t/[ticker]/page.tsx"), /label: "Next result"[^\n]*more: SETTLEMENT_LINK \}/); assert.equal(SETTLEMENT_LINK.href, SETTLEMENT_PATH);
+    assert.match(read("src/app/burnticker/t/[ticker]/page.tsx"), /label: nextRow\.label[^\n]*more: SETTLEMENT_LINK \}/); assert.equal(SETTLEMENT_LINK.href, SETTLEMENT_PATH);
   });
 });
 

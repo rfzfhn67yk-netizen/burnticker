@@ -8,7 +8,7 @@ Nothing here asks you to take our word. Every line names the file or the account
 
 ## 1. Where money can go
 
-This table lists every instruction of both programs and the only place each one can move SOL or tokens. Neither program has an instruction to withdraw, sweep or send funds out.
+This table lists every instruction in both programs and the only place each one can move SOL or tokens. These keys cannot withdraw a burn pool to a personal wallet. A finished rule's remainder can be forwarded to its end sink (the winner or $DEFICIT) by the keeper's signed reading; reading signers decide qualifying results; the upgrade authority can replace the program.
 
 These 51 instructions are the published source's (the programs' registers, round 5). 8 of them are new in round 5 and are not on the deployed programs yet. The deployed programs are the round-4 build of commit 29f6f5de19, checked in section 5.
 
@@ -92,7 +92,7 @@ What does not exist, in the registers' own words:
 
 ## 2. Who can do what
 
-Neither program has **any** power over funds. The burn program (`burn_receipts`) has 13 privileged instructions, and its register says "None." for the funds of every one. The pair program (`pair_curve`) has no privileged instructions.
+These keys cannot withdraw a burn pool to a personal wallet. A finished rule's remainder can be forwarded to its end sink (the winner or $DEFICIT) by the keeper's signed reading; reading signers decide qualifying results; the upgrade authority can replace the program. The burn program (`burn_receipts`) has 13 privileged instructions, and its register says "None." for the funds of every one. The pair program (`pair_curve`) has no privileged instructions.
 
 | Program | Instruction | Holder | What it can do | Time lock | Note |
 |---|---|---|---|---|---|
@@ -129,7 +129,7 @@ Powers outside the programs that they depend on:
 - **Supply**. Neither program keeps the power to mint after a coin is created. Pair coins lose their mint authority inside init_pair, and they never have a freeze authority. The only token instruction either program runs on a coin is Burn. *Where:* docs/burn-receipts/powers-register.json and docs/burn-receipts/pair-curve-powers-register.json, under non_powers
 - **Liquidity**. The liquidity pool tokens (LP) are locked forever at graduation. LaunchLab coins lock 100% when they move to their pool, under the platform config. Pair coins lock 100% through the pair program's lock_lp. Both use Raydium's LP lock, which can never be withdrawn. The Fee Key is held by an account that the burn program controls. Anyone can call claim_lock_fees. It pays 80% of the SOL-side fees to the coin's burn pool and 20% to the operator treasury, and those shares are fixed in the code. The coin side of the fees is burned. *Where:* docs/burn-receipts/powers-register.json, under claim_lock_fees; docs/burn-receipts/pair-curve-powers-register.json, under lock_lp; src/lib/burnticker/lockFees.ts
 - **A pair's terms**. The curve settings, the combined raise that graduates the pair, the minimum share, the deadline, the fee and who receives the fee are all fixed when the pair is created (init_pair). The pair program has no admin at all. *Where:* docs/burn-receipts/pair-curve-powers-register.json, under non_powers
-- **Coin metadata** (arweave at launch (built; first upload pending)). Each coin's metadata file and its art are uploaded to Arweave at launch. The metadata holds the name, the ticker, the image and the generated description, byte for byte. The token URI is the Arweave address. LaunchLab creates the metadata so it cannot be changed (is_mutable = false), and a launch is refused if the upload fails (src/lib/burnticker/pin.ts). This has not been used yet. The Irys client packages and the upload payer are steps for the owner. The devnet rehearsal coins came before it, so their metadata is hosted on our server. The rule, the mint and the burns never depended on it. *Where:* config/burnticker/transparency.json, under trustPack.metadataUri
+- **Coin metadata** (arweave at launch (in use on mainnet since 2026-10-13)). Each coin's metadata file and its art are uploaded to Arweave at launch. The metadata holds the name, the ticker, the image and the generated description, byte for byte. The token URI is the Arweave address. LaunchLab creates the metadata so it cannot be changed (is_mutable = false), and a launch is refused if the upload fails (src/lib/burnticker/pin.ts). The mainnet coins use it: $DEFICIT's metadata, created on 2026-10-13, is at https://gateway.irys.xyz/4dfxjEwmnfLjKaUbdpn2SGffS6jk9r1eKbnqRSxKXk6T (docs/burnkeeper/evidence/mainnet-deficit-2026-10-13/launch.json). The devnet rehearsal coins came before it, so their metadata is hosted on our server. The rule, the mint and the burns never depended on it. *Where:* config/burnticker/transparency.json, under trustPack.metadataUri
 
 ## 4. What is not done yet
 

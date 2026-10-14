@@ -18,7 +18,7 @@ import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFee
 import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForward";
 import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, raceVerdict, recordForward, sidePayout, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 import { fenceToken, type FenceReport } from "@/lib/burnticker/ops/readingFence";
-import { championVerdict, endSinkStep } from "@/lib/burnticker/endSinkKeeper";
+import { championVerdict, endOutcomeOf, endSinkStep } from "@/lib/burnticker/endSinkKeeper";
 import { championPathRule } from "@/lib/burnticker/describe";
 import { askCosigner, type Cosigner } from "@/lib/burnticker/attesters/cosign";
 import type { Cosignature, ReadingInput } from "@/lib/burnKeeper/programPort";
@@ -732,6 +732,51 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
 }
 
 /**
+ * REVIEW 10 F1 (2026-10-14): A ONE-SHOT UNDER 100 % FINISHES ITS SHARE ON THE COIN BEFORE THE END SINK TAKES THE REST. The result's
+ * reading asks for f of the pool; one crank spends at most 2 % of the CPMM pool's SOL reserve and carries the rest
+ * (carried_spend_lamports). For a coin with an EndSink, recording a RESOLVED end (submit_rule_end) closes the coin to further spending:
+ * crank_carried is refused once the rule is not live (RuleNotLive), and forward_on_end moves the whole spendable pool to the sink and
+ * clears the carried amount. So the end waits while the result's own spend is still carried:
+ *   · the owed amount is the chain's carried amount after the result's crank (a one-shot has no other reading that carries);
+ *   · with burn dispersal on and a program that has crank_carried (round 5), the dispersal step later in the same cycle spends it in
+ *     pieces; once the chain shows nothing carried, the end is recorded and only what is left over moves to the sink;
+ *   · on a program without crank_carried (round 4), nothing can spend the carried amount without a new reading, and a new reading on a
+ *     one-shot would spend another f of the pool (crank_buyback refuses a reading with 0 units). The end then waits, an alert says so
+ *     once a day, and nothing is forwarded. The launch preflight refuses a share under 100 % on such a host (launchPreflight.ts
+ *     "one-shot-share-needs-dispersal"), so only a coin made some other way can reach this.
+ * Not held: 100 % (the drain path spends the whole pool on the coin first), a VOID end (the wind-down stays on the coin), a pair loser
+ * (its fuel forwards to the winner), a result below the floor (the program carries nothing: the share is dropped and stays in the pool,
+ * as for every reading), a coin without an EndSink (the hashed wind-down spends the carried amount with its own units), and an end
+ * already on chain (crank_carried is refused then, so forward_on_end runs as before).
+ */
+export async function owedBeforeEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null, end: { mode: "drain" | "winddown"; reason: string; at: number }): Promise<{ owedLamports: bigint; canSpend: boolean; readingDate: number | null } | null> {
+  const rule = locked.rule;
+  if (end.mode !== "winddown" || t.status === "retired" || locked.mode !== "buyback" || !isOneShot(rule) || !endSinkOf(rule) || !d.program.endSink) return null;
+  const ev = d.registry.receipts(t.mint).filter((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair")[0];
+  const f = ev?.mapping?.fractionOfPool ?? 0;
+  if (!ev || !(ev.units > 0) || ev.status === "voided" || !(f > 0 && f < 1) || ev.pairRole === "lost") return null;
+  const sinkPort = d.program.endSink.port(t.mint);
+  if (!(await sinkPort.endSink())) return null;
+  if (await sinkPort.ruleEnd()) return null;
+  if (endOutcomeOf(d.registry, t, locked, gate, end) !== "resolved") return null;
+  const port = d.program.port(t.mint);
+  const cfg = await port.config();
+  if (!cfg || cfg.carriedSpendLamports <= BigInt(0)) return null;
+  return { owedLamports: cfg.carriedSpendLamports, canSpend: !!d.dispersal && typeof port.planCarried === "function" && !cfg.burnsTarget, readingDate: ev.readingDate ?? null };
+}
+/** The hold's log line, its status record (`rule.endowed.<mint>`) and, when nothing on this program can spend it, the daily alert. */
+function holdEndForOwed(d: KeeperDeps, t: TokenRow, o: { owedLamports: bigint; canSpend: boolean; readingDate: number | null }): void {
+  const sol = rawToTokens(o.owedLamports, 9);
+  const line = o.canSpend
+    ? `$${t.ticker}: the result's share is not fully spent yet (${sol} SOL still owed on this coin). It is being spent in pieces, and the end is recorded and the rest moves to the end sink after that.`
+    : `$${t.ticker}: the result's share is not fully spent yet (${sol} SOL still owed on this coin). It can only be spent in pieces by burn dispersal, which is not running for this coin, so the end waits and nothing moves to the end sink.`;
+  d.log(`  [end] ${line}`);
+  if (d.dryRun) return;
+  d.registry.setStatus(`rule.endowed.${t.mint}`, JSON.stringify({ owedLamports: o.owedLamports.toString(), dispersal: o.canSpend, readingDate: o.readingDate, at: d.now() }), d.now());
+  if (!o.canSpend) d.registry.recordAlert({ kind: "bt-burn-behind", key: `${t.mint}:end-owed`, text: line, meta: { mint: t.mint, owedLamports: o.owedLamports.toString(), readingDate: o.readingDate, reason: "end-owed-no-dispersal" } }, d.now());
+}
+
+/**
  * The end-of-rule receipts due by now, and the retirement once they are done:
  *   drain     one "drain-<date>" unit a day from the day after the YES (each unit's rule spend is the whole pool) while the program's last
  *             crank carried spend forward and nothing is pending; done when a crank carries nothing more or falls under the floor.
@@ -751,6 +796,9 @@ export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule
   // 100 % ("burns everything") drains on its own coin first (the drain below), and only then records the end and forwards the trickle.
   let selfBurn: boolean;
   if (end.mode !== "drain" || t.status === "retired") {
+    // REVIEW 10 F1: a one-shot under 100 % finishes its own share on the coin before the end is recorded and the rest is forwarded.
+    const owed = await owedBeforeEnd(d, t, locked, gate, end);
+    if (owed) { holdEndForOwed(d, t, owed); return out; }
     const es = await endSinkStep({ ...d, cosignReading: (port, cfg, input) => cosignReading(d, t, port, cfg, input, []) }, t, locked, gate, end);
     if (es.note) d.log(`  [end] ${es.note}`);
     if (es.handled) return out;

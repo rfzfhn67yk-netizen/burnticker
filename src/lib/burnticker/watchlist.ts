@@ -122,8 +122,8 @@ export function writeWatchlist(w: Watchlist): boolean {
 export { NETWORKS as WATCH_NETWORKS };
 
 /** What the page says about the list, once, where it is shown. */
-export const WATCH_NOTE = "Your followed coins are saved only in this browser. No wallet or account is needed.";
-export const WATCH_EMPTY = "You do not follow any coin yet. Press Follow on a coin card, and it shows up here in this browser.";
+export const WATCH_NOTE = "Your follows stay in this browser. No wallet is needed.";
+export const WATCH_EMPTY = "You do not follow any coin yet. Press Follow on a coin card, and it shows up here.";
 /** A follow saved by ticker before two coins could share one, now matching several coins: the visitor picks, the page never guesses. */
 export const watchAmbiguous = (ticker: string, n: number): string => `You followed $${ticker} before two coins could share a ticker. ${n === 2 ? "Two" : String(n)} coins use $${ticker} now, so follow the one you mean below, or forget the old follow.`;
 export const WATCH_FORGET = "Forget the old follow";

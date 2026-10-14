@@ -651,6 +651,38 @@ burn  = every token the swap delivered</pre>
     var c = $("copyMint"); if (c) c.addEventListener("click", function () { if (navigator.clipboard) navigator.clipboard.writeText(mint).then(function () { c.textContent = "Copied"; setTimeout(function () { c.textContent = "Copy address"; }, 1500); }).catch(function () {}); });
   }
 
+  /* @lifecycle-begin (private review 10 F4: the empty-receipts, trade and footer lines come from the loaded lifecycle, never the static pre-launch text) */
+  // s: the loaded status.json; list: the loaded burns list, or null when burns.json did not load (unavailable, never zero).
+  var LIFECYCLE = {
+    prelaunch: "Not launched, so there are no receipts yet. The first reading after launch is the baseline. The first burn follows the first full $1B increase after it.",
+    onCurve: "No burns yet. The coin is trading on its curve; burns can begin after graduation and pool registration.",
+    graduated: "No burns yet. The curve has graduated. Burns can begin once its pool is registered and verified.",
+    registered: "No burns yet. The pool is registered, and no Treasury reading has qualified for a burn so far.",
+    unavailable: "The receipt history did not load just now, so no receipts are shown. This does not mean there have been no burns."
+  };
+  function deficitLifecycle(s, list) {
+    var explicitPrelaunch = !s || s.state === "not-launched" || /prelaunch/.test(String(s.schema || ""));
+    if (explicitPrelaunch) return { state: "prelaunch", receipts: LIFECYCLE.prelaunch, launched: false };
+    var r = s.readiness && s.readiness.state || null;
+    var launched = !!(s.addresses && s.addresses.mint) || !!(s.program && s.program.initialized) || (r !== null && r !== "not-launched");
+    if (!Array.isArray(list)) return { state: "unavailable", receipts: LIFECYCLE.unavailable, launched: launched };
+    var confirmed = list.filter(function (b) { return b && b.status === "confirmed"; }).length;
+    if (confirmed) return { state: "burned", receipts: null, launched: true, confirmed: confirmed };
+    if (list.length) return { state: "registered-no-burn", receipts: null, launched: true };
+    if (r === "awaiting-registration") return { state: "graduated", receipts: LIFECYCLE.graduated, launched: true };
+    if (r === "awaiting-event" || r === "below-floor" || r === "deferred" || r === "burned") return { state: "registered", receipts: LIFECYCLE.registered, launched: true };
+    if (launched) return { state: "on-curve", receipts: LIFECYCLE.onCurve, launched: true };
+    return { state: "prelaunch", receipts: LIFECYCLE.prelaunch, launched: false };
+  }
+  /* @lifecycle-end */
+  // a launched coin whose trade link this page cannot build (no mainnet mint in status.json) says so, never "until launch"
+  function launchedTradeLabels() {
+    var linked = false;
+    ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); if (!a) return; if (a.hasAttribute("data-trade-link")) { linked = true; return; } a.textContent = id === "tradeTop" ? "No trade link here" : "No trade link on this page yet"; a.removeAttribute("title"); });
+    if (!linked) $("trade").textContent = "$DEFICIT has launched, but this page has no trade link for it yet. Any link that claims to trade $DEFICIT before this page shows one is not ours.";
+  }
+  function setEmptyReceipts(text) { if (text) $("rows").innerHTML = '<tr><td colspan="11" class="empty">' + esc(text) + "</td></tr>"; }
+
   var status = null, burns = [], readings = [];
 
   // ------------------------------------------------------------------ hero board (D1 seven-segment digits, from brand-concepts/d1-debt-clock/seg.js)
@@ -703,7 +735,7 @@ burn  = every token the swap delivered</pre>
     $("healthSub").textContent = (s.feed.lastPollAt ? "Last feed check at " + new Date(s.feed.lastPollAt).toLocaleString() + "." : "No feed check yet.") + (s.feed.lastPollOutcome ? " The result was " + s.feed.lastPollOutcome + "." : "") + (s.health.lastError ? " The last error was " + s.health.lastError + "." : "");
     $("gen").textContent = new Date(s.generatedAt).toLocaleString();
     if (s.rules) { $("sha").textContent = "sha256: " + s.rules.sha256; $("statement").textContent = s.rules.statement; }
-    if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "Fee pool address: " + (s.buyback.funding.feeWalletUrl ? '<a href="' + esc(s.buyback.funding.feeWalletUrl) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? '. It was seeded with ' + esc(s.buyback.funding.seedSol || "an unknown amount of") + ' SOL in <a href="' + esc(s.buyback.funding.seedTxUrl) + '" target="_blank" rel="noopener">this transaction</a>.' : ". It has no seed deposit.");
+    if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "Fee pool address: " + (s.buyback.funding.feeWalletUrl ? '<a href="' + esc(s.buyback.funding.feeWalletUrl) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? ". The operator added " + (s.buyback.funding.seedSol ? esc(s.buyback.funding.seedSol) + " SOL" : "a seed") + '; <a href="' + esc(s.buyback.funding.seedTxUrl) + '" target="_blank" rel="noopener">view the transaction</a>.' : ". Seed funding details have not been published here.");
     if (s.addresses && s.addresses.mint && isMainnet(s.cluster) && !isSample) {
       var phase = s.curve && s.curve.phase || null;
       enableTrade(tradeLinksFor(s.addresses.mint, phase)[0].url);
@@ -958,6 +990,7 @@ burn  = every token the swap delivered</pre>
   getJson("status.json").then(function (s) {
     if (s && (s.state === "not-launched" || /prelaunch/.test(String(s.schema)))) { status = null; prelaunchState(s); renderQueue(s, null); return "prelaunch"; }
     status = s; renderStatus(s); document.documentElement.classList.remove("prelaunch");
+    if (deficitLifecycle(s, []).launched) { launchedTradeLabels(); if (!(s.feed && s.feed.lastAmount)) $("debtExact").textContent = "No reading yet"; }
     var cta = $("receiptsCta"); if (cta) { cta.href = "#receipts"; cta.textContent = "Read the receipts"; }
     if (s.rules && s.rules.sha256) checkRules(s.rules.sha256);
     return getJson("burns.json").catch(function (e) { return { unreadable: String(e && e.message || e) }; });
@@ -966,13 +999,15 @@ burn  = every token the swap delivered</pre>
     // website-15 (code review 6 P2 1): a missing, unparsable or wrong-shape burns.json is unavailable, never an empty history
     var list = Array.isArray(b) ? b : (b && Array.isArray(b.burns) ? b.burns : null);
     if (!list || list.some(function (r) { return !r || typeof r !== "object" || typeof r.status !== "string"; })) {
+      setEmptyReceipts(deficitLifecycle(status, null).receipts); $("todayText").textContent = "The daily report is unavailable right now, because the list of readings and burns did not load.";
       renderQueue(status, null); draw();
       offline("Data unavailable. The keeper's list of readings and burns did not load just now, so no receipt or count is shown. Try again later.", b && b.unreadable ? b.unreadable : "burns.json is not a list of burn rows.");
       return;
     }
     burns = list;
     var deep = /^#r-(\d+)$/.exec(location.hash); if (deep && Number(deep[1]) <= burns.length - LIMIT) showAll = true;
-    renderBurns(); renderHero(); renderToday(); buildSeries(); draw(); renderQueue(status, b);
+    renderBurns(); if (!burns.length) setEmptyReceipts(deficitLifecycle(status, burns).receipts);
+    renderHero(); renderToday(); buildSeries(); draw(); renderQueue(status, b);
     if (deep && $("r-" + deep[1])) $("r-" + deep[1]).scrollIntoView();
     fetchTreasury(burns.length ? burns[0].prevDate : (status.feed && status.feed.lastRecordDate));
   }).catch(function (e) {
