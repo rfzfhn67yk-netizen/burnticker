@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULT_ON_END, type BurnRule } from "@/lib/burnticker/rules";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
-import { gameSeries, seasonYearAt, teamSeries, type Game } from "@/lib/burnticker/sources/espn";
+import { gameSeries, meetingsSeries, seasonYearAt, teamSeries, type Game } from "@/lib/burnticker/sources/espn";
 import { seasonOverFor, seasonOverRefusal, seasonStatus, SEASON_OVER_LINK_LINE } from "@/lib/burnticker/seasonOver";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { prepareLaunch } from "@/lib/burnticker/api/handlers";
@@ -83,5 +83,26 @@ describe("H6: a season rule on a team whose season is over", () => {
     assert.equal(lad.seasonOver, false); assert.equal(lad.warning, null);
     // live teams first, then the teams whose season is over
     assert.ok(page.teams.findIndex((t) => t.abbr === "LAD") < page.teams.findIndex((t) => t.abbr === "COL"));
+  });
+});
+
+describe("launch night 2026-10-13: a rivalry series (meetings) pair on two teams whose season is over", () => {
+  const meetings = (abbr: string, opp: string, year = 2026) => ({ ...firstPartyRule(meetingsSeries("mlb", abbr, opp, year), 0.02), onEnd: { ...DEFAULT_ON_END } }) as BurnRule;
+  test("the refusal names both teams, ends void, and offers next season's series", () => {
+    const r = seasonOverRefusal(meetings("KC", "ATL"))!;
+    assert.equal(r.code, "season-over");
+    assert.equal(r.message, "The Royals and the Braves have no games left against each other in the 2026 season, so a rivalry pair on them would end void and both pools would go to $DEFICIT. Pick the 2027 season instead.");
+    assert.deepEqual([r.next.window, r.next.year, r.next.series], ["meetings", 2027, meetingsSeries("mlb", "KC", "ATL", 2027)]);
+    lint(r.message);
+  });
+  test("seasonOverFor: refused when either team is out of the postseason-only schedule; not when one still plays", async () => {
+    const cur = seasonYearAt("mlb", Date.now());
+    const refused = await seasonOverFor(meetings("KC", "ATL", cur), async () => NLCS);
+    assert.equal(refused?.code, "season-over");
+    const dodgersStillIn = await seasonOverFor(meetings("LAD", "KC", cur), async () => NLCS);
+    assert.equal(dodgersStillIn?.code, "season-over", "the Royals are out, so the two cannot meet again");
+    const bothIn: Game[] = [{ ...NLCS[0], home: side("LAD"), away: side("KC") }];
+    assert.equal(await seasonOverFor(meetings("LAD", "KC", cur), async () => bothIn), null);
+    assert.equal(await seasonOverFor(meetings("KC", "ATL", cur + 1), async () => NLCS), null, "next season is never over");
   });
 });

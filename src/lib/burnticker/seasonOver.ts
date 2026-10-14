@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamSeries, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { meetingsSeries, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamSeries, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { teamRef } from "@/lib/burnticker/describe";
 
 /**
@@ -24,12 +24,18 @@ export function seasonStatus(abbr: string, games: readonly Game[], readable: boo
   return { status: "none-listed", warning: "No game is listed for this team in the next 8 days. A season coin only burns on games still to come." };
 }
 
-export interface SeasonOverRefusal { code: "season-over"; status: 409; message: string; next: { series: string; year: number; label: string; window: "season" | "post" } }
+export interface SeasonOverRefusal { code: "season-over"; status: 409; message: string; next: { series: string; year: number; label: string; window: "season" | "post" | "meetings" } }
 
-/** The team's season or postseason window from a rule (null: not a team season rule). */
-function seasonOf(rule: Pick<BurnRule, "oracle" | "series">): { league: LeagueId; abbr: string; outcome: Parameters<typeof teamSeries>[2]; year: number; window: "season" | "post" } | null {
+/**
+ * The team's season, postseason or rivalry-series (meetings) window from a rule (null: any other rule). Launch night 2026-10-13: a
+ * Royals vs Braves rivalry pair reached the wallet with both teams out of the 2026 season, because only season/post windows were read;
+ * a meetings pair whose teams cannot meet again this season would sit until the season tally and end void, so it is refused the same way.
+ */
+function seasonOf(rule: Pick<BurnRule, "oracle" | "series">): { league: LeagueId; abbr: string; outcome: Parameters<typeof teamSeries>[2]; year: number; window: "season" | "post" | "meetings"; opp?: string } | null {
   const e = rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null;
-  if (!e || e.kind !== "team" || (e.window.kind !== "season" && e.window.kind !== "post")) return null;
+  if (!e || e.kind !== "team") return null;
+  if (e.window.kind === "meetings") return { league: e.league, abbr: e.abbr, outcome: e.outcome, year: e.window.year, window: "meetings", opp: e.window.opp };
+  if (e.window.kind !== "season" && e.window.kind !== "post") return null;
   return { league: e.league, abbr: e.abbr, outcome: e.outcome, year: e.window.year, window: e.window.kind };
 }
 
@@ -44,6 +50,16 @@ export function seasonOverRefusal(rule: Pick<BurnRule, "oracle" | "series">, now
   const team = teamByAbbr(s.league, s.abbr), ref = team ? teamRef(s.league, team.nickname) : s.abbr;
   const Ref = ref[0].toUpperCase() + ref.slice(1);
   const label = seasonLabel(s.league, s.year), nextLabel = seasonLabel(s.league, nextYear);
+  if (s.window === "meetings") {
+    const oppTeam = teamByAbbr(s.league, s.opp!), oppRef = oppTeam ? teamRef(s.league, oppTeam.nickname) : s.opp!;
+    let series: string;
+    try { series = meetingsSeries(s.league, s.abbr, s.opp!, nextYear); } catch { return null; }
+    return {
+      code: "season-over", status: 409,
+      message: `${Ref} and ${oppRef} have no games left against each other in the ${label} season, so a rivalry pair on them would end void and both pools would go to $DEFICIT. Pick the ${nextLabel} season instead.`,
+      next: { series, year: nextYear, label: nextLabel, window: "meetings" },
+    };
+  }
   let series: string;
   try { series = teamSeries(s.league, s.abbr, s.outcome, { kind: s.window, year: nextYear }); } catch { return null; }
   const what = s.window === "post" ? "postseason" : "season";
@@ -75,7 +91,10 @@ export async function seasonOverFor(rule: unknown, schedule: SeasonSchedule | nu
   let timer: ReturnType<typeof setTimeout> | undefined;
   const games = await Promise.race([schedule(s.league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), o.timeoutMs ?? 3_000); })]);
   clearTimeout(timer);
-  return games && seasonStatus(s.abbr, games, true).status === "over" ? seasonOverRefusal(r!, now) : null;
+  if (!games) return null;
+  // a rivalry series is over once EITHER team's season is over: the two cannot meet again this season
+  const over = seasonStatus(s.abbr, games, true).status === "over" || (s.window === "meetings" && !!s.opp && seasonStatus(s.opp, games, true).status === "over");
+  return over ? seasonOverRefusal(r!, now) : null;
 }
 
 /** A season rule on a season that has not started yet: said as a warning (its games are not listed yet), never refused. Null otherwise. */
