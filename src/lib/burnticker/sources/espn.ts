@@ -51,6 +51,11 @@ import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { ty
  *                      PairResult the program's pair-winner end sink reads (end.rs partner_won). See docs in WIRING-RIVALRY-SERIES.md.
  *   espn.team:<league>-<ABBR>-<win|loss>[-reg|-post]  the 10-10 first form (still read): this season by abbreviation
  *   espn.game:<league>-<eventId>-<ABBR>-<win|loss> one game: value 1 if the team won (or lost) it (a tie burns neither side)
+ * THREE-WAY OUTCOMES (owner 2026-10-13: a soccer creator picks which results burn). In a league with draws the outcome may also be two of
+ * the three results, one code each, in the order win, draw, loss: `windraw` (the team does not lose), `drawloss` (the team does not win),
+ * `winloss` (the game does not end in a draw). A game whose result is in the set reads 1 unit, exactly as a single outcome does. These
+ * codes are refused in a league without draws (win or loss there is every game), in the rivalry series (always `win`) and in the 10-10
+ * first form; `win`, `loss` and `draw` ids are unchanged byte for byte.
  * Readings are keyed by the game's UTC start date ("2026-10-04"); a doubleheader counts 2.
  */
 
@@ -172,7 +177,30 @@ export function findTeams(q: string): EspnTeam[] {
 
 // ---- series ids --------------------------------------------------------------------------------------------------------------
 
-export type Outcome = "win" | "loss" | "draw";
+/** One result of a game, as a team sees it. */
+export type SingleOutcome = "win" | "loss" | "draw";
+/** Two of the three results of a game in a league with draws (THREE-WAY OUTCOMES above). */
+export type PairOutcome = "windraw" | "drawloss" | "winloss";
+export type Outcome = SingleOutcome | PairOutcome;
+export const PAIR_OUTCOMES: readonly PairOutcome[] = ["windraw", "drawloss", "winloss"];
+export const isPairOutcome = (o: string | null | undefined): o is PairOutcome => o === "windraw" || o === "drawloss" || o === "winloss";
+/** The results an outcome burns on: one, or two of the three. */
+export const outcomeResults = (o: Outcome): SingleOutcome[] => (o === "windraw" ? ["win", "draw"] : o === "drawloss" ? ["draw", "loss"] : o === "winloss" ? ["win", "loss"] : [o]);
+/** Whether a game's result (a tie is a draw) is one this outcome burns on. */
+export const outcomeHits = (o: Outcome, result: SingleOutcome | "tie"): boolean => outcomeResults(o).includes(result === "tie" ? "draw" : result);
+/** An outcome a league can take: a draw, or two of the three results, only where the league has draws. */
+export const outcomeAllowed = (league: LeagueId, o: string): o is Outcome => o === "win" || o === "loss" || ((o === "draw" || isPairOutcome(o)) && LEAGUES[league].draws);
+/**
+ * The plain words for an outcome: the verb after the team ("win or draw"), the noun ("win or draw"), its plural ("Wins or Draws"), the
+ * short word a coin's name ends with ("Unbeaten", so "Wolverhampton Wanderers 2026–27 Unbeaten" still fits the 32-byte name), and the
+ * everyday "do not lose" where there is one.
+ */
+export function outcomeWords(o: Outcome): { verb: string; noun: string; plural: string; name: string; notVerb: string | null } {
+  if (o === "windraw") return { verb: "win or draw", noun: "win or draw", plural: "Wins or Draws", name: "Unbeaten", notVerb: "do not lose" };
+  if (o === "drawloss") return { verb: "draw or lose", noun: "draw or loss", plural: "Draws or Losses", name: "Winless", notVerb: "do not win" };
+  if (o === "winloss") return { verb: "win or lose", noun: "win or loss", plural: "Wins or Losses", name: "No Draws", notVerb: null };
+  return o === "win" ? { verb: "win", noun: "win", plural: "Wins", name: "Wins", notVerb: null } : o === "draw" ? { verb: "draw", noun: "draw", plural: "Draws", name: "Draws", notVerb: null } : { verb: "lose", noun: "loss", plural: "Losses", name: "Losses", notVerb: null };
+}
 /** A team coin's window (see SERIES above). `legacy` is the 10-10 first form, still read: the current season by abbreviation. */
 export type Window =
   | { kind: "season"; year: number }
@@ -254,10 +282,10 @@ export const asMeetings = (s: EspnSeries | null | undefined): MeetingsSeries | n
 export const isMeetingsSeriesId = (id: string | null | undefined): boolean => !!id && asMeetings(parseEspnSeries(id)) !== null;
 export const gameSeries = (league: LeagueId, eventId: string, abbr: string, outcome: Outcome): string => `espn.game:${league}-${eventId}-${abbr.toUpperCase()}-${outcome}`;
 export function parseEspnSeries(id: string): EspnSeries | null {
-  let m = new RegExp(`^espn\\.team:(${LEAGUE_ALT})-([A-Z0-9]{2,6})\\.(\\d{1,7})-(win|loss|draw)-(s\\d{4}|p\\d{4}|n\\d{1,2}\\.\\d{8}|perpetual|m\\d{4}\\.[A-Z0-9]{2,6}\\.\\d{1,7})$`).exec(id);
+  let m = new RegExp(`^espn\\.team:(${LEAGUE_ALT})-([A-Z0-9]{2,6})\\.(\\d{1,7})-(win|loss|draw|windraw|drawloss|winloss)-(s\\d{4}|p\\d{4}|n\\d{1,2}\\.\\d{8}|perpetual|m\\d{4}\\.[A-Z0-9]{2,6}\\.\\d{1,7})$`).exec(id);
   if (m) {
     const lg = m[1] as LeagueId, t = teamById(lg, m[3]) ?? teamByAbbr(lg, m[2]); let w = parseWindowCode(m[5]);
-    if (m[4] === "draw" && !LEAGUES[lg].draws) return null;
+    if (!outcomeAllowed(lg, m[4])) return null;
     if (w?.kind === "meetings") {
       // the rivalry series: outcome `win` only (a signed head-to-head reading), a real opponent that is not the team itself
       const o = teamById(lg, w.oppId) ?? teamByAbbr(lg, w.opp);
@@ -268,13 +296,15 @@ export function parseEspnSeries(id: string): EspnSeries | null {
   }
   m = /^espn\.team:(nfl|nba|mlb|nhl)-([A-Z]{2,5})-(win|loss)(?:-(reg|post))?$/.exec(id);
   if (m) return teamByAbbr(m[1] as LeagueId, m[2]) ? { kind: "team", league: m[1] as LeagueId, abbr: m[2], teamId: teamIdOf(m[1] as LeagueId, m[2]), outcome: m[3] as Outcome, window: { kind: "legacy", scope: (m[4] as "reg" | "post" | undefined) ?? "all" } } : null;
-  m = new RegExp(`^espn\\.game:(${LEAGUE_ALT})-(\\d{4,12})-([A-Z0-9]{2,6})-(win|loss|draw)$`).exec(id);
-  if (m) return teamByAbbr(m[1] as LeagueId, m[3]) && (m[4] !== "draw" || LEAGUES[m[1] as LeagueId].draws) ? { kind: "game", league: m[1] as LeagueId, eventId: m[2], abbr: m[3], outcome: m[4] as Outcome } : null;
+  m = new RegExp(`^espn\\.game:(${LEAGUE_ALT})-(\\d{4,12})-([A-Z0-9]{2,6})-(win|loss|draw|windraw|drawloss|winloss)$`).exec(id);
+  if (m) return teamByAbbr(m[1] as LeagueId, m[3]) && outcomeAllowed(m[1] as LeagueId, m[4]) ? { kind: "game", league: m[1] as LeagueId, eventId: m[2], abbr: m[3], outcome: m[4] as Outcome } : null;
   return null;
 }
 export function espnSeriesTitle(s: EspnSeries): string {
   const t = teamByAbbr(s.league, s.abbr)!;
   if (s.kind === "team" && s.window.kind === "meetings") { const o = teamById(s.league, s.window.oppId) ?? teamByAbbr(s.league, s.window.opp); return `${t.name} against ${o?.name ?? s.window.opp}, head to head — ${windowPhrase(s.league, s.window)} (${LEAGUES[s.league].label})`; }
+  // the single outcomes keep their 10-10 titles byte for byte ("losses" for a draw coin included); two of three results say both
+  if (isPairOutcome(s.outcome)) { const w = outcomeWords(s.outcome); return s.kind === "team" ? `${t.name} ${w.plural.toLowerCase()}${s.window.kind === "legacy" && s.window.scope === "all" ? "" : ` — ${windowPhrase(s.league, s.window)}`} (${LEAGUES[s.league].label})` : `${t.name} ${w.noun} in ESPN game ${s.eventId}`; }
   return s.kind === "team" ? `${t.name} ${s.outcome === "win" ? "wins" : "losses"}${s.window.kind === "legacy" && s.window.scope === "all" ? "" : ` — ${windowPhrase(s.league, s.window)}`} (${LEAGUES[s.league].label})` : `${t.name} ${s.outcome === "win" ? "win" : "loss"} in ESPN game ${s.eventId}`;
 }
 
@@ -439,7 +469,7 @@ export function dedupeListings(games: readonly Game[]): Game[] {
 }
 
 /** A team's outcome in a completed game, or null (not completed, not its game, or no scores). Ties are neither win nor loss. */
-export function outcomeOf(g: Game, abbr: string, teamId: string | null = null): Outcome | "tie" | null {
+export function outcomeOf(g: Game, abbr: string, teamId: string | null = null): SingleOutcome | "tie" | null {
   const is = (x: GameSide) => (teamId && x.id ? x.id === teamId : x.abbr === abbr);
   const us = is(g.home) ? g.home : is(g.away) ? g.away : null;
   const them = us === g.home ? g.away : g.home;

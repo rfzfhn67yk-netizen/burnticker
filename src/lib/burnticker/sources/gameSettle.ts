@@ -1,6 +1,6 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { LEAGUES, NBA_OFFICIAL_ANSWERS, SETTLE_AFTER_START_MS, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, NBA_OFFICIAL_ANSWERS, outcomeHits, SETTLE_AFTER_START_MS, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome } from "@/lib/burnticker/sources/espn";
 
 /**
  * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10). NO ESPN READS: the game list comes from the league's free official schedule (MLB
@@ -8,7 +8,8 @@ import { LEAGUES, NBA_OFFICIAL_ANSWERS, SETTLE_AFTER_START_MS, asMeetings, teamN
  * EspnClient/SportsClient. Each completed game:
  *
  *   PRIMARY A  the game's ON-CHAIN PAYOUT where Polymarket lists a moneyline market (Gamma search by the two teams and the date → the
- *              condition id → the Conditional Tokens payout vector on Polygon), exactly as an election does;
+ *              condition id → the Conditional Tokens payout vector on Polygon), exactly as an election does; a soccer game is three
+ *              yes/no conditions (home win, draw, away win) and all three payouts are read (threeWayRead);
  *   PRIMARY B  otherwise THESPORTSDB (commercial licence, BURNTICKER_THESPORTSDB_KEY, the v2 API): the final score;
  *   CONFIRMED  by a SECOND, independent operator: the on-chain payout and TheSportsDB confirm each other when both exist; the league's
  *              official feed (MLB, NHL, and the NBA's when it answers) is a further read where it is free; API-Sports (BURNTICKER_APISPORTS_KEY) is optional.
@@ -23,8 +24,14 @@ import { LEAGUES, NBA_OFFICIAL_ANSWERS, SETTLE_AFTER_START_MS, asMeetings, teamN
  * winner (API-Sports' teams.home.winner / teams.away.winner). Owner decision 2026-10-12 (website-20 item 78): a level game decided on
  * penalties counts as a WIN for the declared winner and a LOSS for the other side, never a draw; espn.ts outcomeOf reads it the same way.
  */
-export interface Final { home: number; away: number; done: boolean; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null }
-export interface GameMarket { conditionId: string; question: string; outcomes: [string, string]; url: string }
+export interface Final { home: number; away: number; done: boolean; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null; /** the feed marks the game decided in extra time (AET) */ aet?: boolean }
+/**
+ * A game's Polymarket market. A two-sided moneyline (every sport but soccer) is one condition whose two outcomes name the two teams.
+ * A SOCCER game is THREE yes/no markets inside one event ("Will Arsenal FC win on 2026-10-10?", "Will Arsenal FC vs. Leeds United FC
+ * end in a draw?", "Will Leeds United FC win on 2026-10-10?"): `threeWay` carries the three condition ids and the two team names as
+ * Polymarket writes them; `conditionId` is then the home leg's (the one a receipt links to first).
+ */
+export interface GameMarket { conditionId: string; question: string; outcomes: [string, string]; url: string; threeWay?: { home: string; draw: string; away: string; homeName: string; awayName: string } }
 export interface GamePayout { resolved: boolean; outcome: number | null }
 export interface GameDeps {
   tsdbKey: string | null;
@@ -120,7 +127,7 @@ export function finalFromTsdb(g: Game, body: unknown, url: string): Final | null
   if (!e) return null;
   const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? ""));
   const h = n(e.intHomeScore), a = n(e.intAwayScore);
-  return { home: h ?? 0, away: a ?? 0, done: done && h !== null && a !== null, detail: `TheSportsDB ${e.strEvent ?? ""} ${h ?? "?"}–${a ?? "?"} (${e.strStatus ?? "?"})`, url, pens: /^(AP|PEN)\b/i.test(String(e.strStatus ?? "")), declared: null };
+  return { home: h ?? 0, away: a ?? 0, done: done && h !== null && a !== null, detail: `TheSportsDB ${e.strEvent ?? ""} ${h ?? "?"}–${a ?? "?"} (${e.strStatus ?? "?"})`, url, pens: /^(AP|PEN)\b/i.test(String(e.strStatus ?? "")), declared: null, aet: /^AET\b/i.test(String(e.strStatus ?? "")) };
 }
 export function finalFromMlb(g: Game, body: unknown, url: string): Final | null {
   const games = (((body as { dates?: { games?: unknown[] }[] } | null)?.dates ?? []).flatMap((d) => d.games ?? [])) as { gameDate?: string; status?: { abstractGameState?: string }; teams?: { home?: { team?: { name?: string }; score?: number }; away?: { team?: { name?: string }; score?: number } } }[];
@@ -166,7 +173,7 @@ export function finalFromApiSports(g: Game, body: unknown, url: string): Final |
   const h = n(hit.goals?.home ?? tot(hit.scores?.home)), a = n(hit.goals?.away ?? tot(hit.scores?.away));
   const st = String(hit.fixture?.status?.short ?? hit.status?.short ?? "");
   const declared = hit.teams?.home?.winner === true ? "home" : hit.teams?.away?.winner === true ? "away" : null;
-  return { home: h ?? 0, away: a ?? 0, done: /^(FT|AET|PEN|AOT)$/.test(st) && h !== null && a !== null, detail: `API-Sports ${a ?? "?"}–${h ?? "?"} (${st || "?"})`, url, pens: st === "PEN", declared };
+  return { home: h ?? 0, away: a ?? 0, done: /^(FT|AET|PEN|AOT)$/.test(st) && h !== null && a !== null, detail: `API-Sports ${a ?? "?"}–${h ?? "?"} (${st || "?"})`, url, pens: st === "PEN", declared, aet: st === "AET" };
 }
 
 // ---- one game, settled ----------------------------------------------------------------------------------------------------------
@@ -216,17 +223,47 @@ export function operatorsFor(league: LeagueId, d: GameDeps, hasMarket: boolean):
 }
 
 /**
+ * A SOCCER GAME'S THREE-WAY PAYOUT (launch walkthrough 2026-10-13). Polymarket lists the game as three yes/no conditions (home win, draw,
+ * away win). All three payout vectors are read on Polygon and all three must be resolved; exactly one may pay YES, and that leg is the
+ * result (home, away, or a tie for the draw leg). An unresolved leg, or a split payout (a voided leg), waits; two legs paying YES, or none,
+ * contradict each other and hold the game.
+ *
+ * PENALTIES AND EXTRA TIME: the three markets settle on the 90-minute result (regular time plus stoppage time), so a cup tie decided in
+ * extra time or on penalties pays YES on the DRAW leg. The owner's rule (item 78, `Final` above) counts a level game decided on penalties
+ * as a win for the side that went through, so the draw leg alone never decides such a game: settleGame compares the payout's "level after
+ * 90 minutes" with the score reads and then leaves it out of the operator count (the comment there).
+ */
+async function threeWayRead(market: GameMarket, w: NonNullable<GameMarket["threeWay"]>, d: GameDeps): Promise<{ kind: "read"; winner: "home" | "away" | "tie"; detail: string } | { kind: "awaiting"; why: string } | { kind: "held"; why: string }> {
+  const legs = [["home", w.home, `${w.homeName} win`], ["tie", w.draw, "a draw"], ["away", w.away, `${w.awayName} win`]] as const;
+  const yes: (typeof legs)[number][] = [];
+  for (const leg of legs) {
+    const p = d.payout ? await d.payout(leg[1]).catch(() => null) : null;
+    if (!p || !p.resolved) return { kind: "awaiting", why: `the on-chain payout for ${leg[2]} in ${market.question} is not resolved yet` };
+    if (p.outcome === null) return { kind: "awaiting", why: `the on-chain payout for ${leg[2]} in ${market.question} is split, not a result` };
+    if (p.outcome === 0) yes.push(leg);
+  }
+  if (yes.length > 1) return { kind: "held", why: `the on-chain payouts for ${market.question} pay out on more than one result (${yes.map((l) => l[2]).join(" and ")}) — held` };
+  if (yes.length === 0) return { kind: "held", why: `none of the three on-chain payouts for ${market.question} pays out — held` };
+  return { kind: "read", winner: yes[0][0], detail: `on-chain payout ${market.question}: ${yes[0][2]} (90 minutes)` };
+}
+
+/**
  * Settles one completed game. The PRIMARY is the on-chain payout where a market exists, else TheSportsDB's licensed final; the
  * on-chain payout and TheSportsDB are independent operators, so when both exist each confirms the other. The league's official feed
  * (MLB, NHL, NBA) is a further read where it is free, API-Sports where its key is set. At least TWO operators must read the game and
  * every read must agree (scores where both carry scores, else the winner); one operator alone is held.
  */
 export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Promise<GameVerdict> {
-  type Read = { op: string; label: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null };
+  type Read = { op: string; label: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null; aet?: boolean; ninety?: boolean };
   const reads: Read[] = []; const pending: string[] = []; const errors: string[] = [];
   // the on-chain payout
   const market = d.market ? await d.market(g).catch(() => null) : null;
-  if (market) {
+  if (market?.threeWay) {
+    const r = await threeWayRead(market, market.threeWay, d);
+    if (r.kind === "held") return { kind: "held", why: r.why };
+    if (r.kind === "awaiting") pending.push(r.why);
+    else reads.push({ op: "on-chain payout", label: "the game's on-chain payout", winner: r.winner, final: null, detail: r.detail, url: market.url, ninety: true });
+  } else if (market) {
     const p = d.payout ? await d.payout(market.conditionId).catch(() => null) : null;
     if (!p || !p.resolved) pending.push(`the on-chain payout for ${market.question} is not resolved yet`);
     else {
@@ -250,7 +287,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
         if (f) break;
       }
       if (!any && err) throw err;
-      if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url, pens: f.pens, declared: f.declared });
+      if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url, pens: f.pens, declared: f.declared, aet: f.aet });
       else pending.push(f ? `TheSportsDB has the game but not final: ${f.detail}` : "TheSportsDB has no final for the game yet");
     } catch (e) { errors.push(`TheSportsDB: ${(e as Error).message.slice(0, 80)}`); }
   }
@@ -261,9 +298,22 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
     if (!id) continue;
     try {
       const c = await crossFinal(client, g, d, id);
-      if (c.final && c.final.done) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(c.final), final: { home: c.final.home, away: c.final.away }, detail: c.final.detail, url: c.final.url, pens: c.final.pens, declared: c.final.declared });
+      if (c.final && c.final.done) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(c.final), final: { home: c.final.home, away: c.final.away }, detail: c.final.detail, url: c.final.url, pens: c.final.pens, declared: c.final.declared, aet: c.final.aet });
       else pending.push(`${CROSS_LABEL[id]} has no final for the game yet`);
     } catch (e) { errors.push(`${CROSS_LABEL[id]}: ${(e as Error).message.slice(0, 80)}`); }
+  }
+  // THE THREE-WAY PAYOUT AND EXTRA TIME (see threeWayRead): Polymarket's soccer markets settle on the 90-minute result, so a cup tie
+  // that went to extra time or penalties reads "draw" on chain whoever went through. When any score read marks the game AET or decided
+  // on penalties, the payout is compared on what it does say (the game was level after 90 minutes; a payout naming a winner there
+  // contradicts the score reads and holds the game) and is then NOT counted as one of the two operators, because it says nothing about
+  // the final. The final, and the penalty winner under item 78 below, must come from two other reads.
+  if (reads.some((r) => r.op !== "on-chain payout" && (r.pens || r.aet))) {
+    const i = reads.findIndex((r) => r.ninety);
+    if (i >= 0) {
+      if (reads[i].winner !== "tie") return { kind: "held", why: `the on-chain payout says the game was decided in 90 minutes, but a score read says it went to extra time — held` };
+      reads.splice(i, 1);
+      if (operatorsFor(g.league, d, false).length < 2) return { kind: "held", why: "the game went past 90 minutes, and the on-chain payout only settles the 90-minute result: a second read of the final score is needed" };
+    }
   }
   const primary = reads.find((r) => r.op === "on-chain payout") ?? reads.find((r) => r.op === "TheSportsDB");
   const others = reads.filter((r) => r !== primary);
@@ -293,7 +343,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
 /** A schedule status that means the game was not played on its listed date (MLB marks these "post" without a result). */
 export const POSTPONED_RE = /postpon|cancel|suspend/i;
 
-const outcomeFor = (winner: "home" | "away" | "tie", g: Game, abbr: string, teamId: string | null): Outcome | "tie" | null => {
+const outcomeFor = (winner: "home" | "away" | "tie", g: Game, abbr: string, teamId: string | null): "win" | "loss" | "tie" | null => {
   const isUs = (x: GameSide) => (teamId && x.id ? x.id === teamId : x.abbr === abbr);
   const us = isUs(g.home) ? "home" : isUs(g.away) ? "away" : null;
   if (!us) return null;
@@ -325,7 +375,8 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
     const out = outcomeFor(v.winner, g, s.abbr, tid);
     if (out === null) continue;
     const cur = byDay.get(g.date) ?? { value: 0, titles: [], url: v.url, method: "" };
-    if (out === s.outcome || (s.outcome === "draw" && out === "tie")) cur.value++;
+    // one unit when the result is in the coin's set: its one outcome, or two of the three (espn.ts outcomeHits; a tie is a draw)
+    if (outcomeHits(s.outcome, out)) cur.value++;
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
     cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · settled on ${SETTLED_ON[v.settledOn]} · confirmed by ${v.confirmedBy} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
     cur.method = v.ops.map((o) => (o === "on-chain payout" ? "onchain-payout" : o === "TheSportsDB" ? "thesportsdb" : o)).join("+");
@@ -341,10 +392,51 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
  * PRIMARY A's readers over the Polymarket client: Gamma search by the two teams (closed and open), a moneyline market whose two outcomes
  * name the two teams and whose end falls within a day of the game; the payout from the CTF on Polygon (readChain).
  */
-/** Polymarket's tag slug per league (Gamma /events?tag_slug=): read 2026-10-13 against the live index; a league not here uses the text search only. */
-export const POLY_LEAGUE_TAG: Partial<Record<LeagueId, string>> = { nfl: "nfl", mlb: "mlb", nba: "nba", nhl: "nhl", wnba: "wnba", cfb: "cfb", "eng.1": "epl", "esp.1": "la-liga", "ger.1": "bundesliga", "fra.1": "ligue-1", "ita.1": "serie-a", "usa.1": "mls" };
+/**
+ * Polymarket's tag slug per league (Gamma /events?tag_slug=): read 2026-10-13 against the live index; a league not here uses the text
+ * search only. The soccer tags were probed with start_time windows on 2026-10-13 (each listed that week's three-leg game events): Serie A
+ * is "sea" ("serie-a" lists no game events), the Champions League "ucl" and the Europa League "uel" (both empty before their matchdays on
+ * 10-13 and 10-15, then full), the Conference League "europa-conference-league" ("uecl", "conference-league" and
+ * "uefa-conference-league" list none), NWSL "soccer-nwsl", Liga MX "mex", Eredivisie "ere", Primeira Liga "primeira-liga", the EFL
+ * Championship "efl-championship", the Scottish Premiership "scottish-premiership", the Brasileirão "brazil-serie-a", Argentina "arg".
+ */
+export const POLY_LEAGUE_TAG: Partial<Record<LeagueId, string>> = {
+  nfl: "nfl", mlb: "mlb", nba: "nba", nhl: "nhl", wnba: "wnba", cfb: "cfb",
+  "eng.1": "epl", "esp.1": "la-liga", "ger.1": "bundesliga", "fra.1": "ligue-1", "ita.1": "sea", "usa.1": "mls", "usa.nwsl": "soccer-nwsl",
+  "uefa.champions": "ucl", "uefa.europa": "uel", "uefa.europa.conf": "europa-conference-league", "mex.1": "mex", "ned.1": "ere", "por.1": "primeira-liga",
+  "eng.2": "efl-championship", "sco.1": "scottish-premiership", "bra.1": "brazil-serie-a", "arg.1": "arg",
+};
 
-type GameHitMarket = { conditionId: string; question: string; yes: string; no: string; endDate: string | null; sportsMarketType: string | null; gameStartTime?: string | null };
+type GameHitMarket = { conditionId: string; question: string; yes: string; no: string; endDate: string | null; sportsMarketType: string | null; gameStartTime?: string | null; /** Gamma groupItemTitle ("Arsenal FC", "Draw (Arsenal FC vs. Leeds United FC)") */ outcome?: string | null };
+
+/** How strongly a provider's team name names a side: 0 no match, else the longest matching key (an exact name scores highest). */
+const sideScore = (name: string, s: GameSide): number => { const a = norm(name); let best = 0; for (const k of [s.name, s.nickname, s.short ?? "", s.location ?? "", s.abbr]) { if (!k || k.length < 3) continue; const b = norm(k); if (a === b) best = Math.max(best, 1000); else if (a.includes(b) || b.includes(a)) best = Math.max(best, Math.min(a.length, b.length)); } return best; };
+const DRAW_Q = /\bend in a draw\b/i, TEAM_WIN_Q = /^Will (.+?) win\b/i;
+/**
+ * A soccer event's three moneyline legs (verified live 2026-10-13 on epl-ars-lee-2026-10-10): three binary Yes/No markets of type
+ * moneyline, one asking whether the game ends in a draw and two asking whether a named team wins. The two team legs are assigned to home
+ * and away by the stronger name match (a derby's "Manchester" names both sides; "Manchester United FC" names one better); an event whose
+ * legs cannot be assigned one way only is skipped. Null: the event is not a three-way game market for this game.
+ */
+export function threeWayOf(markets: readonly GameHitMarket[], g: Game): { draw: GameHitMarket; home: GameHitMarket; away: GameHitMarket; homeName: string; awayName: string } | null {
+  const legs = markets.filter((m) => (m.sportsMarketType === "moneyline" || m.sportsMarketType === null) && /^yes$/i.test(m.yes) && /^no$/i.test(m.no));
+  const draws = legs.filter((m) => DRAW_Q.test(m.question) || /^draw\b/i.test(m.outcome ?? ""));
+  const teams = legs.filter((m) => !draws.includes(m)).map((m) => ({ m, name: (m.outcome || TEAM_WIN_Q.exec(m.question)?.[1] || "").trim() })).filter((t) => t.name && TEAM_WIN_Q.test(t.m.question));
+  if (draws.length !== 1 || teams.length !== 2) return null;
+  const [a, b] = teams;
+  // our team table first (ourTeam: "Club Atlético de Madrid" is Atlético Madrid, never Real Madrid); a leg naming a third club is not
+  // this game; the name score only where the table does not know the name
+  const who = (name: string): "home" | "away" | "other" | null => { const t = ourTeam(g.league, name); return !t ? null : t.abbr === g.home.abbr ? "home" : t.abbr === g.away.abbr ? "away" : "other"; };
+  const wa = who(a.name), wb = who(b.name);
+  if (wa === "other" || wb === "other") return null;
+  if (wa && wb) { if (wa === wb) return null; const [home, away] = wa === "home" ? [a, b] : [b, a]; return { draw: draws[0], home: home.m, away: away.m, homeName: home.name, awayName: away.name }; }
+  const sc = (leg: "a" | "b", s: "home" | "away") => { const w = leg === "a" ? wa : wb; return w ? (w === s ? 10_000 : 0) : sideScore((leg === "a" ? a : b).name, g[s]); };
+  const ah = sc("a", "home"), aa = sc("a", "away"), bh = sc("b", "home"), ba = sc("b", "away");
+  const straight = ah > 0 && ba > 0 ? ah + ba : 0, crossed = aa > 0 && bh > 0 ? aa + bh : 0;
+  if (straight === crossed) return null;
+  const [home, away] = straight > crossed ? [a, b] : [b, a];
+  return { draw: draws[0], home: home.m, away: away.m, homeName: home.name, awayName: away.name };
+}
 type GameHits = { events: { url: string; markets: GameHitMarket[] }[] };
 export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "open" | "closed" | "all"; limit?: number }): Promise<GameHits>; eventsInWindow?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; eventsStarting?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; readChain(conditionId: string): Promise<{ resolved: boolean; outcome: number | null }> }): Pick<GameDeps, "market" | "payout"> {
   type Hit = { url: string; markets: GameHitMarket[] };
@@ -360,6 +452,14 @@ export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "
       const when = m.gameStartTime ?? m.endDate;
       const d = when ? Math.abs(Date.parse(when) - Date.parse(g.startsAt)) : NaN;
       if (both && d < 2 * 86_400_000 && (!best || d < best.d)) best = { m: { conditionId: m.conditionId, question: m.question, outcomes: [m.yes, m.no], url: e.url }, d };
+    }
+    // soccer (a league with draws): the event's three yes/no legs (threeWayOf), timed the same way; the nearest game wins
+    if (LEAGUES[g.league].draws) for (const e of events) {
+      const t = threeWayOf(e.markets, g);
+      if (!t) continue;
+      const when = t.home.gameStartTime ?? t.draw.gameStartTime ?? t.home.endDate;
+      const d = when ? Math.abs(Date.parse(when) - Date.parse(g.startsAt)) : NaN;
+      if (d < 2 * 86_400_000 && (!best || d < best.d)) best = { m: { conditionId: t.home.conditionId, question: `${t.homeName} vs. ${t.awayName}`, outcomes: ["Yes", "No"], url: e.url, threeWay: { home: t.home.conditionId, draw: t.draw.conditionId, away: t.away.conditionId, homeName: t.homeName, awayName: t.awayName } }, d };
     }
     return best?.m ?? null;
   };

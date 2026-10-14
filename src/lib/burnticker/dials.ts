@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { LEAGUES, NEXT_MAX, gameSeries, parseEspnSeries, seasonYearAt, teamSeries, windowChoices, type EspnSeries, type Window, type WindowKind } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, NEXT_MAX, PAIR_OUTCOMES, gameSeries, isPairOutcome, outcomeAllowed, parseEspnSeries, seasonYearAt, teamSeries, windowChoices, type EspnSeries, type Window, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
 import { INVERSE_CHOICE, KEEPER_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 
@@ -62,10 +62,16 @@ export const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === 
 /** The set a rule can join: a team coin's league season (id <league>-<year>-<win|loss>, outcome <ABBR>.<ESPN id>), or the market's set. */
 export function leagueSetFor(r: BurnRule, c: DialCtx = {}): { id: string; outcome: string } | null {
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
-  if (e?.kind === "team" && e.teamId && (e.window.kind === "season" || e.window.kind === "post")) return { id: `${e.league.replace(/\./g, "-")}-${e.window.year}-${e.window.kind === "post" ? "post-" : ""}${e.outcome}`, outcome: `${e.abbr}.${e.teamId}` };
+  // league mode reads one result per team (the champion's set); two of three results is not offered there (rules.ts refuses it too)
+  if (e?.kind === "team" && e.teamId && !isPairOutcome(e.outcome) && (e.window.kind === "season" || e.window.kind === "post")) return { id: `${e.league.replace(/\./g, "-")}-${e.window.year}-${e.window.kind === "post" ? "post-" : ""}${e.outcome}`, outcome: `${e.abbr}.${e.teamId}` };
   if (r.oracle === "polymarket" && r.market && c.set) return c.set;
   return null;
 }
+
+/** The launch page's label over a soccer team coin's results choice (the side dial). */
+export const TEAM_RESULTS_LABEL = "Which results burn";
+/** The side dial's words for two of a soccer game's three results (espn.ts PairOutcome), the everyday name in brackets. */
+export const PAIR_OUTCOME_LABEL: Record<(typeof PAIR_OUTCOMES)[number], string> = { windraw: "a win or a draw (does not lose)", drawloss: "a draw or a loss (does not win)", winloss: "a win or a loss (no draw)" };
 
 export function dialsFor(r: BurnRule, c: DialCtx = {}): DialSet {
   const oneShot = isOneShotRule(r);
@@ -79,7 +85,8 @@ export function dialsFor(r: BurnRule, c: DialCtx = {}): DialSet {
   const series = r.oracle === "catalogue" ? r.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;
   if (e) {
-    out.ids.push("side"); out.side = { value: e.outcome, options: [{ value: "win", label: "a win" }, { value: "loss", label: "a loss" }, ...(LEAGUES[e.league].draws ? [{ value: "draw", label: "a draw" }] : [])] };
+    // soccer (a league with draws): a draw, and any two of the three results (owner 2026-10-13), after the single results
+    out.ids.push("side"); out.side = { value: e.outcome, options: [{ value: "win", label: "a win" }, { value: "loss", label: "a loss" }, ...(LEAGUES[e.league].draws ? [{ value: "draw", label: "a draw" }, ...PAIR_OUTCOMES.map((o) => ({ value: o, label: PAIR_OUTCOME_LABEL[o] }))] : [])] };
     if (e.kind === "team") {
       const w = e.window, value: WindowKind = w.kind === "legacy" ? (w.scope === "post" ? "post" : "season") : w.kind;
       out.ids.push("window"); if (value === "next") out.ids.push("games");
@@ -132,7 +139,12 @@ export function applyDial(r: BurnRule, dial: DialId, value: string | number, c: 
   }
   const series = r.oracle === "catalogue" ? r.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;
-  if (e && dial === "side" && (value === "win" || value === "loss" || (value === "draw" && LEAGUES[e.league].draws))) return { ...r, series: e.kind === "team" ? teamSeries(e.league, e.abbr, value, e.window) : gameSeries(e.league, e.eventId, e.abbr, value) } as BurnRule;
+  if (e && dial === "side" && typeof value === "string" && outcomeAllowed(e.league, value) && !(e.kind === "team" && e.window.kind === "meetings")) {
+    // two of the three results cannot take the fade side (inverse.ts), and league mode reads one result: both drop with the switch
+    const { inverse: _inv, set: _set, ...plain } = r as BurnRule & { inverse?: unknown; set?: unknown };
+    const base = (isPairOutcome(value) ? (r.set ? { ...plain, onEnd: { ...(r.onEnd ?? ON_END_DEFAULT), endSink: true } } : plain) : r) as BurnRule;
+    return { ...base, series: e.kind === "team" ? teamSeries(e.league, e.abbr, value, e.window) : gameSeries(e.league, e.eventId, e.abbr, value) } as BurnRule;
+  }
   if (e && e.kind === "team" && dial === "window" && ["season", "post", "next", "perpetual"].includes(String(value))) {
     const year = yearOf(e, c), from = new Date(c.nowMs ?? Date.now()).toISOString().slice(0, 10).replace(/-/g, "");
     const w: Window = value === "season" ? { kind: "season", year } : value === "post" ? { kind: "post", year } : value === "next" ? { kind: "next", n: e.window.kind === "next" ? e.window.n : 5, from: e.window.kind === "next" ? e.window.from : from } : { kind: "perpetual" };

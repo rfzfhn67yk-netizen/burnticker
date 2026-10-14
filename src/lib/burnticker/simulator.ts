@@ -1,6 +1,6 @@
 import { buybackSpend, reserveSpendCap } from "@/lib/burnReceipts/math";
 import { DEFAULT_CAP_LAMPORTS, LAMPORTS, MAX_SPEND_RESERVE_BPS } from "@/lib/burnticker/burnMath";
-import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
+import { outcomeResults, outcomeWords, parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import type { BurnRule } from "@/lib/burnticker/rules";
 
 /**
@@ -73,7 +73,7 @@ export function firingOf(rule: BurnRule): { share: number | null; firesOn: strin
   if (e) {
     const o = e.outcome;
     if (rule.inverse) return { share, firesOn: o === "win" ? "each game without a win" : `each game without a ${o}`, drawFires: o !== "draw" };
-    return { share, firesOn: o === "win" ? "a win" : o === "loss" ? "a loss" : "a draw", drawFires: o === "draw" };
+    return { share, firesOn: o === "win" ? "a win" : o === "loss" ? "a loss" : o === "draw" ? "a draw" : `a ${outcomeWords(o).noun}`, drawFires: outcomeResults(o).includes("draw") };
   }
   if (rule.kind === "scalar") return { share, firesOn: rule.inverse ? "a period when the condition does not happen" : "each unit the number moves", drawFires: false };
   return { share, firesOn: b?.onYes ? "a YES result" : "a NO result", drawFires: false };

@@ -171,7 +171,8 @@ describe("the launch check's sports sentences (GAME_LINES)", () => {
       GAME_LINES.oneSourceNext("Atlanta Hawks", { ...g, name: "Atlanta Hawks at Orlando Magic", date: "2026-10-21" }, "nba"), GAME_LINES.oneSourceNext("Chelsea", null, "eng.1"),
     ];
     assert.equal(lines[5], "only one source can confirm the games of Atlanta Hawks right now, and every result needs two sources that agree. The second would be the Polymarket market for Atlanta Hawks at Orlando Magic on Oct 21, and none was found. Polymarket usually lists a game a few days before it starts, so please try again then.");
-    assert.doesNotMatch(lines[6], /usually lists/, "soccer's markets are not matched, so the page never promises they will be");
+    // 2026-10-13 (test/burntickerSoccerMarkets.test.ts): soccer's three yes/no markets are matched now, so the soccer line says the same
+    assert.match(lines[6], /usually lists/, "soccer's markets are matched under the league tag, like the two-sided leagues");
     for (const l of lines) {
       const shown = `The check run before launch refused this coin: ${l}`;
       assert.ok(lintCopy(shown, cfg).ok, `${lintCopy(shown, cfg).hits.map((h) => h.phrase).join(", ")}: ${shown}`);
