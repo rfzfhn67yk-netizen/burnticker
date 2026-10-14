@@ -137,8 +137,8 @@ describe("NBA settlement does not depend on the dead feed", () => {
     assert.doesNotMatch(nativeSourceById(id)!.flags.join(" "), /\(free, official\)/);
     const r = await preflightSelector(nativeRule(id), { now: NOW });
     assert.equal(r.ok, true, JSON.stringify(r.refusal));
-    assert.equal(r.crossRead?.id, "thesportsdb.v2"); assert.equal(r.agreement, true);
-    assert.match(r.primary.lastReading?.value ?? "", /settled on: on-chain payout/);
+    assert.equal(r.crossRead?.id, "thesportsdb.v2"); assert.equal(r.agreement, null, "no past game is read at launch (owner 2026-10-13)");
+    assert.equal(r.primary.lastReading, null); assert.match(r.agreementBasis, /readers for the next game/);
     const pair = meetingsPairSeries("nba", "PHI", "BOS", 2026);
     const p = await preflightSelector(nativeRule(pair.a), { now: NOW });
     assert.notEqual(p.refusal?.code, "primary-unreadable", JSON.stringify(p.refusal));
