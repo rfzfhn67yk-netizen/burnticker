@@ -29,6 +29,11 @@ import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
  */
 
 export const HERMES_URL = "https://hermes.pyth.network";
+/**
+ * WIRING-AUDIT12 item 11: whether this host has a Pyth access key, so past daily closes can be read (a record close needs them). Only the
+ * yes or no leaves the server (the catalogue's derby.recordCloseKeyed); the key itself never does.
+ */
+export const pythKeyed = (env: Readonly<Record<string, string | undefined>> = process.env): boolean => !!(env.BURNTICKER_PYTH_API_KEY ?? "").trim();
 export const PYTH_FEEDS_FIXTURE = path.join("config", "burnticker", "fixtures", "pyth", "feeds.json");
 /** Pyth SOL/USD — converts a pool TWAP (in SOL) to USD. */
 export const PYTH_SOL_USD = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";

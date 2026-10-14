@@ -307,19 +307,8 @@ export const payoutIsFinal = (chain: Pick<ConditionResolution, "resolved"> | nul
 
 /** Audit 12 item 13: the most outcomes one event's own search lists (the page pages or filters them; see filterOutcomes). */
 export const EVENT_ALL_OUTCOMES = 200;
-/**
- * Audit 12 item 13: a within-event filter over an event's outcomes, by the outcome's own name or its question (case and accents ignored),
- * keeping their order; `limit` and `offset` page it. Returns the page, the number that matched and the total, so the page can say
- * "12 of 30 shown" and offer the next page. Pure.
- */
-export function filterOutcomes<T extends Pick<PolyMarketHit, "question" | "outcome" | "endDate">>(markets: readonly T[], q: string, o: { limit?: number; offset?: number } = {}): { shown: T[]; matched: number; total: number; nextOffset: number | null } {
-  const norm = (s: string | null | undefined) => (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  const words = norm(q).split(/\s+/).filter(Boolean);
-  const hit = words.length ? markets.filter((m) => { const h = `${norm(m.outcome as string | null | undefined)} ${norm(m.question)} ${m.endDate ?? ""}`; return words.every((w) => h.includes(w)); }) : [...markets];
-  const offset = Math.max(0, o.offset ?? 0), limit = Math.max(1, o.limit ?? 12);
-  const shown = hit.slice(offset, offset + limit);
-  return { shown, matched: hit.length, total: markets.length, nextOffset: offset + limit < hit.length ? offset + limit : null };
-}
+/** Audit 12 item 13: the within-event filter lives in outcomeFilter.ts (client-safe, the launch page imports it). */
+export { filterOutcomes } from "@/lib/burnticker/oracle/outcomeFilter";
 
 /**
  * Whether a market's own outcome name shares a word with the query (case and accents ignored; words of 4+ letters, so "win" or "the" in a

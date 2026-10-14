@@ -30,7 +30,7 @@ import { LaunchRecovery } from "./LaunchRecovery";
 import { LAUNCH_GATE_LOADING, launchGateFromCatalogue, wizardMayRender, type LaunchGateState } from "@/lib/burnticker/launchGateState";
 import { availabilityFromCatalogue, launchTypeOf, PREVIEW_BANNER, siteLaunchStateFromCatalogue, SITE_LAUNCH_STATE_LOADING, type LaunchAvailabilityModel, type LaunchType, type SiteLaunchState } from "@/lib/burnticker/launchAvailability";
 import { draftRevision, EMPTY_REVIEW_SLOT, reviewAnswered, reviewFor, reviewMatchesDraft, reviewRequested, REVIEW_UPDATING, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
-import { DEFAULT_SHARE, SLICED_ABOVE, isRaisePreset, shareOf, SHARE_PRESETS, presetRowLabel, pctLabel as presetPct, snapToPreset, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, type RaisePreset } from "@/lib/burnticker/launchPresets";
+import { DEFAULT_SHARE, SLICED_ABOVE, isRaisePreset, shareOf, SHARE_PRESETS, presetRowLabel, pctLabel as presetPct, snapToPreset, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, LINKED_ONE_SHOT_LINE, shareShapeOf, sharePresetsForRule, type RaisePreset } from "@/lib/burnticker/launchPresets";
 import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { PreWalletSummary } from "./PreWalletSummary";
@@ -39,10 +39,12 @@ import { SINGLE_REAL_PICKS, SIDE_REAL_OFF, realBlockers, realField, realReviewNo
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileFieldId, type ProfileUpdate, type ProfileValue } from "./ProfileFields";
 import { NAME_STEP_BLOCKED, fieldRuleSentence, isLintLine, noteIssue, profileIssues, serverFieldProblems } from "./fieldChecks";
-import { JUMP_CONFIRM_LINE, JUMP_CONFIRM_NO, JUMP_CONFIRM_YES, NAMES_REMADE_LINE, NO_SECOND_CHECK, pairBudgetLine, TEAMS_NONE_LINE, TEAMS_UNREAD_LINE, humanDay, leagueButtonName, leagueButtonTitle, winPairNames } from "./pageCopy";
+import { CLOSE_PASSED_CHIP, JUMP_CONFIRM_LINE, JUMP_CONFIRM_NO, JUMP_CONFIRM_YES, NO_SECOND_CHECK, pairBudgetLine, TEAMS_NONE_LINE, TEAMS_UNREAD_LINE, humanDay, leagueButtonName, leagueButtonTitle, winPairNames } from "./pageCopy";
 import { teamAdvancedDefaults } from "@/lib/burnticker/creatorCopy";
 import { nameProblem, tickerProblem, wxThresholdProblem } from "@/lib/burnticker/launchFields";
-import { composeRule, fieldsFromRule, launchBody } from "@/lib/burnticker/launchDraft";
+import { composeRule, fieldsFromRule, launchBody, migrateLinkedShare } from "@/lib/burnticker/launchDraft";
+import { preparedRulesCheckWeb, PREPARED_MISSING_LINE } from "@/lib/burnticker/preparedRules";
+import { filterOutcomes, outcomesShownLine } from "@/lib/burnticker/oracle/outcomeFilter";
 import { VERSION_CHECK_EVENT } from "@/lib/burnticker/buildVersion";
 import { DRAFT_STORE, KEPT_STORE, RESUME_PARAM, RESUME_REVIEW, isReviewedDraft, pickOffer, savedDraftLine } from "@/lib/burnticker/launchDraftStore";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
@@ -56,7 +58,7 @@ import type { ExistingCoin } from "@/lib/burnticker/duplicateRule";
 import { PairFundsFlow } from "../_components/PairFundsFlow";
 import { FundsFlowView, type Blocker, type LaunchVenue, type ProfileFieldKey } from "./ReviewCard";
 import { championPathRule, describeRule, shortDate, windowKindOf, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
-import { LEAGUES, LIVE_NOW, parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, LIVE_NOW, parseEspnSeries, seasonLabel, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import { TEMPLATES, TEMPLATE_START, weatherTemplateDraft, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { fold, meaningful, queryTokens } from "@/lib/burnticker/textMatch";
@@ -72,9 +74,9 @@ import { SEASON_OVER_LINE, SEASON_OVER_LINK_LINE } from "@/lib/burnticker/season
 import { sourceSubjectLabel } from "@/lib/burnticker/paramNames";
 import { prepareIfCurrent, profileRevision, STALE_PREPARE_SENTENCE } from "@/lib/burnticker/preparedLaunch";
 import { endText, settledPairSentence } from "@/lib/burnticker/describe";
-import { SETTLED_DEADLINE_LINE, SETTLED_END_LABEL, settledAsShown, settledPairBody, settledPairFields, settledWhichCoinLine, type SettledPick } from "./settledPair";
+import { SETTLED_DEADLINE_LINE, SETTLED_END_LABEL, settledAsShown, settledPairBody, settledPairFields, settledWhichCoinLine, partyPairNames, type SettledPick } from "./settledPair";
 import { HAZARD_FOLLOW, HAZARD_KINDS, HAZARD_MEASURES, hazardControls, hazardPatternOptions, hazardSeriesFor, hazardSwap, isHazardSeries, type HazardKindId } from "@/lib/burnticker/hazards";
-import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, activeUnit, eventForSide, followForRule, keptProfileLine, keptProfileParts, KEPT_PROFILE_FRESH, KEPT_PROFILE_REUSE, IMAGE_RIGHTS_REQUIRED, oneGameShare, PAIR_COST_EXCLUSIONS, mappingWarning, partyMarketWarning, pickDescribesRule, renderWarnings, reviewBlockers, shareOfBudgetLine, rivalrySeasonLine, stablePatternOptions, teamLine, triggerText, whichAnswer, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, budgetCopy, oneShotSentences, candidateFacts, candidatesPairRule, endSentences, gamePairFacts, gamePairRule, matchupFacts, pairIdentityProblems, pairNames, pairTickers, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
+import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, activeUnit, eventForSide, followForRule, keptProfileLine, keptProfileParts, KEPT_PROFILE_FRESH, KEPT_PROFILE_REUSE, IMAGE_RIGHTS_REQUIRED, oneGameShare, PAIR_COST_EXCLUSIONS, mappingWarning, partyMarketWarning, pickDescribesRule, renderWarnings, reviewBlockers, shareOfBudgetLine, rivalrySeasonLine, stablePatternOptions, teamLine, triggerText, whichAnswer, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, pairDiagramLabel, namesRemadeLine, budgetCopy, oneShotSentences, candidateFacts, candidatesPairRule, endSentences, gamePairFacts, gamePairRule, matchupFacts, pairIdentityProblems, pairNames, pairTickers, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { PICKER_PAGE, pickerPage } from "@/lib/burnticker/polySearch";
 
@@ -111,7 +113,7 @@ const LABELS: Record<Flow, Partial<Record<Step, string>>> = {
 type Suggestion = SearchSuggestion;
 /** Browse (GET /api/burnticker/v1/browse): one source, any venue, in one shape. */
 interface BrowseCategory { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[]; guided?: string | null; adjudicatedOnly?: boolean }
-interface ElOutcome { conditionId: string; label: string; question: string; yes: string; no: string; title: string; settles: string; rule: BurnRule; /** sources-6 (audit 10 #5): which market a candidate's coin settles on, and what a replaced nominee does */ mapping?: string | null }
+interface ElOutcome { conditionId: string; label: string; question: string; yes: string; no: string; title: string; settles: string; rule: BurnRule; /** elections.ts RaceOutcome: the market is the party's result, not the candidate's by name */ partyMarket?: boolean; /** sources-6 (audit 10 #5): which market a candidate's coin settles on, and what a replaced nominee does */ mapping?: string | null }
 interface ElRace { slug: string; title: string; url: string; settlesOn: string | null; description: string | null; hiddenPlaceholders: number; sos: { name: string; url: string }; settlement: string; refused: string[]; outcomes: ElOutcome[] }
 interface ElPairSide { candidate: string; name: string; ticker: string; components: { fecBeats: BurnRule | null; winner: BurnRule }; sentences: { fecBeats: string | null; winner: string }; outcome: { conditionId: string; question: string; yes: string; no: string } }
 interface ElPair { a: ElPairSide; b: ElPairSide; crossRead: { name: string; url: string }; pending: string[] }
@@ -130,10 +132,10 @@ const recordOf = (r: string | null | undefined): { w: number; l: number; d: numb
 /** website-21: GET /v1/sports/rivalry as the step-2 option reads it (`failed`: the read itself failed, never "no game"). */
 interface RivalryRead { key: string; busy: boolean; failed: string | null; offered: boolean; offeredLine: string | null; scheduleNote: string | null; season: string | null; year: number | null; source: string | null; meetings: MeetingRow[]; /** sources-6 (QA 9 #4): what the one-game option searched */ oneGameSearched: string | null }
 interface Side { abbr: string; marketTicker: string; label: string; nickname: string | null; name: string; ticker: string; /** sources-6: the shown code (tickers); `abbr` stays the series pin */ code?: string; /** sources-6 (QA 9 #2): this side plays at home, from the schedule */ home?: boolean }
-interface PolyMarket { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; /** the outcome's name inside its event (Gamma groupItemTitle), when named */ outcome?: string | null; /** sources-2 (oracle/polymarket.ts polyStated) */ resolutionSource?: StatedSource; finalAfter?: FinalAfter }
-interface PolyEvent { slug: string; title: string; url: string; endDate: string | null; closed: boolean; markets: PolyMarket[]; marketCount: number; refused: string[] }
+interface PolyMarket { /** audit 12 item 8: past its scheduled close and waiting for its result */ closePassed?: boolean; conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; /** the outcome's name inside its event (Gamma groupItemTitle), when named */ outcome?: string | null; /** sources-2 (oracle/polymarket.ts polyStated) */ resolutionSource?: StatedSource; finalAfter?: FinalAfter }
+interface PolyEvent { closePassed?: boolean; slug: string; title: string; url: string; endDate: string | null; closed: boolean; markets: PolyMarket[]; marketCount: number; refused: string[] }
 interface PolyTag { slug: string; label: string; events: number; series: string[] }
-interface PolyFound { events: PolyEvent[]; tags: PolyTag[]; markets: PolyMarket[]; /** sources-6 (QA 9 #17): markets ending within 48 hours, hidden unless asked for */ hiddenClosingSoon?: number }
+interface PolyFound { events: PolyEvent[]; tags: PolyTag[]; markets: PolyMarket[]; /** sources-6 (QA 9 #17): markets ending within 48 hours, hidden unless asked for */ hiddenClosingSoon?: number; /** audit 12 item 8: what a market past its scheduled close is */ closePassedNote?: string }
 type Venue = "kalshi" | "polymarket";
 interface EventHit { eventTicker: string; seriesTicker: string; title: string; subTitle: string | null; category: string | null; expectedAt: string | null; closeTime: string | null; markets: { ticker: string; suffix: string; label: string; status: string }[]; matchedSides: string[]; pair: { a: Side; b: Side; tieMarket: string | null } | null; refused: string[] }
 
@@ -224,6 +226,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // (launchGateState.ts — the wizard never flashes before the gate resolves; an unreadable catalogue keeps the controls hidden).
   const [gate, setGate] = useState<LaunchGateState>(LAUNCH_GATE_LOADING);
   const [venues, setVenues] = useState<{ kalshi: boolean; polymarket: boolean; feeds: boolean; pairCurve?: boolean }>({ kalshi: true, polymarket: true, feeds: true });
+  // WIRING-AUDIT12 item 11: whether this host can read past daily closes (a Pyth access key); null until the catalogue is read
+  const [recordKeyed, setRecordKeyed] = useState<boolean | null>(null);
   // review N6: a rivalry pair goes out with the venue this host uses (catalogue venues.pairCurve; a 409 corrects a stale read)
   const [pairVenue, setPairVenue] = useState<PairVenue>("launchlab");
   // browse
@@ -376,6 +380,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [teamsDivision, setTeamsDivision] = useState<"fbs" | "all">("fbs"), [divisionLine, setDivisionLine] = useState<string | null>(null);
   // sources-6 (QA 9 #17): one-time Polymarket markets closing within 48 hours, hidden unless asked for
   const [polyClosingSoon, setPolyClosingSoon] = useState(false);
+  // WIRING-AUDIT12 item 13: one event's every outcome (searched by its slug, up to 200), filtered and paged here (outcomeFilter.ts)
+  const [allOut, setAllOut] = useState<{ slug: string; url: string; markets: PolyMarket[] | null; failed: boolean; text: string; limit: number } | null>(null);
+  const showAllOutcomes = (e: PolyEvent) => {
+    setAllOut({ slug: e.slug, url: e.url, markets: null, failed: false, text: "", limit: 12 });
+    getJson<PolyFound>(`${V1}/polymarket/search?q=${encodeURIComponent(e.slug)}${polyClosingSoon ? "&closingSoon=1" : ""}`)
+      .then((j) => { const ev = (j.events ?? []).find((x) => x.slug === e.slug); setAllOut((a) => (a && a.slug === e.slug ? { ...a, markets: ev?.markets ?? [], failed: !ev } : a)); })
+      .catch(() => setAllOut((a) => (a && a.slug === e.slug ? { ...a, failed: true } : a)));
+  };
   const [hazardCatalogueOf, setHazardCatalogueOf] = useState<ReturnType<typeof hazardControls> | null>(null);
   // sources-6 (QA 9 #40): the natural disaster picked in step 2 and the threshold values chosen per pattern
   const [hazardKind, setHazardKind] = useState<HazardKindId | null>(null), [hazardVals, setHazardVals] = useState<{ every: Record<string, string>; once: Record<string, string> }>({ every: {}, once: {} });
@@ -394,7 +406,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     const a = parseEspnSeries(sideA.marketTicker), b = parseEspnSeries(sideB.marketTicker);
     return a?.kind === "game" && b?.kind === "game" && a.league === b.league && a.eventId === b.eventId && a.abbr !== b.abbr ? { league: a.league, eventId: a.eventId, a: a.abbr, b: b.abbr } : null;
   }, [pairOn, elPick, pairMode, sideA, sideB]);
-  const settledPick: SettledPick | null = useMemo(() => (pairOn && elPick ? { shape: "candidates" as const, market: elPick.b.conditionId, race: elPick.race.slug, names: { a: elPick.a.label, b: elPick.b.label } }
+  // WIRING-AUDIT12 item 5: two party markets are named by the parties (the review then says PARTIES_PAIR_SENTENCE)
+  const settledPick: SettledPick | null = useMemo(() => (pairOn && elPick ? { shape: "candidates" as const, market: elPick.b.conditionId, race: elPick.race.slug, names: partyPairNames(elPick.a, elPick.b) ?? { a: elPick.a.label, b: elPick.b.label } }
     : gameSides && sideA && sideB ? { shape: "game" as const, opp: gameSides.b, names: { a: sideA.nickname ?? sideA.name, b: sideB.nickname ?? sideB.name } } : null), [pairOn, elPick, gameSides, sideA, sideB]);
   const settledOn = !!settledPick;
 
@@ -424,6 +437,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       set("endA", setEndA); set("endB", setEndB);
       set("uq", setUq); set("origin", setOrigin); set("editedFor", setEditedFor); set("eventInfo", setEventInfo); set("srcWarnings", setSrcWarnings); set("bq", setBq); set("wx", setWx); set("draft", setDraft); set("flavour", setFlavour); set("flavourB", setFlavourB); set("cardCtx", setCardCtx); set("cardYear", setCardYear); set("cardSet", setCardSet); set("nameAuto", setNameAuto); set("tickerAuto", setTickerAuto); set("ownImage", setOwnImage); set("note", setNote);
   };
+  // WIRING-AUDIT12 P1-1: a saved linked pair on one result with a share other than 100 % is set to 100 % on resume, and said
+  const resumeFrom = (saved: Record<string, unknown>) => { const { draft: d, notice } = migrateLinkedShare(saved); restoreFrom(d); if (notice) setShareNotice(notice); };
   useEffect(() => {
     // launch night 2026-10-13 (launchDraftStore.ts): the draft offered is the named one in progress, else the kept one that reached the review
     const offer = readOffer();
@@ -434,7 +449,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     // "Start a new launch from the review" (the recovery notice, the signing card): the kept draft opens on its review, rule, name and ticker intact
     const resumeReview = !linked && q0.get(RESUME_PARAM) === RESUME_REVIEW;
     if (linked) { try { sessionStorage.removeItem(STORE); } catch { /* ignore */ } }
-    else if (resumeReview && offer) restoreFrom(offer);
+    else if (resumeReview && offer) resumeFrom(offer);
     else if (offer) setSavedDraft(offer);
     if (resumeReview) { try { window.history.replaceState(window.history.state, "", window.location.pathname); } catch { /* ignore */ } }
     if (wantPair) { setFlow("pair"); setStep("pick"); setGuide({ follow: "rivalry", phase: "which", pairKind: "teams" }); }
@@ -524,10 +539,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   }, []);
   /** launch night 2026-10-13: once every coin is live and recorded, the draft that made them is no longer offered */
   const dropDraft = () => { launched.current = true; try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); } catch { /* ignore */ } setSavedDraft(null); };
-  const resumeDraft = () => { if (savedDraft) restoreFrom(savedDraft); setSavedDraft(null); window.scrollTo({ top: 0 }); };
+  const resumeDraft = () => { if (savedDraft) resumeFrom(savedDraft); setSavedDraft(null); window.scrollTo({ top: 0 }); };
 
   // site audit #18: the one shared catalogue read (catalogueClient.ts) — the header's availability uses the same promise
-  useEffect(() => { loadCatalogue().then((raw) => { const j = raw as { sources?: Source[]; cluster?: string; venues?: typeof venues; customImages?: boolean; hazards?: { id: HazardKindId; controls: ReturnType<typeof hazardControls>[HazardKindId] }[] }; setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) { setVenues(j.venues); setPairVenue(venueFor(j.venues)); } setCustomImages(j.customImages === true); if (j.hazards) setHazardCatalogueOf(Object.fromEntries(j.hazards.map((h) => [h.id, h.controls])) as ReturnType<typeof hazardControls>); setAvail(availabilityFromCatalogue(j)); const st = siteLaunchStateFromCatalogue(j); setSite(st); setGate(st.read === "stale" ? { kind: "unavailable", detail: st.sentence } : launchGateFromCatalogue(j)); }).catch((e) => { const why = String((e as Error).message ?? e); setSite(siteLaunchStateFromCatalogue(null, { failure: why })); setGate(launchGateFromCatalogue(null, why)); }); }, []);
+  useEffect(() => { loadCatalogue().then((raw) => { const j = raw as { sources?: Source[]; cluster?: string; venues?: typeof venues; customImages?: boolean; derby?: { recordCloseKeyed?: boolean }; hazards?: { id: HazardKindId; controls: ReturnType<typeof hazardControls>[HazardKindId] }[] }; setSources(j.sources ?? []); setRecordKeyed(typeof j.derby?.recordCloseKeyed === "boolean" ? j.derby.recordCloseKeyed : null); setCluster(j.cluster ?? null); if (j.venues) { setVenues(j.venues); setPairVenue(venueFor(j.venues)); } setCustomImages(j.customImages === true); if (j.hazards) setHazardCatalogueOf(Object.fromEntries(j.hazards.map((h) => [h.id, h.controls])) as ReturnType<typeof hazardControls>); setAvail(availabilityFromCatalogue(j)); const st = siteLaunchStateFromCatalogue(j); setSite(st); setGate(st.read === "stale" ? { kind: "unavailable", detail: st.sentence } : launchGateFromCatalogue(j)); }).catch((e) => { const why = String((e as Error).message ?? e); setSite(siteLaunchStateFromCatalogue(null, { failure: why })); setGate(launchGateFromCatalogue(null, why)); }); }, []);
   // A2: no pair path while pairs are unavailable — a restored session, ?pair=1, the matchup template or "launch one like this" on a game
   useEffect(() => { if (site.read === "ready" && !site.pairs.available && flow === "pair" && step !== "choose") { setFlow("team"); setStep("choose"); setGame(null); setPairNotice(site.pairs.line); } }, [site, flow, step]);
   const curCat = cats.find((c) => c.id === cat);
@@ -647,7 +662,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       const qs = encodeURIComponent(q2.trim());
       // Both venues at once; either may fail without hiding the other.
       const kalshi = !venues.kalshi ? Promise.resolve(setFound({ results: [], events: [], ranking: "series" })) : getJson<{ results: Series[]; events: EventHit[]; ranking: "events" | "series" }>(`${V1}/kalshi/search?q=${qs}`).then((j) => { if (live) setFound({ results: j.results ?? [], events: j.events ?? [], ranking: j.ranking ?? "series" }); }).catch(() => { if (live) setFound({ results: [], events: [], ranking: "series" }); });
-      const poly = !venues.polymarket ? Promise.resolve(setPolyFound({ events: [], tags: [], markets: [] })) : getJson<PolyFound>(`${V1}/polymarket/search?q=${qs}${polyClosingSoon ? "&closingSoon=1" : ""}`).then((j) => { if (!live) return; setPolyFound({ events: j.events ?? [], tags: j.tags ?? [], markets: j.markets ?? [], hiddenClosingSoon: j.hiddenClosingSoon ?? 0 }); setPolyErr(null); }).catch((e) => { if (!live) return; setPolyFound({ events: [], tags: [], markets: [] }); setPolyErr(String((e as Error).message)); });
+      const poly = !venues.polymarket ? Promise.resolve(setPolyFound({ events: [], tags: [], markets: [] })) : getJson<PolyFound>(`${V1}/polymarket/search?q=${qs}${polyClosingSoon ? "&closingSoon=1" : ""}`).then((j) => { if (!live) return; setPolyFound({ events: j.events ?? [], tags: j.tags ?? [], markets: j.markets ?? [], hiddenClosingSoon: j.hiddenClosingSoon ?? 0, closePassedNote: j.closePassedNote }); setAllOut(null); setPolyErr(null); }).catch((e) => { if (!live) return; setPolyFound({ events: [], tags: [], markets: [] }); setPolyErr(String((e as Error).message)); });
       void Promise.allSettled([kalshi, poly]).then(() => { if (live) setFindBusy(false); });
     }, 400);
     return () => { live = false; clearTimeout(t); };
@@ -710,7 +725,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // website-23: a settled-event pair likewise, its race or its game locked in the pair clause (the race's or the game's own end)
   const ruleShown = useMemo((): BurnRule | null => (rule && settledPick && ruleB ? settledAsShown(rule, "A", settledPick, { a: rule, b: ruleB }) : rule && meetingsOn ? ({ ...rule, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } as BurnRule) : rule), [rule, ruleB, meetingsOn, settledPick]);
   const ruleShownB = useMemo((): BurnRule | null => (ruleB && settledPick && rule ? settledAsShown(ruleB, "B", settledPick, { a: rule, b: ruleB }) : ruleB && meetingsOn ? ({ ...ruleB, pair: { pairId: "review-pair", side: "B", counterpartMint: null, winnerTakesBurn: true } } as BurnRule) : ruleB), [rule, ruleB, meetingsOn, settledPick]);
-  const dialCtx = { nowMs: Date.now(), seasonYear: cardYear ?? (leagueSeries ? seasonYearAt(leagueSeries as LeagueId, Date.now()) : null), set: cardSet };
+  // WIRING-AUDIT12 P1-1: two candidates or one game are a LINKED pair on one result, which moves the whole pool (100 % only)
+  const linkedPair = pairOn && (!!elPick || pairMode === "game");
+  const dialCtx = { nowMs: Date.now(), seasonYear: cardYear ?? (leagueSeries ? seasonYearAt(leagueSeries as LeagueId, Date.now()) : null), set: cardSet, linked: linkedPair };
   useEffect(() => {
     if (!pendingDials || step !== "review" || !baseRule) return;
     const apply = (r0: BurnRule, withSide: boolean) => {
@@ -721,7 +738,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       // intent audit items 1 and 2 (WIRING-INTENT.md): a card's fade side ("Detroit high below 32") survives the rebuild into the review
       if (pendingDials.inverse && dialsFor(r, dialCtx).inverse) r = applyDial(r, "inverse", "on", dialCtx);
       // the copied share moves to the nearest preset (the web UI offers presets; league mode is API-only) — and the page SAYS so (L01)
-      const shape = dialsFor(r, dialCtx).bounds.max >= 1 ? "oneShot" : "recurring";
+      const shape = shareShapeOf(r, { linked: linkedPair });
       const sn = snapToPreset(pendingDials.fraction, shape);
       if (sn.changed && withSide) setShareNotice(`$${pendingDials.from} burns ${presetPct(pendingDials.fraction)} each time. The web launcher offers ${presetRowLabel(shape)}, so ${presetPct(sn.value)} is selected. Use the API to launch with ${presetPct(pendingDials.fraction)}.`);
       r = applyDial(r, "fraction", sn.value, dialCtx);
@@ -741,7 +758,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // that is not a preset (a copied coin, an older default) snaps to the nearest one once per rule. Any other share is API-only.
   const curDials = rule ? dialsFor(rule, dialCtx) : null;
   const oneShotRule = !!curDials && curDials.bounds.max >= 1;
-  const shareOptions = oneShotRule ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring;
+  const shareOptions = rule ? sharePresetsForRule(rule, { linked: linkedPair }) : SHARE_PRESETS.recurring;
+  const linkedOneShotRow = !!curDials?.linkedOneShot;
   const shareValue = curDials ? curDials.fraction : shareOptions[0];
   const snapped = useRef("");
   useEffect(() => {
@@ -750,7 +768,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     snapped.current = baseKey;
     // L01: never a silent swap — the notice names the share the rule came with and the preset now selected
     const sn = oneShotRule ? { value: DEFAULT_SHARE.oneShot, changed: true } : snapToPreset(curDials.fraction, "recurring");
-    setShareNotice(`This rule came with ${presetPct(curDials.fraction)} per burn. The web launcher offers ${presetRowLabel(oneShotRule ? "oneShot" : "recurring")}, so ${presetPct(sn.value)} is selected. Pick another preset below, or use the API to launch with ${presetPct(curDials.fraction)}.`);
+    setShareNotice(`This rule came with ${presetPct(curDials.fraction)} per burn. The web launcher offers ${presetRowLabel(shareShapeOf(rule, { linked: linkedPair }))}, so ${presetPct(sn.value)} is selected. Pick another preset below, or use the API to launch with ${presetPct(curDials.fraction)}.`);
     setDial("fraction", sn.value);
   }, [step, baseKey, curDials?.fraction, pendingDials]);   // eslint-disable-line react-hooks/exhaustive-deps
   // audit 7 item 5: after a mode switch (2 % every win, then Once, then back), the share chosen for that shape comes back, said inline
@@ -934,6 +952,13 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     // item 253: the prepare answer applies only to the draft it was asked for; an edit while it was in flight sets no plan and never
     // reaches the wallet (preparedLaunch.ts prepareIfCurrent). The sign card's tickers are the ones sent, not the form's.
     const sentRev = curRev.current, sent = { a: ticker.toUpperCase(), b: tickerB.toUpperCase() };
+    // WIRING-AUDIT12 P1-2: the bundles' rules are checked against the review's prepared rules before any wallet request; a difference
+    // keeps the wallet closed and sends the creator back to the review with the sentences
+    const preparedOnReview = reviewFor(reviewSlot, sentRev).review?.prepared ?? null;
+    const checkBeforeWallet = async (a: Bundle, b: Bundle | null) => {
+      const lines = preparedOnReview ? await preparedRulesCheckWeb(preparedOnReview, { a: { text: a.rules.text, sha256: a.rules.sha256, mint: a.mint }, b: b ? { text: b.rules.text, sha256: b.rules.sha256 } : null }) : [PREPARED_MISSING_LINE];
+      if (lines.length) throw new Error(lines.join(" "));
+    };
     try {
       const out = await prepareIfCurrent(sentRev, () => curRev.current, async (): Promise<() => void> => {
       if (pairOn && ruleB && !meetingsOn && !settledPick) {
@@ -941,6 +966,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         // website-18: each coin carries its own image, description and links (pinned in its own metadata file)
         const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, rule, ...profileBody(profile) });
         const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: ctxB, note: "", imageUrl: null, rule: ruleB, ...profileBody(profileB) });
+        await checkBeforeWallet(a.bundle as Bundle, b.bundle as Bundle);
         return () => { setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [independentPairFacts(sent.a, sent.b).moves] }); setBundle(a.bundle); };
       } else {
         const body: Record<string, unknown> = { ...common, ...launchBody({ creator, ticker, name, description: finalDescription, descCtx: textCtx, note, rule, raiseSol }) };
@@ -960,9 +986,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           const settledFields = settledPick ? { ...settledPairFields(settledPick), descCtx: ctxB } : {};
           const j = await postPairLaunch((u, init) => fetch(u, init), { ...body, pair: { ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: null, ...profileBody(profileB), ...settledFields } }, meetingsOn || settledPick ? "launchlab" : pairVenue);
           if (j.venue === "pair-curve") return () => { setPairOut(null); setBundle(null); setPcOut({ pairId: j.pair.pairId, pc: j.pairCurve, keys: j.mintSecretKeys, notes: j.pair.notes ?? [] }); };
+          await checkBeforeWallet(j.bundles.a as Bundle, j.bundles.b as Bundle);
           return () => { setPairOut({ pairId: j.pair.pairId, a: j.bundles.a as Bundle, b: j.bundles.b as Bundle, notes: j.pair.notes ?? [] }); setBundle(j.bundles.a as Bundle); };
         }
-        const one = (await post(body)).bundle;
+        const one = (await post(body)).bundle as Bundle;
+        await checkBeforeWallet(one, null);
         return () => setBundle(one);
       }
       });
@@ -1226,6 +1254,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   };
 
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
+  const closePassedChip = <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-normal text-amber-300" data-close-passed>{CLOSE_PASSED_CHIP}</span>;
   const input = "w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm";
   const primary = "rounded bg-amber-400 text-neutral-950 font-medium px-4 py-2 text-sm disabled:opacity-40";
   const pct = (f: number) => `${(f * 100).toFixed(f * 100 % 1 === 0 ? 0 : 1)}%`;
@@ -1260,7 +1289,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     : <div className={card + " space-y-3"}><h2 className="font-medium outline-none" tabIndex={-1} data-step-heading>Choose a league</h2>{leaguePicker}</div>;
   const chip = (v: Venue) => <span className={`ml-2 inline-block rounded px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide ring-1 ${v === "kalshi" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40" : "bg-indigo-500/15 text-indigo-300 ring-indigo-500/40"}`}>{v === "kalshi" ? "Kalshi" : "Polymarket"}</span>;
   // intent audit 2 item 1: a closed market is refused here as well as greyed in the list
-  const pickPoly = (m: PolyMarket) => { if (m.closed) return; markOrigin("exact"); setSrcWarnings([]); setSrcSuggest({ name: m.outcome ? m.outcome.slice(0, 32) : null, ticker: null }); const ev = polyFound?.events.find((e) => e.markets.some((x) => x.conditionId === m.conditionId)); setEventInfo({ question: m.question, url: ev?.url ?? null, outcome: `“${m.yes}”`, resolves: m.endDate ? denver(m.endDate) : ev?.endDate ? denver(ev.endDate) : null, criteria: null, stated: m.resolutionSource && m.finalAfter ? { phrase: m.resolutionSource.phrase, text: m.resolutionSource.text, crossRead: m.resolutionSource.crossRead ? { text: m.resolutionSource.crossRead.text } : null, finalAfter: { text: m.finalAfter.text, ifDisputed: m.finalAfter.ifDisputed } } : null }); setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setBurnOn("yes"); setOnYes(DEFAULT_SHARE.oneShot); setFilter(""); setPolyPreset(null); next(); };
+  const pickPoly = (m: PolyMarket) => { if (m.closed) return; markOrigin("exact"); setSrcWarnings([]); setSrcSuggest({ name: m.outcome ? m.outcome.slice(0, 32) : null, ticker: null }); const ev = polyFound?.events.find((e) => e.markets.some((x) => x.conditionId === m.conditionId)) ?? (allOut?.markets?.some((x) => x.conditionId === m.conditionId) ? polyFound?.events.find((e) => e.slug === allOut.slug) : undefined); setEventInfo({ question: m.question, url: ev?.url ?? null, outcome: `“${m.yes}”`, resolves: m.endDate ? denver(m.endDate) : ev?.endDate ? denver(ev.endDate) : null, criteria: null, stated: m.resolutionSource && m.finalAfter ? { phrase: m.resolutionSource.phrase, text: m.resolutionSource.text, crossRead: m.resolutionSource.crossRead ? { text: m.resolutionSource.crossRead.text } : null, finalAfter: { text: m.finalAfter.text, ifDisputed: m.finalAfter.ifDisputed } } : null }); setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setBurnOn("yes"); setOnYes(DEFAULT_SHARE.oneShot); setFilter(""); setPolyPreset(null); next(); };
   const pickPolySeries = (series: string, title: string) => { markOrigin("exact"); setSrcWarnings([]); setPick({ oracle: "polymarket", series, market: null, title }); setKind("binary"); setFilter(""); setPolyPreset(series.includes("/moneyline") ? "^[^:]+ vs\\. [^:]+$" : null); next(); };
   const badge = (abbr: string) => <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 font-mono text-xs font-bold tracking-tight text-amber-300 ring-1 ring-neutral-700">{abbr}</span>;
   const kalshiOff = !venues.kalshi;
@@ -1358,7 +1387,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">Launch a coin {cluster === "devnet" && <span className="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-sky-500/40" title="BURNTICKER_CLUSTER=devnet: test network, no real money">Devnet</span>}</h1>
-          {(step === "choose" || !guide.follow) && <p className="hidden text-neutral-400 text-sm sm:block">Every <Link className="underline" href="/burnticker">Burnticker</Link> coin settles on a primary source, such as the BLS, the Treasury, the National Weather Service or a league&apos;s own feed, or on a Polymarket payout read from the chain. The rule is locked at launch. <Link className="underline" href="/burnticker/trust">See what the operator can and cannot do.</Link></p>}
+          {/* qa-12 L5: the step-1 intro on step 1 only (Rivalry and Coin comparison keep step === "choose" on their own step 2) */}
+          {(!guide.follow || (step === "choose" && guide.phase === "follow")) && <p className="hidden text-neutral-400 text-sm sm:block" data-step-one-intro>Every <Link className="underline" href="/burnticker">Burnticker</Link> coin settles on a primary source, such as the BLS, the Treasury, the National Weather Service or a league&apos;s own feed, or on a Polymarket payout read from the chain. The rule is locked at launch. <Link className="underline" href="/burnticker/trust">See what the operator can and cannot do.</Link></p>}
         </div>
         <span className="flex items-center gap-3 text-xs"><Link className="underline text-neutral-400" href="/burnticker/templates">Templates</Link><Link className="underline text-neutral-400" href="/burnticker/me">Your coins</Link>{step !== "choose" && !guide.follow && <button data-nav className="text-neutral-500 underline" onClick={() => startOver()}>start over</button>}</span>
       </header>
@@ -1401,8 +1431,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           the tile stays mounted across them, so every pick, share and name is kept */}
       {step === "choose" && guide.follow === "coins" && guide.phase !== "follow" && (
         <div data-coins-steps>
-          {(pairsBlocked ?? typeBlocked("derby")) && <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("coins")}</h2>}
-          <CoinVsCoinTile burnReal={site.burnReal} network={site.cluster ?? cluster} startOpen phase={guide.phase} onPhase={setCoinsPhase} onAnswers={setCoinAnswers} entry={entry} pairCurve={venues.pairCurve === true} customImages={customImages} blocked={walletBlocked("derby", true)} unavailable={pairsBlocked ?? typeBlocked("derby")} unavailableDetail={pairsBlocked ? site.pairs.detail : null} />
+          {(pairsBlocked ?? typeBlocked("derby")) && <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("coins", null, null)}</h2>}
+          <CoinVsCoinTile recordKeyed={recordKeyed} burnReal={site.burnReal} network={site.cluster ?? cluster} startOpen phase={guide.phase} onPhase={setCoinsPhase} onAnswers={setCoinAnswers} entry={entry} pairCurve={venues.pairCurve === true} customImages={customImages} blocked={walletBlocked("derby", true)} unavailable={pairsBlocked ?? typeBlocked("derby")} unavailableDetail={pairsBlocked ? site.pairs.detail : null} />
         </div>
       )}
 
@@ -1557,16 +1587,28 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                 <div key="polymarket" className="space-y-2">
                   {(pm.events.length > 0 || pm.markets.length > 0) && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Events and markets{chip("polymarket")}</h3>}
                   {!polyClosingSoon && (pm.hiddenClosingSoon ?? 0) > 0 && <p className="text-xs text-neutral-400" data-closing-soon>{pm.hiddenClosingSoon} one-time markets closing within 48 hours are hidden. <button type="button" data-nav className="underline" onClick={() => setPolyClosingSoon(true)}>Show closing soon</button></p>}
-                  {pm.markets.map((m) => <div key={m.conditionId} className="flex items-center justify-between gap-2 rounded border border-neutral-800 p-2 text-sm"><span>{m.question} <span className="text-xs text-neutral-500">YES = {m.yes}, NO = {m.no}</span></span><button data-decision="what" className="text-xs underline disabled:no-underline disabled:opacity-50" disabled={m.closed} onClick={() => pickPoly(m)}>{m.closed ? "closed" : "burn on this market →"}</button></div>)}
+                  {pm.closePassedNote && (pm.markets.some((m) => m.closePassed) || pm.events.some((e) => e.closePassed || e.markets.some((m) => m.closePassed))) && <p className="text-xs text-neutral-400" data-close-passed-note>{pm.closePassedNote}</p>}
+                  {pm.markets.map((m) => <div key={m.conditionId} className="flex items-center justify-between gap-2 rounded border border-neutral-800 p-2 text-sm"><span>{m.question} <span className="text-xs text-neutral-500">YES = {m.yes}, NO = {m.no}</span>{m.closePassed && <> {closePassedChip}</>}</span><button data-decision="what" className="text-xs underline disabled:no-underline disabled:opacity-50" disabled={m.closed} onClick={() => pickPoly(m)}>{m.closed ? "closed" : "burn on this market →"}</button></div>)}
                   {pm.events.map((e) => (
                     <div key={e.slug} className="rounded border border-neutral-800 p-2">
-                      <div className="text-sm font-medium">{e.title}{chip("polymarket")} <span className="text-xs text-neutral-500">market closes around {denver(e.endDate)}</span></div>
+                      <div className="text-sm font-medium">{e.title}{chip("polymarket")} <span className="text-xs text-neutral-500">market closes around {denver(e.endDate)}</span>{e.closePassed && <> {closePassedChip}</>}</div>
                       {e.refused.length > 0 ? <p className="text-xs text-red-400">{refusedLine(e.refused)}</p> : <>
                         {/* one outcome = one yes/no market (the owner's Best Picture case): pick a name; "every market" is Advanced only */}
                         {/* owner, 2026-10-12 ("difficult to tell which 'burn if this one wins' matched the 76ers, too much dead space in between"): the
                             whole row is the button, lit on hover and focus, so the name and its action read as one line */}
-                        <ul className="mt-1 text-xs text-neutral-400">{e.markets.map((m) => <li key={m.conditionId}><button type="button" data-decision="what" disabled={m.closed} onClick={() => pickPoly(m)} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800 focus-visible:text-neutral-100 disabled:opacity-50 disabled:hover:bg-transparent"><span className="min-w-0 truncate">{m.outcome ?? m.question}{m.outcome ? null : <span className="text-neutral-500"> (YES = {m.yes}, NO = {m.no})</span>}</span><span className="shrink-0 underline group-disabled:no-underline">{m.closed ? "closed" : m.outcome ? "burn if this one wins →" : "burn on this market →"}</span></button></li>)}</ul>
-                        {e.marketCount > e.markets.length && <p className="mt-1 text-[11px] text-neutral-500">Showing {e.markets.length} of {e.marketCount}. Type the name you want in the search box above to find it.</p>}
+                        <ul className="mt-1 text-xs text-neutral-400">{(allOut?.slug === e.slug && allOut.markets ? filterOutcomes(allOut.markets, allOut.text, { limit: allOut.limit }).shown : e.markets).map((m) => <li key={m.conditionId}><button type="button" data-decision="what" disabled={m.closed} onClick={() => pickPoly(m)} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800 focus-visible:text-neutral-100 disabled:opacity-50 disabled:hover:bg-transparent"><span className="min-w-0 truncate">{m.outcome ?? m.question}{m.outcome ? null : <span className="text-neutral-500"> (YES = {m.yes}, NO = {m.no})</span>}{m.closePassed && !e.closePassed && <> {closePassedChip}</>}</span><span className="shrink-0 underline group-disabled:no-underline">{m.closed ? "closed" : m.outcome ? "burn if this one wins →" : "burn on this market →"}</span></button></li>)}</ul>
+                        {/* WIRING-AUDIT12 item 13: "Show all N" reads every outcome of the event, then a filter and paging here */}
+                        {e.marketCount > e.markets.length && allOut?.slug !== e.slug && <p className="mt-1 text-[11px] text-neutral-500" data-show-all>Showing {e.markets.length} of {e.marketCount}. <button type="button" data-nav className="underline" onClick={() => showAllOutcomes(e)}>Show all {e.marketCount}</button></p>}
+                        {allOut?.slug === e.slug && (() => {
+                          if (allOut.failed) return <p className="mt-1 text-[11px] text-amber-300" role="status" data-show-all-failed>The full list could not be read just now. <button type="button" data-nav className="underline" onClick={() => showAllOutcomes(e)}>Try again</button></p>;
+                          if (!allOut.markets) return <p className="mt-1 text-[11px] text-neutral-500" role="status">Reading every outcome.</p>;
+                          const r = filterOutcomes(allOut.markets, allOut.text, { limit: allOut.limit });
+                          return <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500" data-all-outcomes>
+                            <FieldHelp id="outcome-filter" /><input data-nav data-help="outcome-filter" aria-label="Filter the outcomes" className={input + " w-full sm:w-56"} placeholder="Filter by name" value={allOut.text} onChange={(ev) => setAllOut({ ...allOut, text: ev.target.value, limit: 12 })} />
+                            <span data-outcomes-shown>{outcomesShownLine(r, !!allOut.text.trim())}</span>
+                            {r.nextOffset !== null && <button type="button" data-nav className="underline" onClick={() => setAllOut({ ...allOut, limit: allOut.limit + 12 })}>Show 12 more</button>}
+                          </div>;
+                        })()}
                       </>}
                     </div>
                   ))}
@@ -1740,7 +1782,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const facts = meetingsOn ? null : pairOn && sideA && sideB ? (ruleB ? (elPick ? candidateFacts({ a: ticker, b: tickerB, candA: elPick.a.label, candB: elPick.b.label }) : settledPick?.shape === "game" ? gamePairFacts({ a: ticker, b: tickerB, teamA: A, teamB: B, tie: tieWord }) : matchupFacts({ a: ticker, b: tickerB, oneLinerA: text?.oneLiner ?? "", oneLinerB: textB?.oneLiner ?? "", inverse: !!rule.inverse, once: pairMode === "game", teamA: `the ${A}`, teamB: `the ${B}`, tie: tieWord })) : winnerTakesBurnFacts(ticker || "A", tickerB || "B")) : null;
         // walkthrough snag 11: a one-shot due before the coin can graduate says what the keeper does with an early result
         const dueIso = pairOn && game?.expectedAt ? game.expectedAt : null;
-        const notes = windowKindOf(rule) === "one-shot" ? [beforeGraduationLine(dueIso ? shortDate(dueIso) : eventInfo?.resolves ?? null)] : [];
+        // WIRING-AUDIT12 item 4: what happens after that waiting burn, from the pair's own end (one game, two candidates, another linked pair)
+        const endLink = !pairOn ? null : elPick ? "candidates" as const : settledPick?.shape === "game" ? "game" as const : meetingsOn || !ruleB ? "pair" as const : null;
+        const notes = windowKindOf(rule) === "one-shot" ? [beforeGraduationLine(dueIso ? shortDate(dueIso) : eventInfo?.resolves ?? null, rule, endLink)] : [];
         // website-24: the review sentence for a coin that burns a real token
         const realOneList = fieldOne ? [{ ticker: ticker.toUpperCase(), symbol: fieldOne.symbol }] : [];
         notes.push(...realReviewNotes(realOneList));
@@ -1801,7 +1845,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const budget0 = budgetCopy(rule, shareValue, unitPhrase(activeUnit(rule, pick)));
         // launch night 2026-10-13 (hunt): two separate coins each spend from their own pool ("this coin" read as one coin for both)
         const budget = pairOn && ruleB && endPickable ? { ...budget0, line: pairBudgetLine(budget0.line) } : budget0;
-        const preview = <><p>{sentence}</p>{!sentence.includes(" once, when ") && <p className="mt-1 text-xs text-neutral-300">{budget.line}</p>}{renderWarnings(srcWarnings, ticker, tickerB).map((w) => <p key={w} className="mt-1 text-xs text-amber-200" data-preview-warning>{w}</p>)}</>;
+        // WIRING-AUDIT12 item 16: a team coin names its season beside the team on the Burns step too ("Dodgers, 2026 season")
+        const teamSeason = (() => { if (guide.follow !== "team" || !team) return null; const e = rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null; return e && e.kind === "team" && (e.window.kind === "season" || e.window.kind === "post") ? `${team.nickname ?? team.name}, ${seasonLabel(e.league, e.window.year)} season` : null; })();
+        const preview = <>{teamSeason && <p className="mb-1 text-xs font-medium text-amber-200" data-team-season>{teamSeason}</p>}<p>{sentence}</p>{!sentence.includes(" once, when ") && <p className="mt-1 text-xs text-neutral-300">{budget.line}</p>}{renderWarnings(srcWarnings, ticker, tickerB).map((w) => <p key={w} className="mt-1 text-xs text-amber-200" data-preview-warning>{w}</p>)}</>;
         const nextBtn = (label: string, to: GuidedPhase) => <StickyAction><button type="button" data-nav className={primary + " w-full sm:w-auto"} onClick={() => setGuide((g) => ({ ...g, phase: to }))}>{label}</button></StickyAction>;
         const pairKindNow = guide.follow === "rivalry" ? (elPick ? "candidates" as const : "teams" as const) : null;
         const rivalryScope = pairKindNow === "teams" ? (meetingsOn ? "meetings" as const : pairMode === "game" ? "game" as const : "season" as const) : null;
@@ -1876,8 +1922,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           // website-24 (WIRING-ROUND5): what the coin burns, itself (the default) or a real token; the waiting line until round 5 is deployed
           const realExtra = pairOn || !rule || rule.vault ? null : realOneOffered
             ? <BurnRealChoice side="one" who={`$${ticker.toUpperCase() || "TICKER"}`} picks={SINGLE_REAL_PICKS} value={realOne} onChange={setRealOne} network={realNet} locked={busy} />
-            : site.burnReal.line ? <p className="text-xs text-neutral-400" data-burn-real-waiting>{site.burnReal.line}</p> : null;
-          return <PatternStep drain={drain} preview={preview} options={options} value={curPattern} onPick={pickPattern} shares={shareOptions} share={shareValue} onShare={setShare} pairLabel={pairOn && !!ruleB} math={budget.math} notice={patternNotice} extra={hazardExtra || realExtra || seasonExtra || drainWarn || resultsExtra ? <>{seasonExtra}{resultsExtra}{drainWarn && <p className="text-xs text-amber-300" role="status" data-drain-warning>{drainWarn}</p>}{hazardExtra}{realExtra}</> : null} next={seasonBlocked ? <StickyAction><button type="button" data-nav disabled className={primary + " w-full sm:w-auto"}>Next</button></StickyAction> : nextBtn("Next", "name")} />;
+            // WIRING-AUDIT12 item 15: only where a target could be set (this condition), one tap away
+            : site.burnReal.line ? <details className="text-xs text-neutral-400" data-burn-real-waiting><summary className="cursor-pointer">What is not offered yet</summary><p className="mt-1">{site.burnReal.line}</p></details> : null;
+          return <PatternStep drain={drain} preview={preview} options={options} value={curPattern} onPick={pickPattern} shares={shareOptions} share={shareValue} onShare={setShare} shareLine={linkedOneShotRow ? LINKED_ONE_SHOT_LINE : null} pairLabel={pairOn && !!ruleB} math={budget.math} notice={patternNotice ?? shareNotice} extra={hazardExtra || realExtra || seasonExtra || drainWarn || resultsExtra ? <>{seasonExtra}{resultsExtra}{drainWarn && <p className="text-xs text-amber-300" role="status" data-drain-warning>{drainWarn}</p>}{hazardExtra}{realExtra}</> : null} next={seasonBlocked ? <StickyAction><button type="button" data-nav disabled className={primary + " w-full sm:w-auto"}>Next</button></StickyAction> : nextBtn("Next", "name")} />;
         }
         // the end, stated on the review (the server adds the default end, with the $DEFICIT sink, to a rule sent without one)
         // website-21: a rivalry series pair ends as built (the pair-winner sink): the rest goes to the series winner, and no other end is offered
@@ -1950,7 +1997,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const nameStepBlocked = rightsMissing || !ready || profileBlockers.length > 0 || coins.some((c) => !!c.nameIssue || !!c.tickerIssue);
         if (guide.follow && guide.phase === "name") {
           return <>
-            {namesRemade && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-200" role="status" data-names-remade>{NAMES_REMADE_LINE}</p>}
+            {namesRemade && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-200" role="status" data-names-remade>{namesRemadeLine(pairOn ? 2 : 1)}</p>}
             {keptProfile && keptProfile.length > 0 && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-200" role="status" data-kept-profile>{keptProfileLine(keptProfile)} <button type="button" data-nav className="underline" onClick={() => setKeptProfile(null)}>{KEPT_PROFILE_REUSE}</button> <button type="button" data-nav className="ml-2 underline" onClick={() => { setProfile((x) => ({ ...x, description: "", x: "", telegram: "", website: "" })); setProfileB((x) => ({ ...x, description: "", x: "", telegram: "", website: "" })); setNote(""); setKeptProfile(null); }}>{KEPT_PROFILE_FRESH}</button></p>}
             <ReviewCard mode="name" endChoice={endChoiceBlock} coins={coinsForName} sentence={sentence} ends={null} shares={{ options: [...shareOptions], value: shareValue, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
             image={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`, true, "a")}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false, "b")}</div> : imageField(profile, setProfile, null)}
@@ -2010,6 +2057,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               venue={venue}
               publicProfile={publicProfile}
               pairDiagram={two || (pairOn && !ruleB) ? (venue === "independent" ? "independent" : "linked") : null}
+              pairDiagramText={two || (pairOn && !ruleB) ? pairDiagramLabel(rule, venue !== "independent") : null}
               image={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`, true, "a")}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false, "b")}</div> : imageField(profile, setProfile, null)}
               profile={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" who={`$${ticker || "A"}`} side="a" /><ProfileFields value={profileB} onChange={setProfileB} generated={genB} part="text" who={`$${tickerB || "B"}`} side="b" /></div> : <ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" side="a" />}
               advanced={teamPath ? { defaults: teamAdvancedDefaults({ sharePct: pct(shareValue), raiseSol: raiseSol, minForwardSol: String(ON_END_DEFAULT.sweepThresholdLamports / 1e9), profile: { image: !!profile.image, description: !!profile.description.trim(), links: [profile.x, profile.telegram, profile.website].filter((x) => x.trim()).length } }) } : null}

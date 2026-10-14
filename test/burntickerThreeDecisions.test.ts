@@ -91,7 +91,7 @@ describe("three decisions to a coin", () => {
 
   test("the review card's own sentences pass the copy lint (the acknowledgement line, the receipts line, the LP line)", () => {
     const src = read(REVIEW), cfg = loadCopyLintConfig();
-    for (const k of ["ACK_LINE", "RECEIPTS_LINE"]) { const t = new RegExp(`export const ${k} = "([^"]+)"`).exec(src)![1]; const r = lintCopy(t, cfg); assert.ok(r.ok, `${k}: ${r.hits.map((h) => h.phrase).join(", ")}`); }
+    for (const k of ["ACK_LINE", "ACK_LINE_PAIR", "RECEIPTS_LINE"]) { const t = new RegExp(`export const ${k} = "([^"]+)"`).exec(src)![1]; const r = lintCopy(t, cfg); assert.ok(r.ok, `${k}: ${r.hits.map((h) => h.phrase).join(", ")}`); }
     // the LP lines are built from the fee constants (feeShareLine.ts): lint them as rendered
     for (const t of [`The pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`, `The pool's liquidity is locked forever. ${PAIR_OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`]) { const r = lintCopy(t, cfg); assert.ok(r.ok, `LP line: ${r.hits.map((h) => h.phrase).join(", ")}`); }
   });

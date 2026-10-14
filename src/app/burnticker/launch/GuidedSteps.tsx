@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AMOUNT_MATH_LABEL, END_LABEL, FOLLOW_CHOICES, GUIDED_STEPS, OTHER_PATTERNS_LABEL, UPFRONT_LABEL, createsLine, progressLabel, shareExample, whichHeading, type EndOption, type FollowId, type PatternId, type PatternOption } from "@/lib/burnticker/guidedLaunch";
+import { AMOUNT_MATH_LABEL, END_LABEL, FOLLOW_CHOICES, GUIDED_STEPS, OTHER_PATTERNS_LABEL, UPFRONT_LABEL, createsLine, createsLineFor, progressLabel, shareExample, whichHeading, type EndOption, type FollowId, type PatternId, type PatternOption } from "@/lib/burnticker/guidedLaunch";
 import { MAIN_RECURRING, pctLabel } from "@/lib/burnticker/launchPresets";
 import { CANDIDATES_PAIR_SENTENCE } from "@/lib/burnticker/describe";
 import { HAZARD_FOLLOW } from "@/lib/burnticker/hazards";
@@ -83,7 +83,7 @@ export function FollowStep({ onPick, blocked, upfront = [], extra = null, value 
         {STEP1_CHOICES.map((c) => { const why = blocked(c.id); return (
           <div key={c.id} className={`min-w-0 rounded-xl border border-neutral-800 bg-neutral-900 ${why ? "opacity-60" : ""}`} data-follow={c.id}>
             <button type="button" role="radio" aria-checked={value === c.id} data-decision="what" data-follow-choice={c.id} aria-label={c.label} aria-describedby={`follow-${c.id}-line`} disabled={!!why} onClick={() => onPick(c.id)} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 disabled:cursor-not-allowed">
-              <span className="min-w-0"><span className="block text-base font-semibold">{c.label} <span className="ml-1 align-middle text-[11px] font-normal text-neutral-400" data-creates={c.coins}>{createsLine(c.coins)}</span></span><span id={`follow-${c.id}-line`} className="block truncate text-sm text-neutral-300">{c.line}</span></span>
+              <span className="min-w-0"><span className="block text-base font-semibold">{c.label} <span className="ml-1 align-middle text-[11px] font-normal text-neutral-400" data-creates={c.coins}>{c.id === "coins" ? createsLineFor("coins", null) : createsLine(c.coins)}</span></span><span id={`follow-${c.id}-line`} className="block truncate text-sm text-neutral-300">{c.line}</span></span>
               <span aria-hidden="true" className="shrink-0 text-neutral-500">›</span>
             </button>
             {why && <p className="px-3 pb-2 text-xs text-amber-300">{why}</p>}
@@ -120,7 +120,7 @@ export function RivalryKindStep({ onPick, teamsBlocked, value = null }: { onPick
 }
 
 /** Question 3: the four patterns, the share row and the sentence the coin carries. */
-export function PatternStep({ preview, options, value, onPick, shares, share, onShare, next, math = null, notice = null, extra = null, pairLabel = false, drain = null }: { /** WIRING-PARITY audit 7 #6: how fast a large share empties the pool */ drain?: string | null; /** item 159: a pair's share is set once for both coins */ pairLabel?: boolean; preview: ReactNode; options: PatternOption[]; value: PatternId | null; onPick: (p: PatternId) => void; shares: readonly number[]; share: number; onShare: (v: number) => void; next: ReactNode; /** pass B item 16 */ math?: string | null; /** audit 6 item 7: why a tap did nothing */ notice?: string | null; /** WIRING-SOURCES3: extra choices (a disaster coin's per-event / next-event pair) */ extra?: ReactNode }) {
+export function PatternStep({ preview, options, value, onPick, shares, share, onShare, next, math = null, notice = null, extra = null, pairLabel = false, drain = null, shareLine = null }: { /** WIRING-AUDIT12 P1-1: why a linked one-shot pair has one share (launchPresets.ts LINKED_ONE_SHOT_LINE) */ shareLine?: string | null; /** WIRING-PARITY audit 7 #6: how fast a large share empties the pool */ drain?: string | null; /** item 159: a pair's share is set once for both coins */ pairLabel?: boolean; preview: ReactNode; options: PatternOption[]; value: PatternId | null; onPick: (p: PatternId) => void; shares: readonly number[]; share: number; onShare: (v: number) => void; next: ReactNode; /** pass B item 16 */ math?: string | null; /** audit 6 item 7: why a tap did nothing */ notice?: string | null; /** WIRING-SOURCES3: extra choices (a disaster coin's per-event / next-event pair) */ extra?: ReactNode }) {
   const offered = options.filter((o) => o.available), other = options.filter((o) => !o.available);
   // item 153: More and Less always toggle; the chosen share stays visible on the main row
   const [more, setMore] = useState(false);
@@ -154,6 +154,7 @@ export function PatternStep({ preview, options, value, onPick, shares, share, on
         {/* website-22 (QA 9 item 37): More and Less sit at the end of the row, after every chip */}
         {shares.length > 3 && <button type="button" data-optional="preset" aria-expanded={more} className="text-xs text-neutral-400 underline" onClick={() => setMore(!more)} data-share-more>{more ? "Less" : "More"}</button>}
       </div>
+      {shareLine && <p className="text-xs text-neutral-300" data-linked-one-shot>{shareLine}</p>}
       <p className="text-xs text-neutral-400" data-share-example>{shareExample(share)}</p>
       {drain && <p className="text-xs text-amber-200" data-drain>{drain}</p>}
       {math && <details className="text-xs text-neutral-400" data-amount-math><summary className="cursor-pointer">{AMOUNT_MATH_LABEL}</summary><p className="mt-1">{math}</p></details>}

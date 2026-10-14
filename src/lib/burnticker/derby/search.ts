@@ -14,7 +14,7 @@ import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
  *   · a non-crypto feed (single-asset rules) → cross = redstone:<feed id> when RedStone carries it (EUR_FX, AAPL, XAU …), else none;
  *   · a Jupiter token with no Pyth feed → the TWAP fallback when its liquidity is ≥ $250K: `pool` = its deepest SOL pool on Raydium or
  *     PumpSwap (DexScreener's pair list), cross = jup:<mint>.
- * A hit with no usable cross-read says so (`cross: null` + `why`): the creation preflight would refuse it.
+ * A hit with no usable cross-read says so (`cross: null` + `why`, a plain sentence: qa-12 L3): the creation preflight would refuse it.
  */
 
 export interface DerbyCoinHit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlying | null; why: string | null; /** QA pass 9 #32: how the result tells two coins with one symbol apart */ shortMint?: string | null; mark?: string; label?: string; /** audit 10 #22: the second source as a sentence */ crossLine?: string | null }
@@ -32,7 +32,7 @@ export const liquidityLabel = (usd: number | null | undefined): string | null =>
  */
 export function withHitLabel(h: DerbyCoinHit): DerbyCoinHit {
   const sm = shortMint(h.mint), liq = liquidityLabel(h.liquidityUsd);
-  const mark = h.source === "pyth" && !h.mint ? "price feed, no Solana mint" : h.verified ? "verified" : "not verified";
+  const mark = h.source === "pyth" && !h.mint ? "a Pyth feed with no Solana coin" : h.verified ? "verified" : "not verified";
   return { ...h, shortMint: sm, mark, label: [h.symbol, sm, liq ? `${liq} liquidity` : null, mark].filter(Boolean).join(" · "), crossLine: h.underlying ? crossReadSentence(h.underlying.cross, h.symbol) : null };
 }
 /**
@@ -93,6 +93,17 @@ export async function deepestSolPool(fetchImpl: FetchLike, mint: string): Promis
   } catch { return null; }
 }
 
+/**
+ * QA-12 L3: why a result can or cannot be used, in plain sentences (the tile shows them under each result). Each one says what is missing
+ * and what the creator can do, never the internal names (preflight, cross-read, Hermes, TWAP).
+ */
+export const NO_PYTH = "Pyth has no feed for this coin.";
+export const HOME_CHAIN_WHY = "Pyth does not carry this coin on Solana, so this site reads RedStone's signed value for it, and checks each reading against DexScreener on the coin's own chain.";
+export const POOL_READ_WHY = "Pyth has no feed for this coin, so this site reads its largest SOL pool, averaged over time, and checks each reading against Jupiter's quote.";
+export const NO_POOL_WHY = "This site reads only Raydium and PumpSwap pools paired with SOL, and it found none for this coin.";
+export const noSecondSourceWhy = (sym: string): string => `${sym} cannot be used yet. Every reading has to be checked against a second source run by someone else, and none carries ${sym}: Jupiter has no verified token for it and RedStone does not list it.`;
+export const thinPoolWhy = (usd: number | null | undefined): string => `Its pools hold $${Math.round(usd ?? 0).toLocaleString("en-US")}, and a coin without a Pyth feed needs at least $${DERBY_MIN_LIQUIDITY_USD.toLocaleString("en-US")}.`;
+
 export async function searchDerbyCoins(q: string, d: SearchDeps, o: { assets?: "crypto" | "all"; limit?: number; env?: Readonly<Record<string, string | undefined>> } = {}): Promise<DerbyCoinHit[]> {
   const query = q.trim();
   if (query.length < 2) return [];
@@ -113,7 +124,7 @@ export async function searchDerbyCoins(q: string, d: SearchDeps, o: { assets?: "
     const cross = tok ? `jup:${tok.id}` : rsPrimary && home ? `dexscreener:${home.chain}:${home.address}` : rsId && rs.has(rsId) ? `redstone:${rsId}` : null;
     out.push({ symbol: sym, name: row.symbol, source: "pyth", assetType: h.assetType, feed: h.id, mint: tok?.id ?? null, liquidityUsd: tok?.liquidity ?? null, verified: true,
       underlying: cross ? { symbol: sym, pyth: h.id, mint: tok?.id ?? null, pool: null, cross, ...(rsPrimary ? { redstone: rsPrimary } : {}) } : null,
-      why: cross ? (rsPrimary ? "Pyth on Solana has no account for it: RedStone's signed packages are the primary when no Hermes key is set; DexScreener on its home chain is the cross-read" : null) : `no independent cross-read carries ${sym} (no verified Jupiter token, not on RedStone's gateway): the preflight would refuse it` });
+      why: cross ? (rsPrimary ? HOME_CHAIN_WHY : null) : noSecondSourceWhy(sym) });
   }
   const seen = new Set(out.map((x) => x.mint).filter(Boolean));
   let resolved = 0;
@@ -124,7 +135,7 @@ export async function searchDerbyCoins(q: string, d: SearchDeps, o: { assets?: "
     // The TWAP fallback: resolve the deepest SOL pool for the first few liquid coins (one DexScreener read each).
     const tw = enough && resolved < 3 ? (resolved++, await twapUnderlying(d.fetchImpl, { symbol: sym, mint: t.id, liquidityUsd: t.liquidity })) : null;
     out.push({ symbol: sym, name: t.name, source: "jupiter", assetType: "Crypto", feed: null, mint: t.id, liquidityUsd: t.liquidity, verified: t.isVerified, underlying: tw && "underlying" in tw ? tw.underlying : null,
-      why: tw && "underlying" in tw ? "no Pyth feed: read from its deepest SOL pool (time-weighted vault balances), cross-read by Jupiter" : tw && "why" in tw ? `no Pyth feed: ${tw.why}` : enough ? "no Pyth feed: search for it by name to resolve its pool" : `no Pyth feed and $${Math.round(t.liquidity ?? 0).toLocaleString("en-US")} of liquidity (needs $${DERBY_MIN_LIQUIDITY_USD.toLocaleString("en-US")})` });
+      why: tw && "underlying" in tw ? POOL_READ_WHY : tw && "why" in tw ? `${NO_PYTH} ${tw.why}` : enough ? `${NO_PYTH} Search for it by its name to find its pool.` : `${NO_PYTH} ${thinPoolWhy(t.liquidity)}` });
     if (out.length >= (o.limit ?? 12) * 2) break;
   }
   // audit 10 #21: a usable reference (one with a second source) comes before the ones the preflight would refuse; order is kept within each
@@ -133,8 +144,8 @@ export async function searchDerbyCoins(q: string, d: SearchDeps, o: { assets?: "
 
 /** A TWAP underlying for a Jupiter token (its deepest SOL pool), or why not. */
 export async function twapUnderlying(fetchImpl: FetchLike, t: { symbol: string; mint: string; liquidityUsd: number | null }): Promise<{ underlying: DerbyUnderlying } | { why: string }> {
-  if ((t.liquidityUsd ?? 0) < DERBY_MIN_LIQUIDITY_USD) return { why: `$${Math.round(t.liquidityUsd ?? 0).toLocaleString("en-US")} of liquidity (needs $${DERBY_MIN_LIQUIDITY_USD.toLocaleString("en-US")})` };
+  if ((t.liquidityUsd ?? 0) < DERBY_MIN_LIQUIDITY_USD) return { why: thinPoolWhy(t.liquidityUsd) };
   const p = await deepestSolPool(fetchImpl, t.mint);
-  if (!p) return { why: "no Raydium CPMM or PumpSwap SOL pool found for it (Meteora pools are not read)" };
+  if (!p) return { why: NO_POOL_WHY };
   return { underlying: { symbol: t.symbol, pyth: null, mint: t.mint, pool: p.pool, cross: `jup:${t.mint}` } };
 }

@@ -300,14 +300,15 @@ export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | 
   const ab = tickerB ? `${head}, and $${tickerB}'s share for that ${day} goes to $${tickerA}'s burn. On a ${day} ${d.b.symbol} out-gains ${d.a.symbol}${by}, $${tickerB} burns and takes $${tickerA}'s share.` : `${head}.`;
   // "Runs for N days" (the owner, 2026-10-10: "in the coin vs coin it reads as seasons for the duration")
   // cheap-features item 15 (owner 2026-10-13): a two-coin daily race ends on its tally of winning days, so the end is said as a result
-  return `${ab} ${derbyReadOnlySentence(d)} ${tickerB ? raceEndSentence(d.season.days) : `Runs for ${d.season.days} days, then winds down.`}`;
+  return `${ab} ${derbyReadOnlySentence(d)} ${tickerB ? raceEndSentence(d.season.days, d.window === "weekly" ? "weeks" : "days") : `Runs for ${d.season.days} days, then winds down.`}`;
 }
 
 /** Cheap-features item 14: the run lengths the web launcher offers beside the share presets (the API takes any length up to 366 days). */
 export const DERBY_RUN_PRESETS = [7, 14, 30] as const;
 export const runPresetLabel = (days: number): string => `${days} days`;
 /** Cheap-features item 15: a daily race's end, said as a result. */
-export const raceEndSentence = (days: number): string => `Runs for ${days} days. At the end, the side with more winning days takes the rest.`;
+// qa-12 L2: said the same as the end sentences (describe.ts RACE_END_RESULT): the tally burns once more, the other coin's rest moves to it
+export const raceEndSentence = (days: number, unit: "days" | "weeks" = "days"): string => `Runs for ${days} days. At the end, the coin with more winning ${unit} burns once more and takes the rest of the other coin's pool. If both won the same number of ${unit}, each burns down what is left on itself.`;
 /** The reference coins are inputs only (the owner, 2026-10-13). */
 export const derbyReadOnlySentence = (d: Pick<CoinVsSpec, "a" | "b">): string => `${d.a.symbol} and ${d.b.symbol} are only read, never traded or burned.`;
 

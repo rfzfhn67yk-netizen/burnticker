@@ -58,7 +58,7 @@ describe("1: a failed launch keeps the whole draft, and Start a new launch opens
     assert.match(PAGE, /sessionStorage\.setItem\(STORE, snapshot\); if \(isReviewedDraft\(JSON\.parse\(snapshot\)\)\) sessionStorage\.setItem\(KEPT_STORE, snapshot\);/);
     assert.match(PAGE, /return pickOffer\(read\(STORE\), read\(KEPT_STORE\)\);/);
     assert.match(PAGE, /const resumeReview = !linked && q0\.get\(RESUME_PARAM\) === RESUME_REVIEW;/);
-    assert.match(PAGE, /else if \(resumeReview && offer\) restoreFrom\(offer\);/);
+    assert.match(PAGE, /else if \(resumeReview && offer\) resumeFrom\(offer\);/);
     assert.match(PAGE, /set\("step", \(v: Step\) => setStep\(v === "launch" \? "review" : v\)\)/, "a draft saved at the signing step reopens on its review");
     assert.match(PAGE, /sessionStorage\.removeItem\(STORE\); sessionStorage\.removeItem\(KEPT_STORE\); sessionStorage\.removeItem\(CVC_STORE\);/);
     assert.match(PAGE, /onLive=\{dropDraft\}/); assert.match(PAGE, /const dropDraft = \(\) => \{ launched\.current = true;/);

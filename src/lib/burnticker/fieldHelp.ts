@@ -12,6 +12,7 @@ export const FIELD_HELP = {
   "outcome-search": { what: "Part of a name in this market's list, such as a film, a person or a team.", does: "It filters the list. Picking a name opens the create screen for that name's own yes-or-no market." },
   "market-search": { what: "A team, a person, a show, a city or an election, in plain words.", does: "It lists settled markets that can settle a rule. Nothing is chosen until you pick one." },
   "browse-filter": { what: "A word to narrow this category's sources.", does: "It filters the cards below. It does not change any rule." },
+  "outcome-filter": { what: "A name or a word to narrow this event's outcomes.", does: "It filters the list of outcomes below. It does not change any rule." },
   "league-search": { what: "Part of a league's name, such as MLB, Premier League, WNBA or college.", does: "It filters the league list. Picking a league loads its teams." },
   "league-pick": { what: "The league your team plays in.", does: "It sets where the schedule comes from and which teams you can pick. The schedule comes from the league's official feed, or from TheSportsDB with its licensed key." },
   "team-search": { what: "A team's name, city or short name.", does: "It filters the team list. Picking a team sets the coin's team. The team is pinned by its id, so a rename keeps working." },

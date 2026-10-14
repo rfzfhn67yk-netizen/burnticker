@@ -2,6 +2,7 @@
 
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { REVIEW_UPDATING } from "@/lib/burnticker/launchReviewSync";
+import { pendingWords } from "@/lib/burnticker/preparedRules";
 
 /**
  * THE PRE-WALLET SUMMARY (ChatGPT launch audit 5, L06 / site audit #4, 2026-10-11): what the creator sees on the review card BEFORE the
@@ -56,15 +57,19 @@ export function PreWalletSummary({ review, loading, error, updating = false }: {
       <details className="min-w-0">
         <summary className="cursor-pointer text-neutral-400">{(review.rules?.length ?? 1) > 1 ? "The exact rule of each coin and its fingerprint" : "The exact rule text and its fingerprint"}</summary>
         {/* website-19 (intent audit item 8): every rule the creator signs, labelled with its coin and its transaction number */}
-        {(review.rules && review.rules.length ? review.rules : [{ side: "A" as const, ticker: review.coins[0]?.ticker ?? "", name: review.coins[0]?.name ?? "", step: 1, text: review.rule.text, sha256: review.rule.sha256, derived: false }]).map((r) => (
+        {(review.rules && review.rules.length ? review.rules : [{ side: "A" as const, ticker: review.coins[0]?.ticker ?? "", name: review.coins[0]?.name ?? "", step: 1, text: review.rule.text, sha256: review.rule.sha256, derived: false, label: null, pending: [] as string[] }]).map((r) => (
           <div key={r.side} className="mt-2 min-w-0" data-rule-side={r.side}>
             {(review.rules?.length ?? 1) > 1 && <p className="break-words text-neutral-300">Coin {r.side}, ${r.ticker || "TICKER"} ({r.name || "no name yet"}), signed in transaction {r.step}.</p>}
             {r.derived ? <p className="break-words text-neutral-400">This coin&apos;s rule is built from coin A&apos;s with the result swapped, when the launch is prepared. Its exact text and fingerprint are on the coin&apos;s page once it is registered.</p> : <>
+              {/* WIRING-AUDIT12 P1-2: each text says whether it is the final rule the wallet signs, or a draft with fields still to fill */}
+              {r.label && <p className="mt-1 break-words text-neutral-300" data-rule-label={r.label}>{r.label === "final" ? "Final rule: this is exactly what your wallet signs." : "Draft rule: these parts are filled in when the launch is prepared, and everything else is exactly what your wallet signs."}</p>}
+              {r.label === "draft" && r.pending?.length > 0 && <ul className="mt-0.5 list-disc space-y-0.5 pl-5 text-neutral-400" data-rule-pending>{pendingWords(r.pending).map((x) => <li key={x}>{x}</li>)}</ul>}
               <p className="mt-1 break-all font-mono text-[11px]" data-sha256>sha256 {r.sha256}</p>
               <pre className="mt-1 max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-neutral-900 p-2 font-mono text-[11px]">{r.text}</pre>
             </>}
           </div>
         ))}
+        {review.prepared?.note && <p className="mt-2 break-words text-neutral-400" data-prepared-note>{review.prepared.note}</p>}
       </details>
       </div>
     </details>

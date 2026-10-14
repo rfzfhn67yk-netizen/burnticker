@@ -21,12 +21,13 @@ import { draftRevision, EMPTY_REVIEW_SLOT, reviewAnswered, reviewFor, reviewMatc
 import { derbyExplainer } from "@/lib/burnticker/launchDerby";
 import { PreWalletSummary } from "./PreWalletSummary";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
-import { DEFAULT_RAISE_SOL, DEFAULT_SHARE, RAISE_PRESETS_SOL, SHARE_PRESETS, type RaisePreset } from "@/lib/burnticker/launchPresets";
-import { derbyShareLine, endSentences, pairIdentityProblems, patternOptions, PATTERNS, IMAGE_NOT_KEPT, FACT_LABELS, GUIDED_STEPS, IMAGE_RIGHTS_REQUIRED, PAIR_COST_EXCLUSIONS, budgetCopy, costLine, shareExample, shareOfBudgetLine, triggerText, whichCoinLine, whichHeading } from "@/lib/burnticker/guidedLaunch";
+import { DEFAULT_RAISE_SOL, DEFAULT_SHARE, LINKED_ONE_SHOT_LINE, linkedShareMigratedNotice, RAISE_PRESETS_SOL, SHARE_PRESETS, type RaisePreset } from "@/lib/burnticker/launchPresets";
+import { derbyShareLine, endSentences, pairIdentityProblems, patternOptions, PATTERNS, IMAGE_NOT_KEPT, FACT_LABELS, GUIDED_STEPS, IMAGE_RIGHTS_REQUIRED, PAIR_COST_EXCLUSIONS, budgetCopy, costLine, shareExample, shareOfBudgetLine, triggerText, whichCoinLine, whichHeading, pairDiagramLabel, recordCloseAvailability } from "@/lib/burnticker/guidedLaunch";
 import { PatternStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import { createLatest } from "@/lib/burnticker/latestOnly";
 import { fingerprintFor, prepareIfCurrent, profileRevision, startFingerprint, STALE_PREPARE_SENTENCE, type Fingerprint } from "@/lib/burnticker/preparedLaunch";
+import { preparedRulesCheckWeb, PREPARED_MISSING_LINE } from "@/lib/burnticker/preparedRules";
 import { deepLinkPick, deepLinkQuery, editedFrom, generatedNames, pickerNote, searchToken, visibleHits, NONE_EDITED, type EditedFields } from "@/lib/burnticker/coinPicker";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, type ProfileValue } from "./ProfileFields";
 import { NAME_STEP_BLOCKED, fieldRuleSentence, isLintLine, profileIssues, serverFieldProblems } from "./fieldChecks";
@@ -78,7 +79,7 @@ export function rivalryHits(r: RivalryTemplate): { a: Hit; b: Hit } {
 /** website-26 (WIRING-FEATURES item 14): the run lengths the tile offers; anything else falls back to 30 days. */
 export const runDaysOf = (v: unknown): number => ((DERBY_RUN_PRESETS as readonly number[]).includes(v as number) ? (v as number) : 30);
 interface Hit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlying | null; why: string | null; /** sources-6 (QA 9 #32): the result line ("WIF · EKpQ…zcjm · $12.3M liquidity · verified") and the cross-read in words */ label?: string; crossLine?: string }
-interface Bundle { mint: string; ticker: string; ready: boolean; pending: string[]; mintSecretKey: string | null; rules: { sha256: string; statement: string }; transactions: { label: string; signers: string[]; instructions: SerializedIx[] }[] }
+interface Bundle { mint: string; ticker: string; ready: boolean; pending: string[]; mintSecretKey: string | null; rules: { text: string; sha256: string; statement: string }; transactions: { label: string; signers: string[]; instructions: SerializedIx[] }[] }
 
 /**
  * One side's coin search (launch audit 241–246, coinPicker.ts): the other side's coin is excluded by asset, a deep link picks by itself
@@ -294,7 +295,7 @@ function art(r: BurnRule | null, tk: string): string {
  * `blocked`: why the wallet cannot open (preview mode, a closed host, pairs off on this host) — the review card disables its button and
  * says so. `unavailable`: Coin vs Coin cannot launch on this host at all (launch audit 5 L02) — the tile says why before any picking.
  */
-export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null, customImages = true, startOpen = false, entry = null, phase: phaseIn = null, onPhase, onAnswers }: { /** website-22 (QA 9 item 38): the guided step on screen (which, burn, name, review), set by the page */ phase?: GuidedPhase | null; onPhase?: (p: GuidedPhase) => void; onAnswers?: (a: TileAnswers) => void; /** website-24 (WIRING-ROUND5): the launch state's round-5 line (SiteLaunchState.burnReal): the per-side "Burn the real <symbol>" choice shows only when available */ burnReal?: { available: boolean; line: string | null } | null; /** the network the admission check reads (the catalogue's cluster) */ network?: string | null; /** website-20 item 60: the link that opened the page (the page drops its parameters from the address once read), so a template or a derby link still lands on what it names */ entry?: { template: string | null; a: string; b: string; kind?: string | null; rivalry?: string | null } | null; pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null; /** website-18: the host takes custom images (catalogue customImages) */ customImages?: boolean; /** website-19: the guided path opens it as question 2, with the burn pattern and the end beside the review */ startOpen?: boolean } = {}) {
+export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = null, pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null, customImages = true, startOpen = false, entry = null, phase: phaseIn = null, onPhase, onAnswers }: { /** WIRING-AUDIT12 item 11: the host can read past daily closes (a Pyth access key); null = not known */ recordKeyed?: boolean | null; /** website-22 (QA 9 item 38): the guided step on screen (which, burn, name, review), set by the page */ phase?: GuidedPhase | null; onPhase?: (p: GuidedPhase) => void; onAnswers?: (a: TileAnswers) => void; /** website-24 (WIRING-ROUND5): the launch state's round-5 line (SiteLaunchState.burnReal): the per-side "Burn the real <symbol>" choice shows only when available */ burnReal?: { available: boolean; line: string | null } | null; /** the network the admission check reads (the catalogue's cluster) */ network?: string | null; /** website-20 item 60: the link that opened the page (the page drops its parameters from the address once read), so a template or a derby link still lands on what it names */ entry?: { template: string | null; a: string; b: string; kind?: string | null; rivalry?: string | null } | null; pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null; /** website-18: the host takes custom images (catalogue customImages) */ customImages?: boolean; /** website-19: the guided path opens it as question 2, with the burn pattern and the end beside the review */ startOpen?: boolean } = {}) {
   const wallet = useWallet();
   const [open, setOpen] = useState(startOpen);
   // WIRING-SOURCES4: two coins racing, or one coin's record close (RecordClose above)
@@ -340,6 +341,9 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
   const [shares, setShares] = useState<{ daily: number; flip: number }>({ daily: DEFAULT_SHARE.recurring, flip: DEFAULT_SHARE.oneShot });
   const fraction = flip ? shares.flip : shares.daily;
   const setFraction = (v: number) => setShares((x) => (flip ? { ...x, flip: v } : { ...x, daily: v }));
+  // WIRING-AUDIT12 P1-1: the flippening is a linked pair on one result, so its only share is 100 % (SHARE_PRESETS.linkedOneShot)
+  const shareRow = flip ? SHARE_PRESETS.linkedOneShot : SHARE_PRESETS.recurring;
+  const [shareMigrated, setShareMigrated] = useState<string | null>(null);
   // website-19 (walkthrough snag 2): the raise is picked once and shared by both coins (the review answers null for the pair curve)
   const [raiseSol, setRaiseSol] = useState<RaisePreset>(DEFAULT_RAISE_SOL);
   const [names, setNames] = useState({ a: "", b: "", ta: "", tb: "" });
@@ -358,6 +362,9 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
     try { d = JSON.parse(sessionStorage.getItem(CVC_STORE) ?? "null") as CvcDraft | null; } catch { d = null; }
     if (!d || d.v !== 1) return;
     if (d.a) setA(d.a); if (d.b) setB(d.b); setNames(d.names); setFlip(!!d.flip); if (d.shares && typeof d.shares.daily === "number" && typeof d.shares.flip === "number") setShares(d.shares); else if (typeof d.fraction === "number") setShares((x) => (d!.flip ? { ...x, flip: d!.fraction } : { ...x, daily: d!.fraction }));
+    // WIRING-AUDIT12 P1-1: a saved flippening share other than 100 % is set to 100 % and the creator is told (never silently)
+    const savedFlip = d.shares && typeof d.shares.flip === "number" ? d.shares.flip : d.flip && typeof d.fraction === "number" ? d.fraction : null;
+    if (savedFlip !== null && savedFlip !== 1) { setShares((x) => ({ ...x, flip: 1 })); if (d.flip) setShareMigrated(linkedShareMigratedNotice(savedFlip)); }
     if (d.raiseSol && (RAISE_PRESETS_SOL as readonly string[]).includes(d.raiseSol)) setRaiseSol(d.raiseSol as RaisePreset);
     if (d.seasonDays !== undefined) setSeasonDays(runDaysOf(d.seasonDays));
     setEdited(editedFrom(d.edited));
@@ -447,7 +454,13 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
         if ("stale" in got) { setErr(STALE_PREPARE_SENTENCE); return; }
         const j = got.ok, tickers = { a: body.ticker, b: body.pair.ticker };
         if (j.venue === "pair-curve") setPcOut({ pairId: j.pair.pairId, pc: j.pairCurve, keys: j.mintSecretKeys, notes: j.pair.notes ?? [], tickers });
-        else setOut({ pairId: j.pair.pairId, a: j.bundles.a as Bundle, b: j.bundles.b as Bundle, notes: j.pair.notes ?? [], tickers });
+        else {
+          // WIRING-AUDIT12 P1-2: the bundles' rules against the review's prepared rules, before any wallet request
+          const A = j.bundles.a as Bundle, B = j.bundles.b as Bundle, prep = reviewFor(slot, reviewKey).review?.prepared ?? null;
+          const lines = prep ? await preparedRulesCheckWeb(prep, { a: { text: A.rules.text, sha256: A.rules.sha256, mint: A.mint }, b: { text: B.rules.text, sha256: B.rules.sha256 } }) : [PREPARED_MISSING_LINE];
+          if (lines.length) { setErr(lines.join(" ")); onPhase?.("review"); return; }
+          setOut({ pairId: j.pair.pairId, a: A, b: B, notes: j.pair.notes ?? [], tickers });
+        }
       } catch (e) { const nv = venueFrom409(e); if (nv) setVenue(nv); setErr(String((e as Error).message ?? e)); }
     };
     try { await run(venue); } finally { setBusy(false); }
@@ -493,6 +506,7 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
   // website-22 (QA 9 item 38, audit 10 item 13): the progress strip's answers for the steps the tile walks
   useEffect(() => { if (kind === "pair") onAnswers?.({ which: a && b ? `${a.symbol} vs ${b.symbol}` : null, burn: flip ? "once, the flippening" : PATTERNS.winner.label.toLowerCase(), name: names.ta ? `$${names.ta.toUpperCase()} and $${names.tb.toUpperCase()}` : null }); }, [kind, a?.symbol, b?.symbol, flip, names.ta, names.tb]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!open || unavailable) return tile;
+  const recordAvail = recordKeyed === null ? null : recordCloseAvailability({ keyed: recordKeyed });
   const kindChoice = (
     <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="What the coins follow" data-derby-kind>
       {(["pair", "high"] as const).map((k) => (
@@ -500,10 +514,15 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
           <span className="block font-medium">{k === "pair" ? PAIR_CHOICE_LABEL : HIGH_CHOICE_LABEL}</span><span className="mt-0.5 block text-xs text-neutral-300">{k === "pair" ? PAIR_CHOICE_LINE : HIGH_CHOICE_LINE}</span>
         </button>
       ))}
+      {/* WIRING-AUDIT12 item 11: whether a record close can start on this site, said beside the choice before any setup */}
+      {recordAvail && <div className="text-xs text-neutral-300 sm:col-start-2" data-record-availability={recordAvail.available ? "yes" : "no"}>
+        <p>{recordAvail.line}</p>
+        {recordAvail.alternative && <p className="mt-0.5 text-neutral-400">{recordAvail.alternative} <button type="button" data-nav className="underline" disabled={busy || !!prepared} onClick={() => { setKind("pair"); setFlip(false); }}>Two coins</button> <button type="button" data-nav className="ml-1 underline" disabled={busy || !!prepared} onClick={() => { setKind("pair"); setFlip(true); }}>The flippening</button></p>}
+      </div>}
     </div>
   );
   // website-22: in the guided launch each step is its own screen, with the page's progress strip, Back and Start over above it
-  const stepHead = (p: GuidedPhase) => <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{p === "which" ? whichHeading("coins") : GUIDED_STEPS.find((s) => s.id === p)?.question}</h2>;
+  const stepHead = (p: GuidedPhase) => <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{p === "which" ? whichHeading("coins", null, kind === "high" ? "record" : "race") : GUIDED_STEPS.find((s) => s.id === p)?.question}</h2>;
   const phase: GuidedPhase = phaseIn && phaseIn !== "follow" ? phaseIn : "which";
   if (kind === "high") return (
     <section className="space-y-3" aria-label={HIGH_CHOICE_LABEL} data-guided-step={phase} data-derby-guided="high">
@@ -540,7 +559,8 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
     // website-24 (WIRING-ROUND5): each side may burn its real reference coin instead of itself, once the round-5 program is deployed;
     // until then the launch state's waiting line stands in for the choice
     const pickA = realPickFor(a?.underlying ? { ...a.underlying, symbol: a.symbol } : null), pickB = realPickFor(b?.underlying ? { ...b.underlying, symbol: b.symbol } : null);
-    const realChoices = !a || !b ? null : !realOn ? (burnReal?.line ? <p className="text-xs text-neutral-400" data-burn-real-waiting>{burnReal.line}</p> : null) : (
+    // WIRING-AUDIT12 item 15: the waiting line only where a side could name a real coin, one tap away
+    const realChoices = !a || !b ? null : !realOn ? (burnReal?.line && (pickA || pickB) ? <details className="text-xs text-neutral-400" data-burn-real-waiting><summary className="cursor-pointer">What is not offered yet</summary><p className="mt-1">{burnReal.line}</p></details> : null) : (
       <div className="grid min-w-0 gap-2 md:grid-cols-2" data-burn-real-choices>
         {pickA ? <BurnRealChoice side="a" who={`$${TA}`} picks={[pickA]} value={realA} onChange={setRealA} network={net} locked={busy || !!prepared} /> : <p className="text-xs text-neutral-400" data-burn-real-none="a">{realNotOffered(a.symbol)}</p>}
         {pickB ? <BurnRealChoice side="b" who={`$${TB}`} picks={[pickB]} value={realB} onChange={setRealB} network={net} locked={busy || !!prepared} /> : <p className="text-xs text-neutral-400" data-burn-real-none="b">{realNotOffered(b.symbol)}</p>}
@@ -572,7 +592,7 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
       );
       return (
         <div data-derby-guided="pair">
-          <PatternStep preview={<>{lead && <p className="font-medium text-amber-200" data-fight-lead>{lead}</p>}<p>{sentence ?? "Reading the two coins."}</p></>} options={options} value={flip ? "once" : "winner"} onPick={(id) => setFlip(id === "once")} shares={flip ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring} share={fraction} onShare={setFraction} pairLabel
+          <PatternStep preview={<>{lead && <p className="font-medium text-amber-200" data-fight-lead>{lead}</p>}<p>{sentence ?? "Reading the two coins."}</p></>} options={options} value={flip ? "once" : "winner"} onPick={(id) => setFlip(id === "once")} shares={shareRow} share={fraction} onShare={setFraction} shareLine={flip ? LINKED_ONE_SHOT_LINE : null} notice={flip ? shareMigrated : null} pairLabel
             extra={<>{runRow}<p className="text-xs text-neutral-300" data-share-memory>{derbyShareLine(shares.daily, shares.flip)}</p>{pairCheckLine}{realChoices}{end && <div className="space-y-0.5 text-xs text-neutral-300" data-end-sentences><p className="font-medium text-neutral-200">At the end</p>{end.sentences.map((x) => <p key={x}>{x}</p>)}</div>}</>}
             next={next("Next", "name", !model?.rule || pairRefused)} />
         </div>
@@ -581,7 +601,7 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
     if (!model?.rule) return <section className="space-y-3" data-derby-guided="pair"><p className="text-sm text-neutral-300">Reading the two coins.</p>{next("Back to the coins", "which")}</section>;
     if (phase === "name") return (
       <div data-derby-guided="pair">
-        <ReviewCard mode="name" coins={coinsNow} sentence={sentence!} ends={null} shares={{ options: [...(flip ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring)], value: fraction, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
+        <ReviewCard mode="name" coins={coinsNow} sentence={sentence!} ends={null} shares={{ options: [...shareRow], value: fraction, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
           image={<div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imagesDropped && !profA.image && !profB.image && <p className="text-xs text-amber-300 md:col-span-2" data-image-not-kept>{IMAGE_NOT_KEPT}</p>}<ProfileFields value={profA} onChange={setProfA} part="image" who={`$${TA}`} customImages={customImages} side="a" /><ProfileFields value={profB} onChange={setProfB} part="image" who={`$${TB}`} customImages={customImages} pasteTarget={false} side="b" /></div>}
           profile={<div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profA} onChange={setProfA} part="text" who={`$${TA}`} side="a" generated={reviewCurrent ? shown.review?.coins?.[0]?.description ?? null : null} /><ProfileFields value={profB} onChange={setProfB} part="text" who={`$${TB}`} side="b" /></div>}
           tickerChecks={reviewCurrent ? (shown.review as (LaunchReview & { tickers?: TickerCheck[] }) | null)?.tickers ?? null : null}
@@ -606,9 +626,9 @@ export function CoinVsCoinTile({ burnReal = null, network = null, pairCurve = fa
             { side: "b", image: coinsNow[1].image, name: names.b, ticker: names.tb, description: profB.description, links: profileBody(profB).links, note: null },
           ], edit: () => onPhase?.("name") }}
           lead={lead} simulator={reviewCurrent && shown.review?.simulation ? <SimulatorDisclosure simulation={shown.review.simulation} rule={model.rule} /> : null}
-          coins={coinsNow} sentence={sentence!} pairLine={PAIR_REVIEW_LINE} pairFacts={winnerTakesBurnFacts(TA, TB)} pairDiagram="linked" venue={reviewVenue} ends={ends}
+          coins={coinsNow} sentence={sentence!} pairLine={PAIR_REVIEW_LINE} pairFacts={winnerTakesBurnFacts(TA, TB)} pairDiagram="linked" pairDiagramText={pairDiagramLabel(model.rule, true)} venue={reviewVenue} ends={ends}
           notes={[x.window, x.tie, ...realReviewNotes(realList)]}
-          shares={{ options: [...(flip ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring)], value: fraction, onChange: setFraction }}
+          shares={{ options: [...shareRow], value: fraction, onChange: setFraction }}
           raise={shown.review?.raise ? { options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: setRaiseSol, line: shown.review.raise.line } : null}
           graduation={shown.review?.graduation ?? null}
           profileProblems={blockers} problems={ruleProblemsP} error={err} busy={busy} ready={ready} creator={creator || null} onLaunch={() => { void launch(); }}

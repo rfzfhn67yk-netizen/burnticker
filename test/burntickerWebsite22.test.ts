@@ -244,7 +244,7 @@ describe("audit 10 item 11: words kept from another kind of coin are said, with 
 describe("QA 9 item 38, audit 10 items 13 and 17: Coin comparison walks the real steps", () => {
   test("the tile renders Which, Burns, Name and Review as the page's phases, and Back steps one at a time", () => {
     assert.match(page, /step === "choose" && guide\.follow === "coins" && guide\.phase !== "follow" && \(/);
-    assert.match(page, /<CoinVsCoinTile burnReal=\{site\.burnReal\} network=\{site\.cluster \?\? cluster\} startOpen phase=\{guide\.phase\} onPhase=\{setCoinsPhase\} onAnswers=\{setCoinAnswers\}/);
+    assert.match(page, /<CoinVsCoinTile recordKeyed=\{recordKeyed\} burnReal=\{site\.burnReal\} network=\{site\.cluster \?\? cluster\} startOpen phase=\{guide\.phase\} onPhase=\{setCoinsPhase\} onAnswers=\{setCoinAnswers\}/);
     assert.match(page, /if \(guide\.follow === "coins" && \(guide\.phase === "burn" \|\| guide\.phase === "name" \|\| guide\.phase === "review"\)\)/);
     for (const ph of ["which", "burn", "name"]) assert.match(tile, new RegExp(`if \\(phase === "${ph}"\\)`), ph);
     assert.match(tile, /<ReviewCard mode="review"/); assert.equal((tile.match(/<ReviewCard mode="name"/g) ?? []).length, 2, "the pair and the record close");
