@@ -101,12 +101,13 @@ describe("248 per-field edited flags", () => {
   test("editing coin A's name, then changing coin B: B's name and ticker follow the new pick, A's typed name stays", () => {
     const wif = { symbol: "WIF" }, shib = { symbol: "SHIB" }, bonkS = { symbol: "BONK" };
     let names = generatedNames(wif, shib, { a: "", b: "", ta: "", tb: "" }, NONE_EDITED);
-    assert.deepEqual(names, { a: "WIF vs SHIB, WIF side", b: "SHIB vs WIF, SHIB side", ta: "WIFVSHIB", tb: "SHIBVWIF" });
+    assert.deepEqual(names, { a: "WIF Wins", b: "SHIB Wins", ta: "WIFWINS", tb: "SHIBWINS" }, "cheap-features item 15: a daily race carries the fight");
+    assert.deepEqual(generatedNames(wif, shib, { a: "", b: "", ta: "", tb: "" }, NONE_EDITED, { flip: true }), { a: "WIF vs SHIB, WIF side", b: "SHIB vs WIF, SHIB side", ta: "WIFVSHIB", tb: "SHIBVWIF" }, "the flippening keeps its pair tickers");
     names = { ...names, a: "My dog coin" };
     const edited = { ...NONE_EDITED, a: true };
     const after = generatedNames(wif, bonkS, names, edited);
     assert.equal(after.a, "My dog coin");
-    assert.deepEqual([after.b, after.ta, after.tb], ["BONK vs WIF, BONK side", "WIFVBONK", "BONKVWIF"], "the single flag froze these at SHIB");
+    assert.deepEqual([after.b, after.ta, after.tb], ["BONK Wins", "WIFWINS", "BONKWINS"], "the single flag froze these at SHIB");
     assert.deepEqual(editedFrom(true), { a: true, b: true, ta: true, tb: true }, "an older stored draft keeps every field it had");
     assert.deepEqual(editedFrom(undefined), NONE_EDITED);
     const c = code(tile);

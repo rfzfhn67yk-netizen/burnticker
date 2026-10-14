@@ -1,0 +1,2 @@
+burnticker lookup table verified: mainnet 8DZaHFo6UnJk5br29BcRQZmdEKRpzKJTCyz1dRsHhJ2T, 21 of 21 entries at their index, frozen (no authority), entries sha256 ed2a064aa3314ff170d880273f9678a3553b262b4cc592b1005272bb29782d1b, read at slot 456632231 on 2026-10-14T00:01:33.016Z
+create: 4CvvmnhJsxja… (ops payer EPTYFR8R…) · freeze: vHU5Bo6AA39W… · authority: none (frozen); active: true

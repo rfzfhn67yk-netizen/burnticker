@@ -10,6 +10,8 @@ import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { nwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 import { DEFAULT_SHARE, pctLabel, presetRowLabel } from "@/lib/burnticker/launchPresets";
 import type { LaunchType } from "@/lib/burnticker/launchAvailability";
+import { raceEndSentence, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { fightLead, fightName, fightTickers } from "@/lib/burnticker/derby/tile";
 export type TemplateId = "team-season" | "team-oneshot" | "matchup" | "election-oneshot" | "election-pair" | "number-feed" | "weather" | "launch-count" | "polymarket-oneshot" | "coin-vs-coin" | "bracket" | "flippening";
 /**
  * `pairLine` (review 2 F6): a template that launches a REGISTERED rivalry pair carries describe.ts PAIR_BURN_SENTENCE — the one factual
@@ -108,3 +110,44 @@ export const TEMPLATE_START: Record<TemplateId, { flow?: "team" | "pair" | "sing
 
 /** "Launch one like this" from a coin or pair page. */
 export const likeHref = (ticker: string): string => `/burnticker/launch?like=${encodeURIComponent(ticker)}`;
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// PRE-MADE RIVALRIES (cheap-features pass item 13, owner 2026-10-13 "Coin vs Coin adoption"): three Coin vs Coin pairs with both
+// reference coins already picked, one tap to the Name step. The reference coins are only read (Pyth, cross-read by Jupiter or RedStone),
+// never traded or burned. Each underlying is exactly what the tile would lock (derby/spec.ts DerbyUnderlying; derbySpecProblems passes:
+// test/burntickerFeatures.test.ts). Kept beside the twelve canonical shapes, not among them.
+// ---------------------------------------------------------------------------------------------------------------------------------
+export type RivalryId = "wif-bonk" | "pengu-fartcoin" | "sol-eth-flip";
+export interface RivalryTemplate {
+  id: RivalryId; title: string; example: string; a: DerbyUnderlying; b: DerbyUnderlying; flip: boolean; window: "daily"; seasonDays: number;
+  tickers: { a: string; b: string }; names: { a: string; b: string };
+  /** Where the tap lands: the launch page's Coin vs Coin tile with both coins picked, at the Name step. */
+  href: string; lands: "name"; cta: string;
+}
+const jupU = (symbol: string, pyth: string, mint: string): DerbyUnderlying => ({ symbol, pyth, mint, pool: null, cross: `jup:${mint}` });
+const PYTH = {
+  WIF: "4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc", BONK: "72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419",
+  PENGU: "bed3097008b9b5e3c93bec20be79cb43986b85a996475589351a21e67bae9b61", FARTCOIN: "58cd29ef0e714c5affc44f269b2c1899a52da4169d7acc147b9da692e6953608",
+  SOL: "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d", ETH: "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+};
+const race = (id: RivalryId, title: string, a: DerbyUnderlying, b: DerbyUnderlying): RivalryTemplate => {
+  const t = fightTickers(a.symbol, b.symbol);
+  return {
+    id, title, a, b, flip: false, window: "daily", seasonDays: 30, tickers: t, names: { a: fightName(a.symbol), b: fightName(b.symbol) },
+    example: `${fightLead(t.a, t.b, 30)} On a day ${a.symbol} out-gains ${b.symbol}, $${t.a} burns and takes $${t.b}'s share for that day, and the other way round. ${a.symbol} and ${b.symbol} are only read, never traded or burned. ${raceEndSentence(30)}`,
+    href: `/burnticker/launch?template=coin-vs-coin&rivalry=${id}`, lands: "name", cta: "Name the two coins",
+  };
+};
+export const RIVALRY_TEMPLATES: readonly RivalryTemplate[] = [
+  race("wif-bonk", "WIF vs BONK, a daily race", jupU("WIF", PYTH.WIF, "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"), jupU("BONK", PYTH.BONK, "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263")),
+  race("pengu-fartcoin", "PENGU vs FARTCOIN, a daily race", jupU("PENGU", PYTH.PENGU, "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv"), jupU("FARTCOIN", PYTH.FARTCOIN, "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump")),
+  {
+    id: "sol-eth-flip", title: "SOL vs ETH, the flippening",
+    a: { symbol: "SOL", pyth: PYTH.SOL, mint: "So11111111111111111111111111111111111111112", pool: null, cross: "redstone:SOL" },
+    b: { symbol: "ETH", pyth: PYTH.ETH, mint: "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", pool: null, cross: "redstone:ETH" },
+    flip: true, window: "daily", seasonDays: 30, tickers: { a: "SOLVETH", b: "ETHVSOL" }, names: { a: "SOL vs ETH, SOL side", b: "ETH vs SOL, ETH side" },
+    example: `$SOLVETH and $ETHVSOL, read once a day for 30 days. On the first day SOL's market value is above ETH's, $SOLVETH burns ${O} of its pool once. If that never happens, $ETHVSOL burns once when the run ends. SOL and ETH are only read, never traded or burned.`,
+    href: "/burnticker/launch?template=flippening&rivalry=sol-eth-flip", lands: "name", cta: "Name the two coins",
+  },
+];
+export const rivalryById = (id: string | null | undefined): RivalryTemplate | null => RIVALRY_TEMPLATES.find((r) => r.id === id) ?? null;

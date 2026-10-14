@@ -90,8 +90,8 @@ describe("the generated description", () => {
   test("website-18 the champion path: the Dodgers' coin word for word; only MLB, NBA and NHL wins coins with the $DEFICIT sink take it", () => {
     const r = { ...team("mlb", "LAD", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
     const t = describeRule(r, { ticker: "" });
-    assert.equal(t.ticker, "LAD");
-    assert.equal(t.paragraph, "$LAD burns when the Dodgers win. This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason. Each burn buys $LAD on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
+    assert.equal(t.ticker, "LADWIN");
+    assert.equal(t.paragraph, "$LADWIN burns when the Dodgers win. This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason. Each burn buys $LADWIN on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
     assert.equal(t.ruleBlock.split(/(?<=\.)\s/)[0], "This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason.", "the review card's sentence");
     assert.deepEqual(championEndSentences("the Dodgers"), ["If the Dodgers win the championship, the rest of the pool burns here.", "If they do not, the rest goes to $DEFICIT's burn."]);
     assert.equal(championPathRule(r), true);
@@ -103,16 +103,16 @@ describe("the generated description", () => {
 
   test("the Rays' season coin, word for word (the owner's target, with the window sentence and the year in the ticker)", () => {
     const t = describeRule(team("mlb", "TB", "win", S(2026)), { ticker: "" });
-    assert.equal(t.ticker, "TBMLB"); assert.equal(t.badge, "2026 SEASON");
-    assert.equal(t.paragraph, "$TBMLB burns when the Rays win. For every Rays win in the 2026 season, the burn pool spends 2% buying $TBMLB on Raydium and burns it, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 Rays season only, including the playoffs. After the Rays' last game, it burns down whatever is left over four weeks and then retires. It does not continue into 2027. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
+    assert.equal(t.ticker, "TBMLBWIN"); assert.equal(t.badge, "2026 SEASON");
+    assert.equal(t.paragraph, "$TBMLBWIN burns when the Rays win. For every Rays win in the 2026 season, the burn pool spends 2% buying $TBMLBWIN on Raydium and burns it, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 Rays season only, including the playoffs. After the Rays' last game, it burns down whatever is left over four weeks and then retires. It does not continue into 2027. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
     const e = describeRule(team("nfl", "PHI", "win", S(2026)), { ticker: "" });
-    assert.equal(e.ticker, "PHINFL");
+    assert.equal(e.ticker, "PHINFLWIN");
     assert.match(e.windowSentence, /^This coin covers the 2026 Eagles season only, including the playoffs\. After the Eagles' last game, it burns down whatever is left over four weeks and then retires\. It does not continue into 2027\.$/);
   });
 
   test("perpetual: no end, the sentence says it, the ticker drops the year; soccer draws read as draws", () => {
     const p = describeRule(team("mlb", "TB", "win", { kind: "perpetual" }), { ticker: "" });
-    assert.equal(p.ticker, "TBMLBALL"); assert.equal(p.badge, "PERPETUAL"); assert.equal(p.windowSentence, PERPETUAL_SENTENCE);
+    assert.equal(p.ticker, "TBMLWINALL"); assert.equal(p.badge, "PERPETUAL"); assert.equal(p.windowSentence, PERPETUAL_SENTENCE);
     assert.doesNotMatch(p.paragraph, /retires\b(?!\.)|Ends /);
     const d = describeRule(team("eng.1", "ARS", "draw", S(2026)), { ticker: "" });
     assert.match(d.paragraph, /burns when Arsenal draw/); assert.match(d.paragraph, /Nothing happens on a win or a loss/); assert.equal(d.badge, "2026–27 SEASON");
@@ -175,7 +175,7 @@ describe("the rule dials", () => {
     assert.equal((applyDial(lg, "forward", 2500) as BurnRule).set!.forwardBps, 2500);
     assert.equal((applyDial(lg, "league", "off") as BurnRule).set, undefined);
     assert.deepEqual((applyDial(lg, "league", "off") as BurnRule).onEnd, DEFAULT_ON_END);
-    assert.match(describeRule(lg, { ticker: "" }).paragraph, /In league mode, 100% of the leftover goes to the winning coin of set mlb-2026-win if the forwarding instruction is live by season end\. Otherwise it burns down on this coin\./);
+    assert.match(describeRule(lg, { ticker: "" }).paragraph, /In league mode, 100% of the rest goes to the winning coin of set mlb-2026-win if the forwarding instruction is live by season end\. Otherwise it burns down on this coin\./);
     assert.equal(leagueSetFor(applyDial(r, "window", "perpetual", ctx)), null, "a perpetual coin has no season to win");
     assert.equal(leagueSetFor(feed("treasury.debt", 1e9)), null, "a scalar feed has no winner");
     assert.deepEqual(ON_END_DEFAULT, DEFAULT_ON_END, "dials.ts mirrors rules.ts");

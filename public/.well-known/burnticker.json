@@ -90,7 +90,7 @@
       }
     },
     "mainnet": {
-      "status": "Both programs were deployed on mainnet on 2026-10-11, and the Squads vault below holds their upgrade authority. The LaunchLab platform config was created the same day. No coin is launched yet. Every wallet address below is set.",
+      "status": "Both programs were deployed on mainnet on 2026-10-11, and the Squads vault below holds their upgrade authority. The LaunchLab platform config was created the same day. One coin is launched: $DEFICIT, created on 2026-10-13, plus the $REHEARSAL test coin. Every wallet address below is set.",
       "programs": {
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",

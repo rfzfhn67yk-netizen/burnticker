@@ -308,6 +308,12 @@ export function mainnetRecordEvents(root = process.cwd()): ActivityEvent[] {
     const own = JSON.parse(fs.readFileSync(path.join(root, OWN_TOKENS), "utf8")) as { tokens: { symbol: string; address: string | null; status: string }[] };
     const d = own.tokens.find((t) => t.symbol === "DEFICIT");
     if (d?.address && d.status !== "launched") out.push({ kind: "reserved", at: null, network: "mainnet", ticker: "DEFICIT", signature: null, href: deficitHref(false), text: "$DEFICIT mint address reserved" });
+    // 2026-10-13: once created, the create itself is the record (current-status.json deficit.launch carries the date and the signature)
+    if (d?.address && d.status === "launched") {
+      const rec = JSON.parse(fs.readFileSync(path.join(root, STATUS_FILE), "utf8")) as { deficit?: { launch?: { date?: string | null; createTx?: string | null } } };
+      const l = rec.deficit?.launch;
+      if (l?.date && l.createTx) out.push({ kind: "created", at: l.date, network: "mainnet", ticker: "DEFICIT", signature: l.createTx, href: `https://explorer.solana.com/tx/${l.createTx}`, text: `$DEFICIT created on mainnet, ${shortDay(l.date) ?? l.date}` });
+    }
   } catch { /* no row */ }
   return out;
 }

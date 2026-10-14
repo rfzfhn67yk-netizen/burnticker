@@ -30,6 +30,8 @@ export interface DerbyPairJson {
   symbols: { a: string; b: string | null };
   season: { start: string; days: number; endsOn: string; over: boolean; windows: number; windowsDone: number };
   score: { a: number; b: number; ties: number; withheld: number; dayNumber: number };
+  /** Cheap-features item 12: the live scoreboard (days won, current streak, SOL forwarded, run day N of M), for both coin pages and the share card. */
+  scoreboard: DerbyScoreboard;
   /** Winner takes the burn (2026-10-11): the fuel each side's lost windows moved to the other side's burn pool (SOL, from the forwarded receipts). */
   forwarded: { aToB: string; bToA: string; windows: number };
   days: DerbyDayJson[];
@@ -103,6 +105,7 @@ export function derbyPairJson(reg: Pick<Registry, "token" | "lockedRule" | "getS
     symbols: { a: d.selector === "coinvs" ? d.a.symbol : d.u.symbol, b: d.selector === "coinvs" ? d.b.symbol : null },
     season: { start: d.season.start, days: d.season.days, endsOn, over: now >= seasonEndMs(d), windows: windows.length, windowsDone: days.length },
     score, forwarded: { aToB: fa.sol, bToA: fb.sol, windows: fa.n + fb.n }, days: days.sort((x, y) => (x.at < y.at ? -1 : 1)),
+    scoreboard: derbyScoreboard({ days, score, forwarded: { aToB: fa.sol, bToA: fb.sol }, season: { days: d.season.days, over: now >= seasonEndMs(d) }, flip: d.selector === "coinvs" && d.flip }, { a: ta.ticker, b: tb.ticker }),
     retired: { a: ta.status === "retired" ? retiredReasonOf(reg, ta.mint) ?? "retired" : null, b: tb.status === "retired" ? retiredReasonOf(reg, tb.mint) ?? "retired" : null },
     note: d.selector === "coinvs" && d.flip ? `$${ta.ticker} burns once on the first window ${d.a.symbol} passes ${d.b.symbol}, and $${tb.ticker} once if the run ends without it; ${d.a.symbol} and ${d.b.symbol} are only read, never traded or burned; a withheld window (the cross-read disagreed or a value was missing) settles nothing` : d.selector === "coinvs" ? `$${ta.ticker} burns on a window ${d.a.symbol} wins and $${tb.ticker} on a window ${d.b.symbol} wins, each taking the other new coin's share for that window; ${d.a.symbol} and ${d.b.symbol} are only read, never traded or burned; a tie burns neither (a void receipt still posts); a withheld window (the cross-read disagreed or a value was missing) burns nothing` : "each side counts its own direction of the move; a withheld window burns nothing",
   };
@@ -163,3 +166,48 @@ export function tournamentSummaries(reg: Pick<Registry, "tokens" | "getStatus" |
 
 export const isDerbySpec = (d: DerbySpec | undefined): d is CoinVsSpec | PriceSpec => !!d && d.selector !== "bracket" && d.selector !== "high";
 export { roundCount, slotSelectorKey };
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The live scoreboard (cheap-features pass item 12, owner 2026-10-13: "Coin vs Coin adoption")
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * A derby pair's scoreboard in one block: the days each side won (its burn days, from the receipts), ties and held-back days, the
+ * current streak (the run of days in a row the same side won, up to the latest decided day; a tie ends it), the SOL each side's lost
+ * days moved to the other side's burn pool, and the run day ("day 21 of 30"). Shown on both coin pages and drawn on the share card.
+ */
+export type { DerbyScoreboard } from "@/lib/burnticker/derby/spec";
+import type { DerbyScoreboard } from "@/lib/burnticker/derby/spec";
+
+export function derbyScoreboard(j: { days: readonly Pick<DerbyDayJson, "day" | "at" | "status" | "winner">[]; score: Pick<DerbyPairJson["score"], "a" | "b" | "ties" | "withheld">; forwarded: { aToB: string; bToA: string }; season: { days: number; over: boolean }; flip?: boolean }, tickers: { a: string; b: string }): DerbyScoreboard {
+  const decided = [...j.days].filter((x) => x.status === "decided").sort((x, y) => (x.at < y.at ? -1 : 1));
+  let side: "A" | "B" | null = null, n = 0;
+  for (let i = decided.length - 1; i >= 0; i--) {
+    const w = decided[i].winner;
+    if (w !== "A" && w !== "B") break;
+    if (side === null) side = w;
+    if (w !== side) break;
+    n++;
+  }
+  const day = Math.min(j.season.days, Math.max(0, ...j.days.map((x) => x.day)));
+  const A = `$${tickers.a}`, B = `$${tickers.b}`;
+  const lead = `${A} ${j.score.a} : ${j.score.b} ${B}${j.score.ties ? `, ${j.score.ties} tied` : ""}.`;
+  const when = j.season.over ? `The run of ${j.season.days} days is over.` : day ? `Day ${day} of ${j.season.days}.` : `The run of ${j.season.days} days has not had a reading yet.`;
+  const streak = side && n > 1 ? ` ${side === "A" ? A : B} has won the last ${n} days in a row.` : "";
+  const moved = Number(j.forwarded.aToB) + Number(j.forwarded.bToA);
+  const fwd = moved > 0 ? ` ${Number(moved.toFixed(4))} SOL has moved to the winning side's burn pool so far.` : "";
+  return {
+    tickers, daysWon: { a: j.score.a, b: j.score.b }, ties: j.score.ties, withheld: j.score.withheld,
+    streak: { side: n > 0 ? side : null, days: n }, forwardedSol: { toA: j.forwarded.bToA, toB: j.forwarded.aToB },
+    run: { day, of: j.season.days, over: j.season.over }, line: j.flip ? `${when}` : `${lead} ${when}${streak}${fwd}`,
+  };
+}
+
+/** One coin's derby scoreboard straight from the registry (the coin page data and the share card); null outside a derby pair. */
+export function coinDerbyScoreboard(reg: Pick<Registry, "token" | "lockedRule" | "getStatus" | "db" | "pairOf" | "receipts">, mint: string, now = Date.now()): DerbyScoreboard | null {
+  let pr: PairRow | null;
+  try { pr = reg.pairOf(mint); } catch { return null; }
+  if (!pr || !pr.selectorKey.startsWith("derby:")) return null;
+  const rows = (m: string) => reg.receipts(m).map((r) => ({ eventId: r.eventId, status: r.status, burned: null, signature: r.signature, txUrl: null, units: r.units, spent: r.spendLamports !== null ? (Number(r.spendLamports) / 1e9).toString() : null }));
+  try { return derbyPairJson(reg, pr, rows(pr.mintA), rows(pr.mintB), now)?.scoreboard ?? null; } catch { return null; }
+}

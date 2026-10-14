@@ -197,7 +197,7 @@
       "label": "$DEFICIT mint keypair (public key)",
       "pubkey": "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj",
       "envVar": null,
-      "description": "The mint of the owner's first launch. The keypair signs once, when the coin is set up and created on LaunchLab. After that, the program holds no mint authority."
+      "description": "The mint of the owner's first launch, created on LaunchLab on 2026-10-13. The keypair signed once, when the coin was set up and created. The program holds no mint authority."
     },
     {
       "role": "trading-wallets",

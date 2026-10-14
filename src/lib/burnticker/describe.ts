@@ -356,7 +356,7 @@ const CHAMP_CODE: Record<string, string> = { mlb: "WS", nfl: "SB", nba: "TITLE",
 const yy = (league: LeagueId, year: number) => String(seasonStartYear(league, year) % 100).padStart(2, "0");
 const nextSeason = (league: LeagueId, year: number) => seasonLabel(league, year + 1);
 /** League mode (rules.ts `set`): the conditional forward, in the description whenever the rule carries it. */
-export const leagueSentence = (r: BurnRule): string => (r.set && r.set.forwardBps > 0 ? ` In league mode, ${Math.round(r.set.forwardBps) / 100}% of the leftover goes to the winning coin of set ${r.set.id} if the forwarding instruction is live by season end. Otherwise it burns down on this coin.` : "");
+export const leagueSentence = (r: BurnRule): string => (r.set && r.set.forwardBps > 0 ? ` In league mode, ${Math.round(r.set.forwardBps) / 100}% of the rest goes to the winning coin of set ${r.set.id} if the forwarding instruction is live by season end. Otherwise it burns down on this coin.` : "");
 const oneShotSentence = (r: BurnRule, iso: string | null | undefined, onWhat: string | null = null) => {
   const k = describeEndSink(r), then = k ? `${sinkPhrase(k, r)} and the coin retires` : "it burns down over four weeks and retires";
   return onWhat ? `This coin resolves once, on ${onWhat}. Then ${then}.` : `This coin resolves once${iso ? `, on ${day(iso)}` : ""}. Then ${then}.`;

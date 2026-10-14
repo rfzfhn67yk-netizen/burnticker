@@ -21,7 +21,7 @@ describe("the owner, 2026-10-13: every Coin vs Coin sentence names the new coin 
   const flip: CoinVsSpec = { ...daily, measure: "mcap", flip: true };
   test("the review sentence, the statement, the explainer and the templates", () => {
     const s = derbySentence(daily, "TEAMWIF", "TEAMBONK", 0.02);
-    assert.equal(s, "$TEAMWIF burns 2% every day WIF out-gains BONK (Pyth, 00:00 UTC), and $TEAMBONK's share for that day goes to $TEAMWIF's burn. On a day BONK out-gains WIF, $TEAMBONK burns and takes $TEAMWIF's share. WIF and BONK are only read, never traded or burned. Runs for 30 days, then winds down.");
+    assert.equal(s, "$TEAMWIF burns 2% every day WIF out-gains BONK (Pyth, 00:00 UTC), and $TEAMBONK's share for that day goes to $TEAMWIF's burn. On a day BONK out-gains WIF, $TEAMBONK burns and takes $TEAMWIF's share. WIF and BONK are only read, never traded or burned. Runs for 30 days. At the end, the side with more winning days takes the rest.");
     const texts = [
       s, derbySentence(mcap, "TEAMWIF", "TEAMSHIB", 0.02), derbySentence(flip, "WIFVBONK", "BONKVWIF", 0.5), derbySentence(daily, "TEAMWIF", null, 0.02),
       derbyStatement(daily, "A", "pair-1"), derbyStatement(daily, "B", "pair-1"), derbyStatement(flip, "A", "pair-2"), derbyStatement(flip, "B", "pair-2"),

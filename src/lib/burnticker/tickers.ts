@@ -6,9 +6,14 @@ import { LEAGUES, displayAbbr, teamCodeOf, teamsOf, type LeagueId } from "@/lib/
  * Falcons, Dream and Atlanta United; $ARI for the Diamondbacks and the Cardinals). The wizard, /v1/search and /v1/sports/teams all call
  * this one function now.
  *
- *   $LAD        the season's wins          $LADL     its losses             $LADPO    the postseason
- *   $LADNEXT5   the next five games        $LADALL   every season           $LADNOWIN the fade side
- *   $LADWS      the title, once            $LADLGM   one game's loss
+ *   $LADWIN     the season's wins          $LADLOSS   its losses            $LADWINPO the postseason
+ *   $LADWINN5   the next five games        $LADWINALL every season          $LADNOWIN the fade side
+ *   $LADWS      the title, once            $LADLOSSGM one game's loss
+ *
+ * DIRECTION BY DEFAULT (cheap-features pass item 4, owner 2026-10-13): every generated team ticker says which result burns ($LADWIN,
+ * $ARSLOSS, $LADDRAW). Before that a bare $LAD meant wins and $LADL losses. When the full words do not fit in ten characters the window
+ * shortens first (NEXT5 to N5, ALL to A, GM to G), then the side (WIN to W, LOSS to L). Pair tickers ($PHIVBOS) are made elsewhere and
+ * do not change; a registered ticker never changes either, because only new drafts call this.
  *
  * A team code that more than one league uses gets the league's tag after it ($ATLMLB, $ATLNBA, $ATLNFL, $ATLWNBA, $ATLMLS), so the
  * default ticker is unique per league and season; two teams of one league that share their first four letters get the fifth letter of
@@ -48,10 +53,13 @@ export function teamTicker(abbr0: string, o: { league?: string | null; window?: 
   const shared = !!o.league && (codeLeagues().get(code(abbr))?.size ?? 0) > 1;
   const tag = shared ? LEAGUE_TAG[o.league!] ?? code(o.league!, 3) : "";
   if (o.window === "title") return `${A}${CHAMP[o.league ?? ""] ?? "CHAMP"}`.slice(0, 10);
-  const side = o.inverse ? `NO${o.outcome === "loss" ? "LOSS" : o.outcome === "draw" ? "DRAW" : "WIN"}` : o.outcome === "loss" ? "L" : o.outcome === "draw" ? "D" : "";
-  const win = o.window === "post" ? "PO" : o.window === "next" ? `NEXT${o.games ?? 5}` : o.window === "perpetual" ? "ALL" : o.window === "game" ? "GM" : "";
-  // the league tag comes first after the code; a long fade or next-games suffix shortens the tag before anything else is cut
-  const rest = `${side}${win}`;
+  const word = o.outcome === "loss" ? "LOSS" : o.outcome === "draw" ? "DRAW" : "WIN";
+  const sides = o.inverse ? [`NO${word}`, `NO${word[0]}`] : [word, word[0]];
+  const wins = o.window === "post" ? ["PO", "PO"] : o.window === "next" ? [`NEXT${o.games ?? 5}`, `N${o.games ?? 5}`] : o.window === "perpetual" ? ["ALL", "A"] : o.window === "game" ? ["GM", "G"] : ["", ""];
+  // the league tag comes first after the code and keeps at least its first letter; the full words first, then the short window, then
+  // the short side as well
+  const combos = [`${sides[0]}${wins[0]}`, `${sides[0]}${wins[1]}`, `${sides[1]}${wins[1]}`];
+  const rest = combos.find((c) => A.length + Math.min(tag.length, 1) + c.length <= 10) ?? combos[2];
   const room = Math.max(0, 10 - A.length - rest.length);
   return `${A}${tag.slice(0, Math.max(room, Math.min(tag.length, 1)))}${rest}`.slice(0, 10);
 }

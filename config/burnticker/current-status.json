@@ -1,13 +1,19 @@
 {
   "schema": "burnticker.current-status/v1",
-  "checkedAt": "2026-10-12",
+  "checkedAt": "2026-10-13",
   "note": "THE ONE HUMAN-MAINTAINED CURRENT-STATUS FILE (website brief 2026-10-11 §4). src/lib/burnticker/currentStatus.ts joins it with config/burnticker/verified-build.json, config/burnticker/operator.json, the host's environment and live chain reads (Squads time lock, program upgrade authority), and GET /api/burnticker/v1/current-status serves the result; the homepage, the trust, operator and status pages and the $DEFICIT pre-launch page render that one object. Facts only: no 'coming soon', no promised dates. History stays in the append-only logs listed under `historical`.",
   "deficit": {
     "servedAt": "https://deficit.burnticker.com/",
     "rulesFile": "config/burnkeeper/deficit.rules.json",
     "launch": {
-      "date": null,
-      "note": "No launch date is announced. When one is set it appears here first."
+      "date": "2026-10-13",
+      "note": "$DEFICIT was created on mainnet on 2026-10-13 through the Burnticker LaunchLab platform. Its rules were locked on chain first (rules sha256 8e3e8b66…), then the coin was created, then 3 SOL was seeded into its burn pool as a disclosed gift. The keeper signed the baseline reading the same evening.",
+      "createTx": "2YyZVB96XZgQPL1wg7yUZjWbuWmweFzGEjXUJkfHittaKPX6Tz26diECxRzvwpZYfJGjGxLFCLypr3zf6RDjzSqc",
+      "curvePool": "9t2bzymysRxV2iYHmoDKPRRAb9KozSwEAuKva9bziUZq",
+      "mint": "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj",
+      "feePda": "3DbCrAdmqkKN9odAWHSv9Ln48G2c1HTkvtda4ChXpd2u",
+      "seedSol": 3,
+      "evidence": "docs/burnkeeper/evidence/mainnet-deficit-2026-10-13/launch.json"
     },
     "whitepaper": "https://burnticker.com/whitepaper.html",
     "rehearsal": {
@@ -28,8 +34,8 @@
     "summary": "Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06, which is 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool. One crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT. Every token bought was burned in the same transaction, and the rest carried over to the next crank."
   },
   "phase": {
-    "label": "pre-launch (mainnet programs deployed)",
-    "line": "Burnticker is in pre-launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority, and the LaunchLab platform is set up. The only coin created on mainnet so far is $REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. No public coin has launched on mainnet yet."
+    "label": "soft launch ($DEFICIT created on mainnet)",
+    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. $DEFICIT, the operator’s first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. The only other coin on mainnet is $REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. Public creator launches are still closed."
   },
   "networks": {
     "devnet": {
@@ -100,7 +106,7 @@
       "category": "Economics: U.S. national debt ($DEFICIT)",
       "primary": "the U.S. Treasury's Debt to the Penny, published daily",
       "check": "FRED GFDEBTN, a quarterly series. It is compared at quarter ends only, so it cannot confirm each daily change",
-      "status": "in use on devnet"
+      "status": "live on mainnet since 2026-10-13"
     },
     {
       "category": "Economics: CPI, unemployment",

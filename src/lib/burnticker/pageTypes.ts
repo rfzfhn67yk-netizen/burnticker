@@ -154,6 +154,8 @@ export interface TokenStatusJson {
   lifecycle?: LifecycleJson | null;
   /** sources-2: a one-market Polymarket coin's stated source and dispute window (sources/polyStated.ts). Absent on older files; null when not read. */
   stated?: StatedJson | null;
+  /** cheap-features item 12: a Coin vs Coin coin's live scoreboard (derby/page.ts coinDerbyScoreboard); absent or null outside a derby pair. */
+  derbyScoreboard?: import("@/lib/burnticker/derby/spec").DerbyScoreboard | null;
 }
 /** Polymarket's stated source (`text` verbatim, `phrase` for coin text), the cross-read, and the dispute window. Display only. */
 export interface StatedJson { phrase: string | null; text: string | null; crossRead: { text: string } | null; finalAfter: { text: string; ifDisputed: string } }

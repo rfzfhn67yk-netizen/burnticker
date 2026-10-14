@@ -13,6 +13,14 @@ export interface TileChoice { a: DerbyUnderlying; b: DerbyUnderlying; window: De
 /** The default fan-coin ticker for a coin ("WIF" → "TEAMWIF"; the program's memo prefix allows 2–12 of A–Z/0–9). */
 export const defaultTicker = (symbol: string): string => `TEAM${symbol}`.replace(/[^A-Z0-9]/g, "").slice(0, 12);
 export const defaultName = (symbol: string): string => `Team ${symbol}`;
+/**
+ * Cheap-features item 15 (owner 2026-10-13): fight-style tickers for the two sides of a daily race ("$WIFWINS" / "$BONKWINS"), at most
+ * ten characters (the launch limit): the symbol and WINS, else WIN, else the symbol's first six letters and WINS. The pair id and the
+ * flippening's tickers ($SOLVETH) do not change.
+ */
+export const fightTicker = (symbol: string): string => { const s = symbol.toUpperCase().replace(/[^A-Z0-9]/g, ""); return s.length + 4 <= 10 ? `${s}WINS` : s.length + 3 <= 10 ? `${s}WIN` : `${s.slice(0, 6)}WINS`; };
+export const fightName = (symbol: string): string => `${symbol} Wins`;
+export const fightTickers = (a: string, b: string): { a: string; b: string } => ({ a: fightTicker(a), b: fightTicker(b) });
 
 /** The derby block for a choice (season starts at the first full window after `now`). */
 export function tileSpec(c: TileChoice): CoinVsSpec {
@@ -45,3 +53,6 @@ export async function sha256HexWeb(s: string): Promise<string> {
   const d = await crypto.subtle.digest("SHA-256", bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+/** Cheap-features item 11: the line a daily race's tile and review open with ("$WIFWINS vs $BONKWINS: 30 days, every day a winner."). */
+export const fightLead = (tickerA: string, tickerB: string, days: number): string => `$${tickerA} vs $${tickerB}: ${days} ${days === 1 ? "day" : "days"}, every day a winner.`;

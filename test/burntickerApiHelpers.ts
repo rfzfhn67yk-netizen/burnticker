@@ -136,6 +136,14 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/badge\/([^/]+)$/, "badge/[file]", ["file"]],
   [/^\/verify-mint\/([^/]+)$/, "verify-mint/[mint]", ["mint"]],
   [/^\/clones$/, "clones", []],
+  // cheap-features pass (1.18.0)
+  [/^\/coins\/([^/]+)\/calendar$/, "coins/[mint]/calendar", ["mint"]],
+  [/^\/coins\/([^/]+)\/calendar\.ics$/, "coins/[mint]/calendar.ics", ["mint"]],
+  [/^\/coins\/([^/]+)\/checklist$/, "coins/[mint]/checklist", ["mint"]],
+  [/^\/leaderboard$/, "leaderboard", []],
+  [/^\/digest$/, "digest", []],
+  [/^\/ops\/post-queue$/, "ops/post-queue", []],
+  [/^\/ops\/post-queue\/used$/, "ops/post-queue/used", []],
 ];
 export const ROUTE_MODULES = ROUTES.map((r) => r[1]);
 

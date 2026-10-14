@@ -15,6 +15,7 @@
  *   receipt [--ticker=T|--deficit] [--day=YYYY-MM-DD] [--all]   confirmed burns only (default: the day before --now, UTC)
  *   scoreboard [--day=YYYY-MM-DD] [--league=NHL] [--season=…] [--season-over] [--pair=<pairId>]   (one post per league + the count line)
  *   season-card --ticker=T
+ *   digest --digest-file=FILE                   one post from a saved GET /api/burnticker/v1/digest?day= answer (cheap-features item 8)
  *
  * Flags: --fixtures (test/postQueueFixtures.ts instead of data dirs) · --print (show every post) · --dry-run (write nothing) ·
  * --queue=FILE (default data/launch/post-queue.jsonl) · --site=URL (default https://burnticker.com) · --deficit-site=URL (default
@@ -31,15 +32,16 @@ import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import {
   DEVNET_EVIDENCE, EXPLAINER_TOPICS, POST_FORMATS, PostRefused, QUEUE_FILE, TEASER_TOPICS, appendQueue, checkDraft, coinLaunchThread, coverageCounts, deficitFacts, deficitLaunchThread,
   deficitReceiptDraft, devnetReceipt, explainerDraft, pairScoreboardDraft, platformLaunchThread, printDraft, receiptDraft, reviewFacts, scoreboardDrafts, seasonCardDraft, teaserDraft,
-  type Draft, type ExplainerTopic, type PostFormat, type QueuedPost, type TeaserTopic,
+  DIGEST_FORMAT, type Draft, type ExplainerTopic, type PostFormat, type QueuedPost, type TeaserTopic,
 } from "@/lib/launch/postQueue";
+import { digestDraft, type Digest } from "@/lib/burnticker/digest";
 
 const positional: string[] = [];
 const args = new Map<string, string>();
 for (const a of process.argv.slice(2)) { const m = /^--([^=]+)(?:=(.*))?$/.exec(a); if (m) args.set(m[1], m[2] ?? "true"); else positional.push(a); }
 const usage = (msg: string): never => { console.error(`${msg}\nusage: scripts/burnticker-posts.mts <${[...POST_FORMATS, "all"].join("|")}> [--fixtures] [--print] [--dry-run] … (see the header)`); process.exit(2); };
 const format = positional[0] ?? usage("no format");
-if (format !== "all" && !(POST_FORMATS as readonly string[]).includes(format)) usage(`unknown format ${format}`);
+if (format !== "all" && format !== DIGEST_FORMAT && !(POST_FORMATS as readonly string[]).includes(format)) usage(`unknown format ${format}`);
 const fixtures = args.has("fixtures");
 const site = args.get("site") ?? "https://burnticker.com";
 const deficitSite = args.get("deficit-site") ?? "https://deficit.burnticker.com";
@@ -51,6 +53,21 @@ const platformDir = args.get("platform-dir") ?? process.env.BURNTICKER_PUBLISH_D
 const deficitDir = args.get("dir") ?? process.env.BURNKEEPER_PUBLISH_DIR?.trim() ?? path.join("data", "burnkeeper-site");
 
 const readJson = <T,>(file: string): T | null => { try { return JSON.parse(fs.readFileSync(file, "utf8")) as T; } catch { return null; } };
+
+// ---- the daily digest (cheap-features item 8): one post from a saved GET /v1/digest?day= answer; nothing is read from the network ----
+if (format === DIGEST_FORMAT) {
+  const file = args.get("digest-file") ?? usage("digest needs --digest-file=FILE (a saved answer of GET /api/burnticker/v1/digest?day=YYYY-MM-DD)");
+  const d = readJson<Digest>(file);
+  if (!d || typeof d.day !== "string" || !d.counts || !Array.isArray(d.burns)) usage(`${file} is not a digest answer`);
+  let entry: QueuedPost;
+  try { entry = checkDraft(digestDraft(d!), { source: `digest ${d!.day}`, now }); }
+  catch (e) { if (!(e instanceof PostRefused)) throw e; console.error(`REFUSED ${e.draft.format} · ${e.draft.subject} — ${e.reason}\n${e.detail}\n${printDraft(e.draft)}`); process.exit(3); }
+  const dry = args.has("dry-run");
+  const r = dry ? { appended: [entry!], skipped: [] as QueuedPost[] } : appendQueue(queueFile, [entry!]);
+  if (args.has("print") || dry) for (const e of [...r.appended, ...r.skipped]) console.log(`${printDraft(e)}\n`);
+  console.error(`${dry ? "dry run: nothing written" : `${queueFile}: ${r.appended.length} appended, ${r.skipped.length} already queued`} · nothing was posted (the owner posts by hand)`);
+  process.exit(0);
+}
 
 // ---- the data: fixtures or the keepers' published files ----
 interface Data {
