@@ -28,6 +28,7 @@
     "src/lib/burnReceipts/pairs.ts",
     "src/lib/burnReceipts/pda.ts",
     "src/lib/burnReceipts/platformPins.ts",
+    "src/lib/burnticker/apiBudget.ts",
     "src/lib/burnticker/burnTarget.ts",
     "src/lib/burnticker/cpmmTier.ts",
     "src/lib/burnticker/creatorProfile.ts",

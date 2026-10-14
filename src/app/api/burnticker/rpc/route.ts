@@ -3,6 +3,8 @@ import { clientKey, limiter } from "@/lib/burnticker/api/http";
 import { rpcUrlFor, type Network } from "@/lib/burnticker/networks";
 import { hostCluster } from "@/lib/burnticker/launchAvailability";
 import { RPC_PROXY_MAX_BODY, rpcProxyRefusal } from "@/lib/burnticker/rpcProxy";
+import { BudgetHoldError, takeRpc } from "@/lib/burnticker/apiBudget";
+import { ensureWebApiBudget } from "@/lib/burnticker/server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,12 @@ export async function POST(req: Request) {
   if (refused) return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32601, message: `This site does not forward ${refused}.` } }, { status: 400 });
   const cluster = hostCluster(process.env);
   const network: Network = cluster === "mainnet" ? "mainnet" : "devnet";
+  // the request budget (apiBudget.ts): the site's share of the RPC plan; a spent day or a full bucket answers 503, nothing is forwarded
+  ensureWebApiBudget();
+  try { await takeRpc(rpcUrlFor(network), body); } catch (e) {
+    if (e instanceof BudgetHoldError) return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32005, message: "The site has used its network allowance for now. Please try again in a few minutes." } }, { status: 503, headers: { "retry-after": "60" } });
+    throw e;
+  }
   try {
     const up = await fetch(rpcUrlFor(network), { method: "POST", headers: { "content-type": "application/json" }, body: text, signal: AbortSignal.timeout(20_000) });
     const answer = await up.text();

@@ -20,6 +20,7 @@ import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { isOneTimeSeries, oneShotEligibility } from "@/lib/burnticker/oneShotEligibility";
 import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import { isSingleOfficialSource, singleSourceMethod } from "@/lib/burnticker/singleSource";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit). Before a coin is created on a selector, the selector is run live
@@ -249,6 +250,7 @@ async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: numb
   } else if (u.pool) why.push("the pool TWAP needs a Solana read port and the coin's mint");
   if (u.redstone) {
     try {
+      await takeOrThrow(sourceForUrl(REDSTONE_LATEST_URL));   // the request budget (apiBudget.ts)
       const res = await fetchImpl(REDSTONE_LATEST_URL, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = await redstonePrimary(await res.json(), u.redstone, REDSTONE_LATEST_URL);

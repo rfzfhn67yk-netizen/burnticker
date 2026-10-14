@@ -2,7 +2,8 @@ import { type AddressLookupTableAccount, type Connection, type Keypair, PublicKe
 import { attestationMessage, ed25519SharedMessageInstruction, signAttestation, sourceUrlHash, verifyAttestation, ZERO_HASH } from "@/lib/burnReceipts/attestation";
 import { fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, type Cluster as ProgramCluster, LAUNCHLAB_PROGRAM_ID, MAX_QUORUM, MODE_BUYBACK, OUTCOME_NAMES, POOL_REPLACEMENT_DELAY_SECS, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
-import { anchorErrorName, assertClusterAllowed, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCrank as programPlanCrank, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
+import { anchorErrorName, assertClusterAllowed, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
+import { type PrivateSender, privateSenderFromEnv } from "@/lib/burnKeeper/privateSend";
 import { submitReadingIx } from "@/lib/burnReceipts/instructions";
 import { configPda, feePda, launchlabCreatorFeeVault, readingPda } from "@/lib/burnReceipts/pda";
 import type { Cosignature, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
@@ -46,7 +47,7 @@ export function configView(programId: PublicKey, mint: PublicKey, c: TokenConfig
     poolRegistered: c.poolRegistered, pool: c.poolRegistered ? c.cpmm_pool.toBase58() : null, poolUntradeableSince: c.pool_untradeable_since > BigInt(0) ? Number(c.pool_untradeable_since) : null,
     poolUntradeableLastSeen: c.pool_untradeable_last_seen > BigInt(0) ? Number(c.pool_untradeable_last_seen) : null, clusterGenesis: c.cluster_genesis.toBase58(),
     carriedSpendLamports: c.carried_spend_lamports, totalBurned: c.total_burned, totalSpentLamports: c.total_spent_lamports, shortfall: c.shortfall, readings: c.readings, burns: c.burns,
-    burnsTarget: c.burn_target_kind === 1,
+    burnsTarget: c.burn_target_kind === 1, ruleEnded: c.end_state !== 0,
   };
 }
 
@@ -89,6 +90,11 @@ export interface SolanaProgramPortOpts {
   launchLabPool?: PublicKey | null;
   cpmmProgram?: PublicKey | null;
   log?: (s: string) => void;
+  /**
+   * Burn dispersal (2026-10-13): the private send route. Default: BURNTICKER_PRIVATE_SEND_URL from the environment (privateSend.ts);
+   * null forces the public RPC. Every send and every rebroadcast while confirming goes through it when set.
+   */
+  privateSend?: PrivateSender | null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -114,6 +120,9 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
   const ctx: ProgramContext = { connection: c, programId: o.programId, mint: o.mint, cluster: programClusterOf(o.cluster), allowMainnet: o.allowMainnet, lookupTable: o.lookupTable };
   const fee = feePda(o.programId, o.mint), config = configPda(o.programId, o.mint);
   const maxLocal = Math.min(o.maxLocalAttesters ?? 1, MAX_QUORUM);
+  const priv = o.privateSend === undefined ? privateSenderFromEnv(typeof process !== "undefined" ? process.env : {}) : o.privateSend;
+  if (priv) o.log?.(`  [send] transactions go through the ${priv.label}`);
+  const broadcast = async (raw: Uint8Array): Promise<void> => { if (priv) await priv.send(raw); else await c.sendRawTransaction(raw, { skipPreflight: true, maxRetries: 0 }); };
   let rpcGenesis: string | null = null;
   const checkCluster = async (): Promise<string> => { if (!rpcGenesis) rpcGenesis = await assertClusterAllowed(ctx); return rpcGenesis; };
   const messageFor = (genesis: string, i: ReadingInput): Buffer => attestationMessage(genesis, o.programId, o.mint, i.feedId, i.prevDate, i.recordDate, i.value, i.valueDecimals, sourceUrlHash(i.sourceUrl), i.proofHash ?? ZERO_HASH);
@@ -169,12 +178,19 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
       if ("status" in p) return p.status === "idle" ? { status: "idle" } : { status: "waiting-for-pool", recordDate: p.recordDate };
       return { kind: p.kind, recordDate: p.recordDate, build: () => sign(p.instructions) };
     },
+    async planCarried(maxSpendLamports) {
+      await checkCluster();
+      const p = await planCarriedCrank(ctx, o.payer.publicKey, maxSpendLamports);
+      if ("status" in p) return { status: p.status };
+      return { build: () => sign(p.instructions) };
+    },
+    async poolSolReserve() { return poolSolReserve(ctx); },
     async simulate(raw) {
       const r = await c.simulateTransaction(VersionedTransaction.deserialize(raw), { commitment: "confirmed" });
       const logs = r.value.logs ?? [];
       return { err: r.value.err ? anchorErrorName(logs) ?? JSON.stringify(r.value.err) : null, logs };
     },
-    async send(raw) { await c.sendRawTransaction(raw, { skipPreflight: true, maxRetries: 0 }); },
+    async send(raw) { await broadcast(raw); },
     async confirm(tx) {
       const started = Date.now();
       let lastSend = Date.now();
@@ -186,7 +202,7 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
           if (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized") return { status: "confirmed", slot: st.slot };
         }
         if ((await c.getBlockHeight("confirmed")) > tx.lastValidBlockHeight) return { status: "expired" };
-        if (Date.now() - lastSend > 4_000) { lastSend = Date.now(); await c.sendRawTransaction(tx.raw, { skipPreflight: true, maxRetries: 0 }).catch(() => {}); }
+        if (Date.now() - lastSend > 4_000) { lastSend = Date.now(); await broadcast(tx.raw).catch(() => {}); }
       }
       return { status: "expired" };
     },

@@ -1,3 +1,4 @@
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 /**
  * POLYMARKET, READ FROM THE CHAIN (2026-10-09). A Polymarket market is a Gnosis Conditional Tokens Framework condition on Polygon;
  * when UMA's optimistic oracle resolves it, the UMA CTF adapter calls `reportPayouts` and the CTF contract stores, per condition,
@@ -69,6 +70,7 @@ export function decodeUint(hex: unknown): bigint {
 }
 
 async function rpc(fetchImpl: FetchLike, url: string, method: string, params: unknown[], timeoutMs: number): Promise<unknown> {
+  await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts), before the timeout starts
   const ac = new AbortController(); const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
     const res = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json", "user-agent": "burnkeeper-attest/1 (curl-compatible)" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: ac.signal });

@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { compare, skeleton } from "@/lib/burnticker/lookalike";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE CLONE WATCH (growth batch, owner-approved 2026-10-10) and the public "Not Burnticker" list. A keeper-side job
@@ -234,6 +235,7 @@ export async function scanClones(d: CloneWatchDeps): Promise<{ observations: Clo
   const best = new Map<string, PoolHit & { matched: { term: string; how: string } }>();
   for (const term of d.terms) {
     try {
+      await takeOrThrow(sourceForUrl(dexSearchUrl(term)));   // the request budget (apiBudget.ts)
       const res = await d.fetchImpl(dexSearchUrl(term));
       if (!res.ok) { errors.push(`search ${term}: HTTP ${res.status}`); continue; }
       for (const h of poolsFromDexScreener(await res.json())) {

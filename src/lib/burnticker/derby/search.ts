@@ -4,6 +4,7 @@ import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { DERBY_MIN_LIQUIDITY_USD, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { feedBase, loadPythCatalogue, PRICE_ASSET_TYPES, searchPyth, type PythFeedRow } from "@/lib/burnticker/derby/pyth";
 import { derbySymbol, dexscreenerUrl, JUP_SEARCH_URL, REDSTONE_LATEST_URL, tokensFromJupiter, type JupToken } from "@/lib/burnticker/derby/cross";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE WIZARD'S COIN SEARCH (2026-10-10, the "Coin vs Coin" tile; GET /v1/derby/search). One query over Pyth's catalogue (the fixture
@@ -60,6 +61,7 @@ async function redstoneIds(d: SearchDeps): Promise<Set<string>> {
   if (d.redstoneIds) return d.redstoneIds;
   if (rsCache && Date.now() - rsCache.at < 10 * 60_000) return rsCache.ids;
   try {
+    await takeOrThrow(sourceForUrl(REDSTONE_LATEST_URL));   // the request budget (apiBudget.ts)
     const res = await d.fetchImpl(REDSTONE_LATEST_URL, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
     const ids = res.ok ? new Set(Object.keys((await res.json()) as Record<string, unknown>)) : new Set<string>();
     rsCache = { at: Date.now(), ids };
@@ -69,6 +71,7 @@ async function redstoneIds(d: SearchDeps): Promise<Set<string>> {
 
 async function jupiterSearch(d: SearchDeps, q: string): Promise<JupToken[]> {
   try {
+    await takeOrThrow(sourceForUrl(JUP_SEARCH_URL));
     const res = await d.fetchImpl(`${JUP_SEARCH_URL}?query=${encodeURIComponent(q)}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
     return res.ok ? tokensFromJupiter(await res.json()) : [];
   } catch { return []; }
@@ -80,6 +83,7 @@ export const HOME_CHAINS: Record<string, { chain: string; address: string }> = (
 /** The deepest SOL pool of a mint on Raydium or PumpSwap (DexScreener's pairs), or null. */
 export async function deepestSolPool(fetchImpl: FetchLike, mint: string): Promise<{ pool: string; dexId: string; liquidityUsd: number } | null> {
   try {
+    await takeOrThrow(sourceForUrl(dexscreenerUrl(mint)));
     const res = await fetchImpl(dexscreenerUrl(mint), { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return null;
     const pairs = ((await res.json()) as { pairs?: { chainId?: string; dexId?: string; pairAddress?: string; baseToken?: { address?: string }; quoteToken?: { address?: string }; liquidity?: { usd?: number }; labels?: string[] }[] }).pairs ?? [];

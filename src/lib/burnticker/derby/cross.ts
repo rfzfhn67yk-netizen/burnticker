@@ -1,5 +1,6 @@
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { numToDec } from "@/lib/burnticker/units";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE CROSS-READ (2026-10-10): an independent operator's value for each coin, read at the same window boundaries, so one source cannot
@@ -78,6 +79,7 @@ export async function crossQuote(fetchImpl: FetchLike, locator: string, cache: M
   const url = c.kind === "jup" ? jupPriceUrl(c.mint) : c.kind === "dexscreener" ? dexscreenerUrl(c.address) : REDSTONE_LATEST_URL;
   let body = cache.get(url);
   if (body === undefined) {
+    await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts)
     const res = await fetchImpl(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
     if (!res.ok) throw new Error(`${c.kind === "jup" ? "Jupiter" : c.kind === "dexscreener" ? "DexScreener" : "RedStone"} HTTP ${res.status}`);
     body = await res.json();

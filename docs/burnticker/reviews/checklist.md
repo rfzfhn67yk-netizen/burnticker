@@ -277,3 +277,25 @@ The text above and the earlier errata stay as written. Two owner decisions of 20
   itself is unchanged, and so is every config it created.
 - **What a reviewer checks.** SOL leaves a fee PDA in five places now: `crank_buyback`, `crank_target_burn`, `forward_to_winner`,
   `forward_on_end` and `burn_sol_on_end` (only to the incinerator, only for a coin whose pinned sink is the incinerator).
+
+## Erratum 2026-10-13 (burn dispersal, program round 5)
+
+The text above and the earlier errata stay as written. An owner decision of 2026-10-13 (night) adds one permissionless instruction to the
+same unreleased round 5 (built, not deployed):
+
+- **Instruction count (item 1).** burn_receipts now has **42 entrypoints**: the 41 above plus `crank_carried`. The IDL, the Powers
+  Register and the whitepaper's §13.3 list 42 (44 event types, 136 error codes).
+- **crank_carried(max_spend_lamports).** A reading's crank still spends at most 2 % of the pool's WSOL reserve and carries the rest in
+  `carried_spend_lamports`. `crank_carried` spends a piece of that carried amount without a new reading: spend = min(carried,
+  max_spend_lamports, the platform basis). A request above 2 % of the reserve is refused (`SpendAboveCap`), never clamped; a piece under
+  the floor is refused unless it is the whole remainder (`BelowFloor`); nothing carried or a zero request is refused (`NothingCarried`).
+  The swap is crank_buyback's: the registered, verified pool, the mandatory TWAP guard, the minimum output, the post-swap integrity
+  checks; every token the fee PDA holds is burned; the memo is `<PREFIX>|carried|through=<date>|spent=…|got=…|burn=…|left=…|swap=…|rules=sha256:…|v1`
+  and the event `CarriedSpent` names the last processed reading (`through`).
+- **The queue rule.** `crank_carried` is refused while any submitted reading waits for its own crank (`ReadingPending`: crank_cursor must
+  equal last_record_date). A reading's crank therefore always runs first with the whole carried amount in its target, as before; the new
+  instruction never touches a Reading and never moves the cursor. It is also refused after the rule ended (`RuleNotLive`), for a coin that
+  burns another token (`BurnTargetSet`) and by the cranker allowlist while it is in force.
+- **What a reviewer checks.** SOL leaves a fee PDA in six places now: `crank_buyback`, `crank_carried` (the same path: its own WSOL
+  account, then the registered pool for tokens burned in the same instruction), `crank_target_burn`, `forward_to_winner`, `forward_on_end`
+  and `burn_sol_on_end`.

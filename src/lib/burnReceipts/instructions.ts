@@ -322,6 +322,33 @@ export function crankBuybackIx(o: { programId: PublicKey; cranker: PublicKey; mi
   }, { record_date: o.recordDate });
 }
 
+/**
+ * crank_carried (burn dispersal, 2026-10-13): spend a piece of at most `maxSpendLamports` of the config's carried spend without a
+ * reading — same pool accounts as crank_buyback, no Reading. The program refuses a piece above 2 % of the pool's WSOL reserve
+ * (SpendAboveCap), with nothing carried (NothingCarried) and while a reading waits for its own crank (ReadingPending).
+ */
+export function crankCarriedIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; pool: BuybackPoolAccounts; cluster: Cluster; maxSpendLamports: bigint }): TransactionInstruction {
+  return build(o.programId, "crank_carried", {
+    cranker: o.cranker,
+    config: configPda(o.programId, o.mint),
+    mint: o.mint,
+    fee_vault: feePda(o.programId, o.mint),
+    fee_wsol: feeWsolAddress(o.programId, o.mint),
+    fee_tokens: feeTokenAddress(o.programId, o.mint),
+    wsol_mint: NATIVE_MINT,
+    pool_state: o.pool.pool,
+    amm_config: o.pool.ammConfig,
+    cpmm_authority: o.pool.cpmmAuthority,
+    wsol_vault: o.pool.wsolVault,
+    token_vault: o.pool.tokenVault,
+    observation_state: o.pool.observation,
+    cpmm_program: CPMM_PROGRAM_ID[o.cluster],
+    token_program: TOKEN_PROGRAM_ID,
+    system_program: SystemProgram.programId,
+    memo_program: MEMO_PROGRAM_ID,
+  }, { max_spend_lamports: o.maxSpendLamports });
+}
+
 export function proposeAttestersIx(o: { programId: PublicKey; admin: PublicKey; mint: PublicKey; attesters: AttesterEntry[]; quorum: number }): TransactionInstruction {
   return build(o.programId, "propose_attesters", { admin: o.admin, config: configPda(o.programId, o.mint) }, { attesters: o.attesters, quorum: o.quorum });
 }

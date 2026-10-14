@@ -2,6 +2,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { ImpliedChance, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import type { ResolutionSource } from "@/lib/burnticker/sources/types";
+import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
 
 /**
  * ON-CHAIN FACTS (kind "onchain", tier 1 as a TRUST rank, labelled "on-chain consensus state" and never "adjudicated market" by
@@ -42,6 +43,6 @@ export function onchainSource(id: OnchainFactId, rpc: SolanaRpcPort | null, o: {
 /** A port over @solana/web3.js, built only when an RPC URL is configured. */
 export async function web3RpcPort(rpcUrl: string): Promise<SolanaRpcPort> {
   const { Connection, PublicKey } = await import("@solana/web3.js");
-  const c = new Connection(rpcUrl, "finalized");
+  const c = new Connection(rpcUrl, budgetedRpcConfig({ commitment: "finalized" }));
   return { blockHeight: () => c.getBlockHeight("finalized"), slot: () => c.getSlot("finalized"), accountLamports: async (pk) => { const a = await c.getAccountInfo(new PublicKey(pk), "finalized"); return a ? BigInt(a.lamports) : null; } };
 }

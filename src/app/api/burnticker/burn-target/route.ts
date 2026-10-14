@@ -4,6 +4,8 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { checkTargetAdmission, TARGET_MIN_WSOL_RESERVE_LAMPORTS } from "@/lib/burnReceipts/burnTarget";
 import { admissionLine, burnTargetShapeProblems } from "@/lib/burnticker/burnTarget";
 import { rpcUrlFor, type Network } from "@/lib/burnticker/networks";
+import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
+import { ensureWebApiBudget } from "@/lib/burnticker/server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,8 @@ export async function GET(req: Request) {
   const shape = burnTargetShapeProblems({ mint: q.get("mint") ?? "", pool: q.get("pool") ?? "", symbol, feedId: (q.get("feed") ?? "").toLowerCase() });
   const coin = q.get("coin");
   if (shape.length || (coin !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(coin))) return NextResponse.json({ ok: false, problems: [...shape, ...(coin !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(coin) ? ["coin must be a base58 address"] : [])] }, { status: 400 });
-  const connection = new Connection(rpcUrlFor(network), { commitment: "confirmed", disableRetryOnRateLimit: true });
+  ensureWebApiBudget();
+  const connection = new Connection(rpcUrlFor(network), budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }));
   try {
     const a = await checkTargetAdmission(connection, { cluster: network, targetMint: new PublicKey(q.get("mint")!), pool: new PublicKey(q.get("pool")!), feedId: (q.get("feed") ?? "").toLowerCase(), ...(coin ? { coinMint: new PublicKey(coin) } : {}) });
     const s = (k: PublicKey | null) => (k ? k.toBase58() : null);

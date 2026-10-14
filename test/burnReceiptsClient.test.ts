@@ -10,7 +10,7 @@ import { accountDiscriminator, encodeInstruction, encodeType } from "../src/lib/
 import { attestationMessage, attestReading, ed25519SharedMessageInstruction, ed25519VerifyInstruction, signAttestation, sourceUrlHash, verifyAttestation } from "../src/lib/burnReceipts/attestation.ts";
 import { bs58, decodeReading, decodeTokenConfig, READING_OFFSET_CONFIG, READING_OFFSET_PREV_DATE, READING_OFFSET_RECORD_DATE } from "../src/lib/burnReceipts/accounts.ts";
 import { configPda, feeKeyRecordPda, feeKeysPda, feePda, feeTokenAddress, lockedLiquidityPda, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lpLockVault, platformPda, programDataAddress, readingPda, vaultAddress, associatedTokenAddress } from "../src/lib/burnReceipts/pda.ts";
-import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, clearCrankerAllowlistIx, crankBuybackIx, crankVaultIx, eventAuthority, initializePlatformIx, initializeTokenIx, initializeTokenLayoutFromEnv, INITIALIZE_TOKEN_DEFAULT_LAYOUT, operatorAttester, registerPoolIx, setRegistrationPolicyIx, submitReadingIx, vetoRegistrationPolicyIx, syncNativeIx, zktlsRelayerAttester } from "../src/lib/burnReceipts/instructions.ts";
+import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, clearCrankerAllowlistIx, crankBuybackIx, crankCarriedIx, crankVaultIx, eventAuthority, initializePlatformIx, initializeTokenIx, initializeTokenLayoutFromEnv, INITIALIZE_TOKEN_DEFAULT_LAYOUT, operatorAttester, registerPoolIx, setRegistrationPolicyIx, submitReadingIx, vetoRegistrationPolicyIx, syncNativeIx, zktlsRelayerAttester } from "../src/lib/burnReceipts/instructions.ts";
 import { buybackPoolAccounts, decodeCpmmPool, POOL_STATE_DISCRIMINATOR } from "../src/lib/burnReceipts/cpmm.ts";
 import { anchorErrorName, assertClusterAllowed, buildSizedTransaction, DEFERRABLE_ERRORS, memoFromLogs, memoFromTransaction, readingLookupTableAddresses, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { checkPlatformPins } from "../src/lib/burnReceipts/platformPins.ts";
@@ -45,7 +45,7 @@ describe("burnReceipts client — IDL", () => {
   });
   test("no instruction can withdraw, close or sweep", () => {
     const names = BURN_RECEIPTS_IDL.instructions.map((i) => i.name).sort();
-    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "apply_target_pool", "burn_sol_on_end", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "cancel_target_pool", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_target_burn", "crank_vault", "forward_on_end", "forward_to_winner", "initialize_platform", "initialize_token", "initialize_token_r5", "link_pair", "pin_burn_target", "propose_attesters", "propose_cap_raise", "propose_target_pool", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "submit_rule_end", "unlink_pair", "veto_registration_policy", "veto_target_pool"]);
+    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "apply_target_pool", "burn_sol_on_end", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "cancel_target_pool", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_carried", "crank_no_units", "crank_target_burn", "crank_vault", "forward_on_end", "forward_to_winner", "initialize_platform", "initialize_token", "initialize_token_r5", "link_pair", "pin_burn_target", "propose_attesters", "propose_cap_raise", "propose_target_pool", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "submit_rule_end", "unlink_pair", "veto_registration_policy", "veto_target_pool"]);
   });
 });
 
@@ -264,6 +264,14 @@ describe("burnReceipts client — instructions", () => {
     assert.ok(ix.keys.some((k) => k.pubkey.equals(platformPda(PID))), "the platform config (burn-pool cap) rides along");
     assert.ok(ix.keys[15].pubkey.equals(CPMM_PROGRAM_ID.devnet));
     assert.ok(ix.keys[9].pubkey.equals(pool) && ix.keys[9].isWritable);
+    // burn dispersal (2026-10-13): crank_carried - the same pool accounts, no Reading, the piece's ceiling as a u64 argument
+    const cc = crankCarriedIx({ programId: PID, cranker: MINT, mint: MINT, pool: acc, cluster: "devnet", maxSpendLamports: BigInt(1_043_000_000) });
+    assert.equal(cc.data.length, 16);
+    assert.equal(cc.data.readBigUInt64LE(8), BigInt(1_043_000_000));
+    assert.ok(cc.keys.some((k) => k.pubkey.equals(platformPda(PID))), "the platform cap rides along");
+    assert.ok(cc.keys.some((k) => k.pubkey.equals(pool) && k.isWritable));
+    assert.ok(cc.keys.some((k) => k.pubkey.equals(CPMM_PROGRAM_ID.devnet)));
+    assert.equal(cc.keys.length, 20, "crank_buyback's accounts without the reading and the two pair accounts");
   });
 });
 

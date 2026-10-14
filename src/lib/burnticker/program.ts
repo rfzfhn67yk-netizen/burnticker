@@ -181,11 +181,11 @@ export function counterRule(rule: BurnRule, ticker: string, selectorKey: string,
 export const counterSourceUrl = (ticker: string, date: string, eventIds: readonly string[]): string => `burnticker://${ticker}/units/${date}?events=${eventIds.join(",")}`;
 
 /** What the token page shows about the program for one mint (TokenPageInput.chain.program); null when the client has no config for it. */
-export async function programPageBlock(client: BurnProgramClient, mint: string, lastReading: { date: string; signature: string } | null): Promise<{ config: Awaited<ReturnType<ProgramPort["config"]>>; keeperKeys: string[]; lastReading: { date: string; signature: string } | null } | null> {
+export async function programPageBlock(client: BurnProgramClient, mint: string, lastReading: { date: string; signature: string } | null, /** burn dispersal lines (dispersalKeeper.ts dispersalLines) */ dispersal?: readonly string[]): Promise<{ config: Awaited<ReturnType<ProgramPort["config"]>>; keeperKeys: string[]; lastReading: { date: string; signature: string } | null; dispersal?: readonly string[] } | null> {
   let port: ProgramPort;
   try { port = client.port(mint); } catch { return null; }
   const config = await port.config().catch(() => null);
-  return { config, keeperKeys: client.canSign ? port.attesterKeys() : [], lastReading };
+  return { config, keeperKeys: client.canSign ? port.attesterKeys() : [], lastReading, ...(dispersal && dispersal.length ? { dispersal } : {}) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------

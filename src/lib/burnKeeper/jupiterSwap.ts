@@ -1,3 +1,4 @@
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 /**
  * THE KEEPER'S JUPITER CLIENT (2026-10-09): the two calls the buyback leg needs — the SOL/USD price (for the rule's floor) and a
  * SOL → <mint> market swap built by Jupiter's lite API — and nothing else. Self-contained on purpose: the keeper is published in the
@@ -25,6 +26,7 @@ export interface SwapBuildResult {
 }
 
 async function fetchJson<T>(fetchImpl: FetchLike, url: string, init?: RequestInit): Promise<T> {
+  await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts)
   const res = await fetchImpl(url, { ...init, headers: { Accept: "application/json", ...(init?.headers ?? {}) }, signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Jupiter request failed (${res.status})`);
   return (await res.json()) as T;
@@ -43,6 +45,7 @@ export async function buildSwapTransaction(params: { inputMint: string; outputMi
   try {
     const quote = await fetchJson<JupiterQuoteResponse>(fetchImpl, `${JUPITER_BASE_URL}/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountBaseUnits}&slippageBps=${slippageBps}`);
     if (quote.error || !quote.outAmount) return { status: "no_route", reason: quote.error ?? "no route" };
+    await takeOrThrow(sourceForUrl(JUPITER_BASE_URL));
     const res = await fetchImpl(`${JUPITER_BASE_URL}/swap/v1/swap`, {
       method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS),
       body: JSON.stringify({

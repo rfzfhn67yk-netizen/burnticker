@@ -1,6 +1,7 @@
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { b58decode, base64ToBytes, sha256Hex, toHex } from "@/lib/burnticker/trustpack/base58";
 import { isAccount, readAccount } from "@/lib/burnticker/trustpack/idlReader";
+import { takeRpc } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE BROWSER RECEIPT VERIFIER (trust pack, 2026-10-10; /burnticker/check). Paste a receipt's transaction signature and this module,
@@ -81,6 +82,7 @@ export function jsonRpc(url: string, fetchImpl: typeof fetch = fetch, o: { attem
         const wait = last + gap - Date.now();
         if (wait > 0) await new Promise((ok) => setTimeout(ok, wait));
         last = Date.now();
+        await takeRpc(url, { method });   // the request budget (apiBudget.ts): a hold throws, it is not retried here
         const r = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
         // 429 and 5xx are retried; any other non-OK status is a failed read. A failed read THROWS — it is never an empty result
         // (ChatGPT re-check 2026-10-11 F1: a 503 JSON body or a bodyless 200 used to come back as `undefined` and read as "no account").

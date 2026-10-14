@@ -5,7 +5,7 @@ import { assertSignableGenesis, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LAU
 import { type BuybackPoolAccounts, buybackPoolAccounts, decodeCpmmPool, fetchCpmmPool } from "@/lib/burnReceipts/cpmm";
 import { formatDate } from "@/lib/burnReceipts/math";
 import { fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_RESULT_GRACE_SECS, PAIR_RESULT_LOST, PAIR_STATE_PAIRED, pairResultFor } from "@/lib/burnReceipts/pairs";
-import { checkPoolHealthIx, claimLaunchlabCreatorFeeIx, crankBuybackIx, crankNoUnitsIx, crankVaultIx, createAtaIdempotentIx, eventAuthority, registerPoolIx, submitReadingIx, syncNativeIx } from "@/lib/burnReceipts/instructions";
+import { checkPoolHealthIx, claimLaunchlabCreatorFeeIx, crankBuybackIx, crankCarriedIx, crankNoUnitsIx, crankVaultIx, createAtaIdempotentIx, eventAuthority, registerPoolIx, submitReadingIx, syncNativeIx } from "@/lib/burnReceipts/instructions";
 import { configPda, cpmmAuthority, feePda, feeTokenAddress, feeWsolAddress, launchlabPoolPda, vaultAddress } from "@/lib/burnReceipts/pda";
 import { BURN_TARGET_EXTERNAL, crankTargetBurnIx, feeTargetAddress, fetchBurnTarget, TARGET_POOL_HELD_ERRORS } from "@/lib/burnReceipts/burnTarget";
 
@@ -354,6 +354,54 @@ export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promis
       // Review-2 F3: fold any lamports sent straight to the fee PDA's WSOL account into its balance first (the program also does).
       syncNativeIx(feeWsol),
       crankBuybackIx({ ...base, pool, cluster: ctx.cluster, ...(partner ? { partner } : {}) }),
+    ],
+  };
+}
+
+/**
+ * BURN DISPERSAL (2026-10-13): the pool's WSOL reserve net of the fees owed out of the vault (what the program's 2 % per-crank cap and
+ * the constant-product move are measured on), or null when the config has no readable CPMM pool.
+ */
+export async function poolSolReserve(ctx: ProgramContext): Promise<bigint | null> {
+  const cfg = await fetchTokenConfig(ctx.connection, ctx.programId, ctx.mint);
+  if (!cfg || !cfg.config.poolRegistered) return null;
+  const info = await ctx.connection.getAccountInfo(cfg.config.cpmm_pool, "confirmed");
+  if (!info || !info.owner.equals(CPMM_PROGRAM_ID[ctx.cluster])) return null;
+  let pool;
+  try { pool = decodeCpmmPool(cfg.config.cpmm_pool, info.data); } catch { return null; }
+  const wsol0 = pool.token0Mint.equals(NATIVE_MINT);
+  const vault = await ctx.connection.getAccountInfo(wsol0 ? pool.token0Vault : pool.token1Vault, "confirmed");
+  if (!vault || vault.data.length < 72) return null;
+  const amount = Buffer.from(vault.data).readBigUInt64LE(64);
+  const fees = wsol0 ? pool.fees0 : pool.fees1;
+  return amount > fees ? amount - fees : BigInt(0);
+}
+
+/**
+ * The crank_carried transaction's instructions for a piece of at most `maxSpendLamports` (the fee PDA's ATAs first, SyncNative as for
+ * crank_buyback), or why there is none: no carried spend, a reading still waiting for its own crank, a coin that is not a self-burn
+ * buyback, or no pool.
+ */
+export async function planCarriedCrank(ctx: ProgramContext, cranker: PublicKey, maxSpendLamports: bigint): Promise<{ instructions: TransactionInstruction[]; carriedLamports: bigint; throughDate: number } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" }> {
+  const cfg = await fetchTokenConfig(ctx.connection, ctx.programId, ctx.mint);
+  if (!cfg) throw new Error(`no burn_receipts config for mint ${ctx.mint.toBase58()}`);
+  const c = cfg.config;
+  if (c.rule.mode !== MODE_BUYBACK || c.burn_target_kind === BURN_TARGET_EXTERNAL) return { status: "not-buyback" };
+  if (c.end_state !== 0) return { status: "rule-ended" };
+  if (!c.poolRegistered) return { status: "waiting-for-pool" };
+  if (c.has_baseline && c.crank_cursor !== c.last_record_date) return { status: "reading-pending" };
+  if (c.carried_spend_lamports <= BigInt(0)) return { status: "nothing-carried" };
+  const pool = await poolAccountsOrStandIns(ctx, c.cpmm_pool);
+  const fee = feePda(ctx.programId, ctx.mint);
+  const feeWsol = feeWsolAddress(ctx.programId, ctx.mint);
+  return {
+    carriedLamports: c.carried_spend_lamports,
+    throughDate: c.crank_cursor,
+    instructions: [
+      createAtaIdempotentIx({ payer: cranker, owner: fee, mint: NATIVE_MINT, ata: feeWsol }),
+      createAtaIdempotentIx({ payer: cranker, owner: fee, mint: ctx.mint, ata: feeTokenAddress(ctx.programId, ctx.mint) }),
+      syncNativeIx(feeWsol),
+      crankCarriedIx({ programId: ctx.programId, cranker, mint: ctx.mint, pool, cluster: ctx.cluster, maxSpendLamports }),
     ],
   };
 }

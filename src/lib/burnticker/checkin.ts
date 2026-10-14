@@ -19,7 +19,7 @@ import { collectSnapshot, devFeeDelta, evaluateAlerts, lamportsToSol, registryAl
  */
 
 export interface CheckinAlertRow { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }
-export interface CheckinInput { snapshot: BurntickerSnapshot | null; delta: ReturnType<typeof devFeeDelta> | null; alerts: CheckinAlertRow[] | null; firstLaunchAt: number | null; webhook?: WebhookState | null; why?: string }
+export interface CheckinInput { snapshot: BurntickerSnapshot | null; delta: ReturnType<typeof devFeeDelta> | null; alerts: CheckinAlertRow[] | null; firstLaunchAt: number | null; webhook?: WebhookState | null; why?: string; /** the request budget, one line per provider (apiBudget.ts budgetStatusLines) */ apiBudget?: string[] | null }
 
 export const OPS_SCHEMA = "burnticker.ops/v1";
 export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; webhook: WebhookState | null }
@@ -57,6 +57,7 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
     out.push(`- bt- alerts last 24 h: ${al.length}`);
     for (const a of al.slice(0, 12)) out.push(`    ${new Date(a.ts).toISOString().slice(0, 16)}Z [${a.kind}] ${a.text.slice(0, 150)}${a.seenAt ? "" : " · UNSEEN"}${a.sent ? "" : " · not sent to Telegram"}`);
   }
+  if (i.apiBudget) out.push(...(i.apiBudget.length ? i.apiBudget.map((l) => `- ${l}`) : ["- api budget: no provider read yet today"]));
   return out;
 }
 

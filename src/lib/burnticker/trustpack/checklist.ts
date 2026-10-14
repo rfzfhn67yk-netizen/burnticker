@@ -52,7 +52,7 @@ export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowC
   burn_receipts: {
     apply_attester_change: "none", apply_paired_attester_change: "none", apply_cap_raise: "none", apply_registration_policy: "none", cancel_attester_change: "none", cancel_cap_raise: "none",
     cancel_registration_policy: "none", check_pool_health: "none", claim_launchlab_creator_fee: "intoPool", claim_lock_fees: "lockFees", clear_cranker_allowlist: "none",
-    crank_buyback: "swapBurn", crank_no_units: "none", crank_vault: "burn", initialize_platform: "rent", initialize_token: "rent", propose_attesters: "none",
+    crank_buyback: "swapBurn", crank_carried: "swapBurn", crank_no_units: "none", crank_vault: "burn", initialize_platform: "rent", initialize_token: "rent", propose_attesters: "none",
     propose_cap_raise: "none", register_fee_key: "rent", link_pair: "rent", submit_pair_result: "rent", forward_to_winner: "forwardWinner", unlink_pair: "rent", submit_rule_end: "rent", forward_on_end: "forwardEnd", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",
     set_registration_policy: "none", submit_reading: "rent", veto_registration_policy: "none",
     pin_burn_target: "rent", crank_target_burn: "swapBurnOther", initialize_token_r5: "rent", burn_sol_on_end: "incinerateEnd", propose_target_pool: "none", cancel_target_pool: "none", veto_target_pool: "none", apply_target_pool: "none",

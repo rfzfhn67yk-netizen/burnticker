@@ -5,6 +5,7 @@ import path from "node:path";
 import { fromScaled } from "@/lib/burnticker/units";
 import { DERBY_BOUNDARY_TOLERANCE_SEC, DERBY_MAX_CONF_RATIO, INDEX_PROXY_SYMBOLS, indexProxiesEnabled, PYTH_ID_RE } from "@/lib/burnticker/derby/spec";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * PYTH — Burn Derby's PRIMARY source (2026-10-10). Pyth publishes signed price updates (accumulator updates whose Merkle root is signed by
@@ -108,6 +109,7 @@ export class HermesClient {
     this.last = Date.now();
     const headers: Record<string, string> = { accept: "application/json" };
     if (this.apiKey) headers.authorization = `Bearer ${this.apiKey}`;
+    await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts)
     const res = await this.fetchImpl(url, { headers, signal: AbortSignal.timeout(15_000) });
     if (res.status === 401 || res.status === 403) throw new Error(`Hermes HTTP ${res.status}: price updates need a Pyth API key on this host (BURNTICKER_PYTH_API_KEY)`);
     if (!res.ok) throw new Error(`Hermes HTTP ${res.status}`);

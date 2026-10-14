@@ -9,6 +9,7 @@ import { expandUrl, parseBody, type HttpSourceConfig } from "@/lib/burnticker/so
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { parseMarketsBody as parseGammaMarkets, resolvePolymarket, settledMarketUrl } from "@/lib/burnticker/oracle/polymarket";
 import { readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /** "1 unit", "3 units": a count in words, never "unit(s)". */
 const unitsWord = (n: number | bigint): string => `${n} unit${Number(n) === 1 ? "" : "s"}`;
@@ -145,6 +146,7 @@ export function verifyReceiptCore(i: { ticker: string; rulesText: string; receip
 export async function kalshiSourceReading(rule: BurnRule, eventId: string, fetchImpl: FetchLike, nowMs: number): Promise<SourceReading> {
   const url = rule.kind === "binary" ? marketApiUrl(eventId) : `${KALSHI_API}/markets?event_ticker=${encodeURIComponent(eventId)}&limit=200`;
   try {
+    await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts; passive in a browser)
     const res = await fetchImpl(url, { headers: { accept: "application/json" } });
     if (!res.ok) return { events: null, error: `Kalshi HTTP ${res.status}`, url };
     const body = await res.json() as { market?: unknown; markets?: unknown };
@@ -162,6 +164,7 @@ export async function polymarketSourceReading(rule: BurnRule, eventId: string, o
   if (!POLY_MARKET_RE.test(eventId)) return { events: null, error: `${eventId} is not a Polymarket condition id`, url: null };
   const url = settledMarketUrl(eventId);
   try {
+    await takeOrThrow(sourceForUrl(url));
     const res = await o.fetchImpl(url, { headers: { accept: "application/json" } });
     if (!res.ok) return { events: null, error: `Gamma HTTP ${res.status}`, url };
     const m = parseGammaMarkets(await res.json()).find((x) => x.conditionId === eventId);
@@ -180,6 +183,7 @@ export async function feedSourceReading(cfg: Pick<HttpSourceConfig, "request" | 
   if (/\{[A-Z][A-Z0-9_]*\}/.test(cfg.request.url) || cfg.needsKey) return { events: null, error: `the source needs a key (${cfg.needsKey ?? "a key template in its URL"})`, url: null };
   const url = expandUrl(cfg.request.url, nowMs);
   try {
+    await takeOrThrow(sourceForUrl(url));
     const res = await fetchImpl(url, { headers: { accept: cfg.request.format === "json" ? "application/json" : "*/*", "user-agent": "burnticker-verify/1 (receipt verification)" }, ...(cfg.request.method === "POST" ? { method: "POST", body: cfg.request.body } : {}) } as never);
     if (!res.ok) return { events: null, error: `HTTP ${res.status}`, url };
     const body = cfg.request.format === "json" ? await res.json() : res.text ? await res.text() : String(await res.json());
@@ -195,6 +199,7 @@ export async function feedSourceReading(cfg: Pick<HttpSourceConfig, "request" | 
 export async function verifyPinnedMetadata(pinned: { metadataUri: string | null; metadataSha256: string | null; hosted: boolean; expectedDescription: string } | null | undefined, fetchImpl: (url: string) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer> }>): Promise<{ ok: boolean | null; detail: string }> {
   if (!pinned || pinned.hosted || !pinned.metadataUri || !pinned.metadataSha256) return { ok: null, detail: "no pinned metadata for this coin (made before pinning, or a hosted devnet script coin)" };
   try {
+    await takeOrThrow(sourceForUrl(pinned.metadataUri));
     const r = await fetchImpl(pinned.metadataUri);
     if (!r.ok) return { ok: null, detail: `the gateway answered HTTP ${r.status}` };
     const buf = new Uint8Array(await r.arrayBuffer());

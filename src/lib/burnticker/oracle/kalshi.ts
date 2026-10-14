@@ -4,6 +4,7 @@ import { canonicalDecimal, numToDec, type SettledEvent } from "@/lib/burnticker/
 import type { FetchLike, ImpliedChance, OpenMarketSummary, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { aliasLookup, buildTeams, matchEvents, matchupLeagues, parseEventsBody, seasonStart, type EventHit, type KalshiEvent, type MatchupLeague, type TeamRow } from "@/lib/burnticker/oracle/events";
 import { categoryPage, parseBrowseSeriesList, parseTagsByCategories, seriesExample, summariseEvents, type BrowseSeries, type CategoryPage, type KalshiCategory } from "@/lib/burnticker/oracle/browse";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE KALSHI ORACLE (the PRIMARY event source; the owner, 2026-10-09). Public, keyless: https://api.elections.kalshi.com/trade-api/v2
@@ -246,6 +247,7 @@ export class KalshiClient implements OracleAdapter {
       const wait = this.lastAt + this.minInterval - this.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.lastAt = this.now();
+      await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts), before the timeout starts
       this.requests.push(url);
       const ac = new AbortController(); const t = setTimeout(() => ac.abort(), this.timeoutMs);
       try {

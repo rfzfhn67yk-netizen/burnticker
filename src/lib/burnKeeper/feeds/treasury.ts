@@ -1,4 +1,5 @@
 import { centsToUsd, usdToCents } from "@/lib/burnKeeper/rules";
+import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE $DEBT FEED — U.S. Treasury "Debt to the Penny" (SPEC §1, verified live 2026-10-09). Validation is pure; `fetchDebtToPenny`
@@ -115,6 +116,7 @@ export function validateDebtResponse(body: unknown, opts: { prev?: { recordDate:
 type FetchLike = (url: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 async function getJson(url: string, fetchImpl: FetchLike, timeoutMs: number): Promise<unknown> {
+  await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts), before the timeout starts
   const ac = new AbortController(); const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
     const res = await fetchImpl(url, { signal: ac.signal, headers: { accept: "application/json" } });

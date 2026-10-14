@@ -11,6 +11,7 @@ import { upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
 import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { lpLockPolicyJson, operatorTreasuryRecord, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
 import { compareLivePlatform, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
+import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE TRUST PAGE'S DATA (the owner, 2026-10-09: the platform must leave no room for suspicion that the operator is corrupt). Facts, no
@@ -395,7 +396,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
 /** A ChainReader over @solana/web3.js, built lazily by the route when an RPC URL is configured (never in tests). */
 export async function web3ChainReader(rpcUrl: string): Promise<ChainReader> {
   const { Connection } = await import("@solana/web3.js");
-  const c = new Connection(rpcUrl, "confirmed");
+  const c = new Connection(rpcUrl, budgetedRpcConfig({ commitment: "confirmed" }));
   return {
     accountData: async (pk) => (await c.getAccountInfo(new PublicKey(pk), "confirmed"))?.data ?? null,
     signaturesFor: async (addr, limit) => (await c.getSignaturesForAddress(new PublicKey(addr), { limit }, "confirmed")).map((s) => ({ signature: s.signature, slot: s.slot, blockTime: s.blockTime ?? null })),

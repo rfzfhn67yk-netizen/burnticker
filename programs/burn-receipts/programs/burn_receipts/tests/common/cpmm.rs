@@ -367,6 +367,39 @@ pub fn ix_crank_buyback_paired(cranker: &Pubkey, mint: &Pubkey, p: &Pool, date: 
     )
 }
 
+/// crank_carried (burn dispersal): a piece of at most `max_spend` of the carried spend, without a reading.
+pub fn ix_crank_carried(cranker: &Pubkey, mint: &Pubkey, p: &Pool, max_spend: u64) -> Instruction {
+    let config = config_pda(mint);
+    let fee = fee_pda(mint);
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::CrankCarried { max_spend_lamports: max_spend }.data(),
+        burn_receipts::accounts::CrankCarried {
+            cranker: *cranker,
+            config,
+            platform: platform_pda(),
+            mint: *mint,
+            fee_vault: fee,
+            fee_wsol: get_associated_token_address(&fee, &NATIVE_MINT),
+            fee_tokens: get_associated_token_address(&fee, mint),
+            wsol_mint: NATIVE_MINT,
+            pool_state: p.pool,
+            amm_config: p.amm_config,
+            cpmm_authority: p.authority,
+            wsol_vault: p.wsol_vault(),
+            token_vault: p.token_vault(),
+            observation_state: p.observation,
+            cpmm_program: CPMM_PROGRAM_ID,
+            token_program: spl_token::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
+            memo_program: MEMO_PROGRAM_ID,
+            event_authority: event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
 /// Reserves net of the fees owed out of each vault (what the CPMM curve uses).
 pub fn reserves(env: &Env, p: &Pool) -> (u64, u64) {
     let d = env.svm.get_account(&p.pool).unwrap().data;

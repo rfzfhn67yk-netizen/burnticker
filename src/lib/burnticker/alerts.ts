@@ -4,6 +4,7 @@ import { pollMsFor, type CycleReport } from "@/lib/burnticker/multiKeeper";
 import type { FeedState, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
 import { readAudit, type AuditSummary } from "@/lib/burnticker/trust";
 import { PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
+import { takeRpc } from "@/lib/burnticker/apiBudget";
 
 /**
  * BURNTICKER OPS ALERTS (2026-10-09, the operations layer). On the Burnticker host the keeper records each alert in the registry's
@@ -213,6 +214,7 @@ export async function runBurntickerAlertCheck(o: Parameters<typeof collectSnapsh
 
 export async function rpcBalanceLamports(rpcUrl: string, pubkey: string, fetchImpl: typeof fetch = fetch): Promise<bigint | null> {
   try {
+    await takeRpc(rpcUrl, { method: "getBalance" });   // the request budget (apiBudget.ts); a hold reads as "unknown", never a false alarm
     const r = await fetchImpl(rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [pubkey, { commitment: "confirmed" }] }), signal: AbortSignal.timeout(10_000) });
     if (!r.ok) return null;
     const j = (await r.json()) as { result?: { value?: number } };
