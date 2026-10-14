@@ -31,10 +31,11 @@ describe("devnet items off a mainnet host's public pages", () => {
     assert.ok(!json(d).includes("PracMint") && !json(d).includes("SigPrac"));
   });
 
-  test("$REHEARSAL, a mainnet coin, stays on the mainnet home", () => {
+  // owner 2026-10-14 ("hide the test coins"): $REHEARSAL is marked test in config/own-tokens.json, so it left the home (testCoins.ts)
+  test("$REHEARSAL, a test coin, is off the mainnet home; the mainnet $DEFICIT card stays", () => {
     const d = home("mainnet");
-    assert.ok(d.featured.some((v) => v.id === "rehearsal" && v.ticker === "REHEARSAL"));
-    assert.ok(d.events.some((e) => e.ticker === "REHEARSAL" && e.text.startsWith("$REHEARSAL created on mainnet")));
+    assert.ok(!d.featured.some((v) => v.id === "rehearsal" || v.ticker === "REHEARSAL"));
+    assert.ok(!d.events.some((e) => e.ticker === "REHEARSAL"));
     assert.ok(d.featured.some((v) => v.id === "deficit"), "the mainnet $DEFICIT card stays");
   });
 
@@ -61,7 +62,7 @@ describe("devnet items off a mainnet host's public pages", () => {
   test("the home API, tokens API and feeds pass the host's cluster to the filter", () => {
     const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
     assert.match(read("src/app/api/burnticker/home/route.ts"), /publicRegistryRows\(p\.registry\.tokens\(\), p\.cluster\)/);
-    assert.match(read("src/app/api/burnticker/home/route.ts"), /rehearsalCurve, p\.cluster\)/);
+    assert.match(read("src/app/api/burnticker/home/route.ts"), /rehearsalCurve, p\.cluster, tests\)/);
     assert.match(read("src/app/api/burnticker/tokens/route.ts"), /publicRegistryRows\(p\.registry\.tokens\(\), p\.cluster\)/);
     assert.match(read("src/lib/burnticker/feedsData.ts"), /publicEvents\(activityEvents\(/);
   });

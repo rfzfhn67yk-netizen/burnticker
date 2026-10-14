@@ -23,6 +23,7 @@ import { parseBuybackMemo as parseProgramBuybackMemo, parseDebtMemo as parseProg
 import { buybackSpend as programBuybackSpend, formatDate as formatU32 } from "@/lib/burnReceipts/math";
 import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { buildMarketJson, type CpmmMarket, type MarketInput } from "@/lib/burnticker/market";
+import { allLinks, coinLinks } from "@/lib/burnticker/tradeLinks";
 import type { HoldersRead } from "@/lib/burnticker/holders";
 import type { LifecycleDates } from "@/lib/burnticker/lifecycleDates";
 import type { FinalAfter, StatedSource } from "@/lib/burnticker/sources/polyStated";
@@ -465,6 +466,23 @@ const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?
 const postLegPct = (f: FeeSplit, label: FeeSplit["legs"][number]["label"]): string => `${(f.legs.find((l) => l.label === label)?.bps ?? 0) / 100}%`;
 const feeTable = (f: FeeSplit) => `<table><thead><tr><th>${esc(f.phase)}</th><th>Basis points</th><th>SOL per 1 SOL traded</th><th>Paid to</th><th>Setting</th></tr></thead><tbody>${f.legs.map((l) => `<tr><td>${esc(l.label)}</td><td class="num">${l.bps}</td><td class="num">${esc(bpsPerSol(l.bps))}</td><td>${esc(l.recipient)}</td><td class="muted">${esc(l.dial)}</td></tr>`).join("")}<tr><td>total</td><td class="num">${f.totalBps}</td><td class="num">${esc(bpsPerSol(f.totalBps))}</td><td></td><td></td></tr></tbody></table>`;
 
+/**
+ * owner 2026-10-14: where to trade the coin, on its static page (tradeLinks.ts coinLinks, the same builder as the app). Burnticker never
+ * takes an order; each link opens Raydium, Jupiter, DexScreener or Solscan.
+ */
+export function tradeLinksHtml(s: Pick<TokenStatusJson, "cluster" | "mint" | "status"> & { market?: TokenStatusJson["market"] | null }): string {
+  const l = coinLinks({ cluster: s.cluster, mint: s.mint, phase: s.market?.phase ?? null, status: s.status });
+  const all = allLinks(l);
+  if (!all.length) return l.note ? `<p class="muted" data-trade-links>${esc(l.note)}</p>` : "";
+  return `<p data-trade-links>${all.map((x, i) => `<a ${i === 0 && l.primary ? 'style="font-weight:600" ' : ""}href="${esc(x.url)}" rel="noopener" target="_blank">${esc(x.label)}</a>`).join(" · ")}</p>${l.note ? `<p class="muted">${esc(l.note)}</p>` : ""}`;
+}
+
+/** The index row's trade cell: the primary trade link, or a dash. */
+function indexTradeCell(t: Pick<PlatformIndexToken, "mint" | "status" | "phase">, cluster: string | undefined): string {
+  const p = coinLinks({ cluster: cluster ?? "mainnet", mint: t.mint, phase: t.phase, status: t.status }).primary;
+  return p ? `<a href="${esc(p.url)}" rel="noopener" target="_blank">${esc(p.label)}</a>` : "—";
+}
+
 export function renderTokenHtml(s: TokenStatusJson, receipts: readonly ReceiptJson[], readings: readonly ReadingRow[]): string {
   const t = esc(s.ticker);
   const rows = [...receipts].reverse();
@@ -504,6 +522,7 @@ ${STATUS_CSS}
 <p><a href="../../">← Burnticker</a></p>
 ${s.pair ? `<div class="rule"><strong>$${t} <span class="muted">vs</span> <a href="../${esc(s.pair.counterpart.ticker)}/">$${esc(s.pair.counterpart.ticker)}</a></strong>. This coin is side ${esc(s.pair.side)} of the rivalry pair <code>${esc(s.pair.pairId)}</code>. ${esc(settledLineOf(s.rules.statement) ?? "Both coins read the same market with opposite rules, so each result burns exactly one side.")} Burns ${s.pair.tally.burnsThis} : ${s.pair.tally.burnsOther}. Tokens burned ${fmt(s.pair.tally.burnedThis)} : ${fmt(s.pair.tally.burnedOther)}. Supply ${fmt(s.pair.tally.supplyThis)} : ${fmt(s.pair.tally.supplyOther)}.${s.pair.counterpart.lastBurnAt ? ` The other side last burned on ${esc(s.pair.counterpart.lastBurnAt.slice(0, 10))}.` : ""} <a href="../../p/${esc(s.pair.pairId)}/">Open the pair page</a>.</div>` : ""}
 <h1>$${t} <span class="muted" style="font-weight:400">${esc(s.name)}</span></h1>
+${tradeLinksHtml(s)}
 ${s.profile?.badge ? `<p><code>${esc(s.profile.badge)}</code></p>` : ""}${s.profile?.description ? `<p>${esc(s.profile.description)}</p>` : ""}${s.profile?.note ? `<p class="muted"><em>Creator's note (not part of the rule):</em> ${esc(s.profile.note)}</p>` : ""}
 <p class="muted">${esc(AFFILIATION_LINE)}</p>
 ${s.pinned?.metadataUri && !s.pinned.hosted ? `<p class="muted">The coin's metadata is pinned on Arweave at <a href="${esc(s.pinned.metadataUri)}">${esc(s.pinned.metadataUri)}</a>. Its sha256 hash is <code>${esc(s.pinned.metadataSha256 ?? "")}</code>.</p>` : ""}
@@ -526,6 +545,7 @@ ${verify || `<p class="muted">There is nothing to check yet.</p>`}
 ${programSection(s.program)}
 <h2>Trade</h2>
 <div class="embed">${s.addresses.poolId ? `The LaunchLab pool is <code>${esc(s.addresses.poolId)}</code>.` : "The LaunchLab pool is not created yet."} This page does not show the curve yet.</div>
+${tradeLinksHtml(s)}
 <h2>Fees</h2>
 <p>${esc(s.fees.sentence)}</p>
 <div class="scroll">${feeTable(s.fees.curve)}</div>
@@ -576,7 +596,9 @@ export interface PlatformIndexToken {
   siteKey?: string;
 }
 export interface AuditBadge { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean }
-export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: PlatformIndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary; winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null }
+export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: PlatformIndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary; winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null;
+  /** owner 2026-10-14: the network the coins are on, for the index's trade links (absent on an older index) */
+  cluster?: string }
 
 /** Pairs listed once (both sides), from the statuses' pair fields. */
 export function groupPairs(statuses: readonly TokenStatusJson[]): PlatformIndexJson["pairs"] {
@@ -606,7 +628,7 @@ export function indexToken(s: TokenStatusJson): PlatformIndexToken {
 export function buildPlatformIndex(statuses: readonly TokenStatusJson[], now: number, audit: AuditBadge | null = null, siteKeys: ReadonlyMap<string, readonly string[]> = statusSiteKeys(statuses)): PlatformIndexJson {
   const pairs = groupPairs(statuses);
   return {
-    schema: "burnticker.index/v1", generatedAt: new Date(now).toISOString(), audit, pairs,
+    schema: "burnticker.index/v1", generatedAt: new Date(now).toISOString(), audit, pairs, ...(statuses[0]?.cluster ? { cluster: statuses[0].cluster } : {}),
     tokens: statuses.map((s) => { const k = siteKeys.get(s.mint)?.[0]; return k && k !== s.ticker ? { ...indexToken(s), siteKey: k } : indexToken(s); }),
     totals: { tokens: statuses.length, live: statuses.filter((s) => s.status === "live").length, burns: statuses.reduce((a, s) => a + s.burned.count, 0), burnedTokens: statuses.reduce((a, s) => a + BigInt(s.burned.total.split(".")[0]), ZERO).toString(), pairs: pairs.length },
   };
@@ -631,8 +653,8 @@ ${STATUS_CSS}
 ${ix.pairs.length ? `<h2>Rivalry pairs</h2>
 <div class="tiles">${ix.pairs.map((p) => `<div class="tile"><div class="label">${esc(p.seriesTitle ?? p.selectorKey)}</div><div class="value"><a href="t/${esc(p.a.ticker)}/">$${esc(p.a.ticker)}</a> ${p.a.burns} : ${p.b.burns} <a href="t/${esc(p.b.ticker)}/">$${esc(p.b.ticker)}</a></div><div class="sub">Tokens burned ${fmt(p.a.burned)} : ${fmt(p.b.burned)}. Supply ${fmt(p.a.supply)} : ${fmt(p.b.supply)}. <a href="p/${esc(p.pairId)}/">Open the pair page</a>.</div></div>`).join("")}</div>` : ""}
 <h2>Tokens</h2>
-${ix.tokens.length ? `<div class="scroll"><table><thead><tr><th>Ticker</th><th>Name</th><th>Event</th><th>Mode</th><th>Burned</th><th>Burns</th><th>Status</th></tr></thead><tbody>
-${ix.tokens.filter((t) => !t.pairId).map((t) => `<tr><td><a href="t/${esc(t.siteKey ?? t.ticker)}/">$${esc(t.ticker)}</a></td><td>${esc(t.name)}</td><td title="${esc(t.selectorKey)}">${esc(t.seriesTitle ?? t.selectorKey)}</td><td>${esc(t.mode)}</td><td class="num">${fmt(t.burned)} (${t.pctOfSupply.toFixed(2)}%)</td><td class="num">${t.burns}</td><td>${esc(t.status)}</td></tr>`).join("\n")}
+${ix.tokens.length ? `<div class="scroll"><table><thead><tr><th>Ticker</th><th>Name</th><th>Event</th><th>Mode</th><th>Burned</th><th>Burns</th><th>Status</th><th>Trade</th></tr></thead><tbody>
+${ix.tokens.filter((t) => !t.pairId).map((t) => `<tr><td><a href="t/${esc(t.siteKey ?? t.ticker)}/">$${esc(t.ticker)}</a></td><td>${esc(t.name)}</td><td title="${esc(t.selectorKey)}">${esc(t.seriesTitle ?? t.selectorKey)}</td><td>${esc(t.mode)}</td><td class="num">${fmt(t.burned)} (${t.pctOfSupply.toFixed(2)}%)</td><td class="num">${t.burns}</td><td>${esc(t.status)}</td><td>${indexTradeCell(t, ix.cluster)}</td></tr>`).join("\n")}
 </tbody></table></div>` : `<p class="muted">There are no tokens yet.</p>`}
 <h2>How it works</h2>
 <ol><li>A creator picks an event source, such as a Kalshi series or market or a source's own published data. Then the creator picks a rule that says what each settled outcome burns. The rule is hashed and locked at launch.</li><li>The token launches on Raydium LaunchLab through Burnticker's platform settings. Its creator-fee slot pays all of its fees to its own burn pool.</li><li>When the event settles, the keeper reads the settled result, never a price. It works out the units with the published rule and runs the burn program. The program spends the rule's share of the pool buying the token at market and burns everything it gets, or it burns tokens from a vesting vault. It also writes the receipt memo on chain.</li><li>Anyone can recompute every receipt from the source and the rule. If we stop, anyone can run the burn with the same public readings.</li></ol>

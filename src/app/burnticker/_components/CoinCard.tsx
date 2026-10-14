@@ -5,6 +5,7 @@ import { CARD_LABELS, CARD_MEANINGS, RANK_MEANING, ageText, cardViewFromIndex, c
 import { ProgressStrip } from "./ProgressStrip";
 import { FollowButton } from "./FollowButton";
 import { Why } from "./Why";
+import { TradeButtons } from "./TradeLinks";
 
 /**
  * THE COIN CARD (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md; the full field set since website-13, 2026-10-12,
@@ -151,6 +152,8 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
         <div data-row="age"><dt>{CARD_LABELS.age}</dt><dd><Cell v={v} c={{ text: age, why: age ? null : v.createdWhy }} /></dd></div>
         <div data-row="burned"><dt title={CARD_MEANINGS.burned}>{CARD_LABELS.burned}</dt><dd><Cell v={v} c={v.burned} />{v.rank && <span className="mt-0.5 block text-xs text-neutral-400" data-rank title={RANK_MEANING}>{v.rank}</span>}</dd></div>
       </dl>
+      {/* owner 2026-10-14: where to trade the coin, on every card (tradeLinks.ts); nothing when there is nowhere to trade */}
+      {v.trade && (v.trade.primary || v.trade.info.length > 0) && <div className="mt-2" data-card-trade><TradeButtons links={v.trade} compact ticker={v.ticker} /></div>}
       <div className="bt-card-foot" data-row="receipt">
         {v.receipt ? <a className="bt-ghost-btn" href={v.receipt.href} title={CARD_MEANINGS.receipt}>Check receipt</a> : <><span className="bt-ghost-btn is-disabled" aria-disabled="true" title={v.receiptWhy ?? undefined}>Check receipt</span><span className="text-xs text-neutral-500">{v.receiptWhy}</span></>}
         {(v.group === "public" || v.id === "deficit") && v.watchKey ? <span className="ml-auto"><FollowButton watchKey={v.watchKey} ticker={v.ticker} /></span> : null}
@@ -196,5 +199,6 @@ export function CoinCard({ c, href, prelaunch = false }: { c: CoinCardData; href
       </article>
     );
   }
-  return <ViewCard v={cardViewFromIndex({ ticker: c.ticker, name: c.name, mint: c.ticker, oneLiner: c.oneLiner, status: c.status, imageUrl: c.imageUrl, burned: c.burned ?? "0", burns: c.burns, nextCheckAt: c.nextAt, nextCloseTime: null, lastBurnAt: c.lastBurnAt, launchedAt: c.launchedAt, pairId: c.pairId ?? null, badge: c.badge ?? null, phase: c.phase, progressPct: c.progressPct, raised: c.raised, threshold: c.threshold, quote: c.quote }, c.threshold)} />;
+  // no trade links here: this entry point has no mint (it passes the ticker in its place)
+  return <ViewCard v={{ ...cardViewFromIndex({ ticker: c.ticker, name: c.name, mint: c.ticker, oneLiner: c.oneLiner, status: c.status, imageUrl: c.imageUrl, burned: c.burned ?? "0", burns: c.burns, nextCheckAt: c.nextAt, nextCloseTime: null, lastBurnAt: c.lastBurnAt, launchedAt: c.launchedAt, pairId: c.pairId ?? null, badge: c.badge ?? null, phase: c.phase, progressPct: c.progressPct, raised: c.raised, threshold: c.threshold, quote: c.quote }, c.threshold), trade: null }} />;
 }

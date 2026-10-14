@@ -4,6 +4,7 @@ import { CPMM_PROGRAM_ID as CPMM_PROGRAM, launchLabPoolId, launchLabProgramFor, 
 import type { ChartJson, CurveJson, CurvePhase, HolderRow, LifecycleDatesJson, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
 import type { HoldersRead } from "@/lib/burnticker/holders";
 import { NOT_READ, MCAP_POOL_MEANING } from "@/lib/burnticker/cardView";
+import { coinLinks } from "@/lib/burnticker/tradeLinks";
 
 export type { ChartJson, CurveJson, CurvePhase, HolderRow, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
 
@@ -105,14 +106,10 @@ export function rpcErrorText(e: unknown): string {
 export const HOLDER_COUNT_NOTE = "Counting holders needs an indexer that lists every token account of the coin. This site does not run one.";
 const isMainnet = (c: string) => c === "mainnet";
 
-/** Deep links for a mint. Mainnet only: Raydium's and Jupiter's swap pages do not serve devnet. */
+/** Deep links for a mint, from the one builder (tradeLinks.ts coinLinks). Mainnet only: Raydium's and Jupiter's swap pages do not serve devnet. */
 export function tradeLinks(cluster: string, mint: string, phase: CurvePhase | null, status: string): TradeLinks {
-  if (status === "draft" || status === "expired") return { links: [], note: "This coin is not launched. There is nothing to trade until the launch transaction lands." };
-  if (!isMainnet(cluster)) return { links: [], note: `This is a ${cluster} coin. Raydium's and Jupiter's swap pages only serve mainnet.` };
-  const m = encodeURIComponent(mint);
-  const jupiter = { id: "jupiter" as const, label: "Open in Jupiter", url: `https://jup.ag/swap/SOL-${m}` };
-  if (phase === "graduated") return { links: [{ id: "raydium", label: "Trade on Raydium", url: `https://raydium.io/swap/?inputMint=sol&outputMint=${m}` }, jupiter], note: null };
-  return { links: [{ id: "launchlab", label: "Trade on Raydium", url: `https://raydium.io/launchpad/token/?mint=${m}` }, jupiter], note: null };
+  const l = coinLinks({ cluster, mint, phase, status });
+  return { links: l.trade.map((x) => ({ id: x.id as TradeLinks["links"][number]["id"], label: x.label, url: x.url })), note: l.note };
 }
 
 /** GeckoTerminal's chart embed for the pool that trades now: the CPMM pool after graduation, the LaunchLab curve pool before (only a pool read on chain this cycle — never an unverified id). */

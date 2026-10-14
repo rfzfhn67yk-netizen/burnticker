@@ -98,6 +98,7 @@ a{color:var(--violet)}
 .bar span{display:block;height:100%;background:#c8873a}.bar span.done{background:#5b3fa3}
 .foot{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
 .btn{display:inline-block;font:700 .78rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:9px 12px}
+.trade{margin-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:.8rem}.trade a:not(.btn){text-decoration:underline;color:var(--muted)}
 .btn:hover{text-decoration:none;border-color:var(--violet)}
 .btn.off{opacity:.5;cursor:not-allowed}
 .mint{margin:8px 0 0;font-size:.7rem;color:var(--muted);overflow-wrap:anywhere}
@@ -595,6 +596,16 @@ window.btWhy = function (label, why, name) {
     row(dl, "age", LABELS.age, cellNode({ text: ag, why: ag ? null : v.createdWhy }, emptyOf(v, "age")));
     row(dl, "burned", LABELS.burned, cellNode(v.burned, emptyOf(v, "burned")));
     a.appendChild(dl);
+    // owner 2026-10-14: where to trade the coin, from the API's own links (src/lib/burnticker/tradeLinks.ts); nothing when there are none
+    if (v.trade && (v.trade.trade.length || v.trade.info.length)) {
+      var tr = el("p", "trade"); tr.setAttribute("data-card-trade", "");
+      v.trade.trade.concat(v.trade.info).forEach(function (x, i) {
+        var ln = el("a", i === 0 && v.trade.primary ? "btn" : "", x.label + (i === 0 && v.trade.primary ? " \u2197" : "")); ln.href = x.url; ln.rel = "noopener"; ln.target = "_blank";
+        if (i > 0) tr.appendChild(document.createTextNode(" "));
+        tr.appendChild(ln);
+      });
+      a.appendChild(tr);
+    }
     var foot = el("div", "foot"); foot.setAttribute("data-row", "receipt");
     if (v.receipt) { var r = el("a", "btn", "Check receipt"); r.href = v.receipt.href; foot.appendChild(r); }
     else { var off = el("span", "btn off", "Check receipt"); off.setAttribute("aria-disabled", "true"); if (v.receiptWhy) off.title = v.receiptWhy; foot.appendChild(off); foot.appendChild(el("span", "", v.receiptWhy || "")); }

@@ -11,7 +11,12 @@ import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
  */
 
 export interface SitemapEntry { loc: string; lastmod?: string; changefreq?: "hourly" | "daily" | "weekly" | "monthly"; priority?: number }
-export interface SitemapInput { origin: string; nowMs: number; coins: readonly { ticker: string; mint?: string; status: string; at: number }[]; pairs: readonly { pairId: string }[]; seasonCoins: readonly SeasonCoinInput[] }
+export interface SitemapInput { origin: string; nowMs: number; coins: readonly { ticker: string; mint?: string; status: string; at: number }[]; pairs: readonly { pairId: string }[]; seasonCoins: readonly SeasonCoinInput[];
+  /** owner 2026-10-14: the operator's own coins that have a page here without a registry row ($DEFICIT, run by its own keeper) */
+  ownCoins?: readonly string[] }
+
+/** The operator's coins listed in the sitemap by ticker even when the registry does not hold them (testCoins.ts never lists a test coin). */
+export const OWN_COIN_PAGES: readonly string[] = ["DEFICIT"];
 
 export const STATIC_PAGES: { path: string; changefreq: SitemapEntry["changefreq"]; priority: number }[] = [
   { path: "/", changefreq: "daily", priority: 1 },
@@ -55,6 +60,10 @@ export function sitemapEntries(i: SitemapInput): SitemapEntry[] {
     ...i.coins.filter((c) => c.status === "live" || c.status === "paused" || c.status === "retired").map((c) => ({ loc: `${o}${coinPageHref({ ticker: c.ticker, mint: c.mint ?? c.ticker }, shared)}`, lastmod: today, changefreq: (c.status === "retired" ? "weekly" : "daily") as SitemapEntry["changefreq"], priority: 0.6 })),
     ...i.pairs.map((p) => ({ loc: `${o}/burnticker/p/${encodeURIComponent(p.pairId)}`, changefreq: "daily" as const, priority: 0.5 })),
   ];
+  for (const t of i.ownCoins ?? OWN_COIN_PAGES) {
+    const loc = `${o}/burnticker/t/${encodeURIComponent(t)}`;
+    if (!out.some((e) => e.loc === loc) && !i.coins.some((c) => c.ticker.toUpperCase() === t.toUpperCase() && c.status !== "draft" && c.status !== "expired")) out.push({ loc, lastmod: today, changefreq: "daily", priority: 0.6 });
+  }
   const seasons = new Set<string>();
   for (const id of Object.keys(LEAGUES) as LeagueId[]) seasons.add(leaguePath(id, seasonYearAt(id, i.nowMs)));
   for (const c of i.seasonCoins) { const s = coinSeason(c); if (s) seasons.add(leaguePath(s.league, s.year)); }

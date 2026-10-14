@@ -9,7 +9,7 @@ import path from "node:path";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { cardAge } from "@/lib/burnticker/cardAge.mjs";
 import { EMPTY_LABEL, ageText, cardViewFromIndex, emptyLabel, emptyLabels, featuredLine, mcapText, type CardView } from "@/lib/burnticker/cardView";
-import { homeData } from "@/lib/burnticker/home";
+import { featuredCoins, homeData } from "@/lib/burnticker/home";
 import { UPCOMING_EMPTY, UPCOMING_NONE_REGISTERED_LISTED, upcomingNotice, upcomingSet } from "@/lib/burnticker/upcoming";
 import { PROGRESS_NEXT, PROGRESS_STEPS, progressNow } from "@/lib/burnticker/progress";
 import { hostGaps } from "@/lib/burnticker/hostGaps";
@@ -85,7 +85,9 @@ describe("item 22: the home counts from data and never says no coin under listed
     const main = homeData([], ROOT, NOW, null, null, null, null, null, null, "mainnet");
     assert.equal(main.featured.length, main.featured.filter((v) => !v.tags.some((t) => t.tone === "devnet")).length);
     const tests = main.featured.filter((v) => v.id !== "deficit").length;
-    assert.match(main.featuredLine!, new RegExp(`and ${["no", "one", "two", "three"][tests]} disclosed test coin`));
+    // owner 2026-10-14: test coins left the home (testCoins.ts), so a mainnet host serves $DEFICIT alone and the line says so
+    if (tests === 0) assert.equal(main.featuredLine, "This is $DEFICIT, the operator's first coin.");
+    else assert.match(main.featuredLine!, new RegExp(`and ${["no", "one", "two", "three"][tests]} disclosed test coin`));
     assert.equal(main.nextNotice, UPCOMING_NONE_REGISTERED_LISTED, "coins are listed, so never the empty-page sentence");
     for (const v of main.featured) assert.ok(v.empty && v.empty.mcap, v.id);
   });
@@ -143,7 +145,8 @@ describe("item 23: card fields", () => {
     assert.equal(v.mcap.text, "28 SOL (curve-implied)");
   });
   test("audit 7 item 23: $REHEARSAL's age counts from its create transaction's block time; the next step is an outline, not a lit dot", () => {
-    const rh = homeData([], ROOT, NOW, null, null, null, null, null, null, "mainnet").featured.find((v) => v.id === "rehearsal")!;
+    // the card is still built (featuredCoins); since 2026-10-14 the home leaves it out as a test coin (testCoins.ts)
+    const rh = featuredCoins(ROOT, null, [], null, NOW).find((v) => v.id === "rehearsal")!;
     assert.equal(rh.createdAt, "2026-10-11T23:04:58Z");
     assert.equal(ageText(rh.createdAt, Date.parse("2026-10-13T00:40:00Z")), "1 day"); assert.equal(ageText(rh.createdAt, Date.parse("2026-10-12T22:00:00Z")), "22 hours");
     // measured on chain (pool AAT9VJ…RgG): status byte 0, 0.099 of 85 SOL, so 2 of 6 steps; the "current" dot must not look filled

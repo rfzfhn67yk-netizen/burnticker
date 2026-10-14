@@ -20,6 +20,8 @@ import { historyCountsLine } from "@/lib/burnticker/historyCopy";
 import type { FeaturedSlot } from "@/lib/burnticker/featuredSlots";
 import { publicHomeData, siteCluster } from "@/lib/burnticker/devnetHide";
 import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
+import { coinLinks } from "@/lib/burnticker/tradeLinks";
+import { isTestCoin, testCoinKeys, type TestCoinKeys } from "@/lib/burnticker/testCoins";
 export { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 
 /**
@@ -85,6 +87,11 @@ const OWN_TOKENS = path.join("config", "own-tokens.json");
 export function deficitCreated(root = process.cwd()): boolean {
   try { return (JSON.parse(fs.readFileSync(path.join(root, OWN_TOKENS), "utf8")) as { tokens: { symbol: string; status: string }[] }).tokens.some((t) => t.symbol === "DEFICIT" && t.status === "launched"); }
   catch { return false; }
+}
+/** $DEFICIT's mint once config/own-tokens.json marks it launched (the trade link's address); null before the create or when unreadable. */
+export function deficitMint(root = process.cwd()): string | null {
+  try { const t = (JSON.parse(fs.readFileSync(path.join(root, OWN_TOKENS), "utf8")) as { tokens: { symbol: string; status: string; address: string | null }[] }).tokens.find((x) => x.symbol === "DEFICIT"); return t?.status === "launched" && t.address ? t.address : null; }
+  catch { return null; }
 }
 const REHEARSAL_RULES = path.join("config", "burnkeeper", "rehearsal.rules.json");
 /** The mainnet rehearsal's evidence file (its LaunchLab create: pool id and signature). */
@@ -168,6 +175,8 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
     mint: deficit?.address ? { address: deficit.address, label: created ? "Mint address" : "Reserved mint address (coin not created yet)" } : null,
     // review 2 §2: one served $DEFICIT destination — its own site until the coin is created and registered here
     href: deficitHref(created && !!live),
+    // owner 2026-10-14: the trade link on the card (Raydium's launchpad page on the curve, its pool after graduation)
+    trade: created ? coinLinks({ cluster: "mainnet", mint: deficit?.address, phase: readable ? live!.phase ?? null : kc?.phase ?? null, status: "live" }) : null,
     receipt: sig ? { href: checkReceiptHref(sig, readable ? live!.cluster ?? "mainnet" : "mainnet")! } : null,
     receiptWhy: sig ? null : !created ? "The coin is not created yet." : !readable && !ks ? unreadWhy : "No burn has confirmed yet.",
   });
@@ -318,17 +327,20 @@ export function mainnetRecordEvents(root = process.cwd()): ActivityEvent[] {
   return out;
 }
 
-export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(), now = Date.now(), index: { totals: { burns: number; burnedTokens: string }; audit: { ok: boolean; receipts: number; mismatches: number; chainChecked?: boolean } | null } | null = null, statusRecord: unknown = undefined, launch: SiteLaunchState | null = null, keeper: KeeperFiles | null = null, upcoming: UpcomingSet | null = null, rehearsalCurve: RehearsalCurve = null, host: string = siteCluster()): HomeData {
+export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(), now = Date.now(), index: { totals: { burns: number; burnedTokens: string }; audit: { ok: boolean; receipts: number; mismatches: number; chainChecked?: boolean } | null } | null = null, statusRecord: unknown = undefined, launch: SiteLaunchState | null = null, keeper: KeeperFiles | null = null, upcoming: UpcomingSet | null = null, rehearsalCurve: RehearsalCurve = null, host: string = siteCluster(), tests: TestCoinKeys = testCoinKeys(root)): HomeData {
   let samples: SampleList | null = null;
   try { samples = sampleReceipts(root); } catch { samples = null; }
   let featured: CardView[] = [];
   try { featured = featuredCoins(root, samples, tokens, keeper, now, rehearsalCurve); } catch { featured = []; }
+  // owner 2026-10-14: a test coin ($REHEARSAL today; testCoins.ts) is not a featured card and has no row in the activity line
+  featured = featured.filter((v) => !isTestCoin(tests, { mint: v.mint?.address ?? null, ticker: v.ticker }));
+  const records = mainnetRecordEvents(root).filter((e) => !isTestCoin(tests, { ticker: e.ticker }));
   let rec: StatusRecord | null = null;
   if (statusRecord !== undefined) rec = statusRecord as StatusRecord | null;
   else { try { rec = JSON.parse(fs.readFileSync(path.join(root, STATUS_FILE), "utf8")) as StatusRecord; } catch { rec = null; } }
   // owner decision 2026-10-12: a mainnet host serves no devnet item (devnetHide.ts); a devnet host keeps them
   const out = publicHomeData({
-    schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: sortEvents([...activityEvents(tokens ?? [], samples, 40, keeper), ...mainnetRecordEvents(root)], 12), noEvents: NO_EVENTS_LINE,
+    schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: sortEvents([...activityEvents(tokens ?? [], samples, 40, keeper), ...records], 12), noEvents: NO_EVENTS_LINE,
     raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming: upcoming ?? upcomingSet([], [], tokens === null ? null : tokens.length), stats: withDevnet(homeStats(index?.totals ?? null, index?.audit ?? null), samples),
     // legitimacy pass: the one surface hint of the history pages, the dated counts (reviews published, releases since Oct 10)
     statusLine: [homeStatusLine(rec), historyCountsLine(historyCounts(root)), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,

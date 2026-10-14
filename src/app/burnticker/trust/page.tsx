@@ -17,6 +17,7 @@ import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { CHANGELOG_COPY, HISTORY_COPY } from "@/lib/burnticker/historyCopy";
 import { DEVNET_COPY, DEVNET_HREF } from "@/lib/burnticker/devnetCopy";
+import { TEST_COINS_COPY, TEST_COINS_HREF } from "@/lib/burnticker/testCoinsCopy";
 import { capSentence, type EffectiveCap } from "@/lib/burnticker/capInForce";
 import { denverTime } from "@/lib/burnticker/denverTime";
 
@@ -48,6 +49,8 @@ export default function TrustPage() {
       <p className="text-xs" data-history-link><Link className="underline" href="/burnticker/history">{HISTORY_COPY.trustLink}</Link></p>
       {/* owner decision 2026-10-12: the devnet practice coins and burns, hidden from the public pages on a mainnet host, live on one page */}
       <p className="text-xs" data-devnet-link><Link className="underline" href={DEVNET_HREF}>{DEVNET_COPY.linkLabel}</Link></p>
+      {/* owner 2026-10-14: the test coins the browse surfaces leave out are listed on one page, linked only from here (testCoins.ts) */}
+      <p className="text-xs" data-test-coins-link><Link className="underline" href={TEST_COINS_HREF}>{TEST_COINS_COPY.linkLabel}</Link>. {TEST_COINS_COPY.linkText}</p>
       <section className={card}><p><MailSafe text={t?.operatorLine ?? OPERATOR_LINE} />{t?.contactIsTodo && <span className="text-amber-400 text-xs"> The contact address is not set yet.</span>}</p>{t && <><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">{t.attesterStatus.line}</p></>}</section>
       <TrustPackSection card={card} />
       <SafeguardsSection card={card} />

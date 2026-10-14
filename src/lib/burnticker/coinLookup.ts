@@ -5,7 +5,7 @@ export type { CoinCandidate } from "@/lib/burnticker/coinKey";
 
 /**
  * Resolving a coin from a URL key (owner decision 2026-10-12: tickers are not unique; coinKey.ts has the keying rule). A mint resolves
- * to that coin. A ticker resolves to its one non-expired coin, to the list when several share it, and (as before) to the newest expired
+ * to that coin. A ticker resolves to its one non-expired coin, to its one launched coin when the others sharing it are drafts, to the list when several share it, and (as before) to the newest expired
  * draft when only expired drafts carry it. Server side; the registry is the only input.
  */
 export type CoinLookup = { kind: "one"; token: TokenRow } | { kind: "many"; ticker: string; tokens: TokenRow[] } | { kind: "none" };
@@ -18,6 +18,10 @@ export function lookupCoin(r: Reader, rawKey: string): CoinLookup {
   if (!key) return { kind: "none" };
   if (key.length >= 32 || isMintKey(key)) { const t = r.token(key); return t ? { kind: "one", token: t } : { kind: "none" }; }
   const held = r.tokensByTicker(key);
+  // owner 2026-10-14 (/t/PHINFLWIN answered the chooser): a draft never shadows a launched coin. When exactly one of the coins on the
+  // ticker is launched, the ticker opens it; the drafts stay reachable by their mints.
+  const launched = held.filter((t) => t.status !== "draft");
+  if (held.length > 1 && launched.length === 1) return { kind: "one", token: launched[0] };
   if (held.length > 1) return { kind: "many", ticker: key.toUpperCase(), tokens: held };
   if (held.length === 1) return { kind: "one", token: held[0] };
   const t = r.tokenByTicker(key);

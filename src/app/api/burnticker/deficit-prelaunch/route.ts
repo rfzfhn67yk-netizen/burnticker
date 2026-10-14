@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { deficitPrelaunch } from "@/lib/burnticker/deficitPrelaunch";
 import { deficitQueue, readKeeperFiles } from "@/lib/burnticker/deficitQueue";
 import { eventsFromKeeper, sortEvents } from "@/lib/burnticker/activity";
+import { deficitMint } from "@/lib/burnticker/home";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export async function GET() {
     const live = st?.schema === "burnkeeper.status/v1";
     return NextResponse.json({
       ...deficitPrelaunch(),
+      // owner 2026-10-14: the trade link's address once the coin is created
+      mint: deficitMint(),
       queue: deficitQueue(k, now),
       keeper: live ? { readiness: st!.readiness ?? null, curve: st!.curve ?? null, events: sortEvents(eventsFromKeeper(k.status, k.burns, { includeBurns: true }), 40) } : null,
     }, { headers: { "cache-control": "public, max-age=60" } });

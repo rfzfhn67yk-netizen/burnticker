@@ -622,10 +622,33 @@ burn  = every token the swap delivered</pre>
   var short = function (sig) { return sig ? sig.slice(0, 8) + "…" : "—"; };
   var link = function (url, sig, fallback) { return url && sig ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(short(sig)) + "</a>" : esc(fallback || "—"); };
 
-  // Until LINKS.trade is set the three Trade controls are explicit "not available until launch" labels: no href, aria-disabled.
-  if (LINKS.trade) {
-    ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); a.href = LINKS.trade; a.target = "_blank"; a.rel = "noopener"; a.classList.remove("off"); a.removeAttribute("aria-disabled"); a.removeAttribute("data-trade-unavailable"); a.removeAttribute("title"); a.textContent = id === "tradeHero" ? "Trade $DEFICIT" : "Trade"; });
-    $("trade").textContent = "The trade link is " + LINKS.trade;
+  // Until a trade link is known the three Trade controls are explicit "not available until launch" labels: no href, aria-disabled.
+  // Owner 2026-10-14 ("I don't see the $DEFICIT coin available to buy"): once the keeper's status.json carries the mainnet mint, the
+  // links are built from it, in the same URL forms as the app's builder (src/lib/burnticker/tradeLinks.ts, pinned by
+  // test/burntickerTradeLinks.test.ts): on the curve, Raydium's launchpad page for the mint; after graduation, Raydium's swap and Jupiter.
+  // LINKS.trade, when set by hand, still wins.
+  var isMainnet = function (c) { return c === "mainnet" || c === "mainnet-beta"; };
+  function tradeLinksFor(mint, phase) {
+    var m = encodeURIComponent(mint);
+    var primary = phase === "graduated" ? "https://raydium.io/swap/?inputMint=sol&outputMint=" + m : "https://raydium.io/launchpad/token/?mint=" + m;
+    return [
+      { id: "raydium", label: "Trade on Raydium", url: LINKS.trade || primary },
+      { id: "jupiter", label: "Swap on Jupiter", url: "https://jup.ag/swap/SOL-" + m },
+      { id: "dexscreener", label: "Chart on DexScreener", url: "https://dexscreener.com/solana/" + m },
+      { id: "solscan", label: "Mint on Solscan", url: "https://solscan.io/token/" + m }
+    ];
+  }
+  function enableTrade(url) {
+    ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); if (!a) return; a.href = url; a.target = "_blank"; a.rel = "noopener"; a.classList.remove("off"); a.removeAttribute("aria-disabled"); a.removeAttribute("data-trade-unavailable"); a.removeAttribute("title"); a.setAttribute("data-trade-link", ""); a.textContent = id === "tradeTop" ? "Trade" : "Trade on Raydium"; });
+    $("trade").textContent = "$DEFICIT trades on Raydium. Burnticker never takes an order: each trade link opens Raydium, Jupiter, DexScreener or Solscan. The trade link is " + url;
+  }
+  if (LINKS.trade) enableTrade(LINKS.trade);
+  // the mint address line in "4. The burn": the address, a copy button and the four links
+  function renderMintLinks(mint, phase) {
+    var box = $("mintAddr"); if (!box) return;
+    var ls = tradeLinksFor(mint, phase);
+    box.innerHTML = "Mint address: <code>" + esc(mint) + '</code> <button type="button" id="copyMint" class="copy">Copy address</button><br>' + ls.map(function (l, i) { return '<a ' + (i === 0 ? 'class="btn red" ' : "") + 'href="' + esc(l.url) + '" target="_blank" rel="noopener" data-link="' + l.id + '">' + esc(l.label) + "</a>"; }).join(" ");
+    var c = $("copyMint"); if (c) c.addEventListener("click", function () { if (navigator.clipboard) navigator.clipboard.writeText(mint).then(function () { c.textContent = "Copied"; setTimeout(function () { c.textContent = "Copy address"; }, 1500); }).catch(function () {}); });
   }
 
   var status = null, burns = [], readings = [];
@@ -660,7 +683,7 @@ burn  = every token the swap delivered</pre>
     var READY_DONE = { "not-launched": 0, "on-curve": 2, "awaiting-registration": 3, "awaiting-event": 4, "below-floor": 4, deferred: 5, burned: 6 };
     if (s.readiness && s.readiness.label) { $("readiness").setAttribute("data-readiness", s.readiness.state); var more = document.querySelector(".rd-more"); if (more) more.hidden = s.readiness.state !== "not-launched"; $("readyStep").textContent = "Step " + (READY_DONE[s.readiness.state] != null ? READY_DONE[s.readiness.state] : "?") + " of 6 toward a first burn"; $("readyLabel").textContent = s.readiness.label; $("readyDetail").textContent = s.readiness.detail; }
     var isSample = !!s.sample || s.cluster === "replay";
-    if (isSample || (s.cluster && s.cluster !== "mainnet-beta")) {
+    if (isSample || (s.cluster && !isMainnet(s.cluster))) {
       var b = $("banner"); b.classList.add("show");
       b.textContent = isSample ? "Sample data. " + (s.sample || "This is a replayed series, and no transactions exist.") : "This page is showing " + s.cluster + ". This is not the mainnet token.";
     }
@@ -681,7 +704,11 @@ burn  = every token the swap delivered</pre>
     $("gen").textContent = new Date(s.generatedAt).toLocaleString();
     if (s.rules) { $("sha").textContent = "sha256: " + s.rules.sha256; $("statement").textContent = s.rules.statement; }
     if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "Fee pool address: " + (s.buyback.funding.feeWalletUrl ? '<a href="' + esc(s.buyback.funding.feeWalletUrl) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? '. It was seeded with ' + esc(s.buyback.funding.seedSol || "an unknown amount of") + ' SOL in <a href="' + esc(s.buyback.funding.seedTxUrl) + '" target="_blank" rel="noopener">this transaction</a>.' : ". It has no seed deposit.");
-    if (s.addresses && s.addresses.mint) $("mintAddr").innerHTML = "Mint address: " + (s.addresses.mintUrl ? '<a href="' + esc(s.addresses.mintUrl) + '" target="_blank" rel="noopener">' + esc(s.addresses.mint) + "</a>" : esc(s.addresses.mint));
+    if (s.addresses && s.addresses.mint && isMainnet(s.cluster) && !isSample) {
+      var phase = s.curve && s.curve.phase || null;
+      enableTrade(tradeLinksFor(s.addresses.mint, phase)[0].url);
+      renderMintLinks(s.addresses.mint, phase);
+    } else if (s.addresses && s.addresses.mint) $("mintAddr").innerHTML = "Mint address: " + (s.addresses.mintUrl ? '<a href="' + esc(s.addresses.mintUrl) + '" target="_blank" rel="noopener">' + esc(s.addresses.mint) + "</a>" : esc(s.addresses.mint));
     startClock(s.feed && s.feed.nextPollAt);
     renderHero();
   }

@@ -11,6 +11,7 @@ import { archivePlanRecord, chainReadDeps } from "@/lib/burnticker/launchRecover
 import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
 import { matchesSuffix } from "@/lib/burnticker/vanityMint";
 import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
+import { LaunchedTrade } from "../_components/TradeLinks";
 
 /**
  * THE SIGNING CARD (2026-10-11): the one component that signs every launch — a single LaunchLab coin, two coins, a pair-curve set — from
@@ -145,6 +146,8 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         <div className="space-y-2" data-launch-complete>
           <p className="text-emerald-400">{plan.confirms.length > 1 ? "Both coins are live and recorded." : "Your coin is live and recorded."}</p>
           <p className="flex flex-wrap gap-2">{plan.confirms.map((c) => <a key={c.mint} className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={coinHref(c.ticker)}>Open ${c.ticker}</a>)}</p>
+          {/* the trade links on the success screen (find-and-trade, 2026-10-14) */}
+          <LaunchedTrade coins={plan.confirms} />
         </div>
       ) : stopped?.state === "abandoned" ? (
         <button type="button" data-decision="new-plan" className="rounded border border-amber-400 px-5 py-2 text-base font-semibold text-amber-300" onClick={startNewPlan}>Start a new plan</button>

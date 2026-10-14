@@ -10,7 +10,7 @@ export const WIND_DOWN_DAYS = 28;
 /**
  * THE COIN PAGE'S ORDER AND ITS SMALL FACTS (website-11, 2026-10-12; the owner's review items 6 and 8 as the website brief rewrites
  * them). On top: the chart and ONE outbound link, "Trade on Raydium", to the coin's own pool. Burnticker never takes an order, so there
- * is no buy or sell panel. Under it the tabs, in this order: "Burn log" (the receipts, each with "Check receipt" to the in-browser
+ * the swap panel (TradePanel.tsx, 2026-10-14) sends swaps straight to the coin's Raydium pool; the site holds nothing. Under it the tabs, in this order: "Burn log" (the receipts, each with "Check receipt" to the in-browser
  * verifier), "Rule" (the locked rule text, its hash, the dial, the window and the end), and "Holders" only when holder data was read.
  * There is no thread. The pair page uses the same order with both sides. Pure and client-safe.
  */
