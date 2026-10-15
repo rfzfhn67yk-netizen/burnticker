@@ -202,15 +202,28 @@ describe("438485 appended wallet guard instructions", () => {
   });
   test("an appended instruction from any other program: refused", () => {
     const { handed, after } = withExtra("11111111111111111111111111111111");
-    assert.match(walletReturnProblem(handed, after, step, plan)!, /not its own safety check/);
-  });
-  test("a guard instruction placed BEFORE ours: refused (ours must come first, byte for byte)", () => {
-    const { handed, after } = withExtra(LIGHTHOUSE, { front: true });
     assert.match(walletReturnProblem(handed, after, step, plan)!, /changed the transaction's instructions or accounts/);
+  });
+  test("a guard instruction placed BEFORE ours: accepted too (Phantom may set a compute budget or an assertion first)", () => {
+    const { handed, after } = withExtra(LIGHTHOUSE, { front: true });
+    assert.equal(walletReturnProblem(handed, after, step, plan), null);
+  });
+  test("a compute-budget instruction placed BEFORE ours: accepted", () => {
+    const { handed, after } = withExtra("ComputeBudget111111111111111111111111111111", { front: true });
+    assert.equal(walletReturnProblem(handed, after, step, plan), null);
+  });
+  test("one of OUR instructions dropped and a guard added: refused, naming the count", () => {
+    const built = buildStepTx(step, CREATOR, plan.keys, BH, null, false);
+    const msg = TransactionMessage.decompile(built.message);
+    const extra = new TransactionInstruction({ programId: new PublicKey(LIGHTHOUSE), keys: [], data: Buffer.from([1]) });
+    const after = new VersionedTransaction(new TransactionMessage({ payerKey: msg.payerKey, recentBlockhash: msg.recentBlockhash, instructions: [...msg.instructions.slice(1), extra] }).compileToV0Message());
+    after.sign([creatorKp]);
+    const why = walletReturnProblem({ message: built.message.serialize(), signatures: built.signatures.map((x) => Uint8Array.from(x)) }, after, step, plan);
+    assert.match(why ?? "", /changed the transaction's instructions or accounts|changed who signs/);
   });
   test("a guard instruction that adds a signer: refused", () => {
     const { handed, after } = withExtra(LIGHTHOUSE, { signer: true });
-    assert.match(walletReturnProblem(handed, after, step, plan)!, /changed who signs|needs another signer/);
+    assert.match(walletReturnProblem(handed, after, step, plan)!, /changed who signs/);
   });
   test("the runner sends a transaction the wallet extended with Lighthouse checks, and the mint key signs the extended message", async () => {
     const sends: VersionedTransaction[] = [];
