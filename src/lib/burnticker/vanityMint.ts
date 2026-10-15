@@ -1,12 +1,15 @@
 import { Keypair } from "@solana/web3.js";
 
 /**
- * MINT ADDRESSES THAT END IN burn (owner, 2026-10-14; OPT-IN since the evening of 2026-10-14: "the wait for the vanity address is a
- * killer"). A coin launched from the site gets a plain mint made in the page at Launch time, unless its creator turns on the switch on
- * the review step; then its mint's last four base58 characters are `burn` or `BURN` (`launchMints` picks). The burn-ending key is ground IN THE BROWSER, in Web Workers (src/app/burnticker/launch/vanity.worker.ts), and only its
- * PUBLIC key is sent to the launch route; the secret goes from the worker to the page and from the page into the wallet's transaction,
- * never to a server. Coins created before 2026-10-14 ($DEFICIT, REHEARSAL, $PHINFLWIN) have plain addresses and are never described
- * as ending in burn: the coin page's line is shown only when the coin's own mint matches.
+ * MINT ADDRESSES THAT END IN burn (owner, 2026-10-14; MANDATORY again since the night of 2026-10-14: "the BURN vanity address is
+ * mandatory. Save them like pump.fun does so they launch instantly."). Every coin launched from the site gets a mint whose last four
+ * base58 characters are `burn` or `BURN`. The host grinds them ahead of time into its mint key bank (mintBank.ts,
+ * scripts/burnticker-mint-bank.mts); the launch route takes one per coin and hands its secret to the page once, in the bundle
+ * (`mintSecretKey`). The page checks that key (`withServerKey`: it derives the bundle's mint and ends in burn) before anything is signed.
+ * When the bank has none ready the route answers `mint-bank-empty` and the page grinds the key IN THE BROWSER instead, in Web Workers
+ * (src/app/burnticker/launch/vanity.worker.ts), sending only its PUBLIC key (`withMintSource`). There is no plain address any more.
+ * Coins created before 2026-10-14 ($DEFICIT, REHEARSAL, $PHINFLWIN) have plain addresses and are never described as ending in burn: the
+ * coin page's line is shown only when the coin's own mint matches.
  *
  * Cost: a suffix of four base58 characters is one hit in 58^4 ≈ 11.3M keys; accepting both spellings halves that to ≈ 5.66M. A key is a
  * seed → SHA-512 → scalar × G, so nothing cheaper than a full key generation per try exists for keys a normal wallet can sign with.
@@ -17,8 +20,8 @@ import { Keypair } from "@solana/web3.js";
  */
 
 // relative with its extension so scripts/burnticker-grind-mint.mts loads this file without the alias hook
-import { MINT_BURN_CHOICE_KEY, MINT_SUFFIXES, matchesSuffix } from "./mintSuffix.ts";
-export { MINT_BURN_CHOICE_KEY, MINT_SUFFIXES, MINT_SUFFIX_RE, matchesSuffix } from "./mintSuffix.ts";
+import { MINT_SUFFIXES, matchesSuffix } from "./mintSuffix.ts";
+export { MINT_SUFFIXES, MINT_SUFFIX_RE, matchesSuffix } from "./mintSuffix.ts";
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export function base58(bytes: Uint8Array): string {
@@ -61,7 +64,7 @@ export function expectedTries(suffixes: readonly string[] = MINT_SUFFIXES): numb
 }
 
 export type Rng = (n: number) => Uint8Array;
-export interface GroundMint { publicKey: string; secretKey: Uint8Array; plain?: boolean }
+export interface GroundMint { publicKey: string; secretKey: Uint8Array }
 export type Keygen = (seed: Uint8Array) => { publicKey: Uint8Array; secretKey: Uint8Array };
 
 /** The standard Solana keypair for a 32-byte seed (secretKey = seed ‖ public key), as every wallet and web3.js sign with it. */
@@ -84,46 +87,39 @@ export function grindMint(o: { suffix?: string | readonly string[]; batch: numbe
   return { found: null, tries: o.batch };
 }
 
-/** A plain fresh mint (the default, and the "Use a plain address instead" escape hatch), made in the page; it never leaves the browser either. */
-export function plainMint(): GroundMint {
-  const kp = Keypair.generate();
-  return { publicKey: kp.publicKey.toBase58(), secretKey: kp.secretKey, plain: true };
-}
+/** The code the launch route answers with when its mint key bank has none ready (mintBank.ts MINT_BANK_EMPTY_CODE). */
+export const MINT_BANK_EMPTY = "mint-bank-empty";
 
-/** What this browser remembers about the burn-ending switch (localStorage, or a fake in the tests). */
-export interface ChoiceStorage { getItem(key: string): string | null; setItem(key: string, value: string): void }
-
-/** The creator's remembered choice: off unless this browser saved "on" (no storage, a private window or an error reads as off). */
-export function readBurnChoice(store: ChoiceStorage | null | undefined): boolean {
-  try { return store?.getItem(MINT_BURN_CHOICE_KEY) === "1"; } catch { return false; }
-}
-export function writeBurnChoice(store: ChoiceStorage | null | undefined, on: boolean): void {
-  try { store?.setItem(MINT_BURN_CHOICE_KEY, on ? "1" : "0"); } catch { /* not remembered; the switch still works for this visit */ }
-}
+/** True for the launch route's "no prepared address" answer (a LaunchRequestError, or anything carrying that code). */
+export const isMintBankEmpty = (e: unknown): boolean => !!e && typeof e === "object" && (e as { code?: unknown }).code === MINT_BANK_EMPTY;
 
 /**
- * The mint keys for one press of Launch. Off (the default): `n` fresh plain keys at once, no search and no wait. On: the pool's
- * burn-ending keys, waiting for the search (the panel shows it; "Use a plain address instead" ends the wait).
+ * One press of Launch: first with the server's prepared keys (`run(null)`: the request carries no mint); when the server has none ready
+ * (`mint-bank-empty`), this browser's search finds `n` burn-ending keys (the panel above Launch shows it) and the press goes on with them
+ * (`run(keys)`: their public keys are sent). An edit made while the search ran sets the press aside before anything more is sent.
  */
-export async function launchMints(o: { burn: boolean; pool: Pick<MintGrindPool, "ensure"> | null; n: number; makePlain?: () => GroundMint }): Promise<GroundMint[]> {
-  if (!o.burn) return Array.from({ length: o.n }, () => (o.makePlain ?? plainMint)());
-  if (!o.pool) throw new Error("The address search has not started yet. Please press Launch again.");
-  return o.pool.ensure(o.n);
+export async function withMintSource<T>(o: { pool: Pick<MintGrindPool, "ensure"> | null; n: number; stale?: () => boolean; staleLine?: string }, run: (keys: GroundMint[] | null) => Promise<T>): Promise<T> {
+  try { return await run(null); } catch (e) { if (!isMintBankEmpty(e)) throw e; }
+  if (!o.pool) throw new Error(MINT_SEARCH_NOT_READY);
+  const keys = await o.pool.ensure(o.n);
+  if (o.stale?.()) throw new Error(o.staleLine ?? "The launch changed while its address was being found. Please press Launch again.");
+  return run(keys);
 }
+export const MINT_SEARCH_NOT_READY = "The address search has not started yet. Please press Launch again.";
 
 /** The base58 64-byte secret the signing plan holds (signPlan.ts keys). */
 export const secretBase58 = (m: GroundMint): string => base58(m.secretKey);
 
 /**
- * Null when the key is sound: 64 bytes whose seed derives the public key it names, and (unless it is a plain escape-hatch key) an
- * address that ends in burn or BURN. Run on every key a worker hands back, before it is banked.
+ * Null when the key is sound: 64 bytes whose seed derives the public key it names, and an address that ends in burn or BURN. Run on
+ * every key a worker hands back, every key the host's bank stores or hands out, and every key the server returns to the page.
  */
-export function groundMintProblem(m: { publicKey: string; secretKey: Uint8Array; plain?: boolean }, suffixes: readonly string[] = MINT_SUFFIXES): string | null {
+export function groundMintProblem(m: { publicKey: string; secretKey: Uint8Array }, suffixes: readonly string[] = MINT_SUFFIXES): string | null {
   if (!(m.secretKey instanceof Uint8Array) || m.secretKey.length !== 64) return "the key is not 64 bytes";
   let derived: string;
   try { derived = Keypair.fromSeed(m.secretKey.slice(0, 32)).publicKey.toBase58(); } catch { return "the key could not be read"; }
   if (derived !== m.publicKey || base58(m.secretKey.slice(32)) !== m.publicKey) return "the key does not match its address";
-  if (!m.plain && !(suffixes === MINT_SUFFIXES ? matchesSuffix(m.publicKey) : suffixes.some((x) => m.publicKey.endsWith(x)))) return "the address does not end in burn or BURN";
+  if (!(suffixes === MINT_SUFFIXES ? matchesSuffix(m.publicKey) : suffixes.some((x) => m.publicKey.endsWith(x)))) return "the address does not end in burn or BURN";
   return null;
 }
 
@@ -258,9 +254,7 @@ export interface GrindSnapshot {
   running: boolean;
   /** the found addresses, in the order they will be used */
   addresses: string[];
-  /** a plain address was chosen for the rest */
-  plain: boolean;
-  /** the workers could not run (no Worker support, a crash): the plain address is the way on */
+  /** the workers could not run (no Worker support, a crash): the press that waited is refused with a plain sentence */
   failed: string | null;
 }
 
@@ -268,7 +262,8 @@ export interface GrindSnapshot {
 /**
  * Runs `workers` grinders and keeps a bank of found keys. `ensure(n)` resolves with the first n banked keys once there are n (starting
  * the workers when short); `consume(pub)` drops a key the server has registered a draft for (a refused request leaves its key banked, so
- * the next press does not search again); `skip()` fills the rest with plain keys. Keys live only in this object (page memory).
+ * the next press does not search again). A search that cannot run refuses the waiting press (MINT_FAILED_LINE). Keys live only in
+ * this object (page memory). Since 2026-10-14 night it runs only when the host's bank had no key ready (withMintSource).
  */
 export class MintGrindPool {
   private bank: GroundMint[] = [];
@@ -278,8 +273,7 @@ export class MintGrindPool {
   private startedAt = 0;
   private engine: "webcrypto" | "js" | null = null;
   private failed: string | null = null;
-  private plain = false;
-  private waiters: { n: number; resolve: (k: GroundMint[]) => void }[] = [];
+  private waiters: { n: number; resolve: (k: GroundMint[]) => void; reject: (e: Error) => void }[] = [];
   private listeners = new Set<() => void>();
   private o: { makeWorker: () => WorkerLike; workers: number; now?: () => number; suffixes?: readonly string[] };
   constructor(o: { makeWorker: () => WorkerLike; workers: number; now?: () => number; suffixes?: readonly string[] }) { this.o = o; }
@@ -291,7 +285,7 @@ export class MintGrindPool {
     return {
       tries: this.triesDone + this.live.reduce((s, x) => s + x.tries, 0), elapsedMs: this.startedAt ? this.now() - this.startedAt : 0,
       workers: this.live.length, engine: this.engine, wanted: this.target, found: this.bank.length, running: this.running,
-      addresses: this.bank.map((k) => k.publicKey), plain: this.plain, failed: this.failed,
+      addresses: this.bank.map((k) => k.publicKey), failed: this.failed,
     };
   }
   subscribe(f: () => void): () => void { this.listeners.add(f); return () => { this.listeners.delete(f); }; }
@@ -299,9 +293,9 @@ export class MintGrindPool {
 
   ensure(n: number): Promise<GroundMint[]> {
     this.target = Math.max(this.target, n);
-    const p = new Promise<GroundMint[]>((resolve) => this.waiters.push({ n, resolve }));
+    const p = new Promise<GroundMint[]>((resolve, reject) => this.waiters.push({ n, resolve, reject }));
     this.settle();
-    if (this.bank.length < this.target && !this.running && !this.failed) this.start();
+    if (this.bank.length < this.target && !this.running) { this.failed = null; this.start(); }
     this.emit();
     return p;
   }
@@ -314,29 +308,10 @@ export class MintGrindPool {
     this.emit();
   }
 
-  /** "Use a plain address instead": stop searching and fill what is missing with fresh plain keys. */
-  skip(): void {
-    this.stop();
-    while (this.bank.length < this.target) this.bank.push(plainMint());
-    this.plain = true;
-    this.settle(); this.emit();
-  }
-
-  /**
-   * The creator turned the burn ending off: the search stops, a press already waiting goes on with plain keys, and the bank keeps only
-   * burn-ending keys (for when the switch comes back on), so nothing is searched for until it does.
-   */
-  optOut(): void {
-    if (this.waiters.length) this.skip(); else this.stop();
-    this.bank = this.bank.filter((k) => !k.plain);
-    this.target = 0; this.plain = false;
-    this.emit();
-  }
-
   dispose(): void { this.stop(); this.waiters = []; this.listeners.clear(); }
 
   private start() {
-    this.triesDone = 0; this.startedAt = this.now(); this.plain = false;
+    this.triesDone = 0; this.startedAt = this.now();
     for (let i = 0; i < Math.max(1, this.o.workers); i++) {
       let w: WorkerLike;
       try { w = this.o.makeWorker(); } catch (e) { this.fail(String((e as Error)?.message ?? e)); return; }
@@ -353,7 +328,12 @@ export class MintGrindPool {
     this.live = [];
   }
 
-  private fail(why: string) { this.stop(); this.failed = why; this.emit(); }
+  private fail(why: string) {
+    this.stop(); this.failed = why;
+    const w = this.waiters; this.waiters = [];
+    for (const x of w) x.reject(new Error(MINT_FAILED_SENTENCE));
+    this.emit();
+  }
 
   private onMessage(slot: { w: WorkerLike; tries: number }, m: FromWorker) {
     if (!this.live.includes(slot)) return;
@@ -385,6 +365,38 @@ export class MintGrindPool {
 export function withLocalKey<T extends { mint: string; mintSecretKey: string | null }>(bundle: T, key: GroundMint): T {
   if (bundle.mint !== key.publicKey) throw new Error(MINT_MISMATCH_LINE);
   return { ...bundle, mintSecretKey: secretBase58(key) };
+}
+
+/**
+ * The server's prepared key, checked before anything is signed: the bundle must carry a secret that derives its own mint, and that mint
+ * must end in burn or BURN. Throws a plain sentence otherwise.
+ */
+export function withServerKey<T extends { mint: string; mintSecretKey: string | null }>(bundle: T): T {
+  serverKeyFor(bundle.mint, bundle.mintSecretKey);
+  return bundle;
+}
+/** One prepared key (the pair curve's mintSecretKeys.a / .b) against the mint it is for. */
+export function serverKeyFor(mint: string, secret: string | null | undefined): GroundMint {
+  if (!secret) throw new Error(MINT_SERVER_KEY_LINE);
+  let secretKey: Uint8Array;
+  try { secretKey = base58Decode(secret); } catch { throw new Error(MINT_SERVER_KEY_LINE); }
+  const k = { publicKey: mint, secretKey };
+  if (groundMintProblem(k)) throw new Error(MINT_SERVER_KEY_LINE);
+  return k;
+}
+export const MINT_SERVER_KEY_LINE = "The prepared launch did not carry a sound key for an address that ends in burn, so nothing was signed. Please press Launch again.";
+export const MINT_FAILED_SENTENCE = "This browser could not run the address search, so nothing was sent. Please try again in a few minutes, when the site has prepared addresses ready again.";
+
+export function base58Decode(s: string): Uint8Array {
+  const bytes: number[] = [];
+  for (const ch of s) {
+    let carry = B58.indexOf(ch);
+    if (carry < 0) throw new Error("not base58");
+    for (let j = 0; j < bytes.length; j++) { carry += bytes[j] * 58; bytes[j] = carry & 0xff; carry >>= 8; }
+    while (carry) { bytes.push(carry & 0xff); carry >>= 8; }
+  }
+  for (const ch of s) { if (ch !== "1") break; bytes.push(0); }
+  return new Uint8Array(bytes.reverse());
 }
 
 export const MINT_MISMATCH_LINE = "The prepared launch did not use the address this page made, so nothing was signed. Please press Launch again.";

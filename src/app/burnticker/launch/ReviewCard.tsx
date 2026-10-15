@@ -1,6 +1,6 @@
 "use client";
 
-import { LAUNCHING_NOTICE } from "@/lib/burnticker/mintAddressCopy";
+import { LAUNCHING_NOTICE, MINT_KEY_DISCLOSURE } from "@/lib/burnticker/mintAddressCopy";
 import type { StatedJson } from "@/lib/burnticker/pageTypes";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 
@@ -484,6 +484,8 @@ export function ReviewCard(p: ReviewCardProps) {
           <summary className="cursor-pointer text-neutral-300">What you confirm by launching</summary>
           <p className="mt-1 break-words text-neutral-400" data-lp-line>{RECEIPTS_LINE} {lpDisclosure(p.venue ?? (many ? "independent" : "single"))}</p>
           <p className="mt-1 break-words text-neutral-400" data-ack-line>{many ? ACK_LINE_PAIR : ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
+          {/* owner, 2026-10-14 night: the prepared mint keys, said wherever the launch says what the site controls */}
+          <p className="mt-1 break-words text-neutral-400" data-mint-disclosure>{MINT_KEY_DISCLOSURE}</p>
         </details>
       </div>
     </section>

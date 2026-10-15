@@ -130,7 +130,9 @@ export interface LaunchBundle {
   creator: string;
   mint: string;
   /**
-   * The fresh mint keypair's secret (base58) — ephemeral, generated for this bundle only, needed to co-sign the create. Never stored.
+   * The mint keypair's secret (base58), needed to co-sign the create: a fresh keypair made for this bundle (the public API without a
+   * mint), or one the launch route took from the host's mint key bank (mintBank.ts, 2026-10-14 night; sealed there until handed out
+   * once, wiped once the mint is live). The bundle itself is never stored with it.
    * NULL when the caller supplied its own mint public key (`deps.mint`: the public API and the SDK) — then the secret never leaves
    * the caller's machine and the caller co-signs with its own mint keypair.
    */
@@ -198,6 +200,11 @@ export interface LaunchDeps {
   /** A pair's side B URI (each side's metadata is pinned on its own); defaults to metadataUri. */
   metadataUriB?: (mint: string) => string;
   mintKeypair?: Keypair;
+  /**
+   * 2026-10-14 night (the mint key bank, mintBank.ts): a pair's side B mint keypair taken from the host's bank, with `mintKeypair` for
+   * side A (buildPairBundles only). Both addresses end in burn; both secrets ride in the bundles, as a fresh keypair's always did.
+   */
+  mintKeypairB?: Keypair;
   /**
    * Winner takes the burn (LAUNCHPAD-PATH §40), set only by buildPairBundles: the partner's mint for initialize_token's pair_mint, and
    * `partnerFirst` on the second coin (the partner's TokenConfig exists, so this coin's initialize_token completes the pairing). Absent
@@ -473,14 +480,16 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   // initialize_token is composed. A caller-supplied mint public key (deps.mint) cannot pre-name B: those bundles pair in the registry only.
   if (deps.mintB !== undefined && (deps.mint === undefined || !PUBKEY_RE.test(deps.mintB))) throw new Error("pair: side B's mint public key needs side A's too, and both must be Solana public keys");
   if (deps.mintB !== undefined && deps.mintB === deps.mint) throw new Error("pair: the two coins need two different mints");
-  const kpB = deps.mint === undefined ? Keypair.generate() : null;
+  if (deps.mintKeypairB && (deps.mint !== undefined || !deps.mintKeypair)) throw new Error("pair: side B's bank keypair needs side A's bank keypair, and no public key");
+  if (deps.mintKeypairB && deps.mintKeypair && deps.mintKeypairB.publicKey.equals(deps.mintKeypair.publicKey)) throw new Error("pair: the two coins need two different mints");
+  const kpB = deps.mint === undefined ? deps.mintKeypairB ?? Keypair.generate() : null;
   // the partner B's mint when it is known before A is built: a fresh keypair here, or the caller's own public key (mintB)
   const mintBKnown = kpB ? kpB.publicKey.toBase58() : deps.mintB !== undefined ? new PublicKey(deps.mintB).toBase58() : null;
   // r3 (M-1): the program pairs two coins only with the SAME attester set and quorum (same keys, same order) — both sides are built from
   // the one deps.attesters / deps.quorum below; refuse a set the program would refuse anyway.
   if (new Set(deps.attesters).size !== deps.attesters.length) throw new Error("pair: both coins need one attester set of distinct keys (the program refuses PairAttestersDiffer otherwise)");
-  const { mintB: _ownB, ...depsA } = deps;
-  void _ownB;
+  const { mintB: _ownB, mintKeypairB: _bankB, ...depsA } = deps;
+  void _ownB; void _bankB;
   const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...depsA, ...(mintBKnown ? { pairMint: mintBKnown, partnerFirst: false } : {}) });
   const ruleB = sideB(a.mint);
   const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...depsA, ...(deps.mintB !== undefined ? { mint: deps.mintB } : {}), mintKeypair: kpB ?? undefined, ...(mintBKnown ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });

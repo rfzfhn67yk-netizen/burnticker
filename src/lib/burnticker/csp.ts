@@ -22,7 +22,7 @@ export const APP_CSP_DIRECTIVES: [string, string[]][] = [
   ["style-src", ["'self'", "'unsafe-inline'"]],
   ["font-src", ["'self'", "data:"]],
   ["img-src", ["'self'", "data:", "blob:", "https:"]],
-  ["connect-src", ["'self'", "https://api.fiscaldata.treasury.gov", "https://api.devnet.solana.com", "wss://api.devnet.solana.com", "https://api.mainnet-beta.solana.com", "wss://api.mainnet-beta.solana.com", "https://arweave.net", "https://*.arweave.net", "https://gateway.irys.xyz", "https://devnet.irys.xyz", CLOUDFLARE_RUM]],
+  ["connect-src", ["'self'", "https://api.fiscaldata.treasury.gov", "https://api.devnet.solana.com", "wss://api.devnet.solana.com", "https://api.mainnet-beta.solana.com", "wss://api.mainnet-beta.solana.com", "https://arweave.net", "https://*.arweave.net", "https://gateway.irys.xyz", "https://*.datasprite-cdn.com" /* 2026-10-14: gateway.irys.xyz answers 302 to its CDN; a fetch follows it under this policy */, "https://devnet.irys.xyz", CLOUDFLARE_RUM]],
   ["frame-src", ["https://www.geckoterminal.com"]],
   ["frame-ancestors", ["'none'"]],
   ["base-uri", ["'none'"]],

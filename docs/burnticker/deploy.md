@@ -23,6 +23,7 @@ can only crank burns is the whole blast radius of this box. `scripts/ops/install
 | Next app | Burnticker | `mct-burnticker-web` (`run-burnticker-web.sh`, `127.0.0.1:3000`, production) | the PUBLIC tree's app (below): the wizard, in-app token, rivalry, docs and trust pages, `/api/burnticker/*`; reads `data/burnticker.db` (the launch route writes drafts) |
 | `scripts/burnticker-keeper.mts` | Burnticker | `mct-burnticker-keeper` (loop) | reads selectors, plans and cranks receipts, publishes `data/burnticker-site` every cycle, writes `data/own-tokens.generated.json`, runs the ops alert check every 5 min and publishes `ops.json` |
 | `scripts/burn-keeper.mts` | Burnticker | `mct-burnkeeper` (loop) | the $DEFICIT keeper; publishes `data/burnkeeper-site` |
+| `scripts/burnticker-mint-bank.mts` | Burnticker | `mct-burnticker-mintbank` (loop, `run-burnticker-mintbank.sh`, nice 10) | grinds mint keypairs whose address ends in burn or BURN into `data/burnticker-mintbank.db` (sealed, mode 0600, never leaves the host); the launch route takes one per coin (below, "The mint key bank") |
 | `scripts/burnticker-audit.mts` | Burnticker | `mct-burnticker-audit.timer` → `.service`, hourly | recomputes every receipt; writes `audit.json`; exits 1 on a mismatch (unit failed + `bt-audit-mismatch`) |
 | `scripts/ops/deploy-sites.sh --publish-only` | Burnticker | `mct-burnticker-publish.timer` → `.service`, every minute | syncs both publish dirs into `/var/www/*` (the brand pages ship by hand with the same script) |
 | alert intake | trading VPS | the existing `mct-server` | its alert-intake route (new; private app, not in this repo) → the operator's alert table + Telegram, over Tailscale |
@@ -55,6 +56,10 @@ the local env file in `~/meme-coin-trader` (user `mct`) on the Burnticker host, 
 | `BURNTICKER_LEADER_STATUS_URL` / `BURNTICKER_PEER_STATUS_URL` | on a standby: the leader's public `status.json` (its heartbeat); on the leader (and its web app, for the trust page): the standby's. https only (or a loopback / tailnet address) |
 | `BURNTICKER_TAKEOVER_MISSED`, `BURNTICKER_HEARTBEAT_STALE_SEC` | a standby's takeover after N missed heartbeats (default 5) of a leader whose last cycle is older than S seconds (default 180) |
 | `BURNTICKER_STATUS_URL` | optional: where the trust page links the status page (default `/status/`) |
+| `BURNTICKER_MINT_BANK_KEY` | 32 bytes, base64 (`openssl rand -base64 32`, typed into the host env file by the owner): seals every key in the mint key bank (AES-256-GCM). Read by the bank service AND the web app (the launch route opens each key it hands out). Unset: the service refuses to start and every launch finds its address in the creator's browser. Never in the repo, a unit file or a command line |
+| `BURNTICKER_MINT_BANK_PATH` | the bank file, default `data/burnticker-mintbank.db` (the unit sets it; the web app uses the same default) |
+| `BURNTICKER_MINT_BANK_SIZE` / `BURNTICKER_MINT_BANK_LOW` | keys kept ready (default 300) / refill below this (default 100; `bt-mint-bank-low` is pushed after an hour below it) |
+| `BURNTICKER_MINT_BANK_WORKERS` | optional: grinding threads (default every core but one) |
 | `BURNTICKER_CREATOR_LAUNCHES_ENABLED` | creator launches through the web app and the public API — **unset/off by default**. Off, `/burnticker/launch` shows "Creator launches are not open yet. $DEFICIT is the first coin." instead of the wizard, `POST /api/burnticker/launch`, `/v1/launch/bundle` and `/v1/launch/confirm` refuse (403 `creator-launches-closed`), and `/v1/catalogue` says `launches.creators: false`. The operator's own coins ($REHEARSAL, $DEFICIT) launch with the operator CLI (`scripts/burnkeeper-launch.mts`, `scripts/burnreceipts-admin.mts`, then the registry by hand — runbook), which this flag does not touch. Set `1` only when the owner opens creator launches (LAUNCHPAD-PATH §45), then restart the web unit. |
 | `BURNTICKER_CREATOR_LAUNCHES_PREVIEW` | (API 1.14.0) the read-only launch preview — **unset/off by default**; ignored when `BURNTICKER_CREATOR_LAUNCHES_ENABLED` is on. On, `/burnticker/launch` renders the wizard and the review card under a persistent "Preview: creator launches are closed; nothing here builds or sends a transaction." banner, the wallet button is disabled with that reason, `POST /api/burnticker/v1/launch/review` answers, and every bundle / confirm route refuses with 403 `launches-closed` (`preview: true`). Nothing is pinned, registered, built or sent. |
 
@@ -67,6 +72,31 @@ Keys: both keeper keys are made **on this host** by `scripts/burnkeeper-keygen.m
 env file. Their one passphrase lives **only in the host env file** `~/meme-coin-trader/.env.local` as `BURNKEEPER_SIGNER_PASSPHRASE`
 (mode 600; the platform keeper falls back to it when `BURNTICKER_SIGNER_PASSPHRASE` is unset) — never in the repo. Nothing in
 `src/lib/burnticker` reads a secret.
+
+## The mint key bank (owner decision 2026-10-14 night)
+
+Every coin made on the site gets a mint address that ends in burn or BURN, and pressing Launch does not wait for one: the host grinds
+them ahead of time. `mct-burnticker-mintbank` keeps up to `BURNTICKER_MINT_BANK_SIZE` sealed keys in `data/burnticker-mintbank.db`
+(`src/lib/burnticker/mintBank.ts`); the launch route takes one per coin (two for a pair), marks it taken in the same transaction, returns its
+secret inside the bundle once over HTTPS, and the bank deletes any key taken but not launched within 24 hours. With no key ready the
+route answers `mint-bank-empty` and the page finds the address in the browser (about a minute). The full design is in
+`docs/burnkeeper/README-execution.md`, "Mint addresses that end in burn".
+
+Starting it (as `mct` on the Burnticker host):
+
+```sh
+openssl rand -base64 32                                       # the sealing key: type it into the host env file as BURNTICKER_MINT_BANK_KEY=…
+chmod 600 ~/meme-coin-trader/.env.local                       # (it already is; the env file is never shipped by the deploy)
+sh scripts/ops/install-burnticker-units.sh                    # copies and enables mct-burnticker-mintbank (a deploy runs this too)
+systemctl --user restart mct-burnticker-web                   # the web app reads the key to open the keys it hands out
+systemctl --user start mct-burnticker-mintbank                # grinds to 300 keys, then tops up below 100
+tail -f logs/burnticker-mintbank.log                          # "refill: n/25 banked, … keys a second" every 30 s
+sh scripts/service/run-burnticker-mintbank.sh --status        # counts only, never a key
+```
+
+Back the bank up only with `sqlite3 data/burnticker-mintbank.db ".backup …"` to a 0600 file on the same host, or not at all: a lost bank
+costs only grinding time (the keys in it have never been used). Losing `BURNTICKER_MINT_BANK_KEY` makes the bank unreadable: move the file
+aside and the service starts a new one. Rotating the key means the same.
 
 ## Alerts — how they reach the owner
 

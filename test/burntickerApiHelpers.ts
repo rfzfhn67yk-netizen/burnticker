@@ -24,6 +24,24 @@ const readingPdaFor = (programId: PublicKey, mint: PublicKey, date: number) => r
 import type { Fetch } from "../packages/burnticker-sdk/src/http.ts";
 import { BRONCOS, DEBT_RULE, NOW, fx, treasuryAndCrossFetch } from "./burntickerHelpers.ts";
 import { polyClient } from "./burntickerPolyHelpers.ts";
+import { MintBank, type MintBankPort } from "@/lib/burnticker/mintBank";
+import { grindMint } from "@/lib/burnticker/vanityMint";
+import { randomBytes } from "node:crypto";
+
+/**
+ * A real mint key bank on :memory: for the route tests (2026-10-14 night: a launch with no mint takes its keys from the bank). Its keys
+ * end in "b" (a quick grind), so every take succeeds: the bank is topped up on demand. `bank` is the MintBank underneath.
+ */
+export function testMintBank(o: { refill?: boolean } = {}): MintBankPort & { bank: MintBank } {
+  const bank = new MintBank(":memory:", { key: randomBytes(32).toString("base64"), suffixes: ["b"] });
+  const grind = () => grindMint({ suffix: "b", batch: 200_000, rng: (n) => new Uint8Array(randomBytes(n)) }).found!;
+  return {
+    bank,
+    take: (t, now) => { if (o.refill !== false) while (bank.status().ready < t.length) bank.insert(grind()); return bank.take(t, now); },
+    discard: (k) => bank.discard(k),
+    markCreated: (k, now) => bank.markCreated(k, now),
+  };
+}
 
 export const CREATOR = "CreatorWa11et111111111111111111111111111111";
 export const ATTESTER = "KeeperDataKey1111111111111111111111111111111";
@@ -79,6 +97,8 @@ export async function makeWorld(): Promise<World> {
     uploader: new FakePinUploader(),
     // review N1: confirmations are read from the chain; on the fakes every signature is a landed launch at the call's clock
     launchVerifier: { verify: async () => ({ ok: true as const, blockTimeMs: Date.now() }) },
+    // 2026-10-14 night: the launch route takes its burn-ending mint keys from the host's bank (test keys end in "b")
+    mintBank: testMintBank(),
   };
   setPlatformForTests(p);
   return { p, program, registry, bronco: registry.token(bronco.mint)!, deficit: registry.token(deficit.mint)! };
@@ -174,7 +194,7 @@ export const routeFetch: Fetch = async (url, init) => {
 };
 
 /** Same-origin POST headers a bot sends. */
-export const POST_HEADERS = { "content-type": "application/json", origin: `http://${HOST}` };
+export const POST_HEADERS = { "content-type": "application/json", origin: `http://${HOST}`, "x-forwarded-proto": "https" };
 
 // ---- a tiny JSON Schema validator (the subset spec.ts uses) ----
 

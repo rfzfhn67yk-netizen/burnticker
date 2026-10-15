@@ -6,11 +6,13 @@
 # ever runs on this host), reloads, enables the keepers + the web unit and enables+starts the two timers. The keepers and the web unit
 # are NOT started unless --start is given: the first start wants .env.local and a shipped build in place (docs/burnticker/deploy.md).
 #   --check   print what would change and exit 0; touch nothing
-#   --start   also start mct-burnticker-web, mct-burnticker-keeper and mct-burnkeeper after enabling
+#   --start   also start mct-burnticker-web, mct-burnticker-keeper, mct-burnkeeper and mct-burnticker-mintbank after enabling
+# mct-burnticker-mintbank (2026-10-14 night) grinds the burn-ending mint keys the launch route hands out; it refuses to start (exit 2, not
+# retried) until BURNTICKER_MINT_BANK_KEY is in the host's env file (docs/burnticker/deploy.md, "The mint key bank").
 set -eu
 cd "$(dirname "$0")/../.."
-UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer"
-ENABLE="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service"
+UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer"
+ENABLE="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service"
 TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer"
 CHECK=0; START=0
 for a in "$@"; do case "$a" in --check) CHECK=1 ;; --start) START=1 ;; *) echo "unknown flag $a"; exit 2 ;; esac; done
@@ -43,5 +45,5 @@ if command -v loginctl >/dev/null 2>&1; then
 fi
 [ -f .env.local ] && say "  .env.local: present (never read here)" || say "  .env.local: ABSENT — the units need BURNTICKER_* names from docs/burnticker/deploy.md before a start"
 [ -f .next/BUILD_ID ] && say "  build: $(cat .next/BUILD_ID)" || say "  build: none — ship one with scripts/ops/deploy-burnticker-host.sh from the Mac before starting mct-burnticker-web"
-say "next:  systemctl --user start mct-burnticker-web mct-burnticker-keeper mct-burnkeeper   ·   systemctl --user list-timers 'mct-burnticker-*'"
+say "next:  systemctl --user start mct-burnticker-web mct-burnticker-keeper mct-burnkeeper mct-burnticker-mintbank   ·   systemctl --user list-timers 'mct-burnticker-*'"
 say "       tail -f logs/burnticker-keeper.log logs/burnticker-web.log logs/burnkeeper.log   ·   journalctl --user -u mct-burnticker-keeper -n 50"

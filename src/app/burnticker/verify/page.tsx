@@ -47,8 +47,8 @@ export default function VerifyMintPage() {
           <h2 className={`text-lg font-semibold ${good ? "text-emerald-400" : unknown ? "text-amber-300" : ""}`}>{v.headline}</h2>
           <p>{v.summary}</p>
           {v.registration && v.catalogue && <dl className="grid gap-2 text-xs sm:grid-cols-2" data-separate-facts>
-            <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">Registered with the burn program on chain</dt>
-              {v.registration.networks.map((n) => <dd key={n.network} className="mt-1"><span className={n.state === "registered" ? "text-emerald-400" : n.state === "unavailable" ? "text-amber-300" : "text-neutral-300"}>{n.network}: {REG[n.state]}</span> <span className="block break-all font-mono text-neutral-500">Program {n.programId}</span></dd>)}</div>
+            <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">Registered with the burn program on chain</dt>{/* 2026-10-14 (owner): only the network this site shows; a "devnet: not registered" row under a mainnet coin was noise */}
+              {v.registration.networks.filter((n) => n.network === v.catalogue!.network || n.state === "registered").map((n) => <dd key={n.network} className="mt-1"><span className={n.state === "registered" ? "text-emerald-400" : n.state === "unavailable" ? "text-amber-300" : "text-neutral-300"}>{n.network}: {REG[n.state]}</span> <span className="block break-all font-mono text-neutral-500">Program {n.programId}</span></dd>)}</div>
             <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">Listed in the Burnticker catalogue on {v.catalogue.network}, the network this site shows</dt><dd className="mt-1">{v.catalogue.state === "absent" ? "not listed" : v.catalogue.state}</dd></div>
           </dl>}
           {v.coin && <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
