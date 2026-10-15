@@ -19,7 +19,7 @@ call, leaving out whatever would push the step past the 1,232-byte packet; the a
 | a-team, a-rivalry-game, a-rivalry-series | Skipped without `BURNTICKER_THESPORTSDB_KEY` (NBA and NFL schedules); not driven yet. |
 | a-coin-vs-coin | Not driven yet. |
 | a-published | A national-debt (published data) coin launches. |
-| b-double-press | Two quick presses send one launch request and one wallet request. |
+| b-double-press | Two quick presses send one launch request, and the wallet is asked at most once per step (a single coin is two steps: its rule locked, then the coin created). |
 | b-reject-retry | The wallet refuses, the card says the step was not signed, nothing is sent; the second press reuses the plan and draft (no "already registered"). |
 | b-reload-relaunch | The wallet refuses, the tab reloads on the kept review (`?resume=review`), and Launch works again with no "already registered". |
 | b-reload-pair, b-pair-twice | Not driven yet (they need a pair). |
@@ -31,7 +31,8 @@ call, leaving out whatever would push the step past the 1,232-byte packet; the a
 `--chain real` (default) needs devnet SOL (it asks the faucet for 2 SOL and stops if refused) and a devnet lookup table pinned on the
 host. `--chain stub` intercepts the browser's RPC: the pinned table is answered with the expected entries, the page's dry run with "ok",
 and the send is refused on purpose. Everything up to the network is real, and every sent transaction is checked (each signature verifies,
-the blockhash is valid at the send, the Lighthouse instructions are still there). Stub mode does not check that the coin goes live.
+the blockhash is valid at the send, the Lighthouse instructions are still there). Stub mode does not check that the coin goes live. Since
+2026-10-15 a single coin is two steps, so in stub mode the checked send is step 1, the one that locks in the rule.
 
 Every mint it makes is appended to `logs/synthetic-creator.jsonl`, and with `BURNTICKER_SYNTH_DB` it is flagged
 `token_flags.synthetic = 1`, which hides it from every browse surface like a test coin (`testCoins.ts`), without listing it on

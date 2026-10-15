@@ -1,5 +1,4 @@
 import { PublicKey } from "@solana/web3.js";
-import { BURN_TARGET_EXTERNAL } from "@/lib/burnReceipts/burnTarget";
 import { decodeTokenConfig } from "@/lib/burnReceipts/accounts";
 import { POOL_POLICY_CREATOR_IS_FEE_PDA, POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
@@ -107,8 +106,8 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       const ofProgram = ixs.filter((ix) => ix.program === program);
       // round 5: a coin with a pinned token locks its rule (initialize_token + pin_burn_target) one transaction BEFORE its LaunchLab
       // create (launchBundle.ts launchTransactions), and the confirming step is that create, which calls no burn_receipts instruction.
-      // Such a transaction is taken only for a LaunchLab draft whose TokenConfig on chain burns a pinned token or is paired (checked below), and step
-      // 3 still requires the create. Any transaction that does call burn_receipts must carry this coin's initialize_token, as before.
+      // Such a transaction is taken only for a LaunchLab draft whose TokenConfig is already on chain (checked below), and step 3 still
+      // requires the create. Any transaction that does call burn_receipts must carry this coin's initialize_token, as before.
       const splitCreate = !ofProgram.length && expect.venue.kind === "launchlab";
       if (!ofProgram.length && !splitCreate) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
       const inits = ofProgram.filter((ix) => ix.data.length >= 8 && INIT_DISCS.some((d) => ix.data.subarray(0, 8).equals(d)));
@@ -123,17 +122,17 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       let cfgInfo: Awaited<ReturnType<TxReader["getAccountInfo"]>>;
       try { cfgInfo = await reader.getAccountInfo(cfgAddress, "confirmed"); }
       catch (e) { return { ok: false, status: 502, reason: `the coin's TokenConfig could not be read from the RPC just now (${(e as Error).message.slice(0, 120)}); retry` }; }
-      // a transaction without a burn_receipts call is judged only as a pinned-token coin's create: no config of that kind, the old answer
+      // a transaction without a burn_receipts call is judged only as a split launch's create: no config, the old answer
       if (splitCreate && (!cfgInfo || cfgInfo.owner.toBase58() !== program)) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
       if (!cfgInfo) return { ok: false, status: 422, reason: `no TokenConfig for this mint under the burn_receipts program on chain (${cfgAddress.toBase58()}): initialize_token did not complete, ${NOT_THIS}` };
       if (cfgInfo.owner.toBase58() !== program) return { ok: false, status: 422, reason: `the account at the coin's TokenConfig address is not owned by the burn_receipts program: ${NOT_THIS}` };
       let cfg: ReturnType<typeof decodeTokenConfig>;
       try { cfg = decodeTokenConfig(cfgInfo.data); } catch (e) { return { ok: false, status: 422, reason: `the coin's TokenConfig does not decode (${(e as Error).message.slice(0, 80)}): ${NOT_THIS}` }; }
       if (cfg.mint.toBase58() !== expect.mint || cfg.creator.toBase58() !== expect.creator) return { ok: false, status: 422, reason: `the TokenConfig on chain names another mint or creator: ${NOT_THIS}` };
-      // 2026-10-14 (Phantom review ticket 438485): a LaunchLab PAIR coin also locks its rule one transaction before its create
-      // (launchBundle.ts launchTransactions `paired`), so a create alone is taken for a TokenConfig that initialize_token paired
-      // (pair_state provisional, paired or later unlinked) as well as for one that burns a pinned token.
-      if (splitCreate && cfg.burn_target_kind !== BURN_TARGET_EXTERNAL && !(cfg.pair_state > 0)) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
+      // 2026-10-14 (Phantom review ticket 438485): a LaunchLab PAIR coin also locks its rule one transaction before its create, and since
+      // 2026-10-15 so does every single coin (launchBundle.ts launchTransactions): a create alone is taken for any LaunchLab draft whose
+      // TokenConfig is already on chain under this program, for this mint and creator, locking the draft's rule (checked here and below),
+      // with step 3's create under the draft's platform. A lock step alone never passes: step 3 requires the create.
       if (hex(cfg.rules_sha256) !== expect.rulesSha.toLowerCase()) return { ok: false, status: 422, reason: `the TokenConfig on chain locks another rule (rules sha256 ${short(hex(cfg.rules_sha256))}) than this draft's (${short(expect.rulesSha)}): ${NOT_THIS}` };
 
       // 3. the venue the draft expects, completed
@@ -144,6 +143,7 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
         if (!v.platformId) return { ok: false, status: 422, reason: "the draft records no LaunchLab platform, so its LaunchLab create cannot be checked: it is not taken live" };
         const burnPool = feePda(programKey, mintKey).toBase58();
         const creates = ixs.filter((ix) => ix.program === o.launchLabProgramId && ix.data.length >= 8 && ix.data.subarray(0, 8).equals(LAUNCHLAB_INITIALIZE_V2) && ix.accounts[LL_MINT] === expect.mint);
+        if (!creates.length && splitCreate) return { ok: false, status: 422, reason: `the transaction neither calls the burn_receipts program (initialize_token) nor creates this coin's LaunchLab curve (initialize_v2 for mint ${expect.mint}): ${NOT_THIS}` };
         if (!creates.length) return { ok: false, status: 422, reason: `the transaction does not create this coin's LaunchLab curve (initialize_v2 for mint ${expect.mint}): ${NOT_THIS}` };
         if (!creates.some((ix) => ix.accounts[LL_PAYER] === expect.creator && ix.accounts[LL_PLATFORM] === v.platformId && ix.accounts[LL_CREATOR] === burnPool)) return { ok: false, status: 422, reason: `the LaunchLab create is not under this draft's platform ${v.platformId}, paid by its creator, with the burn pool ${burnPool} as LaunchLab's creator: ${NOT_THIS}` };
         return { ok: true, blockTimeMs };

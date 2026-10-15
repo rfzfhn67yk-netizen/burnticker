@@ -79,8 +79,11 @@ describe("launch bundle (on the fakes)", () => {
     assert.equal(b.ready, false); assert.equal(b.pending.length, 2);
     assert.equal(b.rules.sha256, lockRule(BRONCOS).sha256);
     assert.match(b.description, /^Burns when Denver wins\. — Kalshi series KXNFLGAME \(ticker ∋ -DEN\) · rule sha256:/);
-    assert.equal(b.transactions.length, 1); assert.deepEqual(b.transactions[0].signers, ["creator", "mint"]);
-    const create = JSON.parse(Buffer.from(b.transactions[0].instructions[1].dataBase64, "base64").toString());
+    // 2026-10-15: two steps, initialize_token then the LaunchLab create, both signed by the creator and the mint
+    assert.equal(b.transactions.length, 2); assert.deepEqual(b.transactions.map((t) => t.signers), [["creator", "mint"], ["creator", "mint"]]);
+    assert.deepEqual(b.transactions.map((t) => t.label), ["Lock in $BRONCO's rule", "Create $BRONCO (LaunchLab create + first buy)"]);
+    assert.equal(b.transactions[0].instructions.length, 1);
+    const create = JSON.parse(Buffer.from(b.transactions[1].instructions[0].dataBase64, "base64").toString());
     assert.equal(create.creatorFeeRecipient, b.addresses.feePda, "the LaunchLab creator is the burn program's fee PDA (H-2), never a key");
     assert.equal(b.burnPoolAuthority, b.addresses.feePda);
     assert.match(b.addresses.feeWsol, /^[1-9A-HJ-NP-Za-km-z]{32,44}$/); assert.notEqual(b.addresses.feeWsol, b.addresses.feePda);

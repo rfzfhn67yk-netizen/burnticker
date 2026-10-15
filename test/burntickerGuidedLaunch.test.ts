@@ -294,7 +294,7 @@ describe("walkthrough snags and the launch-intent audits", () => {
     const a = season("LAD", "loss"), b = season("MIL", "loss");
     const r = buildLaunchReview({ rule: a, ticker: "LADVMIL", name: "Dodgers vs Brewers, Dodgers side", companion: { ticker: "MILVLAD", name: "Brewers vs Dodgers, Brewers side", rule: b } } as never, { env, reserved: new Set() });
     assert.ok("review" in r);
-    assert.deepEqual(r.review.rules.map((x) => [x.side, x.ticker, x.step]), [["A", "LADVMIL", 1], ["B", "MILVLAD", 2]]);
+    assert.deepEqual(r.review.rules.map((x) => [x.side, x.ticker, x.step]), [["A", "LADVMIL", 1], ["B", "MILVLAD", 3]]);
     assert.notEqual(r.review.rules[0].sha256, r.review.rules[1].sha256); assert.match(r.review.rules[1].text, /MIL/);
     assert.match(read("src/app/burnticker/launch/PreWalletSummary.tsx"), /Coin \{r\.side\}, \$\{r\.ticker \|\| "TICKER"\} \(\{r\.name \|\| "no name yet"\}\), signed in transaction \{r\.step\}\./);
   });

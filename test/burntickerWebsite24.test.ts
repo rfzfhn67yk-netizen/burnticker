@@ -115,27 +115,38 @@ describe("the review", () => {
     assert.equal(withPinSteps(rv.review, [{ ticker: "WIFFIRE", symbol: "BONK" }]), rv.review, "the server counted it: the page adds nothing");
     assert.equal(BURN_TARGET_BYTES, 373);
   });
-  test("the pre-wallet summary counts the pin: one more transaction, two signatures, the account's rent; idempotent", () => {
+  test("the pre-wallet summary counts the pin: inside a coin's two steps (rent only), or one more transaction for an older one-step review; idempotent", () => {
     // the page's own fallback, on a review that does not count the pin (a server from before WIRING-ROUND5 item 4)
     const rv = buildLaunchReview({ rule: SINGLE, ticker: "WIFFIRE", name: "Wif Fire", raiseSol: "85" } as never, { env: ENV, reserved: new Set() });
     assert.ok("review" in rv); if (!("review" in rv)) return;
+    // 2026-10-15: a single coin is already two steps (lock its rule, then create it), so the pin rides in them
     const before = rv.review;
+    assert.deepEqual(before.transactions.steps.map((s) => s.label), [lockStepLabel("WIFFIRE"), "Create $WIFFIRE"]);
     const after = withPinSteps(before, [{ ticker: "WIFFIRE", symbol: "BONK" }]);
-    assert.equal(after.transactions.count, before.transactions.count + 1);
+    assert.equal(after.transactions.count, before.transactions.count, "no new transaction");
     assert.deepEqual(after.transactions.steps.map((s) => s.label), [lockStepLabel("WIFFIRE"), pinStepLabel("WIFFIRE", "BONK")]);
     assert.ok(after.transactions.steps.every((s) => s.signers.includes("your wallet") && s.signers.includes("a new key made for this coin")));
-    const added = rentLamports(BURN_TARGET_BYTES) + 2 * LAMPORTS_PER_SIGNATURE;
-    assert.ok(Math.abs(Number(after.costs.totalSol) - (Number(before.costs.totalSol) + added / 1e9)) <= 0.00005, `${before.costs.totalSol} + ${added} lamports → ${after.costs.totalSol}`);
-    assert.ok(Number(after.costs.totalSol) > Number(before.costs.totalSol));
-    assert.equal(after.costs.lines.length, before.costs.lines.length + 2);
-    assert.match(after.transactions.note, new RegExp(PIN_NOTE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    const rentOnly = rentLamports(BURN_TARGET_BYTES);
+    assert.ok(Math.abs(Number(after.costs.totalSol) - (Number(before.costs.totalSol) + rentOnly / 1e9)) <= 0.00005, `${before.costs.totalSol} + ${rentOnly} lamports → ${after.costs.totalSol}`);
+    assert.equal(after.costs.lines.length, before.costs.lines.length + 1);
+    assert.doesNotMatch(after.transactions.note, /one more transaction/);
     assert.equal(withPinSteps(after, [{ ticker: "WIFFIRE", symbol: "BONK" }]), after, "counted once");
     assert.equal(withPinSteps(before, []), before);
     assert.match(after.recovery?.[0] ?? "", /asks 2 separate times/);
+    // an older server's one-step review: one more transaction, two signatures, the account's rent
+    const old = { ...before, transactions: { ...before.transactions, count: 1, steps: [{ label: "Create $WIFFIRE and lock in its rule", signers: before.transactions.steps[0].signers }] }, recovery: ["If you reject the request in your wallet, nothing is sent and nothing is charged.", "x"] };
+    const oldAfter = withPinSteps(old, [{ ticker: "WIFFIRE", symbol: "BONK" }]);
+    assert.equal(oldAfter.transactions.count, 2);
+    assert.deepEqual(oldAfter.transactions.steps.map((s) => s.label), [lockStepLabel("WIFFIRE"), pinStepLabel("WIFFIRE", "BONK")]);
+    const added = rentLamports(BURN_TARGET_BYTES) + 2 * LAMPORTS_PER_SIGNATURE;
+    assert.ok(Math.abs(Number(oldAfter.costs.totalSol) - (Number(old.costs.totalSol) + added / 1e9)) <= 0.00005, `${old.costs.totalSol} + ${added} lamports → ${oldAfter.costs.totalSol}`);
+    assert.equal(oldAfter.costs.lines.length, old.costs.lines.length + 2);
+    assert.match(oldAfter.transactions.note, new RegExp(PIN_NOTE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(oldAfter.recovery?.[0] ?? "", /asks 2 separate times/);
     // a review already counting several transactions has its count in the recovery line moved up too
     const three = { ...before, transactions: { ...before.transactions, count: 3, steps: [{ label: "Create $A and lock in its rule", signers: ["your wallet"] }, { label: "Create $B and lock in its rule", signers: ["your wallet"] }, { label: "Link the two coins", signers: ["your wallet"] }] }, recovery: ["Your wallet asks 3 separate times, once for each transaction, in the order above.", "x"] };
     assert.equal(withPinSteps(three, [{ ticker: "A", symbol: "WIF" }]).recovery![0], "Your wallet asks 4 separate times, once for each transaction, in the order above.");
-    for (const s of [...after.transactions.steps.map((x) => x.label), ...after.costs.lines.slice(-2).map((x) => x.label), after.transactions.note]) plain(s);
+    for (const s of [...after.transactions.steps.map((x) => x.label), ...oldAfter.costs.lines.slice(-2).map((x) => x.label), after.transactions.note, oldAfter.transactions.note]) plain(s);
     // a linked pair's side B keeps "and link the two coins" after its pin
     const pair = { ...before, transactions: { ...before.transactions, count: 2, steps: [{ label: "Create $A and lock in its rule", signers: ["your wallet"] }, { label: "Create $B and link the two coins", signers: ["your wallet"] }] } };
     assert.deepEqual(withPinSteps(pair, [{ ticker: "B", symbol: "WIF" }]).transactions.steps.map((s) => s.label), ["Create $A and lock in its rule", "Lock in $B's rule", "Pin WIF's Raydium pool for $B, then create $B and link the two coins"]);

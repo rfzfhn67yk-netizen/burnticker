@@ -1,7 +1,8 @@
 // WIRING-ROUND5 items 1 to 4 (2026-10-13): a coin that burns a real token, through the launch bundle, the pair curve, the signing plan and
 // the review. The pin (pin_burn_target) runs after initialize_token and before the coin's mint exists: on LaunchLab it rides with
 // initialize_token and the create follows in a second transaction (init + pin + create is over the packet limit); on the pair curve the
-// side's one transaction becomes initialize_token, pin, then the mint. A coin that burns itself is byte-for-byte as before. Side B of a
+// side's one transaction becomes initialize_token, pin, then the mint. A LaunchLab coin that burns itself is two transactions as well
+// since 2026-10-15 (its rule locked, then the coin created), with no pin anywhere. Side B of a
 // pair carries its own pinned token (never side A's). The review counts the pin (a step the page recognises, the rent, the signatures).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
@@ -14,7 +15,7 @@ import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { launchlabPlan } from "@/lib/burnticker/signPlan";
 import { v0WireSize } from "@/lib/burnticker/lookupTable";
 import { lockRule } from "@/lib/burnticker/rules";
-import { rentLamports, LAMPORTS_PER_SIGNATURE } from "@/lib/burnticker/launchCost";
+import { rentLamports } from "@/lib/burnticker/launchCost";
 import { prepareLaunch } from "@/lib/burnticker/api/handlers";
 import { withPinSteps } from "@/app/burnticker/launch/burnReal";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
@@ -47,12 +48,13 @@ describe("the BurnTarget account", () => {
 });
 
 describe("the LaunchLab bundle (item 2)", () => {
-  test("a coin that burns itself keeps its one transaction, initialize_token + LaunchLab create", async () => {
+  test("a coin that burns itself (2026-10-15): [initialize_token], then [the create], both signed by the creator and the mint, no pin", async () => {
     const b = await buildLaunchBundle(input(BRONCOS), fakeDeps());
-    assert.equal(b.transactions.length, 1);
-    assert.equal(b.transactions[0].label, "initialize_token + LaunchLab create");
-    assert.ok(isInit(b.transactions[0].instructions[0].label));
-    assert.ok(!b.transactions[0].instructions.some((ix) => isPin(ix.label)));
+    assert.equal(b.transactions.length, 2);
+    assert.deepEqual(b.transactions.map((t) => t.label), ["Lock in $TEAMBONK's rule", "Create $TEAMBONK (LaunchLab create)"]);
+    assert.deepEqual(b.transactions[0].instructions.map((ix) => isInit(ix.label)), [true]);
+    assert.ok(b.transactions[1].instructions.length > 0 && b.transactions[1].instructions.every((ix) => !isInit(ix.label) && !isPin(ix.label)));
+    for (const t of b.transactions) assert.deepEqual(t.signers, ["creator", "mint"]);
   });
   test("a coin with a pinned token: [initialize_token, pin_burn_target], then [the create], both signed by the creator and the mint", async () => {
     for (const buy of ["0", "0.5"]) {
@@ -96,8 +98,8 @@ describe("the LaunchLab bundle (item 2)", () => {
     const self = await buildLaunchBundle(input(BRONCOS), fakeDeps());
     const real = await buildLaunchBundle({ ...input({ ...BRONCOS, burnTarget: BONK }), ticker: "TEAMWIF" }, fakeDeps());
     const plan = launchlabPlan([self, real]);
-    assert.deepEqual(plan.steps.length, 3);
-    assert.deepEqual(plan.confirms.map((c) => [c.ticker, c.step]), [["TEAMBONK", 0], ["TEAMWIF", 2]]);
+    assert.deepEqual(plan.steps.length, 4);
+    assert.deepEqual(plan.confirms.map((c) => [c.ticker, c.step]), [["TEAMBONK", 1], ["TEAMWIF", 3]]);
   });
 });
 
@@ -150,14 +152,16 @@ describe("the pair curve (item 3)", () => {
 describe("the review counts the pin (item 4)", () => {
   const env = { BURNTICKER_CLUSTER: "devnet", BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" };
   const review = (body: unknown, e: Record<string, string> = env) => { const r = buildLaunchReview(body as never, { env: e, reserved: new Set() }); assert.ok("review" in r); return (r as { review: Parameters<typeof withPinSteps>[0] }).review; };
-  test("single coin: two steps, the pin step first, its rent and two more signatures in the total; the page adds nothing", () => {
+  test("single coin: two steps either way, the pin rides in the first; its rent is the only difference in the total; the page adds nothing", () => {
     const self = review({ rule: BRONCOS, ticker: "TEAMBONK", name: "Team Bonk", raiseSol: "85" });
     const real = review({ rule: { ...BRONCOS, burnTarget: BONK }, ticker: "TEAMBONK", name: "Team Bonk", raiseSol: "85" });
     assert.deepEqual(self.pins, []);
     assert.deepEqual(real.transactions.steps.map((s) => s.label), ["Pin BONK's Raydium pool for $TEAMBONK after locking in its rule", "Create $TEAMBONK"]);
     assert.equal(real.transactions.count, 2);
-    assert.deepEqual(real.pins, [{ side: "A", ticker: "TEAMBONK", symbol: "BONK", step: 1, bytes: 373, rentSol: real.pins[0].rentSol, signatures: 2 }]);
-    const added = rentLamports(BURN_TARGET_ACCOUNT_BYTES) + 2 * LAMPORTS_PER_SIGNATURE;
+    // 2026-10-15: a coin that burns itself is two steps too ("Lock in $X's rule", "Create $X"), so the pin adds no transaction
+    assert.deepEqual(self.transactions.steps.map((s) => s.label), ["Lock in $TEAMBONK's rule", "Create $TEAMBONK"]);
+    assert.deepEqual(real.pins, [{ side: "A", ticker: "TEAMBONK", symbol: "BONK", step: 1, bytes: 373, rentSol: real.pins[0].rentSol, signatures: 0 }]);
+    const added = rentLamports(BURN_TARGET_ACCOUNT_BYTES);
     const diff = Math.round(Number(real.costs.totalSol) * 1e9) - Math.round(Number(self.costs.totalSol) * 1e9);
     assert.ok(Math.abs(diff - added) <= 50_000, `${diff} vs ${added} (the total is shown to 4 places)`);
     assert.equal(real.costs.lines.length, self.costs.lines.length + 1);

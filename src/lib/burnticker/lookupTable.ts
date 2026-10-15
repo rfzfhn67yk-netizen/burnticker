@@ -144,7 +144,8 @@ export function v0WireSize(instructions: readonly { programId: string; keys: rea
  * Steps that cannot be sent as one transaction even with the table, measured before anything is signed (re-check 2026-10-11: a LaunchLab
  * create WITH the creator's opening purchase is 1,281 bytes as v0 + the table — the purchase's wrap / account / close instructions do not
  * fit beside initialize_token and initialize_v2). Since launch-10 (2026-10-12) the site never builds that shape (hostedLaunch.ts: no
- * opening purchase), so this is the backstop for anything else that grows past the limit. [] = every step fits.
+ * opening purchase), and since 2026-10-15 a single coin's initialize_token and create are separate steps, so this is the backstop for
+ * anything else that grows past the limit. [] = every step fits.
  */
 export function planSizeProblems(steps: readonly { label: string; instructions: Parameters<typeof v0WireSize>[0] }[], payer: string | null, network: Network | null): string[] {
   if (!payer || !network) return [];

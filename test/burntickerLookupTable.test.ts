@@ -85,12 +85,12 @@ describe("the lookup table holds every fixed account the real bundles reference"
   test("the plan's network is read from its fixed accounts; none or both → unknown (nothing is signed)", async () => {
     for (const n of NETWORKS) {
       const { bundle } = await singleCoin(n);
-      assert.equal(planNetwork([bundle.transactions[0].instructions]), n);
+      assert.equal(planNetwork(bundle.transactions.map((t) => t.instructions)), n);
       const { pc } = await pairCurveSet(n);
       assert.equal(planNetwork(pc.transactions.map((t) => t.instructions)), n, "a pair-curve set (no LaunchLab instruction) is placed by its platform and AmmConfig");
     }
     const d = await singleCoin("devnet"), m = await singleCoin("mainnet");
-    assert.equal(planNetwork([d.bundle.transactions[0].instructions, m.bundle.transactions[0].instructions]), null);
+    assert.equal(planNetwork([...d.bundle.transactions, ...m.bundle.transactions].map((t) => t.instructions)), null);
     assert.equal(planNetwork([[{ programId: "11111111111111111111111111111111", keys: [] }]]), null);
   });
 });
@@ -101,9 +101,12 @@ describe("the lookup table holds every fixed account the real bundles reference"
  * table) and per assertion 1 program index + 1 account count + its account indexes + 1 data length + data. assertAccountInfo Lamports
  * on the fee payer is data 1 discriminator + 1 log level + 1 variant + 8 u64 + 1 operator = 12 bytes, so 16 bytes on the wire with the
  * payer already a key; a token-balance or delta check is about the same plus 32 bytes when it names an account the transaction does not.
- * Three or four assertions with one new account is about 32 + 64 + 32 = 128 bytes, so the steps keep at least 130.
+ * Three or four assertions with one new account is about 32 + 64 + 32 = 128 bytes, so the steps kept at least 130 (2026-10-14).
+ * 2026-10-15: a synthetic creator measured two assertions plus a compute-budget instruction at the front taking the single coin's one
+ * transaction (1,031 to 1,095 bytes) to 1,234, over the limit, so the single coin is two steps too and every step now keeps at least
+ * 330 bytes: room for a wordier wallet guard than the one measured.
  */
-const WALLET_HEADROOM = 130;
+const WALLET_HEADROOM = 330;
 
 describe("the measured wire size: every real step fits 1,232 bytes as v0 + the table; the legacy construction does not", () => {
   for (const network of NETWORKS) test(`${network}: single coin (the F3 fixture), the LaunchLab pair, the pair-curve set`, async () => {
@@ -124,7 +127,8 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
         assert.equal(vt.version, 0, `${name} step ${i + 1} is a version-0 transaction`);
         assert.ok(raw.length <= PACKET_LIMIT, `${name} step ${i + 1}: ${raw.length} bytes > ${PACKET_LIMIT}`);
         // Phantom review ticket 438485 (2026-10-14): a wallet that appends Lighthouse assertions needs room, so every step keeps at
-        // least WALLET_HEADROOM bytes free (the pair used to be 1,191 and 1,223 bytes; it is now four steps of at most 829 bytes)
+        // least WALLET_HEADROOM bytes free (the pair used to be 1,191 and 1,223 bytes; it is now four steps of at most 829 bytes; the
+        // single coin used to be one step of 1,031 to 1,095 bytes and is now two, its rule locked and then the coin created)
         assert.ok(raw.length <= PACKET_LIMIT - WALLET_HEADROOM, `${name} step ${i + 1}: ${raw.length} bytes leaves less than ${WALLET_HEADROOM} bytes for the wallet's own checks`);
         const signerKeys = vt.message.staticAccountKeys.slice(0, vt.message.header.numRequiredSignatures);
         assert.ok(vt.signatures.every((s) => s.some((b) => b !== 0)), `${name} step ${i + 1}: every required signature present (${signerKeys.length})`);
@@ -138,9 +142,14 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
     assert.deepEqual(lpPlan.steps.map((st) => st.label), ["$PAIRA: Lock in $PAIRA's rule", "$PAIRA: Create $PAIRA (LaunchLab create)", "$PAIRB: Lock in $PAIRB's rule and link the two coins", "$PAIRB: Create $PAIRB (LaunchLab create)"]);
     assert.deepEqual(lpPlan.confirms.map((c) => [c.mint, c.step]), [[lp.pair.a.mint, 1], [lp.pair.b.mint, 3]]);
     assert.deepEqual(lpPlan.steps.map((st) => st.signers), [["creator", "mint0"], ["creator", "mint0"], ["creator", "mint1"], ["creator", "mint1"]]);
-    // the auditor's reproduction, kept in reverse: the same single-coin fixture as a legacy transaction is over the limit and cannot be
-    // serialized — reverting buildStepTx to `new Transaction(...)` makes the size assertions above fail
-    const ixs = single.bundle.transactions[0].instructions.map(toIx);
+    // the single coin's two steps (2026-10-15): its rule locked, then the coin created; the create is the step that confirms it
+    const sPlan = launchlabPlan([single.bundle]);
+    assert.deepEqual(sPlan.steps.map((st) => st.label), [`Lock in $${single.bundle.ticker}'s rule`, `Create $${single.bundle.ticker} (LaunchLab create)`]);
+    assert.deepEqual(sPlan.confirms.map((c) => [c.mint, c.step]), [[single.bundle.mint, 1]]);
+    assert.deepEqual(sPlan.steps.map((st) => st.signers), [["creator", "mint"], ["creator", "mint"]]);
+    // the auditor's reproduction, kept in reverse: the single coin's old one-transaction shape as a legacy transaction is over the limit
+    // and cannot be serialized — reverting buildStepTx to `new Transaction(...)` makes the size assertions above fail
+    const ixs = single.bundle.transactions.flatMap((t) => t.instructions).map(toIx);
     assert.ok(legacyWireSize(ixs, [single.creator, single.mint]) > PACKET_LIMIT, "the legacy single coin is over 1,232 bytes");
     const t = new Transaction({ feePayer: single.creator.publicKey, recentBlockhash: BH }).add(...ixs); t.sign(single.creator, single.mint);
     assert.throws(() => t.serialize(), /Transaction too large/);
@@ -149,17 +158,24 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
     assert.ok(built instanceof VersionedTransaction); assert.equal(built.message.addressTableLookups.length, 1);
   });
 
-  test("RESIDUAL (reported to the owner): a create WITH the opening purchase does not fit even as v0 + the table — flagged before signing, refused before the wallet", async () => {
+  /** The single coin's old one-transaction shape (before 2026-10-15): initialize_token + create (+ first buy) in one step. */
+  const joined = (b: Awaited<ReturnType<typeof singleCoin>>["bundle"]) => ({ ...b, transactions: [{ label: "initialize_token + LaunchLab create", signers: ["creator", "mint"], instructions: b.transactions.flatMap((t) => t.instructions) }] });
+
+  test("RESIDUAL (reported to the owner): since the split a create WITH the opening purchase fits 1,232 bytes but not with the wallet headroom, so the hosted path still carries none; an over-limit step is flagged before signing, refused before the wallet", async () => {
     for (const network of NETWORKS) for (const o of [{ firstBuySol: "0.5" }, { firstBuySol: "0.5", vault: true }]) {
       const s = await singleCoin(network, o), plan = launchlabPlan([s.bundle]), creator = s.creator.publicKey.toBase58();
-      const size = v0WireSize(plan.steps[0].instructions, creator, network)!;
-      console.log(`${network} ${o.vault ? "vault + first buy" : "single + first buy"}: v0+table ${size} B (over ${PACKET_LIMIT})`);
-      assert.ok(size > PACKET_LIMIT, "if this now fits, move the case into the list above");
-      const problems = planSizeProblems(plan.steps, creator, network);
+      const sizes = plan.steps.map((st) => v0WireSize(st.instructions, creator, network)!);
+      console.log(`${network} ${o.vault ? "vault + first buy" : "single + first buy"}: v0+table ${sizes.join(" + ")} B`);
+      assert.equal(plan.steps.length, 2); assert.ok(sizes.every((x) => x <= PACKET_LIMIT), "each step fits the packet");
+      assert.ok(sizes[1] > PACKET_LIMIT - WALLET_HEADROOM, "if the create with a purchase now keeps the wallet headroom, the hosted refusal (hostedLaunch.ts) can be revisited");
+      assert.deepEqual(planSizeProblems(plan.steps, creator, network), []);
+      // the old one-transaction shape is over the limit: flagged before signing and refused before the wallet sees it
+      const old = launchlabPlan([joined(s.bundle)]);
+      const problems = planSizeProblems(old.steps, creator, network);
       assert.equal(problems.length, 1); assert.match(problems[0], /over the 1,232-byte limit, so it cannot be sent as one transaction$/);   // launch-10: the site never builds this shape (hostedLaunch.ts)
       assert.ok(lintCopy(problems[0], loadCopyLintConfig()).ok, problems[0]);
       let walletCalls = 0;
-      const r = await signAndSendPlan(plan, creator, { latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }), lookupTable: async () => expectedLookupTable(network), signTransaction: async (tx) => { walletCalls++; return tx; }, sendRaw: async () => "x", confirm: async () => ({ err: null }) });
+      const r = await signAndSendPlan(old, creator, { latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }), lookupTable: async () => expectedLookupTable(network), signTransaction: async (tx) => { walletCalls++; return tx; }, sendRaw: async () => "x", confirm: async () => ({ err: null }) });
       assert.equal(walletCalls, 0); assert.equal(r.state, "not-sent"); assert.match(r.error!, /over the 1,232-byte limit/);
     }
     // every step of the plans that fit is clear of the pre-sign check
@@ -167,10 +183,10 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
     assert.deepEqual(planSizeProblems(launchlabPlan([ok.bundle]).steps, ok.creator.publicKey.toBase58(), "devnet"), []);
   });
 
-  test("without the table the single coin does not fit either: the builder refuses before the wallet sees it", async () => {
+  test("without the table the single coin's old one-transaction shape does not fit: the builder refuses before the wallet sees it", async () => {
     const s = await singleCoin("devnet");
     let walletCalls = 0;
-    const r = await signAndSendPlan(launchlabPlan([s.bundle]), s.creator.publicKey.toBase58(), {
+    const r = await signAndSendPlan(launchlabPlan([joined(s.bundle)]), s.creator.publicKey.toBase58(), {
       latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }), lookupTable: async () => null,
       signTransaction: async (tx) => { walletCalls++; return tx; }, sendRaw: async () => "x", confirm: async () => ({ err: null }),
     });

@@ -572,7 +572,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (problems.length) return { error: fail(400, problems.join("; "), { problems }) };
   // launch-10 (2026-10-12; hostedLaunch.ts): what a launch built by this site never carries, refused before anything is read, pinned or
   // registered. Mainnet only with the host's explicit allowance (passed to the builder below as allowMainnet); no opening purchase (a
-  // create with one does not fit one transaction; the CLI keeps --first-buy-sol); no vault mode (it needs a signature no wallet can give).
+  // create with one leaves too little room for a wallet's own appended checks; the CLI keeps --first-buy-sol); no vault mode (it needs a signature no wallet can give).
   if (p.cluster === "mainnet" && p.allowMainnet !== true) return { error: fail(403, MAINNET_OFF_SENTENCE, { code: "mainnet-launches-off" }) };
   if (requestedOpeningPurchase(b.firstBuySol) !== 0) return { error: fail(400, NO_OPENING_PURCHASE_SENTENCE, { code: "opening-purchase-off" }) };
   // website-19 (ChatGPT launch-intent audit 2, item 1): a set of outcomes is never one coin's rule; the creator picks one outcome's market

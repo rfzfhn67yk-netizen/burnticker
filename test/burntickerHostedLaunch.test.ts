@@ -111,12 +111,12 @@ describe("(a) the real LaunchLab client, selected by env on an RPC host", () => 
       const sdk = new SdkLaunchLab({ cluster: network, programId: LAUNCHLAB_PROGRAM_ID[network], platformId: BURNTICKER_PLATFORM[network], configId: DEFAULT_SOL_CONFIG[network], global: decodeGlobalConfig(globalData()), platform: decodePlatform(platformData(network)) });
       const ref = await buildLaunchBundle(input(network), { ...deps, launchLab: sdk });
       assert.deepEqual(b.transactions, ref.transactions, "byte-identical to the CLI's builder over the same accounts");
-      const ll2 = b.transactions[0].instructions.find((ix) => ix.programId === LAUNCHLAB_PROGRAM_ID[network].toBase58())!;
+      const ll2 = b.transactions[1].instructions.find((ix) => ix.programId === LAUNCHLAB_PROGRAM_ID[network].toBase58())!;
       assert.ok(ll2.keys.some((k) => k.pubkey === BURNTICKER_PLATFORM[network].toBase58()), "the create names the Burnticker platform");
       assert.ok(ll2.keys.some((k) => k.pubkey === burnPoolFor(new PublicKey(PROGRAM_IDS[network].burn_receipts), mint.publicKey).feePda.toBase58()), "LaunchLab's creator is the fee PDA");
-      assert.equal(b.transactions.length, 1); assert.doesNotMatch(b.transactions[0].label, /first buy/);
-      const size = v0WireSize(b.transactions[0].instructions, CREATOR, network)!;
-      assert.ok(size <= 1_232, `${size} bytes with the table`);
+      // 2026-10-15: two steps, the rule locked then the coin created, each with room for a wallet's own appended checks
+      assert.equal(b.transactions.length, 2); assert.doesNotMatch(b.transactions[1].label, /first buy/);
+      for (const t of b.transactions) { const size = v0WireSize(t.instructions, CREATOR, network)!; assert.ok(size <= 900, `${size} bytes with the table`); }
       assert.deepEqual(planSizeProblems(launchlabPlan([b]).steps, CREATOR, network), []);
       assert.deepEqual(launchlabPlan([b]).pending, [], "nothing pending: the browser can sign it");
       await buildLaunchBundle(input(network), { ...deps, mintKeypair: Keypair.generate(), launchLab: ll });
@@ -178,11 +178,11 @@ describe("(b) the mainnet allowance, (c) no opening purchase, (d) no vault mode:
     }
     for (const [i, firstBuySol] of ["0", "0.0", undefined].entries()) {
       const r = await prepareLaunch(w.p, body({ ticker: `HOSTZ${i}`, firstBuySol }), { register: false });
-      assert.ok("ok" in r, JSON.stringify((r as { error?: unknown }).error)); assert.doesNotMatch(r.ok.bundle.transactions[0].label, /first buy/);
+      assert.ok("ok" in r, JSON.stringify((r as { error?: unknown }).error)); assert.doesNotMatch(r.ok.bundle.transactions.map((t) => t.label).join(" | "), /first buy/);
     }
     assert.match(read("scripts/burnkeeper-launch.mts"), /--first-buy-sol/, "the CLI keeps the flag");
     const sdkBuild = await buildLaunchBundle(input("devnet", { firstBuySol: "0.5" }), { program: new RealIdProgram("devnet"), launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [CREATOR], quorum: 1, metadataUri: URI });
-    assert.match(sdkBuild.transactions[0].label, /first buy/, "the offline builder still takes one");
+    assert.match(sdkBuild.transactions[1].label, /first buy/, "the offline builder still takes one (on the create step)");
     // the copy: the signing card names no purchase, and says once that there is none
     const card = read("src/app/burnticker/launch/SignCard.tsx");
     assert.doesNotMatch(card, /your opening purchase/); assert.match(card, /\{NO_OPENING_PURCHASE_SENTENCE\}/);

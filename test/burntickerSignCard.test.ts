@@ -83,7 +83,8 @@ describe("one signing plan for every launch path", () => {
     const a = (await legacy(coin("TBSEASON", firstPartyRule(teamSeries("mlb", "TB", "loss", { kind: "season", year: 2026 }), 0.02)))).json.bundle as LaunchlabBundleLike;
     const b = (await legacy(coin("NYYSEASON", firstPartyRule(teamSeries("mlb", "NYY", "loss", { kind: "season", year: 2026 }), 0.02)))).json.bundle as LaunchlabBundleLike;
     const plan = launchlabPlan([a, b]);
-    assert.deepEqual(plan.confirms.map((c) => [c.ticker, c.step]), [["TBSEASON", 0], ["NYYSEASON", a.transactions.length]]);
+    assert.deepEqual(plan.confirms.map((c) => [c.ticker, c.step]), [["TBSEASON", 1], ["NYYSEASON", a.transactions.length + 1]]);
+    assert.equal(a.transactions.length, 2, "2026-10-15: each coin locks its rule, then is created");
     assert.deepEqual(Object.keys(plan.keys).sort(), ["mint0", "mint1"]);
     const s = await signAndSendPlan(plan, CREATOR, fakeDeps([]));
     assert.equal(s.signatures.length, plan.steps.length);

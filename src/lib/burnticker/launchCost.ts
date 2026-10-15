@@ -31,9 +31,14 @@ export function decimalSolToLamports(sol: string): number {
   if (!m) throw new Error(`not a SOL amount: ${sol}`);
   return Number(BigInt(m[1]) * BigInt(1_000_000_000) + BigInt((m[2] ?? "").padEnd(9, "0") || "0"));
 }
-/** One LaunchLab coin's estimate: the rule account's rent, the reserve moved into its burn pool, LaunchLab's create rent, two signatures. */
+/** Each LaunchLab coin is two transactions (its rule locked, then the coin created; launchBundle.ts launchTransactions, 2026-10-15). */
+export const LAUNCHLAB_STEPS_PER_COIN = 2;
+/**
+ * One LaunchLab coin's estimate: the rule account's rent, the reserve moved into its burn pool, LaunchLab's create rent, and two
+ * signatures (the wallet and the coin's new key) on each of its two transactions.
+ */
 export function launchLabCostLamports(reserveSol: string, coins = 1): number {
-  return (rentLamports(TOKEN_CONFIG_BYTES) + decimalSolToLamports(reserveSol) + Math.round(LAUNCHLAB_CREATE_RENT_SOL * 1e9) + 2 * LAMPORTS_PER_SIGNATURE) * coins;
+  return (rentLamports(TOKEN_CONFIG_BYTES) + decimalSolToLamports(reserveSol) + Math.round(LAUNCHLAB_CREATE_RENT_SOL * 1e9) + LAUNCHLAB_STEPS_PER_COIN * 2 * LAMPORTS_PER_SIGNATURE) * coins;
 }
 /** The same in SOL; the default reserve is the web launcher's 0.02 SOL (launchDraft.ts). */
 export const launchLabCostSol = (reserveSol = "0.02"): string => solText(launchLabCostLamports(reserveSol));

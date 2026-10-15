@@ -15,8 +15,8 @@ import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, typ
 import { PIN_IX_LABEL_PREFIX, createAfterPinText, lockRuleStepText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 
 /**
- * THE LAUNCH BUNDLE (LAUNCHPAD-PATH §1 step 6; 2026-10-09). One wallet approval signs: (a) burn_receipts.initialize_token (TokenConfig
- * + fee PDA), (b) the Raydium LaunchLab create under OUR platform config with the token's fee PDA as the creator-fee recipient
+ * THE LAUNCH BUNDLE (LAUNCHPAD-PATH §1 step 6; 2026-10-09). The wallet signs, in two transactions since 2026-10-15 (launchTransactions):
+ * (a) burn_receipts.initialize_token (TokenConfig + fee PDA), then (b) the Raydium LaunchLab create under OUR platform config with the token's fee PDA as the creator-fee recipient
  * (100%: the owner's fee decision — creators earn no cash from fees), (c) optionally the creator's first buy. The creator pays
  * LaunchLab's creation cost and gas; nothing to us up front.
  *
@@ -236,7 +236,7 @@ function pairVoidByOf(rule: LockedRule["rule"]): number {
 }
 
 /**
- * The bundle's transactions. A coin that burns itself: ONE transaction, initialize_token + LaunchLab create (+ first buy), unchanged.
+ * The bundle's transactions. Every LaunchLab coin is at least TWO transactions, each signed by the creator and the mint key.
  * A coin with a pinned token (rules.ts burnTarget; WIRING-ROUND5 item 2): pin_burn_target must run after initialize_token (it reads the
  * TokenConfig) and before the coin's mint exists (the program refuses MintAlreadyCreated), and initialize_token + pin + create is over
  * the packet limit, so it is TWO: [initialize_token, pin_burn_target], then [LaunchLab create (+ first buy)]. Measured as v0 against the
@@ -248,6 +248,12 @@ function pairVoidByOf(rule: LockedRule["rule"]): number {
  * limit for a wallet that appends its own checks (Phantom's Lighthouse assertions). So it is [initialize_token], then [LaunchLab create]:
  * at most 829 and 694 bytes (test/burntickerLookupTable.test.ts). The create is the confirming step (signPlan.ts launchlabPlan), and
  * launchVerify.ts takes a create alone for a coin whose TokenConfig on chain is paired.
+ * A SINGLE coin that burns itself is split the same way (2026-10-15): initialize_token + create in one v0 transaction with the table
+ * measured 1,031 to 1,095 bytes, and the wallet's own appended checks (two Lighthouse assertions plus a compute-budget instruction)
+ * took a synthetic launch to 1,234 bytes, over the 1,232 limit. So it is [initialize_token] ("Lock in $X's rule"), then [LaunchLab
+ * create (+ first buy)] ("Create $X"), each well under 900 bytes (test/burntickerLookupTable.test.ts pins ≥ 330 bytes of headroom).
+ * initialize_token does not need the mint account to exist (the pair split and the pin split already send it first). `paired` now only
+ * names side B's lock step as the link; the shape is the same for every coin that burns itself.
  */
 export function launchTransactions(input: Pick<LaunchInput, "ticker" | "firstBuySol">, locked: LockedRule, initIxs: SerializedIx[], createIxs: SerializedIx[], link = false, paired = false): LaunchBundle["transactions"] {
   const isPin = (ix: SerializedIx) => ix.label.startsWith(PIN_IX_LABEL_PREFIX);
@@ -256,11 +262,10 @@ export function launchTransactions(input: Pick<LaunchInput, "ticker" | "firstBuy
   const firstBuy = Number(input.firstBuySol) > 0 ? " + first buy" : "";
   if (!bt) {
     if (pins.length) throw new Error("launch: the program client pinned a burn pool for a rule that burns its own coin");
-    if (paired) return [
-      { label: lockRuleStepText(input.ticker, { link }), signers: ["creator", "mint"], instructions: initIxs },
+    return [
+      { label: lockRuleStepText(input.ticker, { link: link && paired }), signers: ["creator", "mint"], instructions: initIxs },
       { label: `${createAfterPinText(input.ticker)} (LaunchLab create${firstBuy})`, signers: ["creator", "mint"], instructions: createIxs },
     ];
-    return [{ label: "initialize_token + LaunchLab create" + firstBuy, signers: ["creator", "mint"], instructions: [...initIxs, ...createIxs] }];
   }
   if (pins.length !== 1) throw new Error(`launch: this rule burns ${bt.symbol}, and the burn program client did not pin ${bt.symbol}'s pool, so the coin would burn itself instead. Nothing was built.`);
   return [

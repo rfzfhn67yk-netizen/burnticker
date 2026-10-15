@@ -6,8 +6,10 @@ import { hostNetwork, lookupTablePin, type Network } from "@/lib/burnticker/netw
  *
  * 1. Mainnet is refused unless the host sets BURNTICKER_ALLOW_MAINNET_LAUNCHES=1 (the owner's explicit allowance). The builder
  *    (launchBundle.ts buildLaunchBundle) refuses mainnet without `allowMainnet`; prepareLaunch passes exactly this flag.
- * 2. No opening purchase. A create combined with the creator's purchase does not fit one transaction (1,281 bytes against 1,232), so
- *    the hosted bundle never carries one: the creator trades on the curve after the create like anyone else. The CLI keeps
+ * 2. No opening purchase. A create combined with the creator's purchase did not fit one transaction (1,281 bytes against 1,232).
+ *    Since the single coin's split (2026-10-15) the create step with a purchase is 933 bytes (1,053 in vault mode): under the limit,
+ *    but short of the 330 bytes kept for a wallet's own appended checks (test/burntickerLookupTable.test.ts), so
+ *    the hosted bundle still never carries one: the creator trades on the curve after the create like anyone else. The CLI keeps
  *    `--first-buy-sol` (scripts/burnkeeper-launch.mts) and the offline SDK keeps `firstBuySol`.
  * 3. No vault mode. A vault-mode bundle needs a signature from the burn program's fee PDA (create_vesting_account), which no wallet can
  *    give, so it is hidden until a signable design exists.
