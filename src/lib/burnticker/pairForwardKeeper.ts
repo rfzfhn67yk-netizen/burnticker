@@ -230,6 +230,7 @@ export async function pairUnmatchedAlerts(reg: Registry, program: Pick<BurnProgr
   for (const pr of reg.pairs()) {
     const a = reg.token(pr.mintA), b = reg.token(pr.mintB);
     if (!a || !b) continue;
+    if (a.status !== "live" || b.status !== "live") continue;   // 2026-10-14: a pair whose coins never launched (drafts, expired) is not unmatched, it is unmade
     let rule = false;
     try { rule = pairWinnerTakesBurn(reg.lockedRule(a).rule); } catch { rule = false; }
     if (!rule) continue;

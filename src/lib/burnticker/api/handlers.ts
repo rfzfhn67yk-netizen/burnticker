@@ -772,7 +772,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
       const ownMints: { mint?: string; mintB?: string } = o.mint && o.mintB ? { mint: o.mint, mintB: o.mintB } : {};
-      const probe = await buildPairBundles({ a: input, b: { ...side, description: "", burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: () => "ar://pending-upload-at-launch" });
+      const probe = await buildPairBundles({ pairIdPick: (base) => p.registry.freePairId(base), a: input, b: { ...side, description: "", burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: () => "ar://pending-upload-at-launch" });
       const lockedB = lockRule(JSON.parse(probe.b.rules.text)), lockedA = lockRule(JSON.parse(probe.a.rules.text));
       // 2026-10-14: side B's own earlier draft is reused only with the same rule (the registry row must match what the chain gets)
       if (o.mintB) { const ownB = p.registry.ownDraft(o.mintB, input.creator); if (ownB && ownB.rulesJson !== lockedB.text) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) }; }
@@ -794,7 +794,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       // an uploaded image is shown from its pinned Arweave copy, per side
       const shownImage = (tk: string, url: string | null, up: unknown) => (up ? pins.get(tk)?.imageUri ?? url : url);
       input.imageUrl = shownImage(input.ticker, input.imageUrl, uploaded); side.imageUrl = shownImage(side.ticker, side.imageUrl, upB.up);
-      const pair = await buildPairBundles({ a: input, b: { ...side, burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
+      const pair = await buildPairBundles({ pairIdPick: (base) => p.registry.freePairId(base), a: input, b: { ...side, burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
       // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab
       // pool — under the pair curve the pool is the CPMM pool its graduation creates, registered later (policy 2).

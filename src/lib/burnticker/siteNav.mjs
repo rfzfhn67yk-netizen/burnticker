@@ -73,7 +73,8 @@ export const EVENT_LABELS = { burn: "Burn", reading: "Reading", graduation: "Gra
 export const SEARCH = { label: "Search coins", placeholder: "Search coins", href: "/burnticker" };
 
 /** The hero, one line and one subline (review item 7). */
-export const HERO = { title: "Memecoins that burn on real-world results.", sub: "Every burn leaves a receipt." };
+/** Owner, 2026-10-14: a kicker above the title. Most coins end on a date or a result; $DEFICIT is the one with no end, and its card says so. */
+export const HERO = { kicker: "Memecoins with an expiration date.", title: "Memecoins that burn on real-world results.", sub: "Every burn leaves a receipt." };
 
 /**
  * TWO PATHS ON ARRIVAL (website-14, ChatGPT product idea 1): explore or create, one sentence each on what happens next. "Create a coin"

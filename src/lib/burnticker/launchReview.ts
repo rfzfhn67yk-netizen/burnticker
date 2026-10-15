@@ -275,7 +275,7 @@ const endsLine = (windowSentence: string, end: ReturnType<typeof endText>): stri
   return `${window} ${end.line}`.trim();
 };
 
-export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"];
+export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** 2026-10-14: the registry's free pair id, so the review shows the id the launch uses */ pairIdPick?: (base: string) => string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"];
   /** audit 6 item 8: whether this host serves Kalshi (the platform's flag; default from the env) */ kalshiEnabled?: boolean;
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
@@ -315,7 +315,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   if (pair) {
     pairVoidBy = o.pairVoidBy ?? pairVoidByOffline(locked.rule, { settled: !!settled, now });
     try {
-      prepared = preparePairRules({ a: { ticker: String(body.ticker ?? "").toUpperCase() || "A", rule: locked.rule }, b: { ticker: String((pair as { ticker?: unknown }).ticker ?? "").toUpperCase() || "B", burnTarget: null }, voidBy: pairVoidBy ?? undefined, now, ...(settled?.bundle ?? {}) });
+      prepared = preparePairRules({ pairIdPick: o.pairIdPick, a: { ticker: String(body.ticker ?? "").toUpperCase() || "A", rule: locked.rule }, b: { ticker: String((pair as { ticker?: unknown }).ticker ?? "").toUpperCase() || "B", burnTarget: null }, voidBy: pairVoidBy ?? undefined, now, ...(settled?.bundle ?? {}) });
     } catch (e) {
       const m = (e as Error).message.replace(/^rule: /, "");
       // said once: the share refusal is in ruleRefusals, the ticker clash among the field problems below
