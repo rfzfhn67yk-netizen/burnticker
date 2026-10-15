@@ -27,11 +27,16 @@ function throwawayKey(dir: string): { file: string; pub: string; priv: crypto.Ke
   fs.writeFileSync(file, JSON.stringify([...seed, ...pub]));
   return { file, pub: b58encode(pub), priv: privateKey };
 }
+/** The real file was signed on 2026-10-14; this puts the template back (status, {DATE}, no signature; the file keeps {PUBKEY}, the page fills it) so the signing tests run from the unsigned state. */
+const SIGNED_AT = "2026-10-14";
+function unsigned(real: string): string {
+  return real.replace(`"status": "${SIGNED_AT}"`, '"status": "TODO_SIGNED_MESSAGE"').replace(`Date: ${SIGNED_AT}.`, "Date: {DATE}.").replace(/"signature": "[1-9A-HJ-NP-Za-km-z]{80,96}"/, '"signature": null');
+}
 /** A copy of operator.json in a temp root whose mainnet dev-fee wallet is `pub`. */
 function tempRoot(pub: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bt-stmt-"));
   fs.mkdirSync(path.join(dir, "config/burnticker"), { recursive: true });
-  const real = read("config/burnticker/operator.json");
+  const real = unsigned(read("config/burnticker/operator.json"));
   fs.writeFileSync(path.join(dir, "config/burnticker/operator.json"), real.replace(/("role": "dev-fee", "label": "Developer fee wallet \(also the operator treasury\)", "pubkey": ")[^"]+/, `$1${pub}`));
   return dir;
 }
@@ -39,10 +44,12 @@ function tempRoot(pub: string): string {
 describe("the statement text", () => {
   const op = loadOperator();
   const m = op.signedMessage.message;
-  test("plain ASCII under the off-chain message limit, with both blanks, naming the facts on the operator page", () => {
+  test("plain ASCII under the off-chain message limit, signed 2026-10-14 (the template form keeps both blanks), naming the facts on the operator page", () => {
     assert.ok(/^[\x20-\x7e]+$/.test(m), "printable ASCII: a Ledger signs it as a restricted-ASCII off-chain message");
     assert.ok(Buffer.byteLength(m) <= 1212);
-    assert.ok(m.includes("{PUBKEY}") && m.includes("{DATE}"));
+    assert.ok(m.includes("{PUBKEY}") && m.endsWith(`Date: ${SIGNED_AT}.`), "the file keeps {PUBKEY} (the page fills the signer) and holds the signing date");
+    const t = JSON.parse(unsigned(read("config/burnticker/operator.json"))).signedMessage.message as string;
+    assert.ok(t.includes("{PUBKEY}") && t.includes("{DATE}"), "the template form has both blanks");
     const main = op.clusters.mainnet;
     for (const v of [main.programs.burn_receipts, main.programs.pair_curve, main.squads.vault, walletOf(op, "mainnet", "keeper")!, op.operator.contact, "https://burnticker.com/burnticker/operator"]) assert.ok(m.includes(v), v);
     assert.match(m, /Two of its three members must approve any change\. I hold two of those member keys, and one other person holds the third\./);
@@ -50,11 +57,13 @@ describe("the statement text", () => {
     assert.doesNotMatch(m, /TODO_|Shane|Cassidy/i, "no name");
     assert.deepEqual(lintCopy(m).hits, []);
   });
-  test("the TODO pointers still land on the status and the text", () => {
+  test("signed 2026-10-14: the status, text and signature sit on the lines the owner's todo names, and the signature verifies", () => {
     const lines = read("config/burnticker/operator.json").split("\n");
-    assert.match(lines[83], /"status": "TODO_SIGNED_MESSAGE"/);
+    assert.match(lines[83], /"status": "2026-10-14"/);
     assert.match(lines[86], /"message": "Burnticker operator statement\./);
-    assert.match(read("docs/burnticker/TODO-OWNER.md"), /`config\/burnticker\/operator\.json:84` \(`TODO_SIGNED_MESSAGE`; the text to sign is on line 87\)/);
+    assert.match(lines[87], /"signature": "65w3gbP5ZBEFy9FHiWvzh5ctAGv9EbigVH6o9BF69GpsDiZxxDeasytF9s3z1uBYSwRVNNzbjqCaAQnq64FPkZwx"/);
+    assert.match(read("docs/burnticker/TODO-OWNER.md"), /Signed operator statement — DONE 2026-10-14/);
+    assert.match(read("config/burnticker/operator.json"), /with one exception: \$REHEARSAL, a test coin/);
   });
 });
 
