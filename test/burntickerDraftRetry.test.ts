@@ -166,3 +166,14 @@ describe("a multi-transaction launch says how many times the wallet asks, above 
     assert.match(page, /signs=\{shownReview\.review\?\.transactions\.count \?\? null\}/);
   });
 });
+
+describe("the pinned file can be read through this site (2026-10-14: some networks cannot reach the gateway's CDN)", () => {
+  test("the coin page links the proxied copy next to the gateway link; the route serves raw bytes with the sha256 header", async () => {
+    const fs = await import("node:fs");
+    const comp = fs.readFileSync(new URL("../src/app/burnticker/_components/PinnedCheck.tsx", import.meta.url), "utf8");
+    assert.match(comp, /pin-check\?mint=\$\{encodeURIComponent\(\(pinned as \{ mint\?: string \}\)\.mint!\)\}&raw=1/);
+    assert.match(comp, /or through this site/);
+    const route = fs.readFileSync(new URL("../src/app/api/burnticker/pin-check/route.ts", import.meta.url), "utf8");
+    assert.match(route, /"x-pinned-sha256"/);
+  });
+});
