@@ -20,9 +20,18 @@ import { isTestCoin, testCoinKeys, withoutTestCoins } from "@/lib/burnticker/tes
 
 export const dynamic = "force-dynamic";
 
-/** The last answer, served again for this long (the coin list changes on the minute, not the second). */
-const HOME_MEMO_MS = 15_000;
+/**
+ * The last answer is served at once and refreshed in the background once it is older than HOME_MEMO_MS (stale while revalidate,
+ * one refresh in flight at a time). A cold process waits up to HOME_COLD_WAIT_MS for the first build, then answers 503 with
+ * retry-after so the page tries again instead of sitting behind the proxy's 20 s limit. The deploy warms it with a probe.
+ */
+const HOME_MEMO_MS = 15_000, HOME_COLD_WAIT_MS = 15_000;
 let homeMemo: { at: number; body: unknown } | null = null;
+let homeInFlight: Promise<void> | null = null;
+function refreshHome(): Promise<void> {
+  if (!homeInFlight) homeInFlight = buildHome().then((body) => { homeMemo = { at: Date.now(), body }; }).catch((e) => { console.error("[burnticker/home] build failed:", e); }).finally(() => { homeInFlight = null; });
+  return homeInFlight;
+}
 
 /** Runs the tasks at most `n` at a time, in order, settling each (a slow coin never blocks the others beyond its own slot). */
 async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<PromiseSettledResult<T>[]> {
@@ -41,7 +50,16 @@ async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<Pr
  * and the $DEFICIT queued-units counter from its keeper's published files (data/burnkeeper-site, or BURNKEEPER_PUBLISH_DIR).
  */
 export async function GET() {
-  if (homeMemo && Date.now() - homeMemo.at < HOME_MEMO_MS) return NextResponse.json(homeMemo.body, { headers: { "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "hit" } });
+  if (homeMemo) {
+    if (Date.now() - homeMemo.at >= HOME_MEMO_MS) void refreshHome();
+    return NextResponse.json(homeMemo.body, { headers: { "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "hit" } });
+  }
+  await Promise.race([refreshHome(), new Promise<void>((r) => setTimeout(r, HOME_COLD_WAIT_MS))]);
+  if (homeMemo) return NextResponse.json((homeMemo as { body: unknown }).body, { headers: { "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "cold" } });
+  return NextResponse.json({ loading: true, error: "the coin list is being read; try again in a few seconds", code: "home-loading", retryAfterSec: 5 }, { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } });
+}
+
+async function buildHome(): Promise<unknown> {
   const p = platform();
   const now = Date.now();
   const statuses = [];
@@ -106,7 +124,7 @@ export async function GET() {
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: ranks.get(c.ticker)?.line ?? null }));
   const slots = coins === null ? null : featuredSlots(slotInputs, now);
-  { const body = { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster }; homeMemo = { at: Date.now(), body }; return NextResponse.json(body, { headers: { "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "miss" } }); }
+  return { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster };
 }
 
 function homeCoinOf(s: Parameters<typeof buildPlatformIndex>[0][number]): HomeCoin {
