@@ -125,7 +125,8 @@ describe("runPushCheck on a real registry with a fake sink", () => {
   });
   test("the keeper script wires the refusal, the five-minute check and the banner", () => {
     const k = fs.readFileSync(path.join(ROOT, "scripts/burnticker-keeper.mts"), "utf8");
-    assert.match(k, /await buildProgram\(\)\.catch\(async \(e: unknown\) => \{ await pushKeeperRefused\(/);
+    // 2026-10-15: a stop during the startup wait exits quietly; any other refusal still pushes
+    assert.match(k, /await buildProgram\(\)\.catch\(async \(e: unknown\) => \{\n  if \(stopping\) \{[^\n]*process\.exit\(0\); \}\n  await pushKeeperRefused\(/);
     assert.match(k, /await runPushCheck\(\{ registry, env: process[.]env, now, log \}\)/);
   });
 });

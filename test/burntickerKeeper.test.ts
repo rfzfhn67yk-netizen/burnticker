@@ -387,3 +387,23 @@ describe("counterRule defaults pass the program's swap-safety bounds (initialize
     assert.equal(c.rule.twap_window_secs, 0);
   });
 });
+
+describe("fresh reads before a coin's sends (2026-10-15 review item 4: KeeperDeps.freshReads)", () => {
+  test("called before the fence and each crank pass of a coin with pending receipts; never on a cycle with nothing pending", async () => {
+    const t = await launch(BRONCOS, "BRONCO");
+    program.deposit(t.mint, BigInt(5_000_000_000));
+    let fresh = 0;
+    const seenDates: number[][] = [];
+    // a dry run (and so a held day) never pays for fresh reads (re-review N1)
+    await runCycle({ ...deps, dryRun: true, freshReads: () => { fresh++; } });
+    assert.equal(fresh, 0, "dry run: no fresh read");
+    const r = await runCycle({ ...deps, freshReads: (_t, dates) => { fresh++; seenDates.push([...dates]); } });
+    assert.ok(seenDates.every((ds) => ds.length > 0 && ds.length <= 10), "each fresh read names the coin's sendable dates");
+    assert.equal(r.executed[0].outcome, "confirmed");
+    assert.ok(fresh >= 2 && fresh <= 5, `fence + execute, at most five passes (${fresh})`);
+    fresh = 0;
+    await runCycle({ ...deps, freshReads: () => { fresh++; } });
+    assert.equal(reg.pending(t.mint).length, 0);
+    assert.equal(fresh, 0, "a quiet coin costs no re-read");
+  });
+});

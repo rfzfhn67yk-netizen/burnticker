@@ -258,6 +258,11 @@ describe("the real batch reader (connectionBatchReader) on a fake Connection", (
     for (const k of Object.keys(w.calls)) delete w.calls[k];
     clock += 61_000;
     clearMarketCache(); await cache.prefetch(batch, items); await publish(cached, market);
-    assert.deepEqual(w.calls, { getMultipleAccounts: 1, getTokenLargestAccounts: 2 }, "a quiet cycle: one batch for every coin, one holders read per coin");
+    assert.deepEqual(w.calls, { getMultipleAccounts: 1 }, "a quiet cycle: one batch for every coin (the holders are kept 10 minutes since 2026-10-15)");
+    const calls = w.calls as Record<string, number>;
+    for (const k of Object.keys(calls)) delete calls[k];
+    clock += READ_TTL_MS.holders;
+    clearMarketCache(); await cache.prefetch(batch, items); await publish(cached, market);
+    assert.equal(calls.getTokenLargestAccounts, 2, "every 10 minutes: one holders read per coin");
   });
 });

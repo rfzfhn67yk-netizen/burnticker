@@ -34,7 +34,21 @@ tail -f logs/burnticker-keeper.log
 - **Smoke a cycle by hand (no sends, no alerts):** `R scripts/burnticker-keeper.mts --once --dry-run`.
 - **Ship a code change** — the host runs the PUBLIC tree: `sh scripts/ops/publish-public-repo.sh --verify --link-node-modules`, then
   `BURNTICKER_SRC=../burnticker-public sh scripts/ops/deploy-burnticker-host.sh --webpack` from the Mac, then the two checks — exact
-  commands in deploy.md "The host runs the public tree". The ship restarts only the web unit: restart the keepers as above.
+  commands in deploy.md "The host runs the public tree". The ship restarts the web unit, and (2026-10-15) asks the Burnticker keeper and
+  the mint bank to restart themselves: it runs `scripts/ops/request-keeper-restart.sh`, which drops `data/restart-requested.keeper` and
+  `data/restart-requested.mintbank` with the build id. Each loop checks for its own file at the END of a cycle (never mid-crank), logs
+  `restart requested by deploy <build id>`, removes the file and exits 0; systemd (`Restart=always`) starts it on the new code within
+  30 s (the mint bank 60 s). The deploy waits up to 300 s for both logs to show the request taken and a new start (`burnticker keeper
+  starting`, or the keeper's `startup (the genesis read) waits` line; the mint bank's `mint key bank:`), and prints `keeper restarted on
+  build …` / `mint bank restarted on build …` or `KEEPER DID NOT RESTART …` / `MINT BANK DID NOT RESTART …: <why>` (the deploy goes on).
+  A request already on disk when a keeper starts is stale (that process already runs the new code): it is removed and logged, never
+  honoured. A `--dry-run` keeper neither takes nor removes a request. To ask by hand: `sh scripts/ops/request-keeper-restart.sh --wait 300`.
+  `--no-keeper-restart` skips it; `--restart-keepers` now restarts only mct-burnkeeper (the $DEFICIT keeper), which does not read these
+  files, and says so when used.
+- **The keeper starts on a spent Helius day** (2026-10-15): it no longer crash-loops. The genesis is read on the keyed RPC (one credit
+  past the hold); reads then move to the public RPC of that cluster (its own `solana-public` budget) once its genesis matched, and every
+  cycle until 00:00 UTC runs with its sends held (`helius on hold: every cycle until 00:00 UTC runs with its sends held`). Nothing is
+  settled from the fallback: readings, cranks and claims resume at midnight. `BURNTICKER_RPC_FALLBACK_URL=off` disables the fallback.
 
 ## Rotate the keeper key
 

@@ -65,12 +65,12 @@ describe("the table", () => {
     assert.equal(rpcSourceFor("https://some-other-rpc.example/"), "helius");
   });
   test("Helius credits by method: 1 for a standard or archival call, 10 for getProgramAccounts and DAS; a batch adds up; sends are essential", () => {
-    assert.deepEqual(rpcCallsOf({ method: "getBalance" }), { calls: 1, credits: 1, essential: false, sends: 0 });
+    assert.deepEqual(rpcCallsOf({ method: "getBalance" }), { calls: 1, credits: 1, essential: false, sends: 0, methods: { getBalance: 1 }, callsByMethod: { getBalance: 1 } });
     assert.equal(rpcCallsOf(JSON.stringify({ method: "getTransaction" })).credits, 1);
     assert.equal(rpcCallsOf({ method: "getProgramAccounts" }).credits, 10);
     assert.equal(rpcCallsOf([{ method: "searchAssets" }, { method: "getSlot" }]).credits, 11);
     assert.equal(rpcCallsOf([{ method: "searchAssets" }, { method: "getSlot" }]).calls, 2);
-    assert.deepEqual(rpcCallsOf({ method: "sendTransaction" }), { calls: 1, credits: 1, essential: true, sends: 1 });
+    assert.deepEqual(rpcCallsOf({ method: "sendTransaction" }), { calls: 1, credits: 1, essential: true, sends: 1, methods: { sendTransaction: 1 }, callsByMethod: { sendTransaction: 1 } });
     assert.equal(rpcCallsOf("not json").credits, 1);
   });
 });

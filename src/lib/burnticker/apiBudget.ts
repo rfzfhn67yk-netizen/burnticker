@@ -122,19 +122,50 @@ export function rpcSourceFor(url: string): string {
  */
 const TEN_CREDITS = new Set(["getProgramAccounts", "searchAssets", "getAsset", "getAssetBatch", "getAssetsByOwner", "getAssetsByAuthority", "getAssetsByCreator",
   "getAssetsByGroup", "getAssetProof", "getAssetProofBatch", "getTokenAccounts", "getSignaturesForAsset", "getNftEditions", "sendBundle"]);
+/** Essential: a hold never stops them (they still count). */
 const ESSENTIAL = new Set(["sendTransaction", "getSignatureStatuses", "getBlockHeight"]);
-export function rpcCallsOf(body: unknown): { calls: number; credits: number; essential: boolean; sends: number } {
+/** Methods made essential for the duration of one call (withEssential): the keeper's startup genesis read only (re-review N5). */
+const essentialNow = new Set<string>();
+/**
+ * Runs `fn` with `methods` essential: the Burnticker keeper's startup getGenesisHash (2026-10-15 review): the cluster check must read
+ * the KEYED RPC even on a spent day (one credit per process), never a fallback. Every other role and every later call: ordinary.
+ */
+export async function withEssential<T>(methods: readonly string[], fn: () => Promise<T>): Promise<T> {
+  const added = methods.filter((m) => !essentialNow.has(m));
+  for (const m of added) essentialNow.add(m);
+  try { return await fn(); } finally { for (const m of added) essentialNow.delete(m); }
+}
+/**
+ * Never moved to the hold fallback (2026-10-15 review): the calls that build or describe one of the keeper's own sends. On a spent day they
+ * fail like any held read, so nothing is signed from public-RPC state and sent through the keyed RPC (stale prev → QuorumNotMet, fees).
+ */
+export const NO_FALLBACK = new Set(["getGenesisHash", "getLatestBlockhash", "simulateTransaction", "getTransaction", "getParsedTransaction", "sendTransaction",
+  "getSignatureStatuses", "getBlockHeight", "getFeeForMessage", "getRecentPrioritizationFees"]);
+/**
+ * Reads that DESCRIBE a landed transaction (memos, claim and forward facts). They may move to the fallback only while the keeper runs a
+ * cycle with its sends held (re-review N4: a held day's adoption step reads them; nothing is built from them on such a cycle).
+ */
+export const DESCRIBE_METHODS = new Set(["getTransaction", "getParsedTransaction"]);
+let describeFallback = false;
+/** The keeper sets this true for a cycle it runs with sends held on a spent day, false otherwise. */
+export function setDescribeFallback(on: boolean): void { describeFallback = on; }
+export function rpcCallsOf(body: unknown): { calls: number; credits: number; essential: boolean; sends: number; methods: Record<string, number>; callsByMethod: Record<string, number> } {
   let parsed: unknown = body;
-  if (typeof body === "string") { try { parsed = JSON.parse(body); } catch { return { calls: 1, credits: 1, essential: false, sends: 0 }; } }
+  if (typeof body === "string") { try { parsed = JSON.parse(body); } catch { return { calls: 1, credits: 1, essential: false, sends: 0, methods: { unknown: 1 }, callsByMethod: { unknown: 1 } }; } }
   const arr = Array.isArray(parsed) ? parsed : [parsed];
   let credits = 0, sends = 0, essential = arr.length > 0;
+  const methods: Record<string, number> = {}, callsByMethod: Record<string, number> = {};
   for (const c of arr) {
     const m = c && typeof c === "object" ? String((c as { method?: unknown }).method ?? "") : "";
-    credits += TEN_CREDITS.has(m) ? 10 : 1;
-    if (!ESSENTIAL.has(m)) essential = false;
+    const cr = TEN_CREDITS.has(m) ? 10 : 1;
+    credits += cr;
+    methods[m || "unknown"] = (methods[m || "unknown"] ?? 0) + cr;
+    callsByMethod[m || "unknown"] = (callsByMethod[m || "unknown"] ?? 0) + 1;
+    if (!ESSENTIAL.has(m) && !essentialNow.has(m)) essential = false;
     if (m === "sendTransaction") sends++;
   }
-  return { calls: Math.max(1, arr.length), credits: Math.max(1, credits), essential, sends };
+  if (!arr.length) { methods.unknown = 1; callsByMethod.unknown = 1; }
+  return { calls: Math.max(1, arr.length), credits: Math.max(1, credits), essential, sends, methods, callsByMethod };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -146,7 +177,10 @@ export interface BudgetStore {
   add(key: string, day: string, delta: number, now: number): number;
   get(key: string): string | null;
   set(key: string, value: string, now: number): void;
+  /** Adds each delta to `key`'s {day, counts} object atomically per entry (a new day starts from zero). */
+  addCounts?(key: string, day: string, deltas: Record<string, number>, now: number): void;
 }
+const countPath = (k: string): string => `$.counts."${k.replace(/["\\]/g, "")}"`;
 /** Minimal node:sqlite surface (the registry's and the ledger's `db`). Method syntax keeps it assignable from DatabaseSync. */
 export interface SqlLike { prepare(sql: string): { run(...a: never[]): unknown; get(...a: never[]): unknown } }
 
@@ -167,6 +201,15 @@ export function statusTableStore(db: SqlLike): BudgetStore {
     },
     get(key) { return get("SELECT value FROM status WHERE key=?", key)?.value ?? null; },
     set(key, value, now) { run("INSERT INTO status (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at", key, value, now); },
+    addCounts(key, day, deltas, now) {
+      run(`INSERT INTO status (key, value, updated_at) VALUES (?, json_object('day', ?, 'counts', json_object()), ?) ON CONFLICT(key) DO NOTHING`, key, day, now);
+      for (const [k, d] of Object.entries(deltas)) {
+        const pth = countPath(k);
+        run(`UPDATE status SET value = CASE WHEN json_extract(value, '$.day') = ? AND json_type(value, '$.counts') = 'object'
+               THEN json_set(value, ?, coalesce(json_extract(value, ?), 0) + ?) ELSE json_set(json_object('day', ?, 'counts', json_object()), ?, ?) END,
+             updated_at = ? WHERE key = ?`, day, pth, pth, d, day, pth, d, now, key);
+      }
+    },
   };
 }
 /** An in-memory store (tests; a process with no database). Shared between ApiBudget instances to simulate a restart. */
@@ -177,6 +220,13 @@ export function memoryStore(): BudgetStore & { rows: Map<string, string> } {
     add(key, day, delta) { let j: { day?: string; used?: number } = {}; try { j = JSON.parse(rows.get(key) ?? "{}"); } catch { j = {}; } const used = (j.day === day ? Number(j.used ?? 0) : 0) + delta; rows.set(key, JSON.stringify({ day, used })); return used; },
     get(key) { return rows.get(key) ?? null; },
     set(key, value) { rows.set(key, value); },
+    addCounts(key, day, deltas) {
+      let j: { day?: string; counts?: Record<string, number> } = {};
+      try { j = JSON.parse(rows.get(key) ?? "{}"); } catch { j = {}; }
+      const counts = j.day === day && j.counts ? j.counts : {};
+      for (const [k, d] of Object.entries(deltas)) counts[k] = (counts[k] ?? 0) + d;
+      rows.set(key, JSON.stringify({ day, counts }));
+    },
   };
 }
 
@@ -198,7 +248,10 @@ export class BudgetHoldError extends Error {
 }
 
 interface Bucket { ratePerMs: number; cap: number; tokens: number; last: number }
-interface SourceState { buckets: Bucket[]; day: string; stored: number; pending: number; lastFlush: number; alerted80: boolean; held: boolean }
+interface SourceState { buckets: Bucket[]; day: string; stored: number; pending: number; lastFlush: number; alerted80: boolean; held: boolean;
+  /** Today's spend by "phase:method" (2026-10-15: the keeper's log prints the top lines, so a credit burn is measured, not guessed). */
+  /** Not yet written deltas (flushed with the atomic addCounts); `local` holds the totals when there is no store. */
+  methodDeltas: Record<string, number>; methodsLocal: Record<string, number> }
 
 export interface ApiBudgetOpts {
   role: BudgetRole; store?: BudgetStore | null; now?: () => number; sleep?: (ms: number) => Promise<void>; maxWaitMs?: number;
@@ -233,6 +286,8 @@ export class ApiBudget {
   private store: BudgetStore | null; private now: () => number; private sleep: (ms: number) => Promise<void>; private maxWait: number;
   private log: (s: string) => void; private alert: ((a: BudgetAlert) => void) | null; private flushUnits: number; private flushMs: number;
   private states = new Map<string, SourceState>();
+  private phase = "";
+  private fallbacks = new Map<string, string>();
 
   constructor(o: ApiBudgetOpts) {
     this.role = o.role; this.enforce = o.enforce ?? true; this.store = o.store ?? null; this.now = o.now ?? (() => Date.now());
@@ -243,6 +298,26 @@ export class ApiBudget {
   /** The status-table key of a source's day count for this process's role. */
   dayKey(source: string): string { return `apiBudget.day.${this.role}.${source}`; }
   private holdKey(source: string): string { return `apiBudget.hold.${this.role}.${source}`; }
+  /** The status-table key of a source's per-method spend for this role (one writer: this role's process). */
+  methodsKey(source: string): string { return `apiBudget.methods.${this.role}.${source}`; }
+  /**
+   * The phase the next calls are counted under ("cycle", "pair-curve", "publish", "ops" in the keeper). The keeper runs its phases one
+   * after another, so the phase names the module that spent the credits. Returns the previous phase.
+   */
+  /**
+   * Names the fallback that serves `source`'s reads while it is on hold (the keeper: "the public Solana RPC"), so the hold's log line and
+   * alert say what really happens; null: no fallback (reads stop).
+   */
+  setFallback(source: string, label: string | null): void { if (label) this.fallbacks.set(source, label); else this.fallbacks.delete(source); }
+  /** True when `source`'s day budget is spent (enforcing budgets only): the keeper runs such a cycle with its sends held. */
+  isHeld(source: string): boolean { if (!this.enforce) return false; const s = this.state(source); return s.held || s.stored + s.pending >= this.dayBudget(source); }
+  /** A log line through this budget's logger (the keeper's log). */
+  note(line: string): void { try { this.log(line); } catch { /* logging never stops a read */ } }
+  setPhase(phase: string): string { const was = this.phase; this.phase = phase; return was; }
+  private loadMethods(source: string, day: string): Record<string, number> {
+    if (!this.store) return {};
+    try { const j = JSON.parse(this.store.get(this.methodsKey(source)) ?? "{}") as { day?: string; counts?: Record<string, number> }; return j.day === day && j.counts ? { ...j.counts } : {}; } catch { return {}; }
+  }
 
   private state(source: string): SourceState {
     const now = this.now(), day = utcDay(now);
@@ -252,17 +327,29 @@ export class ApiBudget {
       const buckets = b.rates.map((r) => { const cap = Math.max(1, r.perMs * Math.min(r.windowMs, BURST_WINDOW_MS)); return { ratePerMs: r.perMs, cap, tokens: cap, last: now }; });
       let stored = 0;
       if (this.store) { try { stored = this.store.add(this.dayKey(source), day, 0, now); } catch { stored = 0; } }
-      s = { buckets, day, stored, pending: 0, lastFlush: now, alerted80: false, held: false };
+      s = { buckets, day, stored, pending: 0, lastFlush: now, alerted80: false, held: false, methodDeltas: {}, methodsLocal: {} };
       this.states.set(source, s);
     }
     if (s.day !== day) {   // a new UTC day: what was pending belongs to the old day; the new day starts from the store (another process may have counted)
       this.flushOne(source, s);
-      s.day = day; s.pending = 0; s.alerted80 = false; s.held = false;
+      s.day = day; s.pending = 0; s.alerted80 = false; s.held = false; s.methodDeltas = {}; s.methodsLocal = {};
       if (this.store) { try { s.stored = this.store.add(this.dayKey(source), day, 0, now); } catch { s.stored = 0; } } else s.stored = 0;
     }
     return s;
   }
+  private flushMethods(source: string, s: SourceState): void {
+    const deltas = s.methodDeltas;
+    if (!Object.keys(deltas).length) return;
+    s.methodDeltas = {};
+    const into = (t: Record<string, number>) => { for (const [k, d] of Object.entries(deltas)) t[k] = (t[k] ?? 0) + d; };
+    if (!this.store) { into(s.methodsLocal); return; }
+    try {
+      if (this.store.addCounts) this.store.addCounts(this.methodsKey(source), s.day, deltas, this.now());
+      else { const t = this.loadMethods(source, s.day); into(t); this.store.set(this.methodsKey(source), JSON.stringify({ day: s.day, counts: t }), this.now()); }
+    } catch { /* the method split is a measurement; never stops a read */ }
+  }
   private flushOne(source: string, s: SourceState): void {
+    this.flushMethods(source, s);
     if (!s.pending) return;
     if (this.store) { try { s.stored = this.store.add(this.dayKey(source), s.day, s.pending, this.now()); } catch { s.stored += s.pending; } } else s.stored += s.pending;
     s.pending = 0; s.lastFlush = this.now();
@@ -277,7 +364,7 @@ export class ApiBudget {
    * Takes `requests` from the rate buckets and `units` from the day budget. Waits (never fails) up to maxWaitMs for the buckets;
    * "busy" past that; "hold" at once when the day budget is spent (unless `essential`).
    */
-  async take(source: string, o: { units?: number; requests?: number; essential?: boolean } = {}): Promise<TakeOutcome> {
+  async take(source: string, o: { units?: number; requests?: number; essential?: boolean; methods?: Record<string, number> } = {}): Promise<TakeOutcome> {
     const units = Math.max(0, o.units ?? 1), requests = Math.max(1, o.requests ?? 1);
     const s = this.state(source), budget = this.dayBudget(source);
     const used = s.stored + s.pending;
@@ -291,6 +378,8 @@ export class ApiBudget {
       for (const b of s.buckets) b.tokens -= requests;   // reserve now (may go negative): concurrent callers queue behind it
     }
     s.pending += units;
+    const tag = this.phase ? `${this.phase}:` : "";
+    for (const [m, n] of Object.entries(o.methods ?? { request: units })) s.methodDeltas[tag + m] = (s.methodDeltas[tag + m] ?? 0) + n;
     const total = s.stored + s.pending;
     if (this.store && (s.pending >= this.flushUnits || this.now() - s.lastFlush >= this.flushMs)) this.flushOne(source, s);
     if (!s.alerted80 && budget > 0 && total >= ALERT_AT * budget) this.on80(source, s, total, budget);
@@ -313,12 +402,23 @@ export class ApiBudget {
     // logged once per day per source, across restarts: the hold marker lives in the store too
     let seen = false;
     if (this.store) { try { seen = this.store.get(this.holdKey(source)) === s.day; this.store.set(this.holdKey(source), s.day, this.now()); } catch { seen = false; } }
-    if (!seen) this.log(`  [api-budget] ${source} ON HOLD until 00:00 UTC: ${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"} used today (${this.role}); its reads are skipped until then`);
+    const fb = this.fallbacks.get(source) ?? null;
+    if (!seen) this.log(`  [api-budget] ${source} ON HOLD until 00:00 UTC: ${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"} used today (${this.role}); ${fb ? `its reads go to ${fb} (its own budget) and the keeper sends nothing until then` : "its reads are skipped until then"}`);
     if (!this.enforce) return;
     this.emit({ level: "hold", key: `bt-api-budget:${this.role}:${source}:${s.day}:hold`, meta: { role: this.role, source, day: s.day, used, budget, unit: spec.unit },
-      text: `${who} used all of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}), so it stopped reading from it until midnight UTC. Reads start again on their own after that. Nothing is retried in the meantime.` });
+      text: fb
+        ? `${who} used all of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}). Until midnight UTC it reads from ${fb} instead, more slowly, and sends nothing: readings, cranks and claims wait until then.`
+        : `${who} used all of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}), so it stopped reading from it until midnight UTC. Reads start again on their own after that. Nothing is retried in the meantime.` });
   }
   private emit(a: Omit<BudgetAlert, "kind">): void { try { this.alert?.({ kind: "bt-api-budget", ...a }); } catch { /* an alert never stops a read */ } }
+
+  /** Today's spend for `source` by "phase:method", largest first (this process's role; survives a restart through the store). */
+  topMethods(source: string, n = 8): { key: string; used: number }[] {
+    const s = this.state(source);
+    const t: Record<string, number> = this.store ? this.loadMethods(source, s.day) : { ...s.methodsLocal };
+    for (const [k, d] of Object.entries(s.methodDeltas)) t[k] = (t[k] ?? 0) + d;
+    return Object.entries(t).map(([key, used]) => ({ key, used })).sort((a, b) => b.used - a.used || a.key.localeCompare(b.key)).slice(0, n);
+  }
 
   /** One line per source this process has touched today, plus every source with a spend recorded in the store. */
   lines(): BudgetLine[] {
@@ -331,6 +431,20 @@ export class ApiBudget {
   }
 }
 const WHO: Record<BudgetRole, string> = { keeper: "The Burnticker keeper", deficit: "The $DEFICIT keeper", web: "The Burnticker site" };
+
+/**
+ * The top-spenders line per credit-metered source (2026-10-15, after the keeper spent its Helius slice by 20:33Z with six coins):
+ * "api budget helius top today: publish:getAccountInfo 40,120 · pair-curve:getProgramAccounts 17,280 · …".
+ */
+export function budgetTopMethodLines(b: ApiBudget, n = 8): string[] {
+  const out: string[] = [];
+  for (const l of b.lines()) {
+    if (l.unit !== "credit" && l.source !== "solana-public") continue;
+    const top = b.topMethods(l.source, n);
+    if (top.length) out.push(`api budget ${l.source} top today: ${top.map((t) => `${t.key} ${fmt(t.used)}`).join(" · ")}`);
+  }
+  return out;
+}
 
 /** The status lines: "api budget helius: 1,234 / 120,000 credits today (1%) · ok". */
 export function budgetStatusLines(lines: readonly BudgetLine[]): string[] {
@@ -350,18 +464,67 @@ export function apiBudget(): ApiBudget { return (current ??= new ApiBudget({ rol
 export function configureApiBudget(o: ApiBudgetOpts): ApiBudget { current?.flush(); current = new ApiBudget(o); return current; }
 /** For tests. */
 export function resetApiBudget(): void { current = null; }
+/** Names the phase this process's next calls are counted under (ApiBudget.setPhase); returns the previous one. */
+export function budgetPhase(phase: string): string { return apiBudget().setPhase(phase); }
 
 /** Takes from the process's budget; throws BudgetHoldError on "hold" or "busy" (the caller's read fails like any network error). */
-export async function takeOrThrow(source: string, o: { units?: number; requests?: number; essential?: boolean } = {}): Promise<void> {
+export async function takeOrThrow(source: string, o: { units?: number; requests?: number; essential?: boolean; methods?: Record<string, number> } = {}): Promise<void> {
   const r = await apiBudget().take(source, o);
   if (r.state !== "ok") throw new BudgetHoldError(source, r);
 }
 /** A JSON-RPC POST's take: Helius counts credits by method, the buckets count calls; send/confirm calls are essential. */
-export async function takeRpc(url: string, body: unknown): Promise<void> {
-  const source = rpcSourceFor(url), c = rpcCallsOf(body);
+export async function takeRpc(url: string, body: unknown, sourceOverride?: string): Promise<void> {
+  const source = sourceOverride ?? rpcSourceFor(url), c = rpcCallsOf(body);
   // Helius states a separate, lower rate for sends (5 a second on the Developer plan): a body with a send also takes from that bucket
   if (source === "helius" && c.sends) await takeOrThrow("helius-send", { requests: c.sends, essential: true });
-  await takeOrThrow(source, { units: source === "helius" ? c.credits : c.calls, requests: c.calls, essential: c.essential });
+  await takeOrThrow(source, { units: source === "helius" ? c.credits : c.calls, requests: c.calls, essential: c.essential, methods: source === "helius" ? c.methods : c.callsByMethod });
+}
+
+/**
+ * The public RPC of a cluster: the keeper's fallback while its keyed plan is on hold (its own "solana-public" budget). null for any other
+ * cluster (localnet has no public endpoint; never guess mainnet). Pass the cluster the keyed RPC's GENESIS says, not the env's.
+ */
+export function publicRpcFor(cluster: string): string | null {
+  return cluster === "mainnet" ? "https://api.mainnet-beta.solana.com" : cluster === "devnet" ? "https://api.devnet.solana.com" : cluster === "testnet" ? "https://api.testnet.solana.com" : null;
+}
+/** Whether every call in a JSON-RPC body may move to the fallback (none of NO_FALLBACK). */
+export function fallbackEligible(body: unknown): boolean {
+  let parsed: unknown = body;
+  if (typeof body === "string") { try { parsed = JSON.parse(body); } catch { return false; } }
+  const arr = Array.isArray(parsed) ? parsed : [parsed];
+  return arr.length > 0 && arr.every((c) => { const m = c && typeof c === "object" ? String((c as { method?: unknown }).method ?? "") : ""; return !!m && (!NO_FALLBACK.has(m) || (describeFallback && DESCRIBE_METHODS.has(m))); });
+}
+/** True when `e` is the keyed plan's day budget being spent (not a busy rate bucket, not another source). */
+/**
+ * A budget hold or busy bucket, also when a library rethrew it wrapped (web3.js turns a failed getLatestBlockhash or getBalance into a
+ * plain Error("failed to get recent blockhash: …") carrying our message): the error, its cause chain, or our message text.
+ */
+export function isBudgetHold(e: unknown): boolean {
+  for (let x: unknown = e, i = 0; x && i < 5; x = (x as { cause?: unknown }).cause, i++) {
+    if (x instanceof BudgetHoldError) return true;
+    if (/today's request budget is spent|the request rate budget is full/.test(String((x as { message?: unknown }).message ?? ""))) return true;
+  }
+  return false;
+}
+export const isHeliusHold = (e: unknown): boolean => e instanceof BudgetHoldError && e.source === "helius" && e.outcome.state === "hold";
+
+let fallbackNotedDay = "";
+/**
+ * HOLD FALLBACK (owner 2026-10-15, after a spent slice left the keeper blind and a restart crash-looped on the startup genesis read): a
+ * JSON-RPC call the keyed plan's day budget refuses is sent to the cluster's public RPC instead, counted against "solana-public" (its own
+ * rate buckets: slower reads, never blindness). A send never reaches the hold (sends are essential), so only reads move. Logged once a day.
+ */
+export type FallbackUrl = string | null | undefined | (() => string | null | undefined);
+async function takeRpcOrFallback(url: string, body: unknown, fallback: FallbackUrl): Promise<string> {
+  try { await takeRpc(url, body); return url; }
+  catch (e) {
+    const fallbackUrl = typeof fallback === "function" ? fallback() : fallback;
+    if (!fallbackUrl || fallbackUrl === url || !isHeliusHold(e) || !fallbackEligible(body)) throw e;
+    const day = new Date().toISOString().slice(0, 10);
+    if (fallbackNotedDay !== day) { fallbackNotedDay = day; apiBudget().note(`  [api-budget] helius on hold: reads go to the public RPC (${new URL(fallbackUrl).hostname}, its own budget) until 00:00 UTC`); }
+    await takeRpc(fallbackUrl, body, "solana-public");   // by role, not by host: a private fallback URL is not the keyed plan
+    return fallbackUrl;
+  }
 }
 
 type AnyFetch = (input: never, init?: never) => Promise<unknown>;
@@ -370,17 +533,58 @@ const urlOf = (input: unknown): string => typeof input === "string" ? input : in
  * Wraps a fetch so every call takes from the budget first. `source`: a fixed id, "rpc" (a Solana JSON-RPC endpoint: credits by
  * method), or omitted (by the URL's host).
  */
-export function budgetedFetch<F extends AnyFetch>(inner: F, source?: string | "rpc"): F {
+export function budgetedFetch<F extends AnyFetch>(inner: F, source?: string | "rpc", o: { fallbackUrl?: FallbackUrl } = {}): F {
   const wrapped = async (input: unknown, init?: { body?: unknown }) => {
     const url = urlOf(input);
     const id = source === "rpc" ? "rpc" : source ?? sourceForUrl(url);
-    if (id === "rpc" || ((id === "helius" || id === "solana-public") && init?.body !== undefined)) await takeRpc(url, init?.body);
-    else await takeOrThrow(id);
-    return (inner as unknown as (i: unknown, n?: unknown) => Promise<unknown>)(input, init);
+    let target: unknown = input;
+    if (id === "rpc" || ((id === "helius" || id === "solana-public") && init?.body !== undefined)) {
+      const used = await takeRpcOrFallback(url, init?.body, id === "rpc" ? o.fallbackUrl : undefined);
+      if (used !== url) target = used;
+    } else await takeOrThrow(id);
+    return (inner as unknown as (i: unknown, n?: unknown) => Promise<unknown>)(target, init);
   };
   return wrapped as unknown as F;
 }
-/** A @solana/web3.js ConnectionConfig whose every request goes through the budget (credits by method). */
-export function budgetedRpcConfig<const C extends object>(base: C): C & { fetch: typeof fetch } {
-  return { ...base, fetch: budgetedFetch(((i: Parameters<typeof fetch>[0], n?: Parameters<typeof fetch>[1]) => fetch(i, n)) as typeof fetch, "rpc") };
+/**
+ * A @solana/web3.js ConnectionConfig whose every request goes through the budget (credits by method). `fallbackUrl` (the keeper:
+ * publicRpcFor(cluster)): while the keyed plan's day budget is spent, reads go there instead of failing.
+ */
+export function budgetedRpcConfig<const C extends object>(base: C, o: { fallbackUrl?: FallbackUrl } = {}): C & { fetch: typeof fetch } {
+  return { ...base, fetch: budgetedFetch(((i: Parameters<typeof fetch>[0], n?: Parameters<typeof fetch>[1]) => fetch(i, n)) as typeof fetch, "rpc", o) };
+}
+
+/**
+ * The hold fallback is used only when its genesis is the KEYED RPC's genesis (2026-10-15 review item 1: a fallback named for the env's
+ * cluster could point at another chain). One getGenesisHash on `url` (counted against solana-public). Returns `url`, or null (logged).
+ */
+export async function verifyRpcFallback(url: string, keyedGenesis: string, o: { log: (s: string) => void; fetchImpl?: typeof fetch }): Promise<string | null> {
+  const host = (() => { try { return new URL(url).hostname; } catch { return "an unparseable URL"; } })();
+  try {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getGenesisHash" });
+    await takeRpc(url, body, "solana-public");
+    const r = await (o.fetchImpl ?? fetch)(url, { method: "POST", headers: { "content-type": "application/json" }, body, signal: AbortSignal.timeout(10_000) });
+    const j = (await r.json()) as { result?: unknown };
+    if (typeof j.result !== "string") { o.log(`  [api-budget] hold fallback ${host} refused: no genesis hash in its answer; a held day's reads wait instead`); return null; }
+    if (j.result !== keyedGenesis) { o.log(`  [api-budget] hold fallback ${host} refused: its genesis ${j.result.slice(0, 8)}… is not the keyed RPC's ${keyedGenesis.slice(0, 8)}… (another cluster)`); return null; }
+    return url;
+  } catch (e) { o.log(`  [api-budget] hold fallback ${host} not verified (${(e as Error).message.slice(0, 120)}); a held day's reads wait instead`); return null; }
+}
+
+/**
+ * Runs a startup step that reads the RPC, waiting out a budget hold or a busy bucket instead of crashing (2026-10-15: a restart while
+ * the slice was spent threw BudgetHoldError from the genesis read and systemd restarted the keeper every 30 s until midnight UTC). Any
+ * other error is thrown. `stop()` true ends the wait (SIGTERM) with the last hold error.
+ */
+export async function retryThroughBudgetHold<T>(step: () => Promise<T>, o: { log: (s: string) => void; sleep?: (ms: number) => Promise<void>; everyMs?: number; stop?: () => boolean; what?: string }): Promise<T> {
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  let logged = false;
+  for (;;) {
+    try { return await step(); }
+    catch (e) {
+      if (!(e instanceof BudgetHoldError) || o.stop?.()) throw e;
+      if (!logged) { o.log(`  [api-budget] ${o.what ?? "startup"} waits: ${e.message}; retrying every ${Math.round((o.everyMs ?? 60_000) / 1000)} s`); logged = true; }
+      await sleep(o.everyMs ?? 60_000);
+    }
+  }
 }

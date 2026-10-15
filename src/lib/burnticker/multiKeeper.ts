@@ -24,6 +24,7 @@ import { askCosigner, type Cosigner } from "@/lib/burnticker/attesters/cosign";
 import type { Cosignature, ReadingInput } from "@/lib/burnKeeper/programPort";
 import { parseTargetMemo } from "@/lib/burnReceipts/memo";
 import { DISPERSAL_STATE_KEY, runDispersal, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
+import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -51,6 +52,13 @@ import { DISPERSAL_STATE_KEY, runDispersal, type DispersalReport } from "@/lib/b
 export interface KeeperDeps {
   registry: Registry;
   program: BurnProgramClient;
+  /**
+   * Called before a coin's fence check and before each of its executePending passes when that coin has something the keeper could SEND
+   * this cycle (sendableWork: a reading date assigned, or a closed day to attest), never on a dry run (2026-10-15 re-review N1). The keeper
+   * re-reads that coin's TokenConfig, fee PDA, mint and the reading PDAs it names in one call (cycleAccountCache.ts refresh), so the fence
+   * and the first crank step read the chain as of that moment. `dates`: the reading dates (YYYYMMDD) worth re-reading. Absent: nothing.
+   */
+  freshReads?: (t: TokenRow, dates: readonly number[]) => Promise<unknown> | unknown;
   /** Polymarket (2026-10-10) is optional so a keeper without it holds Polymarket keys with an error instead of misreading them. */
   oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter; polymarket?: OracleAdapter; /** Burn Derby (2026-10-10; derby/adapter.ts). */ derby?: OracleAdapter };
   /**
@@ -383,6 +391,21 @@ const dayStartMs = (d: number): number => Date.UTC(Math.floor(d / 10_000), (Math
 const nextDay = (d: number): number => ymd(dayStartMs(d) + DAY_MS);
 const prevDay = (d: number): number => ymd(dayStartMs(d) - DAY_MS);
 
+/**
+ * What a coin could SEND this cycle (2026-10-15 re-review N1): a receipt with a reading date (a crank, an adoption) or one whose UTC day has
+ * closed (an attestation). Receipts settled today wait for the day's close and send nothing, so they cost no fresh read. `dates`: the
+ * reading dates and closed days worth re-reading (at most 10, oldest first: the oldest cranks first).
+ */
+export function sendableWork(pending: readonly Pick<ReceiptRow, "readingDate" | "settledAt">[], now: number): { sendable: boolean; dates: number[] } {
+  const today = ymd(now), dates = new Set<number>();
+  for (const b of pending) {
+    if (b.readingDate !== null) { dates.add(b.readingDate); continue; }
+    let day: number; try { day = receiptDay(b.settledAt); } catch { continue; }
+    if (day < today) dates.add(day);
+  }
+  return { sendable: dates.size > 0, dates: [...dates].sort((a, b) => a - b).slice(0, 10) };   // the OLDEST ten: the oldest cranks first
+}
+
 /** The UTC day (YYYYMMDD) a settlement belongs to: an ISO time's UTC date, a feed period's date ("2026-10-08"), a month's first day ("2026-08"). */
 export function receiptDay(settledAt: string): number {
   if (/^\d{4}-\d{2}$/.test(settledAt)) return Number(settledAt.replace("-", "")) * 100 + 1;
@@ -541,7 +564,11 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
       const rd = await port.reading(D);
       if (!rd?.processed) { hold("crank confirmed; the reading is not processed yet", rows); break; }
       recordCrank(d, t, cfg, D, rd, { signature: tx.signature, slot: c.slot, memo: await port.memoOf(tx.signature, D) }, false, out);
-    } catch (e) { fail(`RPC/program error: ${(e as Error).message.slice(0, 200)}`); break; }
+    } catch (e) {
+      // re-review N4: a spent RPC budget is a wait (no backoff, no error row), not a failure of this reading
+      if (isBudgetHold(e)) { const m = (e as Error).message.slice(0, 160); d.log(`  [crank] $${t.ticker} ${Ds}: waiting — ${m}`); hold(`waiting: ${m}`, rows); break; }
+      fail(`RPC/program error: ${(e as Error).message.slice(0, 200)}`); break;
+    }
   }
   return out;
 }
@@ -968,10 +995,14 @@ export async function winnerFlatReading(d: KeeperDeps, ctx: PairCtx, D: number):
 export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): Promise<CycleReport> {
   // `d` is this cycle's copy: a fence hold turns it into a dry run for everything after it (the caller's deps are not changed).
   const d: KeeperDeps = { ...d0 };
+  // the budget's phase per step (apiBudget.ts): the keeper's daily top line names which step spent the credits
+  const phase = (p: string) => { budgetPhase(`cycle/${p}`); };
   const live = d.registry.tokens("live");
   const errors: string[] = [];
   if (d.derby) { try { await d.derby.sample(live); } catch (e) { errors.push(`derby sampler: ${(e as Error).message.slice(0, 160)}`); } }
+  phase("fetch");
   const fetched = opts.fetch === false ? [] : await fetchDue(d, live);
+  phase("pair-gates");
   const gates = await pairGates(d).catch((e: Error) => { errors.push(`pair gates: ${e.message.slice(0, 160)}`); return new Map<string, { gate: PairGate; pairId: string; side: "A" | "B" }>(); });
   // Retired coins stay in the loop when their rule ended under onEnd: the wind-down's last cranks and the retired-coin sweep.
   const tokens = [...live, ...d.registry.tokens("retired").filter((t) => gates.get(t.mint)?.gate.state === "voided" || d.registry.ruleEnd(t.mint) !== null)];
@@ -979,9 +1010,11 @@ export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): 
   const dispersal: (DispersalReport & { mint: string })[] = [];
   // WINNER TAKES THE BURN (2026-10-11): each pair coin's pair context (its counterpart, the pair port, whether forwards apply).
   const ctxs = new Map<string, PairCtx | null>();
+  phase("pair-ctx");
   for (const t of tokens) { try { ctxs.set(t.mint, await pairCtxFor(d.registry, d.program, t, d.now())); } catch (e) { ctxs.set(t.mint, null); errors.push(`$${t.ticker}: pair context: ${(e as Error).message.slice(0, 160)}`); } }
   // Pass 1 — PLAN every token (both coins of a pair get their roles for a result before either executes).
   const ready: { t: TokenRow; locked: LockedRule; gate: PairGate | null }[] = [];
+  phase("plan");
   for (const t of tokens) {
     let locked: LockedRule;
     try { locked = d.registry.lockedRule(t); } catch (e) { errors.push(`$${t.ticker}: rule unreadable: ${(e as Error).message}`); continue; }
@@ -1000,13 +1033,21 @@ export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): 
   // against readings another keeper may already have landed (adopted when the units match; any doubt HOLDS every send this cycle).
   const fenceOn = d.fence !== false;
   const fence: FenceReport = { held: [], adopted: [], checked: 0 };
+  const fresh = async (t: TokenRow): Promise<void> => {
+    if (!d.freshReads || d.dryRun) return;
+    const w = sendableWork(d.registry.pending(t.mint), d.now());
+    if (!w.sendable) return;
+    try { await d.freshReads(t, w.dates); } catch { /* a fresh read never stops a cycle; the steps read through to the RPC */ }
+  };
   const fenceStep = async (t: TokenRow): Promise<void> => {
     if (!fenceOn) return;
+    await fresh(t);
     const before = fence.held.length;
     try { await fenceToken(d, t, fence); }
     catch (e) { fence.held.push({ mint: t.mint, ticker: t.ticker, why: `fence check failed: ${(e as Error).message.slice(0, 120)}` }); d.log(`  [fence] $${t.ticker}: check failed — sends held this cycle`); }
     if (fence.held.length > before && !d.dryRun) { d.dryRun = true; d.log(`  [fence] sends HELD for the rest of this cycle (read, plan and publish go on)`); }
   };
+  phase("fence");
   for (const { t } of ready) await fenceStep(t);
   // Pass 2 — EXECUTE, the coins with a lost period first: the forward lands before the winner's crank (the winner never waits for it).
   const losing = (m: string) => d.registry.pending(m).some((b) => b.pairRole === "lost");
@@ -1015,18 +1056,27 @@ export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): 
   // (forward_to_winner takes it). Single coins and inactive pairs skip this: their cycle is unchanged.
   for (const { t, locked } of ready) {
     if (!ctxs.get(t.mint)?.active) continue;
-    try { executed.push(...await executePending(d, t, locked, ctxs.get(t.mint) ?? null, { attestOnly: true })); } catch (e) { errors.push(`$${t.ticker}: attest: ${(e as Error).message.slice(0, 160)}`); }
+    phase("attest");
+    await fresh(t);
+    try { executed.push(...await executePending(d, t, locked, ctxs.get(t.mint) ?? null, { attestOnly: true })); } catch (e) { if (!isBudgetHold(e)) errors.push(`$${t.ticker}: attest: ${(e as Error).message.slice(0, 160)}`); }
   }
   for (const { t, locked, gate } of ready) {
     const ctx = ctxs.get(t.mint) ?? null;
     // LP LOCKED FOREVER (2026-10-10): claim the locked LP's fees AHEAD of the buyback cranks, so the 80 % share is in the pool they spend.
+    phase("lock-fees");
     if (d.program.lockFees) lpFees.push(await claimLockFeesFor({ registry: d.registry, lockFees: d.program.lockFees, log: d.log, now: d.now, dryRun: d.dryRun }, t));
-    try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
+    phase("execute");
+    await fresh(t);
+    try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { if (!isBudgetHold(e)) errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); else d.log(`  [program] $${t.ticker}: waiting — ${(e as Error).message.slice(0, 160)}`); }
+    phase("rule-end");
     // After the day's cranks: the end of the rule (drain / wind-down / retirement / sweep) is planned from what the program just did —
     // and fenced again before they are attested (a cold standby plans the same wind-down days the leader already counted).
     try { planned.push(...await planRuleEnd(d, t, locked, gate, ctx)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); }
+    phase("fence");
     await fenceStep(t);
-    try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
+    phase("execute");
+    await fresh(t);
+    try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { if (!isBudgetHold(e)) errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); else d.log(`  [program] $${t.ticker}: waiting — ${(e as Error).message.slice(0, 160)}`); }
     // BURN DISPERSAL: after the reading cranks (a waiting reading always cranks first; the program refuses crank_carried until it has).
     if (d.dispersal && locked.mode === "buyback") {
       try {
@@ -1036,12 +1086,15 @@ export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): 
       } catch (e) { errors.push(`$${t.ticker}: dispersal: ${(e as Error).message.slice(0, 160)}`); }
     }
   }
+  phase("pair-alerts");
   try { await pairUnmatchedAlerts(d.registry, d.program, d.now(), d.log); } catch (e) { errors.push(`pair links: ${(e as Error).message.slice(0, 160)}`); }
   // unlink_pair on the program's terminal evidence (round 3); d.pairUnlink === false only observes.
+  phase("pair-unlink");
   try { await pairUnlinkStep(d.registry, d.program, d.now(), !!d.dryRun, d.log, { send: d.pairUnlink !== false }); } catch (e) { errors.push(`pair unlink: ${(e as Error).message.slice(0, 160)}`); }
   for (const r of executed) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} ${r.eventId}: ${r.why}`);
   for (const r of lpFees) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} lock-fees: ${r.why}`);
   if (fence.held.length) for (const h of fence.held) errors.push(`fence: $${h.ticker}: ${h.why}`);
+  phase("end");
   if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }
   return { fetched, planned, executed, errors, ...(d.program.lockFees ? { lpFees } : {}), ...(fenceOn ? { fence } : {}), ...(d.dispersal ? { dispersal } : {}) };
 }
