@@ -26,7 +26,7 @@ const creatorKp = Keypair.generate(), CREATOR = creatorKp.publicKey.toBase58();
 
 const legacy = async (body: Record<string, unknown>) => {
   const { POST } = await import("../src/app/api/burnticker/launch/route.ts");
-  const r = await POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "content-type": "application/json", "x-forwarded-for": `192.0.2.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body) }));
+  const r = await POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "x-forwarded-proto": "https", "content-type": "application/json", "x-forwarded-for": `192.0.2.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body) }));
   return { status: r.status, json: await r.json() as Record<string, unknown> };
 };
 const coin = (ticker: string, rule: unknown) => ({ creator: CREATOR, ticker, name: `${ticker} Coin`, description: "", imageUrl: null, links: [], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true } });

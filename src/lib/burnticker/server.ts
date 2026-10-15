@@ -1,4 +1,5 @@
 import "server-only";
+import type { MintBankPort } from "@/lib/burnticker/mintBank";
 import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
 import { LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
@@ -78,6 +79,11 @@ export interface Platform {
   allowMainnet?: boolean;
   /** Reads a launch transaction from the chain before a draft goes live (launchVerify.ts; review N1). Null/absent (no RPC): confirmations are refused. */
   launchVerifier?: LaunchVerifier | null;
+  /**
+   * 2026-10-14 night: the mint key bank the launch route takes burn-ending keys from (mintBank.ts). Absent (undefined): the route opens
+   * the host's own bank from BURNTICKER_MINT_BANK_PATH / _KEY (webMintBank); null: no bank, every launch finds its address in the browser.
+   */
+  mintBank?: MintBankPort | null;
 }
 
 let cached: Platform | null = null;

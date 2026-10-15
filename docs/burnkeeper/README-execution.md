@@ -185,17 +185,40 @@ The platform keeper runs it every cycle (60 s); the $DEFICIT keeper wakes at the
 
 ## Mint addresses that end in burn (owner decision 2026-10-14)
 
-Since the evening of 2026-10-14 (owner: "the wait for the vanity address is a killer") this is **opt-in on the launch page**. A
-coin's address is a normal Solana address unless its creator chose one that ends in burn. Coins whose address does not end in burn
-($DEFICIT, REHEARSAL, $PHINFLWIN and every plain launch) are never described as ending in burn.
+Every coin made on the platform gets a mint address whose last four characters are `burn` or `BURN`. This was opt-in for a few hours
+on the evening of 2026-10-14 (owner: "the wait for the vanity address is a killer"); since that night it is **mandatory again, with no
+wait** (owner: "the BURN vanity address is mandatory. Save them like pump.fun does so they launch instantly."). Coins made before that
+day ($DEFICIT, REHEARSAL, $PHINFLWIN) keep their plain addresses and are never described as ending in burn.
 
-- **The launch page** makes plain mint keys in the page at Launch time by default, with no search and no wait. The review step has a
-  switch, off by default and remembered in the browser (`localStorage` key `burnticker:mint-ends-in-burn`): "Give this coin an address
-  that ends in burn (about a minute on a laptop; a pair takes longer)". With it on, the address is found in the creator's browser, in
-  Web Workers (`src/app/burnticker/launch/vanity.worker.ts`, `src/lib/burnticker/vanityMint.ts`), from the name step on, Launch waits
-  for it, and "Use a plain address instead" is offered from the start. Either way only the public key is sent with the launch request
-  (`mint`, and `pair.mint` for side B); the secret stays in the page and signs the create transaction there. The server builds the
-  bundle for any valid public key (no suffix is required) and carries no secret.
+What a creator reads (the launch review, the sign card, the trust page, the operator page and the whitepaper's custody section):
+
+> Every coin made here gets an address that ends in burn. This site prepares those mint keys ahead of time, keeps them encrypted, hands
+> each one to its creator once at launch and deletes it 24 hours later if that launch does not happen. Until the coin is created the
+> key only decides the address; it cannot move anything. The creator's wallet still signs the launch, and the key is never used for
+> anything but creating that one mint. When no prepared key is ready, the creator's browser finds one instead, and that key never
+> leaves the browser. Other launchpads prepare addresses the same way.
+
+- **The mint key bank** (`src/lib/burnticker/mintBank.ts`) is a SQLite file on the Burnticker host (`BURNTICKER_MINT_BANK_PATH`, default
+  `data/burnticker-mintbank.db`, mode 0600, owned by the app user, never copied off the host: `data/` is outside the public tree and the
+  deploy excludes it). Each secret is sealed with AES-256-GCM under `BURNTICKER_MINT_BANK_KEY` (32 bytes, base64), with the row's public
+  key bound in. A bank without the key, with the wrong key, or holding an unsealed secret is refused; there is no plaintext fallback.
+  Rows: `pubkey`, `ciphertext`, `created_at`, `taken_at`, `taken_for` (the ticker), `mint_created_at`.
+- **The grinder** (`scripts/burnticker-mint-bank.mts`, unit `mct-burnticker-mintbank`) runs the same search as the browser
+  (`runGrindWorker`) on worker threads, every core but one, and keeps up to `BURNTICKER_MINT_BANK_SIZE` keys (default 300), refilling
+  once fewer than `BURNTICKER_MINT_BANK_LOW` (default 100) are ready. `--once --fill N` adds N keys and exits; `--status` prints the
+  counts; `--bench [SECONDS]` measures the rate without opening the bank. It prints public keys and counts only. Each minute it marks
+  taken keys whose mint the registry shows launched (their sealed secret is wiped), deletes keys taken more than 24 hours ago that never
+  launched (never recycled, so no address is offered to two creators), and records `bt-mint-bank-low` in the registry's alerts when the
+  bank has been below LOW for more than an hour (the keeper pushes it, `push.ts` kind `mint-bank-low`).
+- **The launch route** (`src/app/api/burnticker/launch/route.ts`): a request with no `mint` takes one key per coin (two for a pair) in
+  one write transaction, builds the bundle with it and returns the secret in the bundle (`mintSecretKey`; `mintSecretKeys` on the pair
+  curve), once, and only over HTTPS (Caddy's `X-Forwarded-Proto`, or a local development host). A refused request deletes the keys it
+  took. A `launched` call marks the key created. No key ready, no bank on the host, or plain HTTP: `503` with code `mint-bank-empty`.
+- **The launch page** sends no `mint`, checks the returned secret before anything is signed (`withServerKey`: it derives the bundle's
+  mint and ends in burn), and keeps `walletReturnProblem` and `groundMintProblem` as before. On `mint-bank-empty` it runs the browser
+  search for that launch (`withMintSource`, Web Workers in `src/app/burnticker/launch/vanity.worker.ts`), with the progress panel above
+  Launch, and sends only the public keys it found (`mint`, `pair.mint`), which the route requires to end in burn (`mint-not-burn`
+  otherwise). There is no switch and no plain address.
 - **Operator launches** grind the mint first, outside the repository:
 
       node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/burnticker-grind-mint.mts --out ~/keys/<ticker>-mint.json
@@ -205,4 +228,4 @@ coin's address is a normal Solana address unless its creator chose one that ends
   `scripts/burnkeeper-launch.mts` (a plain mint is warned in a dry run and refused for `--send` without `--allow-plain-mint`) and as
   `--mint` (or `--mint-keypair`) to `scripts/burnreceipts-admin.mts initialize-token` (warned, never refused, so older coins still work).
 - **Cost:** one hit per 58^4 / 2 ≈ 5.66 million keys. On the 10-core Apple M5: Node's native Ed25519 on 9 to 10 workers ≈ 190,000
-  keys a second (≈ 30 s per address); the pure-JavaScript fallback ≈ 42,000 a second on 10 workers (≈ 2 to 3 minutes).
+  to 224,000 keys a second (≈ 25 to 30 s per address; the bank service measured 223,707 a second on 9 workers on 2026-10-14); the pure-JavaScript fallback ≈ 42,000 a second on 10 workers (≈ 2 to 3 minutes).

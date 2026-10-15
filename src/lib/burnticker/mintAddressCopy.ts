@@ -2,29 +2,30 @@ import { matchesSuffix } from "@/lib/burnticker/mintSuffix";
 import type { GrindSnapshot } from "@/lib/burnticker/vanityMint";
 
 /**
- * The words around the burn-ending mint address (owner, 2026-10-14; vanityMint.ts). Plain English, lint clean
- * (test/burntickerVanityMint.test.ts). The owner's 10-14 note: people must see the search is alive, never frozen, so the progress line
- * carries a count, the seconds and how many searches run at once, and the page redraws it several times a second.
+ * The words around the burn-ending mint address (owner, 2026-10-14; vanityMint.ts, mintBank.ts). Plain English, lint clean
+ * (test/burntickerVanityMint.test.ts, test/burntickerMintBank.test.ts).
  *
- * Owner, 2026-10-14 evening ("the wait for the vanity address is a killer"): plain addresses are the default and the burn ending is a
- * switch on the review step, so the general line says a coin's address is a normal one unless its creator chose the burn ending, and a
- * coin page says its own address ends in burn only when it does. The skip button shows from the start of a search, not after a wait.
+ * Owner, 2026-10-14 night: "the BURN vanity address is mandatory. Save them like pump.fun does so they launch instantly." Every coin made
+ * here gets an address that ends in burn. The site prepares the keys ahead of time (the mint key bank) and hands one to each creator at
+ * launch; when none is ready, the creator's browser finds one, and the search panel below shows it working (a count, the seconds, how
+ * many searches run at once, redrawn several times a second). There is no plain address any more. A coin page says its own address
+ * ends in burn only when it does (coins made before 2026-10-14 have plain ones).
  */
 
-export const MINT_SEARCH_LINE = "Finding an address that ends in burn. This usually takes under a minute.";
-export const MINT_SEARCH_PAIR_LINE = "Finding two addresses that end in burn, one for each coin. This usually takes about a minute.";
+export const MINT_SEARCH_LINE = "No prepared address was ready, so this browser is finding one that ends in burn. This usually takes under a minute.";
+export const MINT_SEARCH_PAIR_LINE = "No prepared addresses were ready, so this browser is finding two that end in burn, one for each coin. This usually takes about a minute.";
 export const MINT_SEARCH_DEVICE_LINE = "That is on a laptop. A phone can take a few minutes.";
-export const MINT_SEARCH_PRIVATE_LINE = "The search runs in this browser, and the address key never leaves it.";
-export const MINT_SKIP_LABEL = "Use a plain address instead";
-export const MINT_SKIP_NOTE = "A plain address works the same way, but it does not end in burn.";
-/** The review step's switch (owner's words), off by default and remembered in this browser. */
-export const MINT_CHOICE_LABEL = "Give this coin an address that ends in burn (about a minute on a laptop; a pair takes longer)";
-export const MINT_PLAIN_LINE = "This launch uses a plain address.";
-export const MINT_FAILED_LINE = "This browser could not run the address search. You can launch with a plain address instead.";
+export const MINT_SEARCH_PRIVATE_LINE = "The search runs in this browser, and the key it finds never leaves it.";
+export const MINT_FAILED_LINE = "This browser could not run the address search, so nothing was sent. Please try again in a few minutes, when the site has prepared addresses ready again.";
 /** The general line (the launch review, the sign card and a coin page whose address ends in burn). */
-export const MINT_ADDRESS_NOTE = "A coin's address is a normal Solana address unless its creator chose one that ends in burn.";
-/** The trust page's "How this was built" sentence. */
-export const MINT_ADDRESS_TRUST = "A coin made here has a normal Solana address unless its creator chose one that ends in burn. That address is found in the creator's own browser, and its key never reaches this site.";
+export const MINT_ADDRESS_NOTE = "Every coin made here gets an address that ends in burn. The address is prepared ahead of time on this site, handed to the creator at launch and used once. If none is ready, the creator's browser finds one.";
+/**
+ * THE DISCLOSURE (owner, 2026-10-14 night): wherever the launch flow says what the site controls. The launch review's "What you confirm
+ * by launching", the trust page, the operator page and the whitepaper's custody section carry it (each pinned in a test).
+ */
+export const MINT_KEY_DISCLOSURE = "Every coin made here gets an address that ends in burn. This site prepares those mint keys ahead of time, keeps them encrypted, hands each one to its creator once at launch and deletes it 24 hours later if that launch does not happen. Until the coin is created the key only decides the address; it cannot move anything. The creator's wallet still signs the launch, and the key is never used for anything but creating that one mint. When no prepared key is ready, the creator's browser finds one instead, and that key never leaves the browser. Other launchpads prepare addresses the same way.";
+/** The trust page's "How this was built" sentence: the disclosure itself. */
+export const MINT_ADDRESS_TRUST = MINT_KEY_DISCLOSURE;
 
 const n = (x: number) => Math.round(x).toLocaleString("en-US");
 
@@ -43,28 +44,26 @@ export function mintFoundLine(addresses: readonly string[]): string {
 /** A coin page's line, only for a coin whose own mint ends in burn or BURN (never a plain one). */
 export function coinAddressLine(mint: string): string | null {
   if (!matchesSuffix(mint)) return null;
-  return `This coin's address ends in ${mint.slice(-4)}. ${MINT_ADDRESS_NOTE}`;
+  return `This coin's address ends in ${mint.slice(-4)}. Every coin made here gets an address that ends in burn.`;
 }
 
 export interface MintSearchView {
-  state: "idle" | "searching" | "found" | "plain" | "failed";
+  state: "idle" | "searching" | "found" | "failed";
   lines: string[];
   /** the live counter line while searching */
   progress: string | null;
-  showSkip: boolean;
 }
 
-/** What the search panel shows for a pool snapshot (MintSearch.tsx draws it; the tests read it). */
+/** What the search panel shows for a pool snapshot (MintSearch.tsx draws it; the tests read it). Idle (no panel) unless a search ran. */
 export function mintSearchView(s: GrindSnapshot): MintSearchView {
   const pair = s.wanted > 1;
-  if (s.failed && s.found < s.wanted) return { state: "failed", lines: [MINT_FAILED_LINE], progress: null, showSkip: true };
-  if (s.wanted > 0 && s.found >= s.wanted) return s.plain ? { state: "plain", lines: [MINT_PLAIN_LINE], progress: null, showSkip: false } : { state: "found", lines: [mintFoundLine(s.addresses)], progress: null, showSkip: false };
-  if (!s.running) return { state: "idle", lines: [], progress: null, showSkip: false };
+  if (s.failed && s.found < s.wanted) return { state: "failed", lines: [MINT_FAILED_LINE], progress: null };
+  if (s.wanted > 0 && s.found >= s.wanted) return { state: "found", lines: [mintFoundLine(s.addresses)], progress: null };
+  if (!s.running) return { state: "idle", lines: [], progress: null };
   return {
     state: "searching",
     lines: [pair ? MINT_SEARCH_PAIR_LINE : MINT_SEARCH_LINE, MINT_SEARCH_DEVICE_LINE, ...(pair && s.found ? [`${s.found} of ${s.wanted} found.`] : [])],
     progress: mintSearchProgress(s),
-    showSkip: true,   // from the start (owner, 2026-10-14 evening): nobody has to wait to get out of the search
   };
 }
 

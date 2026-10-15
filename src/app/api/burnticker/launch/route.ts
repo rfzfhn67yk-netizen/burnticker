@@ -10,6 +10,9 @@ import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
 import { recordLaunchTimings } from "@/lib/burnticker/api/product";
 import { globalRefusal, typeRefusal } from "@/lib/burnticker/launchAvailability";
 import { lookupTablePins } from "@/lib/burnticker/networks";
+import { matchesSuffix } from "@/lib/burnticker/mintSuffix";
+import { MINT_BANK_EMPTY_CODE, MINT_BANK_EMPTY_SENTENCE, webMintBank, type MintBankPort } from "@/lib/burnticker/mintBank";
+import { Keypair } from "@solana/web3.js";
 
 export const dynamic = "force-dynamic";
 
@@ -58,19 +61,38 @@ export async function POST(req: Request) {
     if (on && !wants) return NextResponse.json({ error: "rivalry pairs on this host launch through the pair curve (both coins graduate together or neither does); send venue: \"pair-curve\" and sign the pair-curve transaction set — two independent LaunchLab launches are not offered", code: "pair-curve-required" }, { status: 409 });
     if (!pairCurveEnabled(process.env) && wants) return NextResponse.json({ error: "the pair curve is not enabled on this host (BURNTICKER_PAIR_CURVE_ENABLED)", code: "pair-curve-unavailable" }, { status: 409 });
   }
-  if (body.action === "launched") { const r = await markLaunched(p, String(body.mint ?? ""), String(body.launchTx ?? "")); return edgeJson(r.body, r.status); }
-  // 2026-10-14 (owner): the launch page makes each mint in the browser (plain by default, or ground to end in burn when the creator
-  // chooses), and sends only the PUBLIC key; any valid public key is taken, no suffix is required:
-  // `mint` (side A or the one coin) and `pair.mint` (side B). The secret never reaches this host; the bundle then carries none.
-  // A request without them (an older page) still gets a fresh keypair here, as before.
+  const bank: MintBankPort | null = p.mintBank !== undefined ? p.mintBank : webMintBank();
+  if (body.action === "launched") {
+    const mint = String(body.mint ?? "");
+    const r = await markLaunched(p, mint, String(body.launchTx ?? ""));
+    // the mint is live: its prepared key (if it came from the bank) is spent, and its sealed secret is wiped
+    if (r.status === 200) { try { bank?.markCreated(mint); } catch { /* the bank service also marks it from the registry */ } }
+    return edgeJson(r.body, r.status);
+  }
+  // 2026-10-14 night (owner: "the BURN vanity address is mandatory. Save them like pump.fun does so they launch instantly."): every coin's
+  // address ends in burn or BURN. The page sends no `mint`; this route takes one prepared key per coin (two for a pair) from the host's
+  // mint key bank (mintBank.ts, filled by scripts/burnticker-mint-bank.mts), marks it taken, builds the bundle with it and returns its
+  // secret in the bundle (`mintSecretKey`; `mintSecretKeys` on the pair curve) once, over HTTPS only. A refused request deletes the keys it
+  // took (never offered again). No key ready, no bank on this host, or a plain-HTTP request: `mint-bank-empty`, and the page finds the
+  // address in the browser and sends its PUBLIC key in `mint` (and `pair.mint`), which must end in burn too.
   const own = typeof body.mint === "string" ? body.mint : undefined;
   const ownB = body.pair && typeof (body.pair as { mint?: unknown }).mint === "string" ? (body.pair as { mint: string }).mint : undefined;
   // 2026-10-14 night: this route (the page's own launch) raised no bt-launch-failed alert — only the v1 review and bundle routes were
   // wrapped — so a whole evening of refused launches reached nobody's phone. A thrown error is a 500 here, and every server error or
   // launch-check refusal is recorded like the v1 routes' (launchFailAlert.ts; push.ts sends it).
+  if ((own !== undefined && !matchesSuffix(own)) || (ownB !== undefined && !matchesSuffix(ownB))) return NextResponse.json({ error: "Every coin made here gets an address that ends in burn, and this one does not. Please press Launch again.", code: "mint-not-burn" }, { status: 400 });
+  let taken: Keypair[] | null = null;
+  if (own === undefined && ownB === undefined) {
+    const tickers = [String(body.ticker ?? ""), ...(body.pair ? [String((body.pair as { ticker?: unknown }).ticker ?? "")] : [])].map((t) => t.toUpperCase());
+    let keys: { publicKey: string; secretKey: Uint8Array }[] | null = null;
+    if (secureRequest(req)) { try { keys = bank?.take(tickers) ?? null; } catch { keys = null; } }
+    if (!keys) return NextResponse.json({ error: MINT_BANK_EMPTY_SENTENCE, code: MINT_BANK_EMPTY_CODE }, { status: 503, headers: { "cache-control": "no-store" } });
+    taken = keys.map((k) => Keypair.fromSecretKey(k.secretKey));
+  }
   let r: Awaited<ReturnType<typeof prepareLaunch>>;
-  try { r = await prepareLaunch(p, body, { register: true, ...(own !== undefined ? { mint: own } : {}), ...(ownB !== undefined ? { mintB: ownB } : {}) }); }
+  try { r = await prepareLaunch(p, body, { register: true, ...(own !== undefined ? { mint: own } : {}), ...(ownB !== undefined ? { mintB: ownB } : {}), ...(taken ? { mintKeypair: taken[0], ...(taken[1] ? { mintKeypairB: taken[1] } : {}) } : {}) }); }
   catch (e) { r = { error: fail(500, `The launch could not be prepared. The error was: ${String((e as Error)?.message ?? e).slice(0, 160)}`, { code: "internal" }) }; }
+  if ("error" in r && taken) { try { bank?.discard(taken.map((k) => k.publicKey.toBase58())); } catch { /* the 24-hour sweep deletes them */ } }
   // launch walkthrough 2026-10-13: a refusal answered 502 (the launch check could not read a source) reached the page as Cloudflare's
   // own error page, so the page said "The launch request failed (502)"; edgeJson sends it as 503 with the sentence intact
   if ("error" in r) {
@@ -80,10 +102,24 @@ export async function POST(req: Request) {
   recordLaunchTimings(p, body, "pair" in r ? [r.pair.tokens.a?.mint, r.pair.tokens.b?.mint] : [r.ok.token?.mint]);   // time-to-launch (productStore.ts)
   // RIVALRY PAIR (`pair: { ticker, name, … }` for side B): both bundles, both drafts and the pair row.
   if ("pair" in r) {
-    // The two fresh mint keypairs' secrets ride along (as LaunchLab bundles carry mintSecretKey): tx 1 needs creator + mint A, tx 2
-    // creator + mint B. The LaunchLab bundles themselves are never sent on this venue.
+    // The two bank keypairs' secrets ride along (as LaunchLab bundles carry mintSecretKey): tx 1 needs creator + mint A, tx 2 creator +
+    // mint B. The LaunchLab bundles themselves are never sent on this venue. With the page's own mints both are null.
     if (r.pair.pairCurve) return NextResponse.json({ ok: true, venue: "pair-curve", pair: { pairId: r.pair.pairId, selector: r.pair.selector, notes: r.pair.notes, row: r.pair.row }, pairCurve: r.pair.pairCurve, mintSecretKeys: { a: r.pair.bundles.a.mintSecretKey, b: r.pair.bundles.b.mintSecretKey }, tokens: r.pair.tokens, seriesTitle: r.pair.seriesTitle, stubs: p.stubs });
     return NextResponse.json({ ok: true, venue: "launchlab", pair: { pairId: r.pair.pairId, selector: r.pair.selector, notes: r.pair.notes, row: r.pair.row }, bundles: r.pair.bundles, tokens: r.pair.tokens, seriesTitle: r.pair.seriesTitle, stubs: p.stubs });
   }
   return NextResponse.json({ ok: true, bundle: r.ok.bundle, token: r.ok.token, seriesTitle: r.ok.seriesTitle, stubs: p.stubs });
+}
+
+/**
+ * A bank key's secret leaves this host only over HTTPS: the request reached Caddy over https (X-Forwarded-Proto, which Caddy sets from
+ * its own connection), or the URL itself is https, or it is a local development host. Anything else gets mint-bank-empty.
+ */
+function secureRequest(req: Request): boolean {
+  if ((req.headers.get("x-forwarded-proto") ?? "").split(",")[0].trim().toLowerCase() === "https") return true;
+  try {
+    const u = new URL(req.url);
+    if (u.protocol === "https:") return true;
+    const host = (req.headers.get("host") ?? u.host).toLowerCase().replace(/:\d+$/, "");
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  } catch { return false; }
 }

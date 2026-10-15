@@ -1,5 +1,6 @@
 "use client";
 
+import { MINT_KEY_DISCLOSURE } from "@/lib/burnticker/mintAddressCopy";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
@@ -62,6 +63,8 @@ export default function OperatorPage() {
         <section className={card}>
           <h2 className="font-medium">{OPERATOR_COPY.walletsTitle}</h2>
           <p className="text-xs text-neutral-300">{OPERATOR_COPY.walletsIntro}</p>
+          {/* owner, 2026-10-14 night: the one kind of key the site holds for creators, said where the operator's keys are listed */}
+          <p className="text-xs text-neutral-300 mt-1" data-mint-disclosure>{MINT_KEY_DISCLOSURE}</p>
           {(["devnet", "mainnet"] as const).map((c) => { const cl = v.clusters[c]; return (
             <div key={c} className="mt-3">
               <h3 className="text-xs font-medium">{clusterName(c)}. <span className="text-neutral-500 font-normal">{cl.status}</span></h3>

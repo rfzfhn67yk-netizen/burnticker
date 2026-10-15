@@ -22,7 +22,7 @@ const withFlag = async <T>(on: boolean, fn: () => Promise<T>): Promise<T> => {
 /** The page's fetch, pointed at the real legacy launch route. */
 const routeFetch = async (_url: string, init: { method: string; headers: Record<string, string>; body: string }) => {
   const { POST } = await import("../src/app/api/burnticker/launch/route.ts");
-  return POST(new Request("http://bt.test/api/burnticker/launch", { method: init.method, headers: { ...init.headers, host: "bt.test", origin: "http://bt.test", "x-forwarded-for": `198.51.100.${Math.floor(Math.random() * 200)}` }, body: init.body }));
+  return POST(new Request("http://bt.test/api/burnticker/launch", { method: init.method, headers: { ...init.headers, host: "bt.test", origin: "http://bt.test", "x-forwarded-proto": "https", "x-forwarded-for": `198.51.100.${Math.floor(Math.random() * 200)}` }, body: init.body }));
 };
 const LOSE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } } };
 // Tickers and names that are not lookalikes of the $BRONCO fixture (lookalike.ts refuses a copycat ticker or name since the growth batch).

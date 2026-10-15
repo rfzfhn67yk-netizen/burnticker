@@ -119,8 +119,8 @@ describe("walkthrough 13: disclosures that said more than the code does", () => 
     assert.doesNotMatch(read("config/burnticker/transparency.json"), /required before strangers can launch/);
     const phase = JSON.parse(cs).phase.line as string; clean(phase, "phase line");
   });
-  test("a normal address unless the creator chose burn (opt-in since 2026-10-14 evening); the swap goes to the curve or the pool", () => {
-    assert.match(MINT_ADDRESS_NOTE, /normal Solana address unless its creator chose one that ends in burn/); assert.doesNotMatch(MINT_ADDRESS_NOTE, /October|2026/);
+  test("every coin's address ends in burn, prepared ahead of time (mandatory since 2026-10-14 night); the swap goes to the curve or the pool", () => {
+    assert.match(MINT_ADDRESS_NOTE, /^Every coin made here gets an address that ends in burn\. The address is prepared ahead of time on this site, handed to the creator at launch and used once\./); assert.doesNotMatch(MINT_ADDRESS_NOTE, /October|2026|normal Solana address|unless its creator chose/);
     assert.match(SWAP_NOTICE, /the coin's own Raydium curve or pool/);
     assert.doesNotMatch(read("src/app/burnticker/t/[ticker]/page.tsx"), /goes straight to the coin's Raydium pool/);
     const legal = read("src/lib/burnticker/legalCopy.ts");

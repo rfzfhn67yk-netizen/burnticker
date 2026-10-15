@@ -187,7 +187,7 @@ export default function TokenPage() {
           {prof?.note && <div className="max-w-2xl rounded border border-neutral-700 p-2 text-xs text-neutral-300"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note (not part of the rule)</div>{prof.note}</div>}
           <p className="text-xs text-neutral-500">{prof?.affiliation ?? "This coin is not affiliated with any team, league, candidate, agency or market."}</p>
           {launch.open && <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>}
-          <PinnedCheck pinned={s.pinned} />
+          <PinnedCheck pinned={s.pinned ? { ...s.pinned, mint: s.mint } : s.pinned} />
         </div>
       </header>
 

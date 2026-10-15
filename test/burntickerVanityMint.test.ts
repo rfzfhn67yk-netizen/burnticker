@@ -1,7 +1,8 @@
 // MINT ADDRESSES THAT END IN burn (owner, 2026-10-14): the matcher and the residue check, a deterministic grind on a fake RNG, the
 // WebCrypto seed export, the worker loop on a fake scope, the page's pool on fake workers (progress, found keys checked, skip, failure),
-// the search panel's words (lint clean, a live counter, the skip from the start), the opt-in switch (plain by default, remembered), the local key attached to the prepared bundle (and refused
-// when the server built another mint), the server taking the browser's public keys (one coin, a LaunchLab pair, the pair curve), and
+// the search panel's words (lint clean, a live counter), the server's prepared key checked before signing (2026-10-14 night: mandatory,
+// from the host's bank; the browser search is the fallback), the local key attached to the prepared bundle (and refused when the server
+// built another mint), the server taking the browser's public keys when its bank is empty (one coin, a LaunchLab pair, the pair curve), and
 // the wiring by each file's source: the page, the Coin vs Coin tile and the record close, the sign card, the worker, the coin and trust
 // pages, the CLIs and the execution README.
 import { describe, test } from "node:test";
@@ -11,13 +12,13 @@ import { webcrypto } from "node:crypto";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import {
-  base58, expectedTries, mintWorkerCount, grindMint, groundMintProblem, matchesSuffix, MintGrindPool, MINT_MISMATCH_LINE, plainMint, runGrindWorker, secretBase58,
-  launchMints, MINT_BURN_CHOICE_KEY, readBurnChoice, writeBurnChoice, seedFromPkcs8, suffixResidue, tailResidue, webcryptoEd25519Works, withLocalKey,
+  base58, base58Decode, expectedTries, mintWorkerCount, grindMint, groundMintProblem, matchesSuffix, MintGrindPool, MINT_MISMATCH_LINE, runGrindWorker, secretBase58,
+  MINT_BANK_EMPTY, MINT_FAILED_SENTENCE, MINT_SERVER_KEY_LINE, isMintBankEmpty, serverKeyFor, withMintSource, withServerKey, seedFromPkcs8, suffixResidue, tailResidue, webcryptoEd25519Works, withLocalKey,
   type FromWorker, type GroundMint, type SubtleLike, type ToWorker, type WorkerLike,
 } from "@/lib/burnticker/vanityMint";
 import {
-  coinAddressLine, MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_CHOICE_LABEL, MINT_FAILED_LINE, MINT_PLAIN_LINE, MINT_SEARCH_DEVICE_LINE, MINT_SEARCH_LINE, MINT_SEARCH_PAIR_LINE,
-  MINT_SEARCH_PRIVATE_LINE, MINT_SKIP_LABEL, MINT_SKIP_NOTE, mintFoundLine, mintSearchProgress, mintSearchView,
+  coinAddressLine, MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_FAILED_LINE, MINT_KEY_DISCLOSURE, MINT_SEARCH_DEVICE_LINE, MINT_SEARCH_LINE, MINT_SEARCH_PAIR_LINE,
+  MINT_SEARCH_PRIVATE_LINE, mintFoundLine, mintSearchProgress, mintSearchView,
 } from "@/lib/burnticker/mintAddressCopy";
 import { launchlabPlan, pairCurvePlan, planProblems } from "@/lib/burnticker/signPlan";
 import { buildPairBundles, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
@@ -25,6 +26,7 @@ import { FakeBurnProgram } from "@/lib/burnticker/program";
 import { ATTESTER, CREATOR, makeWorld } from "./burntickerApiHelpers.ts";
 import { BRONCOS } from "./burntickerHelpers.ts";
 import { limiter } from "@/lib/burnticker/api/http";
+import { LaunchRequestError } from "@/lib/burnticker/pairLaunchClient";
 
 const read = (f: string) => fs.readFileSync(f, "utf8");
 const cfg = loadCopyLintConfig();
@@ -51,7 +53,7 @@ describe("the matcher", () => {
     // the coins made before 2026-10-14 do not match, so nothing ever says their address ends in burn
     assert.equal(matchesSuffix("AJJ4"), false);
     assert.equal(coinAddressLine("So11111111111111111111111111111111111111112"), null);
-    assert.equal(coinAddressLine("39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN"), `This coin's address ends in BURN. ${MINT_ADDRESS_NOTE}`);
+    assert.equal(coinAddressLine("39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN"), "This coin's address ends in BURN. Every coin made here gets an address that ends in burn.");
   });
   test("the residue check is the last four base58 digits, for any key", () => {
     const rng = seeded(7);
@@ -89,15 +91,13 @@ describe("the grinder (pure, an injected RNG)", () => {
     i = 0;
     assert.deepEqual(grindMint({ batch: 2, rng: () => new Uint8Array(32), keygen: () => ({ publicKey: bytes[i], secretKey: new Uint8Array(64).fill(i++) }) }), { found: null, tries: 2 });
   });
-  test("a key is checked before it is trusted: wrong length, a secret for another address, a plain address", () => {
+  test("a key is checked before it is trusted: wrong length, a secret for another address, a plain address (never accepted now)", () => {
     const k = keyEndingIn("B", 3);
     assert.equal(groundMintProblem({ ...k, secretKey: k.secretKey.slice(0, 32) }), "the key is not 64 bytes");
     const other = Keypair.generate();
     assert.equal(groundMintProblem({ publicKey: k.publicKey, secretKey: other.secretKey }), "the key does not match its address");
-    const plain = plainMint();
-    assert.equal(plain.plain, true);
-    assert.equal(groundMintProblem(plain), null, "a plain escape-hatch key passes as plain");
-    if (!matchesSuffix(plain.publicKey)) assert.equal(groundMintProblem({ ...plain, plain: false }), "the address does not end in burn or BURN");
+    let plain = Keypair.generate(); while (matchesSuffix(plain.publicKey.toBase58())) plain = Keypair.generate();
+    assert.equal(groundMintProblem({ publicKey: plain.publicKey.toBase58(), secretKey: plain.secretKey, plain: true } as never), "the address does not end in burn or BURN", "there is no plain escape hatch");
   });
 });
 
@@ -204,33 +204,27 @@ describe("the pool (the page side) on fake workers", () => {
     workers[0].emit({ type: "progress", tries: 99_999 });
     assert.equal(pool.snapshot().tries, 10);
   });
-  test("skip: the rest are plain keys made in the page, and the waiting launch goes on", async () => {
-    const workers: FakeWorker[] = [];
-    const pool = new MintGrindPool({ workers: 2, makeWorker: () => { const w = new FakeWorker(); workers.push(w); return w; } });
-    const p = pool.ensure(2);
-    pool.skip();
-    const keys = await p;
-    assert.equal(keys.length, 2);
-    for (const k of keys) { assert.equal(k.plain, true); assert.equal(groundMintProblem(k), null); }
-    assert.ok(workers.every((w) => w.terminated));
-    assert.equal(mintSearchView(pool.snapshot()).state, "plain");
-  });
-  test("no Worker in this browser: the pool says it failed and offers the plain address at once", async () => {
+  test("no Worker in this browser: the waiting press is refused with a plain sentence, and the panel says why", async () => {
     const pool = new MintGrindPool({ workers: 4, makeWorker: () => { throw new Error("Worker is not defined"); } });
     const p = pool.ensure(1);
+    await assert.rejects(p, new RegExp(MINT_FAILED_SENTENCE.slice(0, 40)));
     const v = mintSearchView(pool.snapshot());
-    assert.equal(v.state, "failed"); assert.equal(v.showSkip, true); assert.deepEqual(v.lines, [MINT_FAILED_LINE]);
-    pool.skip();
-    assert.equal((await p).length, 1);
+    assert.equal(v.state, "failed"); assert.deepEqual(v.lines, [MINT_FAILED_LINE]);
+    assert.equal(MINT_FAILED_LINE, MINT_FAILED_SENTENCE, "the panel and the refusal say the same thing");
   });
-  test("a worker error stops the search and offers the plain address", () => {
+  test("a worker error stops the search and refuses the waiting press; the next press tries again", async () => {
     const workers: FakeWorker[] = [];
-    const pool = new MintGrindPool({ workers: 2, makeWorker: () => { const w = new FakeWorker(); workers.push(w); return w; } });
-    void pool.ensure(1);
+    const pool = new MintGrindPool({ workers: 2, suffixes: ["b"], makeWorker: () => { const w = new FakeWorker(); workers.push(w); return w; } });
+    const p = pool.ensure(1);
     workers[1].emit({ type: "error", message: "boom" });
+    await assert.rejects(p);
     assert.equal(pool.snapshot().failed, "boom");
     assert.equal(pool.snapshot().running, false);
-    assert.equal(mintSearchView(pool.snapshot()).showSkip, true);
+    const again = pool.ensure(1);
+    assert.equal(workers.length, 4, "a new search started"); assert.equal(pool.snapshot().failed, null);
+    const k = keyEndingIn("b", 31);
+    workers[3].emit({ type: "found", publicKey: k.publicKey, secretKey: k.secretKey, tries: 1 });
+    assert.equal((await again)[0].publicKey, k.publicKey);
   });
   test("workers: every core but one, at least one, at most 16", () => {
     assert.equal(mintWorkerCount(10), 9); assert.equal(mintWorkerCount(1), 1); assert.equal(mintWorkerCount(undefined), 3); assert.equal(mintWorkerCount(64), 16);
@@ -238,17 +232,16 @@ describe("the pool (the page side) on fake workers", () => {
 });
 
 describe("the search panel's words (owner: people must see it is working, not frozen)", () => {
-  const base = { tries: 0, elapsedMs: 0, workers: 9, engine: "webcrypto" as const, wanted: 1, found: 0, running: true, addresses: [], plain: false, failed: null };
+  const base = { tries: 0, elapsedMs: 0, workers: 9, engine: "webcrypto" as const, wanted: 1, found: 0, running: true, addresses: [], failed: null };
   test("every line is plain English and passes the copy lint", () => {
-    for (const t of [MINT_SEARCH_LINE, MINT_SEARCH_PAIR_LINE, MINT_SEARCH_DEVICE_LINE, MINT_SEARCH_PRIVATE_LINE, MINT_SKIP_LABEL, MINT_SKIP_NOTE, MINT_PLAIN_LINE, MINT_FAILED_LINE, MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_MISMATCH_LINE, MINT_CHOICE_LABEL,
+    for (const t of [MINT_SEARCH_LINE, MINT_SEARCH_PAIR_LINE, MINT_SEARCH_DEVICE_LINE, MINT_SEARCH_PRIVATE_LINE, MINT_FAILED_LINE, MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_KEY_DISCLOSURE, MINT_MISMATCH_LINE, MINT_SERVER_KEY_LINE,
       mintSearchProgress({ tries: 1_234_567, elapsedMs: 12_300, workers: 9 }), mintSearchProgress({ tries: 1, elapsedMs: 1_000, workers: 1 }),
       mintFoundLine(["39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN"]), mintFoundLine(["39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN", "39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5burn"]),
       coinAddressLine("39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5burn")!]) clean(t);
-    assert.equal(MINT_SEARCH_LINE, "Finding an address that ends in burn. This usually takes under a minute.", "the owner's line, word for word");
-    assert.equal(MINT_CHOICE_LABEL, "Give this coin an address that ends in burn (about a minute on a laptop; a pair takes longer)", "the owner's switch, word for word");
-    assert.equal(MINT_ADDRESS_NOTE, "A coin's address is a normal Solana address unless its creator chose one that ends in burn.", "plain is the default");
-    assert.match(MINT_ADDRESS_TRUST, /^A coin made here has a normal Solana address unless its creator chose one that ends in burn\./);
-    for (const t of [MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_SKIP_NOTE]) { assert.doesNotMatch(t, /October|2026|since|Waiting is the default/); }
+    assert.match(MINT_SEARCH_LINE, /^No prepared address was ready, so this browser is finding one that ends in burn\./, "the search says why it runs");
+    assert.equal(MINT_ADDRESS_NOTE, "Every coin made here gets an address that ends in burn. The address is prepared ahead of time on this site, handed to the creator at launch and used once. If none is ready, the creator's browser finds one.", "mandatory again, prepared ahead of time (owner, 2026-10-14 night)");
+    assert.equal(MINT_ADDRESS_TRUST, MINT_KEY_DISCLOSURE, "the trust page carries the disclosure");
+    for (const t of [MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_SEARCH_LINE, MINT_FAILED_LINE]) { assert.doesNotMatch(t, /plain address|normal Solana address|unless its creator chose|never reaches this site/); }
   });
   test("the counter: keys tried, seconds, searches at once; the device estimate", () => {
     const v = mintSearchView({ ...base, tries: 2_117_632, elapsedMs: 10_400 });
@@ -259,20 +252,20 @@ describe("the search panel's words (owner: people must see it is working, not fr
     const pair = mintSearchView({ ...base, wanted: 2, found: 1, addresses: ["x"], tries: 5 });
     assert.deepEqual(pair.lines, [MINT_SEARCH_PAIR_LINE, MINT_SEARCH_DEVICE_LINE, "1 of 2 found."]);
   });
-  test("the skip button: there from the first moment of a search (owner, 2026-10-14 evening), not after 60 seconds", () => {
-    assert.equal(mintSearchView({ ...base, elapsedMs: 0 }).showSkip, true);
-    assert.equal(mintSearchView({ ...base, elapsedMs: 59_999 }).showSkip, true);
+  test("no skip button any more: the burn ending is mandatory; idle shows nothing, found shows the address", () => {
+    assert.equal("showSkip" in mintSearchView({ ...base, elapsedMs: 0 }), false);
     assert.equal(mintSearchView({ ...base, elapsedMs: 0, running: false }).state, "idle");
     const found = mintSearchView({ ...base, running: false, found: 1, addresses: ["39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN"] });
-    assert.equal(found.state, "found"); assert.equal(found.showSkip, false);
+    assert.equal(found.state, "found");
     assert.deepEqual(found.lines, ["Found an address that ends in burn: 39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN."]);
   });
-  test("the panel's source: redraws four times a second, a CSS spinner and a ticking line, the count and the workers, the skip button", () => {
+  test("the panel's source: redraws four times a second, a CSS spinner and a ticking line, the count and the workers, no skip and no switch", () => {
     const src = read("src/app/burnticker/launch/MintSearch.tsx");
     assert.match(src, /setInterval\([\s\S]*?, 250\)/);
     assert.match(src, /animate-spin/); assert.doesNotMatch(src, /\.gif/i);
     assert.match(src, /data-mint-ticker/); assert.match(src, /data-mint-tries=\{s\.tries\}/); assert.match(src, /data-mint-workers=\{s\.workers\}/);
-    assert.match(src, /v\.showSkip && [\s\S]*data-mint-skip[\s\S]*pool\.skip\(\)[\s\S]*MINT_SKIP_LABEL/);
+    assert.doesNotMatch(src, /data-mint-skip|pool\.skip|MINT_SKIP|checkbox|localStorage|useBurnChoice|MintChoice/);
+    assert.match(src, /export function MintAddressBlock\(\{ pool \}[^)]*\) \{[\s\S]*<MintSearch pool=\{pool\} \/>[\s\S]*data-mint-note>\{MINT_ADDRESS_NOTE\}/);
     assert.match(src, /new Worker\(new URL\("\.\/vanity\.worker\.ts", import\.meta\.url\), \{ type: "module" \}\)/);
     assert.match(src, /if \(s\.users === 0\) \{ s\.pool\.dispose\(\);/, "the workers stop when the last user goes away");
   });
@@ -295,7 +288,10 @@ describe("the prepared bundle must name the mint this page made", () => {
   });
 });
 
-describe("the server takes the browser's public keys and never makes or sees their secrets", () => {
+/** Real public keys that end in burn (ground on the Mac on 2026-10-14; their secrets were deleted): the fallback sends only public keys. */
+const BURN_PUBS = ["DReoHj97MwYHh5vCrsDoUK5wfTyJyhby21WRvjPkburn", "4UvEV42RgcgvSwbs3ZbTv7hPqLPYX8nRZ9Smeuhhburn", "82CXNdMkgDKydXNfs2ZVnj338xvsjv45hJ9x2HrWburn"];
+
+describe("the fallback: the server takes the browser's burn-ending public keys and never makes or sees their secrets", () => {
   const deps = () => ({ program: new FakeBurnProgram("devnet"), launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m: string) => `https://x/${m}.json` });
   const LOSE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } } };
   const input = { creator: CREATOR, ticker: "DENVER", name: "Denver", description: "", imageUrl: null, links: [], rule: LOSE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" } as never;
@@ -310,12 +306,12 @@ describe("the server takes the browser's public keys and never makes or sees the
   });
   const legacy = async (body: unknown) => {
     const { POST } = await import("../src/app/api/burnticker/launch/route.ts");
-    return POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "content-type": "application/json", "x-forwarded-for": `203.0.113.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body) }));
+    return POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "content-type": "application/json", "x-forwarded-proto": "https", "x-forwarded-for": `203.0.113.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body) }));
   };
   const pairBody = (extra: Record<string, unknown> = {}) => ({ creator: CREATOR, ticker: "DENVER", name: "Denver", description: "", imageUrl: null, links: [], rule: LOSE, acknowledgements: { ruleLocked: true, noReturns: true }, pair: { ticker: "CHIEFS", name: "Chiefs" }, ...extra });
   test("one coin: the route builds for the page's mint and hands back no secret", async () => {
     const w = await makeWorld(); limiter.reset();
-    const mint = Keypair.generate().publicKey.toBase58();
+    const mint = BURN_PUBS[0];
     const r = await legacy({ creator: CREATOR, ticker: "DENVER", name: "Denver", description: "", imageUrl: null, links: [], rule: LOSE, acknowledgements: { ruleLocked: true, noReturns: true }, mint });
     assert.equal(r.status, 200, JSON.stringify(await r.clone().json()).slice(0, 300));
     const j = await r.json() as { bundle: { mint: string; mintSecretKey: string | null } };
@@ -326,7 +322,7 @@ describe("the server takes the browser's public keys and never makes or sees the
     const w = await makeWorld(); limiter.reset();
     const was = process.env.BURNTICKER_PAIR_CURVE_ENABLED; delete process.env.BURNTICKER_PAIR_CURVE_ENABLED;
     try {
-      const a = Keypair.generate().publicKey.toBase58(), b = Keypair.generate().publicKey.toBase58();
+      const [a, b] = BURN_PUBS;
       const r = await legacy(pairBody({ mint: a, pair: { ticker: "CHIEFS", name: "Chiefs", mint: b } }));
       assert.equal(r.status, 200, JSON.stringify(await r.clone().json()).slice(0, 300));
       const j = await r.json() as { bundles: { a: { mint: string; mintSecretKey: string | null }; b: { mint: string; mintSecretKey: string | null } } };
@@ -335,18 +331,22 @@ describe("the server takes the browser's public keys and never makes or sees the
       assert.deepEqual([w.registry.tokenByTicker("DENVER")?.mint, w.registry.tokenByTicker("CHIEFS")?.mint], [a, b]);
       // one mint without the other is the public API's single-coin call: refused for a pair, as before
       limiter.reset();
-      const half = await legacy(pairBody({ ticker: "ORCAS", mint: Keypair.generate().publicKey.toBase58(), pair: { ticker: "WHALES", name: "Chiefs" } }));
+      const half = await legacy(pairBody({ ticker: "ORCAS", mint: BURN_PUBS[2], pair: { ticker: "WHALES", name: "Chiefs" } }));
       assert.equal(half.status, 400, JSON.stringify(await half.clone().json()));
       limiter.reset();
-      const same = Keypair.generate().publicKey.toBase58();
+      const same = BURN_PUBS[2];
       assert.equal((await legacy(pairBody({ ticker: "LIONS", mint: same, pair: { ticker: "TIGERS", name: "Chiefs", mint: same } }))).status, 400, "one mint for both coins is refused");
+      // a plain address is refused: every coin's address ends in burn (owner, 2026-10-14 night)
+      limiter.reset();
+      const plain = await legacy(pairBody({ ticker: "BEARS", mint: BURN_PUBS[0], pair: { ticker: "WOLVES", name: "Chiefs", mint: "So11111111111111111111111111111111111111112" } }));
+      assert.equal(plain.status, 400); assert.equal((await plain.json() as { code: string }).code, "mint-not-burn");
     } finally { if (was !== undefined) process.env.BURNTICKER_PAIR_CURVE_ENABLED = was; }
   });
   test("the pair curve: its two mints are the page's, and mintSecretKeys carries nothing", async () => {
     await makeWorld(); limiter.reset();
     const was = process.env.BURNTICKER_PAIR_CURVE_ENABLED; process.env.BURNTICKER_PAIR_CURVE_ENABLED = "1";
     try {
-      const a = Keypair.generate().publicKey.toBase58(), b = Keypair.generate().publicKey.toBase58();
+      const [a, b] = BURN_PUBS;
       const r = await legacy(pairBody({ venue: "pair-curve", mint: a, pair: { ticker: "CHIEFS", name: "Chiefs", mint: b } }));
       assert.equal(r.status, 200, JSON.stringify(await r.clone().json()).slice(0, 300));
       const j = await r.json() as { pairCurve: { mints: { a: string; b: string } }; mintSecretKeys: { a: string | null; b: string | null } };
@@ -357,33 +357,32 @@ describe("the server takes the browser's public keys and never makes or sees the
 });
 
 describe("the wiring, by each file's source", () => {
-  test("the launch page: the search from the name step, the public keys sent, the page's own secrets attached", () => {
+  test("the launch page: no mint sent, the server's key checked; the search only on mint-bank-empty, its public keys sent, its secrets attached", () => {
     const src = read("src/app/burnticker/launch/page.tsx");
     assert.match(src, /const mintPool = useMintPool\(\)/);
-    assert.match(src, /const burnMint = useBurnChoice\(\)/);
-    assert.match(src, /if \(burnMint && mintPool && wizardMaySign\(gate\) && ticker\.trim\(\) && \(step === "name" \|\| step === "review"\)\) void mintPool\.ensure\(mintsNeeded\)/, "the search starts early only with the switch on");
     assert.match(src, /const mintsNeeded = pairOn \? 2 : 1/);
-    assert.doesNotMatch(src, /await mintPool\.ensure\(/, "Launch never waits on the pool directly");
-    assert.match(src, /await launchMints\(\{ burn: burnMint, pool: mintPool, n: mintsNeeded \}\);\s*if \(curRev\.current !== sentRev\) \{ setLaunchErr\(STALE_PREPARE_SENTENCE\); return; \}/, "an edit while waiting sends nothing");
-    assert.equal((src.match(/mint: kA\.publicKey/g) ?? []).length, 2, "the one coin and side A (and the matchup's first coin)");
-    assert.equal((src.match(/mint: kB\.publicKey/g) ?? []).length, 2, "side B, and the matchup's second coin");
-    assert.equal((src.match(/withLocalKey\(/g) ?? []).length, 5);
-    assert.match(src, /j\.pairCurve\.mints\.a !== kA\.publicKey \|\| j\.pairCurve\.mints\.b !== kB\.publicKey\) throw new Error\(MINT_MISMATCH_LINE\)/);
-    assert.match(src, /keys: keysAB/); assert.doesNotMatch(src, /keys: j\.mintSecretKeys/, "a secret from the server is never used");
-    assert.match(src, /mintSearch=\{<MintChoice pool=\{mintPool\} \/>\}/);
+    assert.doesNotMatch(src, /useBurnChoice|launchMints|MintChoice|plainMint|mintPool\.ensure\(/, "no switch, no plain keys, no search started by the page itself");
+    assert.match(src, /prepareIfCurrent\(sentRev, \(\) => curRev\.current, \(\) => withMintSource\(\{ pool: mintPool, n: mintsNeeded, stale: \(\) => curRev\.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE \}, async \(keys: GroundMint\[\] \| null\)/, "the server's keys first; an edit while searching sends nothing");
+    assert.match(src, /const keyed = \(bundle: Bundle, k: GroundMint \| undefined\) => \(k \? withLocalKey\(bundle, k\) : withServerKey\(bundle\)\)/);
+    assert.match(src, /const sentMint = \(k: GroundMint \| undefined\) => \(k \? \{ mint: k\.publicKey \} : \{\}\)/);
+    assert.equal((src.match(/\.\.\.sentMint\(kA\)/g) ?? []).length, 2, "the one coin and side A (and the matchup's first coin)");
+    assert.equal((src.match(/\.\.\.sentMint\(kB\)/g) ?? []).length, 2, "side B, and the matchup's second coin");
+    assert.equal((src.match(/keyed\(/g) ?? []).length, 5, "the five bundles: the matchup's two, the pair's two, the one coin");
+    assert.match(src, /if \(kA && kB && \(j\.pairCurve\.mints\.a !== kA\.publicKey \|\| j\.pairCurve\.mints\.b !== kB\.publicKey\)\) throw new Error\(MINT_MISMATCH_LINE\)/);
+    assert.match(src, /serverKeyFor\(j\.pairCurve\.mints\.a, j\.mintSecretKeys\?\.a\)/); assert.match(src, /serverKeyFor\(j\.pairCurve\.mints\.b, j\.mintSecretKeys\?\.b\)/);
+    assert.match(src, /mintSearch=\{<MintAddressBlock pool=\{mintPool\} \/>\}/);
     assert.doesNotMatch(src, /secretKey[^\n]*(localStorage|sessionStorage|DRAFT_STORE)/, "the keys are never saved with the draft");
   });
-  test("the Coin vs Coin tile and the record close: the same search, both mints in parallel, the server's secrets never used", () => {
+  test("the Coin vs Coin tile and the record close: the same flow, the server's keys checked, the search only as the fallback", () => {
     const src = read("src/app/burnticker/launch/CoinVsCoinTile.tsx");
-    assert.match(src, /await launchMints\(\{ burn: burnMint, pool: mintPool, n: 2 \}\)/); assert.match(src, /await launchMints\(\{ burn: burnMint, pool: mintPool, n: 1 \}\)/);
-    assert.doesNotMatch(src, /await mintPool\.ensure\(/);
-    assert.equal((src.match(/if \(burnMint && mintPool && !blocked/g) ?? []).length, 2, "both early searches only with the switch on");
-    assert.match(src, /\{ \.\.\.body, mint: kA\.publicKey, pair: \{ \.\.\.body\.pair, mint: kB\.publicKey \} \}/);
-    assert.match(src, /JSON\.stringify\(\{ \.\.\.body, mint: kA\.publicKey \}\)/);
-    assert.doesNotMatch(src, /keys: j\.mintSecretKeys/);
-    assert.match(src, /withLocalKey\(A, kA\), b: withLocalKey\(B, kB\)/); assert.match(src, /withLocalKey\(got\.ok\.bundle, kA\)/);
-    assert.equal((src.match(/mintSearch=\{<MintChoice pool=\{mintPool\} \/>\}/g) ?? []).length, 2);
-    assert.equal((src.match(/const burnMint = useBurnChoice\(\);/g) ?? []).length, 2);
+    assert.match(src, /withMintSource\(\{ pool: mintPool, n: 2, /); assert.match(src, /withMintSource\(\{ pool: mintPool, n: 1, /);
+    assert.doesNotMatch(src, /useBurnChoice|launchMints|MintChoice|mintPool\.ensure\(/);
+    assert.match(src, /kA && kB \? \{ \.\.\.body, mint: kA\.publicKey, pair: \{ \.\.\.body\.pair, mint: kB\.publicKey \} \} : body/);
+    assert.match(src, /JSON\.stringify\(\{ \.\.\.body, \.\.\.\(kA \? \{ mint: kA\.publicKey \} : \{\}\) \}\)/);
+    assert.match(src, /a: kA \? withLocalKey\(A, kA\) : withServerKey\(A\), b: kB \? withLocalKey\(B, kB\) : withServerKey\(B\)/);
+    assert.match(src, /got\.ok\.kA \? withLocalKey\(got\.ok\.bundle, got\.ok\.kA\) : withServerKey\(got\.ok\.bundle\)/);
+    assert.match(src, /serverKeyFor\(j\.pairCurve\.mints\.a, j\.mintSecretKeys\?\.a\)/);
+    assert.equal((src.match(/mintSearch=\{<MintAddressBlock pool=\{mintPool\} \/>\}/g) ?? []).length, 2);
     assert.equal((src.match(/const mintPool = useMintPool\(\);/g) ?? []).length, 2, "the record close and the tile share the tab's one pool");
   });
   test("the review card shows the panel above Launch; the sign card shows each address before signing", () => {
@@ -399,9 +398,9 @@ describe("the wiring, by each file's source", () => {
     assert.doesNotMatch(src, /fetch|XMLHttpRequest|WebSocket|sendBeacon|importScripts/);
     assert.doesNotMatch(read("src/lib/burnticker/vanityMint.ts"), /fetch\(|XMLHttpRequest|WebSocket|sendBeacon/);
   });
-  test("the route takes the two public keys; the coin page and the trust page say it, the coin page only for a matching mint", () => {
+  test("the route: bank keys when no mint is sent, the two public keys otherwise; the coin page and the trust page say it", () => {
     const rt = read("src/app/api/burnticker/launch/route.ts");
-    assert.match(rt, /prepareLaunch\(p, body, \{ register: true, \.\.\.\(own !== undefined \? \{ mint: own \} : \{\}\), \.\.\.\(ownB !== undefined \? \{ mintB: ownB \} : \{\}\) \}\)/);
+    assert.match(rt, /prepareLaunch\(p, body, \{ register: true, \.\.\.\(own !== undefined \? \{ mint: own \} : \{\}\), \.\.\.\(ownB !== undefined \? \{ mintB: ownB \} : \{\}\), \.\.\.\(taken \? \{ mintKeypair: taken\[0\], \.\.\.\(taken\[1\] \? \{ mintKeypairB: taken\[1\] \} : \{\}\) \} : \{\}\) \}\)/);
     const coin = read("src/app/burnticker/t/[ticker]/page.tsx");
     assert.match(coin, /\{coinAddressLine\(s\.mint\) && <span[^>]*data-mint-suffix>\{coinAddressLine\(s\.mint\)\}<\/span>\}/);
     assert.match(read("src/app/burnticker/trust/page.tsx"), /<h2 className="font-medium">How this was built<\/h2>[\s\S]{0,300}data-mint-suffix>\{MINT_ADDRESS_TRUST\}/);
@@ -422,76 +421,52 @@ describe("the wiring, by each file's source", () => {
   });
 });
 
-describe("plain addresses by default, the burn ending opt-in (owner, 2026-10-14 evening)", () => {
-  const counting = () => { const workers: FakeWorker[] = []; const pool = new MintGrindPool({ workers: 2, suffixes: ["b"], makeWorker: () => { const w = new FakeWorker(); workers.push(w); return w; } }); return { workers, pool }; };
-  const memStore = () => { const m = new Map<string, string>(); return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); } }; };
-  test("off (the default): Launch gets plain keys at once, sound by the same check, and no search starts", async () => {
-    assert.equal(readBurnChoice(memStore()), false, "nothing saved reads as off");
-    const { workers, pool } = counting();
-    const keys = await launchMints({ burn: false, pool, n: 2 });
-    assert.equal(keys.length, 2); assert.notEqual(keys[0].publicKey, keys[1].publicKey);
-    for (const k of keys) { assert.equal(k.plain, true); assert.equal(groundMintProblem(k), null); }
-    assert.equal(workers.length, 0, "no worker was made"); assert.equal(pool.snapshot().running, false); assert.equal(mintSearchView(pool.snapshot()).state, "idle");
-    assert.equal((await launchMints({ burn: false, pool: null, n: 1 })).length, 1, "no pool needed either");
-    // the plain key signs the plan like a burn-ending one did
-    const k = keys[0];
-    const bundle = { mint: k.publicKey, ticker: "AAA", ready: true, pending: [], mintSecretKey: null, transactions: [{ label: "create", signers: ["creator", "mint"], instructions: [] }] };
-    assert.deepEqual(planProblems(launchlabPlan([withLocalKey(bundle, k)]), CREATOR), []);
+describe("mandatory again (owner, 2026-10-14 night): the server's key first, the browser search only on mint-bank-empty", () => {
+  const bankEmpty = () => new LaunchRequestError(503, MINT_BANK_EMPTY, "none ready");
+  test("the server answered with its key: run(null) once, no search", async () => {
+    let ensures = 0, calls: unknown[] = [];
+    const pool = { ensure: async () => { ensures++; return []; } };
+    const out = await withMintSource({ pool, n: 2 }, async (keys) => { calls.push(keys); return "ok"; });
+    assert.equal(out, "ok"); assert.deepEqual(calls, [null]); assert.equal(ensures, 0);
   });
-  test("on: the search runs and Launch waits for it; the skip ends the wait at any moment", async () => {
-    const { workers, pool } = counting();
-    let done = false;
-    const p = launchMints({ burn: true, pool, n: 1 }).then((k) => { done = true; return k; });
-    assert.equal(workers.length, 2, "the search started");
-    assert.equal(mintSearchView(pool.snapshot()).showSkip, true, "the skip is there at once");
-    await new Promise((r) => setTimeout(r, 5));
-    assert.equal(done, false, "Launch is waiting");
-    const k = keyEndingIn("b", 41);
-    workers[0].emit({ type: "found", publicKey: k.publicKey, secretKey: k.secretKey, tries: 7 });
-    assert.deepEqual((await p).map((x) => x.publicKey), [k.publicKey]);
-    await assert.rejects(launchMints({ burn: true, pool: null, n: 1 }), /has not started yet/);
-    pool.dispose();
+  test("mint-bank-empty: the search runs for n keys and the press goes on with them", async () => {
+    const k1 = keyEndingIn("b", 51), k2 = keyEndingIn("b", 52);
+    const asked: number[] = [], calls: (GroundMint[] | null)[] = [];
+    const pool = { ensure: async (n: number) => { asked.push(n); return [k1, k2].slice(0, n); } };
+    const out = await withMintSource({ pool, n: 2 }, async (keys) => { calls.push(keys); if (!keys) throw bankEmpty(); return keys.map((k) => k.publicKey); });
+    assert.deepEqual(out, [k1.publicKey, k2.publicKey]); assert.deepEqual(asked, [2]); assert.equal(calls.length, 2);
+    assert.equal(isMintBankEmpty(bankEmpty()), true); assert.equal(isMintBankEmpty(new Error("x")), false);
   });
-  test("turning the switch off mid-search stops it, lets a waiting press go on with plain keys, and keeps found burn keys for later", async () => {
-    const { workers, pool } = counting();
-    const p = launchMints({ burn: true, pool, n: 2 });
-    const k = keyEndingIn("b", 42);
-    workers[1].emit({ type: "found", publicKey: k.publicKey, secretKey: k.secretKey, tries: 3 });
-    pool.optOut();
-    const keys = await p;
-    assert.equal(keys.length, 2); assert.equal(keys[0].publicKey, k.publicKey); assert.equal(keys[1].plain, true);
-    assert.ok(workers.every((w) => w.terminated));
-    const s = pool.snapshot();
-    assert.equal(s.running, false); assert.equal(s.wanted, 0); assert.deepEqual(s.addresses, [k.publicKey], "the plain key is not banked");
-    assert.equal(mintSearchView(s).state, "idle", "no panel after the switch is off");
-    // idle opt-out: nothing waiting, the search just stops
-    const b = counting(); void b.pool.ensure(1); b.pool.optOut();
-    assert.equal(b.pool.snapshot().running, false); assert.equal(b.pool.snapshot().wanted, 0);
+  test("any other refusal is not a reason to search; an edit while searching sends nothing more", async () => {
+    let ensures = 0;
+    const pool = { ensure: async () => { ensures++; return [keyEndingIn("b", 53)]; } };
+    await assert.rejects(withMintSource({ pool, n: 1 }, async () => { throw new LaunchRequestError(409, "mint-taken", "taken"); }), /taken/);
+    assert.equal(ensures, 0);
+    let second = false;
+    await assert.rejects(withMintSource({ pool, n: 1, stale: () => true, staleLine: "changed" }, async (keys) => { if (!keys) throw bankEmpty(); second = true; return 1; }), /changed/);
+    assert.equal(second, false);
+    await assert.rejects(withMintSource({ pool: null, n: 1 }, async () => { throw bankEmpty(); }), /has not started yet/);
   });
-  test("the switch is remembered in this browser, and a broken storage reads as off", () => {
-    const st = memStore();
-    writeBurnChoice(st, true); assert.equal(st.m.get(MINT_BURN_CHOICE_KEY), "1"); assert.equal(readBurnChoice(st), true);
-    writeBurnChoice(st, false); assert.equal(readBurnChoice(st), false);
-    const broken = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); } };
-    assert.equal(readBurnChoice(broken), false); assert.doesNotThrow(() => writeBurnChoice(broken, true));
-    assert.equal(readBurnChoice(null), false);
+  test("the server's key is checked before signing: it must derive the bundle's mint and end in burn", () => {
+    const kp = Keypair.generate();
+    // a sound key that does not end in burn is refused (the check uses the real suffixes)
+    if (!matchesSuffix(kp.publicKey.toBase58())) assert.throws(() => withServerKey({ mint: kp.publicKey.toBase58(), mintSecretKey: base58(kp.secretKey) }), new RegExp(MINT_SERVER_KEY_LINE.slice(0, 30)));
+    assert.throws(() => withServerKey({ mint: BURN_PUBS[0], mintSecretKey: null }), new RegExp(MINT_SERVER_KEY_LINE.slice(0, 30)));
+    assert.throws(() => withServerKey({ mint: BURN_PUBS[0], mintSecretKey: base58(kp.secretKey) }), new RegExp(MINT_SERVER_KEY_LINE.slice(0, 30)), "a secret for another address");
+    assert.throws(() => serverKeyFor(BURN_PUBS[0], "0OIl"), new RegExp(MINT_SERVER_KEY_LINE.slice(0, 30)), "not base58");
+    // base58 round trip of a real 64-byte secret, leading zero bytes included
+    for (const bytes of [kp.secretKey, new Uint8Array([0, 0, 7, ...kp.secretKey.slice(3)])]) assert.deepEqual(base58Decode(base58(bytes)), bytes);
   });
-  test("the switch's source: a checkbox off by default, saved through writeBurnChoice, the panel only when on, the note always", () => {
-    const src = read("src/app/burnticker/launch/MintSearch.tsx");
-    assert.match(src, /export function MintChoice\(/);
-    assert.match(src, /<input type="checkbox" role="switch"[^>]*data-mint-burn-switch checked=\{burn\}/);
-    assert.match(src, /setBurnChoice\(on\); if \(!on\) pool\?\.optOut\(\);/);
-    assert.match(src, /burnChoice = on; writeBurnChoice\(choiceStore\(\), on\)/);
-    assert.match(src, /readBurnChoice\(choiceStore\(\)\)/);
-    assert.match(src, /useSyncExternalStore\([\s\S]*?, getBurnChoice, \(\) => false\)/, "the server render is off");
-    assert.match(src, /\{MINT_CHOICE_LABEL\}/);
-    assert.match(src, /\{burn && <MintSearch pool=\{pool\} \/>\}/);
-    assert.match(src, /data-mint-note>\{MINT_ADDRESS_NOTE\}/);
+  test("the pool has no skip, no opt-out and no plain keys; the suffix rule lives in mintSuffix.ts only", () => {
+    const pool = new MintGrindPool({ workers: 1, makeWorker: () => new FakeWorker() }) as unknown as Record<string, unknown>;
+    assert.equal(typeof pool.skip, "undefined"); assert.equal(typeof pool.optOut, "undefined");
+    assert.doesNotMatch(read("src/lib/burnticker/vanityMint.ts"), /plainMint|readBurnChoice|launchMints|MINT_BURN_CHOICE_KEY/);
+    assert.doesNotMatch(read("src/lib/burnticker/mintSuffix.ts"), /MINT_BURN_CHOICE_KEY/);
   });
-  test("the server needs no suffix: any valid public key, as the plain default sends", () => {
-    const h = read("src/lib/burnticker/api/handlers.ts");
-    assert.doesNotMatch(h, /matchesSuffix|MINT_SUFFIX/);
+  test("the handlers and the bundle builder need no suffix (the route and the bank enforce it); the route refuses a plain mint", () => {
+    assert.doesNotMatch(read("src/lib/burnticker/api/handlers.ts"), /matchesSuffix|MINT_SUFFIX/);
     assert.doesNotMatch(read("src/lib/burnticker/launchBundle.ts"), /matchesSuffix|MINT_SUFFIX/);
-    assert.doesNotMatch(read("src/app/api/burnticker/launch/route.ts"), /matchesSuffix|MINT_SUFFIX/);
+    const rt = read("src/app/api/burnticker/launch/route.ts");
+    assert.match(rt, /if \(\(own !== undefined && !matchesSuffix\(own\)\) \|\| \(ownB !== undefined && !matchesSuffix\(ownB\)\)\) return NextResponse\.json\(\{[^}]*code: "mint-not-burn" \}, \{ status: 400 \}\)/);
   });
 });

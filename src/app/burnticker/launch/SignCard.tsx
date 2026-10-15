@@ -140,7 +140,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         })}
         {plan.confirms.map((c) => <li key={c.mint} className="text-neutral-500">{confirmed.includes(c.mint) ? "✓" : "·"} ${c.ticker} recorded as launched</li>)}
       </ol>
-      {/* 2026-10-14 (owner): the address each coin gets, shown before anything is signed (made in this browser; plain unless the creator chose burn) */}
+      {/* 2026-10-14 (owner): the address each coin gets, shown before anything is signed (prepared by the site, or found in this browser when none was ready; it ends in burn) */}
       <ul className="space-y-0.5 text-xs text-neutral-300" aria-label="Coin addresses" data-mint-addresses>{plan.confirms.map((c) => <li key={c.mint} className="break-all" data-mint-address={c.mint}>${c.ticker}&apos;s address is <code className="text-amber-200">{c.mint}</code></li>)}</ul>
       {plan.confirms.length > 0 && plan.confirms.every((c) => matchesSuffix(c.mint)) && <p className="text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p>}
       <p className="text-xs text-neutral-500" data-no-opening-purchase>{NO_OPENING_PURCHASE_SENTENCE}</p>

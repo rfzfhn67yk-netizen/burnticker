@@ -701,6 +701,11 @@ leg, which would compare each memo on chain, is not wired. The script runs with 
   the platform's fee rates, claim wallets, `cpConfigId`, `platformCpCreator` and LP scales for launches not yet migrated. Four things
   limit this. `initialize_token` pins what matters. `verify-platform-pins` re-reads the platform just before each create and refuses on
   any difference. The stranding switch covers a change between init and migration. The trust page shows the live config.
+- **Mint keys prepared ahead of time (owner decision, 2026-10-14).** Every coin made here gets an address that ends in burn. This site
+  prepares those mint keys ahead of time, keeps them encrypted, hands each one to its creator once at launch and deletes it 24 hours
+  later if that launch does not happen. Until the coin is created the key only decides the address; it cannot move anything. The
+  creator's wallet still signs the launch, and the key is never used for anything but creating that one mint. When no prepared key is
+  ready, the creator's browser finds one instead, and that key never leaves the browser. Other launchpads prepare addresses the same way.
 - **Cranker allowlist during the cap.** `initialize_platform` may name up to 3 keys that are allowed to call `crank_buyback` while the
   cap is in force. This guards against an outside cranker timing a multi-block TWAP hold. The list can only be cleared, by the platform
   authority or any listed key. It lapses 90 days after `initialize_platform` or at the cap sunset, whichever comes first. Readings, vault

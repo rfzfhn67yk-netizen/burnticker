@@ -88,6 +88,7 @@ scripts/service/run-burnticker-keeper.sh
 scripts/service/run-burnticker-audit.sh
 scripts/service/run-burnticker-clonewatch.sh
 scripts/service/run-burnticker-signer.sh
+scripts/service/run-burnticker-mintbank.sh
 scripts/ops/deploy-sites.sh
 scripts/ops/keeper-status-check.sh
 scripts/ops/probe-burnticker.sh

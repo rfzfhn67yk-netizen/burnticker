@@ -136,3 +136,19 @@ describe("tonight's failures reach the phone (2026-10-14): the page's launch rou
     assert.deepEqual(out, []);
   });
 });
+
+describe("the pinned-metadata check runs on this host first (2026-10-14: the gateway redirects to a CDN)", () => {
+  test("the route answers ok for a sound pin and null for an unknown coin; the page asks the host before its own fetch; the policy allows the CDN", async () => {
+    const fs = await import("node:fs");
+    const csp = (await import("@/lib/burnticker/csp")).appCsp?.() ?? fs.readFileSync(new URL("../src/lib/burnticker/csp.ts", import.meta.url), "utf8");
+    assert.match(String(csp), /https:\/\/\*\.datasprite-cdn\.com/);
+    const comp = fs.readFileSync(new URL("../src/app/burnticker/_components/PinnedCheck.tsx", import.meta.url), "utf8");
+    assert.match(comp, /\/api\/burnticker\/pin-check\?mint=/);
+    assert.match(comp, /Your browser could not reach the gateway just now/);
+    const page = fs.readFileSync(new URL("../src/app/burnticker/t/[ticker]/page.tsx", import.meta.url), "utf8");
+    assert.match(page, /<PinnedCheck pinned=\{s\.pinned \? \{ \.\.\.s\.pinned, mint: s\.mint \} : s\.pinned\} \/>/);
+    const { GET } = await import("../src/app/api/burnticker/pin-check/route.ts");
+    const r = await GET(new Request("http://bt.test/api/burnticker/pin-check?mint=11111111111111111111111111111111", { headers: { "x-forwarded-for": "203.0.113.9" } }));
+    assert.equal(r.status, 404);
+  });
+});

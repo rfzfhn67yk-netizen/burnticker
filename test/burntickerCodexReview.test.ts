@@ -370,7 +370,7 @@ describe("N3 — SDK verification never accepts a memo-only transaction as a bur
 describe("N4 — the legacy wizard route is metered like the public API, and paid uploads have a host-wide daily budget", () => {
   const legacy = async (body: unknown, ip = "198.51.100.40") => {
     const { POST } = await import("../src/app/api/burnticker/launch/route.ts");
-    return POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "content-type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify(body) }));
+    return POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "x-forwarded-proto": "https", "content-type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify(body) }));
   };
   test("a client that floods /api/burnticker/launch is rate limited (429 + Retry-After), like /v1/launch/bundle", async () => {
     await makeWorld(); limiter.reset();
@@ -409,7 +409,7 @@ describe("N6 — with the pair curve enabled the wizard route never hands out tw
   const pairBody = (extra: Record<string, unknown> = {}) => ({ creator: CREATOR, ticker: "DENVER", name: "Denver", description: "", imageUrl: null, links: [], rule: LOSE, acknowledgements: { ruleLocked: true, noReturns: true }, pair: { ticker: "CHIEFS", name: "Chiefs" }, ...extra });
   const legacy = async (body: unknown) => {
     const { POST } = await import("../src/app/api/burnticker/launch/route.ts");
-    return POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "content-type": "application/json", "x-forwarded-for": `203.0.113.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body) }));
+    return POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "x-forwarded-proto": "https", "content-type": "application/json", "x-forwarded-for": `203.0.113.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body) }));
   };
   const withFlag = async <T>(fn: () => Promise<T>): Promise<T> => { const was = process.env.BURNTICKER_PAIR_CURVE_ENABLED; process.env.BURNTICKER_PAIR_CURVE_ENABLED = "1"; try { return await fn(); } finally { if (was === undefined) delete process.env.BURNTICKER_PAIR_CURVE_ENABLED; else process.env.BURNTICKER_PAIR_CURVE_ENABLED = was; } };
 

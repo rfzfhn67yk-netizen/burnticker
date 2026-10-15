@@ -29,7 +29,7 @@ test("the static-site policy covers the hosts the static pages fetch and style f
 test("the app policy covers the receipt verifier's RPCs (https + wss), Treasury, the arweave/Irys gateways and the host's wallet RPC placeholder", () => {
   const connect = directive(policy("csp_report_only_app"), "connect-src");
   for (const h of [PUBLIC_RPC.devnet, PUBLIC_RPC.mainnet]) { assert.ok(connect.includes(origin(h)), h); assert.ok(connect.includes(origin(h).replace("https:", "wss:")), `wss ${h}`); }
-  for (const h of ["https://api.fiscaldata.treasury.gov", "https://arweave.net", "https://gateway.irys.xyz", "https://devnet.irys.xyz"]) assert.ok(connect.includes(h), h);
+  for (const h of ["https://api.fiscaldata.treasury.gov", "https://arweave.net", "https://gateway.irys.xyz", "https://*.datasprite-cdn.com", "https://devnet.irys.xyz"]) assert.ok(connect.includes(h), h);
   assert.ok(connect.some((x) => x.startsWith("{$BURNTICKER_PUBLIC_RPC_ORIGIN")), "the host's NEXT_PUBLIC RPC origin is a named placeholder");
   // the pin uploader's gateways are the ones allowed
   const pin = read("src/lib/burnticker/pin.ts");

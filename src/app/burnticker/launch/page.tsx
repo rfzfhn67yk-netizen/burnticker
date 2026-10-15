@@ -17,8 +17,8 @@ import { useScrollEdges } from "../_components/useScrollEdges";
 import { CoinVsCoinTile, CVC_STORE, type TileAnswers } from "./CoinVsCoinTile";
 import { LAUNCH_START_EVENT } from "@/lib/burnticker/launchStart";
 import { SignCard } from "./SignCard";
-import { MintChoice, useBurnChoice, useMintPool } from "./MintSearch";
-import { launchMints, secretBase58, withLocalKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
+import { MintAddressBlock, useMintPool } from "./MintSearch";
+import { secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
 import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { ReviewCard } from "./ReviewCard";
@@ -399,16 +399,13 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [coinAnswers, setCoinAnswers] = useState<TileAnswers | null>(null);
 
   const pairOn = flow === "pair";
-  // 2026-10-14 (owner): plain mint addresses by default, made in the page at Launch time (no wait). A creator who turns on the review
-  // step's switch (remembered in this browser) gets an address that ends in burn or BURN: the search runs in this browser's workers
-  // (MintSearch.tsx, vanityMint.ts) from the name step on, and Launch waits for it. Only the public key is sent with the launch request.
-  // The keys live in page memory, never in the saved draft: a reload makes or searches again, and that is fine because nothing was sent.
+  // 2026-10-14 night (owner: "the BURN vanity address is mandatory. Save them like pump.fun does so they launch instantly."): every coin's
+  // mint address ends in burn or BURN. Launch sends no mint: the server takes a prepared key from its bank and returns its secret in the
+  // bundle, checked here (withServerKey) before anything is signed. Only when the server has none ready (mint-bank-empty) does this
+  // browser search (MintSearch.tsx, vanityMint.ts withMintSource), and then only the public key is sent. Keys live in page memory, never
+  // in the saved draft.
   const mintPool = useMintPool();
-  const burnMint = useBurnChoice();
   const mintsNeeded = pairOn ? 2 : 1;
-  useEffect(() => {
-    if (burnMint && mintPool && wizardMaySign(gate) && ticker.trim() && (step === "name" || step === "review")) void mintPool.ensure(mintsNeeded);
-  }, [burnMint, mintPool, gate, ticker, step, mintsNeeded]);
   // website-21: a rivalry series pair (two teams, every game between them this season): one linked LaunchLab pair, side B on the mirror
   const meetingsOn = pairOn && pairMode === "meetings" && !elPick;
   const season = pairOn && pairMode !== "game";
@@ -980,25 +977,26 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       if (lines.length) throw new Error(lines.join(" "));
     };
     try {
-      // the mint addresses: plain ones made here at once by default; with the burn switch on, usually found already in the background,
-      // otherwise the panel above Launch counts until they are (or the creator takes a plain address). An edit made while waiting sets
-      // the press aside before anything is sent.
-      const keys: GroundMint[] = await launchMints({ burn: burnMint, pool: mintPool, n: mintsNeeded });
-      if (curRev.current !== sentRev) { setLaunchErr(STALE_PREPARE_SENTENCE); return; }
-      const [kA, kB] = keys;
-      const out = await prepareIfCurrent(sentRev, () => curRev.current, async (): Promise<() => void> => {
+      // the mint addresses: the server's prepared ones (no mint sent, keys = null); when it has none ready, this browser's search finds
+      // them (the panel above Launch counts) and the press goes on with their public keys. An edit made while the search ran sets the
+      // press aside before anything more is sent (withMintSource's stale check, and prepareIfCurrent's).
+      const out = await prepareIfCurrent(sentRev, () => curRev.current, () => withMintSource({ pool: mintPool, n: mintsNeeded, stale: () => curRev.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE }, async (keys: GroundMint[] | null): Promise<() => void> => {
+      const [kA, kB] = keys ?? [];
+      // the key each bundle is signed with: this browser's own (checked against the bundle's mint), or the server's (checked to derive it and end in burn)
+      const keyed = (bundle: Bundle, k: GroundMint | undefined) => (k ? withLocalKey(bundle, k) : withServerKey(bundle));
+      const sentMint = (k: GroundMint | undefined) => (k ? { mint: k.publicKey } : {});
       if (pairOn && ruleB && !meetingsOn && !settledPick) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         // website-18: each coin carries its own image, description and links (pinned in its own metadata file)
-        const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, rule, ...profileBody(profile), mint: kA.publicKey });
-        mintPool?.consume(kA.publicKey);
-        const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: ctxB, note: "", imageUrl: null, rule: ruleB, ...profileBody(profileB), mint: kB.publicKey });
-        mintPool?.consume(kB.publicKey);
+        const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, rule, ...profileBody(profile), ...sentMint(kA) });
+        if (kA) mintPool?.consume(kA.publicKey);
+        const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: ctxB, note: "", imageUrl: null, rule: ruleB, ...profileBody(profileB), ...sentMint(kB) });
+        if (kB) mintPool?.consume(kB.publicKey);
         await checkBeforeWallet(a.bundle as Bundle, b.bundle as Bundle);
-        const A = withLocalKey(a.bundle as Bundle, kA), B = withLocalKey(b.bundle as Bundle, kB);
+        const A = keyed(a.bundle as Bundle, kA), B = keyed(b.bundle as Bundle, kB);
         return () => { setPairOut({ pairId: null, a: A, b: B, notes: [independentPairFacts(sent.a, sent.b).moves] }); setBundle(A); };
       } else {
-        const body: Record<string, unknown> = { ...common, ...launchBody({ creator, ticker, name, description: finalDescription, descCtx: textCtx, note, rule, raiseSol }), mint: kA.publicKey };
+        const body: Record<string, unknown> = { ...common, ...launchBody({ creator, ticker, name, description: finalDescription, descCtx: textCtx, note, rule, raiseSol }), ...sentMint(kA) };
         // website-15 item 13: a single coin carries the creator's description, links and uploaded image (with the confirmed rights line)
         // website-18: a registered pair's side A too; side B's profile rides in `pair`
         Object.assign(body, profileBody(profile));
@@ -1013,30 +1011,30 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           // paragraph from it, the same one the review answers (review.settled.descriptionB)
           const descB = meetingsOn ? (reviewMeetings?.descriptionB ?? finalDescriptionB) : settledPick ? (reviewSettled?.descriptionB || finalDescriptionB) : finalDescriptionB;
           const settledFields = settledPick ? { ...settledPairFields(settledPick), descCtx: ctxB } : {};
-          const j = await postPairLaunch((u, init) => fetch(u, init), { ...body, pair: { mint: kB.publicKey, ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: null, ...profileBody(profileB), ...settledFields } }, meetingsOn || settledPick ? "launchlab" : pairVenue);
-          mintPool?.consume(kA.publicKey); mintPool?.consume(kB.publicKey);
+          const j = await postPairLaunch((u, init) => fetch(u, init), { ...body, pair: { ...sentMint(kB), ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: null, ...profileBody(profileB), ...settledFields } }, meetingsOn || settledPick ? "launchlab" : pairVenue);
+          if (kA && kB) { mintPool?.consume(kA.publicKey); mintPool?.consume(kB.publicKey); }
           if (j.venue === "pair-curve") {
-            // the pair curve's two mints must be the two this page made; their keys are this page's own
-            if (j.pairCurve.mints.a !== kA.publicKey || j.pairCurve.mints.b !== kB.publicKey) throw new Error(MINT_MISMATCH_LINE);
-            const keysAB = { a: secretBase58(kA), b: secretBase58(kB) };
+            // the pair curve's two mints: this page's own two (their keys are this page's), or the server's two (each key checked)
+            if (kA && kB && (j.pairCurve.mints.a !== kA.publicKey || j.pairCurve.mints.b !== kB.publicKey)) throw new Error(MINT_MISMATCH_LINE);
+            const keysAB = kA && kB ? { a: secretBase58(kA), b: secretBase58(kB) } : { a: secretBase58(serverKeyFor(j.pairCurve.mints.a, j.mintSecretKeys?.a)), b: secretBase58(serverKeyFor(j.pairCurve.mints.b, j.mintSecretKeys?.b)) };
             return () => { setPairOut(null); setBundle(null); setPcOut({ pairId: j.pair.pairId, pc: j.pairCurve, keys: keysAB, notes: j.pair.notes ?? [] }); };
           }
-          const A = withLocalKey(j.bundles.a as Bundle, kA), B = withLocalKey(j.bundles.b as Bundle, kB);
+          const A = keyed(j.bundles.a as Bundle, kA), B = keyed(j.bundles.b as Bundle, kB);
           await checkBeforeWallet(j.bundles.a as Bundle, j.bundles.b as Bundle);
           return () => { setPairOut({ pairId: j.pair.pairId, a: A, b: B, notes: j.pair.notes ?? [] }); setBundle(A); };
         }
         const got = (await post(body)).bundle as Bundle;
-        mintPool?.consume(kA.publicKey);
-        const one = withLocalKey(got, kA);
+        if (kA) mintPool?.consume(kA.publicKey);
+        const one = keyed(got, kA);
         await checkBeforeWallet(one, null);
         return () => setBundle(one);
       }
-      });
+      }));
       if ("stale" in out) { setLaunchErr(STALE_PREPARE_SENTENCE); return; }
       out.ok(); setSignTickers(sent);
       setStep("launch");
     } catch (e) { const v = venueFrom409(e); if (v) setPairVenue(v); setLaunchErr(String((e as Error).message)); } finally { setBusy(false); }
-  }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, profile, profileB, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title, meetingsOn, reviewMeetings, settledPick, reviewSettled, ctxB, mintPool, burnMint, mintsNeeded]);
+  }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, profile, profileB, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title, meetingsOn, reviewMeetings, settledPick, reviewSettled, ctxB, mintPool, mintsNeeded]);
 
   // ---- navigation -----------------------------------------------------------------------------------------------------------------
   const order = ORDER[flow];
@@ -2095,7 +2093,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               ready={ready}
               creator={creator || null}
               onLaunch={() => { void launch(); }}
-              mintSearch={<MintChoice pool={mintPool} />}
+              mintSearch={<MintAddressBlock pool={mintPool} />}
               duplicate={<DuplicateNotice existing={(shownReview.review as (LaunchReview & { existing?: ExistingCoin[] }) | null)?.existing ?? []} />}
               summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} />}
               cost={shownReview.review && reviewCurrent ? `The estimated cost is about ${shownReview.review.costs.totalSol} SOL.` : null}
