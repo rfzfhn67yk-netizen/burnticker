@@ -321,6 +321,7 @@ export interface PairLaunchInput {
   b: { ticker: string; name: string; description: string; imageUrl: string | null; links: { label: string; url: string }[]; /** side B's own pinned token (round 5); side A's is never inherited */ burnTarget?: BurnTargetField | null };
   /** Optional; derived from the tickers and the selector when absent (deterministic). */
   pairId?: string;
+  pairIdPick?: (base: string) => string;
   /**
    * BOTH OR NEITHER (2026-10-10): the date (YYYY-MM-DD, UTC) by whose end both coins must have a registered pool, else the pair voids.
    * The caller passes a one-shot's first settlement date; absent = 30 days after `now` (default Date.now()).
@@ -384,7 +385,7 @@ export const linkedShareIsFull = (r: Pick<BurnRule, "kind" | "binary" | "scalar"
 /** What preparePairRules needs: side A's ticker and rule, side B's ticker and own pin, and the linking choices. */
 /** A stand-in public key used only to validate side B's draft before side A's mint exists (never built, never shown). */
 const PENDING_MINT = "11111111111111111111111111111111";
-export interface PairRulesInput { a: { ticker: string; rule: unknown }; b: { ticker: string; burnTarget?: BurnTargetField | null }; pairId?: string; voidBy?: string; now?: number; race?: PairLaunchInput["race"]; game?: PairLaunchInput["game"] }
+export interface PairRulesInput { a: { ticker: string; rule: unknown }; b: { ticker: string; burnTarget?: BurnTargetField | null }; pairId?: string; /** 2026-10-14: picks a free pair id from the derived base (registry.freePairId); identity by default */ pairIdPick?: (base: string) => string; voidBy?: string; now?: number; race?: PairLaunchInput["race"]; game?: PairLaunchInput["game"] }
 export interface PreparedPairRules { pairId: string; selector: string; ruleA: BurnRule; sideB: (counterpartMintA: string | null) => BurnRule; race: { slug: string; markets: [string, string] } | null; game: { series: [string, string] } | null }
 /**
  * THE ONE PREPARATION PATH FOR A PAIR'S TWO RULES (audit 12 item 2, 2026-10-13). The review and the bundle both call this, so the rules
@@ -416,7 +417,7 @@ export function preparePairRules(input: PairRulesInput): PreparedPairRules {
   // 100 % is refused here, never rewritten (the page offers 100 % only; launchPreflight.ts refuses it before anything is built).
   if (isOneShot(probe) && !linkedShareIsFull(probe)) throw new Error(LINKED_ONE_SHOT_REFUSAL_TEXT);
   const selector = probe.market ?? `${probe.series}${probe.filter.tickerIncludes ? `:${probe.filter.tickerIncludes}` : ""}`;
-  const pairId = input.pairId ?? pairIdFor(input.a.ticker, input.b.ticker, race ? race.slug : selector);
+  const pairId = input.pairId ?? (input.pairIdPick ?? ((b: string) => b))(pairIdFor(input.a.ticker, input.b.ticker, race ? race.slug : selector));
   // Both or neither: the clause is part of BOTH sides' canonical rules (invertMapping carries it to side B), so each hash locks it.
   // …and the onEnd wind-down (no burn pool is ever left behind), unless the caller's rule already names its own.
   const ruleA = validateRule({ ...probe, onEnd: probe.onEnd ?? defaultOnEndFor(probe), pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now), winnerTakesBurn: true, ...(race ? { race } : {}), ...(game ? { game } : {}) } });
@@ -466,7 +467,7 @@ export function preparedRulesCheck(prepared: { sides: readonly PreparedSide[] },
 }
 
 export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps): Promise<PairBundles> {
-  const { pairId, selector, ruleA, sideB, race, game } = preparePairRules({ a: { ticker: input.a.ticker, rule: input.a.rule }, b: { ticker: input.b.ticker, burnTarget: input.b.burnTarget }, pairId: input.pairId, voidBy: input.voidBy, now: input.now, race: input.race, game: input.game });
+  const { pairId, selector, ruleA, sideB, race, game } = preparePairRules({ a: { ticker: input.a.ticker, rule: input.a.rule }, b: { ticker: input.b.ticker, burnTarget: input.b.burnTarget }, pairIdPick: input.pairIdPick, pairId: input.pairId, voidBy: input.voidBy, now: input.now, race: input.race, game: input.game });
   // On chain the pair is linked through initialize_token (LaunchLab pairs): A names B's mint (A is PROVISIONAL), B names A back with
   // partnerFirst inside the 7-day pairing window. So side A is never built alone: B's draft — its rule and its mint — exists before A's
   // initialize_token is composed. A caller-supplied mint public key (deps.mint) cannot pre-name B: those bundles pair in the registry only.

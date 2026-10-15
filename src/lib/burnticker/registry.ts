@@ -253,6 +253,13 @@ export function readingMatches(rule: BurnRule, r: { id: string; title: string | 
 
 export interface RegisterInput { mint: string; ticker: string; name: string; creator: string; description: string; imageUrl: string | null; links: { label: string; url: string }[]; rulesText: string; feePda: string; vault: string | null; tokenConfig: string | null; poolId: string | null; launchTx: string | null; cluster: string; platformId: string | null; baselineAt: string; status: TokenStatus }
 
+/** The first pair id not yet taken: the base, else base-2, base-3 … kept within the 40-character pair id (registry.freePairId). */
+export function nextFreePairId(base: string, taken: (id: string) => boolean): string {
+  if (!taken(base)) return base;
+  for (let n = 2; n < 1000; n++) { const suffix = `-${n}`; const id = `${base.slice(0, 40 - suffix.length).replace(/-$/, "")}${suffix}`; if (!taken(id)) return id; }
+  throw new Error(`registry: no free pair id for ${base}`);
+}
+
 export class Registry {
   readonly db: DatabaseSync;
   readonly file: string;
@@ -576,6 +583,12 @@ export class Registry {
     this.db.prepare("INSERT INTO pairs (pair_id, mint_a, mint_b, selector_key, created_at) VALUES (?,?,?,?,?)").run(pairId, mintA, mintB, a.selectorKey, now);
     return this.pair(pairId)!;
   }
+  /**
+   * 2026-10-14 (the Steelers vs Ravens retry hit "UNIQUE constraint failed: pairs.pair_id"): a pair id is derived from the tickers and
+   * the selector, so a second attempt at the same matchup — fresh mints, the first pair's drafts never launched — collides with the
+   * first row, and rows are never deleted. The first free id: the base, else base-2, base-3 … (kept within the 40-character pair id).
+   */
+  freePairId(base: string): string { return nextFreePairId(base, (id) => this.pair(id) !== null); }
   pair(pairId: string): PairRow | null { const r = this.db.prepare("SELECT * FROM pairs WHERE pair_id=?").get(pairId) as Row | undefined; return r ? { pairId: String(r.pair_id), mintA: String(r.mint_a), mintB: String(r.mint_b), selectorKey: String(r.selector_key), createdAt: Number(r.created_at) } : null; }
   pairOf(mint: string): PairRow | null { const r = this.db.prepare("SELECT * FROM pairs WHERE mint_a=? OR mint_b=?").get(mint, mint) as Row | undefined; return r ? { pairId: String(r.pair_id), mintA: String(r.mint_a), mintB: String(r.mint_b), selectorKey: String(r.selector_key), createdAt: Number(r.created_at) } : null; }
   /** A clause pair's terminal state (live / voided), or null while it waits (or for a pair without the clause). */

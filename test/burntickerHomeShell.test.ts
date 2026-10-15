@@ -182,7 +182,7 @@ describe("the platform strip and the one-line status (Claude site audit 2 items 
 
 describe("words (memory: plain English; config/launch/copy-lint.json)", () => {
   test("every new shell string passes the copy lint", () => {
-    const all = [HERO.title, HERO.sub, ...HOW_IT_WORKS.flatMap((h) => [h.title, h.text]), ...Object.values(FOOTER_COPY), ...Object.values(LAUNCH_CLOSED), WALLET.label, WALLET.note, WALLET.menuNote, SEARCH.label, NO_EVENTS_LINE, ...FIRST_USE.flatMap((t) => [t.term, t.meaning]), ...Object.values(CARD_MEANINGS), ...Object.values(NOT_READ)];
+    const all = [HERO.kicker, HERO.title, HERO.sub, ...HOW_IT_WORKS.flatMap((h) => [h.title, h.text]), ...Object.values(FOOTER_COPY), ...Object.values(LAUNCH_CLOSED), WALLET.label, WALLET.note, WALLET.menuNote, SEARCH.label, NO_EVENTS_LINE, ...FIRST_USE.flatMap((t) => [t.term, t.meaning]), ...Object.values(CARD_MEANINGS), ...Object.values(NOT_READ)];
     const cells = (c: CardView) => [c.nextSettle, c.mcap, c.holders, c.burned].flatMap((x) => [x.text ?? "", x.why ?? ""]).concat([c.curve.why ?? "", c.createdWhy ?? "", c.receiptWhy ?? ""]);
     for (const f of featuredCoins()) all.push(f.name, f.note ?? "", f.rule, ...cells(f), ...f.tags.map((t) => t.label), f.mint?.label ?? "");
     for (const t of all.filter(Boolean)) clean(t, t);

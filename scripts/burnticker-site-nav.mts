@@ -29,6 +29,7 @@ export function heroHtml(): string {
   const createLoading = createPathFor(null);
   return [
     `<section class="hero wrap" aria-labelledby="hero-h">`,
+    `  <p class="sub kicker" data-hero-kicker>${esc(HERO.kicker)}</p>`,
     `  <h1 id="hero-h">${esc(HERO.title)}</h1>`,
     `  <p class="sub">${esc(HERO.sub)}</p>`,
     // website-14 (product idea 1): two paths on arrival, one sentence each; "Create a coin" opens the closed-launches dialog while closed

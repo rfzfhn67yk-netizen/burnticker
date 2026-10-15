@@ -85,3 +85,34 @@ describe("the launch route demands the pair curve only for the pairs the handler
     assert.equal(pairCurveRequiredFor({ rule: binary.rule }, true), false);
   });
 });
+
+describe("a second attempt at the same matchup gets a free pair id (2026-10-14)", () => {
+  test("nextFreePairId: the base when unused, then -2, -3, within 40 characters; the handler and the review both pick through the registry", async () => {
+    const { nextFreePairId } = await import("@/lib/burnticker/registry");
+    const base = "pitwin-vs-balwin-espn-team-nfl-pit-23-wi";
+    assert.equal(nextFreePairId(base, () => false), base);
+    const taken = new Set([base]);
+    const second = nextFreePairId(base, (id) => taken.has(id));
+    assert.ok(second.endsWith("-2") && second.length <= 40 && second !== base, second);
+    taken.add(second);
+    assert.ok(nextFreePairId(base, (id) => taken.has(id)).endsWith("-3"));
+    const fs = await import("node:fs");
+    const src = fs.readFileSync(new URL("../src/lib/burnticker/api/handlers.ts", import.meta.url), "utf8");
+    assert.equal((src.match(/pairIdPick: \(base\) => p\.registry\.freePairId\(base\)/g) ?? []).length, 2, "both pair builds in the handler pick a free id");
+    const route = fs.readFileSync(new URL("../src/app/api/burnticker/v1/launch/review/route.ts", import.meta.url), "utf8");
+    assert.match(route, /pairIdPick: \(base\) => platform\(\)\.registry\.freePairId\(base\)/, "the review shows the same id the launch uses");
+  });
+});
+
+describe("the home hero kicker (owner, 2026-10-14)", () => {
+  test("the kicker lints, sits above the title in the static home, and is in the HomeShell lint set", async () => {
+    const { HERO } = await import("@/lib/burnticker/siteNav.mjs");
+    const { lintCopy } = await import("@/lib/launch/copyLint");
+    assert.equal(HERO.kicker, "Memecoins with an expiration date.");
+    assert.deepEqual(lintCopy(HERO.kicker).hits, []);
+    const fs = await import("node:fs");
+    const html = fs.readFileSync(new URL("../site/burnticker/index.html", import.meta.url), "utf8");
+    const k = html.indexOf('data-hero-kicker>Memecoins with an expiration date.'), h = html.indexOf('<h1 id="hero-h">');
+    assert.ok(k > 0 && h > k, "kicker above the title");
+  });
+});
