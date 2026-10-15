@@ -1,8 +1,9 @@
 import { Keypair } from "@solana/web3.js";
 
 /**
- * MINT ADDRESSES THAT END IN burn (owner, 2026-10-14). Every coin launched from the site gets a mint whose last four base58 characters
- * are `burn` or `BURN`. The key is ground IN THE BROWSER, in Web Workers (src/app/burnticker/launch/vanity.worker.ts), and only its
+ * MINT ADDRESSES THAT END IN burn (owner, 2026-10-14; OPT-IN since the evening of 2026-10-14: "the wait for the vanity address is a
+ * killer"). A coin launched from the site gets a plain mint made in the page at Launch time, unless its creator turns on the switch on
+ * the review step; then its mint's last four base58 characters are `burn` or `BURN` (`launchMints` picks). The burn-ending key is ground IN THE BROWSER, in Web Workers (src/app/burnticker/launch/vanity.worker.ts), and only its
  * PUBLIC key is sent to the launch route; the secret goes from the worker to the page and from the page into the wallet's transaction,
  * never to a server. Coins created before 2026-10-14 ($DEFICIT, REHEARSAL, $PHINFLWIN) have plain addresses and are never described
  * as ending in burn: the coin page's line is shown only when the coin's own mint matches.
@@ -16,8 +17,8 @@ import { Keypair } from "@solana/web3.js";
  */
 
 // relative with its extension so scripts/burnticker-grind-mint.mts loads this file without the alias hook
-import { MINT_SUFFIXES, matchesSuffix } from "./mintSuffix.ts";
-export { MINT_SUFFIXES, MINT_SUFFIX_RE, SKIP_AFTER_MS, matchesSuffix } from "./mintSuffix.ts";
+import { MINT_BURN_CHOICE_KEY, MINT_SUFFIXES, matchesSuffix } from "./mintSuffix.ts";
+export { MINT_BURN_CHOICE_KEY, MINT_SUFFIXES, MINT_SUFFIX_RE, matchesSuffix } from "./mintSuffix.ts";
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export function base58(bytes: Uint8Array): string {
@@ -83,10 +84,31 @@ export function grindMint(o: { suffix?: string | readonly string[]; batch: numbe
   return { found: null, tries: o.batch };
 }
 
-/** A plain fresh mint (the "Use a plain address instead" escape hatch), made in the page; it never leaves the browser either. */
+/** A plain fresh mint (the default, and the "Use a plain address instead" escape hatch), made in the page; it never leaves the browser either. */
 export function plainMint(): GroundMint {
   const kp = Keypair.generate();
   return { publicKey: kp.publicKey.toBase58(), secretKey: kp.secretKey, plain: true };
+}
+
+/** What this browser remembers about the burn-ending switch (localStorage, or a fake in the tests). */
+export interface ChoiceStorage { getItem(key: string): string | null; setItem(key: string, value: string): void }
+
+/** The creator's remembered choice: off unless this browser saved "on" (no storage, a private window or an error reads as off). */
+export function readBurnChoice(store: ChoiceStorage | null | undefined): boolean {
+  try { return store?.getItem(MINT_BURN_CHOICE_KEY) === "1"; } catch { return false; }
+}
+export function writeBurnChoice(store: ChoiceStorage | null | undefined, on: boolean): void {
+  try { store?.setItem(MINT_BURN_CHOICE_KEY, on ? "1" : "0"); } catch { /* not remembered; the switch still works for this visit */ }
+}
+
+/**
+ * The mint keys for one press of Launch. Off (the default): `n` fresh plain keys at once, no search and no wait. On: the pool's
+ * burn-ending keys, waiting for the search (the panel shows it; "Use a plain address instead" ends the wait).
+ */
+export async function launchMints(o: { burn: boolean; pool: Pick<MintGrindPool, "ensure"> | null; n: number; makePlain?: () => GroundMint }): Promise<GroundMint[]> {
+  if (!o.burn) return Array.from({ length: o.n }, () => (o.makePlain ?? plainMint)());
+  if (!o.pool) throw new Error("The address search has not started yet. Please press Launch again.");
+  return o.pool.ensure(o.n);
 }
 
 /** The base58 64-byte secret the signing plan holds (signPlan.ts keys). */
@@ -298,6 +320,17 @@ export class MintGrindPool {
     while (this.bank.length < this.target) this.bank.push(plainMint());
     this.plain = true;
     this.settle(); this.emit();
+  }
+
+  /**
+   * The creator turned the burn ending off: the search stops, a press already waiting goes on with plain keys, and the bank keeps only
+   * burn-ending keys (for when the switch comes back on), so nothing is searched for until it does.
+   */
+  optOut(): void {
+    if (this.waiters.length) this.skip(); else this.stop();
+    this.bank = this.bank.filter((k) => !k.plain);
+    this.target = 0; this.plain = false;
+    this.emit();
   }
 
   dispose(): void { this.stop(); this.waiters = []; this.listeners.clear(); }

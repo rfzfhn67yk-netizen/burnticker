@@ -34,6 +34,12 @@ export function storedLaunchAction(s: StoredLaunch): RecoveryAction {
   if (s.rec.confirmed.length >= s.rec.steps) return "record";
   return "start-new";
 }
+/**
+ * 2026-10-14: an attempt that never sent anything (the wallet's transaction was refused, or the wallet was closed) and whose keys
+ * are gone is not "unfinished" — nothing is on chain and nothing was paid. It goes straight to the read-only history instead of
+ * sitting at the top of the page as a warning (the evening of 2026-10-14 showed two of them for a coin that had since launched).
+ */
+export const nothingSentAbandoned = (s: StoredLaunch): boolean => storedLaunchAction(s) === "start-new" && s.rec.confirmed.length === 0 && !s.rec.pending && (s.rec.paid?.length ?? 0) === 0;
 export const RECOVERY_BUTTON: Record<RecoveryAction, string> = { check: "Check on chain and record", record: "Record the launch", "start-new": "Start a new launch from the review" };
 /** Beside the start-new button: what pressing it keeps and what it does not undo. */
 export const START_NEW_LINE = "This notice moves to the list of earlier launches below, with its signatures and mints. Anything already created on chain stays there.";

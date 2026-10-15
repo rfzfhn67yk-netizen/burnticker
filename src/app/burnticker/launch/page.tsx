@@ -17,9 +17,8 @@ import { useScrollEdges } from "../_components/useScrollEdges";
 import { CoinVsCoinTile, CVC_STORE, type TileAnswers } from "./CoinVsCoinTile";
 import { LAUNCH_START_EVENT } from "@/lib/burnticker/launchStart";
 import { SignCard } from "./SignCard";
-import { MintSearch, useMintPool } from "./MintSearch";
-import { secretBase58, withLocalKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
-import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
+import { MintChoice, useBurnChoice, useMintPool } from "./MintSearch";
+import { launchMints, secretBase58, withLocalKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
 import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { ReviewCard } from "./ReviewCard";
@@ -400,14 +399,16 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [coinAnswers, setCoinAnswers] = useState<TileAnswers | null>(null);
 
   const pairOn = flow === "pair";
-  // 2026-10-14 (owner): every coin's mint address ends in burn or BURN. The search runs in this browser's workers (MintSearch.tsx,
-  // vanityMint.ts) from the name step on, so it has usually finished by the review; only the public key is sent with the launch request.
-  // The keys live in the pool (page memory), never in the saved draft: a reload searches again, and that is fine because nothing was sent.
+  // 2026-10-14 (owner): plain mint addresses by default, made in the page at Launch time (no wait). A creator who turns on the review
+  // step's switch (remembered in this browser) gets an address that ends in burn or BURN: the search runs in this browser's workers
+  // (MintSearch.tsx, vanityMint.ts) from the name step on, and Launch waits for it. Only the public key is sent with the launch request.
+  // The keys live in page memory, never in the saved draft: a reload makes or searches again, and that is fine because nothing was sent.
   const mintPool = useMintPool();
+  const burnMint = useBurnChoice();
   const mintsNeeded = pairOn ? 2 : 1;
   useEffect(() => {
-    if (mintPool && wizardMaySign(gate) && ticker.trim() && (step === "name" || step === "review")) void mintPool.ensure(mintsNeeded);
-  }, [mintPool, gate, ticker, step, mintsNeeded]);
+    if (burnMint && mintPool && wizardMaySign(gate) && ticker.trim() && (step === "name" || step === "review")) void mintPool.ensure(mintsNeeded);
+  }, [burnMint, mintPool, gate, ticker, step, mintsNeeded]);
   // website-21: a rivalry series pair (two teams, every game between them this season): one linked LaunchLab pair, side B on the mirror
   const meetingsOn = pairOn && pairMode === "meetings" && !elPick;
   const season = pairOn && pairMode !== "game";
@@ -979,10 +980,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       if (lines.length) throw new Error(lines.join(" "));
     };
     try {
-      // the mint addresses: usually found already in the background; otherwise the panel above Launch counts until they are (or the
-      // creator takes a plain address). An edit made while waiting sets the press aside before anything is sent.
-      if (!mintPool) throw new Error("The address search has not started yet. Please press Launch again.");
-      const keys: GroundMint[] = await mintPool.ensure(mintsNeeded);
+      // the mint addresses: plain ones made here at once by default; with the burn switch on, usually found already in the background,
+      // otherwise the panel above Launch counts until they are (or the creator takes a plain address). An edit made while waiting sets
+      // the press aside before anything is sent.
+      const keys: GroundMint[] = await launchMints({ burn: burnMint, pool: mintPool, n: mintsNeeded });
       if (curRev.current !== sentRev) { setLaunchErr(STALE_PREPARE_SENTENCE); return; }
       const [kA, kB] = keys;
       const out = await prepareIfCurrent(sentRev, () => curRev.current, async (): Promise<() => void> => {
@@ -990,9 +991,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         // website-18: each coin carries its own image, description and links (pinned in its own metadata file)
         const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, rule, ...profileBody(profile), mint: kA.publicKey });
-        mintPool.consume(kA.publicKey);
+        mintPool?.consume(kA.publicKey);
         const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: ctxB, note: "", imageUrl: null, rule: ruleB, ...profileBody(profileB), mint: kB.publicKey });
-        mintPool.consume(kB.publicKey);
+        mintPool?.consume(kB.publicKey);
         await checkBeforeWallet(a.bundle as Bundle, b.bundle as Bundle);
         const A = withLocalKey(a.bundle as Bundle, kA), B = withLocalKey(b.bundle as Bundle, kB);
         return () => { setPairOut({ pairId: null, a: A, b: B, notes: [independentPairFacts(sent.a, sent.b).moves] }); setBundle(A); };
@@ -1013,7 +1014,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           const descB = meetingsOn ? (reviewMeetings?.descriptionB ?? finalDescriptionB) : settledPick ? (reviewSettled?.descriptionB || finalDescriptionB) : finalDescriptionB;
           const settledFields = settledPick ? { ...settledPairFields(settledPick), descCtx: ctxB } : {};
           const j = await postPairLaunch((u, init) => fetch(u, init), { ...body, pair: { mint: kB.publicKey, ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: null, ...profileBody(profileB), ...settledFields } }, meetingsOn || settledPick ? "launchlab" : pairVenue);
-          mintPool.consume(kA.publicKey); mintPool.consume(kB.publicKey);
+          mintPool?.consume(kA.publicKey); mintPool?.consume(kB.publicKey);
           if (j.venue === "pair-curve") {
             // the pair curve's two mints must be the two this page made; their keys are this page's own
             if (j.pairCurve.mints.a !== kA.publicKey || j.pairCurve.mints.b !== kB.publicKey) throw new Error(MINT_MISMATCH_LINE);
@@ -1025,7 +1026,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           return () => { setPairOut({ pairId: j.pair.pairId, a: A, b: B, notes: j.pair.notes ?? [] }); setBundle(A); };
         }
         const got = (await post(body)).bundle as Bundle;
-        mintPool.consume(kA.publicKey);
+        mintPool?.consume(kA.publicKey);
         const one = withLocalKey(got, kA);
         await checkBeforeWallet(one, null);
         return () => setBundle(one);
@@ -1035,7 +1036,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       out.ok(); setSignTickers(sent);
       setStep("launch");
     } catch (e) { const v = venueFrom409(e); if (v) setPairVenue(v); setLaunchErr(String((e as Error).message)); } finally { setBusy(false); }
-  }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, profile, profileB, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title, meetingsOn, reviewMeetings, settledPick, reviewSettled, ctxB, mintPool, mintsNeeded]);
+  }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, profile, profileB, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title, meetingsOn, reviewMeetings, settledPick, reviewSettled, ctxB, mintPool, burnMint, mintsNeeded]);
 
   // ---- navigation -----------------------------------------------------------------------------------------------------------------
   const order = ORDER[flow];
@@ -2094,7 +2095,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               ready={ready}
               creator={creator || null}
               onLaunch={() => { void launch(); }}
-              mintSearch={<><MintSearch pool={mintPool} /><p className="min-w-0 break-words text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p></>}
+              mintSearch={<MintChoice pool={mintPool} />}
               duplicate={<DuplicateNotice existing={(shownReview.review as (LaunchReview & { existing?: ExistingCoin[] }) | null)?.existing ?? []} />}
               summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} />}
               cost={shownReview.review && reviewCurrent ? `The estimated cost is about ${shownReview.review.costs.totalSol} SOL.` : null}

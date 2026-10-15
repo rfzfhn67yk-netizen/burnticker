@@ -304,7 +304,7 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     const src = fs.readFileSync(path.join(import.meta.dirname, "..", "src/app/burnticker/launch/LaunchRecovery.tsx"), "utf8");
     assert.match(fs.readFileSync(path.join(import.meta.dirname, "..", "src/app/burnticker/launch/page.tsx"), "utf8"), /<LaunchRecovery \/>/);
     assert.doesNotMatch(src, /sendRawTransaction|signTransaction/);
-    assert.match(src, /useEffect\(\(\) => \{ setView\(\{ items: listStoredLaunches\(storage\), finished: \[\] \}\);/);
+    assert.match(src, /for \(const s of listStoredLaunches\(storage\)\) if \(nothingSentAbandoned\(s\)\) archivePlanRecord\(storage, s\.key\);\s*setView\(\{ items: listStoredLaunches\(storage\), finished: \[\] \}\);/);   // 2026-10-14: attempts that sent nothing are archived first
   });
 
   test("the browser storage wraps sessionStorage and survives its absence", () => {

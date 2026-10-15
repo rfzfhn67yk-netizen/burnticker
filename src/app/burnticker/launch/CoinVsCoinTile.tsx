@@ -14,9 +14,8 @@ import { SimulatorDisclosure } from "./SimulatorDisclosure";
 import { postPairLaunch, venueFrom409, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { SignCard } from "./SignCard";
-import { MintSearch, useMintPool } from "./MintSearch";
-import { secretBase58, withLocalKey, MINT_MISMATCH_LINE } from "@/lib/burnticker/vanityMint";
-import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
+import { MintChoice, useBurnChoice, useMintPool } from "./MintSearch";
+import { launchMints, secretBase58, withLocalKey, MINT_MISMATCH_LINE } from "@/lib/burnticker/vanityMint";
 import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { PAIR_REVIEW_LINE, winnerTakesBurnFacts } from "@/lib/burnticker/describe";
@@ -151,8 +150,10 @@ export interface TileAnswers { which: string | null; burn: string | null; name: 
 function RecordClose({ blocked = null, customImages = true, phase: phaseIn = null, onPhase, onAnswers, initial = "" }: { /** website-25 (WIRING-SOURCES7 H1): the coin a record-close link names (?kind=record-close&a=BTC) */ initial?: string; blocked?: string | null; customImages?: boolean; phase?: GuidedPhase | null; onPhase?: (p: GuidedPhase) => void; onAnswers?: (a: TileAnswers) => void }) {
   const wallet = useWallet();
   const creator = wallet.publicKey?.toBase58() ?? "";
-  // 2026-10-14: the tab's one burn-ending mint address search (MintSearch.tsx useMintPool, shared with the page and the tile)
+  // 2026-10-14: plain mint addresses by default; with the burn switch on, the tab's one burn-ending search (MintSearch.tsx useMintPool,
+  // shared with the page and the tile)
   const mintPool = useMintPool();
+  const burnMint = useBurnChoice();
   const [ref, setRef] = useState<Hit | null>(null), [span, setSpan] = useState<HighSpan>("all"), [once, setOnce] = useState(false);
   // each pattern keeps its own share (the recurring row defaults to 2 %, the one-time row to 100 %)
   const [shares, setShares] = useState<{ every: number; once: number }>({ every: highShares(false).fallback, once: highShares(true).fallback });
@@ -217,15 +218,14 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
     const sentRev = curRev.current, ticker = names.ticker.toUpperCase();
     const body = { creator, ticker, name: names.name, description: text.paragraph, note: "", imageUrl: null, rule, firstBuySol: "0", raiseSol, acknowledgements: { ruleLocked: true, noReturns: true }, ...profileBody(prof) };
     try {
-      // 2026-10-14: the mint address that ends in burn, found in this browser (usually already, from the name step on)
-      if (!mintPool) throw new Error("The address search has not started yet. Please press Launch again.");
-      const [kA] = await mintPool.ensure(1);
+      // 2026-10-14: a plain mint made here, or (switch on) the one that ends in burn, found in this browser (usually already, from the name step on)
+      const [kA] = await launchMints({ burn: burnMint, pool: mintPool, n: 1 });
       if (curRev.current !== sentRev) { setErr(STALE_PREPARE_SENTENCE); return; }
       const got = await prepareIfCurrent(sentRev, () => curRev.current, async () => {
         const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, mint: kA.publicKey }) });
         const j = await r.json().catch(() => null);
         if (!r.ok) throw new LaunchRequestError(r.status, j?.code ?? null, launchErrorMessage(r.status, j as LaunchErrorBody | null, r.headers.get("retry-after")));
-        mintPool.consume(kA.publicKey);
+        mintPool?.consume(kA.publicKey);
         return j as { bundle: Bundle };
       });
       if ("stale" in got) { setErr(STALE_PREPARE_SENTENCE); return; }
@@ -238,7 +238,7 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
   // website-22 (QA 9 item 38, audit 10 item 13): the record close walks the real steps too (which coin, how it burns, name, review)
   useEffect(() => { onAnswers?.({ which: ref?.symbol ?? null, burn: once ? HIGH_PATTERNS.once.label.toLowerCase() : HIGH_PATTERNS.every.label.toLowerCase(), name: names.ticker ? `$${names.ticker.toUpperCase()}` : null }); }, [ref?.symbol, once, names.ticker]); // eslint-disable-line react-hooks/exhaustive-deps
   const phase: GuidedPhase = phaseIn && phaseIn !== "follow" ? phaseIn : "which";
-  useEffect(() => { if (mintPool && !blocked && rule && names.ticker.trim() && (phase === "name" || phase === "review")) void mintPool.ensure(1); }, [mintPool, blocked, !!rule, names.ticker, phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (burnMint && mintPool && !blocked && rule && names.ticker.trim() && (phase === "name" || phase === "review")) void mintPool.ensure(1); }, [burnMint, mintPool, blocked, !!rule, names.ticker, phase]); // eslint-disable-line react-hooks/exhaustive-deps
   {
     const coin = { key: "a", name: names.name, ticker: names.ticker, onName: (v: string) => { setEdited((e) => ({ ...e, name: true })); setNames((n) => ({ ...n, name: v })); }, onTicker: (v: string) => { setEdited((e) => ({ ...e, ticker: true })); setNames((n) => ({ ...n, ticker: v })); }, image: prof.image ? chosenPreview(prof)! : art(rule, names.ticker), oneLiner: text?.oneLiner ?? "", oracle: "derby", badge: text?.badge ?? null, nameIssue: fieldRuleSentence("name", names.name), tickerIssue: fieldRuleSentence("ticker", names.ticker) };
     // website-25 (QA 11 H5): every field rule runs on the name step and keeps Review disabled; the server's field problems join them
@@ -289,7 +289,7 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
         profileProblems={blockersH}
         problems={reviewCurrent ? (shown.review?.problems ?? []).filter((x) => !isLintLine(x) && !serverH.some((f) => f.text === x)) : []} error={err} busy={busy} ready={ready} creator={creator || null} onLaunch={() => { void launch(); }}
         cost={shown.review && reviewCurrent ? `The estimated cost is about ${shown.review.costs.totalSol} SOL.` : null} venue="single"
-        mintSearch={<><MintSearch pool={mintPool} /><p className="min-w-0 break-words text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p></>}
+        mintSearch={<MintChoice pool={mintPool} />}
         summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
         blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
       {out && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${out.ticker}`} coinHref={(t) => `/burnticker/t/${t}`} />}
@@ -451,8 +451,10 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
   const [pcOut, setPcOut] = useState<{ pairId: string; pc: PairCurveLaunchBundle; keys: { a: string; b: string } | null; notes: string[]; tickers: { a: string; b: string } } | null>(null);
   const prepared = pcOut ?? out;
   const mintPool = useMintPool();
-  // 2026-10-14: the two burn-ending mint addresses are searched for from the name step on (MintSearch.tsx), in this browser only
-  useEffect(() => { const ph = phaseIn && phaseIn !== "follow" ? phaseIn : "which"; if (mintPool && !blocked && !unavailable && ruleA && names.ta.trim() && (ph === "name" || ph === "review")) void mintPool.ensure(2); }, [mintPool, blocked, unavailable, !!ruleA, names.ta, phaseIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  const burnMint = useBurnChoice();
+  // 2026-10-14: plain mints by default; with the burn switch on, the two burn-ending addresses are searched for from the name step on
+  // (MintSearch.tsx), in this browser only
+  useEffect(() => { const ph = phaseIn && phaseIn !== "follow" ? phaseIn : "which"; if (burnMint && mintPool && !blocked && !unavailable && ruleA && names.ta.trim() && (ph === "name" || ph === "review")) void mintPool.ensure(2); }, [burnMint, mintPool, blocked, unavailable, !!ruleA, names.ta, phaseIn]); // eslint-disable-line react-hooks/exhaustive-deps
   const launch = async () => {
     if (!ruleA || !creator || !reviewMatchesDraft(slot, curRev.current)) return;   // A6: only the reviewed draft is prepared
     // item 72: the UTC day turned since this draft was built: rebuild it for the new first day, and the creator presses Launch again
@@ -465,13 +467,12 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
     const run = async (v: PairVenue): Promise<void> => {
       try {
         // launch integrity 252: an answer for a draft that changed while it was prepared is set aside: no plan, no wallet, a fresh review
-        // 2026-10-14: both mint addresses end in burn, found in this browser in parallel (usually already, from the name step on)
-        if (!mintPool) throw new Error("The address search has not started yet. Please press Launch again.");
-        const [kA, kB] = await mintPool.ensure(2);
+        // 2026-10-14: two plain mints made here, or (switch on) both ending in burn, found in this browser in parallel (usually already)
+        const [kA, kB] = await launchMints({ burn: burnMint, pool: mintPool, n: 2 });
         if (prepRev.current !== sentRev) { setErr(STALE_PREPARE_SENTENCE); return; }
         const got = await prepareIfCurrent(sentRev, () => prepRev.current, () => postPairLaunch((u, init) => fetch(u, init), { ...body, mint: kA.publicKey, pair: { ...body.pair, mint: kB.publicKey } }, v));
         if ("stale" in got) { setErr(STALE_PREPARE_SENTENCE); return; }
-        mintPool.consume(kA.publicKey); mintPool.consume(kB.publicKey);
+        mintPool?.consume(kA.publicKey); mintPool?.consume(kB.publicKey);
         const j = got.ok, tickers = { a: body.ticker, b: body.pair.ticker };
         if (j.venue === "pair-curve") {
           if (j.pairCurve.mints.a !== kA.publicKey || j.pairCurve.mints.b !== kB.publicKey) throw new Error(MINT_MISMATCH_LINE);
@@ -656,7 +657,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
           graduation={shown.review?.graduation ?? null}
           profileProblems={blockers} problems={ruleProblemsP} error={err} busy={busy} ready={ready} creator={creator || null} onLaunch={() => { void launch(); }}
           /* website-25 (QA 11 H4): the server's two-coin estimate for the venue it reviewed, said with that venue and the server's own note */
-          mintSearch={<><MintSearch pool={mintPool} /><p className="min-w-0 break-words text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p></>}
+          mintSearch={<MintChoice pool={mintPool} />}
           cost={shown.review && reviewCurrent ? pairCostSentence(shown.review.costs.totalSol, shown.review.venue) : null} costNote={shown.review?.venue === "pair-curve" ? shown.review.costs.note : PAIR_COST_EXCLUSIONS}
           summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
           blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}

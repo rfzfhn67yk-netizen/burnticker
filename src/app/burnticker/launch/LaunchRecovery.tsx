@@ -5,7 +5,7 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { browserPlanStorage, listStoredLaunches, recordFailureSentence, recoverStoredLaunch, storedLaunchSentence, withPlanLock, PLAN_LOCKED_SENTENCE, type StoredLaunch } from "@/lib/burnticker/signPlan";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
-import { afterRecoveryCheck, archivePlanRecord, chainReadDeps, readLaunchHistory, recoveryErrorSentence, storedLaunchAction, RECOVERY_BUTTON, START_NEW_LINE, type LaunchHistoryEntry, type RecoveryView } from "@/lib/burnticker/launchRecovery";
+import { afterRecoveryCheck, archivePlanRecord, chainReadDeps, nothingSentAbandoned, readLaunchHistory, recoveryErrorSentence, storedLaunchAction, RECOVERY_BUTTON, START_NEW_LINE, type LaunchHistoryEntry, type RecoveryView } from "@/lib/burnticker/launchRecovery";
 
 /**
  * AFTER A RELOAD (review-2 F4): a launch whose signing card is gone — the page reloaded mid-run — is still in this tab's storage
@@ -24,7 +24,11 @@ export function LaunchRecovery() {
   // read after mount (the server render has no sessionStorage; reading it in the initial state would not match the server's HTML)
   const [view, setView] = useState<RecoveryView>({ items: [], finished: [] });
   const [history, setHistory] = useState<LaunchHistoryEntry[]>([]);
-  useEffect(() => { setView({ items: listStoredLaunches(storage), finished: [] }); setHistory(readLaunchHistory(storage)); }, [storage]);
+  useEffect(() => {
+    // an attempt that sent nothing and lost its keys goes to the history on its own (nothingSentAbandoned)
+    for (const s of listStoredLaunches(storage)) if (nothingSentAbandoned(s)) archivePlanRecord(storage, s.key);
+    setView({ items: listStoredLaunches(storage), finished: [] }); setHistory(readLaunchHistory(storage));
+  }, [storage]);
   const [text, setText] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   if (!view.items.length && !view.finished.length && !history.length) return null;

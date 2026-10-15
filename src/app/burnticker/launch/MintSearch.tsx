@@ -1,8 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MintGrindPool, mintWorkerCount, type WorkerLike } from "@/lib/burnticker/vanityMint";
-import { MINT_SEARCH_PRIVATE_LINE, MINT_SKIP_LABEL, MINT_SKIP_NOTE, mintSearchView } from "@/lib/burnticker/mintAddressCopy";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { MintGrindPool, mintWorkerCount, readBurnChoice, writeBurnChoice, type ChoiceStorage, type WorkerLike } from "@/lib/burnticker/vanityMint";
+import { MINT_ADDRESS_NOTE, MINT_CHOICE_LABEL, MINT_SEARCH_PRIVATE_LINE, MINT_SKIP_LABEL, MINT_SKIP_NOTE, mintSearchView } from "@/lib/burnticker/mintAddressCopy";
+
+/**
+ * The burn-ending switch (owner, 2026-10-14 evening: plain addresses by default, the burn ending opt-in). One value per tab, read from
+ * and saved to localStorage, shared by the launch page, the Coin vs Coin tile and the record close. The server render reads it as off.
+ */
+const choiceStore = (): ChoiceStorage | null => { try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; } };
+let burnChoice: boolean | null = null;
+const choiceListeners = new Set<() => void>();
+const getBurnChoice = () => (burnChoice ??= readBurnChoice(choiceStore()));
+export function setBurnChoice(on: boolean): void {
+  burnChoice = on; writeBurnChoice(choiceStore(), on);
+  for (const f of choiceListeners) f();
+}
+/** True when this coin's address is to end in burn (the switch is on); false by default. */
+export function useBurnChoice(): boolean {
+  return useSyncExternalStore((f) => { choiceListeners.add(f); return () => { choiceListeners.delete(f); }; }, getBurnChoice, () => false);
+}
+
+/**
+ * The review step's block above Launch: the switch, then (only when it is on) the search panel, then the general line. Turning it off
+ * stops the search, and a press already waiting goes on with plain keys.
+ */
+export function MintChoice({ pool }: { pool: MintGrindPool | null }) {
+  const burn = useBurnChoice();
+  return (
+    <div className="min-w-0 space-y-2" data-mint-choice={burn ? "burn" : "plain"}>
+      <label className="flex items-start gap-2 text-xs text-neutral-300">
+        <input type="checkbox" role="switch" aria-checked={burn} className="mt-0.5" data-mint-burn-switch checked={burn}
+          onChange={(e) => { const on = e.target.checked; setBurnChoice(on); if (!on) pool?.optOut(); }} />
+        <span className="min-w-0 break-words">{MINT_CHOICE_LABEL}</span>
+      </label>
+      {burn && <MintSearch pool={pool} />}
+      <p className="min-w-0 break-words text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p>
+    </div>
+  );
+}
 
 /**
  * The page's one address search (vanityMint.ts MintGrindPool): made in the browser only, its workers built from vanity.worker.ts, and
@@ -28,7 +64,7 @@ let shared: { pool: MintGrindPool; users: number } | null = null;
 /**
  * The search panel (owner, 2026-10-14: "make sure people know it's working and not frozen"). While searching it redraws four times a
  * second: the plain line, a CSS spinner and a ticking receipt line, how many addresses were tried, the seconds, how many searches run
- * at once; after 60 seconds (or at once if the search cannot run) the "Use a plain address instead" button. Once found it shows the
+ * at once; and from the start the "Use a plain address instead" button. Once found it shows the
  * address. Only this panel re-renders on a tick, never the page.
  */
 export function MintSearch({ pool }: { pool: MintGrindPool | null }) {
