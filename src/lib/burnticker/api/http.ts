@@ -48,7 +48,17 @@ export class RateLimiter {
   reset(): void { this.buckets.clear(); }
 }
 
-export const limiter = new RateLimiter();
+/**
+ * The write bucket's burst on a NON-mainnet host may be raised with BURNTICKER_DEVNET_WRITE_BURST (2026-10-15: the nightly synthetic
+ * creator launches a dozen devnet coins from one loopback client, past the 10-an-hour write bucket). Ignored on mainnet: the live
+ * host's limits are the spec's, whatever its env says.
+ */
+export function limitsFromEnv(env: Readonly<Record<string, string | undefined>> = process.env): typeof RATE_LIMITS {
+  const n = Number((env.BURNTICKER_DEVNET_WRITE_BURST ?? "").trim());
+  if ((env.BURNTICKER_CLUSTER ?? "").trim() === "mainnet" || !Number.isInteger(n) || n <= RATE_LIMITS.write.burst || n > 1000) return RATE_LIMITS;
+  return { ...RATE_LIMITS, write: { ...RATE_LIMITS.write, burst: n, refillPerSec: n / 3600 } };
+}
+export const limiter = new RateLimiter(limitsFromEnv());
 
 /**
  * The client a request is charged to: the right-most X-Forwarded-For hop (appended by our own Caddy), else X-Real-IP; when that hop is

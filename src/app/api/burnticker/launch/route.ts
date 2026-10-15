@@ -61,6 +61,18 @@ export async function POST(req: Request) {
     if (on && !wants) return NextResponse.json({ error: "rivalry pairs on this host launch through the pair curve (both coins graduate together or neither does); send venue: \"pair-curve\" and sign the pair-curve transaction set — two independent LaunchLab launches are not offered", code: "pair-curve-required" }, { status: 409 });
     if (!pairCurveEnabled(process.env) && wants) return NextResponse.json({ error: "the pair curve is not enabled on this host (BURNTICKER_PAIR_CURVE_ENABLED)", code: "pair-curve-unavailable" }, { status: 409 });
   }
+  // THE DEPLOY SMOKE'S DRY RUN (2026-10-15; scripts/ops/burnticker-deploy-smoke.sh): `dryRun: true` runs every check a launch runs (the
+  // rule refusals, the preflight, the pin budget and the uploader) through the public origin, and answers how long it took. It registers
+  // nothing, uploads nothing and takes no key from the mint bank, so it can run after every deploy on the live host.
+  if (body.dryRun === true && body.action !== "launched") {
+    const t0 = Date.now();
+    let d: Awaited<ReturnType<typeof prepareLaunch>>;
+    try { d = await prepareLaunch(p, body, { register: false, dryRun: true }); }
+    catch (e) { d = { error: fail(500, `The launch could not be prepared. The error was: ${String((e as Error)?.message ?? e).slice(0, 160)}`, { code: "internal" }) }; }
+    if ("error" in d) return edgeJson({ ...(d.error.body as Record<string, unknown>), dryRun: true }, d.error.status, { ...(d.error.headers ?? {}), "cache-control": "no-store" });
+    const tickers = "pair" in d ? [d.pair.bundles.a.ticker, d.pair.bundles.b.ticker] : [d.ok.bundle.ticker];
+    return NextResponse.json({ ok: true, dryRun: true, ms: Date.now() - t0, cluster: p.cluster, tickers, registered: false, keysTaken: 0 }, { headers: { "cache-control": "no-store" } });
+  }
   const bank: MintBankPort | null = p.mintBank !== undefined ? p.mintBank : webMintBank();
   if (body.action === "launched") {
     const mint = String(body.mint ?? "");

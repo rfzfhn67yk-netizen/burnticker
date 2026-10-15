@@ -553,7 +553,8 @@ interface PairSideInput { /** round 5: side B's own pinned token (burnTarget.ts 
  * (buildPairBundles); refusals and the tier rule apply per side, and both drafts plus the pair row are registered together. A rule that
  * carries a `pair` field must come through that flow.
  */
-export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; /** 2026-10-14: a pair's side B mint public key (the launch page grinds both); only with `mint` */ mintB?: string | null; /** 2026-10-14 night: keypairs taken from the host's mint key bank (mintBank.ts; side A / the one coin, and a pair's side B), whose secrets ride in the bundles */ mintKeypair?: Keypair | null; mintKeypairB?: Keypair | null; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
+export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; /** 2026-10-14: a pair's side B mint public key (the launch page grinds both); only with `mint` */ mintB?: string | null; /** 2026-10-14 night: keypairs taken from the host's mint key bank (mintBank.ts; side A / the one coin, and a pair's side B), whose secrets ride in the bundles */ mintKeypair?: Keypair | null; mintKeypairB?: Keypair | null; /** 2026-10-15 (deploy smoke): every check a launch runs (the preflight, the pin budget, the uploader), with `register: false`: nothing is pinned, registered or taken */ dryRun?: boolean; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
+  if (o.dryRun) o = { ...o, register: false, mint: null, mintB: null, mintKeypair: null, mintKeypairB: null };   // a dry run never registers and holds no key
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
   const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
   // NO BURN POOL IS EVER LEFT BEHIND (owner, 2026-10-10): every new launch carries the onEnd clause unless the rule names its own —
@@ -698,6 +699,13 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // BURNTICKER_ALLOW_HOSTED_METADATA (devnet scripts). A preview bundle (register: false) pins nothing and says so.
   const pins = new Map<string, PinnedCoin | null>();
   const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null, image: { bytes: Uint8Array; contentType: string; badge?: boolean } | null = null): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
+    // the deploy smoke's dry run (2026-10-15): the budget and the uploader are checked as a launch would, and nothing is uploaded or counted
+    if (o.dryRun) {
+      const used = Number(p.registry.getStatus(`pin.budget.${new Date().toISOString().slice(0, 10)}`) ?? 0) || 0, cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP;
+      if (p.uploader && used >= cap) return { error: fail(429, `This site has used up its daily upload limit of ${cap} coins. Please try again after midnight UTC.`, { code: "upload-budget" }) };
+      if (!p.uploader && !p.allowHostedMetadata) return { error: fail(502, "The coin's details could not be saved on Arweave, so the launch is refused. The reason given was: this site has no Arweave uploader set up", { code: "pin-failed" }) };
+      return { pin: null };
+    }
     if (!o.register) return { pin: null };
     const registered = registeredDescription(sideRule, description);
     const uploader = p.uploader ?? null;

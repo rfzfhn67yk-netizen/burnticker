@@ -17,6 +17,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *                     (gameSettle.ts; the keeper records bt-single-source once per coin)
  *   mint-bank-low     the mint key bank has had fewer than BURNTICKER_MINT_BANK_LOW prepared addresses for more than an hour
  *                     (scripts/burnticker-mint-bank.mts records bt-mint-bank-low; launches still work through the browser search)
+ *   synthetic-failed  the nightly synthetic creator (scripts/burnticker-synthetic-creator.mts, mct-burnticker-synth.timer) failed a
+ *                     scenario on the devnet instance; one alert per run (bt-synthetic-failed), pushed at once by the script
  *   keeper-stale      the public status file is stale for more than two hours: pushed by scripts/ops/keeper-status-check.sh, which runs
  *                     every minute from the publish timer and so still works when the keeper is down (listed here for the runbook)
  *
@@ -27,7 +29,7 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  * thrown: the keeper never stops for its phone.
  */
 
-export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget" | "single-source" | "mint-bank-low";
+export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget" | "single-source" | "mint-bank-low" | "synthetic-failed";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -39,6 +41,7 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-api-budget": "api-budget",
   "bt-single-source": "single-source",
   "bt-mint-bank-low": "mint-bank-low",
+  "bt-synthetic-failed": "synthetic-failed",
 };
 export const PUSH_TITLE: Record<PushKind, string> = {
   "keeper-refused": "Burnticker keeper refused to start",
@@ -50,6 +53,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "api-budget": "Burnticker data budget running low",
   "single-source": "Burnticker game settled on one source",
   "mint-bank-low": "Burnticker prepared addresses running low",
+  "synthetic-failed": "Burnticker test launch failed",
 };
 export const PUSH_LEAD: Record<PushKind, string> = {
   "keeper-refused": "The keeper stopped before its first cycle. Nothing is read or burned until it starts again.",
@@ -60,6 +64,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "burn-behind": "A reading's burn is not fully spent a day after it landed. The keeper keeps spending the rest in small pieces; the line below says how much is left.",
   "api-budget": "One of the outside services the keeper or the site reads from has used most of its daily allowance, or all of it. When it is all used, reads from that service stop until midnight UTC and start again on their own.",
   "mint-bank-low": "The site has had few prepared coin addresses for more than an hour. Launches still work, but each creator's browser has to find its own address, which takes about a minute. Check that the mint key bank service is running and has its key.",
+  "synthetic-failed": "Last night's test creator could not finish every launch on the devnet copy of the site. A real creator may hit the same problem. The lines below name each check that failed and what the page said.",
   "single-source": "A coin's game settled on TheSportsDB alone for the first time. Polymarket had no market for it and no league feed could read it, so its final score had to stand unchanged for 12 hours first. This is a notice only; nothing needs doing.",
 };
 
@@ -170,4 +175,14 @@ export async function pushKeeperRefused(o: { registry: Pick<Registry, "getStatus
     o.registry.recordAlert({ kind: "bt-keeper-refused", key: `bt-keeper-refused:${o.reason.slice(0, 80)}`, text: `The keeper refused to start. The reason given was: ${o.reason.slice(0, 300)}`, meta: null }, o.now);
     await runPushCheck(o);
   } catch (e) { o.log?.(`  [push] refusal not pushed: ${(e as Error).message.slice(0, 120)}`); }
+}
+
+/** The synthetic creator's one alert per run: record it, then push it at once (through the same rate limit). Never throws. */
+export async function pushSyntheticFailed(o: { registry: Pick<Registry, "getStatus" | "setStatus" | "alertsSince" | "recordAlert">; env: Readonly<Record<string, string | undefined>>; now: number; runId: string; failures: readonly { scenario: string; sentence: string }[]; fetchImpl?: typeof fetch; log?: (s: string) => void }): Promise<void> {
+  try {
+    const lines = o.failures.slice(0, 6).map((f) => `${f.scenario}: ${f.sentence.slice(0, 160)}`);
+    const more = o.failures.length > 6 ? [`${o.failures.length - 6} more failed. The run's report has every one.`] : [];
+    o.registry.recordAlert({ kind: "bt-synthetic-failed", key: `bt-synthetic-failed:${o.runId}`, text: [`${o.failures.length === 1 ? "One check" : `${o.failures.length} checks`} failed.`, ...lines, ...more].join("\n"), meta: { runId: o.runId } }, o.now);
+    await runPushCheck(o);
+  } catch (e) { o.log?.(`  [push] synthetic failure not pushed: ${(e as Error).message.slice(0, 120)}`); }
 }
