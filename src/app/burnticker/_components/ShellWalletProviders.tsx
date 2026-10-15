@@ -5,7 +5,7 @@ import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter, SolflareWalletAdapter } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
-import { walletEndpoint } from "@/lib/burnticker/walletShell";
+import { walletEndpoint, walletWsEndpoint } from "@/lib/burnticker/walletShell";
 
 /**
  * THE ONE WALLET PROVIDER (website-13, 2026-10-12; src/lib/burnticker/walletShell.ts). Mounted once, by the app's root layout, around the
@@ -31,9 +31,11 @@ function useNamedWalletDialog() {
 export function ShellWalletProviders({ cluster, children }: { cluster: string; children: ReactNode }) {
   useNamedWalletDialog();
   const endpoint = useMemo(() => walletEndpoint(cluster, { NEXT_PUBLIC_BURNTICKER_RPC_URL: process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL }), [cluster]);
+  // 2026-10-15: the proxy endpoint has no websocket; subscriptions go to the public cluster's wss (walletShell.ts walletWsEndpoint)
+  const config = useMemo(() => { const wsEndpoint = walletWsEndpoint(cluster, { NEXT_PUBLIC_BURNTICKER_RPC_URL: process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL }); return wsEndpoint ? { commitment: "confirmed" as const, wsEndpoint } : { commitment: "confirmed" as const }; }, [cluster]);
   const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], []);
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={endpoint} config={config}>
       {/* autoConnect: a wallet the visitor already approved for this site reconnects silently on reload (owner, 2026-10-12: a reload dropped the connection); nothing is signed by connecting */}
       <WalletProvider wallets={wallets} autoConnect={true}>
         <WalletModalProvider>{children}</WalletModalProvider>

@@ -172,7 +172,7 @@ describe("the pinned file can be read through this site (2026-10-14: some networ
     const fs = await import("node:fs");
     const comp = fs.readFileSync(new URL("../src/app/burnticker/_components/PinnedCheck.tsx", import.meta.url), "utf8");
     assert.match(comp, /pin-check\?mint=\$\{encodeURIComponent\(\(pinned as \{ mint\?: string \}\)\.mint!\)\}&raw=1/);
-    assert.match(comp, /or through this site/);
+    assert.match(comp, /open the pinned file through this site/);   // 2026-10-15: the site link leads; the gateway link is secondary (some networks cannot reach its CDN)
     const route = fs.readFileSync(new URL("../src/app/api/burnticker/pin-check/route.ts", import.meta.url), "utf8");
     assert.match(route, /"x-pinned-sha256"/);
   });
