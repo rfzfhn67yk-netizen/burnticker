@@ -116,3 +116,23 @@ describe("the home hero kicker (owner, 2026-10-14)", () => {
     assert.ok(k > 0 && h > k, "kicker above the title");
   });
 });
+
+describe("tonight's failures reach the phone (2026-10-14): the page's launch route records bt-launch-failed; draft pairs are not 'unmatched'", () => {
+  test("the page's launch route records a failure alert for server errors and launch-check refusals, and a thrown error becomes a 500", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync(new URL("../src/app/api/burnticker/launch/route.ts", import.meta.url), "utf8");
+    assert.match(src, /launchFailureOf\("launchPage", body, \{ status: r\.error\.status, body: r\.error\.body \}\)/);
+    assert.match(src, /catch \(e\) \{ r = \{ error: fail\(500,/);
+    const { launchFailureOf } = await import("@/lib/burnticker/api/launchFailAlert");
+    assert.ok(launchFailureOf("launchPage", { ticker: "X" }, { status: 500, body: { error: "UNIQUE constraint failed: pairs.pair_id", code: "internal" } }), "a 500 is an alert");
+    assert.ok(launchFailureOf("launchPage", { ticker: "X" }, { status: 503, body: { error: "the check refused", code: "preflight" } }), "a launch-check refusal is an alert");
+    assert.equal(launchFailureOf("launchPage", { ticker: "X" }, { status: 409, body: { error: "own draft", code: "own-draft-changed" } }), null, "a design refusal is not");
+  });
+  test("pair-unmatched skips a pair whose coins are drafts (never calls the chain)", async () => {
+    const { pairUnmatchedAlerts } = await import("@/lib/burnticker/pairForwardKeeper");
+    const reg = { pairs: () => [{ pairId: "p", mintA: "a", mintB: "b", selectorKey: "s", createdAt: 0 }], token: (m: string) => ({ mint: m, ticker: m.toUpperCase(), status: "draft" }), lockedRule: () => { throw new Error("not read"); }, recordAlert: () => { throw new Error("no alert expected"); } };
+    const program = { pairForward: { port: () => { throw new Error("the chain must not be read for a draft pair"); } } };
+    const out = await pairUnmatchedAlerts(reg as never, program as never, Date.now(), () => {});
+    assert.deepEqual(out, []);
+  });
+});
