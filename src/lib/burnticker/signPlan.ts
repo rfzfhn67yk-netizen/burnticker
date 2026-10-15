@@ -174,15 +174,20 @@ function resolvedInstructions(m: VersionedTransaction["message"], tables: Addres
   }));
 }
 
-/** Why the returned message is not "ours plus appended guard instructions", or null when it is exactly that. */
+/**
+ * Why the returned message is not "ours plus the wallet's own guard instructions", or null when it is exactly that. Phantom's
+ * Lighthouse guard may add assertion instructions before or after ours and may add or replace a compute-budget instruction; so
+ * compute-budget instructions are ignored on both sides, Lighthouse ones on the wallet's side, and what remains must equal ours
+ * exactly: same programs, same resolved accounts with the same flags, same data, same order.
+ */
 export function appendedGuardProblem(before: VersionedTransaction["message"], after: VersionedTransaction["message"], tables: AddressLookupTableAccount[]): string | null {
-  const ours = resolvedInstructions(before, tables), theirs = resolvedInstructions(after, tables);
-  if (!ours || !theirs) return "the wallet changed the transaction's instructions or accounts";
-  if (theirs.length < ours.length) return "the wallet changed the transaction's instructions or accounts";
+  const ours0 = resolvedInstructions(before, tables), theirs0 = resolvedInstructions(after, tables);
+  if (!ours0 || !theirs0) return "the wallet changed the transaction's instructions or accounts";
+  const COMPUTE = "ComputeBudget111111111111111111111111111111";
+  const ours = ours0.filter((ix) => ix.program !== COMPUTE), theirs = theirs0.filter((ix) => !WALLET_GUARD_PROGRAMS.includes(ix.program));
   const same = (a: { program: string; accounts: string[]; data: string }, b: typeof a) => a.program === b.program && a.data === b.data && a.accounts.join("|") === b.accounts.join("|");
-  for (let i = 0; i < ours.length; i++) if (!same(ours[i], theirs[i])) return "the wallet changed the transaction's instructions or accounts";
-  // (an extra instruction may name the fee payer, who is already a signer; a NEW signer is caught above by the required-signer check)
-  for (const extra of theirs.slice(ours.length)) if (!WALLET_GUARD_PROGRAMS.includes(extra.program)) return "the wallet added an instruction that is not its own safety check";
+  if (theirs.length !== ours.length) return `the wallet changed the transaction's instructions or accounts (${ours.length} sent, ${theirs.length} came back after its own guard instructions were set aside)`;
+  for (let i = 0; i < ours.length; i++) if (!same(ours[i], theirs[i])) return `the wallet changed the transaction's instructions or accounts (instruction ${i + 1} differs: ${ours[i].program === theirs[i].program ? (ours[i].data === theirs[i].data ? "accounts or flags" : "data") : "program"})`;
   return null;
 }
 
@@ -335,6 +340,8 @@ export interface SendDeps {
    * passed; a dry run the RPC could not perform (throws) does not stop the launch — only a failure the chain reported does. Optional.
    */
   simulate?(tx: VersionedTransaction): Promise<string | null>;
+  /** Diagnostics when a wallet's returned transaction is refused: both messages (base64) and the reason. Optional. */
+  onRefused?(info: { handed: string; returned: string; why: string }): void;
   /**
    * The network's lookup table, VERIFIED (lookupTable.ts verifiedLookupTable: the pinned address, every entry at its index, authority the
    * operations key or frozen) — it throws "lookup table mismatch — nothing was sent" otherwise, and the run stops before anything is
@@ -508,7 +515,11 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       }
       const signed = await d.signTransaction(built);
       const changed = walletReturnProblem(handed, signed, plan.steps[i], plan, lut ? [lut] : []);
-      if (changed) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because ${changed}`);
+      if (changed) {
+        // 2026-10-14: what the wallet handed back, for the console (public bytes only: no key material is ever in a message)
+        try { d.onRefused?.({ handed: Buffer.from(handed.message).toString("base64"), returned: Buffer.from(signed.message.serialize()).toString("base64"), why: changed }); } catch { /* diagnostics only */ }
+        return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because ${changed}`);
+      }
       signStepKeys(signed, plan.steps[i], plan.keys);
       // the integrity check above ran first; only then is the blockhash's age looked at (a stale one is re-checked on chain)
       if (now() - fetchedAt > STALE_BLOCKHASH_MS && d.isBlockhashValid && (await blockhashExpired(d, bh.blockhash))) {

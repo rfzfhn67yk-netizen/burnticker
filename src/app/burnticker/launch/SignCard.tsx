@@ -85,6 +85,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         // Phantom ticket 438485: dry-run each step before the wallet sees it (a transaction that fails on chain trips the wallet's warning)
         simulate: async (tx) => { const r = (await connection.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" })).value; return r.err ? simulationFailureText(r.err, r.logs) : null; },
         lookupTable: () => verifiedLookupTable(connection, network, pin),
+        onRefused: (info) => { console.warn("[burnticker launch] the wallet's transaction was refused", info.why, "\nhanded:", info.handed, "\nreturned:", info.returned); },
         sendRaw: (raw) => connection.sendRawTransaction(raw, { preflightCommitment: "confirmed" }),
         confirm: async (sig, bh) => (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value,
         // launch night 2026-10-13: a wallet slower than the blockhash's life gets the step rebuilt and is asked again (signPlan.ts)
