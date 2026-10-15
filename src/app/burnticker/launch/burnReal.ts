@@ -134,12 +134,15 @@ export function withPinSteps(review: LaunchReview, list: { ticker: string; symbo
   let add = 0;
   for (const { ticker, symbol } of list) {
     const t = ticker || "TICKER";
+    const rent = rentLamports(BURN_TARGET_BYTES), fee = PIN_SIGNATURES * LAMPORTS_PER_SIGNATURE;
+    lines.push({ label: `Rent for the account that pins ${symbol}'s pool to $${t}, which is ${BURN_TARGET_BYTES} bytes.`, sol: solText(rent), kind: "rent" });
+    // 2026-10-14: a LaunchLab pair coin is already two steps (lock its rule, then create it), so the pin rides in them: no new transaction
+    const j = steps.findIndex((s, k) => s.label === `Create $${t}` && k > 0 && steps[k - 1].label.startsWith(lockStepLabel(t)));
+    if (j > 0) { steps.splice(j, 1, { label: pinStepLabel(t, symbol, /link the two coins/.test(steps[j - 1].label)), signers: steps[j].signers }); add += rent; continue; }
     const i = steps.findIndex((s) => s.label.startsWith(`Create $${t} `));
     const signers = i >= 0 ? steps[i].signers : ["your wallet", "a new key made for this coin"];
     const pin = { label: pinStepLabel(t, symbol, i >= 0 && /link the two coins/.test(steps[i].label)), signers };
     if (i >= 0) steps.splice(i, 1, { label: lockStepLabel(t), signers }, pin); else steps.push(pin);
-    const rent = rentLamports(BURN_TARGET_BYTES), fee = PIN_SIGNATURES * LAMPORTS_PER_SIGNATURE;
-    lines.push({ label: `Rent for the account that pins ${symbol}'s pool to $${t}, which is ${BURN_TARGET_BYTES} bytes.`, sol: solText(rent), kind: "rent" });
     lines.push({ label: `Network fees for the two signatures on $${t}'s pin transaction. Priority fees are extra.`, sol: solText(fee), kind: "fee" });
     add += rent + fee;
   }

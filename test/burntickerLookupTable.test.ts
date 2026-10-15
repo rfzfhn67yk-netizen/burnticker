@@ -95,6 +95,16 @@ describe("the lookup table holds every fixed account the real bundles reference"
   });
 });
 
+/**
+ * Room a wallet's appended checks need (Phantom's Lighthouse, program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95; encodings from its
+ * generated client, clients/js/src/generated): the program id as one more static key (32 bytes, invoked programs never come from a
+ * table) and per assertion 1 program index + 1 account count + its account indexes + 1 data length + data. assertAccountInfo Lamports
+ * on the fee payer is data 1 discriminator + 1 log level + 1 variant + 8 u64 + 1 operator = 12 bytes, so 16 bytes on the wire with the
+ * payer already a key; a token-balance or delta check is about the same plus 32 bytes when it names an account the transaction does not.
+ * Three or four assertions with one new account is about 32 + 64 + 32 = 128 bytes, so the steps keep at least 130.
+ */
+const WALLET_HEADROOM = 130;
+
 describe("the measured wire size: every real step fits 1,232 bytes as v0 + the table; the legacy construction does not", () => {
   for (const network of NETWORKS) test(`${network}: single coin (the F3 fixture), the LaunchLab pair, the pair-curve set`, async () => {
     const report: string[] = [];
@@ -113,6 +123,9 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
         const vt = VersionedTransaction.deserialize(raw);
         assert.equal(vt.version, 0, `${name} step ${i + 1} is a version-0 transaction`);
         assert.ok(raw.length <= PACKET_LIMIT, `${name} step ${i + 1}: ${raw.length} bytes > ${PACKET_LIMIT}`);
+        // Phantom review ticket 438485 (2026-10-14): a wallet that appends Lighthouse assertions needs room, so every step keeps at
+        // least WALLET_HEADROOM bytes free (the pair used to be 1,191 and 1,223 bytes; it is now four steps of at most 829 bytes)
+        assert.ok(raw.length <= PACKET_LIMIT - WALLET_HEADROOM, `${name} step ${i + 1}: ${raw.length} bytes leaves less than ${WALLET_HEADROOM} bytes for the wallet's own checks`);
         const signerKeys = vt.message.staticAccountKeys.slice(0, vt.message.header.numRequiredSignatures);
         assert.ok(vt.signatures.every((s) => s.some((b) => b !== 0)), `${name} step ${i + 1}: every required signature present (${signerKeys.length})`);
         const legacy = legacyWireSize(plan.steps[i].instructions.map(toIx), [creator, ...plan.steps[i].signers.filter((s) => s !== "creator").map((s) => Keypair.fromSecretKey(base58ToBytes(plan.keys[s]!)))]);
@@ -120,6 +133,11 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
       });
     }
     console.log(report.join("\n"));
+    // the pair's four steps: each coin locks its rule, then is created; the create is the step that confirms the coin
+    const lpPlan = launchlabPlan([lp.pair.a, lp.pair.b]);
+    assert.deepEqual(lpPlan.steps.map((st) => st.label), ["$PAIRA: Lock in $PAIRA's rule", "$PAIRA: Create $PAIRA (LaunchLab create)", "$PAIRB: Lock in $PAIRB's rule and link the two coins", "$PAIRB: Create $PAIRB (LaunchLab create)"]);
+    assert.deepEqual(lpPlan.confirms.map((c) => [c.mint, c.step]), [[lp.pair.a.mint, 1], [lp.pair.b.mint, 3]]);
+    assert.deepEqual(lpPlan.steps.map((st) => st.signers), [["creator", "mint0"], ["creator", "mint0"], ["creator", "mint1"], ["creator", "mint1"]]);
     // the auditor's reproduction, kept in reverse: the same single-coin fixture as a legacy transaction is over the limit and cannot be
     // serialized — reverting buildStepTx to `new Transaction(...)` makes the size assertions above fail
     const ixs = single.bundle.transactions[0].instructions.map(toIx);

@@ -134,7 +134,12 @@ export const PIN_IX_LABEL_PREFIX = "burn_receipts.pin_burn_target";
  */
 export const pinStepText = (ticker: string, symbol: string, o: { link?: boolean; thenCreate?: boolean } = {}): string =>
   `Pin ${symbol}'s Raydium pool for $${ticker} after locking in its rule${o.link ? " and linking the two coins" : ""}${o.thenCreate ? `, then create $${ticker}` : ""}`;
-/** The create step that follows a pin on LaunchLab. */
+/**
+ * The first of a LaunchLab PAIR coin's two transactions (2026-10-14, Phantom review ticket 438485): initialize_token alone, then the
+ * create (createAfterPinText). Side B's names the link, because its initialize_token completes the pairing.
+ */
+export const lockRuleStepText = (ticker: string, o: { link?: boolean } = {}): string => `Lock in $${ticker}'s rule${o.link ? " and link the two coins" : ""}`;
+/** The create step that follows a pin on LaunchLab, or a pair coin's lock step. */
 export const createAfterPinText = (ticker: string): string => `Create $${ticker}`;
 /** What the review says about the pin, once, when any coin pins a token. */
 export const PIN_STEP_NOTE = "A coin that burns a real token pins the Raydium pool it swaps on while the coin does not exist yet: its rule is locked and the pool pinned first, and the coin is created after that, all signed by the coin's new key and your wallet.";

@@ -55,7 +55,7 @@ export const SOURCES: readonly SourceSpec[] = [
   { id: "helius", label: "Helius RPC", limit: { perSec: 50, perMonth: 10_000_000 }, established: true, unit: "credit", shares: { keeper: 0.6, web: 0.3, deficit: 0.1 } },
   { id: "helius-send", label: "Helius sendTransaction", limit: { perSec: 5 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.3, deficit: 0.1 } },
   { id: "solana-public", label: "Solana public RPC", limit: { perSec: 4 }, established: true, unit: "request" },
-  { id: "thesportsdb", label: "TheSportsDB", limit: { perMin: 30 }, established: true, /* the plan is not recorded in the repo (2026-10-13): the 30/min figure holds until the owner confirms Premium (100/min) */ unit: "request", shares: { keeper: 0.6, web: 0.4 } },
+  { id: "thesportsdb", label: "TheSportsDB", limit: { perMin: 100 }, established: true, /* Premium: the owner holds both Premium plans since 2026-10-10 (Single Developer 100/min, Business 120/min; Paddle receipts); 100/min is right for either key */ unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "mlb-stats", label: "MLB Stats API", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "nhl-api", label: "NHL web API", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "nba-cdn", label: "NBA data feed", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },

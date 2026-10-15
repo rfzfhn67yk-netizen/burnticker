@@ -115,7 +115,11 @@ describe("NBA settlement does not depend on the dead feed", () => {
     if (v.kind !== "settled") return;
     assert.equal(v.winner, "away"); assert.deepEqual(v.final, { home: 99, away: 105 });
     assert.deepEqual(v.ops, ["on-chain payout", "TheSportsDB"]); assert.equal(v.confirmedBy, "a licensed final score");
-    assert.ok(seen.some((u) => u.includes("cdn.nba.com")), "the cdn is still tried as a further read; its 403 changes nothing");
+    assert.equal(seen.filter((u) => u.includes("cdn.nba.com")).length, 1, "the cdn is tried once; its 403 changes nothing and it is not read again in this run (2026-10-14)");
+    const g2 = (await c.season("nba", "PHI", 2026)).find((x) => x.eventId !== "9000005" && x.completed)!;
+    await settleGame(c, g2, deps());
+    assert.equal(seen.filter((u) => u.includes("cdn.nba.com")).length, 1, "a second NBA game does not read the refused feed again");
+    assert.ok(seen.some((u) => /thesportsdb\.com\/api\/v2\/json\/filter\/events\/day\//.test(u)), "the game is read through TheSportsDB's day listing, as every other league");
     const r = await sportsSettled(c, parseEspnSeries(teamSeries("nba", "PHI", "win", { kind: "season", year: 2026 }))!, null, deps(), { nowMs: NOW });
     assert.deepEqual(r.events.map((e) => [e.id, e.value]), [["2025-10-22", "1"], ["2025-11-03", "1"], ["2026-01-10", "1"]]);
     assert.deepEqual(r.refusals, []);

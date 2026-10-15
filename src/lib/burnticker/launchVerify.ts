@@ -107,7 +107,7 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       const ofProgram = ixs.filter((ix) => ix.program === program);
       // round 5: a coin with a pinned token locks its rule (initialize_token + pin_burn_target) one transaction BEFORE its LaunchLab
       // create (launchBundle.ts launchTransactions), and the confirming step is that create, which calls no burn_receipts instruction.
-      // Such a transaction is taken only for a LaunchLab draft whose TokenConfig on chain burns a pinned token (checked below), and step
+      // Such a transaction is taken only for a LaunchLab draft whose TokenConfig on chain burns a pinned token or is paired (checked below), and step
       // 3 still requires the create. Any transaction that does call burn_receipts must carry this coin's initialize_token, as before.
       const splitCreate = !ofProgram.length && expect.venue.kind === "launchlab";
       if (!ofProgram.length && !splitCreate) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
@@ -130,7 +130,10 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       let cfg: ReturnType<typeof decodeTokenConfig>;
       try { cfg = decodeTokenConfig(cfgInfo.data); } catch (e) { return { ok: false, status: 422, reason: `the coin's TokenConfig does not decode (${(e as Error).message.slice(0, 80)}): ${NOT_THIS}` }; }
       if (cfg.mint.toBase58() !== expect.mint || cfg.creator.toBase58() !== expect.creator) return { ok: false, status: 422, reason: `the TokenConfig on chain names another mint or creator: ${NOT_THIS}` };
-      if (splitCreate && cfg.burn_target_kind !== BURN_TARGET_EXTERNAL) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
+      // 2026-10-14 (Phantom review ticket 438485): a LaunchLab PAIR coin also locks its rule one transaction before its create
+      // (launchBundle.ts launchTransactions `paired`), so a create alone is taken for a TokenConfig that initialize_token paired
+      // (pair_state provisional, paired or later unlinked) as well as for one that burns a pinned token.
+      if (splitCreate && cfg.burn_target_kind !== BURN_TARGET_EXTERNAL && !(cfg.pair_state > 0)) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
       if (hex(cfg.rules_sha256) !== expect.rulesSha.toLowerCase()) return { ok: false, status: 422, reason: `the TokenConfig on chain locks another rule (rules sha256 ${short(hex(cfg.rules_sha256))}) than this draft's (${short(expect.rulesSha)}): ${NOT_THIS}` };
 
       // 3. the venue the draft expects, completed

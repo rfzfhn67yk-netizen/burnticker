@@ -5,6 +5,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { crossFinal, finalFromMlb, finalFromTsdb, mlbDays, rowOrientation, settleGame, sideMatches, tsdbDayCandidates, tsdbFinalByDay, tsdbV2DayUrl, tsdbV2EventUrl, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { mlbGames, tsdbGames, tsdbScoreOrder, ourTeam, type EspnClient, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { CHAMPION_KNOWN, EspnClient as EspnClientImpl, ScheduleCut, TSDB_LEAGUE, TSDB_LISTING_CAP, tsdbCutSentence, tsdbScheduleUrl } from "@/lib/burnticker/sources/espn";
+import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 
 type Row = Record<string, unknown>;
 const EMPTY = (idEvent: string, strEvent: string, dateEvent: string): Row => ({ idEvent, strEvent, strHomeTeam: null, strAwayTeam: null, intHomeScore: null, intAwayScore: null, dateEvent });
@@ -187,5 +189,29 @@ describe("bug 4: college rows whose scores follow the event's name", () => {
   test("every other league keeps the field order where the event's name differs only in spelling ('Paris Saint-Germain' / 'Paris SG')", () => {
     assert.equal(tsdbScoreOrder("fra.1", { strEvent: "Nantes vs Paris Saint-Germain", strHomeTeam: "Nantes", strAwayTeam: "Paris SG" }), "fields");
     assert.equal(ourTeam("fra.1", "Paris SG")?.abbr, "PSG", "bug 5: TheSportsDB's 'Paris SG' is PSG, never Paris FC");
+  });
+});
+
+// THE THREE SCHEDULE GAPS (2026-10-14). (a) men's college basketball: TheSportsDB's league listing stops at 3,000 rows, so a season read
+// from it is never taken as whole. (b) women's college basketball read 0 rows because its league id was another sport's. (c) the WNBA
+// stays out of CHAMPION_KNOWN: TheSportsDB marks its 2025 playoffs as round 0 after the first round (see espn.ts CHAMPION_KNOWN).
+describe("the schedule gaps (2026-10-14)", () => {
+  const row = (i: number, home = "Duke", away = "Texas") => ({ idEvent: String(9_000_000 + i), strEvent: `${home} vs ${away}`, strHomeTeam: home, strAwayTeam: away, intHomeScore: null, intAwayScore: null, dateEvent: "2025-11-05", strTimestamp: "2025-11-05T01:45:00", strStatus: "NS", intRound: "0" });
+  const tsdbClient = (rows: Record<string, unknown>[]) => new EspnClientImpl({ tsdbKey: "k", minIntervalMs: 0, fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ schedule: rows }) }) });
+  test("(a) a league listing of 3,000 rows is cut short: the season read fails with a plain sentence; a shorter listing reads as before", async () => {
+    const full = Array.from({ length: TSDB_LISTING_CAP }, (_, i) => row(i));
+    await assert.rejects(tsdbClient(full).season("mcbb", "DUKE", 2026), (e) => e instanceof ScheduleCut && /^TheSportsDB lists only the first 3,000 games of the NCAA men's basketball season, so a whole season cannot be read from it yet\.$/.test((e as Error).message));
+    assert.ok(lintCopy(tsdbCutSentence("mcbb"), loadCopyLintConfig()).ok);
+    const short = await tsdbClient(full.slice(0, 10)).season("mcbb", "DUKE", 2026);
+    assert.equal(short.length, 10);
+  });
+  test("(b) women's college basketball reads TheSportsDB's NCAA Division I Basketball Women (5789), not 4608 (another sport)", () => {
+    assert.equal(TSDB_LEAGUE.wcbb, "5789");
+    assert.equal(tsdbScheduleUrl("wcbb", 2026), "https://www.thesportsdb.com/api/v2/json/schedule/league/5789/2025-2026");
+  });
+  test("(c) the NBA's playoffs (rounds 100 to 499, play-in 400 included) are postseason and the NBA is in CHAMPION_KNOWN; the WNBA is not", () => {
+    const nba = tsdbGames("nba", { schedule: [{ ...row(1, "Los Angeles Lakers", "Minnesota Timberwolves"), dateEvent: "2025-04-20", strTimestamp: "2025-04-20T00:30:00", intRound: "160" }, { ...row(2, "Los Angeles Lakers", "Houston Rockets"), dateEvent: "2025-04-12", strTimestamp: "2025-04-12T00:30:00", intRound: "0" }, { ...row(3, "Memphis Grizzlies", "Dallas Mavericks"), dateEvent: "2025-04-16", strTimestamp: "2025-04-16T00:30:00", intRound: "400" }] }, 2025);
+    assert.deepEqual(nba.map((g) => g.seasonType), [3, 2, 3]);
+    assert.ok(CHAMPION_KNOWN.has("nba")); assert.ok(!CHAMPION_KNOWN.has("wnba"));
   });
 });
