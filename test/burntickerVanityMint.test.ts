@@ -1,6 +1,6 @@
 // MINT ADDRESSES THAT END IN burn (owner, 2026-10-14): the matcher and the residue check, a deterministic grind on a fake RNG, the
 // WebCrypto seed export, the worker loop on a fake scope, the page's pool on fake workers (progress, found keys checked, skip, failure),
-// the search panel's words (lint clean, a live counter, the skip at 60 s), the local key attached to the prepared bundle (and refused
+// the search panel's words (lint clean, a live counter, the skip from the start), the opt-in switch (plain by default, remembered), the local key attached to the prepared bundle (and refused
 // when the server built another mint), the server taking the browser's public keys (one coin, a LaunchLab pair, the pair curve), and
 // the wiring by each file's source: the page, the Coin vs Coin tile and the record close, the sign card, the worker, the coin and trust
 // pages, the CLIs and the execution README.
@@ -12,11 +12,11 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import {
   base58, expectedTries, mintWorkerCount, grindMint, groundMintProblem, matchesSuffix, MintGrindPool, MINT_MISMATCH_LINE, plainMint, runGrindWorker, secretBase58,
-  seedFromPkcs8, SKIP_AFTER_MS, suffixResidue, tailResidue, webcryptoEd25519Works, withLocalKey,
+  launchMints, MINT_BURN_CHOICE_KEY, readBurnChoice, writeBurnChoice, seedFromPkcs8, suffixResidue, tailResidue, webcryptoEd25519Works, withLocalKey,
   type FromWorker, type GroundMint, type SubtleLike, type ToWorker, type WorkerLike,
 } from "@/lib/burnticker/vanityMint";
 import {
-  coinAddressLine, MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_FAILED_LINE, MINT_PLAIN_LINE, MINT_SEARCH_DEVICE_LINE, MINT_SEARCH_LINE, MINT_SEARCH_PAIR_LINE,
+  coinAddressLine, MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_CHOICE_LABEL, MINT_FAILED_LINE, MINT_PLAIN_LINE, MINT_SEARCH_DEVICE_LINE, MINT_SEARCH_LINE, MINT_SEARCH_PAIR_LINE,
   MINT_SEARCH_PRIVATE_LINE, MINT_SKIP_LABEL, MINT_SKIP_NOTE, mintFoundLine, mintSearchProgress, mintSearchView,
 } from "@/lib/burnticker/mintAddressCopy";
 import { launchlabPlan, pairCurvePlan, planProblems } from "@/lib/burnticker/signPlan";
@@ -240,13 +240,15 @@ describe("the pool (the page side) on fake workers", () => {
 describe("the search panel's words (owner: people must see it is working, not frozen)", () => {
   const base = { tries: 0, elapsedMs: 0, workers: 9, engine: "webcrypto" as const, wanted: 1, found: 0, running: true, addresses: [], plain: false, failed: null };
   test("every line is plain English and passes the copy lint", () => {
-    for (const t of [MINT_SEARCH_LINE, MINT_SEARCH_PAIR_LINE, MINT_SEARCH_DEVICE_LINE, MINT_SEARCH_PRIVATE_LINE, MINT_SKIP_LABEL, MINT_SKIP_NOTE, MINT_PLAIN_LINE, MINT_FAILED_LINE, MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_MISMATCH_LINE,
+    for (const t of [MINT_SEARCH_LINE, MINT_SEARCH_PAIR_LINE, MINT_SEARCH_DEVICE_LINE, MINT_SEARCH_PRIVATE_LINE, MINT_SKIP_LABEL, MINT_SKIP_NOTE, MINT_PLAIN_LINE, MINT_FAILED_LINE, MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_MISMATCH_LINE, MINT_CHOICE_LABEL,
       mintSearchProgress({ tries: 1_234_567, elapsedMs: 12_300, workers: 9 }), mintSearchProgress({ tries: 1, elapsedMs: 1_000, workers: 1 }),
       mintFoundLine(["39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN"]), mintFoundLine(["39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN", "39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5burn"]),
       coinAddressLine("39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5burn")!]) clean(t);
     assert.equal(MINT_SEARCH_LINE, "Finding an address that ends in burn. This usually takes under a minute.", "the owner's line, word for word");
-    assert.match(MINT_ADDRESS_TRUST, /from October 14, 2026/, "the trust page dates it: the coins made before have plain addresses");
-    assert.match(MINT_ADDRESS_TRUST, /plain address/, "and names the skip");
+    assert.equal(MINT_CHOICE_LABEL, "Give this coin an address that ends in burn (about a minute on a laptop; a pair takes longer)", "the owner's switch, word for word");
+    assert.equal(MINT_ADDRESS_NOTE, "A coin's address is a normal Solana address unless its creator chose one that ends in burn.", "plain is the default");
+    assert.match(MINT_ADDRESS_TRUST, /^A coin made here has a normal Solana address unless its creator chose one that ends in burn\./);
+    for (const t of [MINT_ADDRESS_NOTE, MINT_ADDRESS_TRUST, MINT_SKIP_NOTE]) { assert.doesNotMatch(t, /October|2026|since|Waiting is the default/); }
   });
   test("the counter: keys tried, seconds, searches at once; the device estimate", () => {
     const v = mintSearchView({ ...base, tries: 2_117_632, elapsedMs: 10_400 });
@@ -257,10 +259,9 @@ describe("the search panel's words (owner: people must see it is working, not fr
     const pair = mintSearchView({ ...base, wanted: 2, found: 1, addresses: ["x"], tries: 5 });
     assert.deepEqual(pair.lines, [MINT_SEARCH_PAIR_LINE, MINT_SEARCH_DEVICE_LINE, "1 of 2 found."]);
   });
-  test("the skip button: not before 60 seconds, from 60 seconds on", () => {
-    assert.equal(SKIP_AFTER_MS, 60_000);
-    assert.equal(mintSearchView({ ...base, elapsedMs: 59_999 }).showSkip, false);
-    assert.equal(mintSearchView({ ...base, elapsedMs: 60_000 }).showSkip, true);
+  test("the skip button: there from the first moment of a search (owner, 2026-10-14 evening), not after 60 seconds", () => {
+    assert.equal(mintSearchView({ ...base, elapsedMs: 0 }).showSkip, true);
+    assert.equal(mintSearchView({ ...base, elapsedMs: 59_999 }).showSkip, true);
     assert.equal(mintSearchView({ ...base, elapsedMs: 0, running: false }).state, "idle");
     const found = mintSearchView({ ...base, running: false, found: 1, addresses: ["39fUzheUNWXi9TiBungPqxnZbE51wzaVZf149in5BURN"] });
     assert.equal(found.state, "found"); assert.equal(found.showSkip, false);
@@ -359,25 +360,30 @@ describe("the wiring, by each file's source", () => {
   test("the launch page: the search from the name step, the public keys sent, the page's own secrets attached", () => {
     const src = read("src/app/burnticker/launch/page.tsx");
     assert.match(src, /const mintPool = useMintPool\(\)/);
-    assert.match(src, /wizardMaySign\(gate\) && ticker\.trim\(\) && \(step === "name" \|\| step === "review"\)\) void mintPool\.ensure\(mintsNeeded\)/);
+    assert.match(src, /const burnMint = useBurnChoice\(\)/);
+    assert.match(src, /if \(burnMint && mintPool && wizardMaySign\(gate\) && ticker\.trim\(\) && \(step === "name" \|\| step === "review"\)\) void mintPool\.ensure\(mintsNeeded\)/, "the search starts early only with the switch on");
     assert.match(src, /const mintsNeeded = pairOn \? 2 : 1/);
-    assert.match(src, /await mintPool\.ensure\(mintsNeeded\);\s*if \(curRev\.current !== sentRev\) \{ setLaunchErr\(STALE_PREPARE_SENTENCE\); return; \}/, "an edit while waiting sends nothing");
+    assert.doesNotMatch(src, /await mintPool\.ensure\(/, "Launch never waits on the pool directly");
+    assert.match(src, /await launchMints\(\{ burn: burnMint, pool: mintPool, n: mintsNeeded \}\);\s*if \(curRev\.current !== sentRev\) \{ setLaunchErr\(STALE_PREPARE_SENTENCE\); return; \}/, "an edit while waiting sends nothing");
     assert.equal((src.match(/mint: kA\.publicKey/g) ?? []).length, 2, "the one coin and side A (and the matchup's first coin)");
     assert.equal((src.match(/mint: kB\.publicKey/g) ?? []).length, 2, "side B, and the matchup's second coin");
     assert.equal((src.match(/withLocalKey\(/g) ?? []).length, 5);
     assert.match(src, /j\.pairCurve\.mints\.a !== kA\.publicKey \|\| j\.pairCurve\.mints\.b !== kB\.publicKey\) throw new Error\(MINT_MISMATCH_LINE\)/);
     assert.match(src, /keys: keysAB/); assert.doesNotMatch(src, /keys: j\.mintSecretKeys/, "a secret from the server is never used");
-    assert.match(src, /mintSearch=\{<><MintSearch pool=\{mintPool\} \/>/);
+    assert.match(src, /mintSearch=\{<MintChoice pool=\{mintPool\} \/>\}/);
     assert.doesNotMatch(src, /secretKey[^\n]*(localStorage|sessionStorage|DRAFT_STORE)/, "the keys are never saved with the draft");
   });
   test("the Coin vs Coin tile and the record close: the same search, both mints in parallel, the server's secrets never used", () => {
     const src = read("src/app/burnticker/launch/CoinVsCoinTile.tsx");
-    assert.match(src, /await mintPool\.ensure\(2\)/); assert.match(src, /await mintPool\.ensure\(1\)/);
+    assert.match(src, /await launchMints\(\{ burn: burnMint, pool: mintPool, n: 2 \}\)/); assert.match(src, /await launchMints\(\{ burn: burnMint, pool: mintPool, n: 1 \}\)/);
+    assert.doesNotMatch(src, /await mintPool\.ensure\(/);
+    assert.equal((src.match(/if \(burnMint && mintPool && !blocked/g) ?? []).length, 2, "both early searches only with the switch on");
     assert.match(src, /\{ \.\.\.body, mint: kA\.publicKey, pair: \{ \.\.\.body\.pair, mint: kB\.publicKey \} \}/);
     assert.match(src, /JSON\.stringify\(\{ \.\.\.body, mint: kA\.publicKey \}\)/);
     assert.doesNotMatch(src, /keys: j\.mintSecretKeys/);
     assert.match(src, /withLocalKey\(A, kA\), b: withLocalKey\(B, kB\)/); assert.match(src, /withLocalKey\(got\.ok\.bundle, kA\)/);
-    assert.equal((src.match(/mintSearch=\{<><MintSearch pool=\{mintPool\} \/>/g) ?? []).length, 2);
+    assert.equal((src.match(/mintSearch=\{<MintChoice pool=\{mintPool\} \/>\}/g) ?? []).length, 2);
+    assert.equal((src.match(/const burnMint = useBurnChoice\(\);/g) ?? []).length, 2);
     assert.equal((src.match(/const mintPool = useMintPool\(\);/g) ?? []).length, 2, "the record close and the tile share the tab's one pool");
   });
   test("the review card shows the panel above Launch; the sign card shows each address before signing", () => {
@@ -413,5 +419,79 @@ describe("the wiring, by each file's source", () => {
     const readme = read("docs/burnkeeper/README-execution.md");
     assert.match(readme, /## Mint addresses that end in burn \(owner decision 2026-10-14\)/);
     assert.match(readme, /solana-keygen grind --ends-with burn:1 --ends-with BURN:1/);
+  });
+});
+
+describe("plain addresses by default, the burn ending opt-in (owner, 2026-10-14 evening)", () => {
+  const counting = () => { const workers: FakeWorker[] = []; const pool = new MintGrindPool({ workers: 2, suffixes: ["b"], makeWorker: () => { const w = new FakeWorker(); workers.push(w); return w; } }); return { workers, pool }; };
+  const memStore = () => { const m = new Map<string, string>(); return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); } }; };
+  test("off (the default): Launch gets plain keys at once, sound by the same check, and no search starts", async () => {
+    assert.equal(readBurnChoice(memStore()), false, "nothing saved reads as off");
+    const { workers, pool } = counting();
+    const keys = await launchMints({ burn: false, pool, n: 2 });
+    assert.equal(keys.length, 2); assert.notEqual(keys[0].publicKey, keys[1].publicKey);
+    for (const k of keys) { assert.equal(k.plain, true); assert.equal(groundMintProblem(k), null); }
+    assert.equal(workers.length, 0, "no worker was made"); assert.equal(pool.snapshot().running, false); assert.equal(mintSearchView(pool.snapshot()).state, "idle");
+    assert.equal((await launchMints({ burn: false, pool: null, n: 1 })).length, 1, "no pool needed either");
+    // the plain key signs the plan like a burn-ending one did
+    const k = keys[0];
+    const bundle = { mint: k.publicKey, ticker: "AAA", ready: true, pending: [], mintSecretKey: null, transactions: [{ label: "create", signers: ["creator", "mint"], instructions: [] }] };
+    assert.deepEqual(planProblems(launchlabPlan([withLocalKey(bundle, k)]), CREATOR), []);
+  });
+  test("on: the search runs and Launch waits for it; the skip ends the wait at any moment", async () => {
+    const { workers, pool } = counting();
+    let done = false;
+    const p = launchMints({ burn: true, pool, n: 1 }).then((k) => { done = true; return k; });
+    assert.equal(workers.length, 2, "the search started");
+    assert.equal(mintSearchView(pool.snapshot()).showSkip, true, "the skip is there at once");
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(done, false, "Launch is waiting");
+    const k = keyEndingIn("b", 41);
+    workers[0].emit({ type: "found", publicKey: k.publicKey, secretKey: k.secretKey, tries: 7 });
+    assert.deepEqual((await p).map((x) => x.publicKey), [k.publicKey]);
+    await assert.rejects(launchMints({ burn: true, pool: null, n: 1 }), /has not started yet/);
+    pool.dispose();
+  });
+  test("turning the switch off mid-search stops it, lets a waiting press go on with plain keys, and keeps found burn keys for later", async () => {
+    const { workers, pool } = counting();
+    const p = launchMints({ burn: true, pool, n: 2 });
+    const k = keyEndingIn("b", 42);
+    workers[1].emit({ type: "found", publicKey: k.publicKey, secretKey: k.secretKey, tries: 3 });
+    pool.optOut();
+    const keys = await p;
+    assert.equal(keys.length, 2); assert.equal(keys[0].publicKey, k.publicKey); assert.equal(keys[1].plain, true);
+    assert.ok(workers.every((w) => w.terminated));
+    const s = pool.snapshot();
+    assert.equal(s.running, false); assert.equal(s.wanted, 0); assert.deepEqual(s.addresses, [k.publicKey], "the plain key is not banked");
+    assert.equal(mintSearchView(s).state, "idle", "no panel after the switch is off");
+    // idle opt-out: nothing waiting, the search just stops
+    const b = counting(); void b.pool.ensure(1); b.pool.optOut();
+    assert.equal(b.pool.snapshot().running, false); assert.equal(b.pool.snapshot().wanted, 0);
+  });
+  test("the switch is remembered in this browser, and a broken storage reads as off", () => {
+    const st = memStore();
+    writeBurnChoice(st, true); assert.equal(st.m.get(MINT_BURN_CHOICE_KEY), "1"); assert.equal(readBurnChoice(st), true);
+    writeBurnChoice(st, false); assert.equal(readBurnChoice(st), false);
+    const broken = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); } };
+    assert.equal(readBurnChoice(broken), false); assert.doesNotThrow(() => writeBurnChoice(broken, true));
+    assert.equal(readBurnChoice(null), false);
+  });
+  test("the switch's source: a checkbox off by default, saved through writeBurnChoice, the panel only when on, the note always", () => {
+    const src = read("src/app/burnticker/launch/MintSearch.tsx");
+    assert.match(src, /export function MintChoice\(/);
+    assert.match(src, /<input type="checkbox" role="switch"[^>]*data-mint-burn-switch checked=\{burn\}/);
+    assert.match(src, /setBurnChoice\(on\); if \(!on\) pool\?\.optOut\(\);/);
+    assert.match(src, /burnChoice = on; writeBurnChoice\(choiceStore\(\), on\)/);
+    assert.match(src, /readBurnChoice\(choiceStore\(\)\)/);
+    assert.match(src, /useSyncExternalStore\([\s\S]*?, getBurnChoice, \(\) => false\)/, "the server render is off");
+    assert.match(src, /\{MINT_CHOICE_LABEL\}/);
+    assert.match(src, /\{burn && <MintSearch pool=\{pool\} \/>\}/);
+    assert.match(src, /data-mint-note>\{MINT_ADDRESS_NOTE\}/);
+  });
+  test("the server needs no suffix: any valid public key, as the plain default sends", () => {
+    const h = read("src/lib/burnticker/api/handlers.ts");
+    assert.doesNotMatch(h, /matchesSuffix|MINT_SUFFIX/);
+    assert.doesNotMatch(read("src/lib/burnticker/launchBundle.ts"), /matchesSuffix|MINT_SUFFIX/);
+    assert.doesNotMatch(read("src/app/api/burnticker/launch/route.ts"), /matchesSuffix|MINT_SUFFIX/);
   });
 });

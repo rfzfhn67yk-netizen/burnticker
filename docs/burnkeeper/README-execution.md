@@ -185,13 +185,17 @@ The platform keeper runs it every cycle (60 s); the $DEFICIT keeper wakes at the
 
 ## Mint addresses that end in burn (owner decision 2026-10-14)
 
-Every coin made on the platform from 2026-10-14 has a mint address whose last four characters are `burn` or `BURN`. Coins made
-before that day ($DEFICIT, REHEARSAL, $PHINFLWIN) keep their plain addresses and are never described as ending in burn.
+Since the evening of 2026-10-14 (owner: "the wait for the vanity address is a killer") this is **opt-in on the launch page**. A
+coin's address is a normal Solana address unless its creator chose one that ends in burn. Coins whose address does not end in burn
+($DEFICIT, REHEARSAL, $PHINFLWIN and every plain launch) are never described as ending in burn.
 
-- **The launch page** finds the address in the creator's browser, in Web Workers (`src/app/burnticker/launch/vanity.worker.ts`,
-  `src/lib/burnticker/vanityMint.ts`), from the name step on. Only the public key is sent with the launch request (`mint`, and
-  `pair.mint` for side B); the secret stays in the page and signs the create transaction there. The server builds the bundle for that
-  public key and carries no secret. After 60 seconds the creator may choose a plain address instead.
+- **The launch page** makes plain mint keys in the page at Launch time by default, with no search and no wait. The review step has a
+  switch, off by default and remembered in the browser (`localStorage` key `burnticker:mint-ends-in-burn`): "Give this coin an address
+  that ends in burn (about a minute on a laptop; a pair takes longer)". With it on, the address is found in the creator's browser, in
+  Web Workers (`src/app/burnticker/launch/vanity.worker.ts`, `src/lib/burnticker/vanityMint.ts`), from the name step on, Launch waits
+  for it, and "Use a plain address instead" is offered from the start. Either way only the public key is sent with the launch request
+  (`mint`, and `pair.mint` for side B); the secret stays in the page and signs the create transaction there. The server builds the
+  bundle for any valid public key (no suffix is required) and carries no secret.
 - **Operator launches** grind the mint first, outside the repository:
 
       node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/burnticker-grind-mint.mts --out ~/keys/<ticker>-mint.json

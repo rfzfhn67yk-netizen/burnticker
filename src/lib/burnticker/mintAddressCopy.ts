@@ -1,4 +1,4 @@
-import { matchesSuffix, SKIP_AFTER_MS } from "@/lib/burnticker/mintSuffix";
+import { matchesSuffix } from "@/lib/burnticker/mintSuffix";
 import type { GrindSnapshot } from "@/lib/burnticker/vanityMint";
 
 /**
@@ -6,9 +6,9 @@ import type { GrindSnapshot } from "@/lib/burnticker/vanityMint";
  * (test/burntickerVanityMint.test.ts). The owner's 10-14 note: people must see the search is alive, never frozen, so the progress line
  * carries a count, the seconds and how many searches run at once, and the page redraws it several times a second.
  *
- * Honesty: coins created before 2026-10-14 ($DEFICIT, REHEARSAL, $PHINFLWIN) have plain addresses, and a creator may skip the search, so
- * the general line says coins made here GET such an address (the practice), the trust page dates it and names the skip, and a coin page
- * says its own address ends in burn only when it does.
+ * Owner, 2026-10-14 evening ("the wait for the vanity address is a killer"): plain addresses are the default and the burn ending is a
+ * switch on the review step, so the general line says a coin's address is a normal one unless its creator chose the burn ending, and a
+ * coin page says its own address ends in burn only when it does. The skip button shows from the start of a search, not after a wait.
  */
 
 export const MINT_SEARCH_LINE = "Finding an address that ends in burn. This usually takes under a minute.";
@@ -16,13 +16,15 @@ export const MINT_SEARCH_PAIR_LINE = "Finding two addresses that end in burn, on
 export const MINT_SEARCH_DEVICE_LINE = "That is on a laptop. A phone can take a few minutes.";
 export const MINT_SEARCH_PRIVATE_LINE = "The search runs in this browser, and the address key never leaves it.";
 export const MINT_SKIP_LABEL = "Use a plain address instead";
-export const MINT_SKIP_NOTE = "Waiting is the default. A plain address works the same way, but it does not end in burn.";
+export const MINT_SKIP_NOTE = "A plain address works the same way, but it does not end in burn.";
+/** The review step's switch (owner's words), off by default and remembered in this browser. */
+export const MINT_CHOICE_LABEL = "Give this coin an address that ends in burn (about a minute on a laptop; a pair takes longer)";
 export const MINT_PLAIN_LINE = "This launch uses a plain address.";
 export const MINT_FAILED_LINE = "This browser could not run the address search. You can launch with a plain address instead.";
-/** The general line (the launch review and the sign card). */
-export const MINT_ADDRESS_NOTE = "Coins made here since October 14, 2026 get an address that ends in burn or BURN, unless the creator chooses a plain one.";
-/** The trust page's "How this was built" sentence: dated, and the skip named. */
-export const MINT_ADDRESS_TRUST = "Coins made here from October 14, 2026 get an address that ends in burn or BURN. The address is found in the creator's own browser, and its key never reaches this site. A creator who does not want to wait can choose a plain address instead.";
+/** The general line (the launch review, the sign card and a coin page whose address ends in burn). */
+export const MINT_ADDRESS_NOTE = "A coin's address is a normal Solana address unless its creator chose one that ends in burn.";
+/** The trust page's "How this was built" sentence. */
+export const MINT_ADDRESS_TRUST = "A coin made here has a normal Solana address unless its creator chose one that ends in burn. That address is found in the creator's own browser, and its key never reaches this site.";
 
 const n = (x: number) => Math.round(x).toLocaleString("en-US");
 
@@ -38,7 +40,7 @@ export function mintFoundLine(addresses: readonly string[]): string {
   return addresses.length === 1 ? `Found an address that ends in burn: ${addresses[0]}.` : `Found ${addresses.length} addresses that end in burn: ${addresses.join(" and ")}.`;
 }
 
-/** A coin page's line, only for a coin whose own mint ends in burn or BURN (never the coins made before 2026-10-14). */
+/** A coin page's line, only for a coin whose own mint ends in burn or BURN (never a plain one). */
 export function coinAddressLine(mint: string): string | null {
   if (!matchesSuffix(mint)) return null;
   return `This coin's address ends in ${mint.slice(-4)}. ${MINT_ADDRESS_NOTE}`;
@@ -62,7 +64,7 @@ export function mintSearchView(s: GrindSnapshot): MintSearchView {
     state: "searching",
     lines: [pair ? MINT_SEARCH_PAIR_LINE : MINT_SEARCH_LINE, MINT_SEARCH_DEVICE_LINE, ...(pair && s.found ? [`${s.found} of ${s.wanted} found.`] : [])],
     progress: mintSearchProgress(s),
-    showSkip: s.elapsedMs >= SKIP_AFTER_MS,
+    showSkip: true,   // from the start (owner, 2026-10-14 evening): nobody has to wait to get out of the search
   };
 }
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { pairCurveRequiredFor } from "@/lib/burnticker/pairVenueRule";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { platform } from "@/lib/burnticker/server";
 import { markLaunched, prepareLaunch } from "@/lib/burnticker/api/handlers";
@@ -51,12 +52,14 @@ export async function POST(req: Request) {
   // the two independent LaunchLab bundles; one that does not ask is refused BEFORE anything is pinned or registered — no silent
   // fallback. Asking for the pair curve on a host without it is refused too.
   if (body.pair && body.action !== "launched") {
-    const on = pairCurveEnabled(process.env), wants = body.venue === "pair-curve";
+    // 2026-10-14: a rivalry series pair and a settled-event pair are LaunchLab pairs linked at creation, never the pair curve (pairVenueRule.ts)
+    const on = pairCurveRequiredFor(body, pairCurveEnabled(process.env)), wants = body.venue === "pair-curve";
     if (on && !wants) return NextResponse.json({ error: "rivalry pairs on this host launch through the pair curve (both coins graduate together or neither does); send venue: \"pair-curve\" and sign the pair-curve transaction set — two independent LaunchLab launches are not offered", code: "pair-curve-required" }, { status: 409 });
-    if (!on && wants) return NextResponse.json({ error: "the pair curve is not enabled on this host (BURNTICKER_PAIR_CURVE_ENABLED)", code: "pair-curve-unavailable" }, { status: 409 });
+    if (!pairCurveEnabled(process.env) && wants) return NextResponse.json({ error: "the pair curve is not enabled on this host (BURNTICKER_PAIR_CURVE_ENABLED)", code: "pair-curve-unavailable" }, { status: 409 });
   }
   if (body.action === "launched") { const r = await markLaunched(p, String(body.mint ?? ""), String(body.launchTx ?? "")); return edgeJson(r.body, r.status); }
-  // 2026-10-14 (owner): the launch page grinds each mint in the browser so its address ends in burn, and sends only the PUBLIC key:
+  // 2026-10-14 (owner): the launch page makes each mint in the browser (plain by default, or ground to end in burn when the creator
+  // chooses), and sends only the PUBLIC key; any valid public key is taken, no suffix is required:
   // `mint` (side A or the one coin) and `pair.mint` (side B). The secret never reaches this host; the bundle then carries none.
   // A request without them (an older page) still gets a fresh keypair here, as before.
   const own = typeof body.mint === "string" ? body.mint : undefined;
