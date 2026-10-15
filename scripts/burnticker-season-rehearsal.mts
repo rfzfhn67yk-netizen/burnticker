@@ -152,7 +152,7 @@ async function main(a: RehearsalArgs): Promise<number> {
   const t0 = Date.now();
   const env = process.env;
   const { EspnClient, gamesFor } = await import("@/lib/burnticker/sources/espn");
-  const { envGameDeps, polymarketGameReaders, settleGame, sportsSettled, POSTPONED_RE } = await import("@/lib/burnticker/sources/gameSettle");
+  const { envGameDeps, polymarketGameReaders, settleGame, sportsSettled, POSTPONED_RE, memoryHoldStore, holdKeyOf, SINGLE_SOURCE_HOLD_MS } = await import("@/lib/burnticker/sources/gameSettle");
   const { PolymarketClient } = await import("@/lib/burnticker/oracle/polymarket");
   const { refuseTitles } = await import("@/lib/burnticker/server");
   const { windowStatus } = await import("@/lib/burnticker/sources/espn");
@@ -174,8 +174,12 @@ async function main(a: RehearsalArgs): Promise<number> {
   };
   const readers = polymarketGameReaders(traced);
   let lastLookup: Lookup | null = null, lastMarket: string | null = null;
+  // ONE SOURCE (owner 2026-10-14): a game only TheSportsDB can read settles after its final has stood 12 hours. The rehearsal keeps the
+  // hold in memory and re-reads such a game once on a clock moved 12 hours on (the reads are cached), so it shows how the keeper settles it.
+  const holds = memoryHoldStore(), clock = { t: a.nowMs };
   const deps = {
     ...envGameDeps(env),
+    holds, now: () => clock.t,
     payout: readers.payout,
     market: async (g: Game) => {
       trace.last = null; trace.error = null;
@@ -203,7 +207,9 @@ async function main(a: RehearsalArgs): Promise<number> {
     if (!g.completed && POSTPONED_RE.test(g.detail)) { record.rows.push(rowOf(g, null, null, null)); console.log(formatRow(record.rows.at(-1)!)); continue; }
     lastLookup = null; lastMarket = null;
     let v: GameVerdict;
+    clock.t = a.nowMs;
     try { v = await settleGame(client, g, deps); } catch (e) { v = { kind: "held", why: `settleGame threw: ${(e as Error).message.slice(0, 160)}` }; }
+    if (v.kind === "awaiting" && holds.get(holdKeyOf(g))) { clock.t = a.nowMs + SINGLE_SOURCE_HOLD_MS; try { v = await settleGame(client, g, deps); } catch (e) { v = { kind: "held", why: `settleGame threw: ${(e as Error).message.slice(0, 160)}` }; } }
     const row = rowOf(g, v, lastLookup, lastMarket);
     record.rows.push(row); console.log(formatRow(row));
   }
@@ -212,6 +218,7 @@ async function main(a: RehearsalArgs): Promise<number> {
     const st = windowStatus(s, season, a.nowMs);
     record.window = { ended: st.ended, reason: st.reason, endsAt: st.endsAt, champion: s.window.kind === "meetings" ? "champion: not applicable (rivalry series)" : championRead(s, season, st.champion) };
     try {
+      clock.t = a.nowMs + SINGLE_SOURCE_HOLD_MS;
       const k = await sportsSettled(client, s, null, deps, { nowMs: a.nowMs });
       const ser = k.window?.series as { wins?: number; losses?: number; draws?: number } | null | undefined;
       record.keeper = { days: k.events.length, awaiting: k.awaitingFinal, refusals: k.refusals, reason: `${k.window?.ended ? "ended" : "open"}: ${k.window?.reason ?? ""}${ser ? ` (series ${ser.wins}–${ser.losses}${ser.draws ? `–${ser.draws}` : ""})` : ""}` };

@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { EspnClient, NBA_LEAGUE_SCHEDULE, NBA_OFFICIAL_ANSWERS, ScheduleUnavailable, gamesFor, meetingsPairSeries, parseEspnSeries, teamSeries, tsdbScheduleUrl, type Game } from "@/lib/burnticker/sources/espn";
-import { countedOfficialOf, operatorsFor, settleGame, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
+import { SINGLE_SOURCE_HOLD_MS, countedOfficialOf, memoryHoldStore, operatorsFor, settleGame, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { nativeRule, nativeSourceById, setNativeClients } from "@/lib/burnticker/sources/native";
 import { sportsRivalry, sportsTeams } from "@/lib/burnticker/api/handlers";
 import { leagueProvenance, scheduleProblem } from "@/lib/burnticker/sources/provenance";
@@ -125,12 +125,18 @@ describe("NBA settlement does not depend on the dead feed", () => {
     assert.deepEqual(r.refusals, []);
   });
 
-  test("the dead feed is not counted as a second operator: TheSportsDB alone is held, not left waiting for the cdn", async () => {
+  test("the dead feed is not counted as a second operator: TheSportsDB alone takes the 12-hour hold (owner 2026-10-14), never waits for the cdn", async () => {
     const c = client([]);
     const g = (await c.season("nba", "PHI", 2026)).find((x) => x.eventId === "9000005")!;
     assert.deepEqual(operatorsFor("nba", deps({ market: false }), false), ["TheSportsDB"]);
-    const v = await settleGame(c, g, deps({ market: false }));
-    assert.equal(v.kind, "held"); assert.match(v.kind === "held" ? v.why : "", /only one operator/);
+    const holds = memoryHoldStore();
+    let t = NOW;
+    const d = { ...deps({ market: false }), holds, now: () => t };
+    const v = await settleGame(c, g, d);
+    assert.equal(v.kind, "awaiting"); assert.match(v.kind === "awaiting" ? v.why : "", /first seen now/);
+    t += SINGLE_SOURCE_HOLD_MS;
+    const w = await settleGame(c, g, d);
+    assert.equal(w.kind, "settled"); assert.equal(w.kind === "settled" ? w.settledBy : "", "TheSportsDB only, confirmed after a 12 h hold");
   });
 
   test("the creation preflight does not refuse an NBA team coin: the payout is primary, TheSportsDB the second source", async () => {
@@ -149,18 +155,33 @@ describe("NBA settlement does not depend on the dead feed", () => {
     assert.notEqual(p.refusal?.code, "no-cross-read", JSON.stringify(p.refusal));
   });
 
-  test("launch walkthrough 2026-10-13: with one source the refusal is a plain sentence the page can show, never operator jargon", async () => {
+  test("owner 2026-10-14: with TheSportsDB alone the preflight passes and the review gets a plain note, never a refusal", async () => {
     const { preflightSelector } = await import("@/lib/burnticker/coverage/preflight");
     const { lintCopy, loadCopyLintConfig } = await import("@/lib/launch/copyLint");
+    const { NEXT_GAME_NOTES } = await import("@/lib/burnticker/sources/native");
     setNativeClients({ espn: client([]), games: deps({ market: false }) });
+    const id = teamSeries("nba", "PHI", "win", { kind: "season", year: 2026 });
+    const r = await preflightSelector(nativeRule(id), { now: NOW });
+    assert.equal(r.ok, true, JSON.stringify(r.refusal)); assert.equal(r.refusal, null);
+    const p = await nativeSourceById(id)!.preflight(NOW);
+    assert.equal(p.problem, null); assert.equal(p.note, NEXT_GAME_NOTES.hold);
+    assert.equal(p.note, "Polymarket has not listed the next game yet; it usually appears a few days before tip-off. Until it does, that game would settle on TheSportsDB alone after a 12-hour confirmation hold.");
+    const cfg = loadCopyLintConfig();
+    for (const l of [NEXT_GAME_NOTES.hold, NEXT_GAME_NOTES.noTag, NEXT_GAME_NOTES.official("MLB's official feed")]) assert.ok(lintCopy(l, cfg).ok, `${lintCopy(l, cfg).hits.map((h) => h.phrase).join(", ")}: ${l}`);
+  });
+
+  test("owner 2026-10-14: a team whose next game no source can read is still refused, with the same sentence", async () => {
+    const { preflightSelector } = await import("@/lib/burnticker/coverage/preflight");
+    const { lintCopy, loadCopyLintConfig } = await import("@/lib/launch/copyLint");
+    setNativeClients({ espn: client([]), games: deps({ market: false, tsdbKey: null }) });
     const r = await preflightSelector(nativeRule(teamSeries("nba", "PHI", "win", { kind: "season", year: 2026 })), { now: NOW });
-    assert.equal(r.refusal?.code, "cross-read-unreadable");
-    assert.match(r.refusal!.reason, /^only one source can confirm the games of Philadelphia 76ers right now, and every result needs two sources that agree\. The second would be the Polymarket market for .+ on [A-Z][a-z]{2} \d{1,2}, and none was found\. Polymarket usually lists a game a few days before it starts, so please try again then\.$/);
+    assert.equal(r.refusal?.code, "primary-unreadable");
+    assert.match(r.refusal!.reason, /^no source can settle the next game for Philadelphia 76ers yet, because Polymarket has not listed a market for .+ and this site has no licensed final scores\./);
     const cfg = loadCopyLintConfig();
     const shown = `The check run before launch refused this coin: ${r.refusal!.reason}`;
     assert.ok(lintCopy(shown, cfg).ok, shown);
-    assert.doesNotMatch(shown, /operator|BURNTICKER_|≠|—|: a second|independent read/);
   });
+
 });
 
 describe("the launch check's sports sentences (GAME_LINES)", () => {
@@ -172,11 +193,8 @@ describe("the launch check's sports sentences (GAME_LINES)", () => {
     const lines = [
       GAME_LINES.scheduleOff("NFL"), GAME_LINES.scheduleUnread("Kansas City Chiefs"), GAME_LINES.gameNotListed("Kansas City Chiefs"),
       GAME_LINES.noSourceNext("Atlanta Hawks", { ...g, name: "Atlanta Hawks at Orlando Magic", date: "2026-10-21" }, "nba"), GAME_LINES.noSourceNext("Chelsea", null, "eng.1"),
-      GAME_LINES.oneSourceNext("Atlanta Hawks", { ...g, name: "Atlanta Hawks at Orlando Magic", date: "2026-10-21" }, "nba"), GAME_LINES.oneSourceNext("Chelsea", null, "eng.1"),
     ];
-    assert.equal(lines[5], "only one source can confirm the games of Atlanta Hawks right now, and every result needs two sources that agree. The second would be the Polymarket market for Atlanta Hawks at Orlando Magic on Oct 21, and none was found. Polymarket usually lists a game a few days before it starts, so please try again then.");
-    // 2026-10-13 (test/burntickerSoccerMarkets.test.ts): soccer's three yes/no markets are matched now, so the soccer line says the same
-    assert.match(lines[6], /usually lists/, "soccer's markets are matched under the league tag, like the two-sided leagues");
+    assert.match(lines[3], /usually lists/, "a league Polymarket lists says when its games usually appear");
     for (const l of lines) {
       const shown = `The check run before launch refused this coin: ${l}`;
       assert.ok(lintCopy(shown, cfg).ok, `${lintCopy(shown, cfg).hits.map((h) => h.phrase).join(", ")}: ${shown}`);

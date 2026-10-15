@@ -279,6 +279,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   /** audit 6 item 8: whether this host serves Kalshi (the platform's flag; default from the env) */ kalshiEnabled?: boolean;
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
+  /** owner 2026-10-14: the launch check's informational note on the next game (native.ts NativePreflight.note: Polymarket has not listed it yet); never a refusal */ sourceNote?: string | null;
   /** audit 12 item 2: a one-market pair's void date as the bundle route reads it (handlers.ts oneShotVoidBy); absent, side A's text is a draft */ pairVoidBy?: string | null;
   /** sources-7 H6: the season-over refusal (seasonOver.ts seasonOverFor, read by the route); refused as a problem, never only a warning */ seasonOver?: SeasonOverRefusal | null;
   /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null;
@@ -494,6 +495,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   { const dw = drainWarning(locked.rule, projection); if (dw) warnings.push(dw); }
   if (o.seasonOver) problems.push(o.seasonOver.message);
   else if (o.seasonWarning) warnings.unshift(o.seasonWarning);
+  if (o.sourceNote && !warnings.includes(o.sourceNote)) warnings.push(o.sourceNote);
   const n = steps.length;
   // the first step of side B (1-based): after side A's one or two transactions
   const stepB = venue === "pair-curve" ? 2 : targets[0] ? 3 : 2;

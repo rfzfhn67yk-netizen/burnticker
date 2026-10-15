@@ -48,7 +48,7 @@ import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
 import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts";
 import type { MarketReader } from "../src/lib/burnticker/market.ts";
 import { nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
-import { envGameDeps, polymarketGameReaders } from "../src/lib/burnticker/sources/gameSettle.ts";
+import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusHoldStore } from "../src/lib/burnticker/sources/gameSettle.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG } from "../src/lib/burnKeeper/pairCurveCrank.ts";
 import type { Keypair } from "@solana/web3.js";
@@ -94,7 +94,15 @@ const kalshi = new KalshiClient();
 const polygonRpcs = (process.env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
 const polymarket = new PolymarketClient({ refuse: (titles) => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))], ...(polygonRpcs.length ? { rpcUrls: polygonRpcs } : {}) });
 // team coins: each game settles on its on-chain payout where a moneyline market exists, else TheSportsDB (commercial); never ESPN
-setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket) } });
+// ONE SOURCE (owner 2026-10-14): a final game with no Polymarket market and no league feed settles on TheSportsDB alone after its score
+// has stood 12 hours. The first-seen score and time persist in the registry's status table (statusHoldStore), so a restart keeps the
+// hold. Measure only: each such settlement is logged, and the first one per coin raises bt-single-source (push.ts) for the owner.
+setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket), holds: statusHoldStore(registry), now: () => Date.now(),
+  onSingleSource: (e) => {
+    log(`  [single-source] ${e.seriesId ?? "?"} ${e.game.name} ${e.game.date}: ${e.final.away}–${e.final.home} (away–home), ${e.settledBy}, first seen ${new Date(e.heldSince).toISOString()}`);
+    const a = singleSourceAlert(registry, e);
+    if (a && registry.recordAlert(a)) log(`  [alert] bt-single-source: ${a.text.slice(0, 160)}`);
+  } } });
 const PROGRAM_ID = process.env.BURNTICKER_PROGRAM_ID?.trim() || null;
 
 /** The real client when the program id, an RPC and the keeper's key exist; the fake otherwise (nothing sent). */

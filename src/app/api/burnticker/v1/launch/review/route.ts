@@ -13,7 +13,7 @@ import { platform } from "@/lib/burnticker/server";
 import { liveSinks, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { lookalikeRows } from "@/lib/burnticker/launchGuards";
 import { seasonNotStartedLine, seasonOverFor } from "@/lib/burnticker/seasonOver";
-import { espnClient } from "@/lib/burnticker/sources/native";
+import { espnClient, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { lastSeasonBacktest } from "@/lib/burnticker/lastSeason";
 import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
@@ -31,6 +31,21 @@ async function gameFor(rule: unknown): Promise<{ eventId: string; startsAt: stri
   clearTimeout(timer);
   const g = games?.find((x) => x.eventId === e.eventId) ?? null;
   return g ? { eventId: g.eventId, startsAt: g.startsAt, name: g.name, detail: g.detail } : null;
+}
+
+/**
+ * Owner 2026-10-14: a team or game rule's next-game note (native.ts preflight `note`: Polymarket has not listed the next game yet, so it
+ * would settle on TheSportsDB alone after a 12-hour hold). At most 4 seconds; null when not a sports rule, not read, or nothing to say.
+ */
+async function sportsNoteFor(rule: unknown): Promise<string | null> {
+  const r = rule && typeof rule === "object" ? (rule as { oracle?: unknown; series?: unknown }) : null;
+  if (!r || r.oracle !== "catalogue" || typeof r.series !== "string" || !parseEspnSeries(r.series)) return null;
+  const src = nativeSourceById(r.series);
+  if (!src) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const p = await Promise.race([src.preflight(Date.now()).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 4_000); })]);
+  clearTimeout(timer);
+  return p && !p.problem ? p.note ?? null : null;
 }
 
 /** Builds nothing, pins nothing, registers nothing, reads no chain (one Gamma read for a one-market Polymarket rule): works in preview and open modes; a closed host refuses. */
@@ -60,6 +75,7 @@ export async function POST(req: Request) {
     // sources-7 H6: a season rule on a team whose season is over is refused (seasonOver.ts), from the platform's schedule port
     const seasonOver = await seasonOverFor((body as { rule?: unknown }).rule, platform().seasonSchedule);
     const game = await gameFor((body as { rule?: unknown }).rule);
+    const sourceNote = await sportsNoteFor((body as { rule?: unknown }).rule);
     // audit 12 item 2: a one-market pair's void date is the market's own end date, read as the bundle route reads it (handlers.ts
     // oneShotVoidBy, at most 4 seconds), so the review's side A rule is the exact one; no read leaves it labelled a draft
     let pairVoidBy: string | null = null;
@@ -74,7 +90,7 @@ export async function POST(req: Request) {
     // the end-sink picker: the live coins on this network a rule may name to take the rest (endSinks.ts); unreadable = none
     let sinks: SinkCoin[] = [];
     try { const p = platform(); sinks = liveSinks(p.registry, p.cluster); } catch { sinks = []; }
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason });
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, sourceNote });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];

@@ -113,6 +113,59 @@ const carryFor = (rule: BurnRule): CarryPolicy => (rule.oracle === "catalogue" &
 export const pollMsFor = (d: Pick<KeeperDeps, "kalshiPollMs">, rule: BurnRule): number => (rule.oracle === "catalogue" && rule.series ? (feedById(rule.series)?.pollEverySec ?? nativeSourceById(rule.series)?.pollEverySec ?? 3600) * 1000 : d.kalshiPollMs ?? 5 * 60_000);
 
 /**
+ * AN EVENT COIN'S CADENCE (owner, 2026-10-14: "do we need to constantly be rechecking?"). A one-market Polymarket coin (oracle polymarket,
+ * kind binary, a condition id) was read every 5 minutes from launch, about 288 Polygon payout reads a day for a market that closes months
+ * later. It is now read HOURLY until 24 hours before the market's end date, then at the market poll (5 minutes) until the payout is final;
+ * with no end date, or one already past, the 5-minute poll stays. Every read still settles at once: a market that resolves early is seen
+ * on the next hourly read and its reading is written in that same cycle. The end date comes from Gamma (GammaMarket.endDate, else
+ * umaEndDate) once per selector and is cached in the registry's status table (POLY_END_STATUS_PREFIX + the selector key; no schema change).
+ */
+export const POLY_FAR_POLL_MS = 3_600_000;
+export const POLY_NEAR_WINDOW_MS = 24 * 3_600_000;
+export const POLY_END_STATUS_PREFIX = "polymarket.endAt.";
+export function polymarketPollMs(endAt: number | null, now: number, base = 5 * 60_000): number {
+  if (endAt === null || !Number.isFinite(endAt)) return base;
+  const nearAt = endAt - POLY_NEAR_WINDOW_MS;
+  if (now >= nearAt) return base;
+  // hourly, but never past the start of the last day (the first read inside it lands on time)
+  return Math.max(base, Math.min(POLY_FAR_POLL_MS, nearAt - now));
+}
+const isEventCoin = (rule: BurnRule): boolean => rule.oracle === "polymarket" && rule.kind === "binary" && !!rule.market;
+/** The cached end date for a selector (undefined: never read; null: Gamma gives none). */
+function cachedEndAt(reg: Pick<Registry, "getStatus">, key: string): number | null | undefined {
+  const raw = reg.getStatus(POLY_END_STATUS_PREFIX + key);
+  if (!raw) return undefined;
+  try { const v = JSON.parse(raw) as { endAt?: string | null }; const t = v.endAt ? Date.parse(v.endAt) : NaN; return Number.isFinite(t) ? t : null; } catch { return undefined; }
+}
+/** The market's end date: the cache, else one Gamma read (a failed or empty read is not cached, so the next poll asks again). */
+export async function marketEndAt(d: Pick<KeeperDeps, "registry" | "oracles">, rule: BurnRule, key: string, now: number): Promise<number | null> {
+  if (!isEventCoin(rule)) return null;
+  const c = cachedEndAt(d.registry, key);
+  if (c !== undefined) return c;
+  const pm = d.oracles.polymarket as unknown as { marketByCondition?: (id: string) => Promise<{ endDate: string | null; umaEndDate: string | null } | null> } | undefined;
+  if (!pm?.marketByCondition) return null;
+  let m: { endDate: string | null; umaEndDate: string | null } | null;
+  try { m = await pm.marketByCondition(rule.market!); } catch { return null; }
+  if (!m) return null;
+  const endIso = m.endDate ?? m.umaEndDate ?? null;
+  d.registry.setStatus(POLY_END_STATUS_PREFIX + key, { endAt: endIso, readAt: now }, now);
+  const t = endIso ? Date.parse(endIso) : NaN;
+  return Number.isFinite(t) ? t : null;
+}
+/** The next read's delay for a selector after a good read (pollMsFor, with an event coin's hourly cadence far from its close). */
+export async function nextPollMs(d: Pick<KeeperDeps, "registry" | "oracles" | "kalshiPollMs">, rule: BurnRule, key: string, now: number): Promise<number> {
+  const base = pollMsFor(d, rule);
+  return isEventCoin(rule) ? polymarketPollMs(await marketEndAt(d, rule, key, now), now, base) : base;
+}
+/** The cadence the ops alerts expect (no network: the cached end date only), so an hourly event coin is not called stalled. */
+export function cadenceMsFor(reg: Pick<Registry, "getStatus">, d: Pick<KeeperDeps, "kalshiPollMs">, rule: BurnRule, key: string, now: number): number {
+  const base = pollMsFor(d, rule);
+  if (!isEventCoin(rule)) return base;
+  const c = cachedEndAt(reg, key);
+  return polymarketPollMs(c === undefined ? null : c, now, base);
+}
+
+/**
  * A WINDOWED SERIES THAT ENDED (an ESPN team coin's season, postseason or next-N games; sources/espn.ts windowStatus): the source says so
  * in `window`, and every live coin on that selector gets its rule end recorded once (registry.markRuleEnded, mode winddown) — the
  * wind-down starts the day after (detectRuleEnd / the end receipts). A perpetual window never ends; a rule made before the onEnd clause
@@ -190,7 +243,7 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       recordWindowEnd(d, tokens.filter((x) => x.selectorKey === key), r);
       if (r.awaitingFinal > 0 && anchor === undefined) d.registry.setStatus(anchorKey, { since: sinceKey }, now);
       else if (r.awaitingFinal === 0 && anchor !== undefined) d.registry.setStatus(anchorKey, "", now);
-      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: now + pollMsFor(d, locked.rule) });
+      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: now + await nextPollMs(d, locked.rule, key, now) });
       if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new ${written === 1 ? "reading" : "readings"}${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);
       out.push({ key, written, refusals: r.refusals, awaitingFinal: r.awaitingFinal, error: null, skipped: false });
     } catch (e) {

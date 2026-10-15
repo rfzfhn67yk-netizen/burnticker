@@ -337,6 +337,15 @@ export class Registry {
     this.db.prepare("INSERT OR IGNORE INTO token_state (mint, carry_out, updated_at) VALUES (?, '0', ?)").run(i.mint, now);
     return this.token(i.mint)!;
   }
+  /**
+   * The creator's OWN unfinished draft for a mint (status draft, no launch transaction, same creator), or null. A retry of the same
+   * draft (2026-10-14: the first Launch press registered it, the launch check refused it, the retry was refused as "already
+   * registered") reuses this row instead of inserting again; rows are never deleted (append-only).
+   */
+  ownDraft(mint: string, creator: string): TokenRow | null {
+    const t = this.token(mint);
+    return t && t.status === "draft" && !t.launchTx && t.creator === creator ? t : null;
+  }
   token(mint: string): TokenRow | null { const r = this.db.prepare("SELECT * FROM tokens WHERE mint=?").get(mint) as Row | undefined; return r ? toToken(r) : null; }
   /** The token holding a ticker; when only expired drafts carry it, the newest of those (pages and lookups still resolve). */
   tokenByTicker(ticker: string): TokenRow | null { const r = this.db.prepare("SELECT * FROM tokens WHERE ticker=? ORDER BY (status = 'expired'), created_at DESC LIMIT 1").get(ticker.toUpperCase()) as Row | undefined; return r ? toToken(r) : null; }

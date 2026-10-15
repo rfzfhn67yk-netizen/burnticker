@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pollMsFor, type CycleReport } from "@/lib/burnticker/multiKeeper";
+import { cadenceMsFor, type CycleReport } from "@/lib/burnticker/multiKeeper";
 import type { FeedState, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
 import { readAudit, type AuditSummary } from "@/lib/burnticker/trust";
 import { PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
@@ -91,7 +91,7 @@ export function collectSnapshot(o: { registry: Registry; siteDir: string; now: n
   const { registry: reg, now } = o;
   const tokens: TokenSnapshot[] = reg.tokens().map((t) => {
     let cadenceMs = 5 * 60_000;
-    try { cadenceMs = pollMsFor({ kalshiPollMs: o.kalshiPollMs }, reg.lockedRule(t).rule); } catch { /* an unreadable rule is the audit's finding, not a cadence */ }
+    try { cadenceMs = cadenceMsFor(reg, { kalshiPollMs: o.kalshiPollMs }, reg.lockedRule(t).rule, t.selectorKey, now); } catch { /* an unreadable rule is the audit's finding, not a cadence */ }
     const rows: ReceiptRow[] = reg.receipts(t.mint);
     const confirmed = rows.filter((r) => r.status === "confirmed");
     const recent = confirmed.filter((r) => (r.confirmedAt ?? 0) >= now - 86_400_000);

@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { eventIdentity } from "@/lib/burnticker/eventIdentity";
 import { teamTicker, type TeamWindow } from "@/lib/burnticker/tickers";
-import { championSeries, displayAbbr, findTeams, isPairOutcome, LEAGUES, noPlayoffs, outcomeResults, outcomeWords, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
+import { NBA_OFFICIAL_ANSWERS, championSeries, displayAbbr, findTeams, isPairOutcome, LEAGUES, noPlayoffs, outcomeResults, outcomeWords, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 import { fedregEoText, isFedregEo } from "@/lib/burnticker/sources/fedreg";
 import { ll2Text, parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
@@ -370,7 +370,8 @@ const possessive = (n: string) => (n.endsWith("s") ? `${n}'` : `${n}'s`);
 export const shortDate = (iso: string | null | undefined): string | null => (iso ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00Z` : iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" }) : null);
 const day = shortDate;
 export const tickerFrom = (s: string, suffix = ""): string => { const base = s.toUpperCase().replace(/[^A-Z0-9]/g, ""); return (base.slice(0, Math.max(2, 10 - suffix.length)) + suffix).slice(0, 10); };
-const CROSS: Record<string, string> = { nhl: "NHL's official scores", mlb: "MLB's official feed", nba: "NBA's official feed" };
+// the NBA's feed is named only while it answers (espn.ts NBA_OFFICIAL_ANSWERS; gameSettle.ts countedOfficialOf)
+const CROSS: Record<string, string> = { nhl: "NHL's official scores", mlb: "MLB's official feed", ...(NBA_OFFICIAL_ANSWERS ? { nba: "NBA's official feed" } : {}) };
 const CHAMP_CODE: Record<string, string> = { mlb: "WS", nfl: "SB", nba: "TITLE", nhl: "CUP" };
 const yy = (league: LeagueId, year: number) => String(seasonStartYear(league, year) % 100).padStart(2, "0");
 const nextSeason = (league: LeagueId, year: number) => seasonLabel(league, year + 1);
@@ -425,7 +426,10 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   // THE FADE SIDE (rules.ts inverse): a team coin that burns on every game day WITHOUT its outcome
   const inv = !!r.inverse && s.kind === "team";
   const sfx = (inv ? "N" : "") + (o === "win" ? (inv ? "W" : "") : o === "draw" ? "D" : "L"), Noun = two ? two.name : (inv ? "No " : "") + (o === "win" ? "Wins" : o === "draw" ? "Draws" : "Losses");
-  const cross = CROSS[s.league] ?? "a second independent source";
+  // owner 2026-10-14: a game no second source can read settles on TheSportsDB alone after a 12-hour hold, so a second source is named
+  // only where the league's own counted feed reads every game; otherwise the description promises none
+  const cross = CROSS[s.league] ?? null;
+  const confirms = cross ? ` ${cap(cross)} confirms it.` : "";
   const badge = windowBadge(r, c);
   const mk = (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]): CoinText => {
     const ruleBlock = `${rules} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
@@ -438,7 +442,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   if (s.kind === "team" && s.window.kind === "meetings") return meetingsText(r, s.league, s.abbr, s.window, c, mk, { ref, nick, pens, cross });
   if (s.kind === "team") {
     const w = s.window as Exclude<Window, { kind: "meetings" }>;
-    const settle = inv ? `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} A day with two games counts once, and a game day with a ${noun} burns nothing.` : `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} Nothing happens on ${other}.`;
+    const settle = inv ? `Each game's result comes from ${SPORTS_RESULT}.${confirms}${pens} A day with two games counts once, and a game day with a ${noun} burns nothing.` : `Each game's result comes from ${SPORTS_RESULT}.${confirms}${pens} Nothing happens on ${other}.`;
     const oneLiner = inv ? `burns on every game day ${ref} do not ${verb}` : `burns when ${ref} ${verb}`;
     const every = (scope: string) => inv ? `For every ${nick} game day without a ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain. ${settle}` : `For every ${nick} ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain.${plainly} ${settle}`;
     if (w.kind === "season" && championPathRule(r)) {
@@ -474,7 +478,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const opp = c.game ? (L0.sport === "soccer" || s.league === "cfb" || s.league === "mcbb" || s.league === "wcbb" ? c.game.opponent : `the ${c.game.opponent}`) : null;
   const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : " in the one game this coin follows";
   const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " that game"}`;
-  return mk(`${nick} ${two ? (o === "windraw" ? "Win or Draw" : o === "drawloss" ? "Draw or Loss" : "Win or Loss") : o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} Nothing happens otherwise${outcomeResults(o).includes("draw") ? "" : `, and a ${tie} burns nothing`}.`,
+  return mk(`${nick} ${two ? (o === "windraw" ? "Win or Draw" : o === "drawloss" ? "Draw or Loss" : "Win or Loss") : o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${SPORTS_RESULT}.${confirms}${pens} Nothing happens otherwise${outcomeResults(o).includes("draw") ? "" : `, and a ${tie} burns nothing`}.`,
     oneShotSentence(r, c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
 }
 
@@ -502,19 +506,19 @@ export function teamRefByName(name: string): string {
   return t ? teamRef(t.league, n) : n;
 }
 export const meetingsTicker = (abbr0: string, opp0: string, league: LeagueId | null = null): string => { const abbr = league ? displayAbbr(league, abbr0) : abbr0, opp = league ? displayAbbr(league, opp0) : opp0; return `${abbr.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4)}V${opp.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4)}`.slice(0, 10); };
-function meetingsText(r: BurnRule, league: LeagueId, abbr: string, w: Extract<Window, { kind: "meetings" }>, c: DescribeCtx, mk: (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]) => CoinText, o: { ref: string; nick: string; pens: string; cross: string }): CoinText {
+function meetingsText(r: BurnRule, league: LeagueId, abbr: string, w: Extract<Window, { kind: "meetings" }>, c: DescribeCtx, mk: (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]) => CoinText, o: { ref: string; nick: string; pens: string; cross: string | null }): CoinText {
   const oppTeam = teamById(league, w.oppId) ?? teamByAbbr(league, w.opp);
   const oppNick = oppTeam?.nickname ?? w.opp, oref = teamRef(league, oppNick), L = seasonLabel(league, w.year), t = c.ticker;
   const scope = `in the ${L} season${noPlayoffs(league) ? "" : ", playoffs included"}`;
   // no "buy" in this copy (the brief's plain-English rule): the share is spent on the coin in its own pool and every token is burned
   const spend = `${fractionText(r)} of the burn pool is spent on this coin in its Raydium pool${sliced(r) ? ", in slices sized to the pool's liquidity," : ""} and every token it gets is burned`;
-  const check = CROSS[league] ? "The league's own feed confirms it." : "A second, independent source confirms it.";
+  const check = CROSS[league] ? " The league's own feed confirms it." : "";
   // sources-7 (QA walkthrough 11 H2: Arsenal vs Tottenham Hotspur came to 1,527 characters with no creator text): the series paragraph
   // says each fact once. The other coin is "the other coin" after its first naming, the level series and a void end share one sentence
   // (MEETINGS_LEVEL_VOID_SENTENCE), the penalties sentence is the short form, and the next season is not named (the window says "only").
   // The money path in full is on the review (pairFundsFlow.ts meetingsFundsFlow) and the pair page.
   const pens = o.pens ? ` ${MEETINGS_PENALTIES_SENTENCE}` : "";
-  const rules = `For each of those wins ${scope}, ${spend}, with a receipt on chain. Each game's result comes from ${SPORTS_RESULT}. ${check}${pens} When ${oref} win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side.`;
+  const rules = `For each of those wins ${scope}, ${spend}, with a receipt on chain. Each game's result comes from ${SPORTS_RESULT}.${check}${pens} When ${oref} win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side.`;
   const windowSentence = `This coin covers the ${L} season only, including ${noPlayoffs(league) ? "every match of the competition" : "the playoffs"}. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. ${MEETINGS_LEVEL_VOID_SENTENCE}`;
   return mk(`${o.nick} vs ${oppNick} ${L}`, meetingsTicker(abbr, w.opp, league), `burns when ${o.ref} beat ${oref}`, rules, windowSentence, "season", "recurring");
 }
