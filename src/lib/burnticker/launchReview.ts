@@ -32,7 +32,7 @@ import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { EVENT_LEVEL_REFUSAL, afterGraduationEnd, eventLevelRule, graduationExplainer } from "@/lib/burnticker/guidedLaunch";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
-import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, burnTargetShapeProblems, createAfterPinText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, burnTargetShapeProblems, createAfterPinText, lockRuleStepText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import type { SeasonOverRefusal } from "@/lib/burnticker/seasonOver";
 import type { LastSeasonBacktest } from "@/lib/burnticker/lastSeason";
 import { simulateResults, type Simulation } from "@/lib/burnticker/simulator";
@@ -461,8 +461,11 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     steps = [];
     plainSteps.forEach((st, i) => {
       const bt = targets[i];
-      if (!bt) { steps.push(st); return; }
       const t = coins > 1 ? tk(i) : ticker || "TICKER";
+      // 2026-10-14 (Phantom review ticket 438485): a LaunchLab pair coin locks its rule, then is created, in two transactions
+      // (launchBundle.ts launchTransactions `paired`); the extra transaction's two signatures are counted here
+      if (!bt && pair) { steps.push({ label: lockRuleStepText(t, { link: i === 1 }), signers: st.signers }, { label: createAfterPinText(t), signers: st.signers }); total += fee; return; }
+      if (!bt) { steps.push(st); return; }
       steps.push({ label: pinStepText(t, bt.symbol, { link: !!pair && i === 1 }), signers: st.signers }, { label: createAfterPinText(t), signers: st.signers });
       pins.push({ side: i === 0 ? "A" : "B", ticker: t, symbol: bt.symbol, step: steps.length - 1, bytes: BURN_TARGET_ACCOUNT_BYTES, rentSol: sol(pinRent), signatures: 2 });
       total += fee;

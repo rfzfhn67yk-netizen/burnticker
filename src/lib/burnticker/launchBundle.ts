@@ -12,7 +12,7 @@ import { isoDate, seasonEndMs } from "@/lib/burnticker/derby/spec";
 import { nameProblem } from "@/lib/burnticker/launchFields";
 import { DESCRIPTION_TOTAL_LIMIT, isWebLink, linksProblems } from "@/lib/burnticker/creatorProfile";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
-import { PIN_IX_LABEL_PREFIX, createAfterPinText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import { PIN_IX_LABEL_PREFIX, createAfterPinText, lockRuleStepText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 
 /**
  * THE LAUNCH BUNDLE (LAUNCHPAD-PATH §1 step 6; 2026-10-09). One wallet approval signs: (a) burn_receipts.initialize_token (TokenConfig
@@ -236,14 +236,23 @@ function pairVoidByOf(rule: LockedRule["rule"]): number {
  * lookup table (test/burntickerPinSteps.test.ts): the first is at most about 1,020 bytes, the second is the create alone. Both are signed
  * by the creator and the mint. The recovery records keep their meaning: step i is transaction i of this list, as before.
  * A rule with a pinned token whose program client emitted no pin is refused: the coin would launch burning itself.
+ * A coin of a LaunchLab PAIR (`paired`; buildPairBundles) is also TWO (2026-10-14, Phantom review ticket 438485): its initialize_token
+ * carries the partner's accounts, which pushed initialize_token + create to 1,191 and 1,223 bytes as v0 + the table, too close to the
+ * limit for a wallet that appends its own checks (Phantom's Lighthouse assertions). So it is [initialize_token], then [LaunchLab create]:
+ * at most 829 and 694 bytes (test/burntickerLookupTable.test.ts). The create is the confirming step (signPlan.ts launchlabPlan), and
+ * launchVerify.ts takes a create alone for a coin whose TokenConfig on chain is paired.
  */
-export function launchTransactions(input: Pick<LaunchInput, "ticker" | "firstBuySol">, locked: LockedRule, initIxs: SerializedIx[], createIxs: SerializedIx[], link = false): LaunchBundle["transactions"] {
+export function launchTransactions(input: Pick<LaunchInput, "ticker" | "firstBuySol">, locked: LockedRule, initIxs: SerializedIx[], createIxs: SerializedIx[], link = false, paired = false): LaunchBundle["transactions"] {
   const isPin = (ix: SerializedIx) => ix.label.startsWith(PIN_IX_LABEL_PREFIX);
   const pins = initIxs.filter(isPin), init = initIxs.filter((ix) => !isPin(ix));
   const bt = locked.rule.burnTarget;
   const firstBuy = Number(input.firstBuySol) > 0 ? " + first buy" : "";
   if (!bt) {
     if (pins.length) throw new Error("launch: the program client pinned a burn pool for a rule that burns its own coin");
+    if (paired) return [
+      { label: lockRuleStepText(input.ticker, { link }), signers: ["creator", "mint"], instructions: initIxs },
+      { label: `${createAfterPinText(input.ticker)} (LaunchLab create${firstBuy})`, signers: ["creator", "mint"], instructions: createIxs },
+    ];
     return [{ label: "initialize_token + LaunchLab create" + firstBuy, signers: ["creator", "mint"], instructions: [...initIxs, ...createIxs] }];
   }
   if (pins.length !== 1) throw new Error(`launch: this rule burns ${bt.symbol}, and the burn program client did not pin ${bt.symbol}'s pool, so the coin would burn itself instead. Nothing was built.`);
@@ -296,7 +305,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), vestDays: alloc.vestDays, cliffDays: alloc.cliffDays, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, teamAllocationPct: 0 },
     fees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(input.cluster), creatorSliceBps: CREATOR_FEE_SLICE_BPS, sentence: feeSplitSentence(input.cluster), devFeeWallet: deps.devFeeWallet },
     burnPoolAuthority,
-    transactions: launchTransactions(input, locked, init.instructions, create.instructions, !!deps.partnerFirst),
+    transactions: launchTransactions(input, locked, init.instructions, create.instructions, !!deps.partnerFirst, !!deps.pairMint),
     notes: [...create.notes, `LaunchLab's recorded creator is the burn program's fee PDA ${burnPoolAuthority} (its WSOL ATA ${pool.feeWsol} receives the claimed curve fees), not the human creator and not the keeper — the keeper only pays gas; the creator-fee slot pays the burn pool 100% (owner, 2026-10-09; review finding H-2)`, `${LP_POLICY_LINE}: ${LP_LOCKED_PCT}% of the graduation LP locked with Raydium's LP lock and its Fee Key owned by the burn program (platform config, not creator-configurable); team allocation 0%`, "the first burn needs fee income or a seed deposit into the burn pool; anyone can deposit, nobody can withdraw", "no referral code, fee discount or hidden parameter exists: every parameter is in rules.json"],
   };
 }

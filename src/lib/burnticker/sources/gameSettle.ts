@@ -276,7 +276,15 @@ export async function crossFinal(client: EspnClient, g: Game, d: GameDeps, which
   const prevDay = dayBefore(g.date);
   if (id === "mlb.statsapi") return { id, final: await firstFinal(client, mlbDays(g).map((day) => `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${day}`), (b, u) => finalFromMlb(g, b, u)) };
   if (id === "nhl.score") return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => `https://api-web.nhle.com/v1/score/${day}`), (b, u) => finalFromNhl(g, b, u)) };
-  if (id === "nba.cdn") return { id, final: await firstFinal(client, [NBA_SCHEDULE_URL], (b, u) => finalFromNba(g, b, u)) };
+  if (id === "nba.cdn") {
+    // 2026-10-14: the NBA's feed answers HTTP 403 since 2026-10-12, and an error is never cached, so each NBA game read it again (a season
+    // rehearsal: one wasted request per game, through the request budget). A refusal now marks it refused for this client's process;
+    // the NBA game then settles on TheSportsDB's day listing and event lookup plus the on-chain payout, as every TheSportsDB league does.
+    const refused = (client as { refusedFeeds?: Set<string> }).refusedFeeds;   // a test double may not carry it
+    if (refused?.has(NBA_SCHEDULE_URL)) throw new Error(`HTTP 403 earlier in this run for ${NBA_SCHEDULE_URL} (not read again)`);
+    try { return { id, final: await firstFinal(client, [NBA_SCHEDULE_URL], (b, u) => finalFromNba(g, b, u)) }; }
+    catch (e) { if (/HTTP (401|403)\b/.test((e as Error).message)) refused?.add(NBA_SCHEDULE_URL); throw e; }
+  }
   if (!d.apiSportsKey) throw new Error("cross-read missing: BURNTICKER_APISPORTS_KEY (a second licensed provider) is not set");
   return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => apiSportsUrl(g.league, day)), (b, u) => finalFromApiSports(g, b, u), { "x-apisports-key": d.apiSportsKey }) };
 }

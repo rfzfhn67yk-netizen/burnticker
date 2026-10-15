@@ -109,9 +109,12 @@ describe("a pair's side B carries its own pinned token (item 1)", () => {
     assert.equal(pair.b.transactions[0].label, "Pin WIF's Raydium pool for $PAIRB after locking in its rule and linking the two coins");
     const onlyA = await launchlabPair("devnet", Keypair.generate(), false, { a: BONK });
     assert.equal(lockRule(JSON.parse(onlyA.pair.b.rules.text)).rule.burnTarget, undefined);
-    assert.equal(onlyA.pair.b.transactions.length, 1, "side B burns itself: one transaction as before");
+    // 2026-10-14 (Phantom review ticket 438485): a pair coin that burns itself is two transactions too, its rule locked (and side B's
+    // link made) first, then the create, with no pin anywhere
+    assert.deepEqual(onlyA.pair.b.transactions.map((t) => t.label), ["Lock in $PAIRB's rule and link the two coins", "Create $PAIRB (LaunchLab create)"], "side B burns itself: lock, then create");
+    assert.ok(onlyA.pair.b.transactions.flatMap((t) => t.instructions).every((ix) => !ix.label.startsWith("burn_receipts.pin_burn_target")));
     const onlyB = await launchlabPair("devnet", Keypair.generate(), false, { b: WIF });
-    assert.equal(onlyB.pair.a.transactions.length, 1);
+    assert.deepEqual(onlyB.pair.a.transactions.map((t) => t.label), ["Lock in $PAIRA's rule", "Create $PAIRA (LaunchLab create)"]);
     assert.equal(onlyB.pair.b.transactions.length, 2);
   });
   test("the bundle route takes pair.burnTarget, checks its shape and puts it in side B's rule", async () => {
@@ -171,8 +174,17 @@ describe("the review counts the pin (item 4)", () => {
     assert.deepEqual(both.pins.map((x) => [x.side, x.symbol, x.step]), [["A", "BONK", 1], ["B", "WIF", 3]]);
     assert.deepEqual((both as unknown as { rules: { side: string; step: number }[] }).rules.map((x) => [x.side, x.step]), [["A", 1], ["B", 3]]);
     const onlyB = review({ rule: RULE, ticker: "MILEHI", name: "Mile High", pair: { ticker: "ARROWHD", name: "Arrowhead", burnTarget: WIF } });
-    assert.deepEqual(onlyB.transactions.steps.map((s) => s.label), ["Create $MILEHI and lock in its rule", "Pin WIF's Raydium pool for $ARROWHD after locking in its rule and linking the two coins", "Create $ARROWHD"]);
+    assert.deepEqual(onlyB.transactions.steps.map((s) => s.label), ["Lock in $MILEHI's rule", "Create $MILEHI", "Pin WIF's Raydium pool for $ARROWHD after locking in its rule and linking the two coins", "Create $ARROWHD"]);
     assert.equal(withPinSteps(onlyB, [{ ticker: "ARROWHD", symbol: "WIF" }]), onlyB);
+    // 2026-10-14: a pair review with no pin is four steps (each coin locks its rule, then is created); the page's own pin count puts the
+    // pin into side B's existing steps (no extra transaction, so no extra fee), the rent only
+    const none = review({ rule: RULE, ticker: "MILEHI", name: "Mile High", pair: { ticker: "ARROWHD", name: "Arrowhead" } });
+    assert.deepEqual(none.transactions.steps.map((s) => s.label), ["Lock in $MILEHI's rule", "Create $MILEHI", "Lock in $ARROWHD's rule and link the two coins", "Create $ARROWHD"]);
+    const paged = withPinSteps(none, [{ ticker: "ARROWHD", symbol: "WIF" }]);
+    assert.deepEqual(paged.transactions.steps.map((s) => s.label), ["Lock in $MILEHI's rule", "Create $MILEHI", "Lock in $ARROWHD's rule and link the two coins", "Pin WIF's Raydium pool for $ARROWHD, then create $ARROWHD and link the two coins"]);
+    assert.equal(paged.transactions.count, 4);
+    assert.ok(!paged.costs.lines.some((l) => /pin transaction/.test(l.label)), "no extra transaction, so no extra fee line");
+    for (const t of [...paged.transactions.steps.map((x) => x.label), ...none.costs.lines.map((x) => x.label)]) plain(t);
     const bad = review({ rule: RULE, ticker: "MILEHI", name: "Mile High", pair: { ticker: "ARROWHD", name: "Arrowhead", burnTarget: { ...WIF, feedId: "WIF" } } });
     assert.ok(bad.problems.some((p) => /^Coin B\. burnTarget\.feedId/.test(p)), bad.problems.join(" | "));
     assert.deepEqual(bad.pins, []);

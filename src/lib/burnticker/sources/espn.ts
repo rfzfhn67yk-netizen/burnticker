@@ -320,6 +320,18 @@ const num = (v: unknown): number | null => { const x = typeof v === "object" && 
 // TheSportsDB (the probe note at the top); TheSportsDB v2 (licensed key) for every other league. A league without its feed answers "schedule needs the licensed key" — never a fallback to ESPN.
 
 export class ScheduleUnavailable extends Error {}
+/**
+ * THE 3,000-ROW LISTING (season rehearsal 2026-10-13, men's college basketball): TheSportsDB's league schedule stops at 3,000 rows, and
+ * a Division I basketball season is about 6,000 games, so the listing ends in mid-season. A team's season read from it would look over
+ * after its last LISTED game, and windowStatus would end the coin's window months early. A listing that reaches the cap is therefore
+ * never taken as a whole season (EspnClient.season): the read fails, the keeper keeps waiting, and the coin cannot be made. The
+ * upcoming-games pickers still read the listing's first rows. No paged or per-team schedule is wired: neither could be checked without
+ * the licensed key (2026-10-14).
+ */
+export const TSDB_LISTING_CAP = 3_000;
+export class ScheduleCut extends Error {}
+export const tsdbListingCut = (body: unknown): boolean => (body && typeof body === "object" ? (Object.values(body as Record<string, unknown>).filter(Array.isArray) as unknown[][]).reduce((n, l) => n + l.length, 0) : 0) >= TSDB_LISTING_CAP;
+export const tsdbCutSentence = (league: LeagueId): string => `TheSportsDB lists only the first ${TSDB_LISTING_CAP.toLocaleString("en-US")} games of the ${LEAGUES[league].label} season, so a whole season cannot be read from it yet.`;
 export const SCHEDULE_NEEDS_KEY = "schedule needs the licensed key (BURNTICKER_THESPORTSDB_KEY)";
 /**
  * ONE NORMAL FORM FOR A TEAM NAME (QA pass 9 #5, 2026-10-13: TheSportsDB lists "Brighton and Hove Albion" where our table says "Brighton &
@@ -427,8 +439,12 @@ export function isLive(g: Pick<Game, "completed" | "state" | "startsAt" | "detai
 export const TSDB_PRESEASON_ROUND = 500;
 /** The NBA's schedule and confirmation while its own feed does not answer, in the one wording every page uses (NBA_OFFICIAL_ANSWERS). */
 export { NBA_FEED_WORDING } from "@/lib/burnticker/sources/polyStated";
-/** TheSportsDB league ids (v2 schedule/league/<id>/<season>). Checked against TheSportsDB's public league pages; verify on the licensed account. */
-export const TSDB_LEAGUE: Partial<Record<LeagueId, string>> = { wnba: "4516", mcbb: "4607", wcbb: "4608", nfl: "4391", cfb: "4479", "eng.1": "4328", "esp.1": "4335", "ita.1": "4332", "ger.1": "4331", "fra.1": "4334", "uefa.champions": "4480", "uefa.europa": "4481", "uefa.europa.conf": "5071", "usa.1": "4346", "usa.nwsl": "4521", "mex.1": "4350", "ned.1": "4337", "por.1": "4344", "eng.2": "4329", "sco.1": "4330", "bra.1": "4351", "arg.1": "4406", nba: "4387", mlb: "4424", nhl: "4380" };
+/**
+ * TheSportsDB league ids (v2 schedule/league/<id>/<season>). Checked against TheSportsDB's public league pages; verify on the licensed account.
+ * 2026-10-14 (the women's college basketball gap, 0 rows): wcbb was 4608, which is "Battlarts Fighting" (lookupleague.php?id=4608 on the
+ * public test key); "NCAA Division I Basketball Women" is 5789 (lookupleague.php?id=5789, current season 2024-2025, United States).
+ */
+export const TSDB_LEAGUE: Partial<Record<LeagueId, string>> = { wnba: "4516", mcbb: "4607", wcbb: "5789", nfl: "4391", cfb: "4479", "eng.1": "4328", "esp.1": "4335", "ita.1": "4332", "ger.1": "4331", "fra.1": "4334", "uefa.champions": "4480", "uefa.europa": "4481", "uefa.europa.conf": "5071", "usa.1": "4346", "usa.nwsl": "4521", "mex.1": "4350", "ned.1": "4337", "por.1": "4344", "eng.2": "4329", "sco.1": "4330", "bra.1": "4351", "arg.1": "4406", nba: "4387", mlb: "4424", nhl: "4380" };
 export const tsdbSeasonCode = (league: LeagueId, year: number): string => (LEAGUES[league].span === "single" ? String(year) : LEAGUES[league].span === "later" ? `${year - 1}-${year}` : `${year}-${year + 1}`);
 export const tsdbScheduleUrl = (league: LeagueId, year: number): string => `https://www.thesportsdb.com/api/v2/json/schedule/league/${TSDB_LEAGUE[league] ?? ""}/${tsdbSeasonCode(league, year)}`;
 /**
@@ -563,6 +579,8 @@ export class EspnClient {
   private fetchImpl: FetchLike; private now: () => number; private minInterval: number; private ttl: number; readonly tsdbKey: string | null;
   private cache = new Map<string, { at: number; body: unknown }>(); private lastAt = 0; private chain: Promise<void> = Promise.resolve();
   requests: string[] = [];
+  /** Feeds that refused this process (HTTP 401 or 403): not read again by the reader that marked them (gameSettle.ts crossFinal, the NBA's feed). */
+  readonly refusedFeeds = new Set<string>();
   constructor(o: EspnClientOpts = {}) {
     this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.minInterval = o.minIntervalMs ?? 250; this.ttl = o.ttlMs ?? 600_000;
     this.tsdbKey = o.tsdbKey === undefined ? ((process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null) : o.tsdbKey;
@@ -609,16 +627,22 @@ export class EspnClient {
    * leaves the schedule empty while the other can be read. Neither readable: the TheSportsDB error (ScheduleUnavailable without a key).
    */
   async nbaSchedule(year: number): Promise<Game[]> {
-    const cdn = async () => nbaGames(await this.get(NBA_LEAGUE_SCHEDULE)).filter((g) => g.seasonYear === year);
+    const cdn = async () => {
+      if (this.refusedFeeds.has(NBA_LEAGUE_SCHEDULE)) throw new Error(`HTTP 403 earlier in this run for ${NBA_LEAGUE_SCHEDULE} (not read again)`);
+      try { return nbaGames(await this.get(NBA_LEAGUE_SCHEDULE)).filter((g) => g.seasonYear === year); }
+      catch (e) { if (/HTTP (401|403)\b/.test((e as Error).message)) this.refusedFeeds.add(NBA_LEAGUE_SCHEDULE); throw e; }
+    };
     const tsdb = () => this.tsdb("nba", year);
     const [first, second] = NBA_OFFICIAL_ANSWERS ? [cdn, tsdb] : [tsdb, cdn];
     let firstErr: unknown;
     try { return await first(); } catch (e) { firstErr = e; }
     try { return await second(); } catch (e) { throw NBA_OFFICIAL_ANSWERS ? e : firstErr; }
   }
-  private async tsdb(league: LeagueId, year: number): Promise<Game[]> {
+  private async tsdb(league: LeagueId, year: number, whole = false): Promise<Game[]> {
     if (!this.tsdbKey || !TSDB_LEAGUE[league]) throw new ScheduleUnavailable(`${LEAGUES[league].label}: ${SCHEDULE_NEEDS_KEY}`);
-    return tsdbGames(league, await this.tsdbRead(this.tsdbKey, tsdbScheduleUrl(league, year), (k) => tsdbV1Urls(k, league, year)), year);
+    const body = await this.tsdbRead(this.tsdbKey, tsdbScheduleUrl(league, year), (k) => tsdbV1Urls(k, league, year));
+    if (whole && tsdbListingCut(body)) throw new ScheduleCut(tsdbCutSentence(league));
+    return tsdbGames(league, body, year);
   }
   /** A team's season (regular season and postseason): the current one, or season `year` (the league's own year naming, as ESPN's was). */
   async season(league: LeagueId, abbrOrId: string, year: number | null = null): Promise<Game[]> {
@@ -630,7 +654,7 @@ export class EspnClient {
     if (league === "mlb") games = mlbGames(await this.get(mlbTeamScheduleUrl(t.abbr, y)));
     else if (league === "nhl") games = nhlGames(await this.get(nhlClubScheduleUrl(t.abbr, y)));
     else if (league === "nba") games = await this.nbaSchedule(y);
-    else games = await this.tsdb(league, y);
+    else games = await this.tsdb(league, y, true);
     return dedupeListings(games.filter(mine)).map((g) => ({ ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
   /** A league's games in the next `days` days (the matchup picker and the team picker's next game). */
@@ -692,7 +716,10 @@ export interface WindowStatus {
  * schedule that marks postseason games exactly: MLB StatsAPI (game types F, D, L, W), the NHL feed (game type 3) and the NBA feed (game
  * ids 004 and 005), or for the NBA and the NFL TheSportsDB's round number (100 to 499, the header note; the NFL added 2026-10-13 by the
  * owner's decision, its 2025 season read from the box: rounds 1–18, then 125 / 150 / 160 and 200 for the Super Bowl, a single-elimination
- * bracket). TheSportsDB's round label is not exact for the WNBA; college football and
+ * bracket). The NBA's 2024-25 playoffs on TheSportsDB's season page (re-checked 2026-10-14): play-in 400, first round 160, second round
+ * 125, conference finals 150, Finals 180, and no round-0 game after the regular season. TheSportsDB's round label is not exact for the
+ * WNBA (the same check on its 2025 season: the first round's first games say "Playoff", every later playoff game says round 0 like the
+ * regular season, and one Finals game says round 4), so no round rule can tell its postseason; college football and
  * basketball have bowls, the NIT and conference tournaments, where many teams win their last game; soccer leagues crown the table
  * leader. Those leagues are left out: their season coins keep the plain end (the rest goes to $DEFICIT's burn).
  */
