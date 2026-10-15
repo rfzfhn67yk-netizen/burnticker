@@ -73,3 +73,6 @@ export function mintSearchView(s: GrindSnapshot): MintSearchView {
  * which can take up to a minute.
  */
 export const LAUNCHING_NOTICE = "Your coin is being prepared: its art and rule are being pinned on Arweave and the pre-launch check is running. This can take up to a minute. Keep this tab open; your wallet opens when it is ready.";
+
+/** Above the Launch button when a launch signs more than one transaction (owner, 2026-10-14: say so before the wallet opens). */
+export const signsLine = (n: number): string => `Your wallet asks ${n} times, once for each transaction, in order. Progress is kept between them, so a later step can be retried without redoing an earlier one.`;
