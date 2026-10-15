@@ -31,6 +31,10 @@ import type { Registry, TokenRow } from "@/lib/burnticker/registry";
  *   market    60 s    the coin card's curve and top holders                         readMarket (3 calls)
  *   pool      60 s    the LaunchLab pool account (inside the market read)           getAccountInfo
  *   owners    5 min   the top holders' owner addresses (inside the market read)     getMultipleParsedAccounts
+ *   holders   10 min  the top token accounts (the coin card's holder list)          getTokenLargestAccounts (2026-10-15: was every
+ *                     cycle, one credit per coin per minute; display only)
+ *   lpSettled 30 min  the LP lock's state once nothing is left but claiming          lockFees.port().state() with the accrual
+ *                     (graduated, Fee Key registered, pool registered): the claim simulation; fees wait safely in the lock
  *
  * THE BATCH: `prefetch` reads the TokenConfig, the fee PDA, the mint, the vault (vault mode) and the LaunchLab pool of EVERY published coin
  * in one getMultipleAccounts call per 100 accounts (20 coins), through the keeper's budgeted Connection, and fills the fields above from
@@ -45,7 +49,7 @@ import type { Registry, TokenRow } from "@/lib/burnticker/registry";
  * per-coin reads fetch (test/burntickerReadCache.test.ts compares the two byte for byte).
  */
 
-export const READ_TTL_MS = { supply: 300_000, config: 300_000, lp: 300_000, vault: 300_000, feePda: 60_000, market: 60_000, pool: 60_000, owners: 300_000 } as const;
+export const READ_TTL_MS = { supply: 300_000, config: 300_000, lp: 300_000, lpSettled: 1_800_000, vault: 300_000, feePda: 60_000, market: 60_000, pool: 60_000, owners: 300_000, holders: 600_000 } as const;
 export type ReadField = keyof typeof READ_TTL_MS;
 
 /** One coin in the batch read: its mint, whether it runs in vault mode, and its LaunchLab pool (the market read's first account). */
@@ -134,7 +138,7 @@ export class KeeperReadCache {
     return e && this.o.now() - e.at < this.ttl[field] ? e : null;
   }
   set(mint: string, field: ReadField, v: unknown, key: string = field): void { this.slot(mint).set(key, { at: this.o.now(), v }); }
-  peek<T>(mint: string, field: ReadField, key: string = field): T | undefined { const e = this.fresh(mint, key, field); return e ? (e.v as T) : undefined; }
+  peek<T>(mint: string, field: ReadField, key: string = field, accept?: (v: T) => boolean): T | undefined { const e = this.fresh(mint, key, field); return e && (!accept || accept(e.v as T)) ? (e.v as T) : undefined; }
   /** The cached value within its TTL, else `load()` (cached when `keep` accepts it; a throw is never cached). */
   async get<T>(mint: string, field: ReadField, load: () => Promise<T>, o: { key?: string; keep?: (v: T) => boolean } = {}): Promise<T> {
     const key = o.key ?? field;
@@ -201,6 +205,9 @@ function overlay<T extends object>(target: T, over: Partial<Record<keyof T, unkn
   });
 }
 
+/** Nothing left on this coin's lock but claiming: the steps before the claim (register_fee_key, register_pool) are done. */
+export const lockSettled = (s: LockFeesState): boolean => s.graduated && s.feeKeyRegistered && s.poolRegistered !== false && s.feeKeyOwner !== null;
+
 /**
  * The lock-fee client through the cache: `state()` is kept for READ_TTL_MS.lp (a state read with the accrual serves a later read without
  * it; the reverse does not); any build or send for a coin drops that coin first, so a claim or a registration is never planned from a
@@ -217,7 +224,9 @@ export function cachedLockFees(client: LockFeesClient, cache: KeeperReadCache): 
       const p = overlay(base, {
         state: async (so?: { accrued?: boolean }): Promise<LockFeesState> => {
           const wantAccrued = so?.accrued !== false;
-          const hit = cache.peek<{ s: LockFeesState; accrued: boolean }>(mint, "lp");
+          const hit = cache.peek<{ s: LockFeesState; accrued: boolean }>(mint, "lp")
+            // 2026-10-15: a settled lock (graduated, Fee Key and pool registered: only the claim is left) is re-read every 30 minutes
+            ?? cache.peek<{ s: LockFeesState; accrued: boolean }>(mint, "lpSettled", "lp", (v) => lockSettled(v.s));
           if (hit && (hit.accrued || !wantAccrued)) { cache.stats.hits++; return hit.s; }
           cache.stats.misses++;
           const s = await base.state(so);
@@ -263,8 +272,7 @@ export function withLockFees(program: BurnProgramClient, lockFees: LockFeesClien
 
 /**
  * The market reader through the cache: the LaunchLab pool account from the batch (60 s), the owners of the top token accounts per
- * address (5 min; a token account's owner does not change with trading). getTokenLargestAccounts is read each time: it is the one
- * per-coin call a quiet cycle makes.
+ * address (5 min; a token account's owner does not change with trading), the top token accounts per mint (10 min, display only).
  */
 export function cachedMarketReader(reader: MarketReader, cache: KeeperReadCache, mintOfPool: (poolId: string) => string | null): MarketReader {
   return {
@@ -273,7 +281,8 @@ export function cachedMarketReader(reader: MarketReader, cache: KeeperReadCache,
       if (!mint) return reader.getAccountInfo(pk);
       return cache.get(mint, "pool", () => reader.getAccountInfo(pk), { key: `pool:${id}` });
     },
-    getTokenLargestAccounts: (mint) => reader.getTokenLargestAccounts(mint),
+    // 2026-10-15: kept READ_TTL_MS.holders (10 min) per mint; it was the one uncached per-coin call of every cycle
+    getTokenLargestAccounts: (mint) => cache.get(mint.toBase58(), "holders", () => reader.getTokenLargestAccounts(mint)),
     getMultipleParsedAccounts: (pks) => cache.parsedAccounts(reader, pks),
   };
 }

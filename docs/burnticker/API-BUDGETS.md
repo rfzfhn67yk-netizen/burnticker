@@ -97,6 +97,74 @@ These fall back to the house default (`established: false` in the code):
 
 ## Findings
 
+- **The keeper spent its Helius day by 20:33Z with six coins; the per-cycle account cache cut a quiet cycle from about 113 credits to
+  1 (2026-10-15).** The live log showed exactly 566 credits between two five-minute budget lines all day (about 6,370 an hour). The
+  `cycle:` log line prints only when a feed was fetched, so it read as "4 cycles an hour"; the loop actually runs every 60 s plus its
+  work, about 56 cycles an hour, at about 113 credits each. Measured by replaying the live registry (a read-only dump, six live coins)
+  through the keeper in `--dry-run` against the PUBLIC mainnet RPC (no Helius credit spent) with the budget's new phase:method split:
+
+  | phase:method (module) | per quiet cycle, before | per quiet cycle, after |
+  |---|---|---|
+  | pair-curve:getProgramAccounts ×3 (`pairCurveCrank.ts` crankPairCurves, three status-filtered scans; zero Pairs on the program) | 30 | 0 (one discriminator-only scan, 10 credits, every 10 min: `PairScanCache`) |
+  | pair-curve:getGenesisHash (`pairCurve/client.ts` assertPairCurveCluster) | 1 | 0 (read once per process) |
+  | cycle/pair-unlink:getAccountInfo (`pairForwardKeeper.ts` pairUnlinkStep: 2 TokenConfigs + 2 PairLinks for every registry pair, drafts included, plus the Pair) | 26 to 27 | 0 |
+  | cycle/pair-ctx:getAccountInfo (`pairForwardKeeper.ts` pairCtxFor, the same four accounts per pair coin) | 16 | 0 |
+  | publish:getAccountInfo (`keeperReadCache.ts` coinChainReads, the pair links again for each pair coin's page) | 16 | 0 |
+  | cycle/pair-alerts:getAccountInfo (`pairForwardKeeper.ts` pairUnmatchedAlerts) | 8 to 10 | 0 |
+  | cycle/pair-gates:getAccountInfo (`multiKeeper.ts` pairGates, both TokenConfigs of a pair with no recorded outcome) | 6 | 0 |
+  | publish:getTokenLargestAccounts (`market.ts` readMarket, the coin card's holders, one per coin) | 6 | 0.6 (kept 10 min) |
+  | publish:getMultipleAccounts (`keeperReadCache.ts` the publish batch) | 1 | 0 (served) |
+  | prefetch:getMultipleAccounts (`cycleAccountCache.ts`, every account the last cycles read: 44 for six coins, about 7 a coin) | none | 1 per 100 accounts |
+  | cycle/lock-fees (`lockFeesChain.ts` locate(): 3 to 7 accounts per coin, every 5 min) | about 18 per 5 min | 0 for the accounts; a settled lock's claim simulation (blockhash + simulate, 2) every 30 min instead of 5 |
+  | ops getBalance ×2 (`alerts.ts`, every 5 min) | 0.4 | 0.4 |
+  | **per quiet cycle** | **about 113 (+18 every 5 min)** | **about 1, plus about 0.2 for the scan and 0.1 per coin for the holders** |
+
+  The reconciliation: five cycles of 113 plus the five-minute lock refresh of 18 plus 2 getBalance is about 585 per five-minute line;
+  the live log says 566. Cranks are unchanged: each still costs about 10 to 20 (blockhash, simulate, send, confirmation polls).
+
+  Projected keeper credits per hour (quiet; 60 cycles an hour; about 7 accounts a coin, so one prefetch call per 14 coins; holders every
+  10 min; a settled lock's claim check every 30 min; the scan; the ops check):
+
+  | live coins | before (about 14 a coin a cycle + 32 fixed, 56 cycles an hour) | after (prefetch + holders + scan + lock checks + ops) | after, share of the 120,000-credit day |
+  |---|---|---|---|
+  | 6 | about 6,400 (measured; the day was gone at 20:33 UTC) | about 200 (60 + 36 + 60 + 24 + 24) | 4% |
+  | 25 | about 21,000 (the day gone in under 6 hours) | about 450 (120 + 150 + 60 + 100 + 24) | 9% |
+  | 100 | about 80,000 (the day gone in 90 minutes) | about 1,500 (420 + 600 + 60 + 400 + 24) | 30% |
+
+  The cache sits under every program-side read (it wraps the keeper's program Connection), so no step's logic changed: a send drops
+  every cached value first (a read after the keeper's own transaction is never from before it), values live one cycle, and a read the
+  cache cannot answer exactly goes to the RPC. `test/burntickerCycleCache.test.ts` pins it. The 5-minute budget line now also prints
+  `api budget helius top today: <phase>:<method> <credits> · …` (the split survives a restart in the registry's status table, key
+  `apiBudget.methods.keeper.helius`) and `[cycle-cache] N account(s) prefetched per cycle …`, so the next burn is measured, not guessed.
+- **A spent day no longer blinds the keeper or crash-loops it (2026-10-15, revised after review the same night).** A restart at 22:23Z
+  on a spent day threw BudgetHoldError from the startup genesis read and systemd restarted it every 30 s. Now:
+  - the genesis is read on the KEYED RPC only and is never answered by a fallback, so the cluster checks always describe
+    BURNTICKER_RPC_URL; the keeper's startup read alone is essential (`withEssential`: one credit per process start, past a hold);
+  - the hold fallback is the public RPC of the cluster that genesis names (`publicRpcFor`, none for localnet), or
+    `BURNTICKER_RPC_FALLBACK_URL` (`off` disables), and it is used only after its own genesis matched the keyed one at startup
+    (`verifyRpcFallback`; a mismatch is logged and the fallback refused). A failed verification (a 429 or a timeout) is retried on the
+    first held cycle and hourly while it stays unverified. It is counted against `solana-public` by role, whatever its host;
+  - the fallback keeps the pages and the plan current and settles nothing: a cycle that starts on a held day runs with its sends held
+    (readings, cranks, claims, pair-curve cranks wait for 00:00 UTC; logged once a day), and the calls that build or confirm a send
+    (`getLatestBlockhash`, `simulateTransaction`, `getTransaction`, `getParsedTransaction`, the send and confirmation calls; `NO_FALLBACK`)
+    never move, so a hold that starts mid-cycle cannot sign from public-RPC state (such a build is held as a wait: no reading error, no
+    backoff, no lock-fee alert). On a held cycle `getTransaction` and `getParsedTransaction` may use the fallback (they describe landed
+    transactions for the adoption step). The hold's log line and alert say so, and the first cycle after it logs `helius hold lifted`;
+  - a startup read still refused (a busy bucket) waits and retries every 60 s, and a SIGTERM or a deploy's restart request ends the wait.
+  `test/burntickerRpcFallback.test.ts` starts the real script on a spent day against two local RPCs.
+- **Review fixes to the per-cycle cache (2026-10-15).** It also drops its values on the private send route (`privateSend.ts`
+  `onPrivateSend`). Before the fence (two passes) and each of the three executePending passes of a coin that has something to SEND this
+  cycle (a receipt with a reading date, or one whose UTC day has closed: `sendableWork`), it re-reads THAT coin's TokenConfig, fee PDA,
+  mint and the reading PDAs of those dates in one getMultipleAccounts (`refresh`, `KeeperDeps.freshReads`): at most 5 credits per such
+  coin per cycle, and none for a coin whose receipts all settled today (they wait for the day's close), none on a dry or held cycle. A coin
+  that stays sendable all day (a crank waiting on TWAP) costs about 5 × 60 = 300 credits an hour; ten such coins 3,000. The re-prefetch
+  after a send asks for `minContextSlot` = the newest confirmed slot a confirmation reported (reset each cycle), retries the backend's
+  -32016 three times 400 ms apart, and a pass-through answer older than that floor is returned but never cached; an answer in flight when
+  the values were dropped is never written back (epochs); every cached value carries the slot it was read at, and a partial
+  getMultipleAccountsInfo hit reads the whole batch fresh; a Token-2022 account longer than 165 bytes is decoded only by its AccountType byte. The pair scan reads the status byte
+  raw before decoding, so voided and old-layout pairs are skipped silently as the status-filtered scans did. The phase:method split is
+  written with an atomic per-entry add (`addCounts`).
+
 - **Helius is the binding budget, and the keeper's read cache fixed its per-coin cost (2026-10-13).** Before it, the keeper read
   every live coin's chain state one account at a time every minute, and that held the keeper at about 7 live coins. Now the publish
   loop and the claim_lock_fees step read through `src/lib/burnticker/keeperReadCache.ts`. Each coin's supply, TokenConfig, LP lock

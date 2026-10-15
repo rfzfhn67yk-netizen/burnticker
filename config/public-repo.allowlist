@@ -96,6 +96,7 @@ scripts/ops/deploy-sites.sh
 scripts/ops/keeper-status-check.sh
 scripts/ops/probe-burnticker.sh
 scripts/ops/install-burnticker-units.sh
+scripts/ops/request-keeper-restart.sh
 scripts/ops/loadtest.sh
 scripts/ops/loadtest.mjs
 

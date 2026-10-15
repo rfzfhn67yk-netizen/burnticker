@@ -1,7 +1,9 @@
 import { type Keypair, PublicKey } from "@solana/web3.js";
 import type { PairAccount } from "@/lib/pairCurve/accounts";
 import { CLAIM_THRESHOLD_LAMPORTS, LP_LOCK_FALLBACK_SECS, registeredSides } from "@/lib/pairCurve/client";
-import { fetchPairs, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED } from "@/lib/pairCurve/accounts";
+import { bs58 } from "@/lib/burnReceipts/accounts";
+import { PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { decodePair, fetchPairs, pairDiscriminator, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED } from "@/lib/pairCurve/accounts";
 import { assertPairCurveCluster, crankPair, simulateAndSend, type CrankStep, type PairCurveContext, type SendResult } from "@/lib/pairCurve/client";
 import { feeKeyRecordPda } from "@/lib/burnReceipts/pda";
 import { fetchPairLink, linkPairIx, PAIR_STATE_UNLINKED, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
@@ -55,6 +57,67 @@ export interface PairCurveCrankDeps {
   isUnlinked?: (mintA: string, mintB: string) => boolean;
   /** Ops alert sink (the keeper: registry.recordAlert, deduped per Denver day). */
   alert?: (kind: string, key: string, text: string, meta: Record<string, unknown>) => void;
+  /**
+   * The scan (2026-10-15): the keeper passes a PairScanCache's `scan`, which runs ONE getProgramAccounts (10 credits) every few minutes
+   * and re-reads the known pairs by address (getMultipleAccountsInfo, 1 credit) in between. Absent: three status-filtered
+   * getProgramAccounts every call, as before.
+   */
+  scan?: (onUndecodable: (address: PublicKey, e: Error, bytes: number) => void) => Promise<{ address: PublicKey; pair: PairAccount }[]>;
+}
+
+/** The Pair's status byte (the offset fetchPairs' status memcmp matches). */
+export const PAIR_STATUS_OFFSET = 11;
+const bs58Encode = (b: Uint8Array): string => bs58(Buffer.from(b));
+/** The statuses the crank works on (Voided pairs only redeem; nothing to crank). */
+export const CRANK_STATUSES: readonly number[] = [STATUS_OPEN, STATUS_GRADUATING, STATUS_GRADUATED];
+
+/**
+ * THE PAIR SCAN CACHE (2026-10-15; measured: the three status-filtered getProgramAccounts were 30 of the keeper's ~150 credits a cycle,
+ * every minute, with no pair on the program). A full scan is ONE getProgramAccounts with the Pair discriminator only (10 credits), its
+ * statuses filtered here, every `fullEveryMs` (default 10 minutes); between full scans the known crankable pairs are re-read by address in
+ * one getMultipleAccountsInfo per 100 (1 credit, and served by the keeper's per-cycle account cache when it is in front), so a known pair's
+ * graduation, void or claim is seen on the very next cycle as before. Only a pair CREATED since the last full scan waits for the next one
+ * (at most `fullEveryMs`; launches send link_pair inside init_pair, so the crank's link step is a catch-up).
+ */
+export class PairScanCache {
+  private known: PublicKey[] = [];
+  private lastFull = -Infinity;
+  readonly stats = { full: 0, byAddress: 0 };
+  private o: { connection: Pick<PairCurveContext["connection"], "getProgramAccounts" | "getMultipleAccountsInfo">; programId?: PublicKey; fullEveryMs?: number; now?: () => number };
+  constructor(o: { connection: Pick<PairCurveContext["connection"], "getProgramAccounts" | "getMultipleAccountsInfo">; programId?: PublicKey; fullEveryMs?: number; now?: () => number }) { this.o = o; }
+  /** Forces the next scan to be a full one (e.g. after a launch of a new pair). */
+  expire(): void { this.lastFull = -Infinity; }
+  async scan(onUndecodable: (address: PublicKey, e: Error, bytes: number) => void = () => undefined): Promise<{ address: PublicKey; pair: PairAccount }[]> {
+    const now = (this.o.now ?? Date.now)();
+    let out: { address: PublicKey; pair: PairAccount }[];
+    if (now - this.lastFull >= (this.o.fullEveryMs ?? 10 * 60_000)) {
+      // one getProgramAccounts with the discriminator filter; the status byte (offset 11, the same byte the old status memcmp matched)
+      // is read raw BEFORE decoding, so a voided or old-layout pair the status filters used to exclude is skipped silently, as before
+      const list = await this.o.connection.getProgramAccounts(this.o.programId ?? PAIR_CURVE_PROGRAM_ID, { commitment: "confirmed", filters: [{ memcmp: { offset: 0, bytes: bs58Encode(pairDiscriminator()) } }] });
+      out = [];
+      for (const x of list) {
+        const data = x.account.data as Buffer;
+        if (data.length <= PAIR_STATUS_OFFSET || !CRANK_STATUSES.includes(data[PAIR_STATUS_OFFSET])) continue;
+        try { out.push({ address: x.pubkey, pair: decodePair(data) }); } catch (e) { onUndecodable(x.pubkey, e as Error, data.length); }
+      }
+      this.lastFull = now; this.stats.full++;
+    } else {
+      out = [];
+      for (let i = 0; i < this.known.length; i += 100) {
+        const chunk = this.known.slice(i, i + 100);
+        const accs = await this.o.connection.getMultipleAccountsInfo(chunk, "confirmed");
+        chunk.forEach((address, j) => {
+          const a = accs[j];
+          if (!a || a.data.length === 0) return;
+          try { const pair = decodePair(a.data); if (CRANK_STATUSES.includes(pair.status)) out.push({ address, pair }); }
+          catch (e) { onUndecodable(address, e as Error, a.data.length); }
+        });
+      }
+      this.stats.byAddress++;
+    }
+    this.known = out.map((x) => x.address);
+    return out;
+  }
 }
 
 /**
@@ -108,7 +171,9 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
   let pairs: Awaited<ReturnType<typeof fetchPairs>> = [];
   try {
     await assertPairCurveCluster(d.ctx);
-    for (const status of [STATUS_OPEN, STATUS_GRADUATING, STATUS_GRADUATED]) pairs.push(...(await fetchPairs(d.ctx.connection, { programId: d.ctx.programId, status, onUndecodable: (address, e, bytes) => out.errors.push(`skipped ${address.toBase58()}: ${bytes} bytes, ${e.message.slice(0, 80)}`) })));
+    const onUndecodable = (address: PublicKey, e: Error, bytes: number) => { out.errors.push(`skipped ${address.toBase58()}: ${bytes} bytes, ${e.message.slice(0, 80)}`); };
+    if (d.scan) pairs = await d.scan(onUndecodable);
+    else for (const status of CRANK_STATUSES) pairs.push(...(await fetchPairs(d.ctx.connection, { programId: d.ctx.programId, status, onUndecodable })));
   } catch (e) {
     out.errors.push(`scan: ${(e as Error).message.slice(0, 160)}`);
     return out;

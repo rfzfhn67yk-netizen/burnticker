@@ -18,6 +18,13 @@ export function redactUrl(u: string): string {
   try { const x = new URL(u); return `${x.protocol}//${x.host}`; } catch { return "(unparseable url)"; }
 }
 
+/**
+ * Listeners told BEFORE every private-route send (2026-10-15 review): this route bypasses the keeper's Connection, so the Burnticker
+ * keeper's per-cycle account cache (cycleAccountCache.ts) registers here to drop its values on these sends too. Returns the unsubscribe.
+ */
+const sendListeners = new Set<() => void>();
+export function onPrivateSend(listener: () => void): () => void { sendListeners.add(listener); return () => { sendListeners.delete(listener); }; }
+
 /** The sender for `url`; JSON-RPC sendTransaction, base64. Returns the signature the route reports (or null). Throws on a refusal. */
 export function privateSender(url: string, fetchImpl: FetchLike = globalThis.fetch as unknown as FetchLike): PrivateSender {
   if (!/^https:\/\//.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(url)) throw new Error(`${PRIVATE_SEND_ENV} must be an https URL (${redactUrl(url)})`);
@@ -25,6 +32,7 @@ export function privateSender(url: string, fetchImpl: FetchLike = globalThis.fet
   return {
     label,
     async send(raw) {
+      for (const l of sendListeners) { try { l(); } catch { /* a listener never stops a send */ } }
       const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "sendTransaction", params: [Buffer.from(raw).toString("base64"), { encoding: "base64" }] });
       let r: Awaited<ReturnType<FetchLike>>;
       try { r = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json" }, body, signal: AbortSignal.timeout(10_000) }); }

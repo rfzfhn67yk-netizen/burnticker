@@ -50,7 +50,10 @@ import type { MarketReader } from "../src/lib/burnticker/market.ts";
 import { nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
 import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusHoldStore } from "../src/lib/burnticker/sources/gameSettle.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
-import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG } from "../src/lib/burnKeeper/pairCurveCrank.ts";
+import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG, PairScanCache } from "../src/lib/burnKeeper/pairCurveCrank.ts";
+import { CycleAccountCache } from "../src/lib/burnticker/cycleAccountCache.ts";
+import { onPrivateSend } from "../src/lib/burnKeeper/privateSend.ts";
+import { freshReadKeys } from "../src/lib/burnticker/cycleAccountCache.ts";
 import type { Keypair } from "@solana/web3.js";
 import { DerbyAdapter } from "../src/lib/burnticker/derby/adapter.ts";
 import { HermesClient } from "../src/lib/burnticker/derby/pyth.ts";
@@ -65,7 +68,8 @@ import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 // BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
 import { dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
 import { cachedMarketReader, cachedPublishProgram, coinChainReads, connectionBatchReader, KeeperReadCache, signatureFingerprints, withLockFees, type BatchReader, type MultipleAccountsReader } from "../src/lib/burnticker/keeperReadCache.ts";
-import { budgetStatusLines, budgetedRpcConfig, configureApiBudget, statusTableStore } from "../src/lib/burnticker/apiBudget.ts";
+import { clearStaleRestartRequest, takeRestartRequest } from "../src/lib/burnticker/restartRequest.ts";
+import { budgetStatusLines, budgetTopMethodLines, budgetedRpcConfig, configureApiBudget, publicRpcFor, retryThroughBudgetHold, setDescribeFallback, statusTableStore, verifyRpcFallback, withEssential } from "../src/lib/burnticker/apiBudget.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -81,6 +85,36 @@ const attester = process.env.BURNTICKER_KEEPER_PUBKEY?.trim() || "unset";
 const RPC = process.env.BURNTICKER_RPC_URL?.trim() || null;
 const FEE_WALLET = process.env.BURNTICKER_FEE_WALLET?.trim() || null;
 const isPubkey = (s: string | null): s is string => !!s && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
+// HOLD FALLBACK (2026-10-15): while the keyed RPC's day budget is spent, reads go to the public RPC of the cluster the KEYED RPC's genesis
+// names (its own small budget), and only after that endpoint's genesis matched the keyed one at startup (review item 1). Calls that build
+// or confirm a send never move (apiBudget.ts NO_FALLBACK), and a cycle that starts on a held day runs with its sends held (review item 2):
+// the fallback keeps the pages and the plan current; it settles nothing. BURNTICKER_RPC_FALLBACK_URL overrides the endpoint; "off" disables.
+const FALLBACK_ENV = process.env.BURNTICKER_RPC_FALLBACK_URL?.trim() || "";
+let fallbackUrl: string | null = null;
+// re-review N3: the endpoint to verify, the keyed genesis to verify it against, and when it was last tried (retried on the first hold and
+// hourly while unverified, so a 429 or a timeout at startup does not leave a held day without its fallback)
+let fallbackCandidate: string | null = null, keyedGenesis: string | null = null, fallbackTriedAt = 0;
+async function verifyFallbackNow(why: string): Promise<void> {
+  if (!fallbackCandidate || !keyedGenesis) return;
+  fallbackTriedAt = Date.now();
+  fallbackUrl = await verifyRpcFallback(fallbackCandidate, keyedGenesis, { log });
+  budget.setFallback("helius", fallbackUrl ? `the public Solana RPC (${new URL(fallbackUrl).hostname})` : null);
+  if (fallbackUrl && why !== "startup") log(`  [api-budget] hold fallback ${new URL(fallbackUrl).hostname} verified (${why}): a held day's reads go there`);
+}
+const RPC_FALLBACK = { fallbackUrl: () => fallbackUrl };
+let stopping = false;
+const KEEPER_STARTED_AT = Date.now();
+for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => { stopping = true; log(`${s}: finishing the current cycle`); });
+// DEPLOY-REQUESTED RESTART (restartRequest.ts): a request already on disk was written before this process started, i.e. after the deploy
+// swapped the code in, so this process already runs it: removed, never honoured. A dry run never takes or removes a request.
+if (!DRY) { const stale = clearStaleRestartRequest("keeper"); if (stale) log(`  stale restart request (build ${stale.build}) removed: this process started after it and already runs the deployed code`); }
+/** A new request during the startup wait ends the wait (exit 0, systemd starts the newer code). */
+const restartAskedDuringStartup = (): boolean => {
+  if (DRY) return false;
+  const r = takeRestartRequest("keeper", { startedAt: KEEPER_STARTED_AT });
+  if (r) { log(`restart requested by deploy ${r.build} during the startup wait: exiting; systemd starts the new code`); stopping = true; }
+  return !!r;
+};
 
 const registry = openRegistry(DB);
 // THE REQUEST BUDGET (src/lib/burnticker/apiBudget.ts, docs/burnticker/API-BUDGETS.md; owner 2026-10-13): every provider read waits for
@@ -89,6 +123,7 @@ const registry = openRegistry(DB);
 const budget = configureApiBudget({ role: "keeper", store: statusTableStore(registry.db), log,
   alert: (a) => { if (registry.recordAlert({ kind: a.kind, key: a.key, text: a.text, meta: a.meta })) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`); } });
 process.on("exit", () => { try { budget.flush(); } catch { /* closing */ } });
+budget.setPhase("startup");
 const kalshi = new KalshiClient();
 // Polymarket (2026-10-10): Gamma for discovery, the Polygon CTF payout vector for results; the refuse list over every market question.
 const polygonRpcs = (process.env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
@@ -106,12 +141,26 @@ setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReader
 const PROGRAM_ID = process.env.BURNTICKER_PROGRAM_ID?.trim() || null;
 
 /** The real client when the program id, an RPC and the keeper's key exist; the fake otherwise (nothing sent). */
+// THE PER-CYCLE ACCOUNT CACHE (2026-10-15, cycleAccountCache.ts): every program-side read goes through it; the loop calls beginCycle()
+let cycleCache = null as CycleAccountCache | null;
 async function buildProgram(): Promise<{ program: BurnProgramClient; real: boolean; why: string; chain?: { connection: Connection; cluster: "mainnet" | "devnet" | "localnet"; payer: Keypair } }> {
   if (!PROGRAM_ID || !RPC) return { program: new FakeBurnProgram(cluster), real: false, why: !PROGRAM_ID ? "no BURNTICKER_PROGRAM_ID" : "no BURNTICKER_RPC_URL" };
-  const connection = new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" }));
-  const actual = clusterOfGenesis(await connection.getGenesisHash());
+  const raw = new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" }, RPC_FALLBACK));
+  cycleCache = new CycleAccountCache(raw as unknown as ConstructorParameters<typeof CycleAccountCache>[0]);
+  const connection = cycleCache.connection<Connection>();
+  // A budget hold (or a busy bucket) at startup waits, never crashes (2026-10-15: a restart on a spent slice crash-looped every 30 s).
+  // the genesis is read on the KEYED RPC only (getGenesisHash is essential and never moves to the fallback; apiBudget.ts)
+  const genesis = await retryThroughBudgetHold(() => withEssential(["getGenesisHash"], () => connection.getGenesisHash()), { log, stop: () => stopping || restartAskedDuringStartup(), what: "startup (the genesis read)",
+    sleep: async (ms) => { for (let t = 0; t < ms && !stopping; t += 1_000) await new Promise((r) => setTimeout(r, 1_000)); } });
+  const actual = clusterOfGenesis(genesis);
   if (actual === "mainnet" && process.env.BURNTICKER_MAINNET !== "1") throw new Error("the RPC is mainnet: refused unless BURNTICKER_MAINNET=1 (after the audit)");
   if (actual === "testnet") throw new Error("burn_receipts has no testnet deployment");
+  keyedGenesis = genesis;
+  if (FALLBACK_ENV !== "off") {
+    fallbackCandidate = /^https?:\/\//.test(FALLBACK_ENV) ? FALLBACK_ENV : publicRpcFor(actual);
+    if (fallbackCandidate) await verifyFallbackNow("startup");
+    else log(`  [api-budget] no hold fallback: ${actual} has no public RPC (reads wait for the keyed RPC's next day)`);
+  }
   const keyPath = process.env.BURNTICKER_SIGNER_PATH?.trim() || path.join(os.homedir(), ".config", "meme-coin-trader", "signer-burnticker.enc.json");
   if (["signer.enc.json", "signer.json"].includes(path.basename(keyPath))) throw new Error(`BURNTICKER_SIGNER_PATH points at the treasury's key file (${keyPath}) — refusing`);
   const { loadKeypair } = await import("../src/lib/burnKeeper/keyfile.ts");
@@ -123,7 +172,10 @@ async function buildProgram(): Promise<{ program: BurnProgramClient; real: boole
   return { program, real: true, why: `program ${PROGRAM_ID} on ${actual}, keeper ${kp.publicKey.toBase58()}`, chain: { connection, cluster: actual, payer: kp } };
 }
 // A startup refusal (mainnet without the flag, the treasury's key file, a key that does not match) reaches the owner's phone before the process exits.
-const built = await buildProgram().catch(async (e: unknown) => { await pushKeeperRefused({ registry, env: process.env, now: Date.now(), reason: (e as Error).message, log }); throw e; });
+const built = await buildProgram().catch(async (e: unknown) => {
+  if (stopping) { log(`stopped during startup: ${(e as Error).message.slice(0, 160)}`); process.exit(0); }
+  await pushKeeperRefused({ registry, env: process.env, now: Date.now(), reason: (e as Error).message, log }); throw e;
+});
 const program = built.program;
 log(`claim_lock_fees crank: ${program.lockFees ? `on (fee-keys PDA ${program.lockFees.feeKeysPda()}, operator treasury ${program.lockFees.operatorTreasury() ?? "NOT PINNED on this cluster — claims wait, the fees stay in the lock"})` : "off (no lock-fee client)"}`);
 // BURN DERBY (2026-10-10): Pyth on Solana (keyless) / Hermes (BURNTICKER_PYTH_API_KEY), pool TWAPs and mint supplies are MAINNET facts
@@ -140,11 +192,19 @@ const operator = operatorPowersSummary(loadPowersRegister());
 const KALSHI_ON = kalshiEnabled(process.env), POLY_DISCOVERY = polymarketDiscoveryEnabled(process.env);
 /** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */
 const ops = new KeeperOps({ registry, siteDir: SITE, cluster, env: process.env, log, uploader: uploaderFromEnv(process.env, cluster), snapshots: !DRY, signer: built.chain ? { publicKey: built.chain.payer.publicKey.toBase58(), secretKey: built.chain.payer.secretKey } : null });
-const marketReader: MarketReader | null = RPC ? (new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })) as unknown as MarketReader) : null;
+const marketReader: MarketReader | null = RPC ? (new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }, RPC_FALLBACK)) as unknown as MarketReader) : null;
 // THE READ CACHE (2026-10-13, keeperReadCache.ts, docs/burnticker/API-BUDGETS.md): the publish loop reads each coin's chain state through
 // a per-coin cache (5 min for supply, the TokenConfig, the LP lock and the vault; 60 s for the fee PDA and the market read) and one batched
 // getMultipleAccounts per cycle; the cycle's claim_lock_fees step shares the LP lock entry. The keeper's own sends drop the coin's entries.
 const readCache = new KeeperReadCache({ now: () => Date.now() });
+// review items 3 and 4: the private send route drops the cycle cache too; a coin with pending receipts reads fresh before its fence and cranks
+if (cycleCache && PROGRAM_ID) {
+  const cc = cycleCache, pid = new PublicKey(PROGRAM_ID);
+  onPrivateSend(() => cc.invalidateAll());
+  // re-review N1: one call per pass for THIS coin only: its TokenConfig, fee PDA, mint and the reading PDAs of its sendable dates
+  deps.freshReads = (t, dates) => cc.refresh(freshReadKeys(pid, t.mint, dates, registry.pairOf(t.mint)), log);
+}
+const pairScan = built.chain ? new PairScanCache({ connection: built.chain.connection, programId: undefined }) : null;
 const publishProgram = cachedPublishProgram(program, readCache);
 if (program.lockFees) deps.program = withLockFees(program, publishProgram.lockFees!);
 const batchReader: BatchReader | null = built.chain ? connectionBatchReader(built.chain.connection as unknown as MultipleAccountsReader, new PublicKey(program.programId), (m) => program.vaultFor(m)) : null;
@@ -192,8 +252,6 @@ async function publishAll(now: number): Promise<void> {
   publishPlatformIndex(SITE, statuses.filter((s) => !tests.mints.has(s.mint)), now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null, receiptsByTicker, siteKeys);
 }
 
-let stopping = false;
-for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => { stopping = true; log(`${s}: finishing the current cycle`); });
 
 // Ops: the crank-failure streaks the alert check reads, the balance sampler (one getBalance per key every ALERT_EVERY_MS), the sink
 // (the registry's alerts table, then the BURNTICKER_ALERT_WEBHOOK to the operator's intake route — this host is not where the owner looks),
@@ -201,6 +259,8 @@ for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => { stopping =
 const tracker = new CrankFailureTracker();
 const { sink, state: webhook } = sinkFromEnv(process.env, { log, local: registryAlertSink(registry) });
 let lastAlertAt = 0;
+let heldNotedDay = "";
+let holdLiftNoted = true;
 async function opsCheck(now: number, paused: boolean): Promise<void> {
   let balances: { at: number; keeperLamports: bigint | null; devFeeLamports: bigint | null } | null = null;
   if (RPC && (isPubkey(attester) || isPubkey(FEE_WALLET))) {
@@ -211,6 +271,8 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   budget.flush();
   const budgetLines = budgetStatusLines(budget.lines());
   for (const l of budgetLines) log(`  [${l}]`);
+  for (const l of budgetTopMethodLines(budget)) log(`  [${l}]`);
+  if (cycleCache) { const c = cycleCache.stats; log(`  [cycle-cache] ${cycleCache.addresses().length} account(s) prefetched per cycle in ${Math.ceil(cycleCache.addresses().length / 100)} call(s); since start: ${c.cycles} cycle(s), ${c.served} read(s) served, ${c.passed} sent to the RPC, ${c.invalidations} drop(s) after a send`); }
   for (const a of r.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);
   for (const a of await ops.alerts(sink, now)) log(`  [alert] ${a.slice(0, 160)}`);
   try { const p = await runPushCheck({ registry, env: process.env, now, log }); for (const m of p.sent) log(`  [push] ${m.kind}: ${m.title}`); } catch (e) { log(`  [push] check failed: ${(e as Error).message.slice(0, 160)}`); }
@@ -225,7 +287,20 @@ while (!stopping) {
   const paused = fs.existsSync(PAUSE);
   if (paused && !DRY) log(`  ${PAUSE} present — cranks held, reading and publishing go on`);
   // The role, then runCycle: fetch, plan, the foreign-reading fence (after planning, before the first attestation — review 2 F1), execute.
-  const { gate, report: cycleReport, error: cycleError } = await ops.cycle(deps, { dryRun: DRY || paused });
+  // the phase each credit is counted under (apiBudget.ts setPhase; the 5-minute check prints today's top phase:method lines)
+  // a held keyed RPC (review item 2): this cycle reads through the fallback and sends nothing (readings, cranks, claims wait for 00:00 UTC)
+  const heliusHeld = !!built.chain && budget.isHeld("helius");
+  // re-review N3: verify the fallback on the first held cycle, and hourly while it stays unverified
+  if (heliusHeld && !fallbackUrl && fallbackCandidate && (heldNotedDay !== new Date().toISOString().slice(0, 10) || Date.now() - fallbackTriedAt >= 3_600_000)) await verifyFallbackNow("on hold");
+  // re-review N4: on a held cycle the reads that describe landed transactions may use the fallback; nothing is built from them
+  setDescribeFallback(heliusHeld);
+  if (!heliusHeld && heldNotedDay && !holdLiftNoted) { holdLiftNoted = true; log(`  [api-budget] helius hold lifted: sends resume this cycle`); }
+  if (heliusHeld) holdLiftNoted = false;
+  if (heliusHeld && heldNotedDay !== new Date().toISOString().slice(0, 10)) { heldNotedDay = new Date().toISOString().slice(0, 10); log(`  [api-budget] helius on hold: every cycle until 00:00 UTC runs with its sends held${fallbackUrl ? `; reads go to ${new URL(fallbackUrl).hostname}` : "; no fallback, so chain reads fail until then"}`); }
+  budget.setPhase("prefetch");
+  if (cycleCache) { try { await cycleCache.beginCycle(log); } catch (e) { log(`  [cycle-cache] ${(e as Error).message.slice(0, 160)}`); } }
+  budget.setPhase("cycle");
+  const { gate, report: cycleReport, error: cycleError } = await ops.cycle(deps, { dryRun: DRY || paused || heliusHeld });
   if (cycleReport) {
     const r = cycleReport;
     tracker.note(r);
@@ -236,22 +311,30 @@ while (!stopping) {
   if (!gate.sendsAllowed) deps.dryRun = true;
   // Rivalry pairs on the pair curve (2026-10-10, docs/burnticker/PAIR-CURVE.md): graduate both sides / register / void — program
   // mode only, behind BURNTICKER_PAIR_CURVE_ENABLED. Permissionless cranks; the keeper key pays transaction fees only.
-  if (built.chain && pairCurveEnabled(process.env) && gate.sendsAllowed) {
+  if (built.chain && pairCurveEnabled(process.env) && gate.sendsAllowed && !heliusHeld) {
+    budget.setPhase("pair-curve");
     try {
-      const pc = await crankPairCurves({ ctx: { connection: built.chain.connection, cluster: built.chain.cluster, burnReceiptsProgramId: new PublicKey(PROGRAM_ID!), allowMainnet: process.env.BURNTICKER_MAINNET === "1" }, cranker: built.chain.payer, dryRun: deps.dryRun, log, isUnlinked: (ma, mb) => { const pr = registry.pairOf(ma); return !!pr && (pr.mintA === mb || pr.mintB === mb) && registry.getStatus(`pair.unlinked.${pr.pairId}`) !== null; }, alert: (kind, key, text, meta) => { registry.recordAlert({ kind, key, text, meta }); } });
-      if (pc.acted.length) readCache.invalidateAll();   // a pair-curve crank (graduation, registration, void) writes no registry signature: re-read every coin
+      const pc = await crankPairCurves({ scan: (u) => pairScan!.scan(u), ctx: { connection: built.chain.connection, cluster: built.chain.cluster, burnReceiptsProgramId: new PublicKey(PROGRAM_ID!), allowMainnet: process.env.BURNTICKER_MAINNET === "1" }, cranker: built.chain.payer, dryRun: deps.dryRun, log, isUnlinked: (ma, mb) => { const pr = registry.pairOf(ma); return !!pr && (pr.mintA === mb || pr.mintB === mb) && registry.getStatus(`pair.unlinked.${pr.pairId}`) !== null; }, alert: (kind, key, text, meta) => { registry.recordAlert({ kind, key, text, meta }); } });
+      if (pc.acted.length) { readCache.invalidateAll(); cycleCache?.invalidateAll(); }   // a pair-curve crank (graduation, registration, void) writes no registry signature: re-read every coin
       if (pc.acted.length || pc.errors.length) log(`pair curve: ${pc.scanned} pair(s) scanned, ${pc.acted.length} cranked${pc.errors.length ? ` · errors: ${pc.errors.slice(0, 3).join(" | ")}` : ""}`);
     } catch (e) { log(`pair curve crank failed: ${(e as Error).message.slice(0, 200)}`); }
   } else if (pairCurveEnabled(process.env) && !built.real) log(`  [pair-curve] ${PAIR_CURVE_FLAG} is set but the program client is the fake — nothing cranked`);
   // the read cache drops every coin this cycle changed (its report, and any new or confirmed signature in the registry)
   try { const dropped = readCache.afterCycle(cycleReport, signatureFingerprints(registry.db)); if (dropped.length) log(`  [read-cache] ${dropped.length} coin(s) re-read after this cycle's sends`); } catch (e) { readCache.invalidateAll(); log(`  [read-cache] invalidation failed, every coin re-read: ${(e as Error).message.slice(0, 160)}`); }
+  budget.setPhase("publish");
   try { await publishAll(Date.now()); } catch (e) { log(`publish failed: ${(e as Error).message.slice(0, 200)}`); }
+  budget.setPhase("after-cycle");
   await ops.afterCycle(cycleReport, paused, ALERTS ? sink : null);
   try { const w = writeOwnTokensGenerated(registry, process.env.OWN_TOKENS_GENERATED_PATH?.trim() || undefined); if (w.changed) log(`  [refuse-list] ${w.file} rewritten: ${w.count} platform token(s) — the arms re-read it on their next candidate`); } catch (e) { log(`  [refuse-list] not written: ${(e as Error).message.slice(0, 160)}`); }
   budget.flush();
+  budget.setPhase("ops");
   if (ALERTS && Date.now() - lastAlertAt >= ALERT_EVERY_MS) { lastAlertAt = Date.now(); try { await opsCheck(lastAlertAt, paused); } catch (e) { log(`  [alert] check failed: ${(e as Error).message.slice(0, 160)}`); } }
   if (ONCE) break;
-  await new Promise((r) => setTimeout(r, 60_000));
+  // DEPLOY-REQUESTED RESTART (restartRequest.ts): the cycle is finished (nothing in flight), so exit 0 and let systemd start the new code
+  const restart = DRY ? null : takeRestartRequest("keeper", { startedAt: KEEPER_STARTED_AT });
+  if (restart) { log(`restart requested by deploy ${restart.build}${restart.at ? ` (requested ${restart.at})` : ""}: exiting between cycles; systemd starts the new code`); break; }
+  // between cycles (nothing in flight): a SIGTERM ends the wait at once instead of after the full minute
+  for (let t = 0; t < 60_000 && !stopping; t += 1_000) await new Promise((r) => setTimeout(r, 1_000));
 }
 registry.close();
 log("burnticker keeper stopped");

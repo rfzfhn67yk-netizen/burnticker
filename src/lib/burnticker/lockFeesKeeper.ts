@@ -1,3 +1,4 @@
+import { isBudgetHold } from "@/lib/burnticker/apiBudget";
 import { backoffMs } from "@/lib/burnKeeper/schedule";
 import type { Registry, TokenRow } from "@/lib/burnticker/registry";
 import { lockFeeClaimLine, lockFeeErrorSentence, splitMatches, TREASURY_NOT_PINNED, type LockFeesClient, type LockFeesPort } from "@/lib/burnticker/lockFees";
@@ -148,6 +149,8 @@ export async function claimLockFeesFor(d: LockFeesKeeperDeps, t: TokenRow): Prom
     if (c.status === "expired") return { mint, outcome: "waiting", why: `claim ${tx.signature.slice(0, 12)}… not confirmed yet` };
     return await record(d, t, port, tx.signature, c.slot);
   } catch (e) {
+    // 2026-10-15 re-review N4: a spent RPC budget is a wait (no alert, no backoff); the step runs again when the budget allows
+    if (isBudgetHold(e)) return { mint, outcome: "waiting", why: `the RPC budget is on hold: ${(e as Error).message.slice(0, 120)}` };
     const why = `lock steps: ${(e as Error).message.slice(0, 160)}`;
     alert(d, t, "lock-fees-failed", why, {});
     return { mint, outcome: "error", why };
