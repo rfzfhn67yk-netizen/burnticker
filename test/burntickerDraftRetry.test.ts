@@ -34,3 +34,18 @@ describe("a creator's own unfinished draft is reused on a retry (registry.ownDra
     assert.deepEqual(lintCopy(m![1]).hits, []);
   });
 });
+
+describe("the anti-clone guard lets a creator's own draft through on a retry", () => {
+  let w: World;
+  before(async () => { w = await makeWorld(); });
+  test("own draft: no refusal; another creator's draft: refused as already registered", async () => {
+    const { launchGuardRefusal } = await import("@/lib/burnticker/launchGuards");
+    const live = w.registry.tokens("live")[0];
+    const mint = Keypair.generate().publicKey.toBase58();
+    w.registry.register({ mint, ticker: "RETRY2", name: "Retry coin", creator: CREATOR, description: "", imageUrl: null, links: [], rulesText: live.rulesJson, feePda: live.feePda, vault: null, tokenConfig: live.tokenConfig, poolId: null, launchTx: null, cluster: live.cluster, platformId: live.platformId, baselineAt: live.baselineAt, status: "draft" } as Parameters<World["registry"]["register"]>[0]);
+    const own = await launchGuardRefusal(w.p, { ticker: "RETRY2", name: "Retry coin", rule: null, mint, creator: CREATOR });
+    assert.ok(!own || !/already registered/.test(own.error), own?.error);
+    const other = await launchGuardRefusal(w.p, { ticker: "RETRY2", name: "Retry coin", rule: null, mint, creator: Keypair.generate().publicKey.toBase58() });
+    assert.match(other?.error ?? "", /already registered/);
+  });
+});

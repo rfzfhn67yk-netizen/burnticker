@@ -676,7 +676,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     if (!own) return { error: fail(409, `The mint ${o.mint} is already registered.`, { code: "mint-taken" }) };
     if (own.rulesJson !== locked.text || own.ticker !== input.ticker) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) };
   }
-  { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
+  { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null, creator: input.creator }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
   // (Polymarket: the payout vector + Gamma) — and creation refused if anything fails. Kalshi is always refused here: its terms forbid
   // settling products on its data. BURNTICKER_PREFLIGHT_STRICT=0 skips it (the test hook does, for the suite).
@@ -752,7 +752,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const bRefusals = nameRefusals(list, side.name, side.ticker);
     { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
-    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}) }); if (g) return { error: fail(g.status, `Side B is refused. ${g.error}`, g.extra) }; }
+    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}), creator: input.creator }); if (g) return { error: fail(g.status, `Side B is refused. ${g.error}`, g.extra) }; }
     // two candidates: both markets must be named outcomes of the one race the body names (Polymarket's own index of open races)
     if (settled?.shape === "candidates" && settled.bundle.race) {
       if (p.polymarketDiscovery === false) return { error: fail(503, POLYMARKET_UNAVAILABLE) };
