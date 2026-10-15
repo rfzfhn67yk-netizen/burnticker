@@ -88,6 +88,9 @@ scripts/service/run-burnticker-keeper.sh
 scripts/service/run-burnticker-audit.sh
 scripts/service/run-burnticker-clonewatch.sh
 scripts/service/run-burnticker-signer.sh
+# the nightly synthetic creator on the box (2026-10-15): its runner, the script and its wallet (scripts/burnticker-*.mts above) are public on
+# purpose so the box has them; the deploy smoke (scripts/ops/burnticker-deploy-smoke.*) stays private (it runs on the Mac)
+scripts/service/run-burnticker-synth.sh
 scripts/service/run-burnticker-mintbank.sh
 scripts/ops/deploy-sites.sh
 scripts/ops/keeper-status-check.sh

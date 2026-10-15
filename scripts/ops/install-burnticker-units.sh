@@ -9,9 +9,11 @@
 #   --start   also start mct-burnticker-web, mct-burnticker-keeper, mct-burnkeeper and mct-burnticker-mintbank after enabling
 # mct-burnticker-mintbank (2026-10-14 night) grinds the burn-ending mint keys the launch route hands out; it refuses to start (exit 2, not
 # retried) until BURNTICKER_MINT_BANK_KEY is in the host's env file (docs/burnticker/deploy.md, "The mint key bank").
+# mct-burnticker-synth.timer (2026-10-15, the nightly synthetic creator) is copied but NOT enabled here: it needs .env.devnet-synth and
+# Chrome first (docs/burnticker/SYNTHETIC-CREATOR.md); then `systemctl --user enable --now mct-burnticker-synth.timer`.
 set -eu
 cd "$(dirname "$0")/../.."
-UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer"
+UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer mct-burnticker-synth.service mct-burnticker-synth.timer"
 ENABLE="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service"
 TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer"
 CHECK=0; START=0
@@ -30,6 +32,9 @@ for u in $UNITS; do
   [ -f "$src" ] || { say "  MISSING in the repo: $src"; exit 1; }
   if [ -f "$DEST/$u" ] && cmp -s "$src" "$DEST/$u"; then say "  unchanged: $u"; else act cp "$src" "$DEST/$u"; CHANGED=1; fi
 done
+# 2026-10-14: run as the service user without a session bus (sudo -u mct from root), systemctl --user cannot reach the bus; point it at
+# the user's runtime dir so enable/start work either way
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -z "${XDG_RUNTIME_DIR:-}" ]; then export XDG_RUNTIME_DIR="/run/user/$(id -u)"; export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"; fi
 if [ "$CHANGED" = 1 ] || [ "$CHECK" = 1 ]; then act systemctl --user daemon-reload; fi
 for u in $ENABLE; do
   if systemctl --user is-enabled "$u" >/dev/null 2>&1; then say "  enabled: $u"; else act systemctl --user enable "$u"; fi

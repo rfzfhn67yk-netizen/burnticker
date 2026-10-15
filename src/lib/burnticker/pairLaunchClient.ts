@@ -25,6 +25,8 @@ export const venueFor = (venues: { pairCurve?: boolean } | null | undefined): Pa
 export interface LaunchErrorBody { error?: string; code?: string; retryAfterSec?: number }
 
 /** A launch response that is not 200 → one plain sentence for the review step. */
+/** The launch answer while the site is being updated (Caddy's fallback 503 during a deploy restart). */
+export const LAUNCH_DURING_UPDATE_SENTENCE = "Burnticker is being updated right now, so this launch was not started. Nothing was sent. Wait a minute and press Launch again.";
 export function launchErrorMessage(status: number, body: LaunchErrorBody | null, retryAfterHeader?: string | null): string {
   const code = body?.code ?? "";
   if (status === 409 && code === "pair-curve-required") return "On this site a matchup launches as one pair curve: both coins graduate together or neither does. Press the button again to build that.";
@@ -35,6 +37,9 @@ export function launchErrorMessage(status: number, body: LaunchErrorBody | null,
     const wait = Number.isFinite(s) && s > 0 ? (s >= 90 ? `about ${Math.ceil(s / 60)} minutes` : `${Math.ceil(s)} seconds`) : "a little while";
     return `Too many launch requests from this connection. Try again in ${wait}.`;
   }
+  // 2026-10-15 (the synthetic creator's deploy-window scenario): while the web unit restarts, Caddy answers the launch with its own JSON 503
+  // (code app-unavailable, "the app is catching up"). The creator is told the site is being updated, never the fallback's words
+  if (status === 503 && code === "app-unavailable") return LAUNCH_DURING_UPDATE_SENTENCE;
   if (status === 503 && code === "launch-unverifiable") return "This site cannot confirm launches yet (no chain connection is set up on the server). Your coins stay drafts; nothing was lost.";
   // launch walkthrough 2026-10-13: a 503 that carries the server's own sentence (a launch check that could not read a source, sent as 503
   // so Cloudflare passes it through) shows that sentence, not the generic line: the creator needs to know which check stopped the coin

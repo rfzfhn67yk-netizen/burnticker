@@ -274,6 +274,8 @@ export class Registry {
     for (const [name, type] of BURN_PROGRAM_COLUMNS) if (!have.has(name)) this.db.exec(`ALTER TABLE burns ADD COLUMN ${name} ${type}`);
     // 2026-10-10: a reading's on-chain proof locator (Polymarket: the CTF payout vector's condition id and block). Added, never changed.
     if (!(this.db.prepare("PRAGMA table_info(readings)").all() as { name: string }[]).some((c) => c.name === "proof")) this.db.exec("ALTER TABLE readings ADD COLUMN proof TEXT");
+    // 2026-10-15: the synthetic creator's coins (scripts/burnticker-synthetic-creator.mts) are flagged in token_flags, hidden like test coins
+    if (!(this.db.prepare("PRAGMA table_info(token_flags)").all() as { name: string }[]).some((c) => c.name === "synthetic")) this.db.exec("ALTER TABLE token_flags ADD COLUMN synthetic INTEGER NOT NULL DEFAULT 0");
     // LP-lock round 2 (memo v2): the operator leg's paid / pending lamports on a claim, added in place, never changed.
     { const have = new Set((this.db.prepare("PRAGMA table_info(lock_fee_claims)").all() as { name: string }[]).map((c) => c.name)); for (const c of ["paid_lamports", "pending_lamports"]) if (!have.has(c)) this.db.exec(`ALTER TABLE lock_fee_claims ADD COLUMN ${c} TEXT`); }
     this.db.exec(IMMUTABILITY);
@@ -362,6 +364,17 @@ export class Registry {
   /** The operator's test mark for a coin (testCoins.ts): on hides it from browse surfaces, off lists it again. Upsert; the note says why. */
   setTokenTest(mint: string, test: boolean, note = "", now = Date.now()): void {
     this.db.prepare("INSERT INTO token_flags (mint, test, note, at) VALUES (?,?,?,?) ON CONFLICT(mint) DO UPDATE SET test=excluded.test, note=excluded.note, at=excluded.at").run(mint, test ? 1 : 0, note, now);
+  }
+  /**
+   * A coin the nightly synthetic creator made on devnet (scripts/burnticker-synthetic-creator.mts): flagged synthetic, left off every browse
+   * surface like a test coin (testCoins.ts testCoinKeys), and NOT listed on /burnticker/test-coins (they are checks, not disclosures).
+   */
+  setTokenSynthetic(mint: string, note = "", now = Date.now()): void {
+    this.db.prepare("INSERT INTO token_flags (mint, test, note, at, synthetic) VALUES (?,0,?,?,1) ON CONFLICT(mint) DO UPDATE SET synthetic=1, at=excluded.at").run(mint, note, now);
+  }
+  /** Every coin flagged synthetic. */
+  syntheticTokens(): { mint: string; note: string; at: number }[] {
+    return (this.db.prepare("SELECT mint, note, at FROM token_flags WHERE synthetic=1 ORDER BY at").all() as Row[]).map((r) => ({ mint: String(r.mint), note: String(r.note ?? ""), at: Number(r.at) }));
   }
   /** Every coin the operator marked test, with the note and when. */
   testTokens(): { mint: string; note: string; at: number }[] {

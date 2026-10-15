@@ -71,9 +71,12 @@ export function testCoins(root = process.cwd(), reg: Pick<Registry, "testTokens"
  * The keys a browse surface hides by: every test coin's mint, and the tickers of the OPERATOR's test coins (their featured cards and
  * activity rows carry a ticker). A registry coin is hidden by its mint only, so a real coin that happens to share its ticker stays listed.
  */
-export function testCoinKeys(root = process.cwd(), reg: Pick<Registry, "testTokens" | "token"> | null = null): TestCoinKeys {
+export function testCoinKeys(root = process.cwd(), reg: (Pick<Registry, "testTokens" | "token"> & Partial<Pick<Registry, "syntheticTokens">>) | null = null): TestCoinKeys {
   const all = testCoins(root, reg);
-  return { mints: new Set(all.map((c) => c.mint).filter((m): m is string => !!m)), tickers: new Set(all.filter((c) => c.source === "operator").map((c) => c.ticker)) };
+  // 2026-10-15: the synthetic creator's coins are hidden by mint the same way (not listed on the test-coins page)
+  let synthetic: string[] = [];
+  try { synthetic = reg?.syntheticTokens ? reg.syntheticTokens().map((r) => r.mint) : []; } catch { synthetic = []; }
+  return { mints: new Set([...all.map((c) => c.mint).filter((m): m is string => !!m), ...synthetic]), tickers: new Set(all.filter((c) => c.source === "operator").map((c) => c.ticker)) };
 }
 
 /** Whether a coin (by mint, or an operator coin by ticker) is a test coin. */
