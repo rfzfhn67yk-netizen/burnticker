@@ -98,12 +98,12 @@ describe("items 4 and 8: host diagnostics behind a disclosure; missing automatio
 });
 
 describe("item 5: one current summary on Trust/Operator; configured wallets are not called missing; bounty funding and balance apart", () => {
-  test("operator.json: no 'created on launch week' prose beside configured mainnet addresses; the statement reads 'address configured; statement not signed'", async () => {
+  test("operator.json: no 'created on launch week' prose beside configured mainnet addresses; the statement is signed (2026-10-14)", async () => {
     const op = JSON.parse(read("config/burnticker/operator.json")) as { note: string; clusters: { mainnet: { status: string; wallets: { role: string; pubkey: string }[] } }; signedMessage: { status: string } };
     assert.doesNotMatch(`${op.note} ${op.clusters.mainnet.status}`, /launch week|created by the owner on|does not exist|until the owner creates/i);
     assert.match(op.clusters.mainnet.status, /^Both programs were deployed on mainnet on 2026-10-11, .*Every wallet address below is set\.$/);   // audit 4 BT-02; website-9: the keeper and deployer keys are set too
     assert.ok(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(op.clusters.mainnet.wallets.find((w) => w.role === "dev-fee")!.pubkey), "the signer address is configured");
-    assert.match(op.signedMessage.status, /^TODO_/, "the statement is NOT signed yet");
+    assert.equal(op.signedMessage.status, "2026-10-14", "the statement was signed on 2026-10-14");
     const { OPERATOR_COPY, OPERATOR_LINE } = await import("@/lib/burnticker/trustpack/copy");
     assert.match(OPERATOR_COPY.signedPending, /^The developer fee wallet listed above is the one that signs it\./); assert.doesNotMatch(`${OPERATOR_COPY.signedPending} ${OPERATOR_COPY.walletsIntro}`, /does not exist|until they exist/);
     assert.equal(OPERATOR_LINE, "Operated by one independent operator (United States) — contact: contact@burnticker.com");

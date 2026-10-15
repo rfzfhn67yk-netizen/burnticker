@@ -109,18 +109,20 @@ describe("operator.json", () => {
     const p = operatorProblems(bad).join(" | ");
     assert.match(p, /devnet\.dev-fee/); assert.match(p, /mainnet: wallet role keeper missing/); assert.match(p, /signature/);
   });
-  test("the signed statement: TODO until signed; a real ed25519 signature over the exact text verifies, a changed byte does not", () => {
-    assert.equal(signedMessageView(op).status, "todo");
+  test("the signed statement: signed 2026-10-14 and verified on the real file; a real ed25519 signature over the exact text verifies, a changed byte does not", () => {
+    assert.deepEqual([signedMessageView(op).status, signedMessageView(op).verified], ["signed", true]);
     const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
     const pub = b58encode(Buffer.from(publicKey.export({ format: "jwk" }).x!, "base64url"));
-    const msg = op.signedMessage.message.replace("{PUBKEY}", pub).replace("{DATE}", "2026-10-11");
+    // the template form of the signed text (the file held {PUBKEY} / {DATE} until 2026-10-14)
+    const template = op.signedMessage.message.replace("Date: 2026-10-14.", "Date: {DATE}.");
+    const msg = template.replace("{PUBKEY}", pub).replace("{DATE}", "2026-10-11");
     const sig = b58encode(crypto.sign(null, Buffer.from(msg, "utf8"), privateKey));
     assert.equal(verifySignedMessage(msg, sig, pub), true);
     assert.equal(verifySignedMessage(`${msg} `, sig, pub), false);
     assert.equal(verifySignedMessage(msg, sig, b58encode(crypto.randomBytes(32))), false);
     const signed = JSON.parse(JSON.stringify(op)) as OperatorConfig;
     signed.clusters.mainnet.wallets.find((w) => w.role === "dev-fee")!.pubkey = pub;
-    signed.signedMessage = { ...signed.signedMessage, status: "2026-10-11", message: signed.signedMessage.message.replace("{DATE}", "2026-10-11"), signature: sig };
+    signed.signedMessage = { ...signed.signedMessage, status: "2026-10-11", message: template.replace("{DATE}", "2026-10-11"), signature: sig };
     assert.equal(signedMessageView(signed).verified, true);
     assert.equal(signedMessageView({ ...signed, signedMessage: { ...signed.signedMessage, signature: b58encode(crypto.randomBytes(64)) } }).status, "invalid");
   });
@@ -131,7 +133,7 @@ describe("TODO-OWNER.md: every placeholder, every pointer", () => {
   test("every TODO_ placeholder in the trust-pack files is on the page", () => {
     const files = ["config/burnticker/operator.json", "config/burnticker/expenses.json", "config/burnticker/transparency.json", "config/public-repo/overlay/SECURITY.md"];
     const all = new Set(files.flatMap((f) => placeholders(f.endsWith(".json") ? JSON.parse(read(f)) : read(f)).map((p) => p.value)));
-    assert.ok(all.size >= 8, `${all.size} placeholders`);   // 20 at the trust pack; the bounty wallet and Squads member A were set on 2026-10-11, the mainnet keeper and deployer keys later that day (website-9); TODO_THIRD_SIGNER_NAME settled 2026-10-12 (owner: member C stays anonymous)
+    assert.ok(all.size >= 7, `${all.size} placeholders`);   // 7 since the operator statement was signed on 2026-10-14 (TODO_SIGNED_MESSAGE gone)   // 20 at the trust pack; the bounty wallet and Squads member A were set on 2026-10-11, the mainnet keeper and deployer keys later that day (website-9); TODO_THIRD_SIGNER_NAME settled 2026-10-12 (owner: member C stays anonymous)
     for (const v of all) assert.ok(doc.includes(v), `${v} is missing from docs/burnticker/TODO-OWNER.md`);
   });
   test("every `file:line` (and `:line` after it) points at a line that holds the token named beside it", () => {
@@ -276,7 +278,7 @@ describe("the six v1 routes (API 1.5.0)", () => {
     const rec = await callRoute(`${API}/check/receipts`); assert.equal(rec.status, 200); const r = await rec.json(); ok("CheckReceipts", r);
     assert.equal(r.receipts.length, 7); assert.ok(r.rules["config/burnkeeper/deficit.devnet.rules.json"]);
     const op0 = await (await callRoute(`${API}/operator`)).json(); ok("OperatorView", op0);
-    assert.equal(op0.neverBuys.status, "not-run"); assert.equal(op0.signedMessage.status, "todo");
+    assert.equal(op0.neverBuys.status, "not-run"); assert.equal(op0.signedMessage.status, "signed");
     assert.ok(op0.placeholders.some((p: { value: string }) => p.value === "TODO_ENTITY"));
     fs.writeFileSync(path.join(dir, NEVER_BUYS_FILE), JSON.stringify({ schema: "burnticker.never-buys/v1", ranAt: "2026-10-10T00:00:00Z", cluster: "devnet", status: "explained", line: NEVER_BUYS_STATUS.explained, wallets: [], mints: [], holdings: [], acquisitions: [], scanned: { tokenAccounts: 0, transactions: 0 }, errors: [] }));
     const op1 = await (await callRoute(`${API}/operator`)).json(); assert.equal(op1.neverBuys.status, "explained");
