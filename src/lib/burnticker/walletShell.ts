@@ -43,6 +43,19 @@ export function walletEndpoint(cluster: string, env: Env = {}): string {
   return set || PUBLIC_RPC[cluster] || PUBLIC_RPC.mainnet;
 }
 
+/**
+ * The adapter's websocket (2026-10-15: the browser logged "ws error" dozens of times a page). With NEXT_PUBLIC_BURNTICKER_RPC_URL set the
+ * HTTP endpoint is this site's own proxy (/api/burnticker/rpc, rpcProxy.ts), which forwards POSTs only, so web3.js's derived wss://<site>/api/burnticker/rpc
+ * never opens and reconnects forever. Subscriptions (confirmTransaction's signature notice) go to the public cluster's websocket instead,
+ * an origin the app's CSP already allows (csp.ts connect-src). No key is in it. Without the setting the endpoint is the public cluster's
+ * own and web3.js derives the same wss itself (undefined here). Localnet keeps web3.js's own derivation.
+ */
+export const PUBLIC_WS: Record<string, string> = { mainnet: "wss://api.mainnet-beta.solana.com", devnet: "wss://api.devnet.solana.com" };
+export function walletWsEndpoint(cluster: string, env: Env = {}): string | undefined {
+  if (!(env.NEXT_PUBLIC_BURNTICKER_RPC_URL ?? "").trim()) return undefined;
+  return PUBLIC_WS[cluster] ?? (cluster === "localnet" ? undefined : PUBLIC_WS.mainnet);
+}
+
 /** True when a page's address asks for the wallet list on arrival (the static pages' deep link). */
 export const wantsConnect = (search: string): boolean => /(?:^|[?&])connect=1(?:&|$)/.test(search);
 

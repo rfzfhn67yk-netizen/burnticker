@@ -5,10 +5,9 @@ import { homeData, type HomeCoin } from "@/lib/burnticker/home";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import { readAudit } from "@/lib/burnticker/trust";
 import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
-import { eventsFromStatus } from "@/lib/burnticker/activity";
-import { readinessFromStatus } from "@/lib/burnticker/readiness";
+import { homeRowOf } from "@/lib/burnticker/homeRow";
 import { deficitRuleSchedule, readKeeperFiles } from "@/lib/burnticker/deficitQueue";
-import { upcomingFromKeeper, upcomingFromStatus, upcomingSet, type UpcomingOmitted, type UpcomingRow } from "@/lib/burnticker/upcoming";
+import { upcomingFromKeeper, upcomingSet, type UpcomingOmitted, type UpcomingRow } from "@/lib/burnticker/upcoming";
 import { deficitCreated, rehearsalCreate, type RehearsalCurve } from "@/lib/burnticker/home";
 import { readKeeperCurve } from "@/lib/burnticker/market";
 import { featuredSlots, type FeaturedInput } from "@/lib/burnticker/featuredSlots";
@@ -60,6 +59,13 @@ export async function GET() {
 }
 
 async function buildHome(): Promise<unknown> {
+  const started = Date.now();
+  const { body, n } = await buildHomeBody();
+  console.info(`[burnticker/home] built in ${Date.now() - started} ms, ${n} coins`);
+  return body;
+}
+
+async function buildHomeBody(): Promise<{ body: unknown; n: number }> {
   const p = platform();
   const now = Date.now();
   const statuses = [];
@@ -79,8 +85,11 @@ async function buildHome(): Promise<unknown> {
     // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
     const shared = sharedTickers(tokens);
     // 2026-10-15 (owner: "coins tab isn't loading"): with five live coins the reads ran one after another and took 17–40 s, past the
-    // proxy's 20 s limit; they now run four at a time, and the whole answer is kept for HOME_MEMO_MS (below)
-    const reads = await allLimited(tokens.map((t) => () => tokenPageData(p, t, now)), 4);
+    // proxy's 20 s limit; they now run four at a time, and the whole answer is kept for HOME_MEMO_MS (below). Each coin is read `lite`
+    // (server.ts tokenPageInput): only what the home renders, at once, without the LP lock, the pair side, the graduated pool or balances
+    // 2026-10-15: six at a time (was four): a lite read sends fewer requests than a full one, in about half the round trips, so five live
+    // coins read in one wave (an estimated 4 s on Helius) instead of two
+    const reads = await allLimited(tokens.map((t) => () => tokenPageData(p, t, now, { lite: true })), 6);
     for (const [i, t] of tokens.entries()) {
       const key = coinKey(t, shared);
       try {
@@ -88,12 +97,10 @@ async function buildHome(): Promise<unknown> {
         if (r.status === "rejected") throw r.reason;
         const d = r.value;
         statuses.push(d.status);
-        const latest = d.receipts.filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
-        const readiness = readinessFromStatus(d.status, d.receipts);
-        coins.push({ ...homeCoinOf(d.status), cluster: d.status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(d.status, d.receipts, key) });
-        slotInputs.push({ ticker: d.status.ticker, group: d.status.cluster === "mainnet" && d.status.status !== "draft" ? "public" : "test", burns: d.receipts.filter((r) => r.status === "confirmed").map((r) => ({ settledAt: r.settledAt })), createdAt: d.status.launchedAt ?? null, poolRegistered: ["awaiting-event", "below-floor", "deferred", "burned"].includes(readiness.state) });
-        const row = upcomingFromStatus(d.status, d.receipts, key, t.mint);
-        if (row) upcoming.push(row);
+        const row = homeRowOf(d.status, d.receipts, key, t.mint);
+        coins.push(row.coin);
+        slotInputs.push(row.slot);
+        if (row.upcoming) upcoming.push(row.upcoming);
       } catch (e) {
         console.error(`[burnticker/home] ${t.ticker}: the coin's page could not be read:`, e);
         coins.push({ ticker: t.ticker, mint: t.mint, burns: 0, lastBurnAt: null, readOk: false });
@@ -124,14 +131,6 @@ async function buildHome(): Promise<unknown> {
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: ranks.get(c.ticker)?.line ?? null }));
   const slots = coins === null ? null : featuredSlots(slotInputs, now);
-  return { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster };
+  return { n: coins?.length ?? 0, body: { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster } };
 }
 
-function homeCoinOf(s: Parameters<typeof buildPlatformIndex>[0][number]): HomeCoin {
-  const c = s.market?.curve ?? null;
-  return {
-    ticker: s.ticker, mint: s.mint, burns: s.burned.count, burned: s.burned.total, pctOfSupply: s.burned.pctOfSupply, lastBurnAt: s.burned.lastAt ?? null,
-    launchedAt: s.launchedAt ?? null, phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null,
-    raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null, marketCap: c?.marketCap ?? null, holders: s.market?.holders.count ?? null,
-  };
-}

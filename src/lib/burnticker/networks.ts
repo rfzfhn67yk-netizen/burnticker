@@ -25,7 +25,7 @@ export const PROGRAM_IDS: Record<Network, { burn_receipts: string; pair_curve: s
  * frozen with scripts/burnticker-lut.mts; `verify` prints the diff against the expected entries.
  */
 export const LOOKUP_TABLES: Record<Network, { address: string | null; authority: string | null }> = {
-  devnet: { address: null, authority: null },
+  devnet: { address: "Es59YYRMUEJj1rNTXcrCDueJ78P2GKrHPe3BaKqqRmkZ", authority: null },   // made and frozen 2026-10-15 from the synthetic creator's devnet wallet (tx 3TS5fqUV…)
   mainnet: { address: "8DZaHFo6UnJk5br29BcRQZmdEKRpzKJTCyz1dRsHhJ2T", authority: null },
 };
 

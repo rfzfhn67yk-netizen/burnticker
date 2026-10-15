@@ -121,7 +121,13 @@ export default function TokenPage() {
   const [tab, setTab] = useState<CoinTab>("burns");
   // owner 2026-10-12, tickers are not unique: the segment is a mint or a ticker, and a ticker several coins share answers 300 with the coins
   const [choices, setChoices] = useState<{ ticker: string; candidates: CoinCandidate[] } | null>(null);
-  useEffect(() => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (r.status === 300) { setChoices(j); return; } if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [ticker]);
+  // 2026-10-15: a coin read for the first time answers 503 "coin-loading" after a bounded wait (the route's memo); the page asks again
+  useEffect(() => {
+    let gone = false, timer: ReturnType<typeof setTimeout> | undefined;
+    const load = (tries: number): void => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (gone) return; if (r.status === 300) { setChoices(j); return; } if (r.status === 503 && j?.code === "coin-loading" && tries < 6) { timer = setTimeout(() => load(tries + 1), Math.max(1, Number(j.retryAfterSec) || 3) * 1000); return; } if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => { if (!gone) setErr(String(e.message ?? e)); }); };
+    load(0);
+    return () => { gone = true; clearTimeout(timer); };
+  }, [ticker]);
   // website-17 wiring item 1: the rank line from the creator summary; nothing when the read fails (never a guessed rank)
   const [rank, setRank] = useState<string | null>(null);
   useEffect(() => { const c = d?.status.addresses.creator, t = d?.status.ticker; if (!c || !t) return; fetch(`/burnticker/creator/${encodeURIComponent(c)}/summary`).then((r) => (r.ok ? r.json() : null)).then((j: { coins?: { ticker: string; rank: string | null }[] } | null) => setRank(j?.coins?.find((x) => x.ticker === t)?.rank ?? null)).catch(() => setRank(null)); }, [d]);

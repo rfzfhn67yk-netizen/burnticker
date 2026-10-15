@@ -168,8 +168,19 @@ export function imageTakenDown(mint: string, root = process.cwd()): boolean {
 /** For tests: a platform over an in-memory registry and injected clients. */
 export function setPlatformForTests(p: Platform | null): void { cached = p; }
 
+/**
+ * `lite` (2026-10-15, the home's coin list): the reads the home renders, and only those, run at once instead of one phase after another.
+ * Skipped, because no home consumer reads them (homeRow.ts homeRowOf: homeCoinOf, eventsFromStatus, upcomingFromStatus, readinessFromStatus and the
+ * featured-slot input; homeData takes only the index's totals and audit): the graduated pool's market cap (cpmm; the home's market cap is
+ * the curve's), the burn-pool and vault balances (status.pool and the lifecycle line), the LP lock block (status.lp falls back to the
+ * policy alone) and the pair counterpart (status.pair). Kept, because the home renders them: the series title (the next-result row), the
+ * supply and the curve (progress, raised, market cap, phase), the program block (last reading, pool registration), the holder count and
+ * the lifecycle dates (the created date and the dated graduation and pool rows). The coin page never passes `lite`.
+ */
+export type TokenPageOpts = { live?: boolean; lite?: boolean };
+
 /** Everything the token page needs, from the registry and the (fake or real) program. No odds are read (owner decision 2026-10-10). */
-export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(), opts: { live?: boolean } = {}): Promise<TokenPageInput> {
+export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(), opts: TokenPageOpts = {}): Promise<TokenPageInput> {
   const locked = p.registry.lockedRule(t);
   const readings = p.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
   const state = p.registry.state(t.mint);
@@ -178,7 +189,8 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   // (venues.ts): no market-implied chance for any coin (owner decision 2026-10-10); series titles from Kalshi only when enabled, from Polymarket only with discovery on.
   const isK = locked.rule.oracle === "kalshi", isP = locked.rule.oracle === "polymarket";
   const kOk = p.kalshiEnabled !== false, pOk = p.polymarketDiscovery !== false;
-  const [implied, info] = opts.live === false ? ([null, null] as const) : await Promise.all([
+  const lite = opts.lite === true;
+  const impliedInfo = () => opts.live === false ? Promise.resolve([null, null] as const) : Promise.all([
     // No odds for any coin (owner decision 2026-10-10): no market-implied chance is read for Kalshi or Polymarket; Burn Derby's call only
     // gives the next window's close time (its chance is always null).
     locked.rule.oracle !== "derby" ? Promise.resolve(null) : oracle.impliedChance(locked.rule, state.lastValue).catch(() => null),
@@ -186,22 +198,44 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   ]);
   const feedState = p.registry.feedState(t.selectorKey);
   const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
-  const [supplyRaw, feePdaLamports, vaultRaw] = await Promise.all([p.program.supplyRaw(t.mint).catch(() => null), p.program.feePdaBalanceLamports(t.mint).catch(() => null), locked.mode === "vault" ? p.program.vaultBalanceRaw(t.mint).catch(() => null) : Promise.resolve(null)]);
   const live = !!p.market && opts.live !== false && t.status !== "draft" && t.status !== "expired";
-  const market = live && p.market
-    ? await readMarket(p.market, { cluster: p.cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: supplyRaw ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS), decimals: DECIMALS }, now).catch(() => null)
-    : null;
-  const programBlock = await programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading"));
-  // indexer-1 (WIRING.md step 1): the graduated pool's market cap, the holder count and the lifecycle dates, read on chain; each read
-  // returns its own "unavailable" reason, never a guess
-  const poolRegistered = programBlock?.config ? !!programBlock.config.poolRegistered : null;
-  const poolAddress = programBlock?.config?.pool ?? null;
   const network = p.cluster === "localnet" ? null : p.cluster;
   const rpc = live && network ? jsonRpc(rpcUrlFor(network)) : null;
+  const supplyRead = () => p.program.supplyRaw(t.mint).catch(() => null);
+  const marketRead = (supplyRaw: bigint | null) => live && p.market
+    ? readMarket(p.market, { cluster: p.cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: supplyRaw ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS), decimals: DECIMALS }, now).catch(() => null)
+    : Promise.resolve(null);
+  const programRead = () => programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading"));
+  const holdersRead = () => rpc ? readHolders(rpc, { cluster: p.cluster, mint: t.mint, labels: { ...poolOwnerLabels(p.cluster), [t.feePda]: "burn pool", [t.creator]: "creator" } }, now) : Promise.resolve(null);
+  const datesRead = (market: Awaited<ReturnType<typeof marketRead>>, poolRegistered: boolean | null) => rpc && network ? readLifecycleDates(rpc, { network, mint: t.mint, launchTx: t.launchTx, curvePool: t.poolId, phase: market?.pool && t.poolId ? curveProgress(market.pool, t.poolId).phase : null, poolRegistered }, now) : Promise.resolve(null);
+  const registeredOf = (b: Awaited<ReturnType<typeof programRead>>) => (b?.config ? !!b.config.poolRegistered : null);
+  if (lite) {
+    // the home's reads at once: supply then curve then dates on one path, the program block, the holders and the series title beside it
+    const programP = programRead();
+    const marketP = supplyRead().then(async (supplyRaw) => ({ supplyRaw, market: await marketRead(supplyRaw) }));
+    const [[implied, info], { supplyRaw, market }, programBlock, holders] = await Promise.all([impliedInfo(), marketP, programP, holdersRead()]);
+    const dates = await datesRead(market, registeredOf(programBlock));
+    return {
+      market, cpmm: null, holders, dates, stated: info && "stated" in info && info.stated ? info.stated : null, pair: null,
+      lifecycle: lifecycleFrom(p.registry, t, locked.rule, null), meta: p.registry.tokenMeta(t.mint),
+      token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
+      chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports: null, vaultRaw: null, program: programBlock },
+      now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
+      operator: operatorPowersSummary(loadPowersRegister()),
+    };
+  }
+  const [implied, info] = await impliedInfo();
+  const [supplyRaw, feePdaLamports, vaultRaw] = await Promise.all([supplyRead(), p.program.feePdaBalanceLamports(t.mint).catch(() => null), locked.mode === "vault" ? p.program.vaultBalanceRaw(t.mint).catch(() => null) : Promise.resolve(null)]);
+  const market = await marketRead(supplyRaw);
+  const programBlock = await programRead();
+  // indexer-1 (WIRING.md step 1): the graduated pool's market cap, the holder count and the lifecycle dates, read on chain; each read
+  // returns its own "unavailable" reason, never a guess
+  const poolRegistered = registeredOf(programBlock);
+  const poolAddress = programBlock?.config?.pool ?? null;
   const [cpmm, holders, dates] = await Promise.all([
     live && p.market && poolRegistered && poolAddress ? readCpmmMarket(p.market as unknown as CpmmReader, { cluster: p.cluster, mint: t.mint, poolId: poolAddress }, now) : Promise.resolve(null),
-    rpc ? readHolders(rpc, { cluster: p.cluster, mint: t.mint, labels: { ...poolOwnerLabels(p.cluster), [t.feePda]: "burn pool", [t.creator]: "creator" } }, now) : Promise.resolve(null),
-    rpc && network ? readLifecycleDates(rpc, { network, mint: t.mint, launchTx: t.launchTx, curvePool: t.poolId, phase: market?.pool && t.poolId ? curveProgress(market.pool, t.poolId).phase : null, poolRegistered }, now) : Promise.resolve(null),
+    holdersRead(),
+    datesRead(market, poolRegistered),
   ]);
   return {
     market, cpmm, holders, dates,
@@ -237,7 +271,7 @@ export async function pairCounterpart(p: Platform, t: TokenRow): Promise<PairCou
   return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards: pairForwardsJson(p.registry, pair.pairId, other.cluster), unpaired: pairUnlinked(p.registry, pair.pairId), ...(await pairChainFields(p.program.pairForward ? (a, b) => p.program.pairForward!.port(a, b).links() : undefined, pair.mintA, pair.mintB, side)) };
 }
 
-export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), opts: { live?: boolean } = {}): Promise<{ status: TokenStatusJson; receipts: ReceiptJson[]; readings: TokenPageInput["readings"]; rulesText: string; stubs: string[] }> {
+export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), opts: TokenPageOpts = {}): Promise<{ status: TokenStatusJson; receipts: ReceiptJson[]; readings: TokenPageInput["readings"]; rulesText: string; stubs: string[] }> {
   const input = await tokenPageInput(p, t, now, opts);
   const receipts = buildReceiptsJson(input);
   const status = buildTokenStatus(input, receipts);

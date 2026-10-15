@@ -475,6 +475,17 @@ export class Registry {
   voidPendingPair(mint: string, reason: string, now = Date.now()): number { return Number(this.db.prepare("UPDATE burns SET status='voided', skipped_reason=?, updated_at=? WHERE mint=? AND status='pending-pair'").run(reason.slice(0, 300), now, mint).changes); }
 
   receipt(mint: string, eventId: string): ReceiptRow | null { const r = this.db.prepare("SELECT * FROM burns WHERE mint=? AND event_id=?").get(mint, eventId) as Row | undefined; return r ? toReceipt(r) : null; }
+  /**
+   * 2026-10-15 (the coin route's memo): a short string that changes when the coin's page must be read again at once: a launch or any
+   * status change (the token row), a new or changed receipt (the burns' count and newest updated_at) and a settled reading (token_state).
+   * Cheap: three indexed reads by mint.
+   */
+  pageVersion(mint: string): string {
+    const t = this.db.prepare("SELECT status, launch_tx, pool_id, image_url, length(description) AS dl FROM tokens WHERE mint=?").get(mint) as Row | undefined;
+    const b = this.db.prepare("SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM burns WHERE mint=?").get(mint) as Row | undefined;
+    const st = this.db.prepare("SELECT updated_at AS u FROM token_state WHERE mint=?").get(mint) as Row | undefined;
+    return [t?.status ?? "", t?.launch_tx ?? "", t?.pool_id ?? "", t?.image_url ?? "", t?.dl ?? "", b?.n ?? 0, b?.u ?? "", st?.u ?? ""].map(String).join("|");
+  }
   receipts(mint: string): ReceiptRow[] { return (this.db.prepare("SELECT * FROM burns WHERE mint=? ORDER BY settled_at, event_id").all(mint) as Row[]).map(toReceipt); }
   pending(mint: string): ReceiptRow[] { return (this.db.prepare("SELECT * FROM burns WHERE mint=? AND status IN ('planned','sending') ORDER BY settled_at, event_id").all(mint) as Row[]).map(toReceipt); }
   /** Fixes the spend (buyback) or burn (vault) and the memo once; a retry sends the same bytes. */
