@@ -122,14 +122,15 @@ const sameBytes = (a: Uint8Array | undefined, b: Uint8Array | undefined) => !!a 
 
 /**
  * LAUNCH INTEGRITY 253: what is wrong with the transaction a wallet hands back, or null when it is the one built here plus the wallet's
- * signature. The rule is exact, by design: the wallet may only fill its own signature slot. Its message bytes (fee payer, blockhash,
+ * signature. The rule is exact, by design: the wallet may only fill its own signature slot — and, since Phantom's review (2026-10-14),
+ * append its own Lighthouse safety-check instructions after ours (appendedGuardProblem). Its message bytes (fee payer, blockhash,
  * signers, accounts, instructions, lookup tables) must equal what it was handed, and every key signature this page had already added
  * (the mint keys; none in the shipped order, where the wallet signs first and the keys sign after) must still be there, byte for byte. A changed message would void those signatures anyway, so no supported wallet can change it and
  * still produce a transaction that lands; a wallet that tries (an added instruction, a different fee payer) is refused before the send.
  * Equal message bytes plus the page's own signature bytes means the mint signatures still verify (they were made over those bytes here).
  * The wallet's own signature is checked only for presence; a bad one is refused by the network, which charges nothing for it.
  */
-export function walletReturnProblem(handed: { message: Uint8Array; signatures: Uint8Array[] }, returned: VersionedTransaction, step: SignStep, plan: Pick<SignPlan, "expect" | "labels">): string | null {
+export function walletReturnProblem(handed: { message: Uint8Array; signatures: Uint8Array[] }, returned: VersionedTransaction, step: SignStep, plan: Pick<SignPlan, "expect" | "labels">, tables: AddressLookupTableAccount[] = []): string | null {
   let got: Uint8Array;
   try { got = returned.message.serialize(); } catch { return "the wallet returned something that is not a transaction"; }
   if (!sameBytes(got, handed.message)) {
@@ -140,7 +141,11 @@ export function walletReturnProblem(handed: { message: Uint8Array; signatures: U
     if (before.staticAccountKeys[0]?.toBase58() !== after.staticAccountKeys[0]?.toBase58()) return "the wallet changed who pays the fee";
     if (before.recentBlockhash !== after.recentBlockhash) return "the wallet changed the transaction's blockhash";
     if (keys(before).join(",") !== keys(after).join(",")) return "the wallet changed who signs the transaction";
-    return "the wallet changed the transaction's instructions or accounts";
+    // Phantom's dApp review (ticket 438485, 2026-10-14): the wallet signs first and its Lighthouse guard APPENDS assertion instructions.
+    // That is the one change accepted: our instructions first, byte for byte (resolved accounts, flags, data), then only extra
+    // instructions whose program is Lighthouse or the compute-budget program, adding no signer. Anything else is refused.
+    const why = appendedGuardProblem(before, after, tables);
+    if (why) return why;
   }
   const n = returned.message.header.numRequiredSignatures;
   if (returned.signatures.length !== n) return "the wallet changed who signs the transaction";
@@ -152,6 +157,32 @@ export function walletReturnProblem(handed: { message: Uint8Array; signatures: U
     if (!hasSignature(handed.signatures[at])) continue; // not signed yet: the key signs after the wallet (signStepKeys)
     if (!sameBytes(returned.signatures[at], handed.signatures[at])) return `the wallet removed or changed ${plan.labels[s] ?? s}'s signature`;
   }
+  return null;
+}
+
+/** Programs a wallet may append instructions from (Phantom's Lighthouse guard; the compute-budget program it may size with). */
+export const WALLET_GUARD_PROGRAMS: readonly string[] = ["L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95", "ComputeBudget111111111111111111111111111111"];
+
+/** One instruction in resolved form: program, accounts with their flags, data — comparable across two compilations. */
+function resolvedInstructions(m: VersionedTransaction["message"], tables: AddressLookupTableAccount[]): { program: string; accounts: string[]; data: string }[] | null {
+  let keys: ReturnType<VersionedTransaction["message"]["getAccountKeys"]>;
+  try { keys = m.getAccountKeys({ addressLookupTableAccounts: tables }); } catch { return null; }
+  return m.compiledInstructions.map((ix) => ({
+    program: keys.get(ix.programIdIndex)?.toBase58() ?? "?",
+    accounts: ix.accountKeyIndexes.map((i) => `${keys.get(i)?.toBase58() ?? "?"}:${m.isAccountSigner(i) ? "s" : "-"}${m.isAccountWritable(i) ? "w" : "-"}`),
+    data: Buffer.from(ix.data).toString("base64"),
+  }));
+}
+
+/** Why the returned message is not "ours plus appended guard instructions", or null when it is exactly that. */
+export function appendedGuardProblem(before: VersionedTransaction["message"], after: VersionedTransaction["message"], tables: AddressLookupTableAccount[]): string | null {
+  const ours = resolvedInstructions(before, tables), theirs = resolvedInstructions(after, tables);
+  if (!ours || !theirs) return "the wallet changed the transaction's instructions or accounts";
+  if (theirs.length < ours.length) return "the wallet changed the transaction's instructions or accounts";
+  const same = (a: { program: string; accounts: string[]; data: string }, b: typeof a) => a.program === b.program && a.data === b.data && a.accounts.join("|") === b.accounts.join("|");
+  for (let i = 0; i < ours.length; i++) if (!same(ours[i], theirs[i])) return "the wallet changed the transaction's instructions or accounts";
+  // (an extra instruction may name the fee payer, who is already a signer; a NEW signer is caught above by the required-signer check)
+  for (const extra of theirs.slice(ours.length)) if (!WALLET_GUARD_PROGRAMS.includes(extra.program)) return "the wallet added an instruction that is not its own safety check";
   return null;
 }
 
@@ -476,7 +507,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
         if (dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry}`);
       }
       const signed = await d.signTransaction(built);
-      const changed = walletReturnProblem(handed, signed, plan.steps[i], plan);
+      const changed = walletReturnProblem(handed, signed, plan.steps[i], plan, lut ? [lut] : []);
       if (changed) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because ${changed}`);
       signStepKeys(signed, plan.steps[i], plan.keys);
       // the integrity check above ran first; only then is the blockhash's age looked at (a stale one is re-checked on chain)

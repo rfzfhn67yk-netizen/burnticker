@@ -1,5 +1,6 @@
 "use client";
 
+import { LAUNCHING_NOTICE } from "@/lib/burnticker/mintAddressCopy";
 import type { StatedJson } from "@/lib/burnticker/pageTypes";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 
@@ -464,6 +465,7 @@ export function ReviewCard(p: ReviewCardProps) {
         {fieldProblems.length > 0 && problemList("Not ready to launch", problemsId)}
         {p.blocked && <p id={blockedId} className="min-w-0 break-words text-xs text-amber-300" data-wallet-blocked>{p.blocked}</p>}
         <button ref={launchBtn} type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-40" aria-describedby={[p.blocked ? blockedId : "", fieldProblems.length ? problemsId : ""].filter(Boolean).join(" ") || undefined} disabled={!p.ready || p.busy || p.problems.length > 0 || !!p.blocked || fieldProblems.length > 0} onClick={launch}>{label}</button>
+        {p.busy && <p className="min-w-0 break-words text-sm text-amber-300" role="status" aria-live="polite" data-launching>{LAUNCHING_NOTICE}</p>}
         {!p.creator && !p.blocked && <p className="min-w-0 break-words text-[11px] text-neutral-500" data-connect-note>Connecting shares only your wallet&apos;s public address. The button then becomes Launch, and launching is a separate step that your wallet asks you to sign.</p>}
       </div>
       {/* website-15 item 12 (Claude site audit 3 item 9; ChatGPT repairs 1 and 6): every word is kept, collapsed below the button */}

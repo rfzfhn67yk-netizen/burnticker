@@ -111,6 +111,23 @@
 	@app path /burnticker /burnticker/* /api/burnticker/* /_next/*
 	handle @app {
 		import security
+		# 2026-10-14: a launch prepare pins the coin's metadata and art on Arweave and runs the pre-launch check, which can take longer
+		# than 20 s; at 20 s Caddy was answering the launch with the fallback 503 ("the app is catching up"). 90 s stays under
+		# Cloudflare's 100 s origin limit. Everything else on the API keeps 20 s.
+		@app_launch path /api/burnticker/launch /api/burnticker/launch/*
+		handle @app_launch {
+			reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
+				header_up X-Forwarded-Proto {scheme}
+				transport http {
+					dial_timeout 3s
+					response_header_timeout 90s
+				}
+				@upstream_5xx status 5xx
+				handle_response @upstream_5xx {
+					import app_fallback_api
+				}
+			}
+		}
 		@app_api path /api/burnticker/*
 		handle @app_api {
 			reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {

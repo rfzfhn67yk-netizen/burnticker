@@ -49,3 +49,14 @@ describe("the anti-clone guard lets a creator's own draft through on a retry", (
     assert.match(other?.error ?? "", /already registered/);
   });
 });
+
+describe("while a launch is being prepared the page says so (owner, 2026-10-14)", () => {
+  test("the notice passes the copy lint and the review card renders it only while busy", async () => {
+    const { LAUNCHING_NOTICE } = await import("@/lib/burnticker/mintAddressCopy");
+    const { lintCopy } = await import("@/lib/launch/copyLint");
+    assert.deepEqual(lintCopy(LAUNCHING_NOTICE).hits, []);
+    assert.match(LAUNCHING_NOTICE, /Keep this tab open/);
+    const src = (await import("node:fs")).readFileSync(new URL("../src/app/burnticker/launch/ReviewCard.tsx", import.meta.url), "utf8");
+    assert.match(src, /\{p\.busy && <p [^>]*data-launching>\{LAUNCHING_NOTICE\}<\/p>\}/);
+  });
+});
