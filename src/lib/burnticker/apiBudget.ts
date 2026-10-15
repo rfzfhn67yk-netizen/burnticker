@@ -61,7 +61,9 @@ export const SOURCES: readonly SourceSpec[] = [
   { id: "nba-cdn", label: "NBA data feed", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "espn", label: "ESPN site API", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "polymarket-gamma", label: "Polymarket Gamma", limit: { perSec: 30 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
-  { id: "polygon-rpc", label: "Polygon public RPC", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
+  // 2026-10-14: the house limit (0.5/s) refused a launch preflight — one payout read is three eth_calls in a row, and the web lane had
+  // one call every 8 s. No public node publishes a limit; 4/s, 60/min, 2,000/day stays polite and lets a preflight run at once.
+  { id: "polygon-rpc", label: "Polygon public RPC", limit: { perSec: 4, perMin: 60, perDay: 2_000 }, established: false, unit: "request", shares: { keeper: 0.5, web: 0.5 } },
   { id: "kalshi", label: "Kalshi API", limit: { perSec: 20 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "pyth-hermes", label: "Pyth Hermes", limit: { perSec: 1 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "irys", label: "Irys uploads", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.5, web: 0.5 } },
