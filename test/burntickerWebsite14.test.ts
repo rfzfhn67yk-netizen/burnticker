@@ -358,7 +358,7 @@ describe("item 11: the graduation preset, 40 / 60 / 85 SOL (§75)", () => {
     for (const [raise, lamports] of [["40", "40000000000"], [undefined, "85000000000"]] as const) {
       const d = await prepareLaunch(w.p, { ...body, ticker: raise ? "ZQXK" : "ZQXL", ...(raise ? { raiseSol: raise } : {}) }, { register: false });
       assert.ok("ok" in d, JSON.stringify((d as { error?: unknown }).error));
-      const ix = d.ok.bundle.transactions[0].instructions.find((i) => /initializeV2/.test((i as { label?: string }).label ?? ""))!;
+      const ix = d.ok.bundle.transactions.flatMap((t) => t.instructions).find((i) => /initializeV2/.test((i as { label?: string }).label ?? ""))!;
       assert.equal(JSON.parse(Buffer.from(ix.dataBase64, "base64").toString("utf8")).totalFundRaisingB, lamports);
     }
   });

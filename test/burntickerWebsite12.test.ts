@@ -173,14 +173,14 @@ describe("Codex F1: the pre-wallet review comes from the venue the bundle route 
     assert.ok(v.recovery.some((x) => /reject a later request/.test(x)) && v.recovery.some((x) => /finish every step/.test(x)));
     for (const t of [...v.recovery, v.prerequisiteLine, v.costs.note, ...v.costs.lines.map((l) => l.label), ...v.transactions.steps.map((s) => s.label)]) lintOk(t, "pair-curve review");
   });
-  test("the same pair with the pair curve off is four LaunchLab transactions (each coin locks its rule, then is created), and a mainnet host refuses it as unavailable; a single coin is one", () => {
+  test("the same pair with the pair curve off is four LaunchLab transactions (each coin locks its rule, then is created), and a mainnet host refuses it as unavailable; a single coin is two (2026-10-15)", () => {
     const off = buildLaunchReview({ rule: RULE, ticker: "BRONCOS", name: "Broncos", pair: { ticker: "CHIEFS", name: "Chiefs" } }, { env: { BURNTICKER_CLUSTER: "devnet", [CREATOR_LAUNCHES_FLAG]: "1" } });
     assert.ok("review" in off); assert.deepEqual([off.review.venue, off.review.transactions.count], ["launchlab", 4]);   // 2026-10-14, Phantom review ticket 438485
     const main = buildLaunchReview({ rule: RULE, ticker: "BRONCOS", name: "Broncos", companion: { ticker: "CHIEFS", name: "Chiefs" } }, { env: { BURNTICKER_CLUSTER: "mainnet", BURNTICKER_THESPORTSDB_KEY: "k", [CREATOR_LAUNCHES_FLAG]: "1" } });
     assert.ok("review" in main); assert.equal(main.review.typeAvailable, false, "a two-coin Matchup is a pair path"); assert.match(main.review.typeReason!, /^Paired launches are not available yet\./);
     assert.equal(main.review.signable, false); assert.equal(main.review.signing, main.review.typeReason);
     const one = buildLaunchReview({ rule: RULE, ticker: "BRONCOS", name: "Broncos" }, { env: { BURNTICKER_CLUSTER: "mainnet", BURNTICKER_THESPORTSDB_KEY: "k", [CREATOR_LAUNCHES_FLAG]: "1" } });
-    assert.ok("review" in one); assert.equal(one.review.transactions.count, 1); assert.equal(one.review.recovery.length, 2);
+    assert.ok("review" in one); assert.equal(one.review.transactions.count, 2); assert.equal(one.review.recovery.length, 4); assert.match(one.review.recovery[0], /asks 2 separate times/);
     // website-14 (§75): no raise named = the default preset, LaunchLab's standard 85 SOL; the line names the coin's own raise
     assert.equal(one.review.prerequisiteLine, prerequisiteLineFor("launchlab", "85")); assert.match(one.review.prerequisiteLine, new RegExp(`raise ${Number(LAUNCHLAB_RAISE_LAMPORTS) / 1e9} SOL`));
     assert.equal(one.review.signing, SIGNING_UNAVAILABLE, "today no launch can be signed here, and the review says so");

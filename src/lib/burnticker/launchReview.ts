@@ -73,8 +73,9 @@ export interface LaunchReview {
   transactions: { count: number; steps: { label: string; signers: string[] }[]; note: string };
   /**
    * Round 5 (WIRING-ROUND5 item 4): every coin that pins a real token, with the step (1-based, as `rules[].step`) whose label starts
-   * "Pin <symbol>'s Raydium pool for $<ticker>", the BurnTarget account's size and rent, and the signatures the pin adds (2 on LaunchLab:
-   * its own transaction; 0 on the pair curve: it rides in the coin's one transaction). Already counted in `transactions` and `costs`:
+   * "Pin <symbol>'s Raydium pool for $<ticker>", the BurnTarget account's size and rent, and the signatures the pin adds (0: on LaunchLab
+   * it rides in the coin's lock step, which every LaunchLab coin signs since 2026-10-15; on the pair curve it rides in the coin's one
+   * transaction). Already counted in `transactions` and `costs`:
    * a page must not add them again. Empty when no coin pins a token.
    */
   pins: { side: "A" | "B"; ticker: string; symbol: string; step: number; bytes: number; rentSol: string; signatures: number }[];
@@ -454,23 +455,19 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       { label: "Network fees for two signatures per transaction. Priority fees are extra.", sol: sol(fee * coins), kind: "fee" },
     ];
     total = launchLabCostLamports(locked.rule.reserveSol, coins);
-    const plainSteps = coins > 1
-      ? [{ label: `Create $${tk(0)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }, { label: pair ? `Create $${tk(1)} and link the two coins` : `Create $${tk(1)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }]
-      : [{ label: `Create $${ticker || "TICKER"} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }];
-    // round 5 (WIRING-ROUND5 items 2 and 4): a coin with a pinned token is two transactions (launchBundle.ts launchTransactions): its rule
-    // locked and the pool pinned, then the coin created; the extra transaction's two signatures are counted here, and in `pins`
+    // Every LaunchLab coin is two transactions (launchBundle.ts launchTransactions), both signed by the wallet and the coin's new key: a
+    // coin that burns itself locks its rule, then is created (2026-10-14 for pairs, Phantom review ticket 438485; 2026-10-15 for every
+    // coin); a coin with a pinned token (round 5, WIRING-ROUND5 items 2 and 4) locks its rule and pins the pool, then is created. Both
+    // transactions' signatures are already in launchLabCostLamports.
+    const signers = ["your wallet", "a new key made for this coin"];
     steps = [];
-    plainSteps.forEach((st, i) => {
+    for (let i = 0; i < coins; i++) {
       const bt = targets[i];
       const t = coins > 1 ? tk(i) : ticker || "TICKER";
-      // 2026-10-14 (Phantom review ticket 438485): a LaunchLab pair coin locks its rule, then is created, in two transactions
-      // (launchBundle.ts launchTransactions `paired`); the extra transaction's two signatures are counted here
-      if (!bt && pair) { steps.push({ label: lockRuleStepText(t, { link: i === 1 }), signers: st.signers }, { label: createAfterPinText(t), signers: st.signers }); total += fee; return; }
-      if (!bt) { steps.push(st); return; }
-      steps.push({ label: pinStepText(t, bt.symbol, { link: !!pair && i === 1 }), signers: st.signers }, { label: createAfterPinText(t), signers: st.signers });
-      pins.push({ side: i === 0 ? "A" : "B", ticker: t, symbol: bt.symbol, step: steps.length - 1, bytes: BURN_TARGET_ACCOUNT_BYTES, rentSol: sol(pinRent), signatures: 2 });
-      total += fee;
-    });
+      if (!bt) { steps.push({ label: lockRuleStepText(t, { link: !!pair && i === 1 }), signers }, { label: createAfterPinText(t), signers }); continue; }
+      steps.push({ label: pinStepText(t, bt.symbol, { link: !!pair && i === 1 }), signers }, { label: createAfterPinText(t), signers });
+      pins.push({ side: i === 0 ? "A" : "B", ticker: t, symbol: bt.symbol, step: steps.length - 1, bytes: BURN_TARGET_ACCOUNT_BYTES, rentSol: sol(pinRent), signatures: 0 });
+    }
     lines[3] = { label: "Network fees for two signatures per transaction. Priority fees are extra.", sol: sol(fee * steps.length), kind: "fee" };
     costNote = "This is an estimate. Your wallet shows the exact amount before you approve. The reserve stays in the coin's burn pool, and the rent stays with the new accounts.";
   }
@@ -497,8 +494,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   else if (o.seasonWarning) warnings.unshift(o.seasonWarning);
   if (o.sourceNote && !warnings.includes(o.sourceNote)) warnings.push(o.sourceNote);
   const n = steps.length;
-  // the first step of side B (1-based): after side A's one or two transactions
-  const stepB = venue === "pair-curve" ? 2 : targets[0] ? 3 : 2;
+  // the first step of side B (1-based): after side A's two transactions (LaunchLab) or its one (pair curve)
+  const stepB = venue === "pair-curve" ? 2 : 3;
   const recovery = n === 1
     ? ["If you reject the request in your wallet, nothing is sent and nothing is charged. The draft is kept for 24 hours, so you can press the button again."]
     : [

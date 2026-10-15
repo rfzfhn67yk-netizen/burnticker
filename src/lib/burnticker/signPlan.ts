@@ -718,8 +718,9 @@ export interface LaunchlabBundleLike { mint: string; ticker: string; ready: bool
 
 /**
  * One or more LaunchLab bundles → one plan, in the order given (a pair: A then B — B's rule names A's mint). Each bundle's "mint" signer
- * becomes its own key; its confirming step is its LAST transaction the mint signs, the one that creates the coin: initialize_token +
- * LaunchLab create, or, for a coin with a pinned token (round 5), the LaunchLab create after [initialize_token + pin_burn_target].
+ * becomes its own key; its confirming step is its LAST transaction the mint signs, the one that creates the coin: the LaunchLab create
+ * after [initialize_token] (every coin that burns itself since 2026-10-15) or after [initialize_token + pin_burn_target] (round 5). A
+ * bundle from before the split (one step, initialize_token + create) confirms on that one step.
  */
 export function launchlabPlan(bundles: readonly LaunchlabBundleLike[]): SignPlan {
   const plan: SignPlan = { steps: [], keys: {}, expect: {}, labels: {}, confirms: [], pending: [], missingKeys: bundles.length > 1 ? "the server did not hand over the mint keys, so the create transactions cannot be signed here" : "the server did not hand over the mint key, so the create transaction cannot be signed here" };

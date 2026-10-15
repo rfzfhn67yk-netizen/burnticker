@@ -135,8 +135,9 @@ export const PIN_IX_LABEL_PREFIX = "burn_receipts.pin_burn_target";
 export const pinStepText = (ticker: string, symbol: string, o: { link?: boolean; thenCreate?: boolean } = {}): string =>
   `Pin ${symbol}'s Raydium pool for $${ticker} after locking in its rule${o.link ? " and linking the two coins" : ""}${o.thenCreate ? `, then create $${ticker}` : ""}`;
 /**
- * The first of a LaunchLab PAIR coin's two transactions (2026-10-14, Phantom review ticket 438485): initialize_token alone, then the
- * create (createAfterPinText). Side B's names the link, because its initialize_token completes the pairing.
+ * The first of a LaunchLab coin's two transactions when it burns itself (pairs since 2026-10-14, Phantom review ticket 438485; every
+ * coin since 2026-10-15): initialize_token alone, then the create (createAfterPinText). A pair's side B names the link, because its
+ * initialize_token completes the pairing.
  */
 export const lockRuleStepText = (ticker: string, o: { link?: boolean } = {}): string => `Lock in $${ticker}'s rule${o.link ? " and link the two coins" : ""}`;
 /** The create step that follows a pin on LaunchLab, or a pair coin's lock step. */

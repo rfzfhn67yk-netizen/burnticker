@@ -590,7 +590,10 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     const b = await buildLaunchBundle({ creator: CREATOR_F3, ticker: "REALL", name: "Real launch", description: "a test", imageUrl: null, links: [], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" },
       { program, launchLab: sdkLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json`, mintKeypair: mintKp });
     const exp = { mint: b.mint, creator: CREATOR_F3, draftCreatedAtMs: NOW - 60_000, rulesSha: b.rules.sha256, venue: { kind: "launchlab" as const, platformId: b.addresses.platformId } };
-    const ixs = b.transactions[0].instructions.map(toIx);
+    // since 2026-10-15 a single coin is two transactions (lock, then create); the fixture joins them into one launch, the shape a
+    // transaction sent before the split had, and the split cases below take the create alone
+    assert.equal(b.transactions.length, 2);
+    const ixs = b.transactions.flatMap((t) => t.instructions).map(toIx);
     return { b, mintKp, exp, ixs, cfg: [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256 })] as [string, { owner: PublicKey; data: Buffer }] };
   };
 
@@ -645,13 +648,15 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     const onlyCreate = ixs.filter((i) => i.programId.toBase58() !== PROGRAM);
     const target = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256, burnTargetKind: 1 })] as const;
     assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [target as never]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
+    // 2026-10-15: every single coin locks its rule one step before its create, so a coin that burns itself is confirmed the same way
     const self = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256 })] as const;
-    const r = await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [self as never]), opts).verify("s", exp);
-    assert.equal(r.ok, false); assert.match(JSON.stringify(r), /does not call the burn_receipts program/);
+    assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [self as never]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
+    const r = await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), []), opts).verify("s", exp);
+    assert.equal(r.ok, false, "a create alone with no TokenConfig on chain is refused"); assert.match(JSON.stringify(r), /does not call the burn_receipts program/);
     const wrongRule = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: "ab".repeat(32), burnTargetKind: 1 })] as const;
     assert.equal((await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [wrongRule as never]), opts).verify("s", exp)).ok, false);
   });
-  test("2026-10-14 (Phantom review ticket 438485): a LaunchLab pair coin is confirmed on its create alone when its TokenConfig on chain is paired (provisional, paired or unlinked); a plain coin's create alone is still refused", async () => {
+  test("2026-10-14 (Phantom review ticket 438485): a LaunchLab pair coin is confirmed on its create alone when its TokenConfig on chain is paired (provisional, paired or unlinked); since 2026-10-15 a plain coin's create alone is too", async () => {
     const { mintKp, exp, ixs, b } = await singleCoin();
     const onlyCreate = ixs.filter((i) => i.programId.toBase58() !== PROGRAM);
     for (const pairState of [1, 2, 3]) {
@@ -659,7 +664,7 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
       assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [paired as never]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW }, `pair_state ${pairState}`);
     }
     const plainCfg = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256, pairState: 0 })] as const;
-    assert.match(JSON.stringify(await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [plainCfg as never]), opts).verify("s", exp)), /does not call the burn_receipts program/);
+    assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [plainCfg as never]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW }, "a single coin's create step (its lock step landed before)");
     const wrongRule = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: "ab".repeat(32), pairState: 2 })] as const;
     assert.equal((await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [wrongRule as never]), opts).verify("s", exp)).ok, false, "a paired config locking another rule is refused");
     const onlyInit = ixs.filter((i) => i.programId.toBase58() === PROGRAM);
@@ -757,9 +762,10 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     assert.equal(after.status, "draft", "a refused confirmation does not take the draft live");
     assert.equal(after.baselineAt, before.baselineAt, "a refused confirmation does not move the baseline");
     assert.equal(after.launchTx, null, "a refused confirmation records no launch transaction (a later genuine one is not blocked)");
-    // the genuine launch: the bundle's own transaction, signed by the creator and the mint
+    // the genuine launch: the bundle's create step (its lock step landed first), signed by the creator and the mint
+    assert.equal(j.transactions.length, 2);
     const blockTime = Math.floor(Date.now() / 1000) + 120;
-    w.p.launchVerifier = connectionLaunchVerifier(chain(landed(signed(j.transactions[0].instructions.map(toIx), [creatorKp, mintKp]), blockTime), [cfg]), opts);
+    w.p.launchVerifier = connectionLaunchVerifier(chain(landed(signed(j.transactions[1].instructions.map(toIx), [creatorKp, mintKp]), blockTime), [cfg]), opts);
     const good = await confirm("4".repeat(88));
     assert.equal(good.status, 200, JSON.stringify(await good.clone().json()));
     assert.equal(w.registry.token(mint)!.status, "live");

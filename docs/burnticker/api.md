@@ -120,9 +120,12 @@ and memo programs, the WSOL mint) come from the table, and the creator, the mint
 and their order are `src/lib/burnticker/lookupTable.ts`; the address is pinned per network in `src/lib/burnticker/networks.ts`
 (`LOOKUP_TABLES`); the browser reads the table and checks every entry, its index and its authority (the operations key or none)
 before anything is signed, and stops with "lookup table mismatch — nothing was sent" otherwise. `scripts/burnticker-lut.mts verify
---cluster devnet|mainnet` prints the same comparison. Measured: a single coin 988 bytes, the two LaunchLab pair steps 1,079 and 1,111,
-the pair-curve steps 807, 807 and 566. A create together with the creator's opening purchase is 1,281 bytes even with the table; the
-page lists it as not signable before the wallet opens. A caller of this endpoint who signs `message` as a legacy transaction meets the
+--cluster devnet|mainnet` prints the same comparison. Measured (2026-10-15, `test/burntickerLookupTable.test.ts`): a single coin is two
+steps, its rule locked (691 to 701 bytes) and then the coin created (640 to 694 bytes); a LaunchLab pair is four steps of at most 829
+bytes; the pair-curve steps are 882, 882 and 683. Every step leaves at least 330 bytes for checks a wallet adds before it signs. A
+single coin used to be one step of 1,031 to 1,095 bytes, and a wallet that added two checks and a compute-budget instruction took it to
+1,234 bytes, over the limit. A create together with the creator's opening purchase is 933 bytes (1,053 in vault mode), which fits the
+limit but not that margin, so the hosted path still carries no opening purchase. A caller of this endpoint who signs `message` as a legacy transaction meets the
 same limit (the `transaction` field is null when the legacy form does not fit): compile `instructions` as version 0 with that table.
 
 ### Polymarket rules (since 2026-10-10, API 1.1.0)
@@ -360,7 +363,7 @@ derives all of it from the host's environment:
 - A mainnet host refuses every launch with 403 `{ code: "mainnet-launches-off" }` unless its owner sets
   `BURNTICKER_ALLOW_MAINNET_LAUNCHES=1`. The refusal comes before anything is pinned or registered.
 - `firstBuySol` must be `"0"` or absent. Anything else is refused with 400 `{ code: "opening-purchase-off" }`: a create with an
-  opening purchase does not fit one transaction. The creator trades on the curve after the create like anyone else. The offline SDK
+  opening purchase leaves too little room in the create step for the checks a wallet adds. The creator trades on the curve after the create like anyone else. The offline SDK
   builder and the operator's CLI (`scripts/burnkeeper-launch.mts --first-buy-sol`) keep the option.
 - A vault-mode rule is refused with 400 `{ code: "vault-off" }`: its bundle needs a signature from the burn program's fee PDA, which
   no wallet can give.

@@ -299,6 +299,13 @@ function mintsOf(seen: Observed): string[] {
   return [...out];
 }
 
+/** How many transactions the prepared launch asks the wallet for (a single coin is two since 2026-10-15: its rule locked, then created). */
+function stepsOf(seen: Observed): number {
+  const j = [...seen.launchPosts].reverse().find((p) => p.body.action !== "launched" && p.json?.code !== "mint-bank-empty")?.json ?? {};
+  const n = (b: any) => (Array.isArray(b?.transactions) ? b.transactions.length : 0);
+  return n(j.bundle) + n(j.bundles?.a) + n(j.bundles?.b) + n(j.pairCurve) || 1;
+}
+
 /** The launch went through: in stub chain, the page handed a fully signed, unexpired transaction to the network (with the wallet's
  *  Lighthouse instructions when it added them); in real chain, the coin page loads and the API says live. */
 async function assertLaunched(page: any, seen: Observed, outcome: { state: string; text: string }, o: { expectGuard: boolean }): Promise<string[]> {
@@ -379,8 +386,10 @@ const SCENARIOS: Scenario[] = [
       const real = prepares.filter((p) => p.json?.code !== "mint-bank-empty");
       if (real.length !== 1) fail(`Two quick presses sent ${real.length} launch requests (expected one).`, prepares.map((p) => `${p.status} ${p.json?.code ?? "ok"}`));
       const out = await signOutcome(page);
-      if (c.wallet.calls.length > 1) fail(`The wallet was asked to sign ${c.wallet.calls.length} times for one launch.`);
-      return { detail: [`one launch request, ${c.wallet.calls.length} wallet request`, ...(await assertLaunched(page, seen, out, { expectGuard: true }))] };
+      // one wallet request per step at most (in stub chain the first send is refused, so the run stops after one)
+      const steps = stepsOf(seen);
+      if (c.wallet.calls.length > steps) fail(`The wallet was asked to sign ${c.wallet.calls.length} times for one launch of ${steps} ${steps === 1 ? "transaction" : "transactions"}.`);
+      return { detail: [`one launch request, ${c.wallet.calls.length} wallet ${c.wallet.calls.length === 1 ? "request" : "requests"} for ${steps} ${steps === 1 ? "step" : "steps"}`, ...(await assertLaunched(page, seen, out, { expectGuard: true }))] };
     }),
   },
   {

@@ -178,7 +178,7 @@ describe("L02 — availability: closed, preview and open, per type, per source, 
     const rv = await callRoute(`${API}/launch/review`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ rule, ticker: "DTWHOT", name: "Detroit Heat" }) });
     assert.equal(rv.status, 200, await rv.clone().text());
     const j = await rv.json() as { mode: string; signable: boolean; rule: { sha256: string; share: string }; transactions: { count: number } };
-    assert.equal(j.mode, "preview"); assert.equal(j.signable, false, "preview never signs"); assert.equal(j.rule.share, "2%"); assert.equal(j.transactions.count, 1);
+    assert.equal(j.mode, "preview"); assert.equal(j.signable, false, "preview never signs"); assert.equal(j.rule.share, "2%"); assert.equal(j.transactions.count, 2);
     delete process.env[CREATOR_LAUNCHES_PREVIEW_FLAG];
     const closed = await callRoute(`${API}/launch/review`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ rule, ticker: "DTWHOT", name: "Detroit Heat" }) });
     assert.equal(closed.status, 403, "a closed host gives no review");
@@ -201,14 +201,16 @@ describe("L02 — availability: closed, preview and open, per type, per source, 
     const r = buildLaunchReview({ rule, ticker: "DTWHOT", name: "Detroit Heat" }, { env: { BURNTICKER_CLUSTER: "mainnet", [CREATOR_LAUNCHES_FLAG]: "1" } });
     assert.ok("review" in r); const v = r.review;
     assert.equal(v.network, "mainnet"); assert.equal(v.signable, true); assert.equal(v.rule.sha256, lockRule({ ...rule, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } }).sha256, "§45: a rule sent without onEnd gets the end sink");
-    assert.equal(v.transactions.count, 1); assert.deepEqual(v.transactions.steps[0].signers, ["your wallet", "a new key made for this coin"]);
+    // 2026-10-15: a single coin is two transactions, its rule locked and then the coin created, each signed by both keys
+    assert.equal(v.transactions.count, 2); assert.deepEqual(v.transactions.steps.map((s) => s.label), ["Lock in $DTWHOT's rule", "Create $DTWHOT"]);
+    for (const st of v.transactions.steps) assert.deepEqual(st.signers, ["your wallet", "a new key made for this coin"]);
     assert.ok(Number(v.costs.totalSol) > 0.05 && Number(v.costs.totalSol) < 0.07, v.costs.totalSol);
     assert.equal(rentLamports(TOKEN_CONFIG_BYTES), 6_897_360);
     assert.match(v.authority, /can still be upgraded/); assert.doesNotMatch(v.authority, /no one can change/i);
     assert.equal(v.rule.endsLine, "This coin has no end date and does not retire.", "a perpetual rule says so and nothing else");
     const once = buildLaunchReview({ rule: firstPartyRule("espn.game:mlb-401999999-TB-loss", 0.1), ticker: "TBGAME", name: "Rays Game" }, { env: {} });
     assert.ok("review" in once); assert.match(once.review.rule.endsLine, /goes to \$DEFICIT's burn\. Then the coin retires\. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead\./);
-    assert.equal(v.costs.lines.find((l) => l.kind === "fee")!.sol, "0.00001", "small amounts keep their digits");
+    assert.equal(v.costs.lines.find((l) => l.kind === "fee")!.sol, "0.00002", "small amounts keep their digits (two signatures on each of two transactions)");
     assert.doesNotMatch(WIND_DOWN_LINE, /DEFICIT|sink|winner/i, "only the deployed self-burn wind-down");
     assert.match(v.operator, /contact@burnticker\.com/);
     for (const t of [v.authority, WIND_DOWN_LINE, v.transactions.note, v.costs.note, ...v.prerequisites, ...v.costs.lines.map((l) => l.label), v.rule.presets]) lintOk(t, "review");

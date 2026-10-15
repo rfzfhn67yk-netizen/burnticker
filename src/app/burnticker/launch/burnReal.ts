@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { LaunchReview, ReviewCost } from "@/lib/burnticker/launchReview";
-import { BURN_TARGET_ACCOUNT_BYTES, SUGGESTED_TARGETS, admissionLine, burnTargetShapeProblems, targetHeldLine, targetReceiptLine, targetReviewSentence, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, SUGGESTED_TARGETS, admissionLine, burnTargetShapeProblems, targetHeldLine, targetReceiptLine, targetReviewSentence, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { LAMPORTS_PER_SIGNATURE, rentLamports, solText } from "@/lib/burnticker/launchCost";
 // the library's own memo v3 reader, browser-safe (memoV3.ts: no web3, no Buffer); it replaced this page's duplicate reader
 import { parseTargetMemo } from "@/lib/burnReceipts/memoV3";
@@ -123,20 +123,23 @@ export const PIN_NOTE = "A coin that burns a real token takes one more transacti
 const PIN_MARK = /^Pin .+'s Raydium pool for \$/;
 
 /**
- * The pre-wallet summary with the pin counted: for each side that burns a real token, its "Create $X …" step becomes two (lock the rule;
- * pin the pool, then create), one more transaction with two more signatures, plus the BurnTarget account's rent. Idempotent: a review
+ * The pre-wallet summary with the pin counted: for each side that burns a real token, the BurnTarget account's rent; a side already
+ * signed as two steps ("Lock in $X's rule", "Create $X": every LaunchLab coin since 2026-10-15) keeps its two, the create step relabelled
+ * as the pin, and an older review's single "Create $X …" step becomes two (lock the rule; pin the pool, then create), one more
+ * transaction with two more signatures. Idempotent: a review
  * whose steps already carry a pin step (the server counting it) is returned as is.
  */
 export function withPinSteps(review: LaunchReview, list: { ticker: string; symbol: string }[]): LaunchReview {
   if (!list.length || review.transactions.steps.some((s) => PIN_MARK.test(s.label))) return review;
   const steps = [...review.transactions.steps];
   const lines: ReviewCost[] = [...review.costs.lines];
-  let add = 0;
+  let add = 0, extra = 0;
   for (const { ticker, symbol } of list) {
     const t = ticker || "TICKER";
     const rent = rentLamports(BURN_TARGET_BYTES), fee = PIN_SIGNATURES * LAMPORTS_PER_SIGNATURE;
     lines.push({ label: `Rent for the account that pins ${symbol}'s pool to $${t}, which is ${BURN_TARGET_BYTES} bytes.`, sol: solText(rent), kind: "rent" });
-    // 2026-10-14: a LaunchLab pair coin is already two steps (lock its rule, then create it), so the pin rides in them: no new transaction
+    // 2026-10-14 (pairs) and 2026-10-15 (every LaunchLab coin): a coin is already two steps (lock its rule, then create it), so the pin
+    // rides in them: no new transaction. Only a review from an older server (one "Create $X …" step) gets one more.
     const j = steps.findIndex((s, k) => s.label === `Create $${t}` && k > 0 && steps[k - 1].label.startsWith(lockStepLabel(t)));
     if (j > 0) { steps.splice(j, 1, { label: pinStepLabel(t, symbol, /link the two coins/.test(steps[j - 1].label)), signers: steps[j].signers }); add += rent; continue; }
     const i = steps.findIndex((s) => s.label.startsWith(`Create $${t} `));
@@ -144,13 +147,13 @@ export function withPinSteps(review: LaunchReview, list: { ticker: string; symbo
     const pin = { label: pinStepLabel(t, symbol, i >= 0 && /link the two coins/.test(steps[i].label)), signers };
     if (i >= 0) steps.splice(i, 1, { label: lockStepLabel(t), signers }, pin); else steps.push(pin);
     lines.push({ label: `Network fees for the two signatures on $${t}'s pin transaction. Priority fees are extra.`, sol: solText(fee), kind: "fee" });
-    add += rent + fee;
+    add += rent + fee; extra++;
   }
   const total = Math.round(Number(review.costs.totalSol) * 1e9) + add;
   const n = steps.length;
   return {
     ...review,
-    transactions: { ...review.transactions, count: n, steps, note: `${n === 1 ? review.transactions.note : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it."} ${PIN_NOTE}` },
+    transactions: { ...review.transactions, count: n, steps, note: `${n === 1 ? review.transactions.note : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it."} ${extra ? PIN_NOTE : PIN_STEP_NOTE}` },
     costs: { ...review.costs, lines, totalSol: solText(total) },
     ...(review.recovery && n > 1 && review.transactions.count > 1 ? { recovery: review.recovery.map((x) => x.replace(/^Your wallet asks \d+ separate times/, `Your wallet asks ${n} separate times`)) } : {}),
     ...(review.recovery && n > 1 && review.transactions.count === 1 ? { recovery: [`Your wallet asks ${n} separate times, once for each transaction, in the order above.`, "If you reject the first request, nothing is sent and nothing is charged.", "If you reject a later request, the transactions already confirmed stay on chain and are not undone. Pressing the button again continues from the next step.", ...review.recovery.slice(1)] } : {}),

@@ -20,6 +20,19 @@ import { isTestCoin, testCoinKeys, withoutTestCoins } from "@/lib/burnticker/tes
 
 export const dynamic = "force-dynamic";
 
+/** The last answer, served again for this long (the coin list changes on the minute, not the second). */
+const HOME_MEMO_MS = 15_000;
+let homeMemo: { at: number; body: unknown } | null = null;
+
+/** Runs the tasks at most `n` at a time, in order, settling each (a slow coin never blocks the others beyond its own slot). */
+async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<PromiseSettledResult<T>[]> {
+  const out: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let next = 0;
+  const worker = async () => { while (next < tasks.length) { const i = next++; try { out[i] = { status: "fulfilled", value: await tasks[i]() }; } catch (reason) { out[i] = { status: "rejected", reason }; } } };
+  await Promise.all(Array.from({ length: Math.min(n, tasks.length) }, worker));
+  return out;
+}
+
 /**
  * The home page's featured cards, activity line, platform strip and one-line status (src/lib/burnticker/home.ts), for the app's home and
  * the static landing page alike. A coin whose page fails to read is marked unreadable (its featured card says "Unavailable"), never
@@ -28,6 +41,7 @@ export const dynamic = "force-dynamic";
  * and the $DEFICIT queued-units counter from its keeper's published files (data/burnkeeper-site, or BURNKEEPER_PUBLISH_DIR).
  */
 export async function GET() {
+  if (homeMemo && Date.now() - homeMemo.at < HOME_MEMO_MS) return NextResponse.json(homeMemo.body, { headers: { "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "hit" } });
   const p = platform();
   const now = Date.now();
   const statuses = [];
@@ -46,10 +60,15 @@ export async function GET() {
     registered = tokens.length;
     // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
     const shared = sharedTickers(tokens);
-    for (const t of tokens) {
+    // 2026-10-15 (owner: "coins tab isn't loading"): with five live coins the reads ran one after another and took 17–40 s, past the
+    // proxy's 20 s limit; they now run four at a time, and the whole answer is kept for HOME_MEMO_MS (below)
+    const reads = await allLimited(tokens.map((t) => () => tokenPageData(p, t, now)), 4);
+    for (const [i, t] of tokens.entries()) {
       const key = coinKey(t, shared);
       try {
-        const d = await tokenPageData(p, t, now);
+        const r = reads[i];
+        if (r.status === "rejected") throw r.reason;
+        const d = r.value;
         statuses.push(d.status);
         const latest = d.receipts.filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
         const readiness = readinessFromStatus(d.status, d.receipts);
@@ -87,7 +106,7 @@ export async function GET() {
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: ranks.get(c.ticker)?.line ?? null }));
   const slots = coins === null ? null : featuredSlots(slotInputs, now);
-  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
+  { const body = { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster }; homeMemo = { at: Date.now(), body }; return NextResponse.json(body, { headers: { "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "miss" } }); }
 }
 
 function homeCoinOf(s: Parameters<typeof buildPlatformIndex>[0][number]): HomeCoin {
