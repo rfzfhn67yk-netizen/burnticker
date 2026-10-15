@@ -14,7 +14,7 @@ export interface GuardRefusal { status: 409; error: string; extra: { code: "look
 export function lookalikeRows(registry: Pick<Platform["registry"], "tokens" | "lockedRule">): { ticker: string; name: string; status: string; rule: Pick<BurnRule, "oracle" | "series"> | null }[] {
   return registry.tokens().map((t) => { let rule: Pick<BurnRule, "oracle" | "series"> | null = null; try { rule = registry.lockedRule(t).rule; } catch { rule = null; } return { ticker: t.ticker, name: t.name, status: t.status, rule }; });
 }
-export async function launchGuardRefusal(p: Pick<Platform, "registry" | "market">, c: { ticker: string; name: string; rule: Pick<BurnRule, "oracle" | "series"> | null; mint?: string | null }): Promise<GuardRefusal | null> {
+export async function launchGuardRefusal(p: Pick<Platform, "registry" | "market">, c: { ticker: string; name: string; rule: Pick<BurnRule, "oracle" | "series"> | null; mint?: string | null; /** 2026-10-14: the creator's own unfinished draft of this mint is not an adoption */ creator?: string | null }): Promise<GuardRefusal | null> {
   const existing = lookalikeRows(p.registry);
   const look = lookalikeRefusal({ ticker: c.ticker, name: c.name, rule: c.rule }, existing);
   if (look) return { status: 409, error: look.reason, extra: { code: "lookalike", hits: look.hits } };
@@ -23,7 +23,7 @@ export async function launchGuardRefusal(p: Pick<Platform, "registry" | "market"
     if (p.market) {
       try { const { PublicKey } = await import("@solana/web3.js"); onChain = (await p.market.getAccountInfo(new PublicKey(c.mint))) !== null; } catch { onChain = null; }
     }
-    const why = mintAdoptionRefusal({ inRegistry: p.registry.token(c.mint) !== null, onChain });
+    const why = mintAdoptionRefusal({ inRegistry: p.registry.token(c.mint) !== null && !(c.creator && p.registry.ownDraft(c.mint, c.creator)), onChain });
     if (why) return { status: 409, error: why, extra: { code: "mint-exists" } };
   }
   return null;
