@@ -538,6 +538,8 @@ async function polymarketBacktest(p: Platform, locked: LockedRule, months: numbe
 
 export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; seriesTitle: string | null; locked: LockedRule; preflight: PreflightResult | null }
 export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null; preflight: PreflightResult | null; /** BURNTICKER_PAIR_CURVE_ENABLED: the pair launches through pair_curve (sign this instead of the two LaunchLab bundles). */ pairCurve?: PairCurveLaunchBundle }
+/** 2026-10-14: a retry that reuses an earlier draft's address must carry the same rule and ticker; otherwise a fresh address is needed. */
+const OWN_DRAFT_CHANGED = "Your earlier draft for this address had a different rule or ticker. Press Start over to get a fresh address, then launch again.";
 interface PairSideInput { /** round 5: side B's own pinned token (burnTarget.ts BurnTargetField); side A's rides in its rule */ burnTarget?: unknown; /** two candidates in one race: candidate B's market and the race slug; two teams in one game: the other team; side B's own describe context */ market?: unknown; race?: unknown; opp?: unknown; descCtx?: unknown; ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown; /** website-18: side B's own creator text and uploaded image */ creatorDescription?: unknown; image?: unknown; imageRights?: unknown; imageBadge?: unknown }
 
 /**
@@ -668,7 +670,12 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     seriesTitle = derbyTitle(locked.rule);
   } else return { error: fail(400, `Coins cannot launch on the ${locked.rule.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.`, { code: "oracle-off" }) };   // ruleRefusals refused it already
   if (refusals.length) return { error: fail(403, refusalMessage(refusals), { code: "refused", refusals }) };
-  if (o.mint && p.registry.token(o.mint)) return { error: fail(409, `The mint ${o.mint} is already registered.`, { code: "mint-taken" }) };
+  // 2026-10-14: a retry of the creator's own unfinished draft (same mint, same rule, same ticker) is not a clash — its row is reused
+  if (o.mint && p.registry.token(o.mint)) {
+    const own = p.registry.ownDraft(o.mint, input.creator);
+    if (!own) return { error: fail(409, `The mint ${o.mint} is already registered.`, { code: "mint-taken" }) };
+    if (own.rulesJson !== locked.text || own.ticker !== input.ticker) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) };
+  }
   { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
   // (Polymarket: the payout vector + Gamma) — and creation refused if anything fails. Kalshi is always refused here: its terms forbid
@@ -714,7 +721,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   const uriFor = (ticker: string) => (m: string) => { const pin = pins.get(ticker); return pin ? pin.metadataUri : o.register ? `${publicOrigin()}/api/burnticker/metadata/${m}` : "ar://pending-upload-at-launch"; };
   const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: uriFor(input.ticker), keeperPubkey: p.keeperPubkey, allowMainnet: p.allowMainnet === true };
   const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[], creatorNote = "", poolId: string | null = bundle.addresses.poolId): TokenRow => {
-    const token = p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
+    const reused = p.registry.ownDraft(bundle.mint, input.creator);   // 2026-10-14: the retry of an unfinished draft (checked above: same rule)
+    const token = reused && reused.rulesJson === bundle.rules.text ? reused : p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
     if (p.keeperPubkey) p.registry.addAttester({ mint: token.mint, pubkey: p.keeperPubkey, role: "data-key", addedAt: Date.now(), timelockUntil: null });
     const pin = pins.get(ticker) ?? null;
     p.registry.putTokenMeta({ mint: token.mint, creatorNote, metadataUri: pin?.metadataUri ?? null, metadataTx: pin?.metadataTx ?? null, metadataSha256: pin?.metadataSha256 ?? null, imageUri: pin?.imageUri ?? null, imageTx: pin?.imageTx || null, imageSha256: pin?.imageSha256 || null, hosted: !pin });
@@ -724,7 +732,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     // 2026-10-14: the launch page sends both mints' public keys (side A in `mint`, side B in `pair.mint`); one without the other is the
     // public API's single-coin call, which never takes a pair
     if (!!o.mint !== !!o.mintB) return { error: fail(400, "A rivalry pair is launched through the pair steps on the launch page, with two new mints. The public API takes one coin at a time.") };
-    if (o.mintB && p.registry.token(o.mintB)) return { error: fail(409, `The mint ${o.mintB} is already registered.`, { code: "mint-taken" }) };
+    if (o.mintB && p.registry.token(o.mintB) && !p.registry.ownDraft(o.mintB, input.creator)) return { error: fail(409, `The mint ${o.mintB} is already registered.`, { code: "mint-taken" }) };
     // WIRING-MEDIA-RECOVERY item 235: a restart after side A's create landed on chain must not make a second A. A draft this creator
     // registered for the same side-A ticker and name whose mint exists on chain is that A: the new plan is refused, naming the mint.
     { const prior = await createdSideA(p, input); if (prior) return { error: fail(409, `Side A, $${input.ticker}, was already created on chain from an earlier plan as mint ${prior}. A new plan would create a second $${input.ticker}. Finish that pair from the launch history, or pick a different ticker and name.`, { code: "pair-side-a-created", mint: prior }) }; }
@@ -766,6 +774,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       const ownMints: { mint?: string; mintB?: string } = o.mint && o.mintB ? { mint: o.mint, mintB: o.mintB } : {};
       const probe = await buildPairBundles({ a: input, b: { ...side, description: "", burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: () => "ar://pending-upload-at-launch" });
       const lockedB = lockRule(JSON.parse(probe.b.rules.text)), lockedA = lockRule(JSON.parse(probe.a.rules.text));
+      // 2026-10-14: side B's own earlier draft is reused only with the same rule (the registry row must match what the chain gets)
+      if (o.mintB) { const ownB = p.registry.ownDraft(o.mintB, input.creator); if (ownB && ownB.rulesJson !== lockedB.text) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) }; }
       // a settled-event pair's side B is described from ITS OWN event (candidate B's market, read here; team B's win in the game), never
       // side A's words (website-23: "$ROGEVELSA burns if the Democrats win"); its context is the body's pair.descCtx
       let ctxB = serverDescribeCtx(lockedB.rule, null, { seriesTitle, feed: feedText });

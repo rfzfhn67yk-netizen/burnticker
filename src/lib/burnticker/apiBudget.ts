@@ -63,6 +63,9 @@ export const SOURCES: readonly SourceSpec[] = [
   { id: "polymarket-gamma", label: "Polymarket Gamma", limit: { perSec: 30 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   // 2026-10-14: the house limit (0.5/s) refused a launch preflight — one payout read is three eth_calls in a row, and the web lane had
   // one call every 8 s. No public node publishes a limit; 4/s, 60/min, 2,000/day stays polite and lets a preflight run at once.
+  // Alchemy Polygon app "Burnticker keeper" (made 2026-10-14, first in BURNTICKER_POLYGON_RPC_URLS). Alchemy's free tier is metered
+  // in compute units (eth_call 26 CU, 330 CU/s throughput, 30M CU a month): 10/s and 100,000/day stay well inside it.
+  { id: "alchemy-polygon", label: "Alchemy Polygon RPC", limit: { perSec: 10, perDay: 100_000 }, established: true, unit: "request", shares: { keeper: 0.5, web: 0.5 } },
   { id: "polygon-rpc", label: "Polygon public RPC", limit: { perSec: 4, perMin: 60, perDay: 2_000 }, established: false, unit: "request", shares: { keeper: 0.5, web: 0.5 } },
   { id: "kalshi", label: "Kalshi API", limit: { perSec: 20 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "pyth-hermes", label: "Pyth Hermes", limit: { perSec: 1 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
@@ -92,6 +95,7 @@ const HOSTS: [RegExp, string][] = [
   [/^api\.(mainnet-beta|devnet|testnet)\.solana\.com$/, "solana-public"],
   [/(^|\.)thesportsdb\.com$/, "thesportsdb"], [/^statsapi\.mlb\.com$/, "mlb-stats"], [/^api-web\.nhle\.com$/, "nhl-api"], [/(^|\.)nba\.com$/, "nba-cdn"],
   [/(^|\.)espn\.com$/, "espn"], [/^gamma-api\.polymarket\.com$/, "polymarket-gamma"],
+  [/^polygon-mainnet\.g\.alchemy\.com$/, "alchemy-polygon"],
   [/^(polygon-rpc\.com|polygon-bor\.publicnode\.com|polygon-bor-rpc\.publicnode\.com|polygon\.drpc\.org|1rpc\.io)$/, "polygon-rpc"],
   [/(^|\.)kalshi\.com$/, "kalshi"], [/^hermes(-beta)?\.pyth\.network$|(^|\.)pyth\.network$/, "pyth-hermes"], [/(^|\.)irys\.xyz$/, "irys"],
   [/^api\.fiscaldata\.treasury\.gov$/, "fiscal-data"], [/(^|\.)stlouisfed\.org$/, "fred"], [/^api\.weather\.gov$/, "nws"], [/^mesonet\.agron\.iastate\.edu$/, "iem"],

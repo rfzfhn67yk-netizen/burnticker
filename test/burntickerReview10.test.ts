@@ -133,7 +133,7 @@ describe("stale copy (f) to (i): the coin page, Following and the no-end line", 
   });
   test("(g) a sports coin names its publisher and its confirming source; an unknown one says unavailable", () => {
     const n = coinSourceNote("catalogue", teamSeries("mlb", "LAD", "loss"));
-    assert.match(n, /^Each game settles on /); assert.match(n, /Polymarket|TheSportsDB/); assert.match(n, /The second source that must agree is /);
+    assert.match(n, /^Each game settles on /); assert.match(n, /Polymarket|TheSportsDB/); assert.match(n, /Where a second source can read the game, it must agree: MLB's official feed\./); assert.match(n, /TheSportsDB alone, once its final score has stood unchanged for 12 hours\./);
     assert.doesNotMatch(n, /source's own published data/);
     assert.equal(coinSourceNote("catalogue", "something.unknown"), SOURCE_DETAILS_UNAVAILABLE);
     assert.equal(SOURCE_DETAILS_UNAVAILABLE, "The source details are unavailable right now.");

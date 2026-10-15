@@ -13,6 +13,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *   crank-refused     a burn run failed three times in a row (alerts.ts bt-crank-failed)
  *   burn-behind       a reading's spend is not fully spent 24 hours after it landed (burn dispersal: dispersalKeeper.ts bt-burn-behind)
  *   api-budget        a provider passed 80% of a process's day budget or was put on hold (apiBudget.ts bt-api-budget)
+ *   single-source     measure only: a coin's game settled on TheSportsDB alone after the 12-hour hold, the first time for that coin
+ *                     (gameSettle.ts; the keeper records bt-single-source once per coin)
  *   keeper-stale      the public status file is stale for more than two hours: pushed by scripts/ops/keeper-status-check.sh, which runs
  *                     every minute from the publish timer and so still works when the keeper is down (listed here for the runbook)
  *
@@ -23,7 +25,7 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  * thrown: the keeper never stops for its phone.
  */
 
-export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget";
+export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget" | "single-source";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -33,6 +35,7 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-launch-failed": "launch-failed",
   "bt-burn-behind": "burn-behind",
   "bt-api-budget": "api-budget",
+  "bt-single-source": "single-source",
 };
 export const PUSH_TITLE: Record<PushKind, string> = {
   "keeper-refused": "Burnticker keeper refused to start",
@@ -42,6 +45,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "launch-failed": "Burnticker launch failed",
   "burn-behind": "Burnticker burn behind",
   "api-budget": "Burnticker data budget running low",
+  "single-source": "Burnticker game settled on one source",
 };
 export const PUSH_LEAD: Record<PushKind, string> = {
   "keeper-refused": "The keeper stopped before its first cycle. Nothing is read or burned until it starts again.",
@@ -51,6 +55,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "launch-failed": "Someone's launch request failed on the site with a server error, a pin failure or a launch-check refusal. The sentence below is what they saw.",
   "burn-behind": "A reading's burn is not fully spent a day after it landed. The keeper keeps spending the rest in small pieces; the line below says how much is left.",
   "api-budget": "One of the outside services the keeper or the site reads from has used most of its daily allowance, or all of it. When it is all used, reads from that service stop until midnight UTC and start again on their own.",
+  "single-source": "A coin's game settled on TheSportsDB alone for the first time. Polymarket had no market for it and no league feed could read it, so its final score had to stand unchanged for 12 hours first. This is a notice only; nothing needs doing.",
 };
 
 export const PUSH_PER_KIND_MS = 60 * 60_000;

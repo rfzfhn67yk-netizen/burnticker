@@ -33,6 +33,8 @@ export interface NativeSource {
 export interface NativePreflight {
   last: { id: string; value: string | null; at: string } | null; crossLast: { id: string; value: string | null; at: string } | null;
   agreement: boolean | null; basis: string; nextAt: string | null; nextBasis: string;
+  /** An informational line for the launch review, never a refusal (owner 2026-10-14: Polymarket has not listed the next game yet). */
+  note?: string | null;
   /** A refusal the source itself raises (the cross-read could not be read for the latest reading; a stale source). */
   problem: { code: "cross-read-unreadable" | "stale-primary" | "primary-unreadable" | "disagreement" | "already-decided"; reason: string } | null;
 }
@@ -56,14 +58,30 @@ export const fecClient = (): FecClient => (fec ??= new FecClient());
 const gameDay = (g: { date: string }): string => new Date(`${g.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 /** Leagues whose game markets the lookup can match under a league tag (a two-sided moneyline, or soccer's three yes-or-no markets: gameSettle.ts threeWayOf). */
 const listsGamesAhead = (league: EspnSeries["league"]): boolean => !!POLY_LEAGUE_TAG[league];
+export { listsGamesAhead };
 const AHEAD = " Polymarket usually lists a game a few days before it starts, so please try again then.";
 export const GAME_LINES = {
   scheduleOff: (league: string): string => `the ${league} schedule cannot be read on this site right now, so a coin on it cannot be checked. Please try again later.`,
   scheduleUnread: (team: string): string => `the schedule for ${team} could not be read just now. Please try again in a few minutes.`,
   gameNotListed: (team: string): string => `this game is not on the schedule for ${team}.`,
   noSourceNext: (team: string, next: Game | null, league: EspnSeries["league"]): string => `no source can settle the next game for ${team} yet, because Polymarket has not listed a market for ${next ? `${next.name} on ${gameDay(next)}` : "it"} and this site has no licensed final scores.${listsGamesAhead(league) ? AHEAD : ""}`,
-  oneSourceNext: (team: string, next: Game | null, league: EspnSeries["league"]): string => `only one source can confirm the games of ${team} right now, and every result needs two sources that agree. The second would be the Polymarket market for ${next ? `${next.name} on ${gameDay(next)}` : "the next game"}, and none was found.${listsGamesAhead(league) ? AHEAD : ""}`,
 };
+/**
+ * THE LAUNCH REVIEW'S NOTE (owner, 2026-10-14: "TheSportsDB should be enough to validate"). One operator that can read the next game is
+ * enough to launch; a next game Polymarket has not listed yet is said here, never refused. With a counted league feed (MLB, the NHL, the
+ * NBA's when it answers) that feed must agree instead of the hold.
+ */
+export const NEXT_GAME_NOTES = {
+  hold: "Polymarket has not listed the next game yet; it usually appears a few days before tip-off. Until it does, that game would settle on TheSportsDB alone after a 12-hour confirmation hold.",
+  official: (feed: string): string => `Polymarket has not listed the next game yet; it usually appears a few days before tip-off. Until it does, that game would settle on TheSportsDB and ${feed}, which must agree.`,
+  noTag: "Polymarket does not list games in this league, so each game would settle on TheSportsDB alone after a 12-hour confirmation hold.",
+};
+export function nextGameNote(league: EspnSeries["league"], d: GameDeps): string {
+  const off = countedOfficialOf(league);
+  if (off) return NEXT_GAME_NOTES.official(CROSS_LABEL[off]);
+  if (d.apiSportsKey) return NEXT_GAME_NOTES.official("API-Sports");
+  return listsGamesAhead(league) ? NEXT_GAME_NOTES.hold : NEXT_GAME_NOTES.noTag;
+}
 
 function espnSource(id: string, s: EspnSeries): NativeSource {
   const t = teamByAbbr(s.league, s.abbr)!, off = countedOfficialOf(s.league), crossLabel = off ? `${CROSS_LABEL[off]} and each other` : "each other (the on-chain payout and TheSportsDB)";
@@ -74,12 +92,12 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
     sourceUrl: `https://www.thesportsdb.com/`, tier: 4, cadence: s.kind === "team" ? "every game day" : "resolves once, after the game",
     unit: s.kind === "team" && s.window.kind === "meetings"
       // the rivalry series (espn.ts window `meetings`): a signed reading per game day, and one season-end reading
-      ? { size: 1, label: "1 win against the rival", definition: `each ${t.name} win against ${teamByAbbr(s.league, s.window.opp)?.name ?? s.window.opp} this season (a loss reads −1, a draw 0), ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final; when both seasons are over, one more reading: +1 if ${t.name} won more of the games between them, −1 if fewer, none if level` }
-      : { size: 1, label: s.kind === "team" ? `1 ${outcomeWords(s.outcome).noun}` : `the ${outcomeWords(s.outcome).noun}`, definition: `each ${t.name} ${outcomeWords(s.outcome).noun} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
+      ? { size: 1, label: "1 win against the rival", definition: `each ${t.name} win against ${teamByAbbr(s.league, s.window.opp)?.name ?? s.window.opp} this season (a loss reads −1, a draw 0), ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final (a game no second source can read settles on TheSportsDB alone after its final has stood 12 hours); when both seasons are over, one more reading: +1 if ${t.name} won more of the games between them, −1 if fewer, none if level` }
+      : { size: 1, label: s.kind === "team" ? `1 ${outcomeWords(s.outcome).noun}` : `the ${outcomeWords(s.outcome).noun}`, definition: `each ${t.name} ${outcomeWords(s.outcome).noun} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final (a game no second source can read settles on TheSportsDB alone after its final has stood 12 hours)${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
-    flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : s.league === "nba" ? "the game list comes from the NBA's feed when it answers, else from TheSportsDB under licence (needs BURNTICKER_THESPORTSDB_KEY)" : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent sources must read every game and agree (a source check; one operator attester signs the reading)"],
+    flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : s.league === "nba" ? "the game list comes from the NBA's feed when it answers, else from TheSportsDB under licence (needs BURNTICKER_THESPORTSDB_KEY)" : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "every source that reads a game must agree; a game with no Polymarket market and no league feed settles on TheSportsDB alone once its final score has stood for 12 hours (a source check; one operator attester signs the reading)"],
     launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",
-    settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps()),
+    settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps(), { seriesId: id }),
     ...(s.kind === "game" ? { eligibility: async () => { const g = (await gamesFor(espnClient(), s))[0]; return g ? gameEligibility(g) : null; } } : {}),
     preflight: async (nowMs) => {
       const c = espnClient(), d = deps();
@@ -92,14 +110,15 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
       const next = games.find((g) => !g.completed && Date.parse(g.startsAt) > nowMs - SETTLE_AFTER_START_MS) ?? null;
       const nextAt = next?.startsAt ?? null, nextBasis = next ? `the next game's start (schedule): ${next.name}` : "no scheduled game listed";
       // owner 2026-10-13: NO PAST GAME IS READ AT LAUNCH ("no passed events should apply, only new events"). The readers are proven on
-      // the next game: its market (or the licensed final once the game is played) plus a second operator. Nothing before launch counts,
-      // and the first game after launch is where the two reads are compared.
+      // the next game. Owner 2026-10-14: ONE operator that can settle the next game is enough (its market, or TheSportsDB's licensed
+      // final); a game Polymarket has not listed yet is a note, never a refusal (gameSettle.ts settles it on TheSportsDB alone after a
+      // 12-hour hold, or on TheSportsDB and the league's own feed where one is counted). No source at all is still refused.
       {
         const m = next && d.market ? await d.market(next).catch(() => null) : null;
         if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: GAME_LINES.noSourceNext(t.name, next, s.league) } };
         const ops = operatorsFor(s.league, d, !!m);
-        if (ops.length < 2) return { ...none, nextAt, nextBasis, problem: { code: "cross-read-unreadable", reason: GAME_LINES.oneSourceNext(t.name, next, s.league) } };
-        return { ...none, basis: next ? `readers for the next game (${next.name}): ${ops.join(" and ")}; games before launch never count, and both reads are compared at the first game after launch` : "no game listed yet; both reads are compared at the first game after launch", nextAt, nextBasis, problem: null };
+        const note = next && !m ? nextGameNote(s.league, d) : null;
+        return { ...none, basis: next ? `readers for the next game (${next.name}): ${ops.join(" and ")}; games before launch never count${ops.length < 2 ? "; one operator, so the game settles on TheSportsDB alone after a 12-hour hold unless Polymarket lists it" : ", and every read is compared at the first game after launch"}` : "no game listed yet; the reads are compared at the first game after launch", nextAt, nextBasis, note, problem: null };
       }
     },
   };

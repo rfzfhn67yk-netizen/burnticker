@@ -13,7 +13,12 @@ import { LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHit
  *   PRIMARY B  otherwise THESPORTSDB (commercial licence, BURNTICKER_THESPORTSDB_KEY, the v2 API): the final score;
  *   CONFIRMED  by a SECOND, independent operator: the on-chain payout and TheSportsDB confirm each other when both exist; the league's
  *              official feed (MLB, NHL, and the NBA's when it answers) is a further read where it is free; API-Sports (BURNTICKER_APISPORTS_KEY) is optional.
- *              Every read must agree (scores where both carry scores, else the winner). A game only ONE operator can read is held.
+ *              Every read must agree (scores where both carry scores, else the winner).
+ *   ONE SOURCE (owner, 2026-10-14: "TheSportsDB should be enough to validate"): a final game with NO Polymarket market and no second
+ *              operator that can read it (no counted league feed, no API-Sports key) settles on TheSportsDB alone, but only once the same
+ *              final score has stood across re-reads for SINGLE_SOURCE_HOLD_MS (12 h). The first-seen score and time live in the keeper's
+ *              hold store (GameDeps.holds, persisted in the registry's status table: statusHoldStore), so the hold survives a restart; a
+ *              changed score starts the hold again. Where a counted league feed exists it must agree instead, and no hold applies.
  *
  * Every reading says how it settled: "settled on the game's on-chain payout · confirmed by MLB's official feed", plus a plain human
  * link to ESPN's scoreboard for that day ("see this game on ESPN →", never fetched).
@@ -40,7 +45,73 @@ export interface GameDeps {
   market: ((g: Game) => Promise<GameMarket | null>) | null;
   /** The CTF payout vector on Polygon for a condition id. */
   payout: ((conditionId: string) => Promise<GamePayout | null>) | null;
+  /** The single-source hold store (null or absent: a game only TheSportsDB can read waits, it never settles). The keeper's is persistent. */
+  holds?: SingleSourceHolds | null;
+  /** The clock the hold reads (the keeper's wall clock; tests and the season rehearsal move it). */
+  now?: () => number;
+  /** Measure-only: called when a game settles on one source (the keeper logs it and raises bt-single-source the first time per coin). */
+  onSingleSource?: ((e: { seriesId: string | null; game: Game; final: { home: number; away: number }; heldSince: number; settledBy: string }) => void) | null;
 }
+
+/** How long a TheSportsDB-only final must stand unchanged before it settles (owner, 2026-10-14). */
+export const SINGLE_SOURCE_HOLD_MS = 12 * 3_600_000;
+/** What a reading and a receipt say about a game settled on TheSportsDB alone. */
+export const SINGLE_SOURCE_SETTLED_BY = "TheSportsDB only, confirmed after a 12 h hold";
+/** The first time a TheSportsDB-only final was seen with this score. */
+export interface HoldMark { home: number; away: number; firstSeenAt: number }
+export interface SingleSourceHolds { get(key: string): HoldMark | null; set(key: string, m: HoldMark): void }
+/** The hold's key for one game (a doubleheader's two games differ by their start). */
+export const holdKeyOf = (g: Pick<Game, "league" | "eventId" | "startsAt">): string => `${g.league}:${g.eventId}:${g.startsAt}`;
+/** An in-memory store (tests, the season rehearsal). */
+export function memoryHoldStore(): SingleSourceHolds & { marks: Map<string, HoldMark> } {
+  const marks = new Map<string, HoldMark>();
+  return { marks, get: (k) => marks.get(k) ?? null, set: (k, m) => { marks.set(k, m); } };
+}
+/** The registry status key the keeper's hold store writes. */
+export const HOLD_STATUS_KEY = "games.singleSourceHolds";
+const HOLD_KEEP_MS = 60 * 86_400_000;
+/**
+ * The keeper's PERSISTENT hold store: one JSON map in the registry's status table (HOLD_STATUS_KEY), read on every get and written on
+ * every set, so a restart keeps each game's first-seen score and time. Marks older than 60 days are dropped when a mark is written.
+ */
+export function statusHoldStore(reg: { getStatus(key: string): string | null; setStatus(key: string, value: unknown, now?: number): void }, now: () => number = Date.now): SingleSourceHolds {
+  const read = (): Record<string, HoldMark> => { try { const v = JSON.parse(reg.getStatus(HOLD_STATUS_KEY) ?? "{}") as unknown; return v && typeof v === "object" ? v as Record<string, HoldMark> : {}; } catch { return {}; } };
+  return {
+    get: (k) => { const m = read()[k]; return m && Number.isFinite(m.firstSeenAt) && Number.isFinite(m.home) && Number.isFinite(m.away) ? m : null; },
+    set: (k, m) => { const all = read(), t = now(); for (const [x, v] of Object.entries(all)) if (!(t - Number(v?.firstSeenAt) < HOLD_KEEP_MS)) delete all[x]; all[k] = m; reg.setStatus(HOLD_STATUS_KEY, all, t); },
+  };
+}
+/**
+ * The 12-hour hold on a TheSportsDB-only final. The first read of a final records its score and time; a later read with the same score
+ * settles once SINGLE_SOURCE_HOLD_MS has passed since then; a different score records the new one and starts the hold again.
+ */
+export function singleSourceHold(holds: SingleSourceHolds | null | undefined, g: Pick<Game, "league" | "eventId" | "startsAt">, f: { home: number; away: number }, now: number): { ready: true; since: number } | { ready: false; why: string } {
+  if (!holds) return { ready: false, why: "only TheSportsDB can read this game (no Polymarket market, no league feed), and this process keeps no record of when its final score was first seen, so it is not settled here" };
+  const k = holdKeyOf(g), m = holds.get(k);
+  if (!m || m.home !== f.home || m.away !== f.away) {
+    holds.set(k, { home: f.home, away: f.away, firstSeenAt: now });
+    return { ready: false, why: m ? `TheSportsDB changed its final from ${m.away}–${m.home} to ${f.away}–${f.home} (away–home), so the 12-hour hold starts again` : `TheSportsDB's final ${f.away}–${f.home} (away–home) was first seen now; with no Polymarket market and no league feed, it settles on TheSportsDB alone once it has stood for 12 hours` };
+  }
+  if (now - m.firstSeenAt < SINGLE_SOURCE_HOLD_MS) return { ready: false, why: `TheSportsDB's final ${f.away}–${f.home} (away–home) has stood since ${new Date(m.firstSeenAt).toISOString()}; it settles on TheSportsDB alone at ${new Date(m.firstSeenAt + SINGLE_SOURCE_HOLD_MS).toISOString()}` };
+  return { ready: true, since: m.firstSeenAt };
+}
+/** The registry status key listing the coins (series ids) already alerted for a one-source settlement. */
+export const SINGLE_SOURCE_ALERTED_KEY = "games.singleSourceAlerted";
+/**
+ * The bt-single-source alert for the FIRST one-source settlement of a coin (series id), or null when that coin was alerted before. The
+ * series is remembered in the status table, so a restart never alerts the same coin twice.
+ */
+export function singleSourceAlert(reg: { getStatus(key: string): string | null; setStatus(key: string, value: unknown): void }, e: { seriesId: string | null; game: Pick<Game, "name" | "date">; final: { home: number; away: number } }): { kind: "bt-single-source"; key: string; text: string; meta: Record<string, unknown> } | null {
+  const id = e.seriesId ?? `game:${e.game.name}:${e.game.date}`;
+  let seen: string[] = [];
+  try { const v = JSON.parse(reg.getStatus(SINGLE_SOURCE_ALERTED_KEY) ?? "[]") as unknown; seen = Array.isArray(v) ? v.map(String) : []; } catch { seen = []; }
+  if (seen.includes(id)) return null;
+  reg.setStatus(SINGLE_SOURCE_ALERTED_KEY, [...seen, id]);
+  return { kind: "bt-single-source", key: `bt-single-source:${id}`, text: `${id}: ${e.game.name} on ${e.game.date} settled on TheSportsDB alone, ${e.final.away} to ${e.final.home}, after its final score stood for 12 hours.`, meta: { seriesId: id } };
+}
+/** The operators that settled a game, in words ("on-chain payout and TheSportsDB"). */
+const OP_WORDS = (op: string): string => (op === "on-chain payout" || op === "TheSportsDB" ? op : CROSS_LABEL[op as CrossId] ?? op);
+export const settledByOf = (ops: readonly string[]): string => { const w = ops.map(OP_WORDS); return w.length <= 1 ? w.join("") : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`; };
 export const envGameDeps = (env: Readonly<Record<string, string | undefined>> = process.env): GameDeps => ({ tsdbKey: (env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null, apiSportsKey: (env.BURNTICKER_APISPORTS_KEY ?? "").trim() || null, market: null, payout: null });
 
 export type CrossId = "mlb.statsapi" | "nhl.score" | "nba.cdn" | "apisports.games";
@@ -244,7 +315,7 @@ export function finalFromApiSports(g: Game, body: unknown, url: string): Final |
 // ---- one game, settled ----------------------------------------------------------------------------------------------------------
 
 export type GameVerdict =
-  | { kind: "settled"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; settledOn: "on-chain payout" | "TheSportsDB"; confirmedBy: string; ops: string[]; detail: string; url: string }
+  | { kind: "settled"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; settledOn: "on-chain payout" | "TheSportsDB"; confirmedBy: string; ops: string[]; detail: string; url: string; /** which operators settled it, in words: "on-chain payout and TheSportsDB", or SINGLE_SOURCE_SETTLED_BY (settleGame always sets it) */ settledBy?: string; /** set when TheSportsDB alone settled it after the 12-hour hold: when that final was first seen */ singleSince?: number }
   | { kind: "awaiting"; why: string }
   | { kind: "held"; why: string };
 
@@ -338,7 +409,8 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
   type Read = { op: string; label: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null; aet?: boolean; ninety?: boolean };
   const reads: Read[] = []; const pending: string[] = []; const errors: string[] = [];
   // the on-chain payout
-  const market = d.market ? await d.market(g).catch(() => null) : null;
+  const lookup = { failed: false };
+  const market = d.market ? await d.market(g).catch(() => { lookup.failed = true; return null; }) : null;
   if (market?.threeWay) {
     const r = await threeWayRead(market, market.threeWay, d);
     if (r.kind === "held") return { kind: "held", why: r.why };
@@ -399,10 +471,18 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
   }
   const primary = reads.find((r) => r.op === "on-chain payout") ?? reads.find((r) => r.op === "TheSportsDB");
   const others = reads.filter((r) => r !== primary);
+  let singleSince: number | null = null;
   if (!primary || others.length === 0) {
     const possible = operatorsFor(g.league, d, !!market);
-    if (possible.length < 2) return { kind: "held", why: `only one operator can read this game (${possible.join(", ") || "none"}): a second independent read is needed` };
-    return { kind: "awaiting", why: pending[0] ?? errors[0] ?? "waiting for a second read" };
+    // ONE SOURCE (owner, 2026-10-14): no Polymarket market and no second operator that can read the game, so TheSportsDB's final
+    // settles it alone once the same score has stood for 12 hours. A failed market lookup is not "no market": the game waits.
+    if (primary?.op === "TheSportsDB" && primary.final && !market && possible.length < 2) {
+      if (lookup.failed) return { kind: "awaiting", why: "the Polymarket market lookup failed, so it cannot be told whether the game has a market; read again next cycle" };
+      const h = singleSourceHold(d.holds, g, primary.final, (d.now ?? Date.now)());
+      if (!h.ready) return { kind: "awaiting", why: h.why };
+      singleSince = h.since;
+    } else if (possible.length < 2) return { kind: "held", why: `only one operator can read this game (${possible.join(", ") || "none"}): a second independent read is needed` };
+    else return { kind: "awaiting", why: pending[0] ?? errors[0] ?? "waiting for a second read" };
   }
   for (const r of others) {
     const agree = primary.final && r.final ? primary.final.home === r.final.home && primary.final.away === r.final.away : primary.winner === r.winner;
@@ -419,7 +499,8 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
     else if (reads.some((r) => r.pens)) return { kind: "held", why: "the game was decided on penalties, but no source names the winner — held" };
   }
   const confirmed = others.map((r) => r.label);
-  return { kind: "settled", winner, final: primary.final ?? others.find((r) => r.final)?.final ?? null, settledOn: primary.op === "on-chain payout" ? "on-chain payout" : "TheSportsDB", confirmedBy: confirmed.join(" and "), ops: reads.map((r) => r.op), detail: reads.map((r) => r.detail).join("; "), url: primary.url };
+  const ops = reads.map((r) => r.op);
+  return { kind: "settled", winner, final: primary.final ?? others.find((r) => r.final)?.final ?? null, settledOn: primary.op === "on-chain payout" ? "on-chain payout" : "TheSportsDB", confirmedBy: confirmed.join(" and "), ops, detail: reads.map((r) => r.detail).join("; "), url: primary.url, settledBy: singleSince !== null ? SINGLE_SOURCE_SETTLED_BY : settledByOf(ops), ...(singleSince !== null ? { singleSince } : {}) };
 }
 
 /** A schedule status that means the game was not played on its listed date (MLB marks these "post" without a result). */
@@ -432,11 +513,21 @@ const outcomeFor = (winner: "home" | "away" | "tie", g: Game, abbr: string, team
   return winner === "tie" ? "tie" : winner === us ? "win" : "loss";
 };
 
+/** How a reading's title says the game settled: "settled on X · confirmed by Y", or "settled on a licensed final score · TheSportsDB only, confirmed after a 12 h hold". */
+export const settledWords = (v: Extract<GameVerdict, { kind: "settled" }>): string => (v.singleSince !== undefined ? `settled on ${SETTLED_ON.TheSportsDB} · ${SINGLE_SOURCE_SETTLED_BY}` : `settled on ${SETTLED_ON[v.settledOn]} · confirmed by ${v.confirmedBy}`);
+/** A reading's method: the operators joined by "+", or "thesportsdb-only-12h-hold". */
+const methodOf = (v: Extract<GameVerdict, { kind: "settled" }>): string => (v.singleSince !== undefined ? "thesportsdb-only-12h-hold" : v.ops.map((o) => (o === "on-chain payout" ? "onchain-payout" : o === "TheSportsDB" ? "thesportsdb" : o)).join("+"));
+/** The measure-only notice for a game settled on one source (GameDeps.onSingleSource); a throwing listener never changes a reading. */
+const noteSingle = (d: GameDeps, seriesId: string | null, g: Game, v: Extract<GameVerdict, { kind: "settled" }>): void => {
+  if (v.singleSince === undefined || !d.onSingleSource || !v.final) return;
+  try { d.onSingleSource({ seriesId, game: g, final: v.final, heldSince: v.singleSince, settledBy: v.settledBy ?? SINGLE_SOURCE_SETTLED_BY }); } catch { /* measure only */ }
+};
+
 /** Settled readings for a team or game series since `sinceIso` (the keeper and the back-test). */
-export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number } = {}): Promise<ResolvedSelector> {
+export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number; seriesId?: string | null } = {}): Promise<ResolvedSelector> {
   const now = o.nowMs ?? Date.now();
   const ms = asMeetings(s);
-  if (ms) return meetingsSettled(client, ms, d, now);
+  if (ms) return meetingsSettled(client, ms, d, now, o.seriesId ?? null);
   const all = await gamesFor(client, s, sinceIso);
   const games = all.filter((g) => !sinceIso || g.date > sinceIso.slice(0, 10));
   const tid = s.kind === "team" ? s.teamId : null;
@@ -460,8 +551,9 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
     // one unit when the result is in the coin's set: its one outcome, or two of the three (espn.ts outcomeHits; a tie is a draw)
     if (outcomeHits(s.outcome, out)) cur.value++;
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
-    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · settled on ${SETTLED_ON[v.settledOn]} · confirmed by ${v.confirmedBy} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
-    cur.method = v.ops.map((o) => (o === "on-chain payout" ? "onchain-payout" : o === "TheSportsDB" ? "thesportsdb" : o)).join("+");
+    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
+    cur.method = methodOf(v);
+    noteSingle(d, o.seriesId ?? null, g, v);
     byDay.set(g.date, cur);
   }
   for (const day of waitingDays) byDay.delete(day);
@@ -584,7 +676,7 @@ export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "
  *                     writes nothing and the window ends void (MEETINGS_LEVEL_REASON)
  * While any meeting still awaits its result or is held, the window does not end.
  */
-export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: GameDeps, now: number): Promise<ResolvedSelector> {
+export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: GameDeps, now: number, seriesId: string | null = null): Promise<ResolvedSelector> {
   const w = s.window;
   const meetings = await gamesFor(client, s, null);
   const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string }>();
@@ -603,8 +695,9 @@ export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: 
     const cur = byDay.get(g.date) ?? { value: 0, titles: [], url: v.url, method: "" };
     cur.value += out === "win" ? 1 : out === "loss" ? -1 : 0;
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
-    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}, head to head) · settled on ${SETTLED_ON[v.settledOn]} · confirmed by ${v.confirmedBy} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
-    cur.method = v.ops.map((op) => (op === "on-chain payout" ? "onchain-payout" : op === "TheSportsDB" ? "thesportsdb" : op)).join("+");
+    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}, head to head) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
+    cur.method = methodOf(v);
+    noteSingle(d, seriesId, g, v);
     byDay.set(g.date, cur);
   }
   for (const day of waitingDays) byDay.delete(day);

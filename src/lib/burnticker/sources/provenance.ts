@@ -12,8 +12,9 @@ import { LEAGUES, NBA_FEED_WORDING, type LeagueId } from "@/lib/burnticker/sourc
  *                 when it cannot be read, only the "next game" line is missing: settlement does not use this read
  *   settlement    gameSettle.ts PRIMARY A / B: the game's on-chain payout where a Polymarket moneyline market exists, else
  *                 TheSportsDB's licensed final score
- *   confirmation  a second, independent operator: the league's official feed where free, the payout and the licensed final confirming
- *                 each other, or a second licensed provider
+ *   confirmation  a second, independent operator where one can read the game: the league's official feed where free, the payout and the
+ *                 licensed final confirming each other, or a second licensed provider. Owner 2026-10-14: a game no second source can read
+ *                 (no Polymarket market, no league feed) settles on TheSportsDB alone once its final has stood 12 hours (SINGLE_SOURCE_LINE)
  *
  * Every launch-flow sentence about sports provenance comes from here; the labels themselves come from gameSettle.ts (SETTLED_ON,
  * CROSS_LABEL), so a change of resolver changes the copy. ESPN appears only as a plain human link on a game row (never fetched).
@@ -30,7 +31,7 @@ export const SPORTS_PROVENANCE = {
   schedule: countedOfficialOf("nba") ? `the league's own free schedule for MLB, the NHL and the NBA, and TheSportsDB's licensed feed for other leagues` : `the league's own free schedule for MLB and the NHL, ${NBA_SCHEDULE} for the NBA, and TheSportsDB's licensed feed for other leagues`,
   settlement: `${SETTLED_ON["on-chain payout"]} when Polymarket lists a market for it, and otherwise ${SETTLED_ON.TheSportsDB} from TheSportsDB`,
   confirmation: `a second, independent source, such as ${list(OFFICIAL_FEEDS)}`,
-  confirmationOther: `For other leagues, the on-chain payout and the licensed score confirm each other, or ${CROSS_LABEL["apisports.games"]} does.`,
+  confirmationOther: "For other leagues, the on-chain payout and the licensed score must agree when both exist.",
   // walkthrough snag 15: a rule's series name starts with "espn", an older label; say that instead of a flat denial next to it
   noEspn: "Some rule names start with espn, an older label. ESPN is not a source for any result.",
 } as const;
@@ -44,9 +45,11 @@ export const SPORTS_SOURCE_NAME = "On-chain payout or licensed final score · fi
 export function sportsProvenanceLine(): string {
   return `Team coins and matchups settle each game on ${SPORTS_PROVENANCE.settlement}. ${sportsConfirmationLine()} Schedules come from ${SPORTS_PROVENANCE.schedule}. ${SPORTS_PROVENANCE.noEspn}`;
 }
-/** Who must agree before a game counts, in two sentences. */
+/** Owner 2026-10-14 ("TheSportsDB should be enough to validate"): what happens to a game no second source can read. */
+export const SINGLE_SOURCE_LINE = "A game with no Polymarket market and no league feed settles on TheSportsDB alone, once its final score has stood unchanged for 12 hours.";
+/** Who must agree before a game counts, in three sentences. */
 export function sportsConfirmationLine(): string {
-  return `A second, independent source must agree, such as ${list(OFFICIAL_FEEDS)}. ${SPORTS_PROVENANCE.confirmationOther}`;
+  return `Where a second source can read the game, such as ${list(OFFICIAL_FEEDS)}, it must agree. ${SPORTS_PROVENANCE.confirmationOther} ${SINGLE_SOURCE_LINE}`;
 }
 
 /** A league's schedule source and its confirmation source, in words. */

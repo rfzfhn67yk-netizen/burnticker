@@ -46,13 +46,14 @@ export function settlementSections(f: SettlementFacts): { intro: string; section
     intro: "A burn follows a result in four steps: the source is read, the result becomes final, the burn runs, and the receipt appears. These are the times the code uses for each step.",
     sections: [
       { id: "read", heading: "How often each source is read", paragraphs: [
-        `A coin settled by a market is read every ${f.marketPollMin} minutes.`,
+        `A coin settled by a market is read every ${f.marketPollMin} minutes. A coin on one Polymarket market is read every hour until the day before the market's end date, and every ${f.marketPollMin} minutes from then on.`,
         `A coin settled by a published data feed is read on that feed's own schedule. A feed with no schedule of its own is read every ${f.feedPollMin} minutes.`,
         `$DEFICIT reads the Treasury's debt figure at ${reads} ${zoneWords(f.deficitZone)} on business days.`,
       ] },
       { id: "final", heading: "When a result counts", paragraphs: [
         "A result counts only when it is final.",
         "A game counts when its feed marks it final.",
+        "A game with no Polymarket market and no league feed counts on TheSportsDB alone, once its final score has stood unchanged for 12 hours.",
         `A Polymarket market counts only after its on-chain payout is recorded. That follows UMA's dispute window of about ${hours(f.umaHours)}, and longer if a proposal is disputed.`,
         "A scheduled publisher's number counts when it is posted.",
       ] },
@@ -63,6 +64,7 @@ export function settlementSections(f: SettlementFacts): { intro: string; section
       ] },
       { id: "times", heading: "Typical times after the event", paragraphs: [
         `Sports results and scheduled data: about ${f.marketPollMin} to ${f.marketPollMin + f.guardMaxMin} minutes.`,
+        "A game settled on TheSportsDB alone: about 12 hours after its final score is first read.",
         `Polymarket markets: about ${hours(f.umaHours)}, plus a few minutes.`,
         "$DEFICIT: within about an hour of the read that first sees each new Treasury figure, which is posted on the business day after the day it describes.",
       ] },
