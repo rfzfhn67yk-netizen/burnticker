@@ -5,7 +5,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { Keypair, VersionedTransaction } from "@solana/web3.js";
+import { Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { buildStepTx, failureSentence, launchlabPlan, memoryPlanStorage, signAndSendPlan, simulationFailureText, walletReturnProblem, type SendDeps, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
 import { createLatest } from "@/lib/burnticker/latestOnly";
 import { draftRevision } from "@/lib/burnticker/launchReviewSync";
@@ -176,5 +176,58 @@ describe("438485 a failed dry run stops the step before the wallet is asked", ()
   test("the dry run passes, or the RPC cannot perform it: the launch proceeds", async () => {
     assert.deepEqual((await runWith(async () => null)).sends, 2);
     assert.deepEqual((await runWith(async () => { throw new Error("rpc down"); })).sends, 2);
+  });
+});
+
+// ---- Phantom ticket 438485 (2026-10-14): the wallet may append its Lighthouse safety checks, nothing else ---------------------------
+describe("438485 appended wallet guard instructions", () => {
+  const b = bundle("LHT"), plan = launchlabPlan([b]), step = plan.steps[0];
+  const LIGHTHOUSE = "L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95";
+  const withExtra = (programId: string, opts: { front?: boolean; signer?: boolean } = {}) => {
+    const built = buildStepTx(step, CREATOR, plan.keys, BH, null, false);
+    const msg = TransactionMessage.decompile(built.message);
+    const extra = new TransactionInstruction({ programId: new PublicKey(programId), keys: opts.signer ? [{ pubkey: Keypair.generate().publicKey, isSigner: true, isWritable: false }] : [{ pubkey: new PublicKey(CREATOR), isSigner: false, isWritable: false }], data: Buffer.from([1, 2, 3]) });
+    const ixs = opts.front ? [extra, ...msg.instructions] : [...msg.instructions, extra];
+    const after = new VersionedTransaction(new TransactionMessage({ payerKey: msg.payerKey, recentBlockhash: msg.recentBlockhash, instructions: ixs }).compileToV0Message());
+    after.sign([creatorKp]);
+    return { handed: { message: built.message.serialize(), signatures: built.signatures.map((s) => Uint8Array.from(s)) }, after };
+  };
+  test("Lighthouse assertions appended after ours: accepted", () => {
+    const { handed, after } = withExtra(LIGHTHOUSE);
+    assert.equal(walletReturnProblem(handed, after, step, plan), null);
+  });
+  test("a compute-budget instruction appended: accepted", () => {
+    const { handed, after } = withExtra("ComputeBudget111111111111111111111111111111");
+    assert.equal(walletReturnProblem(handed, after, step, plan), null);
+  });
+  test("an appended instruction from any other program: refused", () => {
+    const { handed, after } = withExtra("11111111111111111111111111111111");
+    assert.match(walletReturnProblem(handed, after, step, plan)!, /not its own safety check/);
+  });
+  test("a guard instruction placed BEFORE ours: refused (ours must come first, byte for byte)", () => {
+    const { handed, after } = withExtra(LIGHTHOUSE, { front: true });
+    assert.match(walletReturnProblem(handed, after, step, plan)!, /changed the transaction's instructions or accounts/);
+  });
+  test("a guard instruction that adds a signer: refused", () => {
+    const { handed, after } = withExtra(LIGHTHOUSE, { signer: true });
+    assert.match(walletReturnProblem(handed, after, step, plan)!, /changed who signs|needs another signer/);
+  });
+  test("the runner sends a transaction the wallet extended with Lighthouse checks, and the mint key signs the extended message", async () => {
+    const sends: VersionedTransaction[] = [];
+    const store = memoryPlanStorage();
+    const r = await signAndSendPlan(plan, CREATOR, {
+      latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }),
+      signTransaction: async (tx) => { const msg = TransactionMessage.decompile(tx.message); const extra = new TransactionInstruction({ programId: new PublicKey(LIGHTHOUSE), keys: [], data: Buffer.from([9]) }); const t = new VersionedTransaction(new TransactionMessage({ payerKey: msg.payerKey, recentBlockhash: msg.recentBlockhash, instructions: [...msg.instructions, extra] }).compileToV0Message()); t.sign([creatorKp]); return t; },
+      lookupTable: async () => null,
+      sendRaw: async (raw) => { sends.push(VersionedTransaction.deserialize(raw)); return `sig${sends.length}`; },
+      confirm: async () => ({ err: null }),
+      storage: store,
+    });
+    assert.equal(r.error, null);
+    const sent = sends[0];   // step 1 is the create: the wallet and the mint key both sign
+    assert.ok(sent, "sent");
+    assert.equal(sent.message.header.numRequiredSignatures, 2);
+    assert.ok(sent.signatures.every((s) => s.some((x) => x !== 0)), "both the wallet and the mint key signed the extended message");
+    assert.equal(sent.message.compiledInstructions.length, step.instructions.length + 1);
   });
 });

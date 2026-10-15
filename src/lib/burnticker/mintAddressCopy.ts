@@ -65,3 +65,10 @@ export function mintSearchView(s: GrindSnapshot): MintSearchView {
     showSkip: s.elapsedMs >= SKIP_AFTER_MS,
   };
 }
+
+/**
+ * Shown under the Launch button from the press until the wallet opens (owner, 2026-10-14: "people need to know the coin is launching
+ * while it builds so they don't exit out"). The prepare step pins the coin's art and rule on Arweave and runs the pre-launch check,
+ * which can take up to a minute.
+ */
+export const LAUNCHING_NOTICE = "Your coin is being prepared: its art and rule are being pinned on Arweave and the pre-launch check is running. This can take up to a minute. Keep this tab open; your wallet opens when it is ready.";
