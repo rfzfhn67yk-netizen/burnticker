@@ -2090,6 +2090,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               problems={problems}
               error={launchErr}
               busy={busy}
+              signs={shownReview.review?.transactions.count ?? null}
               ready={ready}
               creator={creator || null}
               onLaunch={() => { void launch(); }}
