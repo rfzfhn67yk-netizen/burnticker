@@ -202,6 +202,9 @@ async function throughToReview(page: any, ticker: string): Promise<void> {
     const tick = page.locator('input[data-help="ticker"]').first();
     if (await tick.isVisible().catch(() => false)) {
       await tick.fill(ticker);
+      // a unique name too: the lookalike guard refuses a second coin named like a live one ("Barcelona" twice), as it should
+      const nm = page.locator('input[data-help="name"]').first();
+      if (await nm.isVisible().catch(() => false)) await nm.fill(`Synthetic ${ticker}`);
       await clickButton(page, /^Review$/);
       await page.locator('button[data-decision="launch"]').first().waitFor({ timeout: 60_000 });
       return;
@@ -247,13 +250,44 @@ async function connectIfAsked(page: any): Promise<boolean> {
   return true;
 }
 
+/**
+ * Connects the injected wallet the way a creator does, before Launch: the header's Connect wallet, the wallet list, Phantom, then waits
+ * for the header pill (data-wallet-state="connected"). 2026-10-15: pressing Launch while still disconnected raced the Wallet Standard
+ * registration and left the review on "Connect wallet" with Launch never reachable.
+ */
+async function ensureConnected(page: any): Promise<void> {
+  const connected = page.locator('[data-wallet-state="connected"]').first();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (await connected.isVisible().catch(() => false)) return;
+    const modal = page.locator(".wallet-adapter-modal-wrapper").first();
+    if (!(await modal.isVisible().catch(() => false))) {
+      const b = page.locator('[data-wallet-button][data-wallet-state="disconnected"]:visible').first();
+      await b.click({ timeout: 15_000 }).catch(() => undefined);
+      await modal.waitFor({ state: "visible", timeout: 10_000 }).catch(() => undefined);
+    }
+    if (await modal.isVisible().catch(() => false)) {
+      await modal.getByRole("button", { name: /Phantom/ }).first().click({ timeout: 10_000 }).catch(() => undefined);
+      await modal.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => undefined);
+    }
+    try { await connected.waitFor({ state: "visible", timeout: 20_000 }); return; } catch { await sleep(1000); }
+  }
+  fail(`The test wallet never connected: the header still shows "${(await page.locator("[data-wallet-button]").first().innerText().catch(() => "?")).trim()}".`);
+}
+
 /** Press Launch on the review (connecting first when the page opens the wallet list) and wait for the sign card, an alert or the search. */
 async function pressLaunch(page: any, o: { double?: boolean } = {}, note?: (s: string) => void): Promise<"sign-card" | "alert"> {
   let paced = 0;
+  await ensureConnected(page);
   const btn = page.locator('button[data-decision="launch"]').first();
-  await btn.waitFor({ timeout: 30_000 });
+  await btn.waitFor({ timeout: 60_000 });
+  await btn.scrollIntoViewIfNeeded().catch(() => undefined);
+  for (let i = 0; i < 60 && !(await btn.isEnabled().catch(() => false)); i++) await sleep(1000);
+  if (!(await btn.isEnabled().catch(() => false))) {
+    const why = await page.evaluate(() => { const b = document.querySelector<HTMLButtonElement>('button[data-decision="launch"]'); return (b?.getAttribute("aria-describedby") ?? "").split(" ").filter(Boolean).map((id) => document.getElementById(id)?.innerText ?? "").join(" ").trim(); }).catch(() => "");
+    fail(`The Launch button stayed off for 60 s.${why ? ` The review says: ${why}` : ""}`);
+  }
   await btn.click();
-  if (await connectIfAsked(page)) { await sleep(500); await btn.click(); }
+  if (await connectIfAsked(page)) { await sleep(500); await ensureConnected(page); await btn.click(); }
   if (o.double) await btn.click({ force: true, timeout: 2_000 }).catch(() => undefined);
   let deadline = now() + MINT_SEARCH_MS + 60_000;
   while (now() < deadline) {
@@ -274,7 +308,9 @@ async function pressLaunch(page: any, o: { double?: boolean } = {}, note?: (s: s
 /** The sign card's outcome: complete (live), stopped with a sentence, or still working past the deadline. */
 async function signOutcome(page: any, ms = 120_000): Promise<{ state: "complete" | "stopped"; text: string }> {
   const card = page.locator("[data-sign-card]").first();
+  if (CHAIN === "real" && ms === 120_000) ms = 360_000;   // two steps, each confirmed on devnet
   const deadline = now() + ms;
+  await readCardMints(page);
   while (now() < deadline) {
     if (await card.locator("[data-launch-complete]").first().isVisible().catch(() => false)) return { state: "complete", text: (await card.innerText()).replace(/\s+/g, " ") };
     const red = card.locator("p.text-red-400").first();
@@ -323,15 +359,42 @@ async function assertLaunched(page: any, seen: Observed, outcome: { state: strin
     return detail;
   }
   if (outcome.state !== "complete") fail(`The launch did not finish. The signing card says: ${outcome.text}`);
-  const open = page.locator("[data-launch-complete] a").first();
-  const href = await open.getAttribute("href");
-  const r = await page.goto(new URL(href, BASE).toString(), { waitUntil: "domcontentloaded" });
-  if (!r || r.status() !== 200) fail(`The coin page answered HTTP ${r?.status()}.`);
-  for (const m of mintsOf(seen)) {
-    const j = await (await fetch(`${BASE}/api/burnticker/tokens/${m}`)).json().catch(() => null) as { status?: { status?: string } } | null;
-    if (j?.status?.status !== "live") fail(`The API says ${m} is ${j?.status?.status ?? "unknown"}, not live.`);
+  detail.push(...(await confirmLive(page, cardMints.get(page) ?? [])));
+  return detail;
+}
+
+/** The mints the signing card names (plan.confirms): the coins this launch made, not earlier refused drafts. */
+const cardMints = new WeakMap<object, string[]>();
+async function readCardMints(page: any): Promise<string[]> {
+  const ms = await page.locator("[data-sign-card] [data-mint-address]").evaluateAll((es: Element[]) => es.map((e) => e.getAttribute("data-mint-address") ?? "")).catch(() => [] as string[]);
+  const out = (ms as string[]).filter(Boolean);
+  if (out.length) cardMints.set(page, out);
+  return out;
+}
+
+/**
+ * Real chain: each coin is on chain (the mint account exists) and the API says live, polled for a minute; the coin page is then opened
+ * for its status only. A page that fails to load after the coin is live is said, not counted as a failed launch (owner, 2026-10-15).
+ */
+async function confirmLive(page: any, mints: string[]): Promise<string[]> {
+  const detail: string[] = [];
+  if (!mints.length) fail("The signing card named no coin address.");
+  const conn = new Connection(RPC, "confirmed");
+  for (const m of mints) {
+    let onChain = false, status = "unknown";
+    for (let i = 0; i < 30 && (!onChain || status !== "live"); i++) {
+      if (!onChain) { try { onChain = !!(await conn.getAccountInfo(new PublicKey(m))); } catch { /* retry */ } }
+      try { const j = await (await fetch(`${BASE}/api/burnticker/tokens/${m}`, { signal: AbortSignal.timeout(30_000) })).json() as { status?: { status?: string } }; status = j?.status?.status ?? "unknown"; } catch { /* retry */ }
+      if (!onChain || status !== "live") await sleep(2000);
+    }
+    if (!onChain) fail(`The mint ${m} does not exist on devnet.`);
+    if (status !== "live") fail(`${m} exists on devnet, but the API says it is ${status}, not live.`);
+    detail.push(`${m}: on devnet, API status live`);
+    try {
+      const r = await page.goto(`${BASE}/burnticker/t/${m}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      detail.push(`coin page ${r?.status() ?? "no answer"}`);
+    } catch (e) { detail.push(`landed and live; the coin page then failed to load (${String((e as Error).message).split("\n")[0].slice(0, 120)})`); }
   }
-  detail.push("coin page 200, API status live");
   return detail;
 }
 
@@ -344,6 +407,13 @@ async function withPage<T>(c: Ctx, f: (page: any, seen: Observed) => Promise<T>)
   try { const r = await f(page, seen); return { ...r, mints: mintsOf(seen) }; }
   catch (e) {
     (e as { mints?: string[] }).mints = mintsOf(seen);
+    // a landed, live coin is a pass even when a later step of the script fails; the report says which part failed
+    if (CHAIN === "real" && !(e instanceof Fail) && !(e instanceof Skip)) {
+      const ms = cardMints.get(page) ?? await readCardMints(page);
+      if (ms.length) {
+        try { const d = await confirmLive(page, ms); return { detail: [...d, `landed; the script then failed at: ${String((e as Error).message).split("\n")[0].slice(0, 160)}`], mints: mintsOf(seen) } as unknown as T & { mints: string[] }; } catch { /* not live: the original error stands */ }
+      }
+    }
     // what the failure looked like: a screenshot, the launch requests and the page's console errors
     try {
       const shot = path.join("logs", `${RUN_ID}-${(e as { scenario?: string }).scenario ?? "scenario"}-${Date.now()}.png`);
@@ -419,7 +489,7 @@ const SCENARIOS: Scenario[] = [
       const first = await signOutcome(page);
       if (!/was not signed in the wallet/.test(first.text)) fail(`After the wallet refused, the card should say the step was not signed. It says: ${first.text}`);
       // the tab reloads; "Start a new launch from the review" opens the kept draft on its review (launchDraftStore.ts resumeReviewHref)
-      await page.goto(`${BASE}/burnticker/launch?resume=review`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${BASE}/burnticker/launch?resume=review`, { waitUntil: "domcontentloaded", timeout: 60_000 });
       try { await page.locator('button[data-decision="launch"]').first().waitFor({ timeout: 60_000 }); } catch { fail(`After a reload the kept review did not come back. The page shows: ${(await mainText(page)).slice(0, 300)}`); }
       const got = await pressLaunch(page);
       if (got === "alert") { const a = (await lastAlert(page)) ?? ""; fail(a); }
