@@ -164,6 +164,7 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/digest$/, "digest", []],
   [/^\/ops\/post-queue$/, "ops/post-queue", []],
   [/^\/ops\/post-queue\/used$/, "ops/post-queue/used", []],
+  [/^\/ops\/platform-fees$/, "ops/platform-fees", []],
 ];
 export const ROUTE_MODULES = ROUTES.map((r) => r[1]);
 

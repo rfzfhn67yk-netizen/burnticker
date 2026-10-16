@@ -73,6 +73,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/digest?day=YYYY-MM-DD` | 300 s | read | (1.18.0, item 8; `digest.ts`) one UTC day (default today): results read, confirmed burns, new coins, graduations this site registered, and plain lines; `scripts/burnticker-posts.mts digest --digest-file=FILE` turns a saved answer into one queued post |
 | GET | `/ops/post-queue?state=` | — | read | (1.18.0, item 9; `postApproval.ts`) operator only (the operator's network and `x-action-pin`): the owner's post queue with each post `waiting` or `used`. Never posts |
 | POST | `/ops/post-queue/used` `{ id, note? }` | — | read | (1.18.0) operator only: appends a "used" mark to `data/launch/post-queue-used.jsonl`; the queue file is never changed and nothing posts |
+| GET | `/ops/platform-fees` | — | read | (`platformFeeClaim.ts`) operator only (the post queue's gate): the LaunchLab platform config read from chain, the wrapped-SOL fee vault's balance and the three unsigned instructions of the claim for `/burnticker/operator/claim-fees`. Never signs or sends |
 
 ## Cheap-features pass (API 1.18.0, 2026-10-13)
 
