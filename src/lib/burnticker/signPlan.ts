@@ -34,6 +34,13 @@ export interface SignPlan {
   pending: string[];
   /** the sentence when a key is missing */
   missingKeys: string;
+  /**
+   * AUDIT A C1 (5): true for a set whose coins go live together or not at all (the pair curve: neither side is live until init_pair).
+   * Otherwise (LaunchLab, single or pair) each coin is confirmed the moment its own create step lands, whatever happens after it.
+   */
+  confirmTogether?: boolean;
+  /** re-review 5: the venue, stored with the record so a later reader decides `together` from it */
+  venue?: "launchlab" | "pair-curve";
 }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -237,6 +244,9 @@ export interface PlanRecord {
   /** which step confirms which draft, and how many steps the plan has: enough for a page that no longer holds the plan (after a reload) to reconcile and record */
   confirms?: { mint: string; ticker: string; step: number }[];
   steps?: number;
+  /** AUDIT A C1 (5): the plan's confirmTogether (a pair-curve set records its coins only once every step is confirmed) */
+  together?: boolean;
+  venue?: "launchlab" | "pair-curve";
   /** signatures each step carries (its signer count): a landed step's network fee is this × LAMPORTS_PER_SIGNATURE */
   stepSigners?: number[];
   /** the network fees already paid: every step that landed (confirmed, or rejected on chain — a rejected transaction still pays) */
@@ -298,7 +308,7 @@ function notePaid(rec: { paid?: { step: number; signature: string; lamports: num
 }
 export function savePlanRecord(storage: PlanStorage | null | undefined, plan: SignPlan, rec: PlanRecord): void {
   if (!storage) return;
-  try { storage.set(planStorageKey(plan), JSON.stringify({ ...rec, v: 1, updatedAt: Date.now(), confirms: plan.confirms, steps: plan.steps.length, stepSigners: plan.steps.map((st) => st.signers.length), paid: rec.paid ?? [] })); } catch { /* storage full or gone: the run goes on */ }
+  try { storage.set(planStorageKey(plan), JSON.stringify({ ...rec, v: 1, updatedAt: Date.now(), confirms: plan.confirms, steps: plan.steps.length, together: !!plan.confirmTogether, ...(plan.venue ? { venue: plan.venue } : {}), stepSigners: plan.steps.map((st) => st.signers.length), paid: rec.paid ?? [] })); } catch { /* storage full or gone: the run goes on */ }
 }
 const emptyRecord = (plan: SignPlan): PlanRecord => ({ v: 1, mints: plan.confirms.map((c) => c.mint), confirmed: [], recorded: [], pending: null, failed: null, updatedAt: 0, paid: [] });
 /** Marks drafts recorded as launched (the card, after confirmPlan); the whole record goes once every draft is recorded. */
@@ -667,9 +677,13 @@ export function failureSentence(r: SendResult, n: number): string {
   return `${r.error}. ${before ? "The steps before it are confirmed on chain. Pressing the button again continues from the failed step." : "Nothing was sent."}`;
 }
 
-/** Which signature confirms which draft. */
-export const planConfirmations = (plan: SignPlan, sigs: string[]): { mint: string; launchTx: string }[] =>
-  plan.confirms.every((c) => sigs[c.step]) ? plan.confirms.map((c) => ({ mint: c.mint, launchTx: sigs[c.step] })) : [];
+/**
+ * Which signature confirms which draft. AUDIT A C1 (5): every coin whose own create step has a confirmed signature, even when a later step
+ * (the other coin of a LaunchLab pair) failed: before, a pair with A created and B failed recorded neither, and A was lost after 24 h. A
+ * plan whose coins go live together (confirmTogether: the pair curve) still confirms only once every confirming step is signed.
+ */
+export const planConfirmations = (plan: Pick<SignPlan, "confirms" | "confirmTogether">, sigs: string[]): { mint: string; launchTx: string }[] =>
+  plan.confirmTogether && !plan.confirms.every((c) => sigs[c.step]) ? [] : plan.confirms.filter((c) => sigs[c.step]).map((c) => ({ mint: c.mint, launchTx: sigs[c.step] }));
 
 export interface LaunchErrorBody { error?: string; code?: string; retryAfterSec?: number }
 type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; headers: { get(name: string): string | null }; json(): Promise<unknown> }>;
@@ -723,7 +737,7 @@ export interface LaunchlabBundleLike { mint: string; ticker: string; ready: bool
  * bundle from before the split (one step, initialize_token + create) confirms on that one step.
  */
 export function launchlabPlan(bundles: readonly LaunchlabBundleLike[]): SignPlan {
-  const plan: SignPlan = { steps: [], keys: {}, expect: {}, labels: {}, confirms: [], pending: [], missingKeys: bundles.length > 1 ? "the server did not hand over the mint keys, so the create transactions cannot be signed here" : "the server did not hand over the mint key, so the create transaction cannot be signed here" };
+  const plan: SignPlan = { steps: [], keys: {}, expect: {}, labels: {}, confirms: [], venue: "launchlab", pending: [], missingKeys: bundles.length > 1 ? "the server did not hand over the mint keys, so the create transactions cannot be signed here" : "the server did not hand over the mint key, so the create transaction cannot be signed here" };
   bundles.forEach((b, i) => {
     const name = bundles.length > 1 ? `mint${i}` : "mint";
     plan.keys[name] = b.mintSecretKey; plan.expect[name] = b.mint; plan.labels[name] = `the $${b.ticker} mint key`;
@@ -749,6 +763,9 @@ export function pairCurvePlan(pc: PairCurveLaunchBundle, keys: { a: string; b: s
     confirms: [{ mint: pc.mints.a, ticker: tickers.a, step: 0 }, { mint: pc.mints.b, ticker: tickers.b, step: 1 }],
     pending: pc.ready ? [] : pc.pending.filter((p) => !/^Metaplex metadata/.test(p)),
     missingKeys: "the server did not hand over the two mint keys, so the mint transactions cannot be signed here",
+    // both graduate or neither: a side is verified only once init_pair (the last step) is on chain
+    confirmTogether: true,
+    venue: "pair-curve",
   };
 }
 
@@ -789,7 +806,16 @@ function parseStoredRecord(raw: string | null): StoredLaunch["rec"] | null {
   if (j.pending != null && !(isPending(j.pending) && inPlan(j.pending.step))) return null;
   if (j.failed != null && !(Number.isInteger(j.failed.step) && inPlan(j.failed.step) && typeof j.failed.signature === "string")) return null;
   const confirms = j.confirms;
-  return { v: 1 as const, mints: confirms.map((c) => c.mint), confirmed: [...j.confirmed], recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [], pending: j.pending ?? null, failed: j.failed ?? null, updatedAt: Number(j.updatedAt) || 0, confirms, steps, paid: paidOf(j.paid), ...(Array.isArray(j.stepSigners) ? { stepSigners: [...j.stepSigners] } : {}) };
+  return { v: 1 as const, mints: confirms.map((c) => c.mint), confirmed: [...j.confirmed], recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [], pending: j.pending ?? null, failed: j.failed ?? null, updatedAt: Number(j.updatedAt) || 0, confirms, steps, paid: paidOf(j.paid), together: typeof j.together === "boolean" ? j.together : j.venue === "pair-curve" || j.venue === "launchlab" ? j.venue === "pair-curve" : legacyTogether(confirms, steps), ...(j.venue === "pair-curve" || j.venue === "launchlab" ? { venue: j.venue } : {}), ...(Array.isArray(j.stepSigners) ? { stepSigners: [...j.stepSigners] } : {}) };
+}
+
+/**
+ * Review 2026-10-15 (9; re-review 5): a record stored before `together` and `venue` were written. Only the pair curve's exact shape is
+ * read as together: three steps, coin A confirmed at step 0 and coin B at step 1, then init_pair (pairCurvePlan). A LaunchLab pair
+ * (creates on steps 1 and 3, perhaps an opening buy after) is never this shape. Records written since carry `together` and `venue`.
+ */
+export function legacyTogether(confirms: readonly { step: number }[], steps: number): boolean {
+  return steps === 3 && confirms.length === 2 && confirms[0].step === 0 && confirms[1].step === 1;
 }
 
 /** The line a stored launch shows before anything is checked. */
@@ -826,11 +852,17 @@ export async function recoverStoredLaunch(storage: PlanStorage, s: StoredLaunch,
     save();
     if (rec.pending) return { text: r === "uncertain" || r === "accounts-exist" ? `${staysSentSentence(r, p.step, rec.steps, p.signature)}.` : storedLaunchSentence({ key: s.key, rec }), done: false, rec };
   }
-  if (rec.confirmed.length < rec.steps) return { text: storedLaunchSentence({ key: s.key, rec }), done: false, rec };
-  const c = await confirmPlan(fetchFn, { confirms: rec.confirms } as unknown as SignPlan, rec.confirmed, message, { already: rec.recorded });
+  // AUDIT A C1 (5): a coin whose create step is confirmed is recorded even when a later step never will be (a LaunchLab pair whose B
+  // create failed: A exists on chain). A set that goes live together (the pair curve) still waits for every step.
+  const plan = { confirms: rec.confirms, confirmTogether: rec.together === true } as unknown as SignPlan;
+  const partial = rec.confirmed.length < rec.steps;
+  if (partial && !planConfirmations(plan, rec.confirmed).some((l) => !rec.recorded.includes(l.mint))) return { text: storedLaunchSentence({ key: s.key, rec }), done: false, rec };
+  const c = await confirmPlan(fetchFn, plan, rec.confirmed, message, { already: rec.recorded });
   rec.recorded = c.confirmed;
   const done = rec.confirms.every((x) => rec.recorded.includes(x.mint));
   if (done) { try { storage.remove(s.key); } catch { /* ignore */ } } else save();
   const names = rec.confirms.map((x) => `$${x.ticker}`).join(" and ");
+  if (partial && done) { const left = rec.steps - rec.confirmed.length; return { text: `For ${names}, the coin is created on chain and recorded, so its page is live. The later ${left === 1 ? "step was" : "steps were"} not sent, and the coin does not need ${left === 1 ? "it" : "them"} to be live.`, done, rec }; }
+  if (partial && !done) { const got = rec.confirms.filter((x) => rec.recorded.includes(x.mint)).map((x) => `$${x.ticker}`).join(" and "); return { text: `${got ? `${got} ${got.includes(" and ") ? "are" : "is"} created on chain and recorded. ` : ""}${storedLaunchSentence({ key: s.key, rec })}${c.error ? ` ${c.error}` : ""}`, done: false, rec }; }
   return { text: done ? `For ${names}, everything is confirmed on chain and recorded. The coin page is live.` : `All ${rec.steps} transaction${rec.steps === 1 ? " is" : "s are"} confirmed on chain. ${c.error ?? ""}`.trim(), done, rec };
 }

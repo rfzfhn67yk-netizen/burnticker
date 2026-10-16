@@ -25,7 +25,8 @@ import { decodePair, pairPda } from "@/lib/pairCurve/accounts";
  * Re-sending the same signature is a no-op (registry.markLaunched); the baseline is fixed by an SQL trigger.
  */
 
-export type LaunchCheck = { ok: true; blockTimeMs: number } | { ok: false; status: 404 | 409 | 422 | 502 | 503; reason: string };
+/** `missing`: refused because an account was not found (a lagging RPC can answer that for an account that exists): never remembered. */
+export type LaunchCheck = { ok: true; blockTimeMs: number } | { ok: false; status: 404 | 409 | 422 | 502 | 503; reason: string; missing?: true };
 
 /** The venue a draft launches on: a LaunchLab curve under `platformId`, or one side of a pair-curve pair (mint A, mint B in order). */
 export type LaunchVenue = { kind: "launchlab"; platformId: string | null } | { kind: "pair-curve"; mintA: string; mintB: string } | { kind: "unknown"; why: string };
@@ -123,8 +124,8 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       try { cfgInfo = await reader.getAccountInfo(cfgAddress, "confirmed"); }
       catch (e) { return { ok: false, status: 502, reason: `the coin's TokenConfig could not be read from the RPC just now (${(e as Error).message.slice(0, 120)}); retry` }; }
       // a transaction without a burn_receipts call is judged only as a split launch's create: no config, the old answer
-      if (splitCreate && (!cfgInfo || cfgInfo.owner.toBase58() !== program)) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
-      if (!cfgInfo) return { ok: false, status: 422, reason: `no TokenConfig for this mint under the burn_receipts program on chain (${cfgAddress.toBase58()}): initialize_token did not complete, ${NOT_THIS}` };
+      if (splitCreate && (!cfgInfo || cfgInfo.owner.toBase58() !== program)) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}`, ...(!cfgInfo ? { missing: true as const } : {}) };
+      if (!cfgInfo) return { ok: false, status: 422, missing: true, reason: `no TokenConfig for this mint under the burn_receipts program on chain (${cfgAddress.toBase58()}): initialize_token did not complete, ${NOT_THIS}` };
       if (cfgInfo.owner.toBase58() !== program) return { ok: false, status: 422, reason: `the account at the coin's TokenConfig address is not owned by the burn_receipts program: ${NOT_THIS}` };
       let cfg: ReturnType<typeof decodeTokenConfig>;
       try { cfg = decodeTokenConfig(cfgInfo.data); } catch (e) { return { ok: false, status: 422, reason: `the coin's TokenConfig does not decode (${(e as Error).message.slice(0, 80)}): ${NOT_THIS}` }; }

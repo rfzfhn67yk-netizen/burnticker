@@ -429,8 +429,25 @@ async function resolveSent(d: KeeperDeps, port: ProgramPort, mint: string, key: 
     if (x && x.err === null && x.confirmed) return { landed: { signature: s.signature, slot: x.slot, memo: s.memo } };
     if (x && x.err !== null) { d.registry.setSignatureStatus(s.signature, "failed", x.err, x.slot); continue; }
     height ??= await port.blockHeight();
-    if (height > s.lastValidBlockHeight) d.registry.setSignatureStatus(s.signature, "expired", null, null);
-    else return { waiting: `${key} ${s.signature.slice(0, 12)}… may still land (block height ${height} ≤ ${s.lastValidBlockHeight})` };
+    if (height <= s.lastValidBlockHeight) return { waiting: `${key} ${s.signature.slice(0, 12)}… may still land (block height ${height} ≤ ${s.lastValidBlockHeight})` };
+    // AUDIT A review (3): a null status past the blockhash's life is "never landed" only on an RPC that keeps the history. A fallback or
+    // a provider gap answers null for a reading that DID land; marking it expired would re-date its receipts to D+1 and count them again
+    // (the F1 double burn by another door). The chain's Reading account decides first.
+    if (key.startsWith("reading:")) {
+      const D = Number(key.slice("reading:".length).replace(/-/g, ""));
+      let rd: ProgramReadingView | null;
+      try { rd = await port.reading(D); } catch (e) { return { waiting: `${key} ${s.signature.slice(0, 12)}…: its status is unknown and the reading account could not be read (${(e as Error).message.slice(0, 80)})` }; }
+      if (rd) {
+        let mine: string | null = null;
+        try { mine = (JSON.parse(s.memo) as { value?: string }).value ?? null; } catch { mine = null; }
+        // the Reading on chain carries this row's exact counter value: the receipts it named are counted (whoever's transaction carried it)
+        if (mine !== null && rd.value.toString() === mine) return { landed: { signature: s.signature, slot: null, memo: s.memo } };
+        const text = `The reading for ${key.slice(8)} is on chain but does not carry the value this keeper sent (${rd.value} vs ${mine ?? "unknown"}), and the status of ${s.signature} cannot be read. Held until a human reconciles it.`;
+        if (d.registry.recordAlert({ kind: "reading-unresolved", key: `reading-unresolved:${mint}:${key}`, text, meta: { mint, key, signature: s.signature } }, d.now())) d.log(`  [alert] reading-unresolved: ${text}`);
+        return { waiting: text };
+      }
+    }
+    d.registry.setSignatureStatus(s.signature, "expired", null, null);
   }
   return { none: true };
 }
@@ -462,7 +479,8 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
   // 1. ATTEST the closed days.
   const r = await submitCounterReadings(d, t, port, cfg, out);
   cfg = r.cfg;
-  if (opts.attestOnly) return out;
+  // AUDIT A F1: a reading whose outcome is unknown holds the coin's whole pass (fail closed): nothing is attested or cranked on a guess.
+  if (r.held || opts.attestOnly) return out;
 
   // 2. FEED THE POOL + POOL HEALTH (buyback; best-effort; only when something is waiting for a crank).
   const counted = reg.pending(mint).filter((b) => b.readingDate !== null);
@@ -606,12 +624,62 @@ export async function cosignReading(d: Pick<KeeperDeps, "cosigner" | "registry" 
   return { cosignatures: r.cosignatures, hold: null, note: r.note };
 }
 
-/** Attests every closed day's units (baseline first). Returns the refreshed config. */
-async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPort, cfg0: ProgramConfigView, out: ExecOutcome[]): Promise<{ cfg: ProgramConfigView }> {
+/** The receipts a reading's write-ahead row named (its memo's `events`), or [] when the memo is not one of ours. */
+export function readingEventsOf(memo: string): string[] {
+  try { const e = (JSON.parse(memo) as { events?: unknown }).events; return Array.isArray(e) ? e.filter((x): x is string => typeof x === "string") : []; } catch { return []; }
+}
+const readingKeyDate = (key: string): number => Number(key.slice("reading:".length).replace(/-/g, ""));
+
+/**
+ * AUDIT A F1 (2026-10-15): settle what earlier submit_readings did BEFORE a reading date is chosen. The date is max(oldest unassigned
+ * receipt's day, the day after the chain's last reading); a reading that LANDED but whose confirmation was lost has already moved the
+ * chain's date, so choosing first and resolving the chosen date's key afterwards looked up the wrong key and counted the same receipts
+ * into the next day (two burns for one result). In order:
+ *   1. repair: a CONFIRMED reading whose named receipts are still unassigned (a crash between the two journal writes the old path made)
+ *      gets them now — the chain counted them;
+ *   2. resolve every `sent` reading row of the mint, oldest date first: landed → signature and receipts confirmed together
+ *      (Registry.confirmReading); failed / expired → nothing was counted; may still land, or the status cannot be read → HOLD.
+ * Returns "held" with a waiting outcome per pending receipt while any outcome is unknown.
+ */
+async function settleOutstandingReadings(d: KeeperDeps, t: TokenRow, port: ProgramPort, out: ExecOutcome[]): Promise<"held" | "settled"> {
+  const reg = d.registry, mint = t.mint, now = d.now();
+  const unassigned = new Set(reg.pending(mint).filter((b) => b.readingDate === null).map((b) => b.eventId));
+  for (const s of unassigned.size ? reg.readingSignatures(mint, "confirmed") : []) {
+    const loose = readingEventsOf(s.memo).filter((id) => unassigned.has(id));
+    if (!loose.length) continue;
+    for (const id of loose) unassigned.delete(id);
+    reg.confirmReading(mint, s.signature, s.slot, loose, readingKeyDate(s.eventId), now);
+    d.log(`  [attest] $${t.ticker} ${s.eventId.slice(8)}: repaired — the confirmed reading ${s.signature.slice(0, 12)}… named ${loose.length} ${loose.length === 1 ? "receipt" : "receipts"} the registry had not counted into it (${loose.join(", ")})`);
+  }
+  const keys = [...new Set(reg.readingSignatures(mint, "sent").map((s) => s.eventId))];
+  for (const key of keys) {
+    const holdAll = (why: string): "held" => { for (const b of reg.pending(mint)) out.push({ mint, eventId: b.eventId, outcome: "waiting", why }); d.log(`  [attest] $${t.ticker} ${key.slice(8)}: HOLD — ${why}`); return "held"; };
+    let res: Awaited<ReturnType<typeof resolveSent>>;
+    try { res = await resolveSent(d, port, mint, key); }
+    catch (e) { if (isBudgetHold(e)) throw e; return holdAll(`the outcome of an earlier reading transaction is unknown (${(e as Error).message.slice(0, 120)}), so nothing new is attested or cranked until it is resolved`); }
+    if ("waiting" in res) return holdAll(res.waiting);
+    if ("landed" in res) {
+      const named = readingEventsOf(res.landed.memo);
+      reg.confirmReading(mint, res.landed.signature, res.landed.slot, named, readingKeyDate(key), now);
+      d.log(`  [attest] $${t.ticker} ${key.slice(8)}: an earlier submit_reading landed (${res.landed.signature.slice(0, 12)}…) — ${named.length} ${named.length === 1 ? "receipt" : "receipts"} counted into it`);
+    }
+  }
+  return "settled";
+}
+
+/** Attests every closed day's units (baseline first). Returns the refreshed config, and held when an earlier reading's outcome is unknown. */
+async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPort, cfg0: ProgramConfigView, out: ExecOutcome[]): Promise<{ cfg: ProgramConfigView; held?: boolean }> {
   const reg = d.registry, mint = t.mint;
   let cfg = cfg0;
   const now = d.now(), today = ymd(now);
+  // AUDIT A F1: every outstanding reading is resolved BEFORE a date is allocated (the chain's date may already include it).
+  if (reg.readingSignatures(mint, "sent").length || reg.readingSignatures(mint, "confirmed").length) {
+    const before = reg.readingSignatures(mint, "confirmed").length;
+    if ((await settleOutstandingReadings(d, t, port, out)) === "held") return { cfg, held: true };
+    if (reg.readingSignatures(mint, "confirmed").length !== before) cfg = (await port.config()) ?? cfg;
+  }
   const isFeed = t.selectorKey.startsWith("catalogue:");
+  let heldUnknown = false;
   const submit = async (D: number, value: bigint, counted: readonly ReceiptRow[], report: readonly ReceiptRow[] = counted): Promise<boolean> => {
     const Ds = formatDate(D), key = `reading:${Ds}`, ids = counted.map((b) => b.eventId);
     const rows = report;
@@ -619,11 +687,10 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
     const res = await resolveSent(d, port, mint, key);
     if ("waiting" in res) return wait(res.waiting);
     if ("landed" in res) {
-      // An earlier submit landed: count exactly the receipts IT named (its write-ahead row), not today's selection.
-      let named: string[] = [];
-      try { named = (JSON.parse(res.landed.memo) as { events?: string[] }).events ?? []; } catch { named = []; }
-      reg.setSignatureStatus(res.landed.signature, "confirmed", null, res.landed.slot);
-      reg.assignReading(mint, named, D, now);
+      // An earlier submit landed: count exactly the receipts IT named (its write-ahead row), not today's selection — signature and
+      // assignment in one transaction (AUDIT A F1).
+      const named = readingEventsOf(res.landed.memo);
+      reg.confirmReading(mint, res.landed.signature, res.landed.slot, named, D, now);
       d.log(`  [attest] $${t.ticker} ${Ds}: an earlier submit_reading landed (${res.landed.signature.slice(0, 12)}…) — ${named.length} ${named.length === 1 ? "receipt" : "receipts"} counted into it`);
       cfg = (await port.config()) ?? cfg;
       return true;
@@ -653,17 +720,20 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
     }
     reg.recordSignature({ signature: tx.signature, mint, eventId: key, memo: JSON.stringify({ message: tx.message, events: ids, value: value.toString() }), burnRaw: BigInt(0), spendLamports: BigInt(0), blockhash: tx.blockhash, lastValidBlockHeight: tx.lastValidBlockHeight, sentAt: now });
     try { await port.send(tx.raw); } catch (e) { d.log(`  [attest] $${t.ticker} ${Ds}: send raised ${(e as Error).message.slice(0, 120)} — the signature is on the ledger and will be resolved`); }
-    const c = await port.confirm(tx);
+    // AUDIT A F1: a confirmation that cannot be read is an UNKNOWN outcome, not an error: the write-ahead row stays `sent` and the next
+    // pass resolves it (settleOutstandingReadings) before it chooses any date.
+    let c: Awaited<ReturnType<ProgramPort["confirm"]>>;
+    try { c = await port.confirm(tx); }
+    catch (e) { if (isBudgetHold(e)) throw e; heldUnknown = true; return wait(`The reading transaction ${tx.signature.slice(0, 12)}… was sent and its confirmation could not be read (${(e as Error).message.slice(0, 100)}); it is resolved before anything else is attested.`); }
     if (c.status === "failed") { reg.setSignatureStatus(tx.signature, "failed", c.err, null); for (const b of rows) out.push({ mint, eventId: b.eventId, outcome: "error", why: `submit_reading failed: ${c.err}` }); return false; }
-    if (c.status === "expired") return wait(`The reading transaction ${tx.signature.slice(0, 12)}… is not confirmed yet.`);
-    reg.setSignatureStatus(tx.signature, "confirmed", null, c.slot);
-    reg.assignReading(mint, ids, D, now);
+    if (c.status === "expired") { heldUnknown = true; return wait(`The reading transaction ${tx.signature.slice(0, 12)}… is not confirmed yet.`); }
+    reg.confirmReading(mint, tx.signature, c.slot, ids, D, now);
     d.log(`  [attest] $${t.ticker} ${Ds}: unit counter ${value} attested (${ids.length ? `${ids.length} ${ids.length === 1 ? "receipt" : "receipts"}: ${ids.join(", ")}` : "baseline"}) — ${tx.signature}`);
     cfg = (await port.config()) ?? cfg;
     return true;
   };
   if (!cfg.hasBaseline) {
-    if (!(await submit(prevDay(receiptDay(t.baselineAt)), COUNTER_BASE, [], reg.pending(mint)))) return { cfg };
+    if (!(await submit(prevDay(receiptDay(t.baselineAt)), COUNTER_BASE, [], reg.pending(mint)))) return { cfg, held: heldUnknown };
   }
   let unassigned = reg.pending(mint).filter((b) => b.readingDate === null);
   while (unassigned.length) {
@@ -681,7 +751,7 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
     if (!(await submit(D, cfg.lastValue + units, group))) break;
     unassigned = reg.pending(mint).filter((b) => b.readingDate === null);
   }
-  return { cfg };
+  return { cfg, held: heldUnknown };
 }
 
 /** Writes what the program did for reading D onto its receipts (lead: the amounts; the others: zeros) and reports one outcome per receipt. */
