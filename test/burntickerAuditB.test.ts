@@ -79,7 +79,7 @@ describe("H2: Caddy passes the launch routes' own 5xx answers through; the fallb
     const m = app.match(/@app_launch path ([^\n]+)/);
     assert.ok(m, "the launch matcher");
     const paths = m![1].trim().split(/\s+/);
-    for (const p of ["/api/burnticker/launch", "/api/burnticker/launch/*", "/api/burnticker/v1/launch/bundle"]) assert.ok(paths.includes(p), p);
+    for (const p of ["/api/burnticker/launch", "/api/burnticker/launch/*", "/api/burnticker/v1/launch/*"]) assert.ok(paths.includes(p), p);   // audit C: every v1 launch route, not only bundle
     assert.ok(app.indexOf("handle @app_launch") < app.indexOf("handle @app_api"), "the launch block comes before the general API block");
     const launch = caddyBlock(app, "handle @app_launch {");
     assert.match(launch, /response_header_timeout 90s/);

@@ -37,6 +37,7 @@ async function sendThroughPlan(plan: SignPlan, creator: Keypair, network: Networ
   const raws: Uint8Array[] = [];
   const r = await signAndSendPlan(plan, creator.publicKey.toBase58(), {
     latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }),
+    simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
     signTransaction: async (tx) => { tx.sign([creator]); return tx; },
     lookupTable: () => verifiedLookupTable(reader(table(lutKey, lookupTableKeys(network))), network, pin),
     sendRaw: async (raw) => { raws.push(raw); return `sig${raws.length}`; },
@@ -175,7 +176,7 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
       assert.equal(problems.length, 1); assert.match(problems[0], /over the 1,232-byte limit, so it cannot be sent as one transaction$/);   // launch-10: the site never builds this shape (hostedLaunch.ts)
       assert.ok(lintCopy(problems[0], loadCopyLintConfig()).ok, problems[0]);
       let walletCalls = 0;
-      const r = await signAndSendPlan(old, creator, { latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }), lookupTable: async () => expectedLookupTable(network), signTransaction: async (tx) => { walletCalls++; return tx; }, sendRaw: async () => "x", confirm: async () => ({ err: null }) });
+      const r = await signAndSendPlan(old, creator, { simulate: async () => null, latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }), lookupTable: async () => expectedLookupTable(network), signTransaction: async (tx) => { walletCalls++; return tx; }, sendRaw: async () => "x", confirm: async () => ({ err: null }) });
       assert.equal(walletCalls, 0); assert.equal(r.state, "not-sent"); assert.match(r.error!, /over the 1,232-byte limit/);
     }
     // every step of the plans that fit is clear of the pre-sign check
@@ -188,6 +189,7 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
     let walletCalls = 0;
     const r = await signAndSendPlan(launchlabPlan([joined(s.bundle)]), s.creator.publicKey.toBase58(), {
       latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }), lookupTable: async () => null,
+      simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
       signTransaction: async (tx) => { walletCalls++; return tx; }, sendRaw: async () => "x", confirm: async () => ({ err: null }),
     });
     assert.equal(walletCalls, 0); assert.equal(r.state, "not-sent"); assert.match(r.error!, /1,232-byte limit/);
@@ -224,6 +226,7 @@ describe("the browser verifies the table before signing (lookup table mismatch â
     let walletCalls = 0, sends = 0;
     const r = await signAndSendPlan(launchlabPlan([s.bundle]), s.creator.publicKey.toBase58(), {
       latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }),
+      simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
       lookupTable: () => verifiedLookupTable(reader(table(key, good.slice(1))), n, pin),
       signTransaction: async (tx) => { walletCalls++; return tx; }, sendRaw: async () => { sends++; return "x"; }, confirm: async () => ({ err: null }),
     });

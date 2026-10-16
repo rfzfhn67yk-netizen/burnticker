@@ -24,6 +24,7 @@ function chain(o: { blockhash?: string; store: PlanStorage; send?: (real: string
   const submitted: string[] = [], confirmedWith: string[] = [];
   const deps: SendDeps = {
     latestBlockhash: async () => ({ blockhash: o.blockhash ?? BH, lastValidBlockHeight: 100 }),
+    simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
     signTransaction: async (tx) => { tx.sign([creatorKp]); return tx; },
     lookupTable: async () => null,
     sendRaw: async (raw) => { const real = sigOf(raw); submitted.push(real); return o.send ? o.send(real) : real; },

@@ -30,6 +30,7 @@ const deps = (log: string[], o: { refuseAt?: number; chainErrAt?: number; store?
   let n = 0;
   return {
     latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 1 }),
+    simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
     signTransaction: async (tx: VersionedTransaction) => { if (o.slowWallet) await o.slowWallet; if (o.refuseAt === n) throw new Error("User rejected the request."); log.push(`wallet ${n}`); tx.sign([creatorKp]); return tx; },
     lookupTable: async () => null,
     sendRaw: async () => { n++; log.push(`send ${n}`); return `sig${n}`; },

@@ -136,7 +136,10 @@ describe("224 [VERIFY] two 2 MB images in one pair body fit every host limit", (
     // Next 16 buffers a body only behind a proxy file (proxyClientMaxBodySize, 10 MB default); there is none here
     for (const f of ["src/proxy.ts", "src/middleware.ts", "proxy.ts", "middleware.ts"]) assert.ok(!fs.existsSync(path.join(ROOT, f)), f);
     assert.doesNotMatch(read("next.config.ts"), /bodySizeLimit|proxyClientMaxBodySize|middlewareClientMaxBodySize/);
-    for (const f of fs.readdirSync(path.join(ROOT, "deploy/caddy"))) assert.doesNotMatch(read(`deploy/caddy/${f}`), /request_body|max_size/, f);
+    // audit M3 (2026-10-15): Caddy cuts a body at 8 MB, above the app's 6.5 MB JSON cap (api/http.ts MAX_JSON_BODY); nothing smaller is cut
+    const caddy = read("deploy/caddy/Caddyfile"); const m = caddy.match(/request_body \{\s*max_size (\d+)MB\s*\}/); assert.ok(m, "the Caddyfile caps the request body");
+    assert.ok(Number(m![1]) * 1_000_000 > 6_500_000, "the Caddy cap stays above MAX_JSON_BODY");
+    assert.match(caddy, /@app_launch path [^\n]*\/api\/burnticker\/v1\/launch\/\*/, "every v1 launch route gets the 90 s upstream timeout");
     // prelaunch audit M3 (2026-10-15): the route caps its body now, above the largest pair body (api/http.ts MAX_JSON_BODY)
     assert.match(read("src/app/api/burnticker/launch/route.ts"), /const text = await readTextCapped\(req\)/);
     assert.ok(MAX_JSON_BODY > MAX_PAIR_IMAGE_BYTES_IN_BODY + 100_000, `${MAX_JSON_BODY} leaves room for the two rules`);
