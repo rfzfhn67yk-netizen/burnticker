@@ -27,25 +27,38 @@ export class RateLimiter {
   private readonly limits: typeof RATE_LIMITS;
   private readonly maxKeys: number;
   constructor(limits: typeof RATE_LIMITS = RATE_LIMITS, maxKeys = 50_000) { this.limits = limits; this.maxKeys = maxKeys; }
-  take(client: string, bucket: Bucket, now = Date.now()): { ok: boolean; limit: number; remaining: number; retryAfterSec: number } {
+  /**
+   * Takes `cost` tokens (default 1; the RPC proxy charges one per JSON-RPC call in a batch, C2 2026-10-15) from the client's bucket.
+   * A cost above the burst is refused outright.
+   */
+  take(client: string, bucket: Bucket, now = Date.now(), cost = 1): { ok: boolean; limit: number; remaining: number; retryAfterSec: number } {
     const lim = this.limits[bucket];
     const key = `${bucket}|${client}`;
+    const c = Math.max(1, cost);
     const b = this.buckets.get(key) ?? { tokens: lim.burst, at: now };
     b.tokens = Math.min(lim.burst, b.tokens + ((now - b.at) / 1000) * lim.refillPerSec);
     b.at = now;
     if (this.buckets.size >= this.maxKeys && !this.buckets.has(key)) this.prune(now);
+    this.buckets.delete(key);   // re-inserted last: the map's order is least recently used first (prune's fallback)
     this.buckets.set(key, b);
-    if (b.tokens < 1) return { ok: false, limit: lim.burst, remaining: 0, retryAfterSec: Math.max(1, Math.ceil((1 - b.tokens) / lim.refillPerSec)) };
-    b.tokens -= 1;
+    if (b.tokens < c) return { ok: false, limit: lim.burst, remaining: 0, retryAfterSec: c > lim.burst ? 3600 : Math.max(1, Math.ceil((c - b.tokens) / lim.refillPerSec)) };
+    b.tokens -= c;
     return { ok: true, limit: lim.burst, remaining: Math.floor(b.tokens), retryAfterSec: 0 };
   }
-  /** Drops buckets that have refilled completely (they hold no state worth keeping). */
+  /**
+   * Drops buckets that have refilled completely (they hold no state worth keeping); when that frees too little (2026-10-15 audit M8: a
+   * flood of distinct clients that all spent tokens kept the map growing past maxKeys), the least recently used tenth goes too.
+   */
   private prune(now: number): void {
     for (const [k, b] of this.buckets) {
       const lim = this.limits[k.split("|")[0] as Bucket];
       if (b.tokens + ((now - b.at) / 1000) * lim.refillPerSec >= lim.burst) this.buckets.delete(k);
     }
+    if (this.buckets.size < this.maxKeys) return;
+    let drop = Math.max(1, Math.ceil(this.maxKeys / 10));
+    for (const k of this.buckets.keys()) { if (drop-- <= 0) break; this.buckets.delete(k); }
   }
+  get size(): number { return this.buckets.size; }
   reset(): void { this.buckets.clear(); }
 }
 
@@ -102,6 +115,7 @@ export async function runV1(operationId: string, req: Request, handler: () => Pr
     if (!isSameOrigin(req)) return json(fail(403, "Requests from other sites are refused. A bot must send an Origin header that matches this API's address. In a browser, use this site.", { code: "cross-origin" }), { ...rlHeaders, "cache-control": "no-store" });
     const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     if (type !== "application/json") return json(fail(415, "A POST body must be sent as JSON, with the content type application/json.", { code: "content-type" }), { ...rlHeaders, "cache-control": "no-store" });
+    if (declaredTooLarge(req)) return json(fail(413, "The request is too large.", { code: "too-large" }), { ...rlHeaders, "cache-control": "no-store" });
   }
   let r: ApiResult;
   try { r = await handler(); } catch (e) { r = fail(500, `Something went wrong on the server. The reason given was: ${safeErrorText(e, 200)}`, { code: "internal" }); }
@@ -110,7 +124,35 @@ export async function runV1(operationId: string, req: Request, handler: () => Pr
   return json(r, { ...cors, ...rlHeaders, "cache-control": cache });
 }
 
-/** Parses a JSON body; null when it is not JSON (the caller answers 400). */
+/**
+ * The largest JSON body a route reads (2026-10-15 prelaunch audit M3): a rivalry pair's launch carries at most two 2 MB images as base64
+ * (about 2.8 MB each) plus the two rules and their words. A larger body is refused before it is parsed (Content-Length) or while it
+ * streams in (a chunked body).
+ */
+export const MAX_JSON_BODY = 6_500_000;
+/** True when the request says its body is larger than `max` (its Content-Length). */
+export const declaredTooLarge = (req: Request, max = MAX_JSON_BODY): boolean => { const n = Number(req.headers.get("content-length") ?? ""); return Number.isFinite(n) && n > max; };
+/** The body as text, read up to `max` bytes; null when it is larger (the read stops there). */
+export async function readTextCapped(req: Request, max = MAX_JSON_BODY): Promise<string | null> {
+  if (declaredTooLarge(req, max)) return null;
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.byteLength;
+    if (n > max) { try { await reader.cancel(); } catch { /* the stream is dropped either way */ } return null; }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(n);
+  let o = 0;
+  for (const c of chunks) { all.set(c, o); o += c.byteLength; }
+  return new TextDecoder().decode(all);
+}
+
+/** Parses a JSON body; null when it is not JSON or larger than MAX_JSON_BODY (the caller answers 400). */
 export async function readJson(req: Request): Promise<Record<string, unknown> | null> {
-  try { const b = await req.json(); return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : null; } catch { return null; }
+  try { const t = await readTextCapped(req); if (t === null) return null; const b = JSON.parse(t); return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : null; } catch { return null; }
 }

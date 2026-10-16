@@ -44,7 +44,9 @@ describe("audit 6 item 8: the preflight", () => {
     assert.ok(ruleRefusals(lock({ ...DEBT_RULE, series: "nope.nothing" })).some((x) => x.code === "unknown-source"));
     assert.ok(ruleRefusals(lock({ ...BRONCOS, oracle: "uma" })).some((x) => x.code === "oracle-off"));
     assert.ok(ruleRefusals(lock(BRONCOS), { kalshiEnabled: false }).some((x) => x.code === "venue-off"));
-    assert.ok(ruleRefusals(lock({ ...BRONCOS, filter: { titleRegex: "(a+)+$" } })).some((x) => x.code === "unsafe-regex"));
+    // prelaunch audit H6: validateRule refuses it first now; a stored rule (re-read, not refused) still shows the preflight's refusal
+    assert.throws(() => lock({ ...BRONCOS, filter: { titleRegex: "(a+)+$" } }), /titleRegex/);
+    assert.ok(ruleRefusals(lockRule({ ...BRONCOS, filter: { titleRegex: "(a+)+$" }, onEnd: { ...DEFAULT_ON_END } }, { stored: true })).some((x) => x.code === "unsafe-regex"));
   });
 });
 

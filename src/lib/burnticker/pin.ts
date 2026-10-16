@@ -3,6 +3,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { renderCoinSvg } from "@/lib/burnticker/coinArt";
 import { takeOrThrow } from "@/lib/burnticker/apiBudget";
 
+
 /**
  * NOTHING ABOUT A COIN CAN CHANGE AFTER LAUNCH (2026-10-10). LaunchLab creates the Metaplex metadata with is_mutable = false, so the
  * name, symbol and URI are fixed on chain — but a URI on a server we run would leave the description and the image behind it mutable.
@@ -47,6 +48,7 @@ export class IrysUploader implements PinUploader {
       ({ Uploader } = (await import(/* webpackIgnore: true */ pkgA)) as { Uploader: (c: unknown) => IrysChain });
       ({ Solana } = (await import(/* webpackIgnore: true */ pkgB)) as { Solana: unknown });
     } catch { throw new Error("the Irys client (@irys/upload, @irys/upload-solana) is not installed on this host"); }
+    // the SDK's own HTTP timeout (its 20 s default) cancels a slow request; withUploadTimeout (UPLOAD_TIMEOUT_MS, 30 s) is the backstop above it
     let chain = Uploader(Solana).withWallet(this.o.payer);
     if (this.o.cluster !== "mainnet") chain = chain.withRpc(this.o.rpcUrl ?? "https://api.devnet.solana.com").devnet();
     const client = await chain;

@@ -103,17 +103,18 @@ describe("the home's lite coin read (2026-10-15)", () => {
 
   test("the home route reads every coin lite and logs its build time", () => {
     const src = fs.readFileSync("src/app/api/burnticker/home/route.ts", "utf8");
-    assert.match(src, /tokenPageData\(p, t, now, \{ lite: true \}\)/);
+    assert.match(src, /tokenPageData\(view, t, now, \{ lite: true \}\)/, "read through the site's read cache (webReadCache.ts, prelaunch audit M7)");
     assert.match(src, /console\.info\(`\[burnticker\/home\] built in \$\{Date\.now\(\) - started\} ms, \$\{n\} coins`\)/);
-    assert.match(src, /const HOME_MEMO_MS = 15_000/, "the stale-while-revalidate memo stays");
+    assert.match(src, /homeMemo\.memoMs/, "the stale-while-revalidate memo stays; its window scales with the coins (memoWindowMs, M7)");
     assert.match(src, /homeRowOf\(d\.status, d\.receipts, key, t\.mint\)/, "the route and this test share one per-coin derivation");
     assert.doesNotMatch(fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8"), /lite/, "the coin page reads in full");
   });
 
   test("the tokens index (the coins grid) reads six at a time, keeps its last answer, and the page retries a cold 503 (owner 2026-10-15: 'the coins tab is still slow')", () => {
     const src = fs.readFileSync("src/app/api/burnticker/tokens/route.ts", "utf8");
-    assert.match(src, /allLimited\(tokens\.map\(\(t\) => \(\) => tokenPageData\(p, t, now\)\), INDEX_CONCURRENCY\)/, "parallel full reads (the pairs tab needs the pair side)");
-    assert.match(src, /const INDEX_MEMO_MS = 15_000, INDEX_COLD_WAIT_MS = 15_000, INDEX_CONCURRENCY = 6/);
+    assert.match(src, /allLimited\(tokens\.map\(\(t\) => \(\) => tokenPageData\(view, t, now\)\), INDEX_CONCURRENCY\)/, "parallel full reads (the pairs tab needs the pair side), through the read cache (M7)");
+    assert.match(src, /const INDEX_COLD_WAIT_MS = 15_000, INDEX_CONCURRENCY = 6/);
+    assert.match(src, /indexMemo\.memoMs/, "the memo window scales with the coins (memoWindowMs, M7)");
     assert.match(src, /code: "index-loading", retryAfterSec: 5/);
     assert.doesNotMatch(src, /for \(const t of withoutTestCoins[\s\S]*await tokenPageData/, "no serial per-coin loop");
     assert.match(fs.readFileSync("src/app/burnticker/CoinsIndex.tsx", "utf8"), /r\.status === 503 && left > 0/, "the grid waits for retry-after and asks again");
@@ -206,7 +207,8 @@ describe("the wallet connection's websocket (2026-10-15: \"ws error\" on every p
     const src = fs.readFileSync("src/app/burnticker/_components/ShellWalletProviders.tsx", "utf8");
     assert.match(src, /<ConnectionProvider endpoint=\{endpoint\} config=\{config\}>/);
     assert.match(src, /walletWsEndpoint\(cluster,/);
-    assert.match(src, /\{ commitment: "confirmed" as const, wsEndpoint \}/);
+    assert.match(src, /\{ commitment: "confirmed" as const, wsEndpoint, fetch \}/);
+    assert.match(src, /const fetch = flightFetch\(\)/, "send-path calls carry the flight token (prelaunch audit C2)");
   });
 
   test("nothing in the app subscribes except confirmTransaction (SignCard), which uses the websocket", () => {

@@ -27,13 +27,13 @@ export async function GET(req: Request) {
   // and the sha256 header lets anyone compare them with the recorded hash)
   if (new URL(req.url).searchParams.get("raw") === "1" && meta.metadataUri && !meta.hosted) {
     try {
-      const g = await fetch(meta.metadataUri, { redirect: "follow", cache: "no-store" });
+      const g = await fetch(meta.metadataUri, { redirect: "follow", cache: "no-store", signal: AbortSignal.timeout(15_000) });   // prelaunch audit H1
       if (!g.ok) return NextResponse.json({ ok: null, detail: `the gateway answered HTTP ${g.status}` }, { status: 502, headers: { "cache-control": "no-store" } });
       const bytes = new Uint8Array(await g.arrayBuffer());
       const { createHash } = await import("node:crypto");
       return new NextResponse(Buffer.from(bytes), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=600", "x-pinned-sha256": createHash("sha256").update(bytes).digest("hex"), "x-pinned-uri": meta.metadataUri } });
     } catch (e) { return NextResponse.json({ ok: null, detail: `could not read the pin: ${String((e as Error).message).slice(0, 120)}` }, { status: 502, headers: { "cache-control": "no-store" } }); }
   }
-  const r = await verifyPinnedMetadata({ metadataUri: meta.metadataUri, metadataSha256: meta.metadataSha256, hosted: meta.hosted, expectedDescription }, (u) => fetch(u, { redirect: "follow", cache: "no-store" }));
+  const r = await verifyPinnedMetadata({ metadataUri: meta.metadataUri, metadataSha256: meta.metadataSha256, hosted: meta.hosted, expectedDescription }, (u) => fetch(u, { redirect: "follow", cache: "no-store", signal: AbortSignal.timeout(15_000) }));
   return NextResponse.json(r, { headers: { "cache-control": "public, max-age=600" } });
 }

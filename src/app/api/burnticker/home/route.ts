@@ -16,20 +16,22 @@ import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { coinKey, sharedTickers } from "@/lib/burnticker/coinKey";
 import { isTestCoin, testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
+import { chainRows, memoWindowMs, webReadPlatform } from "@/lib/burnticker/webReadCache";
 import { PUBLIC_READ_CORS } from "@/lib/burnticker/api/http";
 
 export const dynamic = "force-dynamic";
 
 /**
- * The last answer is served at once and refreshed in the background once it is older than HOME_MEMO_MS (stale while revalidate,
+ * The last answer is served at once and refreshed in the background once it is older than its memo window (webReadCache.ts memoWindowMs; stale while revalidate,
  * one refresh in flight at a time). A cold process waits up to HOME_COLD_WAIT_MS for the first build, then answers 503 with
  * retry-after so the page tries again instead of sitting behind the proxy's 20 s limit. The deploy warms it with a probe.
  */
-const HOME_MEMO_MS = 15_000, HOME_COLD_WAIT_MS = 15_000;
-let homeMemo: { at: number; body: unknown } | null = null;
+const HOME_COLD_WAIT_MS = 15_000;
+// 2026-10-15 prelaunch audit M7: the memo window scales with the coins read from the chain (webReadCache.ts memoWindowMs): 15 s under 50
+let homeMemo: { at: number; body: unknown; memoMs: number } | null = null;
 let homeInFlight: Promise<void> | null = null;
 function refreshHome(): Promise<void> {
-  if (!homeInFlight) homeInFlight = buildHome().then((body) => { homeMemo = { at: Date.now(), body }; }).catch((e) => { console.error("[burnticker/home] build failed:", e); }).finally(() => { homeInFlight = null; });
+  if (!homeInFlight) homeInFlight = buildHome().then(({ body, memoMs }) => { homeMemo = { at: Date.now(), body, memoMs }; }).catch((e) => { console.error("[burnticker/home] build failed:", e); }).finally(() => { homeInFlight = null; });
   return homeInFlight;
 }
 
@@ -52,7 +54,7 @@ async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<Pr
  */
 export async function GET() {
   if (homeMemo) {
-    if (Date.now() - homeMemo.at >= HOME_MEMO_MS) void refreshHome();
+    if (Date.now() - homeMemo.at >= homeMemo.memoMs) void refreshHome();
     return NextResponse.json(homeMemo.body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "hit" } });
   }
   await Promise.race([refreshHome(), new Promise<void>((r) => setTimeout(r, HOME_COLD_WAIT_MS))]);
@@ -60,14 +62,14 @@ export async function GET() {
   return NextResponse.json({ loading: true, error: "the coin list is being read; try again in a few seconds", code: "home-loading", retryAfterSec: 5 }, { status: 503, headers: { ...PUBLIC_READ_CORS, "cache-control": "no-store", "retry-after": "5" } });
 }
 
-async function buildHome(): Promise<unknown> {
+async function buildHome(): Promise<{ body: unknown; memoMs: number }> {
   const started = Date.now();
-  const { body, n } = await buildHomeBody();
+  const { body, n, chainCoins } = await buildHomeBody();
   console.info(`[burnticker/home] built in ${Date.now() - started} ms, ${n} coins`);
-  return body;
+  return { body, memoMs: memoWindowMs(chainCoins) };
 }
 
-async function buildHomeBody(): Promise<{ body: unknown; n: number }> {
+async function buildHomeBody(): Promise<{ body: unknown; n: number; chainCoins: number }> {
   const p = platform();
   const now = Date.now();
   const statuses = [];
@@ -76,6 +78,7 @@ async function buildHomeBody(): Promise<{ body: unknown; n: number }> {
   const omitted: UpcomingOmitted[] = [];
   let registered: number | null = null;
   let coins: HomeCoin[] | null = [];
+  let chainCoins = 0;
   // website-17 wiring item 3: the earned featured slots, from each coin's own receipts, creation time and readiness (featuredSlots.ts)
   const slotInputs: FeaturedInput[] = [];
   // owner 2026-10-14: test coins (testCoins.ts) are left off the home: no card, no activity row, no next-result row
@@ -87,11 +90,14 @@ async function buildHomeBody(): Promise<{ body: unknown; n: number }> {
     // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
     const shared = sharedTickers(tokens);
     // 2026-10-15 (owner: "coins tab isn't loading"): with five live coins the reads ran one after another and took 17–40 s, past the
-    // proxy's 20 s limit; they now run four at a time, and the whole answer is kept for HOME_MEMO_MS (below). Each coin is read `lite`
+    // proxy's 20 s limit; they now run four at a time, and the whole answer is kept for the memo window (below). Each coin is read `lite`
     // (server.ts tokenPageInput): only what the home renders, at once, without the LP lock, the pair side, the graduated pool or balances
     // 2026-10-15: six at a time (was four): a lite read sends fewer requests than a full one, in about half the round trips, so five live
     // coins read in one wave (an estimated 4 s on Helius) instead of two
-    const reads = await allLimited(tokens.map((t) => () => tokenPageData(p, t, now, { lite: true })), 6);
+    // M7: drafts and expired drafts are built from the registry alone (server.ts); the rest read through the batch and the read cache
+    chainCoins = chainRows(tokens).length;
+    const view = await webReadPlatform(p, tokens);
+    const reads = await allLimited(tokens.map((t) => () => tokenPageData(view, t, now, { lite: true })), 6);
     for (const [i, t] of tokens.entries()) {
       const key = coinKey(t, shared);
       try {
@@ -133,6 +139,6 @@ async function buildHomeBody(): Promise<{ body: unknown; n: number }> {
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: ranks.get(c.ticker)?.line ?? null }));
   const slots = coins === null ? null : featuredSlots(slotInputs, now);
-  return { n: coins?.length ?? 0, body: { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster } };
+  return { n: coins?.length ?? 0, chainCoins, body: { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster } };
 }
 

@@ -12,6 +12,7 @@ import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
 import { matchesSuffix } from "@/lib/burnticker/vanityMint";
 import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
 import { LaunchedTrade } from "../_components/TradeLinks";
+import { withFlight } from "@/lib/burnticker/rpcProxy";
 
 /**
  * THE SIGNING CARD (2026-10-11): the one component that signs every launch — a single LaunchLab coin, two coins, a pair-curve set — from
@@ -72,7 +73,8 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   // lock (signPlan.ts withPlanLock, shared with the recovery notice) lets one run at a time touch this plan in this tab
   const go = async () => {
     if (!creator || !wallet.signTransaction || problems.length || busy) return;
-    const locked = await withPlanLock(planStorageKey(plan), run);
+    // prelaunch audit C2 re-review 3: the proxy's flight token rides this run's reads and sends only (rpcProxy.ts withFlight)
+    const locked = await withPlanLock(planStorageKey(plan), () => withFlight(run));
     if (!locked.ran) setErr(PLAN_LOCKED_SENTENCE);
   };
   const run = async () => {

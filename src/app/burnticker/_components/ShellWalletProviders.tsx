@@ -6,6 +6,7 @@ import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter, SolflareWalletAdapter } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import { walletEndpoint, walletWsEndpoint } from "@/lib/burnticker/walletShell";
+import { flightFetch } from "@/lib/burnticker/rpcProxy";
 
 /**
  * THE ONE WALLET PROVIDER (website-13, 2026-10-12; src/lib/burnticker/walletShell.ts). Mounted once, by the app's root layout, around the
@@ -32,7 +33,9 @@ export function ShellWalletProviders({ cluster, children }: { cluster: string; c
   useNamedWalletDialog();
   const endpoint = useMemo(() => walletEndpoint(cluster, { NEXT_PUBLIC_BURNTICKER_RPC_URL: process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL }), [cluster]);
   // 2026-10-15: the proxy endpoint has no websocket; subscriptions go to the public cluster's wss (walletShell.ts walletWsEndpoint)
-  const config = useMemo(() => { const wsEndpoint = walletWsEndpoint(cluster, { NEXT_PUBLIC_BURNTICKER_RPC_URL: process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL }); return wsEndpoint ? { commitment: "confirmed" as const, wsEndpoint } : { commitment: "confirmed" as const }; }, [cluster]);
+  // 2026-10-15 prelaunch audit C2: send-path calls to the proxy carry a flight token (rpcProxy.ts flightFetch), so a swap or launch in flight
+  // keeps working when anonymous traffic has spent the proxy's share of the site's RPC day
+  const config = useMemo(() => { const wsEndpoint = walletWsEndpoint(cluster, { NEXT_PUBLIC_BURNTICKER_RPC_URL: process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL }); const fetch = flightFetch(); return wsEndpoint ? { commitment: "confirmed" as const, wsEndpoint, fetch } : { commitment: "confirmed" as const, fetch }; }, [cluster]);
   const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], []);
   return (
     <ConnectionProvider endpoint={endpoint} config={config}>

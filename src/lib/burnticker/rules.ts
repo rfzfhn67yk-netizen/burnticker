@@ -2,6 +2,7 @@ import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { derbySeriesId, derbySpecProblems, derbyStatement, isDerbySeries, type DerbySpec } from "@/lib/burnticker/derby/spec";
 import { inverseRefusal, KEEPER_ONE_SHOT_RE, PAIR_OUTCOME_SERIES_RE } from "@/lib/burnticker/inverse";
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import { regexProblem } from "@/lib/burnticker/safeRegex";
 
 /**
  * BURNTICKER RULES (2026-10-09; the owner's redesign the same evening: the event space is OPEN). A rule is a SELECTOR plus an
@@ -382,7 +383,13 @@ export function ruleMode(r: BurnRule): RuleMode {
  * mapping with both keys, a fraction outside the template's bounds — each is a rule a stranger could not reproduce, so it never
  * launches. Returns the rule with its optional fields normalised (null, not undefined), ready for canonical serialisation.
  */
-export function validateRule(raw: unknown): BurnRule {
+/**
+ * `o.stored` (prelaunch audit H6): the rule is one already locked in the registry, re-read for a page or a cycle. Its title filter is
+ * not refused again here (a coin launched before a check was added must stay readable); it still never runs unsafely, because
+ * safeRegexTest refuses it and the match runs on the linear-time matcher. Every new rule (the launch, the back-test, the API's checks)
+ * is validated strictly.
+ */
+export function validateRule(raw: unknown, o: { stored?: boolean } = {}): BurnRule {
   const p: string[] = [];
   const r = raw as Partial<BurnRule> | null;
   if (!r || typeof r !== "object") throw new Error("rule: not a JSON object");
@@ -443,7 +450,13 @@ export function validateRule(raw: unknown): BurnRule {
     if (filter.tickerIncludes !== undefined && (typeof filter.tickerIncludes !== "string" || !/^[A-Z0-9._-]{1,32}$/.test(filter.tickerIncludes))) p.push("filter.tickerIncludes must be 1–32 ticker characters");
     if (filter.titleRegex !== undefined) {
       if (typeof filter.titleRegex !== "string" || filter.titleRegex.length > 120) p.push("filter.titleRegex must be a string ≤ 120 chars");
-      else try { new RegExp(filter.titleRegex); } catch { p.push("filter.titleRegex is not a valid regular expression"); }
+      else {
+        // prelaunch audit H6: every rule check refuses a pattern the safe matcher refuses (the back-test and the API validate through here)
+        let compiles = true;
+        try { new RegExp(filter.titleRegex); } catch { compiles = false; p.push("filter.titleRegex is not a valid regular expression"); }
+        const why = compiles && !o.stored ? regexProblem(filter.titleRegex) : null;
+        if (why) p.push(`filter.titleRegex: ${why}`);
+      }
     }
     if (market !== null && (filter.tickerIncludes !== undefined || filter.titleRegex !== undefined)) p.push("a one-market rule takes no filter");
     for (const k of Object.keys(filter)) if (k !== "tickerIncludes" && k !== "titleRegex") p.push(`filter.${k} is not a known key`);
@@ -632,8 +645,8 @@ export function canonicalJson(v: unknown): string {
 export interface LockedRule { rule: BurnRule; text: string; sha256: string; sha12: string; mode: RuleMode }
 
 /** Validate → canonical text → hash. The text is what gets stored and published; the hash is of exactly those bytes. */
-export function lockRule(raw: unknown): LockedRule {
-  const rule = validateRule(raw);
+export function lockRule(raw: unknown, o: { stored?: boolean } = {}): LockedRule {
+  const rule = validateRule(raw, o);
   const text = canonicalJson(rule);
   const sha256 = rulesSha256(text);
   return { rule, text, sha256, sha12: sha256.slice(0, 12), mode: ruleMode(rule) };
@@ -643,7 +656,7 @@ export function lockRule(raw: unknown): LockedRule {
 export function rulesFromText(text: string): LockedRule {
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { throw new Error("rule: not valid JSON"); }
-  const locked = lockRule(raw);
+  const locked = lockRule(raw, { stored: true });
   if (locked.text !== text) throw new Error("rule: the text is not in canonical form (re-serialising it changes the bytes, so its hash would not be the published one)");
   return locked;
 }

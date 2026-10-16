@@ -5,6 +5,7 @@ import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesS
 import { finalAfter, statedSource, type FinalAfter, type StatedSource } from "@/lib/burnticker/sources/polyStated";
 import { DEFAULT_POLYGON_RPCS, POLYGON_CHAIN_ID, POLYMARKET_CTF, readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { LruMap } from "@/lib/burnticker/lru";
 
 /**
  * THE POLYMARKET ORACLE (2026-10-10; the owner: "do both" — Polymarket as a full second adjudicated oracle, tier 1, beside Kalshi).
@@ -379,8 +380,9 @@ export class PolymarketClient implements OracleAdapter {
   private chainCap: number;
   private ttl: number;
   readonly refuse: TitleRefuser | null;
-  private cache = new Map<string, { at: number; body: unknown }>();
-  private chainCache = new Map<string, { at: number; r: ConditionResolution }>();
+  // prelaunch audit M8 (2026-10-15): bounded; a search URL is per query, so the cache grew with every distinct visitor query
+  private cache = new LruMap<string, { at: number; body: unknown }>(1_000);
+  private chainCache = new LruMap<string, { at: number; r: ConditionResolution }>(5_000);
   private lastAt = 0;
   private chain: Promise<void> = Promise.resolve();
   /** Gamma requests actually sent (the tests' politeness checks). */

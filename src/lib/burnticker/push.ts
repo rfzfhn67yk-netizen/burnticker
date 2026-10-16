@@ -42,6 +42,8 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-single-source": "single-source",
   "bt-mint-bank-low": "mint-bank-low",
   "bt-synthetic-failed": "synthetic-failed",
+  // prelaunch audit H6 re-review: a coin held because this build cannot check its stored title filter is a burn that is not running
+  "rule-filter-unsupported": "crank-refused",
 };
 export const PUSH_TITLE: Record<PushKind, string> = {
   "keeper-refused": "Burnticker keeper refused to start",

@@ -25,6 +25,7 @@ import type { Cosignature, ReadingInput } from "@/lib/burnKeeper/programPort";
 import { parseTargetMemo } from "@/lib/burnReceipts/memo";
 import { DISPERSAL_STATE_KEY, runDispersal, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
 import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
+import { FilterUnsupportedError, storedFilterProblem } from "@/lib/burnticker/safeRegex";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -283,6 +284,14 @@ export function independentReadings(rule: BurnRule, carry: CarryPolicy): boolean
 
 /** New readings for one token through the engine → receipt rows. Pure apart from the registry writes. */
 export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null = null, wtb: { otherTicker: string; afterDate?: number; /** the partner coin (a candidates pair reads its market too) */ other?: TokenRow } | null = null): { mint: string; eventId: string; status: string }[] {
+  // prelaunch audit H6 re-review: a stored title filter this build refuses never runs, and "no title matches" must not pass for "nothing to
+  // burn": the coin is held (nothing planned) and the owner is alerted, once per coin per pattern
+  const filterWhy = storedFilterProblem(locked.rule);
+  if (filterWhy) {
+    const text = `$${t.ticker}: its title filter ${JSON.stringify(locked.rule.filter.titleRegex)} cannot be checked by this build (${filterWhy}), so nothing is planned or burned for this coin until the operator decides what to do with it.`;
+    if (d.registry.recordAlert({ kind: "rule-filter-unsupported", key: `rule-filter-unsupported:${t.mint}:${String(locked.rule.filter.titleRegex)}`, text, meta: { mint: t.mint, pattern: locked.rule.filter.titleRegex } }, d.now())) d.log(`  [held] ${text}`);
+    throw new FilterUnsupportedError(text);
+  }
   const state = d.registry.state(t.mint);
   const after = state.lastSettledAt ?? t.baselineAt;
   const carry = carryFor(locked.rule);

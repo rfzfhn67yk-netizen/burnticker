@@ -4,7 +4,7 @@ import { pairCurveRequiredFor } from "@/lib/burnticker/pairVenueRule";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { platform } from "@/lib/burnticker/server";
 import { launchesClosedAt, markLaunched, prepareLaunch } from "@/lib/burnticker/api/handlers";
-import { clientKey, edgeJson, fail, limiter } from "@/lib/burnticker/api/http";
+import { clientKey, edgeJson, fail, limiter, readTextCapped } from "@/lib/burnticker/api/http";
 import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
 import { recordLaunchTimings } from "@/lib/burnticker/api/product";
@@ -40,7 +40,11 @@ export async function POST(req: Request) {
   // check here: creators are third parties using the wizard on this origin.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "cross-site request refused", code: "cross-origin" }, { status: 403 });
   let body: Record<string, unknown>;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "invalid JSON body" }, { status: 400 }); }
+  // prelaunch audit M3 (2026-10-15): the body is capped before it is parsed (two 2 MB images as base64, a pair's, plus the rules fit),
+  // here at the one parse, so the `launched` record is capped too
+  const text = await readTextCapped(req);
+  if (text === null) return NextResponse.json({ error: "The request is too large. An image can be at most 2 MB.", code: "too-large" }, { status: 413 });
+  try { body = JSON.parse(text); } catch { return NextResponse.json({ error: "invalid JSON body" }, { status: 400 }); }
   // AUDIT A C1 (6, 7; findings M1 and H4): `launched` records a launch that is ALREADY SIGNED AND ON CHAIN. It is taken whether launches
   // are open, closed or in preview (closing launches must not strand a coin that exists), and it is metered on the heavy bucket, not the
   // 10-an-hour write bucket (a creator who built a few bundles must still be able to record the one that landed). The chain decides.

@@ -66,7 +66,7 @@ export class FecClient {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       await takeOrThrow(sourceForUrl(FEC_API));   // the request budget (apiBudget.ts)
       this.lastAt = this.now(); this.requests.push(pathQ);
-      const res = await this.fetchImpl(`${FEC_API}${pathQ}${pathQ.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(this.key)}`, { headers: { accept: "application/json", "user-agent": "burnticker/0.1" } });
+      const res = await this.fetchImpl(`${FEC_API}${pathQ}${pathQ.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(this.key)}`, { headers: { accept: "application/json", "user-agent": "burnticker/0.1" }, signal: AbortSignal.timeout(10_000) });   // prelaunch audit H1: every source read ends
       if (!res.ok) throw new Error(`FEC HTTP ${res.status} for ${pathQ.slice(0, 100)}`);
       const body = await res.json(); this.cache.set(pathQ, body); return body;
     };

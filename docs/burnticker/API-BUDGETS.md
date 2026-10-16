@@ -34,6 +34,23 @@ agree. `test/burntickerApiBudget.test.ts` fails if a source in the code is missi
   waits or holds. The exception is a server running with `NODE_ENV=production`, which enforces with an in-memory count. The two
   keepers configure the budget at start. The site configures it in `platform()`, and the RPC proxy and burn-target routes call
   `ensureWebApiBudget()` before they read.
+- **Lanes on the site's Helius slice (2026-10-15 prelaunch audit C2, tightened after its blind review).** Anonymous traffic could
+  spend the site's whole day, after which launch confirmations and wallet sends failed until midnight UTC. The web role's Helius day is
+  now split (`LANE_SPLIT` in `apiBudget.ts`), and each lane stops at its own ceiling:
+  - `confirm`, 10% of the day: the launch verifier on the server, reachable from no browser.
+  - `flight`, 15% of the day and a quarter of the rate: a browser swap or launch carrying a flight token from
+    `/api/burnticker/rpc/flight`. A token is bound to the visitor that minted it, good for 24 build/send/confirm calls over 10 minutes,
+    12 an hour per visitor and 10,000 a day for the whole site (the lane ceiling bounds the spend).
+  - `proxy`, at most 35% of the day and half the rate: the browser proxy without a token. Nothing in it is essential.
+  - `general`: every other site read, up to the day less the two reserves, counted without the reserved lanes' spend, so a busy
+    confirm or flight lane never holds the pages.
+
+  Past a ceiling, only the calls that finish a send already in flight (sendTransaction, getSignatureStatuses, getBlockHeight) pass, and
+  they still count. The proxy is limited per visitor by calls, not requests (60 at once, then one a second), before its body is read.
+  Same-origin (`isSameOrigin`) on the proxy and the token route is a CSRF check only: any script can send `Sec-Fetch-Site`; the caps are
+  what bound a bot. An old WebKit that sends no `Sec-Fetch-Site` still reaches the proxy (its POSTs carry `Origin`), but its token
+  request (a same-origin GET carries no `Origin`) is refused, so its sends go in the proxy lane: they work until that lane's cap.
+  The lane counts live in the status table (`apiBudget.lane.web.helius.<lane>`), so a restart keeps them.
 
 ## The table
 

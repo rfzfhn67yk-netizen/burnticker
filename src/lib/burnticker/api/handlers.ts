@@ -36,7 +36,7 @@ import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { describeRule } from "@/lib/burnticker/describe";
 import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
 import { BALLOT_NOTE, RACE_TYPES, candidateMappingLine, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
-import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEED_WORDING, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, teamByAbbr, meetingsPairSeries, meetingOutcome, tallyMeetings, seasonLabel, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEED_WORDING, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, teamByAbbr, meetingsPairSeries, meetingOutcome, tallyMeetings, seasonLabel, within, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
@@ -232,7 +232,9 @@ export async function search(p: Platform, q: { q?: string | null; closingSoon?: 
   const withExisting = cards.map((c) => { const rule = (c as { rule?: unknown }).rule; const existing = rule ? existingCoinsFor(rule, tokens) : []; return existing.length ? { ...c, existing } : c; });
   // ChatGPT audit 7 item 2: a pasted mint that is on the Not Burnticker list answers "known lookalike", never "no coin matches"
   const lookalike = knownLookalike(p, q.q ?? "");
-  return ok({ ...r, ...(lookalike ? { empty: false, lookalike } : {}), cards: withExisting, venues, categories, note: "These are ready-made rules. No prices, odds, volume or liquidity are returned." });
+  const answer = ok({ ...r, ...(lookalike ? { empty: false, lookalike } : {}), cards: withExisting, venues, categories, note: "These are ready-made rules. No prices, odds, volume or liquidity are returned." });
+  // H1 re-review: a team card built without its schedule (still being read, or unreadable) is not kept by caches for the full minute
+  return r.cards.some((c) => (c as { scheduleUnavailable?: boolean }).scheduleUnavailable) ? { ...answer, headers: { ...(answer.headers ?? {}), "cache-control": DEGRADED_CACHE } } : answer;
 }
 
 /** GET /v1/elections?type=&state= — the guided Elections & Politics flow (src/lib/burnticker/elections.ts), from Polymarket's open midterm races. */
@@ -280,6 +282,10 @@ const sideOf = (league: LeagueId, s: Game["home"]) => { const t = teamsOf(league
 /** Where a league's schedule on the pickers comes from, in one sentence (the NBA's feed answers 403 since 2026-10-12: espn.ts probe note). */
 const NBA_SCHEDULE_SOURCE = NBA_FEED_WORDING;
 const scheduleSource = (league: LeagueId): string => (league === "mlb" || league === "nhl" ? "The schedule comes from the league's official feed." : league === "nba" ? "The schedule comes from the NBA's feed when it answers, otherwise from TheSportsDB under licence." : "The schedule comes from TheSportsDB, with a licensed key.");
+/** The cache line of an answer served without a schedule that is still being read or failed (H1 re-review): seconds, never minutes. */
+export const DEGRADED_CACHE = "public, max-age=5";
+/** How long the team picker waits for a league's schedule before it serves the table without next games (H1). */
+export const TEAMS_SCHEDULE_WAIT_MS = 3_000;
 /** GET /v1/sports/teams?league= — the team picker for team coins (the league's own schedule or TheSportsDB; no ESPN reads): the static team table with each team's next game and record. No league → the leagues. */
 export async function sportsTeams(_p: Platform, q: { league?: string | null; q?: string | null; division?: string | null }, nowMs = Date.now()): Promise<ApiResult> {
   const league = q.league?.trim().toLowerCase() ?? "";
@@ -289,7 +295,14 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
   // from TheSportsDB (licensed key) — never ESPN
   // launch audit 5 L05: a schedule that cannot be read is a display problem only — the sentence says so; the technical reason is apart
   let scheduleNote: string | null = null, scheduleDetail: string | null = null;
-  const games = await espnClient().upcoming(league, 8).catch((e) => { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", safeErrorText(e, 160)); scheduleNote = sp.line; scheduleDetail = sp.detail; return [] as Game[]; });
+  // prelaunch audit H1 (2026-10-15): the team table never waits on a slow schedule; past TEAMS_SCHEDULE_WAIT_MS it is served without the
+  // next games (the read goes on and is kept for the next request)
+  const sched = await within(espnClient().upcoming(league, 8), TEAMS_SCHEDULE_WAIT_MS);
+  // re-review: a degraded answer (the schedule still being read, or unreadable) is kept by caches for seconds, not the endpoint's 5 minutes
+  const degraded = !sched.done || "error" in sched;
+  const games = !sched.done ? (() => { scheduleNote = `${LEAGUES[league].label}'s next games are still being read, so teams are shown without them for now. Reload in a few seconds to see them.`; scheduleDetail = null; return [] as Game[]; })()
+    : "error" in sched ? (() => { const e = sched.error; console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", safeErrorText(e, 160)); scheduleNote = sp.line; scheduleDetail = sp.detail; return [] as Game[]; })()
+    : sched.value;
   const year = seasonYearAt(league, Date.now());
   const needle = (q.q ?? "").trim();
   const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
@@ -310,7 +323,8 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
     return { abbr: t.abbr, code: teamCodeOf(t), city: t.city, nickname: t.nickname, name: t.name, ticker: teamTicker(t.abbr, { league, window: "season", outcome: "win" }), league, series: { win, loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, ...(record ? { record } : {}), next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr, live, when: live ? LIVE_NOW : null } : null, season: seasonStatus(t.abbr, games, readable) };
   });
   const divisionInfo = league === "cfb" ? { division: { shown: division, line: division === "fbs" ? FBS_DEFAULT_LINE(listed.length, teamsOf("cfb").length - listed.length) : null, all: "/api/burnticker/v1/sports/teams?league=cfb&division=all" } } : {};
-  return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote, scheduleDetail, ...divisionInfo, order: "alphabetical", teams });
+  const body = ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote, scheduleDetail, ...divisionInfo, order: "alphabetical", teams });
+  return degraded ? { ...body, headers: { ...(body.headers ?? {}), "cache-control": DEGRADED_CACHE } } : body;
 }
 
 /**
@@ -938,6 +952,14 @@ const GUARD_MAX_KEYS = 20_000;
 const sigsByMint = new Map<string, Map<string, number>>();
 const sigsByClientMint = new Map<string, Map<string, number>>();
 const refusedConfirms = new Map<string, { at: number; status: number; reason: string }>();
+/**
+ * Prelaunch audit C2 re-review 4: a transaction the chain does not hold (404) is not a final refusal (an RPC can lag), so it is not kept
+ * for REFUSAL_MEMORY_MS; but a repeated press with the same (mint, signature) is answered from memory for MISSING_MEMORY_MS, so a fake
+ * signature costs the confirm lane one getTransaction a minute, not one per press. An account not shown yet (`missing`, AUDIT A
+ * re-review 3) is still never remembered: its transaction exists, and the creator's retry must reach the chain.
+ */
+export const MISSING_MEMORY_MS = 60_000;
+const missingConfirms = new Map<string, { at: number; status: number; reason: string }>();
 export function resetConfirmGuards(): void { sigsByMint.clear(); sigsByClientMint.clear(); refusedConfirms.clear(); }
 /** Drops entries older than `ttl` (and the oldest keys beyond GUARD_MAX_KEYS); returns the live distinct signatures for `key`. */
 function liveSigs(m: Map<string, Map<string, number>>, key: string, now: number): Map<string, number> {
@@ -983,6 +1005,8 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   const key = `${mint}:${launchTx}`;
   const known = refusedConfirms.get(key);
   if (known && now - known.at < REFUSAL_MEMORY_MS) return fail(known.status, known.reason, { code: "launch-unverified" });
+  const missing = missingConfirms.get(key);
+  if (missing && now - missing.at < MISSING_MEMORY_MS) return fail(missing.status, missing.reason, { code: "launch-unverified", retryAfterSec: Math.max(1, Math.ceil((missing.at + MISSING_MEMORY_MS - now) / 1000)) });
   const perMint = liveSigs(sigsByMint, mint, now), perClient = liveSigs(sigsByClientMint, `${client}|${mint}`, now);
   const limited = (m: Map<string, number>, cap: number) => !m.has(launchTx) && m.size >= cap;
   if (limited(perClient, CONFIRM_VERIFY_PER_CLIENT_MINT_HOUR) || limited(perMint, CONFIRM_VERIFY_PER_MINT_HOUR)) {
@@ -994,7 +1018,14 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   // Review-2 F3: the verifier checks the launch's CONTENT (initialize_token for this mint, the on-chain TokenConfig's rules hash, the
   // venue) — and nothing is written to the registry unless it passes: a refused confirmation leaves status, baseline and launch_tx alone.
   const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, p.registry.pairOf(mint)) });
-  if (!v.ok) { if (v.status === 422 && !v.missing) rememberRefusal(key, v, now); return fail(v.status, v.reason, { code: "launch-unverified" }); }
+  if (!v.ok) {
+    if (v.status === 422 && !v.missing) rememberRefusal(key, v, now);
+    else if (v.status === 404) {
+      if (missingConfirms.size > GUARD_MAX_KEYS) { for (const [k, x] of missingConfirms) if (now - x.at >= MISSING_MEMORY_MS) missingConfirms.delete(k); while (missingConfirms.size > GUARD_MAX_KEYS) missingConfirms.delete(missingConfirms.keys().next().value as string); }
+      missingConfirms.set(key, { at: now, status: v.status, reason: v.reason });
+    }
+    return fail(v.status, v.reason, { code: "launch-unverified" });
+  }
   const baselineAt = new Date(v.blockTimeMs).toISOString();
   if (!inDraftWindow(t.createdAt, v.blockTimeMs)) return fail(409, `This launch landed at ${baselineAt}, more than 24 hours after its draft was made, so it is not recorded here. Please build a new launch.`, { code: "launch-late" });
   const closedAt = launchesClosedAt(p, process.env, now);

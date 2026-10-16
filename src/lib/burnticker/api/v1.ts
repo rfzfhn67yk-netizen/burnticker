@@ -11,6 +11,7 @@ import { compileUnsigned } from "@/lib/burnticker/transactions";
 import { feedSourceReading, kalshiSourceReading, polymarketSourceReading, verifyReceiptCore, type ChainReading, type SourceReading } from "@/lib/burnticker/verify";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
+import { trustSwr } from "@/lib/burnticker/trustServe";
 import type { TokenRow, TokenStatus } from "@/lib/burnticker/registry";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, kalshiCategories, browse, search, elections, electionPair, sportsTeams, sportsGames, sportsRivalry, polymarketSearch, publicConfig } from "@/lib/burnticker/api/handlers";
@@ -198,7 +199,7 @@ export async function v1Verify(p: Platform, id: string, eventId: string, o: { fe
   const d = await tokenPageData(p, t, o.now ?? Date.now(), { live: false });
   const receipt = d.receipts.find((r) => r.eventId === ev);
   if (!receipt) return fail(404, `$${t.ticker} has no receipt for ${ev}.`);
-  const locked = lockRule(JSON.parse(t.rulesJson));
+  const locked = lockRule(JSON.parse(t.rulesJson), { stored: true });
   const now = o.now ?? Date.now();
   const feed = locked.rule.oracle === "catalogue" ? feedById(locked.rule.series!) : null;
   let source: SourceReading;
@@ -236,10 +237,16 @@ function polymarketFetchVia(p: Platform): FetchLike {
 
 export async function v1Trust(p: Platform): Promise<ApiResult> {
   const rpc = (process.env.BURNTICKER_RPC_URL ?? "").trim();
-  const reader = rpc ? await web3ChainReader(rpc).catch(() => null) : null;
-  const attesters = p.registry.tokens().map((t) => { const a = p.registry.attesters(t.mint).filter((x) => x.active); return { ticker: t.ticker, attesters: a.length, independent: a.filter((x) => x.role === "independent").length, quorum: Math.max(1, Math.min(1, a.length)) }; });
-  const live = p.registry.tokens("live");
-  const page = await buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster });
+  // 2026-10-15 prelaunch audit C2: kept and refreshed in the background (trustServe.ts); the fee ledger is not read (not served here).
+  // Without an RPC (tests, an RPC-less host) nothing is read from the chain, so the answer is built fresh each time.
+  const build = async () => {
+    const reader = rpc ? await web3ChainReader(rpc).catch(() => null) : null;
+    const attesters = p.registry.tokens().map((t) => { const a = p.registry.attesters(t.mint).filter((x) => x.active); return { ticker: t.ticker, attesters: a.length, independent: a.filter((x) => x.role === "independent").length, quorum: Math.max(1, Math.min(1, a.length)) }; });
+    const live = p.registry.tokens("live");
+    return buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster, skipFeeLedger: true });
+  };
+  const memo = rpc ? await trustSwr.get("v1", "1", build) : null;
+  const page = (memo?.value as Awaited<ReturnType<typeof build>> | undefined) ?? await build();
   const liveBps = page.livePlatform.found ? Object.fromEntries(page.livePlatform.comparison.map((r) => [r.field, { designed: r.designed, live: r.live, matches: r.matches }])) : null;
   return ok({
     generatedAt: page.generatedAt, cluster: p.cluster, powers: page.powers, operator: page.operator,

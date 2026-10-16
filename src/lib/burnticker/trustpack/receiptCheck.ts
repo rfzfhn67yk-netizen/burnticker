@@ -83,7 +83,7 @@ export function jsonRpc(url: string, fetchImpl: typeof fetch = fetch, o: { attem
         if (wait > 0) await new Promise((ok) => setTimeout(ok, wait));
         last = Date.now();
         await takeRpc(url, { method });   // the request budget (apiBudget.ts): a hold throws, it is not retried here
-        const r = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+        const r = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: AbortSignal.timeout(15_000) });   // prelaunch audit H1
         // 429 and 5xx are retried; any other non-OK status is a failed read. A failed read THROWS — it is never an empty result
         // (ChatGPT re-check 2026-10-11 F1: a 503 JSON body or a bodyless 200 used to come back as `undefined` and read as "no account").
         if (r.status === 429 || r.status >= 500) { if (attempt + 1 < attempts) { await new Promise((ok) => setTimeout(ok, base * 2 ** attempt)); continue; } throw new Error(`${method}: the RPC answered HTTP ${r.status}`); }

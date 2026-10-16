@@ -17,6 +17,19 @@
  * Calls that finish a send already in flight (`sendTransaction`, `getSignatureStatuses`, `getBlockHeight`) are "essential": a hold does not stop them
  * (they still count and still wait for the rate bucket), so a hold never strands a transaction halfway.
  *
+ * LANES (2026-10-15 prelaunch audit C2, tightened after its blind review): the site's Helius slice is split so anonymous traffic cannot
+ * stop a launch confirmation or a wallet send, and no lane can spend another's share (LANE_SPLIT; only the web role splits):
+ *
+ *   confirm   the launch verifier (server.ts), 10% of the day, reachable from no browser
+ *   flight    a browser swap or launch carrying a flight token (rpcFlight.ts), 15% of the day, and its own rate bucket (a quarter of the
+ *             source's rate), so tokens cannot starve the site
+ *   proxy     the browser's proxy without a token: at most 35% of the day and half the source's rate
+ *   general   every other site read: the day less the two reserves, counted WITHOUT the reserved lanes' spend, so a busy confirm or flight
+ *             lane never holds the pages
+ *
+ * Each reserved lane stops at its own ceiling. Past it only the calls that finish a send already in flight (ESSENTIAL: sendTransaction,
+ * getSignatureStatuses, getBlockHeight) still pass, and they still count. In the proxy lane nothing is essential.
+ *
  * A process that never calls `configureApiBudget` (the tests, one-off scripts, the browser) runs the budget PASSIVE: it counts but never
  * waits or holds, unless NODE_ENV is "production" (the web server). The keepers configure it at start. Client-safe: no node imports.
  */
@@ -127,6 +140,11 @@ const TEN_CREDITS = new Set(["getProgramAccounts", "searchAssets", "getAsset", "
   "getAssetsByGroup", "getAssetProof", "getAssetProofBatch", "getTokenAccounts", "getSignaturesForAsset", "getNftEditions", "sendBundle"]);
 /** Essential: a hold never stops them (they still count). */
 const ESSENTIAL = new Set(["sendTransaction", "getSignatureStatuses", "getBlockHeight"]);
+/** The budget lanes (C2): "general" (the default), "proxy", "flight" and "confirm" (see the header). */
+export type BudgetLane = "general" | "proxy" | "flight" | "confirm";
+/** Per source, the web role's split of its day (fractions of the day budget) and of its rate (fractions of each rate bucket). */
+export interface LaneSplitSpec { confirmReserve: number; flightReserve: number; proxyCap: number; proxyRate: number; flightRate: number }
+export const LANE_SPLIT: Readonly<Record<string, LaneSplitSpec>> = { helius: { confirmReserve: 0.10, flightReserve: 0.15, proxyCap: 0.35, proxyRate: 0.5, flightRate: 0.25 } };
 /** Methods made essential for the duration of one call (withEssential): the keeper's startup genesis read only (re-review N5). */
 const essentialNow = new Set<string>();
 /**
@@ -254,7 +272,11 @@ interface Bucket { ratePerMs: number; cap: number; tokens: number; last: number 
 interface SourceState { buckets: Bucket[]; day: string; stored: number; pending: number; lastFlush: number; alerted80: boolean; held: boolean;
   /** Today's spend by "phase:method" (2026-10-15: the keeper's log prints the top lines, so a credit burn is measured, not guessed). */
   /** Not yet written deltas (flushed with the atomic addCounts); `local` holds the totals when there is no store. */
-  methodDeltas: Record<string, number>; methodsLocal: Record<string, number> }
+  methodDeltas: Record<string, number>; methodsLocal: Record<string, number>;
+  /** Today's spend per lane (C2; the web role's split sources only): stored + pending, flushed with the day count. */
+  lanes: Partial<Record<BudgetLane, { stored: number; pending: number; held: boolean }>>;
+  /** The proxy's and the flight lane's own rate buckets (a fraction of the source's), on top of the shared ones. */
+  laneBuckets: Partial<Record<BudgetLane, Bucket[]>> }
 
 export interface ApiBudgetOpts {
   role: BudgetRole; store?: BudgetStore | null; now?: () => number; sleep?: (ms: number) => Promise<void>; maxWaitMs?: number;
@@ -330,12 +352,12 @@ export class ApiBudget {
       const buckets = b.rates.map((r) => { const cap = Math.max(1, r.perMs * Math.min(r.windowMs, BURST_WINDOW_MS)); return { ratePerMs: r.perMs, cap, tokens: cap, last: now }; });
       let stored = 0;
       if (this.store) { try { stored = this.store.add(this.dayKey(source), day, 0, now); } catch { stored = 0; } }
-      s = { buckets, day, stored, pending: 0, lastFlush: now, alerted80: false, held: false, methodDeltas: {}, methodsLocal: {} };
+      s = { buckets, day, stored, pending: 0, lastFlush: now, alerted80: false, held: false, methodDeltas: {}, methodsLocal: {}, lanes: {}, laneBuckets: {} };
       this.states.set(source, s);
     }
     if (s.day !== day) {   // a new UTC day: what was pending belongs to the old day; the new day starts from the store (another process may have counted)
       this.flushOne(source, s);
-      s.day = day; s.pending = 0; s.alerted80 = false; s.held = false; s.methodDeltas = {}; s.methodsLocal = {};
+      s.day = day; s.pending = 0; s.alerted80 = false; s.held = false; s.methodDeltas = {}; s.methodsLocal = {}; s.lanes = {};
       if (this.store) { try { s.stored = this.store.add(this.dayKey(source), day, 0, now); } catch { s.stored = 0; } } else s.stored = 0;
     }
     return s;
@@ -351,8 +373,44 @@ export class ApiBudget {
       else { const t = this.loadMethods(source, s.day); into(t); this.store.set(this.methodsKey(source), JSON.stringify({ day: s.day, counts: t }), this.now()); }
     } catch { /* the method split is a measurement; never stops a read */ }
   }
+  /** The status-table key of a lane's day count (C2). */
+  laneKey(source: string, lane: BudgetLane): string { return `apiBudget.lane.${this.role}.${source}.${lane}`; }
+  private lane(source: string, s: SourceState, lane: BudgetLane): { stored: number; pending: number; held: boolean } {
+    let l = s.lanes[lane];
+    if (!l) {
+      let stored = 0;
+      if (this.store) { try { stored = this.store.add(this.laneKey(source, lane), s.day, 0, this.now()); } catch { stored = 0; } }
+      l = s.lanes[lane] = { stored, pending: 0, held: false };
+    }
+    return l;
+  }
+  /** The web role's lane split of `source` in units (null: no split, every call is "general"). */
+  laneSplit(source: string): { confirm: number; flight: number; general: number; proxyCap: number; spec: LaneSplitSpec } | null {
+    const sp = this.role === "web" ? LANE_SPLIT[source] : undefined;
+    if (!sp) return null;
+    const budget = this.dayBudget(source);
+    const confirm = Math.floor(budget * sp.confirmReserve), flight = Math.floor(budget * sp.flightReserve);
+    return { confirm, flight, general: budget - confirm - flight, proxyCap: Math.floor(budget * sp.proxyCap), spec: sp };
+  }
+  private laneBucketsFor(source: string, s: SourceState, lane: BudgetLane, sp: LaneSplitSpec): Bucket[] {
+    const f = lane === "proxy" ? sp.proxyRate : lane === "flight" ? sp.flightRate : 0;
+    if (!f) return [];
+    let b = s.laneBuckets[lane];
+    if (!b) {
+      const now = this.now();
+      b = s.laneBuckets[lane] = budgetFor(specOf(source), this.role).rates.map((r) => { const perMs = r.perMs * f, cap = Math.max(1, perMs * Math.min(r.windowMs, BURST_WINDOW_MS)); return { ratePerMs: perMs, cap, tokens: cap, last: now }; });
+    }
+    return b;
+  }
+  /** Today's spend in one lane (C2). */
+  laneUsed(source: string, lane: BudgetLane): number { const s = this.state(source), l = this.lane(source, s, lane); return l.stored + l.pending; }
   private flushOne(source: string, s: SourceState): void {
     this.flushMethods(source, s);
+    for (const [lane, l] of Object.entries(s.lanes) as [BudgetLane, { stored: number; pending: number }][]) {
+      if (!l.pending) continue;
+      if (this.store) { try { l.stored = this.store.add(this.laneKey(source, lane), s.day, l.pending, this.now()); } catch { l.stored += l.pending; } } else l.stored += l.pending;
+      l.pending = 0;
+    }
     if (!s.pending) return;
     if (this.store) { try { s.stored = this.store.add(this.dayKey(source), s.day, s.pending, this.now()); } catch { s.stored += s.pending; } } else s.stored += s.pending;
     s.pending = 0; s.lastFlush = this.now();
@@ -367,20 +425,39 @@ export class ApiBudget {
    * Takes `requests` from the rate buckets and `units` from the day budget. Waits (never fails) up to maxWaitMs for the buckets;
    * "busy" past that; "hold" at once when the day budget is spent (unless `essential`).
    */
-  async take(source: string, o: { units?: number; requests?: number; essential?: boolean; methods?: Record<string, number> } = {}): Promise<TakeOutcome> {
+  async take(source: string, o: { units?: number; requests?: number; essential?: boolean; methods?: Record<string, number>; lane?: BudgetLane } = {}): Promise<TakeOutcome> {
     const units = Math.max(0, o.units ?? 1), requests = Math.max(1, o.requests ?? 1);
     const s = this.state(source), budget = this.dayBudget(source);
     const used = s.stored + s.pending;
-    if (this.enforce && !o.essential && used + units > budget) { this.onHold(source, s, used, budget); return { state: "hold", used, budget }; }
+    // C2 lanes (the web role's split sources): each lane has its own ceiling; the general and proxy lanes are counted without the reserved
+    // lanes' spend, so a busy confirm or flight lane never holds the pages; past a ceiling only ESSENTIAL calls pass (never in the proxy lane)
+    const split = this.laneSplit(source), lane: BudgetLane = split ? (o.lane ?? "general") : "general";
+    const laneState = split ? this.lane(source, s, lane) : null;
+    const essential = !!o.essential && lane !== "proxy";
+    if (this.enforce && split && laneState && !essential) {
+      const lu = laneState.stored + laneState.pending;
+      const reserved = (l: BudgetLane) => { const x = this.lane(source, s, l); return x.stored + x.pending; };
+      if (lane === "confirm" || lane === "flight") {
+        const ceiling = lane === "confirm" ? split.confirm : split.flight;
+        if (lu + units > ceiling) { this.onLaneHold(source, s, lane, laneState, lu, ceiling, "cap"); return { state: "hold", used: lu, budget: ceiling }; }
+      } else {
+        const ordinary = used - reserved("confirm") - reserved("flight");
+        if (ordinary + units > split.general) { this.onLaneHold(source, s, lane, laneState, ordinary, split.general, "reserve"); return { state: "hold", used: ordinary, budget: split.general }; }
+        if (lane === "proxy" && lu + units > split.proxyCap) { this.onLaneHold(source, s, lane, laneState, lu, split.proxyCap, "cap"); return { state: "hold", used: lu, budget: split.proxyCap }; }
+      }
+    }
+    if (this.enforce && !split && !essential && used + units > budget) { this.onHold(source, s, used, budget); return { state: "hold", used, budget }; }
     let wait = 0;
     if (this.enforce) {
       const now = this.now();
-      for (const b of s.buckets) { b.tokens = Math.min(b.cap, b.tokens + (now - b.last) * b.ratePerMs); b.last = now; }
-      for (const b of s.buckets) wait = Math.max(wait, b.tokens >= requests ? 0 : (requests - b.tokens) / b.ratePerMs);
+      const buckets = split ? [...s.buckets, ...this.laneBucketsFor(source, s, lane, split.spec)] : s.buckets;
+      for (const b of buckets) { b.tokens = Math.min(b.cap, b.tokens + (now - b.last) * b.ratePerMs); b.last = now; }
+      for (const b of buckets) wait = Math.max(wait, b.tokens >= requests ? 0 : (requests - b.tokens) / b.ratePerMs);
       if (wait > this.maxWait) return { state: "busy", waitMs: Math.ceil(wait) };
-      for (const b of s.buckets) b.tokens -= requests;   // reserve now (may go negative): concurrent callers queue behind it
+      for (const b of buckets) b.tokens -= requests;   // reserve now (may go negative): concurrent callers queue behind it
     }
     s.pending += units;
+    if (laneState) laneState.pending += units;
     const tag = this.phase ? `${this.phase}:` : "";
     for (const [m, n] of Object.entries(o.methods ?? { request: units })) s.methodDeltas[tag + m] = (s.methodDeltas[tag + m] ?? 0) + n;
     const total = s.stored + s.pending;
@@ -412,6 +489,20 @@ export class ApiBudget {
       text: fb
         ? `${who} used all of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}). Until midnight UTC it reads from ${fb} instead, more slowly, and sends nothing: readings, cranks and claims wait until then.`
         : `${who} used all of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}), so it stopped reading from it until midnight UTC. Reads start again on their own after that. Nothing is retried in the meantime.` });
+  }
+  /** A lane stopped (C2): logged once per lane per day; the reserve's stop also alerts (ordinary reads wait while confirmations go on). */
+  private onLaneHold(source: string, s: SourceState, lane: BudgetLane, l: { held: boolean }, used: number, ceiling: number, why: "reserve" | "cap"): void {
+    if (l.held) return;
+    l.held = true;
+    this.flushOne(source, s);
+    const spec = specOf(source), unit = spec.unit === "credit" ? "credits" : "requests";
+    const who = lane === "proxy" ? "the browser proxy" : lane === "flight" ? "swaps and launches in visitors' browsers" : lane === "confirm" ? "launch confirmations" : "the site's pages";
+    const text = why === "cap"
+      ? `${WHO[this.role]}: ${who} used their share of today's ${spec.label} budget (${fmt(used)} of ${fmt(ceiling)} ${unit}). Those reads wait until midnight UTC; transactions already sent are still confirmed, and the other shares go on.`
+      : `${WHO[this.role]} used today's ${spec.label} budget up to the parts kept for launch confirmations and swaps in flight (${fmt(used)} of ${fmt(ceiling)} ${unit}); other reads wait until midnight UTC.`;
+    this.log(`  [api-budget] ${source} ${lane} lane ON HOLD until 00:00 UTC: ${text}`);
+    if (!this.enforce || lane === "proxy") return;
+    this.emit({ level: "hold", key: `bt-api-budget:${this.role}:${source}:${s.day}:${lane}`, meta: { role: this.role, source, day: s.day, used, budget: ceiling, unit: spec.unit, lane }, text });
   }
   private emit(a: Omit<BudgetAlert, "kind">): void { try { this.alert?.({ kind: "bt-api-budget", ...a }); } catch { /* an alert never stops a read */ } }
 
@@ -471,16 +562,22 @@ export function resetApiBudget(): void { current = null; }
 export function budgetPhase(phase: string): string { return apiBudget().setPhase(phase); }
 
 /** Takes from the process's budget; throws BudgetHoldError on "hold" or "busy" (the caller's read fails like any network error). */
-export async function takeOrThrow(source: string, o: { units?: number; requests?: number; essential?: boolean; methods?: Record<string, number> } = {}): Promise<void> {
+export async function takeOrThrow(source: string, o: { units?: number; requests?: number; essential?: boolean; methods?: Record<string, number>; lane?: BudgetLane } = {}): Promise<void> {
   const r = await apiBudget().take(source, o);
   if (r.state !== "ok") throw new BudgetHoldError(source, r);
 }
-/** A JSON-RPC POST's take: Helius counts credits by method, the buckets count calls; send/confirm calls are essential. */
-export async function takeRpc(url: string, body: unknown, sourceOverride?: string): Promise<void> {
+/**
+ * A JSON-RPC POST's take: Helius counts credits by method, the buckets count calls; send/confirm calls are essential. `lane` (C2): the
+ * web's lane (see the header); past a lane's ceiling only ESSENTIAL calls pass. In the "proxy" lane nothing is
+ * essential: an anonymous caller's getSignatureStatuses counts against the proxy's cap like any read.
+ */
+export async function takeRpc(url: string, body: unknown, sourceOverride?: string, o: { lane?: BudgetLane } = {}): Promise<void> {
   const source = sourceOverride ?? rpcSourceFor(url), c = rpcCallsOf(body);
+  const lane = o.lane ?? "general";
+  const essential = lane === "proxy" ? false : c.essential;
   // Helius states a separate, lower rate for sends (5 a second on the Developer plan): a body with a send also takes from that bucket
-  if (source === "helius" && c.sends) await takeOrThrow("helius-send", { requests: c.sends, essential: true });
-  await takeOrThrow(source, { units: source === "helius" ? c.credits : c.calls, requests: c.calls, essential: c.essential, methods: source === "helius" ? c.methods : c.callsByMethod });
+  if (source === "helius" && c.sends) await takeOrThrow("helius-send", { requests: c.sends, essential: lane !== "proxy" });
+  await takeOrThrow(source, { units: source === "helius" ? c.credits : c.calls, requests: c.calls, essential, methods: source === "helius" ? c.methods : c.callsByMethod, lane });
 }
 
 /**
@@ -518,8 +615,8 @@ let fallbackNotedDay = "";
  * rate buckets: slower reads, never blindness). A send never reaches the hold (sends are essential), so only reads move. Logged once a day.
  */
 export type FallbackUrl = string | null | undefined | (() => string | null | undefined);
-async function takeRpcOrFallback(url: string, body: unknown, fallback: FallbackUrl): Promise<string> {
-  try { await takeRpc(url, body); return url; }
+async function takeRpcOrFallback(url: string, body: unknown, fallback: FallbackUrl, lane?: BudgetLane): Promise<string> {
+  try { await takeRpc(url, body, undefined, { lane }); return url; }
   catch (e) {
     const fallbackUrl = typeof fallback === "function" ? fallback() : fallback;
     if (!fallbackUrl || fallbackUrl === url || !isHeliusHold(e) || !fallbackEligible(body)) throw e;
@@ -536,13 +633,13 @@ const urlOf = (input: unknown): string => typeof input === "string" ? input : in
  * Wraps a fetch so every call takes from the budget first. `source`: a fixed id, "rpc" (a Solana JSON-RPC endpoint: credits by
  * method), or omitted (by the URL's host).
  */
-export function budgetedFetch<F extends AnyFetch>(inner: F, source?: string | "rpc", o: { fallbackUrl?: FallbackUrl } = {}): F {
+export function budgetedFetch<F extends AnyFetch>(inner: F, source?: string | "rpc", o: { fallbackUrl?: FallbackUrl; lane?: BudgetLane } = {}): F {
   const wrapped = async (input: unknown, init?: { body?: unknown }) => {
     const url = urlOf(input);
     const id = source === "rpc" ? "rpc" : source ?? sourceForUrl(url);
     let target: unknown = input;
     if (id === "rpc" || ((id === "helius" || id === "solana-public") && init?.body !== undefined)) {
-      const used = await takeRpcOrFallback(url, init?.body, id === "rpc" ? o.fallbackUrl : undefined);
+      const used = await takeRpcOrFallback(url, init?.body, id === "rpc" ? o.fallbackUrl : undefined, o.lane);
       if (used !== url) target = used;
     } else await takeOrThrow(id);
     return (inner as unknown as (i: unknown, n?: unknown) => Promise<unknown>)(target, init);
@@ -551,9 +648,10 @@ export function budgetedFetch<F extends AnyFetch>(inner: F, source?: string | "r
 }
 /**
  * A @solana/web3.js ConnectionConfig whose every request goes through the budget (credits by method). `fallbackUrl` (the keeper:
- * publicRpcFor(cluster)): while the keyed plan's day budget is spent, reads go there instead of failing.
+ * publicRpcFor(cluster)): while the keyed plan's day budget is spent, reads go there instead of failing. `lane` (C2): the site's
+ * launch verifier passes "confirm".
  */
-export function budgetedRpcConfig<const C extends object>(base: C, o: { fallbackUrl?: FallbackUrl } = {}): C & { fetch: typeof fetch } {
+export function budgetedRpcConfig<const C extends object>(base: C, o: { fallbackUrl?: FallbackUrl; lane?: BudgetLane } = {}): C & { fetch: typeof fetch } {
   return { ...base, fetch: budgetedFetch(((i: Parameters<typeof fetch>[0], n?: Parameters<typeof fetch>[1]) => fetch(i, n)) as typeof fetch, "rpc", o) };
 }
 

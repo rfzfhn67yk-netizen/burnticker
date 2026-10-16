@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
-import { findTeams, gameSeries, noPlayoffs, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
+import { findTeams, gameSeries, noPlayoffs, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, within, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { findStations, type NwsMetric } from "@/lib/burnticker/sources/nws";
 import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { gameLine } from "@/lib/burnticker/oneShotEligibility";
@@ -26,6 +26,9 @@ import { scheduleProblem, SPORTS_CHIP } from "@/lib/burnticker/sources/provenanc
 import { asksWomen, compoundOf, compoundSentence, isWomenLeague, milestoneOf, milestoneSentence, regularSeasonOnly, REGULAR_SEASON_SENTENCE, womenSentence, type Compound } from "@/lib/burnticker/teamQuery";
 import { fitName } from "@/lib/burnticker/launchFields";
 import { recordCloseCardText, recordCloseHref, recordCloseIntent } from "@/lib/burnticker/recordCloseSearch";
+
+/** How long a team search waits for the team's schedule before it answers without it (prelaunch audit H1, 2026-10-15). */
+export const SEARCH_SCHEDULE_WAIT_MS = 2_500;
 
 /**
  * INTENT → RULE CARDS (2026-10-10, the owner thinks in sentences, not sources). One box on the launch page takes a plain phrase and
@@ -102,7 +105,7 @@ export interface WindowOption { kind: WindowKind; label: string; title: string; 
 export interface FeedLike { id: string; title: string; sourceName: string; cadence: string; unit: { size: number; label: string; definition: string } | null; direction: "up" | "down" | "abs" | null; baseline: "previousSettlement" | number | null; launchable: { ok: boolean; why: string | null } }
 
 export interface SearchDeps {
-  venues: VenueFlags; feeds: readonly FeedLike[]; espn: EspnClient | null; polyGet: ((url: string) => Promise<unknown>) | null; refuse: TitleRefuser;
+  venues: VenueFlags; feeds: readonly FeedLike[]; espn: EspnClient | null; /** H1: how long a team search waits for the schedule (default SEARCH_SCHEDULE_WAIT_MS) */ scheduleWaitMs?: number; polyGet: ((url: string) => Promise<unknown>) | null; refuse: TitleRefuser;
   kalshiSearch: ((q: string) => Promise<SeriesSummary[]>) | null; derbyHref: string | null; nowMs: number;
   /** ChatGPT audit 7 item 11: show markets that close within CLOSING_SOON_HOURS (hidden by default; the page's "Show closing soon") */
   closingSoon?: boolean;
@@ -317,7 +320,11 @@ function labelTeamIntent(cards: Suggestion[], q: string, t: EspnTeam, o: { compo
 async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<Suggestion[]> {
   let scheduleNote: string | null = null;
   // L05: a schedule that cannot be read is said in plain words (provenance.ts); the card's rule still settles on its own sources
-  const games = d.espn ? await d.espn.season(t.league, t.abbr).catch((e) => { scheduleNote = e instanceof ScheduleUnavailable ? scheduleProblem(t.league, "needs-licence").line : scheduleProblem(t.league, "unreadable").line; return [] as Game[]; }) : [];
+  // prelaunch audit H1 (2026-10-15): search never blocks on a sports schedule; past SEARCH_SCHEDULE_WAIT_MS the cards are built without it
+  // (the read goes on in the background and is kept for the next search)
+  const sched = d.espn ? await within(d.espn.season(t.league, t.abbr), d.scheduleWaitMs ?? SEARCH_SCHEDULE_WAIT_MS) : null;
+  const games: Game[] = !sched ? [] : !sched.done ? (scheduleNote = scheduleProblem(t.league, "unreadable").line, [])
+    : "error" in sched ? (scheduleNote = sched.error instanceof ScheduleUnavailable ? scheduleProblem(t.league, "needs-licence").line : scheduleProblem(t.league, "unreadable").line, []) : sched.value;
   const outcome = outcomeOf(q, t.league);
   const rec = recurringCard(t, games, outcome, d.nowMs);
   if (scheduleNote) { rec.scheduleUnavailable = true; console.warn(`[burnticker/search] ${t.league} schedule: ${scheduleNote}`); }

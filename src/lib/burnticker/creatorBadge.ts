@@ -37,6 +37,13 @@ function markBytes(root: string): Buffer {
 }
 
 /**
+ * The most pixels a creator image may decode to (2026-10-15 prelaunch audit M3): a 2 MB file of one colour can declare 16,000 × 16,000
+ * pixels, about a gigabyte once decoded, on the one Node process. 24 million covers a 6,000 × 4,000 photo; sharp refuses past it before
+ * decoding (limitInputPixels), and the header check (metadata reads the header only) refuses it in words first.
+ */
+export const IMAGE_MAX_PIXELS = 24_000_000;
+const TOO_MANY_PIXELS = "The image has too many pixels. Send one of at most 24 megapixels (for example 6000 by 4000).";
+/**
  * WIRING-MEDIA-RECOVERY item 221: the checks the badge path runs (the bytes decode as an image, at least 16 pixels on each side), for an
  * image pinned without the mark too. badgeCreatorImage runs the same two checks before it composites.
  */
@@ -46,6 +53,7 @@ export async function checkCreatorImage(bytes: Uint8Array): Promise<{ ok: { widt
   try { meta = await sharp(bytes, { pages: 1 }).metadata(); } catch { return { error: "The image could not be read. Send a PNG, JPG, GIF or WebP file." }; }
   const w = meta.width ?? 0, h = meta.height ?? 0;
   if (w < 16 || h < 16) return { error: "The image is too small. Send one at least 16 pixels on each side." };
+  if (w * h > IMAGE_MAX_PIXELS) return { error: TOO_MANY_PIXELS };
   return { ok: { width: w, height: h } };
 }
 
@@ -56,6 +64,7 @@ export async function badgeCreatorImage(bytes: Uint8Array, contentType: string, 
   try { meta = await sharp(bytes, { pages: 1 }).metadata(); } catch { return { error: "The image could not be read. Send a PNG, JPG, GIF or WebP file." }; }
   const w = meta.width ?? 0, h = meta.height ?? 0;
   if (w < 16 || h < 16) return { error: "The image is too small. Send one at least 16 pixels on each side." };
+  if (w * h > IMAGE_MAX_PIXELS) return { error: TOO_MANY_PIXELS };
   const outType = contentType === "image/jpeg" ? "image/jpeg" : "image/png";
   // a very large picture is scaled before the work; the mark is placed on the final square
   for (const maxSide of [2048, 1536, 1024, 768]) {
@@ -65,7 +74,7 @@ export async function badgeCreatorImage(bytes: Uint8Array, contentType: string, 
     const markPng = await sharp(markBytes(root)).resize(mark, mark, { fit: "cover" }).png().toBuffer();
     const keylined = await sharp({ create: { width: b.size, height: b.size, channels: 4, background: BADGE_KEYLINE } })
       .composite([{ input: markPng, left: b.keyline, top: b.keyline }]).png().toBuffer();
-    const base = sharp(bytes, { pages: 1 }).rotate().resize(side, side, { fit: "cover", position: "centre" })
+    const base = sharp(bytes, { pages: 1, limitInputPixels: IMAGE_MAX_PIXELS }).rotate().resize(side, side, { fit: "cover", position: "centre" })
       .composite([{ input: keylined, left: b.x, top: b.y }]);
     const tries = outType === "image/jpeg" ? [90, 82, 72, 60] : [9];
     for (const q of tries) {
