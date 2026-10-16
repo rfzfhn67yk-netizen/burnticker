@@ -430,6 +430,19 @@ public status.json>`. Tunables: `BURNTICKER_TAKEOVER_MISSED` (default 5), `BURNT
 - **Standby check, same day:** the standby's status page says `standby · passive` with a heartbeat under 3 minutes, and the leader's
   status page shows the peer reachable.
 
+## Claiming the platform fee
+
+(2026-10-16.) The LaunchLab platform's 0.25% curve fee collects in its wrapped-SOL fee vault (`getPdaPlatformVault(LaunchLab, platform,
+WSOL)`, EcXnhWsJmc6vcart32M5ZXMmmCzXE3fiUz9qxqrWQKSn on mainnet) until the platform's claim wallet (PlatformConfig.platformClaimFeeWallet,
+8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5, the operator treasury) claims it. Raydium's site does not offer the claim for a platform it
+does not run, so `/burnticker/operator/claim-fees` builds it: open the wallet's wrapped-SOL account, `claim_platform_fee_from_vault`,
+close the account into the wallet, so the fee lands as plain SOL. The page answers only on the operator's own network with the ops PIN
+(the post queue's gate, `GET /api/burnticker/v1/ops/platform-fees`). Steps: make sure the claim wallet holds about 0.002 SOL (the network
+fee plus the account rent, which comes back in the same transaction); open the page, enter the PIN, connect the claim wallet in Phantom,
+press Claim. The page dry-runs the transaction before Phantom is asked, refuses any other wallet, checks what Phantom hands back, sends,
+confirms, shows the signature and reads the vault again. The claim then appears in the fee ledger (`/burnticker/fees/ledger`) by itself,
+since the ledger reads the claim wallet's history from chain.
+
 ## Signing the operator statement
 
 (Moved here from the public operator page on 2026-10-11, review 2 §2: visitors see the "not signed yet" fact and the text; the steps are

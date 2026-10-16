@@ -139,8 +139,9 @@ replacing `platformScale` 0: LP locked forever, its fees fund the burn — 80 % 
   keeper's SOL balance, which under this routing receives no fees. The program's `crank_buyback` (`src/lib/burnReceipts/crank.ts`) is the
   successor for the swap-and-burn leg; since 2026-10-10 the keeper drives it (`BURNKEEPER_EXECUTION=program`) and the Jupiter leg is
   deprecated (README-execution.md §1).
-- **Platform fee** (the developer's): claimed by `BURNTICKER_FEE_WALLET`'s owner through Raydium's UI or `claim_platform_fee_from_vault`;
-  not the keeper's business. **Locked-LP fees** (since 2026-10-10): the Fee Key holder is the burn program's fee-keys PDA, so nobody harvests them in Raydium's UI;
+- **Platform fee** (the developer's): claimed by `BURNTICKER_FEE_WALLET`'s owner with `claim_platform_fee_from_vault` (Raydium's UI does not
+  offer it for a third-party platform; since 2026-10-16 the operator page `/burnticker/operator/claim-fees` builds it for Phantom, see
+  `docs/burnticker/runbook.md` "Claiming the platform fee"); not the keeper's business. **Locked-LP fees** (since 2026-10-10): the Fee Key holder is the burn program's fee-keys PDA, so nobody harvests them in Raydium's UI;
   the keeper cranks the permissionless `register_fee_key` once and `claim_lock_fees` ahead of each buyback crank
   (`src/lib/burnticker/lockFeesKeeper.ts`): 80 % lands in the fee PDA (spent by the next crank), 20 % in the operator treasury.
 
