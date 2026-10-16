@@ -164,10 +164,11 @@ describe("L02 — availability: closed, preview and open, per type, per source, 
     assert.equal(typeRefusal({ rule: firstPartyRule(nwsSeries("high", "DTW", 90), 0.02) }, {}, "mainnet"), null);
   });
 
-  test("preview on the routes: bundle, confirm and the wizard's launch route answer 403 launches-closed (preview: true); the review answers", async () => {
+  test("preview on the routes: bundle and the wizard's launch route answer 403 launches-closed (preview: true); a confirmation is not refused (AUDIT A C1 M1); the review answers", async () => {
     await makeWorld();
     delete process.env[CREATOR_LAUNCHES_FLAG]; process.env[CREATOR_LAUNCHES_PREVIEW_FLAG] = "1";
-    for (const p of ["launch/bundle", "launch/confirm"]) {
+    assert.equal((await callRoute(`${API}/launch/confirm`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ mint: "x", signature: "y" }) })).status, 404, "a confirmation is read in preview like any other (no draft for this mint)");
+    for (const p of ["launch/bundle"]) {
       const r = await callRoute(`${API}/${p}`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ ticker: "X" }) });
       assert.equal(r.status, 403, p); const j = await r.json() as { code: string; preview: boolean }; assert.deepEqual([j.code, j.preview], ["launches-closed", true], p);
     }

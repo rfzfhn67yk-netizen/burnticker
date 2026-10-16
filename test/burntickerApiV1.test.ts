@@ -225,10 +225,11 @@ describe("rate limits", () => {
     limiter.reset();
     const hdr = { "x-forwarded-for": "198.51.100.7" };
     let last: Response | null = null;
-    for (let i = 0; i <= RATE_LIMITS.write.burst; i++) last = await callRoute(`${API}/launch/confirm`, { method: "POST", headers: { ...POST_HEADERS, ...hdr }, body: JSON.stringify({ mint: "x", signature: "y" }) });
+    // AUDIT A C1 (7): confirmations left the write bucket (they are metered on the heavy one); bundles spend it
+    for (let i = 0; i <= RATE_LIMITS.write.burst; i++) last = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: { ...POST_HEADERS, ...hdr }, body: JSON.stringify({ mint: "x" }) });
     assert.equal(last!.status, 429);
     assert.ok(Number(last!.headers.get("retry-after")) > 0);
-    const other = await callRoute(`${API}/launch/confirm`, { method: "POST", headers: { ...POST_HEADERS, "x-forwarded-for": "198.51.100.8" }, body: JSON.stringify({ mint: "x", signature: "y" }) });
+    const other = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: { ...POST_HEADERS, "x-forwarded-for": "198.51.100.8" }, body: JSON.stringify({ mint: "x" }) });
     assert.notEqual(other.status, 429);
     const read = await callRoute(`${API}/openapi.json`, { headers: hdr });
     assert.equal(read.status, 200, "the read bucket is separate");

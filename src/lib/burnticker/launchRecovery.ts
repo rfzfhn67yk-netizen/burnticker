@@ -32,6 +32,8 @@ export type RecoveryAction = "check" | "record" | "start-new";
 export function storedLaunchAction(s: StoredLaunch): RecoveryAction {
   if (s.rec.pending) return "check";
   if (s.rec.confirmed.length >= s.rec.steps) return "record";
+  // AUDIT A C1 (5): a coin whose own create is confirmed (a LaunchLab pair whose other create failed) is recorded, not abandoned
+  if (!s.rec.together && s.rec.confirms.some((c) => c.step < s.rec.confirmed.length && !s.rec.recorded.includes(c.mint))) return "record";
   return "start-new";
 }
 /**

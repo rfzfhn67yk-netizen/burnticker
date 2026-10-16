@@ -383,7 +383,8 @@ describe("N4 — the legacy wizard route is metered like the public API, and pai
   });
   test("the two routes share one write bucket: spending it on /v1 leaves nothing for the legacy route", async () => {
     await makeWorld(); limiter.reset();
-    for (let i = 0; i < RATE_LIMITS.write.burst; i++) await callRoute(`${API}/launch/confirm`, { method: "POST", headers: { ...POST, "x-forwarded-for": "198.51.100.42" }, body: JSON.stringify({ mint: "x", signature: "y" }) });
+    // AUDIT A C1 (7): confirmations are metered on their own bucket now; the write bucket is the bundles'
+    for (let i = 0; i < RATE_LIMITS.write.burst; i++) await callRoute(`${API}/launch/bundle`, { method: "POST", headers: { ...POST, "x-forwarded-for": "198.51.100.42" }, body: JSON.stringify({ mint: "x" }) });
     assert.equal((await legacy({}, "198.51.100.42")).status, 429);
     limiter.reset();
   });

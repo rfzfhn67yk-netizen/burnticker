@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, simulationFailureText, stepStatusText, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, simulationFailureText, stepStatusText, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
 import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
 import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
@@ -96,7 +96,16 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         storage,
       }, (i, sig) => setDone((d) => (d.length === i ? [...d, sig] : d)), done);
       setDone(r.signatures);
-      if (r.error) { setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n)); return; }
+      if (r.error) {
+        setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n));
+        // AUDIT A C1 (5): a coin whose own create landed before the stop is recorded now (a LaunchLab pair whose B create failed: A exists)
+        if (planConfirmations(plan, r.signatures).some((l) => !confirmed.includes(l.mint))) {
+          const c = await confirmPlan((u, init) => fetch(u, init), plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
+          setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
+          // review (9): a failed record of the coin that landed is said too, beside why the run stopped
+          if (c.error) setErr(`${failureSentence(r, n)} ${c.error}`);
+        }
+        return; }
       setStopped(null);
       const c = await confirmPlan((u, init) => fetch(u, init), plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
       setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);

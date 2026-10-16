@@ -262,7 +262,7 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     assert.equal(key, `burnticker.signplan.${plan.confirms[0].mint}`);
     const raw = before.get(key)!;
     const parsed = JSON.parse(raw) as Record<string, unknown> & { pending: Record<string, unknown> };
-    assert.deepEqual(Object.keys(parsed).sort(), ["confirmed", "confirms", "failed", "mints", "paid", "pending", "recorded", "stepSigners", "steps", "updatedAt", "v"]);
+    assert.deepEqual(Object.keys(parsed).sort(), ["confirmed", "confirms", "failed", "mints", "paid", "pending", "recorded", "stepSigners", "steps", "together", "updatedAt", "v", "venue"]);   // review 2026-10-15 (9): `together` and `venue` are always written
     assert.deepEqual(Object.keys(parsed.pending).sort(), ["blockhash", "lastValidBlockHeight", "sentAt", "signature", "step", "tx"]);
     assert.equal(sigOf(Buffer.from(parsed.pending.tx as string, "base64")), one.sent[0], "the stored bytes are the transaction that was sent");
     // the page reloads: a new storage object holding only that string, no `prior`, new deps
@@ -283,13 +283,15 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     assert.equal(listed.length, 1);
     assert.match(storedLaunchSentence(listed[0]), /step 1 of 2 was sent, but the confirmation could not be read \(signature /);
     assert.doesNotMatch(storedLaunchSentence(listed[0]), /Nothing was sent/);
-    // the chain says the create is confirmed: adopted; step 2 was never sent, so nothing is recorded yet and the sentence says how to finish
+    // the chain says the create is confirmed: adopted. AUDIT A C1 (5): the coin exists from the moment its create lands, so it is recorded
+    // now with the create's signature (before, it waited for step 2, the first buy, which was never sent: the coin was lost after 24 h)
     const posts: string[] = [];
     const fetchFn = async (_u: string, init: { body: string }) => { posts.push(init.body); return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}) }; };
     const r = await recoverStoredLaunch(page, listed[0], { getSignatureStatus: async (sig) => (sig === one.sent[0] ? confirmedStatus() : null), getBlockHeight: async () => 50 }, fetchFn, () => "refused");
-    assert.equal(r.done, false); assert.deepEqual(r.rec.confirmed, [one.sent[0]]); assert.equal(r.rec.pending, null);
-    assert.match(r.text, /1 of the 2 steps is confirmed on chain/);
-    assert.equal(posts.length, 0, "not recorded while a step is missing");
+    assert.equal(r.done, true); assert.deepEqual(r.rec.confirmed, [one.sent[0]]); assert.equal(r.rec.pending, null);
+    assert.match(r.text, /created on chain and recorded, so its page is live\. The later step was not sent/);
+    assert.deepEqual(posts.map((b) => JSON.parse(b)), [{ action: "launched", mint: plan.confirms[0].mint, launchTx: one.sent[0] }]);
+    posts.length = 0;
     // a fully confirmed set (both steps landed before the reload): recorded with the transaction the mint signed, then the record is gone
     const done = memoryPlanStorage();
     done.set(key, JSON.stringify({ ...JSON.parse(before.get(key)!), confirmed: ["SIGSTEP1", "SIGSTEP2"], pending: null }));

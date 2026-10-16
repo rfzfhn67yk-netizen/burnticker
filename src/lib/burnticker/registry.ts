@@ -37,6 +37,10 @@ export type TokenStatus = "draft" | "live" | "paused" | "retired" | "expired";
  * token list is read, so it needs no scheduler.
  */
 export const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+/** AUDIT A C1: a create whose block time is this far past the 24 h window still counts as in time (clock skew, a slow last confirmation). */
+export const DRAFT_GRACE_MS = 10 * 60 * 1000;
+/** Whether a create with this block time landed inside its draft's window (judged on the block time, never on when a sweep ran). */
+export const inDraftWindow = (createdAtMs: number, blockTimeMs: number): boolean => blockTimeMs <= createdAtMs + DRAFT_TTL_MS + DRAFT_GRACE_MS;
 export interface TokenRow {
   mint: string; ticker: string; name: string; creator: string; description: string; imageUrl: string | null; links: { label: string; url: string }[];
   oracle: BurnRule["oracle"]; selectorKey: string; rulesJson: string; rulesSha: string; mode: RuleMode; feePda: string; vault: string | null;
@@ -136,6 +140,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS pair_forwards_once ON pair_forwards (pair_id, 
 -- left off every browse surface (coins list, home, search, leaderboard, sitemap, tokens.html) and listed on /burnticker/test-coins; its
 -- own page stays reachable by link. Its own table, so no column is added to tokens; testCoins.ts holds the rule.
 CREATE TABLE IF NOT EXISTS token_flags (mint TEXT PRIMARY KEY, test INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
+-- AUDIT A C1 (2026-10-15): A COIN CREATED IN ITS DRAFT'S WINDOW IS NEVER LOST TO THE SWEEP. draft_revivals: a draft taken live from a
+-- launch verified on chain that the sweep had marked EXPIRED, or whose create landed AFTER the draft's window (operator only, --late):
+-- the signature, its block time, whether that block time fell inside the window, and who did it. The tokens_expired_final trigger lets a
+-- row leave 'expired' only for 'live' with a revival row naming the same launch transaction. Written once; append-only.
+CREATE TABLE IF NOT EXISTS draft_revivals (mint TEXT PRIMARY KEY, launch_tx TEXT NOT NULL, block_time_ms INTEGER NOT NULL, within_window INTEGER NOT NULL, source TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS token_meta (mint TEXT PRIMARY KEY, creator_note TEXT NOT NULL DEFAULT '', metadata_uri TEXT, metadata_tx TEXT, metadata_sha256 TEXT, image_uri TEXT, image_tx TEXT, image_sha256 TEXT, hosted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
 `;
 
@@ -162,7 +171,10 @@ CREATE TRIGGER IF NOT EXISTS tokens_no_delete BEFORE DELETE ON tokens BEGIN SELE
 CREATE TRIGGER IF NOT EXISTS tokens_baseline_fixed BEFORE UPDATE OF baseline_at ON tokens WHEN OLD.launch_tx IS NOT NULL AND NEW.baseline_at IS NOT OLD.baseline_at
   BEGIN SELECT RAISE(ABORT, 'tokens: the baseline is fixed at launch'); END;
 CREATE TRIGGER IF NOT EXISTS tokens_expired_final BEFORE UPDATE OF status ON tokens WHEN OLD.status = 'expired' AND NEW.status <> 'expired'
-  BEGIN SELECT RAISE(ABORT, 'tokens: an expired draft stays expired (build a fresh bundle)'); END;
+  AND NOT (NEW.status = 'live' AND OLD.launch_tx IS NULL AND NEW.launch_tx IS NOT NULL AND EXISTS (SELECT 1 FROM draft_revivals r WHERE r.mint = OLD.mint AND r.launch_tx = NEW.launch_tx))
+  BEGIN SELECT RAISE(ABORT, 'tokens: an expired draft stays expired (build a fresh bundle) unless its launch is verified on chain (draft_revivals)'); END;
+CREATE TRIGGER IF NOT EXISTS draft_revivals_no_update BEFORE UPDATE ON draft_revivals BEGIN SELECT RAISE(ABORT, 'draft_revivals: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS draft_revivals_no_delete BEFORE DELETE ON draft_revivals BEGIN SELECT RAISE(ABORT, 'draft_revivals: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS tokens_expire_drafts_only BEFORE UPDATE OF status ON tokens WHEN NEW.status = 'expired' AND OLD.status <> 'draft' AND OLD.status <> 'expired'
   BEGIN SELECT RAISE(ABORT, 'tokens: only a draft can expire'); END;
 CREATE TRIGGER IF NOT EXISTS readings_no_update BEFORE UPDATE ON readings BEGIN SELECT RAISE(ABORT, 'readings: append-only'); END;
@@ -278,7 +290,12 @@ export class Registry {
     if (!(this.db.prepare("PRAGMA table_info(token_flags)").all() as { name: string }[]).some((c) => c.name === "synthetic")) this.db.exec("ALTER TABLE token_flags ADD COLUMN synthetic INTEGER NOT NULL DEFAULT 0");
     // LP-lock round 2 (memo v2): the operator leg's paid / pending lamports on a claim, added in place, never changed.
     { const have = new Set((this.db.prepare("PRAGMA table_info(lock_fee_claims)").all() as { name: string }[]).map((c) => c.name)); for (const c of ["paid_lamports", "pending_lamports"]) if (!have.has(c)) this.db.exec(`ALTER TABLE lock_fee_claims ADD COLUMN ${c} TEXT`); }
-    this.db.exec(IMMUTABILITY);
+    // AUDIT A C1: a registry made before the revival path carries the old tokens_expired_final (no exit from 'expired' at all). It is
+    // replaced in place by the narrowed one IMMUTABILITY creates (the same guard plus the one verified exit); every other trigger stays.
+    const fin = this.db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='tokens_expired_final'").get() as { sql: string } | undefined;
+    // review 2026-10-15 (6): the swap is one transaction, so a failure never leaves the registry without the guard
+    if (fin && !fin.sql.includes("draft_revivals")) this.tx(() => { this.db.exec("DROP TRIGGER tokens_expired_final"); this.db.exec(IMMUTABILITY); });
+    else this.db.exec(IMMUTABILITY);
     // A program reading, once a receipt is counted into it, is part of the receipt's facts.
     this.db.exec(`CREATE TRIGGER IF NOT EXISTS burns_reading_once BEFORE UPDATE OF reading_date ON burns WHEN OLD.reading_date IS NOT NULL AND NEW.reading_date IS NOT OLD.reading_date
       BEGIN SELECT RAISE(ABORT, 'burns: a receipt is counted into one program reading'); END;`);
@@ -308,7 +325,41 @@ export class Registry {
 
   /** Expires every draft older than DRAFT_TTL_MS (lazy; idempotent). Returns how many expired now. */
   expireDrafts(now = Date.now()): number {
+    // AUDIT A C1: the sweep only marks the row; a create whose block time is inside the window is still taken live (takeLiveFromChain)
     return Number(this.db.prepare("UPDATE tokens SET status='expired' WHERE status='draft' AND launch_tx IS NULL AND created_at < ?").run(now - DRAFT_TTL_MS).changes);
+  }
+  /** AUDIT A C1: drafts and expired drafts with no launch transaction, created at or after `sinceMs`, oldest first (the reconciler's set). */
+  unlaunchedDrafts(sinceMs: number): TokenRow[] {
+    return (this.db.prepare("SELECT * FROM tokens WHERE status IN ('draft','expired') AND launch_tx IS NULL AND created_at >= ? ORDER BY created_at").all(sinceMs) as Row[]).map(toToken);
+  }
+  /** AUDIT A C1: every expired draft taken live after its launch was verified on chain, oldest first. */
+  draftRevivals(): { mint: string; launchTx: string; blockTimeMs: number; withinWindow: boolean; source: string; note: string; at: number }[] {
+    return (this.db.prepare("SELECT * FROM draft_revivals ORDER BY at, mint").all() as Row[]).map((r) => ({ mint: String(r.mint), launchTx: String(r.launch_tx), blockTimeMs: Number(r.block_time_ms), withinWindow: Number(r.within_window) === 1, source: String(r.source), note: String(r.note ?? ""), at: Number(r.at) }));
+  }
+  /**
+   * AUDIT A C1: THE ONE WAY A DRAFT GOES LIVE FROM A LAUNCH VERIFIED ON CHAIN (the browser's confirm, the keeper's draft reconciler, the
+   * operator script). The caller has verified `launchTx` (launchVerify.ts); the baseline is the create's BLOCK TIME. The draft's window is
+   * judged on that block time, never on when a sweep ran: a create at or before createdAt + DRAFT_TTL_MS + DRAFT_GRACE_MS is in time
+   * (inDraftWindow). A create in time goes live whether the row is still a draft or the sweep marked it expired (then through an
+   * append-only draft_revivals row: the only exit the tokens_expired_final trigger allows). A create AFTER the window is refused unless
+   * `late` is set by the operator (scripts/burnticker-draft-revive.mts --late): the rule's event may have settled long ago and every
+   * launch-time check was passed against the old draft. A late create is always recorded in draft_revivals. The same signature again is
+   * a no-op; any other status is refused.
+   */
+  takeLiveFromChain(mint: string, launchTx: string, poolId: string | null, blockTimeMs: number, o: { source: "confirm" | "reconciler" | "operator"; note?: string; late?: boolean }, now = Date.now()): { changed: boolean; revived: boolean; withinWindow: boolean } {
+    const t = this.token(mint); if (!t) throw new Error("no such token");
+    const withinWindow = inDraftWindow(t.createdAt, blockTimeMs);
+    const baselineAt = new Date(blockTimeMs).toISOString();
+    if (t.launchTx === launchTx) return { changed: false, revived: false, withinWindow };
+    if (t.status !== "draft" && t.status !== "expired") throw new Error(`registry: ${mint} is ${t.status}, not a draft: only a draft goes live`);
+    if (!withinWindow && !(o.late && o.source === "operator")) throw new Error(`registry: the launch of ${mint} landed at ${baselineAt}, after its draft's 24-hour window; only the operator can take it live (--late)`);
+    if (t.status === "draft" && withinWindow) return { changed: this.markLaunched(mint, launchTx, poolId, baselineAt), revived: false, withinWindow };
+    this.tx(() => {
+      this.db.prepare("INSERT INTO draft_revivals (mint, launch_tx, block_time_ms, within_window, source, note, at) VALUES (?,?,?,?,?,?,?)").run(mint, launchTx, blockTimeMs, withinWindow ? 1 : 0, o.source, (o.note ?? "").slice(0, 300), now);
+      const r = this.db.prepare("UPDATE tokens SET launch_tx=?, pool_id=COALESCE(?, pool_id), baseline_at=?, status='live' WHERE mint=? AND status=? AND launch_tx IS NULL").run(launchTx, poolId, baselineAt, mint, t.status);
+      if (Number(r.changes) !== 1) throw new Error(`registry: ${mint} changed while it was being confirmed; read it again`);
+    });
+    return { changed: true, revived: true, withinWindow };
   }
   /** Whether a ticker is held by a token that is not expired (expiring stale drafts first). */
   tickerTaken(ticker: string, now = Date.now()): boolean {
@@ -541,6 +592,21 @@ export class Registry {
   /** The reading landed on chain: these receipts' units are in it (written once — a trigger refuses a second assignment). */
   assignReading(mint: string, eventIds: readonly string[], readingDate: number, now = Date.now()): void {
     this.tx(() => { for (const e of eventIds) this.db.prepare("UPDATE burns SET reading_date=?, execution='program', updated_at=? WHERE mint=? AND event_id=? AND reading_date IS NULL").run(readingDate, now, mint, e); });
+  }
+  /**
+   * AUDIT A F1 (2026-10-15): a submit_reading LANDED — its signature is confirmed AND the receipts its write-ahead row named are counted
+   * into that reading, in ONE transaction. Two separate writes left a window (a crash between them) where the chain had counted the
+   * receipts and the registry still held them unassigned, so the next date would count them again.
+   */
+  confirmReading(mint: string, signature: string, slot: number | null, eventIds: readonly string[], readingDate: number, now = Date.now()): void {
+    this.tx(() => {
+      this.db.prepare("UPDATE signatures SET status='confirmed', err=NULL, slot=COALESCE(?, slot) WHERE signature=? AND mint=?").run(slot, signature, mint);
+      for (const e of eventIds) this.db.prepare("UPDATE burns SET reading_date=?, execution='program', updated_at=? WHERE mint=? AND event_id=? AND reading_date IS NULL").run(readingDate, now, mint, e);
+    });
+  }
+  /** Every `reading:<date>` write-ahead row of a mint in one status, oldest date first (AUDIT A F1: resolved before a date is chosen). */
+  readingSignatures(mint: string, status: SignatureRow["status"]): SignatureRow[] {
+    return (this.db.prepare("SELECT * FROM signatures WHERE mint=? AND event_id LIKE 'reading:%' AND status=? ORDER BY event_id, sent_at").all(mint, status) as Row[]).map(toSig);
   }
   /** The receipts of a reading move to 'sending' (their crank's signature was just written ahead). */
   markReadingSending(mint: string, readingDate: number, now = Date.now()): void { this.db.prepare("UPDATE burns SET status='sending', wait_reason=NULL, attempts=attempts+1, updated_at=? WHERE mint=? AND reading_date=? AND status IN ('planned','sending')").run(now, mint, readingDate); }

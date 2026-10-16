@@ -28,12 +28,14 @@ describe("creator launches flag", () => {
     assert.doesNotMatch(CREATOR_LAUNCHES_CLOSED, /coming soon|soon/i);
   });
 
-  test("off: POST /api/burnticker/launch, /v1/launch/bundle and /v1/launch/confirm refuse with 403 and the sentence, before anything is read", async () => {
+  test("off: POST /api/burnticker/launch and /v1/launch/bundle refuse with 403 and the sentence, before anything is read; a confirmation is not refused (AUDIT A C1 M1)", async () => {
     delete process.env[CREATOR_LAUNCHES_FLAG];
     const app = await import("../src/app/api/burnticker/launch/route.ts");
     const bundle = await import("../src/app/api/burnticker/v1/launch/bundle/route.ts");
     const confirm = await import("../src/app/api/burnticker/v1/launch/confirm/route.ts");
-    for (const [h, url] of [[app.POST, "http://localhost:3000/api/burnticker/launch"], [bundle.POST, "http://localhost:3000/api/burnticker/v1/launch/bundle"], [confirm.POST, "http://localhost:3000/api/burnticker/v1/launch/confirm"]] as const) {
+    // AUDIT A C1 (6, finding M1): recording a launch already signed and on chain is taken while launches are closed (it is not a 403)
+    assert.equal((await confirm.POST(post("http://localhost:3000/api/burnticker/v1/launch/confirm", { mint: "x", signature: "y" }))).status, 404, "read like any confirmation: no draft for this mint");
+    for (const [h, url] of [[app.POST, "http://localhost:3000/api/burnticker/launch"], [bundle.POST, "http://localhost:3000/api/burnticker/v1/launch/bundle"]] as const) {
       const r = await h(post(url, { ticker: "X" }));
       assert.equal(r.status, 403, url);
       const j = await r.json() as { error: string; code: string };

@@ -52,6 +52,9 @@ import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusHoldStore 
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG, PairScanCache } from "../src/lib/burnKeeper/pairCurveCrank.ts";
 import { CycleAccountCache } from "../src/lib/burnticker/cycleAccountCache.ts";
+import { reconcileDrafts, type DraftChainReader } from "../src/lib/burnticker/draftReconciler.ts";
+import { connectionLaunchVerifier, type TxReader } from "../src/lib/burnticker/launchVerify.ts";
+import { LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
 import { onPrivateSend } from "../src/lib/burnKeeper/privateSend.ts";
 import { freshReadKeys } from "../src/lib/burnticker/cycleAccountCache.ts";
 import type { Keypair } from "@solana/web3.js";
@@ -208,6 +211,11 @@ const pairScan = built.chain ? new PairScanCache({ connection: built.chain.conne
 const publishProgram = cachedPublishProgram(program, readCache);
 if (program.lockFees) deps.program = withLockFees(program, publishProgram.lockFees!);
 const batchReader: BatchReader | null = built.chain ? connectionBatchReader(built.chain.connection as unknown as MultipleAccountsReader, new PublicKey(program.programId), (m) => program.vaultFor(m)) : null;
+// AUDIT A C1: THE DRAFT RECONCILER (draftReconciler.ts) — a coin created on chain whose browser never confirmed it is taken live from the
+// chain (its TokenConfig in one getMultipleAccounts per sweep, then its create verified exactly as the browser's confirm is). Its own
+// connection: the reads must not be served from the cycle cache. Read-only; it sends nothing.
+const draftConn = built.chain && PROGRAM_ID && RPC ? new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }, RPC_FALLBACK)) : null;
+const draftVerifier = draftConn ? connectionLaunchVerifier(draftConn as unknown as TxReader, { burnProgramId: PROGRAM_ID, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null;
 const cachedMarket: MarketReader | null = marketReader ? cachedMarketReader(marketReader, readCache, (poolId) => registry.tokens().find((x) => x.poolId === poolId)?.mint ?? null) : null;
 
 async function publishAll(now: number): Promise<void> {
@@ -321,6 +329,14 @@ while (!stopping) {
   } else if (pairCurveEnabled(process.env) && !built.real) log(`  [pair-curve] ${PAIR_CURVE_FLAG} is set but the program client is the fake — nothing cranked`);
   // the read cache drops every coin this cycle changed (its report, and any new or confirmed signature in the registry)
   try { const dropped = readCache.afterCycle(cycleReport, signatureFingerprints(registry.db)); if (dropped.length) log(`  [read-cache] ${dropped.length} coin(s) re-read after this cycle's sends`); } catch (e) { readCache.invalidateAll(); log(`  [read-cache] invalidation failed, every coin re-read: ${(e as Error).message.slice(0, 160)}`); }
+  if (draftConn && draftVerifier && PROGRAM_ID && !heliusHeld) {
+    budget.setPhase("drafts");
+    try {
+      const dr = await reconcileDrafts({ registry, reader: draftConn as unknown as DraftChainReader, verifier: draftVerifier, burnProgramId: PROGRAM_ID, now: () => Date.now(), log, dryRun: DRY, env: process.env });
+      if (dr.takenLive.length) readCache.invalidateAll();
+      if (dr.errors.length) log(`  [drafts] ${dr.errors.slice(0, 3).join(" | ")}`);
+    } catch (e) { log(`  [drafts] reconcile failed: ${(e as Error).message.slice(0, 160)}`); }
+  }
   budget.setPhase("publish");
   try { await publishAll(Date.now()); } catch (e) { log(`publish failed: ${(e as Error).message.slice(0, 200)}`); }
   budget.setPhase("after-cycle");

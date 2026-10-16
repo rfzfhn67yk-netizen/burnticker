@@ -22,6 +22,11 @@ import { LOOKUP_TABLES } from "@/lib/burnticker/networks";
  * type (typeRefusal) with a plain sentence and a code. Pure and client-safe; the catalogue carries the model to the browser.
  */
 export const CREATOR_LAUNCHES_PREVIEW_FLAG = "BURNTICKER_CREATOR_LAUNCHES_PREVIEW";
+/**
+ * AUDIT A C1 review (1): when creator launches were closed (ISO time). While launches are closed or in preview, a launch is recorded only
+ * when its create landed before this moment. Unset: the moment this host first saw launches closed (registry status launches.closedAt).
+ */
+export const CREATOR_LAUNCHES_CLOSED_AT_FLAG = "BURNTICKER_CREATOR_LAUNCHES_CLOSED_AT";
 export type LaunchMode = "closed" | "preview" | "open";
 export type LaunchType = "team" | "matchup" | "markets" | "elections" | "feeds" | "weather" | "derby" | "pairs";
 export interface TypeAvailability { type: LaunchType; label: string; available: boolean; reason: string | null }
@@ -134,7 +139,7 @@ export function globalRefusal(env: Env = process.env): { status: 403; body: { er
   const mode = launchModeFromEnv(env);
   if (mode === "open") return null;
   return mode === "preview"
-    ? { status: 403, body: { error: `${PREVIEW_BANNER} You can still read the review with POST /v1/launch/review. Building and confirming launches is refused.`, code: LAUNCHES_CLOSED_CODE, preview: true } }
+    ? { status: 403, body: { error: `${PREVIEW_BANNER} You can still read the review with POST /v1/launch/review. Building launches is refused. A launch already signed and on chain is still recorded.`, code: LAUNCHES_CLOSED_CODE, preview: true } }
     : { status: 403, body: { error: CREATOR_LAUNCHES_CLOSED, code: CREATOR_LAUNCHES_CODE, preview: false } };
 }
 

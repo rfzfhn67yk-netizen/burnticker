@@ -1,5 +1,6 @@
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
-import { burnRealFromEnv } from "@/lib/burnticker/launchAvailability";
+import { burnRealFromEnv, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
+import { recordedClosure } from "@/lib/burnticker/draftReconciler";
 import { dispersalEnabled } from "@/lib/burnticker/dispersal";
 import type { Platform } from "@/lib/burnticker/server";
 import type { Keypair } from "@solana/web3.js";
@@ -38,7 +39,7 @@ import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEE
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
-import { wideRule } from "@/lib/burnticker/registry";
+import { inDraftWindow, wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalMessage, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { buildLaunchBundle, buildPairBundles, defaultVoidBy, launchProblems, raiseProblem, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
@@ -839,26 +840,84 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
 export const DEFAULT_PIN_DAILY_CAP = 50;
 
 /**
+ * AUDIT A C1 review (8; re-review 1, 3): confirmations are metered on the heavy bucket, and expired drafts' mints are listed publicly, so
+ * the verifier (an RPC transaction read and an account read per call) is guarded. Only DISTINCT signatures count (the same (mint,
+ * signature) retried after a 404 counts once): at most CONFIRM_VERIFY_PER_CLIENT_MINT_HOUR per client and mint, and a ceiling of
+ * CONFIRM_VERIFY_PER_MINT_HOUR per mint across clients, so one client cannot lock a creator out. A (mint, signature) refused for its
+ * CONTENT (422, not an account not found yet) is answered from memory for REFUSAL_MEMORY_MS. The maps evict expired entries.
+ */
+export const CONFIRM_VERIFY_PER_CLIENT_MINT_HOUR = 12;
+export const CONFIRM_VERIFY_PER_MINT_HOUR = 60;
+export const REFUSAL_MEMORY_MS = 5 * 60_000;
+const HOUR_MS = 3_600_000;
+const GUARD_MAX_KEYS = 20_000;
+const sigsByMint = new Map<string, Map<string, number>>();
+const sigsByClientMint = new Map<string, Map<string, number>>();
+const refusedConfirms = new Map<string, { at: number; status: number; reason: string }>();
+export function resetConfirmGuards(): void { sigsByMint.clear(); sigsByClientMint.clear(); refusedConfirms.clear(); }
+/** Drops entries older than `ttl` (and the oldest keys beyond GUARD_MAX_KEYS); returns the live distinct signatures for `key`. */
+function liveSigs(m: Map<string, Map<string, number>>, key: string, now: number): Map<string, number> {
+  if (m.size > GUARD_MAX_KEYS) { for (const [k, v] of m) { for (const [s, at] of v) if (now - at >= HOUR_MS) v.delete(s); if (!v.size) m.delete(k); } while (m.size > GUARD_MAX_KEYS) m.delete(m.keys().next().value as string); }
+  const v = m.get(key) ?? new Map<string, number>();
+  for (const [s, at] of v) if (now - at >= HOUR_MS) v.delete(s);
+  m.set(key, v);
+  return v;
+}
+function rememberRefusal(key: string, r: { status: number; reason: string }, now: number): void {
+  if (refusedConfirms.size > GUARD_MAX_KEYS) { for (const [k, v] of refusedConfirms) if (now - v.at >= REFUSAL_MEMORY_MS) refusedConfirms.delete(k); while (refusedConfirms.size > GUARD_MAX_KEYS) refusedConfirms.delete(refusedConfirms.keys().next().value as string); }
+  refusedConfirms.set(key, { at: now, ...r });
+}
+/**
+ * AUDIT A C1 review (1): the closure moment while launches are closed or in preview: the explicit flag, else the first time this host saw
+ * them closed (recorded in registry status launches.closedAt, which the keeper's reconciler reads too); open clears it and returns null.
+ */
+export function launchesClosedAt(p: Pick<Platform, "registry">, env: Record<string, string | undefined> = process.env, now = Date.now()): number | null {
+  if (launchModeFromEnv(env) === "open") { if (p.registry.getStatus("launches.closedAt")) p.registry.setStatus("launches.closedAt", "", now); return null; }
+  const known = recordedClosure(p.registry, env);
+  if (known !== null) return known;
+  p.registry.setStatus("launches.closedAt", String(now), now);
+  return now;
+}
+
+/**
  * `launched`: the landed launch transaction takes the draft live. ChatGPT/Codex review N1 (2026-10-10): the transaction is verified on
  * chain first (launchVerify.ts: successful, signed by the coin's mint and its creator, landed after the draft, carrying burn_receipts
  * initialize_token for this mint, the on-chain TokenConfig locking the draft's rules hash, and the venue completed — review-2 F3) and
  * the baseline is its BLOCK TIME; the same signature again is a no-op that leaves the baseline alone; a host without an RPC refuses.
+ * AUDIT A C1: an EXPIRED draft is judged on the chain too, and both draft and expired rows are judged on the create's block time: in the
+ * draft's window (24 h + DRAFT_GRACE_MS) it goes live whether or not a sweep ran; after it, only the operator script (--late) takes it
+ * live. While launches are closed or in preview, only a create that landed before the closure is recorded.
  */
-export async function markLaunched(p: Platform, mint: string, launchTx: string): Promise<ApiResult> {
+export async function markLaunched(p: Platform, mint: string, launchTx: string, now = Date.now(), client = "unknown"): Promise<ApiResult> {
   const t = p.registry.token(mint);
   if (!t) return fail(404, "There is no draft for this mint.");
   if (!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(launchTx)) return fail(400, "The launch transaction must be a transaction signature.");
   if (t.launchTx === launchTx) return ok({ ok: true, token: t, replay: true, note: `This launch was already confirmed in this transaction. The start time stays ${t.baselineAt}, which was fixed at launch.` });
   if (t.launchTx) return fail(409, `${mint} already launched in transaction ${t.launchTx}.`);
-  if (t.status !== "draft") return fail(409, t.status === "expired" ? `The draft ${mint} expired because it did not launch within 24 hours. Please build a new launch.` : `${mint} is ${t.status}, so it is not a draft.`);
+  if (t.status !== "draft" && t.status !== "expired") return fail(409, `${mint} is ${t.status}, so it is not a draft.`);
   if (!p.launchVerifier) return fail(503, "This site cannot check a launch transaction right now. A draft goes live only after its launch is read from the chain.", { code: "launch-unverifiable" });
+  const key = `${mint}:${launchTx}`;
+  const known = refusedConfirms.get(key);
+  if (known && now - known.at < REFUSAL_MEMORY_MS) return fail(known.status, known.reason, { code: "launch-unverified" });
+  const perMint = liveSigs(sigsByMint, mint, now), perClient = liveSigs(sigsByClientMint, `${client}|${mint}`, now);
+  const limited = (m: Map<string, number>, cap: number) => !m.has(launchTx) && m.size >= cap;
+  if (limited(perClient, CONFIRM_VERIFY_PER_CLIENT_MINT_HOUR) || limited(perMint, CONFIRM_VERIFY_PER_MINT_HOUR)) {
+    const oldest = Math.min(...perClient.values(), ...perMint.values());
+    return fail(429, "This coin's launch was checked with too many different transactions in the last hour. Please try again later.", { code: "rate-limited", retryAfterSec: Math.max(1, Math.ceil((oldest + HOUR_MS - now) / 1000)) });
+  }
+  if (!perMint.has(launchTx)) perMint.set(launchTx, now);
+  if (!perClient.has(launchTx)) perClient.set(launchTx, now);
   // Review-2 F3: the verifier checks the launch's CONTENT (initialize_token for this mint, the on-chain TokenConfig's rules hash, the
   // venue) — and nothing is written to the registry unless it passes: a refused confirmation leaves status, baseline and launch_tx alone.
   const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, p.registry.pairOf(mint)) });
-  if (!v.ok) return fail(v.status, v.reason, { code: "launch-unverified" });
+  if (!v.ok) { if (v.status === 422 && !v.missing) rememberRefusal(key, v, now); return fail(v.status, v.reason, { code: "launch-unverified" }); }
   const baselineAt = new Date(v.blockTimeMs).toISOString();
-  try { p.registry.markLaunched(mint, launchTx, t.poolId, baselineAt); } catch (e) { return fail(409, (e as Error).message); }
-  return ok({ ok: true, token: p.registry.token(mint), note: `The launch transaction was read from the chain. The start time is its block time, ${baselineAt}. Results settled after this moment count.` });
+  if (!inDraftWindow(t.createdAt, v.blockTimeMs)) return fail(409, `This launch landed at ${baselineAt}, more than 24 hours after its draft was made, so it is not recorded here. Please build a new launch.`, { code: "launch-late" });
+  const closedAt = launchesClosedAt(p, process.env, now);
+  if (closedAt !== null && v.blockTimeMs > closedAt) return fail(403, `This launch landed at ${baselineAt}, after creator launches closed, so it is not recorded.`, { code: "launch-after-closure" });
+  let r: ReturnType<Platform["registry"]["takeLiveFromChain"]>;
+  try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); } catch (e) { return fail(409, (e as Error).message); }
+  return ok({ ok: true, token: p.registry.token(mint), ...(r.revived ? { revived: true } : {}), note: `The launch transaction was read from the chain. The start time is its block time, ${baselineAt}. Results settled after this moment count.${r.revived ? " This draft had been marked expired, and the chain shows its coin was created in time, so it is live now." : ""}` });
 }
 
 /**
