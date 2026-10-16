@@ -69,7 +69,7 @@ export const parseDay = (s: string): number => { const m = /^(\d{4})-?(\d{2})-?(
  * already folded into a later day shows up as a mismatch in compareChain — read the chain's prev date with --rpc and pass it.
  */
 export function counterAt(o: { mint: string; ticker: string; rulesText: string; baselineAt: string; readings: readonly SettledEvent[]; recordDate: number; prevDate?: number | null }): CounterResult {
-  const locked = lockRule(JSON.parse(o.rulesText));
+  const locked = lockRule(JSON.parse(o.rulesText), { stored: true });
   if (locked.text !== o.rulesText) throw new Error("rules.json is not canonical (re-lock it: the keeper's exact bytes are what the hash commits to)");
   const rule: BurnRule = locked.rule;
   if (rule.pair) throw new Error("rivalry-pair coins are not supported by `read` yet: their event burns wait on the pair's pool registration (pending-pair), which is chain state this tool does not replay");

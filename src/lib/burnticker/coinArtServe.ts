@@ -22,7 +22,7 @@ export async function coinImage(o: { registry: Pick<Registry, "token" | "tokenBy
   try {
     if (name === "preview") {
       const raw = Buffer.from(o.query.get("r") ?? "", "base64url").toString("utf8");
-      const locked = lockRule(JSON.parse(raw));
+      const locked = lockRule(JSON.parse(raw), { stored: true });
       ticker = (o.query.get("t") ?? "TICKER").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) || "TICKER";
       rule = locked.rule; sha = locked.sha256; oneLiner = (o.query.get("l") ?? "").slice(0, 120) || null;
     } else {

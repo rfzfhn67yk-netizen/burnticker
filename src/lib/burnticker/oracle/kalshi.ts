@@ -5,6 +5,7 @@ import type { FetchLike, ImpliedChance, OpenMarketSummary, OracleAdapter, Resolv
 import { aliasLookup, buildTeams, matchEvents, matchupLeagues, parseEventsBody, seasonStart, type EventHit, type KalshiEvent, type MatchupLeague, type TeamRow } from "@/lib/burnticker/oracle/events";
 import { categoryPage, parseBrowseSeriesList, parseTagsByCategories, seriesExample, summariseEvents, type BrowseSeries, type CategoryPage, type KalshiCategory } from "@/lib/burnticker/oracle/browse";
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { LruMap } from "@/lib/burnticker/lru";
 
 /**
  * THE KALSHI ORACLE (the PRIMARY event source; the owner, 2026-10-09). Public, keyless: https://api.elections.kalshi.com/trade-api/v2
@@ -224,7 +225,8 @@ export class KalshiClient implements OracleAdapter {
   private timeoutMs: number;
   private pageCap: number;
   private ttl: { series: number; settled: number; open: number };
-  private cache = new Map<string, { at: number; body: unknown }>();
+  // prelaunch audit M8 (2026-10-15): bounded; a search or event URL is per query, so the cache grew with every distinct query
+  private cache = new LruMap<string, { at: number; body: unknown }>(1_000);
   private lastAt = 0;
   private chain: Promise<void> = Promise.resolve();
   /** Requests actually sent (for the tests' politeness checks). */

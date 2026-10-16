@@ -447,7 +447,8 @@ export class Registry {
     if (Number(r.changes) !== 1) throw new Error(`registry: ${mint} changed while it was being confirmed; read it again`);
     return true;
   }
-  lockedRule(t: TokenRow): LockedRule { return lockRule(JSON.parse(t.rulesJson)); }
+  /** A stored rule is re-read without the newer title-filter refusal (rules.ts validateRule `stored`, prelaunch audit H6). */
+  lockedRule(t: TokenRow): LockedRule { return lockRule(JSON.parse(t.rulesJson), { stored: true }); }
 
   // ---- readings ----
   /** Inserts new readings; a reading already held with a DIFFERENT result/value throws (an oracle that changed its mind holds the keeper). Returns the count written. */

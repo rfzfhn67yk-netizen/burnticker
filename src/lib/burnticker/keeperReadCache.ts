@@ -8,7 +8,7 @@ import type { LockFeesClient, LockFeesPort, LockFeesState } from "@/lib/burntick
 import type { MarketReader } from "@/lib/burnticker/market";
 import type { CycleReport } from "@/lib/burnticker/multiKeeper";
 import { programPageBlock } from "@/lib/burnticker/program";
-import { readMarket } from "@/lib/burnticker/market";
+import { decodeLaunchLabPool, readMarket } from "@/lib/burnticker/market";
 import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import { pairCounterpartFrom } from "@/lib/burnticker/tokenPage";
 import { DISPERSAL_STATE_KEY, dispersalLines } from "@/lib/burnticker/dispersalKeeper";
@@ -49,6 +49,7 @@ import type { Registry, TokenRow } from "@/lib/burnticker/registry";
  * per-coin reads fetch (test/burntickerReadCache.test.ts compares the two byte for byte).
  */
 
+const NO_SIGNATURES = "0:0:0";
 export const READ_TTL_MS = { supply: 300_000, config: 300_000, lp: 300_000, lpSettled: 1_800_000, vault: 300_000, feePda: 60_000, market: 60_000, pool: 60_000, owners: 300_000, holders: 600_000 } as const;
 export type ReadField = keyof typeof READ_TTL_MS;
 
@@ -127,6 +128,9 @@ export class KeeperReadCache {
   private entries = new Map<string, Map<string, { at: number; v: unknown }>>();
   private owners = new Map<string, { at: number; v: { data: unknown } | null }>();
   private prints = new Map<string, string>();
+  private primed = false;
+  /** The LaunchLab pool's status per mint as last read: a change (graduation, migration: trader-triggered, no signatures row) drops the coin. */
+  private phases = new Map<string, number>();
   readonly ttl: Record<ReadField, number>;
   readonly stats = { hits: 0, misses: 0, batches: 0, invalidations: 0 };
   private o: { now: () => number; ttl?: Partial<Record<ReadField, number>> };
@@ -154,8 +158,12 @@ export class KeeperReadCache {
   /** After a cycle: drop every coin the report changed and every coin whose registry signatures changed since the last call. */
   afterCycle(report: CycleReport | null | undefined, fingerprints: Map<string, string>): string[] {
     const dropped = new Set(mintsChangedBy(report));
-    for (const [mint, fp] of fingerprints) if (this.prints.has(mint) && this.prints.get(mint) !== fp) dropped.add(mint);
+    // prelaunch audit M7 re-review: a mint with no signatures row yet counts as "0:0:0", so its FIRST send (a browser-launched coin's first
+    // reading or crank) drops it too; before the first call nothing is cached, so the first comparison drops nothing that was read
+    const first = !this.primed;
+    for (const [mint, fp] of fingerprints) if (!first && (this.prints.get(mint) ?? NO_SIGNATURES) !== fp) dropped.add(mint);
     this.prints = new Map(fingerprints);
+    this.primed = true;
     for (const m of dropped) this.invalidate(m);
     return [...dropped];
   }
@@ -177,7 +185,22 @@ export class KeeperReadCache {
       if (f.feePdaLamports !== undefined) this.set(it.mint, "feePda", f.feePdaLamports);
       if (f.supplyRaw !== undefined && f.supplyRaw !== null) this.set(it.mint, "supply", f.supplyRaw);
       if (it.vault && f.vaultRaw !== undefined) this.set(it.mint, "vault", f.vaultRaw);
-      if (it.poolId !== null && f.pool !== undefined) this.set(it.mint, "pool", f.pool, `pool:${it.poolId}`);
+      if (it.poolId !== null && f.pool !== undefined) {
+        // M7 re-review: the pool's status moved (the curve graduated or migrated): everything kept about the coin is read fresh
+        const status = f.pool ? decodeLaunchLabPool(f.pool.data instanceof Uint8Array ? f.pool.data : new Uint8Array(f.pool.data))?.status : undefined;
+        if (status !== undefined) {
+          const was = this.phases.get(it.mint);
+          this.phases.set(it.mint, status);
+          if (was !== undefined && was !== status) {
+            this.invalidate(it.mint);
+            if (f.config !== undefined) this.set(it.mint, "config", f.config);
+            if (f.feePdaLamports !== undefined) this.set(it.mint, "feePda", f.feePdaLamports);
+            if (f.supplyRaw !== undefined && f.supplyRaw !== null) this.set(it.mint, "supply", f.supplyRaw);
+            if (it.vault && f.vaultRaw !== undefined) this.set(it.mint, "vault", f.vaultRaw);
+          }
+        }
+        this.set(it.mint, "pool", f.pool, `pool:${it.poolId}`);
+      }
     }
     return due.length;
   }

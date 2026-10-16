@@ -7,6 +7,7 @@ import { PROVIDER_TEAM_IDS } from "@/lib/burnticker/sources/providerTeams";
 import { FBS_TEAM_IDS } from "@/lib/burnticker/sources/fbs";
 import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { type: "json" };
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { LruMap } from "@/lib/burnticker/lru";
 
 /**
  * TEAMS, LEAGUES, SERIES AND SCHEDULES FOR TEAM COINS (the file keeps its old name; since 2026-10-10 NOTHING here reads ESPN). The team
@@ -566,7 +567,39 @@ export function tsdbNamePairs(g: Game): [string, string][] {
 export const ESPN_UA = "burnticker/0.1";
 export const SETTLE_AFTER_START_MS = 6 * 3_600_000;
 
-export interface EspnClientOpts { fetchImpl?: FetchLike; now?: () => number; minIntervalMs?: number; ttlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null }
+export interface EspnClientOpts {
+  fetchImpl?: FetchLike; now?: () => number; minIntervalMs?: number; ttlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null;
+  /** One read's limit, headers and body together (default SPORTS_FETCH_TIMEOUT_MS). */
+  timeoutMs?: number;
+  /** A failed read is answered from memory for this long, doubling per failure up to failMaxMs (defaults FAIL_BACKOFF_MS). */
+  failBaseMs?: number; failMaxMs?: number;
+  /** The most answers kept (oldest out first). */
+  maxCached?: number;
+}
+
+/**
+ * 2026-10-15 prelaunch audit H1 (confirmed live: /v1/sports/teams answered 503 at 20 s, /v1/search?q=broncos 503 three times of three
+ * while TheSportsDB answered 522). Every read had no timeout and waited behind one process-wide queue, and a failure was not kept, so
+ * every request retried the stalled host. Now: each read is aborted after SPORTS_FETCH_TIMEOUT_MS; each provider (by host: TheSportsDB,
+ * MLB, NHL, the NBA's feed) has its own queue and its own spacing, so a stalled one never holds up another; a failed read is answered
+ * from memory for FAIL_BACKOFF_MS.base, doubling per failure up to .max, then tried again; two callers of one URL share one read; the
+ * answers kept are bounded (LruMap).
+ */
+export const SPORTS_FETCH_TIMEOUT_MS = 8_000;
+export const FAIL_BACKOFF_MS = { base: 30_000, max: 600_000 } as const;
+/**
+ * Waits at most `ms` for `p`; past that answers { done: false } and lets the read finish in the background (its answer is kept by the
+ * client's cache for the next caller). The team picker and search use it so a slow schedule never holds the page (H1).
+ */
+export async function within<T>(p: Promise<T>, ms: number): Promise<{ done: true; value: T } | { done: true; error: unknown } | { done: false }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const settled = p.then((value) => ({ done: true as const, value }), (error: unknown) => ({ done: true as const, error }));
+  const r = await Promise.race([settled, new Promise<{ done: false }>((res) => { timer = setTimeout(() => res({ done: false }), ms); })]);
+  clearTimeout(timer);
+  return r;
+}
+/** The error a read that took too long throws (a timeout, a stalled host): the pages say the schedule is not available just now. */
+export class ScheduleSlow extends Error { constructor(what: string) { super(`${what}: the schedule is taking too long to read; it is shown when it arrives`); this.name = "ScheduleSlow"; } }
 
 /**
  * THE SPORTS SCHEDULE READER (no ESPN reads). Kept under its old name for the callers; `SportsClient` is the same class.
@@ -577,27 +610,57 @@ export interface EspnClientOpts { fetchImpl?: FetchLike; now?: () => number; min
  */
 export class EspnClient {
   private fetchImpl: FetchLike; private now: () => number; private minInterval: number; private ttl: number; readonly tsdbKey: string | null;
-  private cache = new Map<string, { at: number; body: unknown }>(); private lastAt = 0; private chain: Promise<void> = Promise.resolve();
+  private timeoutMs: number; private failBase: number; private failMax: number;
+  private cache: LruMap<string, { at: number; body: unknown }>;
+  /** H1: per provider (by source id), its own spacing and its own queue. */
+  private lastAt = new Map<string, number>(); private chains = new Map<string, Promise<void>>();
+  /** H1: failures kept per URL: until when the error is answered from memory, and how many in a row. */
+  private failures: LruMap<string, { until: number; n: number; message: string }>;
+  private inflight = new Map<string, Promise<unknown>>();
   requests: string[] = [];
   /** Feeds that refused this process (HTTP 401 or 403): not read again by the reader that marked them (gameSettle.ts crossFinal, the NBA's feed). */
   readonly refusedFeeds = new Set<string>();
   constructor(o: EspnClientOpts = {}) {
     this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.minInterval = o.minIntervalMs ?? 250; this.ttl = o.ttlMs ?? 600_000;
+    this.timeoutMs = o.timeoutMs ?? SPORTS_FETCH_TIMEOUT_MS; this.failBase = o.failBaseMs ?? FAIL_BACKOFF_MS.base; this.failMax = o.failMaxMs ?? FAIL_BACKOFF_MS.max;
+    this.cache = new LruMap(o.maxCached ?? 500); this.failures = new LruMap(500);
     this.tsdbKey = o.tsdbKey === undefined ? ((process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null) : o.tsdbKey;
   }
   /** GET with the shared politeness and cache; `headers` carry a licensed reader's key (never cached into the key, never logged). */
   async get(url: string, headers: Record<string, string> = {}): Promise<unknown> {
     const hit = this.cache.get(url);
     if (hit && this.now() - hit.at < this.ttl) return hit.body;
+    // H1: a recent failure is answered from memory (with its own words) until its backoff ends
+    const failed = this.failures.get(url);
+    if (failed && this.now() < failed.until) throw new Error(failed.message);
+    const shared = this.inflight.get(url);
+    if (shared) return shared;
+    const source = sourceForUrl(url);
     const run = async () => {
-      const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts): waits for its bucket; a spent day budget skips the read
-      this.lastAt = this.now(); this.requests.push(redactKey(url));
-      const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers } });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${redactKey(url).slice(0, 120)}`);
-      const body = await res.json(); this.cache.set(url, { at: this.now(), body }); return body;
+      const wait = (this.lastAt.get(source) ?? 0) + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      await takeOrThrow(source);   // the request budget (apiBudget.ts): waits for its bucket; a spent day budget skips the read
+      this.lastAt.set(source, this.now()); this.requests.push(redactKey(url));
+      try {
+        const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers }, signal: AbortSignal.timeout(this.timeoutMs) });
+        if (!res.ok) throw new Error(`HTTP ${res.status} for ${redactKey(url).slice(0, 120)}`);
+        const body = await res.json(); this.cache.set(url, { at: this.now(), body }); this.failures.delete(url); return body;
+      } catch (e) {
+        const timedOut = (e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError";
+        const message = timedOut ? `timed out after ${Math.round(this.timeoutMs / 1000)} s for ${redactKey(url).slice(0, 120)}` : (e as Error).message;
+        const n = (this.failures.get(url)?.n ?? 0) + 1;
+        this.failures.set(url, { until: this.now() + Math.min(this.failMax, this.failBase * 2 ** (n - 1)), n, message });
+        throw timedOut ? new Error(message) : e;
+      }
     };
-    const p = this.chain.then(run, run); this.chain = p.then(() => undefined, () => undefined); return p;
+    // the provider's own queue: one read at a time per provider, a stalled provider never holds up another
+    const prev = this.chains.get(source) ?? Promise.resolve();
+    const p = prev.then(run, run);
+    const tail = p.then(() => undefined, () => undefined);
+    this.chains.set(source, tail);
+    void tail.then(() => { if (this.chains.get(source) === tail) this.chains.delete(source); });
+    this.inflight.set(url, p);
+    void p.then(() => this.inflight.delete(url), () => this.inflight.delete(url));
+    return p;
   }
   /** Whether this host can read a league's schedule (the three free official feeds, or TheSportsDB with the key). */
   scheduleAvailable(league: LeagueId): boolean { return league === "mlb" || league === "nhl" || (league === "nba" && NBA_OFFICIAL_ANSWERS) || !!this.tsdbKey; }

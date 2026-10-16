@@ -153,7 +153,7 @@ export class NwsClient {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts)
       this.lastAt = this.now(); this.requests.push(url);
-      const res = await this.fetchImpl(url, { headers: { accept: "application/geo+json", "user-agent": NWS_UA } });
+      const res = await this.fetchImpl(url, { headers: { accept: "application/geo+json", "user-agent": NWS_UA }, signal: AbortSignal.timeout(10_000) });   // prelaunch audit H1: every source read ends
       if (!res.ok) throw new Error(`NWS HTTP ${res.status} for ${url.slice(0, 100)}`);
       const body = await res.json(); this.cache.set(url, { at: this.now(), body }); return body;
     };

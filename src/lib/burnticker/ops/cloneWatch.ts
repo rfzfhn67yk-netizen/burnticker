@@ -236,7 +236,7 @@ export async function scanClones(d: CloneWatchDeps): Promise<{ observations: Clo
   for (const term of d.terms) {
     try {
       await takeOrThrow(sourceForUrl(dexSearchUrl(term)));   // the request budget (apiBudget.ts)
-      const res = await d.fetchImpl(dexSearchUrl(term));
+      const res = await d.fetchImpl(dexSearchUrl(term), { signal: AbortSignal.timeout(10_000) });   // prelaunch audit H1
       if (!res.ok) { errors.push(`search ${term}: HTTP ${res.status}`); continue; }
       for (const h of poolsFromDexScreener(await res.json())) {
         if (d.ownMints.has(h.mint)) continue;

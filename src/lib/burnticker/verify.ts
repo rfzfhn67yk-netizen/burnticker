@@ -11,6 +11,9 @@ import { parseMarketsBody as parseGammaMarkets, resolvePolymarket, settledMarket
 import { readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 
+/** Every source re-read ends (prelaunch audit H1, 2026-10-15): a stalled host fails the check instead of holding it. */
+const SOURCE_READ_TIMEOUT_MS = 15_000;
+
 /** "1 unit", "3 units": a count in words, never "unit(s)". */
 const unitsWord = (n: number | bigint): string => `${n} unit${Number(n) === 1 ? "" : "s"}`;
 
@@ -147,7 +150,7 @@ export async function kalshiSourceReading(rule: BurnRule, eventId: string, fetch
   const url = rule.kind === "binary" ? marketApiUrl(eventId) : `${KALSHI_API}/markets?event_ticker=${encodeURIComponent(eventId)}&limit=200`;
   try {
     await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts; passive in a browser)
-    const res = await fetchImpl(url, { headers: { accept: "application/json" } });
+    const res = await fetchImpl(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS) });
     if (!res.ok) return { events: null, error: `Kalshi HTTP ${res.status}`, url };
     const body = await res.json() as { market?: unknown; markets?: unknown };
     const { markets } = parseMarketsBody(rule.kind === "binary" ? { markets: [body.market] } : body);
@@ -165,7 +168,7 @@ export async function polymarketSourceReading(rule: BurnRule, eventId: string, o
   const url = settledMarketUrl(eventId);
   try {
     await takeOrThrow(sourceForUrl(url));
-    const res = await o.fetchImpl(url, { headers: { accept: "application/json" } });
+    const res = await o.fetchImpl(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS) });
     if (!res.ok) return { events: null, error: `Gamma HTTP ${res.status}`, url };
     const m = parseGammaMarkets(await res.json()).find((x) => x.conditionId === eventId);
     if (!m) return { events: [], error: null, url };
@@ -184,7 +187,7 @@ export async function feedSourceReading(cfg: Pick<HttpSourceConfig, "request" | 
   const url = expandUrl(cfg.request.url, nowMs);
   try {
     await takeOrThrow(sourceForUrl(url));
-    const res = await fetchImpl(url, { headers: { accept: cfg.request.format === "json" ? "application/json" : "*/*", "user-agent": "burnticker-verify/1 (receipt verification)" }, ...(cfg.request.method === "POST" ? { method: "POST", body: cfg.request.body } : {}) } as never);
+    const res = await fetchImpl(url, { headers: { accept: cfg.request.format === "json" ? "application/json" : "*/*", "user-agent": "burnticker-verify/1 (receipt verification)" }, signal: AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS), ...(cfg.request.method === "POST" ? { method: "POST", body: cfg.request.body } : {}) } as never);
     if (!res.ok) return { events: null, error: `HTTP ${res.status}`, url };
     const body = cfg.request.format === "json" ? await res.json() : res.text ? await res.text() : String(await res.json());
     return { events: parseBody(cfg as HttpSourceConfig, body, nowMs).readings, error: null, url };

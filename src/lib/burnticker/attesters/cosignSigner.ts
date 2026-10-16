@@ -93,7 +93,7 @@ async function decideReading(d: SignerDeps, r: ReadingCosignRequest): Promise<Co
   if (!coin) return { status: "cannot-check", why: `this signer does not serve ${r.mint}` };
   if (coin.ticker !== r.ticker) return { status: "disagree", why: "the ticker differs", fields: [{ field: "ticker", keeper: r.ticker, signer: coin.ticker }] };
   if (r.proofHash !== "0".repeat(64)) return { status: "cannot-check", why: "this signer checks only readings with a zero proof (no Burn Derby or end-of-rule clock days yet)" };
-  const rulesSha = coin.kind === "debt" ? rulesFromText(coin.rulesText).sha256 : lockRule(JSON.parse(coin.rulesText)).sha256;
+  const rulesSha = coin.kind === "debt" ? rulesFromText(coin.rulesText).sha256 : lockRule(JSON.parse(coin.rulesText), { stored: true }).sha256;
   const recordDate = parseDay(r.recordDate);
   // The previous reading date: the chain's (what the program enforces) when this host has an RPC, else the keeper's claim.
   let prevDate = r.prevDate === null ? 0 : parseDay(r.prevDate);
@@ -128,7 +128,7 @@ async function decideReading(d: SignerDeps, r: ReadingCosignRequest): Promise<Co
 
 /** A unit-counter coin: the keeper's own engine over the readings this host fetched (byo.ts counterAt). */
 async function unitsReading(d: SignerDeps, coin: SignerCoin, r: ReadingCosignRequest, prevDate: number, recordDate: number, fields: Field[]): Promise<{ message: string; summary: string } | { answer: CosignAnswer }> {
-  const locked = lockRule(JSON.parse(coin.rulesText));
+  const locked = lockRule(JSON.parse(coin.rulesText), { stored: true });
   if (locked.rule.pair) return { answer: { status: "cannot-check", why: "this signer does not check rivalry-pair coins yet" } };
   if (prevDate === 0) {
     const baselineDay = msToYmd(ymdToMs(receiptDay(coin.baselineAt)) - DAY_MS);

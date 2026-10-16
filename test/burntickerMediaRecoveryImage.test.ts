@@ -11,6 +11,7 @@ import { BADGE_UNAVAILABLE_LINE, IMAGE_SIZE_HELP, MAX_PAIR_IMAGE_BYTES_IN_BODY, 
 import { BADGE_NOTE } from "@/lib/burnticker/creatorBadgeCopy";
 import { IMAGE_NOT_KEPT } from "@/lib/burnticker/guidedLaunch";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
+import { MAX_JSON_BODY } from "@/lib/burnticker/api/http";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const read = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8");
@@ -136,7 +137,9 @@ describe("224 [VERIFY] two 2 MB images in one pair body fit every host limit", (
     for (const f of ["src/proxy.ts", "src/middleware.ts", "proxy.ts", "middleware.ts"]) assert.ok(!fs.existsSync(path.join(ROOT, f)), f);
     assert.doesNotMatch(read("next.config.ts"), /bodySizeLimit|proxyClientMaxBodySize|middlewareClientMaxBodySize/);
     for (const f of fs.readdirSync(path.join(ROOT, "deploy/caddy"))) assert.doesNotMatch(read(`deploy/caddy/${f}`), /request_body|max_size/, f);
-    assert.match(read("src/app/api/burnticker/launch/route.ts"), /body = await req\.json\(\)/);
+    // prelaunch audit M3 (2026-10-15): the route caps its body now, above the largest pair body (api/http.ts MAX_JSON_BODY)
+    assert.match(read("src/app/api/burnticker/launch/route.ts"), /const text = await readTextCapped\(req\)/);
+    assert.ok(MAX_JSON_BODY > MAX_PAIR_IMAGE_BYTES_IN_BODY + 100_000, `${MAX_JSON_BODY} leaves room for the two rules`);
   });
 });
 

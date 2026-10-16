@@ -4,6 +4,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import "@solana/wallet-adapter-react-ui/styles.css";
+import { flightFetch } from "@/lib/burnticker/rpcProxy";
 
 /**
  * Wallet providers for the launch wizard only (the rest of the app has none). @solana/wallet-adapter-react is already a dependency;
@@ -29,8 +30,10 @@ function useNamedWalletDialog() {
 export function WalletProviders({ children }: { children: ReactNode }) {
   useNamedWalletDialog();
   const endpoint = useMemo(() => process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL || "https://api.devnet.solana.com", []);
+  // 2026-10-15 prelaunch audit C2: send-path calls to the proxy carry a flight token (rpcProxy.ts flightFetch)
+  const config = useMemo(() => ({ fetch: flightFetch() }), []);
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={endpoint} config={config}>
       <WalletProvider wallets={[]} autoConnect={false}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>

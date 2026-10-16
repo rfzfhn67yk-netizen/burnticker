@@ -131,14 +131,23 @@ export async function readLivePlatform(reader: ChainReader | null, platformId: s
 export interface FeeLedgerEntry { signature: string; slot: number; blockTime: string | null; delta: string; direction: "in" | "out"; counterparty: string | null; memo: string | null }
 export interface FeeLedger { wallet: string | null; entries: FeeLedgerEntry[]; totalIn: string; totalOut: string; source: "chain" | "unavailable"; note: string }
 
-export async function readFeeLedger(reader: ChainReader | null, wallet: string | null, limit = 200): Promise<FeeLedger> {
+/** One transaction's effect on the wallet (ChainReader.lamportsDelta's answer): a landed transaction never changes, so it may be kept. */
+export type LamportsDelta = Awaited<ReturnType<ChainReader["lamportsDelta"]>>;
+/**
+ * `deltaCache` (2026-10-15 prelaunch audit C2): the per-transaction reads kept by "wallet:signature". Every trust page request used to
+ * read up to 200 transactions one by one; with the cache only transactions not seen before are read. A null answer (not found yet) is
+ * not kept.
+ */
+export async function readFeeLedger(reader: ChainReader | null, wallet: string | null, limit = 200, o: { deltaCache?: Map<string, LamportsDelta> } = {}): Promise<FeeLedger> {
   if (!wallet) return { wallet: null, entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "No developer fee wallet is set on this site." };
   if (!reader) return { wallet, entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "This site has no connection to a Solana node, so it cannot read the ledger. The ledger is only ever read from the chain, never from our own records." };
   const sigs = await reader.signaturesFor(wallet, limit);
   const entries: FeeLedgerEntry[] = [];
   let tin = BigInt(0), tout = BigInt(0);
   for (const s of sigs) {
-    const d = await reader.lamportsDelta(s.signature, wallet);
+    const ck = `${wallet}:${s.signature}`;
+    let d = o.deltaCache?.get(ck) ?? null;
+    if (!d) { d = await reader.lamportsDelta(s.signature, wallet); if (d) o.deltaCache?.set(ck, d); }
     if (!d || d.delta === BigInt(0)) continue;
     if (d.delta > BigInt(0)) tin += d.delta; else tout -= d.delta;
     entries.push({ signature: s.signature, slot: s.slot, blockTime: s.blockTime ? new Date(s.blockTime * 1000).toISOString() : null, delta: d.delta.toString(), direction: d.delta > BigInt(0) ? "in" : "out", counterparty: d.counterparty, memo: d.memo });
@@ -359,7 +368,7 @@ export async function readEffectiveCap(reader: ChainReader | null, programId: st
   } catch { return null; }
 }
 
-export async function buildTrustPage(i: { reader: ChainReader | null; env?: Readonly<Record<string, string | undefined>>; root?: string; siteDir: string; attesters: TrustPage["attesters"]; firstLaunchAt?: number | null; now?: number; cluster?: string; upgradeTimeLockSecs?: number | null }): Promise<TrustPage> {
+export async function buildTrustPage(i: { reader: ChainReader | null; env?: Readonly<Record<string, string | undefined>>; root?: string; siteDir: string; attesters: TrustPage["attesters"]; firstLaunchAt?: number | null; now?: number; cluster?: string; upgradeTimeLockSecs?: number | null; deltaCache?: Map<string, LamportsDelta>; skipFeeLedger?: boolean }): Promise<TrustPage> {
   const env = i.env ?? process.env, root = i.root ?? process.cwd(), now = i.now ?? Date.now();
   const powers = loadPowersRegister(env, root, now, i.upgradeTimeLockSecs ?? null);
   const transparency = buildTransparency(root, env);
@@ -373,7 +382,8 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     livePlatform: await readLivePlatform(i.reader, platformId, env, now, cluster),
     designedFees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(cluster), devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: LP_FEES_TO_BURN_POOL_BPS, operatorBps: LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
     lpLock: lpLockPolicyJson(cluster, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null),
-    feeLedger: await readFeeLedger(i.reader, devFeeWallet(env)),
+    // skipFeeLedger: the public API's /v1/trust does not serve the ledger, so it does not read it (C2)
+    feeLedger: i.skipFeeLedger ? { wallet: devFeeWallet(env), entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "Not read for this answer." } : await readFeeLedger(i.reader, devFeeWallet(env), 200, { deltaCache: i.deltaCache }),
     team: teamWallets(env, root), attesters: i.attesters, program: programFacts(env, root), incidents: readIncidents(root), audit: readAudit(i.siteDir),
     transparency,
     statements: [

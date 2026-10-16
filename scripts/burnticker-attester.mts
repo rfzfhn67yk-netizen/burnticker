@@ -116,7 +116,7 @@ if (site) {
   const rf = opt("rules") ?? die("--site <origin>, or --rules <rules.json> --ticker <T> --baseline <ISO>");
   rulesText = fs.readFileSync(rf!, "utf8"); ticker = (opt("ticker") ?? die("--ticker is required with --rules")).toUpperCase(); baselineAt = opt("baseline") ?? die("--baseline <ISO time> is required with --rules");
 }
-const locked = (() => { try { return lockRule(JSON.parse(rulesText)); } catch (e) { return die(`rules.json does not validate: ${(e as Error).message}`); } })();
+const locked = (() => { try { return lockRule(JSON.parse(rulesText), { stored: true }); } catch (e) { return die(`rules.json does not validate: ${(e as Error).message}`); } })();
 if (siteSha && siteSha !== locked.sha256) die(`the site's rules hash ${siteSha} is not the hash of the rules text it served (${locked.sha256})`, 1);
 const independent = !flag("readings-from-site");
 let readings: SettledEvent[];

@@ -38,7 +38,7 @@ function fakeSink(status = 200) {
 
 describe("the plan (pure)", () => {
   test("the five states map to pushes; everything else stays in the registry only", () => {
-    assert.deepEqual(Object.values(PUSH_KIND_OF_ALERT).sort(), ["api-budget", "burn-behind", "crank-refused", "keeper-refused", "launch-failed", "mint-bank-low", "pin-failed", "pin-failed", "signer-disagree", "single-source", "synthetic-failed"]);
+    assert.deepEqual(Object.values(PUSH_KIND_OF_ALERT).sort(), ["api-budget", "burn-behind", "crank-refused", "crank-refused", "keeper-refused", "launch-failed", "mint-bank-low", "pin-failed", "pin-failed", "signer-disagree", "single-source", "synthetic-failed"]);
     const { messages } = planPushes({ now: DAWN, state: settled(DAWN), alerts: [alert(DAWN - 60_000, "cosigner-disagree"), alert(DAWN - 50_000, "bt-feed-stall"), alert(DAWN - 40_000, "bt-daily-summary")] });
     assert.deepEqual(messages.map((m) => m.kind), ["signer-disagree"]);
     assert.equal(messages[0].priority, "high");

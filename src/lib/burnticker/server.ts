@@ -41,6 +41,7 @@ import type { TeamSeasonReader } from "@/lib/burnticker/lastSeason";
 import { coinDerbyScoreboard } from "@/lib/burnticker/derby/page";
 import { derbyTitle } from "@/lib/burnticker/api/handlers";
 import { budgetedRpcConfig, configureApiBudget, statusTableStore } from "@/lib/burnticker/apiBudget";
+import { connectionBatchReader, type BatchReader, type MultipleAccountsReader } from "@/lib/burnticker/keeperReadCache";
 
 /**
  * THE APP'S WIRING (2026-10-09): one place that opens the registry, builds the oracle clients, and chooses the program / LaunchLab
@@ -86,6 +87,11 @@ export interface Platform {
    * the host's own bank from BURNTICKER_MINT_BANK_PATH / _KEY (webMintBank); null: no bank, every launch finds its address in the browser.
    */
   mintBank?: MintBankPort | null;
+  /**
+   * 2026-10-15 prelaunch audit M7: one getMultipleAccounts per 20 coins for the index and home rebuilds (webReadCache.ts). Null/absent
+   * (no RPC or no program id): the per-coin reads run as before.
+   */
+  batchReader?: BatchReader | null;
 }
 
 let cached: Platform | null = null;
@@ -155,7 +161,9 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     pinCreatorDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_CREATOR_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_CREATOR_DAILY_CAP ?? "").trim()) : undefined,
     // Review-2 F3: the verifier decodes initialize_token and reads the TokenConfig (and the Pair) — it needs the program ids it checks
     // against; without BURNTICKER_PROGRAM_ID it refuses every confirmation (fail closed).
-    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" })) as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null,
+    // C2 (2026-10-15 prelaunch audit): the verifier reads in the "confirm" lane, so anonymous traffic cannot spend what a confirmation needs
+    batchReader: rpc && programId && program instanceof ProgramBurnClient ? connectionBatchReader(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })) as unknown as MultipleAccountsReader, new PublicKey(programId), (m) => program.vaultFor(m)) : null,
+    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" }, { lane: "confirm" })) as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null,
   };
   if (!rpc) stubs.push("launch confirmation: no BURNTICKER_RPC_URL on this host, so a launch transaction cannot be read and drafts are not taken live");
   else if (!programId) stubs.push("launch confirmation: no BURNTICKER_PROGRAM_ID on this host, so initialize_token and the TokenConfig cannot be checked and drafts are not taken live");
@@ -212,6 +220,20 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   const holdersRead = () => rpc ? readHolders(rpc, { cluster: p.cluster, mint: t.mint, labels: { ...poolOwnerLabels(p.cluster), [t.feePda]: "burn pool", [t.creator]: "creator" } }, now) : Promise.resolve(null);
   const datesRead = (market: Awaited<ReturnType<typeof marketRead>>, poolRegistered: boolean | null) => rpc && network ? readLifecycleDates(rpc, { network, mint: t.mint, launchTx: t.launchTx, curvePool: t.poolId, phase: market?.pool && t.poolId ? curveProgress(market.pool, t.poolId).phase : null, poolRegistered }, now) : Promise.resolve(null);
   const registeredOf = (b: Awaited<ReturnType<typeof programRead>>) => (b?.config ? !!b.config.poolRegistered : null);
+  // 2026-10-15 prelaunch audit M7: a draft (never signed) or an expired draft has nothing on chain worth reading: no supply, no fee pool,
+  // no TokenConfig, no LP lock, no pair side. The index and the home rebuild every 15 s and read each such row from the chain anyway
+  // (12 drafts + 5 expired against 6 live coins that day, and the set only grows). Its page is built from the registry alone.
+  if (t.status === "draft" || t.status === "expired") {
+    const [implied, info] = await impliedInfo();
+    return {
+      market: null, cpmm: null, holders: null, dates: null, stated: info && "stated" in info && info.stated ? info.stated : null, pair: null,
+      lifecycle: lifecycleFrom(p.registry, t, locked.rule, null), meta: p.registry.tokenMeta(t.mint),
+      token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
+      chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw: null, feePdaLamports: null, vaultRaw: null, program: null },
+      now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
+      operator: operatorPowersSummary(loadPowersRegister()),
+    };
+  }
   if (lite) {
     // the home's reads at once: supply then curve then dates on one path, the program block, the holders and the series title beside it
     const programP = programRead();

@@ -4,6 +4,9 @@ import { cspHeaderRules } from "@/lib/burnticker/csp";
 /** The public Burnticker app: the wizard, the token pages, the trust page and their API routes. Served behind Caddy (deploy/caddy). */
 const nextConfig: NextConfig = {
   compress: true,
+  // 2026-10-15 prelaunch audit H5: no page uses a remote image and the one next/image (the sidebar icon) is a local SVG, so the image
+  // optimiser (/_next/image: GHSA-2xp9 RCE with AVIF, GHSA-cjq9 SSRF) is switched off and no remote host is allowed.
+  images: { unoptimized: true, remotePatterns: [] },
   // scripts/ops/deploy-burnticker-host.sh builds beside the live build (NEXT_DIST_DIR=.next-burnticker) and ships that directory as .next.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   typescript: { ignoreBuildErrors: false },

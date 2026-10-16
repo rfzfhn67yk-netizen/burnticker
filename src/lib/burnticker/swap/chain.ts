@@ -4,6 +4,7 @@ import { cpmmPoolExtras, decodeCpmmConfig, decodeCurveConfig, decodeCurvePlatfor
 import { associatedTokenAddress, CPMM_PROGRAM, LAUNCHLAB_PROGRAM, launchLabPoolId, WSOL_MINT } from "@/lib/burnticker/swap/instructions";
 import type { Balances, Market, Network } from "@/lib/burnticker/swap/plan";
 import { REFUSAL } from "@/lib/burnticker/swap/copy";
+import { withFlight } from "@/lib/burnticker/rpcProxy";
 
 /**
  * THE SWAP PANEL'S CHAIN STEPS (swap-1, 2026-10-14): read the pool, read the wallet, simulate, sign, send, confirm. Each takes the small
@@ -114,6 +115,10 @@ const short = (e: unknown): string => String((e as Error)?.message ?? e).slice(0
  * conservative bound instead (`signedExpiry`), so a swap is never called expired while its real blockhash could still land.
  */
 export async function simulateSignSend(conn: SwapSender, payer: PublicKey, ixs: TransactionInstruction[], signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>, onStep: (s: "simulating" | "signing" | "sending" | "confirming") => void = () => {}, pollMs = 1500, onSubmit: (s: Submitted) => void = () => {}): Promise<SendResult> {
+  // prelaunch audit C2 re-review 3: the proxy's flight token rides this run's reads and sends only (rpcProxy.ts withFlight)
+  return withFlight(() => simulateSignSendRun(conn, payer, ixs, signTransaction, onStep, pollMs, onSubmit));
+}
+async function simulateSignSendRun(conn: SwapSender, payer: PublicKey, ixs: TransactionInstruction[], signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>, onStep: (s: "simulating" | "signing" | "sending" | "confirming") => void, pollMs: number, onSubmit: (s: Submitted) => void): Promise<SendResult> {
   onStep("simulating");
   const { tx, blockhash: compiledBlockhash, lastValidBlockHeight: compiledLast } = await compile(conn, payer, ixs);
   const sim = await conn.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" });
