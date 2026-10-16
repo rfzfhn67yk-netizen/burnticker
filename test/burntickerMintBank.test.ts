@@ -224,12 +224,19 @@ describe("the launch route takes the bank's keys", () => {
     clean(MINT_BANK_EMPTY_SENTENCE);
     assert.equal(w.registry.tokenByTicker("DENVER"), null, "no draft");
   });
-  test("a refused request deletes the keys it took (never offered again)", async () => {
+  test("a refused request takes no key; a key taken before a later refusal is deleted (never offered again)", async () => {
     const w = await makeWorld(); limiter.reset();
     const bank = testMintBank({ refill: false }); for (let i = 0; i < 2; i++) bank.bank.insert(key(i));
     w.p.mintBank = bank;
     const r = await post(one({ rule: { ...LOSE, kind: "nonsense" } }));
     assert.equal(r.status, 400);
+    // audit 2026-10-15 H4: a request its checks refuse takes no key at all (before: the key was taken first, then deleted)
+    assert.deepEqual({ ready: bank.bank.status().ready, taken: bank.bank.status().taken }, { ready: 2, taken: 0 }, "no key was taken");
+    // a refusal after the key was taken (the upload failed) deletes that key, never returns it
+    const { FakePinUploader } = await import("@/lib/burnticker/pin");
+    w.p.uploader = new FakePinUploader({ fail: true });
+    const r2 = await post(one({ ticker: "UPFAIL", name: "Upload fails" }));
+    assert.equal(r2.status, 503);
     assert.deepEqual({ ready: bank.bank.status().ready, taken: bank.bank.status().taken }, { ready: 1, taken: 0 }, "the taken key was deleted, not returned");
   });
 });

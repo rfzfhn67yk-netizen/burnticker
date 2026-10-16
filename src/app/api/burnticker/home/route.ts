@@ -16,6 +16,7 @@ import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { coinKey, sharedTickers } from "@/lib/burnticker/coinKey";
 import { isTestCoin, testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
+import { PUBLIC_READ_CORS } from "@/lib/burnticker/api/http";
 
 export const dynamic = "force-dynamic";
 
@@ -47,15 +48,16 @@ async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<Pr
  * invented; a registry that cannot be read at all passes null, never an empty list. Since website-14 it also carries each coin's own
  * activity rows (burns, signed readings, graduation, pool registration), where each coin stands, the next result each coin waits for,
  * and the $DEFICIT queued-units counter from its keeper's published files (data/burnkeeper-site, or BURNKEEPER_PUBLISH_DIR).
+ * Every answer carries the public-read CORS header (audit 2026-10-15 F5): the $DEFICIT shell on its own host reads `launch` from here.
  */
 export async function GET() {
   if (homeMemo) {
     if (Date.now() - homeMemo.at >= HOME_MEMO_MS) void refreshHome();
-    return NextResponse.json(homeMemo.body, { headers: { "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "hit" } });
+    return NextResponse.json(homeMemo.body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "hit" } });
   }
   await Promise.race([refreshHome(), new Promise<void>((r) => setTimeout(r, HOME_COLD_WAIT_MS))]);
-  if (homeMemo) return NextResponse.json((homeMemo as { body: unknown }).body, { headers: { "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "cold" } });
-  return NextResponse.json({ loading: true, error: "the coin list is being read; try again in a few seconds", code: "home-loading", retryAfterSec: 5 }, { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } });
+  if (homeMemo) return NextResponse.json((homeMemo as { body: unknown }).body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "cold" } });
+  return NextResponse.json({ loading: true, error: "the coin list is being read; try again in a few seconds", code: "home-loading", retryAfterSec: 5 }, { status: 503, headers: { ...PUBLIC_READ_CORS, "cache-control": "no-store", "retry-after": "5" } });
 }
 
 async function buildHome(): Promise<unknown> {

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { EVENT_LABEL, type ActivityEvent } from "@/lib/burnticker/activity";
 import { SETTLEMENT_LABEL, UPCOMING_EMPTY, type UpcomingRow } from "@/lib/burnticker/upcoming";
 import { FEEDS_PATH, type FeedFormat } from "@/lib/burnticker/exportLinks";
+import { safeParam } from "@/lib/burnticker/safeParam";
 export { FEEDS_PATH, feedHref, COIN_FEED_LINK, type FeedFormat } from "@/lib/burnticker/exportLinks";
 
 /**
@@ -46,7 +47,7 @@ export const FEED_COPY = {
 
 /** "receipts.rss" → { name: "receipts", fmt: "rss" }; null for anything else. */
 export function parseFeedFile(file: string, namePattern = /^[A-Za-z0-9-]{2,44}$/): { name: string; fmt: FeedFormat } | null {
-  const m = /^(.+)\.(rss|json)$/.exec(decodeURIComponent(file));
+  const m = /^(.+)\.(rss|json)$/.exec(safeParam(file));
   if (!m || !namePattern.test(m[1])) return null;
   return { name: m[1], fmt: m[2] as FeedFormat };
 }

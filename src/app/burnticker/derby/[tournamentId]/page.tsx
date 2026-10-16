@@ -4,6 +4,7 @@ import { platform } from "@/lib/burnticker/server";
 import { derbyStore } from "@/lib/burnticker/derby/store";
 import { derbyTournamentJson, type DerbyTournamentJson } from "@/lib/burnticker/derby/page";
 import type { Tournament } from "@/lib/burnticker/derby/bracket";
+import { safeParam } from "@/lib/burnticker/safeParam";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Burn Derby bracket", description: "A Burn Derby bracket. In each round, coins meet in one-on-one matches. A fan coin burns on each day its coin wins, and the fan coin of the coin that loses the match retires." };
@@ -18,7 +19,7 @@ export default async function BracketPage({ params }: { params: Promise<{ tourna
   let t: DerbyTournamentJson | null = null, err: string | null = null;
   try {
     const p = platform();
-    const row = derbyStore(p.registry.db).tournament(decodeURIComponent(tournamentId));
+    const row = derbyStore(p.registry.db).tournament(safeParam(tournamentId));
     if (row) t = derbyTournamentJson(p.registry, JSON.parse(row.json) as Tournament, row.sha256);
   } catch (e) { err = e instanceof Error ? e.message : String(e); }
   if (err) return <main className="p-6 text-red-400 text-sm">The coin registry could not be read just now. The error was: {err}</main>;

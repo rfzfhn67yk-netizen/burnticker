@@ -83,6 +83,7 @@ import { HAZARD_FOLLOW, HAZARD_KINDS, HAZARD_MEASURES, hazardControls, hazardPat
 import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, activeUnit, eventForSide, followForRule, keptProfileLine, keptProfileParts, KEPT_PROFILE_FRESH, KEPT_PROFILE_REUSE, IMAGE_RIGHTS_REQUIRED, oneGameShare, PAIR_COST_EXCLUSIONS, mappingWarning, partyMarketWarning, pickDescribesRule, renderWarnings, reviewBlockers, shareOfBudgetLine, rivalrySeasonLine, stablePatternOptions, teamLine, triggerText, whichAnswer, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, pairDiagramLabel, namesRemadeLine, budgetCopy, oneShotSentences, candidateFacts, candidatesPairRule, endSentences, gamePairFacts, gamePairRule, matchupFacts, pairIdentityProblems, pairNames, pairTickers, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { PICKER_PAGE, pickerPage } from "@/lib/burnticker/polySearch";
+import { keyRotatingFetch, newPrepareKey } from "@/lib/burnticker/prepareKey";
 
 /**
  * THE LAUNCH PAGE (LAUNCHPAD-PATH §1; rebuilt 2026-10-10 on the owner's cut: "it feels overly complicated to get a coin set up … the UI
@@ -921,6 +922,16 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // profile is set aside
   const reviewKey = draftRevision([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB, pairVenue] : null, srcWarnings, textCtx, raiseSol, profileRevision(profile), pairOn ? profileRevision(profileB) : ""]);
   const curRev = useRef(reviewKey); curRev.current = reviewKey;
+  // audit 2026-10-15 M2: one prepare per draft. The key stays the same for one draft revision (a double press or the same request sent
+  // again gets the first answer, the same draft and the same addresses); an edit makes a new draft and a new key (api/idempotency.ts).
+  const prepareKey = useRef<{ rev: typeof reviewKey; key: string } | null>(null);
+  const draftPrepareKey = (rev: typeof reviewKey): string => {
+    if (!prepareKey.current || prepareKey.current.rev !== rev) prepareKey.current = { rev, key: newPrepareKey() };
+    return prepareKey.current.key;
+  };
+  // review 2026-10-15 item 1: on idempotency-key-reused the draft gets a new key and the request is sent once more (prepareKey.ts)
+  const rotatePrepareKey = (): string => { const key = newPrepareKey(); prepareKey.current = { rev: curRev.current, key }; return key; };
+  const launchFetch = keyRotatingFetch((u, init) => fetch(u, init), rotatePrepareKey);
   useEffect(() => {
     if (step !== "review" || !rule || gate.kind === "loading") return;
     const seq = ++reviewSeq.current, rev = reviewKey;
@@ -960,12 +971,13 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (!rule || !reviewMatchesDraft(reviewSlot, curRev.current)) return;   // A6: transactions are prepared only for the reviewed draft
     setBusy(true); setLaunchErr(null);
     // 409 / 429 / 503 → a plain sentence (pairLaunchClient.launchErrorMessage)
-    const post = async (body: Record<string, unknown>) => { const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => null); if (!r.ok) throw new LaunchRequestError(r.status, j?.code ?? null, launchErrorMessage(r.status, j as LaunchErrorBody | null, r.headers.get("retry-after"))); return j; };
+    const post = async (body: Record<string, unknown>) => { const r = await launchFetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => null); if (!r.ok) throw new LaunchRequestError(r.status, j?.code ?? null, launchErrorMessage(r.status, j as LaunchErrorBody | null, r.headers.get("retry-after"))); return j; };
     setPcOut(null);
     mark("launch");
     // pressing Launch is the acknowledgement (the line under the button states both); socials and a custom image are API-only; no launch built here carries an opening purchase (hostedLaunch.ts)
     flowStats.current.decisions++;
-    const common = { creator, firstBuySol: "0", raiseSol, acknowledgements: { ruleLocked: true, noReturns: true }, timings: { ...stepTimes.current, screens: flowStats.current.screens, decisions: flowStats.current.decisions } };
+    const idempotencyKey = draftPrepareKey(curRev.current);
+    const common = { creator, firstBuySol: "0", raiseSol, idempotencyKey, acknowledgements: { ruleLocked: true, noReturns: true }, timings: { ...stepTimes.current, screens: flowStats.current.screens, decisions: flowStats.current.decisions } };
     // item 253: the prepare answer applies only to the draft it was asked for; an edit while it was in flight sets no plan and never
     // reaches the wallet (preparedLaunch.ts prepareIfCurrent). The sign card's tickers are the ones sent, not the form's.
     const sentRev = curRev.current, sent = { a: ticker.toUpperCase(), b: tickerB.toUpperCase() };
@@ -988,9 +1000,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       if (pairOn && ruleB && !meetingsOn && !settledPick) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         // website-18: each coin carries its own image, description and links (pinned in its own metadata file)
-        const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, rule, ...profileBody(profile), ...sentMint(kA) });
+        const a = await post({ ...common, idempotencyKey: `${idempotencyKey}_a`, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, rule, ...profileBody(profile), ...sentMint(kA) });
         if (kA) mintPool?.consume(kA.publicKey);
-        const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: ctxB, note: "", imageUrl: null, rule: ruleB, ...profileBody(profileB), ...sentMint(kB) });
+        const b = await post({ ...common, idempotencyKey: `${idempotencyKey}_b`, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: ctxB, note: "", imageUrl: null, rule: ruleB, ...profileBody(profileB), ...sentMint(kB) });
         if (kB) mintPool?.consume(kB.publicKey);
         await checkBeforeWallet(a.bundle as Bundle, b.bundle as Bundle);
         const A = keyed(a.bundle as Bundle, kA), B = keyed(b.bundle as Bundle, kB);
@@ -1011,7 +1023,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           // paragraph from it, the same one the review answers (review.settled.descriptionB)
           const descB = meetingsOn ? (reviewMeetings?.descriptionB ?? finalDescriptionB) : settledPick ? (reviewSettled?.descriptionB || finalDescriptionB) : finalDescriptionB;
           const settledFields = settledPick ? { ...settledPairFields(settledPick), descCtx: ctxB } : {};
-          const j = await postPairLaunch((u, init) => fetch(u, init), { ...body, pair: { ...sentMint(kB), ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: null, ...profileBody(profileB), ...settledFields } }, meetingsOn || settledPick ? "launchlab" : pairVenue);
+          const j = await postPairLaunch((u, init) => launchFetch(u, init as never), { ...body, pair: { ...sentMint(kB), ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: null, ...profileBody(profileB), ...settledFields } }, meetingsOn || settledPick ? "launchlab" : pairVenue);
           if (kA && kB) { mintPool?.consume(kA.publicKey); mintPool?.consume(kB.publicKey); }
           if (j.venue === "pair-curve") {
             // the pair curve's two mints: this page's own two (their keys are this page's), or the server's two (each key checked)

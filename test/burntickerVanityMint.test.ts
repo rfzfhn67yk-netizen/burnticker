@@ -400,7 +400,9 @@ describe("the wiring, by each file's source", () => {
   });
   test("the route: bank keys when no mint is sent, the two public keys otherwise; the coin page and the trust page say it", () => {
     const rt = read("src/app/api/burnticker/launch/route.ts");
-    assert.match(rt, /prepareLaunch\(p, body, \{ register: true, \.\.\.\(own !== undefined \? \{ mint: own \} : \{\}\), \.\.\.\(ownB !== undefined \? \{ mintB: ownB \} : \{\}\), \.\.\.\(taken \? \{ mintKeypair: taken\[0\], \.\.\.\(taken\[1\] \? \{ mintKeypairB: taken\[1\] \} : \{\}\) \} : \{\}\) \}\)/);
+    // audit 2026-10-15 H4: the bank keys are taken through prepareLaunch's takeMintKeys, once every check has passed
+    assert.match(rt, /prepareLaunch\(p, body, \{ register: true, \.\.\.\(own !== undefined \? \{ mint: own \} : \{\}\), \.\.\.\(ownB !== undefined \? \{ mintB: ownB \} : \{\}\), \.\.\.\(takeMintKeys \? \{ takeMintKeys \} : \{\}\), client: clientKey\(req\) \}\)/);
+    assert.match(rt, /const takeMintKeys = own === undefined && ownB === undefined \?/);
     const coin = read("src/app/burnticker/t/[ticker]/page.tsx");
     assert.match(coin, /\{coinAddressLine\(s\.mint\) && <span[^>]*data-mint-suffix>\{coinAddressLine\(s\.mint\)\}<\/span>\}/);
     assert.match(read("src/app/burnticker/trust/page.tsx"), /<h2 className="font-medium">How this was built<\/h2>[\s\S]{0,300}data-mint-suffix>\{MINT_ADDRESS_TRUST\}/);

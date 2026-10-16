@@ -31,7 +31,8 @@ import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBa
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { seasonOverFor, seasonStatus } from "@/lib/burnticker/seasonOver";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
-import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
+import { pinCoin, sha256Hex, type PinnedCoin } from "@/lib/burnticker/pin";
+import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { describeRule } from "@/lib/burnticker/describe";
 import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
 import { BALLOT_NOTE, RACE_TYPES, candidateMappingLine, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
@@ -162,7 +163,7 @@ export async function kalshiSearch(p: Platform, q: { q?: string | null; category
     const ranking = teams.length > 0 || events.some((e) => e.matchedSides.length > 0) ? "events" : "series";
     return ok({ query, results, events, ranking, teams });
   } catch (e) {
-    return fail(502, `Kalshi could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
+    return fail(502, `Kalshi could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
 }
 
@@ -195,7 +196,7 @@ export async function kalshiEvents(p: Platform, q: { q?: string | null; series?:
     const r = await p.kalshi.searchEvents(query, { series, status, limit: 40 });
     return ok({ query, series, events: r.events.map((e) => eventHitJson(e, list)), scanned: r.scanned, teams: r.teams });
   } catch (e) {
-    return fail(502, `Kalshi could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
+    return fail(502, `Kalshi could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
 }
 
@@ -209,7 +210,7 @@ export async function kalshiTeams(p: Platform, q: { series?: string | null }): P
     const t = await p.kalshi.teams(series);
     return ok({ ...t, note: "A team's record counts its own market. YES is a win and NO is a loss. A YES on the game's tie market is a draw. Voided games are not counted." });
   } catch (e) {
-    return fail(502, `Kalshi could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
+    return fail(502, `Kalshi could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
 }
 
@@ -249,7 +250,7 @@ export async function elections(p: Platform, q: { type?: string | null; state?: 
       races: (type === "control" || st ? shown : []).slice(0, 60).map((r) => ({ ...r, outcomes: r.outcomes.map((o) => ({ ...o, title: outcomeCardTitle(r, o), settles: outcomeSettlesNote(r, o), mapping: candidateMappingLine(r, o), rule: polyRule(o.conditionId) })) })),
       note: "These are Polymarket's open midterm races. Placeholder outcomes with no name are hidden. Settlement reads the on-chain payout, and the state's certified results are the second source that checks it.",
     }));
-  } catch (e) { return fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`); }
+  } catch (e) { return fail(502, `Polymarket could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`); }
 }
 
 /** GET /v1/elections/pair?slug=&a=&b= — the election-pair template (electionPair.ts): candidate A vs B for one race → two coins. */
@@ -271,7 +272,7 @@ export async function electionPair(p: Platform, q: { slug?: string | null; a?: s
     };
     const [fa, fb] = [await fecId(oa.label), await fecId(ob.label)];
     return ok(scrubMarketData({ ...electionPairTemplate(race, oa, ob, { a: fa, b: fb }), note: "This makes one linked pair of two coins, one for each candidate. Two markets, one race: the winner's coin burns its own pool on the result and takes the loser's pool at the end. If neither candidate wins, both pools go to $DEFICIT's burn. Post linked.body to the launch route. The pending list has the details." }));
-  } catch (e) { return fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`); }
+  } catch (e) { return fail(502, `Polymarket could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`); }
 }
 
 const sideOf = (league: LeagueId, s: Game["home"]) => { const t = teamsOf(league).find((x) => x.abbr === s.abbr); return { abbr: s.abbr, code: t ? teamCodeOf(t) : s.abbr, name: s.name || t?.name || s.abbr, nickname: s.nickname || t?.nickname || s.abbr, ticker: t?.ticker ?? s.abbr, record: s.record, home: s.homeAway === "home" }; };
@@ -288,7 +289,7 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
   // from TheSportsDB (licensed key) — never ESPN
   // launch audit 5 L05: a schedule that cannot be read is a display problem only — the sentence says so; the technical reason is apart
   let scheduleNote: string | null = null, scheduleDetail: string | null = null;
-  const games = await espnClient().upcoming(league, 8).catch((e) => { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); scheduleNote = sp.line; scheduleDetail = sp.detail; return [] as Game[]; });
+  const games = await espnClient().upcoming(league, 8).catch((e) => { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", safeErrorText(e, 160)); scheduleNote = sp.line; scheduleDetail = sp.detail; return [] as Game[]; });
   const year = seasonYearAt(league, Date.now());
   const needle = (q.q ?? "").trim();
   const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
@@ -326,7 +327,7 @@ export async function sportsGames(_p: Platform, q: { league?: string | null; q?:
   if (!isLeague(league)) return fail(400, `Pick a league from this list: ${Object.keys(LEAGUES).join(", ")}.`);
   try {
     let games: Game[];
-    try { games = await espnClient().upcoming(league, 8); } catch (e) { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: sp.line, scheduleDetail: sp.detail, games: [], count: 0 }); }
+    try { games = await espnClient().upcoming(league, 8); } catch (e) { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", safeErrorText(e, 160)); return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: sp.line, scheduleDetail: sp.detail, games: [], count: 0 }); }
     const needle = (q.q ?? "").trim();
     const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
     const rows = games.filter((g) => !g.completed && g.home.abbr !== "TBD" && g.away.abbr !== "TBD" && (!named || named.has(g.home.abbr) || named.has(g.away.abbr))).sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((g) => ({
@@ -334,7 +335,7 @@ export async function sportsGames(_p: Platform, q: { league?: string | null; q?:
       series: { aLoss: gameSeries(league, g.eventId, g.away.abbr, "loss"), bLoss: gameSeries(league, g.eventId, g.home.abbr, "loss") },
     }));
     return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: null, scheduleDetail: null, games: rows, count: rows.length });
-  } catch (e) { return fail(502, `The schedule could not be read just now. The reason given was: ${(e as Error).message.slice(0, 160)}`); }
+  } catch (e) { return fail(502, `The schedule could not be read just now. The reason given was: ${safeErrorText(e, 160)}`); }
 }
 
 /**
@@ -355,7 +356,7 @@ export async function sportsRivalry(_p: Platform, q: { league?: string | null; a
   const base = { league, label: LEAGUES[league].label, source, option: { label: RIVALRY_SERIES_LABEL, line: RIVALRY_SERIES_LINE }, a: { abbr: ta.abbr, code: teamCodeOf(ta), team: ta.name, nickname: ta.nickname, ...names.a }, b: { abbr: tb.abbr, code: teamCodeOf(tb), team: tb.name, nickname: tb.nickname, ...names.b } };
   let games: Game[];
   try { games = await espnClient().season(league, ta.abbr); } catch (e) {
-    const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160));
+    const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", safeErrorText(e, 160));
     return ok({ ...base, year: null, season: null, series: null, scheduleNote: sp.line, scheduleDetail: sp.detail, offered: false, offeredLine: sp.line, meetings: [], count: 0, tally: null });
   }
   const year = games.find((g) => g.seasonYear)?.seasonYear ?? seasonYearAt(league, Date.now());
@@ -383,7 +384,7 @@ export const venueFlags = (p: Platform): VenueFlags => ({ kalshi: p.kalshiEnable
 export async function browse(p: Platform, q: { category?: string | null; q?: string | null }, now = Date.now()): Promise<ApiResult> {
   const venues = venueFlags(p);
   let cats;
-  try { cats = loadCategories(); } catch (e) { return fail(500, (e as Error).message); }
+  try { cats = loadCategories(); } catch (e) { return fail(500, safeErrorText(e, 600)); }
   const feeds = (catalogueSources(now).sources as unknown as (FeedCardInput & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion");
   // sources-3 (2026-10-12): the weather tile folded into Science, Space & Weather; an old link or a saved draft asking for it lands there
   const asked = q.category?.trim() || null;
@@ -394,7 +395,7 @@ export async function browse(p: Platform, q: { category?: string | null; q?: str
   const errors: string[] = [];
   const polymarket: PolyEventHit[] = [];
   for (const tag of venues.polymarket ? c.polymarket.slice(0, 2) : []) {
-    try { polymarket.push(...(await p.polymarket.eventsByTag(tag, 6)).events); } catch (e) { errors.push(`Polymarket's ${tag} events could not be read. The reason given was: ${(e as Error).message.slice(0, 100)}`); }
+    try { polymarket.push(...(await p.polymarket.eventsByTag(tag, 6)).events); } catch (e) { errors.push(`Polymarket's ${tag} events could not be read. The reason given was: ${safeErrorText(e, 100)}`); }
   }
   const kalshi: (BrowseSeries & { refused: string[] })[] = [];
   if (venues.kalshi) {
@@ -404,7 +405,7 @@ export async function browse(p: Platform, q: { category?: string | null; q?: str
       try {
         const page = await p.kalshi.seriesByCategory(cat, { q: q.q ?? null, limit: per, withEvents: Math.min(4, per) });
         kalshi.push(...page.series.map((s) => ({ ...s, refused: refusalsFor(list, { titles: [s.title], categories: s.category ? [s.category] : [] }).map((r) => r.reason) })));
-      } catch (e) { errors.push(`Kalshi's ${cat} series could not be read. The reason given was: ${(e as Error).message.slice(0, 100)}`); }
+      } catch (e) { errors.push(`Kalshi's ${cat} series could not be read. The reason given was: ${safeErrorText(e, 100)}`); }
     }
   }
   const cards = categoryCards(c, { feeds, polymarket, kalshi }, { q: q.q ?? null });
@@ -436,11 +437,11 @@ export async function kalshiCategories(p: Platform, q: { category?: string | nul
     const tag = POLYMARKET_TAG_FOR[category] ?? null;
     let polymarket: { tag: { slug: string; label: string }; events: unknown[]; error: string | null } | null = null;
     if (tag && q.polymarket !== "0" && p.polymarketDiscovery !== false) {
-      try { const r = await p.polymarket.eventsByTag(tag.slug, 8); polymarket = { tag, events: r.events, error: null }; } catch (e) { polymarket = { tag, events: [], error: (e as Error).message.slice(0, 120) }; }
+      try { const r = await p.polymarket.eventsByTag(tag.slug, 8); polymarket = { tag, events: r.events, error: null }; } catch (e) { polymarket = { tag, events: [], error: safeErrorText(e, 120) }; }
     }
     return ok({ ...page, series, polymarket, note: "The series most traded on Kalshi come first. Trading is used only to order the list. Open a series to see whether it settles as yes or no or as a number." });
   } catch (e) {
-    return fail(502, `Kalshi could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
+    return fail(502, `Kalshi could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
 }
 
@@ -470,14 +471,14 @@ export async function polymarketSearch(p: Platform, q: { q?: string | null; stat
     const keptM = show ? markets : markets.filter((m) => !m.closingSoon), keptE = show ? events : events.filter((e) => !e.closingSoon);
     return ok({ query, status, venue: "polymarket", events: keptE, markets: keptM, hiddenClosingSoon: markets.length - keptM.length + events.length - keptE.length, closePassedNote: CLOSE_PASSED_SEARCH_NOTE, tags: r.tags, note: "Only yes-or-no markets are listed. YES is a market's first outcome and NO is its second. The result is read from the on-chain payout on Polygon. No prices, odds or volume are returned." });
   } catch (e) {
-    return fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
+    return fail(502, `Polymarket could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
 }
 
 /** The back-test of a rule from the venue's own settled history (catalogue rules: the source's frozen fixture; Polymarket: Gamma's closed markets). */
 export async function runBacktest(p: Platform, body: { rule?: unknown; months?: unknown }, now = Date.now()): Promise<ApiResult> {
   let locked: LockedRule;
-  try { locked = lockRule(body.rule); } catch (e) { return fail(400, (e as Error).message); }
+  try { locked = lockRule(body.rule); } catch (e) { return fail(400, safeErrorText(e, 600)); }
   const months = Math.min(24, Math.max(1, Number(body.months ?? 12) || 12));
   try {
     if (locked.rule.oracle === "catalogue" && nativeSourceById(locked.rule.series!)) {
@@ -513,7 +514,7 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
     return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { seriesTitle: info?.title ?? null }), backtest: bt, sentence: backtestSentence(bt), refusals, seriesTitle: info?.title ?? null, settlementSourceUrl: r.settlementSourceUrl, awaitingFinal: r.awaitingFinal, oracleRefusals: r.refusals, matched: r.events.length });
   } catch (e) {
     console.error("[burnticker/backtest] the back-test failed:", e);
-    return fail(502, `The back-test could not run just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
+    return fail(502, `The back-test could not run just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
 }
 
@@ -542,6 +543,20 @@ export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; 
 export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null; preflight: PreflightResult | null; /** BURNTICKER_PAIR_CURVE_ENABLED: the pair launches through pair_curve (sign this instead of the two LaunchLab bundles). */ pairCurve?: PairCurveLaunchBundle }
 /** 2026-10-14: a retry that reuses an earlier draft's address must carry the same rule and ticker; otherwise a fresh address is needed. */
 const OWN_DRAFT_CHANGED = "Your earlier draft for this address had a different rule or ticker. Press Start over to get a fresh address, then launch again.";
+/**
+ * Audit 2026-10-15 F4: one draft has one metadata file. A retry of the same address with a different name, description, links or image
+ * is refused before anything is uploaded (the first file is the one the registry keeps, so the coin would be created naming another).
+ */
+const OWN_DRAFT_DETAILS_CHANGED = "Your earlier draft for this address had a different name, description, links or image, and its details are already saved. Press Start over to get a fresh address, then launch again.";
+/** The registry status key holding a draft's metadata identity (the fingerprint of everything its metadata file says). */
+const draftIdentityKey = (mint: string): string => `draft.identity.${mint}`;
+/** What a coin's metadata file is made from, as one fingerprint: a retry with the same fingerprint may reuse the file. */
+/**
+ * Review 2026-10-15 (7): only what the creator supplied plus the locked rule's hash. The generated paragraph is left out: it can carry a
+ * live source title (a Polymarket market's) that changes between two attempts while nothing the creator chose has changed.
+ */
+export const draftIdentity = (i: { ticker: string; name: string; creatorText: string; rulesSha256: string; links: { label: string; url: string }[]; imageUrl: string | null; imageSha: string | null; badge: boolean | null }): string =>
+  sha256Hex(JSON.stringify({ v: 2, t: i.ticker, n: i.name, c: i.creatorText, r: i.rulesSha256, l: i.links.map((l) => [String(l?.label ?? ""), String(l?.url ?? "")]), u: i.imageUrl, i: i.imageSha, b: i.badge }));
 interface PairSideInput { /** round 5: side B's own pinned token (burnTarget.ts BurnTargetField); side A's rides in its rule */ burnTarget?: unknown; /** two candidates in one race: candidate B's market and the race slug; two teams in one game: the other team; side B's own describe context */ market?: unknown; race?: unknown; opp?: unknown; descCtx?: unknown; ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown; /** website-18: side B's own creator text and uploaded image */ creatorDescription?: unknown; image?: unknown; imageRights?: unknown; imageBadge?: unknown }
 
 /**
@@ -554,7 +569,7 @@ interface PairSideInput { /** round 5: side B's own pinned token (burnTarget.ts 
  * (buildPairBundles); refusals and the tier rule apply per side, and both drafts plus the pair row are registered together. A rule that
  * carries a `pair` field must come through that flow.
  */
-export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; /** 2026-10-14: a pair's side B mint public key (the launch page grinds both); only with `mint` */ mintB?: string | null; /** 2026-10-14 night: keypairs taken from the host's mint key bank (mintBank.ts; side A / the one coin, and a pair's side B), whose secrets ride in the bundles */ mintKeypair?: Keypair | null; mintKeypairB?: Keypair | null; /** 2026-10-15 (deploy smoke): every check a launch runs (the preflight, the pin budget, the uploader), with `register: false`: nothing is pinned, registered or taken */ dryRun?: boolean; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
+export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; /** 2026-10-14: a pair's side B mint public key (the launch page grinds both); only with `mint` */ mintB?: string | null; /** 2026-10-14 night: keypairs taken from the host's mint key bank (mintBank.ts; side A / the one coin, and a pair's side B), whose secrets ride in the bundles */ mintKeypair?: Keypair | null; mintKeypairB?: Keypair | null; /** 2026-10-15 (deploy smoke): every check a launch runs (the preflight, the pin budget, the uploader), with `register: false`: nothing is pinned, registered or taken */ dryRun?: boolean; preflight?: { strict?: boolean; deps?: PreflightDeps }; /** audit 2026-10-15 H4: the bank keys, taken only once every check has passed (a refusal never takes a key); the route discards them if the launch is refused later */ takeMintKeys?: (tickers: string[]) => { keys: Keypair[] } | { error: ApiResult }; /** review 2026-10-15 (2): the request's client key (http.ts clientKey), which the pin budget is counted by */ client?: string }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
   if (o.dryRun) o = { ...o, register: false, mint: null, mintB: null, mintKeypair: null, mintKeypairB: null };   // a dry run never registers and holds no key
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
   const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
@@ -579,7 +594,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // website-19 (ChatGPT launch-intent audit 2, item 1): a set of outcomes is never one coin's rule; the creator picks one outcome's market
   if (input.rule && typeof input.rule === "object" && eventLevelRule(input.rule as Parameters<typeof eventLevelRule>[0])) return { error: fail(400, EVENT_LEVEL_REFUSAL, { code: "pick-one-outcome" }) };
   let locked: LockedRule;
-  try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, (e as Error).message) }; }
+  try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, safeErrorText(e, 600)) }; }
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): the same rule refusals the read-only review lists, in order:
   // vault mode, a venue this host has off, an oracle no coin launches on yet, a source's fixed unit / launchability / decided result, the
   // reserve bounds and an unsafe title regex. The first one answers; every one is in `problems`.
@@ -611,7 +626,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   const creatorText = typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription).trim() : "";
   if (creatorText.length > DESCRIPTION_MAX) return { error: fail(400, `The description can be at most ${DESCRIPTION_MAX} characters.`, { code: "description-too-long" }) };
   // website-18: the same checks for side A (the body) and, in a rivalry pair, side B (`pair.image`, `pair.imageRights`, `pair.imageBadge`)
-  const uploadOf = async (src: { image?: unknown; imageRights?: unknown; imageBadge?: unknown }, who: string): Promise<{ error: ApiResult } | { up: { bytes: Uint8Array; contentType: string; badge: boolean } | null }> => {
+  const uploadOf = async (src: { image?: unknown; imageRights?: unknown; imageBadge?: unknown }, who: string): Promise<{ error: ApiResult } | { up: { bytes: Uint8Array; contentType: string; badge: boolean; rawSha: string } | null }> => {
     if (src.image === undefined || src.image === null) return { up: null };
     if (!p.customImages) return { error: fail(400, `${who}This site does not take custom images right now. The coin uses its generated receipt art.`, { code: "custom-image-off" }) };
     if (src.imageRights !== true) return { error: fail(400, `${who}Confirm the image line first: "${RIGHTS_LINE}"`, { code: "image-rights" }) };
@@ -619,10 +634,12 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     if ("error" in d) return { error: fail(400, `${who}${d.error}`, { code: "image-refused" }) };
     // owner, 2026-10-12: the receipt mark is optional and on by default; when on it is composited before anything is pinned
     // WIRING-MEDIA-RECOVERY item 221: a plain image (mark off) passes the same decode and 16-pixel checks as the badge path
-    if (src.imageBadge === false) { const c = await checkCreatorImage(d.ok.bytes); if ("error" in c) return { error: fail(400, `${who}${c.error}`, { code: "image-refused" }) }; return { up: { bytes: d.ok.bytes, contentType: d.ok.contentType, badge: false } }; }
+    // F4: the creator's own bytes (before the mark is drawn) are the image's identity across a retry
+    const rawSha = sha256Hex(d.ok.bytes);
+    if (src.imageBadge === false) { const c = await checkCreatorImage(d.ok.bytes); if ("error" in c) return { error: fail(400, `${who}${c.error}`, { code: "image-refused" }) }; return { up: { bytes: d.ok.bytes, contentType: d.ok.contentType, badge: false, rawSha } }; }
     const badged = await badgeCreatorImage(d.ok.bytes, d.ok.contentType);
     if ("error" in badged) return { error: fail(400, `${who}${badged.error}`, { code: "image-refused" }) };
-    return { up: { bytes: badged.ok.bytes, contentType: badged.ok.contentType, badge: true } };
+    return { up: { bytes: badged.ok.bytes, contentType: badged.ok.contentType, badge: true, rawSha } };
   };
   const upA = await uploadOf(body as { image?: unknown; imageRights?: unknown; imageBadge?: unknown }, "");
   if ("error" in upA) return upA;
@@ -662,7 +679,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       // One keeper cycle must cover a week of the selector's closed markets (the scan cap): a denser tag is narrowed or refused.
       let scan;
       try { scan = await p.polymarket.candidates(wideRule(locked.rule), { closed: true, sinceIso: new Date(p.polymarket.clock() - 7 * 86_400_000).toISOString() }); }
-      catch (e) { return { error: fail(502, `A week of ${key} could not be read from Polymarket to check how many markets it settles. The reason given was: ${(e as Error).message.slice(0, 120)}`) }; }
+      catch (e) { return { error: fail(502, `A week of ${key} could not be read from Polymarket to check how many markets it settles. The reason given was: ${safeErrorText(e, 120)}`) }; }
       if (!scan.complete) return { error: fail(400, `${key} settles more than ${p.polymarket.pageCap * p.polymarket.pageSize} Polymarket markets a week. Narrow it to one market type, such as moneyline, or to one event pattern.`) };
     }
   } else if (locked.rule.oracle === "derby") {
@@ -670,7 +687,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     // liquidity; distinct coins; a season that starts after launch; a bracket slot that matches its registered tournament.
     let dr;
     try { dr = await derbyAdmission(locked.rule, { registry: p.registry, fetchImpl: p.derbyFetch ?? (globalThis.fetch as unknown as FetchLike), now: Date.now(), refuse: list }); }
-    catch (e) { return { error: fail(502, `A second source for the Burn Derby could not be read, so liquidity could not be checked. The reason given was: ${(e as Error).message.slice(0, 120)}`) }; }
+    catch (e) { return { error: fail(502, `A second source for the Burn Derby could not be read, so liquidity could not be checked. The reason given was: ${safeErrorText(e, 120)}`) }; }
     if (dr.length) return { error: fail(403, `This launch is refused: ${dr.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: dr }) };
     seriesTitle = derbyTitle(locked.rule);
   } else return { error: fail(400, `Coins cannot launch on the ${locked.rule.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.`, { code: "oracle-off" }) };   // ruleRefusals refused it already
@@ -679,7 +696,9 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (o.mint && p.registry.token(o.mint)) {
     const own = p.registry.ownDraft(o.mint, input.creator);
     if (!own) return { error: fail(409, `The mint ${o.mint} is already registered.`, { code: "mint-taken" }) };
-    if (own.rulesJson !== locked.text || own.ticker !== input.ticker) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) };
+    // audit 2026-10-15 F3: a pair's stored side-A rule carries the pair clause (pair id, side, void date, winner takes the burn) that
+    // the request's rule does not; the pair branch expands the request with the recorded pair id and void date and compares there
+    if (own.ticker !== input.ticker || (!b.pair && own.rulesJson !== locked.text)) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) };
   }
   { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null, creator: input.creator }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
@@ -699,35 +718,76 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // bundle is built, and the token URI is the arweave URL. An upload failure refuses the launch; the hosted JSON only behind
   // BURNTICKER_ALLOW_HOSTED_METADATA (devnet scripts). A preview bundle (register: false) pins nothing and says so.
   const pins = new Map<string, PinnedCoin | null>();
-  const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null, image: { bytes: Uint8Array; contentType: string; badge?: boolean } | null = null): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
+  // audit 2026-10-15 F4: the metadata identity each side was prepared with, written with its draft (register below)
+  const identities = new Map<string, string>();
+  // THE PIN BUDGET (review N4; audit H4; review 2026-10-15 items 2 and 5). The host's daily cap, and a per-requester cap: the `creator`
+  // field is not authenticated, so it is counted per CLIENT (http.ts clientKey), and per (client, creator) only for a creator who already
+  // has a launch confirmed on chain here (a real creator on a shared connection is not held back by strangers; a stranger cannot spend a
+  // victim wallet's allowance, and rotating made-up creators does not escape the client count). Checked for every side a launch will
+  // pin BEFORE a bank key is taken or anything is uploaded; only an upload that succeeded is counted.
+  const day = new Date().toISOString().slice(0, 10), client = o.client ?? "unknown";
+  const budgetKeys = { global: `pin.budget.${day}`, client: `pin.budget.${day}.client.${client}`, clientCreator: `pin.budget.${day}.client.${client}.creator.${input.creator}` };
+  const countOf = (k: string) => Number(p.registry.getStatus(k) ?? 0) || 0;
+  const realCreator = (() => { try { return p.registry.tokens().some((t) => t.creator === input.creator && !!t.launchTx); } catch { return false; } })();
+  // an in-process caller with no client (scripts, tests) is held by the host's cap only; both launch routes always pass their client
+  const perRequester = o.client !== undefined;
+  const budgetRefusal = (n: number): { error: ApiResult } | null => {
+    if (n <= 0 || !p.uploader) return null;
+    const cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP, mine = p.pinCreatorDailyCap ?? DEFAULT_PIN_CREATOR_DAILY_CAP;
+    if (countOf(budgetKeys.global) + n > cap) return { error: fail(429, `This site has used up its daily upload limit of ${cap} coins. Please try again after midnight UTC.`, { code: "upload-budget" }) };
+    if (!perRequester) return null;
+    if (realCreator) { if (countOf(budgetKeys.clientCreator) + n > mine) return { error: fail(429, `This wallet has saved the details of ${mine} coins on this site today, which is the daily limit for one wallet. Please try again after midnight UTC.`, { code: "upload-budget-creator" }) }; }
+    else if (countOf(budgetKeys.client) + n > mine) return { error: fail(429, `This connection has saved the details of ${mine} coins on this site today, which is the daily limit. Please try again after midnight UTC.`, { code: "upload-budget-client" }) };
+    return null;
+  };
+  const chargePin = () => { for (const k of Object.values(budgetKeys)) p.registry.setStatus(k, String(countOf(k) + 1)); };
+  /** Whether a side pins a new file: not when it retries the creator's own draft that already has its metadata (F4 reuses it). */
+  const pinsNew = (knownMint: string | null): number => {
+    if (!o.register && !o.dryRun) return 0;
+    if (knownMint && p.registry.ownDraft(knownMint, input.creator)) { const meta = p.registry.tokenMeta(knownMint); if (meta && (meta.hosted || meta.metadataUri)) return 0; }
+    return 1;
+  };
+  const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null, image: { bytes: Uint8Array; contentType: string; badge?: boolean; rawSha?: string } | null = null, knownMint: string | null = null, creatorText = ""): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
     // the deploy smoke's dry run (2026-10-15): the budget and the uploader are checked as a launch would, and nothing is uploaded or counted
     if (o.dryRun) {
-      const used = Number(p.registry.getStatus(`pin.budget.${new Date().toISOString().slice(0, 10)}`) ?? 0) || 0, cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP;
-      if (p.uploader && used >= cap) return { error: fail(429, `This site has used up its daily upload limit of ${cap} coins. Please try again after midnight UTC.`, { code: "upload-budget" }) };
+      { const ob = budgetRefusal(1); if (ob) return ob; }
       if (!p.uploader && !p.allowHostedMetadata) return { error: fail(502, "The coin's details could not be saved on Arweave, so the launch is refused. The reason given was: this site has no Arweave uploader set up", { code: "pin-failed" }) };
       return { pin: null };
     }
     if (!o.register) return { pin: null };
     const registered = registeredDescription(sideRule, description);
+    const identity = draftIdentity({ ticker, name, creatorText: creatorText.trim(), rulesSha256: sideRule.sha256, links, imageUrl, imageSha: image?.rawSha ?? (image ? sha256Hex(image.bytes) : null), badge: image ? image.badge ?? null : null });
+    // F4: a retry of the creator's own draft reuses its metadata file, and only when every detail is the same; a change is refused here,
+    // before anything is uploaded or counted
+    const prior = knownMint ? p.registry.ownDraft(knownMint, input.creator) : null;
+    if (prior && knownMint) {
+      const stored = p.registry.getStatus(draftIdentityKey(knownMint));
+      // a draft made before identities were recorded: the same name, description and links as its row, and no uploaded image (its bytes cannot be compared)
+      const same = stored ? stored === identity : prior.name === name && prior.description === registered && JSON.stringify(prior.links.map((l) => [l.label, l.url])) === JSON.stringify(links.map((l) => [String(l?.label ?? ""), String(l?.url ?? "")])) && (prior.imageUrl ?? null) === (imageUrl ?? null) && !image;
+      if (!same) return { error: fail(409, OWN_DRAFT_DETAILS_CHANGED, { code: "own-draft-changed" }) };
+      identities.set(ticker, identity);
+      const meta = p.registry.tokenMeta(knownMint);
+      if (meta && !meta.hosted && meta.metadataUri && meta.metadataTx && meta.metadataSha256) {
+        const pin: PinnedCoin = { metadataUri: meta.metadataUri, metadataTx: meta.metadataTx, metadataSha256: meta.metadataSha256, metadataJson: "", imageUri: meta.imageUri ?? "", imageTx: meta.imageTx ?? "", imageSha256: meta.imageSha256 ?? "", hosted: false };
+        pins.set(ticker, pin);
+        return { pin };
+      }
+      if (meta?.hosted) { pins.set(ticker, null); return { pin: null }; }
+    }
+    identities.set(ticker, identity);
     const uploader = p.uploader ?? null;
-    // THE HOST'S DAILY UPLOAD BUDGET (ChatGPT/Codex review N4, 2026-10-10): pins are paid by the platform before any wallet signs, so
-    // however the request arrives (the legacy wizard route or /v1, any number of clients) at most BURNTICKER_PIN_DAILY_CAP coins are
-    // pinned per UTC day on this host; past it the launch is refused before anything is uploaded or registered.
-    const budgetKey = `pin.budget.${new Date().toISOString().slice(0, 10)}`;
-    const used = Number(p.registry.getStatus(budgetKey) ?? 0) || 0;
-    const cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP;
-    if (uploader && used >= cap) return { error: fail(429, `This site has used up its daily upload limit of ${cap} coins. Please try again after midnight UTC.`, { code: "upload-budget" }) };
+    // the budget was checked for every side before any key was taken (budgetRefusal above); here only a successful upload is counted
     try {
       if (!uploader) throw new Error("this site has no Arweave uploader set up");
-      p.registry.setStatus(budgetKey, String(used + 1));
       const pin = await pinCoin(uploader, { ticker, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, imageUrl, image });
+      chargePin();
       pins.set(ticker, pin);
       return { pin };
     } catch (e) {
       if (p.allowHostedMetadata) { pins.set(ticker, null); return { pin: null }; }
       // polish-1: the owner's phone hears about a refused pin (push.ts reads the alerts table; one row per ticker per Denver day)
-      try { p.registry.recordAlert({ kind: "bt-pin-failed", key: `bt-pin-failed:${ticker}`, text: `$${ticker}: the coin's details could not be saved on Arweave, so its launch was refused. ${(e as Error).message.slice(0, 160)}`, meta: { ticker } }); } catch { /* the alert never changes the answer */ }
-      return { error: fail(502, `The coin's details could not be saved on Arweave, so the launch is refused. A coin's details are never kept on a server that could change them. The reason given was: ${(e as Error).message.slice(0, 160)}`, { code: "pin-failed" }) };
+      try { p.registry.recordAlert({ kind: "bt-pin-failed", key: `bt-pin-failed:${ticker}`, text: `$${ticker}: the coin's details could not be saved on Arweave, so its launch was refused. ${safeErrorText(e, 160)}`, meta: { ticker } }); } catch { /* the alert never changes the answer */ }
+      return { error: fail(502, `The coin's details could not be saved on Arweave, so the launch is refused. A coin's details are never kept on a server that could change them. The reason given was: ${safeErrorText(e, 160)}`, { code: "pin-failed" }) };
     }
   };
   const uriFor = (ticker: string) => (m: string) => { const pin = pins.get(ticker); return pin ? pin.metadataUri : o.register ? `${publicOrigin()}/api/burnticker/metadata/${m}` : "ar://pending-upload-at-launch"; };
@@ -737,6 +797,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const token = reused && reused.rulesJson === bundle.rules.text ? reused : p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
     if (p.keeperPubkey) p.registry.addAttester({ mint: token.mint, pubkey: p.keeperPubkey, role: "data-key", addedAt: Date.now(), timelockUntil: null });
     const pin = pins.get(ticker) ?? null;
+    // F4: the identity the metadata file was made from, recorded once with the draft (a retry is compared against it)
+    { const id = identities.get(ticker); if (id && !p.registry.getStatus(draftIdentityKey(token.mint))) p.registry.setStatus(draftIdentityKey(token.mint), id); }
     p.registry.putTokenMeta({ mint: token.mint, creatorNote, metadataUri: pin?.metadataUri ?? null, metadataTx: pin?.metadataTx ?? null, metadataSha256: pin?.metadataSha256 ?? null, imageUri: pin?.imageUri ?? null, imageTx: pin?.imageTx || null, imageSha256: pin?.imageSha256 || null, hosted: !pin });
     return token;
   };
@@ -773,20 +835,34 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
         const race = (await loadRaces((u) => p.polymarket.get(u), refuseTitlesList)).find((r) => r.slug === settled.bundle.race!.slug);
         const ids = new Set(race?.outcomes.map((o) => o.conditionId) ?? []);
         if (!race || !ids.has(locked.rule.market ?? "") || !ids.has(settled.bundle.race.marketB)) return { error: fail(400, "Both candidates must be named outcomes of the same open race. Pick the race again, then two of its candidates.", { code: "candidates-not-one-race" }) };
-      } catch (e) { return { error: fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`) }; }
+      } catch (e) { return { error: fail(502, `Polymarket could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`) }; }
     }
     // Round 5 (WIRING-ROUND5 item 1): side B's own pinned token, checked like side A's field (rules.ts validateRule runs again when
     // buildPairBundles locks side B's rule; a vault rule or a bad shape is refused there too)
     const btRaw = pb.burnTarget;
     if (btRaw !== undefined && btRaw !== null) { const bp = burnTargetShapeProblems(btRaw); if (bp.length) return { error: fail(400, `Side B: ${bp.join("; ")}`, { code: "burn-target", problems: bp }) }; }
     const btB = btRaw === undefined || btRaw === null ? null : (btRaw as BurnTargetField);
+    // audit 2026-10-15 F3: a retry of the creator's own unfinished pair (same side-A address) keeps the pair id and the void date its
+    // side-A draft recorded; a fresh pair id or a new 30-day date would make the same request a different rule
+    const ownA = o.mint ? p.registry.ownDraft(o.mint, input.creator) : null;
+    const recorded = ownA ? (() => { try { return lockRule(JSON.parse(ownA.rulesJson)).rule.pair ?? null; } catch { return null; } })() : null;
+    if (ownA && !recorded) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) };
     // a settled-event pair has the 30-day both-or-neither date (its graduation deadline), not the market's own end date
-    const pairVoidBy = settled ? defaultVoidBy() : await oneShotVoidBy(p, locked) ?? undefined;
+    const pairVoidBy = recorded?.voidBy ?? (settled ? defaultVoidBy() : await oneShotVoidBy(p, locked) ?? undefined);
+    const pairIdChoice = recorded ? { pairId: recorded.pairId } : { pairIdPick: (base: string) => p.registry.freePairId(base) };
+    // audit 2026-10-15 H4: every check above has passed; only now are the bank keys taken (a refusal before this point takes none)
+    // review 2026-10-15 (5): both sides' pins are checked against the caps before a key is taken or side A is pinned
+    { const ob = budgetRefusal(pinsNew(o.mint ?? null) + pinsNew(o.mintB ?? null)); if (ob) return ob; }
+    if (o.takeMintKeys) { const t = o.takeMintKeys([input.ticker, side.ticker]); if ("error" in t) return t; if (t.keys.length < 2) return { error: fail(503, "This site could not prepare two addresses for the pair.", { code: "mint-bank-empty" }) }; o = { ...o, mintKeypair: t.keys[0], mintKeypairB: t.keys[1] }; }
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
       const ownMints: { mint?: string; mintB?: string; mintKeypair?: Keypair; mintKeypairB?: Keypair } = o.mint && o.mintB ? { mint: o.mint, mintB: o.mintB } : o.mintKeypair && o.mintKeypairB ? { mintKeypair: o.mintKeypair, mintKeypairB: o.mintKeypairB } : {};
-      const probe = await buildPairBundles({ pairIdPick: (base) => p.registry.freePairId(base), a: input, b: { ...side, description: "", burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: () => "ar://pending-upload-at-launch" });
+      const probe = await buildPairBundles({ ...(recorded ? pairIdChoice : { pairIdPick: (base) => p.registry.freePairId(base) }), a: input, b: { ...side, description: "", burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: () => "ar://pending-upload-at-launch" });
       const lockedB = lockRule(JSON.parse(probe.b.rules.text)), lockedA = lockRule(JSON.parse(probe.a.rules.text));
+      // F3: side A's earlier draft is reused only with the same rule once the request is expanded with the recorded pair id and date
+      if (ownA && ownA.rulesJson !== lockedA.text) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) };
+      // the pair row: a retry finds its own row (same two addresses); a row naming another address is a different pair
+      { const row = p.registry.pair(probe.pairId); if (row && (row.mintA !== probe.a.mint || row.mintB !== probe.b.mint)) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) }; }
       // 2026-10-14: side B's own earlier draft is reused only with the same rule (the registry row must match what the chain gets)
       if (o.mintB) { const ownB = p.registry.ownDraft(o.mintB, input.creator); if (ownB && ownB.rulesJson !== lockedB.text) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) }; }
       // a settled-event pair's side B is described from ITS OWN event (candidate B's market, read here; team B's win in the game), never
@@ -801,13 +877,13 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       side.description = withCreatorText(generatedParagraph(lockedB.rule, side.ticker, ctxB), creatorTextB);
       input.description = withCreatorText(generatedParagraph(lockedA.rule, input.ticker, ctxA), creatorText);
       for (const [lk, tk, nm, desc, links, img, up] of [[lockedA, input.ticker, input.name, input.description, input.links, input.imageUrl, uploaded], [lockedB, side.ticker, side.name, side.description, side.links, side.imageUrl, upB.up]] as const) {
-        const r = await pinFor(lk, tk, nm.trim(), desc, links, img, up);
+        const r = await pinFor(lk, tk, nm.trim(), desc, links, img, up, tk === input.ticker ? o.mint ?? null : o.mintB ?? null, tk === input.ticker ? creatorText : creatorTextB);
         if ("error" in r) return r;
       }
       // an uploaded image is shown from its pinned Arweave copy, per side
       const shownImage = (tk: string, url: string | null, up: unknown) => (up ? pins.get(tk)?.imageUri ?? url : url);
       input.imageUrl = shownImage(input.ticker, input.imageUrl, uploaded); side.imageUrl = shownImage(side.ticker, side.imageUrl, upB.up);
-      const pair = await buildPairBundles({ pairIdPick: (base) => p.registry.freePairId(base), a: input, b: { ...side, burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
+      const pair = await buildPairBundles({ ...(recorded ? pairIdChoice : { pairIdPick: (base) => p.registry.freePairId(base) }), a: input, b: { ...side, burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
       // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab
       // pool — under the pair curve the pool is the CPMM pool its graduation creates, registered later (policy 2).
@@ -817,27 +893,35 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       const pairCurve = pairCurveEnabled(process.env) && !isMeetingsRule(locked.rule) && !settled ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
       const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note, pairCurve ? null : pair.a.addresses.poolId) : null;
       const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links, "", pairCurve ? null : pair.b.addresses.poolId) : null;
-      const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;
+      const row = tokenA && tokenB ? (() => { const had = p.registry.pair(pair.pairId); return had && had.mintA === tokenA.mint && had.mintB === tokenB.mint ? had : p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint); })() : null;
       return { pair: { pairId: pair.pairId, selector: pair.selector, notes: pair.notes, row, bundles: { a: pair.a, b: pair.b }, tokens: { a: tokenA, b: tokenB }, seriesTitle, preflight, ...(pairCurve ? { pairCurve } : {}) } };
     } catch (e) {
-      return { error: fail(400, (e as Error).message) };
+      return { error: fail(400, safeErrorText(e, 600)) };
     }
   }
   if (locked.rule.pair) return { error: fail(400, "A rule that names a pair is launched through the pair steps. Send side B as a pair with its own ticker and name.") };
+  // audit 2026-10-15 H4: every check has passed; only now is the bank key taken
+  { const ob = budgetRefusal(pinsNew(o.mint ?? null)); if (ob) return ob; }   // review 2026-10-15 (5): before the key
+  if (o.takeMintKeys) { const t = o.takeMintKeys([input.ticker]); if ("error" in t) return t; o = { ...o, mintKeypair: t.keys[0] }; }
   try {
-    const pr = await pinFor(locked, input.ticker, input.name.trim(), input.description, input.links, input.imageUrl, uploaded);
+    const pr = await pinFor(locked, input.ticker, input.name.trim(), input.description, input.links, input.imageUrl, uploaded, o.mint ?? null, creatorText);
     if ("error" in pr) return pr;
     const bundle = await buildLaunchBundle(input, { ...deps, ...(o.mint ? { mint: o.mint } : o.mintKeypair ? { mintKeypair: o.mintKeypair } : {}) });
     // an uploaded image is shown from its pinned Arweave copy (the card and the coin page read the registry's image)
     const token = o.register ? register(bundle, input.ticker, uploaded && pr.pin ? pr.pin.imageUri : input.imageUrl, input.links, note) : null;
     return { ok: { bundle, token, seriesTitle, locked, preflight } };
   } catch (e) {
-    return { error: fail(400, (e as Error).message) };
+    return { error: fail(400, safeErrorText(e, 600)) };
   }
 }
 
 /** Coins pinned on Arweave per UTC day per host when BURNTICKER_PIN_DAILY_CAP is not set (review N4). */
 export const DEFAULT_PIN_DAILY_CAP = 50;
+/**
+ * Audit 2026-10-15 H4 / review item 2: coins one requester may pin per UTC day when BURNTICKER_PIN_CREATOR_DAILY_CAP is not set (a pair
+ * is two): per client, or per (client, creator) once that creator has a confirmed launch here.
+ */
+export const DEFAULT_PIN_CREATOR_DAILY_CAP = 6;
 
 /**
  * AUDIT A C1 review (8; re-review 1, 3): confirmations are metered on the heavy bucket, and expired drafts' mints are listed publicly, so
@@ -916,7 +1000,7 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   const closedAt = launchesClosedAt(p, process.env, now);
   if (closedAt !== null && v.blockTimeMs > closedAt) return fail(403, `This launch landed at ${baselineAt}, after creator launches closed, so it is not recorded.`, { code: "launch-after-closure" });
   let r: ReturnType<Platform["registry"]["takeLiveFromChain"]>;
-  try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); } catch (e) { return fail(409, (e as Error).message); }
+  try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); } catch (e) { return fail(409, safeErrorText(e, 600)); }
   return ok({ ok: true, token: p.registry.token(mint), ...(r.revived ? { revived: true } : {}), note: `The launch transaction was read from the chain. The start time is its block time, ${baselineAt}. Results settled after this moment count.${r.revived ? " This draft had been marked expired, and the chain shows its coin was created in time, so it is live now." : ""}` });
 }
 

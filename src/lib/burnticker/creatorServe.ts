@@ -3,6 +3,7 @@ import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server"
 import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { registryCoinKey } from "@/lib/burnticker/coinLookup";
 import { rankLines, receiptsThisWeek, weeklySummary, type RankView } from "@/lib/burnticker/coinRank";
+import { safeParam } from "@/lib/burnticker/safeParam";
 
 /**
  * THE CREATOR PAGE'S DATA (website-17, creator benefits items 1, 2 and 5). Every coin a wallet created, from the registry: live, paused
@@ -26,7 +27,7 @@ export type CreatorData = { kind: "bad-wallet" } | { kind: "unavailable"; wallet
 const sentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUpperCase()); return /[.!?]$/.test(t) ? t : `${t}.`; };
 
 export async function creatorData(wallet: string, now = Date.now(), p: Platform | null = null): Promise<CreatorData> {
-  const w = decodeURIComponent(wallet).trim();
+  const w = safeParam(wallet).trim();
   if (!WALLET_RE.test(w)) return { kind: "bad-wallet" };
   let plat: Platform;
   try { plat = p ?? platform(); } catch { return { kind: "unavailable", wallet: w }; }

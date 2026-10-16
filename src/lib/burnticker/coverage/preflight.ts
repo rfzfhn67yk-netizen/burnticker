@@ -21,6 +21,7 @@ import { isOneTimeSeries, oneShotEligibility } from "@/lib/burnticker/oneShotEli
 import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import { isSingleOfficialSource, singleSourceMethod } from "@/lib/burnticker/singleSource";
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { safeErrorText } from "@/lib/burnticker/api/errorText";
 
 /**
  * THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit). Before a coin is created on a selector, the selector is run live
@@ -101,7 +102,7 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
   const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
   let pr: { readings: SettledEvent[]; refusals: string[] };
   let body: unknown;
-  try { body = await fetchBody(feed.config, now, fetchImpl); pr = parseBody(feed.config, body, now); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${(e as Error).message.slice(0, 160)}`, status: 502 }); }
+  try { body = await fetchBody(feed.config, now, fetchImpl); pr = parseBody(feed.config, body, now); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${safeErrorText(e, 160)}`, status: 502 }); }
   const last = pr.readings[pr.readings.length - 1] ?? null;
   const next = nextExpected(feed.config, last?.id ?? null, now);
   const primary = { ...primaryBase, lastReading: reading(last), error: pr.refusals.length ? pr.refusals.slice(0, 2).join("; ") : null };
@@ -126,7 +127,7 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
     if (!cf) continue;
     let cr: { readings: SettledEvent[]; refusals: string[] };
     const t0 = Date.now();
-    try { cr = await readLive(cf, now, fetchImpl); } catch (e) { lastErr = `${c.id}: ${(e as Error).message.slice(0, 160)}`; continue; }
+    try { cr = await readLive(cf, now, fetchImpl); } catch (e) { lastErr = `${c.id}: ${safeErrorText(e, 160)}`; continue; }
     const cmp = compareFact(feed.config.fact!, pr.readings, cf.config.fact!, cr.readings, { primaryReadAt: now, crossReadAt: now + (Date.now() - t0) });
     const latest = cmp.comparisons[cmp.comparisons.length - 1] ?? null;
     const crossRead = { id: c.id, operator: c.operator, lastReading: reading(cr.readings[cr.readings.length - 1]), error: null };
@@ -169,10 +170,10 @@ async function preflightPolymarket(rule: BurnRule, deps: PreflightDeps, now: num
   if (!pm) return result(rule, now, { primary: primaryBase }, { code: "primary-unreadable", reason: "This site has no connection to Polymarket.", status: 502 });
   if (rule.market) {
     let m: GammaMarket | null;
-    try { m = await pm.marketByCondition(rule.market); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${rule.market}. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+    try { m = await pm.marketByCondition(rule.market); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: safeErrorText(e, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${rule.market}. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
     if (!m) return result(rule, now, { primary: primaryBase }, { code: "unknown-selector", reason: `Polymarket does not know the market ${rule.market}.` });
     let chain;
-    try { chain = await pm.readChain(rule.market); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 160) } }, { code: "primary-unreadable", reason: `The on-chain payout for ${rule.market} could not be read on Polygon. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+    try { chain = await pm.readChain(rule.market); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 160) } }, { code: "primary-unreadable", reason: `The on-chain payout for ${rule.market} could not be read on Polygon. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
     const cr = chainResult(chain), gr = gammaResult(m);
     const at = settledAtOf(m) ?? new Date(now).toISOString();
     const primary = { ...primaryBase, lastReading: cr ? { id: rule.market, value: null, result: cr, at } : null };
@@ -184,8 +185,8 @@ async function preflightPolymarket(rule: BurnRule, deps: PreflightDeps, now: num
   }
   const since = new Date((pm.clock?.() ?? now) - 30 * 86_400_000).toISOString();
   let chainRead, gammaRead;
-  try { chainRead = await pm.settledSince(rule, since, { limitPages: 2 }); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 160) } }, { code: "primary-unreadable", reason: `This rule's settled markets could not be read on Polygon. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
-  try { gammaRead = await pm.gammaSettled(rule, since, 2); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${id}. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+  try { chainRead = await pm.settledSince(rule, since, { limitPages: 2 }); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 160) } }, { code: "primary-unreadable", reason: `This rule's settled markets could not be read on Polygon. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
+  try { gammaRead = await pm.gammaSettled(rule, since, 2); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: safeErrorText(e, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${id}. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
   const last = chainRead.events[chainRead.events.length - 1] ?? null;
   const g = last ? gammaRead.events.find((e) => e.id === last.id) ?? null : null;
   let nextAt: string | null = null;
@@ -226,10 +227,10 @@ async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: numb
         const [acct] = await d.pools.accounts([address]);
         if (acct) { const s = pythSnapshotFromAccount(u.pyth, acct, null, address); value = s.value; publish = s.publishTime; route = "pyth-solana"; }
         else why.push(`no sponsored Pyth account on Solana for ${u.symbol}`);
-      } catch (e) { why.push((e as Error).message.slice(0, 140)); }
+      } catch (e) { why.push(safeErrorText(e, 140)); }
     } else why.push("no Solana read port on this host");
     if (value === null && d.hermes) {
-      try { const r = await d.hermes.latest(u.pyth); if (r.ok) { value = r.point.value; publish = r.point.publishTime; route = "pyth-hermes"; } else why.push(`Hermes: ${r.reason}`); } catch (e) { why.push(`Hermes: ${(e as Error).message.slice(0, 120)}`); }
+      try { const r = await d.hermes.latest(u.pyth); if (r.ok) { value = r.point.value; publish = r.point.publishTime; route = "pyth-hermes"; } else why.push(`Hermes: ${r.reason}`); } catch (e) { why.push(`Hermes: ${safeErrorText(e, 120)}`); }
     } else if (value === null) why.push("no Hermes key on this host (BURNTICKER_PYTH_API_KEY)");
     if (value !== null) {
       const age = now / 1000 - publish;
@@ -246,7 +247,7 @@ async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: numb
         const sol = pythSnapshotFromAccount(PYTH_SOL_USD, solAcct, null, pythFeedAccount(PYTH_SOL_USD));
         return { id: `raydium.twap:${u.pool}`, operator: "Raydium pool (on-chain)", value: truncDec(mulDec(s.priceSol, sol.value), 18), at: new Date(now).toISOString(), route: "pool-twap" };
       }
-    } catch (e) { why.push(`pool ${u.pool} could not be read: ${(e as Error).message.slice(0, 120)}`); }
+    } catch (e) { why.push(`pool ${u.pool} could not be read: ${safeErrorText(e, 120)}`); }
   } else if (u.pool) why.push("the pool TWAP needs a Solana read port and the coin's mint");
   if (u.redstone) {
     try {
@@ -259,7 +260,7 @@ async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: numb
         return { id: `redstone:${u.redstone}`, operator: "RedStone", value: r.value, at: new Date(r.timestampMs).toISOString(), route: "redstone" };
       }
       why.push(r.reason);
-    } catch (e) { why.push(`RedStone: ${(e as Error).message.slice(0, 120)}`); }
+    } catch (e) { why.push(`RedStone: ${safeErrorText(e, 120)}`); }
   }
   const id = u.pyth ? `pyth:${u.pyth.slice(0, 12)}` : u.pool ? `raydium.twap:${u.pool}` : `redstone:${u.redstone}`;
   const operator = u.pyth ? "Pyth Data Association" : u.pool ? "Raydium pool (on-chain)" : "RedStone";
@@ -286,7 +287,7 @@ async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number):
     if ("refusal" in pr) return result(rule, now, { primary: { id: pr.id, operator: pr.operator, lastReading: null, error: pr.refusal.reason }, crossRead: crossBase }, pr.refusal);
     const primary = { id: pr.id, operator: pr.operator, lastReading: { id: u.symbol, value: pr.value, result: null, at: pr.at }, error: null };
     let q;
-    try { q = await crossQuote(fetchImpl, u.cross); } catch (e) { return result(rule, now, { primary, crossRead: { ...crossBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `The second source for ${u.symbol}, ${u.cross}, could not be read just now. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+    try { q = await crossQuote(fetchImpl, u.cross); } catch (e) { return result(rule, now, { primary, crossRead: { ...crossBase, error: safeErrorText(e, 160) } }, { code: "cross-read-unreadable", reason: `The second source for ${u.symbol}, ${u.cross}, could not be read just now. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
     if (!q) return result(rule, now, { primary, crossRead: crossBase }, { code: "no-cross-read", reason: `The second source for ${u.symbol}, ${u.cross}, does not carry this asset. So a coin cannot settle on Pyth's reading alone.` });
     const crossRead = { ...crossBase, lastReading: { id: u.symbol, value: q.usd, result: null, at: new Date(now).toISOString() } };
     const diff = Math.abs(Number(pr.value) - Number(q.usd)) / Math.max(Number(pr.value), Number(q.usd));
@@ -301,7 +302,7 @@ async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number):
     const sizes: string[] = [];
     for (const [i, u] of [spec.a, spec.b].entries()) {
       let supply: string | null = null, why = "no Solana read port on this host";
-      if (d.pools && u.mint) { try { supply = (await readSupply(d.pools, u.mint)).supply; } catch (e) { why = (e as Error).message.slice(0, 120); } }
+      if (d.pools && u.mint) { try { supply = (await readSupply(d.pools, u.mint)).supply; } catch (e) { why = safeErrorText(e, 120); } }
       if (supply === null) return result(rule, now, { primary: first!.primary, crossRead: first!.crossRead, agreement: true, agreementBasis: basis.join(" ") }, { code: "primary-unreadable", reason: `The circulating supply of ${u.symbol} could not be read just now, so it cannot be checked that ${spec.a.symbol} is still the smaller coin. The reason was: ${why}.`, status: 502 });
       sizes.push(mulDec(values[i], supply));
     }

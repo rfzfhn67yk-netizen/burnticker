@@ -283,7 +283,7 @@ describe("every listed source goes through the budget (a scan of the call sites)
         assert.match(above, /takeOrThrow\(|takeRpc\(|budgetedFetch\(/, `${file}:${i + 1} calls out without taking from the budget`);
         sites++;
       });
-      if (file === "src/lib/burnticker/pin.ts") { assert.match(src, /takeOrThrow\("irys"\)[^\n]*\n\s*const r = await client\.upload/); sites++; }
+      if (file === "src/lib/burnticker/pin.ts") { assert.match(src, /takeOrThrow\("irys"\)[^\n]*\n\s*const r = await withUploadTimeout\(client\.upload/); sites++; }
       if (file === "src/lib/burnticker/sources/copycats.ts") assert.match(src, /const f = budgetedFetch\(/);
       if (file === "src/lib/burnticker/trustpack/receiptCheck.ts") assert.match(src, /takeRpc\(url/);
       assert.ok(sites > 0, `${file}: no call site found (the scan is stale)`);

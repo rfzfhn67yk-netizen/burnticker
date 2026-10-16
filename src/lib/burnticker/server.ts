@@ -75,6 +75,8 @@ export interface Platform {
   allowHostedMetadata?: boolean;
   /** BURNTICKER_PIN_DAILY_CAP: coins pinned on Arweave (paid by the platform) per UTC day on this host (review N4); absent = DEFAULT_PIN_DAILY_CAP. */
   pinDailyCap?: number;
+  /** audit 2026-10-15 H4: coins one creator wallet may pin per UTC day (BURNTICKER_PIN_CREATOR_DAILY_CAP; handlers.DEFAULT_PIN_CREATOR_DAILY_CAP) */
+  pinCreatorDailyCap?: number;
   /** BURNTICKER_ALLOW_MAINNET_LAUNCHES on a mainnet host (hostedLaunch.ts): the owner's explicit allowance; absent/false = mainnet launches refused. */
   allowMainnet?: boolean;
   /** Reads a launch transaction from the chain before a draft goes live (launchVerify.ts; review N1). Null/absent (no RPC): confirmations are refused. */
@@ -150,6 +152,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     allowMainnet, devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
     uploader: uploaderFromEnv(env, cluster), customImages: customImagesEnabled(env), allowHostedMetadata: allowHostedMetadata(env),
     pinDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) : undefined,
+    pinCreatorDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_CREATOR_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_CREATOR_DAILY_CAP ?? "").trim()) : undefined,
     // Review-2 F3: the verifier decodes initialize_token and reads the TokenConfig (and the Pair) — it needs the program ids it checks
     // against; without BURNTICKER_PROGRAM_ID it refuses every confirmation (fail closed).
     launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" })) as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null,

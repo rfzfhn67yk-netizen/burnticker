@@ -2,6 +2,7 @@ import { SEASON_OVER_LINK_LINE } from "@/lib/burnticker/seasonOver";
 import { LEAGUES, SPORTS, isLeague, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamsOf, type LeagueId, type Sport } from "@/lib/burnticker/sources/espn";
 import { espnGameUrl } from "@/lib/burnticker/sources/gameSettle";
 import { dateRange, seasonBoards, type SeasonBoard, type SeasonCoinInput } from "@/lib/burnticker/seasons";
+import { safeParam } from "@/lib/burnticker/safeParam";
 
 /**
  * LEAGUE AND SEASON PAGES (growth batch, owner-approved 2026-10-10; SEO). /burnticker/leagues lists every league Burnticker covers,
@@ -175,9 +176,9 @@ export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
 
 /** Resolves a /leagues/<league>/<season> request: the league id and the ESPN year, or null (→ 404). */
 export function resolveLeagueSeason(league: string, season: string): { league: LeagueId; year: number } | null {
-  const l = decodeURIComponent(league).toLowerCase();
+  const l = safeParam(league).toLowerCase();
   if (!isLeague(l)) return null;
-  const y = parseSeasonSlug(l, decodeURIComponent(season));
+  const y = parseSeasonSlug(l, safeParam(season));
   return y !== null && y >= 2000 && y <= 2100 ? { league: l, year: y } : null;
 }
 

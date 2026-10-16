@@ -222,7 +222,7 @@ describe("swap panel: refusals", () => {
     await assert.rejects(simulateSignSend(ok, owner, [syncNativeIx(owner)], async () => { throw new Error("User rejected"); }), new RegExp(REFUSAL.rejected));
     assert.equal(sent, 0);
     const confirmed = await simulateSignSend({ ...ok, getSignatureStatuses: async () => ({ value: [{ err: null, confirmationStatus: "confirmed" }] }) }, owner, [syncNativeIx(owner)], async (t) => t, () => {}, 1);
-    assert.deepEqual(confirmed, { signature: "x", status: "confirmed" });
+    assert.deepEqual(confirmed, { signature: "x", status: "confirmed", lastValidBlockHeight: 10 });
   });
   test("the chain reader refuses an account the Raydium program does not own", async () => {
     const reader = { getMultipleAccountsInfo: async () => [{ owner: SystemProgram.programId, data: bytes(FX.curvePool), executable: false, lamports: 1, rentEpoch: 0 }], getBalance: async () => 0 };

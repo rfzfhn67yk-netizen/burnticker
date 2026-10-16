@@ -69,7 +69,10 @@ export const SOURCES: readonly SourceSpec[] = [
   { id: "polygon-rpc", label: "Polygon public RPC", limit: { perSec: 4, perMin: 60, perDay: 2_000 }, established: false, unit: "request", shares: { keeper: 0.5, web: 0.5 } },
   { id: "kalshi", label: "Kalshi API", limit: { perSec: 20 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "pyth-hermes", label: "Pyth Hermes", limit: { perSec: 1 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
-  { id: "irys", label: "Irys uploads", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.5, web: 0.5 } },
+  // audit 2026-10-15 H4: the house limit gave the web lane 0.15 uploads a second (one every 7 s), so a pair's four uploads queued for
+  // about half a minute inside the launch request. Irys's upload node publishes no per-client limit and takes bursts; 5/s, 120/min,
+  // 5,000/day before the 60% and the split leaves the web lane 1.5/s and 36/min, so a pair's uploads run at once.
+  { id: "irys", label: "Irys uploads", limit: { perSec: 5, perMin: 120, perDay: 5_000 }, established: false, unit: "request", shares: { keeper: 0.5, web: 0.5 } },
   { id: "fiscal-data", label: "Treasury Fiscal Data", limit: HOUSE, established: false, unit: "request", shares: { deficit: 0.5, keeper: 0.3, web: 0.2 } },
   { id: "fred", label: "FRED", limit: { perMin: 120 }, established: true, unit: "request" },
   { id: "nws", label: "NWS api.weather.gov", limit: HOUSE, established: false, unit: "request" },

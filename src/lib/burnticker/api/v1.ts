@@ -21,6 +21,7 @@ import { API_PREFIX, buildOpenApi } from "@/lib/burnticker/api/spec";
 import { liveSinks, SINK_FALLBACK_LINE } from "@/lib/burnticker/endSinks";
 import { buildCoverage, type CoverageMatrix } from "@/lib/burnticker/coverage";
 import { logNoCardSearch, recordLaunchTimings } from "@/lib/burnticker/api/product";
+import { safeErrorText } from "@/lib/burnticker/api/errorText";
 
 /**
  * THE PUBLIC API, v1 (2026-10-09). One function per operation in spec.ts; the route files under src/app/api/burnticker/v1/ call these
@@ -61,9 +62,9 @@ export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()
   let locked: LockedRule;
   try {
     locked = lockRule({ schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: feed.id, market: null, filter: {}, kind: "scalar", scalar: { unit: feed.unit!.size, perUnit, baseline: feed.baseline!, direction: feed.direction! }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: tokens !== null ? { share: 0.2, vestDays: 365, cliffDays: 0 } : null });
-  } catch (e) { return fail(400, (e as Error).message); }
+  } catch (e) { return fail(400, safeErrorText(e, 600)); }
   let pv;
-  try { pv = previewFromFixture(feed, locked.rule, now); } catch (e) { return fail(404, `${feed.id} has no saved sample to preview. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
+  try { pv = previewFromFixture(feed, locked.rule, now); } catch (e) { return fail(404, `${feed.id} has no saved sample to preview. The reason given was: ${safeErrorText(e, 120)}`); }
   return ok({ id: feed.id, title: feed.title, tier: feed.tier, tierLabel: sourceTypeLabel(feed), launchable: feed.launchable, rule: locked.rule, sha256: locked.sha256, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), window: pv.window, totals: pv.totals, perMonth: pv.perMonth, rows: pv.rows, lastReading: pv.lastReading, fixtureFetchedAt: loadFixture(feed).fetchedAt, sentence: `${backtestSentence(pv)} This comes from the source's saved sample.`, projection: reviewProjection(locked.rule, now), note: "These totals are for display only. Receipts use the keeper's exact whole-number spend.", config: publicConfig(feed.config) });
 }
 
@@ -103,12 +104,12 @@ export function v1Validate(body: Record<string, unknown>): ApiResult {
 }
 
 /** The unsigned launch transactions + the review payload the wizard shows. Requires the caller's own mint public key. */
-export async function v1LaunchBundle(p: Platform, body: Record<string, unknown>): Promise<ApiResult> {
+export async function v1LaunchBundle(p: Platform, body: Record<string, unknown>, client?: string): Promise<ApiResult> {
   const mint = typeof body.mint === "string" ? body.mint.trim() : "";
   if (!mint) return fail(400, "A mint is required. Make a new mint keypair yourself and send its public key. The secret key never leaves your machine.", { problems: ["A mint is required."] });
   const register = body.register !== false;
   const blockhash = typeof body.recentBlockhash === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(body.recentBlockhash) ? body.recentBlockhash : null;
-  const r = await prepareLaunch(p, body, { register, mint });
+  const r = await prepareLaunch(p, body, { register, mint, ...(client ? { client } : {}) });
   if ("error" in r) return r.error;
   if (!("ok" in r)) return fail(400, "Rivalry pairs launch through the pair steps on the launch page.");
   const { bundle, token, seriesTitle, locked, preflight } = r.ok;
@@ -206,7 +207,7 @@ export async function v1Verify(p: Platform, id: string, eventId: string, o: { fe
   else if (locked.rule.oracle === "polymarket") source = await polymarketSourceReading(locked.rule, ev, { fetchImpl: o.fetchImpl ?? polymarketFetchVia(p), ...(o.rpcFetch ? { rpcFetch: o.rpcFetch } : { readChain: (id: string) => p.polymarket.readChain(id) }) });
   else if (feed) source = o.fetchImpl ? await feedSourceReading(feed.config, o.fetchImpl, now)
     // the keeper's own reader (the catalogue adapter: same request, same parser, same politeness)
-    : await p.oracles.catalogue.settledSince(locked.rule, null).then((r) => ({ events: r.events, error: null, url: feed.config.request.url }), (e: Error) => ({ events: null, error: e.message.slice(0, 160), url: feed.config.request.url }));
+    : await p.oracles.catalogue.settledSince(locked.rule, null).then((r) => ({ events: r.events, error: null, url: feed.config.request.url }), (e: Error) => ({ events: null, error: safeErrorText(e, 160), url: feed.config.request.url }));
   else source = { events: null, error: `There is no reader for the ${locked.rule.oracle} source.`, url: null };
   let chain: ChainReading | null = null;
   if (receipt.signature) {

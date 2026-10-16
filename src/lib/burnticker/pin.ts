@@ -51,12 +51,23 @@ export class IrysUploader implements PinUploader {
     if (this.o.cluster !== "mainnet") chain = chain.withRpc(this.o.rpcUrl ?? "https://api.devnet.solana.com").devnet();
     const client = await chain;
     await takeOrThrow("irys");   // the request budget (apiBudget.ts): a spent day refuses the upload (the launch is refused, as for any upload failure)
-    const r = await client.upload(Buffer.from(body), { tags: [{ name: "Content-Type", value: contentType }, ...tags] });
+    const r = await withUploadTimeout(client.upload(Buffer.from(body), { tags: [{ name: "Content-Type", value: contentType }, ...tags] }), UPLOAD_TIMEOUT_MS);
     // 2026-10-13: Irys bundles free uploads to Arweave on its own schedule (the 10-12 $DEFICIT pin was still unseeded a day later, so
     // arweave.net answered 404 while gateway.irys.xyz served it). The gateway URL is the same id, served at once and from Arweave once
     // seeded, and it is one of the three forms launchGate's PINNED_URI_RE accepts.
     return { id: r.id, url: this.o.cluster === "mainnet" ? `https://gateway.irys.xyz/${r.id}` : `https://devnet.irys.xyz/${r.id}` };
   }
+}
+
+/**
+ * Audit 2026-10-15 M2: one Irys upload may take at most this long. A hung upload used to hold the launch request until the edge gave up
+ * (90 to 100 s), and the page's retry then prepared a second draft. Past it the launch is refused like any failed upload.
+ */
+export const UPLOAD_TIMEOUT_MS = 30_000;
+export function withUploadTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, rej) => { t = setTimeout(() => rej(new Error(`the Arweave upload did not finish within ${Math.round(ms / 1000)} seconds`)), ms); });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(t));
 }
 
 /** The uploader from the environment (null when no payer is configured: every launch is then refused unless hosted metadata is allowed). */

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletButton, useOpenWalletList } from "../_components/WalletButton";
-import { WALLET_COPY, meState, shortAddress, wantsConnect } from "@/lib/burnticker/walletShell";
+import { WALLET_COPY, meState, meWallet, shortAddress, wantsConnect } from "@/lib/burnticker/walletShell";
 import { ANALYTICS_COPY } from "@/lib/burnticker/creatorBenefits";
 import { WEEK_MEANING } from "@/lib/burnticker/coinRank";
 import { LaunchChecklist } from "../_components/LaunchChecklist";
@@ -13,6 +13,7 @@ import { DRAFTS_HEADING, meCoinView, splitMeCoins, stateChip } from "@/lib/burnt
 import { TradeButtons } from "../_components/TradeLinks";
 import { useLaunchAvailability } from "../_components/useLaunchAvailability";
 import { coinLinks } from "@/lib/burnticker/tradeLinks";
+import { readLatest, shownFor } from "@/lib/burnticker/latestRead";
 
 /**
  * THE CREATOR DASHBOARD (2026-10-10; gated by the shell's wallet since website-13, 2026-10-12): "Your coins" is the one page a connected
@@ -44,20 +45,27 @@ export default function CreatorDashboard() {
   // the static pages' "Connect wallet" deep link: open the wallet list on arrival (once), unless a wallet is already connected
   useEffect(() => { if (wantsConnect(window.location.search) && !wallet.connected) openList(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const connectedKey = wallet.connected ? wallet.publicKey?.toBase58() ?? null : null;
-  const [d, setD] = useState<Data | null>(null), [err, setErr] = useState<string | null>(null), [busy, setBusy] = useState(false), [copied, setCopied] = useState<string | null>(null);
+  // audit 2026-10-15 F7: each answer is kept with the wallet it was read for, and shown only while that wallet is on screen (latestRead.ts)
+  const [slot, setSlot] = useState<{ key: string; value: Data } | null>(null), [errSlot, setErrSlot] = useState<{ key: string; value: string } | null>(null), [busy, setBusy] = useState(false), [copied, setCopied] = useState<string | null>(null);
+  const who = meWallet({ connected: wallet.connected, publicKey: connectedKey, pasted })?.wallet ?? "";
+  const d = shownFor(slot, who), err = shownFor(errSlot, who);
   const st = meState({ connected: wallet.connected, connecting: wallet.connecting, publicKey: connectedKey, pasted, busy, error: err, data: d });
-  const who = st.kind === "prompt" || st.kind === "connecting" ? "" : st.wallet;
   useEffect(() => {
-    if (!who) { setD(null); setErr(null); return; }
-    setBusy(true); setErr(null);
-    fetch(`/api/burnticker/v1/creators/${who}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String((e as Error).message))).finally(() => setBusy(false));
+    if (!who) { setBusy(false); return; }
+    setBusy(true);
+    // a newer wallet cancels this read; an older answer that lands late is dropped
+    return readLatest(who, (signal) => fetch(`/api/burnticker/v1/creators/${who}`, { signal }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); return j as Data; }),
+      (r) => { if (r.ok) { setSlot({ key: r.key, value: r.value }); setErrSlot(null); } else setErrSlot({ key: r.key, value: r.error }); setBusy(false); });
   }, [who]);
-  // website-17 item 5: the creator page's numbers, for a connected wallet only
+  // website-17 item 5: the creator page's numbers, for a connected wallet only; kept per wallet and reset on its own (F7)
   const mine = st.kind !== "prompt" && st.kind !== "connecting" && st.source === "connected" ? st.wallet : "";
-  const [sum, setSum] = useState<Summary | null>(null), [sumErr, setSumErr] = useState(false);
+  const [sumSlot, setSumSlot] = useState<{ key: string; value: Summary | null } | null>(null);
+  const sumRead = mine && sumSlot?.key === mine ? sumSlot : null;
+  const sum = sumRead?.value ?? null, sumErr = !!sumRead && sumRead.value === null;
   useEffect(() => {
-    if (!mine) { setSum(null); setSumErr(false); return; }
-    fetch(`/burnticker/creator/${mine}/summary`).then(async (r) => { if (!r.ok) throw new Error(String(r.status)); setSum(await r.json()); setSumErr(false); }).catch(() => { setSum(null); setSumErr(true); });
+    if (!mine) return;
+    return readLatest(mine, (signal) => fetch(`/burnticker/creator/${mine}/summary`, { signal }).then(async (r) => { if (!r.ok) throw new Error(String(r.status)); return (await r.json()) as Summary; }),
+      (r) => setSumSlot({ key: r.key, value: r.ok ? r.value : null }));
   }, [mine]);
   const rankOf = (t: string) => (sum ? sum.coins.find((x) => x.ticker === t)?.rank ?? null : null);
   const weekText = sum ? sum.coins.map((x) => x.summary).join("\n") : "";

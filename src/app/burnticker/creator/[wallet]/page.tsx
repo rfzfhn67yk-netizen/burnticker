@@ -7,6 +7,7 @@ import { RANK_MEANING, longDay, shortDay } from "@/lib/burnticker/cardView";
 import { shortAddress } from "@/lib/burnticker/walletShell";
 import { CoinThumb } from "../../_components/CoinCard";
 import { ShareBlock } from "../ShareBlock";
+import { safeParam } from "@/lib/burnticker/safeParam";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ type Params = { params: Promise<{ wallet: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { wallet } = await params;
-  const w = decodeURIComponent(wallet);
+  const w = safeParam(wallet);
   return { title: CREATOR_PAGE.title(shortAddress(w)), description: CREATOR_PAGE.description, alternates: { canonical: `/burnticker/creator/${encodeURIComponent(w)}` } };
 }
 

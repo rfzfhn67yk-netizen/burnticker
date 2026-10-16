@@ -1,9 +1,11 @@
 import "server-only";
+import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { findToken } from "@/lib/burnticker/api/v1";
 import { registryCoinKey } from "@/lib/burnticker/coinLookup";
 import { BADGE_CACHE_SEC, badgePayloadProblems, coinBadge, pairBadge, renderBadgeSvg, type BadgeJson, type SideInput } from "@/lib/burnticker/badge";
 import type { TokenRow } from "@/lib/burnticker/registry";
+import { safeParam } from "@/lib/burnticker/safeParam";
 
 /**
  * Serving the receipt badge (badge.ts) from the registry: the coin page's own status + receipts (tokenPageData), one memo per
@@ -60,7 +62,7 @@ export function clearBadgeMemo(): void { memo.clear(); }
 
 /** `BRONCO.svg` → { id: "BRONCO", fmt: "svg" }; null for anything else. */
 export function parseBadgeFile(file: string, idPattern = /^[A-Za-z0-9]{2,44}$/): { id: string; fmt: "svg" | "png" | "json" } | null {
-  const m = /^(.+)\.(svg|png|json)$/.exec(decodeURIComponent(file));
+  const m = /^(.+)\.(svg|png|json)$/.exec(safeParam(file));
   return m && idPattern.test(m[1]) ? { id: m[1], fmt: m[2] as "svg" | "png" | "json" } : null;
 }
 
@@ -72,9 +74,13 @@ export async function badgeBody(b: BadgeJson, fmt: "svg" | "png"): Promise<{ bod
   return { body: new Uint8Array(await sharp(Buffer.from(svg), { density: 144 }).png().toBuffer()), type: "image/png" };
 }
 
-/** The origin links in a badge point at: BURNTICKER_PUBLIC_ORIGIN when set (the public host), else the request's own origin. */
+/**
+ * The origin links in a badge point at: BURNTICKER_PUBLIC_ORIGIN when set (the public host), else the request's own origin unless that is
+ * a loopback address (behind the proxy every request is http://localhost:3000; audit 2026-10-15 F8), which gets the public origin.
+ */
 export function badgeOrigin(req: Request, env: Readonly<Record<string, string | undefined>> = process.env): string {
   const pub = (env.BURNTICKER_PUBLIC_ORIGIN ?? "").trim().replace(/\/$/, "");
   if (/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(pub)) return pub;
-  return new URL(req.url).origin;
+  const u = new URL(req.url);
+  return /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)$/i.test(u.hostname) ? publicOrigin(env) : u.origin;
 }
