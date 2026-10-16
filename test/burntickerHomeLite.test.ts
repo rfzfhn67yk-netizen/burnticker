@@ -109,6 +109,17 @@ describe("the home's lite coin read (2026-10-15)", () => {
     assert.match(src, /homeRowOf\(d\.status, d\.receipts, key, t\.mint\)/, "the route and this test share one per-coin derivation");
     assert.doesNotMatch(fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8"), /lite/, "the coin page reads in full");
   });
+
+  test("the tokens index (the coins grid) reads six at a time, keeps its last answer, and the page retries a cold 503 (owner 2026-10-15: 'the coins tab is still slow')", () => {
+    const src = fs.readFileSync("src/app/api/burnticker/tokens/route.ts", "utf8");
+    assert.match(src, /allLimited\(tokens\.map\(\(t\) => \(\) => tokenPageData\(p, t, now\)\), INDEX_CONCURRENCY\)/, "parallel full reads (the pairs tab needs the pair side)");
+    assert.match(src, /const INDEX_MEMO_MS = 15_000, INDEX_COLD_WAIT_MS = 15_000, INDEX_CONCURRENCY = 6/);
+    assert.match(src, /code: "index-loading", retryAfterSec: 5/);
+    assert.doesNotMatch(src, /for \(const t of withoutTestCoins[\s\S]*await tokenPageData/, "no serial per-coin loop");
+    assert.match(fs.readFileSync("src/app/burnticker/CoinsIndex.tsx", "utf8"), /r\.status === 503 && left > 0/, "the grid waits for retry-after and asks again");
+    // the deploy script is private (not in the public tree)
+    if (fs.existsSync("scripts/ops/publish-and-deploy.sh")) assert.match(fs.readFileSync("scripts/ops/publish-and-deploy.sh", "utf8"), /\/api\/burnticker\/tokens /, "the deploy probe warms the index");
+  });
 });
 
 describe("the coin route's memo (keyedSwr.ts, 2026-10-15)", () => {

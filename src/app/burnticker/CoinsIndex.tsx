@@ -45,7 +45,22 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const searchBox = useRef<HTMLInputElement>(null);
   // ChatGPT audit 6 item 24: the filter row scrolls sideways on narrow screens; the edge that still has more fades
   const tabsHint = useScrollEdges<HTMLDivElement>([ix]);
-  useEffect(() => { fetch("/api/burnticker/tokens").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setIx(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
+  // 2026-10-15: a cold host answers 503 "index-loading" with retry-after while it reads the coins; wait and ask again (up to 6 times)
+  useEffect(() => {
+    const once = async (left: number): Promise<void> => {
+      const r = await fetch("/api/burnticker/tokens");
+      if (r.status === 503 && left > 0) {
+        const j = (await r.json().catch(() => null)) as { retryAfterSec?: number } | null;
+        const wait = Math.min(15, Math.max(2, Number(r.headers.get("retry-after") ?? j?.retryAfterSec ?? 5)));
+        await new Promise((res) => setTimeout(res, wait * 1000));
+        return once(left - 1);
+      }
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      setIx(j);
+    };
+    once(6).catch((e) => setErr(String(e.message ?? e)));
+  }, []);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
   useEffect(() => { try { const s = sessionStorage.getItem("bt-coins-tab") as GridTab | null; if (s && GRID_TABS.some((x) => x.id === s)) setTab(s); } catch { /* private window */ } }, []);
   // the header search (?q= on arrival, or an in-place search event) and the phone tab bar's Search (#search focuses the box)
