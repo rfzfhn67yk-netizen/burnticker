@@ -9,9 +9,10 @@
 #   https://www.burnticker.com/*         301 → the apex
 #   https://status.burnticker.com/       static /var/www/burnticker/status (the keeper's status/status.json + site/burnticker/status/index.html;
 #                                        also at https://burnticker.com/status/) — trust ops 2026-10-10; the owner adds the DNS record
-#   APP DOWN → STATIC FALLBACK           when the Next upstream is unreachable, times out or answers 5xx, /burnticker* pages get
+#   APP DOWN → STATIC FALLBACK           when the Next upstream is unreachable or times out, /burnticker* pages get
 #                                        /var/www/burnticker/fallback/index.html (503, no-store) and /api/burnticker/* a JSON 503 — receipts,
-#                                        the static receipts site and the program are unaffected (deploy-sites.sh publishes the page)
+#                                        the static receipts site and the program are unaffected (deploy-sites.sh publishes the page). The
+#                                        app's own 5xx answers pass through (the API always; a page unless /deploying.json exists).
 #
 # PLACEHOLDER VARIABLES — Caddy substitutes {$NAME:default} from the environment of the caddy service at load time. Set them with
 # `systemctl edit caddy` ([Service] Environment=DEFICIT_DOMAIN=…) or edit the defaults below. The $DEFICIT host is a placeholder until
@@ -107,24 +108,26 @@
 
 	# The Next app: wizard, in-app token pages, trust page, API — ONLY these paths; the public Host header passes through (see the header).
 	# Inside, the API and the pages are proxied separately so the API's own 5xx answers (a venue switched off, an upstream source down)
-	# reach bots unchanged while a PAGE answering 5xx gets the static fallback.
+	# reach bots and the launch page unchanged, while a PAGE answering 5xx during a deploy gets the static fallback.
+	# After editing: `sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile` then `sudo systemctl reload caddy`.
 	@app path /burnticker /burnticker/* /api/burnticker/* /_next/*
 	handle @app {
 		import security
 		# 2026-10-14: a launch prepare pins the coin's metadata and art on Arweave and runs the pre-launch check, which can take longer
 		# than 20 s; at 20 s Caddy was answering the launch with the fallback 503 ("the app is catching up"). 90 s stays under
-		# Cloudflare's 100 s origin limit. Everything else on the API keeps 20 s.
-		@app_launch path /api/burnticker/launch /api/burnticker/launch/*
+		# Cloudflare's 100 s origin limit. Everything else on the API keeps 20 s. The public API's /v1/launch/bundle runs the same prepare,
+		# so it gets the same 90 s (audit 2026-10-15 H2).
+		# The app's OWN 5xx answers pass through unchanged (audit 2026-10-15 H2): the launch route answers a real refusal as JSON 5xx
+		# (mint-bank-empty 503 starts the page's in-browser address search; a launch-check refusal names its reason), and on 2026-10-14
+		# Caddy replaced them with "the app is catching up". Only a dead or slow upstream (Caddy's own 502/504) gets the fallback, in
+		# handle_errors below.
+		@app_launch path /api/burnticker/launch /api/burnticker/launch/* /api/burnticker/v1/launch/bundle
 		handle @app_launch {
 			reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
 				header_up X-Forwarded-Proto {scheme}
 				transport http {
 					dial_timeout 3s
 					response_header_timeout 90s
-				}
-				@upstream_5xx status 5xx
-				handle_response @upstream_5xx {
-					import app_fallback_api
 				}
 			}
 		}
@@ -150,10 +153,21 @@
 					dial_timeout 3s
 					response_header_timeout 20s
 				}
-				# a page answering 5xx itself (a crash page, an unhandled error) gets the fallback, never a stack trace
+				# a page answering 5xx itself gets the static fallback only while a deploy is running (/deploying.json, written by
+				# scripts/ops/deploy-burnticker-host.sh); otherwise the app's own error page passes through (src/app/burnticker/error.tsx:
+				# the site's header and footer and a Retry button; it never shows a stack trace). Audit 2026-10-15 H2/H7.
 				@upstream_5xx status 5xx
 				handle_response @upstream_5xx {
-					import app_fallback_page
+					@deploying file {
+						root /var/www/burnticker
+						try_files /deploying.json
+					}
+					handle @deploying {
+						import app_fallback_page
+					}
+					handle {
+						copy_response
+					}
 				}
 			}
 		}

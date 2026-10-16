@@ -4,6 +4,7 @@ import { POOL_POLICY_CREATOR_IS_FEE_PDA, POOL_POLICY_PAIR_CURVE } from "@/lib/bu
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { configPda, feePda } from "@/lib/burnReceipts/pda";
 import { decodePair, pairPda } from "@/lib/pairCurve/accounts";
+import { safeErrorText } from "@/lib/burnticker/api/errorText";
 
 /**
  * LAUNCH CONFIRMATION IS VERIFIED ON CHAIN (2026-10-10; ChatGPT/Codex PR review N1 — tightened 2026-10-11 by the second review's F3).
@@ -87,7 +88,7 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       const program = o.burnProgramId;
       let tx: Awaited<ReturnType<TxReader["getTransaction"]>>;
       try { tx = await reader.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }); }
-      catch (e) { return { ok: false, status: 502, reason: `the launch transaction could not be read from the RPC just now (${(e as Error).message.slice(0, 120)}); retry` }; }
+      catch (e) { return { ok: false, status: 502, reason: `the launch transaction could not be read from the RPC just now (${safeErrorText(e, 120)}); retry` }; }
       if (!tx) return { ok: false, status: 404, reason: "no confirmed transaction with this signature on this cluster (yet): send the launch, wait for confirmation, then confirm" };
       if (!tx.meta || tx.meta.err !== null) return { ok: false, status: 422, reason: "the launch transaction failed on chain: nothing launched" };
       if (typeof tx.blockTime !== "number") return { ok: false, status: 502, reason: "the launch transaction has no block time yet; retry" };
@@ -122,13 +123,13 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       const cfgAddress = configPda(programKey, mintKey);
       let cfgInfo: Awaited<ReturnType<TxReader["getAccountInfo"]>>;
       try { cfgInfo = await reader.getAccountInfo(cfgAddress, "confirmed"); }
-      catch (e) { return { ok: false, status: 502, reason: `the coin's TokenConfig could not be read from the RPC just now (${(e as Error).message.slice(0, 120)}); retry` }; }
+      catch (e) { return { ok: false, status: 502, reason: `the coin's TokenConfig could not be read from the RPC just now (${safeErrorText(e, 120)}); retry` }; }
       // a transaction without a burn_receipts call is judged only as a split launch's create: no config, the old answer
       if (splitCreate && (!cfgInfo || cfgInfo.owner.toBase58() !== program)) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}`, ...(!cfgInfo ? { missing: true as const } : {}) };
       if (!cfgInfo) return { ok: false, status: 422, missing: true, reason: `no TokenConfig for this mint under the burn_receipts program on chain (${cfgAddress.toBase58()}): initialize_token did not complete, ${NOT_THIS}` };
       if (cfgInfo.owner.toBase58() !== program) return { ok: false, status: 422, reason: `the account at the coin's TokenConfig address is not owned by the burn_receipts program: ${NOT_THIS}` };
       let cfg: ReturnType<typeof decodeTokenConfig>;
-      try { cfg = decodeTokenConfig(cfgInfo.data); } catch (e) { return { ok: false, status: 422, reason: `the coin's TokenConfig does not decode (${(e as Error).message.slice(0, 80)}): ${NOT_THIS}` }; }
+      try { cfg = decodeTokenConfig(cfgInfo.data); } catch (e) { return { ok: false, status: 422, reason: `the coin's TokenConfig does not decode (${safeErrorText(e, 80)}): ${NOT_THIS}` }; }
       if (cfg.mint.toBase58() !== expect.mint || cfg.creator.toBase58() !== expect.creator) return { ok: false, status: 422, reason: `the TokenConfig on chain names another mint or creator: ${NOT_THIS}` };
       // 2026-10-14 (Phantom review ticket 438485): a LaunchLab PAIR coin also locks its rule one transaction before its create, and since
       // 2026-10-15 so does every single coin (launchBundle.ts launchTransactions): a create alone is taken for any LaunchLab draft whose
@@ -157,11 +158,11 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
         const pairAddress = pairPda(new PublicKey(v.mintA), new PublicKey(v.mintB), new PublicKey(o.pairCurveProgramId));
         let pairInfo: Awaited<ReturnType<TxReader["getAccountInfo"]>>;
         try { pairInfo = await reader.getAccountInfo(pairAddress, "confirmed"); }
-        catch (e) { return { ok: false, status: 502, reason: `the pair account could not be read from the RPC just now (${(e as Error).message.slice(0, 120)}); retry` }; }
+        catch (e) { return { ok: false, status: 502, reason: `the pair account could not be read from the RPC just now (${safeErrorText(e, 120)}); retry` }; }
         if (!pairInfo || pairInfo.data.length === 0) return { ok: false, status: 409, reason: `the pair is not set up on chain yet (no Pair account ${pairAddress.toBase58()}): send the set's last transaction (init_pair), then confirm — until then neither coin goes live` };
         if (pairInfo.owner.toBase58() !== o.pairCurveProgramId) return { ok: false, status: 422, reason: `the account at the pair's address is not owned by the pair_curve program: ${NOT_THIS}` };
         let pair: ReturnType<typeof decodePair>;
-        try { pair = decodePair(pairInfo.data); } catch (e) { return { ok: false, status: 422, reason: `the pair account does not decode (${(e as Error).message.slice(0, 80)}): ${NOT_THIS}` }; }
+        try { pair = decodePair(pairInfo.data); } catch (e) { return { ok: false, status: 422, reason: `the pair account does not decode (${safeErrorText(e, 80)}): ${NOT_THIS}` }; }
         if (pair.mints[0]?.toBase58() !== v.mintA || pair.mints[1]?.toBase58() !== v.mintB || pair.creator.toBase58() !== expect.creator) return { ok: false, status: 422, reason: `the pair on chain names other mints or another creator than this draft's pair: ${NOT_THIS}` };
         const pairSha = hex(side === "a" ? pair.rules_sha256_a : pair.rules_sha256_b);
         if (pairSha !== expect.rulesSha.toLowerCase()) return { ok: false, status: 422, reason: `the pair on chain records another rule for this side (rules sha256 ${short(pairSha)}) than this draft's (${short(expect.rulesSha)}): ${NOT_THIS}` };

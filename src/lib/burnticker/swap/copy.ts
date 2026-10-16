@@ -38,6 +38,12 @@ export const SWAP_COPY = {
   curveVenue: "This coin is still on its LaunchLab curve.",
   poolVenue: "This coin trades in its Raydium pool.",
   devnetNote: "This site runs on devnet. The SOL here is test SOL with no money value.",
+  pending: "Your swap was sent, and this page has not seen it settle yet. It sends nothing else until it reads how that swap ended.",
+  checkAgain: "Check again",
+  checking: "Checking the earlier swap",
+  earlierConfirmed: "Your earlier swap is confirmed.",
+  expired: "Your earlier swap did not land, and it can no longer land, so nothing changed. You can swap again.",
+  balanceUnread: "This page could not read the wallet's new balance just now. The swap itself is confirmed.",
   noKeys: "The panel never sees your keys. Your wallet signs, and you can read every step before you approve it.",
 } as const;
 

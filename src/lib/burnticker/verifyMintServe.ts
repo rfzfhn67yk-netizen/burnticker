@@ -1,6 +1,9 @@
 import "server-only";
 import type { Platform } from "@/lib/burnticker/server";
-import { isSolanaAddress, verifyMint, type MintFacts, type MintVerification } from "@/lib/burnticker/verifyMint";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { isSolanaAddress, verifyMint, type FlagshipFacts, type MintFacts, type MintVerification } from "@/lib/burnticker/verifyMint";
 import { PROGRAM_IDS, type Network } from "@/lib/burnticker/networks";
 import { chainRegistrationReader, disclosedCoins, readAllRegistrations, type RegistrationReader } from "@/lib/burnticker/mintRegistration";
 import { tickerShared } from "@/lib/burnticker/coinLookup";
@@ -20,6 +23,26 @@ export function setRegistrationReaderForTests(r: RegistrationReader | null): voi
 
 const hostNet = (p: Pick<Platform, "cluster">): Network => (p.cluster === "mainnet" ? "mainnet" : "devnet");
 
+/**
+ * Audit 2026-10-15 F6: the flagship ($DEFICIT) from the platform's own files: current-status.json names its mint, its rules file and its
+ * create; config/own-tokens.json must mark it launched; the rules hash is the sha256 of the rules file's bytes (the file the keeper
+ * publishes at /deficit/rules.json). Null when any of them is missing or unreadable (the mint is then judged like any other).
+ */
+export function flagshipFacts(root = process.cwd()): FlagshipFacts | null {
+  try {
+    const st = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "current-status.json"), "utf8")) as { deficit?: { rulesFile?: string; servedAt?: string; launch?: { date?: string; mint?: string; createTx?: string; evidence?: string } } };
+    const d = st.deficit, l = d?.launch;
+    if (!d?.rulesFile || !l?.mint || !l.date) return null;
+    const own = JSON.parse(fs.readFileSync(path.join(root, "config", "own-tokens.json"), "utf8")) as { tokens: { symbol: string; address: string | null; status: string }[] };
+    const t = own.tokens.find((x) => x.address === l.mint && x.status === "launched");
+    if (!t) return null;
+    const ev = l.evidence ? (JSON.parse(fs.readFileSync(path.join(root, l.evidence), "utf8")) as { cluster?: string }) : null;
+    const network = ev?.cluster === "devnet" ? "devnet" : "mainnet";
+    const rulesSha256 = crypto.createHash("sha256").update(fs.readFileSync(path.join(root, d.rulesFile))).digest("hex");
+    return { mint: l.mint, ticker: t.symbol, network, rulesSha256, createdOn: l.date, createTx: l.createTx ?? null, page: "/deficit/" };
+  } catch { return null; }
+}
+
 export async function mintFacts(p: Platform, mint: string, o: { reader?: RegistrationReader } = {}): Promise<MintFacts> {
   const net = hostNet(p);
   const networks = await readAllRegistrations(mint, o.reader ?? readerOverride ?? chainRegistrationReader());
@@ -31,7 +54,8 @@ export async function mintFacts(p: Platform, mint: string, o: { reader?: Registr
     return { ticker: t.ticker, name: t.name, status: t.status, creator: t.creator, launchedAt: t.launchTx ? t.baselineAt : null, rulesSha256: t.rulesSha, receipts: rs.length, burns: rs.filter((b) => b.status === "confirmed" && (b.burnRaw ?? BigInt(0)) > BigInt(0)).length, platformId: t.platformId, tickerShared: tickerShared(p.registry, t) };
   })() : null;
   const d = disclosedCoins().find((c) => c.mint === mint) ?? null;
-  return { mint, cluster: net, programId: PROGRAM_IDS[net].burn_receipts, program, networks, disclosed: d ? { network: d.network, ticker: d.ticker, label: d.label } : null, coin };
+  const flag = flagshipFacts();
+  return { mint, cluster: net, programId: PROGRAM_IDS[net].burn_receipts, program, networks, disclosed: d ? { network: d.network, ticker: d.ticker, label: d.label } : null, coin, flagship: flag && flag.mint === mint ? flag : null };
 }
 
 export async function verifyMintOn(p: Platform, mint: string, now = Date.now(), o: { reader?: RegistrationReader } = {}): Promise<MintVerification> {

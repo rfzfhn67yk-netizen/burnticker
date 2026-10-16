@@ -2,6 +2,7 @@ import { platform } from "@/lib/burnticker/server";
 import { badgeOrigin, coinBadgeData } from "@/lib/burnticker/badgeServe";
 import { EMBED_HEADERS, renderEmbedHtml, renderEmbedMissing } from "@/lib/burnticker/embed";
 import { lookupCoin, sharedTickerSentence } from "@/lib/burnticker/coinLookup";
+import { safeParam } from "@/lib/burnticker/safeParam";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request, { params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = await params;
-  const id = decodeURIComponent(ticker);
+  const id = safeParam(ticker);
   const now = Date.now();
   const valid = /^[A-Za-z0-9]{2,44}$/.test(id);
   // a ticker several coins share names their mints; each coin's card is at its mint (owner 2026-10-12: tickers are not unique)

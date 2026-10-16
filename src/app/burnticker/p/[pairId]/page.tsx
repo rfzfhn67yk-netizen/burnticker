@@ -16,6 +16,7 @@ import { isMeetingsSelector, MEETINGS_PAIR_PAGE_LINE } from "@/lib/burnticker/gu
 import { TermNote } from "../../_components/Term";
 import { CurveBar } from "../../_components/CoinCard";
 import { BURNS_AFTER_GRADUATION, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts, type CoinTab } from "@/lib/burnticker/coinPage";
+import { fixed } from "@/lib/burnticker/safeFormat";
 
 /**
  * A rivalry pair's shared page, in the coin page's order (website-11, 2026-10-12; src/lib/burnticker/coinPage.ts). ON TOP, for each
@@ -48,7 +49,8 @@ interface Clause { voidBy: string; state: "live" | "waiting" | "voided"; waiting
 interface DerbyDay { day: number; windowId: string; status: "decided" | "withheld"; winner: "A" | "B" | "tie" | null; a: { symbol: string; changePct: string | null }; b: { symbol: string; changePct: string | null } | null; margin: string | null; crossMargin: string | null; reason: string | null; proofSha256: string | null; proof: { label: string; url: string | null; detail: string }[] }
 interface Derby { pair: { selector: string; window: string; measure: string; flip: boolean; symbols: { a: string; b: string | null }; season: { start: string; days: number; endsOn: string; over: boolean; windows: number; windowsDone: number }; score: { a: number; b: number; ties: number; withheld: number; dayNumber: number }; forwarded?: { aToB: string; bToA: string; windows: number }; days: DerbyDay[]; retired: { a: string | null; b: string | null }; note: string }; tickers: { a: string; b: string }; post: string | null }
 interface Data { pair: { pairId: string; selectorKey: string; createdAt: number }; a: Side; b: Side; tally: Tally & { clause?: Clause | null; curveA?: Curve | null; curveB?: Curve | null }; share: string; derby?: Derby | null; stubs: string[] }
-const pctFmt = (s: string | null) => (s === null ? "—" : `${Number(s) > 0 ? "+" : Number(s) < 0 ? "−" : ""}${Math.abs(Number(s)).toFixed(2)}%`);
+// audit 2026-10-15 H7: a value that is not a finite number is a dash, never "NaN%"
+const pctFmt = (s: string | null) => (s === null || !Number.isFinite(Number(s)) ? "—" : `${Number(s) > 0 ? "+" : Number(s) < 0 ? "−" : ""}${Math.abs(Number(s)).toFixed(2)}%`);
 /** "1 result" / "3 results": a count with the right noun. */
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? `.${f}` : ""); };
@@ -109,7 +111,7 @@ export default function PairPage() {
         {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="pair rule">{PAIR_BURN_SENTENCE}</div>}
         <TermNote ids={["receipt", "burnPool"]} />
         <div className="grid md:grid-cols-3 gap-2">
-          <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">supply left</div><div className="text-lg tabular-nums">{t.supplyPctA.toFixed(2)}% <span className="text-neutral-500">:</span> {t.supplyPctB.toFixed(2)}%</div><div className="text-xs text-neutral-500 tabular-nums">{fmt(t.supplyA)} : {fmt(t.supplyB)}, out of {fmt(d.a.status.supply.initial)} each</div></div>
+          <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">supply left</div><div className="text-lg tabular-nums">{fixed(t.supplyPctA)}% <span className="text-neutral-500">:</span> {fixed(t.supplyPctB)}%</div><div className="text-xs text-neutral-500 tabular-nums">{fmt(t.supplyA)} : {fmt(t.supplyB)}, out of {fmt(d.a.status.supply.initial)} each</div></div>
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">last settlement</div>{ls ? <><div><code>{ls.eventId}</code></div><div className="text-xs text-neutral-500">It settled {(ls.result ?? ls.value ?? "—").toUpperCase()} at {ls.settledAt.slice(0, 16).replace("T", " ")}Z, and {ls.burnedSide ? `${sideName(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)} tokens` : ""}` : "neither side burned"}.</div></> : <div className="text-xs text-neutral-500">None yet. The first result after launch burns one side.</div>}</div>
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">next scheduled market</div>{t.next.market ? <div><code>{t.next.market}</code></div> : <div>—</div>}</div>
         </div>
@@ -156,7 +158,7 @@ export default function PairPage() {
         <div id="panel-holders" role="tabpanel" aria-labelledby="tab-holders" hidden={tab !== "holders"}>
           <section className="grid md:grid-cols-2 gap-3">{sides.map(([s, side]) => { const h = s.status.market?.holders; return (
             <div key={side} className={card} aria-label={`Holders of ${s.status.ticker}`}><h2 className="font-medium">The largest holders of ${s.status.ticker}</h2>
-              {h?.top?.length ? <ol className="mt-2 space-y-0.5 text-xs">{h.top.slice(0, 20).map((x, i) => <li key={x.account} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {(x.owner ?? x.account).slice(0, 4)}…{(x.owner ?? x.account).slice(-4)}{x.label ? <span className="ml-1 text-neutral-500">({x.label})</span> : null}</span><span className="tabular-nums">{x.pct.toFixed(2)}%</span></li>)}</ol> : null}
+              {h?.top?.length ? <ol className="mt-2 space-y-0.5 text-xs">{h.top.slice(0, 20).map((x, i) => <li key={x.account} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {(x.owner ?? x.account).slice(0, 4)}…{(x.owner ?? x.account).slice(-4)}{x.label ? <span className="ml-1 text-neutral-500">({x.label})</span> : null}</span><span className="tabular-nums">{fixed(x.pct)}%</span></li>)}</ol> : null}
               <p className="mt-2 text-xs text-neutral-500">{h?.topNote ?? "The holders were not read."}</p></div>
           ); })}</section>
         </div>

@@ -18,6 +18,7 @@ import { targetActionSentence, targetTrustCopy } from "@/lib/burnticker/burnTarg
 import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnReal";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
+import { finiteNumber, fixed, joinList } from "@/lib/burnticker/safeFormat";
 import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersShareLine, initialTab, marketFacts, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
 import { QueuePanel } from "../../_components/QueuePanel";
@@ -72,7 +73,8 @@ const short = (a: string) => (a.length > 12 ? `${a.slice(0, 4)}…${a.slice(-4)}
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 function Chart({ readings, receipts }: { readings: Reading[]; receipts: Receipt[] }) {
-  const pts = readings.filter((r) => r.value !== null);
+  // audit 2026-10-15 H7: a reading whose value is not a finite number is left off the line (never NaN in the SVG)
+  const pts = readings.filter((r) => r.value !== null && finiteNumber(r.value) !== null);
   if (pts.length < 2) return <div className="flex h-56 items-center justify-center rounded-lg border border-dashed border-neutral-800 text-xs text-neutral-500 px-4 text-center">{readings.length ? `${readings.length === 1 ? "One settled result has" : `${readings.length} settled results have`} been read: ${readings.filter((r) => r.result === "yes").length} YES and ${readings.filter((r) => r.result === "no").length} NO. A line chart appears once the source publishes numbers.` : "The chart of settled readings appears after the second reading."}</div>;
   const W = 720, H = 240, L = 56, R = 10, T = 10, B = 24;
   const ys = pts.map((p) => Number(p.value));
@@ -161,7 +163,7 @@ export default function TokenPage() {
     { key: "trigger", label: "What fires the rule", value: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, note: latest?.settlementSourceUrl ? "The source of the latest result is linked." : coinSourceNote(s.oracle, s.selectorKey), href: latest?.settlementSourceUrl ?? null },
     { key: "next", label: nextRow.label, value: nextRow.value, note: nextRow.note, more: SETTLEMENT_LINK },
     { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? `SOL set aside for this coin's burns. ${s.pool.reserveSol} SOL of it is kept back for fees.` : "Tokens set aside for this coin's burns." },
-    { key: "burned", label: "Burned so far", value: `${fmt(s.burned.total)} of ${fmt(s.supply.initial)} tokens`, note: `${s.burned.pctOfSupply.toFixed(2)}% of the supply, in ${count(s.burned.count, "burn")}.` },
+    { key: "burned", label: "Burned so far", value: `${fmt(s.burned.total)} of ${fmt(s.supply.initial)} tokens`, note: `${fixed(s.burned?.pctOfSupply)}% of the supply, in ${count(s.burned.count, "burn")}.` },
     { key: "last", label: "Last receipt", value: latest ? latest.settledAt.slice(0, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? FIRST_BURN_AFTER_GRADUATION : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
     { key: "pending", label: "Waiting", value: s.health.pending === 0 ? "Nothing waiting" : count(s.health.pending, "receipt"), note: s.health.pending ? "A burn can wait for the pool's checks or a spend floor. The unspent funds stay in the burn pool." : null },
   ];
@@ -227,10 +229,10 @@ export default function TokenPage() {
           {/* a static read of the pool, from the API: the curve as SOL raised of the graduation threshold, or the pool it trades in now */}
           <section className={card} aria-label="Pool">
             <CurveBar c={{ phase: m?.phase ?? null, progressPct: m?.curve?.progressPct ?? (m?.phase === "graduated" ? 100 : null), raised: m?.curve?.raised ?? null, threshold: m?.curve?.threshold ?? null, quote: m?.curve?.quote ?? null, curveNote: m?.curveNote }} />
-            <p className="mt-2 text-xs text-neutral-400">{m?.phase === "graduated" ? `The bonding curve is complete. At graduation, all of the liquidity was locked forever. $${s.ticker} now trades in a Raydium pool${m.graduatedPool ? ` (${short(m.graduatedPool)})` : ""}.` : m?.curve ? `${Number(m.curve.remaining).toFixed(2)} ${m.curve.quote} to go before graduation. When the curve fills, the coin moves to a Raydium pool and its liquidity is locked forever. The pool's fees fund the burn.` : <span title={m?.curveNote}>{m?.curveNote ?? "The curve has not been read."}</span>}</p>
+            <p className="mt-2 text-xs text-neutral-400">{m?.phase === "graduated" ? `The bonding curve is complete. At graduation, all of the liquidity was locked forever. $${s.ticker} now trades in a Raydium pool${m.graduatedPool ? ` (${short(m.graduatedPool)})` : ""}.` : m?.curve ? `${fixed(m.curve.remaining)} ${m.curve.quote} to go before graduation. When the curve fills, the coin moves to a Raydium pool and its liquidity is locked forever. The pool's fees fund the burn.` : <span title={m?.curveNote}>{m?.curveNote ?? "The curve has not been read."}</span>}</p>
             {preBurn && <p className="mt-2 text-xs text-neutral-300" data-burns-after-graduation>{afterGraduation}</p>}
             {/* launch night 2026-10-13: a draft has no pool and no supply yet, so the pool line is left out */}
-            {s.status !== "draft" && s.status !== "expired" && <p className="mt-2 text-[11px] text-neutral-500">{m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC.` : "This site has not read the pool."} {(100 - s.burned.pctOfSupply).toFixed(2)}% of the supply is left.</p>}
+            {s.status !== "draft" && s.status !== "expired" && <p className="mt-2 text-[11px] text-neutral-500">{m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC.` : "This site has not read the pool."} {fixed(typeof s.burned?.pctOfSupply === "number" ? 100 - s.burned.pctOfSupply : NaN)}% of the supply is left.</p>}
           </section>
 
           <section className={card} aria-label="Progress"><h2 className="mb-2 text-xs font-mono uppercase tracking-widest text-neutral-500">Where this coin stands</h2><ProgressStrip p={progressOf(ready, { raiseSol: m?.curve ? Number(m.curve.threshold) : null, raisedSol: m?.curve ? Number(m.curve.raised) : null, queuedUnits: s.ticker === "DEFICIT" && home.data?.deficitQueue.state === "queued" ? home.data.deficitQueue.units : null })} /></section>
@@ -259,7 +261,7 @@ export default function TokenPage() {
           return other.length ? <section aria-label="Readings and milestones"><ol className="bt-tape">{other.map((e) => <li key={`${e.kind}-${e.at}`} className="bt-tape-row text-xs" data-kind={e.kind}><span className="bt-ticker-kind">{EVENT_LABEL[e.kind]}</span><a className="underline" href={e.href}>{e.text}</a></li>)}</ol></section> : null;
         })()}
         <section aria-label="Burn log">
-          <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {s.burned.pctOfSupply.toFixed(2)}% of the supply. Each receipt below can be checked in your browser.</p>
+          <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {fixed(s.burned?.pctOfSupply)}% of the supply. Each receipt below can be checked in your browser.</p>
           {rank && <p className="mb-2 text-xs text-neutral-400" data-rank title={RANK_MEANING}>{rank}</p>}
           <p className="mb-2 flex flex-wrap gap-x-4 text-xs"><a className="underline" href={csvHref(key, "burns")} download>{CSV_LINK_COPY.burnsLink}</a><a className="underline" href={csvHref(key, "readings")} download>{CSV_LINK_COPY.readingsLink}</a><a className="underline" href={feedHref({ coin: key }, "rss")}>{COIN_FEED_LINK}</a></p>
           {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? afterGraduation : "The next result that counts prints the first one."}</p> : (
@@ -289,7 +291,7 @@ export default function TokenPage() {
             <p>2. Apply the rule:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.formula}</pre>
             <p>3. Check that you get this: <strong>{b.verify.expected}</strong></p>
             <p>4. The receipt memo on chain{b.txUrl && <> (<a className="underline" href={b.txUrl}>transaction</a>)</>}:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.memo ?? `No transaction. The status is ${b.status}.`}</pre>
-            {b.verify.checks.length > 0 && <p className="text-red-400">Checks that did not pass: {b.verify.checks.join("; ")}</p>}
+            {(b.verify?.checks?.length ?? 0) > 0 && <p className="text-red-400">Checks that did not pass: {joinList(b.verify.checks, "; ")}</p>}
           </details>)}
         </section>
         <p className="text-xs text-neutral-500">{s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and {s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.{realHeld ? ` ${realHeld}` : s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}</p>
@@ -308,11 +310,11 @@ export default function TokenPage() {
             <div><dt className="text-neutral-500">results read</dt><dd className="font-mono">{s.feed.readings}</dd></div>
             <div><dt className="text-neutral-500">last burn</dt><dd className="font-mono">{ago(s.burned.lastAt ?? null, now)}</dd></div>
             <div><dt className="text-neutral-500">{s.mode === "buyback" ? "burn pool" : "vault"}</dt><dd className="font-mono">{s.mode === "buyback" ? (s.pool.feePdaSol === null ? "—" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "—" : fmt(s.pool.vaultBalance))}</dd></div>
-            <div><dt className="text-neutral-500">burned</dt><dd className="font-mono tabular-nums">{s.burned.pctOfSupply.toFixed(2)}%</dd></div>
+            <div><dt className="text-neutral-500">burned</dt><dd className="font-mono tabular-nums">{fixed(s.burned?.pctOfSupply)}%</dd></div>
           </dl>
           <p className="mt-2 text-[11px] text-neutral-500 break-all">Rule hash (sha256): {s.rules.sha256}</p>
           <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">What the operator can and cannot do</summary>
-            <p className="mt-1"><b>Can:</b> {s.trust.operator.can.join("; ")}.</p><p className="mt-1"><b>Cannot:</b> {s.trust.operator.cannot.join("; ")}.</p>
+            <p className="mt-1"><b>Can:</b> {joinList(s.trust?.operator?.can, "; ")}.</p><p className="mt-1"><b>Cannot:</b> {joinList(s.trust?.operator?.cannot, "; ")}.</p>
             <p className="mt-1 text-neutral-500">These lists come from the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>.{s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} {s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} {s.trust.lpLockedPct ?? 100}% of the liquidity is locked. {postGraduationShareLine(s.fees.postGraduation)} The team allocation is {s.trust.teamAllocationPct}%.</p>
           </details>
           {real && (() => { const t = targetTrustCopy(real.symbol); return (
@@ -331,9 +333,9 @@ export default function TokenPage() {
         {s.lp && <LpLockCard lp={s.lp} card={card} />}
         <section className="space-y-2">
           <h2 className="font-medium">Fees</h2><p>{s.fees.sentence}</p>
-          {[s.fees.curve, s.fees.postGraduation].map((f, k) => <div key={k} className="overflow-x-auto rounded-lg border border-neutral-800"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">{k === 0 ? "On the curve" : "After graduation"}</th><th className="p-2 text-right">Basis points</th><th className="p-2 text-right">SOL per 1 SOL</th><th className="p-2">Paid to</th><th className="p-2">Setting</th></tr></thead><tbody>{f.legs.map((l) => <tr key={l.label} className="border-t border-neutral-800"><td className="p-2">{l.label}</td><td className="p-2 text-right">{l.bps}</td><td className="p-2 text-right">{(l.bps / 10000).toFixed(6).replace(/0+$/, "")}</td><td className="p-2">{l.recipient}</td><td className="p-2 text-neutral-500">{l.dial}</td></tr>)}<tr className="border-t border-neutral-800"><td className="p-2">total</td><td className="p-2 text-right">{f.totalBps}</td><td></td><td></td><td></td></tr></tbody></table></div>)}
+          {[s.fees.curve, s.fees.postGraduation].map((f, k) => <div key={k} className="overflow-x-auto rounded-lg border border-neutral-800"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">{k === 0 ? "On the curve" : "After graduation"}</th><th className="p-2 text-right">Basis points</th><th className="p-2 text-right">SOL per 1 SOL</th><th className="p-2">Paid to</th><th className="p-2">Setting</th></tr></thead><tbody>{f.legs.map((l) => <tr key={l.label} className="border-t border-neutral-800"><td className="p-2">{l.label}</td><td className="p-2 text-right">{l.bps}</td><td className="p-2 text-right">{fixed(l.bps / 10000, 6).replace(/0+$/, "")}</td><td className="p-2">{l.recipient}</td><td className="p-2 text-neutral-500">{l.dial}</td></tr>)}<tr className="border-t border-neutral-800"><td className="p-2">total</td><td className="p-2 text-right">{f.totalBps}</td><td></td><td></td><td></td></tr></tbody></table></div>)}
         </section>
-        <section className={card}><h2 className="font-medium">Reading signers</h2><p>{s.attesters.length ? <>Each reading needs {s.quorum} of {count(s.attesters.length, "signature")} from these keys: {s.attesters.map((a) => `${a.pubkey} (${a.role}${a.active ? "" : ", inactive"})`).join(", ")}.</> : "No signers are recorded."} At level 1, our data key signs each reading. Level 2 adds an independent signer for each source. Level 3 adds a proof of the source&apos;s response (zkTLS), or an on-chain result where the market publishes one.</p></section>
+        <section className={card}><h2 className="font-medium">Reading signers</h2><p>{s.attesters?.length ? <>Each reading needs {s.quorum} of {count(s.attesters.length, "signature")} from these keys: {s.attesters.map((a) => `${a.pubkey} (${a.role}${a.active ? "" : ", inactive"})`).join(", ")}.</> : "No signers are recorded."} At level 1, our data key signs each reading. Level 2 adds an independent signer for each source. Level 3 adds a proof of the source&apos;s response (zkTLS), or an on-chain result where the market publishes one.</p></section>
         <section className={card + " text-xs"}><h2 className="font-medium text-sm">Addresses</h2><ul className="space-y-1 break-all"><li>Mint <a className="underline" href={s.addresses.mintUrl}><code>{s.addresses.mint}</code></a> <CopyButton text={s.mint} />{coinAddressLine(s.mint) && <span className="block text-neutral-500" data-mint-suffix>{coinAddressLine(s.mint)}</span>}</li><li>Burn pool. This is the burn program&apos;s fee account, and it is also the coin&apos;s creator on LaunchLab. Anyone can deposit and nobody can withdraw. The keeper only pays network fees. <a className="underline" href={s.addresses.feePdaUrl}><code>{s.addresses.feePda}</code></a></li>{s.addresses.feeWsol && <li>The burn pool&apos;s wrapped SOL account, where claimed curve fees land <a className="underline" href={s.addresses.feeWsolUrl!}><code>{s.addresses.feeWsol}</code></a></li>}{s.addresses.vault && <li>Vault <a className="underline" href={s.addresses.vaultUrl!}><code>{s.addresses.vault}</code></a></li>}{s.addresses.poolId && <li>LaunchLab pool <code>{s.addresses.poolId}</code></li>}<li>Creator <a className="underline" href={s.addresses.creatorUrl}><code>{s.addresses.creator}</code></a></li><li>Burn program <code>{s.addresses.programId}</code></li>{s.addresses.launchTx && <li>Launch <a className="underline" href={s.addresses.launchTxUrl!}><code>{s.addresses.launchTx}</code></a></li>}</ul></section>
         {/* the rule's own footer line (rules.ts DISCLAIMER_FOOTER); the site's disclaimers live once, in the footer */}
         <p className="text-xs text-neutral-500" data-rule-footer>{s.disclosure.disclaimer}</p>
@@ -343,7 +345,7 @@ export default function TokenPage() {
         <div id="panel-holders" role="tabpanel" aria-labelledby="tab-holders" hidden={tab !== "holders"}>
           <section className={card} aria-label="Holders">
             <h2 className="font-medium">The largest holders</h2>
-            <ol className="mt-2 space-y-0.5 text-xs">{m.holders.top10.map((h, i) => <li key={h.owner} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {short(h.owner)}{h.label ? <span className="ml-1 text-neutral-500">({h.label})</span> : null}</span><span className="tabular-nums">{h.pct === null ? h.amount : `${h.pct.toFixed(2)}%`}</span></li>)}</ol>
+            <ol className="mt-2 space-y-0.5 text-xs">{m.holders.top10.map((h, i) => <li key={h.owner} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {short(h.owner)}{h.label ? <span className="ml-1 text-neutral-500">({h.label})</span> : null}</span><span className="tabular-nums">{h.pct === null ? h.amount : `${fixed(h.pct)}%`}</span></li>)}</ol>
             <p className="mt-2 text-xs text-neutral-500">{holdersShareLine(m.holders.top10Pct, m.holders.top10PctUnlabelled)} {m.holders.count === null ? m.holders.countNote : `There are ${m.holders.count} holders.`}</p>
           </section>
         </div>

@@ -13,6 +13,8 @@ import { lookupTablePins } from "@/lib/burnticker/networks";
 import { matchesSuffix } from "@/lib/burnticker/mintSuffix";
 import { MINT_BANK_EMPTY_CODE, MINT_BANK_EMPTY_SENTENCE, webMintBank, type MintBankPort } from "@/lib/burnticker/mintBank";
 import { Keypair } from "@solana/web3.js";
+import { safeErrorText } from "@/lib/burnticker/api/errorText";
+import { bodyFingerprint, IDEMPOTENCY_KEY_RE, IdempotentRuns } from "@/lib/burnticker/api/idempotency";
 
 export const dynamic = "force-dynamic";
 
@@ -82,8 +84,8 @@ export async function POST(req: Request) {
   if (body.dryRun === true) {
     const t0 = Date.now();
     let d: Awaited<ReturnType<typeof prepareLaunch>>;
-    try { d = await prepareLaunch(p, body, { register: false, dryRun: true }); }
-    catch (e) { d = { error: fail(500, `The launch could not be prepared. The error was: ${String((e as Error)?.message ?? e).slice(0, 160)}`, { code: "internal" }) }; }
+    try { d = await prepareLaunch(p, body, { register: false, dryRun: true, client: clientKey(req) }); }
+    catch (e) { d = { error: fail(500, `The launch could not be prepared. The error was: ${safeErrorText(e)}`, { code: "internal" }) }; }
     if ("error" in d) return edgeJson({ ...(d.error.body as Record<string, unknown>), dryRun: true }, d.error.status, { ...(d.error.headers ?? {}), "cache-control": "no-store" });
     const tickers = "pair" in d ? [d.pair.bundles.a.ticker, d.pair.bundles.b.ticker] : [d.ok.bundle.ticker];
     return NextResponse.json({ ok: true, dryRun: true, ms: Date.now() - t0, cluster: p.cluster, tickers, registered: false, keysTaken: 0 }, { headers: { "cache-control": "no-store" } });
@@ -97,27 +99,48 @@ export async function POST(req: Request) {
   // address in the browser and sends its PUBLIC key in `mint` (and `pair.mint`), which must end in burn too.
   const own = typeof body.mint === "string" ? body.mint : undefined;
   const ownB = body.pair && typeof (body.pair as { mint?: unknown }).mint === "string" ? (body.pair as { mint: string }).mint : undefined;
+  if ((own !== undefined && !matchesSuffix(own)) || (ownB !== undefined && !matchesSuffix(ownB))) return NextResponse.json({ error: "Every coin made here gets an address that ends in burn, and this one does not. Please press Launch again.", code: "mint-not-burn" }, { status: 400 });
+  // audit 2026-10-15 M2: one prepare per draft (idempotency.ts): the page's key, scoped to the creator AND the mint source (review item 1:
+  // the bank's keys and the browser's own mints are two different prepares, so the browser search after mint-bank-empty is never a
+  // "reused key"). Review item 4: an answer carrying a bank key's secret is never replayed to a plain-HTTP request (no key at all then),
+  // and an answer is replayed only while every draft in it is still a draft.
+  const fromBank = own === undefined && ownB === undefined;
+  const idem = typeof body.idempotencyKey === "string" && IDEMPOTENCY_KEY_RE.test(body.idempotencyKey) && (!fromBank || secureRequest(req)) ? `${String(body.creator ?? "")}|${body.idempotencyKey}|${own ?? "bank"}|${ownB ?? "-"}` : null;
+  return PREPARES.run(idem, bodyFingerprint(body), () => prepareAnswer(req, body, p, bank, own, ownB), Date.now(), (cached) => stillDrafts(cached, p));
+}
+
+/** Review 2026-10-15 item 4: a kept prepare answer may be handed out again only while every coin in it is still an unlaunched draft. */
+async function stillDrafts(cached: Response, p: ReturnType<typeof platform>): Promise<boolean> {
+  type M = { mint?: string } | null | undefined;
+  const j = await cached.json() as { bundle?: M; token?: M; bundles?: { a?: M; b?: M }; tokens?: { a?: M; b?: M } };
+  const mints = [...new Set([j.bundle?.mint, j.token?.mint, j.bundles?.a?.mint, j.bundles?.b?.mint, j.tokens?.a?.mint, j.tokens?.b?.mint].filter((m): m is string => typeof m === "string"))];
+  return mints.length > 0 && mints.every((m) => { const t = p.registry.token(m); return !!t && t.status === "draft" && !t.launchTx; });
+}
+
+/** One launch prepare, answered: the keys are taken only after every check passed (audit 2026-10-15 H4) and discarded on a refusal. */
+async function prepareAnswer(req: Request, body: Record<string, unknown>, p: ReturnType<typeof platform>, bank: MintBankPort | null, own: string | undefined, ownB: string | undefined): Promise<Response> {
+  let taken: Keypair[] | null = null;
+  const takeMintKeys = own === undefined && ownB === undefined ? (tickers: string[]) => {
+    let keys: { publicKey: string; secretKey: Uint8Array }[] | null = null;
+    if (secureRequest(req)) { try { keys = bank?.take(tickers.map((t) => t.toUpperCase())) ?? null; } catch { keys = null; } }
+    if (!keys || keys.length < tickers.length) return { error: fail(503, MINT_BANK_EMPTY_SENTENCE, { code: MINT_BANK_EMPTY_CODE }) };
+    taken = keys.map((k) => Keypair.fromSecretKey(k.secretKey));
+    return { keys: taken };
+  } : undefined;
   // 2026-10-14 night: this route (the page's own launch) raised no bt-launch-failed alert — only the v1 review and bundle routes were
   // wrapped — so a whole evening of refused launches reached nobody's phone. A thrown error is a 500 here, and every server error or
   // launch-check refusal is recorded like the v1 routes' (launchFailAlert.ts; push.ts sends it).
-  if ((own !== undefined && !matchesSuffix(own)) || (ownB !== undefined && !matchesSuffix(ownB))) return NextResponse.json({ error: "Every coin made here gets an address that ends in burn, and this one does not. Please press Launch again.", code: "mint-not-burn" }, { status: 400 });
-  let taken: Keypair[] | null = null;
-  if (own === undefined && ownB === undefined) {
-    const tickers = [String(body.ticker ?? ""), ...(body.pair ? [String((body.pair as { ticker?: unknown }).ticker ?? "")] : [])].map((t) => t.toUpperCase());
-    let keys: { publicKey: string; secretKey: Uint8Array }[] | null = null;
-    if (secureRequest(req)) { try { keys = bank?.take(tickers) ?? null; } catch { keys = null; } }
-    if (!keys) return NextResponse.json({ error: MINT_BANK_EMPTY_SENTENCE, code: MINT_BANK_EMPTY_CODE }, { status: 503, headers: { "cache-control": "no-store" } });
-    taken = keys.map((k) => Keypair.fromSecretKey(k.secretKey));
-  }
   let r: Awaited<ReturnType<typeof prepareLaunch>>;
-  try { r = await prepareLaunch(p, body, { register: true, ...(own !== undefined ? { mint: own } : {}), ...(ownB !== undefined ? { mintB: ownB } : {}), ...(taken ? { mintKeypair: taken[0], ...(taken[1] ? { mintKeypairB: taken[1] } : {}) } : {}) }); }
-  catch (e) { r = { error: fail(500, `The launch could not be prepared. The error was: ${String((e as Error)?.message ?? e).slice(0, 160)}`, { code: "internal" }) }; }
-  if ("error" in r && taken) { try { bank?.discard(taken.map((k) => k.publicKey.toBase58())); } catch { /* the 24-hour sweep deletes them */ } }
+  try { r = await prepareLaunch(p, body, { register: true, ...(own !== undefined ? { mint: own } : {}), ...(ownB !== undefined ? { mintB: ownB } : {}), ...(takeMintKeys ? { takeMintKeys } : {}), client: clientKey(req) }); }
+  catch (e) { r = { error: fail(500, `The launch could not be prepared. The error was: ${safeErrorText(e)}`, { code: "internal" }) }; }
+  const took = taken as Keypair[] | null;
+  if ("error" in r && took) { try { bank?.discard(took.map((k) => k.publicKey.toBase58())); } catch { /* the 24-hour sweep deletes them */ } }
   // launch walkthrough 2026-10-13: a refusal answered 502 (the launch check could not read a source) reached the page as Cloudflare's
   // own error page, so the page said "The launch request failed (502)"; edgeJson sends it as 503 with the sentence intact
   if ("error" in r) {
-    try { const a = launchFailureOf("launchPage", body, { status: r.error.status, body: r.error.body }); if (a) p.registry.recordAlert(a); } catch { /* an alert never breaks a launch answer */ }
-    return edgeJson(r.error.body, r.error.status, r.error.headers ?? {});
+    // the bank being empty is the page's cue to find the address in the browser, not a failure to report
+    if ((r.error.body as { code?: unknown })?.code !== MINT_BANK_EMPTY_CODE) { try { const a = launchFailureOf("launchPage", body, { status: r.error.status, body: r.error.body }); if (a) p.registry.recordAlert(a); } catch { /* an alert never breaks a launch answer */ } }
+    return edgeJson(r.error.body, r.error.status, { "cache-control": "no-store", ...(r.error.headers ?? {}) });
   }
   recordLaunchTimings(p, body, "pair" in r ? [r.pair.tokens.a?.mint, r.pair.tokens.b?.mint] : [r.ok.token?.mint]);   // time-to-launch (productStore.ts)
   // RIVALRY PAIR (`pair: { ticker, name, … }` for side B): both bundles, both drafts and the pair row.
@@ -129,6 +152,9 @@ export async function POST(req: Request) {
   }
   return NextResponse.json({ ok: true, bundle: r.ok.bundle, token: r.ok.token, seriesTitle: r.ok.seriesTitle, stubs: p.stubs });
 }
+
+/** Audit 2026-10-15 M2: the prepares in flight or answered in the last 15 minutes, by draft key (this process only). */
+const PREPARES = new IdempotentRuns();
 
 /**
  * A bank key's secret leaves this host only over HTTPS: the request reached Caddy over https (X-Forwarded-Proto, which Caddy sets from

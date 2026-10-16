@@ -6,6 +6,7 @@ import { tokenDayText } from "@/lib/launch/dailyPost";
 import { lintCopy } from "@/lib/launch/copyLint";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import type { TokenStatusJson } from "@/lib/burnticker/tokenPage";
+import { safeParam } from "@/lib/burnticker/safeParam";
 
 /**
  * THE PRODUCT BATCH IN THE API (2026-10-10; OpenAPI 1.6.0): search-miss reports from the launch page, the ops summary of misses and
@@ -72,7 +73,7 @@ const stateOf = (s: TokenStatusJson): CoinState => {
 
 /** GET /v1/creators/{wallet} — the coins and pairs whose creator wallet matches (read-only; the creator dashboard). */
 export async function v1Creator(p: Platform, wallet: string, now = Date.now()): Promise<ApiResult> {
-  const w = decodeURIComponent(wallet).trim();
+  const w = safeParam(wallet).trim();
   if (!PUBKEY.test(w)) return fail(400, "The wallet must be a Solana public key.");
   const mine = p.registry.tokens().filter((t) => t.creator === w && t.status !== "expired").slice(0, 50);
   const day = new Date(now).toISOString().slice(0, 10);

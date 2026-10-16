@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { balanceLine, capLine, DEFAULT_SLIPPAGE_BPS, feeLine, holdsLine, REFUSAL, SLIPPAGE_CHOICES_BPS, SWAP_COPY, SWAP_NOTICE } from "@/lib/burnticker/swap/copy";
 import { formatAmount, parseAmount } from "@/lib/burnticker/swap/math";
 import { balanceRefusal, buildSwap, coinRefusal, feeBps, marketRefusal, quoteSwap, requoteRefusal, walletRefusal, type Balances, type Market, type Network, type Quote, type Side } from "@/lib/burnticker/swap/plan";
-import { connectionOn, explorerTxUrl, readBalances, readMarket, simulateSignSend } from "@/lib/burnticker/swap/chain";
+import { connectionOn, explorerTxUrl, readBalances, readMarket } from "@/lib/burnticker/swap/chain";
+import { browserSwapStore, loadPending, PendingWatch, reconcilePending, submitSwap, type PendingSwap, type SwapOutcome } from "@/lib/burnticker/swap/pending";
 import type { SwapGuard } from "@/lib/burnticker/swap/guard";
 
 /**
@@ -78,7 +79,14 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
   const [slippageBps, setSlippageBps] = useState<number>(DEFAULT_SLIPPAGE_BPS);
   const [step, setStep] = useState<Step>("idle");
   const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<{ signature: string; balance: string } | null>(null);
+  const [done, setDone] = useState<{ signature: string; balance: string; earlier?: boolean } | null>(null);
+  // audit 2026-10-15 F2: a signed swap this tab has not seen settle (swap/pending.ts). While it is held nothing else is sent.
+  const [pending, setPending] = useState<PendingSwap | null>(null);
+  const [checking, setChecking] = useState(false);
+  const store = useMemo(() => browserSwapStore(), []);
+  // review 3d: one status read at a time, and a late answer never re-holds a settled swap
+  const watch = useRef(new PendingWatch());
+  const ownerKey = wallet.publicKey?.toBase58() ?? null;
 
   const decimals = market ? (market.kind === "curve" ? market.pool.decimalsA : 6) : 6;
   const sol = (x: bigint) => formatAmount(x, SOL_DECIMALS, 6);
@@ -110,10 +118,32 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
   const inputNo = text.trim() === "" ? null : amount === null ? REFUSAL.amountFormat(inDecimals) : amount <= BigInt(0) ? REFUSAL.amount : quote && quote.amountOut <= BigInt(0) ? REFUSAL.noOutput : null;
   const balanceNo = quote && balances ? balanceRefusal(side, quote.amountIn, balances, { sol, tokens: tok, ticker: p.ticker }) : null;
   const blocked = walletNo ?? marketErr ?? inputNo ?? balanceNo;
-  const busy = step !== "idle";
+  const busy = step !== "idle" || pending !== null || checking;
+
+  const ctx = useCallback(() => ({ conn: connection, store, network: p.network, mint, owner: wallet.publicKey as PublicKey }), [connection, store, p.network, mint, wallet.publicKey]);
+  const show = useCallback((o: SwapOutcome, earlier: boolean) => {
+    if (o.kind === "pending") { watch.current.hold(o.pending); setPending(o.pending); return; }
+    watch.current.hold(null); setPending(null);
+    if (o.kind === "confirmed") {
+      if (o.balances) setBalances(o.balances);
+      setDone({ signature: o.signature, balance: o.balances ? balanceLine(tok(o.balances.tokens), p.ticker) : SWAP_COPY.balanceUnread, earlier });
+      if (!earlier) setText("");
+    } else if (o.kind === "failed") setErr(REFUSAL.failed(o.error));
+    else setErr(SWAP_COPY.expired);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.ticker, decimals]);
+  // a swap held from before a reload (or an error) is settled before anything else can be sent
+  const check = useCallback(async (rec: PendingSwap) => {
+    if (watch.current.checking) return;
+    setChecking(true);
+    try { const out = await watch.current.check(rec, (r) => reconcilePending(ctx(), r)); if (out) show(out, true); } finally { setChecking(false); }
+  }, [ctx, show]);
+  // the connected wallet's own held swap (review 3c): another wallet's record never shows here or blocks this one
+  useEffect(() => { const rec = loadPending(store, p.network, p.mint, ownerKey); const t = setTimeout(() => { watch.current.hold(rec); setPending(rec); if (rec) void check(rec); }, 0); return () => clearTimeout(t); }, [store, p.network, p.mint, ownerKey, check]);
+  useEffect(() => { if (!pending) return; const t = setInterval(() => void check(pending), 5000); return () => clearInterval(t); }, [pending, check]);
 
   async function go() {
-    if (!wallet.publicKey || !quote || minOut === null || blocked || busy || amount === null) return;
+    if (!wallet.publicKey || !quote || minOut === null || blocked || busy || amount === null || pending) return;
     if (!wallet.signTransaction) { setErr(REFUSAL.cannotSign); return; }
     setErr(null); setDone(null);
     try {
@@ -131,13 +161,10 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
       if (balNo) { setBalances(b); throw new Error(balNo); }
       // the minimum out stays the one shown to the visitor (quote less slippage); the fresh quote only has to clear it
       const { ixs } = buildSwap(fresh, { owner: wallet.publicKey, mint, side, amount, quotedOut: quote.amountOut, slippageBps });
-      const res = await simulateSignSend(connection, wallet.publicKey, ixs, (tx) => wallet.signTransaction!(tx), (s) => setStep(s), 2000);
-      if (res.status === "failed") throw new Error(REFUSAL.failed(res.error ?? ""));
-      if (res.status === "unconfirmed") throw new Error(REFUSAL.notConfirmed(res.signature));
-      const after = await readBalances(connection, wallet.publicKey, mint);
-      setBalances(after); setText("");
-      setDone({ signature: res.signature, balance: balanceLine(tok(after.tokens), p.ticker) });
-      setMarket(await readMarket(connection, p.network, mint, pool).catch(() => fresh));
+      // sent at most once: the signed swap is held (swap/pending.ts) before the send, and any error after it leaves it pending
+      const out = await submitSwap(ctx(), { side, ixs, sign: (tx) => wallet.signTransaction!(tx), onStep: (s) => setStep(s), pollMs: 2000, held: pending });
+      show(out, false);
+      if (out.kind === "confirmed") setMarket(await readMarket(connection, p.network, mint, pool).catch(() => fresh));
     } catch (e) { setErr(String((e as Error).message ?? e)); }
     finally { setStep("idle"); }
   }
@@ -174,7 +201,11 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
         : <button type="button" className="bt-launch-btn block w-full text-center disabled:opacity-50" disabled={!quote || !!blocked || busy} onClick={() => void go()} data-swap-button>{step !== "idle" ? STEP_TEXT[step] : SWAP_COPY.swapButton}</button>}
       {wallet.connected && balances && <p className="text-[11px] text-neutral-500">{holdsLine(sol(balances.lamports), tok(balances.tokens), p.ticker)}</p>}
       {(err ?? blocked) && <p className="text-neutral-200" role="alert" data-swap-refusal>{err ?? blocked}</p>}
-      {done && <p className="text-emerald-300" data-swap-receipt>{SWAP_COPY.confirmed} <a className="underline" href={explorerTxUrl(p.network, done.signature)} rel="noopener" target="_blank">{SWAP_COPY.receiptLink}</a>. {done.balance}</p>}
+      {pending && <div className="rounded border border-amber-500/60 p-2 text-amber-200" role="status" data-swap-pending>
+        <p>{SWAP_COPY.pending} <a className="underline" href={explorerTxUrl(p.network, pending.signature)} rel="noopener" target="_blank">{SWAP_COPY.receiptLink}</a>.</p>
+        <button type="button" className="mt-1 rounded border border-neutral-700 px-2 py-0.5 disabled:opacity-50" disabled={checking} onClick={() => void check(pending)}>{checking ? SWAP_COPY.checking : SWAP_COPY.checkAgain}</button>
+      </div>}
+      {done && <p className="text-emerald-300" data-swap-receipt>{done.earlier ? SWAP_COPY.earlierConfirmed : SWAP_COPY.confirmed} <a className="underline" href={explorerTxUrl(p.network, done.signature)} rel="noopener" target="_blank">{SWAP_COPY.receiptLink}</a>. {done.balance}</p>}
       <p className="text-[11px] text-neutral-500">{SWAP_COPY.noKeys}</p>
     </div>
   );

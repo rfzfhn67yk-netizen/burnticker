@@ -20,7 +20,7 @@ export interface SwapSender {
   getLatestBlockhash(commitment?: Commitment): Promise<{ blockhash: string; lastValidBlockHeight: number }>;
   simulateTransaction(tx: VersionedTransaction, opts: { sigVerify: boolean; replaceRecentBlockhash: boolean; commitment: Commitment }): Promise<{ value: { err: unknown; logs: string[] | null; unitsConsumed?: number } }>;
   sendRawTransaction(raw: Uint8Array, opts: { skipPreflight: boolean; maxRetries: number }): Promise<string>;
-  getSignatureStatuses(sigs: string[]): Promise<{ value: ({ err: unknown; confirmationStatus?: string } | null)[] }>;
+  getSignatureStatuses(sigs: string[], config?: { searchTransactionHistory: boolean }): Promise<{ value: ({ err: unknown; confirmationStatus?: string } | null)[] }>;
   getBlockHeight(commitment?: Commitment): Promise<number>;
 }
 
@@ -71,30 +71,116 @@ export function simulationReason(err: unknown, logs: readonly string[] | null): 
   return last ? `The program said: ${last.replace(/^Program log: /, "").slice(0, 160)}` : `The network said: ${JSON.stringify(err).slice(0, 160)}`;
 }
 
-export interface SendResult { signature: string; status: "confirmed" | "failed" | "unconfirmed"; error?: string }
+/**
+ * What a swap came to. `pending`: the wallet signed and the transaction may be on its way (the send or a status read failed, or the
+ * blockhash has not expired yet), so the panel holds it and sends nothing else until a status read settles it. `expired`: the blockhash
+ * expired and a final status read (with history) still did not find it, so it can no longer land and nothing changed.
+ */
+export interface SendResult { signature: string; status: "confirmed" | "failed" | "expired" | "pending"; error?: string; lastValidBlockHeight?: number }
+/** The identity of a signed swap, known before it is sent (the signature is the wallet's, the expiry is the blockhash's). */
+export interface Submitted { signature: string; lastValidBlockHeight: number }
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+/** Base58 of raw bytes (the transaction signature's printed form). */
+export function base58(bytes: Uint8Array): string {
+  const digits: number[] = [0];
+  for (const b of bytes) {
+    let carry = b;
+    for (let i = 0; i < digits.length; i++) { carry += digits[i] << 8; digits[i] = carry % 58; carry = (carry / 58) | 0; }
+    while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+  }
+  let out = "";
+  for (let k = 0; k < bytes.length && bytes[k] === 0; k++) out += "1";
+  for (let i = digits.length - 1; i >= 0; i--) out += B58[digits[i]];
+  return bytes.every((b) => b === 0) ? out.slice(0, bytes.length) : out;
+}
+/** The fee payer's signature of a signed transaction, or null when the wallet left it empty (all zeros). */
+export function signatureOf(tx: VersionedTransaction): string | null {
+  const sig = tx.signatures[0];
+  return sig && sig.some((b) => b !== 0) ? base58(sig) : null;
+}
+const short = (e: unknown): string => String((e as Error)?.message ?? e).slice(0, 160);
 
 /**
  * Simulate → sign → send → confirm. The simulation must pass before the wallet is asked. `signTransaction` is the wallet's; nothing else
  * signs. Confirmation polls until the blockhash expires.
+ *
+ * audit 2026-10-15 F2: once the wallet has signed, the swap's identity (its signature and blockhash expiry) is handed to `onSubmit`
+ * BEFORE the send, so the panel can keep it across an error or a reload. Every failure after that point (the send itself, a status read,
+ * a block height read) answers `pending` with the signature, never a bare error: the transaction may have landed, and a retry would be
+ * a second swap. If `onSubmit` throws, nothing is sent.
+ *
+ * Review 2026-10-15 (3b): a wallet may replace the blockhash before it signs. The expiry is then not the compiled one: it is held with a
+ * conservative bound instead (`signedExpiry`), so a swap is never called expired while its real blockhash could still land.
  */
-export async function simulateSignSend(conn: SwapSender, payer: PublicKey, ixs: TransactionInstruction[], signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>, onStep: (s: "simulating" | "signing" | "sending" | "confirming") => void = () => {}, pollMs = 1500): Promise<SendResult> {
+export async function simulateSignSend(conn: SwapSender, payer: PublicKey, ixs: TransactionInstruction[], signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>, onStep: (s: "simulating" | "signing" | "sending" | "confirming") => void = () => {}, pollMs = 1500, onSubmit: (s: Submitted) => void = () => {}): Promise<SendResult> {
   onStep("simulating");
-  const { tx, lastValidBlockHeight } = await compile(conn, payer, ixs);
+  const { tx, blockhash: compiledBlockhash, lastValidBlockHeight: compiledLast } = await compile(conn, payer, ixs);
   const sim = await conn.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" });
   if (sim.value.err) throw new Error(REFUSAL.simulation(simulationReason(sim.value.err, sim.value.logs)));
   onStep("signing");
   let signed: VersionedTransaction;
   try { signed = await signTransaction(tx); } catch { throw new Error(REFUSAL.rejected); }
+  const local = signatureOf(signed);
+  const lastValidBlockHeight = await signedExpiry(conn, compiledBlockhash, signed, compiledLast);
+  if (local) onSubmit({ signature: local, lastValidBlockHeight });
   onStep("sending");
-  const signature = await conn.sendRawTransaction(signed.serialize(), { skipPreflight: true, maxRetries: 5 });
+  let signature: string;
+  // the wallet's own signature is the swap's identity (the record already holds it); the RPC's answer is used only when there is none
+  try { const sent = await conn.sendRawTransaction(signed.serialize(), { skipPreflight: true, maxRetries: 5 }); signature = local ?? sent; }
+  catch (e) {
+    if (!local) throw e;
+    return { signature: local, status: "pending", error: short(e), lastValidBlockHeight };
+  }
+  if (!local) onSubmit({ signature, lastValidBlockHeight });
   onStep("confirming");
   for (;;) {
-    const st = (await conn.getSignatureStatuses([signature])).value[0];
-    if (st?.err) return { signature, status: "failed", error: JSON.stringify(st.err).slice(0, 160) };
-    if (st && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) return { signature, status: "confirmed" };
-    if ((await conn.getBlockHeight("confirmed")) > lastValidBlockHeight) return { signature, status: "unconfirmed" };
+    let st: { err: unknown; confirmationStatus?: string } | null;
+    let height: number;
+    try {
+      st = (await conn.getSignatureStatuses([signature])).value[0];
+      if (st?.err) return { signature, status: "failed", error: JSON.stringify(st.err).slice(0, 160), lastValidBlockHeight };
+      if (st && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) return { signature, status: "confirmed", lastValidBlockHeight };
+      height = await conn.getBlockHeight("confirmed");
+    } catch (e) { return { signature, status: "pending", error: short(e), lastValidBlockHeight }; }
+    if (height > lastValidBlockHeight) return reconcileSubmitted(conn, { signature, lastValidBlockHeight });
     await new Promise((res) => setTimeout(res, pollMs));
   }
+}
+
+/** How many blocks a blockhash stays valid (Solana's MAX_PROCESSING_AGE), and the margin added when the wallet chose the blockhash. */
+export const BLOCKHASH_VALID_BLOCKS = 150;
+export const WALLET_BLOCKHASH_MARGIN = 30;
+/** The fallback when the wallet chose the blockhash and the height could not be read: about ten minutes past the compiled expiry. */
+export const UNKNOWN_EXPIRY_BLOCKS = 1_500;
+/**
+ * The expiry to hold a signed swap by. The compiled blockhash's expiry when the wallet kept it; when the wallet replaced it, the wallet's
+ * blockhash is at most as new as the chain right now, so it cannot outlive (height now + 150 + a margin); if the height cannot be read,
+ * the compiled expiry plus UNKNOWN_EXPIRY_BLOCKS.
+ */
+export async function signedExpiry(conn: Pick<SwapSender, "getBlockHeight">, compiledBlockhash: string, signed: VersionedTransaction, compiledLast: number): Promise<number> {
+  // compared with the blockhash string taken BEFORE the wallet saw the transaction (a wallet may change the very object it was handed)
+  if (signed.message.recentBlockhash === compiledBlockhash) return compiledLast;
+  try { return Math.max(compiledLast, (await conn.getBlockHeight("confirmed")) + BLOCKHASH_VALID_BLOCKS + WALLET_BLOCKHASH_MARGIN); }
+  catch { return compiledLast + UNKNOWN_EXPIRY_BLOCKS; }
+}
+
+/**
+ * Settles a swap the panel holds (after an error, or after a reload): one status read with history. Confirmed or failed on chain is
+ * final; not found while the blockhash is still valid is `pending`; not found after the blockhash expired is `expired` (it can no longer
+ * land). Any read error is `pending`: only a status read the network answered ever releases the panel.
+ */
+export async function reconcileSubmitted(conn: Pick<SwapSender, "getSignatureStatuses" | "getBlockHeight">, s: Submitted): Promise<SendResult> {
+  const base = { signature: s.signature, lastValidBlockHeight: s.lastValidBlockHeight };
+  try {
+    // the height first: a status read after it that still finds nothing proves the transaction can no longer land
+    const height = await conn.getBlockHeight("confirmed");
+    const st = (await conn.getSignatureStatuses([s.signature], { searchTransactionHistory: true })).value[0];
+    if (st?.err) return { ...base, status: "failed", error: JSON.stringify(st.err).slice(0, 160) };
+    if (st && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) return { ...base, status: "confirmed" };
+    if (!st && height > s.lastValidBlockHeight) return { ...base, status: "expired" };
+    return { ...base, status: "pending" };
+  } catch (e) { return { ...base, status: "pending", error: short(e) }; }
 }
 
 export function explorerTxUrl(network: Network, signature: string): string {

@@ -3,11 +3,12 @@ import { platform, tokenPageData } from "@/lib/burnticker/server";
 import { pairTally } from "@/lib/burnticker/tokenPage";
 import { pairDailyText } from "@/lib/launch/dailyPost";
 import { derbyPairBlock } from "@/lib/burnticker/api/derby";
+import { publicOrigin } from "@/lib/burnticker/coinArt";
 
 export const dynamic = "force-dynamic";
 
 /** One rivalry pair: both sides' status + receipts + exact rules.json text, the running tally (last settlement with its result, next market) and the share line. */
-export async function GET(req: Request, { params }: { params: Promise<{ pairId: string }> }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ pairId: string }> }) {
   const { pairId } = await params;
   const p = platform();
   const pair = p.registry.pair(pairId);
@@ -16,8 +17,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ pairId: 
   const now = Date.now();
   const [da, db] = await Promise.all([tokenPageData(p, a, now), tokenPageData(p, b, now)]);
   const tally = pairTally(da.status, db.status, da.receipts, db.receipts);
-  // The share line / pair post (dailyPost.ts pairDailyText), linking to this app's pair page.
-  const site = `${new URL(req.url).origin}/burnticker`;
+  // The share line / pair post (dailyPost.ts pairDailyText), linking to this app's pair page. Audit 2026-10-15 F8: the configured public
+  // origin (as the feeds and the calendar use), never the request's: behind the proxy the request is http://localhost:3000.
+  const site = `${publicOrigin()}/burnticker`;
   const share = pairDailyText(tally, site, da.status.profile?.badge ?? null);
   // Burn Derby (2026-10-10): the running score, the day strip with both readings, the season end, the proof links, the day post.
   const derby = pair.selectorKey.startsWith("derby:") ? await derbyPairBlock(p, pairId, site, now).catch(() => null) : null;

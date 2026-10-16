@@ -1,6 +1,7 @@
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { endpoint, RATE_LIMITS, API_VERSION, type Bucket } from "@/lib/burnticker/api/spec";
 import { clientKeyFromHeaders } from "@/lib/burnticker/api/clientIp";
+import { safeErrorText } from "@/lib/burnticker/api/errorText";
 
 /**
  * THE PUBLIC API'S HTTP DISCIPLINE (2026-10-09). One wrapper every v1 route goes through:
@@ -83,6 +84,13 @@ export const edgeJson = (body: unknown, status = 200, headers: Record<string, st
 const json = (r: ApiResult, extra: Record<string, string>): Response =>
   new Response(JSON.stringify(r.body, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), { status: edgeStatus(r.status), headers: { ...edgeRetryHeaders(r.status), "content-type": "application/json; charset=utf-8", "x-burnticker-api": API_VERSION, ...extra, ...(r.headers ?? {}) } });
 
+/**
+ * THE PUBLIC-READ CORS POLICY (audit 2026-10-15 F5): a keyless public GET that the sibling static shells (deficit.burnticker.com,
+ * status.burnticker.com) read from another origin carries this header on EVERY answer, the cold 503 included, so the shell sees the
+ * real answer instead of a blocked read. Never on a write route: a POST stays same-origin (isSameOrigin) and gets no CORS header.
+ */
+export const PUBLIC_READ_CORS: Readonly<Record<string, string>> = Object.freeze({ "access-control-allow-origin": "*" });
+
 /** Runs one v1 operation with the spec's rate limit, cache and POST discipline. */
 export async function runV1(operationId: string, req: Request, handler: () => Promise<ApiResult>, now = Date.now()): Promise<Response> {
   const ep = endpoint(operationId);
@@ -96,7 +104,7 @@ export async function runV1(operationId: string, req: Request, handler: () => Pr
     if (type !== "application/json") return json(fail(415, "A POST body must be sent as JSON, with the content type application/json.", { code: "content-type" }), { ...rlHeaders, "cache-control": "no-store" });
   }
   let r: ApiResult;
-  try { r = await handler(); } catch (e) { r = fail(500, `Something went wrong on the server. The reason given was: ${(e as Error).message.slice(0, 200)}`, { code: "internal" }); }
+  try { r = await handler(); } catch (e) { r = fail(500, `Something went wrong on the server. The reason given was: ${safeErrorText(e, 200)}`, { code: "internal" }); }
   const cache = ep.method === "GET" && r.status === 200 && ep.cacheSec > 0 ? `public, max-age=${ep.cacheSec}, s-maxage=${ep.cacheSec}, stale-while-revalidate=${ep.cacheSec}` : "no-store";
   if (r.raw && r.status === 200) return new Response(r.raw.body as BodyInit, { status: 200, headers: { "content-type": r.raw.type, "x-burnticker-api": API_VERSION, "x-content-type-options": "nosniff", ...cors, ...rlHeaders, "cache-control": cache, ...(r.headers ?? {}) } });
   return json(r, { ...cors, ...rlHeaders, "cache-control": cache });
