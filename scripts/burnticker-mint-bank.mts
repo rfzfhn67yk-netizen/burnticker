@@ -5,6 +5,10 @@
 //
 //   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-mint-bank.mts            the service (unit mct-burnticker-mintbank)
 //   … scripts/burnticker-mint-bank.mts --once --fill N     grind N more keys into the bank, then exit (a manual top-up)
+//   … scripts/burnticker-mint-bank.mts --once --to N       grind until N keys are ready (nothing when there already are), then exit
+//         either --once form takes --max-seconds S: stop after S seconds with what was banked (exit 0); SIGTERM stops it the same way.
+//         --to N --hold keeps N ready until stopped (keys taken meanwhile are ground again), for a bank something is drawing from.
+//         The synthetic creator's devnet bank is filled this way (scripts/service/run-burnticker-synth.sh, one worker, its own file and key).
 //   … scripts/burnticker-mint-bank.mts --status            print the bank's counts and exit
 //   … scripts/burnticker-mint-bank.mts --bench [SECONDS]   grind into nothing for SECONDS (default 20) and print the rate; no bank is opened
 //
@@ -101,7 +105,7 @@ if (isMainThread) {
   const registry = (() => { try { return openRegistry(process.env.BURNTICKER_DB || REGISTRY_FILE); } catch (e) { log(`registry not readable (${(e as Error).message.slice(0, 120)}); taken keys are only marked created by the launch route`); return null; } })();
   const isLive = (pub: string) => { const t = registry?.token(pub); return !!t && (!!t.launchTx || t.status === "live"); };
 
-  /** Grind until `want` keys are inserted (or `stopWhen()`), logging the rate every 30 s. */
+  /** Grind until `want` keys are inserted (or `stopWhen()`, checked every second), logging the rate every 30 s. */
   const grind = async (want: number, label: string, stopWhen: () => boolean = () => false) => {
     let added = 0;
     const t0 = Date.now();
@@ -110,7 +114,11 @@ if (isMainThread) {
     onKey = (k) => { if (added >= want) return; try { if (bank.insert(k)) { added++; if (added >= want) done(); } } catch (e) { log(`a key was not banked: ${(e as Error).message.slice(0, 120)}`); } };
     const g = workers(), tries0 = g.tries();
     g.resume();
-    const tick = setInterval(() => { const s = (Date.now() - t0) / 1000; log(`${label}: ${added}/${want} banked, ${Math.round((g.tries() - tries0) / s).toLocaleString("en-US")} keys a second on ${nWorkers} workers, ${bank.status().ready} ready`); if (stopWhen()) done(); }, 30_000);
+    let ticks = 0;
+    const tick = setInterval(() => {
+      if (++ticks % 30 === 0) { const s = (Date.now() - t0) / 1000; log(`${label}: ${added}/${want} banked, ${Math.round((g.tries() - tries0) / s).toLocaleString("en-US")} keys a second on ${nWorkers} workers, ${bank.status().ready} ready`); }
+      if (stopWhen()) done();
+    }, 1_000);
     await finished;
     clearInterval(tick);
     await g.pause();
@@ -120,9 +128,29 @@ if (isMainThread) {
   };
 
   if (args.includes("--once")) {
-    const n = Math.max(0, Math.min(10_000, Number(opt("fill")) || 0));
-    if (!n) { console.error("refusing: --once needs --fill N (how many keys to add)"); process.exit(2); }
-    await grind(n, "top-up");
+    const to = Math.max(0, Math.min(10_000, Number(opt("to")) || 0));
+    // keys taken more than 24 hours ago and never created are deleted first, as the service does (a bank with no service, like the
+    // synthetic creator's devnet bank, is only ever topped up this way)
+    const swept = bank.sweep(Date.now());
+    if (swept) log(`top-up: ${swept} taken key(s) past 24 hours deleted`);
+    const ready = bank.status().ready;
+    const n = to ? Math.max(0, to - ready) : Math.max(0, Math.min(10_000, Number(opt("fill")) || 0));
+    if (!to && !n) { console.error("refusing: --once needs --fill N (how many keys to add) or --to N (how many to have ready)"); process.exit(2); }
+    const hold = !!to && args.includes("--hold");
+    if (!n && !hold) { log(`top-up: ${ready} ready, at least the ${to} asked for; nothing to grind`); bank.close(); process.exit(0); }
+    const maxS = Number(opt("max-seconds")) || 0, t0 = Date.now();
+    let stopping = false;
+    process.on("SIGTERM", () => { stopping = true; });
+    process.on("SIGINT", () => { stopping = true; });
+    const over = () => stopping || (maxS > 0 && Date.now() - t0 >= maxS * 1000);
+    log(`top-up: ${ready} ready, ${hold ? `keeping ${to} ready` : `grinding ${n} more`} on ${nWorkers} ${nWorkers === 1 ? "worker" : "workers"}${maxS ? ` for at most ${maxS} s` : ""}`);
+    if (!hold) await grind(n, "top-up", over);
+    else while (!over()) {
+      const need = to - bank.status().ready;
+      if (need > 0) await grind(need, "top-up", over);
+      else await new Promise((r) => setTimeout(r, 2000));
+    }
+    if (stopping) log(`top-up: stopped by a signal; ${bank.status().ready} ready`);
     bank.close(); process.exit(0);
   }
 
