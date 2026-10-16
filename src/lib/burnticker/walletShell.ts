@@ -44,6 +44,24 @@ export function walletEndpoint(cluster: string, env: Env = {}): string {
 }
 
 /**
+ * The site's own RPC proxy on the page's OWN origin (2026-10-16, the operator claim page through an ssh tunnel): the baked endpoint names
+ * the public site (https://burnticker.com/api/burnticker/rpc), and a page served from another origin (localhost through a tunnel, the
+ * operator network address) cannot call it: the proxy refuses cross-origin POSTs (rpcProxy.ts, Cloudflare rule 1) and the browser reports
+ * "Failed to fetch". The same proxy answers on every origin that serves the app, so a proxy endpoint is rewritten to the page's origin.
+ * Any other endpoint (a public cluster URL) is left alone. Pure: pass `origin` (the page's) explicitly; the providers pass location.origin.
+ */
+export const RPC_PROXY_PATH = "/api/burnticker/rpc";
+export function sameOriginProxy(endpoint: string, origin: string | undefined): string {
+  if (!origin) return endpoint;
+  try {
+    const u = new URL(endpoint);
+    if (u.pathname !== RPC_PROXY_PATH) return endpoint;
+    if (u.origin === origin) return endpoint;
+    return `${origin}${RPC_PROXY_PATH}`;
+  } catch { return endpoint; }
+}
+
+/**
  * The adapter's websocket (2026-10-15: the browser logged "ws error" dozens of times a page). With NEXT_PUBLIC_BURNTICKER_RPC_URL set the
  * HTTP endpoint is this site's own proxy (/api/burnticker/rpc, rpcProxy.ts), which forwards POSTs only, so web3.js's derived wss://<site>/api/burnticker/rpc
  * never opens and reconnects forever. Subscriptions (confirmTransaction's signature notice) go to the public cluster's websocket instead,

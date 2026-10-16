@@ -5,7 +5,7 @@ import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter, SolflareWalletAdapter } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
-import { walletEndpoint, walletWsEndpoint } from "@/lib/burnticker/walletShell";
+import { sameOriginProxy, walletEndpoint, walletWsEndpoint } from "@/lib/burnticker/walletShell";
 import { flightFetch } from "@/lib/burnticker/rpcProxy";
 
 /**
@@ -31,7 +31,7 @@ function useNamedWalletDialog() {
 
 export function ShellWalletProviders({ cluster, children }: { cluster: string; children: ReactNode }) {
   useNamedWalletDialog();
-  const endpoint = useMemo(() => walletEndpoint(cluster, { NEXT_PUBLIC_BURNTICKER_RPC_URL: process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL }), [cluster]);
+  const endpoint = useMemo(() => sameOriginProxy(walletEndpoint(cluster, { NEXT_PUBLIC_BURNTICKER_RPC_URL: process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL }), typeof window === "undefined" ? undefined : window.location.origin), [cluster]);
   // 2026-10-15: the proxy endpoint has no websocket; subscriptions go to the public cluster's wss (walletShell.ts walletWsEndpoint)
   // 2026-10-15 prelaunch audit C2: send-path calls to the proxy carry a flight token (rpcProxy.ts flightFetch), so a swap or launch in flight
   // keeps working when anonymous traffic has spent the proxy's share of the site's RPC day
