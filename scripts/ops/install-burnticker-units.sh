@@ -11,9 +11,11 @@
 # retried) until BURNTICKER_MINT_BANK_KEY is in the host's env file (docs/burnticker/deploy.md, "The mint key bank").
 # mct-burnticker-synth.timer (2026-10-15, the nightly synthetic creator) is copied but NOT enabled here: it needs .env.devnet-synth and
 # Chrome first (docs/burnticker/SYNTHETIC-CREATOR.md); then `systemctl --user enable --now mct-burnticker-synth.timer`.
+# mct-burnticker-synthbank.timer (2026-10-15, the synthetic creator's devnet mint bank) is copied but NOT enabled either: it needs
+# BURNTICKER_SYNTH_BANK_KEY in devnet-synth.env first; then `systemctl --user enable --now mct-burnticker-synthbank.timer`.
 set -eu
 cd "$(dirname "$0")/../.."
-UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer mct-burnticker-synth.service mct-burnticker-synth.timer"
+UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer mct-burnticker-synth.service mct-burnticker-synth.timer mct-burnticker-synthbank.service mct-burnticker-synthbank.timer"
 ENABLE="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service"
 TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer"
 CHECK=0; START=0
