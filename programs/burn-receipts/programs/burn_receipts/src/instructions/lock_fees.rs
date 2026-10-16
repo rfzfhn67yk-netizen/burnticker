@@ -140,11 +140,11 @@ pub fn handle_register_fee_key(ctx: Context<RegisterFeeKey>) -> Result<()> {
             require_keys_eq!(lock.locker, vault_auth, BurnError::LockerMismatch);
         }
         POOL_POLICY_PAIR_CURVE => {
-            require!(c.pool_verified && c.cpmm_pool == pool_key, BurnError::PoolNotVerified);
+            require!(c.own_pool_verified() && c.cpmm_pool == pool_key, BurnError::PoolNotVerified);
             require_keys_eq!(lock.locker, pool.pool_creator, BurnError::LockerMismatch);
         }
         POOL_POLICY_FIXED => {
-            require!(c.pool_verified && c.cpmm_pool == pool_key, BurnError::PoolNotVerified);
+            require!(c.own_pool_verified() && c.cpmm_pool == pool_key, BurnError::PoolNotVerified);
         }
         _ => return err!(BurnError::WrongPoolPolicy),
     }

@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { ASSOCIATED_TOKEN_PROGRAM_ID, BPF_LOADER_UPGRADEABLE_ID, type Cluster, CPMM_AUTH_SEED, LAUNCHLAB_CREATOR_FEE_VAULT_AUTH_SEED, LAUNCHLAB_POOL_SEED, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCKED_LIQUIDITY_SEED, NATIVE_MINT, SEED_CONFIG, SEED_FEE, SEED_FEE_KEY, SEED_FEE_KEYS, SEED_PLATFORM, SEED_READING, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, BPF_LOADER_UPGRADEABLE_ID, type Cluster, CPMM_AUTH_SEED, LAUNCHLAB_CREATOR_FEE_VAULT_AUTH_SEED, LAUNCHLAB_POOL_SEED, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCKED_LIQUIDITY_SEED, NATIVE_MINT, SEED_CARRIED_PACE, SEED_CONFIG, SEED_FEE, SEED_FEE_KEY, SEED_FEE_KEYS, SEED_PLATFORM, SEED_READING, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 
 /** PDA derivation for burn_receipts (seeds in programs/burn-receipts/.../constants.rs). */
 
@@ -33,6 +33,9 @@ export const feeTokenAddress = (programId: PublicKey, mint: PublicKey): PublicKe
 export const cpmmAuthority = (cpmmProgramId: PublicKey): PublicKey => PublicKey.findProgramAddressSync([CPMM_AUTH_SEED], cpmmProgramId)[0];
 
 /** The program-wide PlatformConfig: ["platform"]. */
+/** Round-5 review R5-8: the coin's CarriedPace ["carried_pace", mint] (crank_carried creates it on the coin's first piece). */
+export const carriedPacePda = (programId: PublicKey, mint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([SEED_CARRIED_PACE, mint.toBuffer()], programId)[0];
+
 export const platformPda = (programId: PublicKey): PublicKey => PublicKey.findProgramAddressSync([SEED_PLATFORM], programId)[0];
 
 /** The program's ProgramData account (BPF Upgradeable Loader), whose upgrade authority may create the PlatformConfig. */

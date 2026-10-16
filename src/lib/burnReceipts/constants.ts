@@ -212,3 +212,9 @@ export function assertSignableGenesis(configGenesis: string, cluster: Cluster, r
   if (configGenesis === GENESIS_HASH.mainnet && cluster !== "mainnet") throw new Error(`burnReceipts: refusing to sign a mainnet-bound message on ${cluster} (use a --features ${cluster} build)`);
   if (cluster !== "localnet" && configGenesis !== rpcGenesis) throw new Error(`burnReceipts: the program build binds genesis ${configGenesis} but the RPC's is ${rpcGenesis}; refusing to sign`);
 }
+
+/** Round-5 review R5-8: CarriedPace ["carried_pace", mint] — crank_carried's per-coin pace and piece counter (accounts.ts). */
+export const SEED_CARRIED_PACE = Buffer.from("carried_pace", "utf8");
+/** Round-5 review R5-8: crank_carried's budget refills at one per-crank cap (2 % of the pool's WSOL reserve) per this many seconds, up to
+ *  one cap; a piece above the budget, or a second piece in the same second, is refused (CarriedTooSoon). math.ts carriedBudget*. */
+export const CARRIED_BUDGET_WINDOW_SECS = 600;

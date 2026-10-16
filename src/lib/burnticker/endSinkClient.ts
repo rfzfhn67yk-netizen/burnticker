@@ -114,7 +114,8 @@ export class FakeEndSinkPort implements EndSinkPort {
     if (!this.rule) return { status: "not-ended" };
     if (this.rule.outcome === "void") return { status: "void" };
     if (f.cfg.crankCursor !== f.cfg.lastRecordDate && f.cfg.poolRegistered) return { status: "readings-pending" };
-    const live = (m: string): boolean => { try { const x = this.fake(m); return x.cfg.poolRegistered && x.endState.state === "live" && x.cfg.mode === "buyback"; } catch { return false; } };
+    // round-5 review R5-9: a target coin (its BurnTarget pinned: the fake's burnTarget, and not stalled) is live before its own pool is verified
+    const live = (m: string): boolean => { try { const x = this.fake(m); return (x.cfg.poolRegistered || (!!x.burnTarget && !x.targetStalled)) && x.endState.state === "live" && x.cfg.mode === "buyback"; } catch { return false; } };
     const flagship = this.flagshipOf();
     if (s.kind === "incinerator") return { status: "ready", target: INCINERATOR_ADDRESS, intended: INCINERATOR_ADDRESS };
     let intended = flagship;

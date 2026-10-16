@@ -12,6 +12,24 @@ the LP fees by compiled constants — SOL 80 % to the coin's burn pool, 20 % to 
 the treasury cannot receive it) — and burns the coin side. Design and threat notes: `docs/burnticker/PAIR-CURVE.md` §5.1–§5.2 and §8,
 Powers Register entries `register_fee_key` / `claim_lock_fees`.
 
+## Done in round 5 — R5-8 and R5-9 (owner decision 2026-10-15, "fix both now"; built, not deployed)
+
+Not queued for a later round: both went into the round-5 program before its mainnet upgrade (checklist erratum of 2026-10-15).
+
+- **R5-8, `crank_carried` budget.** Each piece spends from a per-coin carried budget that refills at one per-crank cap per 600 seconds
+  (`CARRIED_BUDGET_WINDOW_SECS`, half the 1,200 s TWAP window) up to one cap; a piece above it, or a second piece in the same second, is
+  refused (`CarriedTooSoon`), so a dust piece by anyone takes only a dust budget (the first version's fixed 600 s gap let floor-size pieces
+  hold the slot; the blind review of that version). The budget, the last piece's time and the piece count live in a new PDA,
+  `CarriedPace` `["carried_pace", mint]`, because TokenConfig has no spare bytes after round 5's `burn_target_kind`; TokenConfig's size
+  and layout are unchanged. Carried pieces no longer count in `TokenConfig.burns`; the memo gains `piece=<n>`, the `CarriedSpent` event
+  `piece` and `budget_left_lamports`. The keeper (`dispersalKeeper.ts`) reads the budget on the chain's clock before a piece and waits
+  for it, and treats a `CarriedTooSoon` refusal (a race with another cranker) as a wait of at least 30 s, never a lost piece. The cranker
+  allowlist and PlatformConfig path are unchanged.
+- **R5-9, target-coin liveness.** In `forward_to_winner` and in `forward_on_end`'s named-sink test, live = own pool verified, or
+  `burn_target_kind` EXTERNAL with the BurnTarget pinned and not stalled (read from the account; a missing account for such a coin is refused,
+  `BurnTargetAccountMissing`). An unpinned target coin stays dead. The off-chain rule recommended in the devnet run log (refuse a burn
+  target on a pair coin, and a not-yet-graduated target coin as an end sink) is not needed once this program is live.
+
 ## 1. `sweep_retired` — a permissionless instruction
 
 **Status 2026-10-12 (end-sink round 4, `burnticker/endsink2`): not built in that round.** The round added the on-chain end flag this item

@@ -1,6 +1,8 @@
 //! crank_carried — burn dispersal (2026-10-13). A reading's crank spends at most 2 % of the pool's WSOL reserve and carries the rest
 //! (review H-1); crank_carried spends that carried amount in caller-sized pieces without a new reading, under the same pool, TWAP,
-//! slippage and integrity checks, and only while no reading waits for its own crank (the queue rule).
+//! slippage and integrity checks, and only while no reading waits for its own crank (the queue rule). Round-5 review R5-8: each piece
+//! spends from the coin's carried budget (one per-crank cap per CARRIED_BUDGET_WINDOW_SECS = 600 s, up to one cap; one piece per
+//! second), counted in CarriedPace.pieces, never in TokenConfig.burns.
 
 #![allow(clippy::result_large_err, clippy::too_many_arguments)]
 
@@ -125,8 +127,10 @@ fn a_carried_spend_drains_in_three_capped_pieces_without_touching_readings() {
             (e.through_date, e.max_spend_lamports, e.reserve_cap_lamports, e.carried_in_lamports, e.spent_lamports, e.burned, e.carried_out_lamports),
             (D2, cap, cap, carried, piece, burned, carried - piece)
         );
+        // a full budget each time (601 s since the last piece), less this piece
+        assert_eq!((e.piece, e.budget_left_lamports), (calls, cap - piece));
         let head = format!("DEBT|carried|through=2026-10-06|spent={piece}|");
-        let left = format!("|left={}|", carried - piece);
+        let left = format!("|left={}|piece={calls}|", carried - piece);
         assert!(meta.logs.iter().any(|l| l.contains(&head) && l.contains(&left) && l.contains("|v1")), "memo {head}…{left} in logs:\n{}", meta.logs.join("\n"));
         spent_total += piece;
         burned_total += burned;
@@ -136,7 +140,10 @@ fn a_carried_spend_drains_in_three_capped_pieces_without_touching_readings() {
     let c = env.config(&cfg);
     // Never a reading, never the cursor: only the money totals moved.
     assert_eq!((c.crank_cursor, c.last_record_date, c.readings), (before.crank_cursor, before.last_record_date, before.readings));
-    assert_eq!((c.total_spent_lamports, c.total_burned, c.burns), (before.total_spent_lamports + spent_total, before.total_burned + burned_total, before.burns + 3));
+    // R5-8: the pieces are counted in CarriedPace, not in `burns` (reading cranks only).
+    assert_eq!((c.total_spent_lamports, c.total_burned, c.burns), (before.total_spent_lamports + spent_total, before.total_burned + burned_total, before.burns));
+    let p = carried_pace(&env, &mint).expect("pace");
+    assert_eq!((p.mint, p.pieces, p.spent_lamports, p.last_carried_at), (mint, 3, spent_total, env.now()));
     let r = env.reading(&reading_pda(&cfg, D2)).unwrap();
     assert_eq!((r.spent_lamports, r.carried_out_lamports, r.burned), (reading_before.spent_lamports, reading_before.carried_out_lamports, reading_before.burned));
     // Nothing left: refused at zero.
@@ -213,4 +220,135 @@ fn a_waiting_reading_is_always_cranked_first() {
     assert_eq!(env.config(&cfg).carried_spend_lamports, r.carried_out_lamports - SOL);
     // The through date follows the cursor.
     assert_eq!(env.config(&cfg).crank_cursor, D3);
+}
+
+// =================================================================================================================================
+// round-5 review R5-8: each piece spends from the coin's carried budget (one cap per 600 s), counted apart from `burns`
+// =================================================================================================================================
+
+fn cap_now(env: &Env, m: &Market) -> u64 {
+    math::reserve_spend_cap(cpmm::reserves(env, &m.pool).0, MAX_SPEND_RESERVE_BPS)
+}
+
+fn pace_ix_with(env: &Env, m: &Market, max: u64, f: impl FnOnce(&mut anchor_lang::solana_program::instruction::Instruction)) -> anchor_lang::solana_program::instruction::Instruction {
+    let mut ix = cpmm::ix_crank_carried(&env.payer.pubkey(), &m.t.mint.pubkey(), &m.pool, max);
+    f(&mut ix);
+    ix
+}
+
+#[test]
+fn a_full_cap_piece_empties_the_budget_which_refills_one_cap_per_600_seconds() {
+    let mut env = Env::new();
+    let m = market(&mut env);
+    let mint = m.t.mint.pubkey();
+    let cfg = config_pda(&mint);
+    carried_market(&mut env, &m);
+    quiet(&mut env);
+    let burns = env.config(&cfg).burns;
+    assert!(carried_pace(&env, &mint).is_none(), "no pace before the first piece");
+    let cranker = Keypair::new();
+    env.fund(&cranker.pubkey(), SOL);
+    // The first piece: a full cap; it creates the pace (the cranker pays its rent).
+    let cranker_before = env.lamports(&cranker.pubkey());
+    let cap1 = cap_now(&env, &m);
+    env.ok(&[cpmm::ix_crank_carried(&cranker.pubkey(), &mint, &m.pool, cap1)], &[&cranker]);
+    let t1 = env.now();
+    let rent = env.svm.minimum_balance_for_rent_exemption(8 + <burn_receipts::state::CarriedPace as anchor_lang::Space>::INIT_SPACE);
+    assert_eq!(env.lamports(&carried_pace_pda(&mint)), rent);
+    assert_eq!(cranker_before - env.lamports(&cranker.pubkey()), rent, "the cranker paid the pace rent (the harness payer pays the fee)");
+    let p = carried_pace(&env, &mint).unwrap();
+    assert_eq!((p.version, p.pieces, p.spent_lamports, p.last_carried_at, p.budget_lamports), (1, 1, cap1, t1, 0));
+    let carried = env.config(&cfg).carried_spend_lamports;
+    // The same second: refused (the budget is empty, and one piece per second), by anyone; nothing moves.
+    expect_anchor_err(env.send(&[cpmm::ix_crank_carried(&env.payer.pubkey(), &mint, &m.pool, buyback_rule().floor_lamports)], &[]), "CarriedTooSoon");
+    // 599 s later a full cap does not fit yet (599/600 of a cap has refilled), half a cap fits at 300 s.
+    env.set_time(t1 + CARRIED_BUDGET_WINDOW_SECS - 1);
+    expect_anchor_err(env.send(&[cpmm::ix_crank_carried(&cranker.pubkey(), &mint, &m.pool, cap_now(&env, &m))], &[&cranker]), "CarriedTooSoon");
+    assert_eq!(env.config(&cfg).carried_spend_lamports, carried);
+    env.set_time(t1 + CARRIED_BUDGET_WINDOW_SECS);
+    let cap2 = cap_now(&env, &m);
+    env.ok(&[cpmm::ix_crank_carried(&cranker.pubkey(), &mint, &m.pool, cap2)], &[&cranker]);
+    let t2 = env.now();
+    env.set_time(t2 + CARRIED_BUDGET_WINDOW_SECS / 2);
+    let cap3 = cap_now(&env, &m);
+    let half = cap3 / 2;
+    expect_anchor_err(env.send(&[cpmm::ix_crank_carried(&cranker.pubkey(), &mint, &m.pool, half + 2)], &[&cranker]), "CarriedTooSoon");
+    let c = env.config(&cfg);
+    assert_eq!((c.carried_spend_lamports, c.burns), (carried - cap2, burns), "the carried counter moves, `burns` does not");
+    let p = carried_pace(&env, &mint).unwrap();
+    assert_eq!((p.pieces, p.spent_lamports, p.last_carried_at, p.budget_lamports), (2, cap1 + cap2, t2, 0));
+    // half a cap has refilled after 300 s: a half-cap piece passes the budget and meets the next guard, the TWAP (the pool's own TWAP
+    // still carries the price of the full-cap buy 300 s ago in this quiet test pool), never CarriedTooSoon
+    expect_anchor_err(env.send(&[cpmm::ix_crank_carried(&cranker.pubkey(), &mint, &m.pool, half)], &[&cranker]), "TwapDeviation");
+}
+
+#[test]
+fn a_dust_piece_takes_only_a_dust_budget_and_two_pieces_in_one_transaction_are_refused() {
+    let mut env = Env::new();
+    let m = market(&mut env);
+    let mint = m.t.mint.pubkey();
+    let cfg = config_pda(&mint);
+    carried_market(&mut env, &m);
+    quiet(&mut env);
+    let floor = buyback_rule().floor_lamports;
+    // Two pieces in one transaction (one second): the second is refused, so the whole transaction is.
+    let two = [cpmm::ix_crank_carried(&env.payer.pubkey(), &mint, &m.pool, floor), pace_ix_with(&env, &m, floor + 1, |_| {})];
+    expect_anchor_err(env.send(&two, &[]), "CarriedTooSoon");
+    assert!(carried_pace(&env, &mint).is_none());
+    // An attacker's floor-size piece takes the slot ...
+    let cap = cap_now(&env, &m);
+    env.ok(&[cpmm::ix_crank_carried(&env.payer.pubkey(), &mint, &m.pool, floor)], &[]);
+    assert_eq!(carried_pace(&env, &mint).unwrap().budget_lamports, cap - floor);
+    // ... and the keeper's piece of everything left of the cap lands one second later: the dust took only a dust budget.
+    env.set_time(env.now() + 1);
+    let carried = env.config(&cfg).carried_spend_lamports;
+    let rest = cap - floor;
+    env.ok(&[cpmm::ix_crank_carried(&env.payer.pubkey(), &mint, &m.pool, rest)], &[]);
+    assert_eq!(env.config(&cfg).carried_spend_lamports, carried - rest);
+    assert_eq!(carried_pace(&env, &mint).unwrap().pieces, 2);
+}
+
+#[test]
+fn a_pace_account_that_is_not_the_coins_or_of_an_unknown_version_is_refused() {
+    let mut env = Env::new();
+    let m = market(&mut env);
+    let mint = m.t.mint.pubkey();
+    carried_market(&mut env, &m);
+    quiet(&mut env);
+    // Another coin's pace address (or any other account) in the pace slot: refused, so the budget cannot be dodged.
+    for wrong in [carried_pace_pda(&Pubkey::new_unique()), Pubkey::new_unique()] {
+        let ix = pace_ix_with(&env, &m, SOL, |ix| {
+            let at = ix.accounts.iter().position(|a| a.pubkey == carried_pace_pda(&mint)).unwrap();
+            ix.accounts[at].pubkey = wrong;
+        });
+        expect_anchor_err(env.send(&[ix], &[]), "InvalidCarriedPace");
+    }
+    env.ok(&[cpmm::ix_crank_carried(&env.payer.pubkey(), &mint, &m.pool, SOL)], &[]);
+    assert_eq!(carried_pace(&env, &mint).unwrap().pieces, 1);
+    // A pace whose version byte is not 1 (a later layout this program does not know): refused.
+    let key = carried_pace_pda(&mint);
+    let mut acc = env.svm.get_account(&key).unwrap();
+    acc.data[8] = 2;
+    env.svm.set_account(key, acc).unwrap();
+    quiet(&mut env);
+    expect_anchor_err(env.send(&[cpmm::ix_crank_carried(&env.payer.pubkey(), &mint, &m.pool, SOL)], &[]), "InvalidCarriedPace");
+}
+
+#[test]
+fn a_pre_funded_pace_address_is_taken_over_by_the_first_piece() {
+    let mut env = Env::new();
+    let m = market(&mut env);
+    let mint = m.t.mint.pubkey();
+    carried_market(&mut env, &m);
+    quiet(&mut env);
+    // Someone sends lamports to the pace PDA's address before the coin's first piece (a system-owned account with no data).
+    let key = carried_pace_pda(&mint);
+    env.transfer_sol(&key, 1_000_000);
+    assert_eq!(env.lamports(&key), 1_000_000);
+    env.ok(&[cpmm::ix_crank_carried(&env.payer.pubkey(), &mint, &m.pool, SOL)], &[]);
+    let rent = env.svm.minimum_balance_for_rent_exemption(8 + <burn_receipts::state::CarriedPace as anchor_lang::Space>::INIT_SPACE);
+    let acc = env.svm.get_account(&key).unwrap();
+    assert_eq!((acc.owner, acc.lamports), (burn_receipts::ID, rent), "topped up to rent, allocated and assigned to the program");
+    let p = carried_pace(&env, &mint).unwrap();
+    assert_eq!((p.mint, p.pieces, p.spent_lamports), (mint, 1, SOL));
 }

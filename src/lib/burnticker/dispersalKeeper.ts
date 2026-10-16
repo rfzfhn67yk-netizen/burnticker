@@ -1,4 +1,6 @@
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
+import { CARRIED_BUDGET_WINDOW_SECS } from "@/lib/burnReceipts/constants";
+import { carriedBudgetReadySec } from "@/lib/burnReceipts/math";
 import { addReading, behind, debtLine, markChunk, nextDueAt, RECEIPTS_KEPT, reconcile, seedOf, stateFromJson, stateToJson, step, type Debt, type DispersalState } from "@/lib/burnticker/dispersal";
 
 /**
@@ -14,6 +16,11 @@ import { addReading, behind, debtLine, markChunk, nextDueAt, RECEIPTS_KEPT, reco
  *   4. STEP the scheduler: a due piece is planned (crank_carried), simulated, written ahead, sent (the port's send: the private route when
  *      BURNTICKER_PRIVATE_SEND_URL is set), confirmed, and recorded. A "not now" refusal (TWAP, pool) waits ten minutes; any other
  *      refusal gives the piece up (what it would have spent stays carried and rolls into the plan).
+ *      Round-5 review R5-8: the program spends carried pieces from a per-coin budget (one per-crank cap per CARRIED_BUDGET_WINDOW_SECS,
+ *      up to one cap; one piece per second; CarriedPace). The keeper reads the budget (anyone's pieces spend it: cranking is
+ *      permissionless) on the CHAIN's clock and WAITS until its piece fits — before planning, on the port's "too-soon" answer, and on a
+ *      CarriedTooSoon refusal in simulation or on chain (a race with another cranker; then never sooner than 30 s) — so a piece is never
+ *      given up for the budget. A dust piece by someone else takes only a dust budget: the keeper's piece waits seconds, not a window.
  *
  * State lives in the caller's status table (registry / ledger `dispersal:<mint>`), JSON with bigints as strings.
  */
@@ -21,6 +28,24 @@ import { addReading, behind, debtLine, markChunk, nextDueAt, RECEIPTS_KEPT, reco
 export const DISPERSAL_STATE_KEY = (mint: string): string => `dispersal:${mint}`;
 const WAIT_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch", "ReadingPending"]);
 const RETRY_MS = 10 * 60_000;
+/** Round-5 review R5-8: the program's refusal of a piece inside the interval (Anchor error 6141). */
+const TOO_SOON = /CarriedTooSoon|\b6141\b|0x17fd/;
+/** After a CarriedTooSoon refusal, the next try is no sooner than this (a lagging cluster clock must not make the keeper retry every second). */
+export const TOO_SOON_MIN_RETRY_MS = 30_000;
+/** The program's per-crank cap on this reserve (MAX_SPEND_RESERVE_BPS, 2 %): the budget's refill rate per window. */
+const capOf = (reserve: bigint): bigint => (reserve * BigInt(200)) / BigInt(10_000);
+/**
+ * How long until a piece of `lamports` fits the coin's carried budget (ms; 0 = now), measured on the chain's clock and turned into a wait
+ * on the local one; null when the port cannot tell (the plan's "too-soon" and the program's refusal tell then).
+ */
+async function budgetWaitMs(port: ProgramPort, lamports: bigint, reserve: bigint, now: number): Promise<number | null> {
+  if (!port.carriedPace) return null;
+  const p = await port.carriedPace().catch(() => null);
+  if (!p) return null;
+  const chainNow = p.chainNowSec ?? Math.floor(now / 1000);
+  const ready = carriedBudgetReadySec(p.lastCarriedAt, p.budgetLamports, capOf(reserve), lamports, chainNow);
+  return ready === null ? null : (ready - chainNow) * 1000;
+}
 const Z = BigInt(0);
 
 export interface DispersalDeps {
@@ -122,12 +147,22 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
   if (s.action.kind === "wait") return out({ action: "wait", why: s.action.why, nextDueAt: s.action.untilMs });
   if (st.retryAt && now < st.retryAt) return out({ action: "wait", why: "a piece was deferred by the program; retrying", nextDueAt: st.retryAt });
   const lamports = s.action.lamports, idx = s.action.chunkIndex;
+  // R5-8: the piece must fit the coin's carried budget (earlier pieces, this keeper's or anyone's, spent from it): wait until it does.
+  const wait = await budgetWaitMs(port, lamports, reserve, now);
+  if (wait !== null && wait > 0) return out({ action: "wait", why: "the program's carried budget refills (one cap per 600 s)", nextDueAt: now + wait });
   if (d.dryRun) return out({ action: "dry-run", why: `would spend ${sol(lamports)} SOL of the carried ${sol(cfg.carriedSpendLamports)} SOL (crank_carried)`, nextDueAt: now + 60_000 });
   const plan = await port.planCarried(lamports);
-  if ("status" in plan) return out({ action: "wait", why: plan.status, nextDueAt: now + RETRY_MS });
+  if ("status" in plan) return out({ action: "wait", why: plan.status, nextDueAt: plan.status === "too-soon" ? Math.max(plan.nextAtMs, now + 1_000) : now + RETRY_MS });
+  const tooSoonRetry = async (): Promise<number> => now + Math.max(TOO_SOON_MIN_RETRY_MS, (await budgetWaitMs(port, lamports, reserve, now)) ?? CARRIED_BUDGET_WINDOW_SECS * 1000);
   const tx = await plan.build();
   const sim = await port.simulate(tx.raw);
   if (sim.err) {
+    if (TOO_SOON.test(sim.err)) {
+      // another piece landed since the budget was read (or the cluster clock lags): wait for the budget, never sooner than 30 s
+      st = { ...st, retryAt: await tooSoonRetry() };
+      d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece waits for the program's carried budget (another piece spent it); retrying then`);
+      return out({ action: "wait", why: "CarriedTooSoon", nextDueAt: st.retryAt });
+    }
     if (WAIT_ERRORS.has(sim.err) || port.retryableErrors?.has(sim.err)) {
       st = { ...st, retryAt: now + RETRY_MS };
       d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece deferred by the program (${sim.err}); retrying in 10 min`);
@@ -144,8 +179,14 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
   const c = await port.confirm(tx);
   if (c.status === "expired") return out({ action: "sent", signature: tx.signature, why: "not confirmed yet", nextDueAt: now + 15_000 });
   if (c.status === "failed") {
-    if (st.window) st = { ...st, window: markChunk(st.window, Z) };
     st = { ...st, inflight: null };
+    if (TOO_SOON.test(c.err)) {
+      // R5-8: lost a race to another cranker's piece; the piece is not given up, it waits for the budget (never sooner than 30 s)
+      st = { ...st, retryAt: await tooSoonRetry() };
+      d.log(`  [dispersal] $${d.ticker}: the piece was refused on chain over the program's carried budget; retrying then`);
+      return out({ action: "wait", why: "CarriedTooSoon", signature: tx.signature, nextDueAt: st.retryAt });
+    }
+    if (st.window) st = { ...st, window: markChunk(st.window, Z) };
     d.log(`  [dispersal] $${d.ticker}: the piece failed on chain (${c.err.slice(0, 80)}); the amount stays carried`);
     return out({ action: "refused", why: c.err, signature: tx.signature });
   }

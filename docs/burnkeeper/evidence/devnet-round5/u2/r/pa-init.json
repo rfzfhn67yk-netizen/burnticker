@@ -1,0 +1,44 @@
+{
+  "command": "init-pair-coin",
+  "dryRun": false,
+  "mint": "Cc7Yoe1PVRs9z2yt4tUffSvborxFm6CGfvgg79bzJ3ZY",
+  "partner": "HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG",
+  "partnerFirst": false,
+  "sinkMint": null,
+  "step": "init-pair-coin",
+  "bytes": 934,
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 84126,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: InitializeTokenR5",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 333087 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 328185 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 323332 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 83976 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "sent": {
+    "signature": "3m7UQjS2ZVXyhdX4w3Wxy2aJJWCjk8HXK17Cup2xhcFmaHoLfkam4t6BFuZHeTz83i9m3efuivQvA7SZbsu49gAS",
+    "err": null,
+    "explorer": "https://explorer.solana.com/tx/3m7UQjS2ZVXyhdX4w3Wxy2aJJWCjk8HXK17Cup2xhcFmaHoLfkam4t6BFuZHeTz83i9m3efuivQvA7SZbsu49gAS?cluster=devnet"
+  }
+}

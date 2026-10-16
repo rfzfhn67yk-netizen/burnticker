@@ -151,7 +151,7 @@ export interface PairLinks { a: PairLinkView | null; b: PairLinkView | null; sta
 export interface PairForwardPort {
   readonly mintA: string;
   readonly mintB: string;
-  /** `poolsVerified` [A, B]: each TokenConfig's pool_verified (unlink evidence, a win's servability). */
+  /** `poolsVerified` [A, B]: each coin's own pool verified (own_pool_verified: pool_verified, or a target coin's marker, R5-12) — the unlink evidence. */
   links(): Promise<PairLinks>;
   result(recordDate: number): Promise<PairResultView | null>;
   /** submit_pair_result: both coins' quorums sign the same message (on devnet the keeper is both sides' attester). Signed, not sent. */
@@ -236,6 +236,12 @@ export class FakePairForwardPort implements PairForwardPort {
     const v = (m: string) => { try { return this.fake(m).cfg.poolRegistered; } catch { return false; } };
     return [v(this.mintA), v(this.mintB)];
   }
+  /** Round-5 review R5-9 (pair.rs side_live): live = its own pool verified, or a coin that burns another token whose BurnTarget is pinned
+   *  and not stalled. (unlink_pair's evidence stays `verified()`: the program's unlink rule is unchanged.) */
+  private live(): [boolean, boolean] {
+    const v = (m: string) => { try { const f = this.fake(m); return f.cfg.poolRegistered || (!!f.burnTarget && !f.targetStalled); } catch { return false; } };
+    return [v(this.mintA), v(this.mintB)];
+  }
   async links() {
     if (this.unlinked) return { a: null, b: null, stateA: 3 as PairState, stateB: 3 as PairState, paired: false, poolsVerified: this.verified(), pairVoidBy: this.pairVoidBy, pairAfterDate: this.pairAfterDate };
     const v = (mint: string, other: string): PairLinkView => ({ mint, pairMint: other, paired: this.paired, witness: 0, createdAt: 0, pairingDeadline: this.pairingDeadline, pairedAt: this.paired ? this.pairedAtSec : null });
@@ -310,8 +316,9 @@ export class FakePairForwardPort implements PairForwardPort {
     const loser = this.fake(b.loser), winner = this.fake(winnerMint);
     const rd = { ...loser.readings.get(b.recordDate)! };
     if (rd.processed) { this.landed.set(sig, { facts: null }); return; }   // idempotent per period
-    // r2 H-1(b): a side without a verified pool, or a pair no longer paired, forwards 0 lamports — the reading is still processed
-    const [va, vb] = this.verified();
+    // r2 H-1(b): a side that is not live (R5-9: no verified pool and no working pinned burn target), or a pair no longer paired, forwards
+    // 0 lamports — the reading is still processed
+    const [va, vb] = this.live();
     const dead = !va || !vb || !this.winnerLive || !this.paired;
     const a0 = forwardAmount({ feeLamports: loser.feeLamports, reserveLamports: loser.cfg.reserveLamports, wsolLamports: loser.wsol, capLamports: loser.capLamports, units: rd.units, fractionBps: loser.cfg.fractionPerUnitBps, floorLamports: loser.cfg.floorLamports, carriedSpendLamports: loser.cfg.carriedSpendLamports });
     const a = dead ? { pool: a0.pool, lamports: BigInt(0) } : a0;

@@ -2,7 +2,7 @@ import { type AddressLookupTableAccount, type Connection, type Keypair, PublicKe
 import { attestationMessage, ed25519SharedMessageInstruction, signAttestation, sourceUrlHash, verifyAttestation, ZERO_HASH } from "@/lib/burnReceipts/attestation";
 import { fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, type Cluster as ProgramCluster, LAUNCHLAB_PROGRAM_ID, MAX_QUORUM, MODE_BUYBACK, OUTCOME_NAMES, POOL_REPLACEMENT_DELAY_SECS, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
-import { anchorErrorName, assertClusterAllowed, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
+import { anchorErrorName, assertClusterAllowed, carriedPaceView, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
 import { type PrivateSender, privateSenderFromEnv } from "@/lib/burnKeeper/privateSend";
 import { submitReadingIx } from "@/lib/burnReceipts/instructions";
 import { configPda, feePda, launchlabCreatorFeeVault, readingPda } from "@/lib/burnReceipts/pda";
@@ -47,7 +47,7 @@ export function configView(programId: PublicKey, mint: PublicKey, c: TokenConfig
     poolRegistered: c.poolRegistered, pool: c.poolRegistered ? c.cpmm_pool.toBase58() : null, poolUntradeableSince: c.pool_untradeable_since > BigInt(0) ? Number(c.pool_untradeable_since) : null,
     poolUntradeableLastSeen: c.pool_untradeable_last_seen > BigInt(0) ? Number(c.pool_untradeable_last_seen) : null, clusterGenesis: c.cluster_genesis.toBase58(),
     carriedSpendLamports: c.carried_spend_lamports, totalBurned: c.total_burned, totalSpentLamports: c.total_spent_lamports, shortfall: c.shortfall, readings: c.readings, burns: c.burns,
-    burnsTarget: c.burn_target_kind === 1, ruleEnded: c.end_state !== 0,
+    burnsTarget: (c.burn_target_kind ?? 0) !== 0, ruleEnded: c.end_state !== 0,
   };
 }
 
@@ -140,6 +140,8 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
       const r = await fetchTokenConfig(c, o.programId, o.mint);
       return r ? configView(o.programId, o.mint, r.config) : null;
     },
+    // round-5 review R5-8: the carried budget lives in its own account (CarriedPace); read only when a piece is about to be planned
+    async carriedPace() { return carriedPaceView(ctx); },
     async reading(recordDate) {
       const r = await fetchReading(c, o.programId, config, recordDate);
       return r ? readingView(r) : null;
@@ -181,7 +183,7 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
     async planCarried(maxSpendLamports) {
       await checkCluster();
       const p = await planCarriedCrank(ctx, o.payer.publicKey, maxSpendLamports);
-      if ("status" in p) return { status: p.status };
+      if ("status" in p) return p;
       return { build: () => sign(p.instructions) };
     },
     async poolSolReserve() { return poolSolReserve(ctx); },

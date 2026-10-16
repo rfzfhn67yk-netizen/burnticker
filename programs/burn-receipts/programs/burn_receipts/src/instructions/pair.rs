@@ -35,6 +35,7 @@ use crate::instructions::crank_common::{active_cap, crankers_in_force, require_n
 use crate::math;
 use crate::memo;
 use crate::pair_curve::PairView;
+use crate::instructions::burn_target::side_live;
 use crate::state::{pair_link_address, pair_order, pair_result_address, PairLink, PairResult, Reading, TokenConfig};
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -468,8 +469,10 @@ pub fn crank_pair_gate(c: &TokenConfig, r: &Reading, link: Option<&AccountInfo>,
 ///            spend it still owes earlier periods (carried_spend_lamports, r3 RI-4), capped at the burn-pool cap while in force
 ///   amount = pool × (1 − (1 − f)^units)   (the loser's own rule and its reading's units: what it would have spent had it won;
 ///            0 if under its floor; a one-shot rule with f = 100 % forwards the whole pool basis)
-///            and 0 when either coin has no verified pool (pair-forward blind review H-1(b): a voided / unregistered / switched-away
-///            side forwards nothing — and never blocks the loser's queue)
+///            and 0 when either coin is not live (pair-forward blind review H-1(b): a voided / unregistered / switched-away side
+///            forwards nothing — and never blocks the loser's queue). Live (round-5 review R5-9, burn_target::side_live): its own pool
+///            verified, or a target coin whose BurnTarget is pinned (it cranks on the target's pool before it has a pool of its own);
+///            each side's BurnTarget account is passed (Option: required only for a target coin without its own verified pool)
 /// moved loser fee PDA → winner fee PDA (SOL above the reserve first, then WSOL token → the winner fee PDA's WSOL account). The loser's
 /// reading is processed with OUTCOME_FORWARDED (it must be next in the loser's queue) and the PairResult records the forward; the memo
 /// is written every time (lamports=0 included). The winner's reading is not needed (H-1(b)). A second call is a no-op. Refused once
@@ -506,6 +509,11 @@ pub struct ForwardToWinner<'info> {
     /// CHECK: address-checked: the SPL Memo program.
     #[account(address = MEMO_PROGRAM_ID)]
     pub memo_program: UncheckedAccount<'info>,
+    /// CHECK: round-5 review R5-9: the loser's / the winner's BurnTarget ["burn_target", mint] (address-checked in side_live). Needed
+    /// only for a target coin whose own pool is not verified (refused without it: BurnTargetAccountMissing); otherwise ignored.
+    pub loser_burn_target: Option<UncheckedAccount<'info>>,
+    /// CHECK: as loser_burn_target, for the winner.
+    pub winner_burn_target: Option<UncheckedAccount<'info>>,
 }
 
 /// A native WSOL account's synced balance (lamports − its rent reserve), as the crank measures it; 0 if the account does not exist.
@@ -543,7 +551,9 @@ pub fn handle_forward_to_winner(ctx: Context<ForwardToWinner>, record_date: u32)
     let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
     require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     // H-1(b): a side without a verified pool forwards nothing — the reading is still processed. (Unlinked: refused above, P3-I1.)
-    let live = a.loser_config.pool_verified && a.winner_config.pool_verified;
+    // Round-5 review R5-9: a target coin with a pinned BurnTarget is live before its own pool is verified.
+    let live = side_live(&a.loser_config, a.loser_burn_target.as_ref().map(|x| x.as_ref()))?
+        && side_live(&a.winner_config, a.winner_burn_target.as_ref().map(|x| x.as_ref()))?;
 
     let rule = a.loser_config.rule;
     let units = a.loser_reading.units;
@@ -682,7 +692,7 @@ pub fn handle_unlink_pair(ctx: Context<UnlinkPair>) -> Result<()> {
     } else {
         // A LaunchLab pair: its locked voidBy has ended (the day after it has begun, UTC) without both pools.
         let void_by = a.config_a.pair_void_by.max(a.config_b.pair_void_by);
-        let one_dead = !a.config_a.pool_verified || !a.config_b.pool_verified;
+        let one_dead = !a.config_a.own_pool_verified() || !a.config_b.own_pool_verified();
         if void_by != 0 && one_dead && math::utc_date(now) > void_by {
             reason = Some(UNLINK_VOID_BY_PASSED);
         }

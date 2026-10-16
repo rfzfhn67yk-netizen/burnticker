@@ -1,13 +1,13 @@
 import { type AddressLookupTableAccount, AddressLookupTableProgram, ComputeBudgetProgram, type Connection, type Keypair, type ParsedTransactionWithMeta, PublicKey, SystemProgram, type TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { attestReading, sourceUrlHash } from "@/lib/burnReceipts/attestation";
-import { bs58, fetchNextReadingInLine, fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
-import { assertSignableGenesis, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LL_POOL_PLATFORM_ID, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, OUTCOME_NAMES, PACKET_DATA_SIZE, POOL_POLICY_CREATOR_IS_FEE_PDA, SYSVAR_INSTRUCTIONS_ID } from "@/lib/burnReceipts/constants";
+import { bs58, fetchCarriedPace, fetchNextReadingInLine, fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
+import { assertSignableGenesis, CPMM_PROGRAM_ID, MAX_SPEND_RESERVE_BPS, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LL_POOL_PLATFORM_ID, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, OUTCOME_NAMES, PACKET_DATA_SIZE, POOL_POLICY_CREATOR_IS_FEE_PDA, SYSVAR_INSTRUCTIONS_ID } from "@/lib/burnReceipts/constants";
 import { type BuybackPoolAccounts, buybackPoolAccounts, decodeCpmmPool, fetchCpmmPool } from "@/lib/burnReceipts/cpmm";
-import { formatDate } from "@/lib/burnReceipts/math";
+import { carriedBudgetReadySec, formatDate, reserveSpendCap } from "@/lib/burnReceipts/math";
 import { fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_RESULT_GRACE_SECS, PAIR_RESULT_LOST, PAIR_STATE_PAIRED, pairResultFor } from "@/lib/burnReceipts/pairs";
 import { checkPoolHealthIx, claimLaunchlabCreatorFeeIx, crankBuybackIx, crankCarriedIx, crankNoUnitsIx, crankVaultIx, createAtaIdempotentIx, eventAuthority, registerPoolIx, submitReadingIx, syncNativeIx } from "@/lib/burnReceipts/instructions";
 import { configPda, cpmmAuthority, feePda, feeTokenAddress, feeWsolAddress, launchlabPoolPda, vaultAddress } from "@/lib/burnReceipts/pda";
-import { BURN_TARGET_EXTERNAL, crankTargetBurnIx, feeTargetAddress, fetchBurnTarget, TARGET_POOL_HELD_ERRORS } from "@/lib/burnReceipts/burnTarget";
+import { burnsTarget as targetCoin, crankTargetBurnIx, feeTargetAddress, fetchBurnTarget, TARGET_POOL_HELD_ERRORS, TARGET_PYTH_RETRY_ERRORS } from "@/lib/burnReceipts/burnTarget";
 
 /**
  * THE KEEPER'S HANDLE ON THE PROGRAM. Two jobs, both safe to retry:
@@ -267,7 +267,7 @@ export type CrankResult =
  * Errors that mean "not now", not "broken": the next run retries. WsolBalanceMismatch (review-2 F3): the fee PDA's WSOL balance moved
  * between the sync and the swap (the crank's own SyncNative normally prevents it) — retry.
  */
-export const DEFERRABLE_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch", "PairResultPending", ...TARGET_POOL_HELD_ERRORS]);
+export const DEFERRABLE_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch", "PairResultPending", ...TARGET_POOL_HELD_ERRORS, ...TARGET_PYTH_RETRY_ERRORS]);
 /** Deferrals that are also untradeable observations: crankNext records them with check_pool_health (review-2 F6/F7 continuity). */
 export const UNTRADEABLE_ERRORS = new Set(["PoolNotTradable", "EmptyReserves"]);
 
@@ -290,7 +290,7 @@ export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promis
     return { kind: "vault", recordDate, config: c, instructions: [createAtaIdempotentIx({ payer: cranker, owner: config, mint: ctx.mint, ata: vaultAddress(ctx.programId, ctx.mint) }), crankVaultIx(base)] };
   }
   // Round 5: a target coin trades on its pinned target pool, so it never waits for a pool of its own.
-  const burnsTarget = c.burn_target_kind === BURN_TARGET_EXTERNAL;
+  const burnsTarget = targetCoin(c);
   if (!burnsTarget && !c.poolRegistered) return { status: "waiting-for-pool", recordDate };
   // LAUNCHPAD-PATH §40: a PAIRED coin passes its partner (PairLink + the period's PairResult); if it LOST the period, the reading is
   // processed by forward_to_winner (its fuel → the winner's fee PDA) instead of a buyback.
@@ -380,17 +380,29 @@ export async function poolSolReserve(ctx: ProgramContext): Promise<bigint | null
 /**
  * The crank_carried transaction's instructions for a piece of at most `maxSpendLamports` (the fee PDA's ATAs first, SyncNative as for
  * crank_buyback), or why there is none: no carried spend, a reading still waiting for its own crank, a coin that is not a self-burn
- * buyback, or no pool.
+ * buyback, no pool, or (round-5 review R5-8) the piece does not fit the coin's carried budget yet (one per-crank cap per 600 s, up to one
+ * cap, less what earlier pieces spent; one piece per second) — "too-soon" carries the time (ms, local clock) the program will accept it,
+ * computed against the CHAIN's clock (the latest block time) so a lagging or leading local clock does not make the keeper retry early.
  */
-export async function planCarriedCrank(ctx: ProgramContext, cranker: PublicKey, maxSpendLamports: bigint): Promise<{ instructions: TransactionInstruction[]; carriedLamports: bigint; throughDate: number } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" }> {
+export async function planCarriedCrank(ctx: ProgramContext, cranker: PublicKey, maxSpendLamports: bigint, nowMs: number = Date.now()): Promise<{ instructions: TransactionInstruction[]; carriedLamports: bigint; throughDate: number } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" } | { status: "too-soon"; nextAtMs: number }> {
   const cfg = await fetchTokenConfig(ctx.connection, ctx.programId, ctx.mint);
   if (!cfg) throw new Error(`no burn_receipts config for mint ${ctx.mint.toBase58()}`);
   const c = cfg.config;
-  if (c.rule.mode !== MODE_BUYBACK || c.burn_target_kind === BURN_TARGET_EXTERNAL) return { status: "not-buyback" };
+  if (c.rule.mode !== MODE_BUYBACK || targetCoin(c)) return { status: "not-buyback" };
   if (c.end_state !== 0) return { status: "rule-ended" };
   if (!c.poolRegistered) return { status: "waiting-for-pool" };
   if (c.has_baseline && c.crank_cursor !== c.last_record_date) return { status: "reading-pending" };
   if (c.carried_spend_lamports <= BigInt(0)) return { status: "nothing-carried" };
+  const pace = await carriedPaceView(ctx);
+  if (pace && pace.lastCarriedAt > 0) {
+    const reserve = await poolSolReserve(ctx);
+    if (reserve !== null) {
+      const need = maxSpendLamports < c.carried_spend_lamports ? maxSpendLamports : c.carried_spend_lamports;
+      const chainNow = pace.chainNowSec ?? Math.floor(nowMs / 1000);
+      const ready = carriedBudgetReadySec(pace.lastCarriedAt, pace.budgetLamports, reserveSpendCap(reserve, MAX_SPEND_RESERVE_BPS), need, chainNow);
+      if (ready !== null && ready > chainNow) return { status: "too-soon", nextAtMs: nowMs + (ready - chainNow) * 1000 };
+    }
+  }
   const pool = await poolAccountsOrStandIns(ctx, c.cpmm_pool);
   const fee = feePda(ctx.programId, ctx.mint);
   const feeWsol = feeWsolAddress(ctx.programId, ctx.mint);
@@ -404,6 +416,17 @@ export async function planCarriedCrank(ctx: ProgramContext, cranker: PublicKey, 
       crankCarriedIx({ programId: ctx.programId, cranker, mint: ctx.mint, pool, cluster: ctx.cluster, maxSpendLamports }),
     ],
   };
+}
+
+/** The chain's clock: the block time of the latest confirmed slot (unix seconds), or null when the RPC cannot say. */
+export async function chainNowSec(connection: Connection): Promise<number | null> {
+  try { return await connection.getBlockTime(await connection.getSlot("confirmed")); } catch { return null; }
+}
+
+/** Round-5 review R5-8: the coin's carried budget as the program will judge it (CarriedPace; lastCarriedAt 0 = never ran a piece). */
+export async function carriedPaceView(ctx: ProgramContext): Promise<{ lastCarriedAt: number; budgetLamports: bigint; chainNowSec: number | null }> {
+  const pace = await fetchCarriedPace(ctx.connection, ctx.programId, ctx.mint);
+  return { lastCarriedAt: pace ? Number(pace.last_carried_at) : 0, budgetLamports: pace?.budget_lamports ?? BigInt(0), chainNowSec: pace ? await chainNowSec(ctx.connection) : null };
 }
 
 export async function crankNext(ctx: ProgramContext, cranker: Keypair): Promise<CrankResult> {

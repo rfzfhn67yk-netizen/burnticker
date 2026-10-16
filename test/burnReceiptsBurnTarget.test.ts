@@ -44,7 +44,7 @@ describe("instructions (account order from the IDL)", () => {
     assert.ok(ix.keys[5].pubkey.equals(POOL) && ix.keys[6].pubkey.equals(AMM) && ix.keys[7].pubkey.equals(V0));
   });
   test("crank_target_burn takes the pool accounts from the BurnTarget, never from the caller", () => {
-    const t: BurnTargetAccount = { version: 1, bump: 255, mint: COIN, target_mint: TARGET, target_decimals: 5, pool_kind: 0, target_feed_id: Buffer.from(FEED, "hex"), pool: POOL, amm_config: AMM, wsol_vault: V0, target_vault: V1, observation: OBS, wsol_is_token_0: true, pinned_at: BigInt(0), total_target_burned: BigInt(0), total_spent_lamports: BigInt(0), burns: 0, repins: 0, pending_pool: PublicKey.default, pending_eta: BigInt(0) };
+    const t: BurnTargetAccount = { version: 1, bump: 255, mint: COIN, target_mint: TARGET, target_decimals: 5, pool_kind: 0, target_feed_id: Buffer.from(FEED, "hex"), pool: POOL, amm_config: AMM, wsol_vault: V0, target_vault: V1, observation: OBS, wsol_is_token_0: true, pinned_at: BigInt(0), total_target_burned: BigInt(0), total_spent_lamports: BigInt(0), burns: 0, repins: 0, pending_pool: PublicKey.default, pending_eta: BigInt(0), last_sol_publish_time: BigInt(0), last_target_publish_time: BigInt(0), last_burn_at: BigInt(0), last_unblocked_at: BigInt(0) };
     const ix = crankTargetBurnIx({ programId: PID, cranker: k(), mint: COIN, recordDate: 20261011, target: t, cluster: "devnet" });
     const names = idlAccounts("crank_target_burn");
     const at = (n: string) => ix.keys[names.indexOf(n)].pubkey;

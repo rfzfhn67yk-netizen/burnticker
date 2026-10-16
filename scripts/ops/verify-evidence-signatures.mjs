@@ -63,6 +63,9 @@ const tokens = new Map();   // token -> Set(file:line)
 let longerRuns = 0;
 for (const f of files) {
   fs.readFileSync(f, "utf8").split("\n").forEach((line, i) => {
+    // a base64 "Program data:" log line or a hex "dataHex" field is not a base58 value: a run of base58-looking characters inside it is
+    // a slice of base64/hex, never a key or a signature (2026-10-15, round-5 evidence)
+    if (/Program data: |"dataHex"/.test(line)) return;
     for (const m of line.matchAll(RUN)) {
       const t = m[0];
       if (t.length > 88) longerRuns++;

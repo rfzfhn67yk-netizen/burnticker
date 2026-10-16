@@ -239,6 +239,13 @@ pool (blind review 2 I-4: aggregators may route there; the site links only the r
    true draw; a win it cannot record is an alert, never a substitute draw), attests a flat 0-unit winner reading when the winner had nothing
    to read that day, and follows `planCrank` for the 72 h time-out (the forward until then, the paired buyback after) — a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a PairForwardMissing event is published. Against a dead winner the forward moves 0 lamports: the fuel stays in the loser's pool, where the loser's own later
    burns spend it.
+   **Round 5, R5-9 (owner, 2026-10-15; built, not deployed):** "dead" means not live, and a side is live when its own pool is verified
+   or when it burns another token (`burn_target_kind` 1) and its BurnTarget is pinned and not stalled (its last target event is not a
+   30-day unblock: `last_unblocked_at <= last_burn_at`; a stalled target is dead, as before). `forward_to_winner` reads that from each side's
+   BurnTarget account (optional accounts `loser_burn_target` / `winner_burn_target`, which the client always passes); a target coin's
+   BurnTarget left out is refused (`BurnTargetAccountMissing`). So a target coin before its own pool exists forwards its fuel as a loser
+   and receives as a winner; a target coin whose BurnTarget is not pinned, or stalled, stays dead. `unlink_pair`'s "without a verified pool" evidence is
+   unchanged.
    **Round 3 (2026-10-11, after the re-check docs/burnticker/reviews/2026-10-11-pair-forward-recheck.md):** `unlink_pair` accepts
    TERMINAL evidence only — the Pair Voided or a side refunding (the Pair is required evidence for a policy-2 coin), or, for a LaunchLab
    pair, its locked voidBy day (`initialize_token` arg `pair_void_by`, the same on both coins, stored as TokenConfig.pair_void_by) ended

@@ -12,7 +12,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{PYTH_MAX_AGE_SECS, PYTH_MAX_CONF_BPS, PYTH_RECEIVER_PROGRAM_ID};
+use crate::constants::{PYTH_MAX_AGE_SECS, PYTH_MAX_CONF_BPS, PYTH_MAX_FEED_SKEW_SECS, PYTH_MAX_FUTURE_SECS, PYTH_RECEIVER_PROGRAM_ID};
 use crate::error::BurnError;
 
 /// sha256("account:PriceUpdateV2")[..8]
@@ -46,14 +46,30 @@ pub fn read_price(acc: &AccountInfo, feed_id: &[u8; 32], now: i64) -> Result<cor
         exponent: i32::from_le_bytes(d[m + 48..m + 52].try_into().expect("4 bytes")),
         publish_time: i64_at(m + 52),
     };
-    // A publish time in the future (beyond clock skew) is not a price this cluster can have seen: unusable, never "fresh forever".
-    if p.price <= 0 || (p.conf as u128) * 10_000 > (p.price as u128) * PYTH_MAX_CONF_BPS as u128 || p.publish_time > now.saturating_add(PYTH_MAX_AGE_SECS) {
-        return Ok(Err(BurnError::PythUnusable));
+    Ok(usable(&p, now).map(|_| p))
+}
+
+/// The sponsored (push-oracle) PriceUpdateV2 account of a feed, shard 0: PDA([0u16 LE, feed id], PYTH_PUSH_ORACLE_PROGRAM_ID).
+pub fn sponsored_address(feed_id: &[u8; 32]) -> Pubkey {
+    Pubkey::find_program_address(&[&0u16.to_le_bytes(), feed_id], &crate::constants::PYTH_PUSH_ORACLE_PROGRAM_ID).0
+}
+
+/// Whether a parsed price can be used NOW (the inner error of read_price). A publish time in the future beyond clock skew
+/// (PYTH_MAX_FUTURE_SECS, second review R5-01: it was the 60-second age window before) is not a price this cluster can have seen:
+/// unusable, never "fresh forever".
+pub fn usable(p: &PythPrice, now: i64) -> core::result::Result<(), BurnError> {
+    if p.price <= 0 || (p.conf as u128) * 10_000 > (p.price as u128) * PYTH_MAX_CONF_BPS as u128 || p.publish_time > now.saturating_add(PYTH_MAX_FUTURE_SECS) {
+        return Err(BurnError::PythUnusable);
     }
     if now.saturating_sub(p.publish_time) > PYTH_MAX_AGE_SECS {
-        return Ok(Err(BurnError::PythStale));
+        return Err(BurnError::PythStale);
     }
-    Ok(Ok(p))
+    Ok(())
+}
+
+/// Round-5 review R5-7: the SOL/USD and target/USD updates of one reference were published within PYTH_MAX_FEED_SKEW_SECS of each other.
+pub fn feeds_aligned(sol: &PythPrice, target: &PythPrice) -> bool {
+    sol.publish_time.abs_diff(target.publish_time) <= PYTH_MAX_FEED_SKEW_SECS as u64
 }
 
 /// The Pyth reference in the program's price unit: target raw units per lamport × 2^32 (the unit of math::sol_price_x32), from SOL/USD
@@ -76,9 +92,14 @@ pub fn sol_price_x32(sol: &PythPrice, target: &PythPrice, target_decimals: u8) -
 }
 
 /// |spot − reference| ≤ reference × max_dev_bps / 10,000 (two-sided: a pushed price either way holds the crank).
+/// Second review R5-01: exact, overflow-safe — if either product overflows u128 the band is refused (fail closed); the saturating
+/// version accepted any spot once both sides saturated to u128::MAX.
 pub fn within(spot_x32: u128, reference_x32: u128, max_dev_bps: u16) -> bool {
     let diff = spot_x32.abs_diff(reference_x32);
-    diff.saturating_mul(10_000) <= reference_x32.saturating_mul(max_dev_bps as u128)
+    match (diff.checked_mul(10_000), reference_x32.checked_mul(max_dev_bps as u128)) {
+        (Some(lhs), Some(rhs)) => lhs <= rhs,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -93,5 +114,39 @@ mod tests {
         let r = sol_price_x32(&sol, &t, 6).unwrap();
         assert_eq!(r >> 32, 9_411);
         assert!(within(r, r * 102 / 100, 300) && !within(r, r * 104 / 100, 300) && !within(r * 104 / 100, r, 300));
+    }
+
+    /// Second review R5-01: SOL (1, expo 0), target (1, expo −28), 9 decimals → a reference of ≈ 4.29e40; both sides of the band used
+    /// to saturate to u128::MAX, so a spot of 1 << 32 (an almost 100 % shortfall) passed a 300-bps band.
+    #[test]
+    fn extreme_reference_must_not_disable_deviation_guard() {
+        let sol = PythPrice { price: 1, conf: 0, exponent: 0, publish_time: 0 };
+        let t = PythPrice { price: 1, conf: 0, exponent: -28, publish_time: 0 };
+        let reference = sol_price_x32(&sol, &t, 9).unwrap();
+        assert!(reference > u128::MAX / 10_000, "the reference is large enough to overflow the old products");
+        assert!(!within(1u128 << 32, reference, 300));
+        assert!(!within(reference, 1u128 << 32, 300));
+        // the exact comparison still accepts what is inside the band
+        assert!(within(1_000_000, 1_000_000, 0) && within(1_030_000, 1_000_000, 300) && !within(1_030_001, 1_000_000, 300));
+    }
+
+    /// Second review: a publish time may run ahead of the clock by the skew allowance only (5 s), not the 60-second age window.
+    #[test]
+    fn a_future_publish_time_beyond_five_seconds_is_unusable() {
+        let at = |publish_time| PythPrice { price: 100, conf: 0, exponent: 0, publish_time };
+        let now = 1_000_000;
+        assert!(usable(&at(now + 5), now).is_ok());
+        assert!(matches!(usable(&at(now + 6), now), Err(BurnError::PythUnusable)));
+        assert!(matches!(usable(&at(now + 60), now), Err(BurnError::PythUnusable)));
+        assert!(usable(&at(now - 60), now).is_ok());
+        assert!(matches!(usable(&at(now - 61), now), Err(BurnError::PythStale)));
+    }
+
+    /// R5-7: the two feeds must be published within 60 s of each other.
+    #[test]
+    fn the_two_feeds_must_be_published_within_sixty_seconds() {
+        let at = |publish_time| PythPrice { price: 100, conf: 0, exponent: 0, publish_time };
+        assert!(feeds_aligned(&at(1_000), &at(1_060)) && feeds_aligned(&at(1_060), &at(1_000)));
+        assert!(!feeds_aligned(&at(1_000), &at(1_061)) && !feeds_aligned(&at(1_061), &at(1_000)));
     }
 }

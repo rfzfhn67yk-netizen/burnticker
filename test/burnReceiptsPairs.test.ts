@@ -1,3 +1,4 @@
+import { burnTargetPda } from "../src/lib/burnReceipts/burnTarget.ts";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair, PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
@@ -117,6 +118,8 @@ describe("burnReceipts pairs — the signed message and the instructions", () =>
     assert.ok(at(f, "forward_to_winner", "loser_fee_vault").equals(feePda(PID, b.publicKey)));
     assert.ok(at(f, "forward_to_winner", "winner_fee_wsol").equals(associatedTokenAddress(feePda(PID, a.publicKey), NATIVE_MINT)));
     assert.ok(!order("forward_to_winner").includes("winner_reading"), "r2: forward_to_winner no longer reads the winner's reading");
+    // round-5 review R5-9: both sides' BurnTarget accounts ride along (the program reads them for a target coin without its own pool)
+    assert.ok(at(f, "forward_to_winner", "loser_burn_target").equals(burnTargetPda(PID, b.publicKey)) && at(f, "forward_to_winner", "winner_burn_target").equals(burnTargetPda(PID, a.publicKey)));
     const u = unlinkPairIx({ programId: PID, cranker: payer, mintA: a.publicKey, mintB: b.publicKey });
     assert.ok(at(u, "unlink_pair", "link_a").equals(pairLinkPda(PID, a.publicKey)) && at(u, "unlink_pair", "fee_b").equals(feePda(PID, b.publicKey)) && at(u, "unlink_pair", "pair").equals(PID));
     assert.ok(at(f, "forward_to_winner", "pair_result").equals(pairResultPda(PID, a.publicKey, b.publicKey, 20261006)));

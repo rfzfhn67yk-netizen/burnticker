@@ -24,7 +24,7 @@ const BR = "programs/burn-receipts/programs/burn_receipts/src";
 const CHECKLIST = "docs/burnticker/reviews/checklist.md";
 const ERRATUM = "## Erratum 2026-10-10 (after the ChatGPT/Codex review)";
 /** Every dated erratum, in the order they were appended (each one after the last; the pre-registered text before the first never changes). */
-const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)", "## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)", "## Erratum 2026-10-11 (pair-forward round-2 re-check, RI-2 wording)", "## Erratum 2026-10-11 (pair-forward round 3, after the re-check)", "## Erratum 2026-10-12 (market cap on coin cards, owner decision)", "## Erratum 2026-10-12 (end sinks, LAUNCHPAD-PATH §45, program round 4)", "## Erratum 2026-10-13 (external burn targets, program round 5)", "## Erratum 2026-10-13 (end-sink options, program round 5)", "## Erratum 2026-10-13 (burn dispersal, program round 5)"];
+const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)", "## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)", "## Erratum 2026-10-11 (pair-forward round-2 re-check, RI-2 wording)", "## Erratum 2026-10-11 (pair-forward round 3, after the re-check)", "## Erratum 2026-10-12 (market cap on coin cards, owner decision)", "## Erratum 2026-10-12 (end sinks, LAUNCHPAD-PATH §45, program round 4)", "## Erratum 2026-10-13 (external burn targets, program round 5)", "## Erratum 2026-10-13 (end-sink options, program round 5)", "## Erratum 2026-10-13 (burn dispersal, program round 5)", "## Erratum 2026-10-14 (round-5 blind review fixes)", "## Erratum 2026-10-15 (round-5 R5-8 and R5-9, owner decision)", "## Erratum 2026-10-15 (R5-8 / R5-9 after their blind review)"];
 /** sha256 of the pre-registered checklist exactly as reviewed (everything before the erratum). It must never change. */
 const CHECKLIST_PREREGISTERED_SHA256 = "7af9866eb64157d77205e63b34e4695aa9d1ecac6b12c4cbff58c5a068ff5f3b";
 const LP_SENTENCE = "≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation";
@@ -104,10 +104,28 @@ describe("checklist: pre-registered text is immutable, corrections go in the err
   test("the burn-dispersal erratum states 42 entrypoints, 136 errors, 44 events, crank_carried, the queue rule and the six places", () => {
     const e = erratumSection(ERRATA[11]);
     for (const re of [/\*\*42 entrypoints\*\*/, /136 error codes/, /44 event types/, /crank_carried/, /ReadingPending/, /SpendAboveCap/, /NothingCarried/, /BelowFloor/, /RuleNotLive/, /CarriedSpent/, /six places/, /never moves the cursor/]) assert.match(e, re);
-    assert.equal(BURN_RECEIPTS_IDL.errors.length, 136);
-    assert.equal(BURN_RECEIPTS_IDL.events.length, 44);
-    assert.match(read("docs/burnticker/WHITEPAPER.md"), /Error codes: 136\./);
-    assert.match(read("docs/burnticker/WHITEPAPER.md"), /The program has 44 event types:/);
+  });
+  test("the round-5 review erratum states 43 entrypoints, 141 errors, 45 events, the retired create, release_target, the Pyth rules and the fence", () => {
+    const e = erratumSection(ERRATA[12]);
+    for (const re of [/\*\*43 entrypoints\*\*/, /141 error codes/, /45 event types/, /InitializeTokenRetired/, /TargetDecimalsTooLarge/, /sponsored/, /release_target/, /TargetNotStalled/, /TargetReleased/, /PythWentBackwards/, /PythFeedSkew/, /burn_target_kind/, /seven places/]) assert.match(e, re);
+  });
+  test("the R5-8 / R5-9 erratum states 43 entrypoints, 144 errors, 45 events, the carried pace and the target-coin liveness", () => {
+    const e = erratumSection(ERRATA[13]);
+    for (const re of [/\*\*43 entrypoints\*\*/, /\*\*144 error codes\*\*/, /45 event types/, /CarriedTooSoon/, /InvalidCarriedPace/, /BurnTargetAccountMissing/, /MIN_CARRIED_INTERVAL_SECS/, /CarriedPace/, /piece=<n>/, /TokenConfig's size\s+and layout do not change/, /BurnTarget` is pinned/, /stays dead/, /seven places/]) assert.match(e, re);
+    assert.equal(BURN_RECEIPTS_IDL.instructions.length, 43);
+    assert.equal(BURN_RECEIPTS_IDL.errors.length, 144);
+    assert.equal(BURN_RECEIPTS_IDL.events.length, 45);
+    for (const n of ["CarriedTooSoon", "InvalidCarriedPace", "BurnTargetAccountMissing"]) assert.ok(BURN_RECEIPTS_IDL.errors.some((x) => x.name === n), n);
+    assert.match(read("docs/burnticker/WHITEPAPER.md"), /Error codes: 144\./);
+    assert.match(read("docs/burnticker/WHITEPAPER.md"), /The program has 45 event types:/);
+  });
+  test("the R5-8 / R5-9 blind-review erratum states the budget, the version check and the stalled target", () => {
+    const e = erratumSection(ERRATA[14]);
+    for (const re of [/43 entrypoints, 45 event types, 144 error codes/, /CARRIED_BUDGET_WINDOW_SECS/, /dust budget/, /budget_lamports/, /CarriedTooSoon/, /InvalidCarriedPace/, /budget_left_lamports/, /last_unblocked_at >\s+last_burn_at/, /release_target/, /seven places/]) assert.match(e, re);
+    assert.ok(BURN_RECEIPTS_IDL.constants?.some((c) => c.name === "CARRIED_BUDGET_WINDOW_SECS" && c.value === "600"));
+    assert.ok(!BURN_RECEIPTS_IDL.constants?.some((c) => c.name === "MIN_CARRIED_INTERVAL_SECS"));
+    const ev = BURN_RECEIPTS_IDL.types?.find((t) => t.name === "CarriedSpent") as { type: { fields: { name: string }[] } } | undefined;
+    assert.ok(ev?.type.fields.some((f) => f.name === "budget_left_lamports") && !ev.type.fields.some((f) => f.name === "next_piece_at"));
   });
   test("the LP-lock erratum states the policy, the compiled split and the unchanged item-8 floor", () => {
     const e = erratumSection(ERRATA[1]);
@@ -163,7 +181,7 @@ describe("burn_receipts entrypoint count matches the copy (review item 1)", () =
   }
   const n = programEntrypoints().length;
   test("lib.rs, the IDL and the Powers Register agree", () => {
-    assert.equal(n, 42, "42 entrypoints in the #[program] module today (24 + register_fee_key + claim_lock_fees + link_pair + submit_pair_result + forward_to_winner + unlink_pair + apply_paired_attester_change + submit_rule_end + forward_on_end + round 5's pin_burn_target, crank_target_burn, propose / cancel / veto / apply_target_pool, initialize_token_r5, burn_sol_on_end, crank_carried) — update the copy below if this changes");
+    assert.equal(n, 43, "43 entrypoints in the #[program] module today (24 + register_fee_key + claim_lock_fees + link_pair + submit_pair_result + forward_to_winner + unlink_pair + apply_paired_attester_change + submit_rule_end + forward_on_end + round 5's pin_burn_target, crank_target_burn, propose / cancel / veto / apply_target_pool, initialize_token_r5, burn_sol_on_end, crank_carried, release_target) — update the copy below if this changes");
     assert.equal(BURN_RECEIPTS_IDL.instructions.length, n);
     assert.deepEqual([...BURN_RECEIPTS_IDL.instructions.map((x) => x.name)].sort(), [...programEntrypoints()].sort());
     assert.equal((JSON.parse(read("docs/burn-receipts/powers-register.json")) as { instructions: unknown[] }).instructions.length, n);

@@ -111,7 +111,7 @@ if (CMD === "status") {
   }
   ixs.push(closeAccountIx(wsol, payer.publicKey, payer.publicKey));
   await run(payer, ixs, summary);
-} else {
+} else if (CMD === "cpmm-swap") {
   const payer = await payerKey();
   const p = await fetchCpmmPool(connection, new PublicKey(opt("pool") ?? die("--pool is required")), CPMM);
   const mintIs0 = p.token0Mint.equals(mint);

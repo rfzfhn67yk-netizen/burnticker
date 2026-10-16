@@ -541,8 +541,9 @@ Pairs made before then keep their bytes.
   have spent, which is `buyback_spend(min(spendable pool − the loser's carried spend, cap), units, f)` with the loser's units and
   fraction. The amount moves from the loser's burn pool into the winner's. Nothing below the rule's minimum spend moves. A one-shot pair
   maps 100 %, so all of it moves. The instruction writes a memo in every case, in the form
-  `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<date>|lamports=N|v1`. If either coin has no verified pool, or if the pair has been
-  unlinked, it moves 0 lamports and still processes the loser's reading. So a dead side can never wedge the queue. Either way,
+  `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<date>|lamports=N|v1`. If either coin is not live (no verified pool of its own; a coin that
+  burns another token is live before its own pool exists once the token it burns is pinned and still burning, read from that pin itself,
+  round-5 review R5-9), or if the pair has been unlinked, it moves 0 lamports and still processes the loser's reading. So a dead side can never wedge the queue. Either way,
   a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a PairForwardMissing event is published.
   If the winner is dead, the fuel stays in the loser's pool, where the loser's own later burns spend it. The loser's reading is
   processed with outcome 6 (forwarded). The winner's ordinary cranks then spend its pool on the winner's coin and burn what they get.
@@ -811,11 +812,11 @@ terms are drafted in `SECURITY.md` but not published.
 - **PlatformConfig:** `authority`, `burn_pool_cap_lamports`, `cap_sunset_ts`, `pending_cap_lamports`, `pending_cap_eta`, `created_at`,
   `crankers[3]`, `cranker_count`, reserved.
 
-### 13.3 Instructions (42, generated from `src/lib/burnReceipts/idl.ts`)
+### 13.3 Instructions (43, generated from `src/lib/burnReceipts/idl.ts`)
 
 | Instruction | Arguments | Signers | Class |
 |---|---|---|---|
-| `initialize_token` | args | payer, creator, mint | creation |
+| `initialize_token` | args | payer, creator, mint | creation (retired: every deployable build refuses it, `InitializeTokenRetired`) |
 | `initialize_token_r5` | args | payer, creator, mint | creation |
 | `initialize_platform` | authority, burn_pool_cap_lamports, cap_sunset_ts, crankers | payer, upgrade_authority | creation |
 | `submit_reading` | record_date, value, source_url_hash, proof_hash | payer (+ quorum via Ed25519) | permissionless |
@@ -826,6 +827,7 @@ terms are drafted in `SECURITY.md` but not published.
 | `pin_burn_target` | target_feed_id | payer, mint (before the mint exists) | creation |
 | `crank_target_burn` | record_date | cranker | permissionless |
 | `apply_target_pool` | — | caller | permissionless |
+| `release_target` | — | cranker (allowlist while the cap is in force) | permissionless |
 | `claim_launchlab_creator_fee` | — | payer | permissionless |
 | `register_pool` | — | registrar | permissionless |
 | `register_pair_pool` | — | registrar | permissionless |
@@ -858,15 +860,18 @@ terms are drafted in `SECURITY.md` but not published.
 | `renounce_platform_authority` | — | authority | privileged |
 | `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged |
 
-The program has 44 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
+The program has 45 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
 BurnPoolCapBound, BurnTargetPinned, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CarriedSpent, CrankerAllowlistCleared, EndSinkPinned,
 FeeKeyRegistered, ForwardedOnEnd, ForwardedToWinner, LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairForwardMissing, PairLinked,
 PairResultMissing, PairResultSubmitted (plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered,
 PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted,
 RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, RuleEnded, SolBurnedOnEnd, SpendCapBound, SpendCarried,
-TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned, TokenInitialized. Error codes: 136. (Round 5, a coin that
+TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned, TargetReleased, TokenInitialized. Error codes: 144. (Round 5, a coin that
 burns another token: docs/burnticker/EXTERNAL-BURN.md; the incinerator end sink and the r5 create: docs/burnticker/END-SINK.md; burn dispersal
-(`crank_carried`, the CarriedSpent event and five errors): the checklist erratum of 2026-10-13; built, not deployed.)
+(`crank_carried`, the CarriedSpent event and five errors): the checklist erratum of 2026-10-13; the round-5 blind review fixes
+(`release_target`, the TargetReleased event, five errors, the retired `initialize_token`): the checklist erratum of 2026-10-14; the
+carried-piece pace and the liveness of a coin that burns another token (R5-8, R5-9: three errors, the CarriedPace account): the checklist
+erratum of 2026-10-15; built, not deployed.)
 
 The pair program (`pair_curve`, IDL in `src/lib/pairCurve/idl.ts`) has 9 entrypoints. `init_pair` takes args, is signed by the payer
 and the creator, and creates the pair. The two curve-trade instructions take a side, an amount and a slippage bound, and the trader

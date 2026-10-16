@@ -199,10 +199,25 @@ pub fn handle_initialize_token_r5(ctx: Context<InitializeToken>, args: Initializ
     if args.rule.mode == MODE_BUYBACK && ctx.accounts.mint.key() != BURNTICKER_FLAGSHIP {
         require!(ctx.accounts.end_sink.is_some(), BurnError::LostPathBurnsSelf);
     }
-    handle_initialize_token(ctx, args)
+    create_token(ctx, args)
 }
 
+/// Round-5 review R5-5: the round-4 create is RETIRED once round 5 is live, so every new coin goes through initialize_token_r5 and
+/// carries its end-sink requirement (the old entrypoint bypassed it). The instruction keeps its discriminator and account layout, so a
+/// client that still sends it gets this clear error. Coins created by round 4 are untouched.
+/// The `legacy-init` feature (enabled only by `test-pins`, the LiteSVM build that is never deployed) keeps the old create so the round-4
+/// suites can still model the coins round 4 created; every deployable build (default / mainnet, devnet) refuses it.
 pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTokenArgs) -> Result<()> {
+    require!(!initialize_token_retired(), BurnError::InitializeTokenRetired);
+    create_token(ctx, args)
+}
+
+/// True in every deployable build (R5-5).
+pub const fn initialize_token_retired() -> bool {
+    !cfg!(feature = "legacy-init")
+}
+
+fn create_token(ctx: Context<InitializeToken>, args: InitializeTokenArgs) -> Result<()> {
     let rent_min = Rent::get()?.minimum_balance(0);
     validate_rule(&args.rule, rent_min)?;
     validate_attesters(&args.attesters, args.quorum)?;
@@ -414,4 +429,15 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
         emit_cpi!(ev);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    /// R5-5: the default (deployable) build refuses the round-4 create; only `legacy-init` (test-pins) keeps it.
+    #[test]
+    fn the_round4_create_is_retired_in_every_deployable_build() {
+        assert_eq!(super::initialize_token_retired(), !cfg!(feature = "legacy-init"));
+        #[cfg(not(feature = "legacy-init"))]
+        assert!(super::initialize_token_retired());
+    }
 }

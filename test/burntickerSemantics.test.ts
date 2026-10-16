@@ -593,7 +593,8 @@ describe("Part 4: settlement and program semantics", () => {
 
   test("168: a resolved end forwards to the named coin only while it is live, else to $DEFICIT; a $DEFICIT that is not live moves nothing", () => {
     const end = fs.readFileSync(path.join(ROOT, "programs/burn-receipts/programs/burn_receipts/src/instructions/end.rs"), "utf8");
-    assert.match(end, /fn live\(c: &TokenConfig\) -> bool \{\s*c\.pool_verified && c\.end_state == END_STATE_LIVE && c\.rule\.mode == MODE_BUYBACK/);
+    // round-5 review R5-12: own_pool_verified() is pool_verified, or a target coin's marker (its pool_verified stays false: the rollback fence)
+    assert.match(end, /fn live\(c: &TokenConfig\) -> bool \{\s*c\.own_pool_verified\(\) && c\.end_state == END_STATE_LIVE && c\.rule\.mode == MODE_BUYBACK/);
     assert.match(end, /let ok = if sc\.owner != &crate::ID \|\| sc\.data_is_empty\(\) \{\s*false/);   // never created
     assert.match(end, /if ok \{\s*intended\s*\} else \{\s*BURNTICKER_FLAGSHIP\s*\}/);
     assert.match(end, /require!\(live\(&a\.target_config\), BurnError::FlagshipNotLive\)/);

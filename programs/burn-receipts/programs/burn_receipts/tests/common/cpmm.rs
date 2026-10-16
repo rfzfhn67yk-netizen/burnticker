@@ -393,6 +393,7 @@ pub fn ix_crank_carried(cranker: &Pubkey, mint: &Pubkey, p: &Pool, max_spend: u6
             token_program: spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
             memo_program: MEMO_PROGRAM_ID,
+            carried_pace: carried_pace_pda(mint),
             event_authority: event_authority(),
             program: burn_receipts::ID,
         }

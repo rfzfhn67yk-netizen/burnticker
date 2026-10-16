@@ -78,6 +78,8 @@ pub fn admit_target_mint(target: &AccountInfo, coin_mint: &Pubkey) -> Result<u8>
     let m = spl_token::state::Mint::unpack(&d).map_err(|_| BurnError::TargetNotSplToken)?;
     require!(m.freeze_authority.is_none(), BurnError::TargetFreezeAuthority);
     require!(m.mint_authority.is_none(), BurnError::TargetMintAuthority);
+    // Second review (B): receipts format any decimals, but a target past 18 is refused outright.
+    require!(m.decimals <= TARGET_MAX_DECIMALS, BurnError::TargetDecimalsTooLarge);
     Ok(m.decimals)
 }
 
@@ -124,17 +126,51 @@ pub fn admit_target_pool(pool_acc: &AccountInfo, config: &AccountInfo, wsol_vaul
     })
 }
 
+/// A Pyth reference and the publish times it was built from.
+#[derive(Debug, Clone, Copy)]
+pub struct PythRef {
+    /// Target raw units per lamport × 2^32.
+    pub reference: u128,
+    pub sol_publish_time: i64,
+    pub target_publish_time: i64,
+}
+
 /// The Pyth reference (target raw per lamport × 2^32) from the two price-update accounts, or the hold reason. A wrong account is an Err.
-pub fn pyth_reference(sol_acc: &AccountInfo, target_acc: &AccountInfo, target_feed: &[u8; 32], target_decimals: u8, now: i64) -> Result<core::result::Result<u128, BurnError>> {
-    let sol = match pyth::read_price(sol_acc, &PYTH_SOL_USD_FEED_ID, now)? {
-        Ok(p) => p,
-        Err(why) => return Ok(Err(why)),
+/// Round-5 review R5-7: the two updates must be published within PYTH_MAX_FEED_SKEW_SECS of each other (else held: PythFeedSkew).
+/// Second review (A): both accounts must be the feeds' SPONSORED push-oracle accounts (address-checked: a hard refusal). The caller then
+/// chooses nothing: whatever those maintained accounts hold (stale, wide, missing, not fully verified) is the feed's own state and a
+/// HOLD, so the 30-day unblock rests on the feed really being dead, never on a stale snapshot the caller picked.
+pub fn pyth_reference(sol_acc: &AccountInfo, target_acc: &AccountInfo, target_feed: &[u8; 32], target_decimals: u8, now: i64) -> Result<core::result::Result<PythRef, BurnError>> {
+    require_keys_eq!(*sol_acc.key, pyth::sponsored_address(&PYTH_SOL_USD_FEED_ID), BurnError::TargetPythInvalid);
+    require_keys_eq!(*target_acc.key, pyth::sponsored_address(target_feed), BurnError::TargetPythInvalid);
+    let sol = match pyth::read_price(sol_acc, &PYTH_SOL_USD_FEED_ID, now) {
+        Ok(Ok(p)) => p,
+        Ok(Err(why)) => return Ok(Err(why)),
+        Err(_) => return Ok(Err(BurnError::TargetPythInvalid)),
     };
-    let tgt = match pyth::read_price(target_acc, target_feed, now)? {
-        Ok(p) => p,
-        Err(why) => return Ok(Err(why)),
+    let tgt = match pyth::read_price(target_acc, target_feed, now) {
+        Ok(Ok(p)) => p,
+        Ok(Err(why)) => return Ok(Err(why)),
+        Err(_) => return Ok(Err(BurnError::TargetPythInvalid)),
     };
-    Ok(pyth::sol_price_x32(&sol, &tgt, target_decimals).ok_or(BurnError::PythUnusable))
+    if !pyth::feeds_aligned(&sol, &tgt) {
+        return Ok(Err(BurnError::PythFeedSkew));
+    }
+    Ok(pyth::sol_price_x32(&sol, &tgt, target_decimals)
+        .map(|reference| PythRef { reference, sol_publish_time: sol.publish_time, target_publish_time: tgt.publish_time })
+        .ok_or(BurnError::PythUnusable))
+}
+
+/// Round-5 review R5-7: an update older than the last one this coin accepted is refused outright (a cranker-chosen account: a fresher
+/// one exists, so this is never a hold).
+fn require_pyth_not_backwards(t: &BurnTarget, r: &PythRef) -> Result<()> {
+    require!(r.sol_publish_time >= t.last_sol_publish_time && r.target_publish_time >= t.last_target_publish_time, BurnError::PythWentBackwards);
+    Ok(())
+}
+
+fn record_pyth(t: &mut BurnTarget, r: &PythRef) {
+    t.last_sol_publish_time = t.last_sol_publish_time.max(r.sol_publish_time);
+    t.last_target_publish_time = t.last_target_publish_time.max(r.target_publish_time);
 }
 
 /// The pool's tradeable reserves (WSOL, target) right now, for an admitted pool of either kind (keys checked by the caller).
@@ -156,7 +192,7 @@ fn reserves_of(kind: u8, pool_acc: &AccountInfo, wsol_vault: &AccountInfo, targe
 #[allow(clippy::too_many_arguments)]
 /// Pin / re-pin: the Pyth feed must be usable NOW and the pool's spot within the rule's deviation of it (two-sided), so a feed that is
 /// not this token's market (or a pool pushed at pin time) is refused. Returns (reference, spot).
-fn require_pool_matches_pyth(pins: &TargetPins, pool_acc: &AccountInfo, wsol_vault: &AccountInfo, target_vault: &AccountInfo, sol_acc: &AccountInfo, target_acc: &AccountInfo, feed: &[u8; 32], decimals: u8, max_dev_bps: u16, now: i64) -> Result<(u128, u128)> {
+fn require_pool_matches_pyth(pins: &TargetPins, pool_acc: &AccountInfo, wsol_vault: &AccountInfo, target_vault: &AccountInfo, sol_acc: &AccountInfo, target_acc: &AccountInfo, feed: &[u8; 32], decimals: u8, max_dev_bps: u16, now: i64) -> Result<(PythRef, u128)> {
     require_keys_eq!(*target_vault.key, pins.target_vault, BurnError::TargetPoolInvalid);
     let reference = match pyth_reference(sol_acc, target_acc, feed, decimals, now)? {
         Ok(r) => r,
@@ -164,7 +200,7 @@ fn require_pool_matches_pyth(pins: &TargetPins, pool_acc: &AccountInfo, wsol_vau
     };
     let (r_wsol, r_tok) = reserves_of(pins.kind, pool_acc, wsol_vault, target_vault, pins.wsol_is_token_0)?;
     let spot = math::sol_price_x32(r_wsol, r_tok).map_err(|_| BurnError::EmptyReserves)?;
-    require!(pyth::within(spot, reference, max_dev_bps), BurnError::TargetPriceDeviation);
+    require!(pyth::within(spot, reference.reference, max_dev_bps), BurnError::TargetPriceDeviation);
     Ok((reference, spot))
 }
 
@@ -209,6 +245,10 @@ pub struct PinBurnTarget<'info> {
     /// CHECK: a Pyth PriceUpdateV2 of the target's feed (`target_feed_id`), checked the same way.
     pub target_price_update: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
+    /// CHECK: round-5 review R5-5: the coin's EndSink ["end_sink", mint] (address-checked). It must exist (written by
+    /// initialize_token_r5 earlier in the same create): a target coin's lost path goes to its sink, never to a self wind-down.
+    #[account(address = crate::state::end_sink_address(&mint.key()).0 @ BurnError::LostPathBurnsSelf)]
+    pub end_sink: UncheckedAccount<'info>,
 }
 
 pub fn handle_pin_burn_target(ctx: Context<PinBurnTarget>, target_feed_id: [u8; 32]) -> Result<()> {
@@ -222,6 +262,11 @@ pub fn handle_pin_burn_target(ctx: Context<PinBurnTarget>, target_feed_id: [u8; 
     require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
     require!(c.burn_target_kind == BURN_TARGET_SELF, BurnError::BurnTargetAlreadyPinned);
     require!(c.readings == 0 && c.burns == 0 && !c.pool_verified, BurnError::BurnTargetAlreadyPinned);
+    // Round-5 review R5-5: a target coin's lost path goes to its end sink (initialize_token_r5 wrote it), never a self wind-down.
+    {
+        let s = ctx.accounts.end_sink.to_account_info();
+        require!(s.owner == &crate::ID && !s.data_is_empty(), BurnError::LostPathBurnsSelf);
+    }
     require!(target_feed_id != [0u8; 32] && target_feed_id != PYTH_SOL_USD_FEED_ID, BurnError::TargetPythInvalid);
     let max_dev = c.rule.max_twap_deviation_bps;
     let target_mint = ctx.accounts.target_mint.key();
@@ -255,10 +300,13 @@ pub fn handle_pin_burn_target(ctx: Context<PinBurnTarget>, target_feed_id: [u8; 
     t.repins = 0;
     t.pending_pool = Pubkey::default();
     t.pending_eta = 0;
-    t.reserved = [0u8; 32];
+    t.last_sol_publish_time = reference.sol_publish_time;
+    t.last_target_publish_time = reference.target_publish_time;
+    t.last_burn_at = 0;
+    t.last_unblocked_at = 0;
     ctx.accounts.config.burn_target_kind = BURN_TARGET_EXTERNAL;
     let config = ctx.accounts.config.key();
-    emit_cpi!(BurnTargetPinned { config, mint, target_mint, pool: pins.pool, pool_kind: pins.kind, amm_config: pins.amm_config, target_feed_id, wsol_reserve_lamports: pins.wsol_reserve, reference_x32: reference, spot_x32: spot });
+    emit_cpi!(BurnTargetPinned { config, mint, target_mint, pool: pins.pool, pool_kind: pins.kind, amm_config: pins.amm_config, target_feed_id, wsol_reserve_lamports: pins.wsol_reserve, reference_x32: reference.reference, spot_x32: spot });
     Ok(())
 }
 
@@ -383,41 +431,61 @@ struct Quote {
     fee_ppm: u64,
     reference: u128,
     twap: Option<u128>,
+    pyth: PythRef,
 }
 
 /// The price guard for a pool that passed target_pool_blocked: Pyth fresh and tight, spot within the rule's deviation of the Pyth ratio
-/// (two-sided). Ok(Err(why)) = held; Err = a wrong account or (CPMM) the TWAP refusing, as crank_buyback.
+/// (two-sided). Ok(Err(why)) = held; Err = a wrong account (or a Pyth update older than the last one accepted, R5-7).
+/// Round-5 review R5-2: the CPMM TWAP being unavailable or away from spot is a HOLD too (it was a hard revert, so the 30-day unblock
+/// could never run and a persistent pool/oracle basis wedged the queue).
 fn price_guard(a: &CrankTargetBurn, rule_dev: u16, twap_window: u32, now: i64) -> Result<core::result::Result<Quote, BurnError>> {
     let t = &a.burn_target;
-    let reference = match pyth_reference(&a.sol_price_update.to_account_info(), &a.target_price_update.to_account_info(), &t.target_feed_id, t.target_decimals, now)? {
+    let pyth_ref = match pyth_reference(&a.sol_price_update.to_account_info(), &a.target_price_update.to_account_info(), &t.target_feed_id, t.target_decimals, now)? {
         Ok(r) => r,
         Err(why) => return Ok(Err(why)),
     };
-    let (r_wsol, r_tok) = reserves_of(t.pool_kind, &a.pool_state.to_account_info(), &a.wsol_vault.to_account_info(), &a.target_vault.to_account_info(), t.wsol_is_token_0)?;
-    let spot = math::sol_price_x32(r_wsol, r_tok).map_err(|_| BurnError::EmptyReserves)?;
+    require_pyth_not_backwards(t, &pyth_ref)?;
+    let reference = pyth_ref.reference;
+    // Second review (C): everything read from the PINNED pool accounts (the caller cannot choose them) is pool state, so a failure to
+    // load reserves, the fee or the TWAP is a HOLD (the 30-day unblock applies), never a hard revert that wedges the queue.
+    let Ok((r_wsol, r_tok)) = reserves_of(t.pool_kind, &a.pool_state.to_account_info(), &a.wsol_vault.to_account_info(), &a.target_vault.to_account_info(), t.wsol_is_token_0) else {
+        return Ok(Err(BurnError::EmptyReserves));
+    };
+    let Ok(spot) = math::sol_price_x32(r_wsol, r_tok) else { return Ok(Err(BurnError::EmptyReserves)) };
     if !pyth::within(spot, reference, rule_dev) {
         return Ok(Err(BurnError::TargetPriceDeviation));
     }
     let (fee_ppm, twap) = if t.pool_kind == TARGET_POOL_AMM_V4 {
-        (AmmV4View::load(&a.pool_state.to_account_info())?.fee_ppm().ok_or(BurnError::TargetFeeTier)?, None)
+        let Ok(p) = AmmV4View::load(&a.pool_state.to_account_info()) else { return Ok(Err(BurnError::TargetPoolUnhealthy)) };
+        let Some(fee) = p.fee_ppm() else { return Ok(Err(BurnError::TargetFeeTier)) };
+        (fee, None)
     } else {
-        let pool = PoolView::load(&a.pool_state.to_account_info())?;
-        let cfg = AmmConfigView::load(&a.amm_config.to_account_info())?;
-        let fee = cfg.trade_fee_rate.checked_add(if pool.enable_creator_fee { cfg.creator_fee_rate } else { 0 }).ok_or(BurnError::MathOverflow)?;
+        let (Ok(pool), Ok(cfg)) = (PoolView::load(&a.pool_state.to_account_info()), AmmConfigView::load(&a.amm_config.to_account_info())) else {
+            return Ok(Err(BurnError::TargetPoolUnhealthy));
+        };
+        let Some(fee) = cfg.trade_fee_rate.checked_add(if pool.enable_creator_fee { cfg.creator_fee_rate } else { 0 }) else {
+            return Ok(Err(BurnError::TargetFeeTier));
+        };
         // The CPMM pool's own TWAP stays an additional check where it exists.
-        let twap = cpmm::twap_sol_price_x32(&a.observation_state.to_account_info(), t.wsol_is_token_0, twap_window, now, spot)?.ok_or(BurnError::TwapUnavailable)?;
-        require!(math::twap_ok(spot, twap, rule_dev).map_err(|_| BurnError::MathOverflow)?, BurnError::TwapDeviation);
+        let Ok(Some(twap)) = cpmm::twap_sol_price_x32(&a.observation_state.to_account_info(), t.wsol_is_token_0, twap_window, now, spot) else {
+            return Ok(Err(BurnError::TwapUnavailable));
+        };
+        if !math::twap_ok(spot, twap, rule_dev).unwrap_or(false) {
+            return Ok(Err(BurnError::TwapDeviation));
+        }
         (fee, Some(twap))
     };
-    require!(fee_ppm <= TARGET_MAX_FEE_PPM, BurnError::TargetFeeTier);
-    Ok(Ok(Quote { r_wsol, r_tok, fee_ppm, reference, twap }))
+    if fee_ppm > TARGET_MAX_FEE_PPM {
+        return Ok(Err(BurnError::TargetFeeTier));
+    }
+    Ok(Ok(Quote { r_wsol, r_tok, fee_ppm, reference, twap, pyth: pyth_ref }))
 }
 
 pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32) -> Result<()> {
     let (rule, mint_key, fee_bump, pool_key, target_mint, kind) = {
         let c = &ctx.accounts.config;
         require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
-        require!(c.burn_target_kind == BURN_TARGET_EXTERNAL, BurnError::NoBurnTarget);
+        require!(c.burns_target(), BurnError::NoBurnTarget);
         require_next_in_line(c, &ctx.accounts.reading)?;
         require!(ctx.accounts.reading.units > 0, BurnError::NoUnits);
         let t = &ctx.accounts.burn_target;
@@ -466,6 +534,10 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
     let mut reserve_cap = 0u64;
     let mut carry_reason = CARRY_REASON_BELOW_FLOOR;
     let mut reference_x32 = 0u128;
+    let reading_age = now.saturating_sub(ctx.accounts.reading.submitted_at);
+    // R5-6: the 30-day unblock processed this reading without a swap (recorded on the BurnTarget for release_target).
+    let mut unblocked = false;
+    let mut accepted_pyth: Option<PythRef> = None;
 
     // ----- the pool and the price: tradeable, or held (30 days after the reading the queue stops waiting) -----
     let ready: Option<Quote> = if target == 0 || target < rule.floor_lamports {
@@ -478,10 +550,11 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
         match held {
             Ok(q) => Some(q),
             Err(why) => {
-                if now.saturating_sub(ctx.accounts.reading.submitted_at) < QUEUE_UNBLOCK_SECS {
+                if reading_age < QUEUE_UNBLOCK_SECS {
                     return Err(why.into());
                 }
                 carry_reason = CARRY_REASON_POOL_UNTRADEABLE;
+                unblocked = true;
                 None
             }
         }
@@ -496,22 +569,36 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
             reserve_cap = math::reserve_spend_cap(q.r_wsol, MAX_SPEND_RESERVE_BPS);
             let spend = target.min(reserve_cap).min(pool_before);
             // min-out: the larger of the spot and the PYTH quotes (and, CPMM, the TWAP quote), each less the fee and slippage_bps.
-            let min_out = if spend == 0 || spend < rule.floor_lamports {
-                0
+            // Second review (C): a quote that cannot be computed (an overflow on extreme reserves or reference) is a hold as well.
+            let quotes = if spend == 0 || spend < rule.floor_lamports {
+                Some((0, 0))
             } else {
-                let by_pyth = math::buyback_min_out(spend, q.r_wsol, q.r_tok, q.reference, q.fee_ppm, rule.slippage_bps).map_err(|_| BurnError::MathOverflow)?;
+                let by_pyth = math::buyback_min_out(spend, q.r_wsol, q.r_tok, q.reference, q.fee_ppm, rule.slippage_bps).ok();
                 let by_twap = match q.twap {
-                    Some(tw) => math::buyback_min_out(spend, q.r_wsol, q.r_tok, tw, q.fee_ppm, rule.slippage_bps).map_err(|_| BurnError::MathOverflow)?,
-                    None => 0,
+                    Some(tw) => math::buyback_min_out(spend, q.r_wsol, q.r_tok, tw, q.fee_ppm, rule.slippage_bps).ok(),
+                    None => Some(0),
                 };
-                by_pyth.max(by_twap)
+                let spot_out = math::min_amount_out(spend, q.r_wsol, q.r_tok, q.fee_ppm, 0).ok();
+                match (by_pyth, by_twap, spot_out) {
+                    (Some(p), Some(tw), Some(so)) => Some((p.max(tw), so)),
+                    _ => None,
+                }
             };
-            if spend == 0 || spend < rule.floor_lamports || min_out == 0 {
+            let (min_out, spot_out) = quotes.unwrap_or((u64::MAX, 0));
+            if quotes.is_some() && (spend == 0 || spend < rule.floor_lamports || min_out == 0) {
                 (0u64, 0u64, OUTCOME_BELOW_FLOOR, String::from("none"), target)
             } else {
-                let spot_out = math::min_amount_out(spend, q.r_wsol, q.r_tok, q.fee_ppm, 0).map_err(|_| BurnError::MathOverflow)?;
-                require!(spot_out >= min_out, BurnError::TargetPriceDeviation);
-
+                // Round-5 review R5-2: the pool can sit inside the deviation band yet under the Pyth min-out (band wider than the
+                // slippage): a HOLD like every other price reason, so the 30-day unblock still runs (it was a hard revert: a wedge).
+                if spot_out < min_out {
+                    if reading_age < QUEUE_UNBLOCK_SECS {
+                        return err!(BurnError::TargetPriceDeviation);
+                    }
+                    carry_reason = CARRY_REASON_POOL_UNTRADEABLE;
+                    unblocked = true;
+                    (0u64, 0u64, OUTCOME_BELOW_FLOOR, String::from("none"), target)
+                } else {
+                accepted_pyth = Some(q.pyth);
                 let from_lamports = spend.saturating_sub(wsol_balance);
                 if from_lamports > 0 {
                     system_program::transfer(
@@ -590,6 +677,7 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
                 require!(target_vault_before.checked_sub(spl_amount(&ctx.accounts.target_vault)?) == Some(got), BurnError::SwapOutputMismatch);
                 carry_reason = CARRY_REASON_RESERVE_CAP;
                 (spend, got, OUTCOME_BURNED, memo::swap_ref(&pool_key), target - spend)
+                }
             }
         }
     };
@@ -665,6 +753,15 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
     t.total_spent_lamports = t.total_spent_lamports.checked_add(spent).ok_or(BurnError::MathOverflow)?;
     if target_burn > 0 {
         t.burns = t.burns.checked_add(1).ok_or(BurnError::MathOverflow)?;
+    }
+    if let Some(r) = accepted_pyth.as_ref() {
+        record_pyth(t, r);
+    }
+    if spent > 0 {
+        t.last_burn_at = now;
+    }
+    if unblocked {
+        t.last_unblocked_at = now;
     }
 
     if spent == 0 && carried_out > 0 {
@@ -803,7 +900,7 @@ pub fn handle_apply_target_pool(ctx: Context<ApplyTargetPool>) -> Result<()> {
     admit_target_mint(&ctx.accounts.target_mint.to_account_info(), &mint)?;
     let a = &ctx.accounts;
     let pins = admit_target_pool(&a.new_pool.to_account_info(), &a.new_amm_config.to_account_info(), &a.new_wsol_vault.to_account_info(), &target_mint, now)?;
-    require_pool_matches_pyth(
+    let (pyth_ref, _) = require_pool_matches_pyth(
         &pins,
         &a.new_pool.to_account_info(),
         &a.new_wsol_vault.to_account_info(),
@@ -817,10 +914,257 @@ pub fn handle_apply_target_pool(ctx: Context<ApplyTargetPool>) -> Result<()> {
     )?;
     let t = &mut ctx.accounts.burn_target;
     write_pins(t, &pins);
+    record_pyth(t, &pyth_ref);
     t.pending_pool = Pubkey::default();
     t.pending_eta = 0;
     t.repins = t.repins.saturating_add(1);
     let (config, caller) = (ctx.accounts.config.key(), ctx.accounts.caller.key());
     emit_cpi!(TargetPoolRepinned { config, target_mint, old_pool, new_pool: pins.pool, pool_kind: pins.kind, wsol_reserve_lamports: pins.wsol_reserve, caller });
     Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// release_target (round-5 review R5-6: the liveness escape for a target whose pool or feed is dead)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/// PERMISSIONLESS (the cranker allowlist applies while the pre-audit cap is in force). A target coin whose pinned pool or Pyth feed
+/// stopped working only carries its spend: each reading is held, processed after 30 days with its whole spend carried, and the carry is
+/// re-offered to the next reading, which holds again. A re-pin needs an active admin and any one attester can veto it. This moves the
+/// CARRIED spend (only that: never more than the rule already owed) to the flagship's fee PDA, where $DEFICIT's own cranks burn it:
+///   · the coin burns a target, buyback mode, no submitted reading waits for its crank (crank_carried's queue rule);
+///   · the last event of the target is a 30-day unblock (BurnTarget.last_unblocked_at > last_burn_at) and 30 days have passed since the
+///     last target burn (or the pin): a target that burned since is not stalled (TargetNotStalled);
+///   · the flagship is live (verified pool, rule not ended, buyback).
+/// Amount = min(carried_spend_lamports, SOL above the reserve + synced WSOL, the burn-pool cap); SOL first, then WSOL into the
+/// flagship fee PDA's WSOL account. carried_spend_lamports drops by the amount. Memo `<PREFIX>|release|to=<12>|lamports=N|left=N|v1`,
+/// event TargetReleased. No attester or admin takes part, so neither can block it. Callable again while the conditions hold.
+#[event_cpi]
+#[derive(Accounts)]
+pub struct ReleaseTarget<'info> {
+    pub cranker: Signer<'info>,
+    /// CHECK: the platform PDA (seeds-checked) — its cap and cranker allowlist.
+    #[account(seeds = [PLATFORM_SEED], bump)]
+    pub platform: UncheckedAccount<'info>,
+    #[account(mut, seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
+    pub config: Box<Account<'info, TokenConfig>>,
+    #[account(seeds = [BURN_TARGET_SEED, config.mint.as_ref()], bump = burn_target.bump)]
+    pub burn_target: Box<Account<'info, BurnTarget>>,
+    #[account(mut, seeds = [FEE_SEED, config.mint.as_ref()], bump = config.fee_bump)]
+    pub fee_vault: SystemAccount<'info>,
+    /// CHECK: ATA(fee PDA, WSOL) — address-checked; may not exist (then it holds nothing).
+    #[account(mut, address = anchor_spl::associated_token::get_associated_token_address(&fee_vault.key(), &NATIVE_MINT) @ BurnError::FeeAccountTampered)]
+    pub fee_wsol: UncheckedAccount<'info>,
+    #[account(seeds = [CONFIG_SEED, BURNTICKER_FLAGSHIP.as_ref()], bump = flagship_config.bump)]
+    pub flagship_config: Box<Account<'info, TokenConfig>>,
+    #[account(mut, seeds = [FEE_SEED, BURNTICKER_FLAGSHIP.as_ref()], bump = flagship_config.fee_bump)]
+    pub flagship_fee_vault: SystemAccount<'info>,
+    /// CHECK: ATA(flagship fee PDA, WSOL) — address-checked; must exist only when WSOL is moved.
+    #[account(mut, address = anchor_spl::associated_token::get_associated_token_address(&flagship_fee_vault.key(), &NATIVE_MINT) @ BurnError::FeeAccountTampered)]
+    pub flagship_fee_wsol: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    /// CHECK: address-checked: the SPL Memo program.
+    #[account(address = MEMO_PROGRAM_ID)]
+    pub memo_program: UncheckedAccount<'info>,
+}
+
+/// Round-5 review R5-9: the coin's BurnTarget is pinned and working — read from the account itself (address-checked): it exists, belongs
+/// to this coin, names a target mint and a pool, and is not STALLED (last_unblocked_at > last_burn_at: its last target event is a
+/// 30-day unblock, the marker release_target uses; a later burn clears it). No account passed for a coin that needs one is refused
+/// (BurnTargetAccountMissing), so a cranker cannot make a live target coin look dead by leaving it out; an empty account at the address
+/// is "not pinned".
+pub fn target_pinned(mint: &Pubkey, acc: Option<&AccountInfo>) -> Result<bool> {
+    let acc = acc.ok_or(BurnError::BurnTargetAccountMissing)?;
+    require!(*acc.key == crate::state::burn_target_address(mint).0, BurnError::BurnTargetAccountMissing);
+    if acc.owner != &crate::ID {
+        return Ok(false);
+    }
+    // BurnTarget at fixed offsets (8-byte discriminator, version, bump, then state.rs's field order): mint 10..42, target_mint 42..74,
+    // pool 108..140, pinned_at 269..277, last_burn_at 357..365, last_unblocked_at 365..373. Read in place (no Borsh): a small binary.
+    let d = acc.try_borrow_data()?;
+    if d.len() < 373 || d[..8] != BurnTarget::DISCRIMINATOR[..] {
+        return Ok(false);
+    }
+    let set = |r: core::ops::Range<usize>| d[r].iter().any(|b| *b != 0);
+    let i = |at: usize| i64::from_le_bytes(d[at..at + 8].try_into().unwrap());
+    Ok(d[10..42] == mint.to_bytes()[..] && set(42..74) && set(108..140) && i(269) > 0 && i(365) <= i(357))
+}
+
+/// Round-5 review R5-9: the coin can take part in pair forwarding and end sinks — its own pool verified (own_pool_verified, R5-12),
+/// or a target coin (burn_target_kind EXTERNAL, own pool not yet verified) whose BurnTarget is pinned and not stalled: it cranks on the
+/// target's pool without a pool of its own. An external coin whose BurnTarget is not pinned, or stalled, is dead, as before. `bt` is read only for that case.
+pub fn side_live(c: &TokenConfig, bt: Option<&AccountInfo>) -> Result<bool> {
+    if c.own_pool_verified() {
+        return Ok(true);
+    }
+    if c.burn_target_kind != BURN_TARGET_EXTERNAL {
+        return Ok(false);
+    }
+    target_pinned(&c.mint, bt)
+}
+
+/// The stall test of release_target (pure, unit-tested): the last target event is a 30-day unblock, 30 days after the last burn / pin.
+pub fn target_stalled(t: &BurnTarget, now: i64) -> bool {
+    t.last_unblocked_at > t.last_burn_at && now.saturating_sub(t.last_burn_at.max(t.pinned_at)) >= QUEUE_UNBLOCK_SECS
+}
+
+pub fn handle_release_target(ctx: Context<ReleaseTarget>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let a = &ctx.accounts;
+    let c = &a.config;
+    require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
+    require!(c.burns_target(), BurnError::NoBurnTarget);
+    require!(crate::instructions::crank_carried::queue_empty(c), BurnError::ReadingPending);
+    require!(c.carried_spend_lamports > 0 && target_stalled(&a.burn_target, now), BurnError::TargetNotStalled);
+    let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
+    require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
+    require!(BURNTICKER_FLAGSHIP != Pubkey::default(), BurnError::FlagshipNotPinned);
+    require!(crate::instructions::end::live(&a.flagship_config), BurnError::FlagshipNotLive);
+
+    let reserve = c.rule.reserve_lamports;
+    let mint = c.mint;
+    let fee_bump = c.fee_bump;
+    let carried_in = c.carried_spend_lamports;
+    let fee_seeds: &[&[u8]] = &[FEE_SEED, mint.as_ref(), &[fee_bump]];
+    let wsol_acc = a.fee_wsol.to_account_info();
+    let wsol_avail = crate::instructions::pair::wsol_synced_or_zero(&wsol_acc)?;
+    if wsol_avail > 0 {
+        require_fee_token_account_intact(&wsol_acc, &a.fee_vault.key(), &NATIVE_MINT, false)?;
+    }
+    let sol_avail = a.fee_vault.lamports().saturating_sub(reserve);
+    let pool_actual = sol_avail.checked_add(wsol_avail).ok_or(BurnError::MathOverflow)?;
+    let mut amount = carried_in.min(pool_actual);
+    if let Some(cap) = active_cap(&a.platform.to_account_info(), now)? {
+        amount = amount.min(cap);
+    }
+    require!(amount > 0, BurnError::NothingToForward);
+    let sol_part = amount.min(sol_avail);
+    let wsol_part = amount - sol_part;
+    if sol_part > 0 {
+        system_program::transfer(
+            CpiContext::new_with_signer(
+                system_program::ID,
+                system_program::Transfer { from: a.fee_vault.to_account_info(), to: a.flagship_fee_vault.to_account_info() },
+                &[fee_seeds],
+            ),
+            sol_part,
+        )?;
+        require!(a.fee_vault.lamports() >= reserve, BurnError::ReserveBreached);
+    }
+    if wsol_part > 0 {
+        require_fee_token_account_intact(&a.flagship_fee_wsol.to_account_info(), &a.flagship_fee_vault.key(), &NATIVE_MINT, false)?;
+        token::sync_native(CpiContext::new(token::ID, SyncNative { account: wsol_acc.clone() }))?;
+        token::transfer(
+            CpiContext::new_with_signer(
+                token::ID,
+                token::Transfer { from: wsol_acc.clone(), to: a.flagship_fee_wsol.to_account_info(), authority: a.fee_vault.to_account_info() },
+                &[fee_seeds],
+            ),
+            wsol_part,
+        )?;
+    }
+    let left = carried_in - amount;
+    let m = memo::format_release(c.memo_prefix_str(), &BURNTICKER_FLAGSHIP, amount, left);
+    memo::emit_memo(&a.memo_program.to_account_info(), &m)?;
+    let config_key = ctx.accounts.config.key();
+    ctx.accounts.config.carried_spend_lamports = left;
+    emit_cpi!(crate::events::TargetReleased {
+        config: config_key,
+        mint,
+        to_mint: BURNTICKER_FLAGSHIP,
+        lamports: amount,
+        sol_lamports: sol_part,
+        wsol_lamports: wsol_part,
+        carried_out_lamports: left,
+        cranker: ctx.accounts.cranker.key(),
+    });
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bt(pinned_at: i64, last_burn_at: i64, last_unblocked_at: i64) -> BurnTarget {
+        BurnTarget {
+            version: 1,
+            bump: 0,
+            mint: Pubkey::default(),
+            target_mint: Pubkey::default(),
+            target_decimals: 6,
+            pool_kind: TARGET_POOL_CPMM,
+            target_feed_id: [0; 32],
+            pool: Pubkey::default(),
+            amm_config: Pubkey::default(),
+            wsol_vault: Pubkey::default(),
+            target_vault: Pubkey::default(),
+            observation: Pubkey::default(),
+            wsol_is_token_0: true,
+            pinned_at,
+            total_target_burned: 0,
+            total_spent_lamports: 0,
+            burns: 0,
+            repins: 0,
+            pending_pool: Pubkey::default(),
+            pending_eta: 0,
+            last_sol_publish_time: 0,
+            last_target_publish_time: 0,
+            last_burn_at,
+            last_unblocked_at,
+        }
+    }
+
+    /// R5-9: target_pinned reads BurnTarget at fixed offsets; they must match the Borsh layout (mint 10, target_mint 42, pool 108,
+    /// pinned_at 269, last_burn_at 357, last_unblocked_at 365).
+    #[test]
+    fn target_pinned_offsets_match_the_burn_target_layout() {
+        let mut t = bt(0x0102_0304_0506_0708, 0, 0);
+        t.mint = Pubkey::new_from_array([0x11; 32]);
+        t.target_mint = Pubkey::new_from_array([0x22; 32]);
+        t.pool = Pubkey::new_from_array([0x33; 32]);
+        let mut d = Vec::new();
+        t.try_serialize(&mut d).unwrap();
+        assert_eq!(&d[..8], BurnTarget::DISCRIMINATOR);
+        assert_eq!(&d[10..42], &[0x11; 32]);
+        assert_eq!(&d[42..74], &[0x22; 32]);
+        assert_eq!(&d[108..140], &[0x33; 32]);
+        assert_eq!(i64::from_le_bytes(d[269..277].try_into().unwrap()), 0x0102_0304_0506_0708);
+        let t = bt(1, 0x0a0b, 0x0c0d);
+        let mut d = Vec::new();
+        t.try_serialize(&mut d).unwrap();
+        assert_eq!(d.len(), 373);
+        assert_eq!(i64::from_le_bytes(d[357..365].try_into().unwrap()), 0x0a0b, "last_burn_at");
+        assert_eq!(i64::from_le_bytes(d[365..373].try_into().unwrap()), 0x0c0d, "last_unblocked_at");
+    }
+
+    /// R5-6: a release needs a 30-day unblock newer than the last burn, and 30 days since the last burn (or the pin).
+    #[test]
+    fn release_needs_an_unblock_after_the_last_burn_and_thirty_days() {
+        let d = 86_400;
+        let pin = 1_000_000;
+        // never unblocked: not stalled
+        assert!(!target_stalled(&bt(pin, 0, 0), pin + 90 * d));
+        // unblocked, no burn ever, 31 days after the pin: stalled
+        assert!(target_stalled(&bt(pin, 0, pin + 31 * d), pin + 31 * d));
+        // burned after the unblock: not stalled
+        assert!(!target_stalled(&bt(pin, pin + 32 * d, pin + 31 * d), pin + 90 * d));
+        // unblocked after a burn, but the burn was under 30 days ago: not yet
+        assert!(!target_stalled(&bt(pin, pin + 10 * d, pin + 20 * d), pin + 39 * d));
+        assert!(target_stalled(&bt(pin, pin + 10 * d, pin + 20 * d), pin + 40 * d));
+    }
+
+    /// R5-12: a target coin's own-pool verification lives in burn_target_kind; pool_verified stays false (round 4 refuses it).
+    #[test]
+    fn a_target_coins_own_pool_verification_never_sets_pool_verified() {
+        let mut c: TokenConfig = unsafe { core::mem::zeroed() };
+        c.burn_target_kind = BURN_TARGET_EXTERNAL;
+        c.set_own_pool_verified(true);
+        assert!(!c.pool_verified && c.own_pool_verified() && c.burns_target());
+        assert_eq!(c.burn_target_kind, BURN_TARGET_EXTERNAL_POOL_VERIFIED);
+        c.set_own_pool_verified(false);
+        assert!(!c.pool_verified && !c.own_pool_verified() && c.burn_target_kind == BURN_TARGET_EXTERNAL);
+        let mut s: TokenConfig = unsafe { core::mem::zeroed() };
+        s.set_own_pool_verified(true);
+        assert!(s.pool_verified && s.own_pool_verified() && !s.burns_target());
+    }
 }

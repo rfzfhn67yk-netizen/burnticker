@@ -744,6 +744,7 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
             "register_fee_key",
             "register_pair_pool",
             "register_pool",
+            "release_target",
             "renounce_admin",
             "renounce_platform_authority",
             "replace_pool",

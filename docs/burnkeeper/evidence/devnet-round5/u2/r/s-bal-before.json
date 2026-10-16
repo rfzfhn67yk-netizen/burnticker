@@ -1,0 +1,11 @@
+{
+  "mint": "6dgkpNcjztaaNpM55jn3m69koY3nWs2Dx4QrEapHpNF4",
+  "feePda": "22cg6Yvn4Z5NAxKxNpiXEzqhd74HXiCEd5d2D46C31SH",
+  "feeLamports": 120000000,
+  "feeWsol": "BoyLYhnyf4pz5d9YzkVwmi9j7QRVs8WhCRzSAxVzoWws",
+  "feeWsolExists": false,
+  "feeWsolOwner": null,
+  "feeWsolLamports": 0,
+  "feeWsolAmount": null,
+  "incineratorLamports": 0
+}

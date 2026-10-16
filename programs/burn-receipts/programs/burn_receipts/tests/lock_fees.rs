@@ -458,7 +458,14 @@ fn the_mainnet_build_pins_the_owners_treasury_and_platform() {
     // and pins only the owner's LaunchLab platform (94x5qDDJ…): the harness platform is refused
     let payer = env.payer.pubkey();
     let (mint, creator, a) = (Keypair::new(), Keypair::new(), Keypair::new());
+    // (round-5 review R5-5: the mainnet build retires the round-4 create; the r5 create is the one that reaches the platform pin)
     let r = env.send(&[ix_initialize(&payer, &creator.pubkey(), &mint.pubkey(), init_args(buyback_rule(), vec![a.pubkey()], 1))], &[&creator, &mint]);
+    expect_anchor_err(r, "InitializeTokenRetired");
+    let mut args = init_args(buyback_rule(), vec![a.pubkey()], 1);
+    args.admin = creator.pubkey();
+    args.end_sink_kind = END_SINK_FLAGSHIP;
+    args.end_sink_min_lamports = 10_000_000;
+    let r = env.send(&[ix_initialize_r5(&payer, &creator.pubkey(), &mint.pubkey(), args, Some(TEST_LAUNCHLAB_PLATFORM), None, false)], &[&creator, &mint]);
     expect_anchor_err(r, "PlatformNotAllowed");
 }
 

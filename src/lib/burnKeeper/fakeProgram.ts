@@ -1,7 +1,7 @@
 import { ATTESTATION_DOMAIN, CARRY_CONSECUTIVE, GENESIS_HASH, KIND_BASELINE, KIND_RESET, MAX_QUORUM, MAX_SPEND_RESERVE_BPS, PACKET_DATA_SIZE, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
 import { formatBuybackMemo, formatDebtMemo, formatTargetMemo } from "@/lib/burnReceipts/memo";
-import { buybackSpend, deltaPlausible, formatDate, formatFixed, formatSignedFixed, rawToTokens, reserveSpendCap, settleVault, spendablePool, step } from "@/lib/burnReceipts/math";
-import type { ConfirmOutcome, Cosignature, CrankPlan, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
+import { buybackSpend, carriedBudgetNow, carriedBudgetReadySec, deltaPlausible, formatDate, formatFixed, formatSignedFixed, rawToTokens, reserveSpendCap, settleVault, spendablePool, step } from "@/lib/burnReceipts/math";
+import type { CarriedPlanStatus, ConfirmOutcome, Cosignature, CrankPlan, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
 import { PublicKey } from "@solana/web3.js";
 import { sourceUrlHash, verifyAttestation } from "@/lib/burnReceipts/attestation";
 
@@ -328,6 +328,7 @@ export class FakeProgram implements ProgramPort {
     if (!c.poolRegistered) return { err: "PoolNotRegistered" };
     if (c.hasBaseline && c.crankCursor !== c.lastRecordDate) return { err: "ReadingPending" };
     if (c.carriedSpendLamports <= Z || maxSpend <= Z) return { err: "NothingCarried" };
+    const nowSec = Math.floor(this.now() / 1000);
     if (!this.poolTradable) return { err: "PoolNotTradable" };
     const cap = reserveSpendCap(this.poolReserveWsol, MAX_SPEND_RESERVE_BPS);
     if (maxSpend > cap) return { err: "SpendAboveCap" };
@@ -337,9 +338,13 @@ export class FakeProgram implements ProgramPort {
     if (basis < spend) spend = basis;
     if (spend <= Z) return { err: "NothingCarried" };
     if (spend < c.floorLamports && spend !== c.carriedSpendLamports) return { err: "BelowFloor" };
+    // round-5 review R5-8: the piece fits the coin's carried budget (one cap per 600 s, up to one cap; one piece per second)
+    const budget = carriedBudgetNow(this.lastCarriedAt, this.carriedBudgetLamports, cap, nowSec);
+    if (budget === null || spend > budget) return { err: "CarriedTooSoon" };
     if (this.twap === "unavailable") return { err: "TwapUnavailable" };
     if (this.twap === "deviation") return { err: "TwapDeviation" };
     if (!commit) return { memo: null };
+    this.carriedBudgetLamports = budget - spend;
     if (this.strayWsolLamports > Z) { this.wsol += this.strayWsolLamports; this.strayWsolLamports = Z; }
     const got = (spend * this.tokensPerSol) / big(1_000_000_000);
     const fromLamports = spend > this.wsol ? spend - this.wsol : Z;
@@ -349,19 +354,37 @@ export class FakeProgram implements ProgramPort {
     const burned = this.feeTokens;
     this.feeTokens = Z; this.supply -= burned;
     const left = c.carriedSpendLamports - spend;
-    this.cfg = { ...this.cfg, totalBurned: c.totalBurned + burned, totalSpentLamports: c.totalSpentLamports + spend, burns: c.burns + (burned > Z ? 1 : 0), carriedSpendLamports: left };
-    return { memo: `${c.memoPrefix}|carried|through=${formatDate(c.crankCursor)}|spent=${spend}|got=${rawToTokens(got, this.decimals)}|burn=${rawToTokens(burned, this.decimals)}|left=${left}|swap=${(c.pool ?? "none").slice(0, 12)}|rules=sha256:${this.rulesSha256.slice(0, 12)}|v1` };
+    // R5-8: a carried piece counts in CarriedPace.pieces, never in `burns` (reading cranks only)
+    const piece = ++this.carriedPieces;
+    this.lastCarriedAt = nowSec;
+    this.cfg = { ...this.cfg, totalBurned: c.totalBurned + burned, totalSpentLamports: c.totalSpentLamports + spend, carriedSpendLamports: left };
+    return { memo: `${c.memoPrefix}|carried|through=${formatDate(c.crankCursor)}|spent=${spend}|got=${rawToTokens(got, this.decimals)}|burn=${rawToTokens(burned, this.decimals)}|left=${left}|piece=${piece}|swap=${(c.pool ?? "none").slice(0, 12)}|rules=sha256:${this.rulesSha256.slice(0, 12)}|v1` };
   }
-  async planCarried(maxSpendLamports: bigint): Promise<{ build: () => Promise<SignedTx> } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" }> {
+  async planCarried(maxSpendLamports: bigint): Promise<{ build: () => Promise<SignedTx> } | CarriedPlanStatus> {
     const c = this.cfg;
     if (c.mode !== "buyback" || this.burnTarget) return { status: "not-buyback" };
     if (this.endState.state !== "live") return { status: "rule-ended" };
     if (!c.poolRegistered) return { status: "waiting-for-pool" };
     if (c.hasBaseline && c.crankCursor !== c.lastRecordDate) return { status: "reading-pending" };
     if (c.carriedSpendLamports <= Z) return { status: "nothing-carried" };
+    const nowSec = Math.floor(this.now() / 1000);
+    const need = maxSpendLamports < c.carriedSpendLamports ? maxSpendLamports : c.carriedSpendLamports;
+    const ready = carriedBudgetReadySec(this.lastCarriedAt, this.carriedBudgetLamports, reserveSpendCap(this.poolReserveWsol, MAX_SPEND_RESERVE_BPS), need, nowSec);
+    if (ready !== null && ready > nowSec) return { status: "too-soon", nextAtMs: this.now() + (ready - nowSec) * 1000 };
     return { build: async () => this.mk({ kind: "carried", maxSpend: maxSpendLamports }) };
   }
   async poolSolReserve(): Promise<bigint | null> { return this.cfg.poolRegistered ? this.poolReserveWsol : null; }
+  /** Round-5 review R5-8 (CarriedPace): the last carried piece (unix seconds; 0 = never), the budget left after it, and the piece count
+   *  (never in cfg.burns). */
+  lastCarriedAt = 0;
+  carriedBudgetLamports = Z;
+  carriedPieces = 0;
+  async carriedPace(): Promise<{ lastCarriedAt: number; budgetLamports: bigint; chainNowSec: number | null }> {
+    return { lastCarriedAt: this.lastCarriedAt, budgetLamports: this.carriedBudgetLamports, chainNowSec: Math.floor(this.now() / 1000) };
+  }
+  /** Round-5 review R5-9 (blind review): the coin's pinned target STALLED (last_unblocked_at > last_burn_at) — it is then not live for
+   *  pair forwarding or as a named end sink. */
+  targetStalled = false;
 
   /** crank_target_burn as the program runs it (crank_buyback refuses a target coin with BurnTargetSet; a self coin refuses the target crank). */
   private execTarget(D: number, r: ProgramReadingView, kind: string, commit: boolean): { err: string } | { memo: string | null } {

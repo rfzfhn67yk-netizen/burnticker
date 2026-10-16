@@ -43,6 +43,7 @@ export const OUTFLOW = {
   forwardWinner: "a paired coin's fuel for a period it lost goes to the winner's burn pool, in the formula's amount, and the winner's own burns spend it",
   swapBurnOther: "SOL from the burn pool is swapped, on the one pool pinned before the coin existed, for the other token the coin burns, and every token received is burned",
   forwardEnd: "a coin whose rule ended with a result sends its remaining fuel, and any fees that arrive later, to its end sink's burn pool (the named coin while it is live, otherwise the flagship $DEFICIT), and that coin's own burns spend it",
+  releaseTarget: "a coin whose burn target stopped working (no burn for 30 days, its last reading processed without one) sends the spend it still owes, and only that, to the flagship $DEFICIT's burn pool, and $DEFICIT's own burns spend it",
   incinerateEnd: "a coin whose end sink is Solana's incinerator sends the SOL left after its rule ended with a result, and any fees that arrive later, to the incinerator, which nothing can spend from",
   lpBurnFallback: "fallback only: if lock_lp cannot run for 30 days, burn_lp destroys the side's LP tokens, and there are no LP fees after that",
 } as const;
@@ -56,7 +57,7 @@ export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowC
     crank_buyback: "swapBurn", crank_carried: "swapBurn", crank_no_units: "none", crank_vault: "burn", initialize_platform: "rent", initialize_token: "rent", propose_attesters: "none",
     propose_cap_raise: "none", register_fee_key: "rent", link_pair: "rent", submit_pair_result: "rent", forward_to_winner: "forwardWinner", unlink_pair: "rent", submit_rule_end: "rent", forward_on_end: "forwardEnd", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",
     set_registration_policy: "none", submit_reading: "rent", veto_registration_policy: "none",
-    pin_burn_target: "rent", crank_target_burn: "swapBurnOther", initialize_token_r5: "rent", burn_sol_on_end: "incinerateEnd", propose_target_pool: "none", cancel_target_pool: "none", veto_target_pool: "none", apply_target_pool: "none",
+    pin_burn_target: "rent", crank_target_burn: "swapBurnOther", initialize_token_r5: "rent", burn_sol_on_end: "incinerateEnd", propose_target_pool: "none", cancel_target_pool: "none", veto_target_pool: "none", apply_target_pool: "none", release_target: "releaseTarget",
   },
   pair_curve: { buy: "trade", sell: "trade", graduate: "graduate", close_pair: "close", init_pair: "rent", void_pair: "none", claim_developer_fee: "devClaim", lock_lp: "lock", burn_lp: "lpBurnFallback" },
 };

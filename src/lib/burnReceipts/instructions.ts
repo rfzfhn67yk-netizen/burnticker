@@ -4,7 +4,7 @@ import type { BuybackPoolAccounts } from "@/lib/burnReceipts/cpmm";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { encodeInstruction } from "@/lib/burnReceipts/idlCoder";
 import type { RuleParams } from "@/lib/burnReceipts/math";
-import { associatedTokenAddress, configPda, cpmmAuthority, endSinkPda, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lockedLiquidityPda, lpLockVault, pairLinkPda, pairResultPda, platformPda, programDataAddress, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
+import { associatedTokenAddress, configPda, cpmmAuthority, endSinkPda, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, carriedPacePda, lockedLiquidityPda, lpLockVault, pairLinkPda, pairResultPda, platformPda, programDataAddress, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
 
 /**
  * Instruction builders. Data comes from the IDL coder; account ORDER and writable/signer flags come from the IDL too (each builder
@@ -325,7 +325,8 @@ export function crankBuybackIx(o: { programId: PublicKey; cranker: PublicKey; mi
 /**
  * crank_carried (burn dispersal, 2026-10-13): spend a piece of at most `maxSpendLamports` of the config's carried spend without a
  * reading — same pool accounts as crank_buyback, no Reading. The program refuses a piece above 2 % of the pool's WSOL reserve
- * (SpendAboveCap), with nothing carried (NothingCarried) and while a reading waits for its own crank (ReadingPending).
+ * (SpendAboveCap), with nothing carried (NothingCarried), while a reading waits for its own crank (ReadingPending) and (round-5 review
+ * R5-8) within MIN_CARRIED_INTERVAL_SECS of the coin's last piece (CarriedTooSoon).
  */
 export function crankCarriedIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; pool: BuybackPoolAccounts; cluster: Cluster; maxSpendLamports: bigint }): TransactionInstruction {
   return build(o.programId, "crank_carried", {
@@ -346,6 +347,8 @@ export function crankCarriedIx(o: { programId: PublicKey; cranker: PublicKey; mi
     token_program: TOKEN_PROGRAM_ID,
     system_program: SystemProgram.programId,
     memo_program: MEMO_PROGRAM_ID,
+    // round-5 review R5-8: the coin's pace (created on its first piece; the cranker pays the rent)
+    carried_pace: carriedPacePda(o.programId, o.mint),
   }, { max_spend_lamports: o.maxSpendLamports });
 }
 

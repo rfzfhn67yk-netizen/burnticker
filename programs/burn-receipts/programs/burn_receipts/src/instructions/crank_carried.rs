@@ -11,7 +11,8 @@ use crate::instructions::crank_common::{active_cap, crankers_in_force, require_f
 use crate::instructions::pool_health::clear_untradeable;
 use crate::math;
 use crate::memo;
-use crate::state::TokenConfig;
+use crate::instructions::pair::create_pda;
+use crate::state::{carried_pace_address, CarriedPace, TokenConfig};
 
 /// PERMISSIONLESS (BUYBACK MODE, burn dispersal 2026-10-13). Spends part of the SOL the rule already owes from earlier capped cranks
 /// (`carried_spend_lamports`, review H-1) WITHOUT a new reading, so a large owed spend can be bought in small pieces spread over time
@@ -32,14 +33,25 @@ use crate::state::TokenConfig;
 ///   · when nothing is carried (NothingCarried), or the piece would be under the rule's floor while more than that stays carried
 ///     (BelowFloor — the last piece of a remainder may be under the floor so a remainder never sticks);
 ///   · for a coin with a burn target (BurnTargetSet: its fuel only buys the target, through crank_target_burn);
-///   · after the rule ended (RuleNotLive: forward_on_end / burn_sol_on_end handle all fuel then, and they zero the carried amount);
+///   · round-5 review R5-3 / R5-4: NOT refused after an end any more. After a VOID end the coin's wind-down cranks it as before, and
+///     the carry it leaves would otherwise have no spender. After a RESOLVED end the carry is owed by readings inside the window (no
+///     later reading can exist); forward_on_end / burn_sol_on_end leave it in place for 30 days after the end (end::carry_held_back)
+///     so this instruction drains it first, then take whatever is left and zero it. (RuleNotLive stays in the error list, unused.)
 ///   · while the pool is untradeable / empty (PoolNotTradable / EmptyReserves: no 30-day unblock path here, nothing is owed by date);
-///   · by the cranker allowlist while it is in force (CrankerNotAllowed), as crank_buyback.
+///   · by the cranker allowlist while it is in force (CrankerNotAllowed), as crank_buyback;
+///   · round-5 review R5-8: when the piece is above the coin's carried budget (CarriedTooSoon). The budget refills at one per-crank cap
+///     per CARRIED_BUDGET_WINDOW_SECS (600 s, half the TWAP window), up to one cap, and each piece spends its own lamports from it, so
+///     nobody drains faster than one cap per window and a dust piece takes only a dust budget; one piece per coin per second (two in
+///     one transaction are refused). The budget lives in CarriedPace ["carried_pace", mint] (created by the first piece, the cranker
+///     paying its rent), which also counts the pieces: a carried piece no longer adds to TokenConfig.burns (that counts reading cranks);
+///     the memo carries `piece=<n>`.
 /// Draining the carried amount between readings also means the next reading's basis no longer includes lamports that were already
 /// owed (the same basis the pair forward uses since r3 RI-4) — the rule's own fraction is applied to fuel that is not yet promised.
 #[event_cpi]
 #[derive(Accounts)]
 pub struct CrankCarried<'info> {
+    /// Pays the CarriedPace rent on the coin's first piece (round-5 review R5-8).
+    #[account(mut)]
     pub cranker: Signer<'info>,
     #[account(mut, seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
     pub config: Box<Account<'info, TokenConfig>>,
@@ -90,6 +102,50 @@ pub struct CrankCarried<'info> {
     /// CHECK: address-checked: the SPL Memo program.
     #[account(address = MEMO_PROGRAM_ID)]
     pub memo_program: UncheckedAccount<'info>,
+    /// CHECK: round-5 review R5-8: the coin's CarriedPace ["carried_pace", mint] (address-checked in the handler); created here on the
+    /// coin's first piece, then owner + discriminator checked by Anchor's deserializer.
+    #[account(mut)]
+    pub carried_pace: UncheckedAccount<'info>,
+}
+
+/// Round-5 review R5-8: CarriedPace field offsets (Anchor's 8-byte discriminator, then the struct's Borsh layout; state.rs). Read and
+/// written at fixed offsets rather than through Borsh to keep the binary small (the round-5 program data has little room left).
+const PACE_AT: usize = 8 + 1 + 1 + 32; // last_carried_at: i64
+const PIECES_AT: usize = PACE_AT + 8; // pieces: u32
+const SPENT_AT: usize = PIECES_AT + 4; // spent_lamports: u64
+const BUDGET_AT: usize = SPENT_AT + 8; // budget_lamports: u64
+const PACE_VERSION: u8 = 1;
+
+/// The coin's pace (last_carried_at, pieces, spent_lamports, budget_lamports), creating the account on its first piece (an address
+/// someone pre-funded is topped up and taken over: create_pda). A version other than PACE_VERSION is refused.
+fn load_pace<'info>(acc: &AccountInfo<'info>, payer: &AccountInfo<'info>, system: &AccountInfo<'info>, mint: &Pubkey) -> Result<(i64, u32, u64, u64)> {
+    let (addr, bump) = carried_pace_address(mint);
+    require!(*acc.key == addr, BurnError::InvalidCarriedPace);
+    if acc.owner == &crate::ID && !acc.data_is_empty() {
+        let d = acc.try_borrow_data()?;
+        require!(d.len() >= BUDGET_AT + 8 && d[..8] == CarriedPace::DISCRIMINATOR[..] && d[8] == PACE_VERSION && d[10..42] == mint.to_bytes()[..], BurnError::InvalidCarriedPace);
+        let u = |at: usize| u64::from_le_bytes(d[at..at + 8].try_into().unwrap());
+        return Ok((u(PACE_AT) as i64, u32::from_le_bytes(d[PIECES_AT..PIECES_AT + 4].try_into().unwrap()), u(SPENT_AT), u(BUDGET_AT)));
+    }
+    create_pda(payer, acc, system, 8 + CarriedPace::INIT_SPACE, &[CARRIED_PACE_SEED, mint.as_ref(), &[bump]])?;
+    let mut d = acc.try_borrow_mut_data()?;
+    d[..8].copy_from_slice(CarriedPace::DISCRIMINATOR);
+    d[8] = PACE_VERSION;
+    d[9] = bump;
+    d[10..42].copy_from_slice(mint.as_ref());
+    Ok((0, 0, 0, 0))
+}
+
+/// Round-5 review R5-8: the budget a piece may spend now (lamports), or None when no piece may run this second (two pieces in one
+/// transaction or one second). A coin that never ran a piece has a full cap.
+pub fn carried_budget_now(last_carried_at: i64, stored: u64, cap: u64, now: i64) -> Option<u64> {
+    if last_carried_at == 0 {
+        return Some(cap);
+    }
+    if now <= last_carried_at {
+        return None;
+    }
+    Some(math::carried_budget(stored, cap, now - last_carried_at))
 }
 
 fn vault_amount(acc: &AccountInfo) -> Result<u64> {
@@ -109,7 +165,6 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
         let c = &ctx.accounts.config;
         require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
         require!(c.burn_target_kind == BURN_TARGET_SELF, BurnError::BurnTargetSet);
-        require!(c.end_state == END_STATE_LIVE, BurnError::RuleNotLive);
         require!(c.cpmm_pool != Pubkey::default(), BurnError::PoolNotRegistered);
         require!(c.pool_verified, BurnError::PoolNotVerified);
         require!(queue_empty(c), BurnError::ReadingPending);
@@ -122,6 +177,13 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
     let now = Clock::get()?.unix_timestamp;
     let crankers = crankers_in_force(&ctx.accounts.platform.to_account_info(), now)?;
     require!(crankers.is_empty() || crankers.contains(&ctx.accounts.cranker.key()), BurnError::CrankerNotAllowed);
+    // Round-5 review R5-8: the coin's carried budget (checked against the piece below, once the cap is known).
+    let (last_at, pieces, pace_spent, stored_budget) = load_pace(
+        &ctx.accounts.carried_pace.to_account_info(),
+        &ctx.accounts.cranker.to_account_info(),
+        &ctx.accounts.system_program.to_account_info(),
+        &mint_key,
+    )?;
 
     // The synced WSOL balance (review-2 F3), as crank_buyback.
     let wsol_reserve: Option<u64> = ctx.accounts.fee_wsol.is_native.into();
@@ -156,6 +218,10 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
     require!(spend > 0, BurnError::NothingCarried);
     // A piece under the floor only when it is the whole remainder (a remainder never sticks under the floor).
     require!(spend >= rule.floor_lamports || spend == carried_in, BurnError::BelowFloor);
+    // Round-5 review R5-8: the piece fits the coin's budget (refused, never clamped, like the cap).
+    let budget = carried_budget_now(last_at, stored_budget, reserve_cap, now).ok_or(BurnError::CarriedTooSoon)?;
+    require!(spend <= budget, BurnError::CarriedTooSoon);
+    let budget_left = budget - spend;
 
     // TWAP guard (mandatory, review H-1) and min-out (review-2 F1), exactly as crank_buyback.
     let spot = math::sol_price_x32(r_wsol, r_tok).map_err(|_| BurnError::EmptyReserves)?;
@@ -240,6 +306,15 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
         )?;
     }
     let carried_out = carried_in - spend;
+    let piece = pieces.checked_add(1).ok_or(BurnError::MathOverflow)?;
+    {
+        let acc = ctx.accounts.carried_pace.to_account_info();
+        let mut d = acc.try_borrow_mut_data()?;
+        d[PACE_AT..PACE_AT + 8].copy_from_slice(&now.to_le_bytes());
+        d[PIECES_AT..PIECES_AT + 4].copy_from_slice(&piece.to_le_bytes());
+        d[SPENT_AT..SPENT_AT + 8].copy_from_slice(&pace_spent.saturating_add(spend).to_le_bytes());
+        d[BUDGET_AT..BUDGET_AT + 8].copy_from_slice(&budget_left.to_le_bytes());
+    }
     let m = memo::format_carried(
         ctx.accounts.config.memo_prefix_str(),
         through,
@@ -247,6 +322,7 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
         got,
         burn_amount,
         carried_out,
+        piece,
         &memo::swap_ref(&pool_key),
         &ctx.accounts.config.rules_sha256,
         ctx.accounts.mint.decimals,
@@ -257,9 +333,7 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
     let c = &mut ctx.accounts.config;
     c.total_burned = c.total_burned.checked_add(burn_amount).ok_or(BurnError::MathOverflow)?;
     c.total_spent_lamports = c.total_spent_lamports.checked_add(spend).ok_or(BurnError::MathOverflow)?;
-    if burn_amount > 0 {
-        c.burns = c.burns.checked_add(1).ok_or(BurnError::MathOverflow)?;
-    }
+    // Round-5 review R5-8: carried pieces are counted in CarriedPace.pieces, not in `burns` (reading cranks only).
     c.carried_spend_lamports = carried_out;
     if clear_untradeable(c) {
         emit_cpi!(crate::events::PoolUntradeableCleared { config: config_key, pool: pool_key });
@@ -275,6 +349,38 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
         burned: burn_amount,
         carried_out_lamports: carried_out,
         cranker: ctx.accounts.cranker.key(),
+        piece,
+        budget_left_lamports: budget_left,
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// R5-8: the fixed offsets crank_carried reads and writes match CarriedPace's Borsh layout.
+    #[test]
+    fn pace_offsets_match_the_carried_pace_layout() {
+        let p = CarriedPace { version: 1, bump: 254, mint: Pubkey::new_from_array([0x44; 32]), last_carried_at: -2, pieces: 7, spent_lamports: 9, budget_lamports: 11, reserved: [0; 24] };
+        let mut d = Vec::new();
+        p.try_serialize(&mut d).unwrap();
+        assert_eq!(d.len(), 8 + CarriedPace::INIT_SPACE);
+        assert_eq!(d.len(), 94);
+        assert_eq!((&d[..8], d[8], d[9], &d[10..42]), (CarriedPace::DISCRIMINATOR, PACE_VERSION, 254, &[0x44u8; 32][..]));
+        assert_eq!(i64::from_le_bytes(d[PACE_AT..PACE_AT + 8].try_into().unwrap()), -2);
+        assert_eq!(u32::from_le_bytes(d[PIECES_AT..PIECES_AT + 4].try_into().unwrap()), 7);
+        assert_eq!(u64::from_le_bytes(d[SPENT_AT..SPENT_AT + 8].try_into().unwrap()), 9);
+        assert_eq!(u64::from_le_bytes(d[BUDGET_AT..BUDGET_AT + 8].try_into().unwrap()), 11);
+    }
+
+    /// R5-8: the first piece has a full cap; later pieces the refilled budget; never two in one second.
+    #[test]
+    fn the_budget_now() {
+        assert_eq!(carried_budget_now(0, 0, 600, 5), Some(600));
+        assert_eq!(carried_budget_now(100, 0, 600, 100), None);
+        assert_eq!(carried_budget_now(100, 0, 600, 99), None);
+        assert_eq!(carried_budget_now(100, 0, 600, 101), Some(1));
+        assert_eq!(carried_budget_now(100, 0, 600, 700), Some(600));
+    }
 }

@@ -825,3 +825,149 @@ fn unpaired_and_provisional_coins_crank_without_pair_accounts() {
     env.ok(&[cpmm::ix_crank_buyback(&k.pubkey(), &a.mint, &a.pool, D2)], &[&k]);
     assert_eq!(env.reading(&reading_pda(&config_pda(&a.mint), D2)).unwrap().outcome, OUTCOME_BURNED);
 }
+
+// =================================================================================================================================
+// round-5 review R5-9: a target coin with a pinned BurnTarget is live before its own pool is verified
+// =================================================================================================================================
+
+/// D2 readings on both coins (A 1 unit, B `units_b`), B's fee PDA funded, A wins D2.
+fn a_wins_d2(env: &mut Env, att: &Keypair, a: &Coin, b: &Coin, units_b: u64) {
+    env.transfer_sol(&fee_pda(&b.mint), 2 * SOL);
+    submit(env, &a.mint, D2, V1 + UNIT, &[att]).unwrap();
+    submit(env, &b.mint, D2, V1 + units_b * UNIT, &[att]).unwrap();
+    submit_pair_result(env, &a.mint, &b.mint, D2, a.mint, &[att]).unwrap();
+}
+
+#[test]
+fn r5_9_a_pinned_target_coin_as_the_loser_forwards_its_fuel() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let (a, b) = paired(&mut env, &att, buyback_rule(), buyback_rule());
+    a_wins_d2(&mut env, &att, &a, &b, 4);
+    // B burns an external target and has no verified pool of its own yet (pre-graduation), its BurnTarget pinned.
+    make_target_coin(&mut env, &b.mint, true);
+    let cb = env.config(&config_pda(&b.mint));
+    assert!(!cb.pool_verified && !cb.own_pool_verified() && cb.burn_target_kind == BURN_TARGET_EXTERNAL);
+    let k = cranker(&mut env);
+    // The loser's BurnTarget account left out: refused, so a cranker cannot turn the forward into a no-op.
+    let ix = without_account(ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2), &burn_target_pda(&b.mint));
+    expect_anchor_err(env.send(&[ix], &[&k]), "BurnTargetAccountMissing");
+    let expect = expected_forward(&env, &b.mint, D2);
+    assert!(expect > 0);
+    let (fa0, fb0) = (env.lamports(&fee_pda(&a.mint)), env.lamports(&fee_pda(&b.mint)));
+    let meta = env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+    let ev: ForwardedToWinner = event(&meta).unwrap();
+    assert_eq!(ev.lamports, expect);
+    assert_eq!((env.lamports(&fee_pda(&a.mint)) - fa0, fb0 - env.lamports(&fee_pda(&b.mint))), (expect, expect));
+    let rb = env.reading(&reading_pda(&config_pda(&b.mint), D2)).unwrap();
+    assert_eq!((rb.outcome, rb.rule_spend_lamports), (OUTCOME_FORWARDED, expect));
+}
+
+#[test]
+fn r5_9_a_pinned_target_coin_as_the_winner_receives() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let (a, b) = paired(&mut env, &att, buyback_rule(), buyback_rule());
+    a_wins_d2(&mut env, &att, &a, &b, 3);
+    // the WINNER A burns a target and has no verified pool of its own yet
+    make_target_coin(&mut env, &a.mint, true);
+    let k = cranker(&mut env);
+    let ix = without_account(ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2), &burn_target_pda(&a.mint));
+    expect_anchor_err(env.send(&[ix], &[&k]), "BurnTargetAccountMissing");
+    // a self coin's BurnTarget slot may be left out (B burns itself, its pool verified)
+    let expect = expected_forward(&env, &b.mint, D2);
+    let fa0 = env.lamports(&fee_pda(&a.mint));
+    let ix = without_account(ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2), &burn_target_pda(&b.mint));
+    env.ok(&[ix], &[&k]);
+    assert!(expect > 0);
+    assert_eq!(env.lamports(&fee_pda(&a.mint)) - fa0, expect, "the target coin received the loser's fuel");
+}
+
+#[test]
+fn r5_9_an_unpinned_target_coin_is_still_dead_on_either_side() {
+    for loser_is_target in [true, false] {
+        let mut env = Env::new();
+        let att = Keypair::new();
+        let (a, b) = paired(&mut env, &att, buyback_rule(), buyback_rule());
+        a_wins_d2(&mut env, &att, &a, &b, 4);
+        // EXTERNAL without a pinned BurnTarget (no account at its address): not live
+        make_target_coin(&mut env, if loser_is_target { &b.mint } else { &a.mint }, false);
+        let k = cranker(&mut env);
+        let (fa0, fb0) = (env.lamports(&fee_pda(&a.mint)), env.lamports(&fee_pda(&b.mint)));
+        let meta = env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+        assert_eq!((env.lamports(&fee_pda(&a.mint)), env.lamports(&fee_pda(&b.mint))), (fa0, fb0), "nothing moves");
+        let rb = env.reading(&reading_pda(&config_pda(&b.mint), D2)).unwrap();
+        assert_eq!((rb.processed, rb.outcome, rb.rule_spend_lamports), (true, OUTCOME_FORWARDED, 0));
+        assert!(meta.logs.iter().any(|l| l.contains("|forward|") && l.contains("|lamports=0|v1")));
+    }
+    // A BurnTarget whose pin is cleared (pinned_at 0) or that names another coin is not pinned either.
+    for corrupt in [269usize, 10] {
+        let mut env = Env::new();
+        let att = Keypair::new();
+        let (a, b) = paired(&mut env, &att, buyback_rule(), buyback_rule());
+        a_wins_d2(&mut env, &att, &a, &b, 4);
+        make_target_coin(&mut env, &b.mint, true);
+        let key = burn_target_pda(&b.mint);
+        let mut acc = env.svm.get_account(&key).unwrap();
+        acc.data[corrupt..corrupt + 8].copy_from_slice(&[0u8; 8]);
+        env.svm.set_account(key, acc).unwrap();
+        let k = cranker(&mut env);
+        let fa0 = env.lamports(&fee_pda(&a.mint));
+        env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+        assert_eq!(env.lamports(&fee_pda(&a.mint)), fa0, "not pinned: nothing moves");
+    }
+}
+
+/// Round-5 review R5-9 (blind review of 7b9836a3, MEDIUM): a pinned BurnTarget whose target STALLED (last_unblocked_at > last_burn_at)
+/// is not live: as loser it forwards nothing, as winner it receives nothing — the old behaviour. A burn after the unblock revives it.
+#[test]
+fn r5_9_a_stalled_target_coin_is_dead_on_either_side() {
+    for loser_is_target in [true, false] {
+        let mut env = Env::new();
+        let att = Keypair::new();
+        let (a, b) = paired(&mut env, &att, buyback_rule(), buyback_rule());
+        a_wins_d2(&mut env, &att, &a, &b, 4);
+        let t = if loser_is_target { b.mint } else { a.mint };
+        make_target_coin(&mut env, &t, true);
+        stall_target(&mut env, &t);
+        let k = cranker(&mut env);
+        let (fa0, fb0) = (env.lamports(&fee_pda(&a.mint)), env.lamports(&fee_pda(&b.mint)));
+        env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+        assert_eq!((env.lamports(&fee_pda(&a.mint)), env.lamports(&fee_pda(&b.mint))), (fa0, fb0), "stalled: nothing moves");
+        assert_eq!(env.reading(&reading_pda(&config_pda(&b.mint), D2)).unwrap().outcome, OUTCOME_FORWARDED);
+    }
+    // a burn after the unblock (last_burn_at > last_unblocked_at): live again
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let (a, b) = paired(&mut env, &att, buyback_rule(), buyback_rule());
+    a_wins_d2(&mut env, &att, &a, &b, 4);
+    make_target_coin(&mut env, &b.mint, true);
+    stall_target(&mut env, &b.mint);
+    let key = burn_target_pda(&b.mint);
+    let mut acc = env.svm.get_account(&key).unwrap();
+    let later = env.now() + 1;
+    acc.data[357..365].copy_from_slice(&later.to_le_bytes());
+    env.svm.set_account(key, acc).unwrap();
+    let k = cranker(&mut env);
+    let expect = expected_forward(&env, &b.mint, D2);
+    let fa0 = env.lamports(&fee_pda(&a.mint));
+    env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+    assert_eq!(env.lamports(&fee_pda(&a.mint)) - fa0, expect);
+}
+
+/// The other coin's BurnTarget passed in a side's slot is refused (the slot is address-checked against this side's PDA).
+#[test]
+fn r5_9_the_other_coins_burn_target_in_the_slot_is_refused() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let (a, b) = paired(&mut env, &att, buyback_rule(), buyback_rule());
+    a_wins_d2(&mut env, &att, &a, &b, 4);
+    make_target_coin(&mut env, &a.mint, true);
+    make_target_coin(&mut env, &b.mint, true);
+    let k = cranker(&mut env);
+    let mut ix = ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2);
+    let (la, wa) = (ix.accounts.iter().position(|m| m.pubkey == burn_target_pda(&b.mint)).unwrap(), ix.accounts.iter().position(|m| m.pubkey == burn_target_pda(&a.mint)).unwrap());
+    ix.accounts.swap(la, wa);
+    expect_anchor_err(env.send(&[ix], &[&k]), "BurnTargetAccountMissing");
+    env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+}

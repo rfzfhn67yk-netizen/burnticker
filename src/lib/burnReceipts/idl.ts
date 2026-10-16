@@ -1870,6 +1870,10 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "accounts": [
         {
           "name": "cranker",
+          "docs": [
+            "Pays the CarriedPace rent on the coin's first piece (round-5 review R5-8)."
+          ],
+          "writable": true,
           "signer": true
         },
         {
@@ -2096,6 +2100,13 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         {
           "name": "memo_program",
           "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "carried_pace",
+          "docs": [
+            "coin's first piece, then owner + discriminator checked by Anchor's deserializer."
+          ],
+          "writable": true
         },
         {
           "name": "event_authority"
@@ -2958,6 +2969,13 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "optional": true
         },
         {
+          "name": "sink_burn_target",
+          "docs": [
+            "only when the sink coin burns a target and its own pool is not verified yet (refused without it: BurnTargetAccountMissing)."
+          ],
+          "optional": true
+        },
+        {
           "name": "event_authority"
         },
         {
@@ -3149,6 +3167,17 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         {
           "name": "memo_program",
           "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "loser_burn_target",
+          "docs": [
+            "only for a target coin whose own pool is not verified (refused without it: BurnTargetAccountMissing); otherwise ignored."
+          ],
+          "optional": true
+        },
+        {
+          "name": "winner_burn_target",
+          "optional": true
         },
         {
           "name": "event_authority"
@@ -3849,6 +3878,12 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "address": "11111111111111111111111111111111"
         },
         {
+          "name": "end_sink",
+          "docs": [
+            "initialize_token_r5 earlier in the same create): a target coin's lost path goes to its sink, never to a self wind-down."
+          ]
+        },
+        {
           "name": "event_authority"
         },
         {
@@ -4369,6 +4404,256 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
             "platform admin redirected fails closed before the pool is verified. Omitted under policy 1."
           ],
           "optional": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "release_target",
+      "docs": [
+        "Round-5 review R5-6: a stalled target coin's carried spend → the flagship's fee PDA. Permissionless."
+      ],
+      "discriminator": [
+        101,
+        64,
+        239,
+        235,
+        29,
+        41,
+        169,
+        85
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "platform",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "burn_target",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  114,
+                  110,
+                  95,
+                  116,
+                  97,
+                  114,
+                  103,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_wsol",
+          "writable": true
+        },
+        {
+          "name": "flagship_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  138,
+                  39,
+                  88,
+                  209,
+                  29,
+                  107,
+                  82,
+                  17,
+                  225,
+                  157,
+                  55,
+                  4,
+                  81,
+                  137,
+                  34,
+                  24,
+                  94,
+                  175,
+                  186,
+                  142,
+                  244,
+                  82,
+                  19,
+                  129,
+                  238,
+                  99,
+                  20,
+                  21,
+                  47,
+                  140,
+                  36,
+                  250
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "flagship_fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  138,
+                  39,
+                  88,
+                  209,
+                  29,
+                  107,
+                  82,
+                  17,
+                  225,
+                  157,
+                  55,
+                  4,
+                  81,
+                  137,
+                  34,
+                  24,
+                  94,
+                  175,
+                  186,
+                  142,
+                  244,
+                  82,
+                  19,
+                  129,
+                  238,
+                  99,
+                  20,
+                  21,
+                  47,
+                  140,
+                  36,
+                  250
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "flagship_fee_wsol",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "memo_program",
+          "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
         },
         {
           "name": "event_authority"
@@ -6114,6 +6399,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "TargetReleased",
+      "discriminator": [
+        163,
+        53,
+        90,
+        228,
+        192,
+        151,
+        160,
+        27
+      ]
+    },
+    {
       "name": "TokenInitialized",
       "discriminator": [
         77,
@@ -6807,6 +7105,46 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6135,
       "name": "RuleNotLive",
       "msg": "crank_carried: the rule has ended; the end paths handle the fuel"
+    },
+    {
+      "code": 6136,
+      "name": "InitializeTokenRetired",
+      "msg": "initialize_token is retired: create with initialize_token_r5 (a buyback coin must pin an end sink)"
+    },
+    {
+      "code": 6137,
+      "name": "PythWentBackwards",
+      "msg": "burn target: a Pyth update older than the last one this coin used was passed (pass a fresher update)"
+    },
+    {
+      "code": 6138,
+      "name": "PythFeedSkew",
+      "msg": "burn target: the SOL/USD and target/USD updates are more than 60 seconds apart (the SOL is held)"
+    },
+    {
+      "code": 6139,
+      "name": "TargetNotStalled",
+      "msg": "release_target: the target has burned since its last 30-day unblock, or 30 days have not passed, or nothing is carried"
+    },
+    {
+      "code": 6140,
+      "name": "TargetDecimalsTooLarge",
+      "msg": "burn target: the target mint has more than 18 decimals"
+    },
+    {
+      "code": 6141,
+      "name": "CarriedTooSoon",
+      "msg": "crank_carried: over the carried budget"
+    },
+    {
+      "code": 6142,
+      "name": "InvalidCarriedPace",
+      "msg": "crank_carried: not this coin's CarriedPace"
+    },
+    {
+      "code": 6143,
+      "name": "BurnTargetAccountMissing",
+      "msg": "a target coin's BurnTarget account is required"
     }
   ],
   "types": [
@@ -7118,13 +7456,28 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
             "type": "i64"
           },
           {
-            "name": "reserved",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
+            "name": "last_sol_publish_time",
+            "docs": [
+              "Round-5 review R5-7: the publish_time of the SOL/USD and target/USD updates last accepted (pin, re-pin, every swapping crank);",
+              "a later crank may not present an older update."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "last_target_publish_time",
+            "type": "i64"
+          },
+          {
+            "name": "last_burn_at",
+            "docs": [
+              "Round-5 review R5-6: when a crank last spent on the target (0 = never), and when the 30-day unblock last processed a reading",
+              "without a swap (0 = never). release_target needs last_unblocked_at > last_burn_at (and 30 days since the last burn / the pin)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "last_unblocked_at",
+            "type": "i64"
           }
         ]
       }
@@ -7332,6 +7685,18 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "cranker",
             "type": "pubkey"
+          },
+          {
+            "name": "piece",
+            "docs": [
+              "Round-5 review R5-8: this piece's number (CarriedPace.pieces after it) and the coin's carried budget left after it (it refills at",
+              "one per-crank cap per CARRIED_BUDGET_WINDOW_SECS)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "budget_left_lamports",
+            "type": "u64"
           }
         ]
       }
@@ -9364,6 +9729,50 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "TargetReleased",
+      "docs": [
+        "Round-5 review R5-6: release_target moved a stalled target coin's carried spend to the flagship's fee PDA (its pinned pool or feed",
+        "stopped working: no target burn since the last 30-day unblock)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "to_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "lamports",
+            "type": "u64"
+          },
+          {
+            "name": "sol_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "wsol_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "carried_out_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "TokenConfig",
       "type": {
         "kind": "struct",
@@ -9866,6 +10275,17 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "value": "1"
     },
     {
+      "name": "BURN_TARGET_EXTERNAL_POOL_VERIFIED",
+      "docs": [
+        "Round-5 review R5-12 (the rollback fence): a target coin whose OWN pool passed registration (register_pool, register_pair_pool,",
+        "replace_pool, apply_registration_policy). For a target coin those leave `pool_verified` FALSE and record the verification here",
+        "instead, so a round-4 program (which ignores this byte) refuses crank_buyback on it (PoolNotVerified) and can never self-burn it.",
+        "Round-5 readers use TokenConfig::own_pool_verified()."
+      ],
+      "type": "u8",
+      "value": "2"
+    },
+    {
       "name": "BURN_TARGET_SEED",
       "docs": [
         "BurnTarget [\"burn_target\", mint] — the target mint and its pinned CPMM pool, written once by pin_burn_target."
@@ -9880,6 +10300,26 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ],
       "type": "u8",
       "value": "0"
+    },
+    {
+      "name": "CARRIED_BUDGET_WINDOW_SECS",
+      "docs": [
+        "The carried-spend budget refills at one per-crank cap (2 % of the pool's WSOL reserve) per this many seconds (half the 1,200 s TWAP",
+        "window), up to one cap. A piece spends its own lamports from it, so a dust piece uses only a dust budget; at most one piece per coin",
+        "per second (two in one transaction are refused). Anyone may crank; nobody can drain carried spend faster than one cap per window."
+      ],
+      "type": "i64",
+      "value": "600"
+    },
+    {
+      "name": "CARRIED_PACE_SEED",
+      "docs": [
+        "CarriedPace [\"carried_pace\", mint]: the coin's carried-spend budget (what is left of it and when it was last spent) and its piece",
+        "count. A separate account because TokenConfig has no spare bytes left (round 5 used the last one for burn_target_kind); TokenConfig's",
+        "size and layout are unchanged."
+      ],
+      "type": "bytes",
+      "value": "[99, 97, 114, 114, 105, 101, 100, 95, 112, 97, 99, 101]"
     },
     {
       "name": "END_ATTESTATION_DOMAIN",
@@ -10100,12 +10540,37 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "value": "100"
     },
     {
+      "name": "PYTH_MAX_FEED_SKEW_SECS",
+      "docs": [
+        "Round-5 review R5-7: the SOL/USD and target/USD updates of one crank must be published within this many seconds of each other",
+        "(otherwise the crank is held), so a cranker cannot pick the two references independently from a two-minute window."
+      ],
+      "type": "i64",
+      "value": "60"
+    },
+    {
+      "name": "PYTH_MAX_FUTURE_SECS",
+      "docs": [
+        "Round-5 review R5-01 (second review): a publish_time more than this far AHEAD of the cluster clock is unusable (clock skew only)."
+      ],
+      "type": "i64",
+      "value": "5"
+    },
+    {
       "name": "RULE_END_SEED",
       "docs": [
         "RuleEnd [\"rule_end\", mint] — the quorum-signed end of a coin's rule (submit_rule_end)."
       ],
       "type": "bytes",
       "value": "[114, 117, 108, 101, 95, 101, 110, 100]"
+    },
+    {
+      "name": "TARGET_MAX_DECIMALS",
+      "docs": [
+        "Second review (B): a target mint with more decimals than this is refused at admission (receipts and the price math stay in range)."
+      ],
+      "type": "u8",
+      "value": "18"
     },
     {
       "name": "TARGET_MAX_FEE_PPM",

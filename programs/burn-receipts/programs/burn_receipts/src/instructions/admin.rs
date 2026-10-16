@@ -241,7 +241,7 @@ pub fn policy_expires_at(eta: i64) -> i64 {
 /// 2027-10-01 without one) and only while no pool works — none verified yet, or the registered one continuously untradeable ≥ 7 days.
 fn require_policy_switch_window(c: &TokenConfig, platform: &AccountInfo, now: i64) -> Result<()> {
     require!(active_cap(platform, now)?.is_some(), BurnError::PolicySwitchNotAllowed);
-    require!(!c.pool_verified || continuous_untradeable_secs(c, now) >= POOL_REPLACEMENT_DELAY_SECS, BurnError::PolicySwitchNotAllowed);
+    require!(!c.own_pool_verified() || continuous_untradeable_secs(c, now) >= POOL_REPLACEMENT_DELAY_SECS, BurnError::PolicySwitchNotAllowed);
     Ok(())
 }
 
@@ -379,7 +379,7 @@ pub fn handle_apply_registration_policy(ctx: Context<ApplyRegistrationPolicy>) -
     let c = &mut ctx.accounts.config;
     c.registration_policy = policy;
     c.cpmm_pool = pool;
-    c.pool_verified = policy == POOL_POLICY_FIXED;
+    c.set_own_pool_verified(policy == POOL_POLICY_FIXED); // R5-12: the rollback fence for a target coin
     clear_untradeable(c);
     clear_pending_policy(c);
     let config = c.key();

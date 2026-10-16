@@ -7,7 +7,8 @@
 //!
 //!   EndSink ["end_sink", mint]   pinned by initialize_token (optional account; never changed). sink_kind:
 //!       FLAGSHIP     BURNTICKER_FLAGSHIP ($DEFICIT, compiled per cluster; perpetual)
-//!       MINT         a named coin — while it is live (a verified pool, its own rule not ended), else the flagship
+//!       MINT         a named coin — while it is live (a verified pool, or a pinned burn target (R5-9); its own rule not ended), else
+//!                    the flagship
 //!       LEAGUE_SET   reserved for league sets (initialize_token refuses it until they land)
 //!       INCINERATOR  Solana's incinerator (INCINERATOR_ID): the SOL itself is burned (burn_sol_on_end), no swap, no price impact
 //!       PAIR_WINNER  the coin's pair partner — only when the period of the end date (RuleEnd.record_date) has a PairResult naming the
@@ -223,10 +224,40 @@ pub struct ForwardOnEnd<'info> {
     pub pair_link: Option<UncheckedAccount<'info>>,
     /// CHECK: PAIR_WINNER: the PairResult of the end date (address-checked in the handler; may not exist → flagship).
     pub pair_result: Option<UncheckedAccount<'info>>,
+    /// CHECK: round-5 review R5-9: the named sink coin's BurnTarget ["burn_target", sink_mint] (address-checked in side_live). Needed
+    /// only when the sink coin burns a target and its own pool is not verified yet (refused without it: BurnTargetAccountMissing).
+    pub sink_burn_target: Option<UncheckedAccount<'info>>,
 }
 
-fn live(c: &TokenConfig) -> bool {
-    c.pool_verified && c.end_state == END_STATE_LIVE && c.rule.mode == MODE_BUYBACK
+/// Live = the coin's own pool verified (own_pool_verified: a target coin records it outside `pool_verified`, R5-12), its rule not
+/// ended, buyback mode. (The flagship's test; the flagship burns itself.)
+pub fn live(c: &TokenConfig) -> bool {
+    c.own_pool_verified() && c.end_state == END_STATE_LIVE && c.rule.mode == MODE_BUYBACK
+}
+
+/// A named sink coin's test (round-5 review R5-9): as `live`, except that a target coin whose BurnTarget is pinned counts as live
+/// before its own pool is verified (burn_target::side_live; `bt` = its BurnTarget account).
+pub fn sink_live(c: &TokenConfig, bt: Option<&AccountInfo>) -> Result<bool> {
+    Ok(c.end_state == END_STATE_LIVE && c.rule.mode == MODE_BUYBACK && crate::instructions::burn_target::side_live(c, bt)?)
+}
+
+/// Round-5 review R5-1: the end paths wait for every reading inside the window, except for a coin that has no burn path at all — a
+/// SELF coin that never registered a pool (its readings can never crank). A target coin cranks without its own pool
+/// (crank_target_burn), so it always waits.
+pub fn end_readings_done(c: &TokenConfig) -> bool {
+    c.crank_cursor == c.last_record_date || (c.cpmm_pool == Pubkey::default() && c.burn_target_kind == BURN_TARGET_SELF)
+}
+
+/// Round-5 review R5-4: the carried spend a SELF coin with a verified pool still owes from readings inside its window is drained by
+/// crank_carried first. For END_CARRY_GRACE_SECS (30 days) after a RESOLVED end the end paths move only the fuel above it, so the
+/// keeper's order (crank_carried, then forward) is enforced on chain; after that they move everything (nothing can strand).
+pub fn carry_held_back(c: &TokenConfig, rule_end: &RuleEnd, now: i64) -> u64 {
+    let drainable = c.burn_target_kind == BURN_TARGET_SELF && c.pool_verified && c.cpmm_pool != Pubkey::default();
+    if drainable && now.saturating_sub(rule_end.submitted_at) < QUEUE_UNBLOCK_SECS {
+        c.carried_spend_lamports
+    } else {
+        0
+    }
 }
 
 /// PAIR_WINNER: this coin is still paired to `sink`, and the PairResult of `date` names `sink` as winner.
@@ -259,7 +290,7 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
     // Every reading inside the window is processed first (the result reading burns or forwards to the pair winner) — unless the coin
     // has no verified pool, whose readings can never crank (a one-shot that never graduated): its fuel goes to the sink regardless.
     // Blind review L-3: the exception is a coin that never registered a pool (not one whose pool is mid-verification).
-    require!(c.crank_cursor == c.last_record_date || c.cpmm_pool == Pubkey::default(), BurnError::EndReadingsPending);
+    require!(end_readings_done(c), BurnError::EndReadingsPending);
     let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
     require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     require!(BURNTICKER_FLAGSHIP != Pubkey::default(), BurnError::FlagshipNotPinned);
@@ -290,7 +321,9 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
         } else {
             let data = sc.try_borrow_data()?;
             let cfg = TokenConfig::try_deserialize(&mut &data[..])?;
-            cfg.mint == intended && live(&cfg) && (kind != END_SINK_PAIR_WINNER || cfg.pair_state == PAIR_STATE_PAIRED)
+            cfg.mint == intended
+                && sink_live(&cfg, a.sink_burn_target.as_ref().map(|x| x.as_ref()))?
+                && (kind != END_SINK_PAIR_WINNER || cfg.pair_state == PAIR_STATE_PAIRED)
         };
         if ok {
             intended
@@ -314,7 +347,8 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
         require_fee_token_account_intact(&wsol_acc, &a.fee_vault.key(), &NATIVE_MINT, false)?;
     }
     let sol_avail = a.fee_vault.lamports().saturating_sub(reserve);
-    let pool_actual = sol_avail.checked_add(wsol_avail).ok_or(BurnError::MathOverflow)?;
+    let held_back = carry_held_back(c, &a.rule_end, now);
+    let pool_actual = sol_avail.checked_add(wsol_avail).ok_or(BurnError::MathOverflow)?.saturating_sub(held_back);
     let amount = match active_cap(&a.platform.to_account_info(), now)? {
         Some(cap) if pool_actual > cap => cap,
         _ => pool_actual,
@@ -324,6 +358,7 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
     require!(amount > 0 && (amount >= a.end_sink.min_forward_lamports || a.rule_end.forwards == 0), BurnError::NothingToForward);
     let sol_part = amount.min(sol_avail);
     let wsol_part = amount - sol_part;
+    let clear_carry = held_back == 0;
 
     if sol_part > 0 {
         system_program::transfer(
@@ -351,7 +386,9 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
     let m = memo::format_end_forward(c.memo_prefix_str(), &dest, amount);
     memo::emit_memo(&a.memo_program.to_account_info(), &m)?;
 
-    ctx.accounts.config.carried_spend_lamports = 0;
+    if clear_carry {
+        ctx.accounts.config.carried_spend_lamports = 0;
+    }
     let r = &mut ctx.accounts.rule_end;
     r.forwarded_lamports = r.forwarded_lamports.saturating_add(amount);
     r.forwards = r.forwards.saturating_add(1);
@@ -420,9 +457,10 @@ pub fn handle_burn_sol_on_end(ctx: Context<BurnSolOnEnd>) -> Result<()> {
     require!(a.end_sink.sink_kind == END_SINK_INCINERATOR && a.end_sink.sink_mint == INCINERATOR_ID, BurnError::NotIncineratorSink);
     require!(c.end_state == END_STATE_RESOLVED, BurnError::NotEndedResolved);
     require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
-    require!(c.crank_cursor == c.last_record_date || c.cpmm_pool == Pubkey::default(), BurnError::EndReadingsPending);
+    require!(end_readings_done(c), BurnError::EndReadingsPending);
     let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
     require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
+    let held_back = carry_held_back(c, &a.rule_end, now);
 
     let reserve = c.rule.reserve_lamports;
     let mint = c.mint;
@@ -467,7 +505,7 @@ pub fn handle_burn_sol_on_end(ctx: Context<BurnSolOnEnd>) -> Result<()> {
     }
 
     // ----- the amount: the SOL above the reserve, under the cap -----
-    let sol_avail = fee.lamports().saturating_sub(reserve);
+    let sol_avail = fee.lamports().saturating_sub(reserve).saturating_sub(held_back);
     let amount = match active_cap(&a.platform.to_account_info(), now)? {
         Some(cap) if sol_avail > cap => cap,
         _ => sol_avail,
@@ -484,7 +522,9 @@ pub fn handle_burn_sol_on_end(ctx: Context<BurnSolOnEnd>) -> Result<()> {
     let m = memo::format_end_burn(c.memo_prefix_str(), amount);
     memo::emit_memo(&a.memo_program.to_account_info(), &m)?;
 
-    ctx.accounts.config.carried_spend_lamports = 0;
+    if held_back == 0 {
+        ctx.accounts.config.carried_spend_lamports = 0;
+    }
     let r = &mut ctx.accounts.rule_end;
     r.forwarded_lamports = r.forwarded_lamports.saturating_add(amount);
     r.forwards = r.forwards.saturating_add(1);

@@ -4,7 +4,9 @@
 //! fees. See docs/burn-receipts/README.md for the architecture, the trust model and the audit checklist.
 //!
 //! Instruction set (there is deliberately NO withdraw / close / sweep instruction for the fee PDA or the vault):
-//!   initialize_token       mint-signed, once per mint: rule, attesters, quorum; funds the fee PDA's reserve
+//!   initialize_token       RETIRED in every deployable build (round-5 review R5-5: InitializeTokenRetired); the round-4 create
+//!   initialize_token_r5    mint-signed, once per mint: rule, attesters, quorum, the end sink a buyback coin must pin; funds the
+//!                          fee PDA's reserve
 //!   register_pool          permissionless, once: the CPMM pool whose creator is the fee PDA (buyback, policy 0)
 //!   register_pair_pool     permissionless, once: policy 2 — the CPMM pool pair_curve's graduate created for this token (pair_curve
 //!                          PDA, pair-vault creator, pinned cpConfigId, ≥ 90 % of the creation LP burned)
@@ -16,9 +18,11 @@
 //!                          period's pair result refuses: its fuel is forwarded instead)
 //!   link_pair / submit_pair_result / forward_to_winner   LAUNCHPAD-PATH §40, winner takes the burn: pair two coins (pair_curve Pair
 //!                          witness; or both initialize_token calls name each other), attest a period's winner (quorum of each
-//!                          coin's attesters), move the loser's fuel for that period to the winner's fee PDA
+//!                          coin's attesters), move the loser's fuel for that period to the winner's fee PDA (a side is live with
+//!                          its own verified pool or a pinned burn target, round-5 review R5-9)
 //!   crank_carried          permissionless, buyback (burn dispersal): a piece (≤ the 2 % cap, caller-chosen) of the carried spend →
-//!                          the same swap and guards → burn all held → `carried` memo; only while no reading waits for its crank
+//!                          the same swap and guards → burn all held → `carried` memo; only while no reading waits for its crank,
+//!                          within the coin's carried budget, one per-crank cap per 600 s (round-5 review R5-8, CarriedPace)
 //!   crank_vault            permissionless: burn from the vault (shortfall carried) → memo v1
 //!   crank_no_units         permissionless: process a zero-unit reading that is next in line
 //!   propose_attesters / cancel_attester_change / renounce_admin    admin only (48 h timelock on proposals)
@@ -43,6 +47,8 @@
 //!                          memo v3 (crank_buyback refuses a coin with a target)
 //!   propose_target_pool / cancel_target_pool / veto_target_pool / apply_target_pool   round 5: re-pin the target POOL (admin, 48 h,
 //!                          attester veto, the same admission; the target mint never changes)
+//!   release_target         round-5 review R5-6, permissionless: a target coin whose pool or feed is dead (no burn since its last
+//!                          30-day unblock, 30 days since the last burn) moves its carried spend to the flagship's fee PDA
 
 pub mod amm_v4;
 pub mod attest;
@@ -253,5 +259,10 @@ pub mod burn_receipts {
     /// Round 5: permissionless after the timelock, within 14 days of the proposal; the new pool passes the same admission.
     pub fn apply_target_pool(ctx: Context<ApplyTargetPool>) -> Result<()> {
         instructions::burn_target::handle_apply_target_pool(ctx)
+    }
+
+    /// Round-5 review R5-6: a stalled target coin's carried spend → the flagship's fee PDA. Permissionless.
+    pub fn release_target(ctx: Context<ReleaseTarget>) -> Result<()> {
+        instructions::burn_target::handle_release_target(ctx)
     }
 }

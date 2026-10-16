@@ -1,0 +1,51 @@
+{
+  "command": "carried",
+  "dryRun": true,
+  "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+  "maxSpendLamports": "1000000",
+  "before": {
+    "carried": "150454186",
+    "poolWsol": "1104574140",
+    "pace": {
+      "version": 1,
+      "bump": 254,
+      "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+      "last_carried_at": "1792113187",
+      "pieces": 1,
+      "spent_lamports": "21659548",
+      "budget_lamports": "0"
+    },
+    "chainNow": 1792113190,
+    "planner": {
+      "status": "too-soon",
+      "nextAtMs": 1792113216304
+    }
+  },
+  "after": {
+    "carried": "150454186",
+    "pace": {
+      "version": 1,
+      "bump": 254,
+      "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+      "last_carried_at": "1792113187",
+      "pieces": 1,
+      "spent_lamports": "21659548",
+      "budget_lamports": "0"
+    }
+  },
+  "step": "crank_carried max 1000000",
+  "bytes": 856,
+  "simulation": {
+    "err": "{\"InstructionError\":[1,{\"Custom\":6141}]}",
+    "unitsConsumed": 47935,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: CrankCarried",
+      "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/crank_carried.rs:223. Error Code: CarriedTooSoon. Error Number: 6141. Error Message: crank_carried: over the carried budget.",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 47785 of 799850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17fd"
+    ]
+  }
+}

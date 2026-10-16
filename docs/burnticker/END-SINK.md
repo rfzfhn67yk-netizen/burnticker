@@ -42,7 +42,9 @@ the drain path.
 
 What the program allows: `crank_buyback` refuses a reading with 0 units (`NoUnits`), and a new reading with a unit on a one-shot would
 spend another 50 % of the pool, so a round-4 program cannot spend a carried amount without breaking the rule. `crank_carried` (round 5)
-spends it without a reading, but only while the rule is live (`RuleNotLive` once `submit_rule_end` has landed).
+spends it without a reading, but only while the rule is live (`RuleNotLive` once `submit_rule_end` has landed). (Round-5 review R5-3 /
+R5-4 later lifted that refusal; round-5 review R5-8 limits `crank_carried` to a per-coin budget of one per-crank cap per 600 seconds,
+which the keeper waits for.)
 
 The policy (keeper, `multiKeeper.owedBeforeEnd`): for a coin with an EndSink whose one-shot settled RESOLVED with units at a share
 under 100 %, the end is not recorded and nothing is forwarded while the chain shows a carried amount after the result's crank.
@@ -82,6 +84,14 @@ arguments, its own discriminator; the site's `BURNTICKER_INITIALIZE_TOKEN_LAYOUT
 the coin's own wind-down. SELF stays on the won path: a VOID end (a champion coin whose team won the title) keeps the hashed wind-down on
 the coin. The flagship and vault-mode coins are exempt. `initialize_token` (round 4) is unchanged, and every config it created reads as
 before; the reviewer risk list (EXTERNAL-BURN.md item 14) notes that the old entrypoint still accepts a coin without a sink.
+
+**A named coin that burns another token (round-5 review R5-9, owner 2026-10-15; built, not deployed).** `forward_on_end` judges a
+named sink (MINT, or the PAIR_WINNER partner) live when its own pool is verified, or when it burns another token (`burn_target_kind` 1)
+and its BurnTarget is pinned and not stalled (no 30-day unblock since its last target burn), read from the BurnTarget account (`sink_burn_target`, an optional account the client passes with
+`sink_config`; left out for such a coin it is refused, `BurnTargetAccountMissing`, so nobody can divert the fuel to the flagship by
+omission). Before this, such a coin counted as dead until its own pool registered and the fuel went to the flagship. A coin that burns
+another token whose BurnTarget is not pinned, or stalled, is still dead. The client mirror is `endSink.ts` `sinkLive(config,
+targetPinned)` with `burnTargetPinned` / `burnTargetLive`.
 
 **The four end choices** a creator sees (step 4 and the review's end facts; WIRING-END-SINKS.md has the sentences): $DEFICIT (the
 flagship), another live coin you name (onEnd.mint, the end-sink picker), the rival (a linked pair only), Solana's
