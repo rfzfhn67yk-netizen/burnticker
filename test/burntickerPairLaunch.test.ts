@@ -120,7 +120,7 @@ describe("signing the pair-curve set", () => {
 
   test("in order: the wallet signs first and sees no mint signature (Phantom ticket 438485); the mint key signs after; confirmed one by one; tx 1 / tx 2 confirm the drafts", async () => {
     const log: string[] = [], sent: string[] = [];
-    const deps = {
+    const deps = { simulate: async () => null,
       latestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 100 }),
       signTransaction: async (tx: VersionedTransaction) => { const signed = tx.signatures.filter((s) => s.some((b) => b !== 0)); log.push(`wallet sees ${signed.length} mint sig(s)`); tx.sign([creator]); return tx; },
       lookupTable: async () => null,
@@ -144,7 +144,7 @@ describe("signing the pair-curve set", () => {
 
   test("a refusal in the wallet stops the run at that step; pressing again resumes there and never re-sends a confirmed step", async () => {
     let refuse = true; const sent: number[] = [], real: string[] = [];
-    const deps = {
+    const deps = { simulate: async () => null,
       latestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 1 }),
       signTransaction: async (tx: VersionedTransaction) => { if (refuse && tx.message.staticAccountKeys.some((k) => k.equals(mintB.publicKey))) throw new Error("User rejected the request."); tx.sign([creator]); return tx; },
       lookupTable: async () => null,

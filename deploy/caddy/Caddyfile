@@ -87,6 +87,11 @@
 
 {$BURNTICKER_DOMAIN:burnticker.com} {
 	encode zstd gzip
+	# Audit 2026-10-15 M3: a request body is cut at 8 MB. The app caps JSON at 6.5 MB (api/http.ts MAX_JSON_BODY, a rivalry pair's two
+	# 2 MB images as base64 fit under it), so this line only stops larger uploads before they reach the app. Keep it above MAX_JSON_BODY.
+	request_body {
+		max_size 8MB
+	}
 
 	# Embeds first (handle blocks with named matchers run in order): the same upstream, without X-Frame-Options (see security_embed).
 	@embed path /burnticker/embed/*
@@ -121,7 +126,7 @@
 		# (mint-bank-empty 503 starts the page's in-browser address search; a launch-check refusal names its reason), and on 2026-10-14
 		# Caddy replaced them with "the app is catching up". Only a dead or slow upstream (Caddy's own 502/504) gets the fallback, in
 		# handle_errors below.
-		@app_launch path /api/burnticker/launch /api/burnticker/launch/* /api/burnticker/v1/launch/bundle
+		@app_launch path /api/burnticker/launch /api/burnticker/launch/* /api/burnticker/v1/launch/*
 		handle @app_launch {
 			reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
 				header_up X-Forwarded-Proto {scheme}

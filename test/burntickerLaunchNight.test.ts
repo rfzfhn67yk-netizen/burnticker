@@ -190,6 +190,7 @@ describe("6: a wallet slower than the blockhash gets the step rebuilt and signed
     const d: SendDeps = {
       now: () => clock,
       latestBlockhash: async () => ({ blockhash: BHS[fetches++], lastValidBlockHeight: 100 }),
+      simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
       signTransaction: async (tx) => { clock += o.walletMs[signs++] ?? 0; const t = o.tamper ? o.tamper(tx) : tx; t.sign([creatorKp]); return t; },
       lookupTable: async () => null,
       sendRaw: async (raw) => { sends++; const e = o.sendErr?.(sends); if (e) throw new Error(e); sentBlockhashes.push(VersionedTransaction.deserialize(raw).message.recentBlockhash); return "sig"; },

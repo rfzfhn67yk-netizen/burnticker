@@ -30,6 +30,7 @@ const run = async (plan: SignPlan, tamper: (tx: VersionedTransaction) => Version
   let sends = 0, store = memoryPlanStorage();
   const r = await signAndSendPlan(plan, CREATOR, {
     latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 1 }),
+    simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
     signTransaction: async (tx) => { const t = tamper(tx); t.sign([creatorKp]); return t; },
     lookupTable: async () => null,
     sendRaw: async () => { sends++; return `sig${sends}`; },
@@ -173,9 +174,14 @@ describe("438485 a failed dry run stops the step before the wallet is asked", ()
     assert.match(r.error!, /dry run of it failed on chain: .*Custom.*6001.*insufficient SOL/);
     assert.ok(lintCopy(r.error!, cfg).ok, r.error!);
   });
-  test("the dry run passes, or the RPC cannot perform it: the launch proceeds", async () => {
+  test("the dry run passes: the launch proceeds", async () => {
     assert.deepEqual((await runWith(async () => null)).sends, 2);
-    assert.deepEqual((await runWith(async () => { throw new Error("rpc down"); })).sends, 2);
+  });
+  test("Phantom's second review (2026-10-16): a dry run the RPC cannot perform stops the step BEFORE the wallet is asked; nothing sent", async () => {
+    const { r, sends, walletAsked } = await runWith(async () => { throw new Error("rpc down"); });
+    assert.deepEqual([sends, walletAsked, r.failedAt, r.state], [0, 0, 0, "not-sent"]);
+    assert.match(r.error!, /dry run could not be run just now \(rpc down\)\. Nothing was sent; try again in a moment\./);
+    assert.ok(lintCopy(r.error!, cfg).ok, r.error!);
   });
 });
 
@@ -229,6 +235,7 @@ describe("438485 appended wallet guard instructions", () => {
     const sends: VersionedTransaction[] = [];
     const store = memoryPlanStorage();
     const r = await signAndSendPlan(plan, CREATOR, {
+      simulate: async () => null,
       latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }),
       signTransaction: async (tx) => { const msg = TransactionMessage.decompile(tx.message); const extra = new TransactionInstruction({ programId: new PublicKey(LIGHTHOUSE), keys: [], data: Buffer.from([9]) }); const t = new VersionedTransaction(new TransactionMessage({ payerKey: msg.payerKey, recentBlockhash: msg.recentBlockhash, instructions: [...msg.instructions, extra] }).compileToV0Message()); t.sign([creatorKp]); return t; },
       lookupTable: async () => null,

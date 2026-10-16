@@ -347,9 +347,10 @@ export interface SendDeps {
   /**
    * Phantom's dApp guidance (ticket 438485, 2026-10-14): a transaction that fails on chain trips the wallet's warning, so each step is
    * dry-run (simulateTransaction, sigVerify false) BEFORE the wallet is asked to sign. Returns why the dry run failed, or null when it
-   * passed; a dry run the RPC could not perform (throws) does not stop the launch — only a failure the chain reported does. Optional.
+   * passed. Phantom's second review (2026-10-16): a dry run the RPC could not perform (throws) ALSO stops the step before the wallet is
+   * asked, so the wallet never sees a transaction nothing has checked. Required.
    */
-  simulate?(tx: VersionedTransaction): Promise<string | null>;
+  simulate(tx: VersionedTransaction): Promise<string | null>;
   /** Diagnostics when a wallet's returned transaction is refused: both messages (base64) and the reason. Optional. */
   onRefused?(info: { handed: string; returned: string; why: string }): void;
   /**
@@ -518,11 +519,11 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       const built = buildStepTx(plan.steps[i], creator, plan.keys, bh.blockhash, lut, false);
       // launch integrity 253: a copy of what the wallet is handed (a wallet may sign the object in place), checked against what comes back
       const handed = { message: built.message.serialize(), signatures: built.signatures.map((s) => Uint8Array.from(s)) };
-      if (d.simulate) {
-        let dry: string | null = null;
-        try { dry = await d.simulate(built); } catch { dry = null; }
-        if (dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry}`);
-      }
+      // Phantom ticket 438485, second review 2026-10-16: an unavailable or failed dry run stops the step BEFORE the wallet is asked
+      let dry: string | null;
+      try { dry = await d.simulate(built); }
+      catch (e) { return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because its dry run could not be run just now (${String((e as Error)?.message ?? e).slice(0, 160)}). Nothing was sent; try again in a moment.`); }
+      if (dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry}`);
       const signed = await d.signTransaction(built);
       const changed = walletReturnProblem(handed, signed, plan.steps[i], plan, lut ? [lut] : []);
       if (changed) {

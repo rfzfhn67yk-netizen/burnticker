@@ -47,6 +47,7 @@ const fakeDeps = (log: string[], over: Partial<{ refuseAt: number; chainErrAt: n
   return {
     sent,
     latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 1 }),
+    simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
     signTransaction: async (tx: VersionedTransaction) => {
       const pre = tx.signatures.filter((s) => s.some((b) => b !== 0)).length;
       if (over.refuseAt === n) throw new Error("User rejected the request.");
@@ -165,6 +166,7 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     const sent: string[] = [], pendingAtSend: (string | null)[] = [];
     const deps = {
       latestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 100 }),
+      simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
       signTransaction: async (tx: VersionedTransaction) => { tx.sign([creatorKp]); return tx; },
       lookupTable: async () => null,
       sendRaw: async (raw: Uint8Array) => {
