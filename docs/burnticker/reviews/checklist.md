@@ -299,3 +299,74 @@ same unreleased round 5 (built, not deployed):
 - **What a reviewer checks.** SOL leaves a fee PDA in six places now: `crank_buyback`, `crank_carried` (the same path: its own WSOL
   account, then the registered pool for tokens burned in the same instruction), `crank_target_burn`, `forward_to_winner`, `forward_on_end`
   and `burn_sol_on_end`.
+
+## Erratum 2026-10-14 (round-5 blind review fixes)
+
+The text above and the earlier errata stay as written. The round-5 blind review of 2026-10-14 (ROUND5-BLIND-REVIEW-CLAUDE-2026-10-14.md)
+changed the same unreleased round 5 (built, not deployed):
+
+- **Instruction count (item 1).** burn_receipts now has **43 entrypoints**: the 42 above plus `release_target`. The IDL, the Powers
+  Register and the whitepaper's §13.3 list 43 (45 event types, 141 error codes).
+- **initialize_token is retired (R5-5).** Every deployable build refuses the round-4 create with `InitializeTokenRetired` (same
+  discriminator, so an old client gets a clear error). New coins are created with `initialize_token_r5`, which requires an end sink for a
+  buyback coin; `pin_burn_target` also requires the coin's EndSink (`LostPathBurnsSelf`).
+- **The end gate (R5-1).** `forward_on_end` and `burn_sol_on_end` skip the "readings processed" wait only for a coin that burns itself
+  and never registered a pool. A coin that burns another token cranks without a pool of its own, so it always waits for its result reading.
+- **Holds, not reverts (R5-2).** A target pool inside the deviation band but under the Pyth minimum output, an unavailable CPMM TWAP and a
+  TWAP away from spot now hold the crank like every other price reason, so the 30-day unblock can run.
+- **crank_carried after an end (R5-3, R5-4).** `crank_carried` no longer refuses an ended rule (`RuleNotLive` is no longer raised). For 30
+  days after a RESOLVED end, `forward_on_end` and `burn_sol_on_end` leave a self coin's carried spend in its fee PDA so `crank_carried`
+  burns it on the coin first; after that they move whatever is left and clear it.
+- **release_target (R5-6).** Permissionless. A coin whose burn target stopped working (no target burn since its last 30-day unblock, and
+  30 days since its last burn) moves its carried spend, and only that, to the flagship's fee PDA (`TargetNotStalled` otherwise; memo
+  `<PREFIX>|release|to=…|lamports=…|left=…|v1`, event `TargetReleased`). No admin or attester takes part.
+- **Pyth (R5-7, second review R5-01).** A Pyth update older than the last one a coin accepted is refused (`PythWentBackwards`); the SOL/USD
+  and target/USD updates must be published within 60 seconds of each other (`PythFeedSkew`, a hold); a publish time more than 5 seconds
+  ahead of the clock is unusable; the deviation band is computed without saturation (an overflow refuses). The crank's two price
+  accounts must be the feeds' sponsored push-oracle accounts (anyone may refresh them, nobody can roll them back), so a stale price is
+  the feed's own state and a caller can no longer force the 30-day settlement with an old snapshot; a failure to read the pinned pool's
+  reserves, fee or TWAP, or to compute a quote, is a hold, not a revert.
+- **Decimals.** A target mint with more than 18 decimals is refused (`TargetDecimalsTooLarge`); receipts format any decimals.
+- **The rollback fence (R5-12).** A coin that burns another token keeps `pool_verified` false when its own pool registers and records the
+  verification in `burn_target_kind` (2), so the round-4 program refuses to burn it on itself.
+- **What a reviewer checks.** SOL leaves a fee PDA in seven places now: the six above and `release_target` (to the flagship's fee PDA only).
+
+## Erratum 2026-10-15 (round-5 R5-8 and R5-9, owner decision)
+
+The text above and the earlier errata stay as written. The owner decided on 2026-10-15 ("fix both now") to put two findings of the
+round-5 blind review into the same unreleased round 5 instead of a later round (built, not deployed):
+
+- **Counts (item 1).** Still **43 entrypoints** and 45 event types; **144 error codes** (three new: `CarriedTooSoon`,
+  `InvalidCarriedPace`, `BurnTargetAccountMissing`). The IDL, the Powers Register and the whitepaper's §13.3 say the same.
+- **crank_carried has a pace (R5-8).** A coin's carried pieces run at most once every 600 seconds (`MIN_CARRIED_INTERVAL_SECS`, half the
+  1,200-second TWAP window); a second piece inside that time is refused (`CarriedTooSoon`), in the same transaction, the same slot or
+  later. TokenConfig has no spare bytes left (round 5 used the last one for `burn_target_kind`), so the pace lives in a new account,
+  `CarriedPace` ["carried_pace", mint]: the time of the last piece, the number of pieces and the lamports they spent. The coin's first
+  piece creates it and the cranker pays its rent; any other account in its place is refused (`InvalidCarriedPace`). TokenConfig's size
+  and layout do not change. A carried piece no longer adds to `TokenConfig.burns`, which now counts reading cranks only; the piece count
+  is `CarriedPace.pieces`, the memo gains `piece=<n>` and the `CarriedSpent` event gains `piece` and `next_piece_at`.
+- **Liveness of a target coin (R5-9).** In `forward_to_winner` and in `forward_on_end`'s named-sink test, a side is live when its own
+  pool is verified, or when it burns another token (`burn_target_kind` 1) and its `BurnTarget` is pinned. The program reads that from
+  the BurnTarget account itself (this coin's, with a target mint, a pool and a pin time). Both instructions take the BurnTarget accounts
+  as optional accounts; leaving one out for a target coin without its own pool is refused (`BurnTargetAccountMissing`), so nobody can make
+  a live coin look dead by omission. A target coin whose BurnTarget is not pinned stays dead, as before. `unlink_pair` is unchanged.
+- **What a reviewer checks.** SOL still leaves a fee PDA in the same seven places; `forward_to_winner` and `forward_on_end` now also
+  reach a target coin's fee PDA before its own pool exists, and that coin's `crank_target_burn` spends it.
+
+## Erratum 2026-10-15 (R5-8 / R5-9 after their blind review)
+
+The text above and the earlier errata stay as written. A blind review of the R5-8 / R5-9 commit (verdict ship) asked for real fixes in
+the same unreleased round 5 (built, not deployed):
+
+- **Counts (item 1).** Unchanged: 43 entrypoints, 45 event types, 144 error codes.
+- **The carried pace is a budget (R5-8).** A fixed gap between pieces let anyone take every 600-second slot with a floor-size piece and
+  slow the drain to the floor 144 times a day. Now each piece spends its own lamports from the coin's carried budget: it refills at one
+  per-crank cap (2 % of the pool's WSOL reserve) per 600 seconds (`CARRIED_BUDGET_WINDOW_SECS`, which replaces `MIN_CARRIED_INTERVAL_SECS`)
+  up to one cap, so a dust piece takes only a dust budget and nobody drains faster than one cap per window. A piece above the budget, or a
+  second piece of the same coin in the same second (so two in one transaction), is refused (`CarriedTooSoon`). `CarriedPace` keeps its
+  94 bytes and gains `budget_lamports` (the budget left after the last piece) from its reserved bytes; a `version` other than 1 is
+  refused (`InvalidCarriedPace`). The `CarriedSpent` event's `next_piece_at` becomes `budget_left_lamports`.
+- **A stalled target is not live (R5-9).** A coin that burns another token counts as live for pair forwarding and as a named end sink
+  only while its BurnTarget is pinned and not stalled: when its last target event is a 30-day unblock (`last_unblocked_at >
+  last_burn_at`, the state `release_target` acts on), it is dead again, as before R5-9. A later target burn makes it live.
+- **What a reviewer checks.** Unchanged: the same seven places SOL leaves a fee PDA.

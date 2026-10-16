@@ -70,3 +70,18 @@ sh scripts/ops/rollback-burnticker.sh 8a51959               # type 8a51959; read
 
 What to record: how long the rollback took from the confirmation to "Live now", whether the probes passed both ways, the two build ids,
 and anything the script refused.
+
+## Rolling the burn_receipts PROGRAM back (round 5 to round 4)
+
+The host rollback above never touches the chain. A program rollback is a different act: an upgrade of `burn_receipts` through the Squads
+vault to an older binary. Round 5 adds coins that burn another token (docs/burnticker/EXTERNAL-BURN.md); round 4 does not know them.
+
+- **The hazard.** Round 4 reads `TokenConfig.burn_target_kind` as a reserved byte. If a coin that burns another token has `pool_verified`
+  set, round 4's `crank_buyback` spends its fuel on the coin itself, against what the coin promised.
+- **The fence (round-5 blind review R5-12).** Round 5 never sets `pool_verified` for a coin that burns another token: registering its own
+  pool records `burn_target_kind = 2` instead. Round 4 then refuses `crank_buyback` on it (`PoolNotVerified`). The fence does not cover a
+  coin on the FIXED pool policy: round 4's `register_pool` would verify that pool again.
+- **The rule.** Do not roll the program back to round 4 while any BurnTarget-pinned coin holds fuel in its fee PDA. Check every
+  `["burn_target", mint]` account first; if one exists and its coin's fee PDA holds more than its reserve, settle it (its readings
+  cranked, `release_target` where its target is stalled) or do not roll back.
+- Round 5 also retires `initialize_token`; a rollback brings it back for every caller.

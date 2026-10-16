@@ -430,6 +430,12 @@ pub const BURN_TARGET_SEED: &[u8] = b"burn_target";
 pub const BURN_TARGET_SELF: u8 = 0;
 #[constant]
 pub const BURN_TARGET_EXTERNAL: u8 = 1;
+/// Round-5 review R5-12 (the rollback fence): a target coin whose OWN pool passed registration (register_pool, register_pair_pool,
+/// replace_pool, apply_registration_policy). For a target coin those leave `pool_verified` FALSE and record the verification here
+/// instead, so a round-4 program (which ignores this byte) refuses crank_buyback on it (PoolNotVerified) and can never self-burn it.
+/// Round-5 readers use TokenConfig::own_pool_verified().
+#[constant]
+pub const BURN_TARGET_EXTERNAL_POOL_VERIFIED: u8 = 2;
 /// A target pool's fee (trade fee + the creator fee when the pool charges it), parts per million of volume: at most 1 %.
 #[constant]
 pub const TARGET_MAX_FEE_PPM: u64 = 10_000;
@@ -464,3 +470,32 @@ pub const PYTH_MAX_AGE_SECS: i64 = 60;
 /// A Pyth price whose confidence interval is wider than this share of the price holds the crank.
 #[constant]
 pub const PYTH_MAX_CONF_BPS: u64 = 100;
+/// Round-5 review R5-7: the SOL/USD and target/USD updates of one crank must be published within this many seconds of each other
+/// (otherwise the crank is held), so a cranker cannot pick the two references independently from a two-minute window.
+#[constant]
+pub const PYTH_MAX_FEED_SKEW_SECS: i64 = 60;
+/// Pyth's push-oracle program (pyth-push-oracle; the same id on mainnet and devnet). Second review (A): the crank's two price accounts
+/// must be the SPONSORED feed accounts PDA([shard 0 u16 LE, feed id]) under it — maintained, monotonic accounts anyone may refresh but
+/// nobody can roll back — never a caller-chosen snapshot, so a stale price is the feed's state, not the caller's choice.
+pub const PYTH_PUSH_ORACLE_PROGRAM_ID: Pubkey = pubkey!("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT");
+/// Second review (B): a target mint with more decimals than this is refused at admission (receipts and the price math stay in range).
+#[constant]
+pub const TARGET_MAX_DECIMALS: u8 = 18;
+/// Round-5 review R5-01 (second review): a publish_time more than this far AHEAD of the cluster clock is unusable (clock skew only).
+#[constant]
+pub const PYTH_MAX_FUTURE_SECS: i64 = 5;
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Round-5 review R5-8 (owner, 2026-10-15 "fix both now"): crank_carried pacing
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/// CarriedPace ["carried_pace", mint]: the coin's carried-spend budget (what is left of it and when it was last spent) and its piece
+/// count. A separate account because TokenConfig has no spare bytes left (round 5 used the last one for burn_target_kind); TokenConfig's
+/// size and layout are unchanged.
+#[constant]
+pub const CARRIED_PACE_SEED: &[u8] = b"carried_pace";
+/// The carried-spend budget refills at one per-crank cap (2 % of the pool's WSOL reserve) per this many seconds (half the 1,200 s TWAP
+/// window), up to one cap. A piece spends its own lamports from it, so a dust piece uses only a dust budget; at most one piece per coin
+/// per second (two in one transaction are refused). Anyone may crank; nobody can drain carried spend faster than one cap per window.
+#[constant]
+pub const CARRIED_BUDGET_WINDOW_SECS: i64 = 600;

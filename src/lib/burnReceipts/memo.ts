@@ -136,7 +136,7 @@ export function memoFromChain(c: TokenConfigAccount, r: ReadingAccount, mintDeci
     valueDecimals: dec,
   };
   // Round 5: a coin with a burn target writes memo v3 (got/burn in the target's units, the coin's own burned tokens in `owed`).
-  if (c.rule.mode === MODE_BUYBACK && c.burn_target_kind === 1) {
+  if (c.rule.mode === MODE_BUYBACK && (c.burn_target_kind ?? 0) !== 0) {
     if (!target) throw new Error("memoFromChain: this coin burns a target; pass its BurnTarget (mint and decimals)");
     const swap = r.spent_lamports > BigInt(0) ? (r.pool as PublicKey).toBase58().slice(0, 12) : "none";
     return formatTargetMemo({ ...h, pool: r.pool_lamports.toString(), spent: r.spent_lamports.toString(), got: rawToTokens(r.got, target.decimals), burn: rawToTokens(r.burned, target.decimals), target: target.mint.toBase58(), own: rawToTokens(r.owed, mintDecimals), swap, version: "v3" });

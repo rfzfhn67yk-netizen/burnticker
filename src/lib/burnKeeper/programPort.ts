@@ -38,6 +38,9 @@ export interface ProgramConfigView {
   ruleEnded?: boolean;
 }
 
+/** planCarried's "not now" answers. "too-soon" (round-5 review R5-8): the piece fits the coin's carried budget at `nextAtMs`. */
+export type CarriedPlanStatus = { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" } | { status: "too-soon"; nextAtMs: number };
+
 /** One Reading account. `outcome` by name (pending / no-units / burned / below-floor / short / exhausted). */
 export interface ProgramReadingView {
   recordDate: number; prevDate: number; kind: number; processed: boolean; value: bigint; prevValue: bigint; delta: bigint; units: number;
@@ -86,7 +89,14 @@ export interface ProgramPort {
    * BURN DISPERSAL (2026-10-13; src/lib/burnticker/dispersal.ts): crank_carried for a piece of at most `maxSpendLamports` of the carried
    * spend, signed only on build() — or why there is none. Optional: a port without it (an older client) never disperses.
    */
-  planCarried?(maxSpendLamports: bigint): Promise<{ build: () => Promise<SignedTx> } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" }>;
+  planCarried?(maxSpendLamports: bigint): Promise<{ build: () => Promise<SignedTx> } | CarriedPlanStatus>;
+  /**
+   * Round-5 review R5-8: the coin's carried budget as the program judges it — the last piece's time (unix s; 0 = never, a full cap), the
+   * budget left after it, and the chain's clock (latest block time; null when unknown). The budget refills at one per-crank cap per
+   * CARRIED_BUDGET_WINDOW_SECS up to one cap (math.ts carriedBudget*). Read only before a piece is planned. Optional: a port without it
+   * relies on planCarried's "too-soon" and the CarriedTooSoon refusal.
+   */
+  carriedPace?(): Promise<{ lastCarriedAt: number; budgetLamports: bigint; chainNowSec: number | null } | null>;
   /** The registered CPMM pool's WSOL reserve net of owed fees (the per-crank cap and the price move are measured on it), or null. */
   poolSolReserve?(): Promise<bigint | null>;
   /**

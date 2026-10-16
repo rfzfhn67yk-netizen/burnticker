@@ -1,0 +1,8 @@
+{
+  "command": "target-status",
+  "cluster": "devnet",
+  "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+  "burn_target_kind": 0,
+  "burnTarget": null,
+  "pinnedPoolNow": null
+}

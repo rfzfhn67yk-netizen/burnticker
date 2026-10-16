@@ -11,7 +11,7 @@
 //                              coins made before then keep working)
 //                              [--attester <pubkey>]... [--quorum 1] [--launchlab-platform <pubkey>] [--floor-lamports 1000000]
 //                              [--twap-window 1200] [--twap-deviation-bps 300] [--fixed-pool <pubkey>]
-//                              [--end-sink flagship:<min lamports> | mint:<mint>:<min> | pair-winner:<partner>:<min>]   (§45: pins the
+//                              [--end-sink flagship:<min lamports> | incinerator:<min> (round 5) | mint:<mint>:<min> | pair-winner:<partner>:<min>]   (§45: pins the
 //                              coin's EndSink; omitted = none, the hashed wind-down. The flagship itself never takes one.)
 //                              [--program-round 3|4|5]   the deployed program's initialize_token layout: default from
 //                              BURNTICKER_INITIALIZE_TOKEN_LAYOUT (r3 | r4 | r5), else 3; --end-sink implies 4; 5 sends round 4's bytes
@@ -53,6 +53,8 @@
 //   cancel-target-pool         --mint <pubkey> --admin <keypath|pubkey>
 //   veto-target-pool           --mint <pubkey> --attester <keypath|pubkey>   (any current attester)
 //   apply-target-pool          --mint <pubkey>   (after 48 h, within 14 days; the proposed pool passes the same admission)
+//   release-target             --mint <pubkey> [--flagship <mint>]   (round-5 review R5-6, permissionless: a stalled target coin's carried
+//                              spend to the flagship's fee PDA; the program refuses it while the target still burns)
 //   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date> [--cranker <pubkey>]...
 //                              (the cap is always the 25 SOL default at creation; ≤ 3 crankers, enforced only while the cap is in force)
 //   set-registration-policy    --mint <pubkey> --admin <keypath|pubkey> --policy 0|1 [--pool <pubkey>]   (48 h timelock; stranding recovery)
@@ -94,15 +96,15 @@ import { checkLpLockPins } from "../src/lib/burnticker/lpLockPins.ts";
 import { associatedTokenAddress, configPda, cpmmPoolPda, feeKeyRecordPda, launchlabMigrationLocker, feeKeysPda, feePda, feeWsolAddress, platformPda, readingPda } from "../src/lib/burnReceipts/pda.ts";
 import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, linkPairIx, PAIR_STATE_PAIRED, pairLinkPda, pairResultFor, pairResultPda, submitPairResultIx, unlinkPairIx } from "../src/lib/burnReceipts/pairs.ts";
-import { attestRuleEnd, END_SINK_FLAGSHIP, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_RESOLVED, END_STATE_VOID, fetchEndSink, fetchRuleEnd, endSinkPda, planForwardOnEnd, ruleEndPda, submitRuleEndIx } from "../src/lib/burnReceipts/endSink.ts";
+import { attestRuleEnd, END_SINK_FLAGSHIP, END_SINK_INCINERATOR, FLAGSHIP_MINT, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_RESOLVED, END_STATE_VOID, fetchEndSink, fetchRuleEnd, endSinkPda, planForwardOnEnd, ruleEndPda, submitRuleEndIx } from "../src/lib/burnReceipts/endSink.ts";
 import { attestReading, sourceUrlHash } from "../src/lib/burnReceipts/attestation.ts";
 import { fetchCpmmPool } from "../src/lib/burnReceipts/cpmm.ts";
 import { confirmByPolling, planCrank, poolAccountsOrStandIns, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
-import { applyTargetPoolIx, BURN_TARGET_EXTERNAL, burnTargetPda, cancelTargetPoolIx, checkTargetAdmission, fetchBurnTarget, pinBurnTargetIx, proposeTargetPoolIx, vetoTargetPoolIx } from "../src/lib/burnReceipts/burnTarget.ts";
+import { applyTargetPoolIx, BURN_TARGET_EXTERNAL, burnTargetPda, cancelTargetPoolIx, checkTargetAdmission, fetchBurnTarget, pinBurnTargetIx, proposeTargetPoolIx, vetoTargetPoolIx, releaseTargetIx } from "../src/lib/burnReceipts/burnTarget.ts";
 
 const args = process.argv.slice(2);
-const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "unlink-pair", "pair-status", "submit-rule-end", "forward-on-end", "end-status", "check-target", "pin-burn-target", "target-status", "propose-target-pool", "cancel-target-pool", "veto-target-pool", "apply-target-pool"] as const;
+const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "unlink-pair", "pair-status", "submit-rule-end", "forward-on-end", "end-status", "check-target", "pin-burn-target", "target-status", "propose-target-pool", "cancel-target-pool", "veto-target-pool", "apply-target-pool", "release-target"] as const;
 type Command = (typeof COMMANDS)[number];
 const CMD = (COMMANDS as readonly string[]).includes(args[0]) ? (args[0] as Command) : null;
 const flag = (n: string) => args.includes(`--${n}`);
@@ -295,15 +297,17 @@ if (CMD === "initialize-token") {
   const endSink = !es ? undefined : (() => {
     const parts = es.split(":"), min = BigInt(parts[parts.length - 1] ?? "0");
     if (parts[0] === "flagship" && parts.length === 2) return { kind: END_SINK_FLAGSHIP, minForwardLamports: min };
+    if (parts[0] === "incinerator" && parts.length === 2) return { kind: END_SINK_INCINERATOR, minForwardLamports: min };   // round 5 (initialize_token_r5 only)
     if (parts[0] === "mint" && parts.length === 3) return { kind: END_SINK_MINT, sinkMint: pubkeyOf(parts[1], "--end-sink")!, minForwardLamports: min };
     if (parts[0] === "pair-winner" && parts.length === 3) return { kind: END_SINK_PAIR_WINNER, sinkMint: pubkeyOf(parts[1], "--end-sink")!, minForwardLamports: min };
-    return die("--end-sink flagship:<min> | mint:<mint>:<min> | pair-winner:<partner>:<min>");
+    return die("--end-sink flagship:<min> | incinerator:<min> | mint:<mint>:<min> | pair-winner:<partner>:<min>");
   })();
   // r4 and r5 send the same initialize_token bytes (round 5 pins a burn target in a separate instruction)
   const envLayout = initializeTokenLayoutFromEnv();
   const round = opt("program-round") ?? (envLayout === "r5" ? "5" : endSink || envLayout === "r4" ? "4" : "3");
   if (round !== "3" && round !== "4" && round !== "5") die("--program-round 3|4|5");
   if (endSink && round === "3") die("--end-sink needs --program-round 4 or 5");
+  if (endSink?.kind === END_SINK_INCINERATOR && round !== "5") die("--end-sink incinerator needs --program-round 5 (initialize_token_r5)");
   const ix = initializeTokenIx({ programId, payer: payer.publicKey, creator: creator.publicKey, mint: mint.publicKey, launchlabPlatform, layout: round === "5" ? "r5" : round === "4" ? "r4" : "r3", ...(endSink ? { endSink } : {}), args: {
     feed_id: loaded.rules.feed.id, memo_prefix: loaded.rules.memo.prefix, memo_source: loaded.rules.feed.memoSource, rules_sha256: Buffer.from(loaded.sha256, "hex"), rule,
     attesters, quorum: Number(opt("quorum") ?? 1), fixed_pool: fixedPool ?? PublicKey.default, admin,
@@ -447,6 +451,12 @@ if (CMD === "forward-on-end") {
   const plan = await planForwardOnEnd(connection, programId, cluster, mint, payer.publicKey);
   if (plan.status !== "ready") { console.log(JSON.stringify({ command: CMD, cluster, mint: mint.toBase58(), plan }, null, 2)); process.exit(plan.status === "not-ended" || plan.status === "void" ? 0 : 1); }
   await run(plan.instructions, payer, [], [...tokenWatch(mint), { address: feePda(programId, plan.target), kind: "lamports" }], { target: plan.target.toBase58(), intended: plan.intended.toBase58(), sinkKind: plan.sinkKind });
+}
+if (CMD === "release-target") {
+  // round-5 review R5-6: permissionless; a stalled target coin's carried spend goes to the flagship's fee PDA (refused unless stalled)
+  const mint = mintArg();
+  const flagship = pubkeyOf(opt("flagship"), "--flagship") ?? FLAGSHIP_MINT[cluster];
+  await run([releaseTargetIx({ programId, cranker: payer.publicKey, mint, flagship })], payer, [], [...tokenWatch(mint), { address: feePda(programId, flagship), kind: "lamports" }], { flagship: flagship.toBase58() });
 }
 if (CMD === "forward-to-winner") {
   const loser = pubkeyOf(opt("loser"), "--loser") ?? die("--loser <mint> is required");

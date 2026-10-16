@@ -58,6 +58,8 @@ export const WAIT_REASONS: Record<string, string> = {
   TargetPoolBelowFloor: "target pool unhealthy — the pinned target pool holds less SOL than the floor; the burn pool's SOL is held (after 30 days the reading is processed and its spend carried)",
   PythStale: "target pool unhealthy — the Pyth price for the target or SOL is more than 60 seconds old (Pyth's sponsored feed, or post a fresh update); the burn pool's SOL is held (after 30 days the reading is processed and its spend carried)",
   PythUnusable: "target pool unhealthy — the Pyth price's confidence is wider than 1 % (or it is out of range); the burn pool's SOL is held (after 30 days the reading is processed and its spend carried)",
+  PythFeedSkew: "target pool unhealthy — the SOL/USD and target/USD Pyth updates were published more than 60 seconds apart (post fresh updates of both); the burn pool's SOL is held (after 30 days the reading is processed and its spend carried)",
+  PythWentBackwards: "waiting — the Pyth update passed is older than the last one this coin used; retried with fresh updates",
   TargetPriceDeviation: "target pool unhealthy — the pinned pool's price is further from the Pyth price than the rule allows (a pushed pool, or a market moving faster than Pyth); retried, the SOL is held (after 30 days the reading is processed and its spend carried)",
   TargetFeeTier: "target pool unhealthy — the pinned target pool's fee is now above 1 %; the burn pool's SOL is held (after 30 days the reading is processed and its spend carried; the admin can re-pin)",
   EmptyReserves: "waiting — the registered pool has no reserves",

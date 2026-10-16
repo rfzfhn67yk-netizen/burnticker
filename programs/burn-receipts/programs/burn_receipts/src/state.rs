@@ -177,6 +177,25 @@ impl TokenConfig {
     pub fn admin_active(&self) -> bool {
         self.admin != Pubkey::default()
     }
+    /// Round 5: the coin burns a BurnTarget (BURN_TARGET_EXTERNAL, or _EXTERNAL_POOL_VERIFIED once its own pool registered).
+    pub fn burns_target(&self) -> bool {
+        self.burn_target_kind != BURN_TARGET_SELF
+    }
+    /// The coin's own pool passed registration. A target coin records it in burn_target_kind and keeps `pool_verified` false (round-5
+    /// review R5-12: the rollback fence, so a round-4 program refuses to self-burn it).
+    pub fn own_pool_verified(&self) -> bool {
+        self.pool_verified || self.burn_target_kind == BURN_TARGET_EXTERNAL_POOL_VERIFIED
+    }
+    /// Sets the own-pool verification (register_pool, register_pair_pool, replace_pool, apply_registration_policy): `pool_verified`
+    /// for a self coin, the burn_target_kind marker for a target coin (whose `pool_verified` stays false).
+    pub fn set_own_pool_verified(&mut self, verified: bool) {
+        if self.burns_target() {
+            self.pool_verified = false;
+            self.burn_target_kind = if verified { BURN_TARGET_EXTERNAL_POOL_VERIFIED } else { BURN_TARGET_EXTERNAL };
+        } else {
+            self.pool_verified = verified;
+        }
+    }
 }
 
 /// LAUNCHPAD-PATH §35: the coin's permanent LP lock (Raydium's CPMM lock program) and its Fee Key, held by the FEE_KEYS PDA.
@@ -495,7 +514,41 @@ pub struct BurnTarget {
     /// A pending re-pin (apply_target_pool), applicable from `pending_eta` for 14 days after the proposal; 0 = none.
     pub pending_pool: Pubkey,
     pub pending_eta: i64,
-    pub reserved: [u8; 32],
+    /// Round-5 review R5-7: the publish_time of the SOL/USD and target/USD updates last accepted (pin, re-pin, every swapping crank);
+    /// a later crank may not present an older update.
+    pub last_sol_publish_time: i64,
+    pub last_target_publish_time: i64,
+    /// Round-5 review R5-6: when a crank last spent on the target (0 = never), and when the 30-day unblock last processed a reading
+    /// without a swap (0 = never). release_target needs last_unblocked_at > last_burn_at (and 30 days since the last burn / the pin).
+    pub last_burn_at: i64,
+    pub last_unblocked_at: i64,
+}
+
+/// Round-5 review R5-8: crank_carried's per-coin budget. ["carried_pace", mint]. Created by the coin's first crank_carried (the cranker
+/// pays its rent, about 0.0013 SOL); only crank_carried writes it. Budget now = min(cap, budget_lamports + cap × min(now −
+/// last_carried_at, CARRIED_BUDGET_WINDOW_SECS) / CARRIED_BUDGET_WINDOW_SECS), cap = the per-crank cap (2 % of the pool's WSOL reserve)
+/// now; a coin without the account has a full cap. Read at fixed offsets (crank_carried.rs); a version other than 1 is refused. TokenConfig is not touched: it has no spare bytes, and keeping its
+/// size and offsets fixed keeps every earlier program and decoder reading it unchanged.
+#[account]
+#[derive(InitSpace)]
+pub struct CarriedPace {
+    pub version: u8,
+    pub bump: u8,
+    /// The coin.
+    pub mint: Pubkey,
+    /// Unix time of the coin's last carried piece (the budget's reference time); the next piece runs in a later second.
+    pub last_carried_at: i64,
+    /// Carried pieces run (crank_carried). Counted here, not in TokenConfig.burns, which counts reading cranks only.
+    pub pieces: u32,
+    /// Lamports the carried pieces spent (also inside TokenConfig.total_spent_lamports).
+    pub spent_lamports: u64,
+    /// The budget left right after the last piece (lamports); it refills from `last_carried_at`.
+    pub budget_lamports: u64,
+    pub reserved: [u8; 24],
+}
+
+pub fn carried_pace_address(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[CARRIED_PACE_SEED, mint.as_ref()], &crate::ID)
 }
 
 pub fn burn_target_address(mint: &Pubkey) -> (Pubkey, u8) {

@@ -275,4 +275,22 @@ pub enum BurnError {
     BelowFloor,
     #[msg("crank_carried: the rule has ended; the end paths handle the fuel")]
     RuleNotLive,
+    // ----- round-5 review fixes (2026-10-14) -----
+    #[msg("initialize_token is retired: create with initialize_token_r5 (a buyback coin must pin an end sink)")]
+    InitializeTokenRetired,
+    #[msg("burn target: a Pyth update older than the last one this coin used was passed (pass a fresher update)")]
+    PythWentBackwards,
+    #[msg("burn target: the SOL/USD and target/USD updates are more than 60 seconds apart (the SOL is held)")]
+    PythFeedSkew,
+    #[msg("release_target: the target has burned since its last 30-day unblock, or 30 days have not passed, or nothing is carried")]
+    TargetNotStalled,
+    #[msg("burn target: the target mint has more than 18 decimals")]
+    TargetDecimalsTooLarge,
+    // ----- round-5 review R5-8 / R5-9 (owner, 2026-10-15) -----
+    #[msg("crank_carried: over the carried budget")]
+    CarriedTooSoon,
+    #[msg("crank_carried: not this coin's CarriedPace")]
+    InvalidCarriedPace,
+    #[msg("a target coin's BurnTarget account is required")]
+    BurnTargetAccountMissing,
 }

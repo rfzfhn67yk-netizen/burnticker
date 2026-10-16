@@ -60,11 +60,25 @@ fn read_fixture(rel: &str, hint: &str) -> Vec<u8> {
 
 impl Env {
     pub fn new() -> Self {
-        let mut svm = LiteSVM::new().with_precompiles();
         // The `test-pins` build (scripts/test.sh → target/deploy-test): mainnet genesis and Raydium ids, with the harness's
         // TEST_LAUNCHLAB_PLATFORM compiled in as BURNTICKER_PLATFORM (lp-lock blind review RL-3) and the test treasury [0x7e; 32]. The
         // default (mainnet) build pins no platform and refuses every policy-0/2 initialize_token (PlatformNotPinned).
-        svm.add_program(burn_receipts::ID, &read_fixture("target/deploy-test/burn_receipts.so", "Run scripts/test.sh first (builds --features test-pins).")).unwrap();
+        Self::with_program("target/deploy-test/burn_receipts.so", "Run scripts/test.sh first (builds --features test-pins).")
+    }
+
+    /// The DEFAULT (mainnet) build (anchor build → target/deploy/burn_receipts.so) — for the few tests about what only the deployable
+    /// build does (round-5 review R5-5: initialize_token retired).
+    pub fn new_mainnet_build() -> Self {
+        Self::with_program("target/deploy/burn_receipts.so", "Run anchor build (or scripts/test.sh) first.")
+    }
+
+    fn with_program(rel: &str, hint: &str) -> Self {
+        let mut svm = LiteSVM::new().with_precompiles();
+        svm.add_program(burn_receipts::ID, &read_fixture(rel, hint)).unwrap();
+        // Round-5 review R5-11 (opt-in): run against the REAL SPL Token / Associated Token programs dumped from a cluster instead of
+        // LiteSVM's bundled copies (`solana program dump TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA /tmp/token.so -u mainnet-beta`).
+        if let Ok(p) = std::env::var("REVIEW_TOKEN_SO") { svm.add_program(spl_token::ID, &std::fs::read(&p).expect("REVIEW_TOKEN_SO")).unwrap(); }
+        if let Ok(p) = std::env::var("REVIEW_ATA_SO") { svm.add_program(anchor_spl::associated_token::ID, &std::fs::read(&p).expect("REVIEW_ATA_SO")).unwrap(); }
         svm.add_program(CPMM_PROGRAM_ID, &read_fixture("fixtures/raydium_cp_swap.so", "Run scripts/build-cpmm-fixture.sh first.")).unwrap();
         // The WSOL mint (SPL Token's native mint) — present on every real cluster, absent from a bare LiteSVM.
         let mut mint_data = vec![0u8; spl_token::state::Mint::LEN];
@@ -523,6 +537,94 @@ pub fn ix_initialize_full(
 }
 
 /// burn_receipts' PairLink ["pair_link", mint] (LAUNCHPAD-PATH §40).
+/// Round 5: the coin's BurnTarget ["burn_target", mint] (forward_to_winner / forward_on_end pass it for the R5-9 liveness check).
+pub fn burn_target_pda(mint: &Pubkey) -> Pubkey {
+    burn_receipts::state::burn_target_address(mint).0
+}
+
+/// Round-5 review R5-8: the coin's CarriedPace ["carried_pace", mint].
+pub fn carried_pace_pda(mint: &Pubkey) -> Pubkey {
+    burn_receipts::state::carried_pace_address(mint).0
+}
+
+/// Round-5 review R5-9 harness: turns `mint` into a target coin whose own pool is NOT verified (burn_target_kind EXTERNAL,
+/// pool_verified false: the state pin_burn_target leaves before the coin graduates), with its BurnTarget pinned (`pinned`) or absent.
+/// The pinned BurnTarget is written as pin_burn_target writes it (the burn_target suite proves the pin itself against real pools and
+/// Pyth); here only its state matters, because liveness reads that state.
+pub fn make_target_coin(env: &mut Env, mint: &Pubkey, pinned: bool) {
+    use anchor_lang::AccountSerialize;
+    let key = config_pda(mint);
+    let mut cfg = env.config(&key);
+    cfg.pool_verified = false;
+    cfg.burn_target_kind = BURN_TARGET_EXTERNAL;
+    let mut acc = env.svm.get_account(&key).unwrap();
+    let mut data = Vec::new();
+    cfg.try_serialize(&mut data).unwrap();
+    acc.data[..data.len()].copy_from_slice(&data);
+    env.svm.set_account(key, acc).unwrap();
+    let bt_key = burn_target_pda(mint);
+    if !pinned {
+        env.svm.set_account(bt_key, litesvm_account(0, Vec::new(), anchor_lang::solana_program::system_program::ID)).unwrap();
+        return;
+    }
+    let bump = burn_receipts::state::burn_target_address(mint).1;
+    let t = burn_receipts::state::BurnTarget {
+        version: 1,
+        bump,
+        mint: *mint,
+        target_mint: Pubkey::new_unique(),
+        target_decimals: 6,
+        pool_kind: TARGET_POOL_CPMM,
+        target_feed_id: [0x77; 32],
+        pool: Pubkey::new_unique(),
+        amm_config: Pubkey::new_unique(),
+        wsol_vault: Pubkey::new_unique(),
+        target_vault: Pubkey::new_unique(),
+        observation: Pubkey::new_unique(),
+        wsol_is_token_0: true,
+        pinned_at: env.now(),
+        total_target_burned: 0,
+        total_spent_lamports: 0,
+        burns: 0,
+        repins: 0,
+        pending_pool: Pubkey::default(),
+        pending_eta: 0,
+        last_sol_publish_time: env.now(),
+        last_target_publish_time: env.now(),
+        last_burn_at: 0,
+        last_unblocked_at: 0,
+    };
+    let mut d = Vec::new();
+    t.try_serialize(&mut d).unwrap();
+    d.resize(8 + <burn_receipts::state::BurnTarget as anchor_lang::Space>::INIT_SPACE, 0);
+    let lamports = env.svm.minimum_balance_for_rent_exemption(d.len());
+    env.svm.set_account(bt_key, litesvm_account(lamports, d, burn_receipts::ID)).unwrap();
+}
+
+/// Round-5 review R5-9 harness: marks `mint`'s BurnTarget STALLED (its last target event a 30-day unblock: last_unblocked_at >
+/// last_burn_at, the state release_target acts on), as crank_target_burn's unblock leaves it.
+pub fn stall_target(env: &mut Env, mint: &Pubkey) {
+    let key = burn_target_pda(mint);
+    let mut acc = env.svm.get_account(&key).expect("a pinned BurnTarget");
+    let now = env.now();
+    acc.data[357..365].copy_from_slice(&0i64.to_le_bytes());
+    acc.data[365..373].copy_from_slice(&now.to_le_bytes());
+    env.svm.set_account(key, acc).unwrap();
+}
+
+/// The instruction with one account slot replaced by the program id (Anchor's "None" for an optional account).
+pub fn without_account(mut ix: Instruction, key: &Pubkey) -> Instruction {
+    let at = ix.accounts.iter().position(|a| a.pubkey == *key).expect("account in the instruction");
+    ix.accounts[at] = AccountMeta::new_readonly(burn_receipts::ID, false);
+    ix
+}
+
+/// The coin's CarriedPace, if a carried piece has run (round-5 review R5-8).
+pub fn carried_pace(env: &Env, mint: &Pubkey) -> Option<burn_receipts::state::CarriedPace> {
+    use anchor_lang::AccountDeserialize;
+    env.svm.get_account(&carried_pace_pda(mint)).filter(|a| !a.data.is_empty()).map(|a| burn_receipts::state::CarriedPace::try_deserialize(&mut a.data.as_slice()).unwrap())
+}
+
 pub fn pair_link_pda(mint: &Pubkey) -> Pubkey {
     burn_receipts::state::pair_link_address(mint).0
 }
@@ -923,6 +1025,8 @@ pub fn ix_forward_to_winner(cranker: &Pubkey, loser: &Pubkey, winner: &Pubkey, d
             token_program: anchor_spl::token::spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
             memo_program: MEMO_PROGRAM_ID,
+            loser_burn_target: Some(burn_target_pda(loser)),
+            winner_burn_target: Some(burn_target_pda(winner)),
             event_authority: event_authority(),
             program: burn_receipts::ID,
         }
@@ -1070,6 +1174,7 @@ pub fn ix_forward_on_end(cranker: &Pubkey, mint: &Pubkey, target: &Pubkey, sink:
             sink_config: sink.map(|s| config_pda(&s)),
             pair_link: pair.map(|_| pair_link_pda(mint)),
             pair_result: pair.map(|(p, d)| pair_result_pda(mint, &p, d)),
+            sink_burn_target: sink.map(|s| burn_target_pda(&s)),
             event_authority: event_authority(),
             program: burn_receipts::ID,
         }

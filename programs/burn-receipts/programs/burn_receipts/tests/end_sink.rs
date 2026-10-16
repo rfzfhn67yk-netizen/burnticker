@@ -348,7 +348,8 @@ fn a_resolved_coin_forwards_its_remaining_fuel_and_later_trickle_to_the_flagship
     assert!(env.mint_supply(&f.mint) < supply, "the flagship burned");
 }
 
-/// The burn-pool cap bounds one forward; the carried spend is cleared; a reading dated after the end never cranks.
+/// The burn-pool cap bounds one forward; the carried spend waits 30 days for crank_carried (R5-4), then is cleared; a reading dated
+/// after the end never cranks.
 #[test]
 fn a_forward_on_end_is_capped_and_a_reading_after_a_resolved_end_never_cranks() {
     let mut env = Env::new();
@@ -363,16 +364,26 @@ fn a_forward_on_end_is_capped_and_a_reading_after_a_resolved_end_never_cranks() 
     expect_anchor_err(crank(&mut env, &k, &c, D2), "ForwardOnEndRequired");
     patch_config(&mut env, &c.mint, |x| x.end_date = D2);
     crank(&mut env, &k, &c, D2).unwrap();
+    let owed = env.config(&config_pda(&c.mint)).carried_spend_lamports;
+    assert!(owed > 0, "the capped crank left a carry");
     let before = env.lamports(&fee_pda(&c.mint));
     let meta = env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]);
     let ev: ForwardedOnEnd = event(&meta).unwrap();
     assert_eq!(ev.lamports, DEFAULT_BURN_POOL_CAP_LAMPORTS);
     assert_eq!(before - env.lamports(&fee_pda(&c.mint)), DEFAULT_BURN_POOL_CAP_LAMPORTS);
-    assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, 0);
-    // the rest goes on the next call
+    // round-5 review R5-4: the carry owed by readings inside the window stays for crank_carried (30 days after the end)
+    assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, owed);
+    // the rest (above the carry) goes on the next call
     env.set_time(env.now() + 1);
     env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]);
-    assert_eq!(spendable(&env, &c.mint), 0);
+    assert_eq!(spendable(&env, &c.mint), owed);
+    // 30 days after the end the end path takes the carry too and clears it (nothing can strand)
+    env.set_time(rule_end(&env, &c.mint).unwrap().submitted_at + QUEUE_UNBLOCK_SECS);
+    while spendable(&env, &c.mint) > 0 {
+        env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]);
+        env.set_time(env.now() + 1);
+    }
+    assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, 0);
 }
 
 /// MINT: the named coin while it is live; otherwise (no verified pool, or its own rule ended) the flagship.
@@ -506,6 +517,52 @@ fn a_resolved_coin_without_a_pool_forwards_despite_its_uncrankable_reading() {
     let ff = env.lamports(&fee_pda(&f.mint));
     env.ok(&[ix_forward_on_end(&kc.pubkey(), &m, &f.mint, None, None)], &[&kc]);
     assert_eq!(env.lamports(&fee_pda(&f.mint)) - ff, SOL);
+}
+
+/// Round-5 review R5-9: a named sink coin that burns an external target and has no verified pool of its own yet is live while its
+/// BurnTarget is pinned — it receives the fuel; with no pinned BurnTarget it is dead and the fuel goes to the flagship. Leaving its
+/// BurnTarget account out is refused (a cranker cannot divert the fuel to the flagship by omission).
+#[test]
+fn r5_9_a_named_sink_that_burns_a_pinned_target_receives_and_an_unpinned_one_does_not() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let f = flagship(&mut env, &att);
+    let ks = Keypair::new();
+    init(&mut env, &ks, &att.pubkey(), buyback_rule(), None).unwrap();
+    let s = market(&mut env, &ks);
+    make_target_coin(&mut env, &s.mint, true);
+    let c = ending_coin(&mut env, &att, END_SINK_MINT, s.mint, 2 * SOL, 0);
+    submit_rule_end(&mut env, &c.mint, D2, END_STATE_RESOLVED, &[&att]).unwrap();
+    let k = cranker(&mut env);
+    let ix = without_account(ix_forward_on_end(&k.pubkey(), &c.mint, &s.mint, Some(s.mint), None), &burn_target_pda(&s.mint));
+    expect_anchor_err(env.send(&[ix], &[&k]), "BurnTargetAccountMissing");
+    expect_anchor_err(env.send(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, Some(s.mint), None)], &[&k]), "EndSinkMismatch"); // the sink is live
+    let fs = env.lamports(&fee_pda(&s.mint));
+    let meta = env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &s.mint, Some(s.mint), None)], &[&k]);
+    let ev: ForwardedOnEnd = event(&meta).unwrap();
+    assert_eq!((ev.to_mint, ev.intended_mint, ev.sink_kind), (s.mint, s.mint, END_SINK_MINT));
+    assert!(ev.lamports > 0 && env.lamports(&fee_pda(&s.mint)) - fs == ev.lamports, "the target coin's fee PDA received the fuel");
+    // its BurnTarget gone (not pinned): the later trickle goes to the flagship
+    make_target_coin(&mut env, &s.mint, false);
+    env.transfer_sol(&fee_pda(&c.mint), 2 * MIN);
+    env.set_time(env.now() + 1);
+    expect_anchor_err(env.send(&[ix_forward_on_end(&k.pubkey(), &c.mint, &s.mint, Some(s.mint), None)], &[&k]), "EndSinkMismatch");
+    let meta = env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, Some(s.mint), None)], &[&k]);
+    let ev: ForwardedOnEnd = event(&meta).unwrap();
+    assert_eq!((ev.to_mint, ev.intended_mint), (f.mint, s.mint));
+    // pinned again but STALLED (blind review of 7b9836a3): dead, the flagship again; another coin's BurnTarget in the slot: refused
+    make_target_coin(&mut env, &s.mint, true);
+    stall_target(&mut env, &s.mint);
+    env.transfer_sol(&fee_pda(&c.mint), 2 * MIN);
+    env.set_time(env.now() + 1);
+    expect_anchor_err(env.send(&[ix_forward_on_end(&k.pubkey(), &c.mint, &s.mint, Some(s.mint), None)], &[&k]), "EndSinkMismatch");
+    let mut ix = ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, Some(s.mint), None);
+    let at = ix.accounts.iter().position(|m| m.pubkey == burn_target_pda(&s.mint)).unwrap();
+    ix.accounts[at].pubkey = burn_target_pda(&c.mint);
+    expect_anchor_err(env.send(&[ix], &[&k]), "BurnTargetAccountMissing");
+    let meta = env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, Some(s.mint), None)], &[&k]);
+    let ev: ForwardedOnEnd = event(&meta).unwrap();
+    assert_eq!((ev.to_mint, ev.intended_mint), (f.mint, s.mint));
 }
 
 /// Blind review H-1: a named coin that never launched (no TokenConfig) is not live; the fuel goes to the flagship, never stranded.
@@ -724,7 +781,7 @@ fn the_r5_create_refuses_self_on_the_lost_path_and_takes_every_other_sink() {
     // SELF on the lost path (no end sink: a resolved end would wind down on the coin itself): refused
     let s = Keypair::new();
     expect_anchor_err(init_r5(&mut env, &s, &att.pubkey(), buyback_rule(), None, None), "LostPathBurnsSelf");
-    // the round-4 create is untouched: the same coin without a sink is still accepted there
+    // the round-4 create (kept only in the test-pins build, R5-5: every deployable build refuses it) takes it without a sink
     init(&mut env, &s, &att.pubkey(), buyback_rule(), None).unwrap();
     // flagship, a named coin, the incinerator, the pair winner: accepted
     for (kind, sink) in [(END_SINK_FLAGSHIP, Pubkey::default()), (END_SINK_MINT, f.mint), (END_SINK_INCINERATOR, Pubkey::default())] {
@@ -761,4 +818,94 @@ fn an_r5_coin_keeps_self_on_the_won_path() {
     let supply = env.mint_supply(&c.mint);
     crank(&mut env, &kc, &c, D3).unwrap();
     assert!(env.mint_supply(&c.mint) < supply, "the won path burns this coin on its wind-down");
+}
+
+// =================================================================================================================================
+// round-5 blind review fixes (2026-10-14)
+// =================================================================================================================================
+
+/// A coin whose result reading (D2) cranks cap-bound and carries a spend; returns (coin, carried).
+fn carrying_coin(env: &mut Env, att: &Keypair, k: &Keypair) -> (Coin, u64) {
+    let c = ending_coin(env, att, END_SINK_FLAGSHIP, Pubkey::default(), 30 * SOL, 21);
+    crank(env, k, &c, D2).unwrap();
+    let owed = env.config(&config_pda(&c.mint)).carried_spend_lamports;
+    assert!(owed > 0, "the result reading carried a spend");
+    (c, owed)
+}
+
+fn piece(env: &mut Env, k: &Keypair, c: &Coin) -> TxResult {
+    env.set_time(env.now() + 601);
+    let (r_sol, _) = cpmm::reserves(env, &c.pool);
+    let cap = math::reserve_spend_cap(r_sol, MAX_SPEND_RESERVE_BPS);
+    env.send(&[cpmm::ix_crank_carried(&k.pubkey(), &c.mint, &c.pool, cap)], &[k])
+}
+
+/// R5-3: after a VOID end (the champion path) the coin's carried spend is still dispersed by crank_carried.
+#[test]
+fn r5_3_crank_carried_runs_after_a_void_end() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let _f = flagship(&mut env, &att);
+    let k = cranker(&mut env);
+    env.fund(&k.pubkey(), 10 * SOL);
+    let (c, owed) = carrying_coin(&mut env, &att, &k);
+    submit_rule_end(&mut env, &c.mint, D2, END_STATE_VOID, &[&att]).unwrap();
+    let supply = env.mint_supply(&c.mint);
+    piece(&mut env, &k, &c).unwrap();
+    let left = env.config(&config_pda(&c.mint)).carried_spend_lamports;
+    assert!(left < owed && env.mint_supply(&c.mint) < supply, "a piece of the carry burned the coin");
+}
+
+/// R5-4: after a RESOLVED end the end path leaves the carry (owed by readings inside the window) for crank_carried for 30 days, so
+/// the order "disperse, then forward" holds on chain; afterwards the end path takes whatever is left.
+#[test]
+fn r5_4_a_resolved_end_forwards_only_the_fuel_above_the_carry_while_crank_carried_drains_it() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let f = flagship(&mut env, &att);
+    let k = cranker(&mut env);
+    env.fund(&k.pubkey(), 10 * SOL);
+    let (c, owed) = carrying_coin(&mut env, &att, &k);
+    submit_rule_end(&mut env, &c.mint, D2, END_STATE_RESOLVED, &[&att]).unwrap();
+    // the forwards move everything above the carry
+    while spendable(&env, &c.mint) > owed {
+        env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]);
+        env.set_time(env.now() + 1);
+    }
+    assert_eq!(spendable(&env, &c.mint), owed, "the carry stays in the fee PDA");
+    assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, owed);
+    expect_anchor_err(env.send(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]), "NothingToForward");
+    // crank_carried runs after the RESOLVED end and burns the coin with it
+    let supply = env.mint_supply(&c.mint);
+    piece(&mut env, &k, &c).unwrap();
+    let left = env.config(&config_pda(&c.mint)).carried_spend_lamports;
+    assert!(left < owed && env.mint_supply(&c.mint) < supply);
+    // 30 days after the end, the end path takes what is still carried and clears it
+    env.set_time(rule_end(&env, &c.mint).unwrap().submitted_at + QUEUE_UNBLOCK_SECS);
+    env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]);
+    assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, 0);
+}
+
+/// R5-5: the DEFAULT (deployable) build refuses the round-4 create with InitializeTokenRetired (same discriminator); the r5 create is
+/// not retired (it reaches its own checks: the mainnet build pins no LaunchLab platform yet).
+#[test]
+fn r5_5_the_mainnet_build_retires_initialize_token() {
+    let mut env = Env::new_mainnet_build();
+    let kp = Keypair::new();
+    let creator = Keypair::new();
+    let payer = env.payer.pubkey();
+    let mut args = init_args(buyback_rule(), vec![Pubkey::new_unique()], 1);
+    args.admin = creator.pubkey();
+    expect_anchor_err(env.send(&[ix_initialize_with_platform(&payer, &creator.pubkey(), &kp.pubkey(), args.clone(), None)], &[&creator, &kp]), "InitializeTokenRetired");
+    let mut fixed = buyback_rule();
+    fixed.pool_policy = POOL_POLICY_FIXED;
+    let mut a2 = init_args(fixed, vec![Pubkey::new_unique()], 1);
+    a2.admin = creator.pubkey();
+    a2.fixed_pool = Pubkey::new_unique();
+    expect_anchor_err(env.send(&[ix_initialize_with_platform(&payer, &creator.pubkey(), &kp.pubkey(), a2.clone(), None)], &[&creator, &kp]), "InitializeTokenRetired");
+    // the r5 create of the same coin is accepted by the mainnet build (FIXED policy pins no platform; flagship end sink)
+    a2.end_sink_kind = END_SINK_FLAGSHIP;
+    a2.end_sink_min_lamports = MIN;
+    env.ok(&[ix_initialize_r5(&payer, &creator.pubkey(), &kp.pubkey(), a2, None, None, false)], &[&creator, &kp]);
+    assert!(end_sink(&env, &kp.pubkey()).is_some());
 }

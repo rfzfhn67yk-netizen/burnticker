@@ -13,8 +13,11 @@ import { CatalogueAdapter, feedById, loadFixture } from "@/lib/burnticker/catalo
 import { runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { buildReceiptsJson, buildTokenStatus, renderTokenHtml } from "@/lib/burnticker/tokenPage";
 import { programPageBlock } from "@/lib/burnticker/program";
-import { DISPERSAL_STATE_KEY, dispersalLines } from "@/lib/burnticker/dispersalKeeper";
-import { DISPERSAL_MIN_GAP_MS, stateFromJson } from "@/lib/burnticker/dispersal";
+import { DISPERSAL_STATE_KEY, dispersalLines, runDispersal, TOO_SOON_MIN_RETRY_MS, type DispersalDeps } from "@/lib/burnticker/dispersalKeeper";
+import { budgetGapMs, chunkCeiling, DISPERSAL_MIN_GAP_MS, planWindow, PROGRAM_BUDGET_WINDOW_MS, stateFromJson } from "@/lib/burnticker/dispersal";
+import { CARRIED_BUDGET_WINDOW_SECS } from "@/lib/burnReceipts/constants";
+import { carriedBudgetReadySec } from "@/lib/burnReceipts/math";
+import type { ProgramPort, SignedTx } from "@/lib/burnKeeper/programPort";
 import { PUSH_KIND_OF_ALERT, PUSH_LEAD, PUSH_TITLE } from "@/lib/burnticker/push";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { openLedger } from "@/lib/burnKeeper/ledger";
@@ -185,6 +188,120 @@ describe("the platform keeper (runCycle with dispersal on)", () => {
     assert.equal(st.cursor, 20260929);
     assert.ok(st.receipts.some((r) => r.throughDate === D1) && st.receipts.some((r) => r.throughDate === 20260929));
     assert.equal(st.debts.length, 0);
+  });
+});
+
+describe("round-5 review R5-8: the program's carried budget (one cap per 600 s; the keeper waits, never gives a piece up)", () => {
+  /** A carried coin (the reading cranked, dispersal not yet run) and a runDispersal harness over its own state. */
+  async function harness() {
+    const { f } = await carriedCoin();
+    deps.dispersal = false;
+    await runCycle(deps);
+    assert.ok(f.cfg.carriedSpendLamports > BigInt(0));
+    let json: string | null = null;
+    const log: string[] = [];
+    const run = (port: ProgramPort = f) => runDispersal({ port, mint: f.mint, ticker: "BRONCO", load: () => json, save: (j) => { json = j; }, log: (l) => log.push(l), now: () => clock, dryRun: false } satisfies DispersalDeps);
+    const state = () => stateFromJson(json);
+    // the first wake plans the window; its first piece is due at T
+    const first = await run();
+    assert.equal(first.action, "wait");
+    const T = state().window!.chunks[0].atMs;
+    const cap = (f.poolReserveWsol * BigInt(200)) / BigInt(10_000);
+    return { f, run, state, log, T, cap, piece: () => state().window!.chunks[state().window!.done].lamports, signedCarried: () => f.signed.filter((x) => x.payload.kind === "carried").length };
+  }
+  /** Forwards everything to the fake except the named overrides (`this` stays the fake). */
+  const port = (f: FakeProgram, over: Partial<Record<keyof ProgramPort, unknown>>): ProgramPort =>
+    new Proxy(f, { get(t, k) { if (k in over) return over[k as keyof ProgramPort]; const v = Reflect.get(t, k, t); return typeof v === "function" ? v.bind(t) : v; } }) as unknown as ProgramPort;
+  const sec = (ms: number) => Math.floor(ms / 1000);
+
+  test("the plan spaces pieces by the program's budget, never closer than it refills a full-size piece", () => {
+    assert.equal(PROGRAM_BUDGET_WINDOW_MS, CARRIED_BUDGET_WINDOW_SECS * 1000);
+    const cap = BigInt(40_000_000);
+    assert.deepEqual([budgetGapMs(cap, cap), budgetGapMs(cap / BigInt(2), cap), budgetGapMs(cap * BigInt(3), cap), budgetGapMs(BigInt(1), cap)], [600_000, 300_000, 600_000, 1]);
+    assert.ok(DISPERSAL_MIN_GAP_MS >= budgetGapMs(cap, cap), "the default 20-minute gap always lets the budget refill");
+    const reserve = BigInt(2) * SOL;
+    const w = planWindow({ carriedLamports: BigInt(10) * SOL, reserveLamports: reserve, now: NOW, seed: 7, minGapMs: 1_000 });
+    const need = budgetGapMs(chunkCeiling(reserve), (reserve * BigInt(200)) / BigInt(10_000));
+    assert.ok(need > 1_000);
+    for (let i = 1; i < w.chunks.length; i++) assert.ok(w.chunks[i].atMs - w.chunks[i - 1].atMs >= need, "a smaller gap asked for is raised to the budget's");
+  });
+
+  test("another cranker spent the whole budget a minute before our piece: the keeper waits until it refills, then lands (counted apart from burns)", async () => {
+    const h = await harness();
+    const burns = h.f.cfg.burns;
+    h.f.lastCarriedAt = sec(h.T) - 60;      // anyone may crank: a full-cap piece landed a minute before ours was due
+    h.f.carriedBudgetLamports = BigInt(0);
+    clock = h.T;
+    const L = h.piece();
+    const ready = carriedBudgetReadySec(h.f.lastCarriedAt, BigInt(0), h.cap, L, sec(clock))!;
+    assert.ok(ready > sec(clock));
+    const r = await h.run();
+    assert.equal(r.action, "wait");
+    assert.equal(r.nextDueAt, clock + (ready - sec(clock)) * 1000, "the wake is set to the second the budget fits the piece");
+    assert.match(r.why!, /carried budget refills/);
+    assert.equal(h.signedCarried(), 0, "nothing signed over the budget");
+    assert.equal(h.state().window!.done, 0, "the piece is not given up");
+    clock = r.nextDueAt!;
+    const r2 = await h.run();
+    assert.equal(r2.action, "landed", r2.why);
+    assert.equal(h.f.carriedPieces, 1);
+    assert.equal(h.f.cfg.burns, burns, "a carried piece does not count in burns");
+    assert.match(h.state().receipts[0].memo!, /\|left=\d+\|piece=1\|swap=/);
+  });
+
+  test("a dust piece by someone else a second earlier takes only a dust budget: the keeper's piece lands at once", async () => {
+    const h = await harness();
+    h.f.lastCarriedAt = sec(h.T) - 1;
+    h.f.carriedBudgetLamports = h.cap - h.f.cfg.floorLamports;   // a floor-size piece spent
+    clock = h.T;
+    const r = await h.run();
+    assert.equal(r.action, "landed", r.why);
+  });
+
+  test("a lagging cluster clock: the wait is measured on the chain's clock", async () => {
+    const h = await harness();
+    h.f.lastCarriedAt = sec(h.T) - 60;
+    h.f.carriedBudgetLamports = BigInt(0);
+    clock = h.T;
+    const lag = 20;
+    const lagging = port(h.f, { carriedPace: async () => ({ lastCarriedAt: h.f.lastCarriedAt, budgetLamports: BigInt(0), chainNowSec: sec(clock) - lag }) });
+    const ready = carriedBudgetReadySec(h.f.lastCarriedAt, BigInt(0), h.cap, h.piece(), sec(clock) - lag)!;
+    const r = await h.run(lagging);
+    assert.equal(r.action, "wait");
+    assert.equal(r.nextDueAt, clock + (ready - (sec(clock) - lag)) * 1000, "20 s later than the local clock would say");
+  });
+
+  test("a port that cannot read the budget: the plan says too-soon and the keeper waits until then", async () => {
+    const h = await harness();
+    h.f.lastCarriedAt = sec(h.T) - 30;
+    h.f.carriedBudgetLamports = BigInt(0);
+    clock = h.T;
+    const r = await h.run(port(h.f, { carriedPace: undefined }));
+    assert.equal(r.action, "wait");
+    assert.equal(r.why, "too-soon");
+    const ready = carriedBudgetReadySec(h.f.lastCarriedAt, BigInt(0), h.cap, h.piece(), sec(clock))!;
+    assert.equal(r.nextDueAt, clock + (ready - sec(clock)) * 1000);
+    assert.equal(h.signedCarried(), 0);
+  });
+
+  test("a race (the budget read before another piece landed): CarriedTooSoon in simulation waits at least 30 s, the piece is kept", async () => {
+    const h = await harness();
+    h.f.lastCarriedAt = sec(h.T) - 10;
+    h.f.carriedBudgetLamports = BigInt(0);
+    clock = h.T;
+    const mk = (m: bigint) => (h.f as unknown as { mk(p: unknown): Promise<SignedTx> }).mk({ kind: "carried", maxSpend: m });
+    // the port's view says "ready now" (stale, or a clock that runs ahead): no wait before the send; the program refuses
+    const stale = port(h.f, { carriedPace: async () => ({ lastCarriedAt: 0, budgetLamports: BigInt(0), chainNowSec: null }), planCarried: async (m: bigint) => ({ build: () => mk(m) }) });
+    const r = await h.run(stale);
+    assert.equal(r.action, "wait");
+    assert.equal(r.why, "CarriedTooSoon");
+    assert.equal(r.nextDueAt, clock + TOO_SOON_MIN_RETRY_MS, "never a retry every second");
+    assert.equal(h.state().window!.done, 0, "the piece is kept");
+    assert.ok(h.log.some((l) => /waits for the program's carried budget/.test(l)), h.log.join("\n"));
+    // the retry, once the budget has refilled: the real view, the piece lands
+    clock = Math.max(r.nextDueAt!, (h.f.lastCarriedAt + CARRIED_BUDGET_WINDOW_SECS) * 1000);
+    const r2 = await h.run();
+    assert.equal(r2.action, "landed", r2.why);
   });
 });
 

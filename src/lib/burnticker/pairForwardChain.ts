@@ -1,5 +1,6 @@
 import { type Connection, type Keypair, PublicKey, VersionedTransaction, type ParsedTransactionWithMeta } from "@solana/web3.js";
 import { fetchReading, fetchTokenConfig } from "@/lib/burnReceipts/accounts";
+import { ownPoolVerified } from "@/lib/burnReceipts/burnTarget";
 import { assertSignableGenesis, NATIVE_MINT, type Cluster } from "@/lib/burnReceipts/constants";
 import { anchorErrorName, assertClusterAllowed, memoFromTransaction, signTransaction, type ProgramContext } from "@/lib/burnReceipts/crank";
 import { createAtaIdempotentIx } from "@/lib/burnReceipts/instructions";
@@ -104,7 +105,7 @@ export class ChainPairForward implements PairForwardClient {
         const pairVoidBy = Math.max(ca?.config.pair_void_by ?? 0, cb?.config.pair_void_by ?? 0);
         const pairAfterDate = Math.max(ca?.config.pair_after_date ?? 0, cb?.config.pair_after_date ?? 0);
         policy2 = ca?.config.rule.pool_policy === POOL_POLICY_PAIR_CURVE || cb?.config.rule.pool_policy === POOL_POLICY_PAIR_CURVE;
-        return { a: linkView(la), b: linkView(lb), stateA, stateB, paired, poolsVerified: [!!ca?.config.pool_verified, !!cb?.config.pool_verified] as [boolean, boolean], pairVoidBy, pairAfterDate };
+        return { a: linkView(la), b: linkView(lb), stateA, stateB, paired, poolsVerified: [!!ca && ownPoolVerified(ca.config), !!cb && ownPoolVerified(cb.config)] as [boolean, boolean], pairVoidBy, pairAfterDate };
       },
       async unlinkEvidence(nowMs: number): Promise<{ reason: UnlinkReason; pair: string | null } | null> {
         // r3: TERMINAL evidence only. A pair_curve pair (either coin policy 2, or a pair_curve witness) needs its Pair: Voided → 0, a

@@ -20,6 +20,15 @@
 
 export const DISPERSAL_WINDOW_MS = 6 * 3_600_000;
 export const DISPERSAL_MIN_GAP_MS = 20 * 60_000;
+/** Round-5 review R5-8: the program's carried budget refills one per-crank cap per this long (CARRIED_BUDGET_WINDOW_SECS), up to one cap.
+ *  The plan spaces pieces by budget: a piece of L lamports needs L / cap of a window after the one before it (budgetGapMs). */
+export const PROGRAM_BUDGET_WINDOW_MS = 600_000;
+/** How long the program's budget takes to refill `lamports` (a piece's size) at one `capLamports` per window; ≤ one window. */
+export function budgetGapMs(lamports: bigint, capLamports: bigint): number {
+  if (capLamports <= B0 || lamports <= B0) return 0;
+  const l = lamports < capLamports ? lamports : capLamports;
+  return Number((l * BigInt(PROGRAM_BUDGET_WINDOW_MS) + capLamports - B1) / capLamports);
+}
 /** 1 − 1/√1.025 ≈ 0.012270: a buy of this fraction of the SOL reserve moves a constant-product price by 2.5 %. */
 export const DEPTH_PPM = 12_270;
 /** The program's per-crank cap (MAX_SPEND_RESERVE_BPS). */
@@ -79,10 +88,12 @@ export interface PlanInput { carriedLamports: bigint; reserveLamports: bigint; c
  * The first piece is never earlier than `now`; the last is before `end`.
  */
 export function planWindow(i: PlanInput): DispersalWindow {
-  const windowMs = i.windowMs ?? DISPERSAL_WINDOW_MS, gap = i.minGapMs ?? DISPERSAL_MIN_GAP_MS;
+  const windowMs = i.windowMs ?? DISPERSAL_WINDOW_MS;
   const endMs = i.endMs ?? i.now + windowMs;
   const base: DispersalWindow = { startMs: i.now, endMs, seed: i.seed >>> 0, chunks: [], done: 0, expectedCarried: i.carriedLamports, lastAtMs: i.lastAtMs ?? null };
   const ceiling = chunkCeiling(i.reserveLamports, i.capBps);
+  // R5-8: never closer than the program's budget refills a full-size piece, whatever the caller asks (a 20-minute gap always is)
+  const gap = Math.max(i.minGapMs ?? DISPERSAL_MIN_GAP_MS, budgetGapMs(ceiling, (i.reserveLamports * BigInt(i.capBps ?? PROGRAM_CAP_BPS)) / BigInt(10_000)));
   const from = i.lastAtMs != null ? Math.max(i.now, i.lastAtMs + gap) : i.now;
   const span = endMs - from;
   if (i.carriedLamports <= B0 || ceiling <= B0 || span <= 0) return base;

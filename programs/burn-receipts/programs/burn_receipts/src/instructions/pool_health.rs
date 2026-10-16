@@ -243,7 +243,7 @@ pub fn handle_replace_pool(ctx: Context<ReplacePool>) -> Result<()> {
     let c = &mut ctx.accounts.config;
     let old_pool = c.cpmm_pool;
     c.cpmm_pool = ctx.accounts.new_pool.key();
-    c.pool_verified = true;
+    c.set_own_pool_verified(true); // R5-12: the rollback fence for a target coin
     clear_untradeable(c);
     let (config, new_pool) = (c.key(), c.cpmm_pool);
     emit_cpi!(PoolReplaced { config, old_pool, new_pool, untradeable_since: since, caller: ctx.accounts.caller.key() });

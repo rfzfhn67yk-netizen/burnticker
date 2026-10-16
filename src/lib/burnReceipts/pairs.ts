@@ -4,6 +4,7 @@ import { ed25519SharedMessageInstruction, signAttestation } from "@/lib/burnRece
 import { MEMO_PROGRAM_ID, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeAccount } from "@/lib/burnReceipts/idlCoder";
+import { burnTargetPda } from "@/lib/burnReceipts/burnTarget";
 import { buildIx } from "@/lib/burnReceipts/instructions";
 import { formatDate, validDate } from "@/lib/burnReceipts/math";
 import { associatedTokenAddress, configPda, feePda, pairLinkPda, pairOrder, pairResultPda, readingPda } from "@/lib/burnReceipts/pda";
@@ -253,6 +254,9 @@ export function forwardToWinnerIx(o: { programId: PublicKey; cranker: PublicKey;
     token_program: TOKEN_PROGRAM_ID,
     system_program: SystemProgram.programId,
     memo_program: MEMO_PROGRAM_ID,
+    // round-5 review R5-9: each side's BurnTarget (read only for a target coin without its own verified pool; always passed)
+    loser_burn_target: burnTargetPda(o.programId, o.loserMint),
+    winner_burn_target: burnTargetPda(o.programId, o.winnerMint),
   }, { record_date: o.recordDate });
 }
 

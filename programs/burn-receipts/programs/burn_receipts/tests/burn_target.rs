@@ -33,18 +33,20 @@ const T0: i64 = NOW + 6 * 86_400;
 const V1: u64 = 4_027_300_000_000_000;
 const TOKEN_2022: Pubkey = anchor_lang::prelude::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
-fn burn_target_pda(mint: &Pubkey) -> Pubkey {
-    burn_receipts::state::burn_target_address(mint).0
-}
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // Pyth: harness-written PriceUpdateV2 accounts (pyth-solana-receiver layout, Full verification)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-const SOL_PX: Pubkey = Pubkey::new_from_array([0x61; 32]);
-const TGT_PX: Pubkey = Pubkey::new_from_array([0x62; 32]);
 /// The test target's feed id (stands in for Crypto.BONK/USD).
 const TARGET_FEED: [u8; 32] = [0x77; 32];
+/// Second review (A): the program takes only the feeds' SPONSORED push-oracle accounts (PDA [0u16 LE, feed id]); the harness writes them.
+fn sol_px() -> Pubkey {
+    burn_receipts::pyth::sponsored_address(&PYTH_SOL_USD_FEED_ID)
+}
+fn tgt_px() -> Pubkey {
+    burn_receipts::pyth::sponsored_address(&TARGET_FEED)
+}
 const SOL_USD: i64 = 10_000_000_000; // $100, exponent −8
 
 fn write_pyth(env: &mut Env, key: Pubkey, feed: [u8; 32], price: i64, conf: u64, expo: i32, publish_time: i64, full: bool) {
@@ -69,8 +71,8 @@ fn write_pyth(env: &mut Env, key: Pubkey, feed: [u8; 32], price: i64, conf: u64,
 /// SOL at $100 and the target at `target_e12` × 10⁻¹² USD, both published now.
 fn set_prices(env: &mut Env, target_e12: i64) {
     let now = env.now();
-    write_pyth(env, SOL_PX, PYTH_SOL_USD_FEED_ID, SOL_USD, (SOL_USD / 1_000) as u64, -8, now, true);
-    write_pyth(env, TGT_PX, TARGET_FEED, target_e12, (target_e12 / 1_000).max(0) as u64, -12, now, true);
+    write_pyth(env, sol_px(), PYTH_SOL_USD_FEED_ID, SOL_USD, (SOL_USD / 1_000) as u64, -8, now, true);
+    write_pyth(env, tgt_px(), TARGET_FEED, target_e12, (target_e12 / 1_000).max(0) as u64, -12, now, true);
 }
 
 /// The target/USD price at which Pyth agrees with the pool's spot exactly (SOL $100, 6 decimals): 10¹¹ × r_wsol / r_tok (× 10⁻¹²).
@@ -250,9 +252,10 @@ fn ix_pin_feed(payer: &Pubkey, mint: &Pubkey, target: &Pubkey, pool: Pubkey, amm
             target_amm_config: amm_config,
             target_wsol_vault: wsol_vault,
             target_token_vault: target_vault,
-            sol_price_update: SOL_PX,
-            target_price_update: TGT_PX,
+            sol_price_update: sol_px(),
+            target_price_update: tgt_px(),
             system_program: anchor_lang::solana_program::system_program::ID,
+            end_sink: end_sink_pda(mint),
             event_authority: event_authority(),
             program: burn_receipts::ID,
         }
@@ -290,8 +293,8 @@ fn ix_crank_target(cranker: &Pubkey, mint: &Pubkey, target: &Pubkey, p: &impl As
             token_program: spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
             memo_program: MEMO_PROGRAM_ID,
-            sol_price_update: SOL_PX,
-            target_price_update: TGT_PX,
+            sol_price_update: sol_px(),
+            target_price_update: tgt_px(),
             pair_link: None,
             pair_result: None,
             event_authority: event_authority(),
@@ -335,8 +338,8 @@ fn ix_apply_target(caller: &Pubkey, mint: &Pubkey, target: &Pubkey, p: &impl AsT
             new_amm_config: p.config,
             new_wsol_vault: p.wsol_vault,
             new_target_vault: p.target_vault,
-            sol_price_update: SOL_PX,
-            target_price_update: TGT_PX,
+            sol_price_update: sol_px(),
+            target_price_update: tgt_px(),
             event_authority: event_authority(),
             program: burn_receipts::ID,
         }
@@ -407,12 +410,20 @@ fn coin_with_target(env: &mut Env, w: &World) -> (Pubkey, Keypair) {
 
 /// The same, pinning `p` (either kind).
 fn coin_with_target_on(env: &mut Env, w: &World, p: &TP) -> (Pubkey, Keypair) {
+    coin_r5(env, w, p, buyback_rule(), END_SINK_FLAGSHIP)
+}
+
+/// A target coin with `rule` and an end sink of `sink_kind` (FLAGSHIP or INCINERATOR: no named coin).
+fn coin_r5(env: &mut Env, w: &World, p: &TP, rule: burn_receipts::state::RuleParams, sink_kind: u8) -> (Pubkey, Keypair) {
     let kp = Keypair::new();
     let admin = Keypair::new();
-    let mut args = init_args(buyback_rule(), vec![w.attester.pubkey()], 1);
+    let mut args = init_args(rule, vec![w.attester.pubkey()], 1);
     args.admin = admin.pubkey();
+    // Round-5 review R5-5: a target coin is created by initialize_token_r5 with an end sink (pin_burn_target requires one).
+    args.end_sink_kind = sink_kind;
+    args.end_sink_min_lamports = 10_000_000;
     let payer = env.payer.pubkey();
-    let init = ix_initialize(&payer, &admin.pubkey(), &kp.pubkey(), args);
+    let init = ix_initialize_r5(&payer, &admin.pubkey(), &kp.pubkey(), args, Some(TEST_LAUNCHLAB_PLATFORM), None, false);
     let pin = ix_pin(&payer, &kp.pubkey(), &w.target, p);
     refresh(env, p);
     env.ok(&[init, pin], &[&admin, &kp]);
@@ -641,12 +652,25 @@ fn a_pool_that_disappears_holds_the_sol() {
 // admission refusals
 // =================================================================================================================================
 
-/// initialize_token for a fresh policy-0 coin (its mint NOT created); returns the coin keypair.
+/// Round-5 review R5-5: the args of a target coin's create — an end sink (the flagship) is required by pin_burn_target.
+fn sink_args(rule: burn_receipts::state::RuleParams, attester: &Pubkey) -> burn_receipts::InitializeTokenArgs {
+    let mut args = init_args(rule, vec![*attester], 1);
+    if rule.mode == MODE_BUYBACK {
+        args.end_sink_kind = END_SINK_FLAGSHIP;
+        args.end_sink_min_lamports = 10_000_000;
+    }
+    args
+}
+
+/// initialize_token_r5 (with a flagship end sink) for a fresh policy-0 coin (its mint NOT created); returns the coin keypair.
 fn fresh_coin(env: &mut Env, w: &World, rule: burn_receipts::state::RuleParams) -> Keypair {
     let kp = Keypair::new();
     let creator = Keypair::new();
     let payer = env.payer.pubkey();
-    env.ok(&[ix_initialize(&payer, &creator.pubkey(), &kp.pubkey(), init_args(rule, vec![w.attester.pubkey()], 1))], &[&creator, &kp]);
+    let platform = (rule.mode == MODE_BUYBACK && rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA).then_some(TEST_LAUNCHLAB_PLATFORM);
+    let mut args = sink_args(rule, &w.attester.pubkey());
+    args.admin = creator.pubkey();
+    env.ok(&[ix_initialize_r5(&payer, &creator.pubkey(), &kp.pubkey(), args, platform, None, false)], &[&creator, &kp]);
     kp
 }
 
@@ -825,7 +849,9 @@ fn the_target_crank_in_the_keepers_shape_fits_a_legacy_transaction() {
     // combined (the harness's coin_with_target combines them because its payer is also the creator).
     let kp = Keypair::new();
     let creator = Keypair::new();
-    let init = ix_initialize(&c, &creator.pubkey(), &kp.pubkey(), init_args(buyback_rule(), vec![w.attester.pubkey()], 1));
+    let mut args = sink_args(buyback_rule(), &w.attester.pubkey());
+    args.admin = creator.pubkey();
+    let init = ix_initialize_r5(&c, &creator.pubkey(), &kp.pubkey(), args, Some(TEST_LAUNCHLAB_PLATFORM), None, false);
     let init_alone = env.legacy_size(&[compute_budget(400_000), init.clone()]);
     assert!(init_alone <= PACKET_DATA_SIZE, "{init_alone}");
     for p in [w.pool.tp(), amm] {
@@ -884,7 +910,7 @@ fn a_jito_style_push_crank_push_back_is_refused_by_the_pyth_guard() {
     let fee = fee_pda(&mint);
     let lut = env.create_lookup_table(&[
         config_pda(&mint), reading_pda(&config_pda(&mint), D2), platform_pda(), burn_target_pda(&mint), fee, get_associated_token_address(&fee, &NATIVE_MINT),
-        get_associated_token_address(&fee, &mint), get_associated_token_address(&fee, &w.target), NATIVE_MINT, event_authority(), SOL_PX, TGT_PX, amm.authority,
+        get_associated_token_address(&fee, &mint), get_associated_token_address(&fee, &w.target), NATIVE_MINT, event_authority(), sol_px(), tgt_px(), amm.authority,
     ]);
     expect_anchor_err(env.send_v0(&[amm_swap_ix(&w.trader.pubkey(), &amm, &w.target, true, SOL), ix_crank_target(&c.pubkey(), &mint, &w.target, &amm, D2)], &[&w.trader, &c], &[lut]), "TargetPriceDeviation");
     // (3) there is nothing to "record": the reference is Pyth's, and no trade on the pool reaches it. The push back restores the pool.
@@ -896,7 +922,7 @@ fn a_jito_style_push_crank_push_back_is_refused_by_the_pyth_guard() {
     let spot = math::sol_price_x32(r_wsol, r_tok).unwrap();
     let px = burn_receipts::pyth::sol_price_x32(
         &burn_receipts::pyth::PythPrice { price: SOL_USD, conf: 0, exponent: -8, publish_time: 0 },
-        &burn_receipts::pyth::PythPrice { price: i64::from_le_bytes(env.svm.get_account(&TGT_PX).unwrap().data[73..81].try_into().unwrap()), conf: 0, exponent: -12, publish_time: 0 },
+        &burn_receipts::pyth::PythPrice { price: i64::from_le_bytes(env.svm.get_account(&tgt_px()).unwrap().data[73..81].try_into().unwrap()), conf: 0, exponent: -12, publish_time: 0 },
         DECIMALS,
     )
     .unwrap();
@@ -948,33 +974,33 @@ fn stale_wide_future_partial_or_foreign_pyth_accounts_never_price_a_crank() {
     let crank = |env: &mut Env| env.send(&[ix_crank_target(&c.pubkey(), &mint, &w.target, &amm, D2)], &[&c]);
     // stale (61 s) → held
     set_prices(&mut env, fair);
-    write_pyth(&mut env, SOL_PX, PYTH_SOL_USD_FEED_ID, SOL_USD, 0, -8, now - 61, true);
+    write_pyth(&mut env, sol_px(), PYTH_SOL_USD_FEED_ID, SOL_USD, 0, -8, now - 61, true);
     expect_anchor_err(crank(&mut env), "PythStale");
     // a confidence of 2 % → held; a publish time in the future → held
     set_prices(&mut env, fair);
-    write_pyth(&mut env, TGT_PX, TARGET_FEED, fair, (fair / 50) as u64, -12, now, true);
+    write_pyth(&mut env, tgt_px(), TARGET_FEED, fair, (fair / 50) as u64, -12, now, true);
     expect_anchor_err(crank(&mut env), "PythUnusable");
-    write_pyth(&mut env, TGT_PX, TARGET_FEED, fair, 0, -12, now + 3_600, true);
+    write_pyth(&mut env, tgt_px(), TARGET_FEED, fair, 0, -12, now + 3_600, true);
     expect_anchor_err(crank(&mut env), "PythUnusable");
     // partially verified, another feed, the SOL feed swapped in, or not the receiver's account → refused outright
-    write_pyth(&mut env, TGT_PX, TARGET_FEED, fair, 0, -12, now, false);
+    write_pyth(&mut env, tgt_px(), TARGET_FEED, fair, 0, -12, now, false);
     expect_anchor_err(crank(&mut env), "TargetPythInvalid");
-    write_pyth(&mut env, TGT_PX, [0x78; 32], fair, 0, -12, now, true);
-    expect_anchor_err(crank(&mut env), "TargetPythInvalid");
-    set_prices(&mut env, fair);
-    write_pyth(&mut env, SOL_PX, TARGET_FEED, SOL_USD, 0, -8, now, true);
+    write_pyth(&mut env, tgt_px(), [0x78; 32], fair, 0, -12, now, true);
     expect_anchor_err(crank(&mut env), "TargetPythInvalid");
     set_prices(&mut env, fair);
-    let mut a = env.svm.get_account(&TGT_PX).unwrap();
+    write_pyth(&mut env, sol_px(), TARGET_FEED, SOL_USD, 0, -8, now, true);
+    expect_anchor_err(crank(&mut env), "TargetPythInvalid");
+    set_prices(&mut env, fair);
+    let mut a = env.svm.get_account(&tgt_px()).unwrap();
     a.owner = Pubkey::new_unique();
-    env.svm.set_account(TGT_PX, a).unwrap();
+    env.svm.set_account(tgt_px(), a).unwrap();
     expect_anchor_err(crank(&mut env), "TargetPythInvalid");
     // a stale Pyth price for 30 days: the reading is processed below-floor with its spend carried, nothing spent
     let submitted = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap().submitted_at;
     env.set_time(submitted + QUEUE_UNBLOCK_SECS);
     let t = env.now();
-    write_pyth(&mut env, SOL_PX, PYTH_SOL_USD_FEED_ID, SOL_USD, 0, -8, t - 3_600, true);
-    write_pyth(&mut env, TGT_PX, TARGET_FEED, fair, 0, -12, t - 3_600, true);
+    write_pyth(&mut env, sol_px(), PYTH_SOL_USD_FEED_ID, SOL_USD, 0, -8, t - 3_600, true);
+    write_pyth(&mut env, tgt_px(), TARGET_FEED, fair, 0, -12, t - 3_600, true);
     env.ok(&[ix_crank_target(&c.pubkey(), &mint, &w.target, &amm, D2)], &[&c]);
     let rd = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
     assert_eq!((rd.outcome, rd.spent_lamports), (OUTCOME_BELOW_FLOOR, 0));
@@ -997,7 +1023,7 @@ fn a_feed_that_is_not_the_pools_market_cannot_be_pinned() {
     // a stale feed → refused; the SOL feed as the target feed, or an empty feed id → refused
     set_prices(&mut env, fair);
     let now = env.now();
-    write_pyth(&mut env, TGT_PX, TARGET_FEED, fair, 0, -12, now - 120, true);
+    write_pyth(&mut env, tgt_px(), TARGET_FEED, fair, 0, -12, now - 120, true);
     expect_anchor_err(env.send(&[ix_pin(&payer, &kp.pubkey(), &w.target, &amm)], &[&kp]), "PythStale");
     set_prices(&mut env, fair);
     let a = amm;
@@ -1059,4 +1085,327 @@ fn a_cpmm_target_is_re_pinned_to_an_amm_v4_pool_and_then_cranks_there() {
     expect_anchor_err(env.send(&[ix_crank_target(&c.pubkey(), &mint, &w.target, &wrong_program, D2)], &[&c]), "TargetMismatch");
     env.ok(&[ix_crank_target(&c.pubkey(), &mint, &w.target, &amm, D2)], &[&c]);
     assert_eq!(env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap().pool, amm.pool);
+}
+
+// =================================================================================================================================
+// round-5 blind review fixes (2026-10-14)
+// =================================================================================================================================
+
+fn ix_release(cranker: &Pubkey, mint: &Pubkey) -> Instruction {
+    let (fee, ffee) = (fee_pda(mint), fee_pda(&flagship_keypair().pubkey()));
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::ReleaseTarget {}.data(),
+        burn_receipts::accounts::ReleaseTarget {
+            cranker: *cranker,
+            platform: platform_pda(),
+            config: config_pda(mint),
+            burn_target: burn_target_pda(mint),
+            fee_vault: fee,
+            fee_wsol: get_associated_token_address(&fee, &NATIVE_MINT),
+            flagship_config: config_pda(&flagship_keypair().pubkey()),
+            flagship_fee_vault: ffee,
+            flagship_fee_wsol: get_associated_token_address(&ffee, &NATIVE_MINT),
+            token_program: spl_token::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
+            memo_program: MEMO_PROGRAM_ID,
+            event_authority: event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// The harness flagship's TokenConfig (legacy create in the test-pins build), marked as having a verified pool (written into the
+/// account: release_target only needs it live and its fee PDA to receive SOL).
+fn live_flagship(env: &mut Env, w: &World) {
+    let fk = flagship_keypair();
+    let creator = Keypair::new();
+    let payer = env.payer.pubkey();
+    let mut args = init_args(buyback_rule(), vec![w.attester.pubkey()], 1);
+    args.admin = creator.pubkey();
+    env.ok(&[ix_initialize(&payer, &creator.pubkey(), &fk.pubkey(), args)], &[&creator, &fk]);
+    patch_cfg(env, &fk.pubkey(), |c| {
+        c.cpmm_pool = Pubkey::new_unique();
+        c.pool_verified = true;
+    });
+}
+
+fn patch_cfg(env: &mut Env, mint: &Pubkey, f: impl FnOnce(&mut burn_receipts::state::TokenConfig)) {
+    let key = config_pda(mint);
+    let mut cfg = env.config(&key);
+    f(&mut cfg);
+    let mut acc = env.svm.get_account(&key).unwrap();
+    let mut data = Vec::new();
+    anchor_lang::AccountSerialize::try_serialize(&cfg, &mut data).unwrap();
+    acc.data[..data.len()].copy_from_slice(&data);
+    env.svm.set_account(key, acc).unwrap();
+}
+
+/// Sells the target into the pinned CPMM pool until its SOL reserve is under the floor (the pool is "dead" for the target crank).
+fn drain_pool(env: &mut Env, w: &World) {
+    let me = env.payer.insecure_clone();
+    let tata = get_associated_token_address(&w.trader.pubkey(), &w.target);
+    env.mint_to(&w.target, &me, &tata, 700_000_000 * TOKEN);
+    cpmm::swap(env, &w.trader, &w.pool, &w.target, false, 700_000_000 * TOKEN).unwrap();
+    assert!(cpmm::reserves(env, &w.pool).0 < TARGET_MIN_WSOL_RESERVE_LAMPORTS);
+}
+
+/// R5-1: a target coin cranks without a registered pool of its own, so its end path waits for the result reading.
+#[test]
+fn r5_1_a_target_coins_end_burn_waits_for_its_result_reading() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    let tp = w.pool.tp();
+    let (mint, _) = coin_r5(&mut env, &w, &tp, buyback_rule(), END_SINK_INCINERATOR);
+    assert_eq!(env.config(&config_pda(&mint)).cpmm_pool, Pubkey::default(), "no pool of its own");
+    read_and_fund(&mut env, &w, &mint, 1, 10 * SOL);
+    submit_rule_end(&mut env, &mint, D2, END_STATE_RESOLVED, &[&w.attester]).unwrap();
+    let k = cranker(&mut env);
+    expect_anchor_err(env.send(&[ix_burn_sol_on_end(&k.pubkey(), &mint, &INCINERATOR_ID)], &[&k]), "EndReadingsPending");
+    // the result reading burns its target first, then the end burn runs
+    refresh(&mut env, &w.pool);
+    env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]);
+    let rd = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
+    assert_eq!(rd.outcome, OUTCOME_BURNED);
+    assert!(rd.spent_lamports > 0);
+    env.ok(&[ix_burn_sol_on_end(&k.pubkey(), &mint, &INCINERATOR_ID)], &[&k]);
+}
+
+/// R5-2: a pool inside the deviation band but under the Pyth min-out (band 3 % wider than slippage 2.5 %) is HELD, so the 30-day
+/// unblock runs instead of a permanent hard revert.
+#[test]
+fn r5_2_a_pool_inside_the_band_but_under_the_pyth_min_out_is_held_then_unblocked() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    let mut rule = buyback_rule();
+    rule.max_twap_deviation_bps = 300;
+    rule.slippage_bps = 250;
+    let tp = w.pool.tp();
+    let (mint, _) = coin_r5(&mut env, &w, &tp, rule, END_SINK_FLAGSHIP);
+    read_and_fund(&mut env, &w, &mint, 3, 10 * SOL);
+    let k = cranker(&mut env);
+    // Pyth says the target is 2.8 % cheaper than the pool: inside the 3 % band, under the 2.5 % min-out
+    let basis = |env: &mut Env| {
+        let e = fair_e12(env, &w.pool) * 972 / 1000;
+        set_prices(env, e);
+    };
+    basis(&mut env);
+    let fee_before = env.lamports(&fee_pda(&mint));
+    expect_anchor_err(env.send(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]), "TargetPriceDeviation");
+    let submitted = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap().submitted_at;
+    env.set_time(submitted + QUEUE_UNBLOCK_SECS);
+    cpmm::seed_history(&mut env, &w.pool, &w.target);
+    basis(&mut env);
+    env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]);
+    let rd = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
+    assert_eq!((rd.outcome, rd.spent_lamports), (OUTCOME_BELOW_FLOOR, 0));
+    assert_eq!(rd.carried_out_lamports, math::buyback_spend(10 * SOL, 3, 500).unwrap());
+    assert_eq!(env.lamports(&fee_pda(&mint)), fee_before, "held, not lost");
+    let bt = target_account(&env, &mint);
+    assert!(bt.last_unblocked_at > bt.last_burn_at);
+}
+
+/// R5-6: a dead target pool: after the 30-day unblock, release_target moves the carried spend to the flagship (permissionless; no
+/// attester or admin involved). A target that burned since its last unblock is not stalled.
+#[test]
+fn r5_6_a_stalled_target_releases_its_carry_to_the_flagship() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    live_flagship(&mut env, &w);
+    let (mint, admin) = coin_with_target(&mut env, &w);
+    // the admin is gone: no re-pin can ever happen
+    env.ok(&[ix_admin("renounce", &admin.pubkey(), &mint, vec![], 0)], &[&admin]);
+    read_and_fund(&mut env, &w, &mint, 3, 10 * SOL);
+    drain_pool(&mut env, &w);
+    let k = cranker(&mut env);
+    expect_anchor_err(env.send(&[ix_release(&k.pubkey(), &mint)], &[&k]), "ReadingPending");
+    let submitted = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap().submitted_at;
+    env.set_time(submitted + QUEUE_UNBLOCK_SECS);
+    refresh(&mut env, &w.pool);
+    env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]);
+    let owed = env.config(&config_pda(&mint)).carried_spend_lamports;
+    assert_eq!(owed, math::buyback_spend(10 * SOL, 3, 500).unwrap());
+    let (fee_before, flag_before) = (env.lamports(&fee_pda(&mint)), env.lamports(&fee_pda(&flagship_keypair().pubkey())));
+    let meta = env.ok(&[ix_release(&k.pubkey(), &mint)], &[&k]);
+    assert_eq!(env.lamports(&fee_pda(&flagship_keypair().pubkey())), flag_before + owed);
+    assert_eq!(env.lamports(&fee_pda(&mint)), fee_before - owed, "only the carried spend left the fee PDA");
+    assert_eq!(env.config(&config_pda(&mint)).carried_spend_lamports, 0);
+    assert!(meta.logs.iter().any(|l| l.contains("|release|to=") && l.contains(&format!("|lamports={owed}|left=0|v1"))));
+    let ev = event::<burn_receipts::events::TargetReleased>(&meta).expect("TargetReleased");
+    assert_eq!((ev.to_mint, ev.lamports, ev.carried_out_lamports), (flagship_keypair().pubkey(), owed, 0));
+    expect_anchor_err(env.send(&[ix_release(&k.pubkey(), &mint)], &[&k]), "TargetNotStalled");
+}
+
+#[test]
+fn r5_6_a_target_that_burns_is_never_released() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    live_flagship(&mut env, &w);
+    let (mint, _) = coin_with_target(&mut env, &w);
+    // a cap-bound crank leaves a carry; the target is healthy
+    read_and_fund(&mut env, &w, &mint, 10, 40 * SOL);
+    refresh(&mut env, &w.pool);
+    let k = cranker(&mut env);
+    env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]);
+    assert!(env.config(&config_pda(&mint)).carried_spend_lamports > 0);
+    env.set_time(env.now() + 2 * QUEUE_UNBLOCK_SECS);
+    expect_anchor_err(env.send(&[ix_release(&k.pubkey(), &mint)], &[&k]), "TargetNotStalled");
+}
+
+/// R5-7: an update older than the last accepted one is refused, and the two feeds must be published within 60 s of each other.
+#[test]
+fn r5_7_pyth_never_goes_backwards_and_the_two_feeds_must_agree_in_time() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    let (mint, _) = coin_with_target(&mut env, &w);
+    read_and_fund(&mut env, &w, &mint, 3, 10 * SOL);
+    let k = cranker(&mut env);
+    env.set_time(env.now() + 30);
+    refresh(&mut env, &w.pool);
+    env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]);
+    let bt = target_account(&env, &mint);
+    assert_eq!((bt.last_sol_publish_time, bt.last_target_publish_time), (env.now(), env.now()));
+    let accepted = env.now();
+    env.set_time(env.now() + 20);
+    submit(&mut env, &mint, D3, units_value(5), &[&w.attester]).unwrap();
+    let e = fair_e12(&env, &w.pool);
+    // an update published BEFORE the last accepted one (still under 60 s old): refused
+    write_pyth(&mut env, sol_px(), PYTH_SOL_USD_FEED_ID, SOL_USD, (SOL_USD / 1_000) as u64, -8, accepted - 1, true);
+    write_pyth(&mut env, tgt_px(), TARGET_FEED, e, (e / 1_000) as u64, -12, accepted, true);
+    expect_anchor_err(env.send(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D3)], &[&k]), "PythWentBackwards");
+    // both usable on their own (one 5 s ahead, one 56 s old) but 61 s apart: held
+    let now = env.now();
+    write_pyth(&mut env, sol_px(), PYTH_SOL_USD_FEED_ID, SOL_USD, (SOL_USD / 1_000) as u64, -8, now + 5, true);
+    write_pyth(&mut env, tgt_px(), TARGET_FEED, e, (e / 1_000) as u64, -12, now - 56, true);
+    expect_anchor_err(env.send(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D3)], &[&k]), "PythFeedSkew");
+    // a publish time more than 5 s ahead of the clock is unusable
+    write_pyth(&mut env, sol_px(), PYTH_SOL_USD_FEED_ID, SOL_USD, (SOL_USD / 1_000) as u64, -8, now + 6, true);
+    write_pyth(&mut env, tgt_px(), TARGET_FEED, e, (e / 1_000) as u64, -12, now, true);
+    expect_anchor_err(env.send(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D3)], &[&k]), "PythUnusable");
+    // fresh, aligned updates (one TWAP window after the last swap): the crank runs
+    env.set_time(env.now() + 601);
+    refresh(&mut env, &w.pool);
+    env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D3)], &[&k]);
+}
+
+/// R5-5: pin_burn_target needs the coin's end sink (a round-4-shaped coin without one is refused).
+#[test]
+fn r5_5_pin_burn_target_requires_an_end_sink() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    let kp = Keypair::new();
+    let creator = Keypair::new();
+    let payer = env.payer.pubkey();
+    // the legacy create (kept only in the test-pins build) without an end sink
+    env.ok(&[ix_initialize(&payer, &creator.pubkey(), &kp.pubkey(), init_args(buyback_rule(), vec![w.attester.pubkey()], 1))], &[&creator, &kp]);
+    expect_anchor_err(pin(&mut env, &kp, &w.target, &w.pool), "LostPathBurnsSelf");
+}
+
+/// R5-12: the rollback fence. A target coin that registers its own pool keeps `pool_verified` false (a round-4 program refuses
+/// crank_buyback on it: PoolNotVerified) and records the verification in burn_target_kind; round 5 still cranks its target.
+#[test]
+fn r5_12_a_target_coins_own_pool_registration_leaves_pool_verified_false() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    let (mint, _) = coin_with_target(&mut env, &w);
+    let payer = env.payer.pubkey();
+    let me = env.payer.insecure_clone();
+    let lt = env.create_ata(&w.launcher.pubkey(), &mint);
+    env.mint_to(&mint, &me, &lt, 800_000_000 * TOKEN);
+    let own = cpmm::create_pool(&mut env, &w.launcher, &cpmm::amm_config_0(), &mint, &fee_pda(&mint), 85 * SOL, 800_000_000 * TOKEN, &lt);
+    cpmm::launchlab_migrated(&mut env, &mint, &own);
+    env.ok(&[ix_register_pool(&payer, &mint, &own.pool)], &[]);
+    let cfg = env.config(&config_pda(&mint));
+    assert_eq!(cfg.cpmm_pool, own.pool);
+    assert!(!cfg.pool_verified, "round 4 reads pool_verified: it must stay false for a target coin");
+    assert_eq!(cfg.burn_target_kind, BURN_TARGET_EXTERNAL_POOL_VERIFIED);
+    assert!(cfg.own_pool_verified() && cfg.burns_target());
+    // registration cannot be repeated, crank_buyback still refuses it, and the target crank still runs
+    expect_fail(env.send(&[ix_register_pool(&payer, &mint, &own.pool)], &[]));
+    let k = cranker(&mut env);
+    read_and_fund(&mut env, &w, &mint, 3, 10 * SOL);
+    expect_anchor_err(env.send(&[cpmm::ix_crank_buyback(&k.pubkey(), &mint, &own, D2)], &[&k]), "BurnTargetSet");
+    refresh(&mut env, &w.pool);
+    env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]);
+    assert_eq!(env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap().outcome, OUTCOME_BURNED);
+}
+
+/// Second review (A): the price accounts are bound to the feeds' sponsored accounts. On a healthy target with an aged reading, an
+/// authentic but STALE snapshot of the same feed at another address is refused outright and changes nothing (it can no longer force the
+/// 30-day below-floor settlement); the sponsored, fresh account then swaps.
+#[test]
+fn a_stale_snapshot_cannot_force_the_thirty_day_carry_on_a_healthy_target() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    let (mint, _) = coin_with_target(&mut env, &w);
+    read_and_fund(&mut env, &w, &mint, 3, 10 * SOL);
+    let submitted = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap().submitted_at;
+    env.set_time(submitted + QUEUE_UNBLOCK_SECS + 86_400);
+    cpmm::seed_history(&mut env, &w.pool, &w.target);
+    refresh(&mut env, &w.pool);
+    // an authentic snapshot of the target feed, an hour old, posted into another receiver account
+    let stale = Pubkey::new_unique();
+    let e = fair_e12(&env, &w.pool);
+    let t = env.now();
+    write_pyth(&mut env, stale, TARGET_FEED, e, (e / 1_000) as u64, -12, t - 3_600, true);
+    let k = cranker(&mut env);
+    let mut ix = ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2);
+    let at = ix.accounts.iter().position(|m| m.pubkey == tgt_px()).unwrap();
+    ix.accounts[at].pubkey = stale;
+    let (cfg_before, fee_before) = (env.config(&config_pda(&mint)), env.lamports(&fee_pda(&mint)));
+    expect_anchor_err(env.send(&[ix], &[&k]), "TargetPythInvalid");
+    let rd = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
+    assert!(!rd.processed, "nothing settled");
+    assert_eq!((env.config(&config_pda(&mint)).crank_cursor, env.lamports(&fee_pda(&mint))), (cfg_before.crank_cursor, fee_before));
+    // the sponsored, fresh account: the swap runs
+    env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]);
+    let rd = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
+    assert_eq!(rd.outcome, OUTCOME_BURNED);
+    assert!(rd.spent_lamports > 0);
+}
+
+/// Second review (B): a target mint with more than 18 decimals is refused at admission.
+#[test]
+fn a_target_with_more_than_eighteen_decimals_is_refused() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    let payer = env.payer.pubkey();
+    let m = Keypair::new();
+    env.create_mint_full(&m, &payer, None, 19);
+    env.ok(&[spl_token::instruction::set_authority(&spl_token::ID, &m.pubkey(), None, spl_token::instruction::AuthorityType::MintTokens, &payer, &[]).unwrap()], &[]);
+    let kp = fresh_coin(&mut env, &w, buyback_rule());
+    expect_anchor_err(pin(&mut env, &kp, &m.pubkey(), &w.pool), "TargetDecimalsTooLarge");
+}
+
+/// Round-5 review R5-9, end to end with a REAL pin: a coin whose end sink names a target coin that pinned its BurnTarget through
+/// pin_burn_target and has no pool of its own (pre-graduation) forwards its fuel to that coin after a RESOLVED end (before R5-9 the
+/// target coin was "not live" and the fuel fell to the flagship).
+#[test]
+fn r5_9_an_end_sink_naming_a_pinned_target_coin_receives_the_fuel() {
+    let mut env = Env::new();
+    let w = world(&mut env);
+    let (t, _) = coin_with_target(&mut env, &w);
+    let tc = env.config(&config_pda(&t));
+    assert!(tc.burn_target_kind == BURN_TARGET_EXTERNAL && !tc.own_pool_verified() && tc.cpmm_pool == Pubkey::default());
+    // the ending coin: an end sink naming the target coin, no pool of its own
+    let kc = Keypair::new();
+    let creator = Keypair::new();
+    let mut args = init_args(buyback_rule(), vec![w.attester.pubkey()], 1);
+    args.admin = creator.pubkey();
+    args.end_sink_kind = END_SINK_MINT;
+    args.end_sink_mint = Some(t);
+    args.end_sink_min_lamports = 10_000_000;
+    let payer = env.payer.pubkey();
+    env.ok(&[ix_initialize_r5(&payer, &creator.pubkey(), &kc.pubkey(), args, Some(TEST_LAUNCHLAB_PLATFORM), None, false)], &[&creator, &kc]);
+    let c = kc.pubkey();
+    submit(&mut env, &c, D1, V1, &[&w.attester]).unwrap();
+    env.transfer_sol(&fee_pda(&c), SOL);
+    submit_rule_end(&mut env, &c, D1, END_STATE_RESOLVED, &[&w.attester]).unwrap();
+    let k = cranker(&mut env);
+    let ft = env.lamports(&fee_pda(&t));
+    let meta = env.ok(&[ix_forward_on_end(&k.pubkey(), &c, &t, Some(t), None)], &[&k]);
+    let ev: burn_receipts::events::ForwardedOnEnd = event(&meta).unwrap();
+    assert_eq!((ev.to_mint, ev.intended_mint, ev.sink_kind, ev.lamports), (t, t, END_SINK_MINT, SOL));
+    assert_eq!(env.lamports(&fee_pda(&t)) - ft, SOL, "the target coin's fee PDA holds the fuel; its crank_target_burn spends it");
 }

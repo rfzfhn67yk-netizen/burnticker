@@ -1,7 +1,7 @@
 {
   "schema": "burnticker.verified-build/v1",
-  "updatedAt": "2026-10-13",
-  "note": "STAGING COPY for the round-5 devnet run (DEVNET-ROUND5-TEST-PLAN.md): burn_receipts' builds are round 5 (external burn targets), built locally on the operator's Mac from this branch. config/burnticker/verified-build.json stays the deployed truth until an upgrade lands; pass this file to scripts/squads-program-upgrade.mts --table.",
+  "updatedAt": "2026-10-15",
+  "note": "STAGING COPY for the round-5 upgrade (devnet rehearsal 2026-10-15, then mainnet through the Squads vault): burn_receipts builds are round 5 with the round-5 review fixes (R5-8 / R5-9 included; see round5SourceCommit), built locally on the operator Mac. pair_curve stays at its deployed round-4 bytes (source 29f6f5de) and is NOT upgraded in round 5. config/burnticker/verified-build.json stays the deployed truth until an upgrade lands; pass this file to scripts/squads-program-upgrade.mts --table.",
   "kind": "interim-local",
   "kindNote": "INTERIM: built with cargo build-sbf on the operator's Mac (no Docker on that host), not inside solana-verify's Docker image. These hashes are reproducible on that toolchain (a clean build in a fresh checkout gave the same bytes) and the devnet ones equal the bytes deployed on devnet, read back from chain. A Docker build on Linux may give different numbers; when it runs, it replaces this table (kind: docker) and the Docker numbers become the ones to check.",
   "sourceCommit": "29f6f5de19f1916945992fae711cefc36927d856",
@@ -23,29 +23,30 @@
       "builds": {
         "mainnet": {
           "features": [],
-          "bytes": 967304,
-          "hash": "224d10b192e9d7e7378bdac8df8343afac929dc2e4a35a3966009d5ec616ca87",
-          "sha256": "dc32f5fb893063f98e6980058cfa240fbf19fde1613b72e70c5629f0e1756dd1",
-          "status": "round 5, built 2026-10-13, NOT deployed"
+          "bytes": 1028944,
+          "hash": "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821",
+          "sha256": "cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290",
+          "status": "round 5 + review fixes + R5-8/R5-9, built 2026-10-15, NOT deployed"
         },
         "devnet": {
           "features": [
             "devnet"
           ],
-          "bytes": 967280,
-          "hash": "50fc618e4108cf77f5a7223c0c3558b6f745a129e597b1e30e43518e75aaf8c6",
-          "sha256": "63fcde84eab407bd15a07bbd823645470e71116b1bbd59fada1b0a6ddcc0a9f0",
-          "status": "round 5, built 2026-10-13, NOT deployed"
+          "bytes": 1028920,
+          "hash": "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c",
+          "sha256": "d1e79233d43a5324d48425aa1b6ada8a4a08daae3e30f681ee1453b2c0f006b7",
+          "status": "round 5 + review fixes + R5-8/R5-9, built 2026-10-15; devnet upgrade proposed (second round-5 proposal)"
         }
       },
       "deployed": {
         "devnet": {
-          "hash": "87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a",
+          "hash": "a475d902c287e94e2318b0becf18081fc396d5fda245bdf39e4a7e4e11f84bb9",
           "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
-          "readAt": "2026-10-12",
-          "matchesBuild": true,
-          "slot": 510391591
+          "readAt": "2026-10-15",
+          "matchesBuild": false,
+          "note": "the superseded round-5 build (source e9614fdd), vault transaction 21",
+          "slot": 511516747
         },
         "mainnet": {
           "hash": "d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae",
@@ -99,5 +100,7 @@
         }
       }
     }
-  ]
+  ],
+  "round5SourceCommit": "089024ff6ab0cc92ae37899dee1509d52cb5e203",
+  "round5SourceCommitNote": "The program sources of the round-5 builds below: round 5 + review fixes + R5-8 / R5-9 (branch worktree-agent-r5prog tip). Rebuilt 2026-10-15 from a clean OUT directory in worktree-agent-r5devnet after merging that branch (merge a4e195a3; programs/ equals the r5prog tip): the same hashes. Superseded: e9614fdd (mainnet 07b2b58f…, devnet a475d902…; devnet ran it from vault transaction 21)."
 }

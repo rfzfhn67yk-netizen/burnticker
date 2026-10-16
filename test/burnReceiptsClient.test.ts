@@ -8,14 +8,14 @@ import { AddressLookupTableAccount, Ed25519Program, Keypair, PublicKey, SystemPr
 import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
 import { accountDiscriminator, encodeInstruction, encodeType } from "../src/lib/burnReceipts/idlCoder.ts";
 import { attestationMessage, attestReading, ed25519SharedMessageInstruction, ed25519VerifyInstruction, signAttestation, sourceUrlHash, verifyAttestation } from "../src/lib/burnReceipts/attestation.ts";
-import { bs58, decodeReading, decodeTokenConfig, READING_OFFSET_CONFIG, READING_OFFSET_PREV_DATE, READING_OFFSET_RECORD_DATE } from "../src/lib/burnReceipts/accounts.ts";
-import { configPda, feeKeyRecordPda, feeKeysPda, feePda, feeTokenAddress, lockedLiquidityPda, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lpLockVault, platformPda, programDataAddress, readingPda, vaultAddress, associatedTokenAddress } from "../src/lib/burnReceipts/pda.ts";
+import { bs58, CARRIED_PACE_DISCRIMINATOR, CARRIED_PACE_SIZE, decodeCarriedPace, decodeReading, decodeTokenConfig, READING_OFFSET_CONFIG, READING_OFFSET_PREV_DATE, READING_OFFSET_RECORD_DATE } from "../src/lib/burnReceipts/accounts.ts";
+import { carriedPacePda, configPda, feeKeyRecordPda, feeKeysPda, feePda, feeTokenAddress, lockedLiquidityPda, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lpLockVault, platformPda, programDataAddress, readingPda, vaultAddress, associatedTokenAddress } from "../src/lib/burnReceipts/pda.ts";
 import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, clearCrankerAllowlistIx, crankBuybackIx, crankCarriedIx, crankVaultIx, eventAuthority, initializePlatformIx, initializeTokenIx, initializeTokenLayoutFromEnv, INITIALIZE_TOKEN_DEFAULT_LAYOUT, operatorAttester, registerPoolIx, setRegistrationPolicyIx, submitReadingIx, vetoRegistrationPolicyIx, syncNativeIx, zktlsRelayerAttester } from "../src/lib/burnReceipts/instructions.ts";
 import { buybackPoolAccounts, decodeCpmmPool, POOL_STATE_DISCRIMINATOR } from "../src/lib/burnReceipts/cpmm.ts";
 import { anchorErrorName, assertClusterAllowed, buildSizedTransaction, DEFERRABLE_ERRORS, memoFromLogs, memoFromTransaction, readingLookupTableAddresses, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { checkPlatformPins } from "../src/lib/burnReceipts/platformPins.ts";
 import { assertSignableGenesis, BURN_RECEIPTS_LOCALNET_PROGRAM_ID, CPMM_PROGRAM_ID, DEFAULT_BURN_POOL_CAP_LAMPORTS, GENESIS_HASH, LOCALNET_GENESIS_TAG, LAUNCHLAB_PROGRAM_ID, LOCK_CP_AUTHORITY_SEED, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, MAX_QUORUM, OPERATOR_TREASURY, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, PACKET_DATA_SIZE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
-import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
+import { carriedBudget, carriedBudgetNow, carriedBudgetReadySec, ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 
 const PID = BURN_RECEIPTS_LOCALNET_PROGRAM_ID;
 const G = GENESIS_HASH.mainnet;
@@ -45,7 +45,7 @@ describe("burnReceipts client — IDL", () => {
   });
   test("no instruction can withdraw, close or sweep", () => {
     const names = BURN_RECEIPTS_IDL.instructions.map((i) => i.name).sort();
-    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "apply_target_pool", "burn_sol_on_end", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "cancel_target_pool", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_carried", "crank_no_units", "crank_target_burn", "crank_vault", "forward_on_end", "forward_to_winner", "initialize_platform", "initialize_token", "initialize_token_r5", "link_pair", "pin_burn_target", "propose_attesters", "propose_cap_raise", "propose_target_pool", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "submit_rule_end", "unlink_pair", "veto_registration_policy", "veto_target_pool"]);
+    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "apply_target_pool", "burn_sol_on_end", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "cancel_target_pool", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_carried", "crank_no_units", "crank_target_burn", "crank_vault", "forward_on_end", "forward_to_winner", "initialize_platform", "initialize_token", "initialize_token_r5", "link_pair", "pin_burn_target", "propose_attesters", "propose_cap_raise", "propose_target_pool", "register_fee_key", "register_pair_pool", "register_pool", "release_target", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "submit_rule_end", "unlink_pair", "veto_registration_policy", "veto_target_pool"]);
   });
 });
 
@@ -245,6 +245,32 @@ describe("burnReceipts client — instructions", () => {
     assert.ok(cv.keys[5].pubkey.equals(TOKEN_PROGRAM_ID));
     assert.deepEqual(encodeInstruction(BURN_RECEIPTS_IDL, "crank_vault", { record_date: 20261008 }), cv.data);
   });
+  test("round-5 review R5-8: CarriedPace decodes at the program's fixed offsets; its discriminator is Anchor's", () => {
+    assert.deepEqual([...CARRIED_PACE_DISCRIMINATOR], [...crypto.createHash("sha256").update("account:CarriedPace").digest().subarray(0, 8)]);
+    assert.equal(CARRIED_PACE_SIZE, 8 + 1 + 1 + 32 + 8 + 4 + 8 + 32);
+    const d = Buffer.alloc(CARRIED_PACE_SIZE);
+    CARRIED_PACE_DISCRIMINATOR.copy(d, 0);
+    d[8] = 1; d[9] = 254;
+    MINT.toBuffer().copy(d, 10);
+    d.writeBigInt64LE(BigInt(1_760_000_000), 42);
+    d.writeUInt32LE(7, 50);
+    d.writeBigUInt64LE(BigInt(9_000_000_000), 54);
+    d.writeBigUInt64LE(BigInt(123_456), 62);
+    const p = decodeCarriedPace(d);
+    assert.deepEqual([p.version, p.bump, p.mint.toBase58(), p.last_carried_at, p.pieces, p.spent_lamports, p.budget_lamports], [1, 254, MINT.toBase58(), BigInt(1_760_000_000), 7, BigInt(9_000_000_000), BigInt(123_456)]);
+    const wrong = Buffer.from(d); wrong[0] ^= 1;
+    assert.throws(() => decodeCarriedPace(wrong), /not a CarriedPace/);
+    const v2 = Buffer.from(d); v2[8] = 2;
+    assert.throws(() => decodeCarriedPace(v2), /version 2/, "an unknown version is refused, as the program refuses it");
+    assert.ok(carriedPacePda(PID, MINT).equals(PublicKey.findProgramAddressSync([Buffer.from("carried_pace"), MINT.toBuffer()], PID)[0]));
+    const idlConst = BURN_RECEIPTS_IDL.constants?.find((c: { name: string }) => c.name === "CARRIED_BUDGET_WINDOW_SECS") as { value: string } | undefined;
+    assert.equal(idlConst?.value, "600", "the IDL carries the program's budget window");
+    // the budget (math.rs carried_budget / crank_carried.rs carried_budget_now): one cap per 600 s, up to one cap, one piece per second
+    const cap = BigInt(600);
+    assert.deepEqual([carriedBudget(BigInt(0), cap, 300), carriedBudget(BigInt(590), cap, 30), carriedBudget(BigInt(900), cap, 0), carriedBudget(BigInt(5), cap, -3)], [BigInt(300), cap, cap, BigInt(5)]);
+    assert.deepEqual([carriedBudgetNow(0, BigInt(0), cap, 5), carriedBudgetNow(100, BigInt(0), cap, 100), carriedBudgetNow(100, BigInt(0), cap, 101)], [cap, null, BigInt(1)]);
+    assert.deepEqual([carriedBudgetReadySec(100, BigInt(0), cap, cap, 50), carriedBudgetReadySec(100, BigInt(0), cap, BigInt(300), 120), carriedBudgetReadySec(100, BigInt(590), cap, BigInt(300), 100), carriedBudgetReadySec(0, BigInt(0), cap, cap, 7), carriedBudgetReadySec(100, BigInt(0), cap, cap + BigInt(1), 120)], [700, 400, 101, 7, null]);
+  });
   test("crank_buyback resolves the pool's accounts WSOL → token and pins the cluster's CPMM id", () => {
     const pool = Keypair.generate().publicKey;
     const d = Buffer.alloc(637);
@@ -271,7 +297,11 @@ describe("burnReceipts client — instructions", () => {
     assert.ok(cc.keys.some((k) => k.pubkey.equals(platformPda(PID))), "the platform cap rides along");
     assert.ok(cc.keys.some((k) => k.pubkey.equals(pool) && k.isWritable));
     assert.ok(cc.keys.some((k) => k.pubkey.equals(CPMM_PROGRAM_ID.devnet)));
-    assert.equal(cc.keys.length, 20, "crank_buyback's accounts without the reading and the two pair accounts");
+    assert.equal(cc.keys.length, 21, "crank_buyback's accounts without the reading and the two pair accounts, plus the coin's CarriedPace");
+    // round-5 review R5-8: the coin's CarriedPace ["carried_pace", mint], writable (created on the first piece), the cranker writable (pays its rent)
+    const pace = cc.keys.find((k) => k.pubkey.equals(carriedPacePda(PID, MINT)));
+    assert.ok(pace && pace.isWritable && !pace.isSigner, "the pace account rides along, writable");
+    assert.ok(cc.keys[0].pubkey.equals(MINT) && cc.keys[0].isSigner && cc.keys[0].isWritable, "the cranker signs and pays the pace rent");
   });
 });
 

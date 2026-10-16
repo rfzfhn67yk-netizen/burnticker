@@ -135,7 +135,7 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
             require_keys_eq!(rec.pool, a.pool_state.key(), BurnError::FeeKeyMismatch);
         }
         POOL_POLICY_FIXED => {
-            require!(!c.pool_verified, BurnError::PoolAlreadyRegistered);
+            require!(!c.own_pool_verified(), BurnError::PoolAlreadyRegistered);
             require_keys_eq!(a.pool_state.key(), c.cpmm_pool, BurnError::WrongPoolPolicy);
             verify_pool_provenance(&a.pool_state.to_account_info(), &mint, &fee, &a.lp_mint, &a.lp_lock_vault.to_account_info(), None)?;
         }
@@ -144,7 +144,8 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
     let pool_key = ctx.accounts.pool_state.key();
     let c = &mut ctx.accounts.config;
     c.cpmm_pool = pool_key;
-    c.pool_verified = true;
+    // Round-5 review R5-12 (rollback fence): a target coin records this outside `pool_verified`, so round 4 can never self-burn it.
+    c.set_own_pool_verified(true);
     let config = c.key();
     emit_cpi!(PoolRegistered { config, pool: pool_key, registrar: ctx.accounts.registrar.key() });
     Ok(())

@@ -1,4 +1,5 @@
 // LAUNCHPAD-PATH §45 — end sinks: the low-level client (src/lib/burnReceipts/endSink.ts) against the program's IDL.
+import { burnTargetPda } from "../src/lib/burnReceipts/burnTarget.ts";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair, PublicKey } from "@solana/web3.js";
@@ -10,7 +11,7 @@ import { configPda, feePda } from "../src/lib/burnReceipts/pda.ts";
 import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import {
   attestRuleEnd, decodeEndSink, decodeRuleEnd, END_ATTESTATION_DOMAIN, END_FORWARD_MIN_LAMPORTS_CEIL, END_FORWARD_MIN_LAMPORTS_FLOOR, END_SINK_FLAGSHIP,
-  END_SINK_LEAGUE_SET, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_LIVE, END_STATE_RESOLVED, END_STATE_VOID, endSinkPda, FLAGSHIP_MINT, forwardOnEndIx,
+  END_SINK_LEAGUE_SET, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_LIVE, END_STATE_RESOLVED, END_STATE_VOID, endSinkPda, FLAGSHIP_MINT, forwardOnEndIx, sinkLive, burnTargetLive,
   parseEndForwardMemo, ruleEndMessage, ruleEndPda, SEED_END_SINK, SEED_RULE_END, submitRuleEndIx,
 } from "../src/lib/burnReceipts/endSink.ts";
 
@@ -54,8 +55,27 @@ describe("burnReceipts end sinks (LAUNCHPAD-PATH §45)", () => {
     assert.ok(f.keys[names.indexOf("target_config")].pubkey.equals(configPda(PID, target)));
     assert.ok(f.keys[names.indexOf("target_fee_vault")].pubkey.equals(feePda(PID, target)));
     assert.ok(f.keys[names.indexOf("sink_config")].pubkey.equals(configPda(PID, sink)));
+    // round-5 review R5-9: the named sink coin's BurnTarget goes with its config
+    assert.ok(f.keys[names.indexOf("sink_burn_target")].pubkey.equals(burnTargetPda(PID, sink)));
     const plain = forwardOnEndIx({ programId: PID, cranker: c, mint, target });
     assert.ok(plain.keys[names.indexOf("sink_config")].pubkey.equals(PID), "omitted optional accounts are the program id");
+    assert.ok(plain.keys[names.indexOf("sink_burn_target")].pubkey.equals(PID));
+  });
+  test("round-5 review R5-9: a sink that burns a pinned target is live before its own pool; an unpinned one is not", () => {
+    const base = { pool_verified: false, burn_target_kind: 1, end_state: END_STATE_LIVE, rule: { mode: 0 } } as unknown as Parameters<typeof sinkLive>[0];
+    assert.equal(sinkLive(base, true), true, "pinned BurnTarget: live");
+    assert.equal(sinkLive(base, false), false, "not pinned: dead, as before");
+    assert.equal(sinkLive({ ...base!, burn_target_kind: 2 }, false), true, "its own pool verified (R5-12 marker)");
+    assert.equal(sinkLive({ ...base!, end_state: END_STATE_RESOLVED }, true), false, "its own rule ended");
+    assert.equal(sinkLive({ ...base!, burn_target_kind: 0 }, true), false, "a self coin needs its own verified pool");
+    // blind review of 7b9836a3: a pinned BurnTarget whose target STALLED (last_unblocked_at > last_burn_at) is not live
+    const m = Keypair.generate().publicKey;
+    const t = { mint: m, target_mint: Keypair.generate().publicKey, pool: Keypair.generate().publicKey, pinned_at: BigInt(10), last_burn_at: BigInt(0), last_unblocked_at: BigInt(0) };
+    assert.equal(burnTargetLive(t, m), true, "pinned, never unblocked");
+    assert.equal(burnTargetLive({ ...t, last_unblocked_at: BigInt(50) }, m), false, "stalled: its last target event a 30-day unblock");
+    assert.equal(burnTargetLive({ ...t, last_unblocked_at: BigInt(50), last_burn_at: BigInt(60) }, m), true, "a burn after the unblock");
+    assert.equal(burnTargetLive(t, Keypair.generate().publicKey), false, "another coin's BurnTarget");
+    assert.equal(burnTargetLive({ ...t, pinned_at: BigInt(0) }, m), false, "not pinned");
   });
   test("initializeTokenIx pins an end sink: the account and the three trailing args", () => {
     const a = Keypair.generate(), sink = Keypair.generate().publicKey;

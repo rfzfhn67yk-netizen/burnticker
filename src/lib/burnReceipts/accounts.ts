@@ -1,9 +1,10 @@
+import { createHash } from "node:crypto";
 import { type Connection, PublicKey } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { accountDiscriminator, decodeAccount } from "@/lib/burnReceipts/idlCoder";
 import type { AttesterEntry } from "@/lib/burnReceipts/instructions";
 import type { RuleParams } from "@/lib/burnReceipts/math";
-import { configPda, readingPda } from "@/lib/burnReceipts/pda";
+import { carriedPacePda, configPda, readingPda } from "@/lib/burnReceipts/pda";
 
 /** Decoded program accounts (field names as the IDL has them), plus a few readable conveniences. */
 
@@ -99,6 +100,28 @@ export function decodeLockedLiquidity(data: Buffer | Uint8Array): LockedLiquidit
   return { lockedLp: d.readBigUInt64LE(8), claimedLp: d.readBigUInt64LE(16), unclaimedLp: d.readBigUInt64LE(24), lastLp: d.readBigUInt64LE(32), pool: pk(64), feeNftMint: pk(96), owner: pk(128), locker: pk(128), lpMint: pk(160) };
 }
 
+/**
+ * Round-5 review R5-8: CarriedPace ["carried_pace", mint], written only by crank_carried. Not in the IDL's account list (the program reads
+ * and writes it at fixed offsets, so no instruction names its type), so it is decoded here at the same offsets as state.rs's layout:
+ * discriminator sha256("account:CarriedPace")[..8] · version u8 @8 (1; the program refuses any other) · bump u8 @9 · mint @10 ·
+ * last_carried_at i64 @42 · pieces u32 @50 · spent_lamports u64 @54 · budget_lamports u64 @62 (the budget left after the last piece) ·
+ * reserved [u8; 24] @70 (94 bytes).
+ */
+export interface CarriedPaceAccount { version: number; bump: number; mint: PublicKey; last_carried_at: bigint; pieces: number; spent_lamports: bigint; budget_lamports: bigint }
+export const CARRIED_PACE_DISCRIMINATOR = createHash("sha256").update("account:CarriedPace").digest().subarray(0, 8);
+export const CARRIED_PACE_SIZE = 94;
+export function decodeCarriedPace(data: Buffer | Uint8Array): CarriedPaceAccount {
+  const d = Buffer.from(data);
+  if (d.length < CARRIED_PACE_SIZE || !d.subarray(0, 8).equals(CARRIED_PACE_DISCRIMINATOR)) throw new Error("burnReceipts: not a CarriedPace account");
+  if (d[8] !== 1) throw new Error(`burnReceipts: CarriedPace version ${d[8]} is not one this client knows`);
+  return { version: d[8], bump: d[9], mint: new PublicKey(d.subarray(10, 42)), last_carried_at: d.readBigInt64LE(42), pieces: d.readUInt32LE(50), spent_lamports: d.readBigUInt64LE(54), budget_lamports: d.readBigUInt64LE(62) };
+}
+/** The coin's CarriedPace, or null before its first carried piece. */
+export async function fetchCarriedPace(connection: Connection, programId: PublicKey, mint: PublicKey): Promise<CarriedPaceAccount | null> {
+  const info = await connection.getAccountInfo(carriedPacePda(programId, mint), "confirmed");
+  return info && info.owner.equals(programId) && info.data.length > 0 ? decodeCarriedPace(info.data) : null;
+}
+
 export function decodePlatformConfig(data: Buffer | Uint8Array): PlatformConfigAccount {
   return decodeAccount<PlatformConfigAccount>(BURN_RECEIPTS_IDL, "PlatformConfig", data);
 }
@@ -115,7 +138,8 @@ export function decodeTokenConfig(data: Buffer | Uint8Array): TokenConfigAccount
     activeAttesters: c.attesters.slice(0, c.attester_count),
     adminRenounced: c.admin.equals(PublicKey.default),
     // A fixed pool (policy 1) is set at init but must still pass register_pool before any buyback (review-2 F14).
-    poolRegistered: c.pool_verified && !c.cpmm_pool.equals(PublicKey.default),
+    // Round-5 review R5-12: a target coin records its own pool's verification in burn_target_kind (2) and keeps pool_verified false.
+    poolRegistered: (c.pool_verified || c.burn_target_kind === 2) && !c.cpmm_pool.equals(PublicKey.default),
   };
 }
 

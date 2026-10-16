@@ -193,6 +193,10 @@ pub struct CarriedSpent {
     pub burned: u64,
     pub carried_out_lamports: u64,
     pub cranker: Pubkey,
+    /// Round-5 review R5-8: this piece's number (CarriedPace.pieces after it) and the coin's carried budget left after it (it refills at
+    /// one per-crank cap per CARRIED_BUDGET_WINDOW_SECS).
+    pub piece: u32,
+    pub budget_left_lamports: u64,
 }
 
 #[event]
@@ -487,4 +491,18 @@ pub struct TargetPoolRepinned {
     pub pool_kind: u8,
     pub wsol_reserve_lamports: u64,
     pub caller: Pubkey,
+}
+
+/// Round-5 review R5-6: release_target moved a stalled target coin's carried spend to the flagship's fee PDA (its pinned pool or feed
+/// stopped working: no target burn since the last 30-day unblock).
+#[event]
+pub struct TargetReleased {
+    pub config: Pubkey,
+    pub mint: Pubkey,
+    pub to_mint: Pubkey,
+    pub lamports: u64,
+    pub sol_lamports: u64,
+    pub wsol_lamports: u64,
+    pub carried_out_lamports: u64,
+    pub cranker: Pubkey,
 }

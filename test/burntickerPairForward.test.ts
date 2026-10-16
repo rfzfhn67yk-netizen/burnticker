@@ -271,6 +271,37 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     assert.match(forwardLine("BRONCOS", "CHIEFS", B(0)), /forwarded 0 SOL to the \$CHIEFS burn pool\. There was nothing to move/);
   });
 
+  /** Round-5 review R5-9: a loser that burns another token (no verified pool of its own yet), its BurnTarget pinned; `stalled` = its
+   *  last target event a 30-day unblock. */
+  async function targetLoserForward(stalled: boolean) {
+    const { a, b } = await launchPair();
+    const port = program.pairForward.port(a.mint, b.mint), fa = program.fake(a.mint);
+    program.deposit(a.mint, BigInt(5) * BigInt(1_000_000_000));
+    const D = 20261001;
+    fa.readings.set(D, { recordDate: D, prevDate: fa.cfg.crankCursor, kind: 1, processed: false, value: B(2), prevValue: B(1), delta: B(1), units: 1, signersMask: 1, pool: null, outcome: "pending", poolLamports: B(0), poolActualLamports: B(0), spentLamports: B(0), ruleSpendLamports: B(0), carriedInLamports: B(0), carriedOutLamports: B(0), got: B(0), burned: B(0), owed: B(0), shortfall: B(0) } as never);
+    port.results.set(D, { recordDate: D, winner: b.mint, submittedAt: 0, forwarded: false, forwardedLamports: B(0), forwardedAt: null });
+    fa.cfg = { ...fa.cfg, poolRegistered: false };
+    fa.burnTarget = { mint: "TargetMint1111111111111111111111111111111111", pool: "TargetPoo11111111111111111111111111111111111", decimals: 6 };
+    fa.targetStalled = stalled;
+    const fee0 = fa.feeLamports;
+    const tx = await port.buildForward({ loserMint: a.mint, recordDate: D });
+    await port.send(tx.raw);
+    const f = await port.forwardFacts(tx.signature);
+    assert.ok(f && f !== "none");
+    assert.deepEqual([fa.readings.get(D)!.processed, fa.readings.get(D)!.outcome], [true, "forwarded"]);
+    // the unlink evidence is the program's own-pool rule, unchanged: A still lacks a verified pool of its own
+    assert.equal((await port.links()).poolsVerified?.[port.mintA === a.mint ? 0 : 1], false);
+    return { lamports: f.lamports, fee0, fee1: fa.feeLamports };
+  }
+  test("round-5 review R5-9: a loser that burns a pinned, working target forwards before its own pool exists", async () => {
+    const r = await targetLoserForward(false);
+    assert.ok(r.lamports > B(0) && r.fee1 < r.fee0, "live: the fuel moved");
+  });
+  test("round-5 review R5-9: a loser whose pinned target stalled is dead: it forwards 0", async () => {
+    const r = await targetLoserForward(true);
+    assert.deepEqual([r.lamports, r.fee1], [B(0), r.fee0]);
+  });
+
   test("r2: a forward that cannot land alerts pair-forward-pending well inside 72 h; past 72 h the planner plans the paired buyback (PairForwardMissing) and pair-forward-missing fires", async () => {
     const { a, b } = await launchPair();
     program.now = () => clock;

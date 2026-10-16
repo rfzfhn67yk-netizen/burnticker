@@ -4,6 +4,7 @@ import { ed25519SharedMessageInstruction, signAttestation } from "@/lib/burnRece
 import { ASSOCIATED_TOKEN_PROGRAM_ID, type Cluster, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeAccount } from "@/lib/burnReceipts/idlCoder";
+import { burnTargetPda, fetchBurnTarget } from "@/lib/burnReceipts/burnTarget";
 import { buildIx, createAtaIdempotentIx } from "@/lib/burnReceipts/instructions";
 import { formatDate, validDate } from "@/lib/burnReceipts/math";
 import { fetchPairLink, fetchPairResult, PAIR_STATE_PAIRED, pairLinkPda, pairResultPda } from "@/lib/burnReceipts/pairs";
@@ -162,7 +163,8 @@ export function forwardOnEndIx(o: { programId: PublicKey; cranker: PublicKey; mi
     token_program: TOKEN_PROGRAM_ID,
     system_program: SystemProgram.programId,
     memo_program: MEMO_PROGRAM_ID,
-    ...(o.sinkMint ? { sink_config: configPda(o.programId, o.sinkMint) } : {}),
+    // round-5 review R5-9: the sink coin's BurnTarget goes with its config (the program reads it for a target coin without its own pool)
+    ...(o.sinkMint ? { sink_config: configPda(o.programId, o.sinkMint), sink_burn_target: burnTargetPda(o.programId, o.sinkMint) } : {}),
     ...(o.pair ? { pair_link: pairLinkPda(o.programId, o.mint), pair_result: pairResultPda(o.programId, o.mint, o.pair.partner, o.pair.endDate) } : {}),
   }, {});
 }
@@ -194,9 +196,24 @@ export function burnSolOnEndIx(o: { programId: PublicKey; cranker: PublicKey; mi
 // the destination (mirrors end.rs handle_forward_on_end)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/** Live, as the program judges a sink: a verified pool, its own rule not ended, buyback mode. */
-export function sinkLive(c: TokenConfigAccount | null): boolean {
-  return !!c && c.pool_verified && (c.end_state ?? END_STATE_LIVE) === END_STATE_LIVE && c.rule.mode === MODE_BUYBACK;
+/**
+ * Live, as the program judges a sink (end.rs sink_live): its own rule not ended, buyback mode, and a verified pool (own_pool_verified: a
+ * target coin's marker counts, R5-12) — or (round-5 review R5-9) a target coin (burn_target_kind 1) whose BurnTarget is pinned
+ * (`targetPinned`: the account exists for this coin with a target, a pool and a pin time; burn_target.rs target_pinned).
+ */
+export function sinkLive(c: TokenConfigAccount | null, targetPinned = false): boolean {
+  if (!c || (c.end_state ?? END_STATE_LIVE) !== END_STATE_LIVE || c.rule.mode !== MODE_BUYBACK) return false;
+  return c.pool_verified || c.burn_target_kind === 2 || (c.burn_target_kind === 1 && targetPinned);
+}
+
+/** Round-5 review R5-9: the coin's BurnTarget is pinned and working (exists, names this coin, a target mint, a pool and a pin time, and is
+ *  not STALLED: last_unblocked_at > last_burn_at, the marker release_target uses — burn_target.rs target_pinned). */
+export async function burnTargetPinned(connection: Connection, programId: PublicKey, mint: PublicKey): Promise<boolean> {
+  const t = await fetchBurnTarget(connection, programId, mint).catch(() => null);
+  return !!t && burnTargetLive(t.target, mint);
+}
+export function burnTargetLive(t: { mint: PublicKey; target_mint: PublicKey; pool: PublicKey; pinned_at: bigint | number; last_burn_at: bigint | number; last_unblocked_at: bigint | number }, mint: PublicKey): boolean {
+  return t.mint.equals(mint) && !t.target_mint.equals(PublicKey.default) && !t.pool.equals(PublicKey.default) && BigInt(t.pinned_at) > BigInt(0) && BigInt(t.last_unblocked_at) <= BigInt(t.last_burn_at);
 }
 
 export type EndForwardPlan =
@@ -233,7 +250,8 @@ export async function planForwardOnEnd(connection: Connection, programId: Public
   let target = flagship;
   if (!intended.equals(flagship)) {
     const sc = (await fetchTokenConfig(connection, programId, intended))?.config ?? null;
-    if (sinkLive(sc) && (sink.sink_kind !== END_SINK_PAIR_WINNER || sc?.pair_state === PAIR_STATE_PAIRED)) target = intended;
+    const pinned = sc?.burn_target_kind === 1 ? await burnTargetPinned(connection, programId, intended) : false;
+    if (sinkLive(sc, pinned) && (sink.sink_kind !== END_SINK_PAIR_WINNER || sc?.pair_state === PAIR_STATE_PAIRED)) target = intended;
   }
   if (target.equals(flagship) && !sinkLive((await fetchTokenConfig(connection, programId, flagship))?.config ?? null)) return { status: "flagship-not-live" };
   const tf = feePda(programId, target);

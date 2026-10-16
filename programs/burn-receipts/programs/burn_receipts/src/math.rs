@@ -124,6 +124,15 @@ pub fn reserve_spend_cap(reserve_wsol: u64, bps: u64) -> u64 {
     ((reserve_wsol as u128) * (bps as u128) / BPS_DENOMINATOR) as u64
 }
 
+/// Round-5 review R5-8: crank_carried's budget now — `stored` (left after the last piece) refilled by `cap` per
+/// CARRIED_BUDGET_WINDOW_SECS since then, never above one `cap`. `cap` is the per-crank cap now (2 % of the pool's WSOL reserve).
+pub fn carried_budget(stored: u64, cap: u64, elapsed_secs: i64) -> u64 {
+    let w = crate::constants::CARRIED_BUDGET_WINDOW_SECS;
+    let e = elapsed_secs.clamp(0, w) as u128;
+    let refill = (cap as u128 * e / w as u128) as u64;
+    stored.saturating_add(refill).min(cap)
+}
+
 /// Q32 price of SOL in tokens (token raw units per lamport × 2^32) from reserves — the high-precision side for a memecoin.
 pub fn sol_price_x32(reserve_sol: u64, reserve_token: u64) -> Result<u128, MathError> {
     if reserve_sol == 0 {
@@ -250,17 +259,22 @@ pub fn format_signed_fixed(delta: i64, decimals: u8) -> String {
 }
 
 /// Raw base units → a token string with no trailing zeros ("2100000", "12.5"); the keeper's rawToTokens.
+/// Second review (B): decimal-string splitting, so any u8 `decimals` works (10^20 and up no longer fit a u64 scale). The output is the
+/// same as before for every decimals the old version could handle.
 pub fn raw_to_tokens(raw: u64, decimals: u8) -> String {
-    if decimals == 0 {
-        return raw.to_string();
+    let digits = raw.to_string();
+    let d = decimals as usize;
+    if d == 0 {
+        return digits;
     }
-    let scale = 10u64.pow(decimals as u32);
-    let (whole, frac) = (raw / scale, raw % scale);
-    if frac == 0 {
-        return whole.to_string();
+    let padded = if digits.len() <= d { format!("{}{}", "0".repeat(d + 1 - digits.len()), digits) } else { digits };
+    let (whole, frac) = padded.split_at(padded.len() - d);
+    let frac = frac.trim_end_matches('0');
+    if frac.is_empty() {
+        whole.to_string()
+    } else {
+        format!("{whole}.{frac}")
     }
-    let f = format!("{:0width$}", frac, width = decimals as usize);
-    format!("{}.{}", whole, f.trim_end_matches('0'))
 }
 
 /// Lowercase hex of the first 6 bytes (the memo's `rules=sha256:<12>`).
@@ -274,6 +288,18 @@ pub fn hex12(bytes: &[u8; 32]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_carried_budget_refills_one_cap_per_window_and_never_above_it() {
+        use super::carried_budget;
+        assert_eq!(carried_budget(0, 600, 0), 0);
+        assert_eq!(carried_budget(0, 600, 300), 300);
+        assert_eq!(carried_budget(0, 600, 600), 600);
+        assert_eq!(carried_budget(0, 600, 10_000), 600);
+        assert_eq!(carried_budget(590, 600, 30), 600, "a dust piece used only a dust budget");
+        assert_eq!(carried_budget(900, 600, 0), 600, "a cap that shrank bounds the stored budget");
+        assert_eq!(carried_budget(5, 600, -3), 5, "a clock that went back refills nothing");
+    }
+
     #[test]
     fn buyback_min_out_is_the_larger_quote() {
         // 100 SOL / 1e15 raw tokens pool; TWAP = spot → both quotes equal.
@@ -389,6 +415,12 @@ mod tests {
         assert_eq!(raw_to_tokens(12_500_000, 6), "12.5");
         assert_eq!(raw_to_tokens(0, 6), "0");
         assert_eq!(raw_to_tokens(1, 6), "0.000001");
+        // second review (B): decimals past u64's 10^19 scale
+        assert_eq!(raw_to_tokens(10_000_000_000_000_000_000u64, 20), "0.1");
+        assert_eq!(raw_to_tokens(u64::MAX, 255).len(), 2 + 255, "0. then 255 digits");
+        assert_eq!(raw_to_tokens(u64::MAX, 19), "1.8446744073709551615");
+        assert_eq!(raw_to_tokens(u64::MAX, 0), "18446744073709551615");
+        assert_eq!(raw_to_tokens(1_000, 3), "1");
         let mut h = [0u8; 32];
         h[0] = 0xab; h[5] = 0x01;
         assert_eq!(hex12(&h), "ab0000000001");

@@ -37,22 +37,39 @@ it. Both programs are built at opt-level "z".
 | burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 826,384 | `d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae` | mainnet 2026-10-12, slot 456198354 (round-4 upgrade, Squads vault transaction 1): on-chain sha256 `b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7` = this build (docs/burnkeeper/evidence/mainnet-round4/) |
 <!-- previous row: 2026-10-11 slot 455814493, hash e64a2759…dc19 -->
 <!-- || burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 763,536 | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` | mainnet 2026-10-11, slot 455814493: on-chain sha256 `7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a` = this build (upgrade authority the Squads vault 8zsHrHjS…WrDV; docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json) | -->
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 826,392 | `87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a` | `87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a` = build (upgraded through the devnet Squads vault 2026-10-12, vault transaction 19; docs/burnkeeper/evidence/devnet-round4/) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 826,392 | `87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a` | was deployed 2026-10-12 to 2026-10-15 (vault transaction 19; docs/burnkeeper/evidence/devnet-round4/). **Replaced on devnet by round 5 on 2026-10-15** (vault transaction 21, slot 511516747): see the round-5 table below; this row stays until the mainnet upgrade rewrites the committed table |
 <!-- || burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 763,536 | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` = build (upgraded through the Squads vault 2026-10-11, vault transaction 17; docs/burnkeeper/devnet-pair-forward-r3-run-log.md) | -->
 | pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 413,224 | `567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895` | mainnet 2026-10-12, slot 456201604 (round-4 upgrade, vault transaction 2): on-chain sha256 `8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2` = this build (same evidence folder) |
 <!-- || pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 411,296 | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` | mainnet 2026-10-11, slot 455815136: on-chain sha256 `f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767` = this build (same vault, same evidence file) | -->
 | pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 413,224 | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` = build (devnet vault transaction 20, same day) |
 <!-- || pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 411,296 | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` = build (vault transaction 18, same run) | -->
 
-**Round 5 (external burn targets, docs/burnticker/EXTERNAL-BURN.md; the incinerator end sink and initialize_token_r5, docs/burnticker/END-SINK.md): built 2026-10-13 on the same Mac and toolchain, NOT deployed.**
-These rows go into the table above only when the upgrade lands (the staging copy for the upgrade script is
-docs/burnkeeper/evidence/devnet-round5/verified-build.round5.json; the same toolchain rebuilt round 4 from source to exactly
-`d9d44752…d2ae`, the deployed hash):
+**Round 5 (external burn targets, docs/burnticker/EXTERNAL-BURN.md; the incinerator end sink and initialize_token_r5, docs/burnticker/END-SINK.md) with the round-5 review fixes and R5-8 / R5-9 (owner decision 2026-10-15, both checklist errata of 2026-10-15: the budget model and the stalled-target rule after the blind review of the first R5-8 / R5-9 commit): rebuilt 2026-10-15 on the same Mac and toolchain from the round-5 program source plus the R5-8 / R5-9 commits on branch `worktree-agent-r5prog`, twice from clean target directories (`OUT=<dir> bash scripts/ops/verified-build.sh --local`, two different OUT directories: the same four hashes both times). Devnet upgraded to it 2026-10-15 (vault transaction 22); mainnet staged, not deployed.**
+These rows go into the table above only when each upgrade lands and reads back (the staging copy for the upgrade script is
+docs/burnkeeper/evidence/devnet-round5/verified-build.round5.json, rewritten to these hashes 2026-10-15 (devnet vault transaction 21
+ran the superseded `a475d902…` build); the same toolchain rebuilt round 4 from source to exactly `d9d44752…d2ae`, the deployed hash):
 
-- burn_receipts mainnet (default features): 967,304 B, executable hash `224d10b192e9d7e7378bdac8df8343afac929dc2e4a35a3966009d5ec616ca87`
-- burn_receipts devnet (`devnet`): 967,280 B, executable hash `50fc618e4108cf77f5a7223c0c3558b6f745a129e597b1e30e43518e75aaf8c6`
-- The program grows by about 141 KB: each cluster's program data needs `solana program extend` by 143,360 bytes (about 1.00 SOL of
-  rent) before the upgrade (DEVNET-ROUND5-TEST-PLAN.md, step U2).
+| Program | Build | Features | Bytes | Executable hash (local build) | On chain (read back) |
+|---|---|---|---|---|---|
+| burn_receipts | mainnet | default | 1,028,944 | `152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821` | still round 4 `d9d44752…d2ae` (2026-10-15); the owner sheet docs/burnkeeper/evidence/mainnet-round5/README-execution.md still names the superseded `07b2b58f…` build and must be regenerated for this one |
+| burn_receipts | devnet | `devnet` | 1,028,920 | `74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c` | **`74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c` = build** (`solana program dump`, 1,028,905 code bytes in 1,038,536 B; upgraded 2026-10-15 through the devnet Squads vault, vault transaction 22, execute `5P7L219s…RFN`, slot 511540317; authority still the vault; rehearsal re-run green, docs/burnkeeper/devnet-r5-run-log-2026-10-15.md §U2). Before it: the superseded `a475d902…` (vault transaction 21) |
+
+File sha256: mainnet `cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290`, devnet
+`d1e79233d43a5324d48425aa1b6ada8a4a08daae3e30f681ee1453b2c0f006b7`. Both sBPFv3 (`e_flags 0x3`).
+
+- Program data: devnet extended by 194,560 B to 1,028,296 B (2026-10-15, `G3E3e1Nh…`); mainnet needs the same 194,560 B (835,216 →
+  1,029,776; 0.98836 SOL of rent) before its upgrade. With R5-8 / R5-9 (8,416 B more than the `e9614fdd` builds): mainnet 1,028,944 B
+  fits the planned 1,029,776 with 832 B to spare (the planned 194,560 B extend stands; buffer rent (37 + 1,028,944 + 128) × 5,080 =
+  5.22787 SOL, returned at execute); devnet 1,028,920 B is **624 B over** the extended 1,028,296, so devnet needs one more
+  `solana program extend AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM 10240 -u devnet` (10,240 B, 0.05202 SOL of rent; anyone may pay it)
+  before the new buffer can be deployed.
+- pair_curve is not upgraded in round 5. Rebuilt from this tree it gives new bytes (mainnet `0059f9ff…396d`, devnet `6fd69c3b…e500`,
+  419,192 B) only because it links the burn_receipts crate; its deployed round-4 bytes keep their rows above, built from `29f6f5de`.
+- Superseded (never deployed): the 2026-10-13 round-5 build before the review fixes, mainnet `224d10b1…ca87` (967,304 B) / devnet
+  `50fc618e…c8f6` (967,280 B); the first R5-8 / R5-9 build (commit `7b9836a3`: fixed 600 s gap), mainnet
+  `cb4e6f0c…1673` (1,027,776 B) / devnet `da5baa22…f60c` (1,027,752 B); the 2026-10-15 round-5 build before R5-8 / R5-9 (program source `e9614fdd`), mainnet
+  `07b2b58f0a1ca77986a193159b101edc7c35080f6633e1f26a63fe4972c1b2f1` (1,020,528 B) / devnet
+  `a475d902c287e94e2318b0becf18081fc396d5fda245bdf39e4a7e4e11f84bb9` (1,020,504 B; the devnet rehearsal of 2026-10-15 runs it).
 
 **Bytecode version: sBPFv3 (SIMD-0500 checked 2026-10-11).** cargo-build-sbf 4.4.0 (Solana CLI 4.3.0, platform-tools v1.57, Anchor
 1.2.1) builds `--arch v3` by default, and all four rows above are sBPFv3 — ELF header `e_flags = 0x3` (`readelf -h <file>.so | grep

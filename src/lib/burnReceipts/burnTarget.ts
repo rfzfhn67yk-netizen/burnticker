@@ -5,7 +5,7 @@ import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeAccount } from "@/lib/burnReceipts/idlCoder";
 import { buildIx } from "@/lib/burnReceipts/instructions";
 import { buybackMinOut, minAmountOut, reserveSpendCap } from "@/lib/burnReceipts/math";
-import { associatedTokenAddress, configPda, cpmmAuthority, feePda, feeTokenAddress, feeWsolAddress, pairLinkPda, pairResultPda, readingPda } from "@/lib/burnReceipts/pda";
+import { associatedTokenAddress, configPda, cpmmAuthority, endSinkPda, feePda, feeTokenAddress, feeWsolAddress, pairLinkPda, pairResultPda, platformPda, readingPda } from "@/lib/burnReceipts/pda";
 
 /**
  * ROUND 5 (owner, 2026-10-13): A COIN THAT BURNS ANOTHER TOKEN — the client half of programs/burn-receipts/.../instructions/burn_target.rs
@@ -21,6 +21,15 @@ import { associatedTokenAddress, configPda, cpmmAuthority, feePda, feeTokenAddre
 /** TokenConfig.burn_target_kind (the byte that was `reserved`; 0 on every config created before round 5). */
 export const BURN_TARGET_SELF = 0;
 export const BURN_TARGET_EXTERNAL = 1;
+/**
+ * Round-5 review R5-12 (the rollback fence): a target coin whose OWN pool passed registration. The program keeps `pool_verified` false
+ * for a target coin (so a round-4 program refuses to self-burn it) and records the verification in this byte instead.
+ */
+export const BURN_TARGET_EXTERNAL_POOL_VERIFIED = 2;
+/** The coin burns a BurnTarget (any non-zero burn_target_kind). */
+export const burnsTarget = (c: { burn_target_kind?: number }): boolean => (c.burn_target_kind ?? BURN_TARGET_SELF) !== BURN_TARGET_SELF;
+/** The coin's own pool passed registration (TokenConfig::own_pool_verified: pool_verified, or the target-coin marker). */
+export const ownPoolVerified = (c: { pool_verified: boolean; burn_target_kind?: number }): boolean => c.pool_verified || c.burn_target_kind === BURN_TARGET_EXTERNAL_POOL_VERIFIED;
 /** BurnTarget.pool_kind. */
 export const TARGET_POOL_CPMM = 0;
 export const TARGET_POOL_AMM_V4 = 1;
@@ -44,7 +53,9 @@ export const PRICE_UPDATE_V2_DISCRIMINATOR = Buffer.from([34, 241, 35, 99, 157, 
  * Refusals that mean "not now": the crank is held (the SOL stays), the keeper alerts and retries; 30 days after the reading the program
  * processes it below-floor with its spend carried.
  */
-export const TARGET_POOL_HELD_ERRORS = new Set(["TargetPoolUnhealthy", "TargetPoolBelowFloor", "TargetFeeTier", "PythStale", "PythUnusable", "TargetPriceDeviation"]);
+export const TARGET_POOL_HELD_ERRORS = new Set(["TargetPoolUnhealthy", "TargetPoolBelowFloor", "TargetFeeTier", "PythStale", "PythUnusable", "PythFeedSkew", "TargetPriceDeviation"]);
+/** Round-5 review R5-7: a Pyth update older than the last one accepted (the keeper retries with fresh updates; not a hold). */
+export const TARGET_PYTH_RETRY_ERRORS = new Set(["PythWentBackwards"]);
 
 /** BurnTarget ["burn_target", mint]. */
 export const burnTargetPda = (programId: PublicKey, mint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([SEED_BURN_TARGET, mint.toBuffer()], programId)[0];
@@ -61,6 +72,8 @@ export interface BurnTargetAccount {
   pool: PublicKey; amm_config: PublicKey; wsol_vault: PublicKey; target_vault: PublicKey; observation: PublicKey; wsol_is_token_0: boolean;
   pinned_at: bigint; total_target_burned: bigint; total_spent_lamports: bigint; burns: number; repins: number;
   pending_pool: PublicKey; pending_eta: bigint;
+  /** Round-5 review R5-7 / R5-6 (the former reserved bytes). */
+  last_sol_publish_time: bigint; last_target_publish_time: bigint; last_burn_at: bigint; last_unblocked_at: bigint;
 }
 
 export const decodeBurnTarget = (data: Buffer | Uint8Array): BurnTargetAccount => decodeAccount<BurnTargetAccount>(BURN_RECEIPTS_IDL, "BurnTarget", data);
@@ -357,7 +370,24 @@ export function pinBurnTargetIx(o: { programId: PublicKey; payer: PublicKey; min
     payer: o.payer, mint: o.mint, config: configPda(o.programId, o.mint), burn_target: burnTargetPda(o.programId, o.mint),
     target_mint: o.targetMint, target_pool: o.pool, target_amm_config: o.ammConfig, target_wsol_vault: o.wsolVault, target_token_vault: o.targetVault,
     sol_price_update: o.solPriceUpdate ?? sponsoredPriceAccount(PYTH_SOL_USD_FEED_ID), target_price_update: o.targetPriceUpdate ?? sponsoredPriceAccount(o.feedId), system_program: SystemProgram.programId,
+    // round-5 review R5-5: the coin's EndSink must exist (initialize_token_r5 wrote it), or the pin is refused (LostPathBurnsSelf)
+    end_sink: endSinkPda(o.programId, o.mint),
   }, { target_feed_id: feedBytes(o.feedId) });
+}
+
+/**
+ * release_target (round-5 review R5-6) — permissionless: a target coin whose pinned pool or feed is dead (no target burn since its last
+ * 30-day unblock, 30 days since the last burn) moves its carried spend to the flagship's fee PDA. `flagship` = the cluster's flagship
+ * mint (BURNTICKER_FLAGSHIP).
+ */
+export function releaseTargetIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; flagship: PublicKey }): TransactionInstruction {
+  const fee = feePda(o.programId, o.mint);
+  const ffee = feePda(o.programId, o.flagship);
+  return buildIx(o.programId, "release_target", {
+    cranker: o.cranker, platform: platformPda(o.programId), config: configPda(o.programId, o.mint), burn_target: burnTargetPda(o.programId, o.mint),
+    fee_vault: fee, fee_wsol: associatedTokenAddress(fee, NATIVE_MINT), flagship_config: configPda(o.programId, o.flagship), flagship_fee_vault: ffee,
+    flagship_fee_wsol: associatedTokenAddress(ffee, NATIVE_MINT), token_program: TOKEN_PROGRAM_ID, system_program: SystemProgram.programId, memo_program: MEMO_PROGRAM_ID,
+  }, {});
 }
 
 /** The fee PDA's own account for the target (the swap's output; everything in it is burned). */
