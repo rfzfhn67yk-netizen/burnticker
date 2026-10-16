@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, type ReactNode } from "react";
+import { sameOriginProxy } from "@/lib/burnticker/walletShell";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import "@solana/wallet-adapter-react-ui/styles.css";
@@ -29,7 +30,7 @@ function useNamedWalletDialog() {
 
 export function WalletProviders({ children }: { children: ReactNode }) {
   useNamedWalletDialog();
-  const endpoint = useMemo(() => process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL || "https://api.devnet.solana.com", []);
+  const endpoint = useMemo(() => sameOriginProxy(process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL || "https://api.devnet.solana.com", typeof window === "undefined" ? undefined : window.location.origin), []);
   // 2026-10-15 prelaunch audit C2: send-path calls to the proxy carry a flight token (rpcProxy.ts flightFetch)
   const config = useMemo(() => ({ fetch: flightFetch() }), []);
   return (
