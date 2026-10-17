@@ -38,6 +38,7 @@
     "src/lib/burnticker/endSinkClient.ts",
     "src/lib/burnticker/feeShareLine.ts",
     "src/lib/burnticker/fees.ts",
+    "src/lib/burnticker/gameCoin.ts",
     "src/lib/burnticker/inverse.ts",
     "src/lib/burnticker/launchBundle.ts",
     "src/lib/burnticker/launchFields.ts",

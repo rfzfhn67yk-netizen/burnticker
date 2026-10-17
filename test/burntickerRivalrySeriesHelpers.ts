@@ -10,7 +10,7 @@ import { CatalogueAdapter } from "@/lib/burnticker/catalogue";
 import type { KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { EspnClient, NBA_LEAGUE_SCHEDULE, meetingsPairSeries } from "@/lib/burnticker/sources/espn";
 import { nativeRule, setNativeClients } from "@/lib/burnticker/sources/native";
-import type { GameDeps } from "@/lib/burnticker/sources/gameSettle";
+import { memoryFirstReadStore, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { DEFAULT_ON_END, lockRule, WIND_DOWN_ON_END, type BurnRule } from "@/lib/burnticker/rules";
 import type { FetchLike, OracleAdapter } from "@/lib/burnticker/oracle/types";
 
@@ -35,9 +35,10 @@ export const END_DAY = "2026-05-21";
 /** After both seasons and the 4-day grace. */
 export const AFTER = Date.parse("2026-06-01T12:00:00Z");
 
-export function fakeDeps(games: readonly G[]): GameDeps {
+/** `now`: the world's clock, which a game coin's 12 hours after the first read (gameSettle.ts gameSchedule) is measured on. */
+export function fakeDeps(games: readonly G[], now: () => number = Date.now): GameDeps {
   return {
-    tsdbKey: null, apiSportsKey: null,
+    tsdbKey: null, apiSportsKey: null, firstReads: memoryFirstReadStore(), now,
     market: async (g) => ({ conditionId: `0x${g.eventId.padStart(64, "0")}`, question: `${g.away.name} vs. ${g.home.name}`, outcomes: [g.home.name, g.away.name], url: `https://polymarket.com/event/nba-${g.eventId}` }),
     payout: async (id) => { const g = games.find((x) => `0x${x.id.padStart(64, "0")}` === id); if (!g || g.status === 1) return { resolved: false, outcome: null }; return { resolved: true, outcome: (g.hs ?? 0) > (g.as ?? 0) ? 0 : (g.hs ?? 0) < (g.as ?? 0) ? 1 : null }; },
   };
@@ -62,7 +63,7 @@ export async function rivalWorld(games: readonly G[], o: { now?: number } = {}):
   program.now = () => clock.now;
   const logs: string[] = [];
   const all = [...games, ...FILLER];
-  setNativeClients({ espn: scheduleClient(all, () => clock.now), games: fakeDeps(all) });
+  setNativeClients({ espn: scheduleClient(all, () => clock.now), games: fakeDeps(all, () => clock.now) });
   const pr = await buildPairBundles({ a: { creator: CREATOR, ticker: "PHIVBOS", name: "76ers vs Celtics, 76ers side", description: "", imageUrl: null, links: [], rule: meetingsRule(), firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, b: { ticker: "BOSVPHI", name: "Celtics vs 76ers, Celtics side", description: "", imageUrl: null, links: [] }, voidBy: "2026-12-31" },
     { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
   const reg = (bundle: typeof pr.a, ticker: string) => {

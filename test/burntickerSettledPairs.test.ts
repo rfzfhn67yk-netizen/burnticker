@@ -20,6 +20,7 @@ import { candidateFacts, candidatesPairRule, gamePairFacts, gamePairRule, patter
 import { settledPairFundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { TEMPLATES } from "@/lib/burnticker/templates";
 import { nativeRule, setNativeClients } from "@/lib/burnticker/sources/native";
+import { FIRST_READ_STATUS_KEY, GAME_BURN_DELAY_MS, statusFirstReadStore } from "@/lib/burnticker/sources/gameSettle";
 import { gameSeries } from "@/lib/burnticker/sources/espn";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
@@ -201,7 +202,7 @@ describe("two teams in one game through the keeper", () => {
   async function gameWorld(g: G): Promise<World> {
     const all = [g, ...FILLER];
     const w = await world({ rule: gamePairRule("nba", g.id, g.home), tickers: ["PHIGM", "BOSGM"], extra: { game: { opp: g.away } }, oracles: {}, now: Date.parse("2025-11-01T00:00:00Z"), baselineAt: "2025-10-01T00:00:00Z" });
-    setNativeClients({ espn: scheduleClient(all, () => w.clock.now), games: fakeDeps(all) });
+    setNativeClients({ espn: scheduleClient(all, () => w.clock.now), games: fakeDeps(all, () => w.clock.now) });
     return w;
   }
   const run = async (w: World, until: number) => { while (w.clock.now < until) { await runCycle(w.deps); w.clock.now += 3 * 3600_000; } };
@@ -213,6 +214,41 @@ describe("two teams in one game through the keeper", () => {
     const rb = w.registry.receipts(w.b.mint).find((x) => x.eventId === "2025-11-03")!;
     assert.equal(rb.pairRole, "lost"); assert.equal(rb.units, 1); assert.equal(rb.status, "forwarded");
     assert.ok(w.registry.pairForwards(w.pairId).some((f) => f.loserMint === w.b.mint && f.winnerMint === w.a.mint));
+  });
+  test("owner 2026-10-16: two sources agreeing (the market and the NBA feed) burn both coins on the cycle that reads them both, on one shared record", async () => {
+    const g = game(START, "PHI", "BOS", 120, 100), all = [g, ...FILLER];
+    const w = await gameWorld(g);
+    setNativeClients({ espn: scheduleClient(all, () => w.clock.now), games: { ...fakeDeps(all, () => w.clock.now), firstReads: statusFirstReadStore(w.registry, () => w.clock.now) } });
+    const step = 50 * 60_000;
+    let firstRead: number | null = null, resultAt: number | null = null;
+    while (w.clock.now < Date.parse("2025-11-08T00:00:00Z") && resultAt === null) {
+      await runCycle(w.deps);
+      const marks = JSON.parse(w.registry.getStatus(FIRST_READ_STATUS_KEY) ?? "{}") as Record<string, { firstReadAt: number }>;
+      if (firstRead === null && Object.keys(marks).length) { assert.equal(Object.keys(marks).length, 1, "one record for the game, shared by both coins"); firstRead = Object.values(marks)[0].firstReadAt; }
+      if (results(w).get(20251103)) resultAt = w.clock.now;
+      else w.clock.now += step;
+    }
+    assert.ok(firstRead !== null && resultAt !== null, w.logs.slice(-8).join("\n"));
+    assert.equal(resultAt, firstRead, "settled on the cycle that first read both sources, not 12 hours later");
+    assert.equal(results(w).get(20251103)?.winner, w.a.mint);
+  });
+  test("owner 2026-10-16: with one source, both coins wait 12 hours from the first read of the final (persisted, shared), and the keeper reads again when it falls due", async () => {
+    const g = game(START, "PHI", "BOS", 120, 100), all = [g, ...FILLER];
+    const w = await gameWorld(g);
+    setNativeClients({ espn: scheduleClient(all, () => w.clock.now), games: { ...fakeDeps(all, () => w.clock.now), payout: async () => ({ resolved: false, outcome: null }), firstReads: statusFirstReadStore(w.registry, () => w.clock.now) } });
+    const step = 50 * 60_000;   // off the hourly poll grid, so a burn on time needs the due-time read
+    let firstRead: number | null = null, resultAt: number | null = null;
+    while (w.clock.now < Date.parse("2025-11-08T00:00:00Z") && resultAt === null) {
+      await runCycle(w.deps);
+      const marks = JSON.parse(w.registry.getStatus(FIRST_READ_STATUS_KEY) ?? "{}") as Record<string, { firstReadAt: number }>;
+      if (firstRead === null && Object.keys(marks).length) { assert.equal(Object.keys(marks).length, 1, "one record for the game, shared by both coins"); firstRead = Object.values(marks)[0].firstReadAt; }
+      if (results(w).get(20251103)) resultAt = w.clock.now;
+      else w.clock.now += step;
+    }
+    assert.ok(firstRead !== null && resultAt !== null, w.logs.slice(-8).join("\n"));
+    assert.ok(resultAt! >= firstRead! + GAME_BURN_DELAY_MS, "never before the 12 hours");
+    assert.ok(resultAt! - (firstRead! + GAME_BURN_DELAY_MS) < step, `read on the first cycle at or after the due time (${new Date(resultAt!).toISOString()} vs ${new Date(firstRead! + GAME_BURN_DELAY_MS).toISOString()})`);
+    assert.equal(results(w).get(20251103)?.winner, w.a.mint);
   });
   test("BOS wins at PHI: the mirror", async () => {
     const w = await gameWorld(game(START, "PHI", "BOS", 99, 110));

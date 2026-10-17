@@ -3,7 +3,7 @@
 // when they changed. No address, page URL, blocked URL or any other part of a report is stored or logged. docs/burnticker/CSP.md says
 // how to read the counts. 2026-10-16 prelaunch audit F-28: the body is cut at 16 KiB while it streams (readTextCapped), and the counter
 // takes only CSP directive names (csp.ts CSP_REPORT_DIRECTIVES; anything else is "other") in a bounded map.
-import { countCspReport, cspReportCounts } from "@/lib/burnticker/csp";
+import { countCspReport, cspReportCounts } from "@/lib/burnticker/cspReport";
 import { readTextCapped } from "@/lib/burnticker/api/http";
 
 export const dynamic = "force-dynamic";

@@ -115,6 +115,8 @@ test/fixtures/reclaim-sample-proof.json
 test/fixtures/bom-weekend-2026W40-row1.html
 # the swap panel's saved devnet account states (swap-1, 2026-10-14; test/burntickerSwap.test.ts checks its math against the SDK on them)
 test/fixtures/burnticker-swap-devnet.json
+# the game clock's recorded SEA at DEN reads (2026-10-15; test/burntickerGameClock.test.ts replays them through the one game-coin schedule)
+test/fixtures/burnticker-gameclock/sea-den-2026-10-15.json
 
 # --- the carve-out itself, so the public can see how the public tree is cut ---
 config/public-repo.allowlist

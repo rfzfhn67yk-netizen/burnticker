@@ -252,7 +252,10 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       recordWindowEnd(d, tokens.filter((x) => x.selectorKey === key), r);
       if (r.awaitingFinal > 0 && anchor === undefined) d.registry.setStatus(anchorKey, { since: sinceKey }, now);
       else if (r.awaitingFinal === 0 && anchor !== undefined) d.registry.setStatus(anchorKey, "", now);
-      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: now + await nextPollMs(d, locked.rule, key, now) });
+      // a game coin waiting for its scheduled burn (gameSettle.ts gameSchedule, owner 2026-10-16) is read again when the burn falls due,
+      // never up to a poll later
+      const pollAt = now + await nextPollMs(d, locked.rule, key, now);
+      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: r.dueAt && r.dueAt > now && r.dueAt < pollAt ? r.dueAt : pollAt });
       if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new ${written === 1 ? "reading" : "readings"}${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);
       out.push({ key, written, refusals: r.refusals, awaitingFinal: r.awaitingFinal, error: null, skipped: false });
     } catch (e) {

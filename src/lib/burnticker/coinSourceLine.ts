@@ -5,7 +5,7 @@
  * "Next source check" unless a market close is known.
  */
 import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
-import { leagueProvenance, SINGLE_SOURCE_LINE, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
+import { GAME_AGREE_LINE, GAME_BURN_LINE, GAME_SETTLEMENT, leagueProvenance, SINGLE_SOURCE_LINE, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { isSingleSourceSeries, SINGLE_SOURCE_PUBLISHER } from "@/lib/burnticker/singleSource";
 
 export const SOURCE_DETAILS_UNAVAILABLE = "The source details are unavailable right now.";
@@ -25,6 +25,7 @@ export function sourcePublisher(oracle: string, rawSelectorKey: string | null | 
   if (oracle === "kalshi") return "A prediction market's settled result";
   if (oracle === "polymarket") return "Polymarket's settled result, read on Polygon";
   const key = seriesOfSelector(rawSelectorKey);
+  if (key && parseEspnSeries(key)?.kind === "game") return "A licensed final score, the league's own feed, or the game's on-chain settlement, whichever reads the final first";
   if (key && parseEspnSeries(key)) return "Polymarket's on-chain payout for the game where a market exists, otherwise TheSportsDB's licensed final score";
   if (key && isSingleSourceSeries(key)) return `${SINGLE_SOURCE_PUBLISHER[key.split(":")[0]]}'s own published data`;
   if (key && /^treasury\./.test(key)) return "U.S. Treasury, Debt to the Penny";
@@ -38,6 +39,8 @@ export function coinSourceNote(oracle: string, rawSelectorKey: string | null | u
   const selectorKey = seriesOfSelector(rawSelectorKey);
   const sports = selectorKey ? parseEspnSeries(selectorKey) : null;
   // owner 2026-10-14: a second source checks a game where one can read it; otherwise TheSportsDB alone after a 12-hour hold
+  // owner 2026-10-16: a single-game coin burns once two sources agree on the final, or 12 hours after the first read with one source
+  if (sports?.kind === "game") return `The game's result comes from ${GAME_SETTLEMENT}. ${GAME_BURN_LINE} ${GAME_AGREE_LINE}`;
   if (sports) return `Each game settles on ${SPORTS_PROVENANCE.settlement}. Where a second source can read the game, it must agree: ${leagueProvenance(sports.league).confirmation}. ${SINGLE_SOURCE_LINE}`;
   if (selectorKey && isSingleSourceSeries(selectorKey)) return `Read from ${SINGLE_SOURCE_PUBLISHER[selectorKey.split(":")[0]]}'s own published data.`;
   if (selectorKey && /^treasury\./.test(selectorKey)) return "Read from the U.S. Treasury's Debt to the Penny data on Fiscal Data.";

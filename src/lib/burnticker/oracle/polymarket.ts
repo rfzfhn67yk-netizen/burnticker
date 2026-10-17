@@ -389,6 +389,12 @@ export class PolymarketClient implements OracleAdapter {
   requests: string[] = [];
   /** Condition ids read on chain (not from the cache). */
   chainReads: string[] = [];
+  /**
+   * ONE SCHEDULE FOR EVERY SINGLE-GAME COIN (owner 2026-10-16): the keeper sets this to sources/polyGame.ts polyGameGate, and a one-market
+   * rule on a game moneyline then releases its result only on the game-coin schedule (once two sources agree, else 12 hours after the first
+   * read, every source agreeing). Null (the web, tests): unchanged.
+   */
+  gameGate: ((rule: BurnRule, m: GammaMarket, ev: SettledEvent) => Promise<{ release: true } | { release: false; why: string; dueAt: number | null; held: boolean }>) | null = null;
 
   constructor(o: PolymarketClientOpts = {}) {
     this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike);
@@ -529,6 +535,16 @@ export class PolymarketClient implements OracleAdapter {
     }
     if (toRead.length > 0 && failed === toRead.length) throw new Error(`polymarket: every on-chain read failed (${cands[0].chainError?.slice(0, 160)})`);
     const r = resolvePolymarket(rule, cands, { sinceIso, refuse: this.refuse });
+    if (rule.market && this.gameGate && r.events.length && toRead[0]) {
+      const kept: SettledEvent[] = [];
+      for (const ev of r.events) {
+        const g = await this.gameGate(rule, toRead[0], ev).catch((e) => ({ release: false as const, why: `the game-coin schedule could not be read: ${(e as Error).message.slice(0, 120)}`, dueAt: null, held: false }));
+        if (g.release) { kept.push(ev); continue; }
+        if (g.held) r.refusals.push(`${ev.id}: ${g.why}`); else r.awaitingFinal++;
+        if (g.dueAt && (!r.dueAt || g.dueAt < r.dueAt)) r.dueAt = g.dueAt;
+      }
+      r.events = kept;
+    }
     if (wanted.length > toRead.length) { r.refusals.push(`${wanted.length - toRead.length} more closed ${wanted.length - toRead.length === 1 ? "market waits" : "markets wait"} for the next cycle, because each cycle reads at most ${this.chainCap} results on chain.`); r.awaitingFinal += wanted.length - toRead.length; }
     if (!scan.complete) r.refusals.push(`The scan stopped after ${scan.pages} ${scan.pages === 1 ? "page" : "pages"} of ${this.pageSize}, before reaching ${sinceIso ?? "the start"}. This rule settles more markets than one cycle reads.`);
     return r;

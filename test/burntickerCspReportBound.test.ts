@@ -3,7 +3,8 @@
 // as "other"), a bounded counter, and the body read through readTextCapped (cut at 16 KiB while it streams).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import * as csp from "@/lib/burnticker/csp";
+import * as csp from "@/lib/burnticker/cspReport";
+import fs from "node:fs";
 
 const post = (body: BodyInit, headers: Record<string, string> = {}) => new Request("http://x/api/burnticker/csp-report", { method: "POST", body, headers, duplex: "half" } as RequestInit);
 
@@ -21,7 +22,7 @@ describe("the CSP report counter (F-28)", () => {
     const letters = (i: number) => i.toString(26).replace(/\d/g, (d) => "qrstuvwxyz"[Number(d)]);
     for (let i = 0; i < 1000; i++) await POST(post(JSON.stringify({ "csp-report": { "effective-directive": `zz-${letters(i)}-src` } })));
     const counts = (csp as unknown as { cspReportCounts?: Map<string, number> }).cspReportCounts;
-    assert.ok(counts, "the counter is exported from csp.ts so its bound can be checked");
+    assert.ok(counts, "the counter is exported from cspReport.ts so its bound can be checked");
     assert.ok(counts!.size <= (csp as unknown as { CSP_REPORT_MAX_KEYS: number }).CSP_REPORT_MAX_KEYS, `the counter holds ${counts!.size} keys`);
     assert.ok(!counts!.has("zz-a-src"));
   });
@@ -33,5 +34,11 @@ describe("the CSP report counter (F-28)", () => {
     const r = await POST(post(stream));
     assert.equal(r.status, 413);
     assert.ok(pulled < 20, `the route pulled ${pulled} chunks of 4 KiB before refusing`);
+  });
+
+  test("csp.ts imports nothing from the project, because next.config.ts loads it and Next's config transpiler cannot follow a project import (publish 81)", () => {
+    const src = fs.readFileSync(new URL("../src/lib/burnticker/csp.ts", import.meta.url), "utf8");
+    const imports = src.split("\n").filter((l) => /^\s*import\s/.test(l) || /\brequire\(/.test(l));
+    assert.deepEqual(imports, [], `csp.ts must stay import-free; found: ${imports.join(" | ")}`);
   });
 });

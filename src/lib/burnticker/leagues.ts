@@ -1,6 +1,7 @@
 import { SEASON_OVER_LINK_LINE } from "@/lib/burnticker/seasonOver";
 import { LEAGUES, SPORTS, isLeague, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamsOf, type LeagueId, type Sport } from "@/lib/burnticker/sources/espn";
 import { espnGameUrl } from "@/lib/burnticker/sources/gameSettle";
+import { settledParts, settledSentence } from "@/lib/burnticker/settledTitle";
 import { dateRange, seasonBoards, type SeasonBoard, type SeasonCoinInput } from "@/lib/burnticker/seasons";
 import { safeParam } from "@/lib/burnticker/safeParam";
 
@@ -95,15 +96,18 @@ export interface SettledGame {
   espnUrl: string;
 }
 
-const GAME_RE = /([A-Z0-9]{2,6})(?: (\d+))? @ ([A-Z0-9]{2,6})(?: (\d+))? final \([^)]*\) · settled on (.+?) · confirmed by (.+?) · see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g;
+// one game's span in a title: the score, then everything up to its ESPN link (the settled part is parsed by settledTitle.ts, so a title
+// with no confirmer, or one ending "· burned 12 hours after the final was first read" or "· burned when two sources had confirmed it", still reads; review of b3249737 item 5)
+const GAME_RE = /([A-Z0-9]{2,6})(?: (\d+))? @ ([A-Z0-9]{2,6})(?: (\d+))? final \([^)]*\) · (settled on [^]*?) · see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g;
 
 /** The games one reading's title records (one per game that day). */
 export function gamesFromTitle(league: LeagueId, date: string, title: string): SettledGame[] {
   const out: SettledGame[] = [];
   for (const m of title.matchAll(GAME_RE)) {
-    const [, aw, as, hm, hs, on, by, url] = m;
+    const [, aw, as, hm, hs, settled, url] = m;
+    const part = settledParts(settled)[0];
     const side = (abbr: string, score: string | undefined) => ({ abbr, name: teamByAbbr(league, abbr)?.name ?? abbr, score: score === undefined ? null : Number(score) });
-    out.push({ date, league, away: side(aw, as), home: side(hm, hs), source: `Settled on ${on.trim()} and confirmed by ${by.trim()}.`, espnUrl: /^https:\/\/www\.espn\.com\//.test(url) ? url : espnGameUrl(league, date) });
+    out.push({ date, league, away: side(aw, as), home: side(hm, hs), source: part ? settledSentence(part) : settled, espnUrl: /^https:\/\/www\.espn\.com\//.test(url) ? url : espnGameUrl(league, date) });
   }
   return out;
 }

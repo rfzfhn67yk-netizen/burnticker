@@ -161,6 +161,53 @@ keeper's unit check names it in its one combined `bt-unit-failed` alert (keyed b
 
 Every alert that changed anything gets a line in `docs/burnticker/incidents/LOG.md` (append-only, rendered on the trust page) — and, when it is an incident under [INCIDENTS.md](INCIDENTS.md), a public postmortem within 48 hours from [incidents/TEMPLATE.md](incidents/TEMPLATE.md).
 
+## A game coin held by a disagreement
+
+A single-game coin (one team in one game, both coins of two teams in one game, or a one-market Polymarket coin on a game moneyline)
+burns as soon as two independent sources agree on its final (each of TheSportsDB, the market's settlement on chain, the league's feed
+and API-Sports counts once), or 12 hours after its final is first read when only one source answers (owner decisions 2026-10-16;
+`src/lib/burnticker/sources/gameSettle.ts` `gameSchedule`). A tie read on chain (a split, or a soccer draw leg) never counts toward
+the two, so a draw burns early only when two score sources agree on it. A game that has been held by a disagreement or a contradiction, released by
+hand, or has an ignored source always waits the 12 hours. The reading's title says which rule settled it: "burned when two sources had
+confirmed it" or "burned 12 hours after the final was first read". The keeper keeps one record per game in the status table key `games.firstReads`, keyed `league:eventId`: when the final
+was first read, by which source, the agreed result, and each source's latest read. When two sources disagree, the record's `disputed`
+list is set and the game is held (`bt-feed-disagree`). It stays held while any source in that list is quiet, and it is released only when
+every one of them reads again and they all agree; agreement after a dispute starts the 12 hours again.
+
+What to read:
+- `R scripts/burnticker-game-hold.mts --show` lists every record: `HELD (disagreement)`, the first read, the due time, and each source's
+  remembered read with its time.
+- Read each source for that game by hand: TheSportsDB's event (`https://www.thesportsdb.com/`), the league's own feed where it has one,
+  and the market's payout on Polygon (the condition id is in the keeper log line).
+
+How to resolve: if the sources will catch up (a provider fixing its final, a market still in its dispute window), wait; the next read
+that agrees clears the hold. A record can also be `HELD (contradiction)`: one source contradicted itself or the others before a result
+could be compared (two legs of a soccer three-way settlement paying out, a settlement naming neither team, a TheSportsDB row whose team
+order cannot be told, a 90-minute winner on chain while a score read says extra time). It is cleared only when that source reads the game
+again cleanly, and that also starts the 12 hours again.
+
+If one source will never agree (a feed that keeps a wrong final, or a market settled the wrong way on chain, which can never change),
+release it with the guarded script, never by editing the table, and name that source with `--ignore` (the name exactly as `--show`
+prints it under `reads`). Without `--ignore` the source reads the other result again on the next cycle and the game is held again:
+
+```bash
+systemctl --user stop mct-burnticker-keeper   # data/PAUSE-burnticker holds cranks only; reads (and this record) go on, so stop the keeper
+R scripts/burnticker-game-hold.mts --release nfl:2475453 --side home --ignore "on-chain payout" --note "TheSportsDB and NFL.com both show DEN 17-14; the market settled on chain for SEA and cannot change"
+R scripts/burnticker-game-hold.mts --release nfl:2475453 --side home --ignore "on-chain payout" --note "…" --apply
+systemctl --user start mct-burnticker-keeper
+```
+
+The release drops the remembered reads that name another winner and every read of an ignored source, clears the dispute or
+contradiction, and starts the 12 hours again from the release, with the note kept on the record. An ignored source is saved on the record
+(`ignored`) and its reads are not counted for that game while the record lasts; the game goes on the remaining sources. A source that
+still reads the other result and was not ignored disputes it again on the next cycle. The keeper drops records more than 60 days old,
+but never one that is held or carries an ignore list. A release you make by hand is an incident (INCIDENTS.md §7).
+
+The second signer (`scripts/burnticker-signer.mts`) and the attester script read without a first-read store, so they never produce a
+game coin's reading on their own: they fail safe (no cosignature, the reading waits). With today's quorum of 1 that changes nothing; give
+the signer its own persistent store before a game coin needs two signatures. The season rehearsal (`scripts/burnticker-season-rehearsal.mts`)
+settles every game as a game coin too, on a memory store with the clock moved to its due time.
+
 ## Closing creator launches
 
 Set BOTH `BURNTICKER_CREATOR_LAUNCHES_ENABLED` off (or `BURNTICKER_CREATOR_LAUNCHES_PREVIEW=1`) AND `BURNTICKER_CREATOR_LAUNCHES_CLOSED_AT=<ISO time of the closure>` in the web host's env and in the keeper's env, then restart both. While closed, a confirmation is still taken (the coin is already on chain), but only for a create whose block time is before that moment; the keeper's draft reconciler reads the same variable. Without it, the closure is the first time the web host handles a launch request while closed (registry status `launches.closedAt`), which is later than the real closure. Reopening clears that status on the next launch request.

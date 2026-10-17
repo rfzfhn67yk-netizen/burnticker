@@ -1,4 +1,3 @@
-import { LruMap } from "@/lib/burnticker/lru";
 /**
  * THE APP'S CONTENT-SECURITY-POLICY, REPORT-ONLY (ChatGPT audit 7 critical item 4, 2026-10-12: the HTML of a wallet site carried no CSP).
  * The public tree's next.config.ts sends this as Content-Security-Policy-Report-Only on every app page except the embeds (which send their
@@ -13,6 +12,8 @@ import { LruMap } from "@/lib/burnticker/lru";
  *   img      'self', data:, blob: and any https image (creator images are arbitrary https URLs)
  *   frame    the GeckoTerminal chart on a coin page; nobody may frame these pages
  */
+// This file is loaded by next.config.ts, which Next transpiles on its own: it must import NOTHING from the project
+// (publish 81, 2026-10-16: a project import here broke the public build with MODULE_NOT_FOUND). Counters live in cspReport.ts.
 export const CSP_REPORT_PATH = "/api/burnticker/csp-report";
 export const CLOUDFLARE_BEACON = "https://static.cloudflareinsights.com";
 export const CLOUDFLARE_RUM = "https://cloudflareinsights.com";
@@ -60,18 +61,6 @@ export const CSP_REPORT_DIRECTIVES: ReadonlySet<string> = new Set([
   "base-uri", "sandbox", "form-action", "frame-ancestors", "navigate-to", "require-trusted-types-for", "trusted-types",
   "upgrade-insecure-requests", "block-all-mixed-content", "report-uri", "report-to", "webrtc",
 ]);
-/** The counter never holds more than this many keys (the allow-list, "other" and "unknown" fit with room to spare). */
-export const CSP_REPORT_MAX_KEYS = 64;
-/** The route's counts since the process started, by directive (bounded: LruMap; keys only from CSP_REPORT_DIRECTIVES, "other", "unknown"). */
-export const cspReportCounts: LruMap<string, number> = new LruMap(CSP_REPORT_MAX_KEYS);
-/** Counts one report and answers the key it was counted under. */
-export function countCspReport(body: unknown): string {
-  const d = reportDirective(body);
-  const key = d === "unknown" || CSP_REPORT_DIRECTIVES.has(d) ? d : "other";
-  cspReportCounts.set(key, (cspReportCounts.get(key) ?? 0) + 1);
-  return key;
-}
-
 /** A report's directive, for counting: "script-src-elem" from either report format; "unknown" otherwise. Pure. */
 export function reportDirective(body: unknown): string {
   const one = (r: unknown): string | null => {

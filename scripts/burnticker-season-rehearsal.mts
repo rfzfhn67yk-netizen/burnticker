@@ -126,7 +126,7 @@ export function championRead(s: Extract<EspnSeries, { kind: "team" }>, games: re
   return `champion: not read (${LEAGUES[s.league].label} is outside CHAMPION_KNOWN, the season coin keeps the plain end); the same rule would read ${would === null ? "null" : String(would)} — ${last}`;
 }
 
-export interface RunRecord { args: Omit<RehearsalArgs, "out">; team: string; rows: GameRow[]; summary: Summary; window: { ended: boolean; reason: string; endsAt: string | null; champion: string }; keeper: { days: number; awaiting: number; refusals: string[]; reason: string } | null; requests: { schedule: number; gamma: number; chain: number }; error: string | null; seconds: number }
+export interface RunRecord { args: Omit<RehearsalArgs, "out">; team: string; rows: GameRow[]; summary: Summary; window: { ended: boolean; reason: string; endsAt: string | null; champion: string }; keeper: { days: number; awaiting: number; refusals: string[]; reason: string } | null; requests: { schedule: number; gamma: number; chain: number }; error: string | null; seconds: number; /** each game settled as a single-game coin would be (owner 2026-10-16) */ gameCoin?: { settled: number; awaiting: number; held: number } }
 
 const esc = (x: string) => x.replace(/\|/g, "\\|");
 export function renderMarkdown(runs: readonly RunRecord[]): string {
@@ -152,7 +152,7 @@ async function main(a: RehearsalArgs): Promise<number> {
   const t0 = Date.now();
   const env = process.env;
   const { EspnClient, gamesFor } = await import("@/lib/burnticker/sources/espn");
-  const { envGameDeps, polymarketGameReaders, settleGame, sportsSettled, POSTPONED_RE, memoryHoldStore, holdKeyOf, SINGLE_SOURCE_HOLD_MS } = await import("@/lib/burnticker/sources/gameSettle");
+  const { envGameDeps, polymarketGameReaders, settleGame, sportsSettled, POSTPONED_RE, memoryHoldStore, holdKeyOf, SINGLE_SOURCE_HOLD_MS, memoryFirstReadStore } = await import("@/lib/burnticker/sources/gameSettle");
   const { PolymarketClient } = await import("@/lib/burnticker/oracle/polymarket");
   const { refuseTitles } = await import("@/lib/burnticker/server");
   const { windowStatus } = await import("@/lib/burnticker/sources/espn");
@@ -180,6 +180,9 @@ async function main(a: RehearsalArgs): Promise<number> {
   const deps = {
     ...envGameDeps(env),
     holds, now: () => clock.t,
+    // GAME COINS (owner 2026-10-16): each game is also settled as a single-game coin would be (gameSettle.ts gameSchedule), on a memory
+    // store, the clock moved to its due time; the line under each row says what a game coin on it would read
+    firstReads: memoryFirstReadStore(),
     payout: readers.payout,
     market: async (g: Game) => {
       trace.last = null; trace.error = null;
@@ -201,6 +204,7 @@ async function main(a: RehearsalArgs): Promise<number> {
     season = s.window.kind === "post" ? await client.season(a.league, s.teamId ?? a.team, a.year) : games;
   } catch (e) { record.error = `schedule: ${(e as Error).message}`; }
   console.log(`# ${label}: ${games.length} listed games`);
+  const gameCoin = { settled: 0, awaiting: 0, held: 0 };
   for (const g of games) {
     // the keeper's own filter (sportsSettled): only a completed game or one the schedule calls over is settled; postponed is skipped
     if (!g.completed && g.state !== "post") { record.rows.push(rowOf(g, null, null, null)); console.log(formatRow(record.rows.at(-1)!)); continue; }
@@ -212,8 +216,17 @@ async function main(a: RehearsalArgs): Promise<number> {
     if (v.kind === "awaiting" && holds.get(holdKeyOf(g))) { clock.t = a.nowMs + SINGLE_SOURCE_HOLD_MS; try { v = await settleGame(client, g, deps); } catch (e) { v = { kind: "held", why: `settleGame threw: ${(e as Error).message.slice(0, 160)}` }; } }
     const row = rowOf(g, v, lastLookup, lastMarket);
     record.rows.push(row); console.log(formatRow(row));
+    {
+      clock.t = a.nowMs;
+      let gv: GameVerdict;
+      try { gv = await settleGame(client, g, deps, { schedule: "game" }); if (gv.kind === "awaiting" && gv.dueAt) { clock.t = Math.max(a.nowMs, gv.dueAt); gv = await settleGame(client, g, deps, { schedule: "game" }); } } catch (e) { gv = { kind: "held", why: `settleGame threw: ${(e as Error).message.slice(0, 160)}` }; }
+      gameCoin[gv.kind]++;
+      console.log(`    game coin: ${gv.kind}${gv.kind === "settled" ? ` (first read ${new Date(gv.firstReadAt ?? 0).toISOString()}, ${gv.settledBy})` : `: ${gv.why.slice(0, 200)}`}`);
+    }
   }
   record.summary = summarise(record.rows);
+  record.gameCoin = gameCoin;
+  console.log(`# as game coins: ${gameCoin.settled} settled 12 h after their first read, ${gameCoin.awaiting} waiting, ${gameCoin.held} held`);
   if (!record.error) {
     const st = windowStatus(s, season, a.nowMs);
     record.window = { ended: st.ended, reason: st.reason, endsAt: st.endsAt, champion: s.window.kind === "meetings" ? "champion: not applicable (rivalry series)" : championRead(s, season, st.champion) };

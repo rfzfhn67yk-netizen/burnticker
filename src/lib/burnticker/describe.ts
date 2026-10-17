@@ -11,6 +11,7 @@ import { parseSpcSeries, spcText } from "@/lib/burnticker/sources/spc";
 import { nifcText, parseNifcSeries } from "@/lib/burnticker/sources/nifc";
 import { parseVolcanoSeries, volcanoText } from "@/lib/burnticker/sources/volcano";
 import { isSingleSourceSeries, singleSourceSentence } from "@/lib/burnticker/singleSource";
+import { GAME_BURN_LINE } from "@/lib/burnticker/sources/provenance";
 import { githubText, parseGithubSeries } from "@/lib/burnticker/sources/github";
 import { parseYoutubeSeries, youtubeText } from "@/lib/burnticker/sources/youtube";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
@@ -365,6 +366,8 @@ const spends = (r: BurnRule, t: string) => { const p = fractionText(r); return p
 /** "The result comes from X, cross-checked against Y." / "MLB's official feed confirms it." — the settlement sentences. */
 const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
 const SPORTS_RESULT = "its market's on-chain payout if it has one, or else from a licensed final score";
+/** A single game's result (owner 2026-10-16: the first score read, the on-chain settlement last; one source is enough). */
+const GAME_RESULT = "a licensed final score, the league's own feed, or the game's on-chain settlement, whichever reads it";
 const possessive = (n: string) => (n.endsWith("s") ? `${n}'` : `${n}'s`);
 /** "Oct 31, 2026" (America/Denver). */
 export const shortDate = (iso: string | null | undefined): string | null => (iso ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00Z` : iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" }) : null);
@@ -478,7 +481,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const opp = c.game ? (L0.sport === "soccer" || s.league === "cfb" || s.league === "mcbb" || s.league === "wcbb" ? c.game.opponent : `the ${c.game.opponent}`) : null;
   const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : " in the one game this coin follows";
   const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " that game"}`;
-  return mk(`${nick} ${two ? (o === "windraw" ? "Win or Draw" : o === "drawloss" ? "Draw or Loss" : "Win or Loss") : o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${SPORTS_RESULT}.${confirms}${pens} Nothing happens otherwise${outcomeResults(o).includes("draw") ? "" : `, and a ${tie} burns nothing`}.`,
+  return mk(`${nick} ${two ? (o === "windraw" ? "Win or Draw" : o === "drawloss" ? "Draw or Loss" : "Win or Loss") : o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${GAME_RESULT}.${pens} ${GAME_BURN_LINE} Nothing happens otherwise${outcomeResults(o).includes("draw") ? "" : `, and a ${tie} burns nothing`}.`,
     oneShotSentence(r, c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
 }
 
