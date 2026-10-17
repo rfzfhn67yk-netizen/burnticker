@@ -1,0 +1,207 @@
+{
+  "case": "x02-init-min-below-floor",
+  "expected": "InvalidEndSink",
+  "observed": "InvalidEndSink",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR initialize-token --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --creator ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint ~/.config/meme-coin-trader/devnet/r4x-xa-mint.json --admin 2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk --attester D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn --launchlab-platform GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf --rules config/burnkeeper/r4x-xa.rules.json --end-sink flagship:999999 --program-round 4",
+  "simulationErr": "{\"InstructionError\":[1,{\"Custom\":6100}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:68. Error Code: InvalidEndSink. Error Number: 6100. Error Message: end sink: invalid kind, sink mint or minimum (league sets are not supported yet; the flagship has no end sink).",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d4"
+  ],
+  "stderr": [
+    "rules config/burnkeeper/r4x-xa.rules.json: sha256 ea497fafc6b056c647dceb6c24e9a35e862fc6135199fac65c4e995780dafcfc \u2014 this is the hash the program PINS; publish it"
+  ],
+  "output": {
+    "command": "initialize-token",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "rulesFile": "config/burnkeeper/r4x-xa.rules.json",
+    "rulesSha256": "ea497fafc6b056c647dceb6c24e9a35e862fc6135199fac65c4e995780dafcfc",
+    "ruleParams": {
+      "mode": 0,
+      "carry_rule": 0,
+      "pool_policy": 0,
+      "value_decimals": 2,
+      "unit_value": "100000000000",
+      "max_abs_delta": "200000000000000",
+      "fraction_per_unit_bps": 100,
+      "slippage_bps": 300,
+      "max_twap_deviation_bps": 300,
+      "twap_window_secs": 1200,
+      "floor_lamports": "1000000",
+      "reserve_lamports": "20000000",
+      "tokens_per_unit": "0",
+      "vault_allocation": "0"
+    },
+    "endSink": "Ew5pDetb6HDsDBfkakj6e1sTUdL7xgM4TE2BmPTc4YVx",
+    "feePda": "2SvevzMCmDnoBvQkkzR7iRpkzD4MKdZjhLhkgg2x7eGy",
+    "config": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+    "instructions": [
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "initialize_token",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "creator",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": false
+          },
+          {
+            "name": "mint",
+            "pubkey": "EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX",
+            "signer": true,
+            "writable": false
+          },
+          {
+            "name": "config",
+            "pubkey": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "fee_vault",
+            "pubkey": "2SvevzMCmDnoBvQkkzR7iRpkzD4MKdZjhLhkgg2x7eGy",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "launchlab_platform",
+            "pubkey": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "pair_mint",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "pair_link",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "partner_link",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "partner_config",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "end_sink",
+            "pubkey": "Ew5pDetb6HDsDBfkakj6e1sTUdL7xgM4TE2BmPTc4YVx",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "event_authority",
+            "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "program",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {
+          "args": {
+            "feed_id": "treasury.debt_to_penny",
+            "memo_prefix": "R4XA",
+            "memo_source": "fiscaldata.treasury.gov debt_to_penny",
+            "rules_sha256": "ea497fafc6b056c647dceb6c24e9a35e862fc6135199fac65c4e995780dafcfc",
+            "rule": {
+              "mode": 0,
+              "carry_rule": 0,
+              "pool_policy": 0,
+              "value_decimals": 2,
+              "unit_value": "100000000000",
+              "max_abs_delta": "200000000000000",
+              "fraction_per_unit_bps": 100,
+              "slippage_bps": 300,
+              "max_twap_deviation_bps": 300,
+              "twap_window_secs": 1200,
+              "floor_lamports": "1000000",
+              "reserve_lamports": "20000000",
+              "tokens_per_unit": "0",
+              "vault_allocation": "0"
+            },
+            "attesters": [
+              {
+                "kind": 0,
+                "key": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn"
+              }
+            ],
+            "quorum": 1,
+            "fixed_pool": "11111111111111111111111111111111",
+            "admin": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "pair_void_by": 0,
+            "end_sink_kind": 0,
+            "end_sink_mint": null,
+            "end_sink_min_lamports": "999999"
+          }
+        }
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[1,{\"Custom\":6100}]}",
+      "unitsConsumed": 40639,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: InitializeToken",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:68. Error Code: InvalidEndSink. Error Number: 6100. Error Message: end sink: invalid kind, sink mint or minimum (league sets are not supported yet; the flagship has no end sink).",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 40489 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d4"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "2SvevzMCmDnoBvQkkzR7iRpkzD4MKdZjhLhkgg2x7eGy",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "Ew5pDetb6HDsDBfkakj6e1sTUdL7xgM4TE2BmPTc4YVx",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

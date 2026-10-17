@@ -1,0 +1,383 @@
+@import "tailwindcss";
+
+/*
+ * BURNTICKER — B1 "thermal receipt" (site/brand-concepts/b1-thermal-receipt): paper #f2eee4, thermal black #1b1916, stamp violet
+ * #5b3fa3, a dark counter surface behind. Dark first; light is the paper itself. The pages under /burnticker are written with Tailwind's
+ * neutral scale, so the scale IS the theme: it is warmed for dark below and inverted for light, and the few accent shades the pages use
+ * (red/amber/emerald 400, amber 200/900) are re-inked for paper. Fonts: Courier Prime (the receipt voice) + Space Grotesk (reading text).
+ */
+@theme {
+  --font-sans: var(--font-space-grotesk), "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-courier-prime), "Courier Prime", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-neutral-50: #faf8f3;
+  --color-neutral-100: #f2eee4;
+  --color-neutral-200: #e2dccf;
+  --color-neutral-300: #cfc8ba;
+  --color-neutral-400: #aba395;
+  --color-neutral-500: #8b8478;
+  --color-neutral-600: #5a544c;
+  --color-neutral-700: #3e3933;
+  --color-neutral-800: #2d2925;
+  --color-neutral-900: #1d1a17;
+  --color-neutral-950: #12100e;
+  /* Tailwind's amber 300 written out (the preview banner's text), so the contrast test measures the shade the page draws */
+  --color-amber-300: #ffd236;
+}
+
+:root {
+  --bt-bg: #12100e;
+  --bt-counter: #1b1815;
+  --bt-line: #2d2925;
+  --bt-ink: #f2eee4;
+  --bt-dim: #aba395;
+  --bt-muted: #8b8478;
+  --bt-paper: #f2eee4;
+  --bt-paper-ink: #1b1916;
+  --bt-paper-dim: #5a5248;
+  --bt-stamp: #9b84e6;        /* the violet stamp, lifted to read on the dark counter */
+  --bt-stamp-solid: #5b3fa3;
+  --bt-stamp-ink: #ffffff;
+  --bt-scorch: #c8873a;
+  /* audit 7 item 19 (site-polish-2): the venue chips as tokens, so the paper theme can re-ink them (test/burntickerSitePolish2.test.ts
+     measures every badge and the preview banner in both themes) */
+  --bt-chip-kalshi: #6fcf97;
+  --bt-chip-polymarket: #8ea2ff;
+  /* BURNTICKER'S OWN SYSTEM (legitimacy pass, website-16; docs/burnticker/ui-conventions.md): one type scale (the same steps as the
+     Tailwind text-xs … text-2xl classes the pages use), one spacing scale, one radius, one transition duration, one focus ring */
+  --bt-fs-xs: .75rem; --bt-fs-sm: .875rem; --bt-fs-base: 1rem; --bt-fs-lg: 1.125rem; --bt-fs-xl: 1.25rem; --bt-fs-2xl: 1.5rem;
+  --bt-sp-1: 4px; --bt-sp-2: 8px; --bt-sp-3: 12px; --bt-sp-4: 16px; --bt-sp-5: 24px; --bt-sp-6: 32px;
+  --bt-radius: 8px;
+  --bt-dur: 150ms;
+  --bt-focus: var(--bt-stamp);
+  --bt-tabbar-h: 62px;
+  color-scheme: dark;
+}
+
+/* light = paper, only when the visitor picks it with the header switch: dark is the default (the owner's review item 17, 2026-10-12). */
+:root[data-theme="light"] {
+  --bt-bg: #f2eee4; --bt-counter: #e9e4d7; --bt-line: #d3ccbc; --bt-ink: #1b1916; --bt-dim: #4d473f; --bt-muted: #6b645a;
+  --bt-paper: #fbf9f4; --bt-paper-ink: #1b1916; --bt-paper-dim: #5a5248; --bt-stamp: #5b3fa3; --bt-stamp-solid: #5b3fa3; --bt-scorch: #8a5a24;
+  color-scheme: light;
+  --color-neutral-50: #0f0e0c; --color-neutral-100: #1b1916; --color-neutral-200: #2a2622; --color-neutral-300: #38332d; --color-neutral-400: #4d473f;
+  --color-neutral-500: #6b645a; --color-neutral-600: #948c7e; --color-neutral-700: #bdb5a4; --color-neutral-800: #d3ccbc; --color-neutral-900: #e9e4d7; --color-neutral-950: #f2eee4;
+  --bt-chip-kalshi: #1d7346; --bt-chip-polymarket: #3b4fc4;
+  /* audit 7 item 19: amber 300 is the launch preview banner's text; left at Tailwind's own shade it read 1.25:1 on paper */
+  --color-amber-300: #7a4a00;
+  --color-red-400: #b42318; --color-amber-400: #8f5400; --color-amber-200: #6f4200; --color-amber-900: #f3e2b8; --color-emerald-400: #1d7346;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body.bt-body {
+  margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+  background: var(--bt-bg); color: var(--bt-ink);
+  font-family: var(--font-sans); -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+.bt-content { flex: 1 0 auto; width: 100%; }
+/* site audit #16 (2026-10-11): a long unbroken string (a base58 address, a signature, a URL) wraps instead of widening a 320 px page */
+.bt-content p, .bt-content li, .bt-content dd, .bt-content td, .bt-content summary, .bt-content code, .bt-content pre { overflow-wrap: anywhere; }
+.bt-content a.underline:hover { color: var(--bt-stamp); }
+::selection { background: var(--bt-stamp-solid); color: #fff; }
+
+.bt-skip { position: absolute; left: -9999px; top: 8px; z-index: 50; background: var(--bt-paper); color: var(--bt-paper-ink); padding: 6px 10px; font-family: var(--font-mono); }
+.bt-skip:focus { left: 8px; }
+
+/* ---- header: the counter the receipts land on ---- */
+/* ChatGPT audit 6 item 21: the header and the phone tab bar are opaque, so the page never shows through them while it scrolls */
+.bt-header { position: sticky; top: 0; z-index: 40; background: var(--bt-bg); border-bottom: 2px dashed var(--bt-line); }
+.bt-header-row { max-width: 72rem; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
+.bt-brand { display: flex; align-items: center; gap: 10px; color: var(--bt-ink); text-decoration: none; flex: 0 0 auto; }
+.bt-mark { width: 34px; height: 34px; border-radius: 50%; display: block; box-shadow: 0 0 0 1px var(--bt-line); }
+.bt-wordmark { font: 700 1.08rem/1 var(--font-mono); letter-spacing: .16em; }
+.bt-nav-desktop { display: none; align-items: center; gap: 6px; margin-left: 12px; } /* site-polish-2: the static shell's spacing (SHELL_CSS .sh-nav) */
+.bt-nav-link { font: 700 .8rem/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; padding: 9px 10px; border-radius: 4px; white-space: nowrap; }
+.bt-nav-link:hover { color: var(--bt-ink); background: var(--bt-counter); }
+.bt-nav-link.is-active { color: var(--bt-ink); box-shadow: inset 0 -2px 0 var(--bt-stamp); border-radius: 0; }
+.bt-nav-link.is-launch { color: var(--bt-stamp); border: 2px solid var(--bt-stamp); border-radius: 3px; padding: 7px 10px; margin-right: 6px; transform: rotate(-1.5deg); }
+.bt-nav-link.is-launch:hover { background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); color: var(--bt-stamp-ink); }
+.bt-nav-link.is-launch.is-active { box-shadow: none; background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); color: var(--bt-stamp-ink); }
+.bt-ext { font-size: .7em; margin-left: 3px; opacity: .7; }
+.bt-header-tools { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.bt-icon-btn, .bt-menu-btn { font: 700 .78rem/1 var(--font-mono); letter-spacing: .1em; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 4px; height: 34px; min-width: 34px; padding: 0 10px; cursor: pointer; }
+.bt-icon-btn { font-size: 1rem; padding: 0; }
+.bt-icon-btn:hover, .bt-menu-btn:hover { color: var(--bt-ink); border-color: var(--bt-stamp); }
+.bt-nav-mobile { display: none; }
+.bt-nav-mobile.is-open { display: flex; flex-direction: column; gap: 2px; max-width: 64rem; margin: 0 auto; padding: 4px 16px 14px; }
+.bt-nav-mobile .bt-nav-link { padding: 12px 8px; font-size: .9rem; border-bottom: 1px dashed var(--bt-line); border-radius: 0; }
+.bt-nav-mobile .bt-nav-link.is-launch { transform: none; margin: 4px 0 6px; text-align: center; border-radius: 3px; }
+.bt-nav-mobile .bt-nav-link.is-active:not(.is-launch) { box-shadow: inset 3px 0 0 var(--bt-stamp); padding-left: 12px; }
+/* ---- the launchpad header (2026-10-12, review items 3, 4, 11): Learn menu, search, Launch a coin, the disabled wallet, the activity line ---- */
+.bt-learn { position: relative; }
+.bt-learn > button { background: transparent; border: 0; cursor: pointer; }
+.bt-learn-menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 50; display: grid; min-width: 210px; padding: 6px; background: var(--bt-counter); border: 1px solid var(--bt-line); border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,.35); }
+.bt-learn-menu[hidden] { display: none; }
+.bt-learn-menu .bt-nav-link { text-transform: none; letter-spacing: .02em; font: 600 .9rem/1.2 var(--font-sans); padding: 10px; }
+.bt-search { display: none; flex: 1 1 auto; min-width: 0; }
+.bt-search input { width: 100%; max-width: 26rem; font: .9rem var(--font-sans); color: var(--bt-ink); background: var(--bt-counter); border: 1px solid var(--bt-line); border-radius: 6px; padding: 9px 12px; }
+.bt-search input:focus { outline: 2px solid var(--bt-stamp); outline-offset: 1px; }
+.bt-launch-head { padding: 9px 12px; font-size: .78rem; white-space: nowrap; cursor: pointer; }
+/* the real "Connect wallet" (website-13): never disabled; hidden from the header row under 640 px, where the phone menu carries it */
+.bt-wallet { display: none; align-items: center; gap: 6px; font: 700 .76rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-ink); background: transparent; border: 1px solid var(--bt-stamp); border-radius: 4px; padding: 9px 12px; white-space: nowrap; cursor: pointer; }
+.bt-wallet:hover { background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); color: var(--bt-stamp-ink); }
+.bt-wallet.is-connected { text-transform: none; letter-spacing: .02em; font-weight: 600; }
+.bt-wallet-menu { display: inline-flex; }
+.bt-wallet-dot { width: 8px; height: 8px; border-radius: 50%; background: #5ad38f; flex: 0 0 auto; }
+.bt-wallet-box { position: relative; display: inline-flex; }
+.bt-header-tools > .bt-wallet-box { display: none; }
+.bt-wallet-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; display: grid; min-width: 180px; padding: 6px; background: var(--bt-counter); border: 1px solid var(--bt-line); border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,.35); }
+.bt-nav-wallet .bt-wallet-pop { left: 0; right: auto; }
+.bt-wallet-pop[hidden] { display: none; }
+.bt-wallet-pop a, .bt-wallet-pop button { text-align: left; font: 600 .9rem/1.2 var(--font-sans); color: var(--bt-ink); background: transparent; border: 0; border-radius: 6px; padding: 10px; text-decoration: none; cursor: pointer; }
+.bt-wallet-pop a:hover, .bt-wallet-pop button:hover, .bt-wallet-pop a:focus-visible, .bt-wallet-pop button:focus-visible { background: var(--bt-bg); }
+.bt-nav-wallet { padding: 12px 8px 4px; display: grid; gap: 8px; justify-items: start; }
+.bt-nav-wallet p { margin: 0; font-size: .8rem; color: var(--bt-dim); }
+@media (min-width: 640px) { .bt-nav-wallet { display: none; } .bt-header-tools > .bt-wallet-box { display: inline-flex; } }
+/* the wallet adapter's list in the receipt palette */
+.wallet-adapter-modal-wrapper { background: var(--bt-counter) !important; border: 1px solid var(--bt-line); font-family: var(--font-sans) !important; }
+.wallet-adapter-modal-title { color: var(--bt-ink) !important; }
+.wallet-adapter-modal-list .wallet-adapter-button { color: var(--bt-ink) !important; font-family: var(--font-sans) !important; }
+.wallet-adapter-modal-list .wallet-adapter-button:not([disabled]):hover { background: var(--bt-bg) !important; }
+.wallet-adapter-modal-list-more { color: var(--bt-dim) !important; }
+/* one search box per screen: the coin page's own box is the phone's; from 640 px the header's search is the one */
+@media (min-width: 640px) { .bt-grid-search { display: none; } }
+.bt-ticker { border-top: 1px dashed var(--bt-line); font: .78rem/1.3 var(--font-mono); color: var(--bt-dim); overflow-x: auto; white-space: nowrap; scrollbar-width: none; padding: 7px 16px; min-height: 31px; }
+.bt-ticker::-webkit-scrollbar { display: none; }
+.bt-ticker-item { color: var(--bt-ink); text-decoration: none; margin-right: 22px; }
+.bt-ticker-item:hover { text-decoration: underline; }
+.bt-ticker-net { display: inline-block; margin-right: 6px; padding: 1px 5px; border: 1px solid var(--bt-line); border-radius: 3px; font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--bt-scorch); }
+.bt-ticker-skel { display: inline-block; width: min(420px, 70%); height: 10px; border-radius: 4px; background: var(--bt-line); }
+.bt-modal { max-width: min(30rem, calc(100vw - 32px)); background: var(--bt-counter); color: var(--bt-ink); border: 1px solid var(--bt-line); border-radius: 10px; padding: 20px; }
+.bt-modal::backdrop { background: rgba(0,0,0,.6); }
+.bt-modal h2 { font: 700 1rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 10px; }
+.bt-modal p { margin: 0 0 8px; }
+.bt-modal-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px !important; }
+@media (min-width: 640px) { .bt-search { display: block; } .bt-wallet { display: inline-flex; } }
+@media (max-width: 420px) { .bt-launch-head { padding: 9px 9px; font-size: .7rem; } .bt-header-row { gap: 8px; } .bt-header-tools { gap: 4px; } }
+/* under 400 px the mark carries the brand alone, so the header row (mark, Launch a coin, theme, MENU) fits a 320 px phone */
+/* audit 7 item 18: the wordmark returns only where the header tools fit beside it (the row overflowed at 414 to 454 px) */
+@media (max-width: 479px) { .bt-wordmark { display: none; } }
+@media (min-width: 900px) {
+  .bt-nav-desktop { display: flex; }
+  .bt-header-tools { margin-left: 8px; }
+  .bt-menu-btn, .bt-nav-mobile, .bt-nav-mobile.is-open { display: none; }
+}
+
+/* ---- footer: the printed slip ---- */
+.bt-footer { margin-top: 48px; padding: 0 16px 40px; }
+.bt-slip { position: relative; max-width: 34rem; margin: 0 auto; background: var(--bt-paper); color: var(--bt-paper-ink); font-family: var(--font-mono); font-size: .86rem; line-height: 1.5; padding: 26px 22px 22px; transform: rotate(-.6deg); box-shadow: 0 10px 28px rgba(0,0,0,.35), 0 1px 0 rgba(0,0,0,.25);
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.025) 0 1px, transparent 1px 3px), linear-gradient(90deg, transparent 0 61%, rgba(255,255,255,.45) 61% 61.5%, transparent 61.5%); }
+.bt-slip::before, .bt-slip::after { content: ""; position: absolute; left: 0; right: 0; height: 10px; background-repeat: repeat-x; background-size: 14px 10px; }
+/* torn ends: a row of teeth in the paper colour above and below the slip */
+.bt-slip::before { top: -10px; background-image: conic-gradient(from 135deg at 50% 0, var(--bt-paper) 90deg, transparent 0); }
+.bt-slip::after { bottom: -10px; background-image: conic-gradient(from -45deg at 50% 100%, var(--bt-paper) 90deg, transparent 0); }
+.bt-slip-head { text-align: center; }
+.bt-slip-title { display: block; font-weight: 700; font-size: 1.35rem; letter-spacing: .22em; }
+.bt-slip-sub { display: block; font-size: .7rem; letter-spacing: .16em; color: var(--bt-paper-dim); margin-top: 2px; }
+.bt-rule { border-top: 2px dashed color-mix(in srgb, var(--bt-paper-ink) 70%, transparent); margin: 12px 0; }
+.bt-slip-text { margin: 0 0 8px; }
+.bt-slip-dim { color: var(--bt-paper-dim); font-size: .8rem; }
+.bt-rows { margin: 0; display: grid; gap: 6px; }
+.bt-rows > div { display: grid; grid-template-columns: 6.5rem 1fr; gap: 10px; }
+.bt-rows dt { font-weight: 700; letter-spacing: .08em; }
+.bt-rows dd { margin: 0; overflow-wrap: anywhere; }
+.bt-slip a { color: var(--bt-paper-ink); text-decoration: underline; text-underline-offset: 2px; }
+.bt-slip a:hover { color: var(--bt-stamp-solid); }
+.bt-slip-links { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.bt-slip-end { margin: 14px 0 0; text-align: center; font-size: .72rem; letter-spacing: .18em; color: var(--bt-paper-dim); }
+@media (max-width: 480px) { .bt-slip { transform: none; padding: 24px 16px 18px; } .bt-rows > div { grid-template-columns: 1fr; gap: 0; } }
+
+/* ---- the one-line footer on list pages (site audit #17) ---- */
+.bt-footer-compact { margin-top: 40px; border-top: 2px dashed var(--bt-line); padding: 14px 16px 28px; font-size: .78rem; color: var(--bt-dim); }
+.bt-footer-compact > * { max-width: 64rem; margin-left: auto; margin-right: auto; }
+.bt-footer-compact p { margin-bottom: 8px; }
+.bt-footer-compact a { color: var(--bt-ink); text-decoration: underline; text-underline-offset: 2px; }
+.bt-footer-compact nav { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+
+/* the wallet adapter's button in the stamp violet (the wizard is its only user) */
+.wallet-adapter-button-trigger { background-color: var(--bt-stamp-solid) !important; font-family: var(--font-mono) !important; white-space: nowrap; }
+
+/* ---- launchpad conventions (2026-10-10, docs/burnticker/ui-conventions.md): coin cards, tabs, the curve bar, chips, tape, tab bar ---- */
+.bt-coin-card { height: 100%; border: 1px solid var(--bt-line); background: var(--bt-counter); border-radius: 10px; padding: 12px; transition: border-color var(--bt-dur), transform var(--bt-dur); }
+a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
+.bt-thumb-receipt { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: var(--bt-paper); color: var(--bt-paper-ink); border-radius: 4px; font-family: var(--font-mono); overflow: hidden;
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.03) 0 1px, transparent 1px 3px); clip-path: polygon(0 0, 100% 0, 100% 92%, 92% 100%, 84% 92%, 76% 100%, 68% 92%, 60% 100%, 52% 92%, 44% 100%, 36% 92%, 28% 100%, 20% 92%, 12% 100%, 4% 92%, 0 100%); }
+.bt-thumb-top { font-size: 7px; letter-spacing: .14em; color: var(--bt-paper-dim); }
+.bt-thumb-ticker { font-weight: 700; line-height: 1; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-thumb-rule { width: 70%; border-top: 1px dashed color-mix(in srgb, var(--bt-paper-ink) 60%, transparent); }
+.bt-chip { display: inline-block; font: 700 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; padding: 3px 6px; border-radius: 3px; border: 1px solid var(--bt-line); color: var(--bt-dim); }
+.bt-chip-kalshi { color: var(--bt-chip-kalshi); border-color: color-mix(in srgb, var(--bt-chip-kalshi) 45%, transparent); }
+.bt-chip-polymarket { color: var(--bt-chip-polymarket); border-color: color-mix(in srgb, var(--bt-chip-polymarket) 45%, transparent); }
+.bt-chip-catalogue, .bt-chip-feed { color: var(--bt-scorch); border-color: color-mix(in srgb, var(--bt-scorch) 50%, transparent); }
+.bt-chip-grad { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
+.bt-chip-draft { border-style: dashed; }
+/* the window badge (2026 SEASON / PERPETUAL / ONE-SHOT · date): a stamped box, unmissable on every card and header */
+.bt-chip-window { color: var(--bt-paper, #f2eee4); background: transparent; border: 1.5px solid var(--bt-scorch); color: var(--bt-scorch); }
+.bt-curve { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--bt-line) 80%, transparent); overflow: hidden; }
+.bt-curve-fill { height: 100%; border-radius: 99px; background: repeating-linear-gradient(90deg, var(--bt-scorch) 0 6px, color-mix(in srgb, var(--bt-scorch) 75%, transparent) 6px 8px); }
+.bt-curve-fill.is-done { background: var(--bt-stamp-solid); }
+.bt-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.bt-tabs::-webkit-scrollbar { display: none; }
+.bt-tab { flex: 0 0 auto; font: 700 .76rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 99px; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+.bt-tab:hover { color: var(--bt-ink); border-color: var(--bt-stamp); }
+.bt-tab.is-active { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
+.bt-tab-count { display: inline-block; margin-left: 2px; min-width: 1.5em; padding: 1px 5px; border: 1px solid currentColor; border-radius: 999px; font-size: .7em; line-height: 1.3; text-align: center; opacity: .8; }
+.bt-launch-btn { display: inline-block; font: 700 .85rem/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border: 2px solid var(--bt-stamp-solid); border-radius: 4px; padding: 11px 16px; text-decoration: none; }
+.bt-launch-btn:hover { filter: brightness(1.12); }
+.bt-ghost-btn { display: inline-block; font: 700 .8rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-ink); border: 1px solid var(--bt-line); border-radius: 4px; padding: 10px 14px; text-decoration: none; }
+.bt-ghost-btn:hover { border-color: var(--bt-stamp); }
+.bt-copy { font: 700 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--bt-line); border-radius: 3px; padding: 4px 6px; color: var(--bt-dim); background: transparent; cursor: pointer; }
+.bt-copy:hover { color: var(--bt-ink); border-color: var(--bt-stamp); }
+.bt-tape { list-style: none; margin: 0; padding: 14px 14px 18px; background: var(--bt-paper); color: var(--bt-paper-ink); border-radius: 2px; font-family: var(--font-mono);
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.025) 0 1px, transparent 1px 3px); }
+.bt-tape-row { padding: 8px 0; border-bottom: 2px dashed color-mix(in srgb, var(--bt-paper-ink) 35%, transparent); }
+.bt-tape-row:last-child { border-bottom: 0; }
+.bt-tape a { color: var(--bt-paper-ink); }
+.bt-tape .text-neutral-500 { color: var(--bt-paper-dim); }
+.bt-rule-card { border-left: 4px solid var(--bt-stamp-solid) !important; }
+.bt-preview-frame { border: 2px dashed var(--bt-line); border-radius: 12px; padding: 10px; }
+/* ---- the home (2026-10-12, review items 7, 8, 5, 18): one-line hero, the How it works strip, the card rows, skeletons, tags ---- */
+.bt-hero { padding: 8px 0 0; }
+.bt-hero-title { font: 700 clamp(1.6rem, 5vw, 2.8rem)/1.08 var(--font-mono); letter-spacing: -.01em; margin: 0; text-transform: uppercase; overflow-wrap: anywhere; }
+.bt-hero-sub { font: 700 clamp(1rem, 2.6vw, 1.25rem)/1.3 var(--font-mono); color: var(--bt-stamp); margin: 8px 0 0; }
+.bt-how { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+@media (min-width: 760px) { .bt-how { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.bt-how li { display: flex; gap: 10px; border: 1px dashed var(--bt-line); border-radius: 10px; padding: 12px; }
+.bt-how-n { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: var(--bt-paper); color: var(--bt-paper-ink); font: 700 .85rem/1 var(--font-mono); }
+.bt-how-t { font: 700 .82rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 4px; }
+.bt-how-x { margin: 0; font-size: .88rem; color: var(--bt-dim); }
+.bt-coin-card.is-featured { border-color: color-mix(in srgb, var(--bt-stamp) 60%, var(--bt-line)); }
+.bt-card-link { color: inherit; text-decoration: none; }
+.bt-card-link:hover .bt-card-name { text-decoration: underline; }
+.bt-card-ticker { font-family: var(--font-mono); font-size: .9rem; color: var(--bt-dim); }
+.bt-card-rows { margin: 12px 0 0; display: grid; gap: 7px; font-size: .84rem; }
+.bt-card-rows > div { display: grid; grid-template-columns: 6.2rem 1fr; gap: 8px; }
+.bt-card-rows dt { font: 700 .68rem/1.6 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-muted); }
+.bt-card-rows dd { margin: 0; min-width: 0; color: var(--bt-ink); }
+.bt-card-foot { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bt-ghost-btn.is-disabled { opacity: .5; cursor: not-allowed; }
+.bt-tag-featured { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
+.bt-tag-rehearsal { color: var(--bt-scorch); border-color: color-mix(in srgb, var(--bt-scorch) 60%, transparent); }
+.bt-tag-devnet { color: var(--bt-dim); border-style: dashed; }
+.bt-tag-grad { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
+.bt-skel { border-radius: 4px; background: color-mix(in srgb, var(--bt-line) 85%, transparent); }
+@media (prefers-reduced-motion: no-preference) { .bt-skel, .bt-ticker-skel { animation: bt-pulse 1.4s ease-in-out infinite; } }
+@keyframes bt-pulse { 50% { opacity: .45; } }
+.bt-seasons { border-top: 2px dashed var(--bt-line); padding-top: 18px; }
+.bt-tabbar { display: none; }
+@media (max-width: 899px) {
+  /* audit 6 item 21: the page ends above the tab bar (60 px plus its 2 px border) and the phone's safe area, so no footer link or
+     button sits under it; the bar itself is opaque */
+  body.bt-body { padding-bottom: calc(var(--bt-tabbar-h) + env(safe-area-inset-bottom) + 12px); }
+  .bt-tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: var(--bt-bg); border-top: 2px dashed var(--bt-line); padding-bottom: env(safe-area-inset-bottom); }
+  /* audit 7 item 21: labels at 12 px, each tab a full-height hit area of at least 44 px */
+  .bt-tabbar-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 60px; min-width: 44px; font: 700 12px/1 var(--font-mono); letter-spacing: .03em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; }
+  .bt-tabbar-glyph { font-size: 18px; line-height: 1; }
+  .bt-tabbar-item.is-active { color: var(--bt-ink); box-shadow: inset 0 2px 0 var(--bt-stamp); }
+  .bt-tabbar-item.is-launch .bt-tabbar-glyph { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 22px; border-radius: 4px; background: var(--bt-stamp-solid); color: var(--bt-stamp-ink); }
+}
+
+@media (prefers-reduced-motion: reduce) { .bt-nav-link.is-launch, .bt-slip { transform: none; } }
+
+/* website-14: the six-step progress strip (progress.ts), the activity line's kind labels and phone scroll hint, the watch toggle */
+.bt-progress-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.bt-progress-step { min-width: 0; display: flex; flex-direction: column; gap: 4px; font: 700 .62rem/1.25 var(--font-mono); letter-spacing: .02em; text-transform: uppercase; color: var(--bt-muted); }
+@media (max-width: 559px) { .bt-progress:not(.is-compact) .bt-progress-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 8px; } }
+.bt-progress-dot { display: block; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--bt-line) 85%, transparent); }
+.bt-progress-step.is-done .bt-progress-dot { background: var(--bt-stamp-solid); }
+/* audit 7 item 23: the next step is an outline, never a filled dot, so a coin on its curve (2 of 6 done) never reads as 3 of 6 */
+.bt-progress-step.is-current .bt-progress-dot { background: transparent; box-shadow: inset 0 0 0 2px var(--bt-scorch); }
+.bt-progress-step.is-current { color: var(--bt-ink); }
+/* website-15 item 6: a step that does not apply to this coin (the devnet rehearsal coin had no curve): an outlined dot, never a lit one */
+.bt-progress-step.is-na .bt-progress-dot { background: transparent; box-shadow: inset 0 0 0 1px var(--bt-muted); }
+.bt-progress-na { text-transform: none; font-weight: 400; }
+.bt-progress.is-compact .bt-progress-steps { max-width: 9rem; gap: 3px; }
+.bt-progress-now { display: block; margin-top: 4px; font-size: .78rem; color: var(--bt-ink); }
+.bt-progress-next { margin: 4px 0 0; font-size: .74rem; color: var(--bt-dim); }
+.bt-progress-label { overflow-wrap: normal; hyphens: auto; }
+.bt-ticker-kind { display: inline-block; margin-right: 6px; padding: 1px 5px; border: 1px solid var(--bt-line); border-radius: 3px; font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--bt-dim); }
+.bt-watch { font: 700 .7rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 4px; padding: 6px 8px; cursor: pointer; }
+.bt-watch[aria-pressed="true"] { color: var(--bt-ink); border-color: var(--bt-stamp); }
+/* ChatGPT audit 6 item 24: a row that scrolls sideways (the activity line, the Coins filters) fades the edge that still has more
+   (useScrollEdges.ts sets more-start / more-end), at every width */
+.bt-scroll-hint.more-end { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
+.bt-scroll-hint.more-start { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px); mask-image: linear-gradient(90deg, transparent, #000 40px); }
+.bt-scroll-hint.more-start.more-end { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
+
+/* website-15 item 7: a value not read is a dash button; its reason opens under it on tap, click or keyboard focus (phones included) */
+.bt-why { position: relative; display: inline-block; }
+.bt-why-btn { font: inherit; color: inherit; background: none; border: 0; padding: 0 2px; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+/* ChatGPT audit 7 item 21: small help controls ("?", the reason behind an empty field) get a 44 x 44 px hit area from an invisible
+   layer centred on them, so the page layout does not grow; the site-wide :focus-visible ring stays visible on them */
+.bt-hit, .bt-why-btn { position: relative; }
+.bt-hit::after, .bt-why-btn::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+.bt-why-mark { display: inline-block; margin-left: 3px; min-width: 1.1em; height: 1.1em; line-height: 1.1em; border-radius: 99px; border: 1px solid var(--bt-line); font: 700 .62rem/1.05em var(--font-mono); text-align: center; color: var(--bt-muted); vertical-align: 1px; }
+.bt-why-tip { display: none; position: absolute; z-index: 20; left: 0; top: calc(100% + 4px); width: max-content; max-width: min(18rem, 80vw); padding: 6px 8px; border: 1px solid var(--bt-line); border-radius: 6px; background: var(--bt-counter, #1b1814); color: var(--bt-ink); font: 400 .75rem/1.35 var(--font-space-grotesk, system-ui), system-ui, sans-serif; text-transform: none; letter-spacing: 0; white-space: normal; }
+.bt-why-tip.is-open, .bt-why-btn:focus-visible + .bt-why-tip { display: block; }
+@media (hover: hover) { .bt-why:hover .bt-why-tip { display: block; } }
+/* website-15 item 13: the creator's image preview on the review card, always square */
+.bt-profile-square { width: 72px; height: 72px; border: 1px solid var(--bt-line); border-radius: 8px; overflow: hidden; display: grid; place-items: center; background: var(--bt-counter); font: 700 .6rem/1.2 var(--font-mono); text-transform: uppercase; color: var(--bt-muted); text-align: center; }
+.bt-profile-square img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bt-profile-square { margin: 0; }
+.bt-profile-square.is-chosen { outline: 2px solid var(--bt-scorch); outline-offset: 1px; }
+/* website-15 item 18: the short receipt on short pages */
+.bt-footer-short { max-width: 72rem; margin: 24px auto 0; padding: 12px 16px 80px; font-size: .78rem; color: var(--bt-dim); }
+.bt-footer-short summary { cursor: pointer; margin-top: 6px; text-decoration: underline; }
+/* website-15 item 19: a horizontal scroll cue (scroll shadows): a dark edge shows on whichever side still has more to scroll */
+.bt-hscroll {
+  background:
+    linear-gradient(to right, var(--bt-counter) 30%, transparent) left center / 24px 100% no-repeat local,
+    linear-gradient(to left, var(--bt-counter) 30%, transparent) right center / 24px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, .55), transparent) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, .55), transparent) right center / 12px 100% no-repeat scroll,
+    var(--bt-counter);
+}
+/* website-15 item 7: on phones the reason opens in the flow under the dash, so it never runs off the card's edge */
+@media (max-width: 640px) { .bt-why { display: inline; } .bt-why-tip { position: static; width: auto; max-width: none; margin-top: 4px; } .bt-why-tip.is-open, .bt-why-btn:focus-visible + .bt-why-tip { display: block; } }
+
+/* ---- Burnticker's own system (legitimacy pass, website-16, 2026-10-12; docs/burnticker/ui-conventions.md) ----
+   One focus ring on every control, one motion rule (one duration; none at all when the visitor asks for reduced motion), and the page
+   parts the newer pages share (_components/Panel.tsx): page, header, panel, sub-panel, table, list, eyebrow, meta, code block. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--bt-focus); outline-offset: 2px; border-radius: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+.bt-page { max-width: 48rem; margin: 0 auto; padding: var(--bt-sp-5) var(--bt-sp-4); display: grid; gap: var(--bt-sp-5); font-size: var(--bt-fs-sm); line-height: 1.55; }
+.bt-page.is-wide { max-width: 64rem; }
+.bt-page-head { display: grid; gap: var(--bt-sp-2); }
+.bt-h1 { margin: 0; font: 600 var(--bt-fs-2xl)/1.2 var(--font-sans); }
+.bt-h2 { margin: 0 0 var(--bt-sp-2); font: 600 var(--bt-fs-base)/1.3 var(--font-sans); }
+.bt-h3 { margin: var(--bt-sp-3) 0 var(--bt-sp-1); font: 600 var(--bt-fs-sm)/1.3 var(--font-sans); }
+.bt-lede { margin: 0; font-size: var(--bt-fs-base); color: var(--color-neutral-300); }
+.bt-body-text { margin: 0 0 var(--bt-sp-2); color: var(--color-neutral-200); }
+.bt-meta { margin: 0; font-size: var(--bt-fs-xs); color: var(--color-neutral-400); }
+.bt-meta-sep { display: inline-block; width: var(--bt-sp-3); }
+.bt-eyebrow { margin: 0 0 var(--bt-sp-1); font: 700 .6875rem/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--color-neutral-400); }
+.bt-panel { border: 1px solid var(--color-neutral-800); background: var(--color-neutral-900); border-radius: var(--bt-radius); padding: var(--bt-sp-4); min-width: 0; }
+.bt-subpanel { border: 1px dashed var(--color-neutral-700); border-radius: var(--bt-radius); padding: var(--bt-sp-3); min-width: 0; }
+.bt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--bt-sp-3); }
+.bt-bullets { margin: 0 0 var(--bt-sp-2); padding-left: 1.25rem; list-style: disc; display: grid; gap: var(--bt-sp-1); color: var(--color-neutral-200); }
+.bt-dl { margin: 0 0 var(--bt-sp-2); display: grid; gap: var(--bt-sp-2); }
+.bt-dl > div { display: grid; gap: 2px; }
+.bt-dl dt { font: 700 .6875rem/1.4 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--color-neutral-400); }
+.bt-dl dd { margin: 0; min-width: 0; color: var(--color-neutral-200); }
+@media (min-width: 640px) { .bt-dl > div { grid-template-columns: 11rem 1fr; gap: var(--bt-sp-3); } }
+.bt-table-wrap { overflow-x: auto; }
+.bt-table { width: 100%; border-collapse: collapse; font-size: var(--bt-fs-xs); }
+.bt-table th { text-align: left; font-weight: 600; color: var(--color-neutral-400); padding: var(--bt-sp-2); }
+.bt-table td { border-top: 1px solid var(--color-neutral-800); padding: var(--bt-sp-2); vertical-align: top; }
+.bt-pre { margin: 0 0 var(--bt-sp-2); padding: var(--bt-sp-2) var(--bt-sp-3); background: var(--color-neutral-950); border: 1px solid var(--color-neutral-800); border-radius: 6px; font: var(--bt-fs-xs)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-neutral-100); }
+.bt-pre.is-output { border-style: dashed; color: var(--color-neutral-300); }
+.bt-cmd { display: flex; gap: var(--bt-sp-2); align-items: flex-start; }
+.bt-cmd .bt-pre { flex: 1 1 auto; min-width: 0; }
+.bt-cmd .bt-copy { flex: 0 0 auto; min-height: 32px; }
+.bt-note { margin: 0; padding: var(--bt-sp-2); border: 1px dashed var(--color-neutral-700); border-radius: 6px; font-size: var(--bt-fs-xs); color: var(--color-neutral-300); }
+.bt-note.is-devnet { border-color: color-mix(in srgb, var(--color-amber-400) 55%, transparent); color: var(--color-amber-200); }
+.bt-press-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--bt-sp-3); }
+@media (min-width: 640px) { .bt-press-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bt-press-preview { display: block; width: 160px; max-width: 100%; height: auto; margin: var(--bt-sp-2) 0; border-radius: 6px; border: 1px solid var(--color-neutral-800); }
+/* the empty state's receipt mark (EmptyState.tsx): a small slip beside the one sentence */
+.bt-receipt-mark { flex: 0 0 auto; color: var(--color-neutral-500); }
+.bt-empty-row { display: flex; gap: var(--bt-sp-3); align-items: flex-start; }
+.bt-empty-row > div { min-width: 0; }
+/* the phone tab bar's icons (siteNav.mjs SITE_ICONS): one inline SVG set, no icon font */
+.bt-icon { width: 20px; height: 20px; display: block; }

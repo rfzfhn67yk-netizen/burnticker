@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burnticker Whitepaper, draft 1 of 2026-10-10 (archive)</title>
+<meta name="description" content="Burnticker technical paper: how a settled real-world event becomes a burn on Solana, how a program on Solana settles it on chain, what powers exist, and how anyone can recompute every receipt.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#1f1c19">
+<link rel="canonical" href="https://burnticker.com/whitepaper-2026-10-10.html">
+<meta property="og:title" content="Burnticker Whitepaper, draft 1 of 2026-10-10 (archive)">
+<meta property="og:description" content="How a settled real-world result becomes a burn on Solana, what powers exist, and how anyone can recompute every receipt.">
+<meta property="og:image" content="https://burnticker.com/brand/og.png">
+<meta property="og:url" content="https://burnticker.com/whitepaper-2026-10-10.html">
+<meta property="og:type" content="article">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@BurnTicker">
+<meta name="twitter:image" content="https://burnticker.com/brand/og.png">
+<link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
+<script>(function(){try{var t=localStorage.getItem('bt-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();</script>
+<style>@font-face{font-family:"Courier Prime";font-style:normal;font-weight:400;font-display:swap;src:url("/fonts/courier-prime-400-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Courier Prime";font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/courier-prime-700-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:300 700;font-display:swap;src:url("/fonts/space-grotesk-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+
+:root{--sh-bg:#12100e;--sh-counter:#1b1815;--sh-line:#2d2925;--sh-ink:#f2eee4;--sh-dim:#aba395;--sh-paper:#f2eee4;--sh-paper-ink:#1b1916;--sh-paper-dim:#5a5248;--sh-stamp:#9b84e6;--sh-stamp-solid:#5b3fa3;--sh-scorch:#c8873a;
+  --sh-mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sh-sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif}
+:root[data-theme="light"]{--sh-bg:#f2eee4;--sh-counter:#e9e4d7;--sh-line:#d3ccbc;--sh-ink:#1b1916;--sh-dim:#4d473f;--sh-paper:#fbf9f4;--sh-stamp:#5b3fa3;--sh-scorch:#8a5a24}
+.sh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sh-skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--sh-paper);color:var(--sh-paper-ink);padding:6px 10px;font-family:var(--sh-mono)}.sh-skip:focus{left:8px}
+.sh-header{position:sticky;top:0;z-index:40;background:var(--sh-bg);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
+.sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px}
+.sh-brand{display:flex;align-items:center;gap:10px;color:var(--sh-ink);text-decoration:none;flex:0 0 auto}
+.sh-mark{width:34px;height:34px;border-radius:50%;display:block;box-shadow:0 0 0 1px var(--sh-line)}
+.sh-word{font:700 1.08rem/1 var(--sh-mono);letter-spacing:.16em}
+.sh-nav{display:none;align-items:center;gap:6px;margin-left:12px} /* private review 8: room between the wordmark, the links and Learn at 1440 */
+.sh-nav a,.sh-learn>summary{font:700 .8rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
+.sh-learn>summary::-webkit-details-marker{display:none}
+.sh-ext{font-size:.7em;margin-left:3px;opacity:.7}
+.sh-nav a:hover,.sh-learn>summary:hover{color:var(--sh-ink);background:var(--sh-counter)}
+.sh-nav a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 -2px 0 var(--sh-stamp);border-radius:0}
+.sh-learn{position:relative}
+.sh-learn-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:50;display:grid;min-width:210px;padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.sh-learn-menu a{text-transform:none;letter-spacing:.02em;font:600 .9rem/1.2 var(--sh-sans);padding:10px}
+.sh-search{flex:1 1 auto;min-width:0;display:none}
+.sh-search input{width:100%;max-width:26rem;font:.9rem var(--sh-sans);color:var(--sh-ink);background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:6px;padding:9px 12px}
+.sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.sh-launch{display:inline-block;font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
+.sh-wallet,.sh-ghost{font:700 .76rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
+.sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
+.sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
+.sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
+.sh-menu>summary::-webkit-details-marker{display:none}
+.sh-menu{position:relative}
+.sh-menu-links{position:absolute;right:0;top:calc(100% + 6px);z-index:50;display:grid;gap:2px;min-width:210px;max-width:calc(100vw - 32px);padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px}
+.sh-menu-links a{color:var(--sh-ink);text-decoration:none;padding:11px 10px;border-radius:6px;font:600 .92rem var(--sh-sans)}
+.sh-ticker{border-top:1px dashed var(--sh-line);font:.78rem/1.3 var(--sh-mono);color:var(--sh-dim);overflow-x:auto;white-space:nowrap;scrollbar-width:none;padding:7px 16px;min-height:31px}
+.sh-ticker::-webkit-scrollbar{display:none}
+.sh-ticker a{color:var(--sh-ink);text-decoration:none;margin-right:22px}.sh-ticker a:hover{text-decoration:underline}
+.sh-ticker .sh-net{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-scorch)}
+.sh-ticker-skel{display:inline-block;width:min(420px,70%);height:10px;border-radius:4px;background:var(--sh-line)}
+.sh-ticker .sh-kind{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-dim)}
+.sh-modal{max-width:min(28rem,calc(100vw - 32px));background:var(--sh-counter);color:var(--sh-ink);border:1px solid var(--sh-line);border-radius:10px;padding:20px;font-family:var(--sh-sans)}
+.sh-modal::backdrop{background:rgba(0,0,0,.6)}
+.sh-modal h2{font:700 1rem/1.3 var(--sh-mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
+.sh-modal-row{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+.sh-footer{margin-top:48px;padding:0 16px 40px;font-family:var(--sh-mono)}
+.sh-slip{position:relative;max-width:34rem;margin:0 auto;background:var(--sh-paper);color:var(--sh-paper-ink);font-size:.86rem;line-height:1.5;padding:26px 22px 22px;transform:rotate(-.6deg);box-shadow:0 10px 28px rgba(0,0,0,.35),0 1px 0 rgba(0,0,0,.25);background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px)}
+.sh-slip::before,.sh-slip::after{content:"";position:absolute;left:0;right:0;height:10px;background-repeat:repeat-x;background-size:14px 10px}
+.sh-slip::before{top:-10px;background-image:conic-gradient(from 135deg at 50% 0,var(--sh-paper) 90deg,transparent 0)}
+.sh-slip::after{bottom:-10px;background-image:conic-gradient(from -45deg at 50% 100%,var(--sh-paper) 90deg,transparent 0)}
+.sh-slip p{margin:0 0 8px}
+.sh-slip-title{text-align:center;font-weight:700;font-size:1.35rem;letter-spacing:.22em}
+.sh-slip-never{text-align:center;font-weight:700}
+.sh-slip-dim{color:var(--sh-paper-dim);font-size:.8rem}
+.sh-rows{margin:0;display:grid;gap:6px}.sh-rows>div{display:grid;grid-template-columns:6.5rem 1fr;gap:10px}.sh-rows dt{font-weight:700;letter-spacing:.08em}.sh-rows dd{margin:0;overflow-wrap:anywhere}
+.sh-rule{border-top:2px dashed color-mix(in srgb,var(--sh-paper-ink) 70%,transparent);margin:12px 0}
+.sh-slip a{color:var(--sh-paper-ink);text-decoration:underline;text-underline-offset:2px}.sh-slip a:hover{color:var(--sh-stamp-solid)}
+.sh-slip-links{display:flex;flex-wrap:wrap;gap:6px 14px}
+.sh-slip-end{margin:14px 0 0!important;text-align:center;font-size:.72rem;letter-spacing:.18em;color:var(--sh-paper-dim)}
+.sh-tabbar{display:none}
+a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--sh-stamp);outline-offset:2px}
+@media (min-width:640px){.sh-search{display:block}.sh-wallet{display:inline-block}}
+@media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}.sh-actions{margin-left:8px}}
+@media (max-width:899px){
+  body{padding-bottom:calc(62px + env(safe-area-inset-bottom) + 12px)}
+  .sh-tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--sh-bg);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
+  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;min-width:44px;font:700 12px/1 var(--sh-mono);letter-spacing:.03em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
+  .sh-tabbar a span:first-child{display:block;line-height:0}
+  .sh-icon{width:20px;height:20px;display:block}
+  .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
+}
+.sh-ticker.more-end{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent)}
+.sh-ticker.more-start{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px);mask-image:linear-gradient(90deg,transparent,#000 40px)}
+.sh-ticker.more-start.more-end{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent)}
+@media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
+@media (max-width:479px){.sh-word{display:none}}
+@media (max-width:480px){.sh-slip{transform:none;padding:24px 16px 18px}.sh-rows>div{grid-template-columns:1fr;gap:0}}
+@media (prefers-reduced-motion:reduce){.sh-slip{transform:none}} /* audit 7 item 18: the wordmark returns only where the header tools fit beside it (no overflow at 401 to 479 px) */
+</style>
+<style>
+:root{
+  --bg:#1f1c19;--surface:#2a2622;--line:#3a352f;--ink:#f2eee4;--dim:#c9c3b6;--muted:#9a9387;--amber:#ffb000;
+  --paper:#f2eee4;--thermal:#1b1916;--faded:#4a443c;--rule:#2a2622;--stamp:#5b3fa3;--paper2:#e8e3d6;--link:#5b3fa3;
+  --mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+:root[data-theme="light"]{--bg:#dcd6c8;--surface:#cfc8b8;--line:#bdb5a3;--ink:#1b1916;--dim:#3a352f;--muted:#5d564b;--amber:#9a5b00}
+:root[data-theme="dark"]{--bg:#1f1c19;--surface:#2a2622;--line:#3a352f;--ink:#f2eee4;--dim:#c9c3b6;--muted:#9a9387;--amber:#ffb000}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans)}
+a{color:var(--amber)}
+.wrap{max-width:900px;margin:0 auto;padding:0 16px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none}
+.brand svg{width:30px;height:30px}
+.brand b{font:700 1.05rem/1 var(--mono);letter-spacing:.12em}
+.nav{display:flex;gap:6px;flex-wrap:wrap}
+.nav a{font:.84rem/1 var(--sans);color:var(--dim);padding:8px 10px;border:1px solid var(--line);border-radius:999px;text-decoration:none;white-space:nowrap}
+.nav a:hover{border-color:var(--amber);color:var(--ink)}
+.nav a[aria-current="page"]{border-color:var(--amber);color:var(--ink)}
+.themebtn{font:1rem/1 var(--sans);color:var(--dim);background:transparent;border:1px solid var(--line);border-radius:999px;width:34px;height:30px;cursor:pointer}
+.flinks{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 12px}.flinks a{color:var(--dim)}
+.slip{position:relative;background:var(--paper);color:var(--thermal);margin:10px 0 40px;padding:36px 22px 40px;
+  background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px);
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/14px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/14px 51% repeat-x;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/14px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/14px 51% repeat-x}
+@media (min-width:700px){.slip{padding:44px 48px 52px}}
+.slip a{color:var(--link)}
+.notice{border:2px solid var(--rule);border-left-width:6px;padding:10px 14px;margin:14px 0 18px;background:rgba(0,0,0,.04)}.notice p{margin:0}
+.kicker{font:700 .74rem/1.4 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faded);margin:0 0 6px}
+h1{font:700 clamp(1.6rem,4.6vw,2.4rem)/1.15 var(--mono);margin:0 0 14px;letter-spacing:-.01em}
+h2{font:700 1.15rem/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 12px;padding-top:14px;border-top:2px dashed var(--rule)}
+h3{font:700 1rem/1.35 var(--mono);margin:22px 0 8px}
+section{margin:30px 0 0}
+p,li{max-width:72ch}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin:0 0 6px}
+code{font:.86em var(--mono);background:var(--paper2);padding:1px 4px;border-radius:3px;overflow-wrap:anywhere}
+pre{font:.8rem/1.5 var(--mono);background:var(--thermal);color:var(--paper);padding:14px;border-radius:4px;overflow-x:auto;margin:0 0 14px}
+pre code{background:none;padding:0;color:inherit;overflow-wrap:normal;white-space:pre}
+.tbl{overflow-x:auto;margin:0 0 16px;border:1px solid #d6d0c2}
+table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{text-align:left;vertical-align:top;padding:7px 9px;border-bottom:1px dashed #b9b2a3}
+th{font:700 .74rem/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;background:var(--paper2)}
+td code{font-size:.82em}
+.toc{border:2px dashed var(--rule);padding:12px 16px 4px;margin:18px 0 6px}
+.toc p{font:700 .74rem/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;margin:0 0 6px}
+.toc ul{columns:2 220px;margin:0 0 8px;padding:0;list-style:none}
+.toc li{margin:0 0 4px;break-inside:avoid}
+.stamp{display:inline-block;transform:rotate(-4deg);color:var(--stamp);border:2px solid var(--stamp);border-radius:3px;padding:2px 8px;font:700 .8rem/1.3 var(--mono);letter-spacing:.12em;text-transform:uppercase;margin:4px 0 14px;opacity:.85}
+footer{padding:0 0 40px;color:var(--muted);font-size:.84rem}
+footer p{margin:0 0 6px;max-width:none}
+</style>
+</head>
+<body>
+<a class="sh-skip" href="#main">Skip to content</a>
+<header class="sh-header">
+  <div class="sh-row">
+    <a class="sh-brand" href="/" aria-label="Burnticker home"><img src="/brand/favicon.png" width="34" height="34" alt="" class="sh-mark"><span class="sh-word">BURNTICKER</span></a>
+    <nav class="sh-nav" aria-label="Burnticker" data-site-nav="header">
+      <a href="/burnticker">Coins</a>
+      <a href="/burnticker/leagues">Seasons</a>
+      <a href="/burnticker/launch" data-launch-link>Launch</a>
+      <details class="sh-learn"><summary>Learn<span aria-hidden="true" class="sh-ext">▾</span></summary>
+        <div class="sh-learn-menu" data-site-nav="learn">
+          <a href="/burnticker/about">How it works</a>
+          <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/verify-yourself">Verify it yourself</a>
+          <a href="/burnticker/operator">Who runs this</a>
+          <a href="/whitepaper.html" aria-current="page">Whitepaper</a>
+          <a href="/burnticker/docs">Docs and API</a>
+          <a href="/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="/burnticker/changelog">Changelog</a>
+          <a href="/burnticker/incidents">Incidents</a>
+          <a href="/burnticker/bounty">Bounty</a>
+          <a href="/burnticker/press">Press</a>
+          <a href="/burnticker/terms">Terms</a>
+          <a href="/burnticker/privacy">Privacy</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+        </div>
+      </details>
+    </nav>
+    <form class="sh-search" role="search" action="/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
+    <div class="sh-actions">
+      <a class="sh-launch" href="/burnticker/launch" data-launch-button>Launch a coin</a>
+      <a class="sh-wallet" href="/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet<span class="sh-sr">. Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.</span></a>
+      <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
+      <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
+        <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
+          <a href="/burnticker">Coins</a>
+          <a href="/burnticker/leagues">Seasons</a>
+          <a href="/burnticker/launch" data-launch-link>Launch</a>
+          <a href="/burnticker/about">How it works</a>
+          <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/verify-yourself">Verify it yourself</a>
+          <a href="/burnticker/operator">Who runs this</a>
+          <a href="/whitepaper.html" aria-current="page">Whitepaper</a>
+          <a href="/burnticker/docs">Docs and API</a>
+          <a href="/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="/burnticker/changelog">Changelog</a>
+          <a href="/burnticker/incidents">Incidents</a>
+          <a href="/burnticker/bounty">Bounty</a>
+          <a href="/burnticker/press">Press</a>
+          <a href="/burnticker/terms">Terms</a>
+          <a href="/burnticker/privacy">Privacy</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+          <p class="sh-menu-wallet">A wallet is only needed for Your coins. <a href="/burnticker/me?connect=1" data-wallet-button>Connect wallet</a></p>
+        </nav>
+      </details>
+    </div>
+  </div>
+  <div class="sh-ticker" data-activity tabindex="0" aria-label="Latest activity on chain"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest activity.</span></div>
+</header>
+<dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
+  <h2 id="sh-launch-closed-h">Launching a coin</h2>
+  <p data-launch-sentence>Checking whether creator launches are open on this site.</p>
+  <p>You can still look through the coins and check a real receipt.</p>
+  <p class="sh-modal-row"><a class="sh-launch" href="/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
+</dialog>
+<main class="wrap" id="main">
+<article class="slip">
+<aside class="notice" role="note" data-archive><p><strong>Archived copy.</strong> This is draft 1 of the paper, kept exactly as it stood at the end of 2026-10-10, and it is not updated. Its statements about status, governance, reviews and fees describe that day. The current specification is at <a href="/whitepaper.html">whitepaper.html</a>.</p></aside>
+<p class="kicker">Technical paper, draft 1, 2026-10-10, archived</p>
+<h1>Burnticker: coins that burn on real-world results, with receipts</h1>
+<p class="stamp">Not audited by a security firm</p>
+
+<nav class="toc" aria-label="Contents">
+<p>Contents</p>
+<ul>
+<li><a href="#s-1-abstract">1. Abstract</a></li>
+<li><a href="#s-2-the-problem-with-burn-claims-today">2. The problem with &quot;burn&quot; claims today</a></li>
+<li><a href="#s-3-design">3. Design</a></li>
+<li><a href="#s-4-settlement-on-chain-the-burn-receipts-program">4. Settlement on chain: the <code>burn_receipts</code> program</a></li>
+<li><a href="#s-5-rivalry-pairs">5. Rivalry pairs</a></li>
+<li><a href="#s-6-economics">6. Economics</a></li>
+<li><a href="#s-7-attestation-and-the-trust-ladder">7. Attestation and the trust ladder</a></li>
+<li><a href="#s-8-verification-walk-through-recompute-one-receipt">8. Verification walk-through: recompute one receipt</a></li>
+<li><a href="#s-9-governance-and-custody">9. Governance and custody</a></li>
+<li><a href="#s-10-security-review-history">10. Security review history</a></li>
+<li><a href="#s-11-limitations-and-risks">11. Limitations and risks</a></li>
+<li><a href="#s-12-open-source-and-transparency">12. Open source and transparency</a></li>
+<li><a href="#s-13-appendix">13. Appendix</a></li>
+</ul>
+</nav>
+<p>Technical paper, draft 1, 2026-10-10. Written from the code and documents of the Burnticker repository at commit <code>76b9caa</code>. Every statement names its source file; where a component does not exist, this paper says &quot;not built&quot; or &quot;not done&quot;.</p>
+<p><strong>Status at the time of writing.</strong> The program is deployed on devnet (the 2026-10-10 rehearsal, <code>docs/burnkeeper/devnet-run.md</code>); nothing is deployed on mainnet and no mainnet key exists.</p>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Component</th><th scope="col">State</th><th scope="col">Source</th></tr></thead>
+<tbody>
+<tr><td><code>burn_receipts</code> program (Anchor 1.2.1)</td><td>built; 82 Rust tests and the TS suites pass; deployed on devnet, not on mainnet</td><td><code>docs/burn-receipts/README.md</code>, <code>CHANGELOG.md</code></td></tr>
+<tr><td>$DEFICIT keeper and Burnticker multi-token keeper</td><td>built; run against the program in a local end-to-end test; pages run on <code>FakeBurnProgram</code></td><td><code>docs/burnkeeper/README-execution.md</code></td></tr>
+<tr><td>Devnet rehearsal</td><td>done 2026-10-10</td><td><code>docs/burnkeeper/devnet-run.md</code> §4</td></tr>
+<tr><td>Mainnet rehearsal coin</td><td>not done</td><td><code>docs/burnticker/REHEARSAL-RUNSHEET.md</code></td></tr>
+<tr><td><code>pair_curve</code> program (rivalry pairs: both coins graduate or neither; Anchor 1.2.1)</td><td>built 2026-10-10; LiteSVM suite and TS fixtures pass; devnet rehearsal run (one pair graduated to two CPMM pools and registered, one pair voided and sold back); not on mainnet; not reviewed</td><td><code>docs/burnticker/PAIR-CURVE.md</code>, <code>docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md</code></td></tr>
+<tr><td>Program deployment, program id, verifiable hash</td><td>devnet: deployed 2026-10-10 (<code>AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM</code>, upgrade authority a Squads 2-of-3 vault); mainnet: not done</td><td><code>docs/burnkeeper/devnet-run.md</code> §4, <code>docs/burn-receipts/README.md</code> §5.4</td></tr>
+<tr><td>Team-coin and matchup settlement (sports)</td><td>no ESPN reads: schedules from MLB StatsAPI, the NHL feed and the NBA feed (free), TheSportsDB v2 for every other league (<code>BURNTICKER_THESPORTSDB_KEY</code> not yet set); each game settles on its Polymarket on-chain payout where a moneyline market exists, else on TheSportsDB's final, and counts only when a second independent operator agrees (the on-chain payout and TheSportsDB confirm each other; the league's official feed where free; API-Sports optional)</td><td><code>src/lib/burnticker/sources/gameSettle.ts</code>, <code>docs/burnticker/SETTLEMENT-COVERAGE.md</code></td></tr>
+<tr><td>Second, independent attester</td><td>not built</td><td><code>config/burnticker/transparency.json</code> (<code>switchboard-down</code>, <code>quorum-1</code>)</td></tr>
+<tr><td>Public repository</td><td>public</td><td>https://github.com/rfzfhn67yk-netizen/burnticker</td></tr>
+<tr><td>Operator contact</td><td>set: contact@burnticker.com; security@burnticker.com for reports</td><td><code>src/lib/burnticker/fees.ts</code> (<code>OPERATOR_LINE</code>), <code>config/public-repo/overlay/SECURITY.md</code></td></tr>
+<tr><td>Bug bounty</td><td>terms drafted, not published</td><td><code>config/public-repo/overlay/SECURITY.md</code></td></tr>
+<tr><td>Security firm audit</td><td>none, by decision</td><td><code>docs/burnticker/decisions.md</code> (2026-10-09, Audit)</td></tr>
+</tbody>
+</table></div>
+<section aria-labelledby="s-1-abstract">
+<h2 id="s-1-abstract">1. Abstract</h2>
+<p><strong>Coins that burn on real-world results — with receipts.</strong> Burnticker is a launchpad for Solana memecoins whose supply burns when a settled real-world result says so. The receipt is the product: every burn leaves one that a stranger can recompute, and nothing is ever won — things are only burned.</p>
+<p>A creator binds a coin to a selector over a resolution source and to a mapping from outcomes to burns. The source is a primary source with an independent cross-read, or the on-chain payout of an adjudicated Polymarket market. The rule is hashed and locked when the coin is created. When an event in the selector settles, attesters sign the settled reading. The <code>burn_receipts</code> program then spends a share of the coin's own creator-fee pool buying the coin on its Raydium CPMM pool and burns every token it receives, in one instruction that also writes a memo with the reading, the arithmetic and the rule hash. Anyone can recompute that memo from the public source and the published rule.</p>
+<p>The platform has two layers. The engine is the launchpad and the program: rules locked at launch, readings signed before use, burns run by a program rather than promised by a person. The show is built from the same receipts: team coins scored by burns league by league, rivalry pairs (§5) whose pages keep the tally, and Burn Derby pairs and brackets (§5.2). A season is a scoreboard of burns. There is one per league and season, never a ranking across leagues; when a season ends, the coin with the most receipts is its league's champion — a stat, never a recipient: no coin pays anything on any outcome.</p>
+<p>Burnticker is run by one independent operator, reachable at contact@burnticker.com; the operator’s identity is held privately until a legal entity is formed. It is not an investment product: a coin holds no position in any market, and the rule says what the supply does, not what the price does. The program is not audited by a security firm.</p>
+</section>
+<section aria-labelledby="s-2-the-problem-with-burn-claims-today">
+<h2 id="s-2-the-problem-with-burn-claims-today">2. The problem with &quot;burn&quot; claims today</h2>
+<p>Most token burns are statements by whoever controls the tokens. Three patterns recur:</p>
+<ul>
+<li><strong>Operator-controlled burns.</strong> A team wallet decides when and how much to burn, and the same wallet can also sell.</li>
+<li><strong>Unverifiable triggers.</strong> &quot;We burn when X happens&quot; names an event but not a source, a unit or a formula, so nobody can check that a burn matches the event or that one was skipped.</li>
+<li><strong>Team allocations.</strong> Burning tokens a team was given for free removes supply the market never held, and the allocation gives insiders a position the burn posts serve.</li>
+</ul>
+<p>Burnticker takes the trigger, the amount and the custody away from the operator and leaves a receipt a stranger can recompute: the rule is fixed before the first trade, the reading comes from an adjudicated source signed by named keys, the money sits in an account with no withdraw instruction, and the program computes the amount and writes the receipt in the same instruction as the burn.</p>
+</section>
+<section aria-labelledby="s-3-design">
+<h2 id="s-3-design">3. Design</h2>
+<h3 id="s-3-1-the-rule-a-selector-and-an-outcome-burn-mapping">3.1 The rule: a selector and an outcome→burn mapping</h3>
+<p>A rule is a JSON document with schema <code>burnticker.rules/v1</code> (<code>src/lib/burnticker/rules.ts</code>). It names an oracle and a selector, maps outcomes to burns, and applies to markets that do not exist yet.</p>
+<pre><code>{ &quot;schema&quot;: &quot;burnticker.rules/v1&quot;, &quot;oracle&quot;: &quot;kalshi&quot;, &quot;series&quot;: &quot;KXNFLGAME&quot;, &quot;market&quot;: null,
+  &quot;filter&quot;: { &quot;tickerIncludes&quot;: &quot;-DEN&quot; }, &quot;kind&quot;: &quot;binary&quot;,
+  &quot;binary&quot;: { &quot;onYes&quot;: { &quot;fractionOfPool&quot;: 0.02 }, &quot;onNo&quot;: null }, &quot;scalar&quot;: null, &quot;pair&quot;: null,
+  &quot;onVoid&quot;: &quot;skip&quot;, &quot;floorUsd&quot;: &quot;1&quot;, &quot;reserveSol&quot;: &quot;0.02&quot;, &quot;vault&quot;: null }</code></pre>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Field</th><th scope="col">Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>oracle</code></td><td><code>kalshi</code>, <code>polymarket</code> (binary only) and <code>catalogue</code> are live; <code>uma</code>, <code>drift-bet</code>, <code>hedgehog</code> are parsers and stubs, not launchable</td></tr>
+<tr><td><code>series</code> + <code>filter</code></td><td>every present and future market of the series whose ticker contains the text and/or whose title matches a regex</td></tr>
+<tr><td><code>market</code></td><td>one market ticker: a one-shot rule that resolves once, after which the supply is fixed</td></tr>
+<tr><td><code>kind: binary</code></td><td>reads the settled yes/no result (Polymarket: the payout vector on Polygon; Kalshi's <code>result</code> only for coins launched on it before 2026-10-10); <code>onYes</code> / <code>onNo</code> give the burn for each outcome</td></tr>
+<tr><td><code>kind: scalar</code></td><td>reads the settled number and counts <code>unit</code>s from a baseline (<code>previousSettlement</code> or a number) in a direction (<code>up</code>, <code>down</code>, <code>abs</code>)</td></tr>
+<tr><td><code>fractionOfPool</code> / <code>tokens</code></td><td>buyback mode: fraction <code>f</code> of the burn pool per unit (1 % to 10 %); vault mode: tokens per unit</td></tr>
+<tr><td><code>onVoid</code></td><td><code>skip</code>, the only policy</td></tr>
+<tr><td><code>pair</code></td><td>rivalry pairs (§5): <code>pairId</code>, <code>side</code>, <code>counterpartMint</code></td></tr>
+</tbody>
+</table></div>
+<p><strong>Locking.</strong> <code>lockRule</code> serialises the validated rule as canonical JSON (keys sorted, two-space indent, trailing newline) and hashes those bytes with sha256. The hash goes into <code>TokenConfig.rules_sha256</code> at <code>initialize_token</code>, into the token description's footer and into every on-chain memo as <code>rules=sha256:&lt;first 12 hex&gt;</code>. No instruction changes it. A different rule is a different coin.</p>
+<p><strong>Finality.</strong> A Polymarket market counts once its payout vector is on chain; a primary source's period counts once it is complete (<code>src/lib/burnticker/sources/attestedHttp.ts</code>). For coins launched on a Kalshi rule before 2026-10-10, a Kalshi market counts when its status is <code>finalized</code>, or <code>settled</code> once <code>settlement_ts + settlement_timer_seconds</code> has passed (<code>src/lib/burnticker/oracle/kalshi.ts</code>). The rule reads settled results only, never prices; the token page's &quot;market-implied chance of the next burn&quot; is labelled display-only.</p>
+<h3 id="s-3-2-sources">3.2 Sources</h3>
+<p><strong>Settled on primary sources; prediction markets are discovery and optional cross-checks where their terms permit.</strong> On 2026-10-10 the owner decided that Kalshi is not a settlement input: Kalshi's Developer Agreement limits API use to a member's own trading, and its Data Terms forbid using Kalshi data to settle products or to cache or redistribute it. A coin settles on one of two things: a primary source read together with an independent cross-read of the same fact (another operator on another domain), or the payout vector of an adjudicated Polymarket market as Polygon's Conditional Tokens contract stores it (§3.4). The Kalshi adapter (<code>src/lib/burnticker/oracle/kalshi.ts</code>) remains for discovery behind <code>BURNTICKER_KALSHI_ENABLED</code>, and the creation preflight refuses every Kalshi rule.</p>
+<p><strong>Polymarket binary markets are the adjudicated source</strong> (since 2026-10-10): Gamma (<code>https://gamma-api.polymarket.com</code>) finds the markets, and the result is the payout vector the Conditional Tokens contract on Polygon stores for the market's condition id, read with <code>eth_call</code>; a reading counts only once that payout is on chain, a 50-50 payout is a void (<code>src/lib/burnticker/oracle/polymarket.ts</code>). A single game pairs on Polymarket's moneyline market; team coins have no settlement route (Polymarket lists the two teams in an order that changes from game to game).</p>
+<p><strong>First-party feeds are the primary path.</strong> <code>config/burnticker/sources.json</code> holds 34 sources (four of them cross-read-only) read through one generic adapter (<code>src/lib/burnticker/sources/attestedHttp.ts</code>): Treasury, BLS, NOAA, Launch Library 2, JPL, Wikimedia and others, each with a saved fixture, plausibility bounds, a fixed unit, direction, baseline and carry, the <code>operator</code> that runs the endpoint and, where another operator publishes the same number, a shared <code>fact</code>. Key-required sources are present but not launchable.</p>
+<p><strong>$DEFICIT is the stated exception.</strong> The operator's own first coin reads U.S. Treasury &quot;Debt to the Penny&quot; (<code>tot_pub_debt_out_amt</code>) directly: every full $1,000,000,000 added since the previous business day is one unit, remainders carry only across consecutive increases, and each unit spends 2 % of the burn pool — the Federal Reserve's 2 % inflation goal, pointed the other way (<code>config/burnkeeper/deficit.rules.json</code>; the devnet rehearsal coin used 1 %).</p>
+<p><strong>Refused regardless of source</strong> (<code>config/burnticker/refuse.json</code>, applied at create time): deaths, violence, terror, casualty counts, disasters and named private individuals; names that claim to be official; any selector on the coin's own trading (never the token's price). Elections are allowed.</p>
+<h3 id="s-3-3-tiers-what-a-skeptic-can-verify-at-each">3.3 Tiers: what a skeptic can verify at each</h3>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Tier</th><th scope="col">Source kind</th><th scope="col">Admission</th><th scope="col">What a skeptic verifies</th><th scope="col">What stays trusted</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>adjudicated market (Polymarket live; Kalshi not a settlement input since 2026-10-10; Drift BET, Hedgehog stubs)</td><td>settled results only; finality window respected; voids never burn</td><td>the payout vector on Polygon (public chain data) and Gamma's report; the memo's <code>units</code> from the rule</td><td>Polymarket's adjudication (UMA); the attesters' honesty about the read</td></tr>
+<tr><td>2</td><td>optimistic assertion (UMA, stub)</td><td>counts only once settled and not disputed-and-lost</td><td>the assertion's settlement on chain</td><td>UMA's dispute process</td></tr>
+<tr><td>3</td><td>primary API attested by a TEE or zk job</td><td>third-party asset rates allowed from here up</td><td>the job definition and the oracle's on-chain record</td><td>not wired: Switchboard, the planned provider, ended service on 2026-09-25</td></tr>
+<tr><td>4</td><td>primary API read by the keeper</td><td>no asset rates; one real fixture; plausibility bounds; complete periods only</td><td>the exact source row with the <code>curl</code> in every receipt</td><td>the attesters (quorum 1 at launch: the operator)</td></tr>
+<tr><td>5</td><td>page-scraped</td><td>owner's approval per source; regex pinned to the markup</td><td>the page and the regex</td><td>the page's editorial number and the attesters</td></tr>
+</tbody>
+</table></div>
+<p>Source: <code>docs/burnticker/README.md</code> §6 and <code>docs/burnkeeper/attestation.md</code> §1.</p>
+<h3 id="s-3-4-settlement-coverage">3.4 Settlement coverage</h3>
+<p><code>src/lib/burnticker/coverage/</code> audits, for every category of <code>config/burnticker/categories.json</code> and every selector kind the wizard can emit, whether a coin can be settled without Kalshi. A category is <strong>settleable</strong> only with at least one primary source (a first-party adapter: attested-http or on-chain, tier 4 or better, launchable, not an aggregator) AND an independent cross-read of the same fact; <strong>adjudicated-only</strong> when Polymarket's binary markets are the only route; <strong>uncovered</strong> otherwise. Each source also gets a 90-day dry run: readings its schedule expected against readings produced, the median latency from the period's end to the keeper's first sighting, and the rate at which the primary and its cross-read disagree.</p>
+<p>On the frozen fixtures of 2026-10-10 five of eleven categories are settleable (<code>docs/burnticker/SETTLEMENT-COVERAGE.md</code>): Sports (each game settles on its Polymarket on-chain payout where a moneyline market exists, else on TheSportsDB under its commercial licence, confirmed by the league's own feed — MLB, NHL, NBA — or API-Sports; no ESPN reads — schedules come from the leagues' own feeds or TheSportsDB), Economics (<code>fred.UNRATE</code> ↔ BLS <code>LNS14000000</code>, <code>fred.CPIAUCSL</code> ↔ BLS <code>CUSR0000SA0</code>, <code>bls.eggs</code> ↔ FRED <code>APU0000708111</code>, <code>treasury.debt</code> ↔ FRED <code>GFDEBTN</code> at quarter ends; 0 disagreements on every shared month), Financial markets (Pyth ↔ RedStone), Weather &amp; Climate (the NWS climate report ↔ the Iowa Environmental Mesonet) and Crypto &amp; On-chain (<code>bitcoin.blockHeight</code> ↔ blockstream.info; Pyth ↔ RedStone or the pool TWAP). The other six are adjudicated-only; none is uncovered. The pair catches a broken endpoint, a parser error or a tampered response; when the cross-read is a mirror (FRED republishes BLS), it does not catch an error in the original release.</p>
+<p>Creation runs the selector live once first (<code>preflightSelector</code>, wired into the launch pipeline): the primary and its cross-read are read, and creation is refused on a Kalshi rule, a missing cross-read, a failed read or a disagreement on the latest shared period. The matrix is served at <code>GET /api/burnticker/v1/coverage</code>, drawn on the trust page and rendered to <code>docs/burnticker/SETTLEMENT-COVERAGE.md</code>; the test suite fails when any category is uncovered.</p>
+</section>
+<section aria-labelledby="s-4-settlement-on-chain-the-burn-receipts-program">
+<h2 id="s-4-settlement-on-chain-the-burn-receipts-program">4. Settlement on chain: the <code>burn_receipts</code> program</h2>
+<h3 id="s-4-1-accounts">4.1 Accounts</h3>
+<p>All accounts are PDAs of the program keyed by the mint (<code>programs/burn-receipts/programs/burn_receipts/src/constants.rs</code>, <code>state.rs</code>).</p>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Account</th><th scope="col">Seeds</th><th scope="col">Holds</th></tr></thead>
+<tbody>
+<tr><td><code>TokenConfig</code></td><td><code>[&quot;config&quot;, mint]</code></td><td>the immutable rule (<code>RuleParams</code>), feed id, memo prefix and source, <code>rules_sha256</code>, params hash, attester set and quorum, any pending attester proposal, the registered CPMM pool and <code>pool_verified</code>, the pinned LaunchLab platform, the cluster genesis, and running state (last reading, carry, crank cursor, carried spend, totals)</td></tr>
+<tr><td>fee PDA</td><td><code>[&quot;fee&quot;, mint]</code></td><td>a system-owned account with no data: the burn pool. It is LaunchLab's recorded creator, so creator fees land here. Its WSOL and token ATAs are the buyback's working accounts</td></tr>
+<tr><td><code>Reading</code></td><td><code>[&quot;reading&quot;, config, record_date u32 LE]</code></td><td>one attested reading (value, prev, delta, carry in/out, units, signer mask, source and proof hashes) and its crank outcome (pool basis, rule spend, carried spend, spent, received, burned, the pool traded on). Never closed</td></tr>
+<tr><td>vault (vault mode)</td><td>ATA(config PDA, mint)</td><td>tokens to burn; authority is the config PDA</td></tr>
+<tr><td><code>PlatformConfig</code></td><td><code>[&quot;platform&quot;]</code>, one per program</td><td>the pre-audit burn-pool cap, its sunset, its authority, a pending raise, an optional cranker allowlist</td></tr>
+</tbody>
+</table></div>
+<h3 id="s-4-2-lifecycle">4.2 Lifecycle</h3>
+<pre><code>initialize_token (mint keypair signs, once)        rule, hash, attesters, quorum; fee PDA funded with the reserve; LaunchLab platform pinned
+        |
+LaunchLab create with creator = fee PDA            curve trades pay the creator fee into LaunchLab's [fee PDA, WSOL] vault
+        |
+claim_launchlab_creator_fee (anyone)               curve creator fee -&gt; fee PDA's WSOL account
+        |
+graduation -&gt; register_pool (anyone)               only LaunchLab's own migration pool, LP burned or locked
+        |
+collect_creator_fee_permissionless (Raydium, anyone)   CPMM creator fee -&gt; fee PDA's ATAs
+        |
+event settles -&gt; attesters sign -&gt; submit_reading (anyone + quorum)   Reading PDA, units by the carry rule
+        |
+crank_buyback (anyone; allowlist only while the cap stands)
+        fee PDA SOL -&gt; WSOL -&gt; CPMM swap -&gt; fee PDA token ATA -&gt; BURN 100 % -&gt; Memo CPI      one instruction</code></pre>
+<p>Before graduation there is no CPMM pool, so buyback readings wait in order until <code>register_pool</code> succeeds; the 30-day dead-pool rule (§4.9) does not apply to an unregistered pool (<code>docs/burn-receipts/README.md</code> §3).</p>
+<h3 id="s-4-3-initialize-token">4.3 <code>initialize_token</code></h3>
+<p>Signed by the payer, the creator and the new mint keypair (the mint need not exist yet), so only the launcher can create the config for a mint, and only once. It records the rule, feed id, memo text, rules hash, attester set and quorum; funds the fee PDA with the reserve; enforces the swap-safety bounds of §4.5; and, for buyback policy 0, pins the LaunchLab PlatformConfig's key, <code>cpConfigId</code> and LP lock and burn scales, refusing a platform whose <code>platformCpCreator</code> is not unset or the fee PDA, or whose scales cover under 50 %. It takes no token program or token account: the program has no mint path.</p>
+<h3 id="s-4-4-readings">4.4 Readings</h3>
+<p><code>submit_reading(record_date, value, source_url_hash, proof_hash)</code> is permissionless but valid only with a quorum of attester signatures. Each attester signs exactly these bytes (<code>src/attest.rs</code>):</p>
+<pre><code>BURNRECEIPTS-v3|&lt;cluster genesis&gt;|&lt;program id&gt;|&lt;mint&gt;|&lt;feed_id&gt;|prev=&lt;previous date or none&gt;|&lt;YYYY-MM-DD&gt;|&lt;value&gt;|src=&lt;sha256(source URL), hex&gt;|proof=&lt;proof locator, hex&gt;</code></pre>
+<p>The signatures ride in an <code>Ed25519SigVerify</code> instruction of the same transaction (one shared message, one entry per key); the program reads them back through the instructions sysvar, requires every offset to point into that instruction, counts each key once, and matches the message byte for byte. Binding the genesis, program id and mint makes a signature useless on another cluster, token or deployment; binding the previous date fixes the order, so pre-signed readings cannot be reordered or skipped. Attester sets hold at most 5 keys and the quorum is at most 3, the largest that fits a legacy transaction (966 / 1,076 / 1,186 bytes for 1 / 2 / 3 keys).</p>
+<p>Dates strictly increase and no future date is accepted. Readings are never edited, deleted or closed. Units follow the rule (<code>src/math.rs</code>, mirrored in <code>src/lib/burnReceipts/math.ts</code>):</p>
+<ul>
+<li>on an increase, <code>units = floor((delta + carry_in) / unit_value)</code>; under carry rule 0 the remainder carries across consecutive increases, under rule 1 it is dropped;</li>
+<li>a down or flat reading earns nothing and resets the carry;</li>
+<li>a quorum-signed reading whose change exceeds <code>max_abs_delta</code> is accepted as a RESET: 0 units, carry reset, new baseline, <code>ReadingReset</code> emitted. It never wedges the feed (review 1, M-2).</li>
+</ul>
+<p><strong>Event rules on the program: the unit counter.</strong> The program's reading model is one value per UTC date. A Burnticker token is initialised with <code>value_decimals 0</code>, <code>unit_value 1</code>, carry none, feed id <code>bt.units:&lt;TICKER&gt;</code>, and the attested value is a counter: <code>value(D) = 1 + every unit the token's settled receipts carried through date D</code>. The day's delta is the day's units, so one crank covers all of a day's settlements. The signed <code>src</code> hash commits to the exact events counted: <code>sha256(&quot;burnticker://&lt;TICKER&gt;/units/&lt;YYYY-MM-DD&gt;?events=&lt;id,id,…&gt;&quot;)</code> (<code>src/lib/burnticker/program.ts</code>). A rule that pays different fractions for different outcomes cannot be expressed on the current program; the launch bundle refuses it.</p>
+<h3 id="s-4-5-crank-buyback-swap-burn-and-memo-in-one-instruction">4.5 <code>crank_buyback</code>: swap, burn and memo in one instruction</h3>
+<p><code>crank_buyback(record_date)</code> processes the next reading in line (<code>prev_date == crank_cursor</code>). The cranker supplies no amount, pool, rate or recipient. In order (<code>src/instructions/crank_buyback.rs</code>):</p>
+<ol>
+<li><strong>Pool.</strong> <code>pool = fee PDA lamports − reserve + WSOL already held</code> (<code>spendable_pool</code>). While the pre-audit cap is in force the rule is applied to <code>min(pool, cap)</code>; <code>BurnPoolCapBound</code> is emitted when the cap binds and the Reading keeps both the basis and the actual pool.</li>
+<li><strong>Rule spend.</strong> <code>spend = pool × (1 − (1 − f)^units)</code>, <code>f = fraction_per_unit_bps / 10,000</code>, computed as <code>keep = floor(pool × pow_floor(1 − f, units) / 1e18)</code>, <code>spend = pool − keep</code> in u128 fixed point, so spend never exceeds the pool. It agrees with the keeper's exact rational to within one lamport for pools under 10^15 lamports (pinned by test). The amount due is the rule spend plus any spend carried from earlier cranks.</li>
+<li><strong>Spend floor.</strong> Under <code>floor_lamports</code> nothing is bought; the reading is processed and memo'd <code>swap=none</code>, and the pool keeps the SOL.</li>
+<li><strong>Per-crank cap.</strong> One crank spends at most 2 % of the pool's WSOL reserve; the rest is carried (<code>carried_spend_lamports</code>, <code>SpendCapBound</code>). Small, frequent swaps limit trade impact and sandwich room.</li>
+<li><strong>TWAP guard.</strong> <code>max_twap_deviation_bps</code> ≤ 300 and <code>twap_window_secs</code> 600 to 1,200 are enforced at init. The spot exchange rate (tokens per SOL) may not sit more than the deviation below the CPMM oracle's time-weighted average. The oracle records the rate before each swap and only across distinct seconds, so a same-block front-run cannot move it. A refused crank defers the burn day: late, not lost.</li>
+<li><strong>Minimum output.</strong> <code>min_out</code> is the larger of two quotes, each the constant-product output less the pool's whole fee and <code>slippage_bps</code> (≤ 300): one on the live reserves, one on a pool of the same SOL depth at the TWAP rate. A same-transaction push lowers the first quote, not the second, so a sandwich can take at most <code>slippage_bps</code> of a spend that is itself at most 2 % of the reserve.</li>
+<li><strong>Swap.</strong> System transfer from the fee PDA to its WSOL account, then a CPI to Raydium CPMM <code>swap_base_input</code> on the registered, verified pool. The CPMM program id is hard-coded; vaults, <code>amm_config</code> and the observation account are checked against the pool.</li>
+<li><strong>Burn.</strong> Every token the fee PDA holds is burned: what the swap delivered plus any token-side creator fees or donations.</li>
+<li><strong>Memo.</strong> The program CPIs the Memo program with the canonical v2 memo (§13.4), built from the accounts alone.</li>
+<li><strong>Events.</strong> <code>ReadingProcessed</code>, plus <code>SpendCapBound</code>, <code>SpendCarried</code>, <code>BurnPoolCapBound</code> as they apply, via <code>emit_cpi!</code>.</li>
+</ol>
+<p><code>crank_vault</code> is the vault-mode twin: <code>owed = min(units × tokens_per_unit + shortfall_in, allocation_left)</code>, <code>burn = min(owed, vault)</code>, the rest a public shortfall carried forward, memo v1. <code>crank_no_units</code> marks a zero-unit reading processed.</p>
+<p>Measured: about 110,000 compute units typical, 137,009 worst case; the crank transaction is 907 bytes.</p>
+<h3 id="s-4-6-how-fees-reach-the-burn-pool">4.6 How fees reach the burn pool</h3>
+<p>The fee PDA is LaunchLab's recorded creator. LaunchLab's <code>initialize_v2</code> takes <code>creator</code> as a non-signer, so the launch passes <code>feePda(programId, mint)</code> there (<code>docs/burnkeeper/fees.md</code> §1; devnet simulation with a PDA creator succeeded, 188,143 CU).</p>
+<ul>
+<li><strong>On the curve,</strong> LaunchLab accrues the creator fee in its vault <code>[fee PDA, WSOL]</code>, claimable only with the creator's signature. <code>claim_launchlab_creator_fee</code> (permissionless) CPIs LaunchLab's <code>claim_creator_fee</code> with the fee PDA signing by seeds and the recipient pinned to the fee PDA's own WSOL account.</li>
+<li><strong>After graduation,</strong> the CPMM pool records <code>pool_creator</code> = the launch creator when the platform's <code>platformCpCreator</code> is unset, and Raydium's <code>collect_creator_fee_permissionless</code> pays that creator's ATAs. Any payer may call it.</li>
+<li><strong>Seed deposits.</strong> Anyone can send SOL to the fee PDA. Nobody can take it out.</li>
+</ul>
+<h3 id="s-4-7-pool-registration-and-provenance">4.7 Pool registration and provenance</h3>
+<p>*Pair coins (registration policy 2, §5.4) register through <code>register_pair_pool</code> instead; everything below is the LaunchLab path, unchanged.*</p>
+<p><code>register_pool</code> (permissionless, once) accepts only LaunchLab's own migration pool:</p>
+<ol>
+<li>the token's LaunchLab pool (<code>[&quot;pool&quot;, mint, WSOL]</code> under LaunchLab) records the fee PDA as creator, CPMM as its migration destination, and the platform pinned at init;</li>
+<li>the CPMM pool is the deterministic PDA <code>[&quot;pool&quot;, cpConfigId, token0, token1]</code> of the <code>cpConfigId</code> pinned at init;</li>
+<li>its <code>pool_creator</code> is the fee PDA;</li>
+<li>at least 50 % of its live LP supply is burned or held by Raydium's LP lock (<code>ATA(LOCK_CPMM_AUTH, lp_mint)</code>). This is a minimum under the provenance proof: to block registration a griefer must deposit more than the whole migrated liquidity and leave it there.</li>
+</ol>
+<p>The mint must have no mint authority and no freeze authority. Burnticker's platform locks 100 % of graduation LP (§6), so a correct migration passes with margin. <strong>Not yet confirmed:</strong> that the real LaunchLab migration passes the creator through, creates the pool at the <code>cpConfigId</code> PDA and locks or burns LP as its SDK says. LaunchLab is closed source; this is a devnet-rehearsal gate.</p>
+<p><strong>Stranding recovery.</strong> If no pool can be registered, or the registered one is continuously untradeable for 7 days, the token's admin may propose <code>set_registration_policy</code> to a fixed pool passing the same creator and LP checks, plus either 90 % of LP burned or locked or the pool PDA of a LaunchLab-known AmmConfig. The proposal waits 48 hours, expires after 14 days, can be vetoed by any one current attester, and the power ends at the pre-audit cap's sunset or at <code>renounce_admin</code>.</p>
+<h3 id="s-4-8-post-cpi-guards">4.8 Post-CPI guards</h3>
+<p>Two instructions lend the fee PDA's signature to external, upgradeable programs: the LaunchLab claim and the CPMM swap. After each, the program requires the fee PDA to still be System-owned with no data and the expected lamports, and each fee-PDA token account to keep owner, mint, no delegate and no close authority; the swap's output vault must have paid exactly what the fee PDA received. Any violation reverts (<code>FeeAccountTampered</code>, <code>SwapOutputMismatch</code>; <code>src/guards.rs</code>). This is tested against a hostile stand-in loaded at LaunchLab's and CPMM's program ids (<code>mocks/evil_callee</code>).</p>
+<h3 id="s-4-9-pool-health-and-replacement">4.9 Pool health and replacement</h3>
+<p><code>check_pool_health</code> (permissionless, top-level only, alone with the pool in its transaction) records observations of the registered pool being untradeable (swaps disabled, account gone, or under 0.01 SOL WSOL reserve). A spell starts on the second of two observations at least 1 hour apart and stays continuous while observations are at most 24 hours apart. After 7 continuous days, <code>replace_pool</code> (permissionless) moves to a different tradeable pool passing every <code>register_pool</code> check; after 30 days, cranks process readings below the spend floor with the amount carried, so the queue never wedges. A Jito bundle of separate transactions is invisible to these checks; that residual is accepted (<code>pool_health.rs</code>).</p>
+<h3 id="s-4-10-powers-what-exists-with-timelocks-and-sunsets">4.10 Powers: what exists, with timelocks and sunsets</h3>
+<p>From the Powers Register (<code>docs/burn-receipts/powers-register.md</code>, generated from the IDL; the generator fails on any undescribed instruction or signer):</p>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Power</th><th scope="col">Holder</th><th scope="col">Limit</th><th scope="col">Timelock</th><th scope="col">Sunset</th></tr></thead>
+<tbody>
+<tr><td>Propose attester changes</td><td>token admin (intended: the Squads vault)</td><td>quorum never lowered, never above 3; set never smaller than quorum; one proposal keeps ≥ quorum current keys and adds fewer new keys than the new quorum; kept keys vouch for added keys only after 7 days in the set</td><td>48 h, applied by anyone</td><td><code>renounce_admin</code></td></tr>
+<tr><td>Raise the burn-pool cap</td><td>platform authority (intended: the Squads vault)</td><td>raise only</td><td>48 h, applied by anyone</td><td>cap sunset, set once at <code>initialize_platform</code>, ≤ 365 days and ≤ 2027-10-01</td></tr>
+<tr><td>Clear the cranker allowlist</td><td>platform authority or any listed key</td><td>clear only, never add</td><td>none</td><td>allowlist lapses at the cap sunset or 90 days after <code>initialize_platform</code></td></tr>
+<tr><td>Registration-policy switch</td><td>token admin</td><td>stranding only (§4.7)</td><td>48 h, 14-day expiry, attester veto</td><td>cap sunset; <code>renounce_admin</code></td></tr>
+<tr><td>Program upgrade</td><td>upgrade authority (plan: Squads 2-of-3)</td><td>can replace all code</td><td>48 h Squads time lock</td><td>set to none after review (§9)</td></tr>
+<tr><td>LaunchLab platform admin (outside the program)</td><td>the key that created the platform</td><td>fee rates, wallets, <code>cpConfigId</code>, <code>platformCpCreator</code>, LP scales for launches not yet migrated</td><td><strong>none</strong></td><td>none: the admin cannot be transferred</td></tr>
+</tbody>
+</table></div>
+<p><strong>What has no instruction:</strong> withdraw, sweep, transfer, close or set-recipient for the fee PDA, its token accounts, the vault or any program account; mint; pause or freeze; rule update; feed, memo, rules-hash, mint, creator or registered-pool change; reading edit or delete; fee change (the program charges no fee). No account is ever closed, so no rent is refunded. Without a PlatformConfig the hard-coded default cap applies (25 SOL until 2027-10-01T00:00Z), so a lost or finalised upgrade authority cannot wedge buybacks.</p>
+<h3 id="s-4-11-the-pre-audit-cap">4.11 The pre-audit cap</h3>
+<p>While in force, each crank's basis is <code>min(pool, 25 SOL)</code>; SOL above the cap stays in the fee PDA. <code>initialize_platform</code> (upgrade authority only, once) must set exactly the default, so the cap is never lowered; it can only be raised through the 48-hour timelock and disappears at its sunset. It protects against program bugs, not against the operator, whose multisig can replace the code until the upgrade authority is finalised.</p>
+<p>Every state change emits an event through <code>emit_cpi!</code> (inner-instruction data, not truncatable logs), so an indexer can rebuild state (26 event types, §13.3).</p>
+</section>
+<section aria-labelledby="s-5-rivalry-pairs">
+<h2 id="s-5-rivalry-pairs">5. Rivalry pairs</h2>
+<p>Two coins launch together on the same tier-1 selector with inverted mappings (<code>src/lib/burnticker/rules.ts</code> <code>invertMapping</code>, <code>launchBundle.ts</code> <code>buildPairBundles</code>). Examples: $BRONCOS burns on the NO of each <code>-DEN</code> leg of <code>KXNFLGAME</code>, $CHIEFS on the YES; $BULLS and $BEARS on the S&amp;P close direction (scalar <code>up</code> against <code>down</code>). A binary settlement burns exactly one side; a flat scalar settlement burns neither.</p>
+<ul>
+<li><code>pair: { pairId, side, counterpartMint }</code> is part of each side's canonical JSON, so the link is inside both locked rules; the two rules are hashed independently. Side A is created first; side B's rule names A's mint as counterpart, and A's counterpart is held in the registry's append-only <code>pairs</code> table.</li>
+<li>Binary sides swap <code>onYes</code> and <code>onNo</code>; scalar sides flip <code>up</code> and <code>down</code>; an <code>abs</code> rule cannot pair. Pairs must use a tier-1 adjudicated market source.</li>
+<li><strong>The scoreboard.</strong> The pair page shows both sides, the burn tally, the supply burned per side and the interleaved receipts; for a binary pair both back-tests' burn counts sum to the selector's non-void settlement count.</li>
+</ul>
+<p>A relative-value perpetual version was considered and rejected (pool-depth caps, oracle manipulation, no US-legal path; LAUNCHPAD-PATH §22).</p>
+<h3 id="s-5-1-both-or-neither">5.1 Both or neither</h3>
+<p>Every pair created since 2026-10-10 carries a clause in both sides' canonical rules: <code>pair.clause = &quot;both-or-neither&quot;</code>, a <code>voidBy</code> date (a one-shot's first settlement date, else 30 days after launch).</p>
+<ul>
+<li>Event burns on either side apply only once BOTH coins have a registered pool. A settlement read before that is recorded as a <code>pending-pair</code> receipt; the cycle the second pool registers, the pair goes live and the waiting receipts execute in settlement order.</li>
+<li>If either side has no registered pool when the <code>voidBy</code> UTC date ends, the pair voids. Waiting receipts become <code>voided</code> (final), no event burn happens on either side again, and the rule has ended: each coin's pool winds down (section 5.3), executed once that coin has a pool, so no fee is stranded in a pool that can never burn.</li>
+<li>The outcome (live or voided) is written once to the registry's append-only <code>pair_outcomes</code> table. The pair page shows the state, the void date and both bonding curves side by side.</li>
+</ul>
+<h3 id="s-5-2-burn-derby-coin-against-coin">5.2 Burn Derby: coin against coin</h3>
+<p>Burn Derby is a selector kind for pairs: the relative performance of two existing coins over a UTC day (00:00 to 00:00) or week. The rule's <code>derby</code> block names both coins (a Pyth feed id, a Solana mint, the deepest SOL pool, an independent cross-read), the window, the measure (% change, or the change of circulating supply times the feed value) and the season; the rule's <code>series</code> is derived from it and the whole block is inside the rule hash (<code>src/lib/burnticker/derby/spec.ts</code>).</p>
+<ul>
+<li><strong>Settlement.</strong> A window's margin is coin A's % change minus coin B's, exact to six decimals. A positive margin settles YES and side A's coin burns; a negative margin settles NO and side B's coin burns; an exact tie is a void on both sides. The coin on the winning side burns; nothing is paid to anyone. A one-shot variant settles once, on the first window that ends with A's size above B's (YES), or at the end of the season without it (NO).</li>
+<li><strong>Values.</strong> Pyth: the sponsored <code>PriceUpdateV2</code> accounts on Solana, which Pyth's receiver program writes after verifying the Wormhole-signed update, read keylessly and snapshotted at each boundary; or the Hermes update published at the boundary (Pyth's pull service, with an API key), whose bytes' sha256 becomes the proof. A coin without a Pyth feed is read from the time-weighted vault balances of its deepest SOL pool, priced with Pyth's SOL/USD feed.</li>
+<li><strong>Cross-read.</strong> An independent operator (Jupiter, DexScreener or RedStone) is snapshotted at the same boundaries. When its margin differs from the primary's by more than two percentage points, or a value is missing, the window is withheld: no reading, no burn, an alert. Each window is decided once and stored append-only.</li>
+<li><strong>Proof on chain.</strong> The reading carries <code>derby:sha256:&lt;hex&gt;</code> of the window's proof document; the counter attestation's quorum-signed message carries the same hash as <code>proof=</code> (section 4.4), and <code>src=</code> commits to the event ids, which carry its first 16 hex digits.</li>
+<li><strong>Brackets.</strong> Eight or sixteen coins, one derby per match per round (default seven days). More winning days advances; the tiebreak is the compounded change over the round, then the lower seed. The losing fan coin retires and reads nothing more. A winning day in the final counts two units, which the program compounds as pool × (1 − (1 − f)²), while two times f stays within the rules' 10% maximum.</li>
+<li><strong>Refused.</strong> A Burnticker coin as an input, the refuse list, the same coin twice, a coin with no Pyth feed and under $250,000 of liquidity, and US index proxy feeds unless the host enables them. A coin's own trading is never an input.</li>
+</ul>
+<h3 id="s-5-3-no-pool-is-left-behind">5.3 No pool is left behind</h3>
+<p>Every rule created since 2026-10-10 carries <code>onEnd: { windDownDays: 28, sweepThresholdLamports }</code> inside its hash.</p>
+<ul>
+<li><strong>The wind-down.</strong> When a rule ends for any reason (a one-shot resolved NO or void, a pair voided, a derby season over, a bracket coin knocked out, a team's season over), the keeper attests a daily reading from a date-based clock whose proof is sha256(&quot;clock|&lt;date&gt;|&lt;rules sha256&gt;&quot;). Each day counts the smallest number of units n of the rule's own fraction f with (1 − f)^(28n) ≤ 1 % — 17 units a day at 1 % — so at least 99 % of the pool is spent within 28 days; the 2 % per-crank cap carries the rest forward and the $1 floor ends the tail. Then the coin retires.</li>
+<li><strong>A one-shot at 100 %.</strong> A one-shot mapping may spend the whole pool (recurring rules stay at 10 % or less); the program already accepts 10,000 basis points. Because a crank spends at most 2 % of the pool's reserve and needs a reading with units, the keeper attests one drain unit a day after the YES — each one's rule spend is the whole pool, exactly — until the program carries nothing more.</li>
+<li><strong>The sweep.</strong> A retired coin's burn pool keeps receiving the post-graduation creator fee. When its spendable balance passes the threshold the keeper attests one full-spend reading (at most once a week). A permissionless instruction that lets anyone do this without the keeper is queued for the next program review (<code>PROGRAM-UPGRADE-QUEUE.md</code>), as is forwarding a losing coin's leftover to the winning coin of an outcome set.</li>
+</ul>
+<p>Communities adding to a score by burning their own tokens into the program was considered and not built: it would turn the score into a function of spending and add a deposit path to a program designed without one.</p>
+<h3 id="s-5-4-the-pair-curve-both-coins-graduate-or-neither-does">5.4 The pair curve: both coins graduate, or neither does</h3>
+<p>On LaunchLab each coin of a pair has its own curve, so one side can graduate while the other stalls. The owner's decision of 2026-10-10 is a second program, <code>pair_curve</code> (<code>docs/burnticker/PAIR-CURVE.md</code>), through which a pair launches when <code>BURNTICKER_PAIR_CURVE_ENABLED</code> is set (default off; single coins stay on LaunchLab). Until it is on, pairs launch on two LaunchLab curves under the rules-level &quot;both or neither&quot; clause of §5.1.</p>
+<ul>
+<li><strong>One account per pair</strong>, two virtual-reserve bonding curves (pump.fun's constants by default: 30 SOL virtual, 1.073 B virtual tokens, 793.1 M sellable, 206.9 M reserved for the pool), one System-owned SOL vault, 1,000,000,000 tokens per coin at 6 decimals, mint authority revoked at creation and no freeze authority. The curve is path-independent — the vault holds exactly <code>F(sold) = ceil(V_s · sold / (V_t − sold))</code> per side after any sequence of trades, so selling everything back drains it exactly.</li>
+<li><strong>Fee: 100 bps of every curve trade</strong>, 25 for the developer wallet (the claim wallet of Burnticker's own LaunchLab platform, compiled into the program) and 75 for the traded coin's <code>burn_receipts</code> fee PDA. Both stay in the pair's vault until they are due: the 75 bps reach the fee PDA when that coin's pool is created (or go back to its holders on a void), the 25 bps are paid by a permissionless claim. No trade pays any other account, so no outside wallet can stop trading. No Raydium curve fee, no referral, no creator slice.</li>
+<li><strong>Graduation</strong> needs the combined raise to reach the pair's threshold with each side holding a minimum share of it (default 25 %, at most 40 %), before the deadline, and both sides able to pay for their pools. The trade that meets this commits the pair on the spot (both curves close; it can no longer void); each <code>graduate</code> call then creates its side's CPMM pool at a <code>pair_curve</code> address nobody else can sign for, with SOL and tokens in the curve's closing ratio, and burns every token the pool did not need; a permissionless <code>lock_lp</code> then locks 100 % of the LP with Raydium's LP lock, the Fee Key owned by <code>burn_receipts</code>' fee-keys PDA (LP locked forever, §6). Two transactions, because both pools in one would sit at Solana's 64-entry instruction-trace cap and a griefer could push them over it.</li>
+<li><strong>Void</strong>: at the deadline without graduation, buys close and each coin's holders share what that side raised (its curve SOL plus the 75 bps held for its fee PDA) pro rata, with no fee and no advantage in leaving first. Once nothing circulates the pair's accounts close. A side Raydium still blocks three days after the commit, or any side still without its pool thirty days after it, is put into the same pro-rata exit, alone. Once the deadline has passed nobody can leave along the curve ahead of the others.</li>
+<li><strong>Registration</strong>: <code>burn_receipts</code> gained registration policy 2 and <code>register_pair_pool</code>, which accepts only the pool <code>pair_curve</code> recorded for that mint, at its <code>pair_curve</code> address, created by the pair's vault on the pinned cpConfigId, with ≥ 90 % of the creation LP burned or locked (§4.7).</li>
+<li><strong>Powers</strong>: none over funds. No admin, no parameter update, no withdraw; the upgrade authority is the same Squads vault as <code>burn_receipts</code>, to be finalised before the first public pair (<code>docs/burn-receipts/pair-curve-powers-register.md</code>). Two blind reviews (2026-10-10) found five High issues in the first version; all are fixed and re-run on devnet (<code>docs/burn-receipts/CHANGELOG.md</code>).</li>
+</ul>
+</section>
+<section aria-labelledby="s-6-economics">
+<h2 id="s-6-economics">6. Economics</h2>
+<p>Fee dials were read from the pinned Raydium SDK, Raydium's documentation and the live config accounts (<code>docs/burnkeeper/fees.md</code>; designed values in <code>src/lib/burnticker/fees.ts</code>).</p>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Phase, per unit of volume</th><th scope="col">Raydium</th><th scope="col">Burnticker (developer / operator)</th><th scope="col">Burn pool (fee PDA)</th><th scope="col">Nobody</th></tr></thead>
+<tbody>
+<tr><td>Bonding curve (LaunchLab)</td><td>25 bps</td><td>25 bps (platform <code>feeRate</code> 2,500 ppm)</td><td>50 bps (<code>creatorFeeRate</code> 5,000 ppm, the maximum)</td><td>none</td></tr>
+<tr><td>After graduation (CPMM tier 0, 25 bps trade fee)</td><td>4 bps of trade fee (3 RAY buyback + 1 treasury) + 0.25 bp (5 % of the creator fee)</td><td>4.2 bps (20 % of the locked LP's 21 bps, by <code>claim_lock_fees</code>)</td><td>16.8 bps (80 % of the locked LP's fees) + 4.75 bps (Raydium's fixed 5 bps creator fee, less 5 %)</td><td>none</td></tr>
+<tr><td>Pair curve (<code>pair_curve</code>, §5.4)</td><td>0</td><td>25 bps</td><td>75 bps</td><td>none</td></tr>
+<tr><td>Pair coin after graduation (CPMM public <code>initialize</code>, creator fee off)</td><td>4 bps of trade fee</td><td>4.2 bps (20 % of the locked LP's fees)</td><td>16.8 bps (80 % of the locked LP's fees; public pool creation cannot turn the creator fee on)</td><td>none</td></tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>LP locked forever; its fees fund the burn</strong> (owner decision 2026-10-10, replacing &quot;all graduation LP is burned&quot;). 100 % of every coin's graduation LP is locked with Raydium's LP lock (LaunchLab <code>platformScale</code> 1,000,000, creator 0, burn 0; pair coins through <code>lock_lp</code>), never withdrawable and not creator-configurable. The Fee Key NFT is owned by <code>burn_receipts</code>' <code>[&quot;fee_keys&quot;]</code> PDA. The permissionless <code>claim_lock_fees</code> splits the SOL side of the LP fees by compiled constants — <code>LOCK_FEE_BURN_BPS</code> 8,000 to the coin's burn pool, <code>LOCK_FEE_OPERATOR_BPS</code> 2,000 to the operator treasury (the Squads vault) — and burns the coin side; no admin key or config field can change the split. Per swap after graduation that is ≈ 21.55 bps toward the burn (16.8 + 4.75; it was 4.75 with the LP burned) and 4.2 bps to the operator: <strong>the operator earns 20 % of post-graduation LP fees.</strong> On mainnet the treasury is not compiled in yet; until it is, every claim refuses <code>TreasuryNotPinned</code> and the fees stay in the lock.</li>
+<li><strong>Creators earn no cash from fees.</strong> The creator-fee slot pays the burn pool, 100 %, by construction: the fee PDA is the creator.</li>
+<li><strong>No team allocation</strong> on any coin. The program has no mint path; supply is LaunchLab's fixed 1,000,000,000 at 6 decimals.</li>
+<li><strong>Seed deposits are gifts.</strong> $DEFICIT's planned 3 SOL seed to its burn pool is disclosed and carries no claim.</li>
+<li><strong>No referral share</strong> (<code>shareFeeRate</code> 0), no hidden parameters, no creator fee slice (<code>CREATOR_FEE_SLICE_BPS = 0</code>).</li>
+<li><strong>What the platform fee funds</strong> (<code>USE_OF_FEES</code>): &quot;attesters, hosting, the audit, and the operator. The platform never buys back any coin, including its own.&quot; The bounty pool (5 to 10 SOL) is drawn from the same fee.</li>
+<li>A creator pays LaunchLab's creation cost and gas; nothing to Burnticker up front.</li>
+</ul>
+<p>The platform admin key can change these dials for launches not yet migrated (§9); the trust page shows the live PlatformConfig beside the designed dials when the host has an RPC configured (<code>compareLivePlatform</code>).</p>
+</section>
+<section aria-labelledby="s-7-attestation-and-the-trust-ladder">
+<h2 id="s-7-attestation-and-the-trust-ladder">7. Attestation and the trust ladder</h2>
+<p>Every attester is an ed25519 key with an informational kind tag (operator, zkTLS relayer, oracle). The program verifies only signatures and the quorum; proof checking is off chain by design (<code>docs/burn-receipts/attestation.md</code>).</p>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Level</th><th scope="col">Configuration</th><th scope="col">Who could sign a false reading</th><th scope="col">Who holds the money</th><th scope="col">What remains trusted</th></tr></thead>
+<tbody>
+<tr><td>1 (launch)</td><td>the operator's keeper key, quorum 1</td><td>the operator's key</td><td>nobody: the fee PDA has no withdraw path</td><td>the operator's read of the source; the visible, permanent record bounds the damage to wrongly sized burns</td></tr>
+<tr><td>2</td><td>keeper plus an independent attester (second operator or zkTLS relayer), quorum 2</td><td>two independent keys acting together</td><td>nobody</td><td>both attesters; with a relayer, the zkTLS provider</td></tr>
+<tr><td>3</td><td>a quorum of independent operators or relayers whose proofs are public</td><td>a colluding quorum, against public proofs</td><td>nobody</td><td>the proof system and the source</td></tr>
+</tbody>
+</table></div>
+<p><strong>Current status.</strong> Level 1 is the launch design. Switchboard, the planned second signer, ended all oracle services on 2026-09-25; its attester was built and removed from the program the same day (commit <code>f94089c5</code>). The replacements, a Reclaim zkTLS proof of the source response posted by a relayer key and/or a second human operator, are not built; the decision log's &quot;attester two within 14 days of the first launch&quot; is a schedule. For Kalshi no independent on-chain attestation exists: settlement is published through Kalshi's own API, and reports of Kalshi markets tokenised on Solana through DFlow could not be confirmed from a primary source (<code>docs/burnticker/README.md</code> §8). At every level the upgrade authority remains until finalised.</p>
+</section>
+<section aria-labelledby="s-8-verification-walk-through-recompute-one-receipt">
+<h2 id="s-8-verification-walk-through-recompute-one-receipt">8. Verification walk-through: recompute one receipt</h2>
+<p>Take the $DEFICIT reading for 2026-10-08 used in the program's own memo tests (<code>src/memo.rs</code>).</p>
+<p><strong>Step 1, the source.</strong></p>
+<pre><code>curl -s 'https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt&amp;filter=record_date:eq:2026-10-08'</code></pre>
+<p>The row gives <code>40305316210829.72</code>; the previous business day gave <code>40284036147367.19</code>. The attested <code>src</code> field is the sha256 of that exact URL; recompute it with <code>printf %s '&lt;url&gt;' | shasum -a 256</code> and compare with <code>Reading.source_url_hash</code>.</p>
+<p><strong>Step 2, the signature.</strong> Rebuild the canonical message of §4.4 from the Reading and TokenConfig and check each signature in the <code>submit_reading</code> transaction's Ed25519 instruction against the attester keys listed in the TokenConfig.</p>
+<p><strong>Step 3, the units.</strong> <code>delta = 21,280,063,462.53</code> dollars. With carry 0 and a $1B unit, <code>units = floor(21,280,063,462.53 / 1,000,000,000) = 21</code>; the remainder <code>280,063,462.53</code> carries into the next reading if that reading is also an increase.</p>
+<p><strong>Step 4, the spend.</strong> With <code>f = 1 %</code> and a pool basis of 1 SOL (1,000,000,000 lamports), <code>spend = 1,000,000,000 × (1 − 0.99^21) = 190,272,132</code> lamports by the program's fixed-point arithmetic (<code>buybackSpend</code> in <code>src/lib/burnReceipts/math.ts</code> gives the same). Then apply the per-crank cap: if 2 % of the CPMM pool's WSOL reserve is smaller, the crank spends that and the Reading's <code>carried_out_lamports</code> holds the rest. The memo's <code>pool=</code> is the basis actually used, so the arithmetic checks against the memo itself.</p>
+<p><strong>Step 5, the swap and the burn.</strong> The crank transaction is itself the swap and the burn. In its inner instructions find the CPMM <code>swap_base_input</code> from the fee PDA's WSOL account, the SPL Token <code>Burn</code> from the fee PDA's token account (supply falls by <code>burn=</code>), and the Memo CPI. Check that the swap's minimum output is at least the larger of the spot and TWAP quotes less <code>slippage_bps</code>.</p>
+<p><strong>Step 6, the memo.</strong></p>
+<pre><code>DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=&lt;lamports&gt;|spent=&lt;lamports&gt;|got=&lt;tokens&gt;|burn=&lt;tokens&gt;|swap=&lt;first 12 chars of the CPMM pool&gt;|rules=sha256:&lt;12&gt;|v2</code></pre>
+<p><code>swap=</code> carries the first 12 base58 characters of the pool, because one instruction cannot know its own transaction signature. <code>burn</code> can exceed <code>got</code> when donated or fee tokens were also burned. <code>memoFromChain()</code> in <code>src/lib/burnReceipts/</code> rebuilds the memo from accounts alone.</p>
+<p><strong>For a Kalshi receipt</strong>, step 1 is the settled market, for example <code>curl -s 'https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXNFLGAME&amp;status=settled'</code>: market <code>KXNFLGAME-26OCT04DENSF-DEN</code>, status <code>finalized</code>, <code>result</code> <code>no</code>, settled <code>2026-10-04T23:41:27Z</code> (saved fixture <code>config/burnticker/fixtures/kalshi/KXNFLGAME.settled.json</code>). Step 3 applies the locked rule to each settlement of the day; the counter's <code>src</code> hash commits to the event ids counted.</p>
+<p><strong>The public audit.</strong> <code>scripts/burnticker-audit.mts</code> recomputes every receipt of every token from the recorded readings and the published rule, writes <code>audit.json</code> and exits non-zero on any mismatch; it reads no key and sends nothing. Its chain leg (comparing each memo on chain) is not wired: the script runs with no program client and reports &quot;chain not checked&quot;.</p>
+</section>
+<section aria-labelledby="s-9-governance-and-custody">
+<h2 id="s-9-governance-and-custody">9. Governance and custody</h2>
+<ul>
+<li><strong>Squads 2-of-3 with a 48-hour time lock</strong> (owner hardware key, owner second key, a trusted third party) is the planned holder of the upgrade authority, the platform authority and each token's config authority; the program's own 48-hour timelocks come on top. Commands: <code>docs/burn-receipts/README.md</code> §5.2. Not created yet.</li>
+<li><strong>Upgrade authority plan.</strong> Deploy the verifiable build, hand the authority to the Squads vault, and after review set it to none (BPF Upgradeable Loader <code>SetAuthority</code> with no new authority, executed as a Squads vault transaction). The runbook's launch gate is that the mainnet launch is published only after <code>solana program show</code> prints <code>Authority: none</code> and the deployed hash equals the published verifiable hash (README §5.3). Until then, every &quot;no extraction&quot; property depends on the multisig not shipping a malicious upgrade.</li>
+<li><strong>LaunchLab platform admin, disclosed and untimelocked.</strong> Raydium's <code>updatePlatformConfig</code> has no admin-change variant and the PlatformConfig PDA is seeded by the admin key, so the admin cannot be moved under Squads after creation (D-3). It can change the platform's fee rates, claim wallets, <code>cpConfigId</code>, <code>platformCpCreator</code> and LP scales for launches not yet migrated. Mitigations: <code>initialize_token</code> pins what matters; <code>verify-platform-pins</code> re-reads the platform immediately before each create and refuses on any difference; the stranding switch covers a change between init and migration; the trust page shows the live config.</li>
+<li><strong>Cranker allowlist during the cap.</strong> <code>initialize_platform</code> may name up to 3 keys allowed to call <code>crank_buyback</code> while the cap is in force, against an outside cranker timing a multi-block TWAP hold. It can only be cleared, by the platform authority or any listed key, and lapses 90 days after <code>initialize_platform</code> or at the cap sunset, whichever comes first. Readings, vault cranks, claims and health checks stay permissionless.</li>
+</ul>
+</section>
+<section aria-labelledby="s-10-security-review-history">
+<h2 id="s-10-security-review-history">10. Security review history</h2>
+<p>Burnticker is <strong>not audited by a security firm</strong>. The owner decided on 2026-10-09 against a paid audit, in favour of independent AI reviews, free tooling and a public bounty. Reports are published as delivered:</p>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Round</th><th scope="col">Report</th><th scope="col">Findings</th><th scope="col">Outcome</th></tr></thead>
+<tbody>
+<tr><td>Blind review 1 (2026-10-09)</td><td><a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/reviews/2026-10-09-claude-blind-1.md">2026-10-09-claude-blind-1.md</a></td><td>2 High, 4 Medium, 7 Low, 6 Info</td><td>no extraction path found; sandwich budget (H-1) and the fee-inflow routing (H-2) fixed</td></tr>
+<tr><td>Blind review 2 (2026-10-10)</td><td><a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/reviews/2026-10-10-claude-blind-2.md">2026-10-10-claude-blind-2.md</a></td><td>5 Medium, 4 Low, 8 Info</td><td>sandwich bound via TWAP quote, attester takeover, stray-lamport wedge, quorum-2 transaction size, pool squatting fixed</td></tr>
+<tr><td>Blind review 3 and re-check (2026-10-10)</td><td><a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/reviews/2026-10-10-claude-blind-3.md">2026-10-10-claude-blind-3.md</a></td><td>3 Medium, 6 Low, 6 Info; re-check 4 Low, 2 Info</td><td>callee signer abuse (M-1) closed; LP griefing, LaunchLab pinning and iterated attester takeover partly closed by design</td></tr>
+</tbody>
+</table></div>
+<p>Each reviewer was a fresh Claude agent given the code, reading earlier reports only after writing its own findings. Every fix and its closing test is in <code>docs/burn-receipts/CHANGELOG.md</code>. Review 3: no path that moves funds was added and no Critical or High issue found.</p>
+<p><strong>Open or accepted after the re-check:</strong> LP-ratio griefing by a deposit larger than the whole migrated liquidity; LaunchLab platform admin changes between init and migration (launch gate plus stranding switch); attester proposals still need no consent from current attesters (bounded by 48 h + 7 days + 48 h, all public); the Jito-bundle residual on pool-health observations; the multi-block TWAP hold once the allowlist lapses; informational items I-3 to I-6 (<code>docs/burn-receipts/README.md</code> §8).</p>
+<p><strong>Not done:</strong> the ChatGPT review in the decision log; cargo-audit, Trident fuzzing and Sec3 X-ray (review 3 ran clippy with <code>-D warnings</code>: clean); the bounty (5 to 10 SOL from the developer fee, terms drafted in <code>SECURITY.md</code>, not published).</p>
+</section>
+<section aria-labelledby="s-11-limitations-and-risks">
+<h2 id="s-11-limitations-and-risks">11. Limitations and risks</h2>
+<ul>
+<li><strong>Settlement coverage.</strong> Without Kalshi, settled numbers exist only where a primary source has an independent cross-read: two of eleven categories today (§3.4). Everything else settles on Polymarket's payout vector or not at all, and Polymarket is binary-only. Coins launched on a Kalshi rule before 2026-10-10 carry the event-contract disclosure on every page.</li>
+<li><strong>LaunchLab is closed source.</strong> The claim, the migration's pool address, <code>pool_creator</code> and LP handling rest on its SDK and docs, and have run only against a stand-in. Confirmation is a devnet-rehearsal gate, not done.</li>
+<li><strong>Sandwich bound.</strong> A sandwich can take up to <code>slippage_bps</code> (≤ 3 %) of each crank's spend, itself at most 2 % of the reserve. A manipulator who holds the rate up for a full TWAP window can still shift a crank once the allowlist lapses.</li>
+<li><strong>Quorum 1 at launch.</strong> The operator's key alone signs readings. A false reading is permanent and public, but it would size a burn.</li>
+<li><strong>Pre-audit cap.</strong> Each crank's basis is capped at 25 SOL until the sunset; larger pools burn more slowly.</li>
+<li><strong>Upgradeable until finalised.</strong> The upgrade authority can replace every property in this paper until it is set to none.</li>
+<li><strong>Oracle voids and late data.</strong> A late source means no burn until it posts; a missed Treasury date cannot be inserted later (the next delta absorbs it).</li>
+<li><strong>No adoption of existing tokens.</strong> <code>initialize_token</code> needs the new mint's signature and the fee PDA must be LaunchLab's creator from the first trade.</li>
+<li><strong>Per-outcome fractions unsupported.</strong> A rule paying different fractions per outcome cannot be expressed on the current program.</li>
+<li><strong>Burns wait on the curve.</strong> No buyback runs before graduation and pool registration.</li>
+<li><strong>Not built:</strong> mainnet program deployment, second attester, the audit's chain leg, systemd units for the multi-token keeper and audit timer.</li>
+</ul>
+</section>
+<section aria-labelledby="s-12-open-source-and-transparency">
+<h2 id="s-12-open-source-and-transparency">12. Open source and transparency</h2>
+<ul>
+<li><strong>Public repository:</strong> <code>TODO_PUBLIC_REPO_URL</code>. The program, keeper, platform, sites, docs, deploy files, tests and fixtures are carved out of a private monorepo by an explicit allowlist (<code>config/public-repo.allowlist</code>) and a leak scan (<code>config/public-repo.denypatterns</code>); the operator's trading code never leaves. Licence: MIT, brand assets excluded. Every publish appends the commit, program hash, IDL hash and allowlist hash to <code>docs/burnticker/CHANGELOG.md</code>.</li>
+<li><strong>Powers Register:</strong> <code>docs/burn-receipts/powers-register.{md,json}</code>, generated from the IDL.</li>
+<li><strong>Decision log:</strong> <code>docs/burnticker/decisions.md</code>, append-only. <strong>Incident log:</strong> <code>docs/burnticker/incidents/LOG.md</code> (no incidents recorded). <strong>Review reports:</strong> <code>docs/burnticker/reviews/</code>.</li>
+<li><strong>Wallet list:</strong> <code>config/burnticker/transparency.json</code> names every role (operations, deployer, keeper, developer fee, LaunchLab platform admin, Squads vault and three members, the $DEFICIT mint, the operator's trading wallets). Every public key is TODO until set.</li>
+<li><strong>Policies:</strong> no deletions on X, corrections in-thread with the receipt; no paid promotion; no talk of what any coin trades at; nothing described as forthcoming; the platform never buys any coin.</li>
+<li><strong>The operator also runs trading bots.</strong> Every one refuses any platform coin by mint and ticker, fail-closed, in code (<code>src/lib/ownTokens.ts</code> reading <code>config/own-tokens.json</code>, both published).</li>
+<li><strong>The operator:</strong> one independent operator (United States). Contact: contact@burnticker.com; security reports: security@burnticker.com.</li>
+<li><strong>How it was built:</strong> with AI assistance (Claude Code) under the operator's direction and review.</li>
+</ul>
+</section>
+<section aria-labelledby="s-13-appendix">
+<h2 id="s-13-appendix">13. Appendix</h2>
+<h3 id="s-13-1-glossary">13.1 Glossary</h3>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Term</th><th scope="col">Meaning</th></tr></thead>
+<tbody>
+<tr><td>fee PDA</td><td><code>[&quot;fee&quot;, mint]</code> under <code>burn_receipts</code>; the burn pool and LaunchLab creator</td></tr>
+<tr><td>reading</td><td>one attested value for one UTC date (<code>Reading</code> account)</td></tr>
+<tr><td>unit</td><td>the rule's step: $1B of debt, one settlement, one scalar unit</td></tr>
+<tr><td>crank</td><td>the permissionless instruction that processes the next reading</td></tr>
+<tr><td>carry</td><td>a sub-unit remainder, or spend left over by a cap</td></tr>
+<tr><td>TWAP</td><td>time-weighted average exchange rate from the CPMM oracle ring</td></tr>
+<tr><td>attester</td><td>an ed25519 key whose signature counts toward the quorum</td></tr>
+<tr><td>graduation</td><td>LaunchLab's migration of a filled curve to a CPMM pool</td></tr>
+<tr><td>pre-audit cap</td><td>the 25 SOL per-crank basis limit with a sunset</td></tr>
+</tbody>
+</table></div>
+<h3 id="s-13-2-account-layouts-summary-from-the-idl">13.2 Account layouts (summary, from the IDL)</h3>
+<ul>
+<li><strong>RuleParams:</strong> <code>mode</code>, <code>carry_rule</code>, <code>pool_policy</code>, <code>value_decimals</code>, <code>unit_value</code>, <code>max_abs_delta</code>, <code>fraction_per_unit_bps</code>, <code>slippage_bps</code>, <code>max_twap_deviation_bps</code>, <code>twap_window_secs</code>, <code>floor_lamports</code>, <code>reserve_lamports</code>, <code>tokens_per_unit</code>, <code>vault_allocation</code>.</li>
+<li><strong>TokenConfig:</strong> identity (<code>mint</code>, <code>creator</code>, <code>admin</code>), <code>rule</code>, <code>rules_sha256</code>, <code>params_hash</code>, feed id, memo prefix and source, <code>attesters[5]</code> with <code>attester_added_at[5]</code>, <code>quorum</code>, the pending attester and policy proposals, <code>cpmm_pool</code>, <code>pool_verified</code>, <code>registration_policy</code>, the pinned LaunchLab fields (<code>ll_platform</code>, <code>ll_cp_config</code>, <code>ll_lock_scale_ppm</code>), <code>cluster_genesis</code>, running state (<code>last_record_date</code>, <code>last_value</code>, <code>carry</code>, <code>crank_cursor</code>, <code>carried_spend_lamports</code>, totals, <code>shortfall</code>), the pool-untradeable timestamps, reserved bytes.</li>
+<li><strong>Reading:</strong> <code>kind</code>, <code>processed</code>, <code>config</code>, <code>record_date</code>, <code>prev_date</code>, <code>value</code>, <code>prev_value</code>, <code>delta</code>, <code>carry_in</code>, <code>carry_out</code>, <code>units</code>, <code>signers_mask</code>, <code>source_url_hash</code>, <code>proof_hash</code>, <code>submitted_at</code>, <code>outcome</code>, <code>processed_at</code>, <code>pool_lamports</code>, <code>spent_lamports</code>, <code>got</code>, <code>burned</code>, <code>owed</code>, <code>shortfall</code>, <code>pool_actual_lamports</code>, <code>rule_spend_lamports</code>, <code>carried_in_lamports</code>, <code>carried_out_lamports</code>, <code>pool</code>.</li>
+<li><strong>PlatformConfig:</strong> <code>authority</code>, <code>burn_pool_cap_lamports</code>, <code>cap_sunset_ts</code>, <code>pending_cap_lamports</code>, <code>pending_cap_eta</code>, <code>created_at</code>, <code>crankers[3]</code>, <code>cranker_count</code>, reserved.</li>
+</ul>
+<h3 id="s-13-3-instructions-26-generated-from-src-lib-burnreceipts-idl-ts">13.3 Instructions (26, generated from <code>src/lib/burnReceipts/idl.ts</code>)</h3>
+<div class="tbl"><table>
+<thead><tr><th scope="col">Instruction</th><th scope="col">Arguments</th><th scope="col">Signers</th><th scope="col">Class</th></tr></thead>
+<tbody>
+<tr><td><code>initialize_token</code></td><td>args</td><td>payer, creator, mint</td><td>creation</td></tr>
+<tr><td><code>initialize_platform</code></td><td>authority, burn_pool_cap_lamports, cap_sunset_ts, crankers</td><td>payer, upgrade_authority</td><td>creation</td></tr>
+<tr><td><code>submit_reading</code></td><td>record_date, value, source_url_hash, proof_hash</td><td>payer (+ quorum via Ed25519)</td><td>permissionless</td></tr>
+<tr><td><code>crank_buyback</code></td><td>record_date</td><td>cranker</td><td>permissionless</td></tr>
+<tr><td><code>crank_vault</code></td><td>record_date</td><td>cranker</td><td>permissionless</td></tr>
+<tr><td><code>crank_no_units</code></td><td>record_date</td><td>cranker</td><td>permissionless</td></tr>
+<tr><td><code>claim_launchlab_creator_fee</code></td><td>—</td><td>payer</td><td>permissionless</td></tr>
+<tr><td><code>register_pool</code></td><td>—</td><td>registrar</td><td>permissionless</td></tr>
+<tr><td><code>register_pair_pool</code></td><td>—</td><td>registrar</td><td>permissionless</td></tr>
+<tr><td><code>register_fee_key</code></td><td>—</td><td>payer</td><td>permissionless</td></tr>
+<tr><td><code>claim_lock_fees</code></td><td>lp_fee_amount</td><td>cranker (allowlist while the cap is in force)</td><td>permissionless</td></tr>
+<tr><td><code>check_pool_health</code></td><td>—</td><td>caller</td><td>permissionless</td></tr>
+<tr><td><code>replace_pool</code></td><td>—</td><td>caller</td><td>permissionless</td></tr>
+<tr><td><code>apply_attester_change</code></td><td>—</td><td>caller</td><td>permissionless</td></tr>
+<tr><td><code>apply_cap_raise</code></td><td>—</td><td>caller</td><td>permissionless</td></tr>
+<tr><td><code>apply_registration_policy</code></td><td>—</td><td>caller</td><td>permissionless</td></tr>
+<tr><td><code>propose_attesters</code></td><td>attesters, quorum</td><td>admin</td><td>privileged</td></tr>
+<tr><td><code>cancel_attester_change</code></td><td>—</td><td>admin</td><td>privileged</td></tr>
+<tr><td><code>renounce_admin</code></td><td>—</td><td>admin</td><td>privileged</td></tr>
+<tr><td><code>set_registration_policy</code></td><td>policy, pool</td><td>admin</td><td>privileged</td></tr>
+<tr><td><code>cancel_registration_policy</code></td><td>—</td><td>admin</td><td>privileged</td></tr>
+<tr><td><code>veto_registration_policy</code></td><td>—</td><td>attester</td><td>privileged</td></tr>
+<tr><td><code>propose_cap_raise</code></td><td>new_cap_lamports</td><td>authority</td><td>privileged</td></tr>
+<tr><td><code>cancel_cap_raise</code></td><td>—</td><td>authority</td><td>privileged</td></tr>
+<tr><td><code>renounce_platform_authority</code></td><td>—</td><td>authority</td><td>privileged</td></tr>
+<tr><td><code>clear_cranker_allowlist</code></td><td>—</td><td>caller (authority or listed cranker)</td><td>privileged</td></tr>
+</tbody>
+</table></div>
+<p>Events (28): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, BurnPoolCapBound, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered, LaunchLabCreatorFeeClaimed, LockFeesClaimed, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, SpendCapBound, SpendCarried, TokenInitialized. Error codes: 74.</p>
+<p><code>pair_curve</code> (<code>src/lib/pairCurve/idl.ts</code>): <code>init_pair</code> (args; payer, creator — creation), the two curve-trade instructions (side, an amount, a slippage bound; the trader signs), <code>graduate</code> (side; cranker), <code>lock_lp</code> (side; cranker — locks the side's LP forever, Fee Key to burn_receipts' fee-keys PDA), <code>claim_developer_fee</code> (caller), <code>void_pair</code> (caller), <code>close_pair</code> (caller) — every one after <code>init_pair</code> permissionless. Events (8): PairInitialized, Trade, PairCommitted, SideGraduated, LpLocked, DeveloperFeeClaimed, PairVoided, PairClosed.</p>
+<h3 id="s-13-4-memo-grammars">13.4 Memo grammars</h3>
+<p>Written on chain by the program (<code>src/memo.rs</code>), at most 566 bytes:</p>
+<pre><code>v1 (vault):   &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt;|now=&lt;v&gt;|delta=&lt;v&gt;|units=&lt;n&gt;|burn=&lt;tokens&gt;[|short=&lt;tokens&gt;]|rules=sha256:&lt;12&gt;|v1
+v2 (buyback): &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt;|now=&lt;v&gt;|delta=&lt;v&gt;|units=&lt;n&gt;|pool=&lt;lamports&gt;|spent=&lt;lamports&gt;|got=&lt;tokens&gt;|burn=&lt;tokens&gt;|swap=&lt;pool12|none&gt;|rules=sha256:&lt;12&gt;|v2</code></pre>
+<p>For $DEFICIT the prefix is <code>DEBT</code> and the source <code>fiscaldata.treasury.gov debt_to_penny</code>. For a Burnticker counter token the prefix is the ticker, the source <code>burnticker &lt;selector&gt;</code>, and <code>prev</code>/<code>now</code> are counter values.</p>
+<p>The platform's per-event receipt line, v3 (<code>src/lib/burnticker/receipt.ts</code>), parsed and published by the platform; the current program does not write it on chain:</p>
+<pre><code>BT|&lt;TICKER&gt;|&lt;id&gt;|oracle=&lt;oracle&gt;|market=&lt;ticker&gt;|result=&lt;yes|no|void|-&gt;|settled=&lt;ISO second or period&gt;|src=&lt;host+path&gt;|value=&lt;decimal|-&gt;|units=&lt;n&gt;|pool=&lt;lamports&gt;|spent=&lt;lamports&gt;|got=&lt;tokens&gt;|burn=&lt;tokens&gt;|swap=&lt;sig12|none&gt;|rules=sha256:&lt;12&gt;|v3</code></pre>
+<p>The signed attestation message (§4.4) is a separate grammar, <code>BURNRECEIPTS-v3</code>.</p>
+<h3 id="s-13-5-addresses">13.5 Addresses</h3>
+<div class="tbl"><table>
+<thead><tr><th scope="col">What</th><th scope="col">Address</th></tr></thead>
+<tbody>
+<tr><td><code>burn_receipts</code> program id</td><td><code>TODO_PROGRAM_ID</code> (localnet test key <code>GV9CMjXPGbmXnn3ci3RjvTBpfdgiZ4Ts7UWu1LCnSuF8</code> is not a deployment)</td></tr>
+<tr><td>Burnticker LaunchLab platform id</td><td><code>TODO_PLATFORM_ID</code></td></tr>
+<tr><td>$DEFICIT mint</td><td><code>TODO_DEFICIT_MINT</code></td></tr>
+<tr><td>Squads vault</td><td><code>TODO_SQUADS_VAULT</code></td></tr>
+<tr><td>Developer fee wallet</td><td><code>TODO_DEV_FEE_WALLET</code></td></tr>
+<tr><td>Raydium LaunchLab (mainnet)</td><td><code>LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj</code></td></tr>
+<tr><td>Raydium CPMM (mainnet)</td><td><code>CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C</code></td></tr>
+<tr><td>Raydium CPMM LP lock authority (mainnet)</td><td><code>3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH</code></td></tr>
+<tr><td>SPL Memo</td><td><code>MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr</code></td></tr>
+<tr><td>Mainnet genesis bound into signatures</td><td><code>5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d</code></td></tr>
+</tbody>
+</table></div>
+<p>Source for the Raydium and system addresses: <code>programs/burn-receipts/programs/burn_receipts/src/constants.rs</code>.</p>
+</section>
+</article>
+</main>
+<footer class="wrap">
+  <p>Source of this page: <code>docs/burnticker/WHITEPAPER-2026-10-10.md</code>.</p>
+</footer>
+<footer class="sh-footer" id="disclosure">
+  <div class="sh-slip">
+    <p class="sh-slip-title">BURNTICKER</p>
+    <div class="sh-rule"></div>
+    <p class="sh-slip-never">Nothing is ever won. Things are only burned.</p>
+    <p><b>*** NOT ADVICE ***</b> Memecoins are speculative and can go to zero. Burnticker coins pay nothing and promise nothing. A coin's rule says what its supply does when a public result settles, never what its price does. Nothing on this site is investment advice.</p>
+    <p>Burnticker and its coins are not affiliated with any team, league, candidate, agency or market. If a page and the chain disagree, the chain is right.</p>
+    <p class="sh-slip-dim">The rules read public sources such as the U.S. Treasury, BLS, the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia and Polymarket. None of them is affiliated with any coin or endorses one.</p>
+    <p data-legal-line>Read the <a href="/burnticker/terms">terms of use</a> and the <a href="/burnticker/privacy">privacy page</a>.</p>
+    <div class="sh-rule"></div>
+    <dl class="sh-rows">
+      <div><dt>OPERATOR</dt><dd><span data-operator-line>Operated by one independent operator (United States) — contact: contact@burnticker.com</span> <a href="/burnticker/trust">What the operator controls</a></dd></div>
+      <div><dt>DEV FEE</dt><dd><span data-fee-line>Burnticker takes 0.25% of curve volume. After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%. LaunchLab rates; pair-curve pairs differ.</span> <a href="/burnticker/fees/ledger">The fee ledger</a></dd></div>
+      <div><dt>API</dt><dd><a href="/api/burnticker/v1">/api/burnticker/v1</a> · <a href="/burnticker/docs">Docs</a></dd></div>
+    </dl>
+    <div class="sh-rule"></div>
+    <nav class="sh-slip-links" aria-label="Footer" data-site-nav="footer">
+      <a href="/burnticker">Coins</a>
+      <a href="/burnticker/leagues">Seasons</a>
+      <a href="/burnticker/launch" data-launch-link>Launch</a>
+      <a href="/burnticker/about">How it works</a>
+      <a href="/burnticker/trust">Trust</a>
+      <a href="/burnticker/verify-yourself">Verify it yourself</a>
+      <a href="/burnticker/operator">Who runs this</a>
+      <a href="/whitepaper.html" aria-current="page">Whitepaper</a>
+      <a href="/burnticker/docs">Docs and API</a>
+      <a href="/burnticker/how-burns-settle">How burns are settled</a>
+      <a href="/burnticker/changelog">Changelog</a>
+      <a href="/burnticker/incidents">Incidents</a>
+      <a href="/burnticker/bounty">Bounty</a>
+      <a href="/burnticker/press">Press</a>
+      <a href="/burnticker/terms">Terms</a>
+      <a href="/burnticker/privacy">Privacy</a>
+      <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+    </nav>
+    <p class="sh-slip-end">— KEEP THIS RECEIPT —</p>
+  </div>
+</footer>
+<nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">
+  <a href="/burnticker" aria-label="Coins, the list of every coin"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h7v7H4z"/><path d="M13 4h7v7h-7z"/><path d="M4 13h7v7H4z"/><path d="M13 13h7v7h-7z"/></svg></span><span>Coins</span></a>
+  <a href="/burnticker#search" aria-label="Search coins"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z"/><path d="M15.5 15.5 20 20"/></svg></span><span>Search</span></a>
+  <a href="/burnticker/launch" aria-label="Launch a coin"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span><span>Launch</span></a>
+  <a href="/burnticker/leagues" aria-label="Seasons and league scoreboards"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 7h14"/><path d="M15 3l4 4-4 4"/><path d="M19 17H5"/><path d="M9 13l-4 4 4 4"/></svg></span><span>Seasons</span></a>
+  <a href="/burnticker/about" aria-label="Learn how it works"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span><span>Learn</span></a>
+</nav>
+<script>
+(function () {
+  // ONE THEME PREFERENCE: the same "bt-theme" key and switch as the app header; dark unless the visitor picked light
+  var root = document.documentElement, b = document.querySelector("[data-theme-toggle]");
+  function cur() { return root.dataset.theme === "light" ? "light" : "dark"; }
+  function label() { if (!b) return; var d = cur() === "dark"; b.textContent = d ? "\u2600" : "\u263E"; b.setAttribute("aria-label", d ? "Switch to light theme" : "Switch to dark theme"); b.title = d ? "Light theme" : "Dark theme"; }
+  if (b) b.addEventListener("click", function () { var n = cur() === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem("bt-theme", n); } catch (e) { /* private window */ } label(); });
+  label();
+})();
+(function () {
+  // the phone menu: Enter or Space opens it, focus moves to its first link, Tab and Shift+Tab stay inside, Escape closes it
+  var m = document.getElementById("menu"); if (!m) return;
+  var sum = m.querySelector("summary");
+  function links() { return Array.prototype.slice.call(m.querySelectorAll(".sh-menu-links a[href]")); }
+  m.addEventListener("toggle", function () { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
+  sum.setAttribute("aria-expanded", "false");
+  document.addEventListener("keydown", function (e) {
+    if (!m.open) return;
+    if (e.key === "Escape") { e.preventDefault(); m.open = false; sum.focus(); return; }
+    if (e.key !== "Tab") return;
+    var ring = [sum].concat(links()), i = ring.indexOf(document.activeElement);
+    e.preventDefault();
+    ring[i === -1 ? 0 : (e.shiftKey ? (i - 1 + ring.length) % ring.length : (i + 1) % ring.length)].focus();
+  });
+  document.addEventListener("click", function (e) {
+    if (m.open && !m.contains(e.target)) m.open = false;
+    var l = document.querySelector(".sh-learn"); if (l && l.open && !l.contains(e.target)) l.open = false;
+  });
+})();
+(function () {
+  // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
+  // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
+  var btns = Array.prototype.slice.call(document.querySelectorAll("[data-launch-button]")), dlg = document.getElementById("sh-launch-closed"), open = false;
+  var said = dlg && dlg.querySelector("[data-launch-sentence]");
+  window.btHome = window.btHome || fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open is unknown right now, so no launch controls are shown."; createPath(l || null); });
+  // audit 10 item 23: the home's create path, from the same record (siteNav.mjs createPathFor, written here as source)
+  function createPath(l) {
+    var TWO_PATHS = [{"id":"explore","label":"Explore coins","href":"/burnticker","text":"See every coin, its rule and its receipts, and follow coins in this browser without a wallet."},{"id":"create","label":"Create a coin","href":"/burnticker/launch","text":"Pick a public result and lock one rule, and the launch page shows every detail before your wallet signs anything."}], CREATE_PREVIEW = {"label":"Preview a coin launch","text":"Walk through a launch and its review, with nothing signed."}, LAUNCH_CLOSED = {"unread":"Whether creator launches are open is unknown right now, so no launch controls are shown."};
+    var p = (function createPathFor(launch) {
+  const open = !!(launch && launch.canSign === true);
+  const create = TWO_PATHS[1];
+  if (open) return { label: create.label, text: create.text, status: null, open: true };
+  return { label: CREATE_PREVIEW.label, text: CREATE_PREVIEW.text, status: launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : LAUNCH_CLOSED.unread, open: false };
+})(l), box = document.querySelector("[data-two-paths]"); if (!box) return;
+    var t = box.querySelector("[data-create-label]"), x = box.querySelector("[data-create-text]"), s = box.querySelector("[data-create-status]");
+    if (t) t.textContent = p.label; if (x) x.textContent = p.text; if (s) { s.textContent = p.status || ""; s.hidden = !p.status; }
+    box.setAttribute("data-create-open", p.open ? "true" : "false");
+  }
+  if (dlg && typeof dlg.showModal === "function") btns.forEach(function (btn) { btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); }); });
+  if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
+  if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
+})();
+(function () {
+  // THE ACTIVITY LINE (website-14): burns, signed readings, graduations and pool registrations from GET /api/burnticker/home, each
+  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. When the strip is wider
+  // than the screen it scrolls sideways, and the edge that still has more fades (ChatGPT audit 6 item 24, the app's useScrollEdges).
+  var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
+  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered","created":"Created","reserved":"Mint reserved"};
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function edge() { box.classList.toggle("more-start", box.scrollLeft > 4); box.classList.toggle("more-end", box.scrollLeft + box.clientWidth < box.scrollWidth - 4); }
+  box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
+  window.btHome.then(function (j) {
+    box.textContent = "";
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); return; }
+    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); edge(); return; }
+    j.events.forEach(function (ev) { var a = el("a", ""); a.href = (/^https?:/.test(ev.href) ? "" : "") + ev.href; a.setAttribute("data-kind", ev.kind || "burn"); a.appendChild(el("span", "sh-kind", KIND[ev.kind] || KIND.burn)); if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
+    edge();
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); });
+})();
+</script>
+</body>
+</html>

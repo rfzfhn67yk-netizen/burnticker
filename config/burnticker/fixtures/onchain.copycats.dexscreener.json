@@ -1,0 +1,702 @@
+{
+ "fetchedAt": "2026-10-10T03:47:43Z",
+ "url": "https://api.dexscreener.com/latest/dex/search?q=DEFICIT",
+ "note": "Real response, keyless. 13 pairs matched 'DEFICIT' by symbol or name across chains; none on Solana at fetch time. The Base 'DEFICIT' (elephant in the room) has $24.5K liquidity and is the wrong chain: the adapter must refuse it.",
+ "body": {
+  "schemaVersion": "1.0.0",
+  "pairs": [
+   {
+    "chainId": "base",
+    "dexId": "uniswap",
+    "url": "https://dexscreener.com/base/0xd2c370e4cb7e720b872744b45b199209311215d6c50fa0cee5e474034c602b76",
+    "pairAddress": "0xd2c370e4cb7e720b872744b45b199209311215d6c50fa0cee5e474034c602b76",
+    "labels": [
+     "v4"
+    ],
+    "baseToken": {
+     "address": "0xD2B264785b90Aeb92e5e86052029393F318eeB07",
+     "name": "elephant in the room",
+     "symbol": "DEFICIT"
+    },
+    "quoteToken": {
+     "address": "0x4200000000000000000000000000000000000006",
+     "name": "Wrapped Ether",
+     "symbol": "WETH"
+    },
+    "priceNative": "0.00000000009870",
+    "priceUsd": "0.0000002455",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 0,
+      "sells": 3
+     }
+    },
+    "volume": {
+     "h24": 0.45,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {
+     "h24": -0.02
+    },
+    "liquidity": {
+     "usd": 24552.26,
+     "base": 99999944894,
+     "quote": 5.439e-06
+    },
+    "fdv": 24552,
+    "marketCap": 24552,
+    "pairCreatedAt": 1779389677000
+   },
+   {
+    "chainId": "base",
+    "dexId": "uniswap",
+    "url": "https://dexscreener.com/base/0x2a56e961f9038bb9cc68dcb758f93ef3cdd5a17c914e7f7bc9b8aea0d6ec87f9",
+    "pairAddress": "0x2a56e961f9038bb9cc68dcb758f93ef3cdd5a17c914e7f7bc9b8aea0d6ec87f9",
+    "labels": [
+     "v4"
+    ],
+    "baseToken": {
+     "address": "0xD75DA6b90318c300B6f138459f67348abCF77c90",
+     "name": "Attention Deficit Hypercycle",
+     "symbol": "ADHD"
+    },
+    "quoteToken": {
+     "address": "0x4200000000000000000000000000000000000006",
+     "name": "Wrapped Ether",
+     "symbol": "WETH"
+    },
+    "priceNative": "0.0000000002635",
+    "priceUsd": "0.0000006581",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 0,
+      "sells": 1
+     }
+    },
+    "volume": {
+     "h24": 0.31,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {},
+    "liquidity": {
+     "usd": 63551.26,
+     "base": 84813598378,
+     "quote": 3.0944
+    },
+    "fdv": 65161,
+    "marketCap": 65161,
+    "pairCreatedAt": 1770724269000,
+    "info": {
+     "imageUrl": "https://cdn.dexscreener.com/cms/images/IJMQBrFp9iN7ntjV?width=800&height=800&quality=95&format=auto",
+     "header": "https://cdn.dexscreener.com/cms/images/IEHC9cKGNPH4UZEO?width=1500&height=500&quality=95&format=auto",
+     "openGraph": "https://cdn.dexscreener.com/token-images/og/base/0xd75da6b90318c300b6f138459f67348abcf77c90?timestamp=1791603600000",
+     "websites": [
+      {
+       "url": "https://adhd.pw",
+       "label": "Website"
+      }
+     ],
+     "socials": [
+      {
+       "url": "https://x.com/gami_vc/status/2021190021600972800",
+       "type": "twitter"
+      }
+     ]
+    }
+   },
+   {
+    "chainId": "base",
+    "dexId": "uniswap",
+    "url": "https://dexscreener.com/base/0xcd435c91f5975888c326fa8f6a0523d7b61b4a3e6701baf2372b1660bdbcb45c",
+    "pairAddress": "0xcd435c91f5975888c326fa8f6a0523d7b61b4a3e6701baf2372b1660bdbcb45c",
+    "labels": [
+     "v4"
+    ],
+    "baseToken": {
+     "address": "0x6F5772226e3E6f458ebB29F905B59Eb9a25Bd0EB",
+     "name": "Attention Deficit Hypercycle Coin",
+     "symbol": "ADHC"
+    },
+    "quoteToken": {
+     "address": "0x0000000000000000000000000000000000000000",
+     "name": "Ether",
+     "symbol": "ETH"
+    },
+    "priceNative": "0.0000002011",
+    "priceUsd": "0.0005009",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 1
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 22
+     },
+     "h6": {
+      "buys": 3,
+      "sells": 81
+     },
+     "h24": {
+      "buys": 9,
+      "sells": 138
+     }
+    },
+    "volume": {
+     "h24": 6.63,
+     "h6": 3.55,
+     "h1": 0.31,
+     "m5": 0.01
+    },
+    "priceChange": {
+     "m5": -0.02,
+     "h1": -0.12,
+     "h6": 0.22,
+     "h24": 0.16
+    },
+    "liquidity": {
+     "usd": 400766.52,
+     "base": 799994850,
+     "quote": 0.001035
+    },
+    "fdv": 500958,
+    "marketCap": 500958,
+    "pairCreatedAt": 1791567163000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0x8ba42da127c53c97d47e71e31b461e751ecc8835",
+    "pairAddress": "0x8BA42DA127c53c97D47E71e31b461E751ecC8835",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "quoteToken": {
+     "address": "0xA1077a294dDE1B09bB078844df40758a5D0f9a27",
+     "name": "Wrapped Pulse",
+     "symbol": "WPLS"
+    },
+    "priceNative": "150105.7066",
+    "priceUsd": "1.37",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 2,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 7,
+      "sells": 6
+     }
+    },
+    "volume": {
+     "h24": 2.32,
+     "h6": 0.2,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {
+     "h6": 2.08,
+     "h24": 5.24
+    },
+    "liquidity": {
+     "usd": 73.51,
+     "base": 26.701,
+     "quote": 4007975
+    },
+    "fdv": 917,
+    "marketCap": 917,
+    "pairCreatedAt": 1727224855000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0x161622eb7b477deb7ad2d66f0e54d1ddecf741d9",
+    "pairAddress": "0x161622eb7B477DeB7ad2d66f0e54D1ddEcF741D9",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x7164033eC242d3D868Fe3B2f7b00a85c229B28C8",
+     "name": "Hallauween",
+     "symbol": "\ud83c\udf83"
+    },
+    "quoteToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "priceNative": "4.1075",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 1,
+      "sells": 0
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {},
+    "pairCreatedAt": 1729563895000,
+    "info": {
+     "imageUrl": "https://cdn.dexscreener.com/cms/images/3a9773133b9ea78eea83d5584c18523f7c1e0ecd4ef10d4d69fff1f7a92e695a?width=800&height=800&quality=95&format=auto",
+     "header": "https://cdn.dexscreener.com/cms/images/965a6557fd860d45e827024d8b7da0536a6adc5981a03bb7dc6bf5b1dfca5afc?width=1500&height=500&quality=95&format=auto",
+     "openGraph": "https://cdn.dexscreener.com/token-images/og/pulsechain/0x7164033ec242d3d868fe3b2f7b00a85c229b28c8?timestamp=1791603600000",
+     "websites": [
+      {
+       "url": "https://a1a.eco/",
+       "label": "Website"
+      },
+      {
+       "url": "https://liquidity-pools.vercel.app/",
+       "label": "LP Check"
+      }
+     ],
+     "socials": [
+      {
+       "url": "https://t.me/Hallauween",
+       "type": "telegram"
+      }
+     ]
+    }
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0xa082c793cce94f64c4e667c36a63817ad15a5f82",
+    "pairAddress": "0xA082c793Cce94f64C4E667C36A63817aD15a5f82",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x5d1f33D911cF9928cc5154CFb6d3D89D3f910f03",
+     "name": "6\ufe0f\u20e36\ufe0f\u20e36\ufe0f\u20e3",
+     "symbol": "6\ufe0f\u20e36\ufe0f\u20e36\ufe0f\u20e3"
+    },
+    "quoteToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "priceNative": "0.2448",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 1,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 3,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 3,
+      "sells": 2
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {
+     "h1": 0.85,
+     "h6": 1.93,
+     "h24": 0.88
+    },
+    "pairCreatedAt": 1764223935000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0xdb70ea7bcd6e3a884ec41020fa152e0a05c89ab8",
+    "pairAddress": "0xdb70Ea7bCD6e3a884EC41020fa152e0A05c89Ab8",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "quoteToken": {
+     "address": "0x96EB28A11a1169CaeBfBBB1885dC1613ddB5f93d",
+     "name": "Papa Curly Adebisi KRS One Lloyd Austin",
+     "symbol": "United States Secretary Of Defense\u2122"
+    },
+    "priceNative": "15.3818",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 1,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 1,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 2,
+      "sells": 1
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {
+     "h1": 0.39,
+     "h6": 0.39,
+     "h24": 0.01
+    },
+    "pairCreatedAt": 1729386365000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0x37953e8088d52339ad1a148c73c1f27f0a31c6b5",
+    "pairAddress": "0x37953E8088D52339Ad1a148c73c1f27F0a31C6B5",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x603bB905524e0293a3dD3317eB38a1E0AE6D3F02",
+     "name": "Dysnomia 666",
+     "symbol": "\u3010\ud835\udfde\ud835\udfde\ud835\udfde\u3011"
+    },
+    "quoteToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "priceNative": "1.6404",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 0,
+      "sells": 2
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {
+     "h24": -1.65
+    },
+    "pairCreatedAt": 1731753205000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0xaa08e48f6fd56081cd5125e7bf4e0f9a10c41f69",
+    "pairAddress": "0xAA08e48F6fd56081Cd5125E7bf4E0f9A10C41F69",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x75A7e07ef2D50E47eA965a4e9De84e88578c37Bc",
+     "name": "SOUND\u2682\ud83e\ude89",
+     "symbol": "SOUND\u2682\ud83e\ude89"
+    },
+    "quoteToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "priceNative": "0.000005304",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 0,
+      "sells": 2
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {
+     "h24": -2.19
+    },
+    "pairCreatedAt": 1787171625000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0x5884c66b3c112105587c62e959ff0c9addd81e5d",
+    "pairAddress": "0x5884C66b3c112105587c62e959ff0c9aDDD81e5d",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x4b80c0d468e1DdA6Fb02Fd6eAF7FF5Ea09c987dd",
+     "name": "Greed",
+     "symbol": "\ud83d\udcb2\ud83e\udd11"
+    },
+    "quoteToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "priceNative": "0.1359",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 1,
+      "sells": 1
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {
+     "h24": -1.94
+    },
+    "pairCreatedAt": 1729537495000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0x923db5a6f122f35b3b700137ff3f52b2b3e89e1f",
+    "pairAddress": "0x923db5A6f122F35B3b700137fF3f52b2B3E89E1F",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x27fB661c45b7275b4698C7FBDF9f1B8060088007",
+     "name": "\ud83c\udf84",
+     "symbol": "\ud83c\udf84"
+    },
+    "quoteToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "priceNative": "0.1447",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 1,
+      "sells": 0
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {},
+    "pairCreatedAt": 1727224975000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0x5988bdb98fd2dba0ee3fe63035c51197743cd50c",
+    "pairAddress": "0x5988BdB98fd2DBA0eE3fE63035C51197743CD50C",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "quoteToken": {
+     "address": "0xf646eD2Fc7873C7c412Bffb07E2e8038f8EB7895",
+     "name": "Make The Grade",
+     "symbol": "\u00c1SGARD"
+    },
+    "priceNative": "0.2565",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 0,
+      "sells": 1
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {},
+    "pairCreatedAt": 1727223565000
+   },
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "url": "https://dexscreener.com/pulsechain/0x24fa1ccefbcd9b3822d926f9acd3f781951ead76",
+    "pairAddress": "0x24fa1ccEFbcD9B3822d926F9aCD3f781951EAD76",
+    "labels": [
+     "v2"
+    ],
+    "baseToken": {
+     "address": "0x27A28FFb75CF6E92f54C10b2684f4A2d9767c38b",
+     "name": "MrStu",
+     "symbol": "\ud83d\udd4a\ufe0f"
+    },
+    "quoteToken": {
+     "address": "0x7A3e33CE772ef28438Bcb4F564Dc300289cC63F4",
+     "name": "Notice That Ol' En Banc Faggot OJ \"The Federal Reserve Deficit\" Simpson You Musta Quit Lookin For",
+     "symbol": "Durek Verrett"
+    },
+    "priceNative": "0.1060",
+    "txns": {
+     "m5": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0
+     },
+     "h24": {
+      "buys": 1,
+      "sells": 0
+     }
+    },
+    "volume": {
+     "h24": 0,
+     "h6": 0,
+     "h1": 0,
+     "m5": 0
+    },
+    "priceChange": {},
+    "pairCreatedAt": 1727230315000
+   }
+  ]
+ }
+}

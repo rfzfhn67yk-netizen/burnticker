@@ -1,0 +1,38 @@
+# burn_receipts — the on-chain burn program for the Receipts launchpad (first token $DEFICIT) — and pair_curve, the launch program for
+# rivalry pairs (2026-10-10; docs/burnticker/PAIR-CURVE.md). pair_curve's keypair: ~/.config/meme-coin-trader/mainnet-keys/pair_curve-program.json.
+# The program id below is the REAL id (D-7: one id for devnet and mainnet), synced 2026-10-10 for the devnet rehearsal. Its keypair
+# lives at ~/.config/meme-coin-trader/mainnet-keys/burn_receipts-program.json (mode 600, never committed) and is copied into
+# target/deploy/burn_receipts-keypair.json (gitignored) before a build (docs/burn-receipts/README.md, "Deployment runbook").
+
+# LiteSVM runs in-process; no validator is started by `anchor test`.
+skip_local_validator = true
+
+[toolchain]
+anchor_version = "1.2.1"
+solana_version = "4.3.0"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+burn_receipts = "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"
+pair_curve = "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
+
+[programs.devnet]
+burn_receipts = "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"
+pair_curve = "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+# `anchor test` builds the program, then runs the LiteSVM integration suite (programs/burn_receipts/tests/*.rs). LiteSVM is an
+# in-process SVM: no validator, deterministic clock control (the 48 h attester timelock is tested by warping the clock), and it
+# loads the REAL Raydium CPMM program built from source (scripts/build-cpmm-fixture.sh → fixtures/raydium_cp_swap.so).
+# scripts/test.sh builds any missing test fixture first (the CPMM program from its pinned source, the LaunchLab stand-in from
+# mocks/launchlab_mock), so `anchor test` passes from a clean checkout (review-2 F17a).
+[scripts]
+test = "bash scripts/test.sh"
+
+[hooks]

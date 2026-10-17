@@ -1,0 +1,35 @@
+{
+  "case": "x49-register-pair-pool-open-pair",
+  "expected": "AccountNotInitialized|PairNotGraduated",
+  "observed": "AccountNotInitialized",
+  "match": true,
+  "exitCode": 0,
+  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts register-side --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --pair 792sAKMeHvZCxZpZeutjCWUt4cJkybLmRbgbbh8XgYD2 --side A",
+  "simulationErr": "{\"InstructionError\":[1,{\"Custom\":3012}]}",
+  "errorLogLines": [
+    "Program log: AnchorError caused by account: lp_mint. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "h.mts register-side",
+    "cluster": "devnet",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "pair": "792sAKMeHvZCxZpZeutjCWUt4cJkybLmRbgbbh8XgYD2",
+    "side": "A",
+    "simulation": {
+      "err": "{\"InstructionError\":[1,{\"Custom\":3012}]}",
+      "unitsConsumed": 14032,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: RegisterPairPool",
+        "Program log: AnchorError caused by account: lp_mint. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 13882 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+      ]
+    }
+  }
+}

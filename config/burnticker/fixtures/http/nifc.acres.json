@@ -1,0 +1,14 @@
+{
+ "fetchedAt": "2026-10-13T00:12:23Z",
+ "note": "Real response, captured read-only: the sum of IncidentSize over this year's wildfire records (IncidentTypeCategory WF) in the NIFC WFIGS year-to-date incident service.",
+ "url": "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_YearToDate/FeatureServer/0/query?where=IncidentTypeCategory%3D%27WF%27&outStatistics=%5B%7B%22statisticType%22%3A%22sum%22%2C%22onStatisticField%22%3A%22IncidentSize%22%2C%22outStatisticFieldName%22%3A%22acres%22%7D%5D&f=json",
+ "body": {
+  "features": [
+   {
+    "attributes": {
+     "acres": 8975212.167998316
+    }
+   }
+  ]
+ }
+}

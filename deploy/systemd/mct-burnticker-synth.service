@@ -1,0 +1,24 @@
+[Unit]
+Description=Burnticker synthetic creator (a second next start on 127.0.0.1:3100 serving DEVNET from the shipped build, driven by Chrome like a creator, then stopped) — fired nightly by mct-burnticker-synth.timer
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/meme-coin-trader
+# scripts/service/run-burnticker-synth.sh: starts the devnet instance with ONLY devnet-synth.env (devnet program ids, its own registry
+# under data/devnet-synth/, no Arweave uploader, never the live bank's key), waits for it, runs scripts/burnticker-synthetic-creator.mts
+# against it, stops it. The live web unit (127.0.0.1:3000, mainnet) is never touched. A failed scenario pushes bt-synthetic-failed (push.ts).
+# 2026-10-15: with BURNTICKER_SYNTH_BANK_KEY in devnet-synth.env it first tops up its own devnet mint bank (data/devnet-synth/bank.db, one
+# worker at nice 19, at most 300 s), serves 127.0.0.1:3100 from it, starts a second instance on 127.0.0.1:3101 with no bank for
+# d-mint-source, and holds the bank at size on that one worker during the run.
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/run-burnticker-synth.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+Environment=TZ=America/Denver
+# Chrome, two devnet Next servers and one grinding worker: keep the run inside an hour and below 2 GB so the box keeps the live site
+# responsive (each Launch may wait up to 900 s for the browser's address search when the devnet bank is dry)
+TimeoutStartSec=3600
+MemoryMax=2048M
+Nice=10
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-synth.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-synth.log

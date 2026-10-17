@@ -1,0 +1,101 @@
+{
+  "command": "submit-reading",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": true,
+  "message": "BURNRECEIPTS-v3|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|8nxLi6iH6Nk8ccntXLFLQydQCDuKYzM7pVw2WogoWoSP|treasury.debt_to_penny|prev=2026-10-09|2026-10-10|38006000000000.00|src=5634f3424fab8b5b424a23cd733b3d6a47cb60468c53ae52323ac973e1dbc6e6|proof=0000000000000000000000000000000000000000000000000000000000000000",
+  "instructions": [
+    {
+      "program": "Ed25519SigVerify111111111111111111111111111",
+      "accounts": [],
+      "dataHex": "01003000ffff1000ffff70006601ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a5c5d742588e01a661ec451033019d5a555200dcda43e8b336d4f1534af62262fa3835bacd5c028acebd0fcef93361f52d08ee858faed8be8843fbe6e1638be6064255524e52454345495054532d76337c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c386e784c69366948364e6b3863636e74584c464c517964514344754b597a4d3770567732576f676f576f53507c74726561737572792e646562745f746f5f70656e6e797c707265763d323032362d31302d30397c323032362d31302d31307c33383030363030303030303030302e30307c7372633d353633346633343234666162386235623432346132336364373333623364366134376362363034363863353361653532333233616339373365316462633665367c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+    },
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "submit_reading",
+      "accounts": [
+        {
+          "name": "payer",
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "name": "config",
+          "pubkey": "BSCB5zP8fRnu7ZzGLsEX7qpTu3f31BzXuqJ9Hq36rYWg",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "reading",
+          "pubkey": "7jrJY573tjVuYrT5DxLAKMjZxoKgHtdQLDv3QbRMEx5w",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "instructions",
+          "pubkey": "Sysvar1nstructions1111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {
+        "record_date": 20261010,
+        "value": "3800600000000000",
+        "source_url_hash": "5634f3424fab8b5b424a23cd733b3d6a47cb60468c53ae52323ac973e1dbc6e6",
+        "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "simulation": {
+    "err": "{\"InstructionError\":[2,{\"Custom\":6102}]}",
+    "unitsConsumed": 26973,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: SubmitReading",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/submit_reading.rs:47. Error Code: RuleEnded. Error Number: 6102. Error Message: the coin's rule has ended (no new end; after a resolved end, no reading dated later).",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 26823 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d6"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "BSCB5zP8fRnu7ZzGLsEX7qpTu3f31BzXuqJ9Hq36rYWg",
+      "kind": "TokenConfig",
+      "state": null
+    },
+    {
+      "address": "8CXMwLCMbroL1dTnPe2kouHEP7SZgGvjZG1LmkmsYXTn",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "7jrJY573tjVuYrT5DxLAKMjZxoKgHtdQLDv3QbRMEx5w",
+      "kind": "lamports",
+      "state": null
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+npm test (node --test, test/**/*.test.ts) on burnticker/endsink2, 2026-10-12, with no programs/burn-receipts/target/deploy*/ build present
+(test/burntickerVerifiedBuild.test.ts compares any such build with config/burnticker/verified-build.json, the DEPLOYED round-3 table, so a round-4 build in target/deploy fails it by design until the table is rewritten at the upgrade)
+ℹ tests 6251
+ℹ suites 1433
+ℹ pass 6245
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 6
+ℹ todo 0
+ℹ duration_ms 146194.471958

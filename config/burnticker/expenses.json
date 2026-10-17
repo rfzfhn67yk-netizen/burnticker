@@ -1,0 +1,15 @@
+{
+  "schema": "burnticker.expenses/v1",
+  "updatedAt": "2026-10-10",
+  "note": "What the developer fee pays for, shown on /burnticker/fees/ledger next to the fee wallet's on-chain income. An amount of null is a placeholder the owner has not given yet (marked as such on the page, never as zero); docs/burnticker/TODO-OWNER.md lists them. Amounts are what the operator pays, in US dollars; nothing here is income.",
+  "whatTheFeePaysFor": "The developer fee is 25 bps of curve volume (PlatformConfig.feeRate, read live on the trust page). It pays for the attesters, the hosting and RPC that run the keeper and these pages, the security reviews and the bounty, and the operator. It never buys any coin, including the platform's own.",
+  "items": [
+    { "id": "hosting", "label": "Hosting (the keeper host and the site)", "cadence": "monthly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_HOSTING", "note": "the VPS that runs the keeper, the site and the hourly audit" },
+    { "id": "rpc", "label": "Solana RPC", "cadence": "monthly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_RPC", "note": "the keeper's and the pages' chain reads; the public endpoints are rate-limited" },
+    { "id": "domains", "label": "Domains (burnticker.com)", "cadence": "yearly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_DOMAINS", "note": "registration and renewal" },
+    { "id": "email", "label": "Mail for contact@ and security@burnticker.com", "cadence": "monthly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_EMAIL", "note": "custom-domain mail" },
+    { "id": "dexscreener", "label": "DexScreener Enhanced Token Info ($DEFICIT)", "cadence": "one-off", "usd": 299, "placeholder": false, "todo": null, "note": "planned for launch morning so the token's listing shows the site, the X account and the rule. Payment status not recorded here." },
+    { "id": "attester-2", "label": "Second attester operator", "cadence": "monthly", "usd": null, "placeholder": true, "todo": "TODO_EXPENSE_ATTESTER2", "note": "who runs it and at what cost is an open owner decision" },
+    { "id": "bounty", "label": "Bug bounty (set aside, not spent until a report is paid)", "cadence": "one-off", "usd": null, "placeholder": true, "todo": null, "note": "the bounty wallet, funded with 5 SOL on 2026-10-11 and topped up from the developer fee; its balance is read live in SOL on the trust page, so no dollar figure here" }
+  ]
+}

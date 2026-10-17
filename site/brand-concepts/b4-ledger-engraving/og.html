@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B4 og</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display+SC:wght@700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=block" rel="stylesheet">
+<link rel="stylesheet" href="ledger.css">
+<style>
+  html,body{margin:0;width:1200px;height:630px;overflow:hidden;background:var(--dark)}
+  body{position:relative}
+  .wm{position:absolute;left:84px;top:96px;font-size:92px;letter-spacing:14px;line-height:1;white-space:nowrap}
+  .sub{position:absolute;left:88px;top:204px;font-size:21px;letter-spacing:5px;color:#4d5f59;font-family:'Playfair Display SC',serif;font-weight:700}
+  .goldrule{position:absolute;left:86px;top:246px;width:640px;height:1px;background:var(--gold)}
+  .copy{position:absolute;left:86px;top:270px;width:640px;font-size:26px;line-height:38px}
+  table{position:absolute;left:86px;top:420px;border-collapse:collapse;font-size:20px;width:640px}
+  th{font-family:'Playfair Display SC',serif;font-weight:700;color:#4d5f59;font-size:14px;letter-spacing:3px;text-align:left;padding:4px 10px 6px 0;border-bottom:1px solid var(--ink)}
+  td{padding:7px 10px 5px 0}
+  th.r,td.r{text-align:right;padding-right:0}
+  .disc{position:absolute;left:86px;top:566px;font-size:16px;color:#4d5f59}
+</style></head>
+<body>
+<div class="paper"></div>
+<svg class="grain" width="1200" height="630"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="3" stitchTiles="stitch"/></filter><rect width="1200" height="630" filter="url(#g)"/></svg>
+<div class="frame" style="left:24px;top:24px;right:24px;height:18px"></div>
+<div class="frame" style="left:24px;bottom:24px;right:24px;height:18px"></div>
+<div class="frame hz" style="left:24px;top:24px;bottom:24px;width:18px"></div>
+<div class="frame hz" style="right:24px;top:24px;bottom:24px;width:18px"></div>
+<div class="hair" style="left:50px;top:50px;right:50px;bottom:50px"></div>
+<svg id="ros" width="1200" height="630" viewBox="0 0 1200 630" style="position:absolute;left:0;top:0"></svg>
+<div class="cartouche" style="left:862px;top:244px;width:196px;height:132px"><span style="font-size:100px;padding-bottom:4px">B</span></div>
+<div class="wm sc">Burnticker</div>
+<div class="sub">A memecoin launchpad</div>
+<div class="goldrule"></div>
+<div class="copy ital">Coins whose supply is reduced upon the record of a verifiable real-world event. Each reduction is entered on-chain with its receipt; the rule is fixed at issue.</div>
+<table class="num">
+  <tr><th>Date</th><th>Feed</th><th class="r">Units</th><th class="r">Burned</th></tr>
+  <tr><td>8 Oct 2026</td><td class="ital">Treasury · debt to the penny</td><td class="r">21</td><td class="r">2,100,000</td></tr>
+</table>
+<div class="disc ital">memecoins — the rule says what supply does, not what price does</div>
+<svg class="burn" width="1200" height="630" viewBox="0 0 1200 630" style="left:0;top:0">
+  <defs>
+    <filter id="rough" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".03" numOctaves="4" seed="4" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="36"/></filter>
+    <radialGradient id="scorch" cx="100%" cy="100%" r="100%"><stop offset="0" stop-color="#0f1a17"/><stop offset=".55" stop-color="#0f1a17"/><stop offset=".60" stop-color="#1a110a"/><stop offset=".68" stop-color="#4a2c12"/><stop offset=".78" stop-color="#9a6b2e" stop-opacity=".8"/><stop offset=".88" stop-color="#cdb27a" stop-opacity=".45"/><stop offset="1" stop-color="#e9e9df" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="1220" cy="650" r="210" fill="url(#scorch)" filter="url(#rough)"/>
+</svg>
+<script src="guilloche.js"></script>
+<script>rosette(document.getElementById('ros'),960,310,230);</script>
+</body></html>

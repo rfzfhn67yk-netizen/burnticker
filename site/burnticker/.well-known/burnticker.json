@@ -1,0 +1,181 @@
+{
+  "schema": "burnticker.well-known/v1",
+  "name": "Burnticker",
+  "updatedAt": "2026-10-11",
+  "operator": {
+    "name": "Burnticker operator, one independent person whose identity is kept private until a legal entity is formed",
+    "state": null,
+    "country": "United States",
+    "contact": "contact@burnticker.com",
+    "security": "security@burnticker.com",
+    "entity": "TODO_ENTITY"
+  },
+  "links": {
+    "site": "https://burnticker.com",
+    "app": "https://burnticker.com/burnticker",
+    "deficitSite": "https://deficit.burnticker.com",
+    "github": "https://github.com/rfzfhn67yk-netizen/burnticker",
+    "githubOrg": "TODO_GITHUB_ORG",
+    "x": [
+      "https://x.com/burnticker",
+      "https://x.com/USA_DEFICIT"
+    ]
+  },
+  "clusters": {
+    "devnet": {
+      "status": "This is the rehearsal network, used on 2026-10-10. Both programs are deployed, and a 2-of-3 Squads vault with a 60 s time lock holds their upgrade authority.",
+      "programs": {
+        "burn_receipts": {
+          "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "deployed": true,
+          "executableHash": "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c",
+          "buildHash": "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c",
+          "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
+        },
+        "pair_curve": {
+          "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+          "deployed": true,
+          "executableHash": "364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf",
+          "buildHash": "364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf",
+          "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
+        }
+      },
+      "launchlabPlatform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+      "squads": {
+        "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+        "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
+        "threshold": "2 of 3",
+        "timeLock": "60 s on devnet; on mainnet it is 0 now, with 48 h planned"
+      },
+      "wallets": {
+        "dev-fee": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+        "keeper": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+        "deployer": "ED2FxCzefc1pi2M2JxAAgYNAce2LcNVh1QPQ3aJzCBGR",
+        "platform-admin": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+        "squads-vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+        "squads-member-1": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+        "squads-member-2": "58w9pN56qGxuNcnhUrTXgte2mbRNNf4QSAun3ASaLwxd",
+        "squads-member-3": "Bymx5VmL5Fi1A1EBJWXrcoeNUKARUvYjxKkHAqJ3H4wQ"
+      },
+      "lpLock": {
+        "policy": "locked-forever",
+        "line": "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)",
+        "lockedPct": 100,
+        "lockProgram": "DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX",
+        "lockAuthority": "7qWVV8UY2bRJfDLP4s37YzBPKUkVB46DStYJBpYbQzu3",
+        "feeKeysPda": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+        "operatorTreasury": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+        "treasuryPinned": true,
+        "operatorTreasuryHolder": "the devnet Squads vault (rehearsal network)",
+        "platform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+        "platformPinned": true,
+        "launchLabLocker": "5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq",
+        "split": {
+          "burnBps": 8000,
+          "operatorBps": 2000,
+          "coinSide": "burned",
+          "fixedInCode": true
+        },
+        "perSwapAfterGraduationBps": {
+          "lpFees": 21,
+          "toBurnPool": 16.8,
+          "toOperator": 4.2,
+          "creatorFeeToBurnPool": 25,
+          "burnedTotal": 41.8
+        },
+        "instructions": {
+          "register": "register_fee_key",
+          "claim": "claim_lock_fees"
+        }
+      }
+    },
+    "mainnet": {
+      "status": "Both programs were deployed on mainnet on 2026-10-11, and the Squads vault below holds their upgrade authority. The LaunchLab platform config was created the same day. $DEFICIT, the operator's first coin, was created on 2026-10-13. REHEARSAL is the mainnet test coin. Whether public creator launches are open is read from the host and shown on the launch page. Every wallet address below is set.",
+      "programs": {
+        "burn_receipts": {
+          "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "deployed": true,
+          "executableHash": "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821",
+          "buildHash": "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821",
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
+        },
+        "pair_curve": {
+          "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+          "deployed": true,
+          "executableHash": "567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895",
+          "buildHash": "567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895",
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
+        }
+      },
+      "launchlabPlatform": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9",
+      "squads": {
+        "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+        "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
+        "threshold": "2 of 3",
+        "timeLock": "0 now for launch week; 48 h planned from a week or more after the soft launch"
+      },
+      "wallets": {
+        "dev-fee": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
+        "keeper": "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6",
+        "deployer": "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P",
+        "platform-admin": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23",
+        "squads-vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+        "squads-member-1": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ",
+        "squads-member-2": "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt",
+        "squads-member-3": "9usyTn3LbKoQgXUhTQ9Q1agj1JknHvnePTVvFLpXitCG",
+        "bounty": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u"
+      },
+      "lpLock": {
+        "policy": "locked-forever",
+        "line": "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)",
+        "lockedPct": 100,
+        "lockProgram": "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE",
+        "lockAuthority": "3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH",
+        "feeKeysPda": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+        "operatorTreasury": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
+        "treasuryPinned": true,
+        "operatorTreasuryHolder": "the developer fee wallet (the owner's hardware wallet, also the LaunchLab platform fee wallet), not the Squads vault",
+        "platform": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9",
+        "platformPinned": true,
+        "launchLabLocker": "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh",
+        "split": {
+          "burnBps": 8000,
+          "operatorBps": 2000,
+          "coinSide": "burned",
+          "fixedInCode": true
+        },
+        "perSwapAfterGraduationBps": {
+          "lpFees": 21,
+          "toBurnPool": 16.8,
+          "toOperator": 4.2,
+          "creatorFeeToBurnPool": 71.25,
+          "burnedTotal": 88.05
+        },
+        "instructions": {
+          "register": "register_fee_key",
+          "claim": "claim_lock_fees"
+        }
+      }
+    }
+  },
+  "security": {
+    "policy": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/SECURITY.md",
+    "contact": "security@burnticker.com",
+    "bountyWallet": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u",
+    "firmAudit": false
+  },
+  "trust": {
+    "trustPage": "https://burnticker.com/burnticker/trust",
+    "check": "https://burnticker.com/burnticker/check",
+    "feeLedger": "https://burnticker.com/burnticker/fees/ledger",
+    "operator": "https://burnticker.com/burnticker/operator",
+    "verifiedBuild": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/VERIFIED-BUILD.md",
+    "verifiedBuildKind": "interim-local",
+    "sourceCommit": "089024ff6ab0cc92ae37899dee1509d52cb5e203",
+    "powersRegisters": [
+      "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/powers-register.md",
+      "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/pair-curve-powers-register.md"
+    ],
+    "api": "https://burnticker.com/api/burnticker/v1/openapi.json"
+  }
+}

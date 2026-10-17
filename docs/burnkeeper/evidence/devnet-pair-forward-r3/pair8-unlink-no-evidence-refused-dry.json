@@ -1,0 +1,121 @@
+{
+  "command": "unlink-pair",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": true,
+  "instructions": [
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "unlink_pair",
+      "accounts": [
+        {
+          "name": "cranker",
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "name": "config_a",
+          "pubkey": "n1RJZXLMNyu2qU9mJM1ps9Xta55arLoFK3nxfQQFHwb",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "config_b",
+          "pubkey": "8jfK578qBqiXXzed4m5c9WBfFTYL2pDZTfPFVsDNPybB",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "link_a",
+          "pubkey": "2U96dhcP1ksiC2QA8nEt14ykqjKozgQLk8tvrnnqNawk",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "link_b",
+          "pubkey": "H8cGNTjzCup7ns9YNTBpJRC8in3vK5o72NjCzrrgAj5z",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_a",
+          "pubkey": "AmWB1yhbc6BAXLz7UjoSCZERLfkDBDayE4jFwPq7BCXK",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_b",
+          "pubkey": "81rzJnwHPjJeJ1vyrQhWpV24roUj8qyQ3mba4heyfHFT",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "pair",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {}
+    }
+  ],
+  "simulation": {
+    "err": "{\"InstructionError\":[1,{\"Custom\":6093}]}",
+    "unitsConsumed": 39995,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: UnlinkPair",
+      "Program log: AnchorError occurred. Error Code: PairStillLive. Error Number: 6093. Error Message: unlink_pair: no terminal on-chain evidence (Pair voided, a side refunding, or a LaunchLab pair's voidBy ended without both pools).",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 39845 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17cd"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "n1RJZXLMNyu2qU9mJM1ps9Xta55arLoFK3nxfQQFHwb",
+      "kind": "TokenConfig",
+      "state": null
+    },
+    {
+      "address": "AmWB1yhbc6BAXLz7UjoSCZERLfkDBDayE4jFwPq7BCXK",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "8jfK578qBqiXXzed4m5c9WBfFTYL2pDZTfPFVsDNPybB",
+      "kind": "TokenConfig",
+      "state": null
+    },
+    {
+      "address": "81rzJnwHPjJeJ1vyrQhWpV24roUj8qyQ3mba4heyfHFT",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "2U96dhcP1ksiC2QA8nEt14ykqjKozgQLk8tvrnnqNawk",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "H8cGNTjzCup7ns9YNTBpJRC8in3vK5o72NjCzrrgAj5z",
+      "kind": "lamports",
+      "state": null
+    }
+  ]
+}
