@@ -296,8 +296,9 @@ describe("A1 / A4 on About, Templates and the launch meta: every open / closed s
     assert.match(t, /isPair\(t\) && !site\.pairs\.available \? site\.pairs\.line/);
   });
   test("the launch page's description and preview follow the record (closed, review only, open)", () => {
-    assert.match(siteLaunchState({ BURNTICKER_CLUSTER: "mainnet" }).meta.description, /Creator launches are not open yet/);
-    assert.match(siteLaunchState({ BURNTICKER_CLUSTER: "mainnet", [CREATOR_LAUNCHES_FLAG]: "1" }).meta.description, /a launch cannot be signed here yet/);
+    // prelaunch audit 2026-10-16 F-12: the description names no launch state (statically built pages bake it in); the page says it live
+    const closed = siteLaunchState({ BURNTICKER_CLUSTER: "mainnet" }).meta.description, open = siteLaunchState({ BURNTICKER_CLUSTER: "mainnet", [CREATOR_LAUNCHES_FLAG]: "1" }).meta.description;
+    assert.equal(closed, open); assert.doesNotMatch(closed, /not open|cannot be signed/);
     assert.doesNotMatch(read("src/app/burnticker/launch/layout.tsx"), /closed before launch/);
   });
 });

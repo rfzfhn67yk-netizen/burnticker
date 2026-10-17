@@ -141,7 +141,7 @@ export class Burnticker {
     return feePdaFor(this.options.programId, mint);
   }
 
-  tokens(o: { status?: "draft" | "live" | "paused" | "retired" | "expired"; limit?: number; offset?: number } = {}): Promise<TokenList> { return this.api.get<TokenList>("/tokens", o); }
+  tokens(o: { status?: "live" | "paused" | "retired"; limit?: number; offset?: number } = {}): Promise<TokenList> { return this.api.get<TokenList>("/tokens", o); }
 
   /** One token by ticker or mint: status, receipts, next possible burn, the exact rules.json text. */
   async token(tickerOrMint: string): Promise<TokenView> {

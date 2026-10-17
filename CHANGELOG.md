@@ -1594,3 +1594,11 @@ written before one public commit, the commit is recorded against the later tag. 
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
 - allowlist sha256 (config/public-repo.allowlist): `9bbe29a6cf5638f3ba424ad55ae5217f7fcc24f5dd8f91c54cf6e34976a1601e`
 - files published: 2260
+
+## 2026-10-17 — publish from 133468e10225
+
+- monorepo commit: `133468e102259d50cfb629daf2aa180f4ce34ac8` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `64ed38d8c5ec1679c34df4153f1b256ca84f450bb155d28bacf98a032e2f79de`
+- files published: 2272

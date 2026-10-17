@@ -226,6 +226,12 @@ export interface SiteLaunchState {
 
 /** The headline every description starts with (Claude site audit 2 item 1: "the current headline"). */
 export const SITE_HEADLINE = "Memecoins that burn on real-world results. Every burn leaves a receipt.";
+/**
+ * The pages' description and social previews (prelaunch audit 2026-10-16 F-12/F-13). Statically built pages bake their description in
+ * when the site is built, so it names no launch state: the built pages kept saying "Creator launches are not open" after launches opened.
+ * The launch state is shown on the page itself, read live.
+ */
+export const SITE_META_DESCRIPTION = `${SITE_HEADLINE} Each coin locks one rule when it is created, and its own trading fees pay for its burns.`;
 /** A catalogue reading older than this is stale: launch controls stay off until the page reads it again. */
 export const STALE_AFTER_MS = 15 * 60_000;
 /**
@@ -280,7 +286,7 @@ function stateFrom(read: SiteLaunchRead, m: LaunchAvailabilityModel, hostedSigni
     burnSol: { available: fresh && m.sources.some((x) => x.id === "burn-sol" && x.available === true) },
     sinkPicker: { available: fresh && m.sources.some((x) => x.id === "end-sink-picker" && x.available === true) },
     hostedSigning, canSign, wizard: fresh && (mode === "open" || mode === "preview"), sentence, signingSentence, walletNote: WALLET_NOTE,
-    meta: { description: `${SITE_HEADLINE} ${read === "ready" ? sentence : SITE_SENTENCE.closed}` },
+    meta: { description: SITE_META_DESCRIPTION },
     readAt,
   };
 }

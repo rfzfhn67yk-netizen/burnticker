@@ -27,6 +27,9 @@ export function oneShotAllLiner(rule: BurnRule, event: string, endDate: string |
   if (!m || (m.fractionOfPool ?? 0) < 1 || !(rule.market !== null || (rule.derby?.selector === "coinvs" && rule.derby.flip))) return null;
   const weeks = rule.onEnd ? (rule.onEnd.windDownDays === 28 ? "four weeks" : `${rule.onEnd.windDownDays} days`) : null;
   const sink = describeEndSink(rule);
+  // prelaunch audit 2026-10-16 (M11): a market title is a question ("Will … in 2026?"); "burns everything if Will … 2026?. If not" read
+  // as broken. A question is quoted and settled: `burns everything if "Will … 2026?" settles YES. If not, …`
+  if (/\?\s*$/.test(event)) event = `"${event.trim()}" settles ${rule.binary?.onYes ? "YES" : "NO"}`;
   if (sink === "incinerator") return `burns everything if ${event}. If not, the SOL left is sent to ${INCINERATOR_WORDS} after ${endDate ?? "it settles"}`;
   if (sink) return `burns everything if ${event}. If not, whatever is left burns ${sink === "pair-winner" ? "the winning coin, or $DEFICIT if there isn't one" : sink === "mint" ? `${sinkTickerOf(rule)}, or $DEFICIT if ${sinkTickerOf(rule)} is not live then,` : "$DEFICIT"} after ${endDate ?? "it settles"}`;
   return `burns everything if ${event}${weeks ? `. If not, the pool burns down over ${weeks} after ${endDate ?? "it settles"}` : ""}`;

@@ -32,6 +32,8 @@ scripts/burnkeeper-keygen.mjs
 src/lib/burnticker
 src/app/burnticker
 src/app/api/burnticker
+# the one proxy: a malformed address answers 404, not 500 (prelaunch audit 2026-10-16 F-15)
+src/proxy.ts
 config/burnticker
 scripts/burnticker-*.mts
 # the operator statement's self-contained verifier (ops-2, 2026-10-12): no repository code, anyone can run it

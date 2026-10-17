@@ -74,8 +74,9 @@ describe("draft expiry", () => {
     const r = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: body(Keypair.generate().publicKey.toBase58()).replace('"HELD"', '"STALE2"') });
     assert.equal(r.status, 200, JSON.stringify(await r.clone().json()).slice(0, 200));
     assert.equal(w.registry.token(stale.mint)!.status, "expired");
-    const list = await (await callRoute(`${API}/tokens?status=expired`)).json() as { tokens: { ticker: string }[] };
-    assert.deepEqual(list.tokens.map((t) => t.ticker), ["STALE2"]);
+    // block G review M2: an expired draft is not listed publicly (its mint and creator stay out of /tokens)
+    assert.equal((await callRoute(`${API}/tokens?status=expired`)).status, 400);
+    assert.deepEqual(w.registry.tokens("expired").map((t) => t.ticker), ["STALE2"]);
     // AUDIT A C1: an expired draft is judged on the chain, not on when the sweep ran. This world's verifier answers that the launch
     // landed (its create and TokenConfig on chain), so the coin exists and is taken live through the append-only revival row.
     const confirm = await callRoute(`${API}/launch/confirm`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ mint: stale.mint, signature: "6".repeat(88) }) });

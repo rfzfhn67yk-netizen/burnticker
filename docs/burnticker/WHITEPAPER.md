@@ -12,6 +12,16 @@
 Draft 1 of this technical paper was written on 2026-10-10 from the code and documents of the Burnticker repository at commit
 `76b9caa`. This version is dated 2026-10-12. Every statement names its source file. Where a component does not exist, the paper says "not built" or "not done".
 
+**Status on 2026-10-16.** Three facts below were wrong in earlier versions of this paper and are corrected here. The table after this
+one is the status on 2026-10-10, kept for the record.
+
+| Fact | State on 2026-10-16 | Source |
+|---|---|---|
+| Mainnet deployment | `burn_receipts` (`AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM`) has run round 5 on mainnet since 2026-10-15 (Squads proposal 3; the bytes read back from chain hash to `152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821`). `pair_curve` (`2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN`) runs round 4, deployed on 2026-10-12. Both were first deployed on mainnet on 2026-10-11. | `docs/burnticker/VERIFIED-BUILD.md`, `docs/burnkeeper/evidence/mainnet-round5/` |
+| Upgrade authority and its time lock | The Squads 2-of-3 vault `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV`. Its time lock is **0** through launch week, by the owner's decision of 2026-10-11, so a 2-of-3 vote can act at once. The owner holds two of the three keys, so the owner alone meets the threshold. | `config/burnticker/current-status.json` (`squads`), the trust page (read from chain) |
+| Operator treasury | The developer fee wallet `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5`, which the owner holds. It is compiled into the mainnet builds and is also the LaunchLab platform fee wallet. It is not the Squads vault, and the vault receives no fees. | `config/burnticker/transparency.json`, `config/burnticker/operator.json` |
+| $DEFICIT | created on mainnet on 2026-10-13 (mint `AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj`); creator launches opened the same evening | `config/burnticker/current-status.json` (`deficit.launch`) |
+
 **Status on 2026-10-10, kept for the record.** The program is deployed on devnet for the rehearsal of 2026-10-10 (`docs/burnkeeper/devnet-run.md`).
 Nothing is deployed on mainnet, and no mainnet key exists.
 
@@ -368,7 +378,7 @@ on any instruction or signer that has no description.
 | Raise the burn-pool cap | platform authority (intended: the Squads vault) | raise only | 48 h, applied by anyone | cap sunset, set once at `initialize_platform`, ≤ 365 days and ≤ 2027-10-01 |
 | Clear the cranker allowlist | platform authority or any listed key | clear only, never add | none | allowlist lapses at the cap sunset or 90 days after `initialize_platform` |
 | Registration-policy switch | token admin | stranding only (§4.7) | 48 h, 14-day expiry, attester veto | cap sunset; `renounce_admin` |
-| Program upgrade | upgrade authority (plan: Squads 2-of-3) | can replace all code | 48 h Squads time lock | set to none after review (§9) |
+| Program upgrade | upgrade authority: the Squads 2-of-3 vault | can replace all code | **0** through launch week (owner decision 2026-10-11) | set to none after review (§9) |
 | LaunchLab platform admin (outside the program) | the key that created the platform | fee rates, wallets, `cpConfigId`, `platformCpCreator`, LP scales for launches not yet migrated | **none** | none: the admin cannot be transferred |
 
 **What has no instruction.** There is no withdraw, sweep, transfer, close or set-recipient instruction for the fee PDA, its token
@@ -589,10 +599,12 @@ designed values are in `src/lib/burnticker/fees.ts`. The table gives fees in bas
   coins through `lock_lp`). It can never be withdrawn, and the creator cannot configure it. The Fee Key NFT is owned by the
   `["fee_keys"]` PDA of `burn_receipts`. Anyone can call `claim_lock_fees`, which splits the SOL side of the LP fees by compiled
   constants. `LOCK_FEE_BURN_BPS` sends 8,000 basis points of it to the coin's burn pool. `LOCK_FEE_OPERATOR_BPS` sends 2,000 basis points
-  to the operator treasury, which is the Squads vault. The coin side is burned. No admin key or config field can change the split.
+  to the operator treasury, which on mainnet is the developer fee wallet `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5` (the owner's
+  wallet, not the Squads vault). The coin side is burned. No admin key or config field can change the split.
   Per swap after graduation, that was about 21.55 basis points toward the burn on CPMM tier 0 (16.8 + 4.75; it was 4.75 with the LP
-  burned) and 4.2 basis points to the operator. **After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.** On mainnet the treasury is not compiled in yet.
-  Until it is, every claim refuses with `TreasuryNotPinned`, and the fees stay in the lock.
+  burned) and 4.2 basis points to the operator. **After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.** The treasury is compiled into the mainnet
+  build (the owner chose it on 2026-10-11). A build with no treasury pinned refuses every claim with `TreasuryNotPinned`, and the fees
+  stay in the lock.
 - **The Raydium pool tier is 9.** The owner decided this on 2026-10-12, replacing tier 0. The LaunchLab platform's `cpConfigId` names
   Raydium CPMM AmmConfig index 9 (`LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC`): the same 25 bps trade fee as tier 0 and a 75 bps
   creator fee instead of 5 bps. Per 1 SOL of volume after graduation, traders pay 100 bps. The burn pool gets about 88.05 bps
@@ -688,10 +700,11 @@ leg, which would compare each memo on chain, is not wired. The script runs with 
 
 ## 9. Governance and custody
 
-- **The plan is a Squads 2-of-3 vault with a 48-hour time lock.** The owner holds two of its keys, and a trusted third party holds the
-  third. The vault is the planned holder of the upgrade authority, the platform authority and each token's config authority. The
-  program's own 48-hour timelocks come on top. The commands are in `docs/burn-receipts/README.md` section 5.2. The vault is not created
-  yet.
+- **A Squads 2-of-3 vault holds the upgrade authority, with no time lock during launch week.** The mainnet vault is
+  `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV`. The owner holds two of its keys, so the owner alone meets the threshold, and a trusted
+  third party holds the third. Its time lock is 0 through launch week, by the owner's decision of 2026-10-11, so that deploy and config
+  fixes are not delayed. The program's own 48-hour timelocks come
+  on top. The commands are in `docs/burn-receipts/README.md` section 5.2.
 - **Upgrade authority plan.** Deploy the verifiable build, hand the authority to the Squads vault, and after review set it to none. That
   last step is the BPF Upgradeable Loader's `SetAuthority` with no new authority, executed as a Squads vault transaction. The runbook's
   launch gate says the mainnet launch is published only after `solana program show` prints `Authority: none` and the deployed hash
@@ -906,11 +919,12 @@ The signed attestation message (section 4.4) is a separate grammar, `BURNRECEIPT
 
 | What | Address |
 |---|---|
-| `burn_receipts` program id | not set in draft 1 (localnet test key `GV9CMjXPGbmXnn3ci3RjvTBpfdgiZ4Ts7UWu1LCnSuF8` is not a deployment) |
-| Burnticker LaunchLab platform id | not set in draft 1 |
-| $DEFICIT mint | not set in draft 1 |
-| Squads vault | not set in draft 1 |
-| Developer fee wallet | not set in draft 1 |
+| `burn_receipts` program id | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` (devnet and mainnet) |
+| `pair_curve` program id | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` (devnet and mainnet) |
+| Burnticker LaunchLab platform id (mainnet) | `94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9` |
+| $DEFICIT mint | `AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj` |
+| Squads vault (mainnet; holds the upgrade authority, receives no fees) | `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV` |
+| Developer fee wallet (mainnet; the operator treasury) | `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5` |
 | Raydium LaunchLab (mainnet) | `LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj` |
 | Raydium CPMM (mainnet) | `CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C` |
 | Raydium CPMM LP lock authority (mainnet) | `3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH` |

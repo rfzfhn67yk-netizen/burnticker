@@ -137,7 +137,7 @@ async function buildHomeBody(): Promise<{ body: unknown; n: number; chainCoins: 
   if (rh && !isTestCoin(tests, { mint: rh.mint }) && p.market && p.cluster === "mainnet") rehearsalCurve = await readKeeperCurve(p.market, { cluster: "mainnet", mint: rh.mint, poolId: rh.poolId }, now);
   // website-17 wiring items 2 and 3: each coin's rank line (never a guessed rank) and the earned featured slots
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
-  if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: ranks.get(c.ticker)?.line ?? null }));
+  if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: (c.mint ? ranks.get(c.mint)?.line : null) ?? null }));
   const slots = coins === null ? null : featuredSlots(slotInputs, now);
   return { n: coins?.length ?? 0, chainCoins, body: { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster } };
 }

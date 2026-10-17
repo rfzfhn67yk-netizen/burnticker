@@ -6,7 +6,7 @@ import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
 /**
  * THE SITEMAP (growth batch 2026-10-10): /sitemap.xml (Caddy rewrites the apex path to /burnticker/sitemap.xml). Lists the public pages
  * a search engine should know: the app's own pages, the docs (the docs page, the whitepaper, the OpenAPI document), every launched
- * coin's page (live, paused, retired — never a draft), every rivalry pair, the leagues index and each league's current season plus any
+ * coin's page (live, paused, retired — never a draft), every rivalry pair whose two coins are launched (listedPairs), the leagues index and each league's current season plus any
  * season that has coins. Embed pages and badges are not listed (they are noindex). Pure: the route feeds it the registry's rows.
  */
 
@@ -81,3 +81,13 @@ export function sitemapXml(entries: readonly SitemapEntry[]): string {
     "",
   ].join("\n");
 }
+
+/**
+ * F-26 (prelaunch audit 2026-10-16): the pairs a search engine is told about, the ones whose two coins are both launched (live, paused or
+ * retired). A pair with a draft or expired side has no coins to show, and its links resolved by ticker to other coins.
+ */
+export function listedPairs<T extends { pairId: string; mintA: string; mintB: string }>(pairs: readonly T[], coins: readonly { mint?: string; status: string }[]): T[] {
+  const launched = new Set(coins.filter((c) => c.mint && LAUNCHED.has(c.status)).map((c) => c.mint as string));
+  return pairs.filter((p) => launched.has(p.mintA) && launched.has(p.mintB));
+}
+const LAUNCHED = new Set(["live", "paused", "retired"]);

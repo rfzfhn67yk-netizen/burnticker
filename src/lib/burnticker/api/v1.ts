@@ -23,6 +23,10 @@ import { liveSinks, SINK_FALLBACK_LINE } from "@/lib/burnticker/endSinks";
 import { buildCoverage, type CoverageMatrix } from "@/lib/burnticker/coverage";
 import { logNoCardSearch, recordLaunchTimings } from "@/lib/burnticker/api/product";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
+import { deficitMint } from "@/lib/burnticker/home";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * THE PUBLIC API, v1 (2026-10-09). One function per operation in spec.ts; the route files under src/app/api/burnticker/v1/ call these
@@ -157,12 +161,33 @@ export function v1Sinks(p: Platform, q: URLSearchParams): ApiResult {
   return ok({ network, sinks, count: sinks.length, fallback: SINK_FALLBACK_LINE });
 }
 
+/** The statuses /v1/tokens lists when no `status` is asked for (F-25): launched coins only. Drafts are listed only on request. */
+export const LISTED_BY_DEFAULT: readonly TokenStatus[] = ["live", "paused", "retired"];
+
+/**
+ * $DEFICIT while it is run by its own keeper and not registered here (F-25): the API names it so a reader finds the flagship, with its
+ * page and locked rules, and says plainly that its burn record is the keeper's. Null when config/own-tokens.json does not mark it launched
+ * or the registry already holds it (then its own row answers).
+ */
+export function flagshipToken(p: Pick<Platform, "registry" | "cluster">, root = process.cwd()): { ticker: string; name: string; mint: string; status: "live"; registered: false; oracle: string; mode: string; rulesSha256: string; cluster: "mainnet"; imageUrl: string; lastBurnAt: null; page: string; note: string; links: { self: string; receipts: string; page: string; rules: string } } | null {
+  if (p.cluster !== "mainnet") return null;   // the flagship is a mainnet coin; a devnet host does not list it
+  const mint = deficitMint(root);
+  if (!mint) return null;
+  try { if (p.registry.token(mint) || p.registry.tokensByTicker("DEFICIT").some((t) => t.status !== "draft" && t.status !== "expired")) return null; } catch { /* unreadable registry: still name the flagship */ }
+  let rulesSha256 = "";
+  try { rulesSha256 = crypto.createHash("sha256").update(fs.readFileSync(path.join(root, "config", "burnkeeper", "deficit.rules.json"))).digest("hex"); } catch { /* unreadable: empty */ }
+  return { ticker: "DEFICIT", name: "Deficit", mint, status: "live", registered: false, oracle: "catalogue", mode: "buyback", rulesSha256, cluster: "mainnet", imageUrl: "/burnticker/brand/deficit.png", lastBurnAt: null, page: "/burnticker/t/DEFICIT", note: "$DEFICIT is run by its own keeper, so this site does not hold its burn rows. Its page reads the keeper's published files.", links: { self: `${API_PREFIX}/tokens/DEFICIT`, receipts: "https://deficit.burnticker.com/burns.json", page: "/burnticker/t/DEFICIT", rules: "/deficit/rules.json" } };
+}
+
 export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {
   const status = q.get("status");
-  if (status !== null && !["draft", "live", "paused", "retired", "expired"].includes(status)) return fail(400, "The status must be draft, live, paused, retired or expired.");
+  // block G review M2: draft and expired-draft mints (and their creators' wallets) are not listed publicly; the creator's own page and
+  // the operator's tools read them from the registry
+  if (status === "draft" || status === "expired") return fail(400, "Drafts are not listed. A coin is listed here once it is launched.", { code: "not-listed" });
+  if (status !== null && !["live", "paused", "retired"].includes(status)) return fail(400, "The status must be live, paused or retired.");
   p.registry.expireDrafts();
   const limit = Math.min(200, Math.max(1, Number(q.get("limit") ?? 100) || 100)), offset = Math.max(0, Number(q.get("offset") ?? 0) || 0);
-  const all = p.registry.tokens((status as TokenStatus | null) ?? undefined);
+  const all = status !== null ? p.registry.tokens(status as TokenStatus) : p.registry.tokens().filter((t) => LISTED_BY_DEFAULT.includes(t.status));   // status is live, paused or retired here
   const page = all.slice(offset, offset + limit).map((t) => {
     const rows = p.registry.receipts(t.mint);
     const confirmed = rows.filter((b) => b.status === "confirmed");
@@ -171,11 +196,19 @@ export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {
     const lastBurnAt = burns.map((b) => b.settledAt).sort().pop() ?? null;
     return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, burns: burns.length, burnedTokens: rawToTokens(burned, 6), imageUrl: t.imageUrl, lastBurnAt, links: links(t, registryCoinKey(p.registry, t)) };
   });
-  return ok({ tokens: page, count: page.length, total: all.length, cluster: p.cluster });
+  const flagship = status === null || status === "live" ? flagshipToken(p) : null;
+  // the flagship is the list's last row (index all.length): on the page that reaches it, never past it (review L3)
+  const listed = flagship && offset <= all.length && offset + page.length >= all.length && page.length < limit ? [...page, flagship] : page;
+  return ok({ tokens: listed, count: listed.length, total: all.length + (flagship ? 1 : 0), cluster: p.cluster });
 }
 
 export async function v1Token(p: Platform, id: string): Promise<ApiResult> {
   const l = findCoin(p, id);
+  if (l.kind === "none") {
+    // F-25: $DEFICIT by ticker or mint while its own keeper runs it (no registry row)
+    const f = flagshipToken(p), key = decode(id).trim();
+    if (f && (key.toUpperCase() === "DEFICIT" || key === f.mint)) return ok({ status: f, receipts: [], readings: [], note: f.note });
+  }
   if (l.kind !== "one") return notOne(p, l, id);
   const t = l.token;
   const d = await tokenPageData(p, t);
