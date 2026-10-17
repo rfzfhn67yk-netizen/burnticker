@@ -36,7 +36,7 @@ async function world(o: { fraction: number; poolLamports?: bigint; dispersal?: b
   program.now = () => clock.now;
   const g: G = game(START, "PHI", "BOS", 99, 110);   // BOS wins at Philadelphia: the PHI-loss rule fires
   const all = [g, ...FILLER];
-  setNativeClients({ espn: scheduleClient(all, () => clock.now), games: fakeDeps(all) });
+  setNativeClients({ espn: scheduleClient(all, () => clock.now), games: fakeDeps(all, () => clock.now) });
   const rule = { ...nativeRule(LOSS(g.id), { fractionOfPool: o.fraction }), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
   const b = await buildLaunchBundle({ creator: CREATOR, ticker: "PHIGM", name: "76ers Game", description: "", imageUrl: null, links: [], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
   const t0 = registry.register({ mint: b.mint, ticker: "PHIGM", name: "76ers Game", creator: CREATOR, description: b.description, imageUrl: null, links: [], rulesText: b.rules.text, feePda: b.addresses.feePda, vault: b.addresses.vault, tokenConfig: b.addresses.tokenConfig, poolId: b.addresses.poolId, launchTx: null, cluster: "devnet", platformId: null, baselineAt: "2025-10-01T00:00:00Z", status: "draft" }, Date.parse("2025-10-01T00:00:00Z"));
@@ -111,7 +111,8 @@ describe("review 10 F1: a 50 % one-shot finishes its share on the coin before th
     const half = (BigInt(5) * SOL) / BigInt(2);
     // up to the result's crank and the first carried piece
     let guard = 0;
-    while (w.spentOnCoin() <= SOL && guard++ < 200) { await runCycle(w.deps); w.clock.now += 20 * 60_000; }
+    // owner 2026-10-16: the game is read 6 h after its start and the coin burns 12 h after that first read, so the loop runs past both
+    while (w.spentOnCoin() <= SOL && guard++ < 600) { await runCycle(w.deps); w.clock.now += 20 * 60_000; }
     assert.ok(w.spentOnCoin() > SOL && w.spentOnCoin() < half, `mid-drain: ${w.spentOnCoin()}`);
     assert.equal(await w.sink.ruleEnd(), null);
     // another cranker (crank_carried is permissionless) spends a 0.1 SOL piece the keeper never sent

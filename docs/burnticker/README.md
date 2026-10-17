@@ -264,7 +264,11 @@ locked `derby` block (`src/lib/burnticker/derby/spec.ts`); design note: [DERBY.m
   `BURNTICKER_THESPORTSDB_KEY`; each game settles on its on-chain payout where a Polymarket moneyline market exists, else on
   TheSportsDB's final, and counts only when a second independent operator agrees — the payout and TheSportsDB confirm each other,
   the league's official feed is a further read where free, API-Sports (`BURNTICKER_APISPORTS_KEY`) optional; a game is read ≥ 6 h
-  after its start; src/lib/burnticker/sources/gameSettle.ts), `nws.high:<ST>-<°F>`, `nws.rain:<ST>-<in>`, `nws.snow:<ST>` (NWS CLI final reports;
+  after its start; src/lib/burnticker/sources/gameSettle.ts; owner 2026-10-16: a single-game `espn.game:` coin, and both coins of two
+  teams in one game, burn once two independent sources agree on the final, or 12 hours after the final is first read when only one source
+  answers, every source that answers must agree or the burn is held (a game once held waits the 12 hours), and the first-read time is kept in the status table key `games.firstReads`, keyed
+  `league:eventId`; a one-market Polymarket coin on a game moneyline runs on the same schedule, sources/polyGame.ts; a stuck disagreement
+  is released only with scripts/burnticker-game-hold.mts, runbook "A game coin held by a disagreement"), `nws.high:<ST>-<°F>`, `nws.rain:<ST>-<in>`, `nws.snow:<ST>` (NWS CLI final reports;
   the Iowa Environmental Mesonet as the cross-read), `fec.beats:<A>-<B>` (OpenFEC receipts per report; same-operator cross-read, refused
   by the coverage gate). Scalar, unit 1, baseline 0, direction up. Their descriptors (kind `native`) in `config/burnticker/sources.json`
   feed the coverage matrix and the creation preflight.

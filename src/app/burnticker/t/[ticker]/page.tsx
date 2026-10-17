@@ -1,6 +1,7 @@
 "use client";
 
 import { coinAddressLine } from "@/lib/burnticker/mintAddressCopy";
+import { settledLine } from "@/lib/burnticker/settledTitle";
 import { safeCreatorLink } from "@/lib/burnticker/creatorProfile";
 import { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 import { useEffect, useState } from "react";
@@ -273,7 +274,7 @@ export default function TokenPage() {
                     <span className="font-mono text-xs truncate" title={b.title ?? ""}>{b.market}</span>
                     <span className="font-mono text-xs uppercase">{b.result ?? b.value ?? "—"}</span>
                   </div>
-                  {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{[...new Set((b.title.match(/settled on [^·]+· confirmed by [^·]+/g) ?? []).map((x) => x.trim()))].join(" · ")}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={m[1]} rel="noopener" target="_blank">see this game on ESPN →</a>)}</div>}
+                  {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{settledLine(b.title)}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={m[1]} rel="noopener" target="_blank">see this game on ESPN →</a>)}</div>}
                   <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
                     <span>{b.status === "confirmed" ? (() => { const rl = receiptRealLine(b.memo, real); return rl ? <><b className="tabular-nums" data-real-receipt>{rl}</b> from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</>; })() : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{realHeldLine(real, b.skippedReason) ?? <>{b.status}{b.skippedReason ? `. ${b.skippedReason}` : ""}</>}</span>}</span>
                     <span className="flex flex-wrap gap-2">{b.txUrl && <a className="underline" href={b.txUrl}>transaction</a>}{b.settlementSourceUrl && <a className="underline" href={b.settlementSourceUrl}>source</a>}{(() => { const v = receiptRowStatus(b); return <span className={v.status === "passed" ? "text-emerald-400" : v.status === "failed" ? "text-red-400" : "text-neutral-500"} title={v.title} data-receipt-status={v.status}>{v.status === "passed" ? "✓ " : v.status === "failed" ? "✗ " : ""}{v.label}</span>; })()}{(() => { const href = checkReceiptHref(b.signature, s.cluster); return href ? <a className="underline font-medium" href={href} data-check-receipt>Check receipt</a> : null; })()}</span>

@@ -98,10 +98,16 @@ describe("settlement on TheSportsDB alone after a 12-hour hold", () => {
     if (v.kind !== "settled") return;
     assert.deepEqual(v.ops, ["TheSportsDB", "mlb.statsapi"]); assert.equal(v.singleSince, undefined);
     assert.equal(v.settledBy, "TheSportsDB and MLB's official feed");
-    assert.equal(holds.get(holdKeyOf(MLB)), null, "no hold is recorded where the league feed reads the game");
+    // no RUNNING hold where the league feed reads the game: at most a no-score mark that remembers the feed's final (HoldMark.finals)
+    const mk = holds.get(holdKeyOf(MLB));
+    assert.ok(mk === null || mk.home === -1, `no running hold: ${JSON.stringify(mk)}`);
+    assert.deepEqual(mk?.finals?.["mlb.statsapi"] && { home: mk.finals["mlb.statsapi"].home, away: mk.finals["mlb.statsapi"].away }, { home: 3, away: 5 }, "the league feed's final is remembered");
     const x = await settleGame(fakeClient({ home: 3, away: 5 }, { mlb: { home: 4, away: 5 } }), MLB, deps({ holds, now: () => T0 }));
     assert.equal(x.kind, "held");
-    const w = await settleGame(fakeClient({ home: 3, away: 5 }, { mlb: null }), MLB, deps({ holds, now: () => T0 + 99 * SINGLE_SOURCE_HOLD_MS }));
+    // the same store still remembers the feed's 4-5 against TheSportsDB's 3-5: held, not settled, while the feed shows no final
+    const kept = await settleGame(fakeClient({ home: 3, away: 5 }, { mlb: null }), MLB, deps({ holds, now: () => T0 + 99 * SINGLE_SOURCE_HOLD_MS }));
+    assert.equal(kept.kind, "held", "a remembered disagreement holds the game");
+    const w = await settleGame(fakeClient({ home: 3, away: 5 }, { mlb: null }), MLB, deps({ holds: memoryHoldStore(), now: () => T0 + 99 * SINGLE_SOURCE_HOLD_MS }));
     assert.equal(w.kind, "awaiting", "MLB's feed is counted, so a game it has not finalised waits for it rather than taking the hold");
   });
 

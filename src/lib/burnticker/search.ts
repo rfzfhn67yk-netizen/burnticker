@@ -140,6 +140,9 @@ export const namesTeam = (q: string, t: EspnTeam): boolean => { const n = norm(q
 const CHAMP_WORDS = /\b(world series|championship|champions?|title|super ?bowl|stanley cup|finals|pennant|ring)\b/i;
 /** Who settles a team coin's game, in words (gameSettle.ts): never ESPN. */
 export const SPORTS_SETTLEMENT = "the game's on-chain payout where a market exists, else a licensed final score";
+/** Who settles a single game (a game coin, two teams in one game; owner 2026-10-16) and when, in words. */
+export const GAME_SETTLEMENT_WORDS = "a licensed final score, the league's own feed, or the game's on-chain settlement; it burns once two sources agree on the final, or 12 hours after the first final if only one source answers";
+export const GAME_CROSS_WORDS = "every source that answers must agree; a disagreement holds the burn";
 const CROSS_NAME_: Partial<Record<LeagueId, string>> = { nhl: "NHL's official scores", mlb: "MLB's official feed", nba: "NBA's official feed" };
 const OFFICIAL_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official postseason results (statsapi.mlb.com)", nba: "the NBA's official results (nba.com)", nhl: "the NHL's official results (nhl.com)", nfl: "the league's official results" };
 const OFFICIAL_SHORT_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official results", nba: "the NBA's official results", nhl: "the NHL's official results", nfl: "the league's official results" };
@@ -259,7 +262,7 @@ function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Sugges
   const a = side(g.away), b = side(g.home);
   return {
     ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "pair",
-    title: copy.title, subtitle: g.detail || g.startsAt, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league],
+    title: copy.title, subtitle: g.detail || g.startsAt, settlement: GAME_SETTLEMENT_WORDS, crossRead: GAME_CROSS_WORDS,
     nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game", howSettles: copy.howSettles,
     matchup: { league: t.league, eventId: g.eventId, title: g.name, startsAt: g.startsAt, a, b }, score: 2.8,
   };
@@ -286,7 +289,7 @@ function oneGameCard(t: EspnTeam, g: Game, outcome: "win" | "loss" | "draw"): Su
   return {
     ...base, id: `game:${series}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "one-shot",
     title: `Burns ${pctLabel(share)} once if ${teamRef(t)} ${outcome === "win" ? "beat" : outcome === "draw" ? "draw with" : "lose to"} ${oppRef} on ${denverTime(g.startsAt)} Denver time`,
-    subtitle: `${g.name}, this game only`, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league], nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game",
+    subtitle: `${g.name}, this game only`, settlement: GAME_SETTLEMENT_WORDS, crossRead: GAME_CROSS_WORDS, nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game",
     howSettles: outcome === "draw" ? `This coin covers one game, ${g.name}. It burns only on a draw.` : `This coin covers one game, ${g.name}. A ${LEAGUES[t.league].draws ? "draw" : "tie"} burns nothing.`, rule, pick: { oracle: "catalogue", series, market: null, title: `${t.name} ${verb} — ${g.name} (resolves once)` },
     source: { unit: { size: 1, label: "the game", definition: "one burn if the result is the one the rule names" }, baseline: 0, direction: "up" },
     text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score: 3.2,

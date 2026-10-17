@@ -3,6 +3,7 @@ import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, ScheduleUnavailable, espnSeriesTitle, gamesFor, outcomeWords, parseEspnSeries, teamByAbbr, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
 import { CROSS_LABEL, POLY_LEAGUE_TAG, countedOfficialOf, envGameDeps, operatorsFor, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { FecClient, fecSettled, parseFecSeries } from "@/lib/burnticker/sources/fec";
+import { GAME_AGREE_LINE, GAME_BURN_LINE, GAME_SETTLEMENT } from "@/lib/burnticker/sources/provenance";
 import { ALREADY_DECIDED_SENTENCE, gameEligibility } from "@/lib/burnticker/oneShotEligibility";
 import { NwsClient, crossCheck, iemFor, nwsSeriesTitle, nwsSettled, parseNwsSeries, qualifies, stationByCode, type NwsSeries } from "@/lib/burnticker/sources/nws";
 
@@ -76,6 +77,8 @@ export const NEXT_GAME_NOTES = {
   official: (feed: string): string => `Polymarket has not listed the next game yet; it usually appears a few days before tip-off. Until it does, that game would settle on TheSportsDB and ${feed}, which must agree.`,
   noTag: "Polymarket does not list games in this league, so each game would settle on TheSportsDB alone after a 12-hour confirmation hold.",
 };
+/** The launch review's note on a single-game coin (owner, 2026-10-16: one burn schedule for every game coin, gameSettle.ts gameSchedule). */
+export const GAME_COIN_NOTE = `${GAME_BURN_LINE} ${GAME_AGREE_LINE}`;
 export function nextGameNote(league: EspnSeries["league"], d: GameDeps): string {
   const off = countedOfficialOf(league);
   if (off) return NEXT_GAME_NOTES.official(CROSS_LABEL[off]);
@@ -86,16 +89,20 @@ export function nextGameNote(league: EspnSeries["league"], d: GameDeps): string 
 function espnSource(id: string, s: EspnSeries): NativeSource {
   const t = teamByAbbr(s.league, s.abbr)!, off = countedOfficialOf(s.league), crossLabel = off ? `${CROSS_LABEL[off]} and each other` : "each other (the on-chain payout and TheSportsDB)";
   const deps = () => gameDeps();
-  const settles = "settled on the game's on-chain payout where a market exists, else on a licensed final score";
+  // owner 2026-10-16: a game coin settles once two sources agree on the final, or 12 hours after the first read when only one source answers
+  const settles = s.kind === "game" ? `settled on ${GAME_SETTLEMENT}` : "settled on the game's on-chain payout where a market exists, else on a licensed final score";
   return {
-    id, family: s.kind === "team" ? "espn.team" : "espn.game", title: espnSeriesTitle(s), sourceName: `${settles}; confirmed by ${crossLabel}`,
+    id, family: s.kind === "team" ? "espn.team" : "espn.game", title: espnSeriesTitle(s), sourceName: s.kind === "game" ? `${settles}; burns once two sources agree on the final, or 12 hours after the first final if only one source answers, and every source that answers must agree` : `${settles}; confirmed by ${crossLabel}`,
     sourceUrl: `https://www.thesportsdb.com/`, tier: 4, cadence: s.kind === "team" ? "every game day" : "resolves once, after the game",
     unit: s.kind === "team" && s.window.kind === "meetings"
       // the rivalry series (espn.ts window `meetings`): a signed reading per game day, and one season-end reading
       ? { size: 1, label: "1 win against the rival", definition: `each ${t.name} win against ${teamByAbbr(s.league, s.window.opp)?.name ?? s.window.opp} this season (a loss reads −1, a draw 0), ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final (a game no second source can read settles on TheSportsDB alone after its final has stood 12 hours); when both seasons are over, one more reading: +1 if ${t.name} won more of the games between them, −1 if fewer, none if level` }
-      : { size: 1, label: s.kind === "team" ? `1 ${outcomeWords(s.outcome).noun}` : `the ${outcomeWords(s.outcome).noun}`, definition: `each ${t.name} ${outcomeWords(s.outcome).noun} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final (a game no second source can read settles on TheSportsDB alone after its final has stood 12 hours)${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
+      : s.kind === "game"
+        // owner 2026-10-16: ONE schedule for every single-game coin (gameSettle.ts gameSchedule)
+        ? { size: 1, label: `the ${outcomeWords(s.outcome).noun}`, definition: `the ${t.name} ${outcomeWords(s.outcome).noun} in this one game, ${settles}, read ≥ 6 h after the start; it burns once two sources agree on the final (TheSportsDB, the game's on-chain settlement, a league feed or API-Sports, each counted once), or 12 hours after the first final if only one source answers, and every source that answers must agree${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` }
+        : { size: 1, label: `1 ${outcomeWords(s.outcome).noun}`, definition: `each ${t.name} ${outcomeWords(s.outcome).noun} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final (a game no second source can read settles on TheSportsDB alone after its final has stood 12 hours)${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
-    flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : s.league === "nba" ? "the game list comes from the NBA's feed when it answers, else from TheSportsDB under licence (needs BURNTICKER_THESPORTSDB_KEY)" : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "every source that reads a game must agree; a game with no Polymarket market and no league feed settles on TheSportsDB alone once its final score has stood for 12 hours (a source check; one operator attester signs the reading)"],
+    flags: [...(s.kind === "game" ? ["a game coin burns once two sources agree on the final, or 12 hours after the first final if only one source answers; a disagreement holds it (owner 2026-10-16)"] : []), off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : s.league === "nba" ? "the game list comes from the NBA's feed when it answers, else from TheSportsDB under licence (needs BURNTICKER_THESPORTSDB_KEY)" : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", ...(s.kind === "game" ? [] : ["every source that reads a game must agree; a game with no Polymarket market and no league feed settles on TheSportsDB alone once its final score has stood for 12 hours (a source check; one operator attester signs the reading)"])],
     launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",
     settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps(), { seriesId: id }),
     ...(s.kind === "game" ? { eligibility: async () => { const g = (await gamesFor(espnClient(), s))[0]; return g ? gameEligibility(g) : null; } } : {}),
@@ -117,8 +124,8 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
         const m = next && d.market ? await d.market(next).catch(() => null) : null;
         if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: GAME_LINES.noSourceNext(t.name, next, s.league) } };
         const ops = operatorsFor(s.league, d, !!m);
-        const note = next && !m ? nextGameNote(s.league, d) : null;
-        return { ...none, basis: next ? `readers for the next game (${next.name}): ${ops.join(" and ")}; games before launch never count${ops.length < 2 ? "; one operator, so the game settles on TheSportsDB alone after a 12-hour hold unless Polymarket lists it" : ", and every read is compared at the first game after launch"}` : "no game listed yet; the reads are compared at the first game after launch", nextAt, nextBasis, note, problem: null };
+        const note = s.kind === "game" ? GAME_COIN_NOTE : next && !m ? nextGameNote(s.league, d) : null;
+        return { ...none, basis: next ? `readers for the next game (${next.name}): ${ops.join(" and ")}; games before launch never count${s.kind === "game" ? "; a game coin burns once two of them agree on the final, or 12 hours after the first final if only one answers, and every read must agree" : ops.length < 2 ? "; one operator, so the game settles on TheSportsDB alone after a 12-hour hold unless Polymarket lists it" : ", and every read is compared at the first game after launch"}` : "no game listed yet; the reads are compared at the first game after launch", nextAt, nextBasis, note, problem: null };
       }
     },
   };

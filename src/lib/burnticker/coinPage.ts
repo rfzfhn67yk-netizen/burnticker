@@ -1,4 +1,6 @@
 import { windowKindOf, PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
+import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
+import { GAME_BURN_LINE } from "@/lib/burnticker/sources/provenance";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { DateReadJson, LifecycleDatesJson } from "@/lib/burnticker/pageTypes";
 import { MCAP_POOL_MEANING, NOT_READ } from "@/lib/burnticker/cardView";
@@ -80,7 +82,8 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
       : typeof m?.fractionOfPool === "number" ? `${each} spends ${pct(m.fractionOfPool)} of the burn pool on this coin and burns what it gets.` : null;
     const kind = windowKindOf(r);
     const window = kind === "perpetual" ? PERPETUAL_SENTENCE
-      : kind === "one-shot" || oneShot ? "This coin resolves once. One result decides it."
+      // owner 2026-10-16: a single-game coin burns once two sources agree, else 12 hours after its final is first read (gameSettle.ts gameSchedule)
+      : kind === "one-shot" || oneShot ? `This coin resolves once. One result decides it.${r.oracle === "catalogue" && parseEspnSeries(r.series ?? "")?.kind === "game" ? ` ${GAME_BURN_LINE}` : ""}`
       : kind === "next" ? "This coin covers a fixed number of games, and then its rule ends."
       : kind === "post" ? "This coin covers one postseason, and then its rule ends."
       : "This coin covers one season, and then its rule ends.";

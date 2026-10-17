@@ -124,3 +124,59 @@ describe("the 12-hour hold is continuous and never outlives a disagreement (F-4 
     assert.equal((statusHoldStore(reg, () => T0).get(holdKeyOf(NFL)) as { disagreed?: boolean } | null)?.disagreed, true);
   });
 });
+
+describe("a second source's final read before TheSportsDB's is remembered and compared (F residual gaps)", () => {
+  const H = 3_600_000, T0 = Date.parse("2026-10-05T12:00:00Z");
+  type Mode = "out" | "pending" | "opposite" | "agree";
+  function cycleClient(tsdb: () => boolean, mode: () => Mode): EspnClient {
+    const asRow = (home: number, away: number) => ({ teams: { home: { name: "Las Vegas Raiders" }, away: { name: "Kansas City Chiefs" } }, scores: { home: { total: home }, away: { total: away } }, game: { date: { date: NFL.date } }, date: NFL.startsAt, status: { short: "FT" } });
+    return {
+      tsdbRead: async (_k: string, url: string) => (tsdb() && url.includes(`/day/${NFL.date}`) ? { events: [tsdbRow] } : { events: [] }),
+      get: async (url: string) => {
+        if (!url.includes("api-sports.io")) throw new Error("HTTP 404");
+        const m = mode();
+        if (m === "out") throw new BudgetHoldError("apisports-american-football", { state: "hold", used: 85, budget: 85 });
+        if (m === "pending") return { errors: [], response: [] };
+        return { errors: [], response: url.includes(NFL.date) ? [m === "opposite" ? asRow(31, 10) : asRow(27, 30)] : [] };
+      },
+    } as unknown as EspnClient;
+  }
+  const run = async (steps: { at: number; tsdb: boolean; mode: Mode }[]) => {
+    const holds = memoryHoldStore();
+    let now = T0, mode: Mode = "out", tsdb = false;
+    const c = cycleClient(() => tsdb, () => mode);
+    const d: GameDeps = { tsdbKey: "k", apiSportsKey: "as-key", market: async () => null, payout: null, holds, now: () => now };
+    const out = [];
+    for (const s of steps) { now = T0 + s.at; mode = s.mode; tsdb = s.tsdb; out.push(await settleGame(c, NFL, d)); }
+    return { out, holds };
+  };
+
+  test("API-Sports names the other winner while TheSportsDB has no final; TheSportsDB's final arrives with API-Sports out: held, never settled alone", async () => {
+    const { out: [a, b, c], holds } = await run([{ at: 0, tsdb: false, mode: "opposite" }, { at: H, tsdb: true, mode: "out" }, { at: 14 * H, tsdb: true, mode: "out" }]);
+    assert.equal(a.kind, "awaiting");
+    assert.equal(b.kind, "held", JSON.stringify(b));
+    assert.match(b.kind === "held" ? b.why : "", /≠/);
+    assert.equal([...holds.marks.values()][0]?.disagreed, true);
+    assert.notEqual(c.kind, "settled");
+  });
+
+  test("API-Sports agreeing before TheSportsDB's final: no hold from it; with API-Sports out the one-source hold runs and settles", async () => {
+    const { out } = await run([{ at: 0, tsdb: false, mode: "agree" }, { at: H, tsdb: true, mode: "out" }, { at: 13 * H, tsdb: true, mode: "out" }]);
+    assert.equal(out[1].kind, "awaiting"); assert.match(out[1].kind === "awaiting" ? out[1].why : "", /starts again now|first seen now/);
+    assert.equal(out[2].kind, "settled", JSON.stringify(out[2]));
+  });
+
+  test("the 60-day cleanup never drops a disagreement mark", async () => {
+    const { statusHoldStore } = await import("@/lib/burnticker/sources/gameSettle");
+    const m = new Map<string, string>();
+    const reg = { getStatus: (k: string) => m.get(k) ?? null, setStatus: (k: string, v: unknown) => { m.set(k, typeof v === "string" ? v : JSON.stringify(v)); } };
+    let t = T0;
+    const s = statusHoldStore(reg, () => t);
+    s.set("nfl:old:x", { home: 27, away: 30, firstSeenAt: T0 });
+    s.set("nfl:held:x", { home: -1, away: -1, firstSeenAt: T0, disagreed: true });
+    t = T0 + 61 * 24 * H;
+    s.set("nfl:new:x", { home: 1, away: 0, firstSeenAt: t });
+    assert.equal(s.get("nfl:old:x"), null, "an old plain mark is dropped");
+    assert.equal(s.get("nfl:held:x")?.disagreed, true, "a disagreement mark outlives 60 days");
+  });
+});

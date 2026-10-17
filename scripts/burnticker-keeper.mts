@@ -48,8 +48,9 @@ import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
 import { activeConditions, CONDITIONS_KEY, foldConditions, readConditionMemory } from "../src/lib/burnticker/ops/conditions.ts";
 import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts";
 import type { MarketReader } from "../src/lib/burnticker/market.ts";
-import { nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
-import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusHoldStore } from "../src/lib/burnticker/sources/gameSettle.ts";
+import { espnClient, gameDeps, nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
+import { polyGameGate } from "../src/lib/burnticker/sources/polyGame.ts";
+import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusFirstReadStore, statusHoldStore } from "../src/lib/burnticker/sources/gameSettle.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG, PairScanCache } from "../src/lib/burnKeeper/pairCurveCrank.ts";
 import { CycleAccountCache } from "../src/lib/burnticker/cycleAccountCache.ts";
@@ -137,12 +138,16 @@ const polymarket = new PolymarketClient({ refuse: (titles) => [...new Set(refusa
 // ONE SOURCE (owner 2026-10-14): a final game with no Polymarket market and no league feed settles on TheSportsDB alone after its score
 // has stood 12 hours. The first-seen score and time persist in the registry's status table (statusHoldStore), so a restart keeps the
 // hold. Measure only: each such settlement is logged, and the first one per coin raises bt-single-source (push.ts) for the owner.
-setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket), holds: statusHoldStore(registry), now: () => Date.now(),
+// GAME COINS (owner 2026-10-16): a single-game coin burns once two sources agree on its final, else 12 hours after its first read; that first-read time
+// persists in the status table (statusFirstReadStore, games.firstReads), so a restart keeps the clock and a pair's two coins share it.
+setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket), holds: statusHoldStore(registry), firstReads: statusFirstReadStore(registry), now: () => Date.now(),
   onSingleSource: (e) => {
     log(`  [single-source] ${e.seriesId ?? "?"} ${e.game.name} ${e.game.date}: ${e.final.away}–${e.final.home} (away–home), ${e.settledBy}, first seen ${new Date(e.heldSince).toISOString()}`);
     const a = singleSourceAlert(registry, e);
     if (a && registry.recordAlert(a)) log(`  [alert] bt-single-source: ${a.text.slice(0, 160)}`);
   } } });
+// a one-market Polymarket coin on a game moneyline runs on the same single-game schedule (sources/polyGame.ts; owner 2026-10-16)
+polymarket.gameGate = polyGameGate({ client: () => espnClient(), deps: () => gameDeps() });
 const PROGRAM_ID = process.env.BURNTICKER_PROGRAM_ID?.trim() || null;
 
 /** The real client when the program id, an RPC and the keeper's key exist; the fake otherwise (nothing sent). */

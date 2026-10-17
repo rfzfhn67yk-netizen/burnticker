@@ -19,6 +19,7 @@
  * THE SETTLEMENT IS UNCHANGED: a coin settles only on the payout the Conditional Tokens contract records (oracle/polymarket.ts
  * resolvePolymarket). A proposal inside its dispute window is not a payout; the keeper reads "not resolved" and waits.
  */
+import { GAME_AGREE_LINE, GAME_BURN_LINE, isGameMoneyline } from "@/lib/burnticker/gameCoin";
 /**
  * The NBA's schedule and confirmation while its own feed does not answer (HTTP 403 since 2026-10-12, sources/espn.ts probe note), in
  * the one wording every page uses. Defined here, with no imports, so the SDK's import closure stays as it is; espn.ts re-exports it.
@@ -54,7 +55,7 @@ export interface StatedSource {
   crossRead: { publisher: string; sources: string[]; text: string } | null;
   refused: string | null;
 }
-export interface FinalAfter { seconds: number; basis: "market" | "default"; text: string; ifDisputed: string; status: string | null; proposals: number }
+export interface FinalAfter { seconds: number; basis: "market" | "default"; text: string; ifDisputed: string; status: string | null; proposals: number; /** a one-game moneyline (owner 2026-10-16): the coin runs on the game-coin schedule, GAME_BURN_LINE */ game?: boolean }
 
 export const UMA_DEFAULT_LIVENESS_S = 7_200;
 export const UMA_DVM_HOURS = "48 to 72 hours";
@@ -102,10 +103,10 @@ export function statedSource(m: { description?: string | null; resolutionSource?
 }
 
 /** The dispute window: the market's own liveness when Gamma reports one above 0, else UMA's documented 2-hour default. */
-export function finalAfter(m: { customLiveness?: number | null; umaResolutionStatus?: string | null; umaStatuses?: readonly string[] }): FinalAfter {
+export function finalAfter(m: { customLiveness?: number | null; umaResolutionStatus?: string | null; umaStatuses?: readonly string[]; sportsMarketType?: string | null; gameStartTime?: string | null; outcomes?: readonly string[] | null; question?: string | null }): FinalAfter {
   const custom = typeof m.customLiveness === "number" && m.customLiveness > 0 ? Math.round(m.customLiveness) : null;
   const seconds = custom ?? UMA_DEFAULT_LIVENESS_S;
-  return { seconds, basis: custom ? "market" : "default", text: windowWords(seconds), ifDisputed: `A disputed proposal starts a new window. A second dispute goes to UMA's vote, which takes about ${UMA_DVM_HOURS}.`, status: m.umaResolutionStatus ?? null, proposals: (m.umaStatuses ?? []).filter((x) => x === "proposed").length };
+  return { seconds, basis: custom ? "market" : "default", text: windowWords(seconds), ifDisputed: `A disputed proposal starts a new window. A second dispute goes to UMA's vote, which takes about ${UMA_DVM_HOURS}.`, status: m.umaResolutionStatus ?? null, proposals: (m.umaStatuses ?? []).filter((x) => x === "proposed").length, ...(isGameMoneyline(m) ? { game: true } : {}) };
 }
 /** "about 2 hours", "about 15 minutes". */
 export function windowWords(seconds: number): string {
@@ -115,8 +116,10 @@ export function windowWords(seconds: number): string {
 }
 
 /** The describe.ts sentences for a Polymarket-settled coin (lint-clean; test/burntickerSources2.test.ts). */
-export function statedSentences(s: { phrase: string | null; crossRead: { text: string } | null }, f: Pick<FinalAfter, "text">): string {
+export function statedSentences(s: { phrase: string | null; crossRead: { text: string } | null }, f: Pick<FinalAfter, "text" | "game">): string {
   const said = s.phrase ? `Polymarket states it resolves this from ${s.phrase}.` : "Polymarket does not state a source for this market.";
   const cross = s.crossRead ? ` ${s.crossRead.text[0].toUpperCase()}${s.crossRead.text.slice(1)} is read as a cross-check.` : "";
+  // owner 2026-10-16: a one-game moneyline runs on the game-coin schedule (sources/polyGame.ts): the on-chain settlement is one read of several
+  if (f.game) return `It settles on the game's on-chain settlement, read with TheSportsDB's final score and the league's own feed where it has one. ${said} ${GAME_BURN_LINE} ${GAME_AGREE_LINE}${cross}`;
   return `It settles on Polymarket's on-chain payout. ${said} The result becomes final after the dispute window of ${f.text}.${cross}`;
 }

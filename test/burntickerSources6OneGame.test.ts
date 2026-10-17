@@ -26,7 +26,7 @@ async function world(g: G, ruleSeries: (id: string) => string, fraction = 1) {
   const clock = { now: Date.parse("2025-11-01T00:00:00Z") };
   program.now = () => clock.now;
   const all = [g, ...FILLER];
-  setNativeClients({ espn: scheduleClient(all, () => clock.now), games: fakeDeps(all) });
+  setNativeClients({ espn: scheduleClient(all, () => clock.now), games: fakeDeps(all, () => clock.now) });
   const rule = { ...nativeRule(ruleSeries(g.id), { fractionOfPool: fraction }), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
   const b = await buildLaunchBundle({ creator: CREATOR, ticker: "PHIGM", name: "76ers Game", description: "", imageUrl: null, links: [], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
   const t0 = registry.register({ mint: b.mint, ticker: "PHIGM", name: "76ers Game", creator: CREATOR, description: b.description, imageUrl: null, links: [], rulesText: b.rules.text, feePda: b.addresses.feePda, vault: b.addresses.vault, tokenConfig: b.addresses.tokenConfig, poolId: b.addresses.poolId, launchTx: null, cluster: "devnet", platformId: null, baselineAt: "2025-10-01T00:00:00Z", status: "draft" }, Date.parse("2025-10-01T00:00:00Z"));
