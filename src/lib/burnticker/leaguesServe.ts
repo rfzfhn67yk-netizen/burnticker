@@ -1,3 +1,4 @@
+import { publicPairs } from "@/lib/burnticker/publicPairs";
 import "server-only";
 import type { Platform } from "@/lib/burnticker/server";
 import { DECIMALS, TOTAL_SUPPLY } from "@/lib/burnticker/rules";
@@ -24,7 +25,8 @@ export function leagueData(p: Platform, nowMs = Date.now()): { coins: SeasonCoin
   const since = new Date(nowMs - 8 * 86_400_000).toISOString();
   const keys = [...new Set(rows.filter((t) => /^catalogue:espn\.(team|game):/.test(t.selectorKey)).map((t) => t.selectorKey))];
   const readings: GameReading[] = keys.flatMap((k) => p.registry.readings(k, since).map((r) => ({ selectorKey: k, at: r.at, title: r.title ?? null })));
-  const pairs = p.registry.pairs().map((x) => ({ pairId: x.pairId }));
+  // third prelaunch audit F09: the sitemap lists only pairs with a launched side (publicPairs.ts)
+  const pairs = publicPairs(p.registry).map((x) => ({ pairId: x.pairId }));
   const tickers = rows.map((t) => ({ ticker: t.ticker, mint: t.mint, status: t.status, at: t.createdAt }));
   const v = { coins, readings, pairs, tickers };
   memo = { at: nowMs, registry: p.registry, v };

@@ -23,6 +23,8 @@ export interface SwapSender {
   sendRawTransaction(raw: Uint8Array, opts: { skipPreflight: boolean; maxRetries: number }): Promise<string>;
   getSignatureStatuses(sigs: string[], config?: { searchTransactionHistory: boolean }): Promise<{ value: ({ err: unknown; confirmationStatus?: string } | null)[] }>;
   getBlockHeight(commitment?: Commitment): Promise<number>;
+  /** F-30: the second witness before a held swap is called expired (web3.js Connection.getTransaction; null when the RPC has no such transaction). */
+  getTransaction(signature: string, opts: { commitment: "confirmed" | "finalized"; maxSupportedTransactionVersion: number }): Promise<{ meta: { err: unknown } | null } | null>;
 }
 
 const tokenAmount = (data: Uint8Array): bigint => new DataView(data.buffer, data.byteOffset, data.byteLength).getBigUint64(64, true);
@@ -159,6 +161,11 @@ export const WALLET_BLOCKHASH_MARGIN = 30;
 /** The fallback when the wallet chose the blockhash and the height could not be read: about ten minutes past the compiled expiry. */
 export const UNKNOWN_EXPIRY_BLOCKS = 1_500;
 /**
+ * Fourth audit pass 2026-10-16 F-30: a swap is called expired only once the height is this far past its expiry (about a minute), so an
+ * RPC that lags a few blocks behind cannot release the hold on a swap that landed.
+ */
+export const EXPIRY_MARGIN_BLOCKS = 150;
+/**
  * The expiry to hold a signed swap by. The compiled blockhash's expiry when the wallet kept it; when the wallet replaced it, the wallet's
  * blockhash is at most as new as the chain right now, so it cannot outlive (height now + 150 + a margin); if the height cannot be read,
  * the compiled expiry plus UNKNOWN_EXPIRY_BLOCKS.
@@ -171,11 +178,13 @@ export async function signedExpiry(conn: Pick<SwapSender, "getBlockHeight">, com
 }
 
 /**
- * Settles a swap the panel holds (after an error, or after a reload): one status read with history. Confirmed or failed on chain is
- * final; not found while the blockhash is still valid is `pending`; not found after the blockhash expired is `expired` (it can no longer
- * land). Any read error is `pending`: only a status read the network answered ever releases the panel.
+ * Settles a swap the panel holds (after an error, or after a reload): a status read with history. Confirmed or failed on chain is
+ * final; not found while the blockhash is still valid is `pending`. Fourth audit pass F-30: `expired` (it can no longer land) needs the
+ * height past the expiry plus EXPIRY_MARGIN_BLOCKS AND a second status read with history AND getTransaction to find nothing; a
+ * transaction either of them finds settles as what it found (before: one empty status read released the hold, so a lagging RPC could
+ * free a swap that had landed and the visitor bought again). Any read error is `pending`.
  */
-export async function reconcileSubmitted(conn: Pick<SwapSender, "getSignatureStatuses" | "getBlockHeight">, s: Submitted): Promise<SendResult> {
+export async function reconcileSubmitted(conn: Pick<SwapSender, "getSignatureStatuses" | "getBlockHeight" | "getTransaction">, s: Submitted): Promise<SendResult> {
   const base = { signature: s.signature, lastValidBlockHeight: s.lastValidBlockHeight };
   try {
     // the height first: a status read after it that still finds nothing proves the transaction can no longer land
@@ -183,8 +192,14 @@ export async function reconcileSubmitted(conn: Pick<SwapSender, "getSignatureSta
     const st = (await conn.getSignatureStatuses([s.signature], { searchTransactionHistory: true })).value[0];
     if (st?.err) return { ...base, status: "failed", error: JSON.stringify(st.err).slice(0, 160) };
     if (st && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) return { ...base, status: "confirmed" };
-    if (!st && height > s.lastValidBlockHeight) return { ...base, status: "expired" };
-    return { ...base, status: "pending" };
+    if (st || height <= s.lastValidBlockHeight + EXPIRY_MARGIN_BLOCKS) return { ...base, status: "pending" };
+    const again = (await conn.getSignatureStatuses([s.signature], { searchTransactionHistory: true })).value[0];
+    if (again?.err) return { ...base, status: "failed", error: JSON.stringify(again.err).slice(0, 160) };
+    if (again && (again.confirmationStatus === "confirmed" || again.confirmationStatus === "finalized")) return { ...base, status: "confirmed" };
+    if (again) return { ...base, status: "pending" };
+    const tx = await conn.getTransaction(s.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    if (tx) return tx.meta?.err ? { ...base, status: "failed", error: JSON.stringify(tx.meta.err).slice(0, 160) } : { ...base, status: "confirmed" };
+    return { ...base, status: "expired" };
   } catch (e) { return { ...base, status: "pending", error: short(e) }; }
 }
 

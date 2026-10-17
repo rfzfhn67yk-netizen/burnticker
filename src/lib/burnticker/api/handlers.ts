@@ -563,7 +563,7 @@ const OWN_DRAFT_CHANGED = "Your earlier draft for this address had a different r
  */
 const OWN_DRAFT_DETAILS_CHANGED = "Your earlier draft for this address had a different name, description, links or image, and its details are already saved. Press Start over to get a fresh address, then launch again.";
 /** The registry status key holding a draft's metadata identity (the fingerprint of everything its metadata file says). */
-const draftIdentityKey = (mint: string): string => `draft.identity.${mint}`;
+export const draftIdentityKey = (mint: string): string => `draft.identity.${mint}`;
 /** What a coin's metadata file is made from, as one fingerprint: a retry with the same fingerprint may reuse the file. */
 /**
  * Review 2026-10-15 (7): only what the creator supplied plus the locked rule's hash. The generated paragraph is left out: it can carry a
@@ -583,7 +583,46 @@ interface PairSideInput { /** round 5: side B's own pinned token (burnTarget.ts 
  * (buildPairBundles); refusals and the tier rule apply per side, and both drafts plus the pair row are registered together. A rule that
  * carries a `pair` field must come through that flow.
  */
-export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; /** 2026-10-14: a pair's side B mint public key (the launch page grinds both); only with `mint` */ mintB?: string | null; /** 2026-10-14 night: keypairs taken from the host's mint key bank (mintBank.ts; side A / the one coin, and a pair's side B), whose secrets ride in the bundles */ mintKeypair?: Keypair | null; mintKeypairB?: Keypair | null; /** 2026-10-15 (deploy smoke): every check a launch runs (the preflight, the pin budget, the uploader), with `register: false`: nothing is pinned, registered or taken */ dryRun?: boolean; preflight?: { strict?: boolean; deps?: PreflightDeps }; /** audit 2026-10-15 H4: the bank keys, taken only once every check has passed (a refusal never takes a key); the route discards them if the launch is refused later */ takeMintKeys?: (tickers: string[]) => { keys: Keypair[] } | { error: ApiResult }; /** review 2026-10-15 (2): the request's client key (http.ts clientKey), which the pin budget is counted by */ client?: string }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
+/** The options a prepare takes (both launch routes pass their client; scripts and tests may leave it out). */
+export type PrepareOptions = { register: boolean; mint?: string | null; /** 2026-10-14: a pair's side B mint public key (the launch page grinds both); only with `mint` */ mintB?: string | null; /** 2026-10-14 night: keypairs taken from the host's mint key bank (mintBank.ts; side A / the one coin, and a pair's side B), whose secrets ride in the bundles */ mintKeypair?: Keypair | null; mintKeypairB?: Keypair | null; /** 2026-10-15 (deploy smoke): every check a launch runs (the preflight, the pin budget, the uploader), with `register: false`: nothing is pinned, registered or taken */ dryRun?: boolean; preflight?: { strict?: boolean; deps?: PreflightDeps }; /** audit 2026-10-15 H4: the bank keys, taken only once every check has passed (a refusal never takes a key); the route discards them if the launch is refused later */ takeMintKeys?: (tickers: string[]) => { keys: Keypair[] } | { error: ApiResult }; /** review 2026-10-15 (2): the request's client key (http.ts clientKey), which the pin budget is counted by */ client?: string };
+type PrepareResult = { error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair };
+
+/**
+ * Third prelaunch audit 2026-10-16 F03: prepares that register a draft for the same mint run one at a time in this process, whichever
+ * route they came through (the launch page or /v1/launch/bundle), so the second sees the first's draft and its metadata identity. The
+ * registry is still the arbiter: just before a draft is written the identity recorded for its mint is read again (draftRaceRefusal).
+ * F04: the pin slots a prepare reserved are released when it ends, whatever it answered (a successful upload has already been charged).
+ */
+export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: PrepareOptions): Promise<PrepareResult> {
+  const held: (() => void)[] = [];
+  const mints = o.register && !o.dryRun ? [o.mint, o.mintB].filter((m): m is string => typeof m === "string" && m.length > 0) : [];
+  const unlock = await lockMints(mints);
+  try { return await prepareLaunchUnlocked(p, body, o, held); }
+  finally { for (const f of held.splice(0)) { try { f(); } catch { /* a release never changes the answer */ } } unlock(); }
+}
+
+/** F03: one prepare per mint at a time in this process (keys taken in sorted order, so a pair and a single coin never wait on each other in a cycle). */
+const mintQueues = new Map<string, Promise<void>>();
+async function lockMints(mints: string[]): Promise<() => void> {
+  const releases: (() => void)[] = [];
+  for (const m of [...new Set(mints)].sort()) {
+    const prev = mintQueues.get(m) ?? Promise.resolve();
+    let release!: () => void;
+    const mine = new Promise<void>((r) => { release = r; });
+    const tail = prev.then(() => mine);
+    mintQueues.set(m, tail);
+    await prev;
+    releases.push(() => { release(); if (mintQueues.get(m) === tail) mintQueues.delete(m); });
+  }
+  return () => { for (const r of releases.reverse()) r(); };
+}
+
+/** F04: pin slots reserved by prepares still running in this process, per budget key; they count toward every cap like a charged pin. */
+const reservedPins = new Map<string, number>();
+const reservedOf = (k: string): number => reservedPins.get(k) ?? 0;
+function adjustReserved(k: string, d: number): void { const n = reservedOf(k) + d; if (n > 0) reservedPins.set(k, n); else reservedPins.delete(k); }
+
+async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>, o: PrepareOptions, held: (() => void)[]): Promise<PrepareResult> {
   if (o.dryRun) o = { ...o, register: false, mint: null, mintB: null, mintKeypair: null, mintKeypairB: null };   // a dry run never registers and holds no key
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
   const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
@@ -735,30 +774,59 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // audit 2026-10-15 F4: the metadata identity each side was prepared with, written with its draft (register below)
   const identities = new Map<string, string>();
   // THE PIN BUDGET (review N4; audit H4; review 2026-10-15 items 2 and 5). The host's daily cap, and a per-requester cap: the `creator`
-  // field is not authenticated, so it is counted per CLIENT (http.ts clientKey), and per (client, creator) only for a creator who already
-  // has a launch confirmed on chain here (a real creator on a shared connection is not held back by strangers; a stranger cannot spend a
-  // victim wallet's allowance, and rotating made-up creators does not escape the client count). Checked for every side a launch will
+  // field is not authenticated, so it is always counted per CLIENT (http.ts clientKey), and also per (client, creator) for a creator who
+  // already has a launch confirmed on chain here (fourth audit pass F-20: an extra limit, never a replacement for the client's; rotating
+  // creators, made up or real, never escapes the client count). Checked for every side a launch will
   // pin BEFORE a bank key is taken or anything is uploaded; only an upload that succeeded is counted.
   const day = new Date().toISOString().slice(0, 10), client = o.client ?? "unknown";
-  const budgetKeys = { global: `pin.budget.${day}`, client: `pin.budget.${day}.client.${client}`, clientCreator: `pin.budget.${day}.client.${client}.creator.${input.creator}` };
-  const countOf = (k: string) => Number(p.registry.getStatus(k) ?? 0) || 0;
+  const budgetKeys = { global: `pin.budget.${day}`, client: `pin.budget.${day}.client.${client}`, clientReal: `pin.budget.${day}.client.${client}.real`, clientCreator: `pin.budget.${day}.client.${client}.creator.${input.creator}` };
+  // third prelaunch audit F04: a slot reserved by a prepare still uploading counts like a charged one (the cap was checked before the
+  // awaited upload and charged after it, so three prepares at once with a cap of one all pinned)
+  const chargedOf = (k: string) => Number(p.registry.getStatus(k) ?? 0) || 0;
+  const countOf = (k: string) => chargedOf(k) + reservedOf(k);
   const realCreator = (() => { try { return p.registry.tokens().some((t) => t.creator === input.creator && !!t.launchTx); } catch { return false; } })();
   // an in-process caller with no client (scripts, tests) is held by the host's cap only; both launch routes always pass their client
   const perRequester = o.client !== undefined;
+  /**
+   * The buckets this prepare draws from. Fourth audit pass F-20 and its review: a creator with a confirmed launch here draws from its own
+   * (client, creator) bucket AND the connection's bucket for such creators (`client.<key>.real`, capped like the client bucket), so naming
+   * several wallets that launched cannot pass the connection's cap, and strangers with made-up creators (the plain client bucket) cannot
+   * use up what a real creator on the same connection draws from.
+   */
+  const myKeys = (): string[] => [budgetKeys.global, ...(!perRequester ? [] : realCreator ? [budgetKeys.clientCreator, budgetKeys.clientReal] : [budgetKeys.client])];
   const budgetRefusal = (n: number): { error: ApiResult } | null => {
     if (n <= 0 || !p.uploader) return null;
     const cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP, mine = p.pinCreatorDailyCap ?? DEFAULT_PIN_CREATOR_DAILY_CAP;
-    if (countOf(budgetKeys.global) + n > cap) return { error: fail(429, `This site has used up its daily upload limit of ${cap} coins. Please try again after midnight UTC.`, { code: "upload-budget" }) };
-    if (!perRequester) return null;
-    if (realCreator) { if (countOf(budgetKeys.clientCreator) + n > mine) return { error: fail(429, `This wallet has saved the details of ${mine} coins on this site today, which is the daily limit for one wallet. Please try again after midnight UTC.`, { code: "upload-budget-creator" }) }; }
-    else if (countOf(budgetKeys.client) + n > mine) return { error: fail(429, `This connection has saved the details of ${mine} coins on this site today, which is the daily limit. Please try again after midnight UTC.`, { code: "upload-budget-client" }) };
+    // review follow-up 8: a cap reached only because other prepares hold slots while they upload is "busy", not "used up"
+    const over = (k: string, limit: number, usedUp: string, code: string): { error: ApiResult } | null =>
+      countOf(k) + n <= limit ? null : chargedOf(k) + n <= limit ? { error: fail(429, UPLOAD_BUSY_SENTENCE, { code: "upload-busy", retryAfterSec: 60 }) } : { error: fail(429, usedUp, { code }) };
+    const g = over(budgetKeys.global, cap, `This site has used up its daily upload limit of ${cap} coins. Please try again after midnight UTC.`, "upload-budget");
+    if (g || !perRequester) return g;
+    if (realCreator) return over(budgetKeys.clientCreator, mine, `This wallet has saved the details of ${mine} coins on this site today, which is the daily limit for one wallet. Please try again after midnight UTC.`, "upload-budget-creator")
+      ?? over(budgetKeys.clientReal, mine, `This connection has saved the details of ${mine} coins on this site today, which is the daily limit. Please try again after midnight UTC.`, "upload-budget-client");
+    return over(budgetKeys.client, mine, `This connection has saved the details of ${mine} coins on this site today, which is the daily limit. Please try again after midnight UTC.`, "upload-budget-client");
+  };
+  let reserved = 0, charged = 0;
+  /** F04: checks the caps for `n` pins and, in the same step, reserves them against every cap; the slots go back when the prepare ends. */
+  const reservePins = (n: number): { error: ApiResult } | null => {
+    const refused = budgetRefusal(n);
+    if (refused || n <= 0 || !p.uploader) return refused;
+    for (const k of myKeys()) adjustReserved(k, n);
+    reserved += n;
+    held.push(() => { if (reserved > 0) { for (const k of myKeys()) adjustReserved(k, -reserved); reserved = 0; } });
     return null;
   };
-  const chargePin = () => { for (const k of Object.values(budgetKeys)) p.registry.setStatus(k, String(countOf(k) + 1)); };
+  /** A pin that worked: its reserved slot (if any) becomes a charged one. */
+  const chargePin = () => {
+    charged++;
+    if (reserved > 0) { reserved--; for (const k of myKeys()) adjustReserved(k, -1); }
+    for (const k of myKeys()) p.registry.setStatus(k, String(chargedOf(k) + 1));
+  };
   /** Whether a side pins a new file: not when it retries the creator's own draft that already has its metadata (F4 reuses it). */
   const pinsNew = (knownMint: string | null): number => {
     if (!o.register && !o.dryRun) return 0;
-    if (knownMint && p.registry.ownDraft(knownMint, input.creator)) { const meta = p.registry.tokenMeta(knownMint); if (meta && (meta.hosted || meta.metadataUri)) return 0; }
+    // review follow-up 9: the same condition pinFor reuses a file on (a hosted draft, or a pinned file with its id and hash)
+    if (knownMint && p.registry.ownDraft(knownMint, input.creator)) { const meta = p.registry.tokenMeta(knownMint); if (meta && (meta.hosted || (meta.metadataUri && meta.metadataTx && meta.metadataSha256))) return 0; }
     return 1;
   };
   const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null, image: { bytes: Uint8Array; contentType: string; badge?: boolean; rawSha?: string } | null = null, knownMint: string | null = null, creatorText = ""): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
@@ -803,6 +871,30 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       try { p.registry.recordAlert({ kind: "bt-pin-failed", key: `bt-pin-failed:${ticker}`, text: `$${ticker}: the coin's details could not be saved on Arweave, so its launch was refused. ${safeErrorText(e, 160)}`, meta: { ticker } }); } catch { /* the alert never changes the answer */ }
       return { error: fail(502, `The coin's details could not be saved on Arweave, so the launch is refused. A coin's details are never kept on a server that could change them. The reason given was: ${safeErrorText(e, 160)}`, { code: "pin-failed" }) };
     }
+  };
+  /**
+   * F03, the registry as the arbiter: read again right before the drafts are written (nothing awaited in between, so no other prepare in
+   * this process runs in the gap). A draft that appeared for the mint while this prepare was uploading (another process, or a path
+   * that skipped the lock) wins if its identity differs: this prepare is refused. Review follow-up 1: its files really were uploaded, so
+   * they stay charged; they are counted as orphans for the day (`pin.orphans.<day>`) and the owner's phone hears of it.
+   */
+  const draftRaceRefusal = (sides: [string, string][]): { error: ApiResult } | null => {
+    for (const [mint, ticker] of sides) {
+      if (!p.registry.token(mint)) continue;
+      if (!p.registry.ownDraft(mint, input.creator)) return raceRefusal(fail(409, `The mint ${mint} is already registered.`, { code: "mint-taken" }));
+      const stored = p.registry.getStatus(draftIdentityKey(mint)), mine = identities.get(ticker);
+      if (stored && mine && stored !== mine) return raceRefusal(fail(409, OWN_DRAFT_DETAILS_CHANGED, { code: "own-draft-changed" }));
+    }
+    return null;
+  };
+  const raceRefusal = (r: ApiResult): { error: ApiResult } => {
+    if (charged > 0) {
+      const k = `pin.orphans.${day}`;
+      try { p.registry.setStatus(k, String((Number(p.registry.getStatus(k) ?? 0) || 0) + charged)); } catch { /* the count never changes the answer */ }
+      try { p.registry.recordAlert({ kind: "bt-pin-orphan", key: `bt-pin-orphan:${input.ticker}`, text: `$${input.ticker}: ${charged === 1 ? "one file was" : `${charged} files were`} saved on Arweave for a draft that another prepare registered first. The files stay on Arweave and are not used.`, meta: { ticker: input.ticker, mint: o.mint ?? null, files: charged } }); } catch { /* the alert never changes the answer */ }
+      charged = 0;
+    }
+    return { error: r };
   };
   const uriFor = (ticker: string) => (m: string) => { const pin = pins.get(ticker); return pin ? pin.metadataUri : o.register ? `${publicOrigin()}/api/burnticker/metadata/${m}` : "ar://pending-upload-at-launch"; };
   const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: uriFor(input.ticker), keeperPubkey: p.keeperPubkey, allowMainnet: p.allowMainnet === true };
@@ -866,7 +958,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const pairIdChoice = recorded ? { pairId: recorded.pairId } : { pairIdPick: (base: string) => p.registry.freePairId(base) };
     // audit 2026-10-15 H4: every check above has passed; only now are the bank keys taken (a refusal before this point takes none)
     // review 2026-10-15 (5): both sides' pins are checked against the caps before a key is taken or side A is pinned
-    { const ob = budgetRefusal(pinsNew(o.mint ?? null) + pinsNew(o.mintB ?? null)); if (ob) return ob; }
+    { const ob = reservePins(pinsNew(o.mint ?? null) + pinsNew(o.mintB ?? null)); if (ob) return ob; }
     if (o.takeMintKeys) { const t = o.takeMintKeys([input.ticker, side.ticker]); if ("error" in t) return t; if (t.keys.length < 2) return { error: fail(503, "This site could not prepare two addresses for the pair.", { code: "mint-bank-empty" }) }; o = { ...o, mintKeypair: t.keys[0], mintKeypairB: t.keys[1] }; }
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
@@ -905,6 +997,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       // …and so are two candidates in one race and two teams in one game: a LaunchLab pair linked at creation, both sinks naming each other
       if (settled) { const sp = settledPairSinkProblems({ rule: lockRule(JSON.parse(pair.a.rules.text)).rule, mint: pair.a.mint }, { rule: lockRule(JSON.parse(pair.b.rules.text)).rule, mint: pair.b.mint }); if (sp.length) return { error: fail(400, sp.join(" "), { code: "settled-pair-sinks", problems: sp }) }; }
       const pairCurve = pairCurveEnabled(process.env) && !isMeetingsRule(locked.rule) && !settled ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
+      if (o.register) { const race = draftRaceRefusal([[pair.a.mint, input.ticker], [pair.b.mint, side.ticker]]); if (race) return race; }
       const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note, pairCurve ? null : pair.a.addresses.poolId) : null;
       const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links, "", pairCurve ? null : pair.b.addresses.poolId) : null;
       const row = tokenA && tokenB ? (() => { const had = p.registry.pair(pair.pairId); return had && had.mintA === tokenA.mint && had.mintB === tokenB.mint ? had : p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint); })() : null;
@@ -915,13 +1008,14 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   }
   if (locked.rule.pair) return { error: fail(400, "A rule that names a pair is launched through the pair steps. Send side B as a pair with its own ticker and name.") };
   // audit 2026-10-15 H4: every check has passed; only now is the bank key taken
-  { const ob = budgetRefusal(pinsNew(o.mint ?? null)); if (ob) return ob; }   // review 2026-10-15 (5): before the key
+  { const ob = reservePins(pinsNew(o.mint ?? null)); if (ob) return ob; }   // review 2026-10-15 (5): before the key
   if (o.takeMintKeys) { const t = o.takeMintKeys([input.ticker]); if ("error" in t) return t; o = { ...o, mintKeypair: t.keys[0] }; }
   try {
     const pr = await pinFor(locked, input.ticker, input.name.trim(), input.description, input.links, input.imageUrl, uploaded, o.mint ?? null, creatorText);
     if ("error" in pr) return pr;
     const bundle = await buildLaunchBundle(input, { ...deps, ...(o.mint ? { mint: o.mint } : o.mintKeypair ? { mintKeypair: o.mintKeypair } : {}) });
     // an uploaded image is shown from its pinned Arweave copy (the card and the coin page read the registry's image)
+    if (o.register) { const race = draftRaceRefusal([[bundle.mint, input.ticker]]); if (race) return race; }
     const token = o.register ? register(bundle, input.ticker, uploaded && pr.pin ? pr.pin.imageUri : input.imageUrl, input.links, note) : null;
     return { ok: { bundle, token, seriesTitle, locked, preflight } };
   } catch (e) {
@@ -929,6 +1023,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   }
 }
 
+/** Review follow-up 8: a cap reached only by slots other prepares are holding while they upload. */
+export const UPLOAD_BUSY_SENTENCE = "This site is busy saving other coins' details right now. Please try again in a minute.";
 /** Coins pinned on Arweave per UTC day per host when BURNTICKER_PIN_DAILY_CAP is not set (review N4). */
 export const DEFAULT_PIN_DAILY_CAP = 50;
 /**

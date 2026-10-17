@@ -687,6 +687,35 @@ burn  = every token the swap delivered</pre>
 
   var status = null, burns = [], readings = [];
 
+  // ------------------------------------------------------------------ the Last reading card (third prelaunch audit 2026-10-16 F08)
+  // One reading, never two records mixed: the date, the change and the units all come from the keeper's newest reading
+  // (status.json feed.lastReading). An older status file without it uses a burn row only when that row is the same day. The last
+  // reading that had units is a separate, labelled line. test/deficitLastReading.test.ts runs this block as it is.
+  /* @last-reading-begin */
+  function lastReadingView(s, burns) {
+    var B = function (usd) { var n = Number(usd); return (n >= 0 ? "+" : "\u2212") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
+    var U = function (n) { return n + " unit" + (n === 1 ? "" : "s"); };
+    var f = s && s.feed || {}, list = burns || [];
+    var r = f.lastReading && f.lastReading.recordDate ? { date: f.lastReading.recordDate, value: f.lastReading.amount, delta: f.lastReading.deltaUsd, units: f.lastReading.units, kind: f.lastReading.kind, prev: null } : null;
+    if (!r && f.lastRecordDate) {
+      var same = null;
+      for (var i = list.length - 1; i >= 0; i--) if (list[i] && list[i].recordDate === f.lastRecordDate) { same = list[i]; break; }
+      r = { date: f.lastRecordDate, value: f.lastAmount || null, delta: same ? same.delta : null, units: same ? same.units : null, kind: same ? "burn" : null, prev: same ? same.prevDate : null };
+    }
+    if (!r) return { date: "\u2014", value: null, line: "The Treasury posts each business day's figure the next afternoon, Eastern Time.", qualifying: null };
+    var since = r.prev ? "since " + r.prev : "since the reading before";
+    var line = r.kind === "baseline" ? "This is the first reading after launch. Nothing burns for it; later readings are counted from it."
+      : r.delta == null ? "This file does not say how much the debt changed on this reading."
+      : Number(r.delta) < 0 ? B(r.delta) + " " + since + ". The debt fell, so this reading has no units."
+      : r.units > 0 ? B(r.delta) + " " + since + ", which is " + U(r.units) + "."
+      : B(r.delta) + " " + since + ", which is less than one unit.";
+    var q = null;
+    for (var j = list.length - 1; j >= 0; j--) { var b = list[j]; if (b && b.units > 0) { q = b; break; } }
+    return { date: r.date, value: r.value, line: line, qualifying: q && q.recordDate !== r.date ? "The last reading with units was " + q.recordDate + ": " + B(q.delta) + ", " + U(q.units) + "." : null };
+  }
+  /* @last-reading-end */
+  function renderLastReading() { var v = lastReadingView(status, burns); $("lastDate").textContent = v.date; $("lastDelta").textContent = v.line + (v.qualifying ? " " + v.qualifying : ""); }
+
   // ------------------------------------------------------------------ hero board (D1 seven-segment digits, from brand-concepts/d1-debt-clock/seg.js)
   var SEG = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", "S": "afgcd", "b": "fgedc", " ": "" };
   function seg7(el, text, label) {
@@ -725,7 +754,7 @@ burn  = every token the swap delivered</pre>
       $("debtNow").textContent = fmtT(s.feed.lastAmount);
       $("debtExact").textContent = "$" + fmtInt(s.feed.lastAmount) + "." + (String(s.feed.lastAmount).split(".")[1] || "00") + " on " + s.feed.lastRecordDate;
     }
-    $("lastDate").textContent = s.feed && s.feed.lastRecordDate ? s.feed.lastRecordDate : "—";
+    renderLastReading();
     $("burned").textContent = fmtInt(s.burned.total);
     $("burnedSub").innerHTML = "<b>" + Number(s.burned.pctOfSupply).toFixed(2) + "%</b> of the " + fmtInt(s.supply.initial) + " supply, over " + s.burned.count + (s.burned.count === 1 ? " burn" : " burns") + ". " + fmtInt(s.burned.thisMonth) + " burned this month.";
     if (s.buyback) {
@@ -806,9 +835,9 @@ burn  = every token the swap delivered</pre>
         "</td>";
       tr.parentNode.insertBefore(d, tr.nextSibling); btn.setAttribute("aria-expanded", "true");
     };
+    renderLastReading();
     var last = rows[0];
     if (last) {
-      $("lastDelta").innerHTML = fmtB(last.delta) + " since " + esc(last.prevDate) + ", which is <b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b>." + (last.burned ? " " + fmtInt(last.burned) + " were burned." : "");
       $("curl").textContent = b2curl(last);
       if (last.memo) $("memo").textContent = last.memo;
     }

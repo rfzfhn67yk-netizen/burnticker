@@ -22,7 +22,9 @@ export interface SeasonRow { rank: number; ticker: string; mint: string; outcome
 export interface SeasonBoard {
   key: string; league: LeagueId; leagueLabel: string; sport: Sport;
   /** "NHL 2026–27", "MLB 2026 postseason", "Premier League coins with no end date, or for a set number of games" */
-  label: string; window: "season" | "post" | "other";
+  label: string;
+  /** third prelaunch audit F07: "meetings" is a season's head-to-head series (two teams' meetings in one season), kept with its year */
+  window: "season" | "post" | "meetings" | "other";
   /** The date range the receipts cover ("" when there are none yet). */
   from: string | null; to: string | null;
   ended: boolean;
@@ -37,8 +39,8 @@ export function seasonBoards(coins: readonly SeasonCoinInput[]): SeasonBoard[] {
   for (const c of coins) {
     const e = c.rule.oracle === "catalogue" && c.rule.series ? parseEspnSeries(c.rule.series) : null;
     if (!e || e.kind !== "team") continue;
-    const w = e.window.kind === "season" || e.window.kind === "post" ? e.window.kind : "other";
-    const year = e.window.kind === "season" || e.window.kind === "post" ? e.window.year : null;
+    const w = e.window.kind === "season" || e.window.kind === "post" || e.window.kind === "meetings" ? e.window.kind : "other";
+    const year = e.window.kind === "season" || e.window.kind === "post" || e.window.kind === "meetings" ? e.window.year : null;
     const key = `${e.league}:${w}:${year ?? "-"}`;
     const g = groups.get(key) ?? { league: e.league, window: w, year, coins: [] };
     g.coins.push(c); groups.set(key, g);
@@ -53,11 +55,12 @@ export function seasonBoards(coins: readonly SeasonCoinInput[]): SeasonBoard[] {
     }).sort((a, b) => b.receipts - a.receipts || b.burnedPct - a.burnedPct || a.ticker.localeCompare(b.ticker));
     const all = rows.flatMap((r) => [r.first, r.lastBurnAt]).filter((x): x is string => !!x).sort();
     const ended = g.window !== "other" && g.coins.length > 0 && g.coins.every((c) => c.ended);
-    const label = g.window === "season" ? `${L.label} ${seasonLabel(g.league, g.year!)}` : g.window === "post" ? `${L.label} ${seasonLabel(g.league, g.year!)} postseason` : `${L.label} coins with no end date, or for a set number of games`;
+    const label = g.window === "season" ? `${L.label} ${seasonLabel(g.league, g.year!)}` : g.window === "post" ? `${L.label} ${seasonLabel(g.league, g.year!)} postseason` : g.window === "meetings" ? `${L.label} ${seasonLabel(g.league, g.year!)} head-to-head series` : `${L.label} coins with no end date, or for a set number of games`;
     const top = rows[0];
     boards.push({
       key, league: g.league, leagueLabel: L.label, sport: L.sport, label, window: g.window, from: all[0]?.slice(0, 10) ?? null, to: all[all.length - 1]?.slice(0, 10) ?? null, ended,
-      leader: top && top.receipts > 0 && g.window !== "other" ? { ticker: top.ticker, title: ended ? "champion" : "most receipts so far" } : null,
+      // review follow-up 7: no leader or champion on a head-to-head card (its rows are different matchups)
+      leader: top && top.receipts > 0 && g.window !== "other" && g.window !== "meetings" ? { ticker: top.ticker, title: ended ? "champion" : "most receipts so far" } : null,
       rows: rows.map((r, i) => ({ rank: i + 1, ticker: r.ticker, mint: r.mint, outcome: r.outcome, receipts: r.receipts, burnedPct: r.burnedPct, lastBurnAt: r.lastBurnAt })),
     });
   }

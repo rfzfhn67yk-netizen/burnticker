@@ -10,6 +10,7 @@ import { EmptyState } from "../_components/EmptyState";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 import { SeasonsTabs } from "../_components/SeasonsTabs";
 import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
+import { pairLifecycleLine, publicPairs } from "@/lib/burnticker/publicPairs";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Scoreboards", description: "Burnticker keeps one scoreboard for each league and season, ranked by receipts. Rivalry pairs and Burn Derby brackets are listed below the scoreboards.", alternates: { canonical: "/burnticker/rivalries" } }; // audit 7 item 27: a canonical URL
@@ -21,7 +22,7 @@ export const metadata: Metadata = { title: "Scoreboards", description: "Burntick
  * only. Rivalry pairs and Burn Derby brackets follow as their own sections.
  */
 export default function SeasonsPage() {
-  let boards: SeasonBoard[] = [], yesterday = 0, pairs: { pairId: string; a: string; b: string; selectorKey: string; createdAt: number }[] = [], brackets: { id: string; title: string; createdAt: number }[] = [];
+  let boards: SeasonBoard[] = [], yesterday = 0, pairs: { pairId: string; a: string; b: string; selectorKey: string; createdAt: number; note: string | null }[] = [], brackets: { id: string; title: string; createdAt: number }[] = [];
   let shared = new Set<string>();
   let err: string | null = null;
   const launch = launchAvailability(process.env);
@@ -36,7 +37,8 @@ export default function SeasonsPage() {
     boards = seasonBoards(coins);
     shared = sharedTickers(coins);   // tickers are not unique (owner 2026-10-12): a shared ticker links by mint
     yesterday = coinsBurnedOn(coins, yday);
-    pairs = p.registry.pairs().map((pr) => ({ pairId: pr.pairId, a: p.registry.token(pr.mintA)?.ticker ?? pr.mintA.slice(0, 6), b: p.registry.token(pr.mintB)?.ticker ?? pr.mintB.slice(0, 6), selectorKey: pr.selectorKey, createdAt: pr.createdAt }));
+    // third prelaunch audit F09: a pair that never launched is not listed; one launched side is said (publicPairs.ts)
+    pairs = publicPairs(p.registry).map((pr) => ({ pairId: pr.pairId, a: pr.tickerA, b: pr.tickerB, selectorKey: pr.selectorKey, createdAt: pr.createdAt, note: pairLifecycleLine(pr) }));
     try { brackets = derbyStore(p.registry.db).tournaments().map((r) => { let title = r.id; try { title = (JSON.parse(r.json) as { title?: string }).title ?? r.id; } catch { /* keep the id */ } return { id: r.id, title, createdAt: r.createdAt }; }); } catch { brackets = []; }
   } catch (e) { err = e instanceof Error ? e.message : String(e); }
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
@@ -76,7 +78,7 @@ export default function SeasonsPage() {
         <p className="text-neutral-400 text-sm max-w-3xl">A rivalry pairs two coins on one settled event. Each coin burns on its own side&apos;s result, under its own locked rule. The receipts are the scoreboard.</p>
         {!err && pairs.length === 0 && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-4">No rivalry pairs yet.</p>}
         {pairs.length > 0 && <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{pairs.map((r) => (
-          <li key={r.pairId} className="p-3 flex flex-wrap items-baseline gap-x-4 gap-y-1"><Link className="font-mono underline" href={`/burnticker/p/${encodeURIComponent(r.pairId)}`}>${r.a} vs ${r.b}</Link><span className="font-mono text-xs text-neutral-500">{r.selectorKey}</span><span className="text-xs text-neutral-500">since {new Date(r.createdAt).toISOString().slice(0, 10)}</span></li>
+          <li key={r.pairId} className="p-3 flex flex-wrap items-baseline gap-x-4 gap-y-1"><Link className="font-mono underline" href={`/burnticker/p/${encodeURIComponent(r.pairId)}`}>${r.a} vs ${r.b}</Link><span className="font-mono text-xs text-neutral-500">{r.selectorKey}</span><span className="text-xs text-neutral-500">since {new Date(r.createdAt).toISOString().slice(0, 10)}</span>{r.note && <span className="text-xs text-amber-300" data-pair-lifecycle>{r.note}</span>}</li>
         ))}</ul>}
       </section>
 

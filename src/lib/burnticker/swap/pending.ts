@@ -1,6 +1,7 @@
 import type { PublicKey, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
 import { readBalances, reconcileSubmitted, simulateSignSend, type SendResult, type Submitted, type SwapReader, type SwapSender } from "@/lib/burnticker/swap/chain";
 import type { Balances, Network, Side } from "@/lib/burnticker/swap/plan";
+import { withFlight } from "@/lib/burnticker/rpcProxy";
 
 /**
  * A SUBMITTED SWAP KEEPS ITS IDENTITY (audit 2026-10-15 F2). Once the wallet signs, the swap's signature and blockhash expiry are written
@@ -40,6 +41,8 @@ export type SwapOutcome =
   | { kind: "confirmed"; signature: string; balances: Balances | null }
   | { kind: "failed"; signature: string; error: string }
   | { kind: "expired"; signature: string }
+  /** review follow-up 2: released after GIVE_UP_AFTER_MS with no answer; the panel tells the visitor to check the wallet's history */
+  | { kind: "unconfirmed"; signature: string }
   | { kind: "pending"; signature: string; pending: PendingSwap; error?: string };
 
 export interface SwapContext { conn: SwapSender & SwapReader; store: SwapStore | null; network: Network; mint: PublicKey; owner: PublicKey }
@@ -60,10 +63,26 @@ async function settle(c: SwapContext, r: SendResult, rec: PendingSwap): Promise<
   return { kind: "expired", signature: r.signature };
 }
 
-/** Settles a held swap with one status read. */
-export async function reconcilePending(c: SwapContext, rec: PendingSwap): Promise<SwapOutcome> {
-  return settle(c, await reconcileSubmitted(c.conn, { signature: rec.signature, lastValidBlockHeight: rec.lastValidBlockHeight }), rec);
+/**
+ * Settles a held swap with one status read. Third prelaunch audit 2026-10-16 F05: inside withFlight (the timer, the manual check and a
+ * reload all come here), so a held swap still settles once the proxy's ordinary lane is spent for the day; the balance read after a
+ * confirmed swap rides the same flight.
+ */
+export async function reconcilePending(c: SwapContext, rec: PendingSwap, now = Date.now()): Promise<SwapOutcome> {
+  return withFlight(async () => {
+    const out = await settle(c, await reconcileSubmitted(c.conn, { signature: rec.signature, lastValidBlockHeight: rec.lastValidBlockHeight }), rec);
+    // review follow-up 2: reads that keep throwing must not hold the panel forever. After GIVE_UP_AFTER_MS, and only when a height read
+    // succeeds and the chain is GIVE_UP_PAST_BLOCKS past the swap's expiry (it cannot land any more), the hold is released with a warning
+    if (out.kind !== "pending" || now - rec.at <= GIVE_UP_AFTER_MS) return out;
+    const height = await c.conn.getBlockHeight("confirmed").catch(() => null);
+    if (height === null || height <= rec.lastValidBlockHeight + GIVE_UP_PAST_BLOCKS) return out;
+    clearPending(c.store, rec.network, rec.mint, rec.owner);
+    return { kind: "unconfirmed", signature: rec.signature };
+  });
 }
+/** Review follow-up 2: how long a held swap with no answer is kept, and how far past its expiry the chain must be before it is released. */
+export const GIVE_UP_AFTER_MS = 24 * 3_600_000;
+export const GIVE_UP_PAST_BLOCKS = 1_500;
 
 /**
  * One swap, sent at most once. A swap this tab still holds is settled first, and whatever it settles to is returned WITHOUT sending the
@@ -71,9 +90,12 @@ export async function reconcilePending(c: SwapContext, rec: PendingSwap): Promis
  * swap, for a browser whose storage refused the record.
  */
 export async function submitSwap(c: SwapContext, s: { side: Side; ixs: TransactionInstruction[]; sign: (tx: VersionedTransaction) => Promise<VersionedTransaction>; onStep?: (x: "simulating" | "signing" | "sending" | "confirming") => void; pollMs?: number; held?: PendingSwap | null; now?: number }): Promise<SwapOutcome> {
+  return withFlight(() => submitSwapRun(c, s));
+}
+async function submitSwapRun(c: SwapContext, s: Parameters<typeof submitSwap>[1]): Promise<SwapOutcome> {
   const mint = c.mint.toBase58(), owner = c.owner.toBase58();
   // only this wallet's own held swap blocks it (review 3c)
-  const earlier = loadPending(c.store, c.network, mint, owner) ?? (s.held && s.held.owner === owner && s.held.mint === mint && s.held.network === c.network ? s.held : null);
+  const earlier = heldFor(c, s.held);
   if (earlier) return reconcilePending(c, earlier);
   let rec = null as PendingSwap | null;
   const onSubmit = (x: Submitted) => {
@@ -86,6 +108,26 @@ export async function submitSwap(c: SwapContext, s: { side: Side; ixs: Transacti
 }
 
 /**
+ * The panel's swap, the whole of it inside one flight (F05): the held swap is settled first, then this swap's own fresh reads (`prepare`:
+ * the network check, the market and the balances it is built from), then the send, the confirm and the balance read after it. A
+ * refusal thrown by `prepare` reaches the caller as it was thrown. The panel's passive refresh never comes through here.
+ */
+export async function runSwap(c: SwapContext, s: { side: Side; prepare: () => Promise<TransactionInstruction[]>; sign: (tx: VersionedTransaction) => Promise<VersionedTransaction>; onStep?: (x: "simulating" | "signing" | "sending" | "confirming") => void; pollMs?: number; held?: PendingSwap | null; now?: number }): Promise<SwapOutcome> {
+  return withFlight(async () => {
+    const earlier = heldFor(c, s.held);
+    if (earlier) return reconcilePending(c, earlier);
+    const ixs = await s.prepare();
+    return submitSwapRun(c, { ...s, ixs });
+  });
+}
+
+/** This wallet's own held swap (review 3c): the stored record, or the panel's memory of one when storage refused it. */
+function heldFor(c: SwapContext, held: PendingSwap | null | undefined): PendingSwap | null {
+  const mint = c.mint.toBase58(), owner = c.owner.toBase58();
+  return loadPending(c.store, c.network, mint, owner) ?? (held && held.owner === owner && held.mint === mint && held.network === c.network ? held : null);
+}
+
+/**
  * Review 2026-10-15 (3d): the panel's status reads for a held swap. One read at a time (a click and the 5-second timer never overlap),
  * and a read that comes back after the swap was settled (or replaced by another) is dropped: it can never hold a settled swap again.
  * `check` answers null when it skipped or its answer is stale.
@@ -93,13 +135,18 @@ export async function submitSwap(c: SwapContext, s: { side: Side; ixs: Transacti
 export class PendingWatch {
   current: PendingSwap | null = null;
   private busy = false;
+  /** Review follow-up 2: status reads in a row that answered with an error; the panel's check backs off after a few. */
+  private failures = 0;
   hold(rec: PendingSwap | null): void { this.current = rec; }
+  /** The wait before the next check: 5 seconds, doubling after three errors in a row, at most a minute. */
+  delayMs(base = 5_000): number { return this.failures < 3 ? base : Math.min(60_000, base * 2 ** (this.failures - 2)); }
   get checking(): boolean { return this.busy; }
   async check(rec: PendingSwap, reconcile: (r: PendingSwap) => Promise<SwapOutcome>): Promise<SwapOutcome | null> {
     if (this.busy || !this.current || this.current.signature !== rec.signature) return null;
     this.busy = true;
     try {
       const out = await reconcile(rec);
+      this.failures = out.kind === "pending" && out.error ? this.failures + 1 : 0;
       if (!this.current || this.current.signature !== rec.signature) return null;
       this.current = out.kind === "pending" ? out.pending : null;
       return out;

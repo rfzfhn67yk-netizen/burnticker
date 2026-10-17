@@ -165,7 +165,7 @@ describe("website-21: the review", () => {
 describe("website-21: the pair pages say a rivalry series pair reads two series", () => {
   test("tokenPage.ts and /burnticker/p use MEETINGS_PAIR_PAGE_LINE for a meetings selector", () => {
     // 2026-10-13: a settled-event pair (two candidates, one game) has its own sentence between the two
-    assert.match(read("src/lib/burnticker/tokenPage.ts"), /\$\{isMeetingsSelector\(a\.selectorKey\) \? `\$\{esc\(MEETINGS_PAIR_PAGE_LINE\)\} A draw, a postponed or a cancelled game moves nothing\.` : settledLineOf\(a\.rules\.statement\) \? esc\(settledLineOf\(a\.rules\.statement\)!\) : `Both coins read the same market/);
+    assert.match(read("src/lib/burnticker/tokenPage.ts"), /\$\{pairKindOf\(a\) === "meetings" \? `\$\{esc\(MEETINGS_PAIR_PAGE_LINE\)\} A draw, a postponed or a cancelled game moves nothing\.` : settledLineOf\(a\.rules\.statement\) \? esc\(settledLineOf\(a\.rules\.statement\)!\) : `Both coins read the same market/);   // third prelaunch audit F10: pairKindOf strips the coin selector's catalogue: prefix, which isMeetingsSelector missed
     assert.match(read("src/app/burnticker/p/[pairId]/page.tsx"), /\{isMeetingsSelector\(d\.pair\.selectorKey\) \? <>\{MEETINGS_PAIR_PAGE_LINE\} A draw, a postponed or a cancelled game moves nothing\.<\/> : settledLineOf\(d\.a\.status\.rules\.statement\) \? <span data-settled-pair-line>\{settledLineOf\(d\.a\.status\.rules\.statement\)\}<\/span> : <>Both coins read the same market/);
     plain(`${MEETINGS_PAIR_PAGE_LINE} A draw, a postponed or a cancelled game moves nothing.`);
     assert.equal(isMeetingsSelector(meetingsPairRules("nba", "PHI", "BOS", 2026).a.series), true);

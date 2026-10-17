@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { Keypair, type VersionedTransaction } from "@solana/web3.js";
 import { syncNativeIx } from "@/lib/burnticker/swap/instructions";
-import { BLOCKHASH_VALID_BLOCKS, reconcileSubmitted, signatureOf, simulateSignSend, UNKNOWN_EXPIRY_BLOCKS, WALLET_BLOCKHASH_MARGIN } from "@/lib/burnticker/swap/chain";
+import { BLOCKHASH_VALID_BLOCKS, EXPIRY_MARGIN_BLOCKS, reconcileSubmitted, signatureOf, simulateSignSend, UNKNOWN_EXPIRY_BLOCKS, WALLET_BLOCKHASH_MARGIN } from "@/lib/burnticker/swap/chain";
 import { browserSwapStore, loadPending, pendingKey, PendingWatch, submitSwap, type PendingSwap, type SwapOutcome, type SwapStore } from "@/lib/burnticker/swap/pending";
 import { REFUSAL, SWAP_COPY } from "@/lib/burnticker/swap/copy";
 import { lintCopy } from "@/lib/launch/copyLint";
@@ -27,6 +27,7 @@ function chain(o: { send?: "ok" | "throw"; statuses?: (() => ({ err: unknown; co
     getBlockHeight: async () => { if (o.heightThrows) throw new Error("block height: 503"); return o.height ? o.height() : 50; },
     getBalance: async () => { if (o.balanceThrows) throw new Error("getBalance: 503"); return 5; },
     getMultipleAccountsInfo: async () => { if (o.balanceThrows) throw new Error("getMultipleAccounts: 503"); return [null]; },
+    getTransaction: async () => null,   // F-30: the second witness before expired
   };
   return c;
 }
@@ -75,7 +76,7 @@ describe("a signed swap is held before it is sent (swap/pending.ts)", () => {
 
   test("accepted, then the confirmation times out: a final history read decides; not found after expiry is expired, never resent", async () => {
     const store = new MemStore();
-    let h = 50; const c = chain({ statuses: [() => null], height: () => (h += 30) });
+    let h = 50; const c = chain({ statuses: [() => null], height: () => (h += 30 + EXPIRY_MARGIN_BLOCKS) });   // F-30: past the expiry and its margin
     const out = await run(c, store);
     assert.equal(out.kind, "expired");
     assert.equal(c.sends, 1);
@@ -115,7 +116,8 @@ describe("a signed swap is held before it is sent (swap/pending.ts)", () => {
     // a held swap still unknown after the reload stays pending; one whose blockhash expired unseen is released
     const s3 = new MemStore(); await run(chain({ statusThrows: 99 }), s3);
     assert.equal((await run(chain({ statuses: [() => null], height: () => 60 }), s3)).kind, "pending");
-    assert.equal((await run(chain({ statuses: [() => null], height: () => 101 }), s3)).kind, "expired");
+    assert.equal((await run(chain({ statuses: [() => null], height: () => 101 }), s3)).kind, "pending", "F-30: one block past the expiry is inside the margin");
+    assert.equal((await run(chain({ statuses: [() => null], height: () => 101 + EXPIRY_MARGIN_BLOCKS }), s3)).kind, "expired");
   });
 
   test("a browser without storage still holds the swap in the panel's memory (held)", async () => {
@@ -128,7 +130,7 @@ describe("a signed swap is held before it is sent (swap/pending.ts)", () => {
   });
 
   test("reconcileSubmitted: a read error is pending, never expired; the signature helper reads the wallet's signature", async () => {
-    assert.equal((await reconcileSubmitted({ getBlockHeight: async () => { throw new Error("x"); }, getSignatureStatuses: async () => ({ value: [null] }) }, { signature: "s", lastValidBlockHeight: 1 })).status, "pending");
+    assert.equal((await reconcileSubmitted({ getBlockHeight: async () => { throw new Error("x"); }, getSignatureStatuses: async () => ({ value: [null] }), getTransaction: async () => null }, { signature: "s", lastValidBlockHeight: 1 })).status, "pending");
     const conn = chain({ statuses: [() => ({ err: null, confirmationStatus: "confirmed" })] });
     let seen: string | null = null;
     await simulateSignSend(conn, payer.publicKey, ixs, async (t) => { const s = await sign(t); seen = signatureOf(s); return s; }, () => {}, 1, () => {});
@@ -138,11 +140,11 @@ describe("a signed swap is held before it is sent (swap/pending.ts)", () => {
   test("the new sentences lint, and the panel blocks the button and settles a held swap on load", () => {
     for (const k of ["pending", "checkAgain", "checking", "earlierConfirmed", "expired", "balanceUnread"] as const) assert.deepEqual(lintCopy(SWAP_COPY[k]).hits, [], k);
     const panel = fs.readFileSync("src/app/burnticker/t/[ticker]/TradePanel.tsx", "utf8");
-    assert.match(panel, /submitSwap\(ctx\(\)/);
+    assert.match(panel, /runSwap\(ctx\(\)/);   // third prelaunch audit F05: runSwap wraps submitSwap in the flight
     assert.match(panel, /const busy = step !== "idle" \|\| pending !== null \|\| checking;/);
     assert.match(panel, /loadPending\(store, p\.network, p\.mint, ownerKey\)/);
     assert.match(panel, /watch\.current\.check\(rec, \(r\) => reconcilePending\(ctx\(\), r\)\)/);
-    assert.ok(!/simulateSignSend/.test(panel), "the panel sends only through submitSwap");
+    assert.ok(!/simulateSignSend/.test(panel), "the panel sends only through runSwap (submitSwap)");
   });
 });
 

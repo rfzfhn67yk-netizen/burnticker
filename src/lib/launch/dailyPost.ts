@@ -1,6 +1,6 @@
 import type { BurnJson, StatusJson } from "@/lib/burnKeeper/statusPage";
 import { dateIn } from "@/lib/burnKeeper/schedule";
-import type { PairTally, PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
+import type { PairKind, PairTally, PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
 import { byCoin } from "@/lib/burnticker/coinKey";
 
@@ -290,8 +290,25 @@ function tokenDayBody(s: TokenStatusJson, receipts: readonly ReceiptJson[], day:
 }
 
 // ---- the rivalry pair (the pair page's share line and the @burnticker post) ----
-/** The share line alone: "$A 3 : 1 $B — every loss burns". */
-export const pairShareLine = (t: Pick<PairTally, "a" | "b" | "burnsA" | "burnsB">): string => `$${t.a.ticker} ${t.burnsA} : ${t.burnsB} $${t.b.ticker} — every loss burns`;
+/**
+ * THE PAIR'S OWN MECHANICS (third prelaunch audit 2026-10-16 F10). Before, every pair's post said "every loss burns" and "one market,
+ * inverted rules", which only the original one-market pair does; a head-to-head series pair said it too. Each kind now has its own
+ * score label and its own sentence, with the result that burns neither coin. The original pair keeps its words.
+ */
+const PAIR_KIND_COPY: Record<PairKind, { score: string; mechanics: string; live: string }> = {
+  inversion: { score: " — every loss burns", mechanics: "one market, inverted rules", live: ", every settlement burns one side" },
+  meetings: { score: ", head-to-head wins", mechanics: "Each game between the two teams burns the coin of the team that won it. A draw, a postponed or a cancelled game burns neither.", live: "" },
+  game: { score: ", one game", mechanics: "One game: the winning team's coin burns. After a draw neither coin burns.", live: "" },
+  candidates: { score: ", one race", mechanics: "One race: the winning candidate's coin burns. If neither candidate wins, neither coin burns.", live: "" },
+  derby: { score: ", windows won", mechanics: "Each window burns the pair coin whose reference coin did better in it. A tie or a withheld window burns neither.", live: "" },
+  flippening: { score: ", one flippening", mechanics: "One flippening: on the first day one reference coin passes the other, the pair coin on that side burns, once. If neither passes the other before the season ends, neither coin burns.", live: "" },
+};
+const kindOf = (t: { kind?: PairKind }): PairKind => t.kind ?? "inversion";
+/** Before any settlement: what has to be true for a result to burn (never "the first one burns one side"). */
+export const PAIR_NO_SETTLEMENT_LINE = "No settlement yet since launch. A result burns a coin only after that coin's pool is registered, and only what its burn pool holds.";
+
+/** The share line alone: "$A 3 : 1 $B — every loss burns" for the original pair; each other kind its own label. */
+export const pairShareLine = (t: Pick<PairTally, "a" | "b" | "burnsA" | "burnsB" | "kind">): string => `$${t.a.ticker} ${t.burnsA} : ${t.burnsB} $${t.b.ticker}${PAIR_KIND_COPY[kindOf(t)].score}`;
 
 /**
  * (f) RIVALRY PAIR — the scoreboard as a report: burns A : B, supply A : B (and % of the starting supply left), the last settlement
@@ -302,10 +319,10 @@ export const pairShareLine = (t: Pick<PairTally, "a" | "b" | "burnsA" | "burnsB"
  * Both or neither (2026-10-10): the pair's state line — "Pair live: both pools registered", "Pair voided — both sides on the weekly
  * clock", or "Waiting on $B's pool (both or neither; voids after <date> UTC)". Null for a pair made before the clause.
  */
-export function pairStateLine(t: Pick<PairTally, "a" | "b" | "clause">): string | null {
+export function pairStateLine(t: Pick<PairTally, "a" | "b" | "clause" | "kind">): string | null {
   const c = t.clause;
   if (!c) return null;
-  if (c.state === "live") return "Pair live: both pools registered, every settlement burns one side";
+  if (c.state === "live") return `Pair live: both pools registered${PAIR_KIND_COPY[kindOf(t)].live}`;
   if (c.state === "voided") return `Pair voided — both pools wind down over four weeks (no event burns; ${c.voidBy} ended without both pools)`;
   const who = c.waitingOn.length === 2 ? "both pools" : c.waitingOn.length === 1 ? `$${c.waitingOn[0] === "A" ? t.a.ticker : t.b.ticker}'s pool` : "both pools to register";
   return `Waiting on ${who} (both or neither: settlements wait as pending; the pair voids if ${c.voidBy} ends without both)`;
@@ -315,14 +332,15 @@ export function pairDailyText(t: PairTally, site?: string | null, tag?: string |
   const A = `$${t.a.ticker}`, B = `$${t.b.ticker}`;
   const ls = t.lastSettlement;
   const outcome = ls ? (ls.result ?? ls.value ?? "—").toUpperCase() : "";
-  const last = !ls ? "No settlement yet since launch: the first one burns one side."
+  const kind = kindOf(t), copy = PAIR_KIND_COPY[kind];
+  const last = !ls ? PAIR_NO_SETTLEMENT_LINE
     : ls.burnedSide ? `Last: ${ls.eventId} settled ${outcome} → ${ls.burnedSide === "A" ? A : B} burned${ls.burned ? ` ${fmtInt(ls.burned)}` : ""}`
     : `Last: ${ls.eventId} settled ${outcome} → neither side burned${ls.result === "void" ? " (void)" : ""}`;
   return [
     pairShareLine(t),
     pairStateLine(t),
     `Supply ${fmtInt(t.supplyA)} : ${fmtInt(t.supplyB)} (${fmtPct(t.supplyPctA)} : ${fmtPct(t.supplyPctB)} of the start)`,
-    `${t.settlements} ${t.settlements === 1 ? "settlement" : "settlements"}${t.voids ? `, ${t.voids} void` : ""} · one market, inverted rules`,
+    kind === "inversion" ? `${t.settlements} ${t.settlements === 1 ? "settlement" : "settlements"}${t.voids ? `, ${t.voids} void` : ""} · ${copy.mechanics}` : `${t.settlements} ${t.settlements === 1 ? "settlement" : "settlements"}${t.voids ? `, ${t.voids} void` : ""}. ${copy.mechanics}`,
     last,
     t.next.market ? `Next market: ${t.next.market}${t.next.closeTime ? ` (closes ${t.next.closeTime.slice(0, 16).replace("T", " ")}Z)` : ""}` : null,
     `Scoreboard: ${siteOf(site)}/p/${t.pairId}/`,

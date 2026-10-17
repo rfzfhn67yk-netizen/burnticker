@@ -1,4 +1,5 @@
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
+import { publicPairs } from "@/lib/burnticker/publicPairs";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { platform } from "@/lib/burnticker/server";
@@ -28,7 +29,8 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
   try {
     const p = platform();
     const now = Date.now();
-    rows = p.registry.pairs().filter((pr) => pr.selectorKey.startsWith("derby:")).flatMap((pr) => {
+    // third prelaunch audit F09: the shared public rule (publicPairs.ts): a pair that never launched is not listed
+    rows = publicPairs(p.registry).filter((pr) => pr.selectorKey.startsWith("derby:")).flatMap((pr) => {
       const ta = p.registry.token(pr.mintA), tb = p.registry.token(pr.mintB);
       if (!ta || !tb) return [];
       const rc = (m: string) => p.registry.receipts(m).map((r) => ({ eventId: r.eventId, status: r.status, burned: null, signature: r.signature, txUrl: null, units: r.units }));

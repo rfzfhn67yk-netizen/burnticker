@@ -180,8 +180,18 @@ describe("438485 a failed dry run stops the step before the wallet is asked", ()
   test("Phantom's second review (2026-10-16): a dry run the RPC cannot perform stops the step BEFORE the wallet is asked; nothing sent", async () => {
     const { r, sends, walletAsked } = await runWith(async () => { throw new Error("rpc down"); });
     assert.deepEqual([sends, walletAsked, r.failedAt, r.state], [0, 0, 0, "not-sent"]);
-    assert.match(r.error!, /dry run could not be run just now \(rpc down\)\. Nothing was sent; try again in a moment\./);
+    assert.match(r.error!, /dry run could not be run just now \(rpc down\)\. Try again in a moment\./);
     assert.ok(lintCopy(r.error!, cfg).ok, r.error!);
+  });
+  test("third prelaunch audit F11: step 2's dry run cannot run after step 1 confirmed: the sentence never says nothing was sent (before: 'Nothing was sent' then 'the steps before it are confirmed')", async () => {
+    let calls = 0;
+    const { r, sends } = await runWith(async () => { if (++calls === 2) throw new Error("rpc down"); return null; });
+    assert.deepEqual([sends, r.failedAt, r.state, r.signatures.length], [1, 1, "not-sent", 1]);
+    const said = failureSentence(r, 2);
+    assert.doesNotMatch(said, /Nothing was sent/);
+    assert.match(said, /^Step 2 of 2 was not sent because its dry run could not be run just now \(rpc down\)\. Try again in a moment\. The steps before it are confirmed on chain\./);
+    assert.doesNotMatch(said, /\.\./, "one full stop between sentences");
+    assert.ok(lintCopy(said, cfg).ok, said);
   });
 });
 

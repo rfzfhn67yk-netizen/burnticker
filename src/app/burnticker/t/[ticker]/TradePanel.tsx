@@ -8,7 +8,7 @@ import { balanceLine, capLine, DEFAULT_SLIPPAGE_BPS, feeLine, holdsLine, REFUSAL
 import { formatAmount, parseAmount } from "@/lib/burnticker/swap/math";
 import { balanceRefusal, buildSwap, coinRefusal, feeBps, marketRefusal, quoteSwap, requoteRefusal, walletRefusal, type Balances, type Market, type Network, type Quote, type Side } from "@/lib/burnticker/swap/plan";
 import { connectionOn, explorerTxUrl, readBalances, readMarket } from "@/lib/burnticker/swap/chain";
-import { browserSwapStore, loadPending, PendingWatch, reconcilePending, submitSwap, type PendingSwap, type SwapOutcome } from "@/lib/burnticker/swap/pending";
+import { browserSwapStore, loadPending, PendingWatch, reconcilePending, runSwap, type PendingSwap, type SwapOutcome } from "@/lib/burnticker/swap/pending";
 import type { SwapGuard } from "@/lib/burnticker/swap/guard";
 
 /**
@@ -129,6 +129,7 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
       setDone({ signature: o.signature, balance: o.balances ? balanceLine(tok(o.balances.tokens), p.ticker) : SWAP_COPY.balanceUnread, earlier });
       if (!earlier) setText("");
     } else if (o.kind === "failed") setErr(REFUSAL.failed(o.error));
+    else if (o.kind === "unconfirmed") setErr(SWAP_COPY.unconfirmed);
     else setErr(SWAP_COPY.expired);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.ticker, decimals]);
@@ -140,7 +141,8 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
   }, [ctx, show]);
   // the connected wallet's own held swap (review 3c): another wallet's record never shows here or blocks this one
   useEffect(() => { const rec = loadPending(store, p.network, p.mint, ownerKey); const t = setTimeout(() => { watch.current.hold(rec); setPending(rec); if (rec) void check(rec); }, 0); return () => clearTimeout(t); }, [store, p.network, p.mint, ownerKey, check]);
-  useEffect(() => { if (!pending) return; const t = setInterval(() => void check(pending), 5000); return () => clearInterval(t); }, [pending, check]);
+  // review follow-up 2: the check backs off after repeated read errors (PendingWatch.delayMs), instead of every 5 seconds forever
+  useEffect(() => { if (!pending) return; let t: ReturnType<typeof setTimeout>, live = true; const tick = async () => { await check(pending); if (live) t = setTimeout(tick, watch.current.delayMs()); }; t = setTimeout(tick, watch.current.delayMs()); return () => { live = false; clearTimeout(t); }; }, [pending, check]);
 
   async function go() {
     if (!wallet.publicKey || !quote || minOut === null || blocked || busy || amount === null || pending) return;
@@ -148,23 +150,29 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
     setErr(null); setDone(null);
     try {
       setStep("quoting");
-      if (!(await connectionOn(connection, p.network))) throw new Error(REFUSAL.wrongNetwork);
-      // a fresh read right before signing: a pool that moved past the slippage setting is refused here, nothing is sent
-      const fresh = await readMarket(connection, p.network, mint, pool);
-      const no = marketRefusal(fresh, mint, Math.floor(Date.now() / 1000));
-      if (no) throw new Error(no);
-      const q = quoteSwap(fresh, side, amount, p.poolBurnBps);
-      const slipNo = requoteRefusal(q, minOut, fmtOut, slippageBps);
-      if (slipNo) { setMarket(fresh); throw new Error(slipNo); }
-      const b = await readBalances(connection, wallet.publicKey, mint);
-      const balNo = balanceRefusal(side, q.amountIn, b, { sol, tokens: tok, ticker: p.ticker });
-      if (balNo) { setBalances(b); throw new Error(balNo); }
-      // the minimum out stays the one shown to the visitor (quote less slippage); the fresh quote only has to clear it
-      const { ixs } = buildSwap(fresh, { owner: wallet.publicKey, mint, side, amount, quotedOut: quote.amountOut, slippageBps });
-      // sent at most once: the signed swap is held (swap/pending.ts) before the send, and any error after it leaves it pending
-      const out = await submitSwap(ctx(), { side, ixs, sign: (tx) => wallet.signTransaction!(tx), onStep: (s) => setStep(s), pollMs: 2000, held: pending });
+      let fresh: Market | null = null;
+      // third prelaunch audit F05: this swap's own reads, its send and its confirm run in one flight (swap/pending.ts runSwap), so a swap
+      // still goes through once the proxy's ordinary lane is spent; the panel's passive refresh above stays in the ordinary lane
+      const out = await runSwap(ctx(), { side, sign: (tx) => wallet.signTransaction!(tx), onStep: (s) => setStep(s), pollMs: 2000, held: pending, prepare: async () => {
+        const owner = wallet.publicKey as PublicKey;
+        if (!(await connectionOn(connection, p.network))) throw new Error(REFUSAL.wrongNetwork);
+        // a fresh read right before signing: a pool that moved past the slippage setting is refused here, nothing is sent
+        const m = await readMarket(connection, p.network, mint, pool);
+        fresh = m;
+        const no = marketRefusal(m, mint, Math.floor(Date.now() / 1000));
+        if (no) throw new Error(no);
+        const q = quoteSwap(m, side, amount, p.poolBurnBps);
+        const slipNo = requoteRefusal(q, minOut, fmtOut, slippageBps);
+        if (slipNo) { setMarket(m); throw new Error(slipNo); }
+        const b = await readBalances(connection, owner, mint);
+        const balNo = balanceRefusal(side, q.amountIn, b, { sol, tokens: tok, ticker: p.ticker });
+        if (balNo) { setBalances(b); throw new Error(balNo); }
+        // the minimum out stays the one shown to the visitor (quote less slippage); the fresh quote only has to clear it
+        // sent at most once: the signed swap is held (swap/pending.ts) before the send, and any error after it leaves it pending
+        return buildSwap(m, { owner, mint, side, amount, quotedOut: quote.amountOut, slippageBps }).ixs;
+      } });
       show(out, false);
-      if (out.kind === "confirmed") setMarket(await readMarket(connection, p.network, mint, pool).catch(() => fresh));
+      if (out.kind === "confirmed") { const kept = fresh as Market | null, after = await readMarket(connection, p.network, mint, pool).catch(() => null); if (after ?? kept) setMarket((after ?? kept)!); }
     } catch (e) { setErr(String((e as Error).message ?? e)); }
     finally { setStep("idle"); }
   }

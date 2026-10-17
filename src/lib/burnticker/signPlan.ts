@@ -455,8 +455,8 @@ async function blockhashExpired(d: Pick<SendDeps, "isBlockhashValid">, blockhash
   try { return (await d.isBlockhashValid!(blockhash)) === false; } catch { return false; }
 }
 /** Said to the creator while the wallet is asked again. */
-export const resignSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} waited in the wallet longer than the network allows, so it was prepared again. Nothing was sent. Approve it in your wallet once more.`;
-export const resignExhaustedSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} was not sent because the wallet took longer than the network allows, ${RESIGN_MAX + 1} times in a row. Nothing was sent. Press the button to try again, and approve the request in your wallet within a minute.`;
+export const resignSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} waited in the wallet longer than the network allows, so it was prepared again. This step was not sent. Approve it in your wallet once more.`;
+export const resignExhaustedSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} was not sent because the wallet took longer than the network allows, ${RESIGN_MAX + 1} times in a row. Press the button to try again, and approve the request in your wallet within a minute.`;
 /** A send error that proves the transaction never left the RPC node (preflight / blockhash refused); anything else may have landed. */
 const SEND_REFUSED = /simulation failed|preflight|blockhash not found|insufficient funds/i;
 
@@ -522,7 +522,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       // Phantom ticket 438485, second review 2026-10-16: an unavailable or failed dry run stops the step BEFORE the wallet is asked
       let dry: string | null;
       try { dry = await d.simulate(built); }
-      catch (e) { return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because its dry run could not be run just now (${String((e as Error)?.message ?? e).slice(0, 160)}). Nothing was sent; try again in a moment.`); }
+      catch (e) { return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because its dry run could not be run just now (${String((e as Error)?.message ?? e).slice(0, 160)}). Try again in a moment.`); }
       if (dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry}`);
       const signed = await d.signTransaction(built);
       const changed = walletReturnProblem(handed, signed, plan.steps[i], plan, lut ? [lut] : []);
@@ -669,10 +669,15 @@ export function sentRecoverySentence(p: Pick<PendingSend, "step" | "signature">,
   return failureSentence({ signatures: confirmedBefore.slice(0, p.step), failedAt: p.step, error: sentSentence(p.step, n, p.signature), state: "sent", signature: p.signature }, n);
 }
 
-/** The card's sentence for a run that stopped. "Nothing was sent." only when no step was confirmed or sent. */
-export function failureSentence(r: SendResult, n: number): string {
+/**
+ * The card's sentence for a run that stopped. "Nothing was sent." only when no step was confirmed or sent. Third prelaunch audit F11: the
+ * step sentences themselves say "This step was not sent" (never "Nothing was sent", which a later step contradicted once the earlier
+ * steps were confirmed), and the confirmed earlier steps are described here, once; a step sentence's own full stop is not doubled.
+ */
+export function failureSentence(r0: SendResult, n: number): string {
+  const r = { ...r0, error: r0.error?.replace(/\.+$/, "") };
   const before = r.signatures.length > 0;
-  if (r.state === "abandoned") return r.error ?? "This plan is abandoned. The only safe thing to do is to start the launch again from the review, as a new plan.";
+  if (r.state === "abandoned") return r0.error ?? "This plan is abandoned. The only safe thing to do is to start the launch again from the review, as a new plan.";
   if (r.state === "sent") return `${r.error}. Pressing the button again checks that transaction on chain first. A new one is built only once the chain shows the old one did not land.${before ? " The steps before it are confirmed on chain." : ""}`;
   if (r.state === "failed") return `${r.error}. ${before ? "The steps before it are confirmed on chain. " : ""}Pressing the button again builds step ${(r.failedAt ?? 0) + 1} of ${n} afresh.`;
   return `${r.error}. ${before ? "The steps before it are confirmed on chain. Pressing the button again continues from the failed step." : "Nothing was sent."}`;

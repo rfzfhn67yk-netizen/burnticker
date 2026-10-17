@@ -37,7 +37,8 @@ const receiptsText = (n: number) => `${n} receipt${n === 1 ? "" : "s"}`;
 export function rankLines(coins: readonly SeasonCoinInput[]): Map<string, RankView> {
   const out = new Map<string, RankView>();
   for (const b of seasonBoards(coins)) {
-    if (b.window === "other") continue;
+    // review follow-up 7: a head-to-head card holds unrelated matchups (PIT v BAL next to DAL v PHI), so it ranks nobody
+    if (b.window === "other" || b.window === "meetings") continue;
     for (const r of b.rows) {
       const tied = b.rows.some((x) => x.ticker !== r.ticker && x.receipts === r.receipts);
       out.set(r.ticker, { ticker: r.ticker, line: `Ranked ${r.rank} of ${b.rows.length} in ${b.label} by receipts.`, season: b.label, rank: r.rank, of: b.rows.length, receipts: r.receipts, tied });

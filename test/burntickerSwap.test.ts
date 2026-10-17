@@ -215,7 +215,7 @@ describe("swap panel: refusals", () => {
   test("a failed simulation is refused with the program's reason; a wallet that declines sends nothing", async () => {
     assert.equal(simulationReason({ InstructionError: [4, { Custom: 6005 }] }, ["Program log: AnchorError ... Error Code: ExceededSlippage"]), "The pool would give less than your minimum out.");
     let sent = 0;
-    const conn = { getLatestBlockhash: async () => ({ blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 10 }), simulateTransaction: async () => ({ value: { err: { InstructionError: [4, { Custom: 1 }] }, logs: ["Program log: Error: something"] } }), sendRawTransaction: async () => { sent++; return "x"; }, getSignatureStatuses: async () => ({ value: [null] }), getBlockHeight: async () => 0 };
+    const conn = { getLatestBlockhash: async () => ({ blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 10 }), simulateTransaction: async () => ({ value: { err: { InstructionError: [4, { Custom: 1 }] }, logs: ["Program log: Error: something"] } }), sendRawTransaction: async () => { sent++; return "x"; }, getSignatureStatuses: async () => ({ value: [null] }), getBlockHeight: async () => 0, getTransaction: async () => null };
     const owner = Keypair.generate().publicKey;
     await assert.rejects(simulateSignSend(conn, owner, [syncNativeIx(owner)], async (t) => t), /test run of this swap failed/);
     const ok = { ...conn, simulateTransaction: async () => ({ value: { err: null, logs: [] } }) };

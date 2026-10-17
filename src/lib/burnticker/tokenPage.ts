@@ -97,6 +97,25 @@ export interface PairTally {
   attesterLine?: string | null;
   /** Round 2: the pair was unlinked on chain (reason in words); "unpaired (reason)" on the page. */
   unpaired?: { reason: string; at: string; signature: string | null } | null;
+  /** Third prelaunch audit F10: what kind of pair this is, so the share text says its own mechanics (pairKindOf). Absent = "inversion". */
+  kind?: PairKind;
+}
+
+/**
+ * The kinds of rivalry pair (third prelaunch audit 2026-10-16 F10), from side A's selector and locked statement: a season's head-to-head
+ * series (`meetings`), one game between two teams (`game`), two candidates in one race (`candidates`), a Burn Derby pair (`derby`), or
+ * the original pair of one market read with opposite rules (`inversion`).
+ */
+export type PairKind = "meetings" | "game" | "candidates" | "derby" | "flippening" | "inversion";
+export function pairKindOf(a: { selectorKey: string; rules: { statement: string } }): PairKind {
+  // a coin's selector carries its oracle prefix (registry.ts selectorKeyOf: catalogue:espn.team:…); the pair row's does not
+  if (isMeetingsSelector(a.selectorKey.replace(/^catalogue:/, ""))) return "meetings";
+  // review follow-up 4: the one-shot flippening (series "coinvs:<A>-<B>:<window>:<pct|mcap>-flip:<hash>") is its own kind
+  if (/^derby:coinvs:[^:]+:[^:]+:[^:]*-flip(:|$)/.test(a.selectorKey)) return "flippening";
+  if (/^derby:/.test(a.selectorKey)) return "derby";
+  if (/ One-game pair /.test(` ${a.rules.statement} `)) return "game";
+  if (/ Candidates pair /.test(` ${a.rules.statement} `)) return "candidates";
+  return "inversion";
 }
 
 /** One side's summary from its status (and receipts, for the last burn time). */
@@ -158,6 +177,7 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
     winnerTakesBurn: !!(a.pair?.winnerTakesBurn || b.pair?.winnerTakesBurn), forwardedAtoB: forwardedSol(receiptsA), forwardedBtoA: forwardedSol(receiptsB),
     forwards: a.pair?.forwards ?? b.pair?.forwards ?? forwardsFromReceipts(a, b, receiptsA, receiptsB),
     unpaired: a.pair?.unpaired ?? b.pair?.unpaired ?? null,
+    kind: pairKindOf(a),
     attesterLine: soleAttester(a, b) ? PAIR_SOLE_ATTESTER_LINE : (a.pair?.winnerTakesBurn || b.pair?.winnerTakesBurn) ? PAIR_QUORUM_LINE : null,
   };
 }
@@ -668,7 +688,12 @@ ${ix.tokens.filter((t) => !t.pairId).map((t) => `<tr><td><a href="t/${esc(t.site
  * with its market ticker and result, the next scheduled market (ticker and close time only, no odds) — the share line
  * (pairDailyText), both receipts tables stacked, both rules with their hashes, the disclaimer. Pure over the two sides' pages.
  */
-export function renderPairHtml(tally: PairTally, a: TokenStatusJson, b: TokenStatusJson, receiptsA: readonly ReceiptJson[], receiptsB: readonly ReceiptJson[], site: string | null = null): string {
+/**
+ * `keys` (review follow-up 3): the keeper's site directories per mint (coinKey.ts siteKeysOf); a side links to its own first directory, so
+ * a coin whose ticker another coin also holds links by its mint. Without keys, by ticker as before.
+ */
+export function renderPairHtml(tally: PairTally, a: TokenStatusJson, b: TokenStatusJson, receiptsA: readonly ReceiptJson[], receiptsB: readonly ReceiptJson[], site: string | null = null, keys: ReadonlyMap<string, readonly string[]> | null = null): string {
+  const dirOf = (s: TokenStatusJson): string => encodeURIComponent(keys?.get(s.mint)?.[0] ?? s.ticker);
   const A = esc(a.ticker), B = esc(b.ticker);
   const tile = (label: string, value: string, sub = "") => `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
   const ls = tally.lastSettlement;
@@ -686,19 +711,19 @@ ${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("
     ...(tally.unpaired ? [tile("Pair", "unpaired", `The pair was unlinked on ${esc(tally.unpaired.at.slice(0, 10))} (${esc(tally.unpaired.reason)}). They are two separate coins now, and nothing moves between them.`)] : []),
     ...(tally.winnerTakesBurn ? [tile("Burned and forwarded", `$${A} burned ${fmt(tally.burnedA)}. $${B} burned ${fmt(tally.burnedB)}.`, `$${A} has forwarded ${esc(tally.forwardedAtoB ?? "0")} SOL to $${B}, and $${B} has forwarded ${esc(tally.forwardedBtoA ?? "0")} SOL to $${A}. ${esc(PAIR_BURN_SENTENCE)}`)] : []),
   ].join("\n");
-  const rule = (s: TokenStatusJson, side: "A" | "B") => `<div class="rule"><strong>Side ${side}: <a href="../../t/${esc(s.ticker)}/">$${esc(s.ticker)}</a></strong> ${esc(s.name)}. ${esc(s.rules.statement)}<br><span class="muted">The rule file is <a href="../../t/${esc(s.ticker)}/rules.json">rules.json</a>, and its sha256 hash is <code>${esc(s.rules.sha256)}</code>.</span></div>`;
+  const rule = (s: TokenStatusJson, side: "A" | "B") => `<div class="rule"><strong>Side ${side}: <a href="../../t/${dirOf(s)}/">$${esc(s.ticker)}</a></strong> ${esc(s.name)}. ${esc(s.rules.statement)}<br><span class="muted">The rule file is <a href="../../t/${dirOf(s)}/rules.json">rules.json</a>, and its sha256 hash is <code>${esc(s.rules.sha256)}</code>.</span></div>`;
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>$${A} vs $${B}, a rivalry pair</title>
-<meta name="description" content="$${A} and $${B} read one settled market with opposite rules, so every result burns one side. The receipts are the scoreboard.">
+<meta name="description" content="${pairKindOf(a) === "inversion" ? `$${A} and $${B} read one settled market with opposite rules, so every result burns one side.` : `$${A} and $${B} are a rivalry pair. Each result burns the coin its rule names, and some results burn neither.`} The receipts are the scoreboard.">
 <style>
 ${STATUS_CSS}
 .score{font-size:2.2rem;font-weight:700;text-align:center;margin:8px 0 4px;font-variant-numeric:tabular-nums}
 .today{white-space:pre-wrap;word-break:break-word;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font:inherit;line-height:1.5}
 </style></head><body><main>
 <p><a href="../../">← Burnticker</a></p>
-<h1><a href="../../t/${A}/">$${A}</a> <span class="muted" style="font-weight:400">vs</span> <a href="../../t/${B}/">$${B}</a></h1>
-<p class="muted">This is the rivalry pair <code>${esc(tally.pairId)}</code>. ${isMeetingsSelector(a.selectorKey) ? `${esc(MEETINGS_PAIR_PAGE_LINE)} A draw, a postponed or a cancelled game moves nothing.` : settledLineOf(a.rules.statement) ? esc(settledLineOf(a.rules.statement)!) : `Both coins read the same market (<code>${esc(a.selectorKey)}</code>${a.seriesTitle ? `, ${esc(a.seriesTitle)}` : ""}) with opposite rules, so each result burns exactly one side. A voided market burns neither.`} Updated ${esc(a.generatedAt)}.</p>
+<h1><a href="../../t/${dirOf(a)}/">$${A}</a> <span class="muted" style="font-weight:400">vs</span> <a href="../../t/${dirOf(b)}/">$${B}</a></h1>
+<p class="muted">This is the rivalry pair <code>${esc(tally.pairId)}</code>. ${pairKindOf(a) === "meetings" ? `${esc(MEETINGS_PAIR_PAGE_LINE)} A draw, a postponed or a cancelled game moves nothing.` : settledLineOf(a.rules.statement) ? esc(settledLineOf(a.rules.statement)!) : `Both coins read the same market (<code>${esc(a.selectorKey)}</code>${a.seriesTitle ? `, ${esc(a.seriesTitle)}` : ""}) with opposite rules, so each result burns exactly one side. A voided market burns neither.`} Updated ${esc(a.generatedAt)}.</p>
 <div class="score">$${A} ${tally.burnsA} <span class="muted">:</span> ${tally.burnsB} $${B}</div>
 <div class="tiles">
 ${tiles}
@@ -723,8 +748,8 @@ ${a.disclosure.eventContract ? `<p class="rule">${esc(a.disclosure.eventContract
 }
 
 /** Writes one pair's site: p/<pairId>/{pair.json, index.html}. */
-export function publishPairSite(dir: string, tally: PairTally, a: TokenStatusJson, b: TokenStatusJson, receiptsA: readonly ReceiptJson[], receiptsB: readonly ReceiptJson[]): void {
-  publishSite(`${dir}/p/${tally.pairId}`, { "pair.json": toJson({ schema: "burnticker.pair/v1", generatedAt: a.generatedAt, tally }), "index.html": renderPairHtml(tally, a, b, receiptsA, receiptsB) });
+export function publishPairSite(dir: string, tally: PairTally, a: TokenStatusJson, b: TokenStatusJson, receiptsA: readonly ReceiptJson[], receiptsB: readonly ReceiptJson[], keys: ReadonlyMap<string, readonly string[]> | null = null): void {
+  publishSite(`${dir}/p/${tally.pairId}`, { "pair.json": toJson({ schema: "burnticker.pair/v1", generatedAt: a.generatedAt, tally }), "index.html": renderPairHtml(tally, a, b, receiptsA, receiptsB, null, keys) });
 }
 
 /**
@@ -743,14 +768,15 @@ export function statusSiteKeys(statuses: readonly TokenStatusJson[]): Map<string
 
 /** `receiptsByTicker` is read by mint first, then by ticker (coinKey.ts byCoin); the keeper keys it by mint. */
 export function publishPlatformIndex(dir: string, statuses: readonly TokenStatusJson[], now: number, audit: AuditBadge | null = null, receiptsByTicker: Record<string, readonly ReceiptJson[]> = {}, siteKeys?: ReadonlyMap<string, readonly string[]>): PlatformIndexJson {
-  const ix = buildPlatformIndex(statuses, now, audit, siteKeys ?? statusSiteKeys(statuses));
+  const keys = siteKeys ?? statusSiteKeys(statuses);
+  const ix = buildPlatformIndex(statuses, now, audit, keys);
   publishSite(dir, { "index.json": toJson(ix), "index.html": renderPlatformIndexHtml(ix, receiptsByTicker) });
   // Each pair's scoreboard page (the index cards and the versus headers link to p/<pairId>/).
   for (const p of ix.pairs) {
     const a = statuses.find((s) => s.mint === p.a.mint), b = statuses.find((s) => s.mint === p.b.mint);
     if (!a || !b) continue;
     const ra = byCoin(receiptsByTicker, a) ?? [], rb = byCoin(receiptsByTicker, b) ?? [];
-    publishPairSite(dir, pairTally(a, b, ra, rb), a, b, ra, rb);
+    publishPairSite(dir, pairTally(a, b, ra, rb), a, b, ra, rb, keys);
   }
   return ix;
 }

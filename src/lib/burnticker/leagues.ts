@@ -9,7 +9,7 @@ import { safeParam } from "@/lib/burnticker/safeParam";
  * grouped by sport (sports and leagues alphabetical — no league first, never an ordering by receipts across leagues). Each league has
  * one page per season, /burnticker/leagues/<league>/<season> ("nhl/2026-27", "mlb/2026"), with:
  *
- *   · the scoreboard cards for that league and season — seasons.ts `seasonBoards`, imported, not re-implemented: ranked inside the
+ *   · the scoreboard cards for that league and season (season, postseason and head-to-head series cards, each kept with its year) — seasons.ts `seasonBoards`, imported, not re-implemented: ranked inside the
  *     card only, "most receipts so far" during the season, "champion" only once the season ended for every coin on the card;
  *   · the team list with a "launch a coin for this team" link (the wizard's describe-the-event box, prefilled);
  *   · the games our coins settled in the last seven days, each with its settlement source line exactly as the reading recorded it
@@ -38,11 +38,25 @@ export const leaguePath = (league: LeagueId, year: number): string => `${LEAGUES
 /** website-20 item 119: the launch page opens on this league with this team picked (the guided team path, step 2). */
 export const launchHref = (teamName: string, league?: string, abbr?: string, o: { seasonOver?: boolean } = {}): string => (league && abbr ? `/burnticker/launch?league=${encodeURIComponent(league)}&team=${encodeURIComponent(abbr)}${o.seasonOver ? "&season=over" : ""}` : `/burnticker/launch?q=${encodeURIComponent(teamName)}`);
 
-/** A team coin's league and season year, or null (not a team coin, or a perpetual / next-N / legacy window). */
-export function coinSeason(c: Pick<SeasonCoinInput, "rule">): { league: LeagueId; year: number; window: "season" | "post" } | null {
+/**
+ * A team coin's league and season year, or null (not a team coin, or a perpetual / next-N / legacy window). Third prelaunch audit F07: a
+ * head-to-head series (window `meetings`) belongs to its own season year, like a season or postseason coin (before: null, so the league
+ * page listed it on the year-less card of every current season and counted it nowhere).
+ */
+export function coinSeason(c: Pick<SeasonCoinInput, "rule">): { league: LeagueId; year: number; window: "season" | "post" | "meetings" } | null {
   const e = c.rule.oracle === "catalogue" && c.rule.series ? parseEspnSeries(c.rule.series) : null;
-  if (!e || e.kind !== "team" || (e.window.kind !== "season" && e.window.kind !== "post")) return null;
+  if (!e || e.kind !== "team" || (e.window.kind !== "season" && e.window.kind !== "post" && e.window.kind !== "meetings")) return null;
   return { league: e.league, year: e.window.year, window: e.window.kind };
+}
+/**
+ * F07: which season page shows a year-less team coin. A next-N window shows on the season its first counted day falls in; a perpetual or
+ * legacy window on the current season only.
+ */
+function otherSeasonYear(c: Pick<SeasonCoinInput, "rule">, nowMs: number): number | null {
+  const e = c.rule.oracle === "catalogue" && c.rule.series ? parseEspnSeries(c.rule.series) : null;
+  if (!e || e.kind !== "team") return null;
+  if (e.window.kind === "next") { const f = e.window.from; return seasonYearAt(e.league, Date.parse(`${f.slice(0, 4)}-${f.slice(4, 6)}-${f.slice(6)}T12:00:00Z`)); }
+  return seasonYearAt(e.league, nowMs);
 }
 const coinLeague = (c: Pick<SeasonCoinInput, "rule">): LeagueId | null => {
   const e = c.rule.oracle === "catalogue" && c.rule.series ? parseEspnSeries(c.rule.series) : null;
@@ -121,7 +135,7 @@ export interface LeagueSeasonPage {
   league: LeagueId; leagueLabel: string; sport: Sport; year: number; slug: string; seasonLabel: string; path: string;
   current: boolean;
   title: string; description: string;
-  /** seasons.ts boards for this league and season (season + postseason cards; on the current season also the perpetual / next-N card). */
+  /** seasons.ts boards for this league and season (season, postseason and head-to-head series cards; the year-less card holds the perpetual coins on the current season and each next-N coin on the season it starts in). */
   boards: SeasonBoard[];
   /** The champion line, only once a season card ended (seasons.ts decides). */
   champions: { board: string; ticker: string }[];
@@ -137,7 +151,7 @@ export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
   const L = LEAGUES[i.league], label = seasonLabel(i.league, i.year), slug = seasonSlug(i.league, i.year), path = leaguePath(i.league, i.year);
   const current = seasonYearAt(i.league, i.nowMs) === i.year;
   const inSeason = i.coins.filter((c) => { const s = coinSeason(c); return s !== null && s.league === i.league && s.year === i.year; });
-  const other = current ? i.coins.filter((c) => coinSeason(c) === null && coinLeague(c) === i.league && c.rule.series && /^espn\.team:/.test(c.rule.series)) : [];
+  const other = i.coins.filter((c) => coinSeason(c) === null && coinLeague(c) === i.league && c.rule.series && /^espn\.team:/.test(c.rule.series) && otherSeasonYear(c, i.nowMs) === i.year);
   const boards = seasonBoards([...inSeason, ...other]);
   const champions = boards.filter((b) => b.leader?.title === "champion").map((b) => ({ board: b.label, ticker: b.leader!.ticker }));
   const coinsByTeam = new Map<string, { ticker: string; outcome: string }[]>();
