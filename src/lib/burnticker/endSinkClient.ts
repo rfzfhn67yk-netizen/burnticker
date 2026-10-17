@@ -4,6 +4,7 @@ import type { FakeProgram } from "@/lib/burnKeeper/fakeProgram";
 import { formatDate, spendablePool } from "@/lib/burnReceipts/math";
 import { parseEndForwardMemo } from "@/lib/burnReceipts/endSink";
 import { INCINERATOR_ADDRESS } from "@/lib/burnticker/rules";
+import { QUEUE_UNBLOCK_SECS } from "@/lib/burnReceipts/constants";
 /** The rent-exempt minimum of an empty account (Rent::minimum_balance(0)): the smallest credit the incinerator accepts. */
 export const INCINERATOR_MIN_LAMPORTS = BigInt(890_880);
 
@@ -33,7 +34,8 @@ export interface EndSinkPort {
   readonly mint: string;
   endSink(): Promise<EndSinkView | null>;
   ruleEnd(): Promise<RuleEndView | null>;
-  /** The fee PDA's SOL above the reserve plus its WSOL — what a forward would move before the program's cap. */
+  /** The fee PDA's SOL above the reserve plus its WSOL, less the carry held on the coin in the 30-day grace after a RESOLVED end (round-5
+   *  R5-4) — what a forward would move before the program's cap. */
   spendableLamports(): Promise<bigint>;
   /** submit_rule_end, quorum-signed by the client's attester keys (Ed25519SigVerify + the instruction). Signed, not sent. */
   buildRuleEnd(o: { recordDate: number; outcome: EndOutcome; sourceUrl: string; proofHash?: Uint8Array }): Promise<SignedTx & { message: string }>;
@@ -83,6 +85,8 @@ export class FakeEndSinkPort implements EndSinkPort {
   readonly mint: string;
   pinned: EndSinkView | null = null;
   rule: RuleEndView | null = null;
+  /** RuleEnd.submitted_at (unix seconds): the start of the 30-day carry grace (end.rs carry_held_back). */
+  submittedAt = 0;
   simErr: string | null = null;
   /** Round 5: lamports this coin sent to the incinerator (burn_sol_on_end), for tests. */
   incinerated = BigInt(0);
@@ -99,7 +103,7 @@ export class FakeEndSinkPort implements EndSinkPort {
   }
   async endSink() { return this.pinned; }
   async ruleEnd() { return this.rule; }
-  async spendableLamports() { const f = this.fake(this.mint); return spendablePool(f.feeLamports, f.cfg.reserveLamports, f.wsol); }
+  async spendableLamports() { const f = this.fake(this.mint), all = spendablePool(f.feeLamports, f.cfg.reserveLamports, f.wsol), held = this.heldBack(); return all > held ? all - held : Z; }
   private sig(label: string): string { return crypto.createHash("sha256").update(`${this.mint}|${label}|${++this.n}`).digest("hex"); }
   async buildRuleEnd(o: { recordDate: number; outcome: EndOutcome; sourceUrl: string; proofHash?: Uint8Array }) {
     const f = this.fake(this.mint);
@@ -142,37 +146,49 @@ export class FakeEndSinkPort implements EndSinkPort {
       if (signed < f.cfg.quorum) return { err: "QuorumNotMet" };
       if (!commit) return { memo: null };
       this.rule = { recordDate: p.recordDate, outcome: p.outcome, forwardedLamports: Z, forwards: 0, lastForwardAt: 0 };
+      this.submittedAt = Math.floor(this.now() / 1000);
       f.endState = { state: p.outcome, date: p.recordDate };
       return { memo: null };
     }
     const d = this.destination();
     if (d.status !== "ready") return { err: d.status === "readings-pending" ? "EndReadingsPending" : d.status === "flagship-not-live" ? "FlagshipNotLive" : "NotEndedResolved" };
+    // round-5 review R5-4 (end.rs carry_held_back): for 30 days after a RESOLVED end a SELF coin with a verified pool keeps its carried
+    // spend on the coin (crank_carried drains it first); the end paths move only the fuel above it and leave the carry in place. After
+    // the grace they move everything and clear it (nothing can strand).
+    const heldBack = this.heldBack();
     if (this.pinned!.kind === "incinerator") {
       // burn_sol_on_end: the WSOL unwrapped into the fee PDA first, then the SOL above the reserve (under the cap) to the incinerator,
       // never under the rent-exempt minimum of an empty account (the runtime refuses a smaller credit to the incinerator)
-      const solAll = (f.feeLamports + f.wsol) > f.cfg.reserveLamports ? f.feeLamports + f.wsol - f.cfg.reserveLamports : Z;
+      const above = (f.feeLamports + f.wsol) > f.cfg.reserveLamports ? f.feeLamports + f.wsol - f.cfg.reserveLamports : Z;
+      const solAll = above > heldBack ? above - heldBack : Z;
       const amt = f.capLamports !== null && solAll > f.capLamports ? f.capLamports : solAll;
       if (amt === Z || (amt < this.pinned!.minForwardLamports && this.rule!.forwards > 0) || amt < INCINERATOR_MIN_LAMPORTS) return { err: "NothingToForward" };
       if (!commit) return { memo: null };
       f.feeLamports += f.wsol; f.wsol = Z; f.feeLamports -= amt;
-      f.cfg = { ...f.cfg, carriedSpendLamports: Z };
+      if (heldBack === Z) f.cfg = { ...f.cfg, carriedSpendLamports: Z };
       this.incinerated += amt;
       const r0 = this.rule!;
       this.rule = { ...r0, forwardedLamports: r0.forwardedLamports + amt, forwards: r0.forwards + 1, lastForwardAt: Math.floor(this.now() / 1000) };
       return { memo: `${f.cfg.memoPrefix}|endburn|to=${INCINERATOR_ADDRESS.slice(0, 12)}|lamports=${amt}|v1` };
     }
     const solAvail = f.feeLamports > f.cfg.reserveLamports ? f.feeLamports - f.cfg.reserveLamports : Z;
-    const actual = solAvail + f.wsol;
+    const actual = solAvail + f.wsol > heldBack ? solAvail + f.wsol - heldBack : Z;
     const amount = f.capLamports !== null && actual > f.capLamports ? f.capLamports : actual;
     if (amount === Z || (amount < this.pinned!.minForwardLamports && this.rule!.forwards > 0)) return { err: "NothingToForward" };
     if (!commit) return { memo: null };
     const sol = amount < solAvail ? amount : solAvail;
     f.feeLamports -= sol; f.wsol -= amount - sol;
-    f.cfg = { ...f.cfg, carriedSpendLamports: Z };
+    if (heldBack === Z) f.cfg = { ...f.cfg, carriedSpendLamports: Z };
     this.fake(d.target).deposit(amount);
     const r = this.rule!;
     this.rule = { ...r, forwardedLamports: r.forwardedLamports + amount, forwards: r.forwards + 1, lastForwardAt: Math.floor(this.now() / 1000) };
     return { memo: `${f.cfg.memoPrefix}|endfwd|to=${d.target.slice(0, 12)}|lamports=${amount}|v1` };
+  }
+  /** end.rs carry_held_back: the carried spend a drainable SELF coin keeps for QUEUE_UNBLOCK_SECS after a RESOLVED end, else 0. */
+  heldBack(): bigint {
+    const f = this.fake(this.mint);
+    const drainable = !f.burnTarget && f.cfg.poolRegistered;
+    return drainable && this.rule?.outcome === "resolved" && Math.floor(this.now() / 1000) - this.submittedAt < QUEUE_UNBLOCK_SECS ? f.cfg.carriedSpendLamports : Z;
   }
   async simulate(raw: Uint8Array) {
     if (this.simErr) return { err: this.simErr, logs: [] };

@@ -8,7 +8,8 @@
 #   From the Mac (the script is streamed over ssh, nothing to copy):
 #     ssh root@<server ip> 'bash -s' < scripts/ops/reproducible-build-host.sh
 #     ssh root@<server ip> 'bash -s -- --commit <public commit>' < scripts/ops/reproducible-build-host.sh
-#   Options: --commit <sha> (default: the commit the site pins, PUBLIC_REPO_COMMIT), --repo <url>, --rpc <url> (default the public
+#   Options: --commit <sha> (default: the commit the site pins, PUBLIC_REPO_COMMIT; burn_receipts is built at it),
+#   --pair-curve-commit <sha> (default: the public commit whose program source is pair_curve's deployed round 4, see below), --repo <url>, --rpc <url> (default the public
 #   mainnet endpoint), --skip-install (a second run on the same server). SV_BASE_IMAGE=<image> pins solana-verify's build image if it
 #   cannot pick one for the workspace's Solana version.
 #
@@ -16,12 +17,17 @@
 # which). Exit 2 = it could not run (wrong architecture, a failed install, a failed build).
 set -euo pipefail
 COMMIT="74156660eb4baaa97224f4c02a8eba599a2598e2"
+# pair_curve runs round 4 (it was not upgraded in round 5). It links the burn_receipts crate (its constants, the CPMM pool reader and the
+# TokenConfig type), so building it from a round-5 tree gives other bytes without any change of its own. Public commit 7e7bab58 (2026-10-12)
+# carries exactly the program tree of monorepo 29f6f5de, the source of pair_curve's deployed bytes; pair_curve is built there.
+PAIR_CURVE_COMMIT="7e7bab5804f9e3dee070ebbc2bd3ba1de1c6b999"
 REPO="https://github.com/rfzfhn67yk-netizen/burnticker"
 RPC="https://api.mainnet-beta.solana.com"
 INSTALL=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --commit) COMMIT="$2"; shift 2 ;;
+    --pair-curve-commit) PAIR_CURVE_COMMIT="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --rpc) RPC="$2"; shift 2 ;;
     --skip-install) INSTALL=0; shift ;;
@@ -29,13 +35,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# What the table in config/burnticker/verified-build.json says for the mainnet builds (2026-10-12 round-4 upgrade). sha256 is the plain hash of
-# the .so file; the executable hash is solana-verify's (trailing zero bytes removed), the number get-program-hash prints for the chain.
-# test/burntickerVerifiedBuild.test.ts keeps these lines equal to the table.
+# What the table in config/burnticker/verified-build.json says for the mainnet builds. sha256 is the plain hash of the .so file; the executable
+# hash is solana-verify's (trailing zero bytes removed), the number get-program-hash prints for the chain. test/burntickerVerifiedBuild.test.ts
+# keeps these lines equal to the table. burn_receipts: round 5 (source 089024ff, upgraded on mainnet 2026-10-15 ~19:57 Denver), built at
+# COMMIT. pair_curve: still round 4 (source 29f6f5de, 2026-10-12), built at PAIR_CURVE_COMMIT (above).
 declare -A ID SHA EXE
 ID[burn_receipts]="AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"
-SHA[burn_receipts]="b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7"
-EXE[burn_receipts]="d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae"
+SHA[burn_receipts]="cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290"
+EXE[burn_receipts]="152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821"
 ID[pair_curve]="2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
 SHA[pair_curve]="8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2"
 EXE[pair_curve]="567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895"
@@ -67,12 +74,14 @@ rm -rf "$SRC"
 say "cloning $REPO at $COMMIT"
 git clone -q "$REPO" "$SRC"
 cd "$SRC"
-git checkout -q "$COMMIT"
-say "source tree: $(git rev-parse HEAD)"
+declare -A AT; AT[burn_receipts]="$COMMIT"; AT[pair_curve]="$PAIR_CURVE_COMMIT"
+for lib in "${LIBS[@]}"; do git cat-file -e "${AT[$lib]}^{commit}" 2>/dev/null || { echo "commit ${AT[$lib]} ($lib) is not in $REPO"; exit 2; }; done
 
 OUT="$HOME/burnticker-verify-out"; rm -rf "$OUT"; mkdir -p "$OUT"
 BASE=(); [ -n "${SV_BASE_IMAGE:-}" ] && BASE=(--base-image "$SV_BASE_IMAGE")
 for lib in "${LIBS[@]}"; do
+  git checkout -q "${AT[$lib]}"
+  say "source tree for $lib: $(git rev-parse HEAD)"
   say "building $lib inside solana-verify's Docker image (default features: the mainnet build)"
   if ! solana-verify build "$WS" --library-name "$lib" ${BASE[@]+"${BASE[@]}"} > "$OUT/$lib.build.log" 2>&1; then
     echo "the build of $lib failed; the last lines of $OUT/$lib.build.log:"; tail -20 "$OUT/$lib.build.log"; exit 2
@@ -97,9 +106,9 @@ for lib in "${LIBS[@]}"; do
   printf '%-14s %-10s %s\n' "" "bytes" "$(stat -c %s "$f")"
 done
 echo
-echo "commit $(git rev-parse HEAD), $(solana-verify --version 2>/dev/null), image ${SV_BASE_IMAGE:-chosen by solana-verify}; build logs in $OUT"
+echo "commits: burn_receipts $COMMIT, pair_curve $PAIR_CURVE_COMMIT; $(solana-verify --version 2>/dev/null), image ${SV_BASE_IMAGE:-chosen by solana-verify}; build logs in $OUT"
 if [ "$STATUS" = 0 ]; then
-  echo "RESULT: both programs on mainnet are exactly what this public commit builds in solana-verify's image."
+  echo "RESULT: both programs on mainnet are exactly what their public commits build in solana-verify's image."
 else
   echo "RESULT: at least one program differs. Paste this table to the operator. Nothing on chain was touched. Delete this server either way."
 fi

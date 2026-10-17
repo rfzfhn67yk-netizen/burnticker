@@ -12,7 +12,7 @@ the LP fees by compiled constants — SOL 80 % to the coin's burn pool, 20 % to 
 the treasury cannot receive it) — and burns the coin side. Design and threat notes: `docs/burnticker/PAIR-CURVE.md` §5.1–§5.2 and §8,
 Powers Register entries `register_fee_key` / `claim_lock_fees`.
 
-## Done in round 5 — R5-8 and R5-9 (owner decision 2026-10-15, "fix both now"; built, not deployed)
+## Done in round 5 — R5-8 and R5-9 (owner decision 2026-10-15, "fix both now"; deployed on devnet and mainnet on 2026-10-15)
 
 Not queued for a later round: both went into the round-5 program before its mainnet upgrade (checklist erratum of 2026-10-15).
 

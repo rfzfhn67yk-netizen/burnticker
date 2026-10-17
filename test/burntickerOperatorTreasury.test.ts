@@ -75,13 +75,17 @@ test("R05: the build table has a Network column; each row's deployed bytes, read
   const c = buildChecklist();
   for (const p of c.build.programs) for (const v of ["mainnet", "devnet"] as const) {
     const d = p.deployed[v];
-    if (d) { assert.equal(d.evidence, DEPLOY_EVIDENCE[v]); assert.ok(fs.existsSync(d.evidence!), d.evidence); assert.match(d.readAt, /^\d{4}-\d{2}-\d{2}/); }
+    // the table's own evidence per program wins (third prelaunch audit, 2026-10-16: burn_receipts reads back in the round-5 folders), else DEPLOY_EVIDENCE
+    const stored = (JSON.parse(fs.readFileSync("config/burnticker/verified-build.json", "utf8")) as { programs: { library: string; deployed: Record<string, { evidence?: string } | null> }[] }).programs.find((x) => x.library === p.library)!.deployed[v]?.evidence;
+    if (d) { assert.equal(d.evidence, stored ?? DEPLOY_EVIDENCE[v]); assert.ok(fs.existsSync(d.evidence!), d.evidence); assert.match(d.readAt, /^\d{4}-\d{2}-\d{2}/); }
   }
   assert.ok(c.build.programs.every((p) => p.deployed.mainnet), "both programs carry a mainnet deployed record");
   const md = checklistMarkdown(c);
   assert.match(md, /\| Program \| Network \| Features \| Executable hash \(this repository\) \| Deployed bytes on that network \| Read \| Evidence \|/);
   assert.doesNotMatch(md, /Deployed \(devnet\)/);
-  assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*same as the build \| 2026-10-12 \| docs\/burnkeeper\/evidence\/mainnet-round4\/onchain-verify-after-pc\.log \|/);
+  // round 5 (2026-10-15): burn_receipts reads back in mainnet-round5; pair_curve (not upgraded) still in mainnet-round4
+  assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*same as the build \| 2026-10-16 \| docs\/burnkeeper\/evidence\/mainnet-round5\/onchain-verify-after\.log \|/);
+  assert.match(md, /\| pair_curve \| mainnet \|[^\n]*same as the build \| 2026-10-12 \| docs\/burnkeeper\/evidence\/mainnet-round4\/onchain-verify-after-pc\.log \|/);
   const page = fs.readFileSync("src/app/burnticker/check/CheckClient.tsx", "utf8");
   assert.doesNotMatch(page, /Deployed on devnet/);
   assert.match(page, /<th className="p-2">Network<\/th>[\s\S]*<th className="p-2">Read<\/th><th className="p-2">Evidence<\/th>/);

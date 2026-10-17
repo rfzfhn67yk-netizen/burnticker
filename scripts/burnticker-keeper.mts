@@ -45,6 +45,7 @@ import { testCoinKeys } from "../src/lib/burnticker/testCoins.ts";
 import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib/burnticker/trust.ts";
 import { CrankFailureTracker, devFeeDelta, recordBalanceSample, registryAlertRows, registryAlertSink, rpcBalanceLamports, runBurntickerAlertCheck, sinkFromEnv } from "../src/lib/burnticker/alerts.ts";
 import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
+import { activeConditions, CONDITIONS_KEY, foldConditions, readConditionMemory } from "../src/lib/burnticker/ops/conditions.ts";
 import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts";
 import type { MarketReader } from "../src/lib/burnticker/market.ts";
 import { nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
@@ -287,7 +288,10 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   const launched = registry.tokens("live").map((t) => Date.parse(t.baselineAt)).filter((x) => Number.isFinite(x));
   let alerts: { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }[] | null = null;
   try { alerts = registryAlertRows(registry, now); } catch { alerts = null; }
-  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines }));
+  // F06: ops.json's conditions come from the one aggregator (keeper-level + per-source health); the memory feeds "recovered"
+  const health = ops.feedHealth(), memory = readConditionMemory(registry);
+  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory }));
+  try { registry.setStatus(CONDITIONS_KEY, foldConditions(memory, activeConditions(r.snapshot, health), now), now); } catch (e) { log(`  [ops] condition memory not written: ${(e as Error).message.slice(0, 120)}`); }
 }
 
 log(`burnticker keeper starting — ${registry.tokens("live").length} live token(s) · ledger ${DB} · site ${SITE} · ${cluster}${DRY ? " · DRY RUN" : ""} · program ${program.programId} (${built.real ? `REAL: ${built.why}` : `FAKE — ${built.why}; nothing is sent`}) · ${ops.banner()} · alerts ${ALERTS ? `every ${ALERT_EVERY_MS / 60_000} min${RPC ? " with balances" : " (no BURNTICKER_RPC_URL: balances unknown)"}${webhook.configured ? " → webhook" : " (no BURNTICKER_ALERT_WEBHOOK: local only)"}${pushConfigFromEnv(process.env) ? " + phone push" : ""}` : "off (--once)"}`);

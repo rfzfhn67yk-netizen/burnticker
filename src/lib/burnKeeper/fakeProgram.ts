@@ -149,7 +149,7 @@ export class FakeProgram implements ProgramPort {
   deposit(lamports: bigint): void { this.feeLamports += lamports; }
 
   // ---- reads ----
-  async config() { return { ...this.cfg, attesters: [...this.cfg.attesters], ruleEnded: this.endState.state !== "live" }; }
+  async config() { return { ...this.cfg, attesters: [...this.cfg.attesters], ruleEnded: this.endState.state !== "live", endState: this.endState.state }; }
   async reading(d: number) { const r = this.readings.get(d); return r ? { ...r } : null; }
   attesterKeys() { return [...this.heldKeys]; }
   async feePdaLamports() { return this.feeLamports; }
@@ -314,7 +314,7 @@ export class FakeProgram implements ProgramPort {
   }
 
   /**
-   * crank_carried (burn dispersal) as the program runs it: refuses while a reading waits (ReadingPending), with nothing carried or a zero
+   * crank_carried (burn dispersal) as the program runs it (round 5: before AND after the rule's end): refuses while a reading waits (ReadingPending), with nothing carried or a zero
    * piece (NothingCarried), above 2 % of the reserve (SpendAboveCap), under the floor unless it is the whole remainder (BelowFloor);
    * TWAP / tradability as crank_buyback. Spends min(carried, max, basis), burns everything held, writes the `carried` memo.
    * `poolMovesOnBuy` (off by default) adds each spend to the pool's WSOL reserve, as a real constant-product pool would.
@@ -324,7 +324,8 @@ export class FakeProgram implements ProgramPort {
     const c = this.cfg;
     if (c.mode !== "buyback") return { err: "WrongMode" };
     if (this.burnTarget) return { err: "BurnTargetSet" };
-    if (this.endState.state !== "live") return { err: "RuleNotLive" };
+    // round-5 review R5-3 / R5-4 (deployed 2026-10-15, crank_carried.rs): NOT refused after an end — a VOID end's wind-down carry and a
+    // RESOLVED end's carry (held on the coin for 30 days by the end paths) are drained here. RuleNotLive stays unused, as in the program.
     if (!c.poolRegistered) return { err: "PoolNotRegistered" };
     if (c.hasBaseline && c.crankCursor !== c.lastRecordDate) return { err: "ReadingPending" };
     if (c.carriedSpendLamports <= Z || maxSpend <= Z) return { err: "NothingCarried" };
@@ -363,7 +364,6 @@ export class FakeProgram implements ProgramPort {
   async planCarried(maxSpendLamports: bigint): Promise<{ build: () => Promise<SignedTx> } | CarriedPlanStatus> {
     const c = this.cfg;
     if (c.mode !== "buyback" || this.burnTarget) return { status: "not-buyback" };
-    if (this.endState.state !== "live") return { status: "rule-ended" };
     if (!c.poolRegistered) return { status: "waiting-for-pool" };
     if (c.hasBaseline && c.crankCursor !== c.lastRecordDate) return { status: "reading-pending" };
     if (c.carriedSpendLamports <= Z) return { status: "nothing-carried" };

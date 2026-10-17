@@ -1,7 +1,7 @@
 import { type Connection, PublicKey, SystemProgram, SYSVAR_INSTRUCTIONS_PUBKEY, type TransactionInstruction } from "@solana/web3.js";
 import { fetchTokenConfig, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 import { ed25519SharedMessageInstruction, signAttestation } from "@/lib/burnReceipts/attestation";
-import { ASSOCIATED_TOKEN_PROGRAM_ID, type Cluster, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, type Cluster, MEMO_PROGRAM_ID, MODE_BUYBACK, QUEUE_UNBLOCK_SECS, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeAccount } from "@/lib/burnReceipts/idlCoder";
 import { burnTargetPda, fetchBurnTarget } from "@/lib/burnReceipts/burnTarget";
@@ -214,6 +214,16 @@ export async function burnTargetPinned(connection: Connection, programId: Public
 }
 export function burnTargetLive(t: { mint: PublicKey; target_mint: PublicKey; pool: PublicKey; pinned_at: bigint | number; last_burn_at: bigint | number; last_unblocked_at: bigint | number }, mint: PublicKey): boolean {
   return t.mint.equals(mint) && !t.target_mint.equals(PublicKey.default) && !t.pool.equals(PublicKey.default) && BigInt(t.pinned_at) > BigInt(0) && BigInt(t.last_unblocked_at) <= BigInt(t.last_burn_at);
+}
+
+/**
+ * Round-5 review R5-4 (end.rs carry_held_back, deployed 2026-10-15): the carried spend the end paths (forward_on_end, burn_sol_on_end)
+ * leave on a SELF coin with a verified pool for QUEUE_UNBLOCK_SECS (30 days) after a RESOLVED end, so crank_carried drains it on the coin
+ * first; 0 after the grace (the end path then takes everything and clears the carry), for a VOID end, a target coin or a coin with no pool.
+ */
+export function carryHeldBack(c: Pick<TokenConfigAccount, "end_state" | "burn_target_kind" | "pool_verified" | "cpmm_pool" | "carried_spend_lamports">, submittedAtSec: number, nowSec: number): bigint {
+  const drainable = (c.burn_target_kind ?? 0) === 0 && c.pool_verified && !c.cpmm_pool.equals(PublicKey.default);
+  return c.end_state === END_STATE_RESOLVED && drainable && nowSec - submittedAtSec < QUEUE_UNBLOCK_SECS ? c.carried_spend_lamports : BigInt(0);
 }
 
 export type EndForwardPlan =

@@ -893,9 +893,11 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
 /**
  * REVIEW 10 F1 (2026-10-14): A ONE-SHOT UNDER 100 % FINISHES ITS SHARE ON THE COIN BEFORE THE END SINK TAKES THE REST. The result's
  * reading asks for f of the pool; one crank spends at most 2 % of the CPMM pool's SOL reserve and carries the rest
- * (carried_spend_lamports). For a coin with an EndSink, recording a RESOLVED end (submit_rule_end) closes the coin to further spending:
- * crank_carried is refused once the rule is not live (RuleNotLive), and forward_on_end moves the whole spendable pool to the sink and
- * clears the carried amount. So the end waits while the result's own spend is still carried:
+ * (carried_spend_lamports). On the round-4 program, recording a RESOLVED end (submit_rule_end) closed the coin to further spending
+ * (crank_carried refused with RuleNotLive) and forward_on_end moved the whole spendable pool and cleared the carried amount. The round-5
+ * program (deployed on mainnet 2026-10-15) lifted that (R5-3 / R5-4): crank_carried runs after any end, and for 30 days after a RESOLVED
+ * end the end paths leave the carry on the coin. The keeper still waits while the result's own spend is carried (the simplest order:
+ * the share is finished before the end is recorded, on either program):
  *   · the owed amount is the chain's carried amount after the result's crank (a one-shot has no other reading that carries);
  *   · with burn dispersal on and a program that has crank_carried (round 5), the dispersal step later in the same cycle spends it in
  *     pieces; once the chain shows nothing carried, the end is recorded and only what is left over moves to the sink;
@@ -906,7 +908,9 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
  * Not held: 100 % (the drain path spends the whole pool on the coin first), a VOID end (the wind-down stays on the coin), a pair loser
  * (its fuel forwards to the winner), a result below the floor (the program carries nothing: the share is dropped and stays in the pool,
  * as for every reading), a coin without an EndSink (the hashed wind-down spends the carried amount with its own units), and an end
- * already on chain (crank_carried is refused then, so forward_on_end runs as before).
+ * already on chain (third prelaunch audit F01: nothing is held then — the round-5 end paths leave the carry on the coin for 30 days and
+ * the dispersal step keeps draining it after the end, runDispersal no longer stops at an ended rule; a retired coin with an end stays
+ * in the cycle for that).
  */
 export async function owedBeforeEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null, end: { mode: "drain" | "winddown"; reason: string; at: number }): Promise<{ owedLamports: bigint; canSpend: boolean; readingDate: number | null } | null> {
   const rule = locked.rule;

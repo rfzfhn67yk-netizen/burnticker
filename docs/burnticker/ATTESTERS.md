@@ -50,7 +50,7 @@ devnet the keeper key is both coins' attester). Two notes for anyone checking or
   that upgrade the runbook rule holds: change a paired coin's set only together with its partner's. The keeper never rotates attesters on its own: a rotation is the operator's (Squads vault)
   decision, run by hand with the admin CLI.
 
-The end of a coin's rule (program round 4, LAUNCHPAD-PATH §45; built, not deployed yet) is signed the same way: a quorum of the coin's
+The end of a coin's rule (program round 4, LAUNCHPAD-PATH §45; deployed on devnet and mainnet on 2026-10-12, kept in round 5) is signed the same way: a quorum of the coin's
 own attesters signs one message, once per coin, and only a coin launched with an end sink can end on chain (`attestRuleEnd`,
 `ruleEndMessage` in `src/lib/burnReceipts/endSink.ts`):
 

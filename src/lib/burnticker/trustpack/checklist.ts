@@ -106,20 +106,33 @@ export function loadRegister(root: string, p: ProgramName): Register {
 
 /**
  * Private review 9 (editorial): the checker said "48 instructions" as if all were deployed. The list is the published source's (the
- * programs' registers, round 5); the deployed programs are the round-4 build of the commit verified-build.json records.
+ * programs' registers, round 5). Which round each deployed program runs, and from which commit, comes from verified-build.json (third
+ * prelaunch audit, 2026-10-16: burn_receipts round 5 is deployed since 2026-10-15, so its round-5 instructions are on chain; pair_curve
+ * stays on round 4). The round-5 rows belong to burn_receipts (`sourceOnly` is "the register calls it Round 5").
  */
-export function moneySourceLine(money: readonly Pick<MoneyRow, "sourceOnly">[], build: Pick<VerifiedBuild, "sourceCommit">): string {
-  const n5 = money.filter((m) => m.sourceOnly).length, commit = String(build.sourceCommit ?? "").slice(0, 10);
-  return `These ${money.length} instructions are the published source's (the programs' registers, round 5).${n5 ? ` ${n5} of them are new in round 5 and are not on the deployed programs yet.` : ""} The deployed programs are the round-4 build of commit ${commit || "(not recorded)"}, checked in section 5.`;
+export function moneySourceLine(money: readonly Pick<MoneyRow, "sourceOnly" | "program">[], build: Pick<VerifiedBuild, "sourceCommit"> & { programs?: readonly { library: string; round?: number; sourceCommit?: string }[] }): string {
+  const short = (c: string | undefined) => String(c ?? "").slice(0, 10) || "(not recorded)";
+  const plain = (lib: string) => `${lib === "pair_curve" ? "the pair program" : lib === "burn_receipts" ? "the burn program" : "the program"} (${lib})`;
+  const progs = build.programs ?? [];
+  const roundOf = (lib: string) => progs.find((p) => p.library === lib)?.round ?? 4;
+  const r5 = money.filter((m) => m.sourceOnly);
+  const missing = r5.filter((m) => roundOf(m.program) < 5).length;
+  const libs = [...new Set(r5.map((m) => m.program))];
+  const head = `These ${money.length} instructions are the published source's (the programs' registers, round 5).`;
+  const five = !r5.length ? "" : missing ? ` ${missing} of them are new in round 5 and are not on the deployed programs yet.`
+    : ` ${r5.length} of them are new in round 5. They belong to ${libs.map(plain).join(" and ")}, which ${libs.length > 1 ? "run" : "runs"} round 5, so they are on the deployed program${libs.length > 1 ? "s" : ""} too.`;
+  const deployed = progs.length
+    ? ` The deployed programs are ${progs.map((p) => `${plain(p.library)} at round ${p.round ?? 4}, from commit ${short(p.sourceCommit ?? build.sourceCommit)}`).join(", and ")}. Section 5 checks both.`
+    : ` The deployed programs are the build of commit ${short(build.sourceCommit)}, checked in section 5.`;
+  return head + five + deployed;
 }
-
 export function buildChecklist(root = process.cwd()): Checklist {
   const regs = { burn_receipts: loadRegister(root, "burn_receipts"), pair_curve: loadRegister(root, "pair_curve") };
   const t = loadTransparency(root);
   const op = loadOperator(root);
   const vb = loadVerifiedBuild(root);
   // audit R05: each deployed record names its own evidence (mainnet deploy file / devnet verified-build doc)
-  const build: VerifiedBuild = { ...vb, programs: vb.programs.map((p) => ({ ...p, deployed: { devnet: p.deployed.devnet ? { ...p.deployed.devnet, evidence: DEPLOY_EVIDENCE.devnet } : null, mainnet: p.deployed.mainnet ? { ...p.deployed.mainnet, evidence: DEPLOY_EVIDENCE.mainnet } : null } })) };
+  const build: VerifiedBuild = { ...vb, programs: vb.programs.map((p) => ({ ...p, deployed: { devnet: p.deployed.devnet ? { ...p.deployed.devnet, evidence: p.deployed.devnet.evidence ?? DEPLOY_EVIDENCE.devnet } : null, mainnet: p.deployed.mainnet ? { ...p.deployed.mainnet, evidence: p.deployed.mainnet.evidence ?? DEPLOY_EVIDENCE.mainnet } : null } })) };
   const money: MoneyRow[] = [], powers: PowerRow[] = [];
   for (const name of ["burn_receipts", "pair_curve"] as ProgramName[]) {
     for (const ix of regs[name].instructions) {

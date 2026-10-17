@@ -83,6 +83,8 @@ export class KeeperOps {
       return s;
     } catch (e) { this.o.log(`  [ops] status.json not written: ${(e as Error).message.slice(0, 160)}`); return null; }
   }
+  /** The per-source health computed after the last cycle (ops.json's conditions read it: third prelaunch audit F06). */
+  feedHealth(): FeedHealth[] { return this.health; }
   /** The feed alerts and the fence's hold, through the keeper's sink (call from the 5-minute alert check). */
   async alerts(sink: AlertSink, now = this.o.now()): Promise<string[]> {
     this.pendingSink = sink;

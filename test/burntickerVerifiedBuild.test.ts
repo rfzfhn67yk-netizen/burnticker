@@ -23,7 +23,7 @@ describe("verified-build.json", () => {
       assert.match(p.programId, /^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
       assert.equal(p.deployed.devnet?.matchesBuild, true, `${p.library}: the devnet deployment is this build`);
       assert.equal(p.deployed.devnet?.upgradeAuthority, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
-      assert.equal(p.deployed.mainnet?.matchesBuild, true, `${p.library}: the mainnet deployment (2026-10-11) is this build`);
+      assert.equal(p.deployed.mainnet?.matchesBuild, true, `${p.library}: the mainnet deployment is this build`);
       assert.equal(p.deployed.mainnet?.upgradeAuthority, "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", "mainnet upgrade authority is the Squads vault");
       assert.notEqual(p.builds.mainnet.hash, p.builds.devnet.hash, "the devnet build compiles Raydium's devnet ids in");
     }
@@ -73,13 +73,20 @@ describe("scripts/ops/reproducible-build-host.sh", () => {
       assert.equal(val("EXE", p.library), p.builds.mainnet.hash, p.library);
       assert.equal(val("SHA", p.library), (p.builds.mainnet as { sha256?: string }).sha256, p.library);
     }
-    assert.equal(val("SHA", "burn_receipts"), "b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7"); // round 4, 2026-10-12
+    assert.equal(val("SHA", "burn_receipts"), "cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290"); // round 5, 2026-10-15
     assert.equal(val("SHA", "pair_curve"), "8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2");
   });
   test("it builds the commit the site pins, compares with mainnet read-only, and the page explains it", async () => {
     const { PUBLIC_REPO_COMMIT } = await import("@/lib/burnticker/currentStatusLinks");
     assert.equal(/^COMMIT="([0-9a-f]{40})"$/m.exec(host)?.[1], PUBLIC_REPO_COMMIT);
     assert.match(host, /solana-verify get-program-hash -u "\$RPC"/);
+    // review of the release identity: each program builds at its own public commit (pair_curve stays round 4: public 7e7bab58 carries the
+    // program tree of monorepo 29f6f5de, its deployed source), so a third party can get a clean PASS for both
+    assert.match(host, /^PAIR_CURVE_COMMIT="7e7bab5804f9e3dee070ebbc2bd3ba1de1c6b999"$/m);
+    assert.match(host, /--pair-curve-commit\) PAIR_CURVE_COMMIT="\$2"/);
+    assert.match(host, /AT\[burn_receipts\]="\$COMMIT"; AT\[pair_curve\]="\$PAIR_CURVE_COMMIT"/);
+    assert.match(host, /git checkout -q "\$\{AT\[\$lib\]\}"/);
+    assert.match(host, /its constants, the CPMM pool reader and the\n# TokenConfig type/);
     assert.doesNotMatch(host, /solana program deploy|solana transfer|keypair|--keypair|-k /, "no key, no send");
     assert.match(doc, /### Throwaway Linux host/); assert.match(doc, /ssh root@<server ip> 'bash -s' < scripts\/ops\/reproducible-build-host\.sh/);
     assert.ok(fs.readFileSync(path.join(ROOT, "config", "public-repo.allowlist"), "utf8").split("\n").includes("scripts/ops/reproducible-build-host.sh"));

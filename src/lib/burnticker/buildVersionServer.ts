@@ -14,5 +14,15 @@ export function currentBuildId(now = Date.now(), env: Readonly<Record<string, st
   cache = { at: now, id };
   return id;
 }
+/**
+ * When THIS server process started (unix ms; process-bound, never read from disk). The deploy's smoke (scripts/ops/swap-web-build.sh,
+ * third prelaunch audit F02) requires it to be after its restart, so an answer from the old process (or a unit that did not restart)
+ * cannot pass for the new build: BUILD_ID alone is read from disk and cached for 10 s.
+ */
+let startedAt: number | null = null;
+export function processStartedAtMs(): number {
+  if (startedAt === null) startedAt = Math.round(Date.now() - process.uptime() * 1000);
+  return startedAt;
+}
 /** Tests only. */
 export function resetBuildIdCache(): void { cache = null; }
