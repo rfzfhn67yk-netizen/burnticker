@@ -13,11 +13,14 @@
 # Chrome first (docs/burnticker/SYNTHETIC-CREATOR.md); then `systemctl --user enable --now mct-burnticker-synth.timer`.
 # mct-burnticker-synthbank.timer (2026-10-15, the synthetic creator's devnet mint bank) is copied but NOT enabled either: it needs
 # BURNTICKER_SYNTH_BANK_KEY in devnet-synth.env first; then `systemctl --user enable --now mct-burnticker-synthbank.timer`.
+# mct-burnticker-backup.timer (2026-10-16, audit F-7) is enabled and started here: every 6 hours a sqlite .backup of the registry, the
+# $DEFICIT ledger and the mint key bank into data/backups/ (keep 14, quick_check), copied off the box to BURNTICKER_BACKUP_DEST when the
+# owner has named one (until then the log says the off-box copy is skipped). Needs the sqlite3 CLI (apt install sqlite3).
 set -eu
 cd "$(dirname "$0")/../.."
-UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer mct-burnticker-synth.service mct-burnticker-synth.timer mct-burnticker-synthbank.service mct-burnticker-synthbank.timer"
+UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer mct-burnticker-backup.service mct-burnticker-backup.timer mct-burnticker-synth.service mct-burnticker-synth.timer mct-burnticker-synthbank.service mct-burnticker-synthbank.timer"
 ENABLE="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service"
-TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer"
+TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer mct-burnticker-backup.timer"
 CHECK=0; START=0
 for a in "$@"; do case "$a" in --check) CHECK=1 ;; --start) START=1 ;; *) echo "unknown flag $a"; exit 2 ;; esac; done
 if [ "$(uname -s)" != "Linux" ]; then echo "systemd user units are a Linux thing; on the Mac nothing to install (the keepers run on the Burnticker VPS)"; exit 0; fi
@@ -26,7 +29,7 @@ say() { printf '%s\n' "$*"; }
 act() { if [ "$CHECK" = 1 ]; then say "  would: $*"; else say "  $*"; "$@"; fi; }
 
 say "burnticker units → $DEST ($([ "$CHECK" = 1 ] && echo CHECK ONLY || echo applying))"
-for d in logs data data/burnticker-site data/burnkeeper-site; do [ -d "$d" ] || act mkdir -p "$d"; done
+for d in logs data data/burnticker-site data/burnkeeper-site data/backups; do [ -d "$d" ] || act mkdir -p "$d"; done
 [ -d "$DEST" ] || act mkdir -p "$DEST"
 CHANGED=0
 for u in $UNITS; do
@@ -51,6 +54,7 @@ if command -v loginctl >/dev/null 2>&1; then
   if loginctl show-user "$(id -un)" -p Linger 2>/dev/null | grep -q 'Linger=yes'; then say "  linger: yes"; else say "  linger: NO — as root: loginctl enable-linger $(id -un)"; fi
 fi
 [ -f .env.local ] && say "  .env.local: present (never read here)" || say "  .env.local: ABSENT — the units need BURNTICKER_* names from docs/burnticker/deploy.md before a start"
+command -v sqlite3 >/dev/null 2>&1 && say "  sqlite3: present (the backup timer needs it)" || say "  sqlite3: ABSENT — as root: apt install sqlite3 (mct-burnticker-backup fails without it)"
 [ -f .next/BUILD_ID ] && say "  build: $(cat .next/BUILD_ID)" || say "  build: none — ship one with scripts/ops/deploy-burnticker-host.sh from the Mac before starting mct-burnticker-web"
 say "next:  systemctl --user start mct-burnticker-web mct-burnticker-keeper mct-burnkeeper mct-burnticker-mintbank   ·   systemctl --user list-timers 'mct-burnticker-*'"
 say "       tail -f logs/burnticker-keeper.log logs/burnticker-web.log logs/burnkeeper.log   ·   journalctl --user -u mct-burnticker-keeper -n 50"

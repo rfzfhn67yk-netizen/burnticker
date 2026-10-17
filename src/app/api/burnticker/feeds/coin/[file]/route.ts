@@ -1,6 +1,6 @@
 import { platform } from "@/lib/burnticker/server";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
-import { collectFeedData } from "@/lib/burnticker/feedsData";
+import { cachedFeedData } from "@/lib/burnticker/feedsData";
 import { FEED_COPY, coinFeed, feedError, feedResponse, parseFeedFile } from "@/lib/burnticker/feeds";
 import { isMintKey } from "@/lib/burnticker/coinKey";
 
@@ -13,7 +13,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ file: string }>
   if (!f) return feedError(404, FEED_COPY.badPath);
   const now = Date.now();
   let data;
-  try { data = await collectFeedData(platform(), now); } catch { return feedError(503, FEED_COPY.unavailable); }
+  // audit 2026-10-16 F-11: the memoised copy (feedsData.ts cachedFeedData), no per-coin chain read per request
+  try { data = await cachedFeedData(platform()); } catch { return feedError(503, FEED_COPY.unavailable); }
   if (!data.ok) return feedError(503, FEED_COPY.unavailable);
   // a mint works in place of the ticker; a ticker several coins share answers with their mints (tickers are not unique, coinKey.ts)
   if (isMintKey(f.name)) {

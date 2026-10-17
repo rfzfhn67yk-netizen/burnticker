@@ -571,6 +571,10 @@ export interface EspnClientOpts {
   fetchImpl?: FetchLike; now?: () => number; minIntervalMs?: number; ttlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null;
   /** One read's limit, headers and body together (default SPORTS_FETCH_TIMEOUT_MS). */
   timeoutMs?: number;
+  /** The season schedule file's limit (default SEASON_SCHEDULE_TIMEOUT_MS; isSeasonScheduleUrl). */
+  scheduleTimeoutMs?: number;
+  /** API-Sports (BURNTICKER_APISPORTS_KEY): the second schedule source for a day listing (APISPORTS_SCHEDULE) while TheSportsDB cannot be read. */
+  apiSportsKey?: string | null;
   /** A failed read is answered from memory for this long, doubling per failure up to failMaxMs (defaults FAIL_BACKOFF_MS). */
   failBaseMs?: number; failMaxMs?: number;
   /** The most answers kept (oldest out first). */
@@ -588,6 +592,32 @@ export interface EspnClientOpts {
 export const SPORTS_FETCH_TIMEOUT_MS = 8_000;
 export const FAIL_BACKOFF_MS = { base: 30_000, max: 600_000 } as const;
 /**
+ * 2026-10-16 prelaunch audit F-4 / F-19 (the keeper could not read the NFL season schedule for about 16 hours while TheSportsDB answered
+ * 503 and then timed out at 8 s; healthy, the 380 KB file answers in 0.2 s):
+ *   lanes          each provider's queue is split by league (readLane: TheSportsDB's league id in the URL), so a stalled NFL read never
+ *                  holds up an NBA read on the same provider; the request budget and the spacing stay per provider
+ *   season file    the season schedule file (isSeasonScheduleUrl) may take SEASON_SCHEDULE_TIMEOUT_MS; small reads keep 8 s
+ *   game near      a failed read of a league whose next game starts within SOON_GAME_WINDOW_MS is tried again after at most
+ *                  SOON_FAIL_MAX_MS, however often it failed (the doubling backoff applies otherwise)
+ *   next           upcoming() offers no game that is over: not final, not postponed, not started more than SETTLE_AFTER_START_MS ago
+ *   second source  a league in APISPORTS_SCHEDULE (the NFL) reads its day listing from API-Sports fixtures by date while TheSportsDB
+ *                  cannot be read (BURNTICKER_APISPORTS_KEY; its own budget source, 100 a day on the free plan). Display only: those games
+ *                  carry an `apisports-` id, which no game coin can be made from, and season() never falls back (a partial season
+ *                  would read as a season that ended).
+ */
+export const SEASON_SCHEDULE_TIMEOUT_MS = 20_000;
+export const SOON_GAME_WINDOW_MS = 24 * 3_600_000;
+export const SOON_FAIL_MAX_MS = 60_000;
+/** The read's queue: its provider, and for TheSportsDB the league id in the URL. */
+export function readLane(url: string): string {
+  const source = sourceForUrl(url);
+  if (source !== "thesportsdb") return source;
+  const m = /\/league\/(\d+)|[?&](?:id|l)=(\d+)/.exec(url);
+  return m ? `${source}:${m[1] ?? m[2]}` : source;
+}
+/** TheSportsDB's whole-season schedule file (v2 schedule/league/<id>/<season>, or v1 eventsseason.php): the large read. */
+export const isSeasonScheduleUrl = (url: string): boolean => /thesportsdb\.com\/api\/v2\/json\/schedule\/league\/\d+\/[^/?]+$|thesportsdb\.com\/api\/v1\/json\/[^/]+\/eventsseason\.php\?/.test(url);
+/**
  * Waits at most `ms` for `p`; past that answers { done: false } and lets the read finish in the background (its answer is kept by the
  * client's cache for the next caller). The team picker and search use it so a slow schedule never holds the page (H1).
  */
@@ -602,6 +632,42 @@ export async function within<T>(p: Promise<T>, ms: number): Promise<{ done: true
 export class ScheduleSlow extends Error { constructor(what: string) { super(`${what}: the schedule is taking too long to read; it is shown when it arrives`); this.name = "ScheduleSlow"; } }
 
 /**
+ * F-4: THE SECOND SCHEDULE SOURCE (API-Sports, BURNTICKER_APISPORTS_KEY; already the settlement cross-read in gameSettle.ts). Fixtures by
+ * date on the league's API, with `&timezone=UTC` so the URL is not the settlement read's (whose answers must stay fresh). Only rows of
+ * the league's own API league id whose two teams are known here are kept; preseason rows are dropped.
+ */
+export const APISPORTS_SCHEDULE: Partial<Record<LeagueId, { base: string; leagueId: number }>> = { nfl: { base: "https://v1.american-football.api-sports.io", leagueId: 1 } };
+export const APISPORTS_SCHEDULE_DAYS = 4;
+/** The id prefix of a fallback game: display only (no game coin can be made from it) and a PARTIAL listing (today and three days). */
+export const FALLBACK_GAME_PREFIX = "apisports-";
+export const isFallbackGame = (g: Pick<Game, "eventId">): boolean => g.eventId.startsWith(FALLBACK_GAME_PREFIX);
+/** The games picker's line when only the fallback listing could be read (its games cannot be launched on, so none are offered). */
+export const FALLBACK_ONLY_LINE = "The full schedule could not be read just now, so no games are offered here. Try again in a few minutes.";
+export const APISPORTS_TODAY_TTL_MS = 2 * 3_600_000;
+export const APISPORTS_DAY_TTL_MS = 6 * 3_600_000;
+export const apiSportsDayUrl = (league: LeagueId, date: string): string => `${APISPORTS_SCHEDULE[league]?.base ?? ""}/games?date=${date}&timezone=UTC`;
+/** An API-Sports answer that carries errors (a spent day, a plan that does not cover the date) is a failed read, never an empty day. */
+export function apiSportsRefusal(body: unknown): string | null {
+  const e = (body as { errors?: unknown } | null)?.errors;
+  const msgs = Array.isArray(e) ? e.map(String) : e && typeof e === "object" ? Object.values(e as Record<string, unknown>).map(String) : [];
+  return msgs.length ? `API-Sports refused the read: ${msgs.join("; ").slice(0, 160)}` : null;
+}
+export function apiSportsGames(league: LeagueId, body: unknown, year: number): Game[] {
+  const spec = APISPORTS_SCHEDULE[league];
+  if (!spec) return [];
+  type Row = { game?: { id?: number | string; stage?: string; date?: { date?: string; time?: string; timestamp?: number }; status?: { short?: string } }; league?: { id?: number | string }; teams?: { home?: { name?: string }; away?: { name?: string } }; scores?: { home?: { total?: number | null }; away?: { total?: number | null } } };
+  const rows = (((body as { response?: unknown[] } | null)?.response ?? []) as Row[]).filter((r) => r?.game?.id !== undefined && Number(r.league?.id) === spec.leagueId && !/pre/i.test(String(r.game?.stage ?? "")));
+  return rows.map((r) => {
+    const g = r.game!, ts = Number(g.date?.timestamp);
+    const startsAt = Number.isFinite(ts) && ts > 0 ? new Date(ts * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") : `${g.date?.date ?? ""}T${(g.date?.time ?? "00:00").slice(0, 5)}:00Z`;
+    const st = String(g.status?.short ?? "");
+    const done = /^(FT|AOT)$/.test(st), off = /^(CANC|PST|SUSP|ABD)$/.test(st), live = /^(Q[1-4]|OT|HT)$/.test(st);
+    return mk(league, `${FALLBACK_GAME_PREFIX}${g.id}`, startsAt, /post/i.test(String(g.stage ?? "")) ? 3 : 2, year, done || off ? "post" : live ? "in" : "pre", done, st,
+      sideOf(league, "home", String(r.teams?.home?.name ?? ""), null, num(r.scores?.home?.total)), sideOf(league, "away", String(r.teams?.away?.name ?? ""), null, num(r.scores?.away?.total)));
+  }).filter((g) => g.home.abbr !== "TBD" && g.away.abbr !== "TBD" && /^\d{4}-\d{2}-\d{2}T/.test(g.startsAt));
+}
+
+/**
  * THE SPORTS SCHEDULE READER (no ESPN reads). Kept under its old name for the callers; `SportsClient` is the same class.
  *   MLB  statsapi.mlb.com  (free, official)      NHL  api-web.nhle.com (free, official)
  *   NBA  the NBA's feed (cdn.nba.com) when it answers, else TheSportsDB under licence; while NBA_OFFICIAL_ANSWERS is false TheSportsDB
@@ -610,8 +676,11 @@ export class ScheduleSlow extends Error { constructor(what: string) { super(`${w
  */
 export class EspnClient {
   private fetchImpl: FetchLike; private now: () => number; private minInterval: number; private ttl: number; readonly tsdbKey: string | null;
-  private timeoutMs: number; private failBase: number; private failMax: number;
-  private cache: LruMap<string, { at: number; body: unknown }>;
+  private timeoutMs: number; private scheduleTimeoutMs: number; private failBase: number; private failMax: number;
+  readonly apiSportsKey: string | null;
+  private cache: LruMap<string, { at: number; body: unknown; ttl?: number }>;
+  /** F-4: per league, the start of its next open game as last read (a failed read of a league with a game near is retried sooner). */
+  private nextGameAt = new Map<LeagueId, number>();
   /** H1: per provider (by source id), its own spacing and its own queue. */
   private lastAt = new Map<string, number>(); private chains = new Map<string, Promise<void>>();
   /** H1: failures kept per URL: until when the error is answered from memory, and how many in a row. */
@@ -622,42 +691,62 @@ export class EspnClient {
   readonly refusedFeeds = new Set<string>();
   constructor(o: EspnClientOpts = {}) {
     this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.minInterval = o.minIntervalMs ?? 250; this.ttl = o.ttlMs ?? 600_000;
-    this.timeoutMs = o.timeoutMs ?? SPORTS_FETCH_TIMEOUT_MS; this.failBase = o.failBaseMs ?? FAIL_BACKOFF_MS.base; this.failMax = o.failMaxMs ?? FAIL_BACKOFF_MS.max;
+    this.timeoutMs = o.timeoutMs ?? SPORTS_FETCH_TIMEOUT_MS; this.scheduleTimeoutMs = o.scheduleTimeoutMs ?? SEASON_SCHEDULE_TIMEOUT_MS; this.failBase = o.failBaseMs ?? FAIL_BACKOFF_MS.base; this.failMax = o.failMaxMs ?? FAIL_BACKOFF_MS.max;
     this.cache = new LruMap(o.maxCached ?? 500); this.failures = new LruMap(500);
     this.tsdbKey = o.tsdbKey === undefined ? ((process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null) : o.tsdbKey;
+    this.apiSportsKey = o.apiSportsKey === undefined ? ((process.env.BURNTICKER_APISPORTS_KEY ?? "").trim() || null) : o.apiSportsKey;
+  }
+  /** F-4: notes the league's next open game from a schedule just read. */
+  private noteGames(league: LeagueId, games: readonly Game[]): void {
+    const now = this.now();
+    const starts = games.filter((g) => !g.completed && g.state !== "post").map((g) => Date.parse(g.startsAt)).filter((t) => Number.isFinite(t) && t > now - SETTLE_AFTER_START_MS);
+    if (starts.length) this.nextGameAt.set(league, Math.min(...starts)); else this.nextGameAt.delete(league);
+  }
+  /** F-4: whether the league's next game (as last read) starts within SOON_GAME_WINDOW_MS, or is being played. */
+  gameSoon(league: LeagueId): boolean {
+    const t = this.nextGameAt.get(league);
+    return t !== undefined && t - this.now() <= SOON_GAME_WINDOW_MS && t > this.now() - SETTLE_AFTER_START_MS;
   }
   /** GET with the shared politeness and cache; `headers` carry a licensed reader's key (never cached into the key, never logged). */
-  async get(url: string, headers: Record<string, string> = {}): Promise<unknown> {
+  async get(url: string, headers: Record<string, string> = {}, o: { /** the league the read is for (F-4: retried sooner while its next game is near) */ league?: LeagueId; /** this answer's own TTL */ ttlMs?: number; /** a body the provider answered 200 with but that says it failed: its message, else null */ refuse?: (body: unknown) => string | null } = {}): Promise<unknown> {
     const hit = this.cache.get(url);
-    if (hit && this.now() - hit.at < this.ttl) return hit.body;
+    if (hit && this.now() - hit.at < (hit.ttl ?? this.ttl)) return hit.body;
     // H1: a recent failure is answered from memory (with its own words) until its backoff ends
     const failed = this.failures.get(url);
     if (failed && this.now() < failed.until) throw new Error(failed.message);
     const shared = this.inflight.get(url);
     if (shared) return shared;
-    const source = sourceForUrl(url);
+    const source = sourceForUrl(url), lane = readLane(url);
+    const limitMs = isSeasonScheduleUrl(url) ? Math.max(this.timeoutMs, this.scheduleTimeoutMs) : this.timeoutMs;
+    let refusedBody = false;
     const run = async () => {
       const wait = (this.lastAt.get(source) ?? 0) + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       await takeOrThrow(source);   // the request budget (apiBudget.ts): waits for its bucket; a spent day budget skips the read
       this.lastAt.set(source, this.now()); this.requests.push(redactKey(url));
       try {
-        const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers }, signal: AbortSignal.timeout(this.timeoutMs) });
+        const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers }, signal: AbortSignal.timeout(limitMs) });
         if (!res.ok) throw new Error(`HTTP ${res.status} for ${redactKey(url).slice(0, 120)}`);
-        const body = await res.json(); this.cache.set(url, { at: this.now(), body }); this.failures.delete(url); return body;
+        const body = await res.json();
+        const refused = o.refuse?.(body) ?? null;
+        if (refused) { refusedBody = true; throw new Error(refused); }
+        this.cache.set(url, { at: this.now(), body, ...(o.ttlMs ? { ttl: o.ttlMs } : {}) }); this.failures.delete(url); return body;
       } catch (e) {
         const timedOut = (e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError";
-        const message = timedOut ? `timed out after ${Math.round(this.timeoutMs / 1000)} s for ${redactKey(url).slice(0, 120)}` : (e as Error).message;
+        const message = timedOut ? `timed out after ${Math.round(limitMs / 1000)} s for ${redactKey(url).slice(0, 120)}` : (e as Error).message;
         const n = (this.failures.get(url)?.n ?? 0) + 1;
-        this.failures.set(url, { until: this.now() + Math.min(this.failMax, this.failBase * 2 ** (n - 1)), n, message });
+        const backoff = Math.min(this.failMax, this.failBase * 2 ** (n - 1));
+        // F-4: while the league's next game is within a day, a failed read is tried again within a minute
+        // (F-4 review: not for a provider that refused the read, such as a spent day on its plan: retrying sooner only spends more)
+        this.failures.set(url, { until: this.now() + (!refusedBody && o.league && this.gameSoon(o.league) ? Math.min(SOON_FAIL_MAX_MS, backoff) : backoff), n, message });
         throw timedOut ? new Error(message) : e;
       }
     };
-    // the provider's own queue: one read at a time per provider, a stalled provider never holds up another
-    const prev = this.chains.get(source) ?? Promise.resolve();
+    // the lane's own queue (F-4: per provider and league): one read at a time per lane, a stalled lane never holds up another
+    const prev = this.chains.get(lane) ?? Promise.resolve();
     const p = prev.then(run, run);
     const tail = p.then(() => undefined, () => undefined);
-    this.chains.set(source, tail);
-    void tail.then(() => { if (this.chains.get(source) === tail) this.chains.delete(source); });
+    this.chains.set(lane, tail);
+    void tail.then(() => { if (this.chains.get(lane) === tail) this.chains.delete(lane); });
     this.inflight.set(url, p);
     void p.then(() => this.inflight.delete(url), () => this.inflight.delete(url));
     return p;
@@ -670,15 +759,15 @@ export class EspnClient {
    * One TheSportsDB read with `key`: v2 with the key in the X-API-KEY header; when v2 refuses the key (HTTP 400 / 401 / 403) the v1
    * URLs (key in the path, never logged) are read instead and their event lists merged by idEvent.
    */
-  async tsdbRead(key: string, v2: string, v1: (key: string) => string[]): Promise<unknown> {
+  async tsdbRead(key: string, v2: string, v1: (key: string) => string[], league?: LeagueId): Promise<unknown> {
     if (!this.tsdbV1) {
-      try { return await this.get(v2, { "X-API-KEY": key }); } catch (e) { if (!/HTTP (400|401|403)\b/.test((e as Error).message)) throw e; this.tsdbV1 = true; }
+      try { return await this.get(v2, { "X-API-KEY": key }, { league }); } catch (e) { if (!/HTTP (400|401|403)\b/.test((e as Error).message)) throw e; this.tsdbV1 = true; }
     }
     const seen = new Set<string>(), events: Record<string, unknown>[] = [];
     let got = 0, last: Error | null = null;
     for (const u of v1(key)) {
       let body: unknown;
-      try { body = await this.get(u); got++; } catch (e) { last = e as Error; continue; }
+      try { body = await this.get(u, {}, { league }); got++; } catch (e) { last = e as Error; continue; }
       for (const list of body && typeof body === "object" ? Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][] : []) for (const ev of list) { const id = String(ev?.idEvent ?? ""); if (id && !seen.has(id)) { seen.add(id); events.push(ev); } }
     }
     if (!got && last) throw last;
@@ -692,7 +781,7 @@ export class EspnClient {
   async nbaSchedule(year: number): Promise<Game[]> {
     const cdn = async () => {
       if (this.refusedFeeds.has(NBA_LEAGUE_SCHEDULE)) throw new Error(`HTTP 403 earlier in this run for ${NBA_LEAGUE_SCHEDULE} (not read again)`);
-      try { return nbaGames(await this.get(NBA_LEAGUE_SCHEDULE)).filter((g) => g.seasonYear === year); }
+      try { return nbaGames(await this.get(NBA_LEAGUE_SCHEDULE, {}, { league: "nba" })).filter((g) => g.seasonYear === year); }
       catch (e) { if (/HTTP (401|403)\b/.test((e as Error).message)) this.refusedFeeds.add(NBA_LEAGUE_SCHEDULE); throw e; }
     };
     const tsdb = () => this.tsdb("nba", year);
@@ -703,7 +792,7 @@ export class EspnClient {
   }
   private async tsdb(league: LeagueId, year: number, whole = false): Promise<Game[]> {
     if (!this.tsdbKey || !TSDB_LEAGUE[league]) throw new ScheduleUnavailable(`${LEAGUES[league].label}: ${SCHEDULE_NEEDS_KEY}`);
-    const body = await this.tsdbRead(this.tsdbKey, tsdbScheduleUrl(league, year), (k) => tsdbV1Urls(k, league, year));
+    const body = await this.tsdbRead(this.tsdbKey, tsdbScheduleUrl(league, year), (k) => tsdbV1Urls(k, league, year), league);
     if (whole && tsdbListingCut(body)) throw new ScheduleCut(tsdbCutSentence(league));
     return tsdbGames(league, body, year);
   }
@@ -714,21 +803,52 @@ export class EspnClient {
     const y = year ?? seasonYearAt(league, this.now());
     const mine = (g: Game) => g.home.abbr === t.abbr || g.away.abbr === t.abbr;
     let games: Game[];
-    if (league === "mlb") games = mlbGames(await this.get(mlbTeamScheduleUrl(t.abbr, y)));
-    else if (league === "nhl") games = nhlGames(await this.get(nhlClubScheduleUrl(t.abbr, y)));
+    if (league === "mlb") games = mlbGames(await this.get(mlbTeamScheduleUrl(t.abbr, y), {}, { league }));
+    else if (league === "nhl") games = nhlGames(await this.get(nhlClubScheduleUrl(t.abbr, y), {}, { league }));
     else if (league === "nba") games = await this.nbaSchedule(y);
     else games = await this.tsdb(league, y, true);
+    // a team's season (MLB, NHL) holds only its own games: the league's next game is noted from the whole-league reads only
+    if (league !== "mlb" && league !== "nhl" && (year === null || year === seasonYearAt(league, this.now()))) this.noteGames(league, games);
     return dedupeListings(games.filter(mine)).map((g) => ({ ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
   /** A league's games in the next `days` days (the matchup picker and the team picker's next game). */
   async upcoming(league: LeagueId, days = 7): Promise<Game[]> {
     const from = new Date(this.now()).toISOString().slice(0, 10), to = new Date(this.now() + days * 86_400_000).toISOString().slice(0, 10);
     let games: Game[];
-    if (league === "mlb") games = mlbGames(await this.get(mlbRangeUrl(from, to)));
-    else if (league === "nhl") games = nhlGames(await this.get(nhlWeekUrl(from)));
+    if (league === "mlb") games = mlbGames(await this.get(mlbRangeUrl(from, to), {}, { league }));
+    else if (league === "nhl") games = nhlGames(await this.get(nhlWeekUrl(from), {}, { league }));
     else if (league === "nba") games = await this.nbaSchedule(seasonYearAt(league, this.now()));
-    else games = await this.tsdb(league, seasonYearAt(league, this.now()));
-    return games.filter((g) => g.date >= from && g.date <= to).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    else {
+      try { games = await this.tsdb(league, seasonYearAt(league, this.now())); }
+      catch (e) {
+        // F-4: the second schedule source for the day listing (the NFL), while TheSportsDB cannot be read; without it the error stands
+        if (!this.apiSportsKey || !APISPORTS_SCHEDULE[league] || e instanceof ScheduleUnavailable) throw e;
+        games = await this.apiSportsDays(league, from, Math.min(days, APISPORTS_SCHEDULE_DAYS - 1)).catch(() => { throw e; });
+      }
+    }
+    const now = this.now();
+    this.noteGames(league, games);
+    // F-4: nothing that is over is offered as a next game (final, postponed or cancelled, or started more than six hours ago)
+    return games.filter((g) => g.date >= from && g.date <= to && !g.completed && g.state !== "post" && Date.parse(g.startsAt) > now - SETTLE_AFTER_START_MS).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  }
+  /**
+   * F-4: a league's games from API-Sports fixtures by date, today and the next `extra` days (at most APISPORTS_SCHEDULE_DAYS reads; each
+   * day's answer is kept APISPORTS_DAY_TTL_MS, today's APISPORTS_TODAY_TTL_MS, so a long TheSportsDB outage stays inside the free plan's
+   * 100 a day). A day that cannot be read is skipped; none readable throws the last error.
+   */
+  async apiSportsDays(league: LeagueId, from: string, extra: number): Promise<Game[]> {
+    if (!this.apiSportsKey || !APISPORTS_SCHEDULE[league]) throw new ScheduleUnavailable(`${LEAGUES[league].label}: no second schedule source`);
+    const out: Game[] = [];
+    let got = 0, last: unknown = null;
+    for (let i = 0; i <= Math.max(0, Math.min(extra, APISPORTS_SCHEDULE_DAYS - 1)); i++) {
+      const day = new Date(Date.parse(`${from}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10);
+      try {
+        const body = await this.get(apiSportsDayUrl(league, day), { "x-apisports-key": this.apiSportsKey }, { league, ttlMs: i === 0 ? APISPORTS_TODAY_TTL_MS : APISPORTS_DAY_TTL_MS, refuse: apiSportsRefusal });
+        out.push(...apiSportsGames(league, body, seasonYearAt(league, this.now()))); got++;
+      } catch (e) { last = e; }
+    }
+    if (!got) throw last ?? new Error("API-Sports: nothing read");
+    return out;
   }
 }
 export { EspnClient as SportsClient };

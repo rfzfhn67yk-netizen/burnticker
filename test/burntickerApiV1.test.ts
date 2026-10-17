@@ -237,7 +237,7 @@ describe("rate limits", () => {
     limiter.reset();
   });
   test("the bucket refills over time", () => {
-    const l = new RateLimiter({ read: { burst: 2, refillPerSec: 1, human: "" }, heavy: { burst: 1, refillPerSec: 1, human: "" }, write: { burst: 1, refillPerSec: 1, human: "" } });
+    const l = new RateLimiter({ read: { burst: 2, refillPerSec: 1, human: "" }, heavy: { burst: 1, refillPerSec: 1, human: "" }, write: { burst: 1, refillPerSec: 1, human: "" }, confirm: { burst: 1, refillPerSec: 1, human: "" } });
     assert.ok(l.take("c", "read", 0).ok); assert.ok(l.take("c", "read", 0).ok); assert.equal(l.take("c", "read", 0).ok, false);
     assert.ok(l.take("c", "read", 1000).ok);
   });

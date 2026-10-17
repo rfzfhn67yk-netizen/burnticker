@@ -1,0 +1,11 @@
+[Unit]
+Description=Every 6 hours: the Burnticker database backup (00:17, 06:17, 12:17, 18:17 UTC)
+
+[Timer]
+OnCalendar=*-*-* 00/6:17:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+Unit=mct-burnticker-backup.service
+
+[Install]
+WantedBy=timers.target

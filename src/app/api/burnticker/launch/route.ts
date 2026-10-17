@@ -48,9 +48,11 @@ export async function POST(req: Request) {
   // AUDIT A C1 (6, 7; findings M1 and H4): `launched` records a launch that is ALREADY SIGNED AND ON CHAIN. It is taken whether launches
   // are open, closed or in preview (closing launches must not strand a coin that exists), and it is metered on the heavy bucket, not the
   // 10-an-hour write bucket (a creator who built a few bundles must still be able to record the one that landed). The chain decides.
+  // 2026-10-16 prelaunch audit F-21: its own `confirm` bucket (30 a minute), not the heavy one the wizard's reads spend, so twenty
+  // team-picker or back-test reads can never refuse the record of a launch that is on chain (the sign card also retries a 429).
   if (body.action === "launched") {
-    const rlc = limiter.take(clientKey(req), "heavy");
-    if (!rlc.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.heavy.human}; retry in ${rlc.retryAfterSec}s`, code: "rate-limited", retryAfterSec: rlc.retryAfterSec }, { status: 429, headers: { "retry-after": String(rlc.retryAfterSec), "ratelimit-limit": String(rlc.limit), "ratelimit-remaining": "0" } });
+    const rlc = limiter.take(clientKey(req), "confirm");
+    if (!rlc.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.confirm.human}; retry in ${rlc.retryAfterSec}s`, code: "rate-limited", retryAfterSec: rlc.retryAfterSec }, { status: 429, headers: { "retry-after": String(rlc.retryAfterSec), "ratelimit-limit": String(rlc.limit), "ratelimit-remaining": "0" } });
     const p = platform();
     const bank: MintBankPort | null = p.mintBank !== undefined ? p.mintBank : webMintBank();
     const mint = String(body.mint ?? "");

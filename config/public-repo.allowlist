@@ -92,6 +92,9 @@ scripts/service/run-burnticker-signer.sh
 # purpose so the box has them; the deploy smoke (scripts/ops/burnticker-deploy-smoke.*) stays private (it runs on the Mac)
 scripts/service/run-burnticker-synth.sh
 scripts/service/run-burnticker-mintbank.sh
+# 2026-10-16 audit F-7 / F-32: the 6-hourly database backup's entrypoint and the synthetic creator's stale Playwright lock cleanup
+scripts/service/run-burnticker-backup.sh
+scripts/service/playwright-dirlock.sh
 scripts/ops/deploy-sites.sh
 scripts/ops/keeper-status-check.sh
 scripts/ops/probe-burnticker.sh

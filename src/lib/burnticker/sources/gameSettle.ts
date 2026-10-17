@@ -1,6 +1,6 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHits, SETTLE_AFTER_START_MS, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHits, SETTLE_AFTER_START_MS, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome, apiSportsRefusal } from "@/lib/burnticker/sources/espn";
 
 /**
  * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10). NO ESPN READS: the game list comes from the league's free official schedule (MLB
@@ -58,7 +58,14 @@ export const SINGLE_SOURCE_HOLD_MS = 12 * 3_600_000;
 /** What a reading and a receipt say about a game settled on TheSportsDB alone. */
 export const SINGLE_SOURCE_SETTLED_BY = "TheSportsDB only, confirmed after a 12 h hold";
 /** The first time a TheSportsDB-only final was seen with this score. */
-export interface HoldMark { home: number; away: number; firstSeenAt: number }
+export interface HoldMark {
+  home: number; away: number; firstSeenAt: number;
+  /** F-4 re-review: a second source (API-Sports, a league feed) read this game and disagreed with TheSportsDB at least once: never
+   *  settled on TheSportsDB alone. Kept with the mark (the persistent store too). */
+  disagreed?: boolean;
+}
+/** A mark with no score held: a second source answered, so a TheSportsDB-only hold has to start again from the next read. */
+const NO_SCORE = -1;
 export interface SingleSourceHolds { get(key: string): HoldMark | null; set(key: string, m: HoldMark): void }
 /** The hold's key for one game (a doubleheader's two games differ by their start). */
 export const holdKeyOf = (g: Pick<Game, "league" | "eventId" | "startsAt">): string => `${g.league}:${g.eventId}:${g.startsAt}`;
@@ -88,6 +95,11 @@ export function statusHoldStore(reg: { getStatus(key: string): string | null; se
 export function singleSourceHold(holds: SingleSourceHolds | null | undefined, g: Pick<Game, "league" | "eventId" | "startsAt">, f: { home: number; away: number }, now: number): { ready: true; since: number } | { ready: false; why: string } {
   if (!holds) return { ready: false, why: "only TheSportsDB can read this game (no Polymarket market, no league feed), and this process keeps no record of when its final score was first seen, so it is not settled here" };
   const k = holdKeyOf(g), m = holds.get(k);
+  if (m?.disagreed) return { ready: false, why: "a second source disagreed with TheSportsDB on this game, so it is never settled on TheSportsDB alone; it waits for two sources that agree" };
+  if (m && m.home === NO_SCORE) {
+    holds.set(k, { home: f.home, away: f.away, firstSeenAt: now });
+    return { ready: false, why: `a second source answered for this game since the last read, so the 12-hour hold on TheSportsDB's final ${f.away}–${f.home} (away–home) starts again now` };
+  }
   if (!m || m.home !== f.home || m.away !== f.away) {
     holds.set(k, { home: f.home, away: f.away, firstSeenAt: now });
     return { ready: false, why: m ? `TheSportsDB changed its final from ${m.away}–${m.home} to ${f.away}–${f.home} (away–home), so the 12-hour hold starts again` : `TheSportsDB's final ${f.away}–${f.home} (away–home) was first seen now; with no Polymarket market and no league feed, it settles on TheSportsDB alone once it has stood for 12 hours` };
@@ -95,6 +107,23 @@ export function singleSourceHold(holds: SingleSourceHolds | null | undefined, g:
   if (now - m.firstSeenAt < SINGLE_SOURCE_HOLD_MS) return { ready: false, why: `TheSportsDB's final ${f.away}–${f.home} (away–home) has stood since ${new Date(m.firstSeenAt).toISOString()}; it settles on TheSportsDB alone at ${new Date(m.firstSeenAt + SINGLE_SOURCE_HOLD_MS).toISOString()}` };
   return { ready: true, since: m.firstSeenAt };
 }
+/**
+ * F-4 re-review (the hold must be continuous): a second source that can read this game ANSWERED (a final or not yet), so the game is not
+ * one-source now. A running TheSportsDB-only hold is ended; the next read with that source out starts a new one, so a game settles on
+ * TheSportsDB alone only after the second source has been out for the whole 12 hours. A disagreement mark is kept.
+ */
+export function secondSourceAnswered(holds: SingleSourceHolds | null | undefined, g: Pick<Game, "league" | "eventId" | "startsAt">, now: number): void {
+  if (!holds) return;
+  const k = holdKeyOf(g), m = holds.get(k);
+  if (m && m.home !== NO_SCORE) holds.set(k, { home: NO_SCORE, away: NO_SCORE, firstSeenAt: now, ...(m.disagreed ? { disagreed: true } : {}) });
+}
+/** F-4 re-review: a second source disagreed with the primary on this game: marked for good (secondSourceAnswered keeps the mark). */
+export function sourcesDisagreed(holds: SingleSourceHolds | null | undefined, g: Pick<Game, "league" | "eventId" | "startsAt">, now: number): void {
+  if (!holds) return;
+  const k = holdKeyOf(g), m = holds.get(k);
+  if (!m?.disagreed) holds.set(k, { home: NO_SCORE, away: NO_SCORE, firstSeenAt: m?.firstSeenAt ?? now, disagreed: true });
+}
+
 /** The registry status key listing the coins (series ids) already alerted for a one-source settlement. */
 export const SINGLE_SOURCE_ALERTED_KEY = "games.singleSourceAlerted";
 /**
@@ -323,11 +352,11 @@ const winnerOf = (f: { home: number; away: number }): "home" | "away" | "tie" =>
 
 /** The cross-read's final for a game (null: not in the feed; throws: unreadable). */
 /** Reads one URL per candidate day; a day the feed does not serve (404) is skipped, and only when every day fails is the read unreadable. */
-async function firstFinal(client: EspnClient, urls: string[], parse: (body: unknown, url: string) => Final | null, headers: Record<string, string> = {}): Promise<Final | null> {
+async function firstFinal(client: EspnClient, urls: string[], parse: (body: unknown, url: string) => Final | null, headers: Record<string, string> = {}, o: { ttlMs?: number; refuse?: (body: unknown) => string | null } = {}): Promise<Final | null> {
   let err: Error | null = null, any = false;
   for (const url of urls) {
     let body: unknown;
-    try { body = await client.get(url, headers); any = true; } catch (e) { err = e as Error; continue; }
+    try { body = await client.get(url, headers, o); any = true; } catch (e) { err = e as Error; continue; }
     const f = parse(body, url);
     if (f) return f;
   }
@@ -357,8 +386,19 @@ export async function crossFinal(client: EspnClient, g: Game, d: GameDeps, which
     catch (e) { if (/HTTP (401|403)\b/.test((e as Error).message)) refused?.add(NBA_SCHEDULE_URL); throw e; }
   }
   if (!d.apiSportsKey) throw new Error("cross-read missing: BURNTICKER_APISPORTS_KEY (a second licensed provider) is not set");
-  return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => apiSportsUrl(g.league, day)), (b, u) => finalFromApiSports(g, b, u), { "x-apisports-key": d.apiSportsKey }) };
+  // audit 2026-10-16 F-4 review: 100 reads a day per sport on the free plan, so an answer is kept APISPORTS_CROSS_TTL_MS (the game is
+  // not final yet, or it would have settled); an `errors` body is a failed read (apiSportsRefusal), never "no final yet"
+  return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => apiSportsUrl(g.league, day)), (b, u) => finalFromApiSports(g, b, u), { "x-apisports-key": d.apiSportsKey }, { ttlMs: APISPORTS_CROSS_TTL_MS, refuse: apiSportsRefusal }) };
 }
+
+/** How long a settlement cross-read answer from API-Sports is kept (the free plan's 100 a day per sport). */
+export const APISPORTS_CROSS_TTL_MS = 30 * 60_000;
+/**
+ * API-Sports cannot be read for now: its budget for the day is spent, or it refused the read (an `errors` body: the day's limit, a plan
+ * that does not cover the date). Settlement then counts it out (operatorsFor), so a game it was the second operator for takes the
+ * TheSportsDB-only path instead of waiting for a read that will not come today.
+ */
+export const apiSportsOut = (e: unknown): boolean => /today's request budget is spent|API-Sports refused the read/.test(String((e as Error)?.message ?? e));
 
 /** The league's free official feed (MLB, NHL, NBA), if any — a third read where it exists (the NBA's is tried, not counted: countedOfficialOf). */
 export const officialOf = (league: LeagueId): CrossId | null => (league === "mlb" ? "mlb.statsapi" : league === "nhl" ? "nhl.score" : league === "nba" ? "nba.cdn" : null);
@@ -448,13 +488,16 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
   if (!market && !d.tsdbKey) return { kind: "held", why: "no primary: no moneyline market for the game and BURNTICKER_THESPORTSDB_KEY (the commercial license) is not set" };
   // the league's official feed (free) and API-Sports (optional)
   const off = officialOf(g.league);
+  // F-4 review: API-Sports out for now (budget spent, or a refusal) is counted out of the operators below (dOps)
+  let dOps: GameDeps = d;
   for (const id of [off, d.apiSportsKey ? "apisports.games" as const : null]) {
     if (!id) continue;
     try {
       const c = await crossFinal(client, g, d, id);
+      secondSourceAnswered(d.holds, g, (d.now ?? Date.now)());   // F-4 re-review: an answer ends a running one-source hold
       if (c.final && c.final.done) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(c.final), final: { home: c.final.home, away: c.final.away }, detail: c.final.detail, url: c.final.url, pens: c.final.pens, declared: c.final.declared, aet: c.final.aet });
       else pending.push(`${CROSS_LABEL[id]} has no final for the game yet`);
-    } catch (e) { errors.push(`${CROSS_LABEL[id]}: ${(e as Error).message.slice(0, 80)}`); }
+    } catch (e) { errors.push(`${CROSS_LABEL[id]}: ${(e as Error).message.slice(0, 80)}`); if (id === "apisports.games" && apiSportsOut(e)) dOps = { ...d, apiSportsKey: null }; }
   }
   // THE THREE-WAY PAYOUT AND EXTRA TIME (see threeWayRead): Polymarket's soccer markets settle on the 90-minute result, so a cup tie
   // that went to extra time or penalties reads "draw" on chain whoever went through. When any score read marks the game AET or decided
@@ -466,14 +509,14 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
     if (i >= 0) {
       if (reads[i].winner !== "tie") return { kind: "held", why: `the on-chain payout says the game was decided in 90 minutes, but a score read says it went to extra time — held` };
       reads.splice(i, 1);
-      if (operatorsFor(g.league, d, false).length < 2) return { kind: "held", why: "the game went past 90 minutes, and the on-chain payout only settles the 90-minute result: a second read of the final score is needed" };
+      if (operatorsFor(g.league, dOps, false).length < 2) return { kind: "held", why: "the game went past 90 minutes, and the on-chain payout only settles the 90-minute result: a second read of the final score is needed" };
     }
   }
   const primary = reads.find((r) => r.op === "on-chain payout") ?? reads.find((r) => r.op === "TheSportsDB");
   const others = reads.filter((r) => r !== primary);
   let singleSince: number | null = null;
   if (!primary || others.length === 0) {
-    const possible = operatorsFor(g.league, d, !!market);
+    const possible = operatorsFor(g.league, dOps, !!market);
     // ONE SOURCE (owner, 2026-10-14): no Polymarket market and no second operator that can read the game, so TheSportsDB's final
     // settles it alone once the same score has stood for 12 hours. A failed market lookup is not "no market": the game waits.
     if (primary?.op === "TheSportsDB" && primary.final && !market && possible.length < 2) {
@@ -486,7 +529,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
   }
   for (const r of others) {
     const agree = primary.final && r.final ? primary.final.home === r.final.home && primary.final.away === r.final.away : primary.winner === r.winner;
-    if (!agree) return { kind: "held", why: `${primary.detail} ≠ ${r.detail} — held` };
+    if (!agree) { sourcesDisagreed(d.holds, g, (d.now ?? Date.now)()); return { kind: "held", why: `${primary.detail} ≠ ${r.detail} — held` }; }
   }
   // item 78: a level score decided on penalties follows the declared winner (any read, or the schedule's own winner flag), never a draw
   let winner = primary.winner;

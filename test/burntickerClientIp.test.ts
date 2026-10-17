@@ -29,7 +29,7 @@ describe("clientKey", () => {
     assert.equal(clientKeyFromHeaders(h({ "x-forwarded-for": CF_EDGE6, "cf-connecting-ip": "198.51.100.8" })), "198.51.100.8");
   });
   test("two visitors behind the same edge get separate buckets", () => {
-    const l = new RateLimiter({ read: { burst: 1, refillPerSec: 0.0001, human: "" }, heavy: { burst: 1, refillPerSec: 0.0001, human: "" }, write: { burst: 1, refillPerSec: 0.0001, human: "" } });
+    const l = new RateLimiter({ read: { burst: 1, refillPerSec: 0.0001, human: "" }, heavy: { burst: 1, refillPerSec: 0.0001, human: "" }, write: { burst: 1, refillPerSec: 0.0001, human: "" }, confirm: { burst: 1, refillPerSec: 0.0001, human: "" } });
     const a = clientKey(new Request("http://x/", { headers: { "x-forwarded-for": CF_EDGE, "cf-connecting-ip": "198.51.100.1" } }));
     const b = clientKey(new Request("http://x/", { headers: { "x-forwarded-for": CF_EDGE, "cf-connecting-ip": "198.51.100.2" } }));
     assert.ok(l.take(a, "read", 0).ok); assert.equal(l.take(a, "read", 0).ok, false);

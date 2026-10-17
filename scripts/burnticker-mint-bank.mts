@@ -158,26 +158,20 @@ if (isMainThread) {
   process.on("SIGTERM", () => { stopping = true; log("stopping"); });
   process.on("SIGINT", () => { stopping = true; });
   log(`mint key bank: ${settings.path}, size ${settings.size}, low ${settings.low}, ${nWorkers} workers; ${bank.status().ready} ready`);
-  let filling = false;
   const startedAt = Date.now();
-  const { clearStaleRestartRequest, takeRestartRequest } = await import("../src/lib/burnticker/restartRequest.ts");
-  // a request already on disk predates this process, which already runs the deployed code: removed, not honoured
-  { const stale = clearStaleRestartRequest("mintbank"); if (stale) log(`stale restart request (build ${stale.build}) removed: this process already runs the deployed code`); }
-  while (!stopping) {
-    // DEPLOY-REQUESTED RESTART (restartRequest.ts): checked between fill chunks (no key job in flight); exit 0, systemd starts the new code
-    const rr = takeRestartRequest("mintbank", { startedAt });
-    if (rr) { log(`restart requested by deploy ${rr.build}: exiting between fills; systemd starts the new code`); break; }
-    const h = bankHousekeeping(bank, { size: settings.size, low: settings.low, now: Date.now(), isLive, filling });
-    if (h.created || h.swept) log(`${h.created} taken key(s) seen launched, ${h.swept} taken key(s) past 24 hours deleted`);
-    if (h.alert && registry) { if (registry.recordAlert({ kind: h.alert.kind, key: h.alert.key, text: h.alert.text, meta: null })) log(`[alert] ${h.alert.kind}: ${h.alert.text.slice(0, 160)}`); }
-    filling = h.filling;
-    if (h.need > 0) {
-      // fill in chunks of at most 25 so housekeeping and the low check keep running while a long fill goes on
-      await grind(Math.min(25, h.need), "refill", () => stopping);
-      continue;
-    }
-    for (let i = 0; i < 60 && !stopping; i++) await new Promise((r) => setTimeout(r, 1000));
-  }
+  const { runBankLoop } = await import("../src/lib/burnticker/mintBankLoop.ts");
+  // audit 2026-10-16 F-8: the loop (housekeeping, fill chunks, the idle minute, the deploy's restart request) is mintBankLoop.ts; it
+  // checks a restart request every few seconds while full and stops a fill chunk for one, then exits 0 so systemd starts the new code
+  await runBankLoop({
+    startedAt, log, stopping: () => stopping,
+    housekeeping: (filling) => {
+      const h = bankHousekeeping(bank, { size: settings.size, low: settings.low, now: Date.now(), isLive, filling });
+      if (h.created || h.swept) log(`${h.created} taken key(s) seen launched, ${h.swept} taken key(s) past 24 hours deleted`);
+      if (h.alert && registry) { if (registry.recordAlert({ kind: h.alert.kind, key: h.alert.key, text: h.alert.text, meta: null })) log(`[alert] ${h.alert.kind}: ${h.alert.text.slice(0, 160)}`); }
+      return h;
+    },
+    grind: (n, stopWhen) => grind(n, "refill", stopWhen),
+  });
   bank.close();
   process.exit(0);
 } else {

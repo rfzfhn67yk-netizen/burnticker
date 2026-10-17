@@ -1,3 +1,4 @@
+import { LruMap } from "@/lib/burnticker/lru";
 /**
  * THE APP'S CONTENT-SECURITY-POLICY, REPORT-ONLY (ChatGPT audit 7 critical item 4, 2026-10-12: the HTML of a wallet site carried no CSP).
  * The public tree's next.config.ts sends this as Content-Security-Policy-Report-Only on every app page except the embeds (which send their
@@ -46,6 +47,29 @@ export const CSP_SOURCES = ["/", "/burnticker", "/burnticker/:path((?!embed(?:/|
 export function cspHeaderRules(rpcOrigin: string | null): { source: string; headers: { key: string; value: string }[] }[] {
   const value = appCsp(rpcOrigin);
   return CSP_SOURCES.map((source) => ({ source, headers: [{ key: "Content-Security-Policy-Report-Only", value }, { key: "Reporting-Endpoints", value: REPORTING_ENDPOINTS }] }));
+}
+
+/**
+ * THE DIRECTIVE NAMES A REPORT IS COUNTED UNDER (2026-10-16 prelaunch audit F-28: the counter took any directive-shaped name a caller
+ * sent, so one script could grow it without limit). CSP Level 3's fetch, document, navigation and reporting directives; any other name
+ * a report carries is counted as "other", and a report with none as "unknown".
+ */
+export const CSP_REPORT_DIRECTIVES: ReadonlySet<string> = new Set([
+  "default-src", "child-src", "connect-src", "font-src", "frame-src", "img-src", "manifest-src", "media-src", "object-src", "prefetch-src",
+  "script-src", "script-src-elem", "script-src-attr", "style-src", "style-src-elem", "style-src-attr", "worker-src", "fenced-frame-src",
+  "base-uri", "sandbox", "form-action", "frame-ancestors", "navigate-to", "require-trusted-types-for", "trusted-types",
+  "upgrade-insecure-requests", "block-all-mixed-content", "report-uri", "report-to", "webrtc",
+]);
+/** The counter never holds more than this many keys (the allow-list, "other" and "unknown" fit with room to spare). */
+export const CSP_REPORT_MAX_KEYS = 64;
+/** The route's counts since the process started, by directive (bounded: LruMap; keys only from CSP_REPORT_DIRECTIVES, "other", "unknown"). */
+export const cspReportCounts: LruMap<string, number> = new LruMap(CSP_REPORT_MAX_KEYS);
+/** Counts one report and answers the key it was counted under. */
+export function countCspReport(body: unknown): string {
+  const d = reportDirective(body);
+  const key = d === "unknown" || CSP_REPORT_DIRECTIVES.has(d) ? d : "other";
+  cspReportCounts.set(key, (cspReportCounts.get(key) ?? 0) + 1);
+  return key;
 }
 
 /** A report's directive, for counting: "script-src-elem" from either report format; "unknown" otherwise. Pure. */

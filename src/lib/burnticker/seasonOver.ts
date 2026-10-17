@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { meetingsSeries, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamSeries, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { isFallbackGame, meetingsSeries, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamSeries, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { teamRef } from "@/lib/burnticker/describe";
 
 /**
@@ -20,6 +20,9 @@ export function seasonStatus(abbr: string, games: readonly Game[], readable: boo
   if (!readable) return { status: "unknown", warning: "This league's schedule could not be read, so whether this team has games left is not known." };
   const open = games.filter((g) => !g.completed);
   if (open.some((g) => g.home.abbr === abbr || g.away.abbr === abbr)) return { status: "upcoming", warning: null };
+  // audit 2026-10-16 F-4 review: a listing from the fallback source covers today and three days only, so it can show a team playing,
+  // never that its season is over or that it has no game in the next days
+  if (games.some(isFallbackGame)) return { status: "unknown", warning: "Only part of this league's schedule could be read just now, so whether this team has games left is not known." };
   if (open.length && open.every((g) => g.seasonType === 3)) return { status: "over", warning: SEASON_OVER_LINE };
   return { status: "none-listed", warning: "No game is listed for this team in the next 8 days. A season coin only burns on games still to come." };
 }
@@ -92,6 +95,8 @@ export async function seasonOverFor(rule: unknown, schedule: SeasonSchedule | nu
   const games = await Promise.race([schedule(s.league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), o.timeoutMs ?? 3_000); })]);
   clearTimeout(timer);
   if (!games) return null;
+  // audit 2026-10-16 F-4 review: a partial listing from the fallback source never refuses a launch as "season over"
+  if (games.some(isFallbackGame)) return null;
   // a rivalry series is over once EITHER team's season is over: the two cannot meet again this season
   const over = seasonStatus(s.abbr, games, true).status === "over" || (s.window === "meetings" && !!s.opp && seasonStatus(s.opp, games, true).status === "over");
   return over ? seasonOverRefusal(r!, now) : null;

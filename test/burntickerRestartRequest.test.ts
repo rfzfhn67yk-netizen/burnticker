@@ -54,7 +54,11 @@ describe("the restart request", () => {
     assert.match(tail, /takeRestartRequest\("keeper"[\s\S]*restart requested by deploy \$\{restart\.build\}[\s\S]*break;[\s\S]*t < 60_000 && !stopping/);
     assert.match(keeper, /registry\.close\(\);\nlog\("burnticker keeper stopped"\);/);
     const bank = fs.readFileSync("scripts/burnticker-mint-bank.mts", "utf8");
-    assert.match(bank, /takeRestartRequest\("mintbank"[\s\S]*restart requested by deploy/);
+    // audit 2026-10-16 F-8: the loop moved to mintBankLoop.ts (tested in burntickerMintBankRestart.test.ts); the script runs it
+    const loop = fs.readFileSync("src/lib/burnticker/mintBankLoop.ts", "utf8");
+    assert.match(bank, /runBankLoop\(/);
+    assert.match(loop, /const UNIT = "mintbank";/);
+    assert.match(loop, /takeRestartRequest\(UNIT[\s\S]*restart requested by deploy/);
     // the deploy script is private (not in the public tree): its wiring is checked only where it exists
     if (fs.existsSync("scripts/ops/deploy-burnticker-host.sh")) {
       const deploy = fs.readFileSync("scripts/ops/deploy-burnticker-host.sh", "utf8");
@@ -149,6 +153,6 @@ describe("the restart request", () => {
       assert.match(deploy, /--restart-keepers: restarts mct-burnkeeper \(the \\\$DEFICIT keeper\) only/);
       assert.match(deploy, /request-keeper-restart\.sh --wait 300/);
     }
-    assert.match(fs.readFileSync("scripts/burnticker-mint-bank.mts", "utf8"), /clearStaleRestartRequest\("mintbank"\)/);
+    assert.match(fs.readFileSync("src/lib/burnticker/mintBankLoop.ts", "utf8"), /clearStaleRestartRequest\(UNIT, /);
   });
 });
