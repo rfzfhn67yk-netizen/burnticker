@@ -2,8 +2,8 @@ import { type Connection, type Keypair, PublicKey, VersionedTransaction } from "
 import { fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { sourceUrlHash } from "@/lib/burnReceipts/attestation";
 import { assertSignableGenesis, NATIVE_MINT, type Cluster } from "@/lib/burnReceipts/constants";
-import { anchorErrorName, assertClusterAllowed, memoFromTransaction, signTransaction, type ProgramContext } from "@/lib/burnReceipts/crank";
-import { attestRuleEnd, END_SINK_FLAGSHIP, END_SINK_INCINERATOR, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_RESOLVED, END_STATE_VOID, fetchEndSink, fetchRuleEnd, FLAGSHIP_MINT, parseEndForwardMemo, planForwardOnEnd, submitRuleEndIx } from "@/lib/burnReceipts/endSink";
+import { anchorErrorName, assertClusterAllowed, chainNowSec, memoFromTransaction, signTransaction, type ProgramContext } from "@/lib/burnReceipts/crank";
+import { attestRuleEnd, carryHeldBack, END_SINK_FLAGSHIP, END_SINK_INCINERATOR, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_RESOLVED, END_STATE_VOID, fetchEndSink, fetchRuleEnd, FLAGSHIP_MINT, parseEndForwardMemo, planForwardOnEnd, submitRuleEndIx } from "@/lib/burnReceipts/endSink";
 import { associatedTokenAddress, feePda } from "@/lib/burnReceipts/pda";
 import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
 import type { EndSinkClient, EndSinkKindView, EndSinkPort, EndForwardReadiness } from "@/lib/burnticker/endSinkClient";
@@ -65,7 +65,13 @@ export class ChainEndSink implements EndSinkClient {
         const sol = BigInt(await c.getBalance(fee, "confirmed"));
         const wsol = (await c.getAccountInfo(w, "confirmed")) ? BigInt((await c.getTokenAccountBalance(w, "confirmed")).value.amount) : BigInt(0);
         const above = sol > cfg.config.rule.reserve_lamports ? sol - cfg.config.rule.reserve_lamports : BigInt(0);
-        return above + wsol;
+        // round-5 R5-4: inside the 30-day grace after a RESOLVED end the carried spend stays on the coin (crank_carried drains it)
+        const re = cfg.config.end_state === END_STATE_RESOLVED ? await fetchRuleEnd(c, o.programId, mint) : null;
+        // judged on the CHAIN's clock (the latest confirmed block time, as the program's Clock), not this host's; the local clock only
+        // when the RPC cannot say
+        const nowSec = re ? (await chainNowSec(c)) ?? Math.floor(Date.now() / 1000) : 0;
+        const held = re ? carryHeldBack(cfg.config, Number(re.submitted_at), nowSec) : BigInt(0);
+        return above + wsol > held ? above + wsol - held : BigInt(0);
       },
       async buildRuleEnd(i) {
         const payer = await need();

@@ -52,7 +52,7 @@ under 100 %, the end is not recorded and nothing is forwarded while the chain sh
 - With burn dispersal on (`BURNTICKER_DISPERSAL=1`, a program with `crank_carried`): the dispersal step spends the carried amount in
   pieces; when the chain shows nothing carried, the end is recorded and only what is left moves to the sink. In the example: 2.5 SOL is
   burned on the coin, then 2.5 SOL is forwarded.
-- Without it (the round-4 program today, or a coin with a burn target, which `crank_carried` refuses): the end waits, nothing is
+- Without it (dispersal off on the host, a program without `crank_carried` such as round 4 before 2026-10-15, or a coin with a burn target, which `crank_carried` refuses): the end waits, nothing is
   forwarded, the status key `rule.endowed.<mint>` records the owed amount, and a `bt-burn-behind` alert (key `<mint>:end-owed`) says so
   once a day. Turning dispersal on after round 5 lands finishes the share and then forwards.
 - Not held: 100 % (the drain), a VOID end (the wind-down on the coin), a pair loser, a result below the floor (the program carries
@@ -63,7 +63,7 @@ The launcher (`launchPresets.ts`): single and linked one-shots offer 100 % only.
 100 % with an end sink unless the host runs burn dispersal, and always for a coin with a burn target. The review and the guided budget
 row say the share is spent on the coin before the rest moves on. Tests: `test/burntickerOneShotShare.test.ts`.
 
-## Round 5 additions (owner, 2026-10-13; built on the round-5 branch, not deployed)
+## Round 5 additions (owner, 2026-10-13; deployed on devnet and mainnet on 2026-10-15)
 
 **Burn the SOL itself (the incinerator end sink).** A fourth sink a creator can pick: `onEnd.endSink: "incinerator"` in the hashed rule
 (single coins only; a pair ends on the pair winner). It pins EndSink kind `END_SINK_INCINERATOR` (4) at creation, with
@@ -85,7 +85,7 @@ the coin's own wind-down. SELF stays on the won path: a VOID end (a champion coi
 the coin. The flagship and vault-mode coins are exempt. `initialize_token` (round 4) is unchanged, and every config it created reads as
 before; the reviewer risk list (EXTERNAL-BURN.md item 14) notes that the old entrypoint still accepts a coin without a sink.
 
-**A named coin that burns another token (round-5 review R5-9, owner 2026-10-15; built, not deployed).** `forward_on_end` judges a
+**A named coin that burns another token (round-5 review R5-9, owner 2026-10-15; deployed on devnet and mainnet on 2026-10-15).** `forward_on_end` judges a
 named sink (MINT, or the PAIR_WINNER partner) live when its own pool is verified, or when it burns another token (`burn_target_kind` 1)
 and its BurnTarget is pinned and not stalled (no 30-day unblock since its last target burn), read from the BurnTarget account (`sink_burn_target`, an optional account the client passes with
 `sink_config`; left out for such a coin it is refused, `BurnTargetAccountMissing`, so nobody can divert the fuel to the flagship by

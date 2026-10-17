@@ -3,7 +3,9 @@ import path from "node:path";
 import { openRegistry, REGISTRY_FILE, type Registry } from "@/lib/burnticker/registry";
 import { attesterStatusLine } from "@/lib/burnticker/fees";
 import { publishSite, toJson } from "@/lib/burnKeeper/statusPage";
-import { collectSnapshot, devFeeDelta, evaluateAlerts, lamportsToSol, registryAlertRows, solStr, type BurntickerSnapshot, type WebhookState } from "@/lib/burnticker/alerts";
+import { computeFeedHealth, type FeedHealth } from "@/lib/burnticker/ops/feedHealth";
+import { conditionLines, conditionsView, readConditionMemory, type ActiveCondition, type ConditionRecord } from "@/lib/burnticker/ops/conditions";
+import { collectSnapshot, devFeeDelta, lamportsToSol, registryAlertRows, solStr, type BurntickerSnapshot, type WebhookState } from "@/lib/burnticker/alerts";
 
 /**
  * THE MORNING CHECK'S BURNTICKER BLOCK (2026-10-09). The operator's daily check-in prints one `## Burnticker`
@@ -19,10 +21,20 @@ import { collectSnapshot, devFeeDelta, evaluateAlerts, lamportsToSol, registryAl
  */
 
 export interface CheckinAlertRow { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }
-export interface CheckinInput { snapshot: BurntickerSnapshot | null; delta: ReturnType<typeof devFeeDelta> | null; alerts: CheckinAlertRow[] | null; firstLaunchAt: number | null; webhook?: WebhookState | null; why?: string; /** the request budget, one line per provider (apiBudget.ts budgetStatusLines) */ apiBudget?: string[] | null }
+export interface CheckinInput {
+  snapshot: BurntickerSnapshot | null; delta: ReturnType<typeof devFeeDelta> | null; alerts: CheckinAlertRow[] | null; firstLaunchAt: number | null; webhook?: WebhookState | null; why?: string;
+  /** the request budget, one line per provider (apiBudget.ts budgetStatusLines) */ apiBudget?: string[] | null;
+  /** Third prelaunch audit F06: the per-source health (ops/feedHealth.ts computeFeedHealth) — down / stale / disagree / withheld count as
+   *  conditions; absent = not computed (only the keeper-level conditions count). */
+  health?: readonly FeedHealth[] | null;
+  /** The keeper's condition memory (ops/conditions.ts CONDITIONS_KEY), for the "recovered" line. */
+  conditionMemory?: Readonly<Record<string, ConditionRecord>> | null;
+}
 
 export const OPS_SCHEMA = "burnticker.ops/v1";
-export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; webhook: WebhookState | null }
+/** `conditions`: the active conditions' labels (ops/conditions.ts, the same list the check-in prints); `conditionDetail` and `recovered`
+ *  carry the rest (added 2026-10-16, F06; absent in older documents). */
+export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; conditionDetail?: ActiveCondition[]; recovered?: ConditionRecord[]; webhook: WebhookState | null }
 
 const ago = (now: number, ts: number | null): string => (ts === null || !ts ? "never" : `${Math.round((now - ts) / 60_000)} min ago`);
 
@@ -48,8 +60,8 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
   out.push(`- keeper: last cycle ${s.lastCycle ? ago(now, s.lastCycle.at) : "never recorded"}${s.lastCycle?.errors.length ? ` · errors: ${s.lastCycle.errors.slice(0, 2).join(" | ").slice(0, 160)}` : ""} · key balance ${d?.latest ? `${solStr(d.latest.keeperLamports)} SOL` : "unknown"}`);
   const feeds = [...new Map(live.map((t) => [t.selectorKey, t])).values()];
   if (feeds.length) out.push(`- feeds: ${feeds.map((t) => `${t.selectorKey} ok ${ago(now, t.feed.lastOkAt)}${t.feed.failures ? ` (${t.feed.failures} failing)` : ""}`).join(" · ")}`);
-  const would = evaluateAlerts(s).filter((a) => a.kind !== "bt-daily-summary");
-  out.push(`- conditions now: ${would.length ? would.map((a) => a.kind).join(", ") : "none"}`);
+  // F06: the one aggregator (keeper-level conditions + every source's health), the same list ops.json carries
+  out.push(...conditionLines(conditionsView(s, i.health ?? null, i.conditionMemory ?? {}, now), now));
   if (i.webhook) out.push(`- alert webhook: ${i.webhook.configured ? `${i.webhook.lastError ? `FAILING (${i.webhook.lastError})` : i.webhook.lastOkAt ? `ok, last delivery ${ago(now, i.webhook.lastOkAt)}` : "configured, nothing delivered yet"}` : "not configured (alerts stay on the Burnticker host; set BURNTICKER_ALERT_WEBHOOK)"}`);
   if (i.alerts === null) out.push(`- bt- alerts last 24 h: unavailable (alert table not readable on this host)`);
   else {
@@ -63,7 +75,8 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
 
 /** The block as the keeper publishes it for other hosts (the check-in there, the owner's phone). */
 export function buildOpsJson(i: CheckinInput & { now: number; host?: string }): OpsJson {
-  return { schema: OPS_SCHEMA, generatedAt: new Date(i.now).toISOString(), host: i.host ?? "burnticker", lines: burntickerCheckinLines(i), conditions: i.snapshot ? evaluateAlerts(i.snapshot).filter((a) => a.kind !== "bt-daily-summary").map((a) => a.kind) : [], webhook: i.webhook ?? null };
+  const v = conditionsView(i.snapshot, i.health ?? null, i.conditionMemory ?? {}, i.now);
+  return { schema: OPS_SCHEMA, generatedAt: new Date(i.now).toISOString(), host: i.host ?? "burnticker", lines: burntickerCheckinLines(i), conditions: v.active.map((c) => c.label), conditionDetail: v.active, recovered: v.recovered, webhook: i.webhook ?? null };
 }
 export function publishOps(siteDir: string, ops: OpsJson): void { publishSite(siteDir, { "ops.json": toJson(ops) }); }
 
@@ -100,7 +113,9 @@ export async function burntickerCheckin(o: { now?: number; registryFile?: string
       const read = o.readAlerts === undefined ? async () => registryAlertRows(reg!, now) : o.readAlerts;
       alerts = read ? (await read()).filter((a) => a.ts >= now - 86_400_000) : null;
     } catch { alerts = null; }
-    return burntickerCheckinLines({ snapshot, delta: devFeeDelta(reg, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null });
+    let health: FeedHealth[] | null = null;
+    try { health = computeFeedHealth(reg, now); } catch { health = null; }
+    return burntickerCheckinLines({ snapshot, delta: devFeeDelta(reg, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, health, conditionMemory: readConditionMemory(reg) });
   } catch (e) {
     return burntickerCheckinLines({ snapshot: null, delta: null, alerts: null, firstLaunchAt: null, why: `registry not readable: ${(e as Error).message.slice(0, 120)}` });
   } finally { try { reg?.close(); } catch { /* closed */ } }

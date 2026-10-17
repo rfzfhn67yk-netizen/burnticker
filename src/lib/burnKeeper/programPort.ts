@@ -34,12 +34,16 @@ export interface ProgramConfigView {
   /** Round 5: true when the coin burns a TARGET token (crank_target_burn; a target reading's `burned`/`got` are the target's units and
    *  `owed` the coin's own tokens burned). Absent on older ports = false. */
   burnsTarget?: boolean;
-  /** LAUNCHPAD-PATH §45: the rule ended (resolved or void) — crank_carried refuses then. Absent on older ports = live. */
+  /** LAUNCHPAD-PATH §45: the rule ended (resolved or void). Informational: since round 5 (R5-3 / R5-4) crank_carried still drains the
+   *  carried spend after an end (a RESOLVED end keeps it on the coin for 30 days), so the keeper never stops dispersing on this. Absent on
+   *  older ports = live. */
   ruleEnded?: boolean;
+  /** The end state itself (live / resolved / void); absent on older ports = live. */
+  endState?: "live" | "resolved" | "void";
 }
 
 /** planCarried's "not now" answers. "too-soon" (round-5 review R5-8): the piece fits the coin's carried budget at `nextAtMs`. */
-export type CarriedPlanStatus = { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" } | { status: "too-soon"; nextAtMs: number };
+export type CarriedPlanStatus = { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" } | { status: "too-soon"; nextAtMs: number };
 
 /** One Reading account. `outcome` by name (pending / no-units / burned / below-floor / short / exhausted). */
 export interface ProgramReadingView {

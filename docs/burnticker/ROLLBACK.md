@@ -36,11 +36,39 @@ Then, in order:
 1. `git -C ../burnticker-public checkout --detach <commit>` (it prints where the checkout was, for the way back)
 2. `BURNTICKER_SRC=../burnticker-public sh scripts/ops/deploy-burnticker-host.sh --webpack`: builds on the Mac, mirrors the tree, swaps
    the build in, restarts the web unit, and runs `deploy-sites.sh` on the host as mct. The rollback stops here if the ship does not
-   report "web is up" (the host then keeps its previous build in `.next-old`).
+   report "web is up" (the host then swaps its previous build back by itself; see "The web smoke and the automatic swap back" below).
 3. `deploy-sites.sh` on the host again, as mct, so the old commit's static pages are certainly in place (it copies only what changed)
 4. `sh scripts/ops/probe-burnticker.sh`
 5. "Live now": the public commit and its subject, the host's build id beside the one built on the Mac, the probe's verdict, and the
    roll-forward command. The exit code is 0 only when the probes pass and the two build ids match.
+
+## The web smoke and the automatic swap back (third prelaunch audit F02, 2026-10-16)
+
+Every ship swaps the staged build in with `scripts/ops/swap-web-build.sh`, run on the host as mct. The deploy script sends that file
+from the Mac checkout it runs in (to a fresh `mktemp` file under `/tmp` on the host, root-owned and mode 0755, removed afterwards) and runs that copy, never the host's tree: a rollback
+ships a public commit that may predate the script, and the mirror would have removed it. `rollback-burnticker.sh` refuses to start
+when this checkout lacks the script or its deploy script would not send it. After restarting the web unit the script checks, under one
+deadline (150 s by default), that `GET /api/burnticker/build` answers HTTP 200 with the STAGED build id and a `startedAt` (the server
+process's own start time) no earlier than the restart, so the old process or a unit that did not restart cannot pass, and that
+`GET /burnticker` answers HTTP 200 with the Burnticker page. A previous build that is swapped back is checked for what it can show: one
+from before `startedAt` existed, or without a BUILD_ID, passes on HTTP 200 alone. A 403, 404 or 500, another build id, a different page or no answer is a
+failure (the old check passed any answer, because `curl -s` exits 0 on an HTTP error, and then deleted the previous build).
+
+- Passed: "web is up on build <id>". The previous build stays in `.next-old` until the next deploy replaces it, so a failure found later
+  (the public deploy smoke) can still be swapped back by hand on the host, as mct: `mv .next .next-failed && mv .next-old .next &&
+  systemctl --user restart mct-burnticker-web`.
+- Failed: the host moves the new build to `.next-failed`, puts `.next-old` back, restarts the web unit, checks that the previous build
+  answers ("ROLLED BACK", or "ROLLBACK DID NOT ANSWER EITHER" when it does not), and the deploy exits 1 without asking the keepers to
+  restart.
+- The deploy's last line says which case it was, from what the host printed: rolled back (the previous build serves, next to the new
+  source), the web not healthy, the swap refused, a failure before the swap, or "DEPLOY INCOMPLETE" when the new build passed and a later
+  step (the keeper restart request, the static pages) failed. `publish-and-deploy.sh` stops on any of them, after the public commit and
+  the pins were pushed, and says so.
+
+The limit: only the Next build is swapped back. By then the deploy has already mirrored the new source to the host and, when the lock
+file changed, run `npm ci` in place; neither is undone. The keepers run from that source: they were not asked to restart, so they keep
+the code they loaded, but one that restarts for any other reason (a crash; systemd brings it back) loads the new source. To put everything back, ship the previous public commit with
+`rollback-burnticker.sh` as above.
 
 ## Rolling forward again
 

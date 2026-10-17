@@ -26,7 +26,7 @@ interface Check {
   upgradeAuthority: { program: string; holder: string; sunset: string }[];
   external: { program: string; power: string; holder: string; effect: string }[];
   locked: Item[]; notDone: Item[];
-  build: { kind: string; kindNote: string; sourceCommit: string; programs: { library: string; programId: string; builds: Record<"mainnet" | "devnet", { features: string[]; hash: string }>; deployed: Partial<Record<"mainnet" | "devnet", { hash: string; matchesBuild: boolean; upgradeAuthority: string; readAt?: string; evidence?: string } | null>> }[] };
+  build: { kind: string; kindNote: string; sourceCommit: string; programs: { library: string; programId: string; round?: number; sourceCommit?: string; builds: Record<"mainnet" | "devnet", { features: string[]; hash: string }>; deployed: Partial<Record<"mainnet" | "devnet", { hash: string; matchesBuild: boolean; upgradeAuthority: string; readAt?: string; evidence?: string } | null>> }[] };
 }
 
 const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
@@ -88,7 +88,9 @@ export default function CheckPage() {
         <section className={card} id="build">
           <h2 className="font-medium">{CHECK_COPY.buildTitle}</h2>
           <p className="text-xs text-neutral-300">{CHECK_COPY.buildIntro}</p>
-          <p className="text-xs mt-1"><span className={`rounded px-1 ${c.build.kind === "docker" ? "bg-neutral-800" : "bg-amber-900 text-amber-200"}`}>{c.build.kind}</span> {c.build.kindNote} It was built from source commit <code>{c.build.sourceCommit.slice(0, 12)}</code>.</p>
+          <p className="text-xs mt-1"><span className={`rounded px-1 ${c.build.kind === "docker" ? "bg-neutral-800" : "bg-amber-900 text-amber-200"}`}>{c.build.kind}</span> {c.build.kindNote} {c.build.programs.some((p) => p.sourceCommit && p.sourceCommit !== c.build.sourceCommit)
+            ? <>Each program is built from its own source commit: {c.build.programs.map((p, i) => <span key={p.library}>{i ? ", " : ""}<code>{p.library}</code>{p.round ? ` round ${p.round}` : ""} from <code>{(p.sourceCommit ?? c.build.sourceCommit).slice(0, 12)}</code></span>)}.</>
+            : <>It was built from source commit <code>{c.build.sourceCommit.slice(0, 12)}</code>.</>}</p>
           {/* audit R05: one row per program and network — a Network column, and each row's deployed bytes, read date and evidence are that network's own */}
           <div className="overflow-x-auto mt-2"><table className="w-full text-xs" data-build-table><thead className="text-neutral-400 text-left"><tr><th className="p-2">Program</th><th className="p-2">Network</th><th className="p-2">Executable hash (this repository)</th><th className="p-2">Deployed bytes on that network</th><th className="p-2">Read</th><th className="p-2">Evidence</th></tr></thead>
             <tbody>{c.build.programs.flatMap((p) => (["mainnet", "devnet"] as const).map((v) => { const d = p.deployed[v]; return <tr key={`${p.library}-${v}`} className="border-t border-neutral-800 align-top"><td className="p-2"><code>{p.library}</code></td><td className="p-2">{v}{p.builds[v].features.length ? <span className="text-neutral-500"> (--features {p.builds[v].features.join(",")})</span> : null}</td><td className="p-2 break-all"><code>{p.builds[v].hash}</code></td><td className="p-2 break-all">{d ? <><code>{d.hash}</code> <span className={d.matchesBuild ? "text-emerald-400" : "text-red-400"}>{d.matchesBuild ? "✓ same bytes" : "✗ differs"}</span></> : <span className="text-neutral-500">no deployed bytes recorded for {v}</span>}</td><td className="p-2 whitespace-nowrap">{d?.readAt ?? "—"}</td><td className="p-2">{d?.evidence ? <RepoText text={d.evidence} /> : "—"}</td></tr>; }))}</tbody></table></div>

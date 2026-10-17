@@ -11,21 +11,29 @@ import crypto from "node:crypto";
 export const VERIFIED_BUILD_FILE = path.join("config", "burnticker", "verified-build.json");
 export type BuildVariant = "mainnet" | "devnet";
 export interface ProgramBuild { features: string[]; bytes: number; hash: string }
-export interface Deployed { hash: string; programData: string; upgradeAuthority: string; readAt: string; matchesBuild: boolean; /** added by the checklist (DEPLOY_EVIDENCE), not stored in the table */ evidence?: string }
+export interface Deployed { hash: string; programData: string; upgradeAuthority: string; readAt: string; matchesBuild: boolean; /** the read-back's record: stored per program since round 5 (2026-10-16); else filled by the checklist from DEPLOY_EVIDENCE */ evidence?: string }
 /**
- * Where each network's deployed-bytes read is recorded (audit R05, 2026-10-11): the check page's build table names it per row. Mainnet:
- * the round-4 upgrade read-back (2026-10-12; the 2026-10-11 first deploy is in docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json); devnet: the verified-build doc (scripts/ops/verified-build.sh
+ * Where each network's deployed-bytes read is recorded (audit R05, 2026-10-11): the check page's build table names it per row. The
+ * table's own `deployed.<network>.evidence` wins (round 5, 2026-10-16: burn_receipts reads back in mainnet-round5, pair_curve still in
+ * mainnet-round4); these are the fallbacks. Mainnet: the latest upgrade read-back; devnet: the verified-build doc (scripts/ops/verified-build.sh
  * --onchain devnet).
  */
 export const DEPLOY_EVIDENCE: Record<BuildVariant, string> = {
-  mainnet: "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log",
+  mainnet: "docs/burnkeeper/evidence/mainnet-round5/onchain-verify-after.log",
   devnet: "docs/burnticker/VERIFIED-BUILD.md",
 };
 export interface VerifiedBuild {
   schema: "burnticker.verified-build/v1"; updatedAt: string; note: string;
   kind: "interim-local" | "docker"; kindNote: string; sourceCommit: string; sourceCommitNote: string;
   toolchain: Record<string, string>; workspace: string;
-  programs: { library: string; programId: string; builds: Record<BuildVariant, ProgramBuild>; deployed: { devnet: Deployed | null; mainnet: Deployed | null } }[];
+  programs: {
+    library: string; programId: string;
+    /** The program round its deployed bytes are (round 5, 2026-10-16: burn_receipts 5, pair_curve 4 — pair_curve was not upgraded). */
+    round?: number;
+    /** The source commit of THIS program's builds when it differs from the table's (pair_curve: round 4's 29f6f5de). */
+    sourceCommit?: string;
+    builds: Record<BuildVariant, ProgramBuild>; deployed: { devnet: Deployed | null; mainnet: Deployed | null };
+  }[];
 }
 
 export function executableHash(bytes: Uint8Array): string {
@@ -41,6 +49,10 @@ export function verifiedBuildProblems(t: Partial<VerifiedBuild> | null): string[
   if (!/^[0-9a-f]{40}$/.test(String(t.sourceCommit))) out.push("sourceCommit must be a 40-hex git commit");
   const libs = (t.programs ?? []).map((p) => p.library).sort();
   if (JSON.stringify(libs) !== JSON.stringify(["burn_receipts", "pair_curve"])) out.push("programs must be burn_receipts and pair_curve");
+  for (const p of t.programs ?? []) {
+    if (p.sourceCommit !== undefined && !/^[0-9a-f]{40}$/.test(String(p.sourceCommit))) out.push(`${p.library}.sourceCommit must be a 40-hex git commit`);
+    if (p.round !== undefined && !(Number.isInteger(p.round) && p.round >= 1)) out.push(`${p.library}.round must be a positive integer`);
+  }
   for (const p of t.programs ?? []) for (const v of ["mainnet", "devnet"] as BuildVariant[]) {
     const b = p.builds?.[v];
     if (!b || !/^[0-9a-f]{64}$/.test(b.hash)) out.push(`${p.library}.${v}: hash must be 64 hex`);

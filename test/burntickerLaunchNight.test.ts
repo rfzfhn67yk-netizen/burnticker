@@ -170,7 +170,7 @@ describe("5: a page from an earlier build says so", () => {
     const vc = read("src/app/burnticker/_components/VersionCheck.tsx");
     assert.match(vc, /window\.addEventListener\("focus", onFocus\)/); assert.match(vc, /mayCheck\(last\.current, now\)/);
     assert.equal((vc.match(/location\.reload\(\)/g) ?? []).length, 1, "the one reload is the button's"); assert.match(vc, /onClick=\{\(\) => window\.location\.reload\(\)\}/);
-    assert.match(read("src/app/api/burnticker/build/route.ts"), /\{ build: currentBuildId\(\) \}, \{ headers: \{ "cache-control": "no-store" \} \}/);
+    assert.match(read("src/app/api/burnticker/build/route.ts"), /\{ build: currentBuildId\(\), startedAt: processStartedAtMs\(\) \}, \{ headers: \{ "cache-control": "no-store" \} \}/);
   });
 });
 

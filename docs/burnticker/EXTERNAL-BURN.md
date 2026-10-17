@@ -1,7 +1,7 @@
-# External burn targets: burn_receipts round 5 (status 2026-10-14: round-5 blind review fixes in, still not deployed)
+# External burn targets: burn_receipts round 5 (status 2026-10-16: deployed on devnet and mainnet on 2026-10-15)
 
-Owner, 2026-10-13: "is there another example where we can make the actual wif and bonk coins burn?" → "build it". Built on a branch,
-nothing deployed. Brief: `mct-runner-study/launch-debt-egg-2026-10-09/ROUND5-EXTERNAL-BURN-BRIEF.md`; the venue measurement and the
+Owner, 2026-10-13: "is there another example where we can make the actual wif and bonk coins burn?" → "build it". Built on a branch
+first (2026-10-13), then deployed with the review fixes on devnet and mainnet on 2026-10-15. Brief: `mct-runner-study/launch-debt-egg-2026-10-09/ROUND5-EXTERNAL-BURN-BRIEF.md`; the venue measurement and the
 AMM v4 decision: docs/burnticker/EXTERNAL-BURN-VENUES.md.
 
 ## What a target coin does

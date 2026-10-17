@@ -5,6 +5,7 @@ import { assertSignableGenesis, type Cluster as ProgramCluster, LAUNCHLAB_PROGRA
 import { anchorErrorName, assertClusterAllowed, carriedPaceView, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
 import { type PrivateSender, privateSenderFromEnv } from "@/lib/burnKeeper/privateSend";
 import { submitReadingIx } from "@/lib/burnReceipts/instructions";
+import { END_STATE_LIVE, END_STATE_RESOLVED, END_STATE_VOID } from "@/lib/burnReceipts/endSink";
 import { configPda, feePda, launchlabCreatorFeeVault, readingPda } from "@/lib/burnReceipts/pda";
 import type { Cosignature, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
 import { planGraduatedCreatorFeeClaim } from "@/lib/burnKeeper/creatorFees";
@@ -47,7 +48,7 @@ export function configView(programId: PublicKey, mint: PublicKey, c: TokenConfig
     poolRegistered: c.poolRegistered, pool: c.poolRegistered ? c.cpmm_pool.toBase58() : null, poolUntradeableSince: c.pool_untradeable_since > BigInt(0) ? Number(c.pool_untradeable_since) : null,
     poolUntradeableLastSeen: c.pool_untradeable_last_seen > BigInt(0) ? Number(c.pool_untradeable_last_seen) : null, clusterGenesis: c.cluster_genesis.toBase58(),
     carriedSpendLamports: c.carried_spend_lamports, totalBurned: c.total_burned, totalSpentLamports: c.total_spent_lamports, shortfall: c.shortfall, readings: c.readings, burns: c.burns,
-    burnsTarget: (c.burn_target_kind ?? 0) !== 0, ruleEnded: c.end_state !== 0,
+    burnsTarget: (c.burn_target_kind ?? 0) !== 0, ruleEnded: c.end_state !== END_STATE_LIVE, endState: c.end_state === END_STATE_RESOLVED ? "resolved" : c.end_state === END_STATE_VOID ? "void" : "live",
   };
 }
 

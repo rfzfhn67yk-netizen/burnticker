@@ -383,13 +383,15 @@ export async function poolSolReserve(ctx: ProgramContext): Promise<bigint | null
  * buyback, no pool, or (round-5 review R5-8) the piece does not fit the coin's carried budget yet (one per-crank cap per 600 s, up to one
  * cap, less what earlier pieces spent; one piece per second) — "too-soon" carries the time (ms, local clock) the program will accept it,
  * computed against the CHAIN's clock (the latest block time) so a lagging or leading local clock does not make the keeper retry early.
+ * An ENDED rule is not a refusal (round-5 review R5-3 / R5-4, deployed on mainnet 2026-10-15): crank_carried runs after a VOID end (the
+ * wind-down's carry) and after a RESOLVED end (the 30-day grace in which forward_on_end / burn_sol_on_end leave the carry on the coin), so
+ * the plan is the same as for a live rule — the budget, TWAP, pool and reserve checks are the program's either way.
  */
-export async function planCarriedCrank(ctx: ProgramContext, cranker: PublicKey, maxSpendLamports: bigint, nowMs: number = Date.now()): Promise<{ instructions: TransactionInstruction[]; carriedLamports: bigint; throughDate: number } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" | "rule-ended" } | { status: "too-soon"; nextAtMs: number }> {
+export async function planCarriedCrank(ctx: ProgramContext, cranker: PublicKey, maxSpendLamports: bigint, nowMs: number = Date.now()): Promise<{ instructions: TransactionInstruction[]; carriedLamports: bigint; throughDate: number } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" } | { status: "too-soon"; nextAtMs: number }> {
   const cfg = await fetchTokenConfig(ctx.connection, ctx.programId, ctx.mint);
   if (!cfg) throw new Error(`no burn_receipts config for mint ${ctx.mint.toBase58()}`);
   const c = cfg.config;
   if (c.rule.mode !== MODE_BUYBACK || targetCoin(c)) return { status: "not-buyback" };
-  if (c.end_state !== 0) return { status: "rule-ended" };
   if (!c.poolRegistered) return { status: "waiting-for-pool" };
   if (c.has_baseline && c.crank_cursor !== c.last_record_date) return { status: "reading-pending" };
   if (c.carried_spend_lamports <= BigInt(0)) return { status: "nothing-carried" };

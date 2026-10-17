@@ -11,6 +11,8 @@
 //      ≤ 44-char base58 pubkey (32 bytes), never anything longer.
 //
 //   node scripts/ops/verify-evidence-signatures.mjs [--rpc https://api.devnet.solana.com] [file|dir ...]
+//   node scripts/ops/verify-evidence-signatures.mjs --cluster mainnet --rpc <a mainnet RPC> file ...   (2026-10-16: mainnet evidence, e.g.
+//     the round-5 upgrade's Squads signatures; the RPC must answer with mainnet's genesis hash)
 //   (default: both devnet run logs and every evidence directory — the 10-10 rehearsal and the pair_curve rehearsal)
 //
 // Exits 0 only when every token is a confirmed devnet transaction and the evidence directory is clean; prints one summary. Read-only.
@@ -20,8 +22,11 @@ import path from "node:path";
 
 const args = process.argv.slice(2);
 const rpcIdx = args.indexOf("--rpc");
-const RPC = rpcIdx >= 0 ? args[rpcIdx + 1] : "https://api.devnet.solana.com";
-const DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
+const clIdx = args.indexOf("--cluster");
+const CLUSTER = clIdx >= 0 ? args[clIdx + 1] : "devnet";
+const GENESIS = { devnet: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG", mainnet: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d" }[CLUSTER];
+if (!GENESIS) throw new Error("--cluster must be devnet or mainnet");
+const RPC = rpcIdx >= 0 ? args[rpcIdx + 1] : CLUSTER === "devnet" ? "https://api.devnet.solana.com" : "https://api.mainnet-beta.solana.com";
 // Every directory under docs/burnkeeper/evidence/ is an evidence directory (the 10-10 rehearsal, then the pair_curve rehearsal).
 const EVIDENCE_ROOT = "docs/burnkeeper/evidence/";
 const DEFAULT_TARGETS = [
@@ -33,7 +38,7 @@ const DEFAULT_TARGETS = [
   "docs/burnkeeper/devnet-pair-forward-r2-run-log.md", "docs/burnkeeper/evidence/devnet-pair-forward-r2",
   "docs/burnkeeper/devnet-pair-forward-r3-run-log.md", "docs/burnkeeper/evidence/devnet-pair-forward-r3",
 ];
-const targets = args.filter((a, i) => !(a === "--rpc" || (rpcIdx >= 0 && i === rpcIdx + 1)));
+const targets = args.filter((a, i) => !(a === "--rpc" || a === "--cluster" || (rpcIdx >= 0 && i === rpcIdx + 1) || (clIdx >= 0 && i === clIdx + 1)));
 const files = (targets.length ? targets : DEFAULT_TARGETS).flatMap((t) => fs.statSync(t).isDirectory() ? fs.readdirSync(t).sort().map((f) => path.join(t, f)) : [t]);
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -75,7 +80,7 @@ for (const f of files) {
     }
   });
 }
-if ((await rpc("getGenesisHash", [])) !== DEVNET_GENESIS) throw new Error(`${new URL(RPC).host} is not devnet`);
+if ((await rpc("getGenesisHash", [])) !== GENESIS) throw new Error(`the RPC is not ${CLUSTER}`);
 const all = [...tokens.keys()];
 const not64 = all.filter((t) => b58decode(t)?.length !== 64);
 for (const t of not64) problems.push(`not a 64-byte value: ${t.slice(0, 12)}… at ${[...tokens.get(t)][0]}`);
@@ -93,7 +98,7 @@ for (const s of candidates) {
     const tx = await rpc("getTransaction", [s, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }]);
     if (tx) { viaGetTransaction++; st = { confirmationStatus: "confirmed", err: tx.meta?.err ?? null }; }
   }
-  if (!st || !["confirmed", "finalized"].includes(st.confirmationStatus)) { problems.push(`NOT a confirmed devnet transaction: ${s.slice(0, 12)}… at ${[...tokens.get(s)].join(", ")}`); continue; }
+  if (!st || !["confirmed", "finalized"].includes(st.confirmationStatus)) { problems.push(`NOT a confirmed ${CLUSTER} transaction: ${s.slice(0, 12)}… at ${[...tokens.get(s)].join(", ")}`); continue; }
   confirmed++;
   if (st.err) landedWithError++;
 }
@@ -121,10 +126,10 @@ for (const f of evidence) {
 
 const occurrences = [...tokens.values()].reduce((a, s) => a + s.size, 0);
 console.log(`verify-evidence-signatures: ${files.length} files, ${all.length} distinct 86–88-char base58 tokens (${occurrences} file:line occurrences)`);
-console.log(`  64-byte decodes: ${candidates.length}/${all.length} · confirmed devnet transactions: ${confirmed}/${all.length} (${viaGetTransaction} via getTransaction, ${landedWithError} landed with a program error)`);
+console.log(`  64-byte decodes: ${candidates.length}/${all.length} · confirmed ${CLUSTER} transactions: ${confirmed}/${all.length} (${viaGetTransaction} via getTransaction, ${landedWithError} landed with a program error)`);
 console.log(`  evidence dir: ${evidence.length} files (${jsonFiles} JSON parsed) — 64-number arrays / secret|keypair fields / over-long *key* fields: ${problems.filter((p) => !p.startsWith("NOT a") && !p.startsWith("not a")).length}`);
 if (longerRuns) console.log(`  note: ${longerRuns} base58 run(s) longer than 88 chars (not the key shape; not checked)`);
 if (problems.length) { console.log(`FAILED (${problems.length}):`); for (const p of problems) console.log(`  ${p}`); process.exit(1); }
 // Scope (review item 16): this proves each token is a confirmed devnet signature and that the key-shape heuristics above found nothing.
 // It does not authenticate burn programs, mints or amounts, recompute units, or prove the absence of every possible secret.
-console.log("PASSED: every token is a confirmed devnet transaction signature; no key-shaped material found in the evidence directory (64-byte arrays, secret/keypair fields, over-long *key* fields — heuristics, not a proof of no secrets)");
+console.log(`PASSED: every token is a confirmed ${CLUSTER} transaction signature; no key-shaped material found in the evidence directory (64-byte arrays, secret/keypair fields, over-long *key* fields — heuristics, not a proof of no secrets)`);

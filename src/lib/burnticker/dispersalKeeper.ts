@@ -28,6 +28,10 @@ import { addReading, behind, debtLine, markChunk, nextDueAt, RECEIPTS_KEPT, reco
 export const DISPERSAL_STATE_KEY = (mint: string): string => `dispersal:${mint}`;
 const WAIT_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch", "ReadingPending"]);
 const RETRY_MS = 10 * 60_000;
+/** The program's "nothing is carried" refusal: the carry was spent by another cranker or cleared by the rule's end path (after the grace). */
+const NOTHING_CARRIED = /NothingCarried/;
+/** What a refused or failed piece leaves behind, in the log's words (never "stays carried" when the chain says nothing is). */
+const afterRefusal = (err: string): string => NOTHING_CARRIED.test(err) ? "nothing is carried on chain any more (spent by another cranker, or cleared by the rule's end path); there is nothing left to spend" : "the amount stays carried";
 /** Round-5 review R5-8: the program's refusal of a piece inside the interval (Anchor error 6141). */
 const TOO_SOON = /CarriedTooSoon|\b6141\b|0x17fd/;
 /** After a CarriedTooSoon refusal, the next try is no sooner than this (a lagging cluster clock must not make the keeper retry every second). */
@@ -93,28 +97,36 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
   const port = d.port;
   if (!port.planCarried || !port.poolSolReserve) return out({ action: "off", why: "this program client has no crank_carried" });
   const cfg = await port.config();
-  if (!cfg || cfg.mode !== "buyback" || cfg.burnsTarget || cfg.ruleEnded || !cfg.poolRegistered) {
-    st = { ...st, window: null };
-    return out({ action: "idle", why: !cfg ? "no program config" : cfg.mode !== "buyback" ? "not a buyback coin" : cfg.burnsTarget ? "a coin with a burn target" : cfg.ruleEnded ? "the rule has ended" : "no pool registered" });
-  }
 
-  // 1. RESOLVE the piece in flight.
+  // 1. RESOLVE the piece in flight — FIRST, before any lifecycle answer (third prelaunch audit F01): a piece signed before the rule
+  // ended, before the pool went away or before a restart is still a signature that may land; it is reconciled to its own receipt (or
+  // released) whatever the coin's state is now, so a landed piece is never lost and a dead one never blocks the plan.
   if (st.inflight) {
     const f = st.inflight;
     const [s] = await port.signatureStatuses([f.signature]);
     if (s && s.confirmed && !s.err) {
       const memo = await port.memoOf(f.signature);
-      const spent = spentFromMemo(memo) ?? (f.carriedBefore > cfg.carriedSpendLamports ? f.carriedBefore - cfg.carriedSpendLamports : Z);
+      const spent = spentFromMemo(memo) ?? (cfg && f.carriedBefore > cfg.carriedSpendLamports ? f.carriedBefore - cfg.carriedSpendLamports : cfg ? Z : f.lamports);
       st = landed(st, f.signature, spent, memo, s.slot, now, f.chunkIndex);
       d.log(`  [dispersal] $${d.ticker}: a piece landed after a restart: ${sol(spent)} SOL · ${f.signature}`);
     } else if (s && s.err) {
       if (st.window && st.window.done === f.chunkIndex) st = { ...st, window: markChunk(st.window, Z) };
       st = { ...st, inflight: null };
-      d.log(`  [dispersal] $${d.ticker}: the piece ${f.signature.slice(0, 12)}… failed on chain (${s.err.slice(0, 80)}); the amount stays carried`);
+      d.log(`  [dispersal] $${d.ticker}: the piece ${f.signature.slice(0, 12)}… failed on chain (${s.err.slice(0, 80)}); ${afterRefusal(s.err)}`);
     } else if ((await port.blockHeight()) > f.lastValidBlockHeight) {
       st = { ...st, inflight: null };
       d.log(`  [dispersal] $${d.ticker}: the piece ${f.signature.slice(0, 12)}… expired without landing; it is planned again`);
     } else return out({ action: "wait", why: `piece ${f.signature.slice(0, 12)}… not final yet`, nextDueAt: now + 15_000 });
+  }
+
+  // LIFECYCLE. An ENDED rule is NOT a reason to stop (round-5 review R5-3 / R5-4, the program deployed on mainnet 2026-10-15):
+  // crank_carried drains the carried spend after a VOID end (the wind-down's carry) and after a RESOLVED end, for which forward_on_end /
+  // burn_sol_on_end leave the carry on the coin for 30 days. The keeper keeps accounting, alerting and spending pieces through the
+  // normal budget / TWAP / reserve checks until the chain shows nothing carried — drained here, or disposed by the end path after the
+  // grace (the carry then reads 0 and the debts reconcile away).
+  if (!cfg || cfg.mode !== "buyback" || cfg.burnsTarget || !cfg.poolRegistered) {
+    st = { ...st, window: null };
+    return out({ action: "idle", why: !cfg ? "no program config" : cfg.mode !== "buyback" ? "not a buyback coin" : cfg.burnsTarget ? "a coin with a burn target" : "no pool registered" });
   }
 
   // 2. ACCOUNT: a reading's crank since the last look, then the chain's carried amount.
@@ -168,6 +180,11 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
       d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece deferred by the program (${sim.err}); retrying in 10 min`);
       return out({ action: "wait", why: sim.err, nextDueAt: now + RETRY_MS });
     }
+    if (NOTHING_CARRIED.test(sim.err)) {
+      st = { ...st, window: null };
+      d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece refused in simulation (${sim.err}): ${afterRefusal(sim.err)}`);
+      return out({ action: "refused", why: sim.err, nextDueAt: null });
+    }
     if (st.window) st = { ...st, window: markChunk(st.window, Z) };
     d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece refused in simulation (${sim.err}); it stays carried and the plan moves on`);
     return out({ action: "refused", why: sim.err });
@@ -187,7 +204,8 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
       return out({ action: "wait", why: "CarriedTooSoon", signature: tx.signature, nextDueAt: st.retryAt });
     }
     if (st.window) st = { ...st, window: markChunk(st.window, Z) };
-    d.log(`  [dispersal] $${d.ticker}: the piece failed on chain (${c.err.slice(0, 80)}); the amount stays carried`);
+    if (NOTHING_CARRIED.test(c.err)) st = { ...st, window: null };
+    d.log(`  [dispersal] $${d.ticker}: the piece failed on chain (${c.err.slice(0, 80)}); ${afterRefusal(c.err)}`);
     return out({ action: "refused", why: c.err, signature: tx.signature });
   }
   const memo = await port.memoOf(tx.signature);

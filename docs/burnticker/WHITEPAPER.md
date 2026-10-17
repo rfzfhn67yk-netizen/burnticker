@@ -871,7 +871,7 @@ burns another token: docs/burnticker/EXTERNAL-BURN.md; the incinerator end sink 
 (`crank_carried`, the CarriedSpent event and five errors): the checklist erratum of 2026-10-13; the round-5 blind review fixes
 (`release_target`, the TargetReleased event, five errors, the retired `initialize_token`): the checklist erratum of 2026-10-14; the
 carried-piece pace and the liveness of a coin that burns another token (R5-8, R5-9: three errors, the CarriedPace account): the checklist
-erratum of 2026-10-15; built, not deployed.)
+erratum of 2026-10-15; deployed on devnet and mainnet on 2026-10-15.)
 
 The pair program (`pair_curve`, IDL in `src/lib/pairCurve/idl.ts`) has 9 entrypoints. `init_pair` takes args, is signed by the payer
 and the creator, and creates the pair. The two curve-trade instructions take a side, an amount and a slippage bound, and the trader

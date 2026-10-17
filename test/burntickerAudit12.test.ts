@@ -269,7 +269,12 @@ describe("private review 9 F1: old ticker follows migrate only against the compl
   test("editorial: the checker labels its instruction list as the published source beside the deployed commit; the fee line names both venues", async () => {
     const { buildChecklist } = await import("@/lib/burnticker/trustpack/checklist");
     const c = buildChecklist();
-    assert.match(c.moneySource, new RegExp(`^These ${c.money.length} instructions are the published source's \\(the programs' registers, round 5\\)[\\s\\S]*round-4 build of commit ${c.build.sourceCommit.slice(0, 10)}`));
+    assert.match(c.moneySource, new RegExp(`^These ${c.money.length} instructions are the published source's \\(the programs' registers, round 5\\)`));
+    // third prelaunch audit (2026-10-16): round 5 is deployed (burn_receipts, 2026-10-15), so the line no longer says its instructions are missing,
+    // and it names each program's deployed round and commit (pair_curve stays on round 4)
+    assert.doesNotMatch(c.moneySource, /not on the deployed programs/);
+    assert.match(c.moneySource, /8 of them are new in round 5\. They belong to the burn program \(burn_receipts\), which runs round 5, so they are on the deployed program too\./);
+    assert.match(c.moneySource, new RegExp(`the burn program \\(burn_receipts\\) at round 5, from commit ${c.build.sourceCommit.slice(0, 10)}, and the pair program \\(pair_curve\\) at round 4, from commit 29f6f5de19\\.`));
     const { DEV_FEE_LINE, devFeeLineFor } = await import("@/lib/burnticker/fees");
     assert.match(DEV_FEE_LINE, /LaunchLab rates; pair-curve pairs differ\.$/);
     assert.doesNotMatch(devFeeLineFor("launchlab"), /pair-curve/);

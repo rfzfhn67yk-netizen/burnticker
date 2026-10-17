@@ -1,5 +1,7 @@
 # Round 5 → mainnet: owner execution sheet (staged 2026-10-15, NOT run)
 
+**EXECUTED 2026-10-15 ~19:57 Denver** (2026-10-16T01:57:13Z): vault transaction 3 executed in slot 457461970, signature `2u95GqT9W4pxg8GPmbfyWRUrpsjbrnH8ruKCussb9HMX9UkUjFibToW7Z8BmQ1BJzjiixri3R6y6uS2DuciAiFpR`; the votes and the execute are in `squads-votes-execute.log`, the read-back (`152929ce…0821` MATCH, authority still the vault; pair_curve still round 4 `567f3700…8a95` MATCH) in `onchain-verify-after.log`, both read from chain 2026-10-16. The sheet below is kept as it was staged.
+
 burn_receipts round 5 with the round-5 review fixes (R5-1..R5-7, R5-12, second review R5-01, A, B, C; release_target; pin_burn_target
 needs an end sink; initialize_token retired) and R5-8 / R5-9 inside the program (owner decision 2026-10-15: carried-spend lamport budget
 with the CarriedPace PDA, stalled targets dead, optional BurnTarget accounts on forward_to_winner / forward_on_end). Updated 2026-10-15
