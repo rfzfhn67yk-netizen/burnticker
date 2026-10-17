@@ -58,15 +58,16 @@ async function buildIndex(): Promise<{ body: unknown; memoMs: number }> {
   const ready = new Map<string, Readiness>();
   // owner decision 2026-10-12: a mainnet host lists no registry row on the devnet cluster (devnetHide.ts)
   // owner 2026-10-14: a coin the operator marked test is not listed (testCoins.ts); /burnticker/test-coins lists it
-  const tokens = withoutTestCoins(publicRegistryRows(p.registry.tokens(), p.cluster), testCoinKeys(process.cwd(), p.registry));
+  // block G re-review Low 3: draft and expired-draft mints are not listed publicly (the same rule as GET /v1/tokens)
+  const tokens = withoutTestCoins(publicRegistryRows(p.registry.tokens(), p.cluster), testCoinKeys(process.cwd(), p.registry)).filter((t) => t.status !== "draft" && t.status !== "expired");
   // M7: drafts and expired drafts are built from the registry alone (server.ts); the rest read through the batch and the read cache
   const view = await webReadPlatform(p, tokens);
   const reads = await allLimited(tokens.map((t) => () => tokenPageData(view, t, now)), INDEX_CONCURRENCY);
-  for (const r of reads) { if (r.status !== "fulfilled") continue; /* a token whose page fails is left out, not invented */ const d = r.value; statuses.push(d.status); ready.set(d.status.ticker, readinessFromStatus(d.status, d.receipts)); }
+  for (const r of reads) { if (r.status !== "fulfilled") continue; /* a token whose page fails is left out, not invented */ const d = r.value; statuses.push(d.status); ready.set(d.status.mint, readinessFromStatus(d.status, d.receipts)); }
   const audit = readAudit(p.publishDir);
   const index = buildPlatformIndex(statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null);
   // website-17 wiring item 2: each coin's rank line (coinRank.ts), null when the registry could not be ranked (never a guessed rank)
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   console.info(`[burnticker/tokens] built in ${Date.now() - started} ms, ${statuses.length} coins`);
-  return { memoMs: memoWindowMs(chainRows(tokens).length), body: { ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.ticker) ?? null, rank: ranks?.get(t.ticker)?.line ?? null })), cluster: p.cluster, stubs: p.stubs } };
+  return { memoMs: memoWindowMs(chainRows(tokens).length), body: { ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.mint) ?? null, rank: ranks?.get(t.mint)?.line ?? null })), cluster: p.cluster, stubs: p.stubs } };
 }

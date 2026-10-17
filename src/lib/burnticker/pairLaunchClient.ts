@@ -106,11 +106,32 @@ export const PAIR_CURVE_LAUNCHED_TX: { a: number; b: number } = { a: 0, b: 1 };
 export const launchedSignatures = (pc: PairCurveLaunchBundle, sigs: string[], map: { a: number; b: number } = PAIR_CURVE_LAUNCHED_TX): { mint: string; launchTx: string }[] =>
   sigs[map.a] && sigs[map.b] ? [{ mint: pc.mints.a, launchTx: sigs[map.a] }, { mint: pc.mints.b, launchTx: sigs[map.b] }] : [];
 
-/** A failed `launched` confirmation → one plain sentence (404 = not seen yet, retried before this is shown). */
+/** The server's own sentence as one sentence: first letter capitalised, ending with a full stop. "" when it gave none. */
+const asSentence = (s: string | undefined): string => { const t = (s ?? "").trim(); if (!t) return ""; const c = t[0].toUpperCase() + t.slice(1); return /[.!?]$/.test(c) ? c : `${c}.`; };
+const KEPT_DRAFT = "Nothing changed, and the coin stays a draft.";
+
+/**
+ * A failed `launched` confirmation, one plain sentence chosen by the response's CODE (prelaunch audit 2026-10-16 F-17; the codes are
+ * api/handlers.ts markLaunched's), falling back to the server's own sentence. 404 = not seen yet (retried before this is shown).
+ */
 export function launchedErrorMessage(status: number, body: LaunchErrorBody | null, retryAfterHeader?: string | null): string {
+  const code = body?.code ?? "", own = asSentence(body?.error);
   if (status === 404) return "The server has not seen the transaction on chain yet. Wait a minute and press the button again.";
-  if (status === 422) return "The server did not accept that transaction as this coin's launch. Nothing changed; the coin stays a draft.";
-  if (status === 409) return "This coin is already recorded as launched in a different transaction.";
+  if (code === "already-launched") return "This coin is already recorded as launched in a different transaction.";
+  if (code === "launch-late") return "This launch landed more than 24 hours after its draft was made, so it is not recorded. Start over to build a new launch.";
+  if (code === "launch-after-closure") return own || "This launch landed after creator launches closed, so it is not recorded.";
+  if (code === "launch-race") return "This coin was being recorded by another check at the same moment. Reload the page to see whether it is live.";
+  if (code === "launch-unverified") {
+    if (status === 422) return own ? `The server did not accept that transaction as this coin's launch. ${own} ${KEPT_DRAFT}` : `The server did not accept that transaction as this coin's launch. ${KEPT_DRAFT}`;
+    return own || `The server could not confirm this launch just now. ${KEPT_DRAFT}`;
+  }
+  if (status === 429 && code === "rate-limited") {
+    const s = Number(retryAfterHeader ?? body?.retryAfterSec);
+    const wait = Number.isFinite(s) && s > 0 ? (s >= 90 ? `about ${Math.ceil(s / 60)} minutes` : `${Math.ceil(s)} seconds`) : "a little while";
+    return `This coin's launch was checked with too many different transactions in the last hour. Try again in ${wait}.`;
+  }
+  if ((status === 409 || status === 422 || status === 403) && own) return own;
+  if (status === 409 || status === 422) return `The server could not record this launch. ${KEPT_DRAFT}`;
   return launchErrorMessage(status, body, retryAfterHeader);
 }
 

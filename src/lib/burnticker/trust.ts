@@ -1,3 +1,4 @@
+import { plainPower } from "@/lib/burnticker/powerPlain";
 import fs from "node:fs";
 import path from "node:path";
 import { PublicKey } from "@solana/web3.js";
@@ -86,7 +87,8 @@ export function registerPowersFromShipped(j: ShippedRegister, upgradeTimeLockSec
 /** What the operator can and cannot do — the block on every token page. Derived from the register, not free text. */
 export function operatorPowersSummary(reg: PowersRegister): { can: string[]; cannot: string[]; placeholder: boolean } {
   const can = new Set<string>(), cannot = new Set<string>();
-  for (const p of reg.powers) { p.canDo.forEach((x) => can.add(x)); p.cannotDo.forEach((x) => cannot.add(x)); }
+  // prelaunch audit 2026-10-16 (M11): the lists a holder reads are in plain words (powerPlain.ts); the register stays as written
+  for (const p of reg.powers) { p.canDo.forEach((x) => can.add(plainPower(x))); p.cannotDo.forEach((x) => cannot.add(plainPower(x))); }
   cannot.add("change a token's rule, readings or receipts after the fact, because the registry is append-only and database triggers enforce that");
   cannot.add("earn from a burn pool, because nothing is ever taken from one");
   return { can: [...can], cannot: [...cannot], placeholder: reg.placeholder };

@@ -27,6 +27,20 @@ export function coinTabs(hasHolders: boolean): CoinTab[] {
 
 /** The Holders tab's share line (indexer-1): the ten largest wallets' share of the supply, then the same without the labelled wallets (the
  * bonding curve, the trading pool, the burn pool and the creator). A share that was not read is left out, never shown as zero. */
+/**
+ * A pair card's title (prelaunch audit 2026-10-16 F-14): the series title without internal labels. A one-game title read "Seattle
+ * Seahawks win in ESPN game 2475453" (an event id, and ESPN is not a settlement source): it reads "Seattle Seahawks win, one game". With
+ * no title the card says "$A vs $B", never the selector key.
+ */
+export function pairCardTitle(seriesTitle: string | null | undefined, a: string, b: string): string {
+  const t = (seriesTitle ?? "").trim();
+  if (!t) return `$${a} vs $${b}`;
+  return t.replace(/\s+in ESPN game \d+$/, ", one game");
+}
+
+/** "There is 1 holder." / "There are 12 holders." (prelaunch audit 2026-10-16: the page said "There are 1 holders."). */
+export const holdersCountSentence = (n: number): string => (n === 1 ? "There is 1 holder." : `There are ${n.toLocaleString("en-US")} holders.`);
+
 export function holdersShareLine(top10Pct: number | null | undefined, top10PctUnlabelled: number | null | undefined): string {
   const pct = (n: number) => `${n.toFixed(2)}%`;
   return [

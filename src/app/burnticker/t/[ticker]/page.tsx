@@ -19,8 +19,8 @@ import { targetActionSentence, targetTrustCopy } from "@/lib/burnticker/burnTarg
 import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnReal";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
-import { finiteNumber, fixed, joinList } from "@/lib/burnticker/safeFormat";
-import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersShareLine, initialTab, marketFacts, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
+import { counted, finiteNumber, fixed, grouped, headOf, joinList, listOf } from "@/lib/burnticker/safeFormat";
+import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersCountSentence, holdersShareLine, initialTab, marketFacts, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
 import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
@@ -68,10 +68,11 @@ interface LpBlock { policy: string; lockProgram: string; feeKey: string | null; 
 interface Reading { id: string; at: string; result: string | null; value: string | null; title: string | null }
 interface Data { status: Status & { lifecycle?: { line: string } | null; stated?: StatedJson | null; /** website-26 (WIRING-FEATURES item 12) */ derbyScoreboard?: DerbyScoreboard | null }; receipts: Receipt[]; readings: Reading[]; rulesText: string; stubs: string[] }
 
-const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? `.${f}` : ""); };
+// F-24: a field missing from an older status file is a dash, never a crash (safeFormat.ts)
+const fmt = (s: unknown) => grouped(s);
 const short = (a: string) => (a.length > 12 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
 /** "1 burn" / "3 burns": a count with the right noun. */
-const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const count = (n: unknown, one: string, many = `${one}s`) => counted(n, one, many);
 
 function Chart({ readings, receipts }: { readings: Reading[]; receipts: Receipt[] }) {
   // audit 2026-10-15 H7: a reading whose value is not a finite number is left off the line (never NaN in the SVG)
@@ -158,14 +159,14 @@ export default function TokenPage() {
   const afterGraduation = burnsAfterGraduation(m?.curve?.threshold ?? null, m?.curve?.quote ?? "SOL");
   // ChatGPT audit 6 A10: the market facts this site read, and Burnticker's own facts, equally legible; a dash with a reason for the rest
   const market = marketFacts({ cluster: s.cluster, status: s.status, mint: s.mint, mintUrl: s.addresses.mintUrl, creator: s.addresses.creator, creatorUrl: s.addresses.creatorUrl, launchedAt: s.launchedAt, phase: m?.phase ?? null, curve: m?.curve ?? null, curveNote: m?.curveNote ?? null, graduatedPool: m?.graduatedPool ?? null, holdersCount: m?.holders.count ?? null, holdersNote: m?.holders.countNote ?? "This site has not read the holders.", pool: m?.pool ?? null, poolNote: m?.poolNote ?? null, dates: m?.dates ?? null, feesCurveBps: s.fees.curve.totalBps, feesPoolBps: s.fees.postGraduation.totalBps, readAt: m?.readAt ?? null });
-  const latest = [...d.receipts].filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
+  const latest = [...d.receipts].filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => String(b.settledAt).localeCompare(String(a.settledAt)))[0] ?? null;
   const nextRow = nextTimeRow(s.next.nextCloseTime, s.next.nextCheckAt);
   const burnFacts: FactRow[] = [
     { key: "trigger", label: "What fires the rule", value: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, note: latest?.settlementSourceUrl ? "The source of the latest result is linked." : coinSourceNote(s.oracle, s.selectorKey), href: latest?.settlementSourceUrl ?? null },
     { key: "next", label: nextRow.label, value: nextRow.value, note: nextRow.note, more: SETTLEMENT_LINK },
     { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? `SOL set aside for this coin's burns. ${s.pool.reserveSol} SOL of it is kept back for fees.` : "Tokens set aside for this coin's burns." },
-    { key: "burned", label: "Burned so far", value: `${fmt(s.burned.total)} of ${fmt(s.supply.initial)} tokens`, note: `${fixed(s.burned?.pctOfSupply)}% of the supply, in ${count(s.burned.count, "burn")}.` },
-    { key: "last", label: "Last receipt", value: latest ? latest.settledAt.slice(0, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? FIRST_BURN_AFTER_GRADUATION : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
+    { key: "burned", label: "Burned so far", value: `${fmt(s.burned?.total)} of ${fmt(s.supply?.initial)} tokens`, note: `${fixed(s.burned?.pctOfSupply)}% of the supply, in ${count(s.burned?.count, "burn")}.` },
+    { key: "last", label: "Last receipt", value: latest ? headOf(latest.settledAt, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? FIRST_BURN_AFTER_GRADUATION : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
     { key: "pending", label: "Waiting", value: s.health.pending === 0 ? "Nothing waiting" : count(s.health.pending, "receipt"), note: s.health.pending ? "A burn can wait for the pool's checks or a spend floor. The unspent funds stay in the burn pool." : null },
   ];
 
@@ -262,7 +263,7 @@ export default function TokenPage() {
           return other.length ? <section aria-label="Readings and milestones"><ol className="bt-tape">{other.map((e) => <li key={`${e.kind}-${e.at}`} className="bt-tape-row text-xs" data-kind={e.kind}><span className="bt-ticker-kind">{EVENT_LABEL[e.kind]}</span><a className="underline" href={e.href}>{e.text}</a></li>)}</ol></section> : null;
         })()}
         <section aria-label="Burn log">
-          <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {fixed(s.burned?.pctOfSupply)}% of the supply. Each receipt below can be checked in your browser.</p>
+          <p className="mb-2 text-xs text-neutral-500">{count(s.burned?.count, "burn")} so far, and {fmt(s.burned?.total)} tokens burned. That is {fixed(s.burned?.pctOfSupply)}% of the supply. Each receipt below can be checked in your browser.</p>
           {rank && <p className="mb-2 text-xs text-neutral-400" data-rank title={RANK_MEANING}>{rank}</p>}
           <p className="mb-2 flex flex-wrap gap-x-4 text-xs"><a className="underline" href={csvHref(key, "burns")} download>{CSV_LINK_COPY.burnsLink}</a><a className="underline" href={csvHref(key, "readings")} download>{CSV_LINK_COPY.readingsLink}</a><a className="underline" href={feedHref({ coin: key }, "rss")}>{COIN_FEED_LINK}</a></p>
           {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? afterGraduation : "The next result that counts prints the first one."}</p> : (
@@ -316,7 +317,7 @@ export default function TokenPage() {
           <p className="mt-2 text-[11px] text-neutral-500 break-all">Rule hash (sha256): {s.rules.sha256}</p>
           <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">What the operator can and cannot do</summary>
             <p className="mt-1"><b>Can:</b> {joinList(s.trust?.operator?.can, "; ")}.</p><p className="mt-1"><b>Cannot:</b> {joinList(s.trust?.operator?.cannot, "; ")}.</p>
-            <p className="mt-1 text-neutral-500">These lists come from the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>.{s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} {s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} {s.trust.lpLockedPct ?? 100}% of the liquidity is locked. {postGraduationShareLine(s.fees.postGraduation)} The team allocation is {s.trust.teamAllocationPct}%.</p>
+            <p className="mt-1 text-neutral-500">These lists come from the <Link className="underline" href={s.trust?.registerUrl ?? "/burnticker/trust"}>Powers Register</Link>.{s.trust?.operator?.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} {s.trust?.creatorCashBps === 0 ? "Creators get no cash from fees." : typeof s.trust?.creatorCashBps === "number" ? `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.` : ""} {s.trust?.lpLockedPct ?? 100}% of the liquidity is locked. {postGraduationShareLine(s.fees.postGraduation)} The team allocation is {fixed(s.trust?.teamAllocationPct, 0)}%.</p>
           </details>
           {real && (() => { const t = targetTrustCopy(real.symbol); return (
             <details className="mt-2 text-xs" data-real-trust><summary className="cursor-pointer text-neutral-400">What burning the real {real.symbol} can and cannot do</summary>
@@ -334,7 +335,7 @@ export default function TokenPage() {
         {s.lp && <LpLockCard lp={s.lp} card={card} />}
         <section className="space-y-2">
           <h2 className="font-medium">Fees</h2><p>{s.fees.sentence}</p>
-          {[s.fees.curve, s.fees.postGraduation].map((f, k) => <div key={k} className="overflow-x-auto rounded-lg border border-neutral-800"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">{k === 0 ? "On the curve" : "After graduation"}</th><th className="p-2 text-right">Basis points</th><th className="p-2 text-right">SOL per 1 SOL</th><th className="p-2">Paid to</th><th className="p-2">Setting</th></tr></thead><tbody>{f.legs.map((l) => <tr key={l.label} className="border-t border-neutral-800"><td className="p-2">{l.label}</td><td className="p-2 text-right">{l.bps}</td><td className="p-2 text-right">{fixed(l.bps / 10000, 6).replace(/0+$/, "")}</td><td className="p-2">{l.recipient}</td><td className="p-2 text-neutral-500">{l.dial}</td></tr>)}<tr className="border-t border-neutral-800"><td className="p-2">total</td><td className="p-2 text-right">{f.totalBps}</td><td></td><td></td><td></td></tr></tbody></table></div>)}
+          {[s.fees.curve, s.fees.postGraduation].map((f, k) => <div key={k} className="overflow-x-auto rounded-lg border border-neutral-800"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">{k === 0 ? "On the curve" : "After graduation"}</th><th className="p-2 text-right">Basis points</th><th className="p-2 text-right">SOL per 1 SOL</th><th className="p-2">Paid to</th><th className="p-2">Setting</th></tr></thead><tbody>{listOf(f?.legs).map((l) => <tr key={l.label} className="border-t border-neutral-800"><td className="p-2">{l.label}</td><td className="p-2 text-right">{l.bps}</td><td className="p-2 text-right">{fixed(l.bps / 10000, 6).replace(/0+$/, "")}</td><td className="p-2">{l.recipient}</td><td className="p-2 text-neutral-500">{l.dial}</td></tr>)}<tr className="border-t border-neutral-800"><td className="p-2">total</td><td className="p-2 text-right">{f.totalBps}</td><td></td><td></td><td></td></tr></tbody></table></div>)}
         </section>
         <section className={card}><h2 className="font-medium">Reading signers</h2><p>{s.attesters?.length ? <>Each reading needs {s.quorum} of {count(s.attesters.length, "signature")} from these keys: {s.attesters.map((a) => `${a.pubkey} (${a.role}${a.active ? "" : ", inactive"})`).join(", ")}.</> : "No signers are recorded."} At level 1, our data key signs each reading. Level 2 adds an independent signer for each source. Level 3 adds a proof of the source&apos;s response (zkTLS), or an on-chain result where the market publishes one.</p></section>
         <section className={card + " text-xs"}><h2 className="font-medium text-sm">Addresses</h2><ul className="space-y-1 break-all"><li>Mint <a className="underline" href={s.addresses.mintUrl}><code>{s.addresses.mint}</code></a> <CopyButton text={s.mint} />{coinAddressLine(s.mint) && <span className="block text-neutral-500" data-mint-suffix>{coinAddressLine(s.mint)}</span>}</li><li>Burn pool. This is the burn program&apos;s fee account, and it is also the coin&apos;s creator on LaunchLab. Anyone can deposit and nobody can withdraw. The keeper only pays network fees. <a className="underline" href={s.addresses.feePdaUrl}><code>{s.addresses.feePda}</code></a></li>{s.addresses.feeWsol && <li>The burn pool&apos;s wrapped SOL account, where claimed curve fees land <a className="underline" href={s.addresses.feeWsolUrl!}><code>{s.addresses.feeWsol}</code></a></li>}{s.addresses.vault && <li>Vault <a className="underline" href={s.addresses.vaultUrl!}><code>{s.addresses.vault}</code></a></li>}{s.addresses.poolId && <li>LaunchLab pool <code>{s.addresses.poolId}</code></li>}<li>Creator <a className="underline" href={s.addresses.creatorUrl}><code>{s.addresses.creator}</code></a></li><li>Burn program <code>{s.addresses.programId}</code></li>{s.addresses.launchTx && <li>Launch <a className="underline" href={s.addresses.launchTxUrl!}><code>{s.addresses.launchTx}</code></a></li>}</ul></section>
@@ -346,15 +347,15 @@ export default function TokenPage() {
         <div id="panel-holders" role="tabpanel" aria-labelledby="tab-holders" hidden={tab !== "holders"}>
           <section className={card} aria-label="Holders">
             <h2 className="font-medium">The largest holders</h2>
-            <ol className="mt-2 space-y-0.5 text-xs">{m.holders.top10.map((h, i) => <li key={h.owner} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {short(h.owner)}{h.label ? <span className="ml-1 text-neutral-500">({h.label})</span> : null}</span><span className="tabular-nums">{h.pct === null ? h.amount : `${fixed(h.pct)}%`}</span></li>)}</ol>
-            <p className="mt-2 text-xs text-neutral-500">{holdersShareLine(m.holders.top10Pct, m.holders.top10PctUnlabelled)} {m.holders.count === null ? m.holders.countNote : `There are ${m.holders.count} holders.`}</p>
+            <ol className="mt-2 space-y-0.5 text-xs">{listOf(m.holders?.top10).map((h, i) => <li key={h.owner} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {short(h.owner)}{h.label ? <span className="ml-1 text-neutral-500">({h.label})</span> : null}</span><span className="tabular-nums">{h.pct === null ? h.amount : `${fixed(h.pct)}%`}</span></li>)}</ol>
+            <p className="mt-2 text-xs text-neutral-500">{holdersShareLine(m.holders?.top10Pct, m.holders?.top10PctUnlabelled)} {typeof m.holders?.count !== "number" ? m.holders?.countNote : holdersCountSentence(m.holders.count)}</p>
           </section>
         </div>
       )}
 
       {s.status !== "draft" && s.status !== "expired" && <section className={card + " text-xs"} aria-label={SHARE_COPY.heading}><h2 className="font-medium text-sm">{SHARE_COPY.heading}</h2><div className="mt-2"><ShareBlock ticker={s.ticker} id={key} /></div></section>}
       {/* website-26 (WIRING-FEATURES item 7): the receipt card as a copyable embed, by mint, closed by default */}
-      {s.status !== "draft" && s.status !== "expired" && <ReceiptEmbed mint={s.mint} alt={receiptAlt({ ticker: s.ticker, sentence: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, latest: latest ? { tokens: latest.burned ?? "0", day: latest.settledAt.slice(0, 10) } : null, scoreboard: s.derbyScoreboard?.line ?? null })} />}
+      {s.status !== "draft" && s.status !== "expired" && <ReceiptEmbed mint={s.mint} alt={receiptAlt({ ticker: s.ticker, sentence: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, latest: latest ? { tokens: latest.burned ?? "0", day: headOf(latest.settledAt, 10) } : null, scoreboard: s.derbyScoreboard?.line ?? null })} />}
       <HostDiagnostics stubs={d.stubs} />
     </main>
   );

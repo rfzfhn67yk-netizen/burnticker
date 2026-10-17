@@ -32,6 +32,8 @@ export function heroHtml(): string {
     `  <p class="sub kicker" data-hero-kicker>${esc(HERO.kicker)}</p>`,
     `  <h1 id="hero-h">${esc(HERO.title)}</h1>`,
     `  <p class="sub">${esc(HERO.sub)}</p>`,
+    // prelaunch audit 2026-10-16 F-14: the kicker's qualifier (a perpetual coin has no end date)
+    `  <p class="sub kicker-note" data-hero-note>${esc(HERO.note)}</p>`,
     // website-14 (product idea 1): two paths on arrival, one sentence each; "Create a coin" opens the closed-launches dialog while closed
     `  <div class="paths" data-two-paths>`,
     // audit 10 item 23: while creator launches are closed the create path reads "Preview a coin launch" with the site launch record's own

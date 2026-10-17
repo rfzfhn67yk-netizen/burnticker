@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
-import { configPda } from "@/lib/burnReceipts/pda";
-import { launchVenueOf, type LaunchVerifier } from "@/lib/burnticker/launchVerify";
+import { configPda, feePda } from "@/lib/burnReceipts/pda";
+import { launchVenueOf, type LaunchExpectation, type LaunchVerifier } from "@/lib/burnticker/launchVerify";
 import { DRAFT_GRACE_MS, DRAFT_TTL_MS, inDraftWindow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
 import { CREATOR_LAUNCHES_CLOSED_AT_FLAG } from "@/lib/burnticker/launchAvailability";
@@ -15,15 +15,19 @@ import { CREATOR_LAUNCHES_CLOSED_AT_FLAG } from "@/lib/burnticker/launchAvailabi
  *   2. a draft is FINISHED (status drafts.scan.<mint>: done) when nothing more can make it live: no TokenConfig read after its window
  *      closed (the create needs one, and a create after the window is refused), or a complete scan of its history made after the window
  *      closed found no create in the window. Today's 12 abandoned drafts and 5 expired ones are read until their windows close, then never.
- *   3. a TokenConfig owned by burn_receipts: the mint's signatures are scanned page by page (newest first, `before` cursor kept across
- *      sweeps, `until` the newest signature a finished scan saw), and only SUCCESSFUL transactions whose block time falls in the draft's
- *      window go to the verifier the browser's confirm uses (launchVerify.ts checks the content: this mint's initialize_token or the
- *      LaunchLab create, the TokenConfig locking the draft's rule). No positional cap: every in-window transaction is a candidate.
- *   4. a draft whose scan found no create backs off (5 min, doubling, up to 6 h); pages and verifications are capped PER SWEEP; the sweep
- *      runs under the budget phase "drafts" and stops at a budget hold.
+ *   3. a TokenConfig owned by burn_receipts: the coin's FEE PDA history is read (prelaunch audit 2026-10-16 F-2; scanAddress below: the
+ *      fee PDA is in every create the verifier accepts and in no swap, so a busy coin's history stays a handful of transactions, where
+ *      the mint's history grows with every trade). Pages go newest first (`before` cursor kept across sweeps, `until` the newest signature
+ *      a finished read saw) down to the draft's creation; the SUCCESSFUL transactions collected are then offered to the verifier the
+ *      browser's confirm uses OLDEST FIRST (launchVerify.ts checks the content: this mint's initialize_token or the LaunchLab create,
+ *      the TokenConfig locking the draft's rule). The create is among a coin's first fee-PDA transactions, so it is found in one sweep.
+ *   4. the sweep's budget is SHARED: pages in per-draft shares (the draft read longest ago first), verifications one per draft per round,
+ *      so one busy or padded draft never starves another. A draft whose read found no create backs off (5 min, doubling, up to 6 h);
+ *      the sweep runs under the budget phase "drafts" and stops at a budget hold.
  *   5. the first verified create in the window takes the draft live with its signature and block time (registry.takeLiveFromChain; an
- *      expired draft through the append-only revival row). A create after the window is never taken here: only the operator script
- *      (scripts/burnticker-draft-revive.mts --late) does that.
+ *      expired draft through the append-only revival row). A verified create AFTER the window is never taken here: the draft is finished
+ *      and the owner gets one bt-launch-late alert per coin naming the operator script (scripts/burnticker-draft-revive.mts --late), the
+ *      only path that takes it live (F-3).
  *
  * Read-only on chain (it signs and sends nothing); a dry run reads and reports and writes nothing.
  */
@@ -34,8 +38,14 @@ export const RECONCILE_STATUS_KEY = "drafts.reconciledAt";
 export const SCAN_STATUS_PREFIX = "drafts.scan.";
 export const BACKOFF_MIN_MS = 5 * 60_000;
 export const BACKOFF_MAX_MS = 6 * 3_600_000;
-export const PAGES_PER_SWEEP = 6;
+/** Pages (1,000 signatures each) per sweep, shared out across the due drafts (each gets at least one). */
+export const PAGES_PER_SWEEP = 12;
+/** Verifications per sweep, handed out one per draft per round (F-2: one busy draft never starves another). */
 export const VERIFY_PER_SWEEP = 10;
+/** F-3: a create after the window raises this alert once per mint (registry status drafts.late.<mint> remembers it). */
+export const LATE_ALERT_KIND = "bt-launch-late";
+export const LATE_STATUS_PREFIX = "drafts.late.";
+export const REVIVE_SCRIPT = "scripts/burnticker-draft-revive.mts";
 /** After the window closes, wait this long (finality, a slow RPC index) before a scan or a missing TokenConfig finishes the draft. */
 export const SETTLE_MS = 10 * 60_000;
 const BATCH = 100;
@@ -82,16 +92,36 @@ export interface ReconcileReport {
   onChainNoCreate: string[];
   /** drafts finished this sweep (never read again) */
   finished: string[];
+  /** F-3: creates found that landed after their draft's window (not taken live; one bt-launch-late alert each) */
+  late: { mint: string; ticker: string; launchTx: string; blockTimeMs: number }[];
   pages: number;
   verified: number;
   errors: string[];
 }
 
-interface ScanState { done?: boolean; before?: string; top?: string; until?: string; nextAt?: number; backoffMs?: number }
+/**
+ * A draft's read state (registry status drafts.scan.<mint>). Review M2: CURSORS, never the history itself, so no transaction is ever
+ * dropped (1,000+ dust transfers to the fee PDA cannot push the real create out of a capped list).
+ *   disc   a history read part way down: the `before` cursor of each page read so far (newest page first; null = the top), the cursor
+ *          of the next page, the lower bound (`until`) and the newest signature seen
+ *   walk   a finished read being verified OLDEST FIRST: the pages' cursors (the last one is the oldest page, popped when done), their
+ *          lower bound, and `through`, the last transaction of the oldest page already judged
+ *   until  the newest signature a finished read saw (the next read stops there); `lastAt` when it was last read; `late` the create found
+ *          after the window (F-3)
+ */
+/**
+ * One page of a finished read, PINNED at both ends (re-review blocker: the newest page used to be re-read as "the newest 1,000 rows now",
+ * so new transactions pushed the create off its bottom): `before` the exclusive cursor it is read below, `head` the newest page's own top
+ * row (judged too; null for older pages), `last` its oldest row. Re-read, a page is cut at `last`, whatever arrived since.
+ */
+interface PageRef { before: string; head: string | null; last: string }
+interface Disc { pages: PageRef[]; next: string | null; until: string | null; top: string | null; emptyTries?: number }
+interface Walk { pages: PageRef[]; until: string | null; through: string | null }
+interface ScanState { done?: boolean; until?: string; nextAt?: number; backoffMs?: number; disc?: Disc; walk?: Walk; lastAt?: number; late?: string }
 const windowEnd = (t: TokenRow) => t.createdAt + DRAFT_TTL_MS + DRAFT_GRACE_MS;
 
 export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport> {
-  const out: ReconcileReport = { skipped: false, checked: 0, takenLive: [], onChainNoCreate: [], finished: [], pages: 0, verified: 0, errors: [] };
+  const out: ReconcileReport = { skipped: false, checked: 0, takenLive: [], onChainNoCreate: [], finished: [], late: [], pages: 0, verified: 0, errors: [] };
   const reg = d.registry, now = d.now();
   const last = Number(reg.getStatus(RECONCILE_STATUS_KEY) ?? 0);
   if (Number.isFinite(last) && last > 0 && now - last < (d.intervalMs ?? RECONCILE_INTERVAL_MS)) { out.skipped = true; return out; }
@@ -117,34 +147,78 @@ export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport
         else if (now > windowEnd(c.t) + SETTLE_MS) { save(c.t.mint, { ...load(c.t.mint), done: true }); out.finished.push(c.t.mint); }
       });
     }
-    for (const t of withConfig) {
-      const st = load(t.mint);
-      if (st.nextAt && now < st.nextAt) continue;
-      if (out.pages >= PAGES_PER_SWEEP || out.verified >= VERIFY_PER_SWEEP) break;
-      let found: { signature: string; blockTimeMs: number } | null = null;
-      try { found = await scan(d, t, st, out, now); }
-      catch (e) { if (isBudgetHold(e)) throw e; out.errors.push(`$${t.ticker}: ${(e as Error).message.slice(0, 120)}`); continue; }
-      if (!found) {
-        if (st.before) { save(t.mint, st); continue; }   // the scan goes on next sweep from its cursor
+    // F-2: the drafts due this sweep, the one read longest ago first, so the page budget rotates across sweeps
+    // review M1: a draft whose window is still open (it can still go live) goes before one kept only to be finished
+    const open = (t: TokenRow) => (now <= windowEnd(t) + SETTLE_MS ? 0 : 1);
+    const due = withConfig.map((t) => ({ t, st: load(t.mint) })).filter((x) => !(x.st.nextAt && now < x.st.nextAt)).sort((a, b) => open(a.t) - open(b.t) || (a.st.lastAt ?? 0) - (b.st.lastAt ?? 0));
+    // 1. PAGES: each due draft's fee-PDA history, in per-draft shares of the sweep's page budget, down to the bottom of its window
+    const share = Math.max(1, Math.floor(PAGES_PER_SWEEP / Math.max(1, due.length)));
+    const ready: { t: TokenRow; st: ScanState }[] = [];
+    const oldest = new Map<string, Sig[]>();   // the oldest page a read just finished on, so the walk does not read it twice
+    for (const x of due) {
+      if (x.st.walk && !Array.isArray(x.st.walk.pages)) delete x.st.walk;   // an older state shape: read again
+      if (x.st.walk?.pages.length) { x.st.lastAt = now; ready.push(x); continue; }   // a finished read still being verified: no new pages
+      if (out.pages >= PAGES_PER_SWEEP) break;
+      x.st.lastAt = now;
+      try { if (await page(d, x.t, x.st, out, Math.min(share, PAGES_PER_SWEEP - out.pages), oldest)) ready.push(x); else save(x.t.mint, x.st); }
+      catch (e) { if (isBudgetHold(e)) throw e; out.errors.push(`$${x.t.ticker}: ${(e as Error).message.slice(0, 120)}`); save(x.t.mint, x.st); }
+    }
+    const walkers = new Map(ready.map((x) => [x.t, walker(d, x.t, x.st, out, oldest.get(x.t.mint) ?? null)] as const));
+    // 2. VERIFY: round robin, one transaction per draft per round, each draft's OLDEST unchecked transaction first
+    const active = new Set(ready), found = new Map<TokenRow, { signature: string; blockTimeMs: number }>(), stuck = new Set<TokenRow>();
+    while (active.size && out.verified < VERIFY_PER_SWEEP) {
+      for (const x of [...active]) {
+        if (out.verified >= VERIFY_PER_SWEEP) break;
+        const w = walkers.get(x.t)!;
+        let head: string | null;
+        try { head = await w.head(); }
+        catch (e) { if (isBudgetHold(e)) throw e; out.errors.push(`$${x.t.ticker}: ${(e as Error).message.slice(0, 120)}`); stuck.add(x.t); active.delete(x); continue; }
+        if (head === null) { active.delete(x); continue; }
+        out.verified++;
+        let v: Awaited<ReturnType<LaunchVerifier["verify"]>>;
+        try { v = await d.verifier.verify(head, expectOf(d, x.t)); }
+        catch (e) { if (isBudgetHold(e)) throw e; out.errors.push(`$${x.t.ticker}: ${(e as Error).message.slice(0, 120)}`); stuck.add(x.t); active.delete(x); continue; }
+        if (v.ok) { found.set(x.t, { signature: head, blockTimeMs: v.blockTimeMs }); active.delete(x); continue; }
+        // a refusal for the transaction's CONTENT is final; so is a 409 (a pair not set up) once the window and its settle time have
+        // passed (review M1: an abandoned pair side finishes). Anything else (RPC lag, an account not shown yet, a pair not set up yet
+        // inside the window) is retried from the same transaction after a backoff, so the oldest-first order is never skipped
+        if ((v.status === 422 && !v.missing) || (v.status === 409 && now > windowEnd(x.t) + SETTLE_MS)) w.consume(head); else { stuck.add(x.t); active.delete(x); }
+      }
+    }
+    // 3. OUTCOMES
+    for (const x of ready) {
+      const { t, st } = x, hit = found.get(t);
+      if (!hit) {
+        // unchecked transactions left: the next sweep goes on, after a backoff when the head could not be judged (review M1)
+        if (st.walk?.pages.length) { if (stuck.has(t)) backoff(st, now); save(t.mint, st); continue; }
+        delete st.walk;
         out.onChainNoCreate.push(t.mint);
-        if (now > windowEnd(t) + SETTLE_MS) { st.done = true; out.finished.push(t.mint); d.log(`  [drafts] $${t.ticker} ${t.mint}: TokenConfig on chain, no create in its window: finished`); }
-        else { const b = Math.min(BACKOFF_MAX_MS, Math.max(BACKOFF_MIN_MS, (st.backoffMs ?? BACKOFF_MIN_MS / 2) * 2)); st.backoffMs = b; st.nextAt = now + b; }
+        if (now > windowEnd(t) + SETTLE_MS) { st.done = true; out.finished.push(t.mint); d.log(`  [drafts] $${t.ticker} ${t.mint}: TokenConfig on chain, no create found: finished`); }
+        else backoff(st, now);
         save(t.mint, st);
+        continue;
+      }
+      // F-3: a create after the draft's window is never taken live here: the owner is told once, with the operator's path
+      if (hit.blockTimeMs > windowEnd(t)) {
+        out.late.push({ mint: t.mint, ticker: t.ticker, launchTx: hit.signature, blockTimeMs: hit.blockTimeMs });
+        out.finished.push(t.mint);
+        d.log(`  [drafts] $${t.ticker} ${t.mint}: created on chain at ${new Date(hit.blockTimeMs).toISOString()}, after its draft window: not taken live (operator: ${REVIVE_SCRIPT} --late)`);
+        if (!d.dryRun) { alertLaunchLate(reg, t, hit.signature, hit.blockTimeMs, now); save(t.mint, { done: true, late: hit.signature }); }
         continue;
       }
       const closedAt = recordedClosure(reg, d.env);
       // re-review 2: a closure is not final (launches may reopen, or a wrong closure time is corrected): back off, never finish
-      if (closedAt !== null && found.blockTimeMs > closedAt) { out.errors.push(`$${t.ticker}: its create landed after creator launches closed; not taken live`); const b = Math.min(BACKOFF_MAX_MS, Math.max(BACKOFF_MIN_MS, (st.backoffMs ?? BACKOFF_MIN_MS / 2) * 2)); save(t.mint, { ...st, backoffMs: b, nextAt: now + b }); continue; }
+      if (closedAt !== null && hit.blockTimeMs > closedAt) { out.errors.push(`$${t.ticker}: its create landed after creator launches closed; not taken live`); backoff(st, now); save(t.mint, st); continue; }
       let revived = t.status === "expired", withinWindow = true, changed = true;
       if (!d.dryRun) {
-        try { const r = reg.takeLiveFromChain(t.mint, found.signature, t.poolId, found.blockTimeMs, { source: "reconciler", note: "the browser never confirmed this launch; the keeper read it from the chain" }, now); revived = r.revived; withinWindow = r.withinWindow; changed = r.changed; }
+        try { const r = reg.takeLiveFromChain(t.mint, hit.signature, t.poolId, hit.blockTimeMs, { source: "reconciler", note: "the browser never confirmed this launch; the keeper read it from the chain" }, now); revived = r.revived; withinWindow = r.withinWindow; changed = r.changed; }
         catch (e) { out.errors.push(`$${t.ticker}: ${(e as Error).message.slice(0, 120)}`); continue; }
         save(t.mint, { done: true });
         // review (5): alert only when this sweep took it live (a browser confirm that won the race is not news)
-        if (changed) reg.recordAlert({ kind: "draft-reconciled", key: `draft-reconciled:${t.mint}`, text: `$${t.ticker} was created on chain but never confirmed by the browser. The keeper verified its create (${found.signature.slice(0, 12)}…) and took it live${revived ? " (the draft had been marked expired)" : ""}.`, meta: { mint: t.mint, launchTx: found.signature, revived, withinWindow } }, now);
+        if (changed) reg.recordAlert({ kind: "draft-reconciled", key: `draft-reconciled:${t.mint}`, text: `$${t.ticker} was created on chain but never confirmed by the browser. The keeper verified its create (${hit.signature.slice(0, 12)}…) and took it live${revived ? " (the draft had been marked expired)" : ""}.`, meta: { mint: t.mint, launchTx: hit.signature, revived, withinWindow } }, now);
       }
-      if (changed) out.takenLive.push({ mint: t.mint, ticker: t.ticker, launchTx: found.signature, blockTimeMs: found.blockTimeMs, revived, withinWindow });
-      if (changed) d.log(`  [drafts] $${t.ticker} ${t.mint}: ${d.dryRun ? "would take" : "taken"} live from the chain — create ${found.signature} at ${new Date(found.blockTimeMs).toISOString()}${revived ? " (was expired)" : ""}`);
+      if (changed) out.takenLive.push({ mint: t.mint, ticker: t.ticker, launchTx: hit.signature, blockTimeMs: hit.blockTimeMs, revived, withinWindow });
+      if (changed) d.log(`  [drafts] $${t.ticker} ${t.mint}: ${d.dryRun ? "would take" : "taken"} live from the chain, create ${hit.signature} at ${new Date(hit.blockTimeMs).toISOString()}${revived ? " (was expired)" : ""}`);
     }
   } catch (e) {
     if (!isBudgetHold(e)) throw e;
@@ -153,36 +227,103 @@ export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport
   return out;
 }
 
+function backoff(st: ScanState, now: number): void {
+  const b = Math.min(BACKOFF_MAX_MS, Math.max(BACKOFF_MIN_MS, (st.backoffMs ?? BACKOFF_MIN_MS / 2) * 2));
+  st.backoffMs = b; st.nextAt = now + b;
+}
+
+const expectOf = (d: ReconcileDeps, t: TokenRow): LaunchExpectation => ({ mint: t.mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, d.registry.pairOf(t.mint)) });
+
 /**
- * One sweep's share of a draft's history scan: pages newest first from the saved cursor (`before`) down to `until` (the newest signature a
- * finished scan saw), offering every successful in-window transaction to the verifier. Mutates `st`: the cursor while pages remain, or
- * `until` = the newest signature of a scan that reached the bottom. A verification budget exhausted mid-page leaves the cursor just
- * above the transaction not yet checked.
+ * F-2: the address whose history holds the create. The coin's fee PDA (["fee", mint], the burn pool) is an account of initialize_token
+ * (its fee_vault: the pair-curve create and the LaunchLab lock) and LaunchLab's recorded creator in initialize_v2 (the LaunchLab create,
+ * a separate transaction since 2026-10-15 that does not carry the TokenConfig). No swap names it, on either venue: a coin with 1,000
+ * trades has a handful of fee-PDA transactions. The mint (every swap) and the LaunchLab pool (every swap) are not read.
  */
-async function scan(d: ReconcileDeps, t: TokenRow, st: ScanState, out: ReconcileReport, now: number): Promise<{ signature: string; blockTimeMs: number } | null> {
-  const mint = new PublicKey(t.mint), lo = t.createdAt - 60_000, hi = windowEnd(t);
-  const expect = { mint: t.mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, d.registry.pairOf(t.mint)) };
-  while (out.pages < PAGES_PER_SWEEP) {
-    const rows = await d.reader.getSignaturesForAddress(mint, { limit: PAGE, ...(st.before ? { before: st.before } : {}), ...(st.until ? { until: st.until } : {}) }, "confirmed");
+export const scanAddress = (programId: PublicKey, mint: string): PublicKey => feePda(programId, new PublicKey(mint));
+
+const fetchPage = (d: ReconcileDeps, address: PublicKey, before: string | null, until: string | null) =>
+  d.reader.getSignaturesForAddress(address, { limit: PAGE, ...(before ? { before } : {}), ...(until ? { until } : {}) }, "confirmed");
+
+/**
+ * One sweep's share of a draft's history read (review M2): pages newest first from the saved cursor down to `until` (the newest signature
+ * a finished read saw) or to the bottom of the draft's window, keeping only each page's cursor. Returns true when the read reached the
+ * bottom (the cursors become `st.walk`, verified oldest first); false when pages remain (the cursors are kept for the next sweep).
+ */
+type Sig = Awaited<ReturnType<DraftChainReader["getSignaturesForAddress"]>>[number];
+async function page(d: ReconcileDeps, t: TokenRow, st: ScanState, out: ReconcileReport, pages: number, oldest: Map<string, Sig[]>): Promise<boolean> {
+  const address = scanAddress(new PublicKey(d.burnProgramId), t.mint), lo = t.createdAt - 60_000;
+  const disc: Disc = st.disc && Array.isArray(st.disc.pages) ? st.disc : { pages: [], next: null, until: st.until ?? null, top: null };
+  st.disc = disc;
+  for (let k = 0; k < pages; k++) {
+    const rows = await fetchPage(d, address, disc.next, disc.until);
     out.pages++;
-    if (!st.before) st.top = rows[0]?.signature ?? st.until;
-    let prev = st.before, bottom = rows.length < PAGE;
-    for (const s of rows) {
-      const ms = typeof s.blockTime === "number" ? s.blockTime * 1000 : null;
-      if (ms !== null && ms < lo) { bottom = true; break; }
-      const candidate = (s.err === null || s.err === undefined) && (ms === null || inDraftWindow(t.createdAt, ms));
-      if (candidate) {
-        if (out.verified >= VERIFY_PER_SWEEP) { st.before = prev; return null; }
-        out.verified++;
-        const v = await d.verifier.verify(s.signature, expect);
-        if (v.ok && v.blockTimeMs <= hi) return { signature: s.signature, blockTimeMs: v.blockTimeMs };
-      }
-      prev = s.signature;
+    // re-review Low 1: an empty page below a cursor may be a lagging node; it counts as the bottom only when a later sweep agrees
+    if (!rows.length && disc.next !== null && !disc.emptyTries) { disc.emptyTries = 1; return false; }
+    delete disc.emptyTries;
+    if (!disc.pages.length && disc.next === null) disc.top = rows[0]?.signature ?? disc.until;
+    if (rows.length) {
+      const last = rows[rows.length - 1].signature;
+      disc.pages.push(disc.next === null ? { before: rows[0].signature, head: rows[0].signature, last } : { before: disc.next, head: null, last });
     }
-    if (bottom) { st.until = st.top; delete st.before; delete st.top; return null; }
-    st.before = rows[rows.length - 1].signature;
+    const bottom = rows.length < PAGE || rows.some((r) => typeof r.blockTime === "number" && r.blockTime * 1000 < lo);
+    if (bottom) {
+      if (rows.length) oldest.set(t.mint, rows);
+      st.walk = { pages: disc.pages, until: disc.until, through: null };
+      if (disc.top) st.until = disc.top;
+      delete st.disc;
+      return true;
+    }
+    disc.next = rows[rows.length - 1].signature;
   }
-  return null;
+  return false;
+}
+
+/**
+ * Review M2, re-review blocker: the oldest unjudged transaction of a finished read, page by page from the oldest page, each re-read by
+ * its pinned cursor and cut at its own oldest row (once per sweep), skipping failed transactions and those before the draft. `consume`
+ * marks the head judged; an exhausted page is dropped from the walk. A page the node does not serve in full, or a judged transaction it
+ * no longer shows, throws: the draft backs off and the walk resumes from the same place, never from the start.
+ */
+function walker(d: ReconcileDeps, t: TokenRow, st: ScanState, out: ReconcileReport, first: Sig[] | null): { head(): Promise<string | null>; consume(sig: string): void } {
+  const address = scanAddress(new PublicKey(d.burnProgramId), t.mint), lo = t.createdAt - 60_000;
+  const judgeable = (got: Sig[]) => got.filter((r) => (r.err === null || r.err === undefined) && !(typeof r.blockTime === "number" && r.blockTime * 1000 < lo)).map((r) => r.signature).reverse();
+  let rows: string[] | null = first ? judgeable(first) : null;
+  return {
+    async head() {
+      const w = st.walk;
+      while (w && w.pages.length) {
+        const pg = w.pages[w.pages.length - 1];
+        if (rows === null) {
+          let got: Sig[] = [];
+          if (pg.last !== pg.head) {
+            const fetched = await fetchPage(d, address, pg.before, w.until);
+            out.pages++;
+            const end = fetched.findIndex((r) => r.signature === pg.last);
+            if (end < 0) throw new Error("a page of the fee PDA's history was not served in full just now; it is read again later");
+            got = fetched.slice(0, end + 1);
+          }
+          rows = [...judgeable(got), ...(pg.head ? [pg.head] : [])];
+        }
+        const at = w.through ? rows.indexOf(w.through) + 1 : 0;
+        if (w.through && at === 0) throw new Error("a transaction already judged is missing from its page just now; it is read again later");
+        if (at < rows.length) return rows[at];
+        w.pages.pop(); w.through = null; rows = null;
+      }
+      return null;
+    },
+    // re-review Low 2: progress resets the backoff
+    consume(sig: string) { if (st.walk) st.walk.through = sig; delete st.backoffMs; },
+  };
+}
+
+/** F-3: the owner hears once per coin that a create landed after its draft's window, with the operator's command to take it live. */
+export function alertLaunchLate(reg: Pick<Registry, "getStatus" | "setStatus" | "recordAlert">, t: Pick<TokenRow, "mint" | "ticker">, launchTx: string, blockTimeMs: number, now: number): boolean {
+  const key = LATE_STATUS_PREFIX + t.mint;
+  if (reg.getStatus(key)) return false;
+  reg.setStatus(key, launchTx, now);
+  reg.recordAlert({ kind: LATE_ALERT_KIND, key: `${LATE_ALERT_KIND}:${t.mint}`, text: `$${t.ticker} was created on chain at ${new Date(blockTimeMs).toISOString()}, after its draft's 24-hour window, so it was not taken live. Its create is ${launchTx}. To take it live anyway (recorded as late): ${REVIVE_SCRIPT} --mint ${t.mint} --tx ${launchTx} --late --note "<why>" --apply`, meta: { mint: t.mint, launchTx, blockTimeMs } }, now);
+  return true;
 }
 
 /**

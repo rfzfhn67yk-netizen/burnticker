@@ -97,7 +97,8 @@ describe("the coin list's chain reads (prelaunch audit M7)", () => {
     assert.equal(r.status, 200);
     const body = await r.json() as { tokens: { ticker: string; status: string }[] };
     assert.equal(body.tokens.filter((t) => t.status === "live").length, LIVE, "every live coin is listed");
-    assert.equal(body.tokens.filter((t) => t.status === "draft").length, DRAFTS, "drafts stay listed (built from the registry)");
+    // block G re-review Low 3: drafts are not listed in the public index (the coin grid already left them out)
+    assert.equal(body.tokens.filter((t) => t.status === "draft" || t.status === "expired").length, 0, "drafts are not listed");
     const n = total(counts);
     console.log(`  [M7] index cold rebuild, ${LIVE} live + ${DRAFTS} drafts + ${EXPIRED} expired: ${n} chain reads ${JSON.stringify(counts)}`);
     assert.ok((counts["batch.getMultipleAccounts"] ?? 0) >= 1, "the batch ran");

@@ -74,7 +74,12 @@ export const SEARCH = { label: "Search coins", placeholder: "Search coins", href
 
 /** The hero, one line and one subline (review item 7). */
 /** Owner, 2026-10-14: a kicker above the title. Most coins end on a date or a result; $DEFICIT is the one with no end, and its card says so. */
-export const HERO = { kicker: "Memecoins with an expiration date.", title: "Memecoins that burn on real-world results.", sub: "Every burn leaves a receipt." };
+/**
+ * Prelaunch audit 2026-10-16 F-14: the owner's kicker stays, and `note` qualifies it under the subline, since a perpetual coin's page says
+ * "This coin has no end date and does not retire." (describe.ts PERPETUAL_SENTENCE). The smaller honest change: one short plain sentence
+ * here (four words: the home stays inside its 880-word first screen, test/burntickerHome.test.ts).
+ */
+export const HERO = { kicker: "Memecoins with an expiration date.", title: "Memecoins that burn on real-world results.", sub: "Every burn leaves a receipt.", note: "Some coins never end." };
 
 /**
  * TWO PATHS ON ARRIVAL (website-14, ChatGPT product idea 1): explore or create, one sentence each on what happens next. "Create a coin"

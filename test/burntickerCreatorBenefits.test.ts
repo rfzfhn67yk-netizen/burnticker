@@ -31,31 +31,31 @@ describe("item 2: the rank line, read from the registry rows", () => {
   });
   test("non-season coins: N receipts, the Kth most on this site; ties said as ties; none says no rank", () => {
     const r = rankLines([other("AAA", 5), other("BBB", 3), other("CCC", 3), other("DDD", 1), other("EEE", 0)]);
-    assert.equal(r.get("AAA")!.line, "5 receipts, the most on this site.");
-    assert.equal(r.get("BBB")!.line, "3 receipts, tied for the 2nd most on this site.");
-    assert.equal(r.get("CCC")!.line, "3 receipts, tied for the 2nd most on this site.");
-    assert.equal(r.get("DDD")!.line, "1 receipt, the 4th most on this site.");
-    assert.equal(r.get("EEE")!.line, "No receipts yet, so it has no rank on this site.");
-    assert.equal(r.get("EEE")!.rank, null);
+    assert.equal(r.get("MAAA")!.line, "5 receipts, the most on this site.");
+    assert.equal(r.get("MBBB")!.line, "3 receipts, tied for the 2nd most on this site.");
+    assert.equal(r.get("MCCC")!.line, "3 receipts, tied for the 2nd most on this site.");
+    assert.equal(r.get("MDDD")!.line, "1 receipt, the 4th most on this site.");
+    assert.equal(r.get("MEEE")!.line, "No receipts yet, so it has no rank on this site.");
+    assert.equal(r.get("MEEE")!.rank, null);
     for (const v of r.values()) clean(v.line, v.ticker);
   });
   test("a coin in a season is ranked inside its own league and season (seasons.ts), never across leagues", () => {
     const MLB = { kind: "season", year: 2026 } as Window, NHL = { kind: "season", year: 2027 } as Window;
     const coins = [team("RAYS26", "mlb", "TB", MLB, 4), team("YANKEES26", "mlb", "NYY", MLB, 6), team("OILERS27", "nhl", "EDM", NHL, 9), team("RAYS", "mlb", "TB", { kind: "perpetual" }, 2), other("DEBT", 9)];
     const r = rankLines(coins);
-    assert.equal(r.get("YANKEES26")!.line, "Ranked 1 of 2 in MLB 2026 by receipts.");
-    assert.equal(r.get("RAYS26")!.line, "Ranked 2 of 2 in MLB 2026 by receipts.");
-    assert.equal(r.get("OILERS27")!.line, "Ranked 1 of 1 in NHL 2026–27 by receipts.");
-    assert.equal(r.get("RAYS26")!.season, "MLB 2026");
+    assert.equal(r.get("MYANKEES26")!.line, "Ranked 1 of 2 in MLB 2026 by receipts.");
+    assert.equal(r.get("MRAYS26")!.line, "Ranked 2 of 2 in MLB 2026 by receipts.");
+    assert.equal(r.get("MOILERS27")!.line, "Ranked 1 of 1 in NHL 2026–27 by receipts.");
+    assert.equal(r.get("MRAYS26")!.season, "MLB 2026");
     // a team coin with no season window, and a feed coin, are counted against every registered coin by their own receipts
-    assert.equal(r.get("RAYS")!.line, "2 receipts, the 5th most on this site.");
-    assert.equal(r.get("DEBT")!.line, "9 receipts, tied for the most on this site.");
+    assert.equal(r.get("MRAYS")!.line, "2 receipts, the 5th most on this site.");
+    assert.equal(r.get("MDEBT")!.line, "9 receipts, tied for the most on this site.");
     for (const v of r.values()) clean(v.line, v.ticker);
   });
   test("receipts this week and the copyable weekly summary", () => {
     assert.equal(receiptsThisWeek([{ settledAt: day(1) }, { settledAt: day(6.9) }, { settledAt: day(7.1) }, { settledAt: "nonsense" }], NOW), 2);
     const r = rankLines([other("AAA", 5), other("BBB", 2)]);
-    const s = weeklySummary("BBB", 2, r.get("BBB")!);
+    const s = weeklySummary("BBB", 2, r.get("MBBB")!);
     assert.equal(s, "$BBB this week: 2 receipts. 2 receipts, the 2nd most on this site.");
     clean(s, "weekly summary");
     clean(weeklySummary("BBB", 1, null), "weekly summary without a rank");

@@ -17,6 +17,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *                     (gameSettle.ts; the keeper records bt-single-source once per coin)
  *   mint-bank-low     the mint key bank has had fewer than BURNTICKER_MINT_BANK_LOW prepared addresses for more than an hour
  *                     (scripts/burnticker-mint-bank.mts records bt-mint-bank-low; launches still work through the browser search)
+ *   launch-late       a coin was created on chain after its draft's 24-hour window, so it was not taken live; the alert carries the
+ *                     operator command that can (draftReconciler.ts and the confirm route record bt-launch-late once per coin)
  *   synthetic-failed  the nightly synthetic creator (scripts/burnticker-synthetic-creator.mts, mct-burnticker-synth.timer) failed a
  *                     scenario on the devnet instance; one alert per run (bt-synthetic-failed), pushed at once by the script
  *   feed-down         a source failed several reads in a row (ops/feedHealth.ts bt-feed-down; one per selector per Denver day, the
@@ -34,7 +36,7 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  * thrown: the keeper never stops for its phone.
  */
 
-export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget" | "single-source" | "mint-bank-low" | "synthetic-failed" | "feed-down" | "unit-failed" | "backup-failed" | "backup-offbox";
+export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget" | "single-source" | "mint-bank-low" | "synthetic-failed" | "feed-down" | "unit-failed" | "backup-failed" | "backup-offbox" | "launch-late";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -54,6 +56,8 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-backup-failed": "backup-failed",
   // F-7 review: a destination is set but no copy left the box for a day; a low-priority push (PUSH_LOW_PRIORITY)
   "bt-backup-offbox-stale": "backup-offbox",
+  // prelaunch audit 2026-10-16 F-3 (block G review M3): a create after its draft window reaches the phone
+  "bt-launch-late": "launch-late",
   // prelaunch audit H6 re-review: a coin held because this build cannot check its stored title filter is a burn that is not running
   "rule-filter-unsupported": "crank-refused",
 };
@@ -72,6 +76,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "unit-failed": "Burnticker service failed",
   "backup-failed": "Burnticker backup failed",
   "backup-offbox": "Burnticker backup not copied off the box",
+  "launch-late": "Burnticker coin created too late",
 };
 /** Kinds pushed at low priority: a note, not trouble that needs someone now. */
 export const PUSH_LOW_PRIORITY: ReadonlySet<PushKind> = new Set(["backup-offbox"]);
@@ -89,6 +94,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "unit-failed": "A service on the Burnticker host has failed or is not running. The line below names it and says how to read its log.",
   "backup-offbox": "The backups on the host are fine, but none has been copied to the backup destination for a day. A lost disk would lose them. The line below says since when.",
   "backup-failed": "The database backup did not finish, or none has finished for too long. The copies already made are still there. The line below says why.",
+  "launch-late": "A coin was created on chain more than 24 hours after its draft was made, so the site did not take it live. It exists and can trade, but no burn runs for it until the operator decides. The line below has the command that takes it live as late.",
   "single-source": "A coin's game settled on TheSportsDB alone for the first time. Polymarket had no market for it and no league feed could read it, so its final score had to stand unchanged for 12 hours first. This is a notice only; nothing needs doing.",
 };
 

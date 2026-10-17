@@ -85,6 +85,7 @@ import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { PICKER_PAGE, pickerPage } from "@/lib/burnticker/polySearch";
 import { keyRotatingFetch, newPrepareKey } from "@/lib/burnticker/prepareKey";
+import { PLAN_EXPIRED_SENTENCE, planExpired, planExpiresInMs } from "@/lib/burnticker/planAge";
 
 /**
  * THE LAUNCH PAGE (LAUNCHPAD-PATH §1; rebuilt 2026-10-10 on the owner's cut: "it feels overly complicated to get a coin set up … the UI
@@ -289,6 +290,17 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [bundle, setBundle] = useState<Bundle | null>(null), [launchErr, setLaunchErr] = useState<string | null>(null), [busy, setBusy] = useState(false);
   const [pairOut, setPairOut] = useState<{ pairId: string | null; a: Bundle; b: Bundle; notes: string[] } | null>(null);
   const [pcOut, setPcOut] = useState<{ pairId: string; pc: PairCurveLaunchBundle; keys: { a: string; b: string } | null; notes: string[] } | null>(null);
+  // F-3 (prelaunch audit 2026-10-16): when this page received the plan it signs (planAge.ts). A plan older than its drafts' window is not
+  // signable; `clock` is re-read when the plan reaches that age and whenever the tab is shown again (a tab left open overnight).
+  const [planAt, setPlanAt] = useState<number | null>(null), [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (planAt === null) return;
+    const tick = () => setClock(Date.now());
+    const timer = window.setTimeout(tick, planExpiresInMs(planAt, Date.now()) + 1_000);
+    document.addEventListener("visibilitychange", tick); window.addEventListener("focus", tick);
+    tick();
+    return () => { window.clearTimeout(timer); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
+  }, [planAt]);
   // the dials (dials.ts): the rule as edited on the create screen, valid while the path's own rule is unchanged (key)
   const [draft, setDraft] = useState<{ key: string; a: BurnRule; b: BurnRule | null } | null>(null);
   // THE END CHOICE (END-SINK-OPTIONS-BRIEF item 2; guidedLaunch.ts endChoiceModel): where each coin's rest goes when it does not win. A
@@ -1045,7 +1057,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       }));
       if ("stale" in out) { setLaunchErr(STALE_PREPARE_SENTENCE); return; }
       out.ok(); setSignTickers(sent);
-      setStep("launch");
+      setStep("launch"); setPlanAt(Date.now());
     } catch (e) { const v = venueFrom409(e); if (v) setPairVenue(v); setLaunchErr(String((e as Error).message)); } finally { setBusy(false); }
   }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, profile, profileB, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title, meetingsOn, reviewMeetings, settledPick, reviewSettled, ctxB, mintPool, mintsNeeded]);
 
@@ -2154,6 +2166,12 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const st = signTickers ?? { a: ticker, b: tickerB };
         const plan = pcOut ? pairCurvePlan(pcOut.pc, pcOut.keys, st) : pairOut ? launchlabPlan([pairOut.a, pairOut.b]) : launchlabPlan([bundle!]);
         const two = !!(pcOut || pairOut);
+        if (planExpired(planAt, clock)) return (
+          <section className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm" data-plan-expired>
+            <p>{PLAN_EXPIRED_SENTENCE}</p>
+            <button type="button" data-decision="new-plan" className="rounded border border-neutral-600 px-3 py-1 text-xs" onClick={() => startOver(true)}>Start over</button>
+          </section>
+        );
         return (
           <section className="space-y-3 text-sm">
             <SignCard plan={plan} creator={creator || null} title={two ? `Launch $${st.a} and $${st.b}` : `Launch $${st.a}`} coinHref={(t) => `/burnticker/t/${t}`} onLive={dropDraft} />

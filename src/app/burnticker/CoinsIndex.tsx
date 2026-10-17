@@ -14,6 +14,7 @@ import { SEASONS_LINKS } from "./_components/nav";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
 import { CARD_MEANINGS, cardViewFromIndex, featuredLine, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
+import { pairCardTitle } from "@/lib/burnticker/coinPage";
 import { FIRST_PARTY_CARD_IDS, GRID_TABS, cardMatches, firstPartyCards, gridState, liveCoinsTotal, searchKey, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
 import { sharedTickers } from "@/lib/burnticker/coinKey";
@@ -143,7 +144,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
               <div className="grid gap-3 md:grid-cols-2">
                 {pairs.map((p) => (
                   <Link key={p.pairId} href={`/burnticker/p/${encodeURIComponent(p.pairId)}`} className="bt-coin-card block">
-                    <div className="text-xs text-neutral-500 truncate">{p.seriesTitle ?? p.selectorKey}</div>
+                    <div className="text-xs text-neutral-500 truncate">{pairCardTitle(p.seriesTitle, p.a.ticker, p.b.ticker)}</div>
                     <div className="mt-1 flex items-center justify-between gap-2 font-mono">
                       <span className="text-lg font-semibold">${p.a.ticker}</span>
                       <span className="text-2xl tabular-nums">{p.a.burns} <span className="text-neutral-500">:</span> {p.b.burns}</span>

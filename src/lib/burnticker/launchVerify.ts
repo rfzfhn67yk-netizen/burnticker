@@ -26,8 +26,12 @@ import { safeErrorText } from "@/lib/burnticker/api/errorText";
  * Re-sending the same signature is a no-op (registry.markLaunched); the baseline is fixed by an SQL trigger.
  */
 
-/** `missing`: refused because an account was not found (a lagging RPC can answer that for an account that exists): never remembered. */
-export type LaunchCheck = { ok: true; blockTimeMs: number } | { ok: false; status: 404 | 409 | 422 | 502 | 503; reason: string; missing?: true };
+/**
+ * `missing`: refused because an account was not found (a lagging RPC can answer that for an account that exists): never remembered.
+ * `foreign`: the transaction exists but was not signed by this coin's mint and creator (anyone can copy such a signature off the chain),
+ * so it never counts toward the per-mint confirm ceiling (prelaunch audit 2026-10-16 F-16).
+ */
+export type LaunchCheck = { ok: true; blockTimeMs: number } | { ok: false; status: 404 | 409 | 422 | 502 | 503; reason: string; missing?: true; foreign?: true };
 
 /** The venue a draft launches on: a LaunchLab curve under `platformId`, or one side of a pair-curve pair (mint A, mint B in order). */
 export type LaunchVenue = { kind: "launchlab"; platformId: string | null } | { kind: "pair-curve"; mintA: string; mintB: string } | { kind: "unknown"; why: string };
@@ -41,6 +45,11 @@ export interface LaunchExpectation {
 
 export interface LaunchVerifier {
   verify(signature: string, expect: LaunchExpectation): Promise<LaunchCheck>;
+  /**
+   * F-16: whether the chain holds this signature at all (getSignatureStatuses, one cheap call): false = not there, null = could not tell.
+   * Optional: a verifier without it is asked to verify every signature.
+   */
+  seen?(signature: string): Promise<boolean | null>;
 }
 
 /** What the draft row says about its venue: a pair member with no LaunchLab pool is a pair-curve side; a row with a pool is LaunchLab. */
@@ -61,6 +70,8 @@ export interface TxReader {
     transaction: { message: { header: { numRequiredSignatures: number }; staticAccountKeys?: Key[]; accountKeys?: Key[]; compiledInstructions?: CompiledIx[] } };
   } | null>;
   getAccountInfo(address: PublicKey, commitment: "confirmed"): Promise<{ owner: Key; data: Uint8Array } | null>;
+  /** F-16 (optional): web3.js getSignatureStatuses; history search so an older create is found too. */
+  getSignatureStatuses?(signatures: string[], config: { searchTransactionHistory: boolean }): Promise<{ value: (unknown | null)[] }>;
 }
 
 /** burn_receipts initialize_token: discriminator and account slots, from the program's IDL (payer 0, creator 1, mint 2). */
@@ -83,6 +94,12 @@ const NOT_THIS = "it is not this coin's launch";
 /** Checks one transaction against the draft: the transaction read, then the TokenConfig (and for a pair, the Pair) read. */
 export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: string | null; launchLabProgramId?: string | null; pairCurveProgramId?: string | null }): LaunchVerifier {
   return {
+    ...(reader.getSignatureStatuses ? {
+      async seen(signature: string): Promise<boolean | null> {
+        try { const r = await reader.getSignatureStatuses!([signature], { searchTransactionHistory: true }); return r.value[0] !== null && r.value[0] !== undefined; }
+        catch { return null; }
+      },
+    } : {}),
     async verify(signature, expect) {
       if (!o.burnProgramId) return { ok: false, status: 503, reason: "this site has no address set for the burn program, so a launch cannot be checked. Drafts are not taken live." };
       const program = o.burnProgramId;
@@ -97,8 +114,8 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       // v0: account indexes past the static keys point into the lookup-table addresses (writable, then readonly). Program ids are always static.
       const keys = [...statics, ...(tx.meta.loadedAddresses?.writable ?? []).map((k) => k.toBase58()), ...(tx.meta.loadedAddresses?.readonly ?? []).map((k) => k.toBase58())];
       const signers = new Set(statics.slice(0, msg.header.numRequiredSignatures));
-      if (!signers.has(expect.mint)) return { ok: false, status: 422, reason: `the transaction was not signed by this coin's mint ${expect.mint}: ${NOT_THIS}` };
-      if (!signers.has(expect.creator)) return { ok: false, status: 422, reason: `the transaction was not signed by the draft's creator ${expect.creator}: ${NOT_THIS}` };
+      if (!signers.has(expect.mint)) return { ok: false, status: 422, foreign: true, reason: `the transaction was not signed by this coin's mint ${expect.mint}: ${NOT_THIS}` };
+      if (!signers.has(expect.creator)) return { ok: false, status: 422, foreign: true, reason: `the transaction was not signed by the draft's creator ${expect.creator}: ${NOT_THIS}` };
       const blockTimeMs = tx.blockTime * 1000;
       if (blockTimeMs + 60_000 < expect.draftCreatedAtMs) return { ok: false, status: 422, reason: `the transaction landed before this draft was registered: ${NOT_THIS}` };
       if (!Array.isArray(msg.compiledInstructions)) return { ok: false, status: 502, reason: "the RPC returned the transaction without its instructions, so it cannot be checked; retry" };

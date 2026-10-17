@@ -89,8 +89,9 @@ describe("2: Your coins tells a draft from a created coin", () => {
     w.registry.register({ mint, ticker: w.bronco.ticker, name: w.bronco.name, creator: WORLD_CREATOR, description: "a test", imageUrl: null, links: [], rulesText: w.bronco.rulesJson, feePda: Keypair.generate().publicKey.toBase58(), vault: null, tokenConfig: null, poolId: null, launchTx: null, cluster: "devnet", platformId: w.bronco.platformId, baselineAt: new Date().toISOString(), status: "draft" } as Parameters<typeof w.registry.register>[0]);
     const r = await v1Creator(w.p, WORLD_CREATOR);
     const coins = (r as unknown as { body: { coins: { mint: string; state: string; windDown: string | null }[] } }).body?.coins ?? (r as unknown as { coins: { mint: string; state: string; windDown: string | null }[] }).coins;
-    const d = coins.find((c) => c.mint === mint)!, l = coins.find((c) => c.mint === w.bronco.mint)!;
-    assert.equal(d.state, "draft"); assert.equal(d.windDown, null, "no wind-down on a draft card");
+    const d = coins.find((c) => c.mint === mint), l = coins.find((c) => c.mint === w.bronco.mint)!;
+    // prelaunch audit 2026-10-16 F-25: the public creator view lists launched coins only, so a draft has no card at all
+    assert.equal(d, undefined, "no draft card");
     assert.equal(l.windDown, "This coin is live.");
     const reg = { ruleEnd: () => null, receipts: () => [], getStatus: () => null } as unknown as Parameters<typeof lifecycleFrom>[0];
     const rule = { kind: "binary", binary: { onYes: { fractionOfPool: 0.02 }, onNo: null }, scalar: null, onEnd: { windDownDays: 28, sweepThresholdLamports: 1 } } as unknown as Parameters<typeof lifecycleFrom>[2];

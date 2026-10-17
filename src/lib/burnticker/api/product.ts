@@ -75,7 +75,8 @@ const stateOf = (s: TokenStatusJson): CoinState => {
 export async function v1Creator(p: Platform, wallet: string, now = Date.now()): Promise<ApiResult> {
   const w = safeParam(wallet).trim();
   if (!PUBKEY.test(w)) return fail(400, "The wallet must be a Solana public key.");
-  const mine = p.registry.tokens().filter((t) => t.creator === w && t.status !== "expired").slice(0, 50);
+  // F-25: a creator's public view lists launched coins only (a draft's mint and plan stay out of public reads)
+  const mine = p.registry.tokens().filter((t) => t.creator === w && t.status !== "expired" && t.status !== "draft").slice(0, 50);
   const day = new Date(now).toISOString().slice(0, 10);
   const coins: CreatorCoin[] = [];
   for (const t of mine) {

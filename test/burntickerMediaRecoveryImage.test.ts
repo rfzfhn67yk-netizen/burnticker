@@ -133,8 +133,14 @@ describe("224 [VERIFY] two 2 MB images in one pair body fit every host limit", (
     // exactly 2 MB decodes on the server (the base64 length guard is not tighter than the byte cap)
     const max = Buffer.alloc(IMAGE_MAX_BYTES); PNG_HEAD.copy(max);
     assert.ok("ok" in decodeCreatorImage({ contentType: "image/png", base64: max.toString("base64") }));
-    // Next 16 buffers a body only behind a proxy file (proxyClientMaxBodySize, 10 MB default); there is none here
-    for (const f of ["src/proxy.ts", "src/middleware.ts", "proxy.ts", "middleware.ts"]) assert.ok(!fs.existsSync(path.join(ROOT, f)), f);
+    // Next 16 buffers a body only behind a proxy file (proxyClientMaxBodySize, 10 MB default). The one proxy (src/proxy.ts, prelaunch
+    // audit 2026-10-16 F-15) reads only the path and its matcher admits only paths carrying a "%": no upload route reaches it
+    for (const f of ["src/middleware.ts", "proxy.ts", "middleware.ts"]) assert.ok(!fs.existsSync(path.join(ROOT, f)), f);
+    if (fs.existsSync(path.join(ROOT, "src/proxy.ts"))) {
+      const proxySrc = read("src/proxy.ts");
+      assert.match(proxySrc, /matcher: \["\/:path\(\.\*%\.\*\)"\]/, "the proxy's matcher admits only paths with a %");
+      assert.doesNotMatch(proxySrc, /request\.(json|text|formData|arrayBuffer|body)\b/, "the proxy never reads a body");
+    }
     assert.doesNotMatch(read("next.config.ts"), /bodySizeLimit|proxyClientMaxBodySize|middlewareClientMaxBodySize/);
     // audit M3 (2026-10-15): Caddy cuts a body at 8 MB, above the app's 6.5 MB JSON cap (api/http.ts MAX_JSON_BODY); nothing smaller is cut
     const caddy = read("deploy/caddy/Caddyfile"); const m = caddy.match(/request_body \{\s*max_size (\d+)MB\s*\}/); assert.ok(m, "the Caddyfile caps the request body");

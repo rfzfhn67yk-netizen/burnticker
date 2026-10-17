@@ -12,7 +12,7 @@ import { lockRule } from "@/lib/burnticker/rules";
 import { CONFIRM_VERIFY_PER_CLIENT_MINT_HOUR, CONFIRM_VERIFY_PER_MINT_HOUR, REFUSAL_MEMORY_MS, launchesClosedAt, markLaunched, resetConfirmGuards } from "@/lib/burnticker/api/handlers";
 import type { Platform } from "@/lib/burnticker/server";
 import type { LaunchExpectation, LaunchVerifier } from "@/lib/burnticker/launchVerify";
-import { configPda } from "@/lib/burnReceipts/pda";
+import { configPda, feePda } from "@/lib/burnReceipts/pda";
 import { reconcileDrafts, reviveDraft, BACKOFF_MIN_MS, RECONCILE_INTERVAL_MS, SCAN_STATUS_PREFIX, VERIFY_PER_SWEEP, type DraftChainReader } from "@/lib/burnticker/draftReconciler";
 import { PLAN_STORAGE_PREFIX, legacyTogether, launchlabPlan, memoryPlanStorage, planConfirmations, pairCurvePlan, recoverStoredLaunch, listStoredLaunches, type LaunchlabBundleLike } from "@/lib/burnticker/signPlan";
 import { limiter } from "@/lib/burnticker/api/http";
@@ -131,11 +131,15 @@ describe("C1 · the browser confirm judges the 24 h window on the create's block
     for (let i = 0; i < CONFIRM_VERIFY_PER_CLIENT_MINT_HOUR; i++) assert.equal((await markLaunched(p, t.mint, s58(i + 1), now + 100 + i, "spammer")).status, 404);
     assert.equal((await markLaunched(p, t.mint, s58(99), now + 200, "spammer")).status, 429, "the spammer is limited");
     assert.equal((await markLaunched(p, t.mint, sig("6"), now + 201, "creator")).status, 404, "the creator is not");
-    // the per-mint ceiling across many clients
+    // F-16 (2026-10-16): signatures the chain does not hold never fill the per-mint ceiling, whoever sends them
     for (let i = 0; i < CONFIRM_VERIFY_PER_MINT_HOUR; i++) await markLaunched(p, t.mint, s58(1000 + i), now + 300 + i, `c${i}`);
-    assert.equal((await markLaunched(p, t.mint, s58(5000), now + 400, "creator")).status, 429);
-    assert.equal((await markLaunched(p, t.mint, sig("5"), now + 401, "creator")).status, 404, "a signature already counted is still checked");
-    assert.equal((await markLaunched(p, t.mint, s58(5000), now + 3_600_500, "creator")).status, 404, "an hour later it is checked again");
+    assert.equal((await markLaunched(p, t.mint, s58(5000), now + 400, "creator")).status, 404, "the creator is still checked");
+    // the per-mint ceiling counts transactions on chain signed by this coin's mint and creator (refused for their content)
+    const b58 = (k: number) => { const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; let o = ""; do { o = A[k % 58] + o; k = Math.floor(k / 58); } while (k > 0); return (o + "x".repeat(88)).slice(0, 88); };
+    const onChain = platformOf(reg, { verify: async () => ({ ok: false, status: 422, reason: "the TokenConfig on chain locks another rule" }) });
+    for (let i = 0; i < CONFIRM_VERIFY_PER_MINT_HOUR; i++) await markLaunched(onChain, t.mint, b58(2000 + i), now + 500 + i, `d${i}`);
+    assert.equal((await markLaunched(onChain, t.mint, b58(6000), now + 600, "creator")).status, 429);
+    assert.equal((await markLaunched(onChain, t.mint, b58(6000), now + 3_600_700, "creator")).status, 422, "an hour later it is checked again");
   });
 
   test("re-review (3): a content refusal is remembered for 5 minutes; an account not found yet (a lagging RPC) is never remembered", async () => {
@@ -194,14 +198,18 @@ describe("C1 · the browser confirm judges the 24 h window on the create's block
 
 describe("C1 · the keeper's draft reconciler takes coins created in their window live from the chain (bounded)", () => {
   type Sig = { signature: string; err: unknown; blockTime: number | null };
-  /** A chain: TokenConfigs by mint, each mint's history NEWEST FIRST, honouring before/until/limit like the RPC. */
+  /**
+   * A chain: TokenConfigs by mint, each coin's history NEWEST FIRST, honouring before/until/limit like the RPC. F-2 (2026-10-16): the
+   * reconciler reads the coin's FEE PDA history (in every create, in no swap), so `hist` (keyed by mint) answers for that address.
+   */
   function chain(cfgMints: Set<string>, hist: Map<string, Sig[]>, owner = PROGRAM) {
     const calls = { multiple: 0, keys: 0, sigs: 0, opts: [] as { before?: string; until?: string }[] };
     const reader: DraftChainReader = {
       async getMultipleAccountsInfo(keys: PublicKey[]) { calls.multiple++; calls.keys += keys.length; return keys.map((k) => { const m = [...cfgMints].find((x) => configPda(new PublicKey(PROGRAM), new PublicKey(x)).equals(k)); return m ? { owner: new PublicKey(owner), data: new Uint8Array(8) } : null; }); },
       async getSignaturesForAddress(a: PublicKey, o: { limit: number; before?: string; until?: string }) {
         calls.sigs++; calls.opts.push({ before: o.before, until: o.until });
-        let rows = hist.get(a.toBase58()) ?? [];
+        const m = [...hist.keys()].find((x) => feePda(new PublicKey(PROGRAM), new PublicKey(x)).equals(a));
+        let rows = m ? hist.get(m)! : [];
         if (o.before) rows = rows.slice(rows.findIndex((r) => r.signature === o.before) + 1);
         if (o.until) { const u = rows.findIndex((r) => r.signature === o.until); if (u >= 0) rows = rows.slice(0, u); }
         return rows.slice(0, o.limit);
@@ -226,15 +234,16 @@ describe("C1 · the keeper's draft reconciler takes coins created in their windo
     assert.ok(reg.alertsSince(0).some((a) => a.kind === "draft-reconciled"));
   });
 
-  test("review (1): a create that landed at 25 h is NOT taken live by the reconciler (it is not even offered to the verifier); the draft is finished", async () => {
+  test("review (1), F-3: a create that landed at 25 h is NOT taken live by the reconciler; the draft is finished and the owner is alerted once", async () => {
     const reg = openRegistry(":memory:");
     const t = draft(reg, "LATE25", T0);
     const landed = T0 + 25 * 3_600_000, calls: string[] = [];
     const { reader } = chain(new Set([t.mint]), new Map([[t.mint, [{ signature: sig("8"), err: null, blockTime: secs(landed) }]]]));
     const r = await run(reg, reader, tableVerifier(new Map([[sig("8"), { mint: t.mint, blockTimeMs: landed }]]), calls), landed + 3_600_000);
-    assert.deepEqual(r.takenLive, []); assert.deepEqual(calls, []);
+    assert.deepEqual(r.takenLive, []); assert.deepEqual(calls, [sig("8")], "the late create is verified so the alert names a real create");
     assert.equal(reg.token(t.mint)!.status, "draft");
-    assert.deepEqual(r.finished, [t.mint]);
+    assert.deepEqual(r.finished, [t.mint]); assert.deepEqual(r.late.map((x) => x.launchTx), [sig("8")]);
+    assert.equal(reg.alertsSince(0).filter((a) => a.kind === "bt-launch-late").length, 1);
   });
 
   test("never without a TokenConfig, never a failed transaction, never a TokenConfig owned by another program", async () => {
@@ -277,7 +286,7 @@ describe("C1 · the keeper's draft reconciler takes coins created in their windo
     assert.deepEqual({ m: calls.multiple, s: calls.sigs }, before, "a finished draft is never read again");
   });
 
-  test("review (2, 4): verifications are capped per sweep, the scan resumes from its cursor, and a create with many earlier transactions is found by content", async () => {
+  test("review (2, 4), F-2: a create with many later transactions is found by content, oldest first, in the first sweep", async () => {
     const reg = openRegistry(":memory:");
     const t = draft(reg, "BUSY", T0);
     // newest first: 25 successful in-window transactions after the create, then the create, then the lock
@@ -286,6 +295,20 @@ describe("C1 · the keeper's draft reconciler takes coins created in their windo
     const { reader } = chain(new Set([t.mint]), new Map([[t.mint, rows]]));
     const calls: string[] = [];
     const v = tableVerifier(new Map([[sig("8"), { mint: t.mint, blockTimeMs: T0 + 120_000 }]]), calls);
+    const r = await run(reg, reader, v, T0 + 2 * 3_600_000);
+    assert.deepEqual(r.takenLive.map((x) => x.launchTx), [sig("8")]);
+    assert.deepEqual(calls, [sig("7"), sig("8")], "the lock, then the create: nothing newer is offered");
+    assert.equal(reg.token(t.mint)!.status, "live");
+  });
+
+  test("review (2, 4): verifications are capped per sweep and the queue resumes where it stopped (no transaction verified twice)", async () => {
+    const reg = openRegistry(":memory:");
+    const t = draft(reg, "PADDED", T0);
+    // newest first: the create, then 25 junk transactions sent to the fee PDA BEFORE it (worst case for oldest first)
+    const rows: Sig[] = [{ signature: sig("8"), err: null, blockTime: secs(T0 + 3_600_000) }, ...Array.from({ length: 25 }, (_, k) => ({ signature: "ABCDEFGHJKLMNPQRSTUVWXYZa"[k].repeat(88), err: null, blockTime: secs(T0 + 60_000 + (25 - k) * 1000) }))];
+    const { reader } = chain(new Set([t.mint]), new Map([[t.mint, rows]]));
+    const calls: string[] = [];
+    const v = tableVerifier(new Map([[sig("8"), { mint: t.mint, blockTimeMs: T0 + 3_600_000 }]]), calls);
     let now = T0 + 2 * 3_600_000, r = await run(reg, reader, v, now);
     assert.equal(r.verified, VERIFY_PER_SWEEP); assert.deepEqual(r.takenLive, []);
     for (let k = 0; k < 3 && !r.takenLive.length; k++) { now += RECONCILE_INTERVAL_MS + 1; r = await run(reg, reader, v, now); assert.ok(r.verified <= VERIFY_PER_SWEEP); }
@@ -431,18 +454,14 @@ describe("C1 (6, 7) · confirms of launches already signed: accepted while launc
     const r2 = await legacy({ action: "launched", mint: b.mint, launchTx: sig("8") }, ip);
     assert.equal(r2.status, 200, JSON.stringify(await r2.clone().json()));
   });
-  test("review (8): confirmations are rate limited (429 with Retry-After): the API route on the heavy bucket, the page route on its own confirm bucket (F-21)", async () => {
+  test("review (8): confirmations are rate limited on their own confirm bucket (429 with Retry-After), shared by both routes", async () => {
     await makeWorld(); limiter.reset();
     const ip = "198.51.100.63";
     let last: Response | null = null;
-    for (let i = 0; i <= RATE_LIMITS.heavy.burst; i++) last = await callRoute(`${API}/launch/confirm`, { method: "POST", headers: { ...POST_HEADERS, "x-forwarded-for": ip }, body: JSON.stringify({ mint: "x", signature: "y" }) });
+    assert.deepEqual([RATE_LIMITS.confirm.burst, RATE_LIMITS.confirm.refillPerSec * 60], [30, 30]);
+    for (let i = 0; i <= RATE_LIMITS.confirm.burst; i++) last = await callRoute(`${API}/launch/confirm`, { method: "POST", headers: { ...POST_HEADERS, "x-forwarded-for": ip }, body: JSON.stringify({ mint: "x", signature: "y" }) });
     assert.equal(last!.status, 429); assert.ok(Number(last!.headers.get("retry-after")) > 0);
-    // audit 2026-10-16 F-21: the page route records a launch on its own `confirm` bucket (30 a minute), so the wizard's reads on the
-    // heavy bucket never refuse it; it is still limited, on that bucket
-    assert.equal((await legacy({ action: "launched", mint: "x", launchTx: "y" }, ip)).status, 404, "the page route's confirmation is not refused by the heavy bucket");
-    for (let i = 1; i < RATE_LIMITS.confirm.burst; i++) await legacy({ action: "launched", mint: "x", launchTx: "y" }, ip);
-    const capped = await legacy({ action: "launched", mint: "x", launchTx: "y" }, ip);
-    assert.equal(capped.status, 429, "the confirm bucket limits it"); assert.ok(Number(capped.headers.get("retry-after")) > 0);
+    assert.equal((await legacy({ action: "launched", mint: "x", launchTx: "y" }, ip)).status, 429, "the page route shares the confirm bucket");
     assert.equal((await legacy({ action: "launched", mint: "x", launchTx: "y" }, "198.51.100.64")).status, 404, "another client is not affected");
   });
 });

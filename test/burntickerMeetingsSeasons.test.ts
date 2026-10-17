@@ -81,7 +81,7 @@ describe("F07: meetings coins keep their season year", () => {
     assert.ok(locs.includes(`https://burnticker.com${leaguePath("nfl", 2025)}`), "the 2025 page is in the sitemap");
   });
   test("review follow-up 7: head-to-head coins of different matchups are never ranked together and no card names a leader or champion; every new string lints", () => {
-    const r = rankLines(COINS).get("PITWIN")!;
+    const r = rankLines(COINS).get(COINS.find((c) => c.ticker === "PITWIN")!.mint)!; // block G keys rank lines by mint
     assert.doesNotMatch(r.line, /Ranked \d+ of \d+ in NFL 2026 head-to-head series/, r.line);
     assert.equal(r.season, null);
     for (const b of seasonBoards(COINS).filter((x) => x.window === "meetings")) assert.equal(b.leader, null, b.key);

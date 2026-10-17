@@ -41,7 +41,7 @@ export async function creatorData(wallet: string, now = Date.now(), p: Platform 
     let d;
     try { d = await tokenPageData(plat, t, now); } catch { continue; }
     const s = d.status;
-    const rank = ranks?.get(s.ticker) ?? null;
+    const rank = ranks?.get(s.mint) ?? null;
     const week = receiptsThisWeek(burnsBy.get(s.mint) ?? [], now);
     coins.push({
       ticker: s.ticker, name: s.name, key: registryCoinKey(plat.registry, t), page: `/burnticker/t/${encodeURIComponent(registryCoinKey(plat.registry, t))}`, status: s.status, cluster: s.cluster,

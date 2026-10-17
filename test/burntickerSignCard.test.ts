@@ -129,7 +129,7 @@ describe("failures: never half-signed, resume at the failed step, plain sentence
     const ok = await confirmPlan(async () => (++n <= 3 ? reply(404) : reply(200, { ok: true })), plan, ["sig1", "sig2"], launchedErrorMessage, { sleep: async (ms) => { waits += ms; } });
     assert.deepEqual([ok.error, ok.confirmed.length, n, waits], [null, 1, 4, 12000]);
     const cfg = loadCopyLintConfig();
-    for (const [st, code, re] of [[409, "", /already recorded as launched/], [422, "launch-unverified", /did not accept that transaction/], [429, "rate-limited", /Try again in about 15 minutes/], [503, "launch-unverifiable", /cannot confirm launches yet/]] as const) {
+    for (const [st, code, re] of [[409, "already-launched", /already recorded as launched/], [422, "launch-unverified", /did not accept that transaction/], [429, "rate-limited", /Try again in about 15 minutes/], [503, "launch-unverifiable", /cannot confirm launches yet/]] as const) {
       const r = await confirmPlan(async () => reply(st, { code }), plan, ["sig1", "sig2"], launchedErrorMessage, { sleep: async () => {} });
       assert.match(r.error!, re); assert.ok(lintCopy(r.error!, cfg).ok, r.error!);
     }

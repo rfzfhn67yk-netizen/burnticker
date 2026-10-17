@@ -291,9 +291,10 @@ describe("the committed platform fixture and the brand", () => {
     assert.equal(META_TITLE, "Burnticker: Memecoins that burn on real-world results");
     const closed = metaDescription({}), preview = metaDescription({ BURNTICKER_CREATOR_LAUNCHES_PREVIEW: "1" }), open = metaDescription({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" });
     for (const d of [closed, preview, open]) assert.match(d, /^Memecoins that burn on real-world results\. Every burn leaves a receipt\. /);
-    assert.ok(closed.endsWith(CREATOR_LAUNCHES_CLOSED), closed); assert.doesNotMatch(closed, /Launch one|launch a/i);
-    assert.ok(preview.endsWith(PREVIEW_BANNER), preview);
-    assert.ok(open.endsWith(siteLaunchState({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" }).sentence), open);
+    // prelaunch audit 2026-10-16 F-12/F-13: statically built pages bake the description in at build time, so it names no launch state
+    // (the built pages said "Creator launches are not open" after launches opened): one description whatever the host's switch
+    assert.equal(closed, open); assert.equal(preview, open);
+    for (const d of [closed, preview, open]) { assert.ok(!d.includes(CREATOR_LAUNCHES_CLOSED) && !d.includes(PREVIEW_BANNER) && !d.includes(siteLaunchState({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" }).sentence), d); assert.doesNotMatch(d, /not open|launches are/i); }
     assert.doesNotMatch(layout, /burns on the news/i);
     clean(closed, "OG description (closed)"); clean(preview, "OG description (preview)"); clean(open, "OG description (open)");
   });

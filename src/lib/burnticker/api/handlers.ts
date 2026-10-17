@@ -1,6 +1,6 @@
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { burnRealFromEnv, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
-import { recordedClosure } from "@/lib/burnticker/draftReconciler";
+import { alertLaunchLate, recordedClosure } from "@/lib/burnticker/draftReconciler";
 import { dispersalEnabled } from "@/lib/burnticker/dispersal";
 import type { Platform } from "@/lib/burnticker/server";
 import type { Keypair } from "@solana/web3.js";
@@ -1098,39 +1098,48 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   if (!t) return fail(404, "There is no draft for this mint.");
   if (!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(launchTx)) return fail(400, "The launch transaction must be a transaction signature.");
   if (t.launchTx === launchTx) return ok({ ok: true, token: t, replay: true, note: `This launch was already confirmed in this transaction. The start time stays ${t.baselineAt}, which was fixed at launch.` });
-  if (t.launchTx) return fail(409, `${mint} already launched in transaction ${t.launchTx}.`);
-  if (t.status !== "draft" && t.status !== "expired") return fail(409, `${mint} is ${t.status}, so it is not a draft.`);
+  if (t.launchTx) return fail(409, `${mint} already launched in transaction ${t.launchTx}.`, { code: "already-launched" });
+  if (t.status !== "draft" && t.status !== "expired") return fail(409, `${mint} is ${t.status}, so it is not a draft.`, { code: "not-a-draft" });
   if (!p.launchVerifier) return fail(503, "This site cannot check a launch transaction right now. A draft goes live only after its launch is read from the chain.", { code: "launch-unverifiable" });
   const key = `${mint}:${launchTx}`;
   const known = refusedConfirms.get(key);
   if (known && now - known.at < REFUSAL_MEMORY_MS) return fail(known.status, known.reason, { code: "launch-unverified" });
   const missing = missingConfirms.get(key);
   if (missing && now - missing.at < MISSING_MEMORY_MS) return fail(missing.status, missing.reason, { code: "launch-unverified", retryAfterSec: Math.max(1, Math.ceil((missing.at + MISSING_MEMORY_MS - now) / 1000)) });
+  // F-16 (prelaunch audit 2026-10-16): the per-CLIENT limit is the first gate and counts every distinct signature. The per-MINT ceiling
+  // counts only signatures the chain holds that were signed by this coin's mint and creator: a made-up signature (not on chain) or a
+  // stranger's real transaction copied off the chain never counts, so strangers cannot block the creator's confirm.
   const perMint = liveSigs(sigsByMint, mint, now), perClient = liveSigs(sigsByClientMint, `${client}|${mint}`, now);
   const limited = (m: Map<string, number>, cap: number) => !m.has(launchTx) && m.size >= cap;
-  if (limited(perClient, CONFIRM_VERIFY_PER_CLIENT_MINT_HOUR) || limited(perMint, CONFIRM_VERIFY_PER_MINT_HOUR)) {
-    const oldest = Math.min(...perClient.values(), ...perMint.values());
-    return fail(429, "This coin's launch was checked with too many different transactions in the last hour. Please try again later.", { code: "rate-limited", retryAfterSec: Math.max(1, Math.ceil((oldest + HOUR_MS - now) / 1000)) });
-  }
-  if (!perMint.has(launchTx)) perMint.set(launchTx, now);
+  const tooMany = (m: Map<string, number>) => fail(429, "This coin's launch was checked with too many different transactions in the last hour. Please try again later.", { code: "rate-limited", retryAfterSec: Math.max(1, Math.ceil((Math.min(...m.values()) + HOUR_MS - now) / 1000)) });
+  if (limited(perClient, CONFIRM_VERIFY_PER_CLIENT_MINT_HOUR)) return tooMany(perClient);
   if (!perClient.has(launchTx)) perClient.set(launchTx, now);
+  const notOnChain = (reason: string) => {
+    if (missingConfirms.size > GUARD_MAX_KEYS) { for (const [k, x] of missingConfirms) if (now - x.at >= MISSING_MEMORY_MS) missingConfirms.delete(k); while (missingConfirms.size > GUARD_MAX_KEYS) missingConfirms.delete(missingConfirms.keys().next().value as string); }
+    missingConfirms.set(key, { at: now, status: 404, reason });
+    return fail(404, reason, { code: "launch-unverified" });
+  };
+  // a signature the chain does not hold costs one status lookup, never a transaction read, and never a per-mint slot
+  if (!perMint.has(launchTx) && p.launchVerifier.seen && (await p.launchVerifier.seen(launchTx)) === false) return notOnChain("No confirmed transaction with this signature on this cluster (yet). Send the launch, wait for it to confirm, then confirm again.");
+  if (limited(perMint, CONFIRM_VERIFY_PER_MINT_HOUR)) return tooMany(perMint);
   // Review-2 F3: the verifier checks the launch's CONTENT (initialize_token for this mint, the on-chain TokenConfig's rules hash, the
   // venue) — and nothing is written to the registry unless it passes: a refused confirmation leaves status, baseline and launch_tx alone.
   const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, p.registry.pairOf(mint)) });
+  // review L1: a slot is taken only by an answer about the transaction itself: it passed, or it was refused for its content or state
+  // (422 / 409) without being someone else's transaction. RPC trouble (502, 503) and a throw (budget hold) never take one.
+  if (!perMint.has(launchTx) && (v.ok || ((v.status === 422 || v.status === 409) && !v.foreign))) perMint.set(launchTx, now);
   if (!v.ok) {
     if (v.status === 422 && !v.missing) rememberRefusal(key, v, now);
-    else if (v.status === 404) {
-      if (missingConfirms.size > GUARD_MAX_KEYS) { for (const [k, x] of missingConfirms) if (now - x.at >= MISSING_MEMORY_MS) missingConfirms.delete(k); while (missingConfirms.size > GUARD_MAX_KEYS) missingConfirms.delete(missingConfirms.keys().next().value as string); }
-      missingConfirms.set(key, { at: now, status: v.status, reason: v.reason });
-    }
+    else if (v.status === 404) return notOnChain(v.reason);
     return fail(v.status, v.reason, { code: "launch-unverified" });
   }
   const baselineAt = new Date(v.blockTimeMs).toISOString();
-  if (!inDraftWindow(t.createdAt, v.blockTimeMs)) return fail(409, `This launch landed at ${baselineAt}, more than 24 hours after its draft was made, so it is not recorded here. Please build a new launch.`, { code: "launch-late" });
+  // F-3: the owner hears once per coin (draftReconciler.alertLaunchLate), with the operator's command that can still take it live
+  if (!inDraftWindow(t.createdAt, v.blockTimeMs)) { alertLaunchLate(p.registry, t, launchTx, v.blockTimeMs, now); return fail(409, `This launch landed at ${baselineAt}, more than 24 hours after its draft was made, so it is not recorded here. Please build a new launch.`, { code: "launch-late" }); }
   const closedAt = launchesClosedAt(p, process.env, now);
   if (closedAt !== null && v.blockTimeMs > closedAt) return fail(403, `This launch landed at ${baselineAt}, after creator launches closed, so it is not recorded.`, { code: "launch-after-closure" });
   let r: ReturnType<Platform["registry"]["takeLiveFromChain"]>;
-  try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); } catch (e) { return fail(409, safeErrorText(e, 600)); }
+  try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); } catch (e) { return fail(409, safeErrorText(e, 600), { code: "launch-race" }); }
   return ok({ ok: true, token: p.registry.token(mint), ...(r.revived ? { revived: true } : {}), note: `The launch transaction was read from the chain. The start time is its block time, ${baselineAt}. Results settled after this moment count.${r.revived ? " This draft had been marked expired, and the chain shows its coin was created in time, so it is live now." : ""}` });
 }
 

@@ -286,7 +286,7 @@ describe("re-review: no echoed error carries an RPC or feed address with its key
     const v1 = read("src/lib/burnticker/api/v1.ts");
     assert.ok(!/fail\(\d+, \(e as Error\)\.message|e\.message\.slice/.test(v1), "v1.ts");
     const h = read("src/lib/burnticker/api/handlers.ts");
-    assert.match(h, /takeLiveFromChain\([^\n]*catch \(e\) \{ return fail\(409, safeErrorText\(e, 600\)\); \}/);
+    assert.match(h, /takeLiveFromChain\([^\n]*catch \(e\) \{ return fail\(409, safeErrorText\(e, 600\), \{ code: "launch-race" \}\); \}/);
     assert.ok(!/fail\(\d+, \(e as Error\)\.message/.test(h), "handlers.ts");
   });
 });
