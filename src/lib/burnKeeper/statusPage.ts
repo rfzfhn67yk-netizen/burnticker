@@ -157,6 +157,11 @@ export interface StatusJson {
   vault: { allocation: string; balance: string | null; allocationLeft: string; trailing30d: string; projectedLifeDays: number | null; vesting: { kind: string; cliffDays: number; vestDays: number } };
   feed: {
     name: string; lastRecordDate: string | null; lastAmount: string | null; readings: number; lastPollAt: string | null; lastPollOutcome: string | null; nextPollAt: string | null;
+    /**
+     * Third prelaunch audit 2026-10-16 F08: the newest reading as one record (its date, amount, change and units together), so a page
+     * never shows one reading's date with another's change. deltaUsd is null for the baseline. Absent on older files.
+     */
+    lastReading?: { recordDate: string; amount: string; deltaUsd: string | null; units: number; kind: "baseline" | "nothing" | "burn" } | null;
     /** The first reading after launch (the baseline nothing is burned for), so a page can say how far the debt has risen since launch (website-14, LAUNCHPAD-PATH §73). Absent on older files. */
     baseline?: { recordDate: string; amount: string } | null;
   };
@@ -323,7 +328,8 @@ export function buildStatus(i: StatusInput, burnsJson: readonly BurnJson[] = bui
     },
     feed: { name: rules.feed.name, lastRecordDate: lastReading?.recordDate ?? null, lastAmount: lastReading?.amount ?? null, readings: i.readings.length,
       lastPollAt: i.lastPoll ? new Date(i.lastPoll.at).toISOString() : null, lastPollOutcome: i.lastPoll?.outcome ?? null, nextPollAt: i.nextPollAt ? new Date(i.nextPollAt).toISOString() : null,
-      baseline: baseline ? { recordDate: baseline.recordDate, amount: baseline.amount } : null },
+      baseline: baseline ? { recordDate: baseline.recordDate, amount: baseline.amount } : null,
+      lastReading: lastReading ? { recordDate: lastReading.recordDate, amount: lastReading.amount, deltaUsd: lastReading.deltaCents === null ? null : centsToUsd(lastReading.deltaCents), units: lastReading.units, kind: lastReading.kind } : null },
     health: { pending: i.burns.filter((b) => b.status === "planned" || b.status === "sending" || b.status === "swap-sent" || b.status === "swapped").length, lastError: i.lastError, unverified: burnsJson.filter((b) => b.status === "confirmed" && !b.verify.verified).length, waiting: i.burns.filter((b) => b.waitReason && (b.status === "planned" || b.status === "sending")).length },
     mode: rules.mode,
     execution: i.program ? "program" : "legacy",

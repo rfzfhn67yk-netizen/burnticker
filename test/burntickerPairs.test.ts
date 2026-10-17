@@ -176,6 +176,11 @@ describe("a Broncos pair through the keeper", () => {
     assert.ok(html.indexOf("<h2>Receipts — $BRONCOS</h2>") < html.indexOf("<h2>Receipts — $CHIEFS</h2>"), "A's table above B's");
     assert.match(html, /Scoreboard: this page/); assert.doesNotMatch(html, /\{SITE_URL\}/);
     assert.match(html, /href="\.\.\/\.\.\/t\/BRONCOS\/rules\.json"/);
+    // review follow-up 3: a side whose ticker is shared links by its own site directory (its mint), never another coin's ticker page
+    const keyed = renderPairHtml(t, sa, sb, recA, recB, null, new Map([[sa.mint, [sa.mint]], [sb.mint, ["CHIEFS"]]]));
+    assert.match(keyed, new RegExp(`href="\\.\\./\\.\\./t/${sa.mint}/"`)); assert.match(keyed, new RegExp(`href="\\.\\./\\.\\./t/${sa.mint}/rules\\.json"`));
+    assert.doesNotMatch(keyed, /href="\.\.\/\.\.\/t\/BRONCOS\//);
+    assert.match(keyed, /href="\.\.\/\.\.\/t\/CHIEFS\/"/);
     // publishPlatformIndex writes the pair page the index cards link to.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bt-pair-"));
     try {

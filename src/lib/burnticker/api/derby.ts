@@ -1,3 +1,4 @@
+import { publicPairs } from "@/lib/burnticker/publicPairs";
 import type { Platform } from "@/lib/burnticker/server";
 import { tokenPageData } from "@/lib/burnticker/server";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
@@ -24,7 +25,8 @@ import { preflightSelector } from "@/lib/burnticker/coverage/preflight";
 const decode = (s: string): string => { try { return decodeURIComponent(s); } catch { return s; } };
 
 export function v1ListDerby(p: Platform, now = Date.now()): ApiResult {
-  const pairs = p.registry.pairs().filter((pr) => pr.selectorKey.startsWith("derby:")).map((pr) => {
+  // review follow-up 3: the shared public rule (publicPairs.ts): a pair that never launched is not listed
+  const pairs = publicPairs(p.registry).filter((pr) => pr.selectorKey.startsWith("derby:")).map((pr) => {
     const a = p.registry.token(pr.mintA), b = p.registry.token(pr.mintB);
     const j = derbyPairJson(p.registry, pr, p.registry.receipts(pr.mintA).map((r) => ({ eventId: r.eventId, status: r.status, burned: null, signature: r.signature, txUrl: null, units: r.units })), p.registry.receipts(pr.mintB).map((r) => ({ eventId: r.eventId, status: r.status, burned: null, signature: r.signature, txUrl: null, units: r.units })), now);
     return { pairId: pr.pairId, a: a?.ticker ?? pr.mintA, b: b?.ticker ?? pr.mintB, series: pr.selectorKey.replace(/^derby:/, ""), selector: j?.selector ?? "coinvs", season: j ? { start: j.season.start, days: j.season.days, endsOn: j.season.endsOn } : { start: "", days: 0, endsOn: "" }, score: j ? { a: j.score.a, b: j.score.b, ties: j.score.ties } : { a: 0, b: 0, ties: 0 }, page: `/burnticker/p/${pr.pairId}` };

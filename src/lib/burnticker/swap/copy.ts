@@ -43,6 +43,8 @@ export const SWAP_COPY = {
   checking: "Checking the earlier swap",
   earlierConfirmed: "Your earlier swap is confirmed.",
   expired: "Your earlier swap did not land, and it can no longer land, so nothing changed. You can swap again.",
+  /** review follow-up 2: a held swap released after 24 hours without an answer from the network (swap/pending.ts GIVE_UP_AFTER_MS) */
+  unconfirmed: "We could not confirm whether your earlier swap went through. Check your wallet's history before you swap again.",
   balanceUnread: "This page could not read the wallet's new balance just now. The swap itself is confirmed.",
   noKeys: "The panel never sees your keys. Your wallet signs, and you can read every step before you approve it.",
 } as const;

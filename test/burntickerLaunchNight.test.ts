@@ -234,7 +234,7 @@ describe("6: a wallet slower than the blockhash gets the step rebuilt and signed
     const r = await signAndSendPlan(planOf(), CREATOR, h.d);
     assert.deepEqual([r.failedAt, r.state, r.error], [0, "not-sent", resignExhaustedSentence(0, 1)]);
     assert.deepEqual([h.get().signs, h.get().sends], [RESIGN_MAX + 1, 0]);
-    clean(resignExhaustedSentence(0, 1)); assert.match(resignExhaustedSentence(0, 1), /Nothing was sent\./);
+    clean(resignExhaustedSentence(0, 1)); assert.doesNotMatch(resignExhaustedSentence(0, 1), /Nothing was sent|This step was not sent/); assert.equal((resignExhaustedSentence(0, 1).match(/not sent/g) ?? []).length, 1, "said once");   // third prelaunch audit F11 and its review (6)
   });
   test("a send refused with \"Blockhash not found\" (nothing left the node) is rebuilt and signed again too", async () => {
     const h = harness({ walletMs: [1_000, 1_000], sendErr: (n) => (n === 1 ? "failed to send transaction: Transaction simulation failed: Blockhash not found" : null) });

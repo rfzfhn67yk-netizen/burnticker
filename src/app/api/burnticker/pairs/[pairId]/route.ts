@@ -4,6 +4,7 @@ import { pairTally } from "@/lib/burnticker/tokenPage";
 import { pairDailyText } from "@/lib/launch/dailyPost";
 import { derbyPairBlock } from "@/lib/burnticker/api/derby";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
+import { pairLifecycle, pairSideHrefs } from "@/lib/burnticker/publicPairs";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +24,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ pairId:
   const share = pairDailyText(tally, site, da.status.profile?.badge ?? null);
   // Burn Derby (2026-10-10): the running score, the day strip with both readings, the season end, the proof links, the day post.
   const derby = pair.selectorKey.startsWith("derby:") ? await derbyPairBlock(p, pairId, site, now).catch(() => null) : null;
-  return NextResponse.json({ pair, a: { status: da.status, receipts: da.receipts, rulesText: da.rulesText }, b: { status: db.status, receipts: db.receipts, rulesText: db.rulesText }, tally, share, derby, stubs: p.stubs });
+  // review follow-up 3: each side links to its own coin page (by mint when its ticker is shared), and the pair says its lifecycle
+  return NextResponse.json({ pair, hrefs: pairSideHrefs(p.registry, pair), lifecycle: pairLifecycle(p.registry, pairId), a: { status: da.status, receipts: da.receipts, rulesText: da.rulesText }, b: { status: db.status, receipts: db.receipts, rulesText: db.rulesText }, tally, share, derby, stubs: p.stubs });
 }

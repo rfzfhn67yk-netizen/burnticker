@@ -56,6 +56,12 @@ describe("status.json", () => {
     assert.equal(s.vault.allocationLeft, "243800000");
     assert.ok(s.vault.projectedLifeDays! > 0);
     assert.equal(s.feed.lastRecordDate, "2026-10-08");
+    // third prelaunch audit F08: the newest reading as one record, its change and units with its date
+    const lr = s.feed.lastReading!;
+    assert.equal(lr.recordDate, s.feed.lastRecordDate); assert.equal(lr.amount, s.feed.lastAmount);
+    const row = (await scenario()).readings.at(-1)!;
+    assert.equal(lr.units, row.units); assert.equal(lr.kind, row.kind);
+    assert.equal(lr.deltaUsd === null ? null : usdToCents(lr.deltaUsd), row.deltaCents);
     assert.equal(s.health.unverified, 0);
     assert.match(s.addresses.mintUrl!, /\?cluster=devnet$/);
     JSON.parse(JSON.stringify(s));   // no BigInt anywhere
