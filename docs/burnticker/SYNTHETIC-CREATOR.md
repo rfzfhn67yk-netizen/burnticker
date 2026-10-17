@@ -60,7 +60,10 @@ Every mint it makes is appended to `logs/synthetic-creator.jsonl`, and with `BUR
 `/burnticker/test-coins`. Any failure records one `bt-synthetic-failed` alert per run and pushes it (`push.ts`).
 
 Install once (outside the repository): `mkdir -p ~/.cache/burnticker-synth && cd ~/.cache/burnticker-synth && npm i playwright-core@1.48.2`,
-then on Linux `npx playwright-core install --with-deps chromium`. On the Mac the installed Google Chrome is used.
+then on Linux `timeout 900 npx playwright-core install --with-deps chromium` (as the service user, never from a root shell: the browser
+lands in that user's `~/.cache/ms-playwright`). On the Mac the installed Google Chrome is used. The time limit matters: an install that
+hangs holds `~/.cache/ms-playwright/__dirlock` (audit 2026-10-16 F-32, 15 hours); the nightly run removes a lock over an hour old when
+no installer is running (`scripts/service/playwright-dirlock.sh`).
 
 Run against a local devnet build (the PUBLIC tree: the monorepo's own root layout has no wallet provider):
 

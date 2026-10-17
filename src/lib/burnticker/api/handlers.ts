@@ -36,7 +36,7 @@ import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { describeRule } from "@/lib/burnticker/describe";
 import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
 import { BALLOT_NOTE, RACE_TYPES, candidateMappingLine, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
-import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEED_WORDING, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, teamByAbbr, meetingsPairSeries, meetingOutcome, tallyMeetings, seasonLabel, within, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEED_WORDING, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, teamByAbbr, meetingsPairSeries, meetingOutcome, tallyMeetings, seasonLabel, within, type Game, type LeagueId, isFallbackGame, FALLBACK_ONLY_LINE } from "@/lib/burnticker/sources/espn";
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
@@ -344,11 +344,14 @@ export async function sportsGames(_p: Platform, q: { league?: string | null; q?:
     try { games = await espnClient().upcoming(league, 8); } catch (e) { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", safeErrorText(e, 160)); return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: sp.line, scheduleDetail: sp.detail, games: [], count: 0 }); }
     const needle = (q.q ?? "").trim();
     const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
-    const rows = games.filter((g) => !g.completed && g.home.abbr !== "TBD" && g.away.abbr !== "TBD" && (!named || named.has(g.home.abbr) || named.has(g.away.abbr))).sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((g) => ({
+    // audit 2026-10-16 F-4 review: a fallback (API-Sports) game has no TheSportsDB id, so no game coin can be made from it: not offered
+    const rows = games.filter((g) => !isFallbackGame(g) && !g.completed && g.home.abbr !== "TBD" && g.away.abbr !== "TBD" && (!named || named.has(g.home.abbr) || named.has(g.away.abbr))).sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((g) => ({
       eventId: g.eventId, league, title: g.name, startsAt: g.startsAt, detail: g.detail, live: isLive(g, nowMs), when: isLive(g, nowMs) ? LIVE_NOW : null, a: sideOf(league, g.away), b: sideOf(league, g.home),
       series: { aLoss: gameSeries(league, g.eventId, g.away.abbr, "loss"), bLoss: gameSeries(league, g.eventId, g.home.abbr, "loss") },
     }));
-    return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: null, scheduleDetail: null, games: rows, count: rows.length });
+    // F-4 re-review: only the partial fallback listing could be read, so nothing is offered: say so plainly instead of an empty list
+    const fallbackOnly = !rows.length && games.some(isFallbackGame);
+    return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: fallbackOnly ? FALLBACK_ONLY_LINE : null, scheduleDetail: null, games: rows, count: rows.length });
   } catch (e) { return fail(502, `The schedule could not be read just now. The reason given was: ${safeErrorText(e, 160)}`); }
 }
 

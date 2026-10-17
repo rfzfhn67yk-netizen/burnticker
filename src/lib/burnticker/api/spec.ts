@@ -18,7 +18,7 @@ import { BADGE_ENDPOINTS, BADGE_SCHEMAS } from "@/lib/burnticker/api/badgeSpec";
 import { OPS_ENDPOINTS, OPS_SCHEMAS } from "@/lib/burnticker/ops/spec";
 import { FEATURES_ENDPOINTS, FEATURES_SCHEMAS } from "@/lib/burnticker/api/featuresSpec";
 
-export type Bucket = "read" | "heavy" | "write";
+export type Bucket = "read" | "heavy" | "write" | "confirm";
 type Schema = Record<string, unknown>;
 
 export interface Param { name: string; in: "path" | "query"; required: boolean; description: string; schema: Schema }
@@ -46,6 +46,9 @@ export const RATE_LIMITS: Record<Bucket, { burst: number; refillPerSec: number; 
   read: { burst: 120, refillPerSec: 2, human: "a burst of 120 requests, then 120 a minute" },
   heavy: { burst: 20, refillPerSec: 20 / 60, human: "a burst of 20 requests, then 20 a minute, because these call Kalshi or Polymarket or read a source again" },
   write: { burst: 10, refillPerSec: 10 / 3600, human: "10 an hour, for launch bundles and confirmations" },
+  // 2026-10-16 prelaunch audit F-21: the wizard's launch confirmation (a launch already on chain) has its own bucket, so the wizard's
+  // reads on the heavy bucket (team picker, search, back-test, image preview) can never refuse the record of a coin that exists
+  confirm: { burst: 30, refillPerSec: 30 / 60, human: "a burst of 30 requests, then 30 a minute, for recording a launch that is already on chain" },
 };
 
 const ref = (name: string): Schema => ({ $ref: `#/components/schemas/${name}` });

@@ -431,13 +431,18 @@ describe("C1 (6, 7) · confirms of launches already signed: accepted while launc
     const r2 = await legacy({ action: "launched", mint: b.mint, launchTx: sig("8") }, ip);
     assert.equal(r2.status, 200, JSON.stringify(await r2.clone().json()));
   });
-  test("review (8): confirmations are rate limited on the heavy bucket (429 with Retry-After), on both routes", async () => {
+  test("review (8): confirmations are rate limited (429 with Retry-After): the API route on the heavy bucket, the page route on its own confirm bucket (F-21)", async () => {
     await makeWorld(); limiter.reset();
     const ip = "198.51.100.63";
     let last: Response | null = null;
     for (let i = 0; i <= RATE_LIMITS.heavy.burst; i++) last = await callRoute(`${API}/launch/confirm`, { method: "POST", headers: { ...POST_HEADERS, "x-forwarded-for": ip }, body: JSON.stringify({ mint: "x", signature: "y" }) });
     assert.equal(last!.status, 429); assert.ok(Number(last!.headers.get("retry-after")) > 0);
-    assert.equal((await legacy({ action: "launched", mint: "x", launchTx: "y" }, ip)).status, 429, "the page route shares the heavy bucket");
+    // audit 2026-10-16 F-21: the page route records a launch on its own `confirm` bucket (30 a minute), so the wizard's reads on the
+    // heavy bucket never refuse it; it is still limited, on that bucket
+    assert.equal((await legacy({ action: "launched", mint: "x", launchTx: "y" }, ip)).status, 404, "the page route's confirmation is not refused by the heavy bucket");
+    for (let i = 1; i < RATE_LIMITS.confirm.burst; i++) await legacy({ action: "launched", mint: "x", launchTx: "y" }, ip);
+    const capped = await legacy({ action: "launched", mint: "x", launchTx: "y" }, ip);
+    assert.equal(capped.status, 429, "the confirm bucket limits it"); assert.ok(Number(capped.headers.get("retry-after")) > 0);
     assert.equal((await legacy({ action: "launched", mint: "x", launchTx: "y" }, "198.51.100.64")).status, 404, "another client is not affected");
   });
 });

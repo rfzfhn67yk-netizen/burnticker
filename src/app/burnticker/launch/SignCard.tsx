@@ -13,6 +13,10 @@ import { matchesSuffix } from "@/lib/burnticker/vanityMint";
 import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
 import { LaunchedTrade } from "../_components/TradeLinks";
 import { withFlight } from "@/lib/burnticker/rpcProxy";
+import { retry429 } from "@/lib/burnticker/retry429";
+
+/** The launch record's fetch: a 429 is asked again after its Retry-After (audit 2026-10-16 F-21; retry429.ts). */
+const confirmFetch = retry429((u: string, init: { method: string; headers: Record<string, string>; body: string }) => fetch(u, init));
 
 /**
  * THE SIGNING CARD (2026-10-11): the one component that signs every launch — a single LaunchLab coin, two coins, a pair-curve set — from
@@ -102,14 +106,14 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n));
         // AUDIT A C1 (5): a coin whose own create landed before the stop is recorded now (a LaunchLab pair whose B create failed: A exists)
         if (planConfirmations(plan, r.signatures).some((l) => !confirmed.includes(l.mint))) {
-          const c = await confirmPlan((u, init) => fetch(u, init), plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
+          const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
           setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
           // review (9): a failed record of the coin that landed is said too, beside why the run stopped
           if (c.error) setErr(`${failureSentence(r, n)} ${c.error}`);
         }
         return; }
       setStopped(null);
-      const c = await confirmPlan((u, init) => fetch(u, init), plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
+      const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
       setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
       if (c.error) setErr(`All ${n} transaction${n === 1 ? " is" : "s are"} confirmed on chain. ${c.error}`);
     } catch (e) {

@@ -79,6 +79,9 @@ if [ "${1:-}" = --fill-bank ] || [ "${1:-}" = --bank-status ]; then
   bank_fill 0; CODE=$?; tail -n 1 logs/burnticker-synth-bank.log; exit $CODE
 fi
 
+# audit 2026-10-16 F-32: a Playwright install lock left by a hung installer (over an hour old, no installer alive) is removed first
+sh ./scripts/service/playwright-dirlock.sh || true
+
 WEB=""; WEB2=""; FILL=""
 cleanup() {
   [ -z "$FILL" ] || { kill -TERM "$FILL" 2>/dev/null || true; wait "$FILL" 2>/dev/null || true; }

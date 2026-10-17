@@ -68,6 +68,7 @@ import { KeeperOps } from "../src/lib/burnticker/ops/keeperOps.ts";
 import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
+import { runUnitCheck } from "../src/lib/burnticker/ops/unitHealth.ts";
 import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 // BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
 import { dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
@@ -284,6 +285,7 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   if (cycleCache) { const c = cycleCache.stats; log(`  [cycle-cache] ${cycleCache.addresses().length} account(s) prefetched per cycle in ${Math.ceil(cycleCache.addresses().length / 100)} call(s); since start: ${c.cycles} cycle(s), ${c.served} read(s) served, ${c.passed} sent to the RPC, ${c.invalidations} drop(s) after a send`); }
   for (const a of r.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);
   for (const a of await ops.alerts(sink, now)) log(`  [alert] ${a.slice(0, 160)}`);
+  for (const a of (await runUnitCheck({ sink, now, log })).raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);   // audit 2026-10-16 F-5: failed units, backups
   try { const p = await runPushCheck({ registry, env: process.env, now, log }); for (const m of p.sent) log(`  [push] ${m.kind}: ${m.title}`); } catch (e) { log(`  [push] check failed: ${(e as Error).message.slice(0, 160)}`); }
   const launched = registry.tokens("live").map((t) => Date.parse(t.baselineAt)).filter((x) => Number.isFinite(x));
   let alerts: { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }[] | null = null;

@@ -73,6 +73,13 @@ export const SOURCES: readonly SourceSpec[] = [
   { id: "nhl-api", label: "NHL web API", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "nba-cdn", label: "NBA data feed", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   { id: "espn", label: "ESPN site API", limit: HOUSE, established: false, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
+  // API-Sports (BURNTICKER_APISPORTS_KEY; the settlement cross-read and, since 2026-10-16 audit F-4, the NFL day listing's second source):
+  // the free plan allows 100 requests a day and 10 a minute on EACH sport's API, so each API host is its own source. Before this row
+  // the hosts fell under the house default (2,000 a day), which the provider would have refused long before. The keeper holds 0.85 of
+  // the 60% (it settles games on it; the site only reads the NFL day listing while TheSportsDB is down), the web 0.15.
+  { id: "apisports-american-football", label: "API-Sports American football", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 } },
+  { id: "apisports-football", label: "API-Sports football (soccer)", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 } },
+  { id: "apisports-basketball", label: "API-Sports basketball", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 } },
   { id: "polymarket-gamma", label: "Polymarket Gamma", limit: { perSec: 30 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   // 2026-10-14: the house limit (0.5/s) refused a launch preflight — one payout read is three eth_calls in a row, and the web lane had
   // one call every 8 s. No public node publishes a limit; 4/s, 60/min, 2,000/day stays polite and lets a preflight run at once.
@@ -110,6 +117,7 @@ const HOSTS: [RegExp, string][] = [
   [/(^|\.)helius-rpc\.com$|(^|\.)helius\.xyz$/, "helius"],
   [/^api\.(mainnet-beta|devnet|testnet)\.solana\.com$/, "solana-public"],
   [/(^|\.)thesportsdb\.com$/, "thesportsdb"], [/^statsapi\.mlb\.com$/, "mlb-stats"], [/^api-web\.nhle\.com$/, "nhl-api"], [/(^|\.)nba\.com$/, "nba-cdn"],
+  [/^v1\.american-football\.api-sports\.io$/, "apisports-american-football"], [/^v3\.football\.api-sports\.io$/, "apisports-football"], [/^v1\.basketball\.api-sports\.io$/, "apisports-basketball"],
   [/(^|\.)espn\.com$/, "espn"], [/^gamma-api\.polymarket\.com$/, "polymarket-gamma"],
   [/^polygon-mainnet\.g\.alchemy\.com$/, "alchemy-polygon"],
   [/^(polygon-rpc\.com|polygon-bor\.publicnode\.com|polygon-bor-rpc\.publicnode\.com|polygon\.drpc\.org|1rpc\.io)$/, "polygon-rpc"],

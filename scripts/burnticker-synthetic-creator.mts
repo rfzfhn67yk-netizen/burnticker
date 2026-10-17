@@ -90,7 +90,7 @@ function tickerFor(tag: string): string { const t = Date.now().toString(36).toUp
 async function loadPlaywright(): Promise<{ chromium: any }> {
   const tries = [process.env.PLAYWRIGHT_CORE, "playwright-core", "playwright", path.join(os.homedir(), ".cache", "burnticker-synth", "node_modules", "playwright-core", "index.mjs")].filter(Boolean) as string[];
   for (const t of tries) { try { return (await import(t)) as { chromium: any }; } catch { /* next */ } }
-  throw new Error("Playwright is not installed here. Install it once outside the repository: mkdir -p ~/.cache/burnticker-synth && cd ~/.cache/burnticker-synth && npm i playwright-core@1.48.2, then (Linux) npx playwright-core install --with-deps chromium");
+  throw new Error("Playwright is not installed here. Install it once outside the repository: mkdir -p ~/.cache/burnticker-synth && cd ~/.cache/burnticker-synth && npm i playwright-core@1.48.2, then (Linux) timeout 900 npx playwright-core install --with-deps chromium");
 }
 
 async function launchBrowser(pw: { chromium: any }): Promise<any> {

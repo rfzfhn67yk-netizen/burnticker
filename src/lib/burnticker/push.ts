@@ -19,6 +19,11 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *                     (scripts/burnticker-mint-bank.mts records bt-mint-bank-low; launches still work through the browser search)
  *   synthetic-failed  the nightly synthetic creator (scripts/burnticker-synthetic-creator.mts, mct-burnticker-synth.timer) failed a
  *                     scenario on the devnet instance; one alert per run (bt-synthetic-failed), pushed at once by the script
+ *   feed-down         a source failed several reads in a row (ops/feedHealth.ts bt-feed-down; one per selector per Denver day, the
+ *                     registry's (key, day) key), so its readings are held (audit 2026-10-16 F-5)
+ *   unit-failed       a systemd user unit mct-* failed, or an expected one (mint bank, synthetic creator's timer, backup timer) is not
+ *                     running (ops/unitHealth.ts, the keeper's unit check; F-5 / F-9)
+ *   backup-failed     the last database backup failed or none finished for 13 hours (ops/unitHealth.ts from data/backups/last-backup.json)
  *   keeper-stale      the public status file is stale for more than two hours: pushed by scripts/ops/keeper-status-check.sh, which runs
  *                     every minute from the publish timer and so still works when the keeper is down (listed here for the runbook)
  *
@@ -29,7 +34,7 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  * thrown: the keeper never stops for its phone.
  */
 
-export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget" | "single-source" | "mint-bank-low" | "synthetic-failed";
+export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget" | "single-source" | "mint-bank-low" | "synthetic-failed" | "feed-down" | "unit-failed" | "backup-failed" | "backup-offbox";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -42,6 +47,13 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-single-source": "single-source",
   "bt-mint-bank-low": "mint-bank-low",
   "bt-synthetic-failed": "synthetic-failed",
+  // prelaunch audit 2026-10-16 F-5: a source that is down (one alert per selector per Denver day: the registry keys alerts by key and
+  // day), a failed or missing systemd unit and a failed or stale backup (ops/unitHealth.ts, the keeper's unit check)
+  "bt-feed-down": "feed-down",
+  "bt-unit-failed": "unit-failed",
+  "bt-backup-failed": "backup-failed",
+  // F-7 review: a destination is set but no copy left the box for a day; a low-priority push (PUSH_LOW_PRIORITY)
+  "bt-backup-offbox-stale": "backup-offbox",
   // prelaunch audit H6 re-review: a coin held because this build cannot check its stored title filter is a burn that is not running
   "rule-filter-unsupported": "crank-refused",
 };
@@ -56,7 +68,13 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "single-source": "Burnticker game settled on one source",
   "mint-bank-low": "Burnticker prepared addresses running low",
   "synthetic-failed": "Burnticker test launch failed",
+  "feed-down": "Burnticker source down",
+  "unit-failed": "Burnticker service failed",
+  "backup-failed": "Burnticker backup failed",
+  "backup-offbox": "Burnticker backup not copied off the box",
 };
+/** Kinds pushed at low priority: a note, not trouble that needs someone now. */
+export const PUSH_LOW_PRIORITY: ReadonlySet<PushKind> = new Set(["backup-offbox"]);
 export const PUSH_LEAD: Record<PushKind, string> = {
   "keeper-refused": "The keeper stopped before its first cycle. Nothing is read or burned until it starts again.",
   "signer-disagree": "A reading is held because the second signer did not agree with the keeper. Nothing burns for it until someone looks.",
@@ -67,6 +85,10 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "api-budget": "One of the outside services the keeper or the site reads from has used most of its daily allowance, or all of it. When it is all used, reads from that service stop until midnight UTC and start again on their own.",
   "mint-bank-low": "The site has had few prepared coin addresses for more than an hour. Launches still work, but each creator's browser has to find its own address, which takes about a minute. Check that the mint key bank service is running and has its key.",
   "synthetic-failed": "Last night's test creator could not finish every launch on the devnet copy of the site. A real creator may hit the same problem. The lines below name each check that failed and what the page said.",
+  "feed-down": "A source the keeper reads has failed several reads in a row. Readings from it are held, and nothing burns on a guess. It starts again by itself when the source answers. The line below names the source.",
+  "unit-failed": "A service on the Burnticker host has failed or is not running. The line below names it and says how to read its log.",
+  "backup-offbox": "The backups on the host are fine, but none has been copied to the backup destination for a day. A lost disk would lose them. The line below says since when.",
+  "backup-failed": "The database backup did not finish, or none has finished for too long. The copies already made are still there. The line below says why.",
   "single-source": "A coin's game settled on TheSportsDB alone for the first time. Polymarket had no market for it and no league feed could read it, so its final score had to stand unchanged for 12 hours first. This is a notice only; nothing needs doing.",
 };
 
@@ -122,7 +144,7 @@ export function planPushes(i: { now: number; alerts: readonly AlertRowLike[]; st
     const last = st.lastByKind[kind] ?? 0;
     if (i.now - last < PUSH_PER_KIND_MS || lastHour >= PUSH_MAX_PER_HOUR) { st.held[kind] = (st.held[kind] ?? 0) + 1; st.heldToday++; continue; }
     const held = heldLine(st.held);
-    messages.push({ kind, title: PUSH_TITLE[kind], priority: "high", body: [PUSH_LEAD[kind], a.text.slice(0, 400), held].filter(Boolean).join("\n\n") });
+    messages.push({ kind, title: PUSH_TITLE[kind], priority: PUSH_LOW_PRIORITY.has(kind) ? "low" : "high", body: [PUSH_LEAD[kind], a.text.slice(0, 400), held].filter(Boolean).join("\n\n") });
     st.lastByKind[kind] = i.now; st.sent.push(i.now); st.held = {};
   }
   if (denverHour(i.now) >= PUSH_DAILY_HOUR_DENVER && st.lastDaily !== today) {

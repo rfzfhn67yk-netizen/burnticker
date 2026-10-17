@@ -3,6 +3,8 @@ import { clientKey, edgeJson, limiter, readTextCapped } from "@/lib/burnticker/a
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { platform } from "@/lib/burnticker/server";
 import { runBacktest } from "@/lib/burnticker/api/handlers";
+import { within } from "@/lib/burnticker/sources/espn";
+import { BACKTEST_SLOW, BACKTEST_SLOW_CODE, BACKTEST_SLOW_RETRY_SEC, BACKTEST_WAIT } from "@/lib/burnticker/api/backtestWait";
 
 export const dynamic = "force-dynamic";
 const BACKTEST_MAX_BODY = 64_000;
@@ -23,8 +25,13 @@ export async function POST(req: Request) {
   if (text === null) return NextResponse.json({ error: "The request is too large.", code: "too-large" }, { status: 413 });
   try { body = JSON.parse(text); } catch { return NextResponse.json({ error: "invalid JSON body" }, { status: 400 }); }
   // website-15 item 4: anything the handler did not catch is logged here and answered as JSON, never a bare 502 page
+  // audit 2026-10-16 F-10: waited on for at most BACKTEST_WAIT.ms; a slower read answers 503 with a plain sentence and goes on in the
+  // background (its answer is kept by the source's client for the page's retry), so the review step never sits behind Caddy's 20 s cut
   try {
-    const r = await runBacktest(platform(), body);
+    const w = await within(runBacktest(platform(), body), BACKTEST_WAIT.ms);
+    if (!w.done) return NextResponse.json({ error: BACKTEST_SLOW, code: BACKTEST_SLOW_CODE, retryAfterSec: BACKTEST_SLOW_RETRY_SEC }, { status: 503, headers: { "retry-after": String(BACKTEST_SLOW_RETRY_SEC), "cache-control": "no-store" } });
+    if ("error" in w) throw w.error;
+    const r = w.value;
     return NextResponse.json(r.body, { status: r.status });
   } catch (e) {
     console.error("[burnticker/backtest] the back-test route failed:", e);

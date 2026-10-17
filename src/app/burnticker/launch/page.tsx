@@ -40,6 +40,7 @@ import { PreWalletSummary } from "./PreWalletSummary";
 import { BurnRealChoice } from "./BurnRealChoice";
 import { SINGLE_REAL_PICKS, SIDE_REAL_OFF, realBlockers, realField, realReviewNotes, withRealBurn, type SideReal } from "./burnReal";
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
+import { BACKTEST_SLOW } from "@/lib/burnticker/api/backtestWait";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileFieldId, type ProfileUpdate, type ProfileValue } from "./ProfileFields";
 import { NAME_STEP_BLOCKED, fieldRuleSentence, isLintLine, noteIssue, profileIssues, serverFieldProblems } from "./fieldChecks";
 import { CLOSE_PASSED_CHIP, JUMP_CONFIRM_LINE, JUMP_CONFIRM_NO, JUMP_CONFIRM_YES, NO_SECOND_CHECK, pairBudgetLine, TEAMS_NONE_LINE, TEAMS_UNREAD_LINE, humanDay, leagueButtonName, leagueButtonTitle, winPairNames } from "./pageCopy";
@@ -2135,7 +2136,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             {/* WIRING-PARITY audit 6 #11: what the rule would have spent on past readings, at 1, 2 and 5 %, or why there is no projection */}
             {/* website-26 (WIRING-FEATURES item 5): a team coin's last season (review.backtest) where the projection is unavailable */}
             {reviewCurrent && rv?.projection && <details className="text-xs text-neutral-300" data-projection><summary className="cursor-pointer">How much it would have spent before</summary>{rv.projection.available ? rv.projection.lines.map((x) => <p key={x} className="mt-1">{x}</p>) : rv.backtest?.available ? rv.backtest.lines.map((x) => <p key={x} className="mt-1" data-last-season>{x}</p>) : <><p className="mt-1">{rv.projection.reason}</p>{rv.backtest?.reason && <details className="mt-1 text-neutral-500" data-last-season-unavailable><summary className="cursor-pointer">Details</summary><p className="break-words">{rv.backtest.reason}</p></details>}</>}</details>}
-            {btErr && btFor === btKey && !rv?.projection && <div className="text-xs text-amber-300" role="status" data-backtest-unavailable><p>{BACKTEST_UNAVAILABLE}</p><details className="text-neutral-500"><summary className="cursor-pointer">Details</summary><p className="break-words font-mono">{btErr}</p>{rv?.backtest?.reason && <p className="break-words">{rv.backtest.reason}</p>}</details></div>}
+            {btErr && btFor === btKey && !rv?.projection && <div className="text-xs text-amber-300" role="status" data-backtest-unavailable><p>{btErr.includes(BACKTEST_SLOW) ? BACKTEST_SLOW : BACKTEST_UNAVAILABLE}</p><details className="text-neutral-500"><summary className="cursor-pointer">Details</summary><p className="break-words font-mono">{btErr}</p>{rv?.backtest?.reason && <p className="break-words">{rv.backtest.reason}</p>}</details></div>}
             {/* website brief §2: the funds flow before a registered pair launches (pairs made now are winner-takes-the-burn) */}
             {reviewMeetings?.flow && <FundsFlowView flow={reviewMeetings.flow} open />}
             {/* website-23: a settled-event pair's money path and coin B's description, as the review answered them (review.settled) */}

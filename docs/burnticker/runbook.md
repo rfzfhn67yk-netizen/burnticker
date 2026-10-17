@@ -106,7 +106,7 @@ as `[alert] …`. The morning block (`## Burnticker` in the check-in, `https://b
 
 ### Phone push (polish-1, 2026-10-12)
 
-Five states reach the owner's phone directly, so they are seen even when nobody opens the check-in. The rest stay in the registry, the
+These states reach the owner's phone directly, so they are seen even when nobody opens the check-in. The rest stay in the registry, the
 log and the morning block.
 
 | Push title | Raised by | Do |
@@ -116,6 +116,10 @@ log and the morning block.
 | Burnticker reading held | `cosigner-disagree`: the second signer did not agree with the keeper's reading, so nothing was sent for that date | Read the source for that date by hand and both signers' logs. Nothing burns until they agree; a disagreement you settle by hand is an incident (INCIDENTS.md §7). |
 | Burnticker upload failed | `bt-pin-failed` (a launch refused because its details could not be pinned on Arweave) or `bt-snapshot-failed` (the daily snapshot) | Check the upload payer's balance and `BURNTICKER_UPLOAD_PAYER`; the `bt-snapshot-failed` row above. |
 | Burnticker burn run failing | `bt-crank-failed`: one receipt failed three times in a row | The `bt-crank-failed` row above. |
+| Burnticker source down | `bt-feed-down` (audit 2026-10-16 F-5): a source failed three reads in a row; one push per selector per Denver day | The `bt-feed-down` row above. A schedule source (TheSportsDB) down for hours: `grep -i "thesportsdb\|api-sports" logs/burnticker-keeper.log | tail`; the NFL day listing falls back to API-Sports by itself when its key is set. |
+| Burnticker service failed | `bt-unit-failed` (F-5 / F-9, `src/lib/burnticker/ops/unitHealth.ts`, every five minutes): any `mct-*` user unit in the failed state, or the mint bank, the synthetic creator's timer or the backup timer not running or not installed | `journalctl --user -u <unit> -n 50` and its `logs/*.log`; fix it, or remove a unit that does not belong (below), then `systemctl --user reset-failed <unit>`. A unit not installed: `sh scripts/ops/install-burnticker-units.sh`. |
+| Burnticker backup failed | `bt-backup-failed` (F-5 / F-7): `data/backups/last-backup.json` says the last run failed, or no backup finished for 13 hours | `tail logs/burnticker-backup.log`; run it by hand (`sh scripts/service/run-burnticker-backup.sh`). An off-box copy that fails: check `BURNTICKER_BACKUP_DEST` and the key it uses. |
+| Burnticker backup not copied off the box (low priority) | `bt-backup-offbox-stale`: `BURNTICKER_BACKUP_DEST` is set but no copy has left the box for 24 hours (`lastOffBoxAt` in `data/backups/last-backup.json`); silent while no destination is set | `tail logs/burnticker-backup.log`; check the destination and the key it uses. |
 | Burnticker all quiet (or daily line) | once per Denver day after 08:00 | Nothing, when it says quiet. **A missing daily line means the keeper is not running its alert check**: treat it like the not-publishing push. |
 
 How it works: the keeper reads the registry's `alerts` table on its five-minute alert check (`src/lib/burnticker/push.ts`
@@ -133,6 +137,27 @@ waiting for trouble, from `~/meme-coin-trader` as mct:
 ```sh
 sqlite3 data/burnticker.db "UPDATE status SET value=json_set(value,'$.lastDaily',NULL) WHERE key='push.state'"   # the next check after 08:00 Denver sends the daily line
 ```
+
+**Units that are not in the repo** (audit 2026-10-16 F-9). Every unit on the Burnticker host comes from `deploy/systemd/` through
+`scripts/ops/install-burnticker-units.sh`; a unit installed by hand is not reviewed, not redeployed and not documented. The one found
+on 2026-10-16, `mct-rehearsal-keeper.service/.timer` (the $REHEARSAL keeper on MAINNET, one cycle an hour,
+`BURNKEEPER_RULES=config/burnkeeper/rehearsal.rules.json`, its own ledger `data/burnkeeper-rehearsal.db`), failed every hour for two and
+a half days unseen; its timer was disabled that morning. Why it failed: the unit sets the $REHEARSAL values with `Environment=` lines AND
+loads `.env.local` with `EnvironmentFile=`, and systemd lets the file win, so the $DEFICIT keeper's `BURNKEEPER_RULES_SHA` (and its
+`BURNKEEPER_MINT` and ledger, had the check not stopped it) replaced the rehearsal's; the keeper refused with "BURNKEEPER_RULES_SHA does
+not match the loaded rule file". The refusal is the safety check working. Whether $REHEARSAL keeps a keeper is the owner's call
+(TODO-OWNER.md #31). To bring it back it must come into `deploy/systemd/` with its values in a file of its own that is loaded AFTER
+`.env.local` (or with no `.env.local` at all), and a test; to retire it, as mct:
+
+```sh
+systemctl --user disable --now mct-rehearsal-keeper.timer; systemctl --user stop mct-rehearsal-keeper.service
+rm ~/.config/systemd/user/mct-rehearsal-keeper.service ~/.config/systemd/user/mct-rehearsal-keeper.timer
+systemctl --user daemon-reload; systemctl --user reset-failed mct-rehearsal-keeper.service
+systemctl --user list-units 'mct-*' --all --no-pager      # nothing but the units in deploy/systemd/
+```
+
+Keep `data/burnkeeper-rehearsal.db` either way (its receipts are the rehearsal's evidence). Until the failed state is cleared, the
+keeper's unit check names it in its one combined `bt-unit-failed` alert (keyed by the set of units, so a new failure is still a new alert).
 
 Every alert that changed anything gets a line in `docs/burnticker/incidents/LOG.md` (append-only, rendered on the trust page) — and, when it is an incident under [INCIDENTS.md](INCIDENTS.md), a public postmortem within 48 hours from [incidents/TEMPLATE.md](incidents/TEMPLATE.md).
 
@@ -182,21 +207,38 @@ A receipt is correct when: the reading equals the source, `units` follow from th
 `pool × (1 − (1 − f)^units)` on the recorded pool (the keeper's `buybackSpend`), and the memo on chain equals the row's. For $DEFICIT the
 same with `scripts/burn-keeper.mts --print-rules` (the rules sha) and `data/burnkeeper-site/burns.json`'s verify blocks.
 
-## Back up data/burnticker.db
+## Back up data/burnticker.db (and restore)
 
 The registry is WAL-mode SQLite and append-only. **Never copy the live file or its `-wal`/`-shm`** (a torn copy, and a reader that looks
-whole). Always the online backup API:
+whole). Always the online backup API. Since 2026-10-16 (prelaunch audit F-7) a timer does it:
+
+- **`mct-burnticker-backup.timer`**, every 6 hours (00:17, 06:17, 12:17, 18:17 UTC), runs `scripts/service/run-burnticker-backup.sh`:
+  `sqlite3 <db> ".backup …"` of `data/burnticker.db` (the registry), `data/burnkeeper.db` (the $DEFICIT ledger) and
+  `data/burnticker-mintbank.db` (the mint key bank) into `data/backups/<name>-<UTC stamp>-000.db` (mode 0600), `PRAGMA quick_check` on
+  each copy, the newest 14 of each kept. Never an env file or a key file (the script refuses such a path).
+- **Off the box**: this run's copies go to `BURNTICKER_BACKUP_DEST` (`user@host:path` over scp with a key, a local path, or
+  `rclone:<remote>:<path>`), set in the environment or on its own line of `.env.local` (the script reads only that line). Unset, the log
+  says `off-box copy SKIPPED` and the copies stay on the box: the owner names the destination (TODO-OWNER.md #29). The mint key bank is
+  never copied off the box.
+- **Evidence**: `logs/burnticker-backup.log`; `data/backups/last-backup.json` (`ok`, `at`, `files`, `offBox`, `error`). A failed run
+  leaves the unit failed; the keeper's unit check pushes `bt-unit-failed` and, from the status file, `bt-backup-failed` (see "On each alert").
+- Install: `sh scripts/ops/install-burnticker-units.sh` (copies, enables and starts the timer; needs `apt install sqlite3`).
+  By hand: `sh scripts/service/run-burnticker-backup.sh`; list: `sh scripts/service/run-burnticker-backup.sh --list`. The one-off
+  equivalent for a single file: `sqlite3 data/burnticker.db ".backup data/backups/manual.db" && sqlite3 data/backups/manual.db "PRAGMA quick_check"`.
+
+**Restore** (an incident entry too, because the triggers' promise is "no history edits"):
 
 ```sh
-mkdir -p ~/backups && sqlite3 data/burnticker.db ".backup ~/backups/burnticker-$(date +%Y%m%d-%H%M).db" && sqlite3 ~/backups/burnticker-$(date +%Y%m%d-%H%M).db "PRAGMA quick_check"
-sqlite3 data/burnkeeper.db ".backup ~/backups/burnkeeper-$(date +%Y%m%d-%H%M).db"       # the $DEFICIT ledger too
+systemctl --user stop mct-burnticker-keeper mct-burnticker-web          # whatever writes the file
+mv data/burnticker.db data/burnticker.db.before-restore
+for x in wal shm journal; do [ -e data/burnticker.db-$x ] && mv data/burnticker.db-$x data/burnticker.db-$x.before-restore; done   # kept, never deleted
+sh scripts/service/run-burnticker-backup.sh --restore data/backups/burnticker-<stamp>-000.db --to data/burnticker.db
+systemctl --user start mct-burnticker-web mct-burnticker-keeper
 ```
 
-Schedule it (as mct): `crontab -e` → `17 */6 * * * cd $HOME/meme-coin-trader && sqlite3 data/burnticker.db ".backup $HOME/backups/burnticker-$(date +\%Y\%m\%d-\%H).db" && find $HOME/backups -name 'burnticker-*.db' -mtime +14 -delete`
-(cron is fine here; nothing else on this box uses it). Copy a backup off the box over the tailnet from the Mac:
-`rsync -aW mct-burnticker:backups/ ~/mct-backups/burnticker/` (whole files, never `-az` on SQLite). A backup is also what an auditor runs
-`scripts/burnticker-audit.mts` against (`BURNTICKER_DB=<copy> BURNTICKER_PUBLISH_DIR=/tmp/x`). Restore = stop the keeper, move the live file
-aside, `cp` the backup into place, start — and an incident entry, because the triggers' promise is "no history edits".
+The restore checks the backup (quick_check), copies it with the backup API into a temporary file, checks that, moves it into place and
+prints the seconds taken; it refuses a target that exists, or one whose `-wal` or `-journal` is still beside it. The restore drill (`test/burntickerBackup.test.ts`) times it on a fixture.
+A backup is also what an auditor runs `scripts/burnticker-audit.mts` against (`BURNTICKER_DB=<copy> BURNTICKER_PUBLISH_DIR=/tmp/x`).
 
 ## Go / no-go gates — ticked, with proof, before `--send` on $DEFICIT
 
@@ -212,7 +254,7 @@ aside, `cp` the backup into place, start — and an incident entry, because the 
 | 8 | Failure definition on the trust page: if the coin trades at any price, nothing changes — no relaunch, no v2, no rebrand | the sentence in `statements` in `src/lib/burnticker/trust.ts`, visible on `/burnticker/trust` and quoted in the launch thread |
 | 9 | Copy lint: every post produced by `scripts/burnkeeper-post-draft.mts` (forbidden-word refusal) and approved by the owner — no freehand posts | each post's draft file saved from `R scripts/burnkeeper-post-draft.mts …` (exit 0; exit 3 = refused) with the owner's OK; the launch thread text equals a draft byte for byte |
 | 10 | Alerts verified end to end (a test alert reached the phone) | the webhook `curl` from §On each alert returned 200, the row shows on the trading VPS's wallet page / check-in (`bt-test`) and the Telegram message arrived; `https://burnticker.com/ops.json` `.webhook.lastOkAt` set |
-| 11 | Backups: sqlite `.backup` of `data/burnticker.db` (and `burnkeeper.db`) scheduled | `crontab -l` shows the §backup line; one file in `~/backups/` newer than 6 h with `PRAGMA quick_check` = ok |
+| 11 | Backups: sqlite `.backup` of `data/burnticker.db` (and `burnkeeper.db`) scheduled, copied off the box | `systemctl --user list-timers mct-burnticker-backup.timer` shows the next run; `data/backups/last-backup.json` has `"ok":true` newer than 6 h and `"offBox":"copied"` (BURNTICKER_BACKUP_DEST set) |
 | 12 | Keys: keeper key generated ON THE HOST, ops/deployer wallets fresh, dev fee wallet = hardware, Squads 2-of-3 created and holding upgrade + platform authority, deployer drained | `ls -la ~/.config/meme-coin-trader/` (two `.enc.json`, mode 600, created on this box); `solana program show <program id>` → upgrade authority = the Squads vault; the PlatformConfig admin = the Squads vault (trust page "live PlatformConfig" row); `solana balance <deployer>` ≈ 0 |
 | 13 | The public repo published at the tagged commit with the program hash | the tag exists (`git tag --contains` on the Mac), the repository link + `BURNTICKER_PROGRAM_HASH` on the trust page's program section, and `sha256sum program.so` of `solana program dump` equals it |
 
