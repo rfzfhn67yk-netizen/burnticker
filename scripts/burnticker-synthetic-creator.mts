@@ -35,15 +35,18 @@
 // (a Chrome/Chromium executable; else Playwright's chromium, else the installed Google Chrome).
 //
 // Output: the JSON report (--report, default logs/synthetic-creator-report.json), a plain-English summary on stdout, every mint it made
-// appended to logs/synthetic-creator.jsonl. Exit 0 when every scenario passed or was skipped with a reason, 1 on any failure, 2 when the
-// run could not start (no browser, no SOL, site down).
+// appended to logs/synthetic-creator.jsonl. Exit 0 when the run went through and wrote its report and either nothing failed or the
+// bt-synthetic-failed push was delivered (2026-10-18: a non-zero exit for pushed failures also failed the unit, so the keeper raised
+// bt-unit-failed every night for the same failures). Exit 3 when scenarios failed and NO push was delivered (no registry, push not
+// configured, delivery failed or held), so the unit fails instead. Exit 1 when the run could not start (no browser, no SOL, site down) or
+// stopped before its report was written.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { SyntheticWallet, walletShimSource, LIGHTHOUSE_PROGRAM, SLOW_DEFAULT_MS, ed25519Verify, type WalletMode } from "./burnticker-synth/wallet.mts";
 import { fabricatedLookupTableData, expectedEntries } from "./burnticker-synth/stubChain.mts";
-import { bankPlan, describeStall, DEFAULT_SYNTH_LEAGUES, huntRateLine, huntWaitMs, HUNT_WAIT_CEILING_MS, mintSourceOf, nameStepFills, pairTickersFor, pickRivals, pickTeam, type ListedTeam, type StallState } from "./burnticker-synth/plan.mts";
+import { bankPlan, browserRpcKind, describeStall, DEFAULT_SYNTH_LEAGUES, huntRateLine, huntWaitMs, HUNT_WAIT_CEILING_MS, mintSourceOf, nameStepFills, pairTickersFor, pickRivals, pickTeam, rpcCallsOf, type ListedTeam, type StallState } from "./burnticker-synth/plan.mts";
 import { expectedTries, mintWorkerCount } from "../src/lib/burnticker/vanityMint.ts";
 
 // ---- arguments -------------------------------------------------------------------------------------------------------------------
@@ -124,6 +127,8 @@ async function fundWallet(conn: Connection, pk: PublicKey): Promise<{ sol: numbe
 interface Observed {
   launchPosts: { at: number; body: Record<string, unknown>; status: number | null; json: any }[];
   sends: { at: number; tx: VersionedTransaction; blockhashValid: boolean | null; problems: string[] }[];
+  /** the page's dry runs (simulateTransaction), counted apart from sends so a dry run is never taken for one */
+  simulations: number;
   console: string[];
   /** launch requests sent and not yet answered (request → when it was sent) */
   launchPending: Map<object, number>;
@@ -146,7 +151,7 @@ async function openPage(browser: any, wallet: SyntheticWallet, conn: Connection,
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   pageBase.set(page, base);
-  const seen: Observed = { launchPosts: [], sends: [], console: [], launchPending: new Map(), walletBusy: 0, notes: [] };
+  const seen: Observed = { launchPosts: [], sends: [], simulations: 0, console: [], launchPending: new Map(), walletBusy: 0, notes: [] };
   const held = async <T,>(f: () => Promise<T> | T): Promise<T> => { seen.walletBusy++; try { return await f(); } finally { seen.walletBusy--; } };
   await page.exposeFunction("__btSynthSign", (b64: string) => held(() => wallet.signBase64(b64)));
   await page.exposeFunction("__btSynthSignMessage", (b64: string) => held(() => wallet.signMessageBase64(b64)));
@@ -166,29 +171,36 @@ async function openPage(browser: any, wallet: SyntheticWallet, conn: Connection,
       seen.launchPosts.push({ at: now(), body, status: r.status(), json });
     } catch { /* observer only */ }
   });
-  // the browser's RPC: every send is inspected (signatures, blockhash age); the stub chain answers the lookup table, the dry run and the send
-  await page.route(`${BROWSER_RPC}/**`, async (route: any) => handleRpc(route, conn, lutPin, seen));
-  await page.route(BROWSER_RPC, async (route: any) => handleRpc(route, conn, lutPin, seen));
+  // the browser's RPC: every send is inspected (signatures, blockhash age), dry runs are counted apart; the stub chain answers the lookup
+  // table, the dry run and the send. 2026-10-18: the page calls the proxy on its OWN origin (walletShell.ts sameOriginProxy, publish 78)
+  // with a flight token in a header (rpcProxy.ts withFlight, publish 75), not the baked endpoint, so both are matched (plan.mts browserRpcKind)
+  const rpcScope = { browserRpc: BROWSER_RPC, pageOrigins: [new URL(base).origin] };
+  await page.route((u: URL) => browserRpcKind(u, rpcScope) !== null, async (route: any) => handleRpc(route, conn, lutPin, seen, browserRpcKind(route.request().url(), rpcScope)));
   return { page, ctx, seen };
 }
 
-async function handleRpc(route: any, conn: Connection, lutPin: string | null, seen: Observed): Promise<void> {
+async function handleRpc(route: any, conn: Connection, lutPin: string | null, seen: Observed, kind: "proxy" | "baked" | null): Promise<void> {
   const req = route.request();
-  let body: any = null;
-  try { body = JSON.parse(req.postData() ?? "null"); } catch { body = null; }
-  const one = Array.isArray(body) ? null : body;
+  // a GET (or anything not a JSON-RPC POST) goes on untouched
+  if (req.method() !== "POST") return route.continue();
+  const calls = rpcCallsOf(req.postData());
+  const one: any = calls.length === 1 && !String(req.postData() ?? "").trimStart().startsWith("[") ? calls[0] : null;
   const answer = (result: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: one.id, result }) });
   const error = (code: number, message: string) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: one.id, error: { code, message } }) });
-  if (one?.method === "sendTransaction") {
-    const raw = Buffer.from(String(one.params?.[0] ?? ""), (one.params?.[1]?.encoding ?? "base58") === "base64" ? "base64" : "base64");
+  for (const c of calls) {
+    // a dry run is never a send: the page simulates each step before it asks the wallet, and the report counts it on its own
+    if (c.method === "simulateTransaction") { seen.simulations++; continue; }
+    if (c.method !== "sendTransaction") continue;
+    const ps = Array.isArray(c.params) ? c.params as any[] : [];
+    const raw = Buffer.from(String(ps[0] ?? ""), "base64");   // web3.js sendRawTransaction always sends base64
     let tx: VersionedTransaction | null = null; try { tx = VersionedTransaction.deserialize(raw); } catch { tx = null; }
     if (tx) {
       let valid: boolean | null = null;
       try { valid = (await conn.isBlockhashValid(tx.message.recentBlockhash, { commitment: "confirmed" })).value; } catch { valid = null; }
       seen.sends.push({ at: now(), tx, blockhashValid: valid, problems: signatureProblems(tx) });
     }
-    if (CHAIN === "stub") return error(-32002, "Transaction simulation failed: synthetic stub chain, nothing was sent");
   }
+  if (one?.method === "sendTransaction" && CHAIN === "stub") return error(-32002, "Transaction simulation failed: synthetic stub chain, nothing was sent");
   if (CHAIN === "stub" && one) {
     const slot = 1;
     if (one.method === "getAccountInfo" && lutPin && one.params?.[0] === lutPin) {
@@ -196,9 +208,12 @@ async function handleRpc(route: any, conn: Connection, lutPin: string | null, se
     }
     if (one.method === "simulateTransaction") return answer({ context: { slot }, value: { err: null, logs: ["synthetic stub chain: dry run answered ok"], accounts: null, unitsConsumed: 150_000, returnData: null } });
   }
+  // the page's own proxy on the devnet instance forwards to that instance's devnet RPC (BURNTICKER_CLUSTER=devnet): the call goes on as
+  // the page made it, flight header and all, so the run exercises the real send path
+  if (kind === "proxy") return route.continue();
   // the build's own wallet RPC (NEXT_PUBLIC_BURNTICKER_RPC_URL, baked in at build time) may be a mainnet endpoint on a host that serves
   // devnet from the same build: every call is then answered from the devnet RPC instead, so the page reads and sends on devnet only
-  if (BROWSER_RPC !== RPC && req.method() === "POST") {
+  if (BROWSER_RPC !== RPC) {
     try { const r = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: req.postData() ?? "" }); return route.fulfill({ status: r.status, contentType: "application/json", body: await r.text() }); }
     catch { return route.abort(); }
   }
@@ -529,12 +544,12 @@ function stepsOf(seen: Observed): number {
 async function assertLaunched(page: any, seen: Observed, outcome: { state: string; text: string }, o: { expectGuard: boolean }): Promise<string[]> {
   const detail: string[] = [];
   const send = seen.sends.at(-1);
-  if (!send) fail(`The page never sent a transaction. The signing card says: ${outcome.text}`);
+  if (!send) fail(`The page never sent a transaction${seen.simulations ? ` (it dry-ran ${seen.simulations} ${seen.simulations === 1 ? "time" : "times"})` : ""}. The signing card says: ${outcome.text}`);
   if (send!.problems.length) fail(`The page sent a transaction with bad signatures: ${send!.problems.join("; ")}.`);
   if (send!.blockhashValid === false) fail("The page sent a transaction whose blockhash had already expired.");
   const programs = send!.tx.message.compiledInstructions.map((ix) => send!.tx.message.staticAccountKeys[ix.programIdIndex]?.toBase58() ?? "lookup");
   if (o.expectGuard && !programs.includes(LIGHTHOUSE_PROGRAM.toBase58())) fail("The sent transaction lacks the wallet's Lighthouse instructions: the page sent something other than what the wallet signed.");
-  detail.push(`sent: ${programs.length} instructions, all ${send!.tx.message.header.numRequiredSignatures} signatures verify, blockhash ${send!.blockhashValid ? "valid" : "unknown"} at send`);
+  detail.push(`sent: ${seen.sends.length} ${seen.sends.length === 1 ? "transaction" : "transactions"} after ${seen.simulations} dry ${seen.simulations === 1 ? "run" : "runs"}; the last has ${programs.length} instructions, all ${send!.tx.message.header.numRequiredSignatures} signatures verify, blockhash ${send!.blockhashValid ? "valid" : "unknown"} at send`);
   if (CHAIN === "stub") {
     if (!/synthetic stub chain/.test(outcome.text)) fail(`The page did not stop at the stub send as expected. It says: ${outcome.text}`);
     detail.push("stub chain: the send was refused on purpose, so the coin stays a draft (going live is not checked in this mode)");
@@ -722,11 +737,18 @@ const SCENARIOS: Scenario[] = [
       let searched = false;
       const watch = (async () => { for (let i = 0; i < 60 && !searched; i++) { if (await page.locator("[data-mint-search]").first().isVisible().catch(() => false)) searched = true; await sleep(500); } })();
       const t0 = now();
-      await pressLaunch(page, { seen });
+      const got = await pressLaunch(page, { seen });
       await watch;
       const prepares = seen.launchPosts.filter((p) => p.body.action !== "launched");
-      const emptied = prepares.some((p) => p.json?.code === "mint-bank-empty");
-      const mode = emptied ? "empty" : "filled";
+      // 2026-10-18: a prepare refused before the bank is asked (the pin cap, upload-budget-creator) was read as "the bank handed a key",
+      // so the run said the empty bank was filled. The source is judged only from an answer that says it (mintSourceOf); none: the
+      // launch's own refusal is the failure
+      const source = mintSourceOf(prepares.map((p) => ({ status: p.status, code: p.json?.code ?? null, ownMint: typeof p.body.mint === "string" })));
+      if (source === "none") {
+        const last = prepares.at(-1);
+        fail(`No launch request was answered with an address, so the mint source could not be judged.${last ? ` The last answer was HTTP ${last.status} ${last.json?.code ?? ""}: ${String(last.json?.error ?? "").slice(0, 200)}` : ""}${got === "alert" ? ` The page said: ${(await lastAlert(page)) ?? ""}` : ""}`);
+      }
+      const mode = source === "browser" ? "empty" : "filled";
       if (plan.expect && plan.expect !== mode) fail(`The host's bank was expected ${plan.expect} (${plan.why}) but answered as ${mode}.`);
       const mint = mintsOf(seen)[0] ?? "";
       if (!/burn$/i.test(mint)) fail(`The coin's address ${mint || "(none)"} does not end in burn.`);
@@ -844,7 +866,7 @@ async function main(): Promise<number> {
   const stop = async (sentence: string): Promise<number> => {
     console.log(`STOP: ${sentence}`);
     if (reg) { const { pushSyntheticFailed } = await import("@/lib/burnticker/push"); await pushSyntheticFailed({ registry: reg, env: process.env, now: now(), runId: RUN_ID, failures: [{ scenario: "start", sentence }], log: (x) => console.log(x) }); }
-    return 2;
+    return 1;
   };
   // devnet only: the RPC this run reads, airdrops and (stub chain) forwards through must be devnet's (its genesis hash), never mainnet's
   try { const g = await conn.getGenesisHash(); if (g !== DEVNET_GENESIS) return stop(`BURNTICKER_SYNTH_RPC is not a devnet endpoint (genesis ${g.slice(0, 8)}…). The synthetic creator runs on devnet only.`); }
@@ -871,6 +893,8 @@ async function main(): Promise<number> {
   const huntLine = huntRateLine(hunt, EXPECTED_TRIES, HUNT_WAIT);
   head.push(huntLine);
   console.log(huntLine);
+  // run-burnticker-synth.sh blanks the live host's secrets on its devnet instances, the upload payer among them (2026-10-18)
+  head.push("The pin path (Arweave upload and its daily budget) is not exercised: the box's devnet instances have no uploader, so their coins use hosted metadata.");
   if (EMPTY_BASE) head.push(`d-mint-source runs on ${EMPTY_BASE} (no mint bank); every other scenario on ${BASE}.`);
   const wallet = new SyntheticWallet(kp);
   const c: Ctx = { browser, wallet, conn, lutPin, sportsKey: !!(process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() };
@@ -901,13 +925,19 @@ async function main(): Promise<number> {
   fs.writeFileSync(REPORT, JSON.stringify({ runId: RUN_ID, base: BASE, emptyBase: EMPTY_BASE, chain: CHAIN, wallet: kp.publicKey.toBase58(), at: new Date().toISOString(), hunt: { ...hunt, expectedTries: EXPECTED_TRIES, waitOneMs: HUNT_WAIT.one, waitTwoMs: HUNT_WAIT.two }, results, summary }, null, 2));
   console.log(`\n${summary}\n\nreport: ${REPORT}`);
   const failed = results.filter((r) => r.outcome === "fail");
-  if (failed.length && reg) {
+  if (!failed.length) { console.log("Every scenario passed or was skipped with a reason; exit 0."); return 0; }
+  let push = { delivered: false, why: "the registry was not opened (BURNTICKER_SYNTH_DB), so nothing was recorded or pushed" };
+  if (reg) {
     const { pushSyntheticFailed } = await import("@/lib/burnticker/push");
-    await pushSyntheticFailed({ registry: reg, env: process.env, now: now(), runId: RUN_ID, failures: failed.map((f) => ({ scenario: f.id, sentence: f.sentence ?? "" })), log: (s) => console.log(s) });
+    push = await pushSyntheticFailed({ registry: reg, env: process.env, now: now(), runId: RUN_ID, failures: failed.map((f) => ({ scenario: f.id, sentence: f.sentence ?? "" })), log: (s) => console.log(s) });
   }
-  return failed.length ? 1 : 0;
+  // review 2026-10-18: failures that reached the phone are the report's, not the unit's (exit 0); failures nobody was told about fail the
+  // unit (exit 3), so a broken wizard on a night the push channel is down still raises bt-unit-failed
+  if (push.delivered) { console.log(`${failed.length} ${failed.length === 1 ? "scenario" : "scenarios"} failed and the push was delivered; exit 0.`); return 0; }
+  console.log(`${failed.length} ${failed.length === 1 ? "scenario" : "scenarios"} failed and no push was delivered (${push.why}); exit 3 so the unit fails.`);
+  return 3;
 }
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("burnticker-synthetic-creator.mts")) {
-  main().then((code) => process.exit(code), (e) => { console.error(e); process.exit(2); });
+  main().then((code) => process.exit(code), (e) => { console.error(e); process.exit(1); });
 }

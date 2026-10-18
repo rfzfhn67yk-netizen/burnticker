@@ -8,7 +8,7 @@ import path from "node:path";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { expectedTries, mintWorkerCount } from "@/lib/burnticker/vanityMint";
 import {
-  bankPlan, describeStall, EMPTY_BANK_SCENARIO, HUNT_WAIT_CEILING_MS, HUNT_WAIT_FLOOR_MS, huntRateLine, huntWaitMs, MIN_LEAD_MS, mintSourceOf,
+  bankPlan, browserRpcKind, describeStall, EMPTY_BANK_SCENARIO, rpcCallsOf, HUNT_WAIT_CEILING_MS, HUNT_WAIT_FLOOR_MS, huntRateLine, huntWaitMs, MIN_LEAD_MS, mintSourceOf,
   nameStepFills, pairTickersFor, pickRivals, pickTeam, type ListedTeam, type StallState,
 } from "../scripts/burnticker-synth/plan.mts";
 
@@ -39,6 +39,16 @@ describe("which instance each scenario runs on", () => {
     assert.equal(mintSourceOf([{ status: 200, code: null, ownMint: true }]), "browser", "a resent press with the page's own key");
     assert.equal(mintSourceOf([]), "none");
     assert.equal(mintSourceOf([{ status: 503, code: "app-unavailable", ownMint: false }]), "none");
+    // 2026-10-18: the pin cap refuses before the bank is asked; that is no answer about the bank, never "filled"
+    assert.equal(mintSourceOf([{ status: 429, code: "upload-budget-creator", ownMint: false }]), "none");
+  });
+  test("d-mint-source judges the bank from mintSourceOf and fails on the launch's own refusal when nothing said", () => {
+    const h = read("scripts/burnticker-synthetic-creator.mts");
+    const d = h.slice(h.indexOf('id: "d-mint-source"'), h.indexOf('id: "e-slow"'));
+    assert.match(d, /const source = mintSourceOf\(/);
+    assert.match(d, /if \(source === "none"\)/);
+    assert.match(d, /const mode = source === "browser" \? "empty" : "filled";/);
+    assert.doesNotMatch(d, /const mode = emptied/);
   });
 });
 
@@ -182,7 +192,18 @@ describe("the devnet mint bank on the box (scripts/service/run-burnticker-synth.
     assert.match(sh, /start_web "\$EMPTY_PORT" "\$D\/empty-bank\.db" 0; WEB2=\$!/);
     assert.match(sh, /EMPTY_ARG="--empty-base http:\/\/127\.0\.0\.1:\$EMPTY_PORT"/);
     assert.match(sh, /--base "http:\/\/127\.0\.0\.1:\$PORT" \$EMPTY_ARG/);
-    assert.match(sh, /unset BURNTICKER_MINT_BANK_KEY; \\\n\s+if \[ \$3 = 1 \]; then export BURNTICKER_MINT_BANK_KEY=/, "the empty instance never gets a bank key");
+    assert.match(sh, /set \+a; BURNTICKER_MINT_BANK_KEY=; \\\n\s+if \[ \$3 = 1 \]; then BURNTICKER_MINT_BANK_KEY=\\"\\\$BURNTICKER_SYNTH_BANK_KEY\\"; fi; export BURNTICKER_MINT_BANK_KEY BURNTICKER_SYNTH_BANK_KEY=;/, "the empty instance never gets a bank key");
+  });
+  test("the live host's env never reaches a devnet instance: every name in it is blanked, the two sports data keys kept on purpose", () => {
+    const list = (name: string): string[] => { const m = new RegExp(`^${name}="([^"]*)"`, "m").exec(sh); assert.ok(m, name); return m[1].replace(/\\\n/g, " ").split(/\s+/).filter(Boolean); };
+    assert.deepEqual(list("SYNTH_WEB_KEPT"), ["BURNTICKER_THESPORTSDB_KEY", "BURNTICKER_APISPORTS_KEY"], "only the read-only sports data keys are inherited");
+    const floor = list("SYNTH_WEB_SECRETS");
+    for (const n of ["BURNTICKER_UPLOAD_PAYER", "BURNTICKER_MINT_BANK_KEY", "BURNTICKER_SYNTH_BANK_KEY", "BURNTICKER_PUSH_URL", "BURNTICKER_PUSH_TOKEN", "BURNTICKER_ALERT_WEBHOOK", "BURNTICKER_OPS_PIN", "MCT_ACTION_PIN", "BURNTICKER_RPC_URL"]) assert.ok(floor.includes(n), n);
+    // every name in the live file (names only), less the kept ones; blanked before devnet-synth.env is read, so its own values still win
+    assert.match(sh, /for n in \$SYNTH_WEB_SECRETS \$\(env_local_names \.\); do/);
+    assert.match(sh, /case " \$SYNTH_WEB_KEPT " in \(\*" \$n "\*\) continue ;; esac/);
+    assert.match(sh, /sh -c "export \$SYNTH_WEB_BLANK; set -a; \. \.\/devnet-synth[.]env;/);
+    assert.match(read("scripts/load-env.sh"), /^env_local_names\(\) \{$/m);
   });
   test("the unit: an hour, room for two web instances, Chrome and the grinder", () => {
     const unit = read("deploy/systemd/mct-burnticker-synth.service");
@@ -205,5 +226,42 @@ describe("the devnet mint bank on the box (scripts/service/run-burnticker-synth.
     assert.match(s, /const hold = !!to && args\.includes\("--hold"\)/);
     assert.match(s, /const over = \(\) => stopping \|\| \(maxS > 0 && Date\.now\(\) - t0 >= maxS \* 1000\)/);
     assert.match(s, /const swept = bank\.sweep\(Date\.now\(\)\)/);
+  });
+});
+
+describe("the wallet RPC the harness watches: the proxy on the page's own origin, and the baked endpoint", () => {
+  const o = { browserRpc: "https://burnticker.com/api/burnticker/rpc", pageOrigins: ["http://127.0.0.1:3100"] };
+  test("the page's own proxy, as the wallet shell rewrites it (publish 78), with or without a query string", () => {
+    assert.equal(browserRpcKind("http://127.0.0.1:3100/api/burnticker/rpc", o), "proxy");
+    assert.equal(browserRpcKind("http://127.0.0.1:3100/api/burnticker/rpc?x=1", o), "proxy");
+    assert.equal(browserRpcKind("http://127.0.0.1:3100/api/burnticker/rpc/", o), "proxy");
+    assert.equal(browserRpcKind("http://127.0.0.1:3101/api/burnticker/rpc", { ...o, pageOrigins: ["http://127.0.0.1:3101"] }), "proxy", "the empty-bank instance's page");
+  });
+  test("another instance's proxy, the flight-token path and other API routes are not watched", () => {
+    assert.equal(browserRpcKind("http://127.0.0.1:3101/api/burnticker/rpc", o), null);
+    assert.equal(browserRpcKind("http://127.0.0.1:3100/api/burnticker/rpc/flight", o), null);
+    assert.equal(browserRpcKind("https://burnticker.com/api/burnticker/rpc/flight", o), null);
+    assert.equal(browserRpcKind("http://127.0.0.1:3100/api/burnticker/launch", o), null);
+    assert.equal(browserRpcKind("not a url", o), null);
+  });
+  test("the baked endpoint (a build that does not rewrite it), with any query string", () => {
+    assert.equal(browserRpcKind("https://burnticker.com/api/burnticker/rpc", o), "baked");
+    assert.equal(browserRpcKind("https://burnticker.com/api/burnticker/rpc?cluster=devnet", o), "baked");
+    const dev = { browserRpc: "https://api.devnet.solana.com", pageOrigins: ["http://127.0.0.1:3100"] };
+    assert.equal(browserRpcKind("https://api.devnet.solana.com/", dev), "baked");
+    assert.equal(browserRpcKind("https://api.devnet.solana.com/?api-key=x", dev), "baked");
+    assert.equal(browserRpcKind("https://api.mainnet-beta.solana.com/", dev), null);
+  });
+  test("a send and a dry run are told apart, in one call or a batch", () => {
+    assert.deepEqual(rpcCallsOf(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "sendTransaction", params: ["AA==", { encoding: "base64" }] })).map((c) => c.method), ["sendTransaction"]);
+    assert.deepEqual(rpcCallsOf(JSON.stringify([{ id: 1, method: "simulateTransaction" }, { id: 2, method: "getLatestBlockhash" }, { id: 3 }])).map((c) => c.method), ["simulateTransaction", "getLatestBlockhash"]);
+    assert.deepEqual(rpcCallsOf("not json"), []);
+    assert.deepEqual(rpcCallsOf(null), []);
+  });
+  test("the harness routes by this predicate, counts sends and dry runs apart, and keeps the page's flight header on the way through", () => {
+    const h = read("scripts/burnticker-synthetic-creator.mts");
+    assert.match(h, /page\.route\(\(u: URL\) => browserRpcKind\(u, rpcScope\) !== null/);
+    assert.match(h, /seen\.simulations\+\+/);
+    assert.doesNotMatch(h, /page\.route\(`\$\{BROWSER_RPC\}\/\*\*`/, "the old baked-only route is gone");
   });
 });
