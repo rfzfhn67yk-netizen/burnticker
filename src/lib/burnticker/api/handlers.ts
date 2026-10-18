@@ -1035,6 +1035,19 @@ export const DEFAULT_PIN_DAILY_CAP = 50;
  * is two): per client, or per (client, creator) once that creator has a confirmed launch here.
  */
 export const DEFAULT_PIN_CREATOR_DAILY_CAP = 6;
+/**
+ * The per-requester pin cap from the environment: BURNTICKER_PIN_CREATOR_DAILY_CAP when set, else the default (undefined). On a DEVNET
+ * host only, BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP may raise it, never lower it, to at most 1000 (2026-10-18: the nightly synthetic
+ * creator launches a dozen devnet coins from one wallet on one loopback client, and the cap of 6 refused every scenario after the sixth
+ * pin). Ignored on mainnet, localnet and a host with no cluster set: the live host's cap is untouched whatever its env says.
+ */
+export function pinCreatorDailyCapFromEnv(env: Readonly<Record<string, string | undefined>>): number | undefined {
+  const set = (env.BURNTICKER_PIN_CREATOR_DAILY_CAP ?? "").trim();
+  const base = /^\d+$/.test(set) ? Number(set) : undefined;
+  const n = Number((env.BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP ?? "").trim());
+  if ((env.BURNTICKER_CLUSTER ?? "").trim() !== "devnet" || !Number.isInteger(n) || n <= (base ?? DEFAULT_PIN_CREATOR_DAILY_CAP) || n > 1000) return base;
+  return n;
+}
 
 /**
  * AUDIT A C1 review (8; re-review 1, 3): confirmations are metered on the heavy bucket, and expired drafts' mints are listed publicly, so

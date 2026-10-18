@@ -31,3 +31,34 @@ load_env_local() {
     export "$_key=${line#*=}"
   done < "$_dir/.env.local"
 }
+
+# The NAMES in .env.local, one a line, never a value (2026-10-18: the synthetic creator's devnet web instances set every one of them empty,
+# because `next start` would otherwise fill them in from this file). Reads the names the way Next's own parser does: `export` and any
+# whitespace before the name, `KEY=value` and `KEY: value`, spaces around the separator. A name is [A-Za-z_][A-Za-z0-9_]*; anything else
+# is skipped. A value that opens a quote (" ' or `) and does not close it on its line runs on to the line that does: those lines are part
+# of the value (a PEM or base64 block), never read as names.
+env_local_names() {
+  _dir="${1:-.}"
+  [ -f "$_dir/.env.local" ] || return 0
+  _open=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ -n "$_open" ]; then
+      case "$line" in *"$_open"*) _open="" ;; esac
+      continue
+    fi
+    line="${line#"${line%%[![:space:]]*}"}"
+    case "$line" in ''|\#*) continue ;; esac
+    case "$line" in export[[:space:]]*) line="${line#export}"; line="${line#"${line%%[![:space:]]*}"}" ;; esac
+    _key="${line%%[!A-Za-z0-9_]*}"
+    _rest="${line#"$_key"}"
+    _rest="${_rest#"${_rest%%[![:space:]]*}"}"
+    case "$_rest" in =*|:*) ;; *) continue ;; esac
+    _val="${_rest#?}"
+    _val="${_val#"${_val%%[![:space:]]*}"}"
+    case "$_val" in
+      \"*|\'*|\`*) _q="${_val%"${_val#?}"}"; case "${_val#?}" in *"$_q"*) ;; *) _open="$_q" ;; esac ;;
+    esac
+    case "$_key" in ''|[0-9]*) continue ;; esac
+    printf '%s\n' "$_key"
+  done < "$_dir/.env.local"
+}

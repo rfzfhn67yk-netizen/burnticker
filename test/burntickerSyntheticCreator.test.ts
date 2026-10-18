@@ -14,6 +14,7 @@ import { registryTestCoins, testCoinKeys, withoutTestCoins } from "@/lib/burntic
 import { PUSH_KIND_OF_ALERT, PUSH_LEAD, PUSH_TITLE, planPushes, pushSyntheticFailed } from "@/lib/burnticker/push";
 import { launchErrorMessage, LAUNCH_DURING_UPDATE_SENTENCE } from "@/lib/burnticker/pairLaunchClient";
 import { limiter, limitsFromEnv } from "@/lib/burnticker/api/http";
+import { DEFAULT_PIN_CREATOR_DAILY_CAP, pinCreatorDailyCapFromEnv } from "@/lib/burnticker/api/handlers";
 import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { applyWalletMode, COMPUTE_BUDGET_PROGRAM, ed25519Verify, LIGHTHOUSE_PROGRAM, REJECT_MESSAGE, SyntheticWallet, walletShimSource } from "../scripts/burnticker-synth/wallet.mts";
 import { fabricatedLookupTableData } from "../scripts/burnticker-synth/stubChain.mts";
@@ -180,14 +181,27 @@ describe("the bt-synthetic-failed push", () => {
     const sent: { headers: Record<string, string>; body: string }[] = [];
     const fetchImpl = (async (_u: string, init: RequestInit) => { sent.push({ headers: init.headers as Record<string, string>, body: String(init.body) }); return new Response("ok"); }) as unknown as typeof fetch;
     const now = Date.parse("2026-10-15T09:31:00Z");
-    await pushSyntheticFailed({ registry: reg, env: { BURNTICKER_PUSH_URL: "https://push.test/x" }, now, runId: "synth-1", failures: [{ scenario: "e-tamper", sentence: "Step 1 of 1 was not sent because the wallet changed the transaction's instructions or accounts." }, { scenario: "c-deploy-window", sentence: "The launch service is not available right now." }], fetchImpl });
+    const r = await pushSyntheticFailed({ registry: reg, env: { BURNTICKER_PUSH_URL: "https://push.test/x" }, now, runId: "synth-1", failures: [{ scenario: "e-tamper", sentence: "Step 1 of 1 was not sent because the wallet changed the transaction's instructions or accounts." }, { scenario: "c-deploy-window", sentence: "The launch service is not available right now." }], fetchImpl });
     const pushes = sent.filter((s) => s.headers.tags === "synthetic-failed");
     assert.equal(pushes.length, 1, "one push per run");
+    assert.equal(r.delivered, true);
     assert.match(pushes[0].body, /2 checks failed\.\ne-tamper: Step 1 of 1 was not sent/);
     clean(pushes[0].body.split("\n\n")[1]);
     // the rate limit still applies to a second run inside the hour
     const plan = planPushes({ now: now + 60_000, alerts: [{ ts: now + 30_000, kind: "bt-synthetic-failed", key: "k2", text: "x" }], state: JSON.parse(reg.getStatus("push.state")!) });
     assert.equal(plan.messages.filter((m) => m.kind === "synthetic-failed").length, 0);
+  });
+  test("it says whether the push was delivered: not configured, a failed send and a held push are not", async () => {
+    const fresh = () => openRegistry(path.join(fs.mkdtempSync(path.join(os.tmpdir(), "bt-synth-push-")), "r.db"));
+    const now = Date.parse("2026-10-15T09:31:00Z"), failures = [{ scenario: "a-event", sentence: "x" }];
+    const ok = (async () => new Response("ok")) as unknown as typeof fetch;
+    const down = (async () => new Response("no", { status: 500 })) as unknown as typeof fetch;
+    assert.deepEqual(await pushSyntheticFailed({ registry: fresh(), env: {}, now, runId: "s1", failures, fetchImpl: ok }), { delivered: false, why: "the push channel is not configured" });
+    assert.equal((await pushSyntheticFailed({ registry: fresh(), env: { BURNTICKER_PUSH_URL: "https://push.test/x" }, now, runId: "s2", failures, fetchImpl: down })).delivered, false);
+    const reg = fresh(), env = { BURNTICKER_PUSH_URL: "https://push.test/x" };
+    assert.equal((await pushSyntheticFailed({ registry: reg, env, now, runId: "s3", failures, fetchImpl: ok })).delivered, true);
+    const held = await pushSyntheticFailed({ registry: reg, env, now: now + 60_000, runId: "s4", failures, fetchImpl: ok });
+    assert.equal(held.delivered, false, "a second run inside the hour is held by the rate limit");
   });
 });
 
@@ -210,5 +224,53 @@ describe("the devnet instance's write bucket", () => {
     assert.equal(limitsFromEnv({ BURNTICKER_CLUSTER: "devnet", BURNTICKER_DEVNET_WRITE_BURST: "5" }), RATE_LIMITS, "never lower, never odd");
     assert.equal(limitsFromEnv({}), RATE_LIMITS);
     assert.match(fs.readFileSync(path.join(ROOT, "scripts/service/run-burnticker-synth.sh"), "utf8"), /BURNTICKER_CLUSTER=devnet [^"]*BURNTICKER_DEVNET_WRITE_BURST=60/);
+  });
+});
+
+describe("the devnet instance's per-wallet pin cap", () => {
+  test("BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP raises the cap on devnet only; mainnet, localnet and an unset cluster keep theirs", () => {
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_CLUSTER: "devnet", BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: "40" }), 40);
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_CLUSTER: "mainnet", BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: "40" }), undefined, "mainnet: the default applies");
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_CLUSTER: "mainnet", BURNTICKER_PIN_CREATOR_DAILY_CAP: "4", BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: "40" }), 4, "mainnet: its own setting, never the devnet one");
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_CLUSTER: "localnet", BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: "40" }), undefined);
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: "40" }), undefined, "no cluster set: not devnet for this purpose");
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_CLUSTER: "devnet", BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: String(DEFAULT_PIN_CREATOR_DAILY_CAP - 1) }), undefined, "never lower");
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_CLUSTER: "devnet", BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: "2.5" }), undefined, "never odd");
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_CLUSTER: "devnet", BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: "5000" }), undefined, "never past 1000");
+    assert.equal(pinCreatorDailyCapFromEnv({ BURNTICKER_CLUSTER: "devnet", BURNTICKER_PIN_CREATOR_DAILY_CAP: "50", BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP: "40" }), 50, "a higher plain setting stands");
+    assert.equal(pinCreatorDailyCapFromEnv({}), undefined);
+  });
+  test("the server reads the cap through it, and the service script sets it on the devnet instances only", () => {
+    assert.match(fs.readFileSync(path.join(ROOT, "src/lib/burnticker/server.ts"), "utf8"), /pinCreatorDailyCap: pinCreatorDailyCapFromEnv\(env\)/);
+    const sh = fs.readFileSync(path.join(ROOT, "scripts/service/run-burnticker-synth.sh"), "utf8");
+    assert.match(sh, /BURNTICKER_CLUSTER=devnet [^"]*BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP=40/);
+    assert.equal(sh.match(/BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP=/g)?.length, 1, "set once, in start_web");
+  });
+});
+
+describe("the synthetic creator's exit: scenario failures are the report's, not the unit's", () => {
+  test("report written: 0 when nothing failed or the push went out, 3 when failures reached nobody; could not start (or crashed): 1", () => {
+    const h = fs.readFileSync(path.join(ROOT, "scripts/burnticker-synthetic-creator.mts"), "utf8");
+    const main = h.slice(h.indexOf("async function main()"));
+    const tail = main.slice(main.indexOf("fs.writeFileSync(REPORT,"));
+    assert.match(tail, /if \(!failed\.length\) \{ console\.log\([^\n]*\); return 0; \}/, "nothing failed: 0");
+    assert.match(tail, /push = await pushSyntheticFailed\(/);
+    assert.match(tail, /if \(push\.delivered\) \{ console\.log\([^\n]*\); return 0; \}/, "failures pushed: 0");
+    assert.match(tail, /no push was delivered[^\n]*\n  return 3;\n\}/, "failures nobody was told about: 3");
+    assert.doesNotMatch(main, /failed\.length \? 1 : 0/);
+    assert.match(main, /const stop = async \(sentence: string\): Promise<number> => \{[\s\S]*?return 1;\n  \};/, "could not start: 1");
+    assert.match(h, /process\.exit\(code\), \(e\) => \{ console\.error\(e\); process\.exit\(1\); \}/, "crashed before the report: 1");
+  });
+  test("the unit check: the timer is expected, and the service finished (inactive, dead) after a run with failed scenarios raises nothing", async () => {
+    const { unitAlerts, parseUnitList, EXPECTED_UNITS } = await import("@/lib/burnticker/ops/unitHealth");
+    assert.ok(EXPECTED_UNITS.some((u) => u.unit === "mct-burnticker-synth.timer"));
+    assert.ok(!EXPECTED_UNITS.some((u) => u.unit === "mct-burnticker-synth.service"), "the oneshot service is not expected to be running");
+    const list = [
+      "mct-burnticker-mintbank.service   loaded active   running Burnticker mint key bank",
+      "mct-burnticker-backup.timer       loaded active   waiting Burnticker backup",
+      "mct-burnticker-synth.service      loaded inactive dead    Burnticker synthetic creator",
+      "mct-burnticker-synth.timer        loaded active   waiting Nightly Burnticker synthetic creator",
+    ].join("\n");
+    assert.deepEqual(unitAlerts(parseUnitList(list), EXPECTED_UNITS), []);
   });
 });

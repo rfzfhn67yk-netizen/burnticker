@@ -39,7 +39,7 @@ import { espnClient, nativeSourceById, setNativeClients } from "@/lib/burnticker
 import type { SeasonSchedule } from "@/lib/burnticker/seasonOver";
 import type { TeamSeasonReader } from "@/lib/burnticker/lastSeason";
 import { coinDerbyScoreboard } from "@/lib/burnticker/derby/page";
-import { derbyTitle } from "@/lib/burnticker/api/handlers";
+import { derbyTitle, pinCreatorDailyCapFromEnv } from "@/lib/burnticker/api/handlers";
 import { budgetedRpcConfig, configureApiBudget, statusTableStore } from "@/lib/burnticker/apiBudget";
 import { connectionBatchReader, type BatchReader, type MultipleAccountsReader } from "@/lib/burnticker/keeperReadCache";
 
@@ -158,7 +158,8 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     allowMainnet, devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
     uploader: uploaderFromEnv(env, cluster), customImages: customImagesEnabled(env), allowHostedMetadata: allowHostedMetadata(env),
     pinDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) : undefined,
-    pinCreatorDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_CREATOR_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_CREATOR_DAILY_CAP ?? "").trim()) : undefined,
+    // the synthetic creator's devnet instance may raise this (BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP); ignored on mainnet
+    pinCreatorDailyCap: pinCreatorDailyCapFromEnv(env),
     // Review-2 F3: the verifier decodes initialize_token and reads the TokenConfig (and the Pair) — it needs the program ids it checks
     // against; without BURNTICKER_PROGRAM_ID it refuses every confirmation (fail closed).
     // C2 (2026-10-15 prelaunch audit): the verifier reads in the "confirm" lane, so anonymous traffic cannot spend what a confirmation needs

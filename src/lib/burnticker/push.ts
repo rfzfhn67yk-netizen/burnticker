@@ -208,11 +208,16 @@ export async function pushKeeperRefused(o: { registry: Pick<Registry, "getStatus
 }
 
 /** The synthetic creator's one alert per run: record it, then push it at once (through the same rate limit). Never throws. */
-export async function pushSyntheticFailed(o: { registry: Pick<Registry, "getStatus" | "setStatus" | "alertsSince" | "recordAlert">; env: Readonly<Record<string, string | undefined>>; now: number; runId: string; failures: readonly { scenario: string; sentence: string }[]; fetchImpl?: typeof fetch; log?: (s: string) => void }): Promise<void> {
+export async function pushSyntheticFailed(o: { registry: Pick<Registry, "getStatus" | "setStatus" | "alertsSince" | "recordAlert">; env: Readonly<Record<string, string | undefined>>; now: number; runId: string; failures: readonly { scenario: string; sentence: string }[]; fetchImpl?: typeof fetch; log?: (s: string) => void }): Promise<{ delivered: boolean; why: string }> {
   try {
     const lines = o.failures.slice(0, 6).map((f) => `${f.scenario}: ${f.sentence.slice(0, 160)}`);
     const more = o.failures.length > 6 ? [`${o.failures.length - 6} more failed. The run's report has every one.`] : [];
     o.registry.recordAlert({ kind: "bt-synthetic-failed", key: `bt-synthetic-failed:${o.runId}`, text: [`${o.failures.length === 1 ? "One check" : `${o.failures.length} checks`} failed.`, ...lines, ...more].join("\n"), meta: { runId: o.runId } }, o.now);
-    await runPushCheck(o);
-  } catch (e) { o.log?.(`  [push] synthetic failure not pushed: ${(e as Error).message.slice(0, 120)}`); }
+    // 2026-10-18 review: the synthetic creator exits 0 for failed scenarios only when this push actually went out
+    const r = await runPushCheck(o);
+    if (!r.configured) return { delivered: false, why: "the push channel is not configured" };
+    if (r.sent.some((m) => m.kind === "synthetic-failed")) return { delivered: true, why: "the push was delivered" };
+    if (r.failed.some((f) => f.m.kind === "synthetic-failed")) return { delivered: false, why: "the push could not be delivered" };
+    return { delivered: false, why: "the push was held (rate limit)" };
+  } catch (e) { o.log?.(`  [push] synthetic failure not pushed: ${(e as Error).message.slice(0, 120)}`); return { delivered: false, why: "the push failed with an error" }; }
 }

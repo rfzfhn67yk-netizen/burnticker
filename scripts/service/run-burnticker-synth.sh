@@ -7,8 +7,8 @@
 # https://burnticker.com/api/burnticker/rpc); the synthetic creator answers every browser call to it from the devnet RPC
 # (BURNTICKER_SYNTH_BROWSER_RPC), so nothing it signs or reads touches mainnet. Caddy does not route to 3100 or 3101: loopback only.
 #
-# The devnet instance gets ONLY devnet-synth.env (never the live host's env file, which holds its uploader and bank keys). That file holds
-# public values: BURNTICKER_PROGRAM_ID, BURNTICKER_PLATFORM_ID, BURNTICKER_ADMIN, BURNTICKER_KEEPER_PUBKEY, BURNTICKER_FEE_WALLET,
+# The devnet instance gets devnet-synth.env and NOTHING of the live host's env file except the two read-only sports data keys: `next
+# start` reads the live env file by itself, so every name in it is set empty first (start_web below). devnet-synth.env holds public values: BURNTICKER_PROGRAM_ID, BURNTICKER_PLATFORM_ID, BURNTICKER_ADMIN, BURNTICKER_KEEPER_PUBKEY, BURNTICKER_FEE_WALLET,
 # BURNTICKER_LOOKUP_TABLE (the devnet table, docs/burnticker/HOSTED-LAUNCH-DEVNET-PROOF.md step A), BURNTICKER_RPC_URL (devnet), and the
 # synthetic creator's BURNTICKER_SYNTH_KEYPAIR (a devnet-only keypair file) and BURNTICKER_SYNTH_CHAIN (real, or stub until the devnet table
 # exists). The push channel (BURNTICKER_PUSH_URL / _TOKEN) comes from the live env file, loaded for the creator process only (after
@@ -58,12 +58,39 @@ bank_fill() {
   if [ "$2" = bg ]; then env -i PATH="$PATH" HOME="$HOME" TZ=America/Denver sh -c "$3" >> logs/burnticker-synth-bank.log 2>&1 & FILL=$!
   else env -i PATH="$PATH" HOME="$HOME" TZ=America/Denver sh -c "$3" >> logs/burnticker-synth-bank.log 2>&1; fi
 }
-# one devnet web instance: $1 port, $2 bank file, $3 1 = sealed with the devnet bank key, 0 = no bank key (every launch searches)
+# one devnet web instance: $1 port, $2 bank file, $3 1 = sealed with the devnet bank key, 0 = no bank key (every launch searches). The
+# write burst and the per-wallet pin cap are raised for the night's dozen launches from one wallet on one loopback client (2026-10-18: the
+# cap of 6 refused every scenario after the sixth pin); both settings are honoured on devnet only (http.ts limitsFromEnv, handlers.ts
+# pinCreatorDailyCapFromEnv), so the live host's limits never move.
+#
+# THE LIVE HOST'S ENV NEVER REACHES A DEVNET INSTANCE (2026-10-18). `env -i` is not enough: `next start` reads the live env file in the
+# repository by itself (@next/env, the file scripts/load-env.sh reads) and fills in every name the process does not already have. So
+# EVERY name in that file (env_local_names: names only, no value is read here) and the SYNTH_WEB_SECRETS floor are set EMPTY before
+# devnet-synth.env is read: a name that is defined, even empty, is never filled in by Next, and anything devnet-synth.env or start_web sets
+# itself still wins. A secret added to the live file later is blanked with no change here. Kept ON PURPOSE (SYNTH_WEB_KEPT): the
+# read-only sports data keys the team and rivalry schedules need. The consequence: no uploader, so devnet coins use hosted metadata and
+# the pin budget is not exercised on devnet; and no live push, alert, PIN, signer, bank, RPC or API key in a devnet process.
+SYNTH_WEB_SECRETS="BURNTICKER_UPLOAD_PAYER BURNTICKER_MINT_BANK_KEY BURNTICKER_SYNTH_BANK_KEY BURNTICKER_PUSH_URL BURNTICKER_PUSH_TOKEN \
+BURNTICKER_ALERT_WEBHOOK BURNTICKER_ALERT_WEBHOOK_TOKEN BURNTICKER_OPS_PIN MCT_ACTION_PIN BURNTICKER_RPC_URL"
+SYNTH_WEB_KEPT="BURNTICKER_THESPORTSDB_KEY BURNTICKER_APISPORTS_KEY"
+# the names start_web sets empty: the floor and every name in the live env file, less the kept ones (names only, never a value)
+synth_web_blank() {
+  ( . ./scripts/load-env.sh
+    for n in $SYNTH_WEB_SECRETS $(env_local_names .); do
+      case " $SYNTH_WEB_KEPT " in (*" $n "*) continue ;; esac
+      # the process's own basics are never blanked, whatever the live file holds
+      case "$n" in (PATH|HOME|TZ|NODE_ENV|NODE_OPTIONS) continue ;; esac
+      printf '%s= ' "$n"
+    done )
+}
+SYNTH_WEB_BLANK=$(synth_web_blank)
 start_web() {
-  env -i PATH="$PATH" HOME="$HOME" TZ=America/Denver NODE_ENV=production sh -c "set -a; . ./devnet-synth.env; set +a; unset BURNTICKER_MINT_BANK_KEY; \
-    if [ $3 = 1 ]; then export BURNTICKER_MINT_BANK_KEY=\"\$BURNTICKER_SYNTH_BANK_KEY\"; fi; unset BURNTICKER_SYNTH_BANK_KEY; \
+  # the secrets blanked first (above), then devnet-synth.env; the 3100 instance's bank key is the devnet bank's, set from
+  # BURNTICKER_SYNTH_BANK_KEY here; on 3101 it stays empty
+  env -i PATH="$PATH" HOME="$HOME" TZ=America/Denver NODE_ENV=production sh -c "export $SYNTH_WEB_BLANK; set -a; . ./devnet-synth.env; set +a; BURNTICKER_MINT_BANK_KEY=; \
+    if [ $3 = 1 ]; then BURNTICKER_MINT_BANK_KEY=\"\$BURNTICKER_SYNTH_BANK_KEY\"; fi; export BURNTICKER_MINT_BANK_KEY BURNTICKER_SYNTH_BANK_KEY=; \
     export BURNTICKER_CLUSTER=devnet BURNTICKER_DB=$D/registry.db BURNTICKER_PUBLISH_DIR=$D/site BURNTICKER_MINT_BANK_PATH=$2 \
-      BURNTICKER_CREATOR_LAUNCHES_ENABLED=1 BURNTICKER_ALLOW_HOSTED_METADATA=1 BURNTICKER_END_SINKS_LIVE=1 BURNTICKER_DEVNET_WRITE_BURST=60 BURNTICKER_PUBLIC_ORIGIN=http://127.0.0.1:$1; \
+      BURNTICKER_CREATOR_LAUNCHES_ENABLED=1 BURNTICKER_ALLOW_HOSTED_METADATA=1 BURNTICKER_END_SINKS_LIVE=1 BURNTICKER_DEVNET_WRITE_BURST=60 BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP=40 BURNTICKER_PUBLIC_ORIGIN=http://127.0.0.1:$1; \
     exec ./node_modules/.bin/next start -H 127.0.0.1 -p $1" > "logs/burnticker-synth-web-$1.log" 2>&1 &
 }
 wait_web() { i=0; until curl -fsS -o /dev/null "http://127.0.0.1:$1/api/burnticker/build"; do i=$((i+1)); [ $i -lt 60 ] || { echo "[$(stamp)] the devnet instance on $1 did not answer in 60 s"; exit 2; }; sleep 1; done; }

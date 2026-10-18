@@ -151,3 +151,40 @@ export function pairTickersFor(base: string): [string, string] {
 export function nameStepFills(tickers: readonly string[]): { index: number; name: string; ticker: string }[] {
   return tickers.map((t, index) => ({ index, name: `Synthetic ${t}`, ticker: t }));
 }
+
+// ---- which browser requests are the wallet connection's RPC ---------------------------------------------------------------------------
+
+/** The site's own RPC proxy path (rpcProxy.ts RPC_PROXY_PATH) and its flight-token path, which is not an RPC call. */
+export const SYNTH_RPC_PROXY_PATH = "/api/burnticker/rpc";
+export const SYNTH_RPC_FLIGHT_PATH = "/api/burnticker/rpc/flight";
+
+const trimPath = (p: string): string => p.replace(/\/+$/, "") || "/";
+
+/**
+ * Which kind of wallet RPC request a browser URL is, or null when it is none (2026-10-18: a-event landed on devnet, but the run said the
+ * page never sent a transaction, because the harness only watched the baked endpoint and the page no longer calls it):
+ *   "proxy"  the site's proxy on the page's OWN origin, with any query string. Since publish 78 the wallet shell rewrites a cross-origin
+ *            proxy endpoint to the page's origin (walletShell.ts sameOriginProxy), and since publish 75 the sign card's reads and sends
+ *            carry a flight token in a header (rpcProxy.ts withFlight); the URL itself is still the bare proxy path.
+ *   "baked"  the endpoint baked into the build (BURNTICKER_SYNTH_BROWSER_RPC), same origin and path, any query string (a keyed URL).
+ * The flight-token path (a GET beside the proxy) is never an RPC call, on either origin.
+ */
+export function browserRpcKind(url: string | URL, o: { browserRpc: string; pageOrigins: readonly string[] }): "proxy" | "baked" | null {
+  let u: URL;
+  try { u = new URL(String(url)); } catch { return null; }
+  const p = trimPath(u.pathname);
+  if (p === SYNTH_RPC_FLIGHT_PATH) return null;
+  const sameOrigin = (x: string): boolean => { try { return new URL(x).origin === u.origin; } catch { return false; } };
+  if (p === SYNTH_RPC_PROXY_PATH && o.pageOrigins.some(sameOrigin)) return "proxy";
+  try { const b = new URL(o.browserRpc); if (b.origin === u.origin && trimPath(b.pathname) === p) return "baked"; } catch { /* no baked endpoint */ }
+  return null;
+}
+
+/** The JSON-RPC calls in a request body (one call or a batch), so sends and dry runs are counted apart. */
+export function rpcCallsOf(postData: string | null): { method: string; id: unknown; params: unknown }[] {
+  let body: unknown = null;
+  try { body = JSON.parse(postData ?? "null"); } catch { return []; }
+  return (Array.isArray(body) ? body : [body])
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === "object" && typeof (c as { method?: unknown }).method === "string")
+    .map((c) => ({ method: String(c.method), id: c.id, params: c.params }));
+}
