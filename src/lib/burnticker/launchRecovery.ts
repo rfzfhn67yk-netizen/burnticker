@@ -10,7 +10,7 @@ export function chainReadDeps(connection: Pick<Connection, "getSignatureStatuses
   return {
     getSignatureStatus: async (sig) => (await connection.getSignatureStatuses([sig], { searchTransactionHistory: true })).value[0] ?? null,
     getBlockHeight: () => connection.getBlockHeight("confirmed"),
-    getTransaction: async (sig) => { const t = await connection.getTransaction(sig, { maxSupportedTransactionVersion: 0, commitment: "confirmed" }); return t ? { err: t.meta?.err ?? null } : null; },
+    getTransaction: async (sig) => { const t = await connection.getTransaction(sig, { maxSupportedTransactionVersion: 1, commitment: "confirmed" }); return t ? { err: t.meta?.err ?? null } : null; },
     expectedAccounts: async (mints) => ((await connection.getMultipleAccountsInfo(mints.map((m) => new PublicKey(m)), "confirmed")).some(Boolean) ? "present" : "absent"),
   };
 }

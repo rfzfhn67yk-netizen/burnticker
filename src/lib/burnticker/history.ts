@@ -193,7 +193,7 @@ export function verifyReceipt(root = process.cwd()): VerifyReceipt {
 /** The exact commands and their expected output for one receipt (shown with copy buttons). */
 export interface VerifyCommand { id: "tx" | "memo" | "treasury" | "units" | "spend"; command: string; expected: string }
 export function verifyCommands(v: VerifyReceipt): VerifyCommand[] {
-  const tx = `curl -s ${v.rpcUrl} -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"getTransaction","params":["${v.signature}",{"maxSupportedTransactionVersion":0}]}'`;
+  const tx = `curl -s ${v.rpcUrl} -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"getTransaction","params":["${v.signature}",{"maxSupportedTransactionVersion":1}]}'`;
   const keep = Math.round((1 - v.fraction) * 1e6) / 1e6;
   return [
     { id: "tx", command: `${tx} | jq '.result.meta.err'`, expected: "null" },

@@ -411,7 +411,7 @@ export interface SendDeps {
   /** the clock (tests); Date.now by default */
   now?(): number;
   /**
-   * launch recovery 255: the transaction history for one signature (Connection.getTransaction(sig, { maxSupportedTransactionVersion: 0,
+   * launch recovery 255: the transaction history for one signature (Connection.getTransaction(sig, { maxSupportedTransactionVersion: 1,
    * commitment: "confirmed" }) → null, or its meta.err). Absent → an expired step is never proven unlanded, so it is never rebuilt.
    */
   getTransaction?(sig: string): Promise<{ err: unknown } | null>;

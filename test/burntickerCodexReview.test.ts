@@ -36,6 +36,7 @@ import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { accountDiscriminator, decodeType, encodeType } from "@/lib/burnReceipts/idlCoder";
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { BRONCOS, DEBT_RULE, DENVER_HIGH, FRED_GFDEBTN_CSV, NOW } from "./burntickerHelpers.ts";
+import { encodeV1Message } from "./burntickerV1Helpers.ts";
 
 const POST = { "content-type": "application/json", origin: "http://bt.test" };
 const ATTESTER = "KeeperDataKey1111111111111111111111111111111";
@@ -567,8 +568,18 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
   const opts = { burnProgramId: PROGRAM, launchLabProgramId: LAUNCHLAB_PROGRAM.devnet.toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() };
   const toIx = (s: { programId: string; keys: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; dataBase64: string }) => new TransactionInstruction({ programId: new PublicKey(s.programId), keys: s.keys.map((k) => ({ pubkey: new PublicKey(k.pubkey), isSigner: k.isSigner, isWritable: k.isWritable })), data: Buffer.from(s.dataBase64, "base64") });
   /** Signs locally (never sent) and returns the message exactly as getTransaction would: deserialized from the wire. */
-  const signed = (ixs: TransactionInstruction[], signers: Keypair[], v0 = false) => {
-    if (v0) {
+  const signed = (ixs: TransactionInstruction[], signers: Keypair[], version: boolean | 1 = false) => {
+    if (version === 1) {
+      // Phantom v1 scope step 0 (2026-10-19): the same compiled message in the v1 envelope (0x81; the compute budget in the message, no
+      // lookup tables), as web3.js 1.99.0 deserializes a landed v1 launch
+      const v0 = new TransactionMessage({ payerKey: signers[0].publicKey, recentBlockhash: BLOCKHASH, instructions: ixs }).compileToV0Message();
+      const wire = encodeV1Message({ header: v0.header, staticAccountKeys: v0.staticAccountKeys, recentBlockhash: v0.recentBlockhash, compiledInstructions: v0.compiledInstructions, transactionConfig: { computeUnitLimit: 400_000, heapSize: null, loadedAccountsDataSizeLimit: 262_144, priorityFee: 0 } });
+      assert.equal(wire[0], 0x81, "the v1 envelope");
+      const msg = VersionedMessage.deserialize(wire);
+      assert.equal(msg.version, 1);
+      return msg;   // (unsigned: 1.99.0 reads v1 only, and the verifier judges the header's signers, as for the legacy and v0 fixtures)
+    }
+    if (version) {
       const vt = new VersionedTransaction(new TransactionMessage({ payerKey: signers[0].publicKey, recentBlockhash: BLOCKHASH, instructions: ixs }).compileToV0Message());
       vt.sign(signers);
       return VersionedMessage.deserialize(vt.message.serialize());
@@ -672,10 +683,11 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     const pairedCfg = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256, pairState: 1 })] as const;
     assert.match(JSON.stringify(await connectionLaunchVerifier(chain(landed(signed(onlyInit, [creatorKp, mintKp])), [pairedCfg as never]), opts).verify("s", exp)), /LaunchLab/, "the lock step alone never confirms the coin");
   });
-  test("a correct LaunchLab launch passes (legacy and v0 messages), with the block time as the baseline", async () => {
+  test("a correct LaunchLab launch passes (legacy, v0 and v1 messages), with the block time as the baseline", async () => {
     const { mintKp, exp, ixs, cfg } = await singleCoin();
     assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [cfg]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
     assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp], true)), [cfg]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
+    assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp], 1)), [cfg]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW }, "the real launch bundle landed as a version-1 transaction");
     const noProgram = await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [cfg]), { ...opts, burnProgramId: null }).verify("s", exp);
     assert.equal(noProgram.ok, false, "no burn_receipts program id on the host: refused (fail closed)");
   });

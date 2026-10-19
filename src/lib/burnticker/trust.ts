@@ -438,7 +438,7 @@ export async function web3ChainReader(rpcUrl: string): Promise<ChainReader> {
     accountData: async (pk) => (await c.getAccountInfo(new PublicKey(pk), "confirmed"))?.data ?? null,
     signaturesFor: async (addr, limit) => (await c.getSignaturesForAddress(new PublicKey(addr), { limit }, "confirmed")).map((s) => ({ signature: s.signature, slot: s.slot, blockTime: s.blockTime ?? null })),
     lamportsDelta: async (sig, addr) => {
-      const tx = await c.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+      const tx = await c.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
       if (!tx?.meta) return null;
       const keys = tx.transaction.message.getAccountKeys({ accountKeysFromLookups: tx.meta.loadedAddresses }).staticAccountKeys.map((k) => k.toBase58());
       const ix = keys.indexOf(addr);

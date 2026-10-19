@@ -1,9 +1,10 @@
 import "server-only";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { tokenPageData, type Platform } from "@/lib/burnticker/server";
-import { findToken } from "@/lib/burnticker/api/v1";
+import { findToken, flagshipToken } from "@/lib/burnticker/api/v1";
+import { readKeeperFiles } from "@/lib/burnticker/deficitQueue";
 import { registryCoinKey } from "@/lib/burnticker/coinLookup";
-import { BADGE_CACHE_SEC, badgePayloadProblems, coinBadge, pairBadge, renderBadgeSvg, type BadgeJson, type SideInput } from "@/lib/burnticker/badge";
+import { BADGE_CACHE_SEC, BADGE_DISCLAIMER, BADGE_SCHEMA, badgePayloadProblems, coinBadge, pairBadge, renderBadgeSvg, seasonScope, snippets, type BadgeJson, type CoinBadgeJson, type SideInput } from "@/lib/burnticker/badge";
 import type { TokenRow } from "@/lib/burnticker/registry";
 import { safeParam } from "@/lib/burnticker/safeParam";
 
@@ -24,14 +25,60 @@ async function side(p: Platform, t: TokenRow, origin: string, now: number): Prom
 const badged = (t: TokenRow | null): t is TokenRow => !!t && t.status !== "draft" && t.status !== "expired";
 
 /** A coin's badge payload, or null when there is no launched coin by that mint (or ticker, when one coin holds it; the route answers a shared ticker with the list). */
-export async function coinBadgeData(p: Platform, id: string, origin: string, now = Date.now()): Promise<BadgeJson | null> {
+export async function coinBadgeData(p: Platform, id: string, origin: string, now = Date.now(), env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd()): Promise<BadgeJson | null> {
   const t = findToken(p, id);
-  if (!badged(t)) return null;
+  // handoff 2026-10-19: the flagship has no registry row while its own keeper runs it, so its card comes from the keeper's files
+  if (!badged(t)) return flagshipBadgeData(p, id, origin, now, env, root);
   const key = `coin:${t.mint}:${origin}`;
   const hit = memo.get(key);
   if (hit && now - hit.at < BADGE_CACHE_SEC * 1000) return hit.v;
   const v = coinBadge(await side(p, t, origin, now));
   remember(key, now, v);
+  return v;
+}
+
+type KeeperStatusLite = { schema?: string; rules?: { sha256?: string }; feed?: { nextPollAt?: string | null } };
+type KeeperBurnRow = { recordDate?: string; status?: string; units?: number; burned?: string | null };
+const FLAGSHIP_LINER = "Fees burn $DEFICIT when the Treasury reports a qualifying rise in the public debt.";
+const FLAGSHIP_AFFILIATION = "This coin is not affiliated with any team, league, candidate, agency or market.";
+
+/**
+ * The flagship's badge while its own keeper runs it (F-25: no registry row, the token API names it through flagshipToken). The card
+ * reads the keeper's published status.json and burns.json (deficitQueue.ts readKeeperFiles): confirmed burns with tokens burned are its
+ * receipts, the feed's next poll is its next settlement, the rules hash is the keeper's (else the locked file's). Null when this host
+ * does not name the flagship (devnet, or the registry already holds it) or the id is neither its ticker nor its mint. No market data.
+ */
+export function flagshipBadgeData(p: Pick<Platform, "registry" | "cluster">, id: string, origin: string, now = Date.now(), env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd()): CoinBadgeJson | null {
+  const f = flagshipToken(p, root);
+  if (!f) return null;
+  const key = id.trim();
+  if (key.toUpperCase() !== f.ticker && key !== f.mint) return null;
+  const memoKey = `coin:${f.mint}:${origin}`;
+  const hit = memo.get(memoKey);
+  if (hit && now - hit.at < BADGE_CACHE_SEC * 1000) return hit.v as CoinBadgeJson;
+  const k = readKeeperFiles(env as Record<string, string | undefined>, root);
+  const st = k.status && (k.status as KeeperStatusLite).schema === "burnkeeper.status/v1" ? (k.status as KeeperStatusLite) : null;
+  const rows = (Array.isArray(k.burns) ? k.burns : (k.burns as { burns?: unknown[] } | null)?.burns ?? []) as KeeperBurnRow[];
+  const burns = rows
+    .filter((b) => b.status === "confirmed" && /[1-9]/.test(String(b.burned ?? "0")) && /^\d{4}-\d{2}-\d{2}$/.test(String(b.recordDate ?? "")))
+    .map((b) => ({ at: `${b.recordDate}T00:00:00.000Z`, units: Number(b.units ?? 0), burned: String(b.burned) }))
+    .sort((x, y) => (x.at < y.at ? 1 : -1));
+  const scope = seasonScope({ oracle: "catalogue", series: null }, now);
+  const inScope = scope.from ? burns.filter((b) => b.at.slice(0, 10) >= scope.from!) : burns;
+  const o = origin.replace(/\/$/, ""), t = encodeURIComponent(f.ticker);
+  const page = `${o}/burnticker/t/${t}`, badgePath = `/api/burnticker/v1/badge/${t}`;
+  const sha = st?.rules?.sha256 || f.rulesSha256;
+  const next = st?.feed?.nextPollAt && !Number.isNaN(Date.parse(st.feed.nextPollAt)) ? new Date(st.feed.nextPollAt).toISOString() : null;
+  const v: CoinBadgeJson = {
+    schema: BADGE_SCHEMA, kind: "coin", generatedAt: new Date(now).toISOString(),
+    ticker: f.ticker, name: f.name, oneLiner: FLAGSHIP_LINER, window: null, status: "live",
+    lastBurn: burns[0] ?? null, receipts: { count: inScope.length, label: scope.label }, rulesSha12: sha.slice(0, 12), pageUrl: page, verifyUrl: `${page}#verify`,
+    nextSettlementAt: next, nextSettlementNote: next ? "the keeper's next read of the source" : "no result scheduled",
+    badgeUrl: { svg: `${o}${badgePath}.svg`, png: `${o}${badgePath}.png`, json: `${o}${badgePath}.json` }, embedUrl: `${o}/burnticker/embed/${t}`,
+    embed: snippets({ origin: o, embedPath: `/burnticker/embed/${t}`, badgePath: `${badgePath}.svg`, pagePath: `/burnticker/t/${t}`, alt: `${f.ticker} receipts on Burnticker` }),
+    disclaimer: BADGE_DISCLAIMER, affiliation: FLAGSHIP_AFFILIATION,
+  };
+  remember(memoKey, now, v);
   return v;
 }
 

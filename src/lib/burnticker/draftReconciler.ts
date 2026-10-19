@@ -68,9 +68,9 @@ export const SIGNER_BATCH = 100;
 export const SIGNER_BATCHES_PER_SWEEP = 10;
 
 /** A-18: the keeper's batched signer read on a web3.js Connection (getTransactions: one JSON-RPC batch per call). */
-export function withSignerReads<C extends { getTransactions(sigs: string[], o: { commitment: "confirmed"; maxSupportedTransactionVersion: 0 }): Promise<({ transaction: { message: { header: { numRequiredSignatures: number }; staticAccountKeys?: { toBase58(): string }[]; accountKeys?: { toBase58(): string }[] } } } | null)[]> }>(conn: C): C & Pick<DraftChainReader, "signersOf"> {
+export function withSignerReads<C extends { getTransactions(sigs: string[], o: { commitment: "confirmed"; maxSupportedTransactionVersion: 1 }): Promise<({ transaction: { message: { header: { numRequiredSignatures: number }; staticAccountKeys?: { toBase58(): string }[]; accountKeys?: { toBase58(): string }[] } } } | null)[]> }>(conn: C): C & Pick<DraftChainReader, "signersOf"> {
   const signersOf = async (signatures: string[]): Promise<(string[] | null)[]> => {
-    const txs = await conn.getTransactions(signatures, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    const txs = await conn.getTransactions(signatures, { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
     return txs.map((t) => { if (!t) return null; const m = t.transaction.message, keys = m.staticAccountKeys ?? m.accountKeys ?? []; return keys.slice(0, m.header.numRequiredSignatures).map((k) => k.toBase58()); });
   };
   return Object.assign(conn, { signersOf });

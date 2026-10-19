@@ -210,7 +210,7 @@ export async function checkReceiptTx(o: CheckOptions): Promise<ReceiptCheckResul
 
   // tx + program
   let tx: TxJson | null;
-  try { tx = await o.rpc.call<TxJson | null>("getTransaction", [o.signature, { encoding: "json", maxSupportedTransactionVersion: 0, commitment: "confirmed" }]); }
+  try { tx = await o.rpc.call<TxJson | null>("getTransaction", [o.signature, { encoding: "json", maxSupportedTransactionVersion: 1, commitment: "confirmed" }]); }
   catch (e) { add("tx", null, `the RPC did not answer: ${(e as Error).message.slice(0, 160)}`); return done(); }
   if (!tx || !tx.meta) { add("tx", false, `no confirmed transaction ${o.signature.slice(0, 12)}… on ${o.cluster}`); return done(); }
   facts.slot = tx.slot; facts.blockTime = tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null;
