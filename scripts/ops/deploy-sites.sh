@@ -44,7 +44,7 @@ umask 022
 RS="rsync -rltO --no-owner --no-group -i --exclude=*.tmp-*"
 [ "$CHECK" = 1 ] && RS="$RS -n"
 command -v rsync >/dev/null 2>&1 || { echo "rsync is not installed (apt install rsync)"; exit 1; }
-stamp() { date '+%Y-%m-%d %H:%M:%S'; }
+stamp() { date -u '+%Y-%m-%d %H:%M:%SZ'; }
 
 for d in "$DEFICIT_WWW" "$BURNTICKER_WWW"; do
   if [ ! -d "$d" ] || [ ! -w "$d" ]; then

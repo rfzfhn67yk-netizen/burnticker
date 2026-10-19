@@ -1,3 +1,4 @@
+import { safeParam } from "@/lib/burnticker/safeParam";
 import { publicPairs } from "@/lib/burnticker/publicPairs";
 import type { Platform } from "@/lib/burnticker/server";
 import { tokenPageData } from "@/lib/burnticker/server";
@@ -22,7 +23,8 @@ import { preflightSelector } from "@/lib/burnticker/coverage/preflight";
  * (a bracket or one pair's derby block + the latest day's post), GET /derby/search (the wizard tile's coin search).
  */
 
-const decode = (s: string): string => { try { return decodeURIComponent(s); } catch { return s; } };
+/** A route param as Next decoded it, never decoded again (audit 2026-10-18 A-42: %2541 answered "A"). */
+const decode = safeParam;
 
 export function v1ListDerby(p: Platform, now = Date.now()): ApiResult {
   // review follow-up 3: the shared public rule (publicPairs.ts): a pair that never launched is not listed

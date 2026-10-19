@@ -1610,3 +1610,27 @@ written before one public commit, the commit is recorded against the later tag. 
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
 - allowlist sha256 (config/public-repo.allowlist): `64ed38d8c5ec1679c34df4153f1b256ca84f450bb155d28bacf98a032e2f79de`
 - files published: 2272
+
+## 2026-10-18 — publish from 8c843ca1c8bc
+
+- monorepo commit: `8c843ca1c8bc2a499c5729f06081763a13f32fa3` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `64ed38d8c5ec1679c34df4153f1b256ca84f450bb155d28bacf98a032e2f79de`
+- files published: 2274
+
+## 2026-10-18 — publish from 5c9e7f1da4b1
+
+- monorepo commit: `5c9e7f1da4b16a59aad34b7ab710e7ce97fe8aa7` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `c36e2d2b710a001b0fe24d30b17b5a56292e7f6f5d6790c71723ed0c3366ecdd`
+- files published: 2311
+
+## 2026-10-18 — publish from 4de9c312064a
+
+- monorepo commit: `4de9c312064a3a74e37bf6a4a4186e688b7e5cda` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `c36e2d2b710a001b0fe24d30b17b5a56292e7f6f5d6790c71723ed0c3366ecdd`
+- files published: 2311

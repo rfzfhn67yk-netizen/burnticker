@@ -48,7 +48,7 @@ SHA[pair_curve]="8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded
 EXE[pair_curve]="567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895"
 LIBS=(burn_receipts pair_curve)
 WS="programs/burn-receipts"
-say() { printf '[%s] %s\n' "$(date -u '+%H:%M:%S')" "$*"; }
+say() { printf '[%s] %s\n' "$(date -u '+%H:%M:%SZ')" "$*"; }
 
 [ "$(uname -m)" = x86_64 ] || { echo "this server is $(uname -m): use an x86 server type, not ARM. solana-verify's build image is amd64."; exit 2; }
 

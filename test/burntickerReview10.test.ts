@@ -128,7 +128,7 @@ describe("stale copy (f) to (i): the coin page, Following and the no-end line", 
     assert.equal(nextTimeRow(null, null).value, "None scheduled");
     assert.equal(PUBLISHER_DECIDES, "The publisher decides when the result is available.");
     const p = read("src/app/burnticker/t/[ticker]/page.tsx");
-    assert.match(p, /const nextRow = nextTimeRow\(s\.next\.nextCloseTime, s\.next\.nextCheckAt\);/);
+    assert.match(p, /const nextRow = nextTimeRow\(s\.next\.nextCloseTime, s\.next\.nextCheckAt, tick\);/, "a past check is labelled overdue (audit 2026-10-18 F02)");
     assert.doesNotMatch(p, /The source publishes the result after this/);
   });
   test("(g) a sports coin names its publisher and its confirming source; an unknown one says unavailable", () => {

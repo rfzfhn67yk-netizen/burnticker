@@ -14,6 +14,8 @@
 #   4. copies this run's files off the box to BURNTICKER_BACKUP_DEST: `user@host:path` (scp, key-based, BatchMode), a local directory,
 #      or `rclone:<remote>:<path>` (rclone copy). Unset: the copy is skipped and the log says so (the owner step, TODO-OWNER.md). The
 #      mint key bank is NEVER copied off the box (its file holds sealed keys and stays on the host, mintBank.ts); it is kept here only.
+#      The destination keeps BURNTICKER_BACKUP_OFFBOX_DAYS (default 30) days: older copies named by this script are removed there.
+#   Each copy is switched to an ordinary journal and no -wal / -shm file is left beside it; rotation removes any it finds.
 #   5. writes data/backups/last-backup.json ({ ok, at, files, offBox, error }); the keeper's unit check (ops/unitHealth.ts) raises
 #      bt-backup-failed from it, and a failed run also leaves the unit failed (bt-unit-failed).
 # NEVER an env file or a key file: a path naming .env, a key, a keypair or a secret is refused before anything is read.
@@ -29,12 +31,15 @@ DIR=${BURNTICKER_BACKUP_DIR:-data/backups}
 KEEP=${BURNTICKER_BACKUP_KEEP:-14}
 DBS=${BURNTICKER_BACKUP_DBS:-data/burnticker.db data/burnkeeper.db data/burnticker-mintbank.db}
 REQUIRED=${BURNTICKER_BACKUP_REQUIRED:-data/burnticker.db}
-stamp() { date '+%F %T'; }
+stamp() { date -u '+%F %TZ'; }
 say() { echo "[$(stamp)] $*"; }
 # a time limit where coreutils has one (the box); the Mac has none, and runs the command as it is
 limit() { if command -v timeout >/dev/null 2>&1; then timeout "$@"; else shift; "$@"; fi; }
 command -v sqlite3 >/dev/null 2>&1 || { say "backup FAILED: sqlite3 is not installed (apt install sqlite3)"; exit 2; }
 case "$KEEP" in ''|*[!0-9]*) say "refusing: BURNTICKER_BACKUP_KEEP must be a number"; exit 2 ;; esac
+OFFBOX_DAYS=${BURNTICKER_BACKUP_OFFBOX_DAYS:-30}
+case "$OFFBOX_DAYS" in ''|*[!0-9]*) say "refusing: BURNTICKER_BACKUP_OFFBOX_DAYS must be a number"; exit 2 ;; esac
+[ "$OFFBOX_DAYS" -ge 1 ] || { say "refusing: BURNTICKER_BACKUP_OFFBOX_DAYS must be at least 1"; exit 2; }
 [ "$KEEP" -ge 1 ] || { say "refusing: BURNTICKER_BACKUP_KEEP must be at least 1"; exit 2; }
 
 # every sqlite3 call below passes -cmd ".timeout 10000": it waits up to 10 s for a lock the keeper or the site holds (F-7 review)
@@ -91,14 +96,24 @@ for db in $DBS; do
   while [ -e "$out" ]; do n=$((n + 1)); out="$DIR/$base-$TAG-$(printf '%03d' "$n").db"; done
   if ! OUT=$(sqlite3 -cmd ".timeout 10000" "$db" ".backup '$out'" 2>&1); then rm -f "$out"; ERR="the backup of $db did not finish: $(first_line "$OUT")"; say "backup FAILED: $ERR"; break; fi
   chmod 600 "$out"
+  # A-15 (second audit 2026-10-18): the copy of a WAL database is a WAL database, and opening it (the check below) left -wal and -shm
+  # files beside it that rotation never removed. The copy is switched to an ordinary rollback journal first, and any sidecar is removed.
+  sqlite3 -cmd ".timeout 10000" "$out" "PRAGMA journal_mode=DELETE;" >/dev/null 2>&1 || true
   CHECK=$(sqlite3 -cmd ".timeout 10000" "$out" "PRAGMA quick_check;" 2>&1 || true)
+  rm -f "$out-wal" "$out-shm" "$out-journal"
   if [ "$CHECK" != ok ]; then ERR="quick_check of the copy of $db: $(printf '%s' "$CHECK" | head -c 120 | tr -d '"\\\n')"; say "backup FAILED: $ERR"; break; fi
   say "backed up $db to $out ($(wc -c < "$out" | tr -d ' ') bytes, quick_check ok)"
   NEW="$NEW $out"
   case "$base" in *mintbank*) ;; *) OFFBOX_FILES="$OFFBOX_FILES $out" ;; esac
   # rotation: the newest KEEP copies of this database (names sort by time)
   COUNT=$(ls -1 "$DIR/$base"-[0-9]*.db 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$COUNT" -gt "$KEEP" ]; then ls -1 "$DIR/$base"-[0-9]*.db | sort | head -n $((COUNT - KEEP)) | while IFS= read -r old; do rm -f "$old"; done; fi
+  if [ "$COUNT" -gt "$KEEP" ]; then ls -1 "$DIR/$base"-[0-9]*.db | sort | head -n $((COUNT - KEEP)) | while IFS= read -r old; do rm -f "$old" "$old-wal" "$old-shm" "$old-journal"; done; fi
+  # and any sidecar whose backup is gone (left by runs before A-15)
+  for s in "$DIR/$base"-[0-9]*.db-wal "$DIR/$base"-[0-9]*.db-shm "$DIR/$base"-[0-9]*.db-journal; do
+    [ -e "$s" ] || continue
+    case "$s" in *-wal) b=${s%-wal} ;; *-shm) b=${s%-shm} ;; *) b=${s%-journal} ;; esac
+    [ -f "$b" ] || rm -f "$s"
+  done
 done
 
 DEST=${BURNTICKER_BACKUP_DEST:-}
@@ -128,6 +143,24 @@ else
   esac
   if [ "$OK" = 1 ]; then OFFBOX="copied"; say "copied off the box:$OFFBOX_FILES"
   else OFFBOX="failed"; ERR="the off-box copy failed"; say "backup FAILED: $ERR (the copies on this host are fine)"; fi
+  # A-15 (second audit 2026-10-18): the destination keeps BURNTICKER_BACKUP_OFFBOX_DAYS (default 30) days of copies. Only files named
+  # the way this script names them (<db>-<UTC stamp>-<nnn>.db) and older than that are removed; anything else there is left alone.
+  # A prune that fails is said in the log and never fails the run (the new copies are already there).
+  if [ "$OK" = 1 ]; then
+    PAT='*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z-[0-9][0-9][0-9].db'
+    PRUNED=1
+    case "$DEST" in
+      rclone:*) limit 600 rclone delete --min-age "${OFFBOX_DAYS}d" --max-depth 1 --include "$PAT" "$DEST_TARGET" >/dev/null 2>&1 || PRUNED=0 ;;
+      # a home-relative path (~/x, or ~) is made relative to the remote login directory, where ssh runs: inside the single quotes
+      # below a ~ is never expanded (review, 2026-10-18)
+      *:*) H=${DEST%%:*}; P=${DEST#*:}
+           case "$P" in "~") P=. ;; "~/"*) P=${P#\~/} ;; esac
+           [ -n "$P" ] || P=.
+           limit 120 ssh -o BatchMode=yes -o ConnectTimeout=20 "$H" "find '$P' -maxdepth 1 -type f -name '$PAT' -mtime +$OFFBOX_DAYS -delete" >/dev/null 2>&1 || PRUNED=0 ;;
+      *) find "$DEST" -maxdepth 1 -type f -name "$PAT" -mtime +"$OFFBOX_DAYS" -exec rm -f {} + 2>/dev/null || PRUNED=0 ;;
+    esac
+    if [ "$PRUNED" = 1 ]; then say "off-box copies older than $OFFBOX_DAYS days removed"; else say "WARNING: could not remove off-box copies older than $OFFBOX_DAYS days (the new copies are there)"; fi
+  fi
 fi
 
 # F-7 review: when the last copy left the box (kept across runs) and since when a destination is set, for the keeper's 24-hour note

@@ -4,7 +4,7 @@
   "observed": "AccountNotInitialized",
   "match": true,
   "exitCode": 0,
-  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts register-side --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --pair 792sAKMeHvZCxZpZeutjCWUt4cJkybLmRbgbbh8XgYD2 --side A",
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts register-side --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --pair 792sAKMeHvZCxZpZeutjCWUt4cJkybLmRbgbbh8XgYD2 --side A",
   "simulationErr": "{\"InstructionError\":[1,{\"Custom\":3012}]}",
   "errorLogLines": [
     "Program log: AnchorError caused by account: lp_mint. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",

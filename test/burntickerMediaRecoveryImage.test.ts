@@ -147,7 +147,8 @@ describe("224 [VERIFY] two 2 MB images in one pair body fit every host limit", (
     assert.ok(Number(m![1]) * 1_000_000 > 6_500_000, "the Caddy cap stays above MAX_JSON_BODY");
     assert.match(caddy, /@app_launch path [^\n]*\/api\/burnticker\/v1\/launch\/\*/, "every v1 launch route gets the 90 s upstream timeout");
     // prelaunch audit M3 (2026-10-15): the route caps its body now, above the largest pair body (api/http.ts MAX_JSON_BODY)
-    assert.match(read("src/app/api/burnticker/launch/route.ts"), /const text = await readTextCapped\(req\)/);
+    // (review of A-42: read through readTextGated, the same cap with the write gate at 64 KB)
+    assert.match(read("src/app/api/burnticker/launch/route.ts"), /const text = await readTextGated\(req, MAX_JSON_BODY, /);
     assert.ok(MAX_JSON_BODY > MAX_PAIR_IMAGE_BYTES_IN_BODY + 100_000, `${MAX_JSON_BODY} leaves room for the two rules`);
   });
 });

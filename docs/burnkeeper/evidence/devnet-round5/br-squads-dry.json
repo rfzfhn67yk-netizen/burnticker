@@ -17,7 +17,7 @@
     "verifiedBuildTable": "docs/burnkeeper/evidence/devnet-round5/verified-build.round5.json",
     "tableHash": "a475d902c287e94e2318b0becf18081fc396d5fda245bdf39e4a7e4e11f84bb9",
     "tableLibrary": "burn_receipts",
-    "localBuildFile": "/private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r5build/local-devnet/burn_receipts.so",
+    "localBuildFile": "/private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r5build/local-devnet/burn_receipts.so",
     "localBuildExecutableHash": "a475d902c287e94e2318b0becf18081fc396d5fda245bdf39e4a7e4e11f84bb9",
     "codeBytes": 1020489,
     "bufferAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",

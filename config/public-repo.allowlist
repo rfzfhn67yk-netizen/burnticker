@@ -83,6 +83,7 @@ deploy/caddy
 deploy/systemd/mct-burnkeeper.service
 deploy/systemd/mct-burnticker-*.service
 deploy/systemd/mct-burnticker-*.timer
+deploy/logrotate/burnticker
 scripts/load-env.sh
 scripts/service/run-burnticker-web.sh
 scripts/service/run-burnkeeper.sh
@@ -101,6 +102,7 @@ scripts/ops/deploy-sites.sh
 scripts/ops/keeper-status-check.sh
 scripts/ops/probe-burnticker.sh
 scripts/ops/install-burnticker-units.sh
+scripts/ops/render-logrotate.mjs
 scripts/ops/request-keeper-restart.sh
 scripts/ops/swap-web-build.sh
 scripts/ops/loadtest.sh

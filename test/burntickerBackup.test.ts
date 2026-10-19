@@ -66,6 +66,63 @@ describe("the database backup (F-7)", { skip: !hasSqlite && "sqlite3 is not inst
     } finally { fs.rmSync(dest, { recursive: true, force: true }); }
   });
 
+  // SECOND 2026-10-18 AUDIT A-15: each backup of a WAL database left -wal and -shm files beside it (macOS) that rotation never removed,
+  // and the destination kept every copy forever. Now no sidecar is left, rotation removes any it finds, and the destination keeps 30 days.
+  test("A-15: no -wal or -shm beside a backup; rotation removes old sidecars; the destination keeps 30 days of this script's copies", () => {
+    const bk = path.join(root, "data/backups");
+    // a sidecar left by an earlier run beside a backup that rotation removes, and one beside a backup already gone
+    const orphan = path.join(bk, "burnticker-20200101T000000Z-000.db");
+    fs.writeFileSync(orphan, "old"); fs.writeFileSync(`${orphan}-wal`, "x"); fs.writeFileSync(`${orphan}-shm`, "x");
+    fs.writeFileSync(path.join(bk, "burnkeeper-20200101T000000Z-000.db-shm"), "x");
+    const dest = fs.mkdtempSync(path.join(os.tmpdir(), "bt-backup-dest-"));
+    const day = 86_400;
+    const old = path.join(dest, "burnticker-20250101T000000Z-000.db"), recent = path.join(dest, "burnticker-20260101T000000Z-000.db"), other = path.join(dest, "notes.txt");
+    for (const f of [old, recent, other]) fs.writeFileSync(f, "x");
+    const now = Date.now() / 1000;
+    fs.utimesSync(old, now - 40 * day, now - 40 * day); fs.utimesSync(other, now - 40 * day, now - 40 * day); fs.utimesSync(recent, now - 10 * day, now - 10 * day);
+    try {
+      const r = run(root, [], { BURNTICKER_BACKUP_DEST: dest });
+      assert.equal(r.code, 0, r.out);
+      const left = fs.readdirSync(bk);
+      assert.deepEqual(left.filter((f) => /-(wal|shm|journal)$/.test(f)), [], left.join(" "));
+      assert.ok(!fs.existsSync(orphan), "the oldest backup was rotated out");
+      const there = fs.readdirSync(dest);
+      assert.ok(!there.includes(path.basename(old)), "a copy older than 30 days is removed at the destination");
+      assert.ok(there.includes(path.basename(recent)), "a copy inside 30 days stays");
+      assert.ok(there.includes("notes.txt"), "a file this script did not name is never touched");
+      assert.match(r.out, /off-box copies older than 30 days removed/);
+      for (const f of status(root).files) assert.equal(sql(path.join(root, f), "PRAGMA journal_mode;"), "delete");
+    } finally { fs.rmSync(dest, { recursive: true, force: true }); }
+  });
+
+  // review of A-15 (2026-10-18): `find '~/x'` on the remote never expands the ~, so a home-relative destination failed every prune;
+  // and the rclone prune must not descend into folders. Fake scp / ssh / rclone record what they were asked to run.
+  test("review: a ~/ destination is pruned relative to the remote home; the rclone prune stays at the top level", () => {
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), "bt-backup-bin-"));
+    const rec = path.join(bin, "calls.log");
+    for (const tool of ["scp", "ssh", "rclone"]) {
+      fs.writeFileSync(path.join(bin, tool), `#!/bin/sh\nprintf '%s\\n' "${tool} $*" >> '${rec}'\nexit 0\n`, { mode: 0o755 });
+    }
+    const PATHX = `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`;
+    try {
+      for (const [dest, want] of [["mct@backup-box:~/bt-backups", "'bt-backups'"], ["mct@backup-box:~", "'.'"], ["mct@backup-box:/srv/bt", "'/srv/bt'"]] as const) {
+        fs.rmSync(rec, { force: true });
+        const r = run(root, [], { PATH: PATHX, BURNTICKER_BACKUP_DEST: dest });
+        assert.equal(r.code, 0, r.out);
+        const calls = fs.readFileSync(rec, "utf8");
+        const ssh = calls.split("\n").find((l) => l.startsWith("ssh "))!;
+        assert.ok(ssh, calls);
+        assert.match(ssh, new RegExp(`find ${want.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")} -maxdepth 1 -type f -name `), ssh);
+        assert.doesNotMatch(ssh, /'~/, "never a quoted ~");
+        assert.match(r.out, /off-box copies older than 30 days removed/);
+      }
+      fs.rmSync(rec, { force: true });
+      const r = run(root, [], { PATH: PATHX, BURNTICKER_BACKUP_DEST: "rclone:remote:bt" });
+      assert.equal(r.code, 0, r.out);
+      assert.match(fs.readFileSync(rec, "utf8"), /^rclone delete --min-age 30d --max-depth 1 --include \S+ remote:bt$/m);
+    } finally { fs.rmSync(bin, { recursive: true, force: true }); }
+  });
+
   test("the destination may be named on its one line of .env.local; no other line is used", () => {
     const dest = fs.mkdtempSync(path.join(os.tmpdir(), "bt-backup-dest-"));
     const env = path.join(root, ".env.local");

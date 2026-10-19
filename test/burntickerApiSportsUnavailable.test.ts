@@ -69,7 +69,8 @@ describe("API-Sports out for the day: TheSportsDB alone applies (F-4 review 3)",
 });
 
 describe("the 12-hour hold is continuous and never outlives a disagreement (F-4 re-review blocker)", () => {
-  const H = 3_600_000, T0 = Date.parse("2026-10-05T12:00:00Z");
+  // the first cycle 3 hours after the start, so every step (up to 24 h later) is inside API-Sports' 36-hour read window (2026-10-18)
+  const H = 3_600_000, T0 = Date.parse("2026-10-04T23:25:00Z");
   /** A client whose TheSportsDB day listing has KC 30, LV 27 (final), and whose API-Sports read follows `mode()`. */
   function cycleClient(mode: () => "out" | "pending" | "opposite" | "agree"): EspnClient {
     const asRow = (home: number, away: number) => ({ teams: { home: { name: "Las Vegas Raiders" }, away: { name: "Kansas City Chiefs" } }, scores: { home: { total: home }, away: { total: away } }, game: { date: { date: NFL.date } }, date: NFL.startsAt, status: { short: "FT" } });
@@ -160,10 +161,19 @@ describe("a second source's final read before TheSportsDB's is remembered and co
     assert.notEqual(c.kind, "settled");
   });
 
-  test("API-Sports agreeing before TheSportsDB's final: no hold from it; with API-Sports out the one-source hold runs and settles", async () => {
-    const { out } = await run([{ at: 0, tsdb: false, mode: "agree" }, { at: H, tsdb: true, mode: "out" }, { at: 13 * H, tsdb: true, mode: "out" }]);
-    assert.equal(out[1].kind, "awaiting"); assert.match(out[1].kind === "awaiting" ? out[1].why : "", /starts again now|first seen now/);
-    assert.equal(out[2].kind, "settled", JSON.stringify(out[2]));
+  test("API-Sports agreeing before TheSportsDB's final: its remembered final confirms TheSportsDB's, with no one-source hold", async () => {
+    // 2026-10-18 (apiSportsWindow): once API-Sports' final is remembered it is not read again, so it cannot be "out" afterwards; the
+    // remembered final stands as its read and the two sources agree when TheSportsDB's final arrives
+    const { out, holds } = await run([{ at: 0, tsdb: false, mode: "agree" }, { at: H, tsdb: true, mode: "out" }]);
+    assert.equal(out[0].kind, "awaiting");
+    assert.equal(out[1].kind, "settled", JSON.stringify(out[1]));
+    assert.equal(out[1].kind === "settled" ? out[1].singleSince : 0, undefined, "two sources, not the one-source hold");
+    assert.deepEqual(out[1].kind === "settled" ? out[1].ops : [], ["TheSportsDB", "apisports.games"]);
+    assert.equal([...holds.marks.values()][0]?.home, -1, "no one-source hold started");
+  });
+  test("API-Sports names the other winner, then is not read again: TheSportsDB's final is held against the remembered one", async () => {
+    const { out } = await run([{ at: 0, tsdb: false, mode: "opposite" }, { at: 40 * H, tsdb: true, mode: "agree" }]);
+    assert.equal(out[1].kind, "held", JSON.stringify(out[1]));
   });
 
   test("the 60-day cleanup never drops a disagreement mark", async () => {

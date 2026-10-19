@@ -7,7 +7,7 @@ import { rawToTokens, type LoadedRules } from "@/lib/burnKeeper/rules";
 import { backoffMs } from "@/lib/burnKeeper/schedule";
 import { askCosigner } from "@/lib/burnticker/attesters/cosign";
 import type { ReadingInput } from "@/lib/burnKeeper/programPort";
-import { DISPERSAL_STATE_KEY, dispersalLines, runDispersal, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
+import { DISPERSAL_STATE_KEY, dispersalLines, runDispersal, type DispersalAlert, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
 
 /**
  * THE KEEPER ON THE PROGRAM PATH (2026-10-10; docs/burnkeeper/README-execution.md). With BURNKEEPER_EXECUTION=program the keeper no
@@ -365,9 +365,9 @@ function record(ctx: KeeperCtx, port: ProgramPort, cfg: ProgramConfigView, D: st
 /**
  * The $DEFICIT keeper's burn dispersal: the same step the platform keeper runs (dispersalKeeper.ts), its state in this ledger's status
  * table. Run after executeProgramPending (a waiting reading cranks first); scripts/burn-keeper.mts wakes again at `nextDueAt`.
- * `alert` records bt-burn-behind where the phone push reads it (the platform registry, when the keeper can open it).
+ * `alert` records bt-burn-behind and bt-dispersal-receipt where the phone push reads it (the platform registry, when the keeper can open it).
  */
-export async function executeDispersal(ctx: KeeperCtx, port: ProgramPort, o: { alert?: (a: { kind: "bt-burn-behind"; key: string; text: string; meta: Record<string, unknown> | null }) => void } = {}): Promise<DispersalReport> {
+export async function executeDispersal(ctx: KeeperCtx, port: ProgramPort, o: { alert?: (a: DispersalAlert) => void } = {}): Promise<DispersalReport> {
   const key = DISPERSAL_STATE_KEY(port.mint);
   return runDispersal({ port, mint: port.mint, ticker: ctx.loaded.rules.ticker, load: () => ctx.ledger.getStatus(key), save: (j) => ctx.ledger.setStatus(key, j, ctx.now()), log: ctx.log, now: ctx.now, dryRun: ctx.dryRun, ...(o.alert ? { alert: o.alert } : {}) });
 }

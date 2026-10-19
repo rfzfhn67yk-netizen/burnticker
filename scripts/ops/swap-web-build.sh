@@ -24,6 +24,9 @@
 #   5. on failure: SWAPS BACK by itself (.next → .next-failed, .next-old → .next), restarts the web unit, checks that the previous build
 #      answers, says which build is live, and exits 1. A previous build without a BUILD_ID, or from before `startedAt` existed, is checked
 #      for what it can show: HTTP 200 on both paths, a new unit process, and a fresh start time only when it reports one.
+#      A restart command that itself exits non-zero (fourth prelaunch audit F01, 2026-10-18) is a failure like a failed smoke: the same
+#      swap back, restart and check. If the restart fails again on the previous build, it says the web is down and exits 1.
+#   The exit status of a failure survives the EXIT cleanup (it is never turned into 0).
 #
 # THE LIMIT (say it plainly): only the Next build is swapped back. The deploy has already mirrored the SOURCE (keepers and scripts run
 # from it) and, when package-lock.json changed, run npm ci in place; neither is undone here. A failed web smoke therefore leaves the old
@@ -43,10 +46,13 @@ unit_id() {
   echo "pid=$pid ts=$ts"
 }
 unit_pid() { p="${1#pid=}"; echo "${p%% *}"; }
+# for a message: "none" when systemd gave no identity at all (review of A-7/F01, 2026-10-18), never a bare "pid= ts="
+show_id() { case "$1" in ""|"pid= ts=") echo none ;; *) echo "$1" ;; esac; }
 DEADLINE="${BT_WEB_DEADLINE:-150}"
 BACK_DEADLINE="${BT_WEB_ROLLBACK_DEADLINE:-60}"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/bt-swap.XXXXXX")"
-trap 'rm -rf "$TMP"' EXIT
+# keep the script's own exit status through the cleanup (a shell that exits on an error otherwise reports the cleanup's 0)
+trap 'rc=$?; rm -rf "$TMP"; exit $rc' EXIT
 
 [ -f .next-staging/BUILD_ID ] || { echo "SWAP REFUSED: no staged build (.next-staging/BUILD_ID); the running build is untouched"; exit 1; }
 NEW="$(cat .next-staging/BUILD_ID)"
@@ -77,7 +83,7 @@ smoke() {
     elif [ -n "$want" ] && ! grep -qF "\"build\":\"$want\"" "$TMP/body"; then
       WHY="GET /api/burnticker/build serves another build ($(head -c 120 "$TMP/body" | tr -d '\n')), not $want"
     elif now_id=$(unit_id); now_pid=$(unit_pid "$now_id"); [ -z "$now_pid" ] || [ "$now_pid" = 0 ] || [ "$now_id" = "$before" ]; then
-      WHY="the web unit's process did not change across the restart (before: ${before:-none}, now: ${now_id:-none}): the old process, or none, is answering"
+      WHY="the web unit's process did not change across the restart (before: $(show_id "$before"), now: $(show_id "$now_id")): the old process, or none, is answering"
     elif [ -n "$started" ] && [ $(( started / 1000 )) -lt $(( since - 1 )) ]; then
       WHY="the process answering started before the restart (startedAt $started): the web unit did not restart onto this build"
     else
@@ -94,11 +100,18 @@ smoke() {
 }
 
 STARTED=$(date +%s)
+# the deploy reads this line: from here on .next may change, so a failure is never "before the swap" (A-9, audit 2026-10-18)
+echo "SWAP STARTED: moving build $NEW into .next (the running build${OLD:+ $OLD} goes to .next-old)"
 rm -rf .next-old
 if [ -d .next ]; then mv .next .next-old; fi
 mv .next-staging .next
+# restart: runs the restart command; on a non-zero exit sets WHY and returns 1 (the smoke never runs, the rollback path does)
+restart() {
+  if sh -c "$RESTART"; then return 0; else rc=$?; WHY="the restart command failed (exit $rc)"; return 1; fi
+}
+WHY="the restart or the smoke did not finish"
 T0=$(date +%s); ID0=$(unit_id)
-if sh -c "$RESTART" && smoke "$NEW" "$DEADLINE" "$T0" "$ID0"; then
+if restart && smoke "$NEW" "$DEADLINE" "$T0" "$ID0"; then
   echo "web is up on build $NEW (smoke passed in $(( $(date +%s) - STARTED )) s; the previous build${OLD:+ $OLD} is kept in .next-old until the next deploy)"
   exit 0
 fi
@@ -111,10 +124,15 @@ rm -rf .next-failed
 mv .next .next-failed
 mv .next-old .next
 echo "SWAPPED BACK: the failed build is in .next-failed; restarting the web unit on the previous build ${OLD:-(no BUILD_ID)}"
-T1=$(date +%s); ID1=$(unit_id)
-if sh -c "$RESTART" && smoke "$OLD" "$BACK_DEADLINE" "$T1" "$ID1"; then
-  echo "ROLLED BACK: the web is up on the previous build ${OLD:-(no BUILD_ID)}; the source and node_modules stay the new ones (see the limit in this script's header)"
+echo "ONLY THE WEB BUILD IS SWAPPED BACK: the source, node_modules and systemd units from this deploy stay in place (see the limit in this script's header)"
+T1=$(date +%s); ID1=$(unit_id); WHY="the restart or the smoke did not finish"
+# the smoke runs even when the restart command reports a failure: a unit can come up although systemctl exited non-zero (review, 2026-10-18)
+RWHY=""; restart || RWHY="$WHY"
+if smoke "$OLD" "$BACK_DEADLINE" "$T1" "$ID1"; then
+  echo "ROLLED BACK: the web is up on the previous build ${OLD:-(no BUILD_ID)}${RWHY:+ (the restart command reported a failure, $RWHY, but the previous build answers)}; the source and node_modules stay the new ones (see the limit in this script's header)"
+elif [ -n "$RWHY" ]; then
+  echo "ROLLBACK DID NOT ANSWER EITHER: $RWHY on the previous build too, and the check found that $WHY. The previous build ${OLD:-(no BUILD_ID)} is in .next but the web is down; act now (docs/burnticker/ROLLBACK.md)"
 else
-  echo "ROLLBACK DID NOT ANSWER EITHER: $WHY — the web is down; act now (docs/burnticker/ROLLBACK.md)"
+  echo "ROLLBACK DID NOT ANSWER EITHER: $WHY. The web is down; act now (docs/burnticker/ROLLBACK.md)"
 fi
 exit 1

@@ -85,7 +85,11 @@ describe("F05: a held swap settles through the flight lane when the ordinary lan
     const src = fs.readFileSync("src/app/burnticker/t/[ticker]/TradePanel.tsx", "utf8");
     assert.match(src, /await runSwap\(ctx\(\), \{/);
     assert.doesNotMatch(src, /await submitSwap\(/, "the panel never sends outside runSwap");
-    const refresh = src.slice(src.indexOf("const refresh = useCallback"), src.indexOf("useEffect(() => { const t = setTimeout(() => void refresh()"));
-    assert.doesNotMatch(refresh, /withFlight|runSwap/, "the passive refresh stays in the ordinary lane");
+    // prelaunch audit 2026-10-18 F03: the refresh can ride a flight, but only from the visitor's own Try again; the first read and the
+    // background retries call it without one (test/burntickerTradePanelRecovery.test.ts runs the component and counts flight calls)
+    const passive = src.slice(src.indexOf("// the first read, then (F03) background retries"), src.indexOf("// Try again: the same read now"));
+    assert.match(passive, /const r = await refresh\(\);/);
+    assert.doesNotMatch(passive, /withFlight|runSwap|flight: true/, "the passive refresh stays in the ordinary lane");
+    assert.equal(src.match(/refresh\(\{ flight: true \}\)/g)?.length, 1, "one flight read: Try again's");
   });
 });

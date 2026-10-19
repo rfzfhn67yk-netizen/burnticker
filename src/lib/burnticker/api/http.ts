@@ -73,6 +73,23 @@ export function limitsFromEnv(env: Readonly<Record<string, string | undefined>> 
   return { ...RATE_LIMITS, write: { ...RATE_LIMITS.write, burst: n, refillPerSec: n / 3600 } };
 }
 export const limiter = new RateLimiter(limitsFromEnv());
+/**
+ * Audit 2026-10-18 A-38 / A-42: the site's own routes that read the chain, fetch a pin or render an image had no per-client limit. They
+ * take from the heavy bucket's sizes (20, then 20 a minute) on limiters of their own, so a visitor reading coin pages or a wizard redrawing
+ * its preview never spends the bucket the wizard's back-tests and searches use. `pageLimiter`: pairs and the league image (heavy sizes);
+ * `pinCheckLimiter`: the pin check every coin page makes (the read sizes, 120 then 120 a minute, as before; a shared address reads many pages);
+ * `imageLimiter`: the wizard's preview image (it redraws on each ticker edit, so a burst of 60, then 60 a minute).
+ */
+export const pageLimiter = new RateLimiter();
+export const pinCheckLimiter = new RateLimiter();
+export const imageLimiter = new RateLimiter({ ...RATE_LIMITS, heavy: { burst: 60, refillPerSec: 1, human: "a burst of 60 images, then 60 a minute" } });
+/** A 429 for one of the site's own routes when `client` has spent its heavy bucket on `lim`; null when the request may run. */
+export function heavyRefusal(req: Request, lim: RateLimiter = limiter, now = Date.now(), bucket: Bucket = "heavy"): Response | null {
+  const rl = lim.take(clientKey(req), bucket, now);
+  if (rl.ok) return null;
+  const error = `Too many requests from this address. Please try again in ${rl.retryAfterSec} seconds.`;
+  return new Response(JSON.stringify({ ok: null, error, detail: error, code: "rate-limited", retryAfterSec: rl.retryAfterSec }), { status: 429, headers: { "content-type": "application/json; charset=utf-8", "retry-after": String(rl.retryAfterSec), "cache-control": "no-store" } });
+}
 
 /**
  * The client a request is charged to: the right-most X-Forwarded-For hop (appended by our own Caddy), else X-Real-IP; when that hop is
@@ -108,15 +125,17 @@ export const PUBLIC_READ_CORS: Readonly<Record<string, string>> = Object.freeze(
 export async function runV1(operationId: string, req: Request, handler: () => Promise<ApiResult>, now = Date.now()): Promise<Response> {
   const ep = endpoint(operationId);
   const cors: Record<string, string> = ep.method === "GET" ? { "access-control-allow-origin": "*" } : {};
+  // audit 2026-10-18 A-39: the cross-site, content-type and size refusals come BEFORE the limiter, so a page on another site that posts
+  // here spends nothing from the visitor's buckets (the non-v1 launch route already worked this way)
+  if (ep.method === "POST") {
+    if (!isSameOrigin(req)) return json(fail(403, "Requests from other sites are refused. A bot must send an Origin header that matches this API's address. In a browser, use this site.", { code: "cross-origin" }), { "cache-control": "no-store" });
+    const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (type !== "application/json") return json(fail(415, "A POST body must be sent as JSON, with the content type application/json.", { code: "content-type" }), { "cache-control": "no-store" });
+    if (declaredTooLarge(req)) return json(fail(413, "The request is too large.", { code: "too-large" }), { "cache-control": "no-store" });
+  }
   const rl = limiter.take(clientKey(req), ep.bucket, now);
   const rlHeaders = { "ratelimit-limit": String(rl.limit), "ratelimit-remaining": String(rl.remaining) };
   if (!rl.ok) return json(fail(429, `Too many requests. The limit here is ${RATE_LIMITS[ep.bucket].human}. Please try again in ${rl.retryAfterSec} seconds.`, { code: "rate-limited", retryAfterSec: rl.retryAfterSec }), { ...cors, ...rlHeaders, "retry-after": String(rl.retryAfterSec), "cache-control": "no-store" });
-  if (ep.method === "POST") {
-    if (!isSameOrigin(req)) return json(fail(403, "Requests from other sites are refused. A bot must send an Origin header that matches this API's address. In a browser, use this site.", { code: "cross-origin" }), { ...rlHeaders, "cache-control": "no-store" });
-    const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    if (type !== "application/json") return json(fail(415, "A POST body must be sent as JSON, with the content type application/json.", { code: "content-type" }), { ...rlHeaders, "cache-control": "no-store" });
-    if (declaredTooLarge(req)) return json(fail(413, "The request is too large.", { code: "too-large" }), { ...rlHeaders, "cache-control": "no-store" });
-  }
   let r: ApiResult;
   try { r = await handler(); } catch (e) { r = fail(500, `Something went wrong on the server. The reason given was: ${safeErrorText(e, 200)}`, { code: "internal" }); }
   const cache = ep.method === "GET" && r.status === 200 && ep.cacheSec > 0 ? `public, max-age=${ep.cacheSec}, s-maxage=${ep.cacheSec}, stale-while-revalidate=${ep.cacheSec}` : "no-store";
@@ -144,6 +163,35 @@ export async function readTextCapped(req: Request, max = MAX_JSON_BODY): Promise
     if (done) break;
     n += value.byteLength;
     if (n > max) { try { await reader.cancel(); } catch { /* the stream is dropped either way */ } return null; }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(n);
+  let o = 0;
+  for (const c of chunks) { all.set(c, o); o += c.byteLength; }
+  return new TextDecoder().decode(all);
+}
+
+/**
+ * readTextCapped with a gate (review of A-42): `gate` runs once, before the read when the declared Content-Length passes `gateAt`, else
+ * as soon as the bytes streamed pass it (a chunked body declares nothing). A Response from the gate stops the read and is returned as
+ * is; null lets it go on. Null when the body is larger than `max`.
+ */
+export async function readTextGated(req: Request, max: number, gateAt: number, gate: () => Response | null): Promise<string | null | Response> {
+  if (declaredTooLarge(req, max)) return null;
+  let gated = false;
+  const runGate = (): Response | null => { gated = true; return gate(); };
+  if (declaredTooLarge(req, gateAt)) { const r = runGate(); if (r) return r; }
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let n = 0;
+  const stop = async () => { try { await reader.cancel(); } catch { /* the stream is dropped either way */ } };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.byteLength;
+    if (n > max) { await stop(); return null; }
+    if (!gated && n > gateAt) { const r = runGate(); if (r) { await stop(); return r; } }
     chunks.push(value);
   }
   const all = new Uint8Array(n);

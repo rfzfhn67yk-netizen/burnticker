@@ -1,4 +1,4 @@
-source /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/env.zsh
+source /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/env.zsh
 cd $S/k
 BURNTICKER_DB=$S/k/data2/burnticker.db BURNTICKER_PUBLISH_DIR=$S/k/site BURNTICKER_CLUSTER=devnet BURNTICKER_KEEPER_PUBKEY=$KEEPER \
 BURNTICKER_PROGRAM_ID=$PROG BURNTICKER_RPC_URL=https://api.devnet.solana.com BURNTICKER_SIGNER_PATH=$D/keeper.json \

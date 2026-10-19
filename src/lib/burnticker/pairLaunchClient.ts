@@ -22,8 +22,18 @@ export const PAIR_CURVE_REVIEW_LINE = "Both coins graduate together, or neither 
 /** Which venue to ask for, from the catalogue's venue flags (absent → LaunchLab, the server corrects a stale read with a 409). */
 export const venueFor = (venues: { pairCurve?: boolean } | null | undefined): PairVenue => (venues?.pairCurve ? "pair-curve" : "launchlab");
 
-export interface LaunchErrorBody { error?: string; code?: string; retryAfterSec?: number }
+export interface LaunchErrorBody { error?: string; code?: string; retryAfterSec?: number; /** A-19: a 422 whose account the server's RPC has not shown yet (not final) */ missing?: boolean }
+/** A-19: a confirm refused only because the server's RPC has not shown the coin's account yet (the card keeps checking first). */
+export const LAUNCH_NOT_SEEN_YET_SENTENCE = "The server has not seen this launch on chain yet, so it kept checking. It can take a minute to show up. Wait a minute and press the button again; nothing is lost.";
 
+/** A-19: the prepare's 429 codes for the daily upload limits and for uploads busy right now (api/handlers.ts budgetRefusal). */
+export const UPLOAD_LIMIT_CODES: ReadonlySet<string> = new Set(["upload-budget", "upload-budget-client", "upload-budget-creator", "upload-busy"]);
+const UPLOAD_LIMIT_FALLBACK = "This site has reached a daily limit for saving coin details. Please try again later.";
+/** How long a 429 asks to wait, in words. */
+const waitText = (retryAfterHeader: string | null | undefined, body: LaunchErrorBody | null): string => {
+  const s = Number(retryAfterHeader ?? body?.retryAfterSec);
+  return Number.isFinite(s) && s > 0 ? (s >= 90 ? `about ${Math.ceil(s / 60)} minutes` : `${Math.ceil(s)} seconds`) : "a little while";
+};
 /** A launch response that is not 200 → one plain sentence for the review step. */
 /** The launch answer while the site is being updated (Caddy's fallback 503 during a deploy restart). */
 export const LAUNCH_DURING_UPDATE_SENTENCE = "Burnticker is being updated right now, so this launch was not started. Nothing was sent. Wait a minute and press Launch again.";
@@ -33,9 +43,11 @@ export function launchErrorMessage(status: number, body: LaunchErrorBody | null,
   if (status === 409 && code === "pair-curve-unavailable") return "The pair curve is not switched on here, so the two coins launch separately. Press the button again to build those.";
   if (status === 409 && code === "ticker-taken") return `${body?.error ?? "That ticker is taken"}. Pick another ticker.`;
   if (status === 429) {
-    const s = Number(retryAfterHeader ?? body?.retryAfterSec);
-    const wait = Number.isFinite(s) && s > 0 ? (s >= 90 ? `about ${Math.ceil(s / 60)} minutes` : `${Math.ceil(s)} seconds`) : "a little while";
-    return `Too many launch requests from this connection. Try again in ${wait}.`;
+    // second prelaunch audit 2026-10-18 A-19: chosen by CODE. The daily upload limits and the busy answer carry the server's own
+    // sentence (which limit, and when it resets); only the connection's request limit is "too many launch requests".
+    if (UPLOAD_LIMIT_CODES.has(code)) return asSentence(body?.error) || UPLOAD_LIMIT_FALLBACK;
+    if (code && code !== "rate-limited" && asSentence(body?.error)) return asSentence(body?.error);
+    return `Too many launch requests from this connection. Try again in ${waitText(retryAfterHeader, body)}.`;
   }
   // 2026-10-15 (the synthetic creator's deploy-window scenario): while the web unit restarts, Caddy answers the launch with its own JSON 503
   // (code app-unavailable, "the app is catching up"). The creator is told the site is being updated, never the fallback's words
@@ -122,14 +134,14 @@ export function launchedErrorMessage(status: number, body: LaunchErrorBody | nul
   if (code === "launch-after-closure") return own || "This launch landed after creator launches closed, so it is not recorded.";
   if (code === "launch-race") return "This coin was being recorded by another check at the same moment. Reload the page to see whether it is live.";
   if (code === "launch-unverified") {
+    // A-19: an account the server's RPC has not shown yet (`missing`) is not a final answer: the card asks again before this is shown
+    if (status === 422 && body?.missing === true) return LAUNCH_NOT_SEEN_YET_SENTENCE;
     if (status === 422) return own ? `The server did not accept that transaction as this coin's launch. ${own} ${KEPT_DRAFT}` : `The server did not accept that transaction as this coin's launch. ${KEPT_DRAFT}`;
     return own || `The server could not confirm this launch just now. ${KEPT_DRAFT}`;
   }
-  if (status === 429 && code === "rate-limited") {
-    const s = Number(retryAfterHeader ?? body?.retryAfterSec);
-    const wait = Number.isFinite(s) && s > 0 ? (s >= 90 ? `about ${Math.ceil(s / 60)} minutes` : `${Math.ceil(s)} seconds`) : "a little while";
-    return `This coin's launch was checked with too many different transactions in the last hour. Try again in ${wait}.`;
-  }
+  // A-19: the launch route's own per-connection confirm limit is not the coin's signature ceiling
+  if (status === 429 && code === "confirm-busy") return `This connection sent many launch records in the last minute. Try again in ${waitText(retryAfterHeader, body)}. The coin itself is not affected.`;
+  if (status === 429 && code === "rate-limited") return `This coin's launch was checked with too many different transactions in the last hour. Try again in ${waitText(retryAfterHeader, body)}.`;
   if ((status === 409 || status === 422 || status === 403) && own) return own;
   if (status === 409 || status === 422) return `The server could not record this launch. ${KEPT_DRAFT}`;
   return launchErrorMessage(status, body, retryAfterHeader);

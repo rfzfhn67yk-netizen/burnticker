@@ -137,7 +137,39 @@ describe("F06: one active-condition aggregator for ops.json and the check-in", (
     const k = path.join(import.meta.dirname, "..", "scripts", "burnticker-keeper.mts");
     if (!fs.existsSync(k)) { t.skip("not in this tree"); return; }
     const s = fs.readFileSync(k, "utf8");
-    assert.match(s, /buildOpsJson\(\{[^\n]*health, conditionMemory: memory \}\)/);
-    assert.match(s, /registry\.setStatus\(CONDITIONS_KEY, foldConditions\(memory, activeConditions\(r\.snapshot, health\), now\), now\)/);
+    assert.match(s, /buildOpsJson\(\{[^\n]*health, conditionMemory: memory, signals, heartbeat: heartbeat\.state \}\)/);
+    assert.match(s, /registry\.setStatus\(CONDITIONS_KEY, foldConditions\(memory, activeConditions\(r\.snapshot, health, \{ \.\.\.signals, alerts, lastCycleAt: r\.snapshot\?\.lastCycle\?\.at \?\? null \}\), now\), now\)/);
+    // second audit A-7: the unit check's computed alerts and the budget's lines reach the conditions
+    assert.match(s, /const signals = \{ units: unitCheck\.active, budget: budget\.lines\(\) \};/);
+  });
+});
+
+// SECOND 2026-10-18 AUDIT A-7: ops.json said "conditions now: none" with the synthetic creator's unit failed since the day before and
+// API-Sports on hold since the morning. Failed units, backup trouble, budget holds and a keeper refusal are now conditions too.
+describe("A-7: units, backups, budget holds and a keeper refusal are conditions", () => {
+  test("a failed unit and a provider on hold appear in ops.json and the check-in; neither is 'none'", () => {
+    healthy(SPORTS);
+    const s = snap();
+    const units = [{ kind: "bt-unit-failed", key: "bt-unit-failed:mct-burnticker-synth.service", text: "One unit is failed or not running: mct-burnticker-synth.service." }, { kind: "bt-backup-failed", key: "bt-backup-failed", text: "No backup status was found." }];
+    const budget = [{ source: "api-sports", label: "API-Sports", state: "hold" as const, used: 100, budget: 100 }, { source: "helius", label: "Helius", state: "ok" as const, used: 5, budget: 100 }];
+    const ops = buildOpsJson({ now: NOW, snapshot: s, delta: null, alerts: [], firstLaunchAt: null, health: health(), signals: { units, budget } });
+    assert.deepEqual(ops.conditions, ["bt-unit-failed(mct-burnticker-synth.service)", "bt-backup-failed", "bt-api-budget-hold(api-sports)"]);
+    const lines = ops.lines.join("\n");
+    assert.match(lines, /^- conditions now: bt-unit-failed\(mct-burnticker-synth\.service\), bt-backup-failed, bt-api-budget-hold\(api-sports\)$/m);
+    assert.doesNotMatch(lines, /conditions now: none/);
+    assert.match(lines, /bt-api-budget-hold\(api-sports\): API-Sports is on hold: today's budget is spent \(100 of 100\)\./);
+    // the same thing clears into "recovered" once it is fixed
+    const m = foldConditions({}, activeConditions(s, health(), { units, budget }), NOW);
+    const v = conditionsView(snap(NOW + HOUR), health(NOW + HOUR), m, NOW + HOUR, { units: [], budget: [] });
+    assert.deepEqual(v.recovered.map((r) => r.label).sort(), ["bt-api-budget-hold(api-sports)", "bt-backup-failed", "bt-unit-failed(mct-burnticker-synth.service)"]);
+  });
+
+  test("a keeper refusal newer than the last cycle is a condition (read from the alert rows); an older one is not", () => {
+    healthy(SPORTS);
+    const s = snap();   // last cycle one minute ago
+    const refusedLater = [{ ts: NOW - 30_000, kind: "bt-keeper-refused", text: "The keeper refused to start. The reason given was: no key", seenAt: null, sent: false }];
+    assert.deepEqual(buildOpsJson({ now: NOW, snapshot: s, delta: null, alerts: refusedLater, firstLaunchAt: null }).conditions, ["bt-keeper-refused"]);
+    const refusedBefore = [{ ...refusedLater[0], ts: NOW - 10 * MIN }];
+    assert.deepEqual(buildOpsJson({ now: NOW, snapshot: s, delta: null, alerts: refusedBefore, firstLaunchAt: null }).conditions, [], "the keeper ran a cycle since");
   });
 });

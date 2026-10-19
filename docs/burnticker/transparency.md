@@ -95,16 +95,19 @@ The trust page no longer reads the trading treasury's environment variable for i
 
 ## 4. Privacy — what the site records about the people using it
 
-Burnticker uses no third-party analytics, sets no tracking cookie and runs no fingerprinting. Two first-party records exist, both
-append-only, in the registry's own database (`src/lib/burnticker/productStore.ts`):
+Burnticker uses no third-party analytics, sets no tracking cookie and runs no fingerprinting. Two first-party records exist in the
+registry's own database (`src/lib/burnticker/productStore.ts`):
 
-- **Search misses** (`search_misses`). A search on the launch page that found no card is logged by the server. A search that showed
-  cards that nobody used before the next search or leaving the page is reported by the page. Each row holds:
+- **Search misses** (`search_miss_counts`, `search_miss_days`). A search on the launch page that found no card is logged by the
+  server. A search that showed cards that nobody used before the next search or leaving the page is reported by the page. They are
+  kept as counts, one row per query per UTC day:
   - the query, folded to plain lowercase words (at most 80 characters; anything that looks like a wallet address, an e-mail address
     or a long number is dropped first);
-  - how many cards it showed;
-  - the reason (no card / no click);
-  - the UTC hour.
+  - how many times that day it found no card, and how many times it found cards nobody used (each count stops at 500);
+  - the last UTC hour it was seen.
+
+  At most 2,000 queries are kept for one day; past that only the day's totals go up. Counts are deleted after 90 days. Rows from the
+  first version (`search_misses`, one row per miss) are kept as they were and no longer written.
 
   There is no IP address, no user or session id, no wallet and no cookie.
 - **Time to launch** (`launch_timings`). When a creator asks for a launch bundle, the page sends how long each wizard step took.

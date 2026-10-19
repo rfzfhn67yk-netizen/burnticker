@@ -335,9 +335,9 @@ describe("cross-host delivery: the webhook sink (the intake end is the operator'
   test("postAlertWebhook: JSON + bearer; non-2xx and network failures come back as outcomes, never throws", async () => {
     const seen: { url: string; auth: string | null; origin: string | null; body: Record<string, unknown> }[] = [];
     const ok = (async (url: string, init?: RequestInit) => { const h = init?.headers as Record<string, string>; seen.push({ url, auth: h.authorization ?? null, origin: h.origin ?? null, body: JSON.parse(String(init?.body)) }); return new Response("{}", { status: 200 }); }) as unknown as typeof fetch;
-    const r = await postAlertWebhook("https://ops.example:3001/alerts/intake", "tok-abcdefghijklmnop", { kind: "bt-test", key: "k", text: "t", meta: { a: 1 }, ts: NIGHT }, ok);
+    const r = await postAlertWebhook("https://ops.example:3001/alerts/intake", "test-token", { kind: "bt-test", key: "k", text: "t", meta: { a: 1 }, ts: NIGHT }, ok);
     assert.deepEqual(r, { ok: true, status: 200, error: null });
-    assert.equal(seen[0].auth, "Bearer tok-abcdefghijklmnop"); assert.deepEqual(seen[0].body, { source: "burnticker", kind: "bt-test", key: "k", text: "t", meta: { a: 1 }, ts: NIGHT });
+    assert.equal(seen[0].auth, "Bearer test-token"); assert.deepEqual(seen[0].body, { source: "burnticker", kind: "bt-test", key: "k", text: "t", meta: { a: 1 }, ts: NIGHT });
     assert.equal(seen[0].origin, "https://ops.example:3001", "an Origin equal to the address called, as the runners send (requireOwnerAction's same-origin check)");
     assert.deepEqual(await postAlertWebhook("https://x", null, { kind: "bt-test", key: "k", text: "t", meta: null, ts: NIGHT }, (async () => new Response("", { status: 503 })) as unknown as typeof fetch), { ok: false, status: 503, error: "HTTP 503" });
     const down = await postAlertWebhook("https://x", null, { kind: "bt-test", key: "k", text: "t", meta: null, ts: NIGHT }, (async () => { throw new Error("ECONNREFUSED"); }) as unknown as typeof fetch);

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { platform, tokenPageData } from "@/lib/burnticker/server";
 import { lookupCoin, sharedTickerBody } from "@/lib/burnticker/coinLookup";
-import { KeyedSwr } from "@/lib/burnticker/keyedSwr";
+import { KeyedSwr, SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
+import { COIN_MAX_STALE_MS, coinFreshness } from "@/lib/burnticker/coinFreshness";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ export const dynamic = "force-dynamic";
  * a launch or a new receipt changes the registry's pageVersion and the next read waits for a fresh build. A first read waits up to
  * COIN_COLD_WAIT_MS, then answers 503 with retry-after (the coin page retries). The browser still never caches it (no-store): the 15 s
  * staleness is the server's only. Nothing here signs: the launch page's signing reads go through their own routes.
+ * 2026-10-18 prelaunch audit F02: the memo now has a maximum age (COIN_MAX_STALE_MS, coinFreshness.ts) and a bounded build time
+ * (keyedSwr.ts SWR_BUILD_TIMEOUT_MS); every answer carries `ageMs`, `marketAgeMs` and `stale`, so the page can date an old snapshot.
  */
 const COIN_MEMO_MS = 15_000, COIN_COLD_WAIT_MS = 12_000, COIN_RETRY_SEC = 3;
 type CoinBody = { status: unknown; receipts: unknown; readings: unknown; rulesText: string; stubs: string[] };
@@ -23,7 +26,7 @@ type CoinBody = { status: unknown; receipts: unknown; readings: unknown; rulesTe
 const memos = new WeakMap<object, KeyedSwr<CoinBody>>();
 const memoFor = (registry: object): KeyedSwr<CoinBody> => {
   let m = memos.get(registry);
-  if (!m) { m = new KeyedSwr<CoinBody>({ freshMs: COIN_MEMO_MS, coldWaitMs: COIN_COLD_WAIT_MS, maxKeys: 256, log: (k, e) => console.error(`[burnticker/tokens] ${k}: the coin's page could not be read:`, e) }); memos.set(registry, m); }
+  if (!m) { m = new KeyedSwr<CoinBody>({ freshMs: COIN_MEMO_MS, coldWaitMs: COIN_COLD_WAIT_MS, maxStaleMs: COIN_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, maxKeys: 256, log: (k, e) => console.error(`[burnticker/tokens] ${k}: the coin's page could not be read:`, e) }); memos.set(registry, m); }
   return m;
 };
 
@@ -45,5 +48,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ ticker: 
   };
   const got = await memoFor(p.registry).get(t.mint, p.registry.pageVersion(t.mint), build);
   if (!got) return NextResponse.json({ loading: true, error: "this coin's page is being read; try again in a few seconds", code: "coin-loading", retryAfterSec: COIN_RETRY_SEC }, { status: 503, headers: { ...NO_STORE, "retry-after": String(COIN_RETRY_SEC) } });
-  return NextResponse.json(got.value, { headers: { ...NO_STORE, "x-coin-memo": got.state } });
+  const fresh = coinFreshness(got, got.value.status);
+  return NextResponse.json({ ...got.value, ...fresh }, { headers: { ...NO_STORE, "x-coin-memo": fresh.stale ? "stale" : got.state } });
 }

@@ -568,7 +568,7 @@ export const ESPN_UA = "burnticker/0.1";
 export const SETTLE_AFTER_START_MS = 6 * 3_600_000;
 
 export interface EspnClientOpts {
-  fetchImpl?: FetchLike; now?: () => number; minIntervalMs?: number; ttlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null;
+  fetchImpl?: FetchLike; now?: () => number; /** the clock a fetch is stamped with (fetchedAt; default `now`): the season rehearsal stamps its moved clock */ fetchClock?: () => number; minIntervalMs?: number; ttlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null;
   /** One read's limit, headers and body together (default SPORTS_FETCH_TIMEOUT_MS). */
   timeoutMs?: number;
   /** The season schedule file's limit (default SEASON_SCHEDULE_TIMEOUT_MS; isSeasonScheduleUrl). */
@@ -679,6 +679,8 @@ export class EspnClient {
   private timeoutMs: number; private scheduleTimeoutMs: number; private failBase: number; private failMax: number;
   readonly apiSportsKey: string | null;
   private cache: LruMap<string, { at: number; body: unknown; ttl?: number }>;
+  /** 2026-10-18 review: when each answer body was fetched (this client's clock), so a cached repeat is never taken for a new read (fetchedAt). */
+  private fetchedBodies = new WeakMap<object, number>(); private fetchClock: () => number;
   /** F-4: per league, the start of its next open game as last read (a failed read of a league with a game near is retried sooner). */
   private nextGameAt = new Map<LeagueId, number>();
   /** H1: per provider (by source id), its own spacing and its own queue. */
@@ -690,7 +692,7 @@ export class EspnClient {
   /** Feeds that refused this process (HTTP 401 or 403): not read again by the reader that marked them (gameSettle.ts crossFinal, the NBA's feed). */
   readonly refusedFeeds = new Set<string>();
   constructor(o: EspnClientOpts = {}) {
-    this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.minInterval = o.minIntervalMs ?? 250; this.ttl = o.ttlMs ?? 600_000;
+    this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.fetchClock = o.fetchClock ?? this.now; this.minInterval = o.minIntervalMs ?? 250; this.ttl = o.ttlMs ?? 600_000;
     this.timeoutMs = o.timeoutMs ?? SPORTS_FETCH_TIMEOUT_MS; this.scheduleTimeoutMs = o.scheduleTimeoutMs ?? SEASON_SCHEDULE_TIMEOUT_MS; this.failBase = o.failBaseMs ?? FAIL_BACKOFF_MS.base; this.failMax = o.failMaxMs ?? FAIL_BACKOFF_MS.max;
     this.cache = new LruMap(o.maxCached ?? 500); this.failures = new LruMap(500);
     this.tsdbKey = o.tsdbKey === undefined ? ((process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null) : o.tsdbKey;
@@ -707,10 +709,15 @@ export class EspnClient {
     const t = this.nextGameAt.get(league);
     return t !== undefined && t - this.now() <= SOON_GAME_WINDOW_MS && t > this.now() - SETTLE_AFTER_START_MS;
   }
+  /**
+   * When an answer body this client returned was fetched (its clock), or null for a body it did not fetch. A cached answer keeps the
+   * time of its fetch, so a game coin's second read of a final is never the first one read again from the cache (gameSettle.ts).
+   */
+  fetchedAt(body: unknown): number | null { return body && typeof body === "object" ? this.fetchedBodies.get(body) ?? null : null; }
   /** GET with the shared politeness and cache; `headers` carry a licensed reader's key (never cached into the key, never logged). */
-  async get(url: string, headers: Record<string, string> = {}, o: { /** the league the read is for (F-4: retried sooner while its next game is near) */ league?: LeagueId; /** this answer's own TTL */ ttlMs?: number; /** a body the provider answered 200 with but that says it failed: its message, else null */ refuse?: (body: unknown) => string | null } = {}): Promise<unknown> {
+  async get(url: string, headers: Record<string, string> = {}, o: { /** the league the read is for (F-4: retried sooner while its next game is near) */ league?: LeagueId; /** this answer's own TTL */ ttlMs?: number; /** a body the provider answered 200 with but that says it failed: its message, else null */ refuse?: (body: unknown) => string | null; /** skip the cache: a game coin's confirming read (gameSettle.ts) must be a new fetch */ fresh?: boolean } = {}): Promise<unknown> {
     const hit = this.cache.get(url);
-    if (hit && this.now() - hit.at < (hit.ttl ?? this.ttl)) return hit.body;
+    if (hit && !o.fresh && this.now() - hit.at < (hit.ttl ?? this.ttl)) return hit.body;
     // H1: a recent failure is answered from memory (with its own words) until its backoff ends
     const failed = this.failures.get(url);
     if (failed && this.now() < failed.until) throw new Error(failed.message);
@@ -729,7 +736,10 @@ export class EspnClient {
         const body = await res.json();
         const refused = o.refuse?.(body) ?? null;
         if (refused) { refusedBody = true; throw new Error(refused); }
-        this.cache.set(url, { at: this.now(), body, ...(o.ttlMs ? { ttl: o.ttlMs } : {}) }); this.failures.delete(url); return body;
+        const at = this.now();
+        this.cache.set(url, { at, body, ...(o.ttlMs ? { ttl: o.ttlMs } : {}) }); this.failures.delete(url);
+        if (body && typeof body === "object") this.fetchedBodies.set(body, this.fetchClock());
+        return body;
       } catch (e) {
         const timedOut = (e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError";
         const message = timedOut ? `timed out after ${Math.round(limitMs / 1000)} s for ${redactKey(url).slice(0, 120)}` : (e as Error).message;

@@ -141,7 +141,7 @@ const CHAMP_WORDS = /\b(world series|championship|champions?|title|super ?bowl|s
 /** Who settles a team coin's game, in words (gameSettle.ts): never ESPN. */
 export const SPORTS_SETTLEMENT = "the game's on-chain payout where a market exists, else a licensed final score";
 /** Who settles a single game (a game coin, two teams in one game; owner 2026-10-16) and when, in words. */
-export const GAME_SETTLEMENT_WORDS = "a licensed final score, the league's own feed, or the game's on-chain settlement; it burns once two sources agree on the final, or 12 hours after the first final if only one source answers";
+export const GAME_SETTLEMENT_WORDS = "a licensed final score, the league's own feed, or the game's on-chain settlement; it burns once two sources agree on the final, or once one source has shown the same final twice a few minutes apart";
 export const GAME_CROSS_WORDS = "every source that answers must agree; a disagreement holds the burn";
 const CROSS_NAME_: Partial<Record<LeagueId, string>> = { nhl: "NHL's official scores", mlb: "MLB's official feed", nba: "NBA's official feed" };
 const OFFICIAL_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official postseason results (statsapi.mlb.com)", nba: "the NBA's official results (nba.com)", nhl: "the NHL's official results (nhl.com)", nfl: "the league's official results" };

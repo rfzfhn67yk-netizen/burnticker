@@ -4,7 +4,7 @@
   "observed": "NoPendingChange",
   "match": true,
   "exitCode": 0,
-  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts apply-attesters --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX",
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts apply-attesters --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX",
   "simulationErr": "{\"InstructionError\":[1,{\"Custom\":6033}]}",
   "errorLogLines": [
     "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/admin.rs:145. Error Code: NoPendingChange. Error Number: 6033. Error Message: no attester change is pending.",

@@ -10,6 +10,6 @@ cd "$(dirname "$0")/../.."
 load_env_local .
 export BURNTICKER_DB="${BURNTICKER_DB:-data/burnticker.db}"
 export BURNTICKER_PUBLISH_DIR="${BURNTICKER_PUBLISH_DIR:-data/burnticker-site}"
-if [ ! -f "$BURNTICKER_DB" ]; then echo "[$(date '+%Y-%m-%d %H:%M:%S')] no registry at $BURNTICKER_DB yet — nothing to audit"; exit 0; fi
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] burnticker audit (registry $BURNTICKER_DB → $BURNTICKER_PUBLISH_DIR/audit.json)"
+if [ ! -f "$BURNTICKER_DB" ]; then echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] no registry at $BURNTICKER_DB yet — nothing to audit"; exit 0; fi
+echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] burnticker audit (registry $BURNTICKER_DB → $BURNTICKER_PUBLISH_DIR/audit.json)"
 exec node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-audit.mts "$@"

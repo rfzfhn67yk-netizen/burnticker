@@ -69,6 +69,7 @@ import { KeeperOps } from "../src/lib/burnticker/ops/keeperOps.ts";
 import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
+import { Heartbeat, heartbeatUrlFromEnv, heartbeatVerdict } from "../src/lib/burnticker/ops/heartbeat.ts";
 import { runUnitCheck } from "../src/lib/burnticker/ops/unitHealth.ts";
 import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 // BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
@@ -138,8 +139,9 @@ const polymarket = new PolymarketClient({ refuse: (titles) => [...new Set(refusa
 // ONE SOURCE (owner 2026-10-14): a final game with no Polymarket market and no league feed settles on TheSportsDB alone after its score
 // has stood 12 hours. The first-seen score and time persist in the registry's status table (statusHoldStore), so a restart keeps the
 // hold. Measure only: each such settlement is logged, and the first one per coin raises bt-single-source (push.ts) for the owner.
-// GAME COINS (owner 2026-10-16): a single-game coin burns once two sources agree on its final, else 12 hours after its first read; that first-read time
-// persists in the status table (statusFirstReadStore, games.firstReads), so a restart keeps the clock and a pair's two coins share it.
+// GAME COINS (owner 2026-10-16, 2026-10-18 evening): a single-game coin burns once two sources agree on its final, else once one source
+// has shown the same final on two reads a few minutes apart; each source's reads persist in the status table (statusFirstReadStore,
+// games.firstReads), so a restart keeps them and a pair's two coins share them.
 setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket), holds: statusHoldStore(registry), firstReads: statusFirstReadStore(registry), now: () => Date.now(),
   onSingleSource: (e) => {
     log(`  [single-source] ${e.seriesId ?? "?"} ${e.game.name} ${e.game.date}: ${e.final.away}–${e.final.home} (away–home), ${e.settledBy}, first seen ${new Date(e.heldSince).toISOString()}`);
@@ -273,6 +275,8 @@ async function publishAll(now: number): Promise<void> {
 // and ops.json — the morning check's block published into the public site so the check-in on another host can read it.
 const tracker = new CrankFailureTracker();
 const { sink, state: webhook } = sinkFromEnv(process.env, { log, local: registryAlertSink(registry) });
+// second audit 2026-10-18 A-7: an off-box monitor's ping URL, GET once per cycle (ops/heartbeat.ts); the URL itself is never logged
+const heartbeat = new Heartbeat(heartbeatUrlFromEnv(process.env), fetch, log);
 let lastAlertAt = 0;
 let heldNotedDay = "";
 let holdLiftNoted = true;
@@ -290,15 +294,18 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   if (cycleCache) { const c = cycleCache.stats; log(`  [cycle-cache] ${cycleCache.addresses().length} account(s) prefetched per cycle in ${Math.ceil(cycleCache.addresses().length / 100)} call(s); since start: ${c.cycles} cycle(s), ${c.served} read(s) served, ${c.passed} sent to the RPC, ${c.invalidations} drop(s) after a send`); }
   for (const a of r.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);
   for (const a of await ops.alerts(sink, now)) log(`  [alert] ${a.slice(0, 160)}`);
-  for (const a of (await runUnitCheck({ sink, now, log })).raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);   // audit 2026-10-16 F-5: failed units, backups
+  const unitCheck = await runUnitCheck({ sink, now, log });
+  for (const a of unitCheck.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);   // audit 2026-10-16 F-5: failed units, backups
   try { const p = await runPushCheck({ registry, env: process.env, now, log }); for (const m of p.sent) log(`  [push] ${m.kind}: ${m.title}`); } catch (e) { log(`  [push] check failed: ${(e as Error).message.slice(0, 160)}`); }
   const launched = registry.tokens("live").map((t) => Date.parse(t.baselineAt)).filter((x) => Number.isFinite(x));
   let alerts: { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }[] | null = null;
   try { alerts = registryAlertRows(registry, now); } catch { alerts = null; }
   // F06: ops.json's conditions come from the one aggregator (keeper-level + per-source health); the memory feeds "recovered"
   const health = ops.feedHealth(), memory = readConditionMemory(registry);
-  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory }));
-  try { registry.setStatus(CONDITIONS_KEY, foldConditions(memory, activeConditions(r.snapshot, health), now), now); } catch (e) { log(`  [ops] condition memory not written: ${(e as Error).message.slice(0, 120)}`); }
+  // second audit 2026-10-18 A-7: failed units, backups and budget holds are conditions too (a keeper refusal is read from the alert rows)
+  const signals = { units: unitCheck.active, budget: budget.lines() };
+  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state }));
+  try { registry.setStatus(CONDITIONS_KEY, foldConditions(memory, activeConditions(r.snapshot, health, { ...signals, alerts, lastCycleAt: r.snapshot?.lastCycle?.at ?? null }), now), now); } catch (e) { log(`  [ops] condition memory not written: ${(e as Error).message.slice(0, 120)}`); }
 }
 
 log(`burnticker keeper starting — ${registry.tokens("live").length} live token(s) · ledger ${DB} · site ${SITE} · ${cluster}${DRY ? " · DRY RUN" : ""} · program ${program.programId} (${built.real ? `REAL: ${built.why}` : `FAKE — ${built.why}; nothing is sent`}) · ${ops.banner()} · alerts ${ALERTS ? `every ${ALERT_EVERY_MS / 60_000} min${RPC ? " with balances" : " (no BURNTICKER_RPC_URL: balances unknown)"}${webhook.configured ? " → webhook" : " (no BURNTICKER_ALERT_WEBHOOK: local only)"}${pushConfigFromEnv(process.env) ? " + phone push" : ""}` : "off (--once)"}`);
@@ -354,6 +361,9 @@ while (!stopping) {
   await ops.afterCycle(cycleReport, paused, ALERTS ? sink : null);
   try { const w = writeOwnTokensGenerated(registry, process.env.OWN_TOKENS_GENERATED_PATH?.trim() || undefined); if (w.changed) log(`  [refuse-list] ${w.file} rewritten: ${w.count} platform token(s) — the arms re-read it on their next candidate`); } catch (e) { log(`  [refuse-list] not written: ${(e as Error).message.slice(0, 160)}`); }
   budget.flush();
+  // one bounded GET per cycle, never throws (A-7): ok for a completed cycle whose errors are per coin or fence holds, fail when the cycle
+  // failed or every live coin errored, nothing otherwise (ops/heartbeat.ts heartbeatVerdict; review and re-review, 2026-10-18)
+  await heartbeat.beat(Date.now(), heartbeatVerdict(cycleReport, registry.tokens("live")));
   budget.setPhase("ops");
   if (ALERTS && Date.now() - lastAlertAt >= ALERT_EVERY_MS) { lastAlertAt = Date.now(); try { await opsCheck(lastAlertAt, paused); } catch (e) { log(`  [alert] check failed: ${(e as Error).message.slice(0, 160)}`); } }
   if (ONCE) break;

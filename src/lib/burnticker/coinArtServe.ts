@@ -12,6 +12,8 @@ import { lookupCoin, sharedTickerText } from "@/lib/burnticker/coinLookup";
  */
 const cache = new Map<string, { body: Uint8Array; type: string }>();
 const MAX = 500;
+/** The longest base64url rule a preview takes (a pair side's rule with every field set is well under it). */
+export const PREVIEW_RULE_MAX_CHARS = 16_000;
 
 /** `<TICKER>.svg` while one coin holds the ticker, `<MINT>.svg` always; a ticker several coins share answers 300 naming their mints (owner 2026-10-12). */
 export async function coinImage(o: { registry: Pick<Registry, "token" | "tokenByTicker" | "tokensByTicker" | "lockedRule">; file: string; query: URLSearchParams }): Promise<{ status: number; body: Uint8Array | string; type: string }> {
@@ -21,6 +23,8 @@ export async function coinImage(o: { registry: Pick<Registry, "token" | "tokenBy
   let ticker: string, rule, sha: string, oneLiner: string | null = null;
   try {
     if (name === "preview") {
+      // audit 2026-10-18 A-42: the encoded rule is capped before it is decoded and parsed (a real rule is a few kilobytes)
+      if ((o.query.get("r") ?? "").length > PREVIEW_RULE_MAX_CHARS) return { status: 400, body: "The rule in this address is too long to draw.", type: "text/plain; charset=utf-8" };
       const raw = Buffer.from(o.query.get("r") ?? "", "base64url").toString("utf8");
       const locked = lockRule(JSON.parse(raw), { stored: true });
       ticker = (o.query.get("t") ?? "TICKER").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) || "TICKER";

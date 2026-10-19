@@ -13,7 +13,7 @@ const obj = (properties: Record<string, Schema>, required: string[] = [], extra:
 const PUBKEY: Schema = { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" };
 
 export const PRODUCT_SCHEMAS: Record<string, Schema> = {
-  SearchMissReport: obj({ query: str, cards: int }, ["query", "cards"], { description: "A search that showed cards but got no \"Use this\" click before the person searched again or left. Anonymous: the query is folded to plain words, the hour bucketed; no IP, no id." }),
+  SearchMissReport: obj({ query: str, cards: int }, ["query", "cards"], { description: "A search that showed cards but got no \"Use this\" click before the person searched again or left. Anonymous: the query is folded to plain words and counted per day; no IP, no id." }),
   SearchMissAck: obj({ ok: bool, stored: bool, note: str }, ["ok", "stored"]),
   OpsSearchMisses: obj({
     days: int,
@@ -31,7 +31,7 @@ export const PRODUCT_SCHEMAS: Record<string, Schema> = {
 };
 
 export const PRODUCT_ENDPOINTS = [
-  { operationId: "reportSearchMiss", method: "POST" as const, path: "/search/miss", tag: "platform", summary: "Report a search where no card was used, without any name attached", description: "Since 1.6.0. The launch page sends this when a search showed cards but none was used. A search with no card is logged by the server itself. Stored append-only, without IP, id or cookie.", params: [], request: "SearchMissReport", response: "SearchMissAck", errors: [400, 403, 415, 429], cacheSec: 0, bucket: "read" as const },
+  { operationId: "reportSearchMiss", method: "POST" as const, path: "/search/miss", tag: "platform", summary: "Report a search where no card was used, without any name attached", description: "Since 1.6.0. The launch page sends this when a search showed cards but none was used. A search with no card is logged by the server itself. Kept as a daily count per query, without IP, id or cookie.", params: [], request: "SearchMissReport", response: "SearchMissAck", errors: [400, 403, 415, 429], cacheSec: 0, bucket: "read" as const },
   { operationId: "getOpsSearchMisses", method: "GET" as const, path: "/ops/search-misses", tag: "platform", summary: "Searches that found nothing, and time to launch, for the operator only", description: "Since 1.6.0. Answers only on the operator's own network with the x-action-pin header: missed searches by query, and p50 / p90 seconds per wizard step from the timings sent with launch bundles.", params: [{ name: "days", in: "query" as const, required: false, description: "1–90 (default 7)", schema: { type: "integer" } }], request: null, response: "OpsSearchMisses", errors: [401, 403, 429, 503], cacheSec: 0, bucket: "read" as const },
   { operationId: "getCreator", method: "GET" as const, path: "/creators/{wallet}", tag: "tokens", summary: "A creator's coins and pairs, read-only", description: "Since 1.6.0. Every coin whose creator wallet matches: state, queued units, next settlement, last reading and how many independent reads confirmed it, receipts, wind-down, and today's lint-checked post to copy. No signing, no posting.", params: [{ name: "wallet", in: "path" as const, required: true, description: "the creator's public key", schema: PUBKEY }], request: null, response: "Creator", errors: [400, 429], cacheSec: 30, bucket: "read" as const },
 ];

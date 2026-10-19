@@ -3,6 +3,9 @@
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
+// Every test process opens its databases and publish directories in its own temporary directory, never ./data of the checkout it
+// runs in (test/test-isolation.mjs; 2026-10-18 prelaunch audit A-13). Imported before anything else.
+import "./test-isolation.mjs";
 
 // Burnticker's creation preflight runs the selector LIVE (network) and is strict by default; the suite's launch tests run on
 // fixtures, so it is off inside test workers. The preflight tests (test/burntickerCoverage.test.ts) pass strict: true explicitly.

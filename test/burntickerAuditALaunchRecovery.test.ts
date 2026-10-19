@@ -136,7 +136,8 @@ describe("C1 · the browser confirm judges the 24 h window on the create's block
     assert.equal((await markLaunched(p, t.mint, s58(5000), now + 400, "creator")).status, 404, "the creator is still checked");
     // the per-mint ceiling counts transactions on chain signed by this coin's mint and creator (refused for their content)
     const b58 = (k: number) => { const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; let o = ""; do { o = A[k % 58] + o; k = Math.floor(k / 58); } while (k > 0); return (o + "x".repeat(88)).slice(0, 88); };
-    const onChain = platformOf(reg, { verify: async () => ({ ok: false, status: 422, reason: "the TokenConfig on chain locks another rule" }) });
+    // F05 (2026-10-18): only an answer that says the coin's mint and creator signed it takes a slot
+    const onChain = platformOf(reg, { verify: async () => ({ ok: false, status: 422, belongsToExpectedSigners: true, reason: "the TokenConfig on chain locks another rule" }) });
     for (let i = 0; i < CONFIRM_VERIFY_PER_MINT_HOUR; i++) await markLaunched(onChain, t.mint, b58(2000 + i), now + 500 + i, `d${i}`);
     assert.equal((await markLaunched(onChain, t.mint, b58(6000), now + 600, "creator")).status, 429);
     assert.equal((await markLaunched(onChain, t.mint, b58(6000), now + 3_600_700, "creator")).status, 422, "an hour later it is checked again");

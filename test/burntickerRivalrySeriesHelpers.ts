@@ -35,7 +35,7 @@ export const END_DAY = "2026-05-21";
 /** After both seasons and the 4-day grace. */
 export const AFTER = Date.parse("2026-06-01T12:00:00Z");
 
-/** `now`: the world's clock, which a game coin's 12 hours after the first read (gameSettle.ts gameSchedule) is measured on. */
+/** `now`: the world's clock, which a game coin's two reads of its final (gameSettle.ts gameSchedule) are measured on. */
 export function fakeDeps(games: readonly G[], now: () => number = Date.now): GameDeps {
   return {
     tsdbKey: null, apiSportsKey: null, firstReads: memoryFirstReadStore(), now,

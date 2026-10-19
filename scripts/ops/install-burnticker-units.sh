@@ -16,11 +16,16 @@
 # mct-burnticker-backup.timer (2026-10-16, audit F-7) is enabled and started here: every 6 hours a sqlite .backup of the registry, the
 # $DEFICIT ledger and the mint key bank into data/backups/ (keep 14, quick_check), copied off the box to BURNTICKER_BACKUP_DEST when the
 # owner has named one (until then the log says the off-box copy is skipped). Needs the sqlite3 CLI (apt install sqlite3).
+# mct-burnticker-logrotate.timer (2026-10-18, audit A-32) is enabled and started here: daily, logs/*.log rotated (keep 14, compressed,
+# copytruncate) by the service user's own logrotate run. The config is deploy/logrotate/burnticker with this directory, the user and
+# its group filled in (scripts/ops/render-logrotate.mjs), checked with `logrotate -d`, written to ~/.config/burnticker/logrotate.conf;
+# its state file is ~/.local/state/burnticker-logrotate.status. Without /usr/sbin/logrotate the install STOPS before changing anything
+# (apt install logrotate; Ubuntu has it).
 set -eu
 cd "$(dirname "$0")/../.."
-UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer mct-burnticker-backup.service mct-burnticker-backup.timer mct-burnticker-synth.service mct-burnticker-synth.timer mct-burnticker-synthbank.service mct-burnticker-synthbank.timer"
+UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer mct-burnticker-backup.service mct-burnticker-backup.timer mct-burnticker-logrotate.service mct-burnticker-logrotate.timer mct-burnticker-synth.service mct-burnticker-synth.timer mct-burnticker-synthbank.service mct-burnticker-synthbank.timer"
 ENABLE="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service"
-TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer mct-burnticker-backup.timer"
+TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer mct-burnticker-backup.timer mct-burnticker-logrotate.timer"
 CHECK=0; START=0
 for a in "$@"; do case "$a" in --check) CHECK=1 ;; --start) START=1 ;; *) echo "unknown flag $a"; exit 2 ;; esac; done
 if [ "$(uname -s)" != "Linux" ]; then echo "systemd user units are a Linux thing; on the Mac nothing to install (the keepers run on the Burnticker VPS)"; exit 0; fi
@@ -29,6 +34,8 @@ say() { printf '%s\n' "$*"; }
 act() { if [ "$CHECK" = 1 ]; then say "  would: $*"; else say "  $*"; "$@"; fi; }
 
 say "burnticker units → $DEST ($([ "$CHECK" = 1 ] && echo CHECK ONLY || echo applying))"
+# the log rotation timer runs /usr/sbin/logrotate: without it every daily run would fail, so the install stops here, before any change
+if [ ! -x /usr/sbin/logrotate ]; then say "STOP: /usr/sbin/logrotate is not installed, and mct-burnticker-logrotate needs it. As root: apt install logrotate, then run this again. Nothing was changed."; exit 1; fi
 for d in logs data data/burnticker-site data/burnkeeper-site data/backups; do [ -d "$d" ] || act mkdir -p "$d"; done
 [ -d "$DEST" ] || act mkdir -p "$DEST"
 CHANGED=0
@@ -37,6 +44,24 @@ for u in $UNITS; do
   [ -f "$src" ] || { say "  MISSING in the repo: $src"; exit 1; }
   if [ -f "$DEST/$u" ] && cmp -s "$src" "$DEST/$u"; then say "  unchanged: $u"; else act cp "$src" "$DEST/$u"; CHANGED=1; fi
 done
+# the log rotation config: the repo's template with this directory (logrotate wants absolute paths), the service user and its group
+# filled in as plain text by render-logrotate.mjs (never sed: a `&`, `|` or `\` in the path would be rewritten), checked with
+# `logrotate -d` (reads and reports only; a scratch state file) before it replaces anything, and the state file's directory
+LR_DEST="$HOME/.config/burnticker/logrotate.conf"
+LR_NEW=$(mktemp); LR_STATE=$(mktemp)
+node scripts/ops/render-logrotate.mjs deploy/logrotate/burnticker "$(pwd)" "$(id -un)" "$(id -gn)" > "$LR_NEW" || { rm -f "$LR_NEW" "$LR_STATE"; say "STOP: the log rotation config could not be written for this directory (above)"; exit 1; }
+if ! /usr/sbin/logrotate -d --state "$LR_STATE" "$LR_NEW" > "$LR_NEW.check" 2>&1 || grep -qi '^error' "$LR_NEW.check"; then
+  sed 's/^/    /' "$LR_NEW.check" | tail -15; rm -f "$LR_NEW" "$LR_NEW.check" "$LR_STATE"
+  say "STOP: logrotate -d rejected the rendered config (above); nothing was replaced"; exit 1
+fi
+say "  logrotate -d: the rendered config is valid"
+rm -f "$LR_NEW.check" "$LR_STATE"
+if [ -f "$LR_DEST" ] && cmp -s "$LR_NEW" "$LR_DEST"; then say "  unchanged: $LR_DEST"; else
+  [ -d "$(dirname "$LR_DEST")" ] || act mkdir -p "$(dirname "$LR_DEST")"
+  act cp "$LR_NEW" "$LR_DEST"
+fi
+rm -f "$LR_NEW"
+[ -d "$HOME/.local/state" ] || act mkdir -p "$HOME/.local/state"
 # 2026-10-14: run as the service user without a session bus (sudo -u mct from root), systemctl --user cannot reach the bus; point it at
 # the user's runtime dir so enable/start work either way
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -z "${XDG_RUNTIME_DIR:-}" ]; then export XDG_RUNTIME_DIR="/run/user/$(id -u)"; export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"; fi

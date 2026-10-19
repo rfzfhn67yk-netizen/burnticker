@@ -40,6 +40,7 @@ import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burntick
 import type { LifecycleDatesJson, PoolMarketJson, StatedJson } from "@/lib/burnticker/pageTypes";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { coinSourceNote, nextTimeRow } from "@/lib/burnticker/coinSourceLine";
+import { COIN_POLL_MS, COIN_STALE_POLL_MS, snapshotView, staleSnapshotLine, withholdStaleMarket } from "@/lib/burnticker/coinFreshness";
 import { CHOOSER_COPY, chooserRows, isMintKey, type CoinCandidate } from "@/lib/burnticker/coinKey";
 import type { DerbyScoreboard } from "@/lib/burnticker/derby/spec";
 import { BurnCalendar, ReceiptEmbed, ScoreboardCard } from "./CoinFeatures";
@@ -66,7 +67,7 @@ interface Receipt { eventId: string; settledAt: string; oracle: string; market: 
 /** status.json `lp` (LP locked forever, 2026-10-10; src/lib/burnticker/lockFees.ts LpLockJson). */
 interface LpBlock { policy: string; lockProgram: string; feeKey: string | null; feeKeyOwner: string | null; lockedLiquidity: string | null; lockedPct: number; split: { burnBps: number; operatorBps: number }; operatorTreasury: string | null; lastClaim: { at: string; line: string; txUrl: string | null } | null; totals: { claims: number; sol: string; toBurnPool: string; toOperator: string }; urls: { lockProgram: string | null; feeKey: string | null; feeKeyOwner: string | null; lockedLiquidity: string | null; operatorTreasury: string | null }; line: string; note: string | null }
 interface Reading { id: string; at: string; result: string | null; value: string | null; title: string | null }
-interface Data { status: Status & { lifecycle?: { line: string } | null; stated?: StatedJson | null; /** website-26 (WIRING-FEATURES item 12) */ derbyScoreboard?: DerbyScoreboard | null }; receipts: Receipt[]; readings: Reading[]; rulesText: string; stubs: string[] }
+interface Data { status: Status & { lifecycle?: { line: string } | null; stated?: StatedJson | null; /** website-26 (WIRING-FEATURES item 12) */ derbyScoreboard?: DerbyScoreboard | null }; receipts: Receipt[]; readings: Reading[]; rulesText: string; stubs: string[]; /** audit 2026-10-18 F02: the route's freshness fields (coinFreshness.ts) and when this page received the answer */ ageMs?: number; marketAgeMs?: number | null; stale?: boolean; receivedAt: number }
 
 // F-24: a field missing from an older status file is a dash, never a crash (safeFormat.ts)
 const fmt = (s: unknown) => grouped(s);
@@ -125,23 +126,37 @@ export default function TokenPage() {
   const [tab, setTab] = useState<CoinTab>("burns");
   // owner 2026-10-12, tickers are not unique: the segment is a mint or a ticker, and a ticker several coins share answers 300 with the coins
   const [choices, setChoices] = useState<{ ticker: string; candidates: CoinCandidate[] } | null>(null);
-  // 2026-10-15: a coin read for the first time answers 503 "coin-loading" after a bounded wait (the route's memo); the page asks again
+  // the freshness clock: the snapshot's age is re-judged at each re-read, whether it succeeds or fails (nothing on the page counts down)
+  const [tick, setTick] = useState(() => Date.now());
+  // 2026-10-15: a coin read for the first time answers 503 "coin-loading" after a bounded wait (the route's memo); the page asks again.
+  // Audit 2026-10-18 F02: the mounted page asks again every COIN_POLL_MS (COIN_STALE_POLL_MS while the answer is stale), so a refresh
+  // that lands on the server reaches the page without a reload; a failed re-read keeps the last answer and lets its age show.
   useEffect(() => {
-    let gone = false, timer: ReturnType<typeof setTimeout> | undefined;
-    const load = (tries: number): void => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (gone) return; if (r.status === 300) { setChoices(j); return; } if (r.status === 503 && j?.code === "coin-loading" && tries < 6) { timer = setTimeout(() => load(tries + 1), Math.max(1, Number(j.retryAfterSec) || 3) * 1000); return; } if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => { if (!gone) setErr(String(e.message ?? e)); }); };
+    // review follow-up: no re-read while the tab is hidden (the next one runs when it is shown again), and none after a 404 or a 300
+    let gone = false, have = false, waiting = false, timer: ReturnType<typeof setTimeout> | undefined;
+    const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+    const again = (ms: number) => { setTick(Date.now()); clearTimeout(timer); timer = setTimeout(() => { if (hidden()) { waiting = true; return; } load(0); }, ms); };
+    const onVisible = () => { if (waiting && !hidden() && !gone) { waiting = false; load(0); } };
+    document.addEventListener("visibilitychange", onVisible);
+    const load = (tries: number): void => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`, { cache: "no-store" }).then(async (r) => { const j = await r.json(); if (gone) return; if (have && (r.status === 404 || r.status === 300)) return; if (have && !r.ok) { again(COIN_STALE_POLL_MS); return; } if (r.status === 300) { setChoices(j); return; } if (r.status === 503 && j?.code === "coin-loading" && tries < 6) { timer = setTimeout(() => load(tries + 1), Math.max(1, Number(j.retryAfterSec) || 3) * 1000); return; } if (!r.ok) throw new Error(j.error ?? r.statusText); have = true; const at = Date.now(); setD({ ...j, receivedAt: at }); again(j?.stale ? COIN_STALE_POLL_MS : COIN_POLL_MS); }).catch((e) => { if (gone) return; if (have) { again(COIN_STALE_POLL_MS); return; } setErr(String(e.message ?? e)); }); };
     load(0);
-    return () => { gone = true; clearTimeout(timer); };
+    return () => { gone = true; clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, [ticker]);
   // website-17 wiring item 1: the rank line from the creator summary; nothing when the read fails (never a guessed rank)
   const [rank, setRank] = useState<string | null>(null);
-  useEffect(() => { const c = d?.status.addresses.creator, t = d?.status.ticker; if (!c || !t) return; fetch(`/burnticker/creator/${encodeURIComponent(c)}/summary`).then((r) => (r.ok ? r.json() : null)).then((j: { coins?: { ticker: string; rank: string | null }[] } | null) => setRank(j?.coins?.find((x) => x.ticker === t)?.rank ?? null)).catch(() => setRank(null)); }, [d]);
+  const rankCreator = d?.status.addresses.creator, rankTicker = d?.status.ticker;
+  useEffect(() => { const c = rankCreator, t = rankTicker; if (!c || !t) return; fetch(`/burnticker/creator/${encodeURIComponent(c)}/summary`).then((r) => (r.ok ? r.json() : null)).then((j: { coins?: { ticker: string; rank: string | null }[] } | null) => setRank(j?.coins?.find((x) => x.ticker === t)?.rank ?? null)).catch(() => setRank(null)); }, [rankCreator, rankTicker]);
   const hasHolders = !!d?.status.market?.holders.top10?.length;
-  useEffect(() => { if (d) setTab(initialTab(window.location.hash, coinTabs(hasHolders))); }, [d, hasHolders]);
+  // the page re-reads its answer (F02 above), so the first tab is chosen once the coin has loaded, not on every re-read
+  const loaded = !!d;
+  useEffect(() => { if (loaded) setTab(initialTab(window.location.hash, coinTabs(hasHolders))); }, [loaded, hasHolders]);
   // review 2 §2: a ticker this host has no record of explains itself (and $DEFICIT links its served page) instead of a bare error line
   if (choices) return <TickerChooser ticker={choices.ticker} candidates={choices.candidates} />;
   if (err) return /no token/i.test(err) ? <NotRegistered ticker={ticker} /> : <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="unavailable" body={`The page for $${ticker.toUpperCase()} could not be read just now.`} details={err} /></main>;
   if (!d) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="loading" /></main>;
-  const s = d.status, m = s.market, prof = s.profile;
+  // audit 2026-10-18 F02: past COIN_MAX_STALE_MS the numbers are a dated snapshot; the curve's progress and the pool's reserves are withheld
+  const snap = snapshotView(d, d.receivedAt, tick);
+  const s = d.status, m = snap.stale && d.status.market ? withholdStaleMarket(d.status.market, snap.ageMs) : d.status.market, prof = s.profile;
   // the coin's own links: by mint when it was opened by its mint, else by its ticker (one coin holds it, or the API would have listed several)
   const key = isMintKey(ticker) ? ticker : s.ticker;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
@@ -160,7 +175,7 @@ export default function TokenPage() {
   // ChatGPT audit 6 A10: the market facts this site read, and Burnticker's own facts, equally legible; a dash with a reason for the rest
   const market = marketFacts({ cluster: s.cluster, status: s.status, mint: s.mint, mintUrl: s.addresses.mintUrl, creator: s.addresses.creator, creatorUrl: s.addresses.creatorUrl, launchedAt: s.launchedAt, phase: m?.phase ?? null, curve: m?.curve ?? null, curveNote: m?.curveNote ?? null, graduatedPool: m?.graduatedPool ?? null, holdersCount: m?.holders.count ?? null, holdersNote: m?.holders.countNote ?? "This site has not read the holders.", pool: m?.pool ?? null, poolNote: m?.poolNote ?? null, dates: m?.dates ?? null, feesCurveBps: s.fees.curve.totalBps, feesPoolBps: s.fees.postGraduation.totalBps, readAt: m?.readAt ?? null });
   const latest = [...d.receipts].filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => String(b.settledAt).localeCompare(String(a.settledAt)))[0] ?? null;
-  const nextRow = nextTimeRow(s.next.nextCloseTime, s.next.nextCheckAt);
+  const nextRow = nextTimeRow(s.next.nextCloseTime, s.next.nextCheckAt, tick);
   const burnFacts: FactRow[] = [
     { key: "trigger", label: "What fires the rule", value: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, note: latest?.settlementSourceUrl ? "The source of the latest result is linked." : coinSourceNote(s.oracle, s.selectorKey), href: latest?.settlementSourceUrl ?? null },
     { key: "next", label: nextRow.label, value: nextRow.value, note: nextRow.note, more: SETTLEMENT_LINK },
@@ -234,7 +249,7 @@ export default function TokenPage() {
             <p className="mt-2 text-xs text-neutral-400">{m?.phase === "graduated" ? `The bonding curve is complete. At graduation, all of the liquidity was locked forever. $${s.ticker} now trades in a Raydium pool${m.graduatedPool ? ` (${short(m.graduatedPool)})` : ""}.` : m?.curve ? `${fixed(m.curve.remaining)} ${m.curve.quote} to go before graduation. When the curve fills, the coin moves to a Raydium pool and its liquidity is locked forever. The pool's fees fund the burn.` : <span title={m?.curveNote}>{m?.curveNote ?? "The curve has not been read."}</span>}</p>
             {preBurn && <p className="mt-2 text-xs text-neutral-300" data-burns-after-graduation>{afterGraduation}</p>}
             {/* launch night 2026-10-13: a draft has no pool and no supply yet, so the pool line is left out */}
-            {s.status !== "draft" && s.status !== "expired" && <p className="mt-2 text-[11px] text-neutral-500">{m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC.` : "This site has not read the pool."} {fixed(typeof s.burned?.pctOfSupply === "number" ? 100 - s.burned.pctOfSupply : NaN)}% of the supply is left.</p>}
+            {s.status !== "draft" && s.status !== "expired" && <p className="mt-2 text-[11px] text-neutral-500">{snap.stale ? <span data-stale-snapshot>{m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC. ` : ""}{staleSnapshotLine(snap.ageMs)}</span> : m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC.` : "This site has not read the pool."} {fixed(typeof s.burned?.pctOfSupply === "number" ? 100 - s.burned.pctOfSupply : NaN)}% of the supply is left.</p>}
           </section>
 
           <section className={card} aria-label="Progress"><h2 className="mb-2 text-xs font-mono uppercase tracking-widest text-neutral-500">Where this coin stands</h2><ProgressStrip p={progressOf(ready, { raiseSol: m?.curve ? Number(m.curve.threshold) : null, raisedSol: m?.curve ? Number(m.curve.raised) : null, queuedUnits: s.ticker === "DEFICIT" && home.data?.deficitQueue.state === "queued" ? home.data.deficitQueue.units : null })} /></section>

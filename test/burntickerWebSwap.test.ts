@@ -139,6 +139,59 @@ describe("F02: swap-web-build.sh smokes the staged build and swaps back on failu
     assert.match(dead.out, /the web unit's process did not change across the restart \(before: pid=0 ts=\d+, now: pid=0 ts=\d+\)/);
   });
 
+  // FOURTH PRELAUNCH AUDIT F01 (2026-10-18): a restart command that itself exits non-zero skipped the smoke, hit an unbound $WHY under
+  // set -u and never reached the swap back, so the failed build stayed selected. A failed restart now takes the same rollback path.
+  const flaky = () => { const n = path.join(dir, "restart-count"), log = path.join(dir, "restarts.log");
+    // the first call fails without restarting anything; every later call restarts (appends to the log) and succeeds
+    return `n=$(cat ${n} 2>/dev/null || echo 0); n=$((n + 1)); echo $n > ${n}; [ $n -ge 2 ] || exit 3; echo restart >> ${log}`; };
+  test("F01: the first restart fails and the rollback restart works: the old build serves again, the exit is non-zero, it says SWAPPED BACK", async () => {
+    const d = host({ newMode: "ok" });
+    const r = await run(4, flaky());
+    assert.notEqual(r.code, 0, r.out);
+    assert.doesNotMatch(r.out, /unbound variable/, r.out);
+    assert.match(r.out, /WEB SMOKE FAILED for build new-build-2 .*the restart command failed \(exit 3\)/, r.out);
+    assert.match(r.out, /SWAPPED BACK: the failed build is in \.next-failed/);
+    assert.match(r.out, /ROLLED BACK: the web is up on the previous build old-build-1/, r.out);
+    assert.match(r.out, /source and node_modules stay the new ones/, "the limit of the swap back is said on rollback");
+    assert.equal(idOf(d, ".next"), "old-build-1", "the previous build is selected again");
+    assert.equal(idOf(d, ".next-failed"), "new-build-2");
+    const served = await (await fetch(`${url}/api/burnticker/build`)).json() as { build: string };
+    assert.equal(served.build, "old-build-1", "the server answers with the old BUILD_ID");
+    assert.equal(r.restarts, 1, "the one restart that worked is the rollback's");
+  });
+
+  test("F01: both restarts fail: non-zero, the previous build is selected on disk, and one clear sentence says the web is down", async () => {
+    const d = host({ newMode: "ok" });
+    const r = await run(3, "exit 4");
+    assert.notEqual(r.code, 0, r.out);
+    assert.doesNotMatch(r.out, /unbound variable/, r.out);
+    assert.match(r.out, /SWAPPED BACK/);
+    assert.match(r.out, /ROLLBACK DID NOT ANSWER EITHER: the restart command failed \(exit 4\) on the previous build too, and the check found that .*\. The previous build old-build-1 is in \.next but the web is down; act now/, r.out);
+    assert.doesNotMatch(r.out, /web is up/);
+    assert.equal(idOf(d, ".next"), "old-build-1");
+    assert.equal(idOf(d, ".next-failed"), "new-build-2");
+  });
+
+  // review of F01 (2026-10-18): a rollback restart that exits non-zero can still bring the unit up; the smoke decides, not the exit code
+  test("review: the rollback restart reports a failure but the previous build comes up: ROLLED BACK, and it says the restart complained", async () => {
+    const d = host({ newMode: "ok" });
+    const n = path.join(dir, "rc"), log = path.join(dir, "restarts.log");
+    // the first call fails without restarting; the second restarts the unit and still exits non-zero (half up)
+    const r = await run(4, `n=$(cat ${n} 2>/dev/null || echo 0); n=$((n + 1)); echo $n > ${n}; [ $n -ge 2 ] || exit 3; echo restart >> ${log}; exit 5`);
+    assert.notEqual(r.code, 0, r.out);
+    assert.match(r.out, /ROLLED BACK: the web is up on the previous build old-build-1 \(the restart command reported a failure, the restart command failed \(exit 5\), but the previous build answers\)/, r.out);
+    assert.doesNotMatch(r.out, /DID NOT ANSWER/);
+    assert.equal(idOf(d, ".next"), "old-build-1");
+  });
+
+  test("review: an empty unit identity is printed as none, never as a bare pid= ts=", async () => {
+    host({ newMode: "ok" });
+    const r = await run(3, undefined, "true");                        // systemctl prints nothing
+    assert.notEqual(r.code, 0, r.out);
+    assert.match(r.out, /process did not change across the restart \(before: none, now: none\)/, r.out);
+    assert.doesNotMatch(r.out, /pid= ts=/);
+  });
+
   test("no staged BUILD_ID: refused before anything moves", async () => {
     const d = host({ newMode: "ok", stagedId: null });
     const r = await run(3);
@@ -167,7 +220,7 @@ describe("F02: swap-web-build.sh smokes the staged build and swaps back on failu
     assert.match(s, /\$SSH "\$HOST" "rm -f \$SWAP_REMOTE"/);
     assert.match(s, / sh \$SWAP_REMOTE /);
     assert.doesNotMatch(s, /sh scripts\/ops\/swap-web-build\.sh/, "never the host tree's copy");
-    assert.match(s, /DEPLOY INCOMPLETE \(exit \$RC\): the new web build passed its smoke and is serving/, "a later failed step is not reported as a swap failure");
+    assert.match(s, /DEPLOY INCOMPLETE \(exit \$1\): the new web build passed its smoke and is serving/, "a later failed step is not reported as a swap failure");
     const rbFile = path.join(import.meta.dirname, "..", "scripts", "ops", "rollback-burnticker.sh"), pdFile = path.join(import.meta.dirname, "..", "scripts", "ops", "publish-and-deploy.sh");
     // each private script is checked only where it exists (the public tree carries neither)
     if (fs.existsSync(rbFile)) {
@@ -184,7 +237,37 @@ describe("F02: swap-web-build.sh smokes the staged build and swaps back on failu
     assert.doesNotMatch(s, /rm -rf \.next-old/, "the deploy never deletes the rollback build itself");
     assert.doesNotMatch(s, /if curl -s /, "no bare curl success as the smoke");
     assert.match(s, /RC=\$\(cat "\$RC_FILE"/);
-    assert.match(s, /DEPLOY FAILED \(exit \$RC\): the new web build failed its smoke and the host swapped the previous web build back/);
+    assert.match(s, /echo "\[\$\(stamp\)\] \$\(swap_outcome "\$RC" "\$REMOTE_LOG"\)"/);
+    assert.match(s, /DEPLOY FAILED \(exit \$1\): the new web build failed its smoke or its restart, and the host swapped the previous web build back/);
     assert.match(fs.readFileSync(path.join(import.meta.dirname, "..", "config", "public-repo.allowlist"), "utf8"), /^scripts\/ops\/swap-web-build\.sh$/m, "the host has the script (it mirrors the public tree)");
+  });
+
+  // SECOND 2026-10-18 AUDIT A-9: after a failed restart the deploy printed "before the swap ... The previous web build is still serving",
+  // which was false. The deploy's swap_outcome now reads what the swap script actually printed. Run here on real swap-script output.
+  test("A-9: the deploy's last line says what the host's swap actually did (swapped back, could not swap back, or never started)", async (t) => {
+    const p = path.join(import.meta.dirname, "..", "scripts", "ops", "deploy-burnticker-host.sh");
+    if (!fs.existsSync(p)) { t.skip("the deploy script is not part of the public tree"); return; }
+    const src = fs.readFileSync(p, "utf8");
+    const a = src.indexOf("# >>> swap outcome"), b = src.indexOf("# <<< swap outcome");
+    assert.ok(a >= 0 && b > a, "the deploy has a swap_outcome block");
+    const fn = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "bt-outcome-")), "outcome.sh");
+    fs.writeFileSync(fn, `${src.slice(a, b)}\nswap_outcome "$1" "$2"\n`);
+    const outcome = (log: string) => { const f = `${fn}.log`; fs.writeFileSync(f, log); return new Promise<string>((res) => { const c = spawn("sh", [fn, "1", f]); let o = ""; c.stdout.on("data", (x) => { o += x; }); c.on("close", () => res(o.trim())); }); };
+    // both restarts fail: the script swapped back but the old build did not answer
+    host({ newMode: "ok" });
+    const both = await run(3, "exit 4");
+    const line = await outcome(both.out);
+    assert.match(line, /swapped the previous web build back into \.next, but it did not answer, so the web is DOWN/, line);
+    assert.doesNotMatch(line, /still serving|before the swap/);
+    // the first restart fails, the rollback restart works
+    host({ newMode: "ok" });
+    const one = await run(4, `n=$(cat ${path.join(dir, "rc")} 2>/dev/null || echo 0); n=$((n + 1)); echo $n > ${path.join(dir, "rc")}; [ $n -ge 2 ] || exit 3; echo restart >> ${path.join(dir, "restarts.log")}`);
+    assert.match(await outcome(one.out), /host swapped the previous web build back; it is serving/);
+    // the swap script died after it started moving builds: never "before the swap", never "serving"
+    const died = await outcome("SWAP STARTED: moving build new-build-2 into .next (the running build old-build-1 goes to .next-old)\nsh: 105: WHY: parameter not set\n");
+    assert.match(died, /the swap started but stopped before it could swap the previous web build back/);
+    assert.doesNotMatch(died, /still serving|before the swap/);
+    // nothing from the swap script at all: the failure was before it
+    assert.match(await outcome("npm ERR! code E401\n"), /before the swap .*Nothing was swapped/);
   });
 });

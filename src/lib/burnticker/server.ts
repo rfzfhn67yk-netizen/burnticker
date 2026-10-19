@@ -40,7 +40,7 @@ import type { SeasonSchedule } from "@/lib/burnticker/seasonOver";
 import type { TeamSeasonReader } from "@/lib/burnticker/lastSeason";
 import { coinDerbyScoreboard } from "@/lib/burnticker/derby/page";
 import { derbyTitle, pinCreatorDailyCapFromEnv } from "@/lib/burnticker/api/handlers";
-import { budgetedRpcConfig, configureApiBudget, statusTableStore } from "@/lib/burnticker/apiBudget";
+import { apiBudget, budgetedRpcConfig, configureApiBudget, rpcSourceFor, statusTableStore } from "@/lib/burnticker/apiBudget";
 import { connectionBatchReader, type BatchReader, type MultipleAccountsReader } from "@/lib/burnticker/keeperReadCache";
 
 /**
@@ -164,7 +164,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     // against; without BURNTICKER_PROGRAM_ID it refuses every confirmation (fail closed).
     // C2 (2026-10-15 prelaunch audit): the verifier reads in the "confirm" lane, so anonymous traffic cannot spend what a confirmation needs
     batchReader: rpc && programId && program instanceof ProgramBurnClient ? connectionBatchReader(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })) as unknown as MultipleAccountsReader, new PublicKey(programId), (m) => program.vaultFor(m)) : null,
-    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" }, { lane: "confirm" })) as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null,
+    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" }, { lane: "confirm" })) as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58(), busy: () => apiBudget().laneBusy(rpcSourceFor(rpc), "confirm") }) : null,
   };
   if (!rpc) stubs.push("launch confirmation: no BURNTICKER_RPC_URL on this host, so a launch transaction cannot be read and drafts are not taken live");
   else if (!programId) stubs.push("launch confirmation: no BURNTICKER_PROGRAM_ID on this host, so initialize_token and the TokenConfig cannot be checked and drafts are not taken live");

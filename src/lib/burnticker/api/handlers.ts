@@ -3,7 +3,7 @@ import { burnRealFromEnv, launchModeFromEnv } from "@/lib/burnticker/launchAvail
 import { alertLaunchLate, recordedClosure } from "@/lib/burnticker/draftReconciler";
 import { dispersalEnabled } from "@/lib/burnticker/dispersal";
 import type { Platform } from "@/lib/burnticker/server";
-import type { Keypair } from "@solana/web3.js";
+import { Keypair } from "@solana/web3.js";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
@@ -31,7 +31,7 @@ import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBa
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { seasonOverFor, seasonStatus } from "@/lib/burnticker/seasonOver";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
-import { pinCoin, sha256Hex, type PinnedCoin } from "@/lib/burnticker/pin";
+import { pinCoin, sha256Hex, uploadMayHaveCompleted, type PinHooks, type PinnedCoin } from "@/lib/burnticker/pin";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { describeRule } from "@/lib/burnticker/describe";
 import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
@@ -567,6 +567,13 @@ const OWN_DRAFT_CHANGED = "Your earlier draft for this address had a different r
 const OWN_DRAFT_DETAILS_CHANGED = "Your earlier draft for this address had a different name, description, links or image, and its details are already saved. Press Start over to get a fresh address, then launch again.";
 /** The registry status key holding a draft's metadata identity (the fingerprint of everything its metadata file says). */
 export const draftIdentityKey = (mint: string): string => `draft.identity.${mint}`;
+/**
+ * Prelaunch audit 2026-10-18 F08: every file this site paid to save on Arweave, by the sha256 of its bytes (registry status key). A
+ * retry with the same bytes reuses it instead of paying again. `unused`: the slot it was charged against is held for the attempt that
+ * uses it (its own attempt failed after saving it); false once a prepare used it.
+ */
+export const pinUploadKey = (sha256: string): string => `pin.upload.${sha256}`;
+export type PinUploadRecord = { id: string; url: string; contentType: string; unused: boolean; at: number; /** review fix: whose held slot it is ("client|creator"); only the same requester takes it over */ holder?: string };
 /** What a coin's metadata file is made from, as one fingerprint: a retry with the same fingerprint may reuse the file. */
 /**
  * Review 2026-10-15 (7): only what the creator supplied plus the locked rule's hash. The generated paragraph is left out: it can carry a
@@ -819,7 +826,12 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     held.push(() => { if (reserved > 0) { for (const k of myKeys()) adjustReserved(k, -reserved); reserved = 0; } });
     return null;
   };
-  /** A pin that worked: its reserved slot (if any) becomes a charged one. */
+  /** F08: a counter in the registry's status table (the orphan and unknown file counts); a count never changes the answer. */
+  const bumpStatus = (k: string, n: number) => { try { p.registry.setStatus(k, String(chargedOf(k) + n)); } catch { /* the count never changes the answer */ } };
+  /** A paid upload this site recorded by its content hash (pinUploadKey). An unreadable record reads as none. */
+  const readUpload = (sha: string): PinUploadRecord | null => { try { const v = p.registry.getStatus(pinUploadKey(sha)); return v ? JSON.parse(v) as PinUploadRecord : null; } catch { return null; } };
+  const writeUpload = (sha: string, r: PinUploadRecord) => p.registry.setStatus(pinUploadKey(sha), JSON.stringify(r));
+  /** A pin that worked (F08: a side's first paid upload): its reserved slot (if any) becomes a charged one. */
   const chargePin = () => {
     charged++;
     if (reserved > 0) { reserved--; for (const k of myKeys()) adjustReserved(k, -1); }
@@ -832,7 +844,11 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     if (knownMint && p.registry.ownDraft(knownMint, input.creator)) { const meta = p.registry.tokenMeta(knownMint); if (meta && (meta.hosted || (meta.metadataUri && meta.metadataTx && meta.metadataSha256))) return 0; }
     return 1;
   };
-  const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null, image: { bytes: Uint8Array; contentType: string; badge?: boolean; rawSha?: string } | null = null, knownMint: string | null = null, creatorText = ""): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
+  /**
+   * Prelaunch audit 2026-10-18 F09: `knownMint` is the side's chosen mint (the caller's, a bank key or a fresh keypair), always picked
+   * BEFORE this runs, so the pinned metadata's link names this coin's own mint page, never a ticker another coin may share.
+   */
+  const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null, image: { bytes: Uint8Array; contentType: string; badge?: boolean; rawSha?: string } | null, knownMint: string, creatorText = ""): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
     // the deploy smoke's dry run (2026-10-15): the budget and the uploader are checked as a launch would, and nothing is uploaded or counted
     if (o.dryRun) {
       { const ob = budgetRefusal(1); if (ob) return ob; }
@@ -844,8 +860,8 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     const identity = draftIdentity({ ticker, name, creatorText: creatorText.trim(), rulesSha256: sideRule.sha256, links, imageUrl, imageSha: image?.rawSha ?? (image ? sha256Hex(image.bytes) : null), badge: image ? image.badge ?? null : null });
     // F4: a retry of the creator's own draft reuses its metadata file, and only when every detail is the same; a change is refused here,
     // before anything is uploaded or counted
-    const prior = knownMint ? p.registry.ownDraft(knownMint, input.creator) : null;
-    if (prior && knownMint) {
+    const prior = p.registry.ownDraft(knownMint, input.creator);
+    if (prior) {
       const stored = p.registry.getStatus(draftIdentityKey(knownMint));
       // a draft made before identities were recorded: the same name, description and links as its row, and no uploaded image (its bytes cannot be compared)
       const same = stored ? stored === identity : prior.name === name && prior.description === registered && JSON.stringify(prior.links.map((l) => [l.label, l.url])) === JSON.stringify(links.map((l) => [String(l?.label ?? ""), String(l?.url ?? "")])) && (prior.imageUrl ?? null) === (imageUrl ?? null) && !image;
@@ -861,14 +877,46 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     }
     identities.set(ticker, identity);
     const uploader = p.uploader ?? null;
-    // the budget was checked for every side before any key was taken (budgetRefusal above); here only a successful upload is counted
+    // the budget was checked for every side before any key was taken (budgetRefusal above). Prelaunch audit 2026-10-18 F08: the slot is
+    // charged the moment this side's FIRST paid upload succeeds (the image, before its metadata), not once the whole pin worked, so an
+    // image saved before a failed metadata upload is never outside the caps. Each saved file is recorded durably by its content hash and
+    // reused by a retry with the same bytes. A slot charged by an attempt that then failed is held by its file: the first later attempt
+    // that reuses that file draws on it instead of a new slot. A timeout may have saved the file anyway: it is charged and counted unknown.
+    let sideCharged = false, rideHeld: string | null = null;
+    const holderKey = `${client}|${input.creator}`;
+    const fresh: string[] = [];
+    const chargeSide = () => { if (!sideCharged) { sideCharged = true; chargePin(); } };
+    const hooks: PinHooks = {
+      recall: (sha, contentType) => {
+        const r = readUpload(sha);
+        if (!r || r.contentType !== contentType) return null;
+        // a file whose slot was charged by an attempt that failed: this attempt takes that slot over (claimed now, given back on failure)
+        // review fix: only by the same requester (client AND creator) that was charged for it; anyone else may reuse the file (it is public)
+        // but pays its own slot, so a stranger presenting a victim's orphaned image cannot take over the victim's charge
+        if (r.unused && r.holder === holderKey && !rideHeld && !sideCharged) { rideHeld = sha; writeUpload(sha, { ...r, unused: false }); }
+        return { id: r.id, url: r.url };
+      },
+      uploaded: (_kind, up, sha, contentType) => {
+        // recorded first: the file exists and is paid for, whatever happens next. Review fix: written as NOT holding a slot, so a
+        // concurrent prepare with the same bytes (bank-key prepares are not serialised) reuses the file but pays its own slot; the slot is
+        // handed to the file only once this attempt has failed (the catch below)
+        writeUpload(sha, { id: up.id, url: up.url, contentType, unused: false, at: Date.now() });
+        fresh.push(sha);
+        if (!rideHeld) chargeSide();
+      },
+      failed: (_kind, e) => { if (uploadMayHaveCompleted(e)) { chargeSide(); bumpStatus(`pin.unknown.${day}`, 1); } },
+    };
     try {
       if (!uploader) throw new Error("this site has no Arweave uploader set up");
-      const pin = await pinCoin(uploader, { ticker, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, imageUrl, image });
-      chargePin();
+      const pin = await pinCoin(uploader, { ticker, mint: knownMint, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, imageUrl, image }, hooks);
       pins.set(ticker, pin);
       return { pin };
     } catch (e) {
+      // the files this attempt saved stay recorded for a retry; until one uses them they are counted as orphans of the day
+      if (fresh.length) bumpStatus(`pin.orphans.${day}`, fresh.length);
+      // the slot this attempt was charged is held by its first saved file (one file, so one later attempt can take it over)
+      if (sideCharged && fresh.length) { const r = readUpload(fresh[0]); if (r) writeUpload(fresh[0], { ...r, unused: true, holder: holderKey }); }
+      if (rideHeld) { const r = readUpload(rideHeld); if (r) writeUpload(rideHeld, { ...r, unused: true }); }
       if (p.allowHostedMetadata) { pins.set(ticker, null); return { pin: null }; }
       // polish-1: the owner's phone hears about a refused pin (push.ts reads the alerts table; one row per ticker per Denver day)
       try { p.registry.recordAlert({ kind: "bt-pin-failed", key: `bt-pin-failed:${ticker}`, text: `$${ticker}: the coin's details could not be saved on Arweave, so its launch was refused. ${safeErrorText(e, 160)}`, meta: { ticker } }); } catch { /* the alert never changes the answer */ }
@@ -963,6 +1011,8 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     // review 2026-10-15 (5): both sides' pins are checked against the caps before a key is taken or side A is pinned
     { const ob = reservePins(pinsNew(o.mint ?? null) + pinsNew(o.mintB ?? null)); if (ob) return ob; }
     if (o.takeMintKeys) { const t = o.takeMintKeys([input.ticker, side.ticker]); if ("error" in t) return t; if (t.keys.length < 2) return { error: fail(503, "This site could not prepare two addresses for the pair.", { code: "mint-bank-empty" }) }; o = { ...o, mintKeypair: t.keys[0], mintKeypairB: t.keys[1] }; }
+    // F09 (prelaunch audit 2026-10-18): both mints are chosen here, before anything is pinned, so each side's metadata names its own mint
+    if (!o.mint && !o.mintKeypair) o = { ...o, mintKeypair: Keypair.generate(), mintKeypairB: Keypair.generate() };
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
       const ownMints: { mint?: string; mintB?: string; mintKeypair?: Keypair; mintKeypairB?: Keypair } = o.mint && o.mintB ? { mint: o.mint, mintB: o.mintB } : o.mintKeypair && o.mintKeypairB ? { mintKeypair: o.mintKeypair, mintKeypairB: o.mintKeypairB } : {};
@@ -986,13 +1036,14 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
       side.description = withCreatorText(generatedParagraph(lockedB.rule, side.ticker, ctxB), creatorTextB);
       input.description = withCreatorText(generatedParagraph(lockedA.rule, input.ticker, ctxA), creatorText);
       for (const [lk, tk, nm, desc, links, img, up] of [[lockedA, input.ticker, input.name, input.description, input.links, input.imageUrl, uploaded], [lockedB, side.ticker, side.name, side.description, side.links, side.imageUrl, upB.up]] as const) {
-        const r = await pinFor(lk, tk, nm.trim(), desc, links, img, up, tk === input.ticker ? o.mint ?? null : o.mintB ?? null, tk === input.ticker ? creatorText : creatorTextB);
+        const r = await pinFor(lk, tk, nm.trim(), desc, links, img, up, tk === input.ticker ? probe.a.mint : probe.b.mint, tk === input.ticker ? creatorText : creatorTextB);
         if ("error" in r) return r;
       }
       // an uploaded image is shown from its pinned Arweave copy, per side
       const shownImage = (tk: string, url: string | null, up: unknown) => (up ? pins.get(tk)?.imageUri ?? url : url);
       input.imageUrl = shownImage(input.ticker, input.imageUrl, uploaded); side.imageUrl = shownImage(side.ticker, side.imageUrl, upB.up);
       const pair = await buildPairBundles({ ...(recorded ? pairIdChoice : { pairIdPick: (base) => p.registry.freePairId(base) }), a: input, b: { ...side, burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, ...ownMints, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
+      if (pair.a.mint !== probe.a.mint || pair.b.mint !== probe.b.mint) throw new Error("the pair's mints changed between the pin and the build; please try again");
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
       // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab
       // pool — under the pair curve the pool is the CPMM pool its graduation creates, registered later (policy 2).
@@ -1013,10 +1064,14 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   // audit 2026-10-15 H4: every check has passed; only now is the bank key taken
   { const ob = reservePins(pinsNew(o.mint ?? null)); if (ob) return ob; }   // review 2026-10-15 (5): before the key
   if (o.takeMintKeys) { const t = o.takeMintKeys([input.ticker]); if ("error" in t) return t; o = { ...o, mintKeypair: t.keys[0] }; }
+  // F09 (prelaunch audit 2026-10-18): the mint is chosen here, before anything is pinned, so the metadata names this coin's own mint
+  if (!o.mint && !o.mintKeypair) o = { ...o, mintKeypair: Keypair.generate() };
+  const chosenMint = o.mint ?? o.mintKeypair!.publicKey.toBase58();
   try {
-    const pr = await pinFor(locked, input.ticker, input.name.trim(), input.description, input.links, input.imageUrl, uploaded, o.mint ?? null, creatorText);
+    const pr = await pinFor(locked, input.ticker, input.name.trim(), input.description, input.links, input.imageUrl, uploaded, chosenMint, creatorText);
     if ("error" in pr) return pr;
-    const bundle = await buildLaunchBundle(input, { ...deps, ...(o.mint ? { mint: o.mint } : o.mintKeypair ? { mintKeypair: o.mintKeypair } : {}) });
+    const bundle = await buildLaunchBundle(input, { ...deps, ...(o.mint ? { mint: o.mint } : { mintKeypair: o.mintKeypair! }) });
+    if (bundle.mint !== chosenMint) throw new Error("the coin's mint changed between the pin and the build; please try again");
     // an uploaded image is shown from its pinned Arweave copy (the card and the coin page read the registry's image)
     if (o.register) { const race = draftRaceRefusal([[bundle.mint, input.ticker]]); if (race) return race; }
     const token = o.register ? register(bundle, input.ticker, uploaded && pr.pin ? pr.pin.imageUri : input.imageUrl, input.links, note) : null;
@@ -1071,8 +1126,14 @@ const refusedConfirms = new Map<string, { at: number; status: number; reason: st
  * re-review 3) is still never remembered: its transaction exists, and the creator's retry must reach the chain.
  */
 export const MISSING_MEMORY_MS = 60_000;
-const missingConfirms = new Map<string, { at: number; status: number; reason: string }>();
-export function resetConfirmGuards(): void { sigsByMint.clear(); sigsByClientMint.clear(); refusedConfirms.clear(); }
+/**
+ * Second prelaunch audit 2026-10-18 A-20: the client that first sent a signature is not held to that minute. The card retries a 404
+ * every 4 seconds, and a server RPC a few seconds behind the browser used to answer every retry from memory until the card gave up on a
+ * launch that had landed. That client may have the chain read again once this long has passed since its last read; others keep the minute.
+ */
+export const MISSING_RECHECK_MS = 3_000;
+const missingConfirms = new Map<string, { at: number; checkedAt: number; status: number; reason: string; client: string }>();
+export function resetConfirmGuards(): void { sigsByMint.clear(); sigsByClientMint.clear(); refusedConfirms.clear(); missingConfirms.clear(); }
 /** Drops entries older than `ttl` (and the oldest keys beyond GUARD_MAX_KEYS); returns the live distinct signatures for `key`. */
 function liveSigs(m: Map<string, Map<string, number>>, key: string, now: number): Map<string, number> {
   if (m.size > GUARD_MAX_KEYS) { for (const [k, v] of m) { for (const [s, at] of v) if (now - at >= HOUR_MS) v.delete(s); if (!v.size) m.delete(k); } while (m.size > GUARD_MAX_KEYS) m.delete(m.keys().next().value as string); }
@@ -1118,7 +1179,10 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   const known = refusedConfirms.get(key);
   if (known && now - known.at < REFUSAL_MEMORY_MS) return fail(known.status, known.reason, { code: "launch-unverified" });
   const missing = missingConfirms.get(key);
-  if (missing && now - missing.at < MISSING_MEMORY_MS) return fail(missing.status, missing.reason, { code: "launch-unverified", retryAfterSec: Math.max(1, Math.ceil((missing.at + MISSING_MEMORY_MS - now) / 1000)) });
+  // A-20. Accepted limit: a third party that posts the creator's signature first becomes its "first client", and the creator then waits
+  // out the minute (or the reconciler takes the coin live); bounded delay, never a loss
+  const recheck = !!missing && missing.client === client && now - missing.checkedAt >= MISSING_RECHECK_MS;
+  if (missing && now - missing.at < MISSING_MEMORY_MS && !recheck) return fail(missing.status, missing.reason, { code: "launch-unverified", retryAfterSec: Math.max(1, Math.ceil((missing.at + MISSING_MEMORY_MS - now) / 1000)) });
   // F-16 (prelaunch audit 2026-10-16): the per-CLIENT limit is the first gate and counts every distinct signature. The per-MINT ceiling
   // counts only signatures the chain holds that were signed by this coin's mint and creator: a made-up signature (not on chain) or a
   // stranger's real transaction copied off the chain never counts, so strangers cannot block the creator's confirm.
@@ -1129,7 +1193,9 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   if (!perClient.has(launchTx)) perClient.set(launchTx, now);
   const notOnChain = (reason: string) => {
     if (missingConfirms.size > GUARD_MAX_KEYS) { for (const [k, x] of missingConfirms) if (now - x.at >= MISSING_MEMORY_MS) missingConfirms.delete(k); while (missingConfirms.size > GUARD_MAX_KEYS) missingConfirms.delete(missingConfirms.keys().next().value as string); }
-    missingConfirms.set(key, { at: now, status: 404, reason });
+    // A-20: the first sender's re-check keeps the minute's start and its owner; only the time of its last read moves
+    const prev = missingConfirms.get(key);
+    missingConfirms.set(key, prev && prev.client === client && now - prev.at < MISSING_MEMORY_MS ? { ...prev, checkedAt: now, reason } : { at: now, checkedAt: now, status: 404, reason, client });
     return fail(404, reason, { code: "launch-unverified" });
   };
   // a signature the chain does not hold costs one status lookup, never a transaction read, and never a per-mint slot
@@ -1139,12 +1205,15 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   // venue) — and nothing is written to the registry unless it passes: a refused confirmation leaves status, baseline and launch_tx alone.
   const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, p.registry.pairOf(mint)) });
   // review L1: a slot is taken only by an answer about the transaction itself: it passed, or it was refused for its content or state
-  // (422 / 409) without being someone else's transaction. RPC trouble (502, 503) and a throw (budget hold) never take one.
-  if (!perMint.has(launchTx) && (v.ok || ((v.status === 422 || v.status === 409) && !v.foreign))) perMint.set(launchTx, now);
+  // (422 / 409). RPC trouble (502, 503) and a throw (budget hold) never take one. F05 (prelaunch audit 2026-10-18): a refusal takes one
+  // only when the verifier says affirmatively that this coin's mint and creator signed it; a missing answer is not proof, so a stranger's
+  // failed transaction (refused before its content was read) never fills the creator's ceiling.
+  if (!perMint.has(launchTx) && (v.ok || ((v.status === 422 || v.status === 409) && v.belongsToExpectedSigners === true))) perMint.set(launchTx, now);
   if (!v.ok) {
     if (v.status === 422 && !v.missing) rememberRefusal(key, v, now);
     else if (v.status === 404) return notOnChain(v.reason);
-    return fail(v.status, v.reason, { code: "launch-unverified" });
+    // second audit 2026-10-18 A-19: an account not shown yet is said as such, so the card asks again instead of reading it as final
+    return fail(v.status, v.reason, { code: "launch-unverified", ...(v.missing ? { missing: true } : {}) });
   }
   const baselineAt = new Date(v.blockTimeMs).toISOString();
   // F-3: the owner hears once per coin (draftReconciler.alertLaunchLate), with the operator's command that can still take it live

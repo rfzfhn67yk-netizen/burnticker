@@ -25,6 +25,7 @@
 // exists on this host, IDL sha256, allowlist sha256, file count), so the trust page and the public root carry the same entry.
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 
@@ -211,6 +212,18 @@ function scanImports(manifest) {
   return { violations, notes, external, declared: { ...transitive, ...declared } };
 }
 
+/**
+ * ALWAYS SCANNED, WHATEVER THE PATTERNS FILE SAYS (2026-10-18 prelaunch audit A-32): a home directory in path or dashed form (a scrubbed
+ * one reads <home>), PEM key material, cloud and service key prefixes and a bearer token. The patterns file carries the same shapes with
+ * their reasons; these copies have no exemptions, so an edit to the file cannot switch them off.
+ */
+export const BUILTIN_DENY = [
+  /\/Users\/(?!<home>)[A-Za-z0-9._-]+/, /(?<![A-Za-z])-Users-[A-Za-z0-9._]+(?=[-/]|$)/, /-{5}BEGIN/, /\b(AKIA|ASIA)[0-9A-Z]{16}\b/, /\bgh[pousr]_[A-Za-z0-9]{36}\b/,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/, /\bAIza[0-9A-Za-z_-]{35}\b/, /\b[sr]k_(live|test)_[0-9A-Za-z]{16,}/, /\bsk-(ant-)?[A-Za-z0-9_-]{32,}/,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*/,
+  /(secret|token|api[_-]?key|apikey|passw(or)?d|private[_-]?key|credential|auth)[A-Za-z_]*["'`]?\s*[:=]\s*["'`]?[0-9a-fA-F]{40}\b/i,
+];
+
 function readDenyPatterns() {
   const out = [];
   for (const raw of fs.readFileSync(DENYPATTERNS, "utf8").split("\n")) {
@@ -220,6 +233,7 @@ function readDenyPatterns() {
     if (!m) throw new Error(`denypatterns: cannot parse line: ${line}`);
     out.push({ source: m[1], re: new RegExp(m[1], m[2]), allow: new Set((m[3] ?? "").split(/\s+/).filter(Boolean)) });
   }
+  for (const re of BUILTIN_DENY) out.push({ source: `${re.source} (built in)`, re, allow: new Set() });
   return out;
 }
 
@@ -392,18 +406,54 @@ function deriveLockfile() {
   return true;
 }
 
-function verify() {
+/**
+ * LINT (2026-10-18 prelaunch audit A-32: no lint ran in any gate; `next lint` is gone in Next 16). ESLint with the monorepo's own
+ * eslint.config.mjs (Next's core-web-vitals and TypeScript rules) over exactly the published code under src/ — read from its source,
+ * the overlay's included — run from the monorepo, where the config and its plugins are installed. Errors fail; warnings are counted.
+ * --cache keeps a re-run to a few seconds. Returns true when there is nothing to lint or ESLint is not installed (said so).
+ */
+function lint(manifest) {
+  const bin = path.join(REPO, "node_modules", ".bin", "eslint");
+  if (!fs.existsSync(bin) || !fs.existsSync(path.join(REPO, "eslint.config.mjs"))) { console.log("verify: eslint: not installed in the publishing checkout — FAILED (the gate needs it)"); return false; }
+  const files = [...manifest].filter(([pub]) => pub.startsWith("src/") && /\.(ts|tsx|mts|js|mjs|jsx)$/.test(pub)).map(([, { from }]) => path.relative(REPO, from));
+  if (!files.length) return true;
+  const t0 = Date.now();
+  const r = spawnSync(bin, ["--no-warn-ignored", "--cache", "--cache-location", path.join(REPO, "node_modules", ".cache", "eslint-public-gate"), "--format", "json", ...files], { cwd: REPO, encoding: "utf8", maxBuffer: 1 << 30, env: { ...process.env, NODE_OPTIONS: "" }, timeout: 10 * 60_000, killSignal: "SIGKILL" });
+  let results;
+  try { results = JSON.parse(r.stdout); } catch { console.log(`verify: eslint: FAILED (exit ${r.status}, no report)\n${(r.stderr || r.stdout).trim().split("\n").slice(-8).join("\n").replace(/^/gm, "    ")}`); return false; }
+  const errors = results.flatMap((f) => f.messages.filter((m) => m.severity === 2 || m.fatal).map((m) => `${path.relative(REPO, f.filePath)}:${m.line}:${m.column} ${m.ruleId ?? "parse"} ${m.message.split("\n")[0]}`));
+  const warnings = results.reduce((n, f) => n + f.warningCount, 0);
+  console.log(`verify: eslint (${files.length} files under src/, ${((Date.now() - t0) / 1000).toFixed(1)} s): ${errors.length ? `FAILED (${errors.length} errors)` : "ok"}, ${warnings} warnings`);
+  for (const e of errors.slice(0, 20)) console.log(`    ${e}`);
+  return errors.length === 0;
+}
+
+function verify(manifest) {
   if (flag("link-node-modules") && !fs.existsSync(path.join(OUT, "node_modules"))) fs.symlinkSync(path.join(REPO, "node_modules"), path.join(OUT, "node_modules"));
   if (!fs.existsSync(path.join(OUT, "node_modules"))) { console.log("verify: no node_modules in the public tree — run `npm install` there (or pass --link-node-modules for a local check)"); return false; }
+  // every step is bounded (review of A-32): a step still running after 40 minutes is killed and reported as TIMED OUT, which the
+  // publish script never retries (it retries only a node --test step that FAILED)
+  const STEP_TIMEOUT_MS = Number(process.env.PUBLIC_REPO_STEP_TIMEOUT_MS) || 40 * 60_000;
   const run = (label, file, a) => {
-    const r = spawnSync(file, a, { cwd: OUT, encoding: "utf8", env: { ...process.env, NODE_OPTIONS: "" } });
-    const tail = (r.stdout + r.stderr).trim().split("\n").slice(-12).join("\n");
+    const r = spawnSync(file, a, { cwd: OUT, encoding: "utf8", maxBuffer: 1 << 30, env: { ...process.env, NODE_OPTIONS: "" }, timeout: STEP_TIMEOUT_MS, killSignal: "SIGKILL" });
+    const tail = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").slice(-12).join("\n");
+    if (r.error?.code === "ETIMEDOUT" || (r.status === null && r.signal === "SIGKILL")) {
+      console.log(`verify: ${label}: TIMED OUT — still running after ${Math.round(STEP_TIMEOUT_MS / 60_000)} minutes, killed; STOP (a hang is never a flake)\n${tail.replace(/^/gm, "    ")}`);
+      return false;
+    }
     console.log(`verify: ${label}: ${r.status === 0 ? "ok" : `FAILED (exit ${r.status})`}\n${tail.replace(/^/gm, "    ")}`);
     return r.status === 0;
   };
+  const okLint = lint(manifest);
   const okTsc = run("tsc --noEmit", path.join(OUT, "node_modules", ".bin", "tsc"), ["--noEmit", "-p", "tsconfig.json"]);
-  const okTest = run("node --test", process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--import", "./test/alias-hook.mjs", "--test", "--test-concurrency=1", "test/**/*.test.ts"]);
-  return okTsc && okTest;
+  // audit A-32 (2026-10-18): a per-test timeout (a hung test ends the run instead of holding the publish; 5 minutes is about three
+  // times the slowest honest test, the review/bundle parity sweep at 104 s measured under a parallel run), and the TAP kept so a retry
+  // can NAME the tests that failed here (a flake passes the publish only when it is on the operator's known-flake list)
+  const tap = process.env.PUBLIC_REPO_TEST_TAP || path.join(os.tmpdir(), "publish-gate-public.tap");
+  const okTest = run("node --test", process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--import", "./test/alias-hook.mjs", "--test", "--test-concurrency=1", "--test-timeout=300000", "--test-force-exit",
+    "--test-reporter=tap", `--test-reporter-destination=${tap}`, "--test-reporter=spec", "--test-reporter-destination=stdout", "test/**/*.test.ts"]);
+  if (!okTest) console.log(`verify: node --test TAP: ${tap}`);
+  return okLint && okTsc && okTest;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -462,7 +512,7 @@ function main() {
   // "CHECK FAILED: N import, M leak findings" (a provenance refusal above prints "CHECK FAILED: K provenance, 0 import, 0 leak
   // findings"). Exit status agrees (0 / 1). Nothing is written on a failure or in --check.
   if (violations.length || hits.length) { console.log(`\nnothing written.\nCHECK FAILED: ${violations.length} import, ${hits.length} leak findings`); process.exit(1); }
-  if (cmd === "check") { reportCaseOnlyRenames(manifest); console.log("nothing written (dry run).\nCHECK PASSED"); return; }
+  if (cmd === "check") { reportCaseOnlyRenames(manifest); if (flag("lint") && !lint(manifest)) { console.log("nothing written (dry run).\nCHECK FAILED: lint"); process.exit(1); } console.log("nothing written (dry run).\nCHECK PASSED"); return; }
 
   if (flag("tag")) { const t = appendTag(manifest); console.log(`tagged ${CHANGELOG_SRC}: ${t.date} commit ${t.commit.slice(0, 12)}${t.dirty ? " (dirty)" : ""}, program ${t.prog.hash ?? "not built here"}, IDL ${t.idl.slice(0, 16)}…`); }
   // an unchanged lockfile keeps its old mtime, so the host's `npm ci` (run when the lockfile is newer than node_modules) is not repeated for nothing
@@ -486,7 +536,7 @@ function main() {
   console.log(`staged output: ${staged.count} regular files, no symlink, nothing outside the manifest, leak scan clean`);
   if (oldLock && fs.existsSync(oldLockPath) && fs.readFileSync(oldLockPath).equals(oldLock.buf)) fs.utimesSync(oldLockPath, oldLock.mtime, oldLock.mtime);
   reportCaseOnlyRenames(manifest);
-  if (flag("verify")) { const ok = verify(); if (!ok) process.exit(1); }
+  if (flag("verify")) { const ok = verify(manifest); if (!ok) process.exit(1); }
 }
 
 main();

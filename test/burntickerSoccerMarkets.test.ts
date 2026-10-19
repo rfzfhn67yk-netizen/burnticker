@@ -148,7 +148,8 @@ describe("settleGame on a three-way payout", () => {
     assert.equal(alone.kind, "held");
     if (alone.kind === "held") assert.match(alone.why, /past 90 minutes/);
     const api = { response: [{ teams: { home: { name: "Arsenal", winner: true }, away: { name: "Leeds United", winner: false } }, goals: { home: 1, away: 1 }, fixture: { date: "2026-10-10T11:30:00+00:00", status: { short: "PEN" } } }] };
-    const both = await settleGame(client({ ...pens, [apiSportsUrl("eng.1", "2026-10-10")]: api }), ARS_LEE, deps(payouts, { apiSportsKey: "x" }));
+    // the clock inside API-Sports' read window (36 hours from the start, gameSettle.ts apiSportsWindow)
+    const both = await settleGame(client({ ...pens, [apiSportsUrl("eng.1", "2026-10-10")]: api }), ARS_LEE, deps(payouts, { apiSportsKey: "x", now: () => Date.parse(ARS_LEE.startsAt) + 6 * 3_600_000 }));
     assert.equal(both.kind, "settled", JSON.stringify(both));
     if (both.kind === "settled") { assert.equal(both.winner, "home"); assert.deepEqual([...both.ops].sort(), ["TheSportsDB", "apisports.games"], "the 90-minute payout is not one of the two operators"); }
   });

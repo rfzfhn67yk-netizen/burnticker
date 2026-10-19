@@ -37,8 +37,20 @@ function fakeSink(status = 200) {
 }
 
 describe("the plan (pure)", () => {
+  // SECOND 2026-10-18 AUDIT A-7: the most serious recorded kinds never reached the phone
+  test("A-7: audit mismatch, low keeper balance, reading conflict, foreign reading, takeover and the other serious kinds are pushed", () => {
+    const serious = ["bt-audit-mismatch", "bt-audit-stale", "bt-keeper-balance-low", "bt-reading-conflict", "bt-reading-implausible", "bt-foreign-reading", "bt-keeper-takeover", "bt-feed-stale", "bt-feed-disagree", "derby-withheld", "bt-cap-binding", "bt-pin-orphan"];
+    for (const k of serious) assert.ok(PUSH_KIND_OF_ALERT[k], `${k} is not pushed`);
+    const r = planPushes({ now: DAWN, state: settled(DAWN), alerts: serious.map((k, i) => alert(DAWN - 60_000 + i, k)) });
+    // six per hour in all: the first six go now and the rest are held, except an urgent kind (the takeover), which the cap never holds
+    assert.equal(r.messages.length, PUSH_MAX_PER_HOUR + 1);
+    assert.deepEqual(r.messages.map((m) => m.title), ["Burnticker audit found a receipt that does not add up", "Burnticker audit not running", "Burnticker keeper key running low on SOL", "Burnticker source changed a recorded result", "Burnticker reading refused", "Burnticker keeper holding its sends", "Burnticker standby keeper took over"]);
+    for (const m of r.messages) { assert.equal(m.priority, "high"); assert.doesNotMatch(`${m.title} ${m.body}`, /→|\bwill\b|\d{4}-\d{2}-\d{2}/); }
+    const later = planPushes({ now: DAWN + 2 * H, state: { ...settled(DAWN), cursor: DAWN - 120_000 }, alerts: serious.slice(6).map((k, i) => alert(DAWN - 60_000 + i, k)) });
+    assert.deepEqual(later.messages.filter((m) => m.kind !== "daily").map((m) => [m.kind, m.priority]), [["keeper-takeover", "high"], ["feed-stale", "high"], ["feed-disagree", "high"], ["derby-withheld", "high"], ["cap-binding", "low"], ["pin-orphan", "low"]]);
+  });
   test("the five states map to pushes; everything else stays in the registry only", () => {
-    assert.deepEqual(Object.values(PUSH_KIND_OF_ALERT).sort(), ["api-budget", "backup-failed", "backup-offbox", "burn-behind", "crank-refused", "crank-refused", "feed-down", "keeper-refused", "launch-failed", "launch-late", "mint-bank-low", "pin-failed", "pin-failed", "signer-disagree", "single-source", "synthetic-failed", "unit-failed"]);
+    assert.deepEqual(Object.values(PUSH_KIND_OF_ALERT).sort(), ["api-budget", "audit-mismatch", "audit-stale", "backup-failed", "backup-offbox", "burn-behind", "cap-binding", "crank-refused", "crank-refused", "derby-withheld", "dispersal-receipt", "feed-disagree", "feed-down", "feed-stale", "foreign-reading", "keeper-balance-low", "keeper-refused", "keeper-takeover", "launch-failed", "launch-late", "mint-bank-low", "pin-failed", "pin-failed", "pin-orphan", "reading-conflict", "reading-implausible", "signer-disagree", "single-source", "synthetic-failed", "unit-failed"]);
     const { messages } = planPushes({ now: DAWN, state: settled(DAWN), alerts: [alert(DAWN - 60_000, "cosigner-disagree"), alert(DAWN - 50_000, "bt-feed-stall"), alert(DAWN - 40_000, "bt-daily-summary")] });
     assert.deepEqual(messages.map((m) => m.kind), ["signer-disagree"]);
     assert.equal(messages[0].priority, "high");
@@ -55,7 +67,9 @@ describe("the plan (pure)", () => {
     assert.equal(r.messages.length, 1); assert.match(r.messages[0].body, /3 more alerts were held back by the rate limit/); assert.deepEqual(r.state.held, {});
     // the global cap
     const full = { ...settled(DAWN), sent: Array.from({ length: PUSH_MAX_PER_HOUR }, (_, i) => DAWN - i * 1000) };
-    assert.equal(planPushes({ now: DAWN, state: full, alerts: [alert(DAWN - 1, "bt-keeper-refused")] }).messages.length, 0);
+    assert.equal(planPushes({ now: DAWN, state: full, alerts: [alert(DAWN - 1, "bt-pin-failed")] }).messages.length, 0);
+    // review (2026-10-18): an urgent kind such as the keeper refusal is never held by the six-per-hour cap
+    assert.equal(planPushes({ now: DAWN, state: full, alerts: [alert(DAWN - 1, "bt-keeper-refused")] }).messages.length, 1);
   });
   test("the cursor: an alert is pushed once, and a first run looks back one hour only", () => {
     const r1 = planPushes({ now: DAWN, state: settled(DAWN), alerts: [alert(DAWN - 1000, "bt-pin-failed")] });

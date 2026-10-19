@@ -14,6 +14,8 @@ import { openRegistry } from "@/lib/burnticker/registry";
 import { registryAlertSink } from "@/lib/burnticker/alerts";
 
 const LIST = [
+  "mct-burnticker-web.service        loaded active   running Burnticker web",
+  "mct-burnticker-keeper.service     loaded active   running Burnticker keeper",
   "mct-burnkeeper.service            loaded active   running Burn keeper for $DEFICIT",
   "mct-burnticker-mintbank.service   loaded active   running Burnticker mint key bank",
   "mct-burnticker-synth.service      loaded failed   failed  Burnticker synthetic creator",
@@ -46,7 +48,7 @@ describe("the keeper's unit check (F-5, F-9)", () => {
   test("any mct-* unit in the failed state is an alert, and each expected unit must be running", async () => {
     const { unitAlerts, parseUnitList, EXPECTED_UNITS } = await import("@/lib/burnticker/ops/unitHealth");
     const units = parseUnitList(LIST);
-    assert.equal(units.length, 6);
+    assert.equal(units.length, 8);
     const a = unitAlerts(units, EXPECTED_UNITS);
     assert.equal(a.length, 1, "one combined alert");
     assert.equal(a[0].kind, "bt-unit-failed");
@@ -157,6 +159,89 @@ describe("the keeper's unit check (F-5, F-9)", () => {
       assert.equal(none.raised.length, 0);
       assert.match(none.note ?? "", /could not list the units/);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  // fourth prelaunch audit (2026-10-18), operations note: a missing or unreadable last-backup.json raised nothing, so a backup that never
+  // ran was silent. After a grace of BACKUP_STATUS_GRACE_MS from the keeper's start (the timer's first run is due within six hours), a
+  // missing or malformed status raises bt-backup-failed with a plain sentence. Only where the unit list ran and the timer is installed.
+  test("no backup status (missing or malformed) raises bt-backup-failed after the grace from the keeper's start", async () => {
+    const { runUnitCheck, BACKUP_STATUS_GRACE_MS } = await import("@/lib/burnticker/ops/unitHealth");
+    assert.equal(BACKUP_STATUS_GRACE_MS, 8 * 3_600_000);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bt-units-nostatus-"));
+    try {
+      const startedAt = Date.parse("2026-10-16T12:00:00Z");
+      const run = async (now: number, listUnits: () => Promise<string> = async () => LIST) => {
+        const raised: { kind: string; text: string }[] = [];
+        const sink = async (kind: string, _key: string, text: string) => { raised.push({ kind, text }); return true; };
+        await runUnitCheck({ sink, now, root, listUnits, startedAt } as Parameters<typeof runUnitCheck>[0]);
+        return raised.filter((a) => a.kind === "bt-backup-failed");
+      };
+      assert.deepEqual(await run(startedAt + 7 * 3_600_000), [], "inside the grace: nothing yet");
+      const missing = await run(startedAt + 8 * 3_600_000 + 1);
+      assert.equal(missing.length, 1, "missing status after the grace");
+      assert.match(missing[0].text, /^No backup status was found\. /);
+      assert.match(missing[0].text, /systemctl --user list-timers mct-burnticker-backup\.timer/);
+      assert.doesNotMatch(missing[0].text, /→|\bwill\b/);
+      fs.mkdirSync(path.join(root, "data/backups"), { recursive: true });
+      fs.writeFileSync(path.join(root, "data/backups/last-backup.json"), "{ not json");
+      const malformed = await run(startedAt + 9 * 3_600_000);
+      assert.equal(malformed.length, 1, "malformed status after the grace");
+      assert.match(malformed[0].text, /^No backup status was found\. The status file could not be read\./);
+      // where the units cannot be listed (a Mac, no user bus) or the timer is not installed, nothing is said about backups
+      assert.deepEqual(await run(startedAt + 9 * 3_600_000, async () => { throw new Error("Failed to connect to bus"); }), []);
+      assert.deepEqual(await run(startedAt + 9 * 3_600_000, async () => LIST.split("\n").filter((l) => !l.includes("backup.timer")).join("\n")), []);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  // SECOND 2026-10-18 AUDIT A-7: a stopped web unit or $DEFICIT keeper raised nothing (only the mint bank and two timers were expected),
+  // and a oneshot timer job mid-run (activating start) at two checks was reported as a crash loop.
+  test("A-7: a stopped web unit, Burnticker keeper or $DEFICIT keeper is an alert", async () => {
+    const { unitAlerts, parseUnitList, EXPECTED_UNITS } = await import("@/lib/burnticker/ops/unitHealth");
+    for (const [unit, what] of [["mct-burnticker-web.service", "the Burnticker website"], ["mct-burnticker-keeper.service", "the Burnticker keeper"], ["mct-burnkeeper.service", "the \\$DEFICIT burn keeper"]] as const) {
+      const stopped = LIST.split("\n").map((l) => (l.startsWith(`${unit} `) ? `${unit}   loaded inactive dead  stopped` : l)).join("\n");
+      const a = unitAlerts(parseUnitList(stopped), EXPECTED_UNITS);
+      assert.equal(a.length, 1);
+      assert.match(a[0].text, new RegExp(`${unit.replace(/\./g, "\\.")}, ${what}[^.]*, is not running`), a[0].text);
+      const missing = unitAlerts(parseUnitList(LIST.split("\n").filter((l) => !l.startsWith(`${unit} `)).join("\n")), EXPECTED_UNITS);
+      assert.match(missing[0].text, new RegExp(`${unit.replace(/\./g, "\\.")}, [^.]*is not installed`));
+    }
+  });
+
+  test("review of A-7: a standby keeper's host does not expect the web unit or the $DEFICIT keeper (no daily alert there)", async () => {
+    const { runUnitCheck } = await import("@/lib/burnticker/ops/unitHealth");
+    const bare = LIST.split("\n").filter((l) => !l.startsWith("mct-burnticker-web.service ") && !l.startsWith("mct-burnkeeper.service ")).join("\n");
+    const check = async (env: Record<string, string>) => {
+      const raised: string[] = [];
+      const sink = async (_k: string, _key: string, text: string) => { raised.push(text); return true; };
+      await runUnitCheck({ sink, now: Date.parse("2026-10-16T20:00:00Z"), root: os.tmpdir(), listUnits: async () => bare, showRestarts: async () => "", state: { activating: new Set(), restarts: new Map() }, env });
+      return raised.join("\n");
+    };
+    const standby = await check({ BURNTICKER_KEEPER_ROLE: "standby" });
+    assert.doesNotMatch(standby, /mct-burnticker-web\.service|mct-burnkeeper\.service/, standby);
+    assert.match(standby, /mct-burnticker-synth\.service has failed/, "the rest of the check still runs");
+    for (const env of [{}, { BURNTICKER_KEEPER_ROLE: "leader" }] as Record<string, string>[]) {
+      const primary = await check(env);
+      assert.match(primary, /mct-burnticker-web\.service, the Burnticker website, is not installed/);
+      assert.match(primary, /mct-burnkeeper\.service, the \$DEFICIT burn keeper, is not installed/);
+    }
+  });
+
+  test("A-7: a oneshot timer job in a long run is never 'restarting over and over'; a real auto-restart still is", async () => {
+    const { runUnitCheck } = await import("@/lib/burnticker/ops/unitHealth");
+    const raised: string[] = [];
+    const sink = async (_k: string, _key: string, text: string) => { raised.push(text); return true; };
+    const t = Date.parse("2026-10-16T20:00:00Z");
+    // the backup and publish jobs are mid-run (activating start) at three checks in a row, and the publish job's restart counter moves
+    const busy = `${LIST}\nmct-burnticker-backup.service     loaded activating start   Burnticker backup\nmct-burnticker-publish.service    loaded activating start   Burnticker publish`;
+    const show = (n: number) => async () => `Id=mct-burnticker-backup.service\nType=oneshot\nNRestarts=0\n\nId=mct-burnticker-publish.service\nType=oneshot\nNRestarts=${n}\n\nId=mct-burnkeeper.service\nType=simple\nNRestarts=0\n`;
+    const state = { activating: new Set<string>(), restarts: new Map<string, number>() };
+    for (let i = 0; i < 3; i++) await runUnitCheck({ sink, now: t + i * 300_000, root: os.tmpdir(), listUnits: async () => busy, showRestarts: show(i * 5), state });
+    assert.ok(!raised.some((x) => /restarting over and over/.test(x)), raised.join("\n"));
+    // a simple service waiting to restart (auto-restart) at two checks is still a crash loop
+    const loop = LIST.replace("mct-burnkeeper.service            loaded active   running", "mct-burnkeeper.service            loaded activating auto-restart");
+    const s2 = { activating: new Set<string>(), restarts: new Map<string, number>() };
+    for (let i = 0; i < 2; i++) await runUnitCheck({ sink, now: t + i * 300_000, root: os.tmpdir(), listUnits: async () => loop, showRestarts: show(0), state: s2 });
+    assert.ok(raised.some((x) => /mct-burnkeeper\.service is restarting over and over/.test(x)));
   });
 
   test("the keeper calls the unit check on its alert cadence, before the push check", () => {

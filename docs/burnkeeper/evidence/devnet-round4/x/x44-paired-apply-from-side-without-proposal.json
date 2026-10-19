@@ -4,7 +4,7 @@
   "observed": "QuorumLowered",
   "match": true,
   "exitCode": 0,
-  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts apply-paired --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint ExNU8xg4vVNEr9G9aX7VDpFoHUQjQyjRibvohyRtBHqi --partner AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L --attester-key ~/.config/meme-coin-trader/devnet/keeper.json",
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts apply-paired --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint ExNU8xg4vVNEr9G9aX7VDpFoHUQjQyjRibvohyRtBHqi --partner AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L --attester-key ~/.config/meme-coin-trader/devnet/keeper.json",
   "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6036}]}",
   "errorLogLines": [
     "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/admin.rs:194. Error Code: QuorumLowered. Error Number: 6036. Error Message: the quorum may never be lowered.",

@@ -445,7 +445,8 @@ describe("owner decisions 2026-10-12", () => {
   const tsdbCup = { events: [{ idEvent: "77", dateEvent: "2026-08-20", strTimestamp: "2026-08-20T19:00:00", strEvent: "Arsenal vs Chelsea", strHomeTeam: "Arsenal", strAwayTeam: "Chelsea", idLeague: "4328", strStatus: "AP", intHomeScore: "1", intAwayScore: "1" }] };
   const apiCup = (winner: "home" | "away" | null) => ({ response: [{ fixture: { date: at, status: { short: "PEN" } }, teams: { home: { name: "Arsenal", winner: winner === null ? null : winner === "home" }, away: { name: "Chelsea", winner: winner === null ? null : winner === "away" } }, goals: { home: 1, away: 1 } }] });
   const socClient = (api: unknown) => ({ season: async () => [cup], get: async (url: string) => { if (/api-sports/.test(url)) return api; throw new Error(`HTTP 404 for ${url}`); }, tsdbRead: async () => tsdbCup }) as unknown as EspnClient;
-  const socDeps = { tsdbKey: "k", apiSportsKey: "a", market: null, payout: null };
+  // the clock inside API-Sports' read window (36 hours from the start, gameSettle.ts apiSportsWindow)
+  const socDeps = { tsdbKey: "k", apiSportsKey: "a", market: null, payout: null, now: () => Date.parse(at) + 10 * 3_600_000 };
 
   test("78: a cup tie decided on penalties is a win for the declared winner and a loss for the other side, in settlement and in espn.ts", async () => {
     const v = await settleGame(socClient(apiCup("home")), cup, socDeps);

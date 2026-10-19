@@ -21,12 +21,13 @@ import { LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHit
  *              changed score starts the hold again. Where a counted league feed exists it must agree instead, and no hold applies.
  *
  *   GAME COINS (owner, 2026-10-16): a single-game coin (series kind `game`: NBA/NFL/MLB/NHL/soccer game coins and both coins of a game
- *              pair) has ONE burn schedule. Its reading is released exactly GAME_BURN_DELAY_MS (12 h) after the final is FIRST read by ANY
- *              operator (TheSportsDB, the game's on-chain settlement, a league feed, API-Sports). That first-read time is persisted in the
- *              status table (FIRST_READ_STATUS_KEY, keyed by holdKeyOf(game)), so a keeper restart keeps it and both coins of a pair share it.
- *              Within the window every other source that answers must agree; a disagreement holds the game (the refusal carries "≠", so
- *              feedHealth raises the disagree alert) until they agree. A source that never answers does not delay the burn: one is enough.
- *              The on-chain settlement only confirms; it never brings the burn forward. A corrected result restarts the 12 hours.
+ *              pair) has ONE burn schedule (owner, 2026-10-18 evening: "game results are final when the game ends"; the 12-hour wait
+ *              is gone). Its reading is released as soon as two independent operators agree on the final, or once one operator
+ *              (TheSportsDB, the game's on-chain settlement, a league feed, API-Sports) has shown the same final on two keeper reads at
+ *              least GAME_CONFIRM_GAP_MS apart. Each operator's latest read is persisted in the status table (FIRST_READ_STATUS_KEY,
+ *              keyed by gameKeyOf(game)), so a keeper restart keeps it and both coins of a pair share it. Every source that answers must
+ *              agree; a disagreement holds the game (the refusal carries "≠", so feedHealth raises the disagree alert) until they agree.
+ *              A source that never answers does not delay the burn: one is enough. A corrected result starts the count again.
  *              Team, season, series and champion coins keep the rules above (gameSchedule is used only for series kind `game`).
  *
  * Every reading says how it settled: "settled on the game's on-chain payout · confirmed by MLB's official feed", plus a plain human
@@ -46,14 +47,14 @@ export interface Final { home: number; away: number; done: boolean; detail: stri
  * Polymarket writes them; `conditionId` is then the home leg's (the one a receipt links to first).
  */
 export interface GameMarket { conditionId: string; question: string; outcomes: [string, string]; url: string; threeWay?: { home: string; draw: string; away: string; homeName: string; awayName: string } }
-export interface GamePayout { resolved: boolean; outcome: number | null }
+export interface GamePayout { resolved: boolean; outcome: number | null; /** when this vector was read from the RPC (absent: now) */ fetchedAt?: number }
 export interface GameDeps {
   tsdbKey: string | null;
   apiSportsKey: string | null;
   /** Gamma search for the game's moneyline market (null: Polymarket discovery off on this host). */
   market: ((g: Game) => Promise<GameMarket | null>) | null;
   /** The CTF payout vector on Polygon for a condition id. */
-  payout: ((conditionId: string) => Promise<GamePayout | null>) | null;
+  payout: ((conditionId: string, o?: { /** read the RPC again, whatever is cached: a game coin's confirming read */ fresh?: boolean }) => Promise<GamePayout | null>) | null;
   /** The single-source hold store (null or absent: a game only TheSportsDB can read waits, it never settles). The keeper's is persistent. */
   holds?: SingleSourceHolds | null;
   /** The clock the hold reads (the keeper's wall clock; tests and the season rehearsal move it). */
@@ -75,9 +76,16 @@ export interface HoldMark {
    *  settled on TheSportsDB alone. Kept with the mark (the persistent store too). */
   disagreed?: boolean;
   /** Each second source's latest final for this game (API-Sports, a league feed), kept so a final read while TheSportsDB had none yet is
-   *  still compared when TheSportsDB's final arrives, even if that source is quiet or out by then. */
-  finals?: Record<string, { home: number; away: number; at: number }>;
+   *  still compared when TheSportsDB's final arrives, even if that source is quiet or out by then. Since 2026-10-18 the final's own
+   *  words are kept too (detail, url, and a soccer final's penalties, extra time and declared winner), because API-Sports is not read
+   *  again once its final is remembered (apiSportsWindow) and settleGame counts the remembered final as its read. */
+  finals?: Record<string, RememberedFinal>;
+  /** 2026-10-18 review: when API-Sports was read once more for a team coin's game after its read window had closed, because TheSportsDB
+   *  first showed a final then (settleGame). Kept on every rewrite of the mark, so that late read is made once. */
+  lateApiSportsAt?: number;
 }
+/** A second source's remembered final (HoldMark.finals). Marks written before 2026-10-18 carry only the score and the time. */
+export interface RememberedFinal { home: number; away: number; at: number; detail?: string; url?: string; pens?: boolean; declared?: "home" | "away" | null; aet?: boolean }
 /** A mark with no score held: a second source answered, so a TheSportsDB-only hold has to start again from the next read. */
 const NO_SCORE = -1;
 export interface SingleSourceHolds { get(key: string): HoldMark | null; set(key: string, m: HoldMark): void }
@@ -90,6 +98,21 @@ export function memoryHoldStore(): SingleSourceHolds & { marks: Map<string, Hold
 }
 /** The registry status key the keeper's hold store writes. */
 export const HOLD_STATUS_KEY = "games.singleSourceHolds";
+/**
+ * An operator's release (releaseDispute) drops a source's reads from a game's record; this drops the same sources' remembered finals
+ * from that game's hold marks (keyed league:eventId:startsAt), so a released final is not compared again (review 2026-10-18). Pure.
+ */
+export function releaseHoldFinals(marks: Record<string, HoldMark>, gameKey: string, ops: readonly string[]): { marks: Record<string, HoldMark>; changed: boolean } {
+  let changed = false;
+  const out: Record<string, HoldMark> = {};
+  for (const [k, m] of Object.entries(marks)) {
+    if (!k.startsWith(`${gameKey}:`) || !m?.finals || !ops.some((op) => m.finals![op])) { out[k] = m; continue; }
+    const finals = Object.fromEntries(Object.entries(m.finals).filter(([op]) => !ops.includes(op)));
+    out[k] = { ...m, finals };
+    changed = true;
+  }
+  return { marks: out, changed };
+}
 const HOLD_KEEP_MS = 60 * 86_400_000;
 /**
  * The keeper's PERSISTENT hold store: one JSON map in the registry's status table (HOLD_STATUS_KEY), read on every get and written on
@@ -111,7 +134,7 @@ export function singleSourceHold(holds: SingleSourceHolds | null | undefined, g:
   if (!holds) return { ready: false, why: "only TheSportsDB can read this game (no Polymarket market, no league feed), and this process keeps no record of when its final score was first seen, so it is not settled here" };
   const k = holdKeyOf(g), m = holds.get(k);
   if (m?.disagreed) return { ready: false, why: "a second source disagreed with TheSportsDB on this game, so it is never settled on TheSportsDB alone; it waits for two sources that agree" };
-  const kept = m?.finals ? { finals: m.finals } : {};
+  const kept = { ...(m?.finals ? { finals: m.finals } : {}), ...(m?.lateApiSportsAt !== undefined ? { lateApiSportsAt: m.lateApiSportsAt } : {}) };
   if (m && m.home === NO_SCORE) {
     holds.set(k, { home: f.home, away: f.away, firstSeenAt: now, ...kept });
     return { ready: false, why: `a second source answered for this game since the last read, so the 12-hour hold on TheSportsDB's final ${f.away}–${f.home} (away–home) starts again now` };
@@ -130,34 +153,44 @@ export function singleSourceHold(holds: SingleSourceHolds | null | undefined, g:
  * final (`final`), it is remembered on the mark (HoldMark.finals), even with no mark yet, so settleGame compares it with TheSportsDB's
  * final when that arrives, whether or not the second source still answers then.
  */
-export function secondSourceAnswered(holds: SingleSourceHolds | null | undefined, g: Pick<Game, "league" | "eventId" | "startsAt">, now: number, final: { op: string; home: number; away: number } | null = null): void {
+export function secondSourceAnswered(holds: SingleSourceHolds | null | undefined, g: Pick<Game, "league" | "eventId" | "startsAt">, now: number, final: ({ op: string } & Omit<RememberedFinal, "at">) | null = null): void {
   if (!holds) return;
   const k = holdKeyOf(g), m = holds.get(k);
-  const finals = final ? { ...(m?.finals ?? {}), [final.op]: { home: final.home, away: final.away, at: now } } : m?.finals;
+  const finals = final ? { ...(m?.finals ?? {}), [final.op]: { home: final.home, away: final.away, at: now, ...(final.detail !== undefined ? { detail: final.detail } : {}), ...(final.url !== undefined ? { url: final.url } : {}), ...(final.pens ? { pens: true } : {}), ...(final.declared !== undefined ? { declared: final.declared } : {}), ...(final.aet ? { aet: true } : {}) } } : m?.finals;
   const same = !!final && !!m?.finals?.[final.op] && m.finals[final.op].home === final.home && m.finals[final.op].away === final.away;
-  if (m && m.home !== NO_SCORE) holds.set(k, { home: NO_SCORE, away: NO_SCORE, firstSeenAt: now, ...(m.disagreed ? { disagreed: true } : {}), ...(finals ? { finals } : {}) });
-  else if (final && !same) holds.set(k, { home: NO_SCORE, away: NO_SCORE, firstSeenAt: m?.firstSeenAt ?? now, ...(m?.disagreed ? { disagreed: true } : {}), finals: finals! });
+  const late = m?.lateApiSportsAt !== undefined ? { lateApiSportsAt: m.lateApiSportsAt } : {};
+  if (m && m.home !== NO_SCORE) holds.set(k, { home: NO_SCORE, away: NO_SCORE, firstSeenAt: now, ...(m.disagreed ? { disagreed: true } : {}), ...(finals ? { finals } : {}), ...late });
+  else if (final && !same) holds.set(k, { home: NO_SCORE, away: NO_SCORE, firstSeenAt: m?.firstSeenAt ?? now, ...(m?.disagreed ? { disagreed: true } : {}), finals: finals!, ...late });
 }
 /** F-4 re-review: a second source disagreed with the primary on this game: marked for good (secondSourceAnswered keeps the mark). */
 export function sourcesDisagreed(holds: SingleSourceHolds | null | undefined, g: Pick<Game, "league" | "eventId" | "startsAt">, now: number): void {
   if (!holds) return;
   const k = holdKeyOf(g), m = holds.get(k);
-  if (!m?.disagreed) holds.set(k, { home: NO_SCORE, away: NO_SCORE, firstSeenAt: m?.firstSeenAt ?? now, disagreed: true, ...(m?.finals ? { finals: m.finals } : {}) });
+  if (!m?.disagreed) holds.set(k, { home: NO_SCORE, away: NO_SCORE, firstSeenAt: m?.firstSeenAt ?? now, disagreed: true, ...(m?.finals ? { finals: m.finals } : {}), ...(m?.lateApiSportsAt !== undefined ? { lateApiSportsAt: m.lateApiSportsAt } : {}) });
 }
 
-/** A game coin burns this long after its final is first read by any operator (owner, 2026-10-16). */
-export const GAME_BURN_DELAY_MS = 12 * 3_600_000;
-/** One operator's latest positive read of a game coin's final (kept on the record, so a source that goes quiet is still remembered). */
-export interface OpRead { winner: "home" | "away" | "tie"; home: number | null; away: number | null; at: number; detail: string; url: string; declared?: "home" | "away" | null; pens?: boolean; /** the score read marks extra time */ aet?: boolean; /** a soccer three-way payout: the 90-minute result only */ ninety?: boolean }
 /**
- * A game coin's first-read record. `firstReadAt` is when the result the sources now agree on was first read (the anchor; the burn is due
- * 12 hours later), `by` the operator that read it, `winner`/`home`/`away` that result (scores null until a score read arrives), `ops` every
+ * ONE SOURCE, READ TWICE (owner, 2026-10-18 evening: "game results are final when the game ends"; it replaced the 12-hour wait of
+ * 2026-10-16). A game coin read by one source alone burns once that same source has shown the same final (the same winner and score) on
+ * two keeper reads at least this far apart, about one keeper cycle (5 minutes).
+ */
+export const GAME_CONFIRM_GAP_MS = 4 * 60_000;
+/** One operator's latest positive read of a game coin's final (kept on the record, so a source that goes quiet is still remembered). */
+export interface OpRead {
+  winner: "home" | "away" | "tie"; home: number | null; away: number | null; at: number; detail: string; url: string; declared?: "home" | "away" | null; pens?: boolean; /** the score read marks extra time */ aet?: boolean; /** a soccer three-way payout: the 90-minute result only */ ninety?: boolean;
+  /** when this operator first showed this same print (winner and score) in an unbroken run of reads since the record's anchor; a read
+   *  written before 2026-10-18 has none, and its `at` stands in. `at - since` of GAME_CONFIRM_GAP_MS or more: the print is confirmed. */
+  since?: number;
+}
+/**
+ * A game coin's first-read record. `firstReadAt` is when the result the sources now agree on was first read (the anchor: a source's two
+ * reads of the same final count only from it, see GAME_CONFIRM_GAP_MS), `by` the operator that read it, `winner`/`home`/`away` that result (scores null until a score read arrives), `ops` every
  * operator that has agreed (named on the reading), `reads` each operator's latest positive read, `disputed` the conflicting reads while
- * the sources disagree (set: nothing burns; cleared only when every disputing operator has read again and all agree, which restarts the
- * 12 hours), `contradiction` a read that contradicts itself or the others before any result can be compared (two legs of a three-way
+ * the sources disagree (set: nothing burns; cleared only when every disputing operator has read again and all agree, which moves the
+ * anchor to then), `contradiction` a read that contradicts itself or the others before any result can be compared (two legs of a three-way
  * settlement paying out, a settlement naming neither team, a TheSportsDB row whose order cannot be told, a 90-minute winner on chain
  * against a score read that went to extra time; set: nothing burns; cleared only when that operator reads the game again cleanly, which
- * restarts the 12 hours), `startsAt` the schedule's start when first read (not part of the key), `release` an operator's resolution note
+ * moves the anchor to then), `startsAt` the schedule's start when first read (not part of the key), `release` an operator's resolution note
  * (scripts/burnticker-game-hold.mts), `ignored` the operators an operator's release set aside for this game (a source that will never
  * agree, such as a settled market on chain): their reads are not counted for this game while the record lasts.
  */
@@ -167,7 +200,11 @@ export interface FirstRead {
   startsAt?: string; release?: { at: number; note: string } | null;
   contradiction?: { op: string; why: string; at: number } | null;
   ignored?: string[] | null;
-  /** set once the game has been held by a dispute, a contradiction or a revised final: it then always waits the 12 hours (no two-source early burn) */
+  /** the agreed shoot-out winner of a level final (item 78), when a source names one; compared like the score (F07). Absent on
+   *  records written before 2026-10-18. */
+  declared?: "home" | "away" | null;
+  /** set once the game has been held by a dispute, a contradiction or a revised final: two sources agreeing no longer burn it at once; it
+   *  burns when one source has shown the agreed final twice, GAME_CONFIRM_GAP_MS apart, after the anchor */
   heldOnce?: boolean;
 }
 export interface FirstReadStore { get(key: string): FirstRead | null; set(key: string, m: FirstRead): void }
@@ -199,36 +236,54 @@ export function statusFirstReadStore(reg: { getStatus(key: string): string | nul
   };
 }
 const scoreWords = (f: { home: number | null; away: number | null }): string => (f.home === null || f.away === null ? "" : ` ${f.away}–${f.home} (away–home)`);
-const resultWords = (f: { winner: string; home: number | null; away: number | null }): string => scoreWords(f) || ` a ${f.winner} result`;
+const resultWords = (f: { winner: string; home: number | null; away: number | null; declared?: "home" | "away" | null }): string => (scoreWords(f) || ` a ${f.winner} result`) + (f.winner === "tie" && f.declared ? `, the ${f.declared} side through on penalties` : "");
 const iso = (t: number): string => new Date(t).toISOString();
-/** Two reads agree: the same score where both carry one, else the same winner. */
-const sameResult = (a: Pick<OpRead, "winner" | "home" | "away">, b: Pick<OpRead, "winner" | "home" | "away">): boolean =>
-  a.home !== null && a.away !== null && b.home !== null && b.away !== null ? a.home === b.home && a.away === b.away : a.winner === b.winner;
+/**
+ * A read's EFFECTIVE winner (audit 2026-10-18 F07): a level score with a declared winner (a penalty shoot-out, item 78) is a win for the
+ * declared side, so a provider that corrects only its shoot-out winner has changed its final.
+ */
+const effWinner = (x: Pick<OpRead, "winner" | "declared">): "home" | "away" | "tie" => (x.winner === "tie" && x.declared ? x.declared : x.winner);
+/** Two reads agree: the same score where both carry one, else the same winner; and, where both name a winner, the same effective winner. */
+const sameResult = (a: Pick<OpRead, "winner" | "home" | "away" | "declared">, b: Pick<OpRead, "winner" | "home" | "away" | "declared">): boolean =>
+  (a.home !== null && a.away !== null && b.home !== null && b.away !== null ? a.home === b.home && a.away === b.away : a.winner === b.winner) &&
+  !(a.declared && b.declared && effWinner(a) !== effWinner(b));
+/** One source's print is unchanged: the same effective winner, the same score, and the same penalty and extra-time marks (F07). */
+const samePrint = (a: Pick<OpRead, "winner" | "home" | "away" | "declared" | "pens" | "aet">, b: Pick<OpRead, "winner" | "home" | "away" | "declared" | "pens" | "aet">): boolean =>
+  a.winner === b.winner && effWinner(a) === effWinner(b) && a.home === b.home && a.away === b.away && !!a.pens === !!b.pens && !!a.aet === !!b.aet;
 /** One read handed to gameSchedule: an operator and what it read now. */
-export interface ScheduleRead { op: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail?: string; url?: string; declared?: "home" | "away" | null; pens?: boolean; aet?: boolean; ninety?: boolean }
-export type ScheduleVerdict = { kind: "ready"; mark: FirstRead; /** settled before the 12 hours because two independent sources agree (TWO SOURCES below) */ twoSources?: boolean } | { kind: "awaiting"; why: string; dueAt: number | null } | { kind: "held"; why: string };
+export interface ScheduleRead {
+  op: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail?: string; url?: string; declared?: "home" | "away" | null; pens?: boolean; aet?: boolean; ninety?: boolean;
+  /** when the body this read came from was FETCHED (2026-10-18 review: a cached repeat keeps its first fetch time, so it is never a
+   *  second read); absent: `now` */
+  fetchedAt?: number;
+}
+export type ScheduleVerdict = { kind: "ready"; mark: FirstRead; /** two independent sources agree (TWO SOURCES below) */ twoSources?: boolean; /** one source showed the same final twice (ONE SOURCE TWICE below) */ twice?: boolean } | { kind: "awaiting"; why: string; dueAt: number | null } | { kind: "held"; why: string };
 /**
  * THE GAME-COIN SCHEDULE (owner, 2026-10-16; review of b3249737). `reads` are the operators that read the final this cycle. Each one's
  * latest read is kept on the record, so an operator that read once and then goes quiet (a failing Polygon read, a lost market lookup, a
  * score source that starts throwing) is still counted; only a new positive read replaces it.
  *   disagree  any two remembered reads differ: the dispute is saved on the record and the game is HELD ("≠"; feedHealth's disagree
  *             alert: nothing burns until the sources agree). It stays held while any disputing operator is quiet.
- *   agree     every remembered read agrees. The first such read creates the record (the anchor); the burn is due 12 hours later. After
- *             a dispute, or when the agreed result differs from the anchor's (a corrected score), the 12 hours start again now.
+ *   agree     every remembered read agrees. The first such read creates the record (the anchor). After a dispute, or when the agreed
+ *             result differs from the anchor's (a corrected score), the anchor moves to now and heldOnce is set.
  *   tie       an on-chain split or void, or the soccer draw leg, never creates the record alone: a tie needs a score read.
  *   contra    settleGame found a read that contradicts itself or the others (`contra`, see FirstRead.contradiction): it is saved on the
  *             record and the game is HELD, and it stays held on later cycles while that operator is quiet (a failing Polygon leg) or
- *             contradicts again; only a clean read by that operator clears it, and that restarts the 12 hours, as after a dispute.
+ *             contradicts again; only a clean read by that operator clears it, and that moves the anchor to now, as after a dispute.
  *   ignored   an operator in the record's `ignored` list (set by releaseDispute) is not read at all for this game: its reads and its
  *             contradictions are dropped, so the game goes on the remaining sources.
- *   TWO SOURCES (owner, 2026-10-16, second decision) the game is READY AT ONCE, before the 12 hours, when two independent operators have
+ *   TWO SOURCES (owner, 2026-10-16, second decision) the game is READY AT ONCE when two independent operators have
  *             each read it as final and agree (the same score where both carry one, else the same winner or tie). Each operator counts
  *             once (`reads` is keyed by operator, so two reads by one source are one). A tie read on chain never counts: a two-way split
  *             may be a void, and a three-way draw leg says only that the game was level after 90 minutes (coordinator decision
  *             2026-10-16, conservative). A draw settles early only when two score sources agree it ended level after any extra time.
- *             The early path is closed for a game that has ever been held (`heldOnce`: a dispute, a contradiction, or a source revising
- *             its own final, which restarts the 12 hours like a dispute), that an operator released, or that has an ignored source: such
- *             a game waits the 12 hours. Otherwise the 12 hours run as above.
+ *             This path is closed for a game that has ever been held (`heldOnce`: a dispute, a contradiction, or a source revising its
+ *             own final), that an operator released, or that has an ignored source: such a game takes the path below.
+ *   ONE SOURCE TWICE (owner, 2026-10-18 evening; the 12-hour wait of 2026-10-16 is gone) every remembered read agrees and one operator
+ *             has shown that same final (the same winner and score) on two FETCHES GAME_CONFIRM_GAP_MS or more apart (fetch times: an answer served again from a cache is the same fetch; the confirming read is fetched fresh, confirmingRead), both at or after the
+ *             anchor: READY. A first print settles nothing alone. A print that changes between the two reads starts the count again from
+ *             the new print (and, as the agreed result changing, moves the anchor and sets heldOnce). A tie on chain never counts here
+ *             either. The on-chain settlement alone follows this rule (it cannot change once resolved, so the second read is cheap).
  */
 export function gameSchedule(store: FirstReadStore | null | undefined, g: Pick<Game, "league" | "eventId" | "startsAt">, reads: readonly ScheduleRead[], now: number, waiting: string | null = null, contra: { op: string; why: string } | null = null): ScheduleVerdict {
   if (!store) return contra ? { kind: "held", why: contra.why } : { kind: "awaiting", why: "this game coin's final may have been read, but this process keeps no record of when it was first read, so it is not settled here", dueAt: null };
@@ -237,7 +292,15 @@ export function gameSchedule(store: FirstReadStore | null | undefined, g: Pick<G
   if (ignored.size) { reads = reads.filter((r) => !ignored.has(r.op)); if (contra && ignored.has(contra.op)) contra = null; }
   const mem: Record<string, OpRead> = { ...(m?.reads ?? {}) };
   for (const op of ignored) delete mem[op];
-  for (const r of reads) mem[r.op] = { winner: r.winner, home: r.final?.home ?? null, away: r.final?.away ?? null, at: now, detail: r.detail ?? r.op, url: r.url ?? "", ...(r.declared !== undefined ? { declared: r.declared } : {}), ...(r.pens ? { pens: true } : {}), ...(r.aet ? { aet: true } : {}), ...(r.ninety ? { ninety: true } : {}) };
+  // ONE SOURCE TWICE: the same print as this operator's remembered read, made at or after the anchor, keeps that read's `since`
+  const anchor0 = m?.firstReadAt ?? -Infinity;
+  // `at` is the FETCH time of the body the read came from (2026-10-18 review), never the keeper's clock: an answer served again from a
+  // cache keeps its fetch time, so it can never be the second of the two reads
+  for (const r of reads) {
+    const prev = mem[r.op], home = r.final?.home ?? null, away = r.final?.away ?? null, at = Math.min(r.fetchedAt ?? now, now);
+    const same = !!prev && samePrint(prev, { winner: r.winner, home, away, declared: r.declared ?? null, pens: r.pens, aet: r.aet }) && prev.at >= anchor0;
+    mem[r.op] = { winner: r.winner, home, away, at, detail: r.detail ?? r.op, url: r.url ?? "", ...(r.declared !== undefined ? { declared: r.declared } : {}), ...(r.pens ? { pens: true } : {}), ...(r.aet ? { aet: true } : {}), ...(r.ninety ? { ninety: true } : {}), since: same ? Math.max(prev.since ?? prev.at, anchor0) : at };
+  }
   // a game past 90 minutes: the soccer three-way payout says only that it was level after 90 (settleGame compares that this cycle) and
   // nothing about the final, so it is not remembered as a read of the final
   if (Object.values(mem).some((x) => x.pens || x.aet)) for (const [op, x] of Object.entries(mem)) if (x.ninety) delete mem[op];
@@ -250,7 +313,7 @@ export function gameSchedule(store: FirstReadStore | null | undefined, g: Pick<G
     return { kind: "held", why: contra ? kept.why : `${kept.why} (first read at ${iso(kept.at)}; it stays held until that source reads the game again without the contradiction)` };
   }
   const all = Object.entries(mem);
-  if (!all.length) return { kind: "awaiting", why: waiting ?? "no source has a final for the game yet", dueAt: m && !m.disputed && !m.contradiction ? m.firstReadAt + GAME_BURN_DELAY_MS : null };
+  if (!all.length) return { kind: "awaiting", why: waiting ?? "no source has a final for the game yet", dueAt: null };
   const scored = all.find(([, x]) => x.home !== null && x.away !== null);
   const ref = scored ?? all[0];
   const odd = all.find(([, x]) => !sameResult(ref[1], x)) ?? all.find(([, x], i) => all.some(([, y], j) => j !== i && !sameResult(x, y)));
@@ -262,36 +325,51 @@ export function gameSchedule(store: FirstReadStore | null | undefined, g: Pick<G
     return { kind: "held", why: `${ref[1].detail} ≠ ${odd[1].detail} — held: the sources disagree on the final, and nothing burns for this game until every one of them reads it again and they agree` };
   }
   const agreed = { winner: ref[1].winner, home: scored ? scored[1].home : null, away: scored ? scored[1].away : null };
-  if (agreed.winner === "tie" && !scored) return { kind: "awaiting", why: "the only read is a tie from the on-chain settlement (a split or void market, or the draw leg); a tie needs a final score read before the game coin's 12 hours start", dueAt: null };
+  // F07: the shoot-out winner the sources name (they agree, or `odd` above held the game)
+  const agreedDeclared = agreed.winner === "tie" ? all.map(([, x]) => x.declared ?? null).find((x) => !!x) ?? null : null;
+  if (agreed.winner === "tie" && !scored) return { kind: "awaiting", why: "the only read is a tie from the on-chain settlement (a split or void market, or the draw leg); a tie needs a final score read before the game coin can burn", dueAt: null };
   const ops = [...(m?.ops ?? []).filter((o) => mem[o]), ...all.map(([op]) => op).filter((o) => !(m?.ops ?? []).includes(o))];
-  const changed = !!m && (m.winner !== agreed.winner || (agreed.home !== null && m.home !== null && (m.home !== agreed.home || m.away !== agreed.away)));
+  const changed = !!m && (m.winner !== agreed.winner || (agreed.home !== null && m.home !== null && (m.home !== agreed.home || m.away !== agreed.away)) ||
+    // F07: a winner-only correction of a level final (the shoot-out winner) is a change too; a record from before 2026-10-18 has none
+    (m.declared !== undefined && (m.declared ?? null) !== agreedDeclared));
   // TWO SOURCES (above): every remembered read agrees here; count the independent operators that read a final
   // a tie from the chain never counts: a two-way split may be a void, and the soccer draw leg says only "level after 90 minutes"
   const counted = all.filter(([op, x]) => !(op === "on-chain payout" && x.winner === "tie"));
   const twoSources = counted.length >= 2 && !changed && !m?.heldOnce && !m?.disputed && !m?.contradiction && !m?.release && !m?.ignored?.length;
-  if (!m || m.disputed || m.contradiction || changed) {
+  const restart = !m || !!m.disputed || !!m.contradiction || changed;
+  // a FIRST record anchors at the earliest fetch among this cycle's reads, so the reads that made it count as the first of the two. A
+  // restart after a hold (a cleared dispute or contradiction, a changed print; a release sets its own) anchors at NOW: a read fetched
+  // during the hold, such as a payout served from a cache, never counts toward the two (re-review 2026-10-18)
+  const restartAt = m ? now : Math.min(now, ...reads.map((r) => Math.min(r.fetchedAt ?? now, now)));
+  // ONE SOURCE TWICE (above): an operator whose same print stood GAME_CONFIRM_GAP_MS or more (fetch times), counted from the anchor
+  const anchor = restart ? restartAt : m.firstReadAt;
+  const startOf = (x: OpRead): number => Math.max(x.since ?? x.at, anchor);
+  const twice = counted.find(([, x]) => x.at - startOf(x) >= GAME_CONFIRM_GAP_MS);
+  // the earliest a second read can confirm (the keeper's next read of this game); null when no source answered this cycle (review
+  // 2026-10-18: a quiet source's old read would otherwise ask for a read every minute forever), so the normal poll applies
+  const dueAt = !reads.length ? null : Math.max(Math.min(...counted.map(([, x]) => startOf(x)), now) + GAME_CONFIRM_GAP_MS, now + 60_000);
+  if (restart) {
     const by = reads.find((r) => mem[r.op])?.op ?? ref[0];
-    const rec: FirstRead = { firstReadAt: now, by, winner: agreed.winner, home: agreed.home, away: agreed.away, ops, reads: mem, disputed: null, contradiction: null, startsAt: m?.startsAt ?? g.startsAt, release: m?.release ?? null, ...(m?.ignored?.length ? { ignored: m.ignored } : {}), ...(m?.heldOnce || changed ? { heldOnce: true } : {}) };
+    const rec: FirstRead = { firstReadAt: restartAt, by, winner: agreed.winner, home: agreed.home, away: agreed.away, declared: agreedDeclared, ops, reads: mem, disputed: null, contradiction: null, startsAt: m?.startsAt ?? g.startsAt, release: m?.release ?? null, ...(m?.ignored?.length ? { ignored: m.ignored } : {}), ...(m?.heldOnce || changed ? { heldOnce: true } : {}) };
     store.set(k, rec);
     if (twoSources) return { kind: "ready", mark: rec, twoSources: true };
-    const due = iso(now + GAME_BURN_DELAY_MS);
-    return { kind: "awaiting", dueAt: now + GAME_BURN_DELAY_MS, why: !m
-      ? `the final${resultWords(agreed)} was first read now by ${settledByOf(all.map(([op]) => op))}; the game coin burns 12 hours later, at ${due}, if every source that answers still agrees`
-      : m.disputed ? `the sources agree again on${resultWords(agreed)} after a disagreement, so the 12 hours start again: due ${due}`
-      : m.contradiction ? `${m.contradiction.op} read the game again without the contradiction and the sources agree on${resultWords(agreed)}, so the 12 hours start again: due ${due}`
-      : `the final changed from${resultWords(m)} to${resultWords(agreed)}, so the 12 hours start again: due ${due}` };
+    return { kind: "awaiting", dueAt, why: !m
+      ? `the final${resultWords(agreed)} was first read now by ${settledByOf(all.map(([op]) => op))}; the game coin burns once a second source agrees, or once one source shows the same final again a few minutes later`
+      : m.disputed ? `the sources agree again on${resultWords(agreed)} after a disagreement; the game coin burns once one source shows that final again a few minutes later`
+      : m.contradiction ? `${m.contradiction.op} read the game again without the contradiction and the sources agree on${resultWords(agreed)}; the game coin burns once one source shows that final again a few minutes later`
+      : `the final changed from${resultWords(m)} to${resultWords({ ...agreed, declared: agreedDeclared })}; the game coin burns once one source shows the new final again a few minutes later` };
   }
-  const next: FirstRead = { ...m, ops, reads: mem, contradiction: null, home: m.home ?? agreed.home, away: m.away ?? agreed.away };
+  const next: FirstRead = { ...m, ops, reads: mem, contradiction: null, home: m.home ?? agreed.home, away: m.away ?? agreed.away, declared: m.declared ?? agreedDeclared };
   store.set(k, next);
-  const dueAt = m.firstReadAt + GAME_BURN_DELAY_MS;
-  if (now < dueAt && twoSources) return { kind: "ready", mark: next, twoSources: true };
-  if (now < dueAt) return { kind: "awaiting", dueAt, why: `the final${resultWords(next)} was first read at ${iso(m.firstReadAt)} by ${settledByOf([m.by])}, confirmed so far by ${settledByOf(ops)}; the game coin burns at ${iso(dueAt)}` };
-  return { kind: "ready", mark: next };
+  if (twoSources) return { kind: "ready", mark: next, twoSources: true };
+  if (twice) return { kind: "ready", mark: next, twice: true };
+  return { kind: "awaiting", dueAt, why: `the final${resultWords(next)} was first read by ${settledByOf([m.by])}, confirmed so far by ${settledByOf(ops)}; the game coin burns once one source shows the same final again a few minutes later, or a second source agrees` };
 }
 /**
  * THE OPERATOR'S RELEASE OF A STUCK DISAGREEMENT (review of b3249737 item 6; scripts/burnticker-game-hold.mts, dry run unless --apply).
  * After reading every source by hand, the operator names the result that is right (`side`). Remembered reads that name another winner
- * are dropped, the dispute is cleared, and the 12 hours start again NOW on that result, with the note kept on the record. A source that
+ * are dropped, the dispute is cleared, and the anchor moves to NOW on that result, with the note kept on the record: the game then burns
+ * once one source has shown that result on two reads after the release, GAME_CONFIRM_GAP_MS apart (no 12 hours since 2026-10-18). A source that
  * still reads the other result on the next cycle disputes it again: the release never overrides a live disagreement, UNLESS the
  * operator names that source in `ignore` (a source that will never agree: the immutable settlement of a market on chain, a feed that
  * keeps a wrong final). An ignored source is saved on the record (`ignored`) and gameSchedule does not count its reads for this game
@@ -533,8 +611,8 @@ export function finalFromApiSports(g: Game, body: unknown, url: string): Final |
 // ---- one game, settled ----------------------------------------------------------------------------------------------------------
 
 export type GameVerdict =
-  | { kind: "settled"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; /** the operator it settled on: "on-chain payout", "TheSportsDB", or (a game coin) a CrossId */ settledOn: string; confirmedBy: string; ops: string[]; detail: string; url: string; /** which operators settled it, in words: "on-chain payout and TheSportsDB", or SINGLE_SOURCE_SETTLED_BY (settleGame always sets it) */ settledBy?: string; /** set when TheSportsDB alone settled it after the 12-hour hold: when that final was first seen */ singleSince?: number; /** a game coin (GAME COINS above): when its final was first read by any operator; the burn was due 12 hours later */ firstReadAt?: number; /** a game coin settled before the 12 hours because two independent sources agreed (gameSchedule TWO SOURCES) */ twoSources?: boolean }
-  | { kind: "awaiting"; why: string; /** a game coin: when its burn falls due (its first read + 12 h), for the keeper's next read */ dueAt?: number | null }
+  | { kind: "settled"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; /** the operator it settled on: "on-chain payout", "TheSportsDB", or (a game coin) a CrossId */ settledOn: string; confirmedBy: string; ops: string[]; detail: string; url: string; /** which operators settled it, in words: "on-chain payout and TheSportsDB", or SINGLE_SOURCE_SETTLED_BY (settleGame always sets it) */ settledBy?: string; /** set when TheSportsDB alone settled it after the 12-hour hold: when that final was first seen */ singleSince?: number; /** a game coin (GAME COINS above): when its final was first read by any operator; the burn was due 12 hours later */ firstReadAt?: number; /** a game coin settled because two independent sources agreed (gameSchedule TWO SOURCES) */ twoSources?: boolean; /** a game coin settled because one source showed the same final twice (gameSchedule ONE SOURCE TWICE) */ twice?: boolean }
+  | { kind: "awaiting"; why: string; /** a game coin: the earliest its final can be confirmed by a second read, for the keeper's next read */ dueAt?: number | null }
   | { kind: "held"; why: string };
 
 const winnerOf = (f: { home: number; away: number }): "home" | "away" | "tie" => (f.home > f.away ? "home" : f.home < f.away ? "away" : "tie");
@@ -582,6 +660,49 @@ export async function crossFinal(client: EspnClient, g: Game, d: GameDeps, which
 
 /** How long a settlement cross-read answer from API-Sports is kept (the free plan's 100 a day per sport). */
 export const APISPORTS_CROSS_TTL_MS = 30 * 60_000;
+/** How long after a game's start API-Sports is still read for it when it has given no final (apiSportsWindow). */
+export const APISPORTS_READ_AFTER_START_MS = 36 * 3_600_000;
+/** The pending line before kickoff (shown on the coin page: plain English, no dates). */
+export const APISPORTS_BEFORE_START_WHY = "API-Sports is read once the game has started";
+/** The pending line once the window has closed with no final from API-Sports. */
+export const APISPORTS_WINDOW_CLOSED_WHY = "API-Sports is no longer read for this game, because it had no final in the 36 hours after the start";
+/**
+ * THE API-SPORTS READ WINDOW (2026-10-18; the box spent the American-football day, 51 of 51, by 13:00 UTC on 10-17 and 10-18, before any
+ * game kicked off, because every keeper cycle cross-read every NFL game coin, each answer kept 30 minutes: about 96 reads a game a day).
+ * API-Sports is read for a game only while it can matter:
+ *   before     the game's start (the schedule's, else the first-read record's, else 12:00 UTC on the game's date): not read ("skip")
+ *   live       from the start until API-Sports' final is remembered, or 36 hours after the start: read, each answer kept 30 minutes
+ *   final      once its final is remembered (HoldMark.finals, or the game-coin record's reads): not read again ("remembered"; settleGame
+ *              counts the remembered final as API-Sports' read). While a game is held over a dispute or a contradiction that involves
+ *              API-Sports (or a hold mark records a disagreement), it is still read inside the 36 hours, so a corrected final can clear it.
+ *   after      36 hours after the start with no final from it: not read ("skip")
+ * A skipped read is "not answered" (pending), never a disagreement, and never "API-Sports out" except for a team coin once the window has closed and TheSportsDB has a final (settleGame; one late read first). The league feeds (MLB, NHL, NBA) are free
+ * and are not windowed. Pure apart from reading the two stores.
+ */
+export function apiSportsWindow(g: Pick<Game, "league" | "eventId" | "startsAt" | "date">, d: Pick<GameDeps, "holds" | "firstReads">, now: number, gameCoin = false): { kind: "read" } | { kind: "skip"; why: string; /** the 36 hours have passed (not before kickoff) */ closed?: boolean } | { kind: "remembered"; final: RememberedFinal; inRecord: boolean } {
+  const op = "apisports.games";
+  const rec = d.firstReads?.get(gameKeyOf(g)) ?? null, mark = d.holds?.get(holdKeyOf(g)) ?? null;
+  const start = [g.startsAt, rec?.startsAt, `${g.date}T12:00:00Z`].map((x) => (x ? Date.parse(x) : NaN)).find((t) => Number.isFinite(t)) ?? NaN;
+  if (Number.isFinite(start) && now < start) return { kind: "skip", why: APISPORTS_BEFORE_START_WHY };
+  const open = !Number.isFinite(start) || now <= start + APISPORTS_READ_AFTER_START_MS;
+  const r = rec?.reads?.[op];
+  const fromRecord: RememberedFinal | null = r && r.home !== null && r.away !== null ? { home: r.home, away: r.away, at: r.at, detail: r.detail, url: r.url, ...(r.pens ? { pens: true } : {}), ...(r.declared !== undefined ? { declared: r.declared } : {}), ...(r.aet ? { aet: true } : {}) } : null;
+  // a game coin with a record goes on the record alone: a final the record no longer holds was dropped by an operator's release
+  // (releaseDispute), and the hold mark's copy of it must not bring it back (review 2026-10-18)
+  const remembered = fromRecord ?? (gameCoin && rec ? null : mark?.finals?.[op] ?? null);
+  const contested = !!(rec?.disputed?.some((x) => x.op === op) || rec?.contradiction?.op === op || mark?.disagreed);
+  // 2026-10-18 review: a GAME COIN whose only answering source is API-Sports needs its final read twice (ONE SOURCE TWICE). Its
+  // remembered final is read once more inside the window, fresh, GAME_CONFIRM_GAP_MS after its first fetch (confirmingRead), and then
+  // not again. Until then it waits on the remembered final.
+  if (gameCoin && open && fromRecord && rec && !contested) {
+    const alone = Object.keys(rec.reads ?? {}).every((o) => o === op || rec.ignored?.includes(o));
+    const confirmed = r!.at - Math.max(r!.since ?? r!.at, rec.firstReadAt) >= GAME_CONFIRM_GAP_MS;
+    if (alone && !confirmed && confirmingRead(rec, op, now)) return { kind: "read" };
+  }
+  if (remembered && !(contested && open)) return { kind: "remembered", final: remembered, inRecord: !!fromRecord };
+  if (!open) return { kind: "skip", why: APISPORTS_WINDOW_CLOSED_WHY, closed: true };
+  return { kind: "read" };
+}
 /**
  * API-Sports cannot be read for now: its budget for the day is spent, or it refused the read (an `errors` body: the day's limit, a plan
  * that does not cover the date). Settlement then counts it out (operatorsFor), so a game it was the second operator for takes the
@@ -614,18 +735,55 @@ export function operatorsFor(league: LeagueId, d: GameDeps, hasMarket: boolean):
  * as a win for the side that went through, so the draw leg alone never decides such a game: settleGame compares the payout's "level after
  * 90 minutes" with the score reads and then leaves it out of the operator count (the comment there).
  */
-async function threeWayRead(market: GameMarket, w: NonNullable<GameMarket["threeWay"]>, d: GameDeps): Promise<{ kind: "read"; winner: "home" | "away" | "tie"; detail: string } | { kind: "awaiting"; why: string } | { kind: "held"; why: string }> {
+async function threeWayRead(market: GameMarket, w: NonNullable<GameMarket["threeWay"]>, d: GameDeps, fresh = false): Promise<{ kind: "read"; winner: "home" | "away" | "tie"; detail: string; fetchedAt?: number } | { kind: "awaiting"; why: string } | { kind: "held"; why: string }> {
   const legs = [["home", w.home, `${w.homeName} win`], ["tie", w.draw, "a draw"], ["away", w.away, `${w.awayName} win`]] as const;
   const yes: (typeof legs)[number][] = [];
+  const times: number[] = [];
   for (const leg of legs) {
-    const p = d.payout ? await d.payout(leg[1]).catch(() => null) : null;
+    const p = d.payout ? await d.payout(leg[1], fresh ? { fresh: true } : undefined).catch(() => null) : null;
+    if (p?.fetchedAt !== undefined) times.push(p.fetchedAt);
     if (!p || !p.resolved) return { kind: "awaiting", why: `the on-chain payout for ${leg[2]} in ${market.question} is not resolved yet` };
     if (p.outcome === null) return { kind: "awaiting", why: `the on-chain payout for ${leg[2]} in ${market.question} is split, not a result` };
     if (p.outcome === 0) yes.push(leg);
   }
   if (yes.length > 1) return { kind: "held", why: `the on-chain payouts for ${market.question} pay out on more than one result (${yes.map((l) => l[2]).join(" and ")}) — held` };
   if (yes.length === 0) return { kind: "held", why: `none of the three on-chain payouts for ${market.question} pays out — held` };
-  return { kind: "read", winner: yes[0][0], detail: `on-chain payout ${market.question}: ${yes[0][2]} (90 minutes)` };
+  return { kind: "read", winner: yes[0][0], detail: `on-chain payout ${market.question}: ${yes[0][2]} (90 minutes)`, ...(times.length ? { fetchedAt: Math.min(...times) } : {}) };
+}
+
+/**
+ * ONE SOURCE'S READS IN ONE settleGame (2026-10-18 review). A view of the client that notes when each answer body was fetched
+ * (EspnClient.fetchedAt; a test double that cannot say counts as fetched now) and, with `fresh`, makes every read skip the cache. `at()`
+ * is the OLDEST fetch among the bodies read, so a final built partly from a cached body is never taken for a new read.
+ */
+export function sourceReader(client: EspnClient, fresh: boolean, now: number): { client: EspnClient; at: () => number } {
+  const times: number[] = [];
+  const t = client as EspnClient & { fetchedAt?: (b: unknown) => number | null };
+  const view: EspnClient = new Proxy(t, {
+    get(target, prop) {
+      if (prop === "get") return async (url: string, headers: Record<string, string> = {}, o: Parameters<EspnClient["get"]>[2] = {}) => {
+        const body = await target.get(url, headers, fresh ? { ...o, fresh: true } : o);
+        times.push(target.fetchedAt?.(body) ?? now);
+        return body;
+      };
+      // tsdbRead reads through this.get: called on the view, so its reads are noted (and fresh) too
+      if (prop === "tsdbRead") return (...a: Parameters<EspnClient["tsdbRead"]>) => target.tsdbRead.apply(view, a);
+      const v = Reflect.get(target, prop, target) as unknown;
+      return typeof v === "function" ? (v as (...x: unknown[]) => unknown).bind(target) : v;
+    },
+  });
+  return { client: view, at: () => (times.length ? Math.min(...times) : now) };
+}
+/**
+ * Whether this cycle's read by `op` could be a game coin's SECOND read (ONE SOURCE TWICE): the record is not held, `op` has a remembered
+ * read not yet confirmed, and GAME_CONFIRM_GAP_MS has passed since that print was first fetched. Such a read is fetched fresh.
+ */
+export function confirmingRead(rec: FirstRead | null | undefined, op: string, now: number): boolean {
+  if (!rec || rec.disputed?.length || rec.contradiction || rec.ignored?.includes(op)) return false;
+  const x = rec.reads?.[op];
+  if (!x) return false;
+  const start = Math.max(x.since ?? x.at, rec.firstReadAt);
+  return x.at - start < GAME_CONFIRM_GAP_MS && now - start >= GAME_CONFIRM_GAP_MS;
 }
 
 /**
@@ -636,7 +794,10 @@ async function threeWayRead(market: GameMarket, w: NonNullable<GameMarket["three
  */
 export async function settleGame(client: EspnClient, g: Game, d: GameDeps, o: { schedule?: "game" } = {}): Promise<GameVerdict> {
   const gameCoin = o.schedule === "game";
-  type Read = { op: string; label: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null; aet?: boolean; ninety?: boolean };
+  type Read = { op: string; label: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null; aet?: boolean; ninety?: boolean; fetchedAt?: number };
+  // a game coin's record: a source whose remembered print may be confirmed this cycle is read fresh (confirmingRead)
+  const nowMs = (d.now ?? Date.now)(), rec = gameCoin ? d.firstReads?.get(gameKeyOf(g)) ?? null : null;
+  const fresh = (op: string): boolean => confirmingRead(rec, op, nowMs);
   const reads: Read[] = []; const pending: string[] = []; const errors: string[] = [];
   // A GAME COIN's contradictions are saved on its record (gameSchedule `contra`), so a later cycle on which that source is quiet (one
   // Polygon leg failing) cannot release them; any other game returns held at once, as before.
@@ -645,18 +806,19 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps, o: { 
   const lookup = { failed: false };
   const market = d.market ? await d.market(g).catch(() => { lookup.failed = true; return null; }) : null;
   if (market?.threeWay) {
-    const r = await threeWayRead(market, market.threeWay, d);
+    const r = await threeWayRead(market, market.threeWay, d, fresh("on-chain payout"));
     if (r.kind === "held") { if (!gameCoin) return { kind: "held", why: r.why }; contra = { op: "on-chain payout", why: r.why }; }
     else if (r.kind === "awaiting") pending.push(r.why);
-    else reads.push({ op: "on-chain payout", label: "the game's on-chain payout", winner: r.winner, final: null, detail: r.detail, url: market.url, ninety: true });
+    else reads.push({ op: "on-chain payout", label: "the game's on-chain payout", winner: r.winner, final: null, detail: r.detail, url: market.url, ninety: true, ...(r.fetchedAt !== undefined ? { fetchedAt: r.fetchedAt } : {}) });
   } else if (market) {
-    const p = d.payout ? await d.payout(market.conditionId).catch(() => null) : null;
+    // 2026-10-18 review: the confirming read of a payout read alone goes to the RPC again (a resolved vector is otherwise cached for good)
+    const p = d.payout ? await d.payout(market.conditionId, fresh("on-chain payout") ? { fresh: true } : undefined).catch(() => null) : null;
     if (!p || !p.resolved) pending.push(`the on-chain payout for ${market.question} is not resolved yet`);
     else {
       const name = p.outcome === null ? null : market.outcomes[p.outcome];
       const winner = name === null ? "tie" : sideMatches(name, g.home) ? "home" : sideMatches(name, g.away) ? "away" : null;
       if (winner === null) { const why = `the payout names "${name}", which matches neither team`; if (!gameCoin) return { kind: "held", why }; contra = { op: "on-chain payout", why }; }
-      else reads.push({ op: "on-chain payout", label: "the game's on-chain payout", winner, final: null, detail: `on-chain payout ${market.question}: ${name ?? "split"}`, url: market.url });
+      else reads.push({ op: "on-chain payout", label: "the game's on-chain payout", winner, final: null, detail: `on-chain payout ${market.question}: ${name ?? "split"}`, url: market.url, ...(p.fetchedAt !== undefined ? { fetchedAt: p.fetchedAt } : {}) });
     }
   }
   // TheSportsDB (licensed)
@@ -664,17 +826,18 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps, o: { 
     try {
       // v2 with the key in the header; a key v2 refuses is read through v1 (espn.ts tsdbRead), the key never logged
       let f: Final | null = null, any = false, err: Error | null = null;
+      const src = sourceReader(client, fresh("TheSportsDB"), nowMs);
       // the day listing first (2026-10-13: v2 search/event finds nothing for any league); the name search stays as the fallback
-      try { f = await tsdbFinalByDay(client, d.tsdbKey, g); any = true; } catch (e) { err = e as Error; }
+      try { f = await tsdbFinalByDay(src.client, d.tsdbKey, g); any = true; } catch (e) { err = e as Error; }
       for (const names of f ? [] : tsdbNamePairs(g)) {
         let body: unknown;
-        try { body = await client.tsdbRead(d.tsdbKey, tsdbV2Url(names), (k) => [tsdbV1SearchUrl(k, names)]); any = true; } catch (e) { err = e as Error; continue; }
+        try { body = await src.client.tsdbRead(d.tsdbKey, tsdbV2Url(names), (k) => [tsdbV1SearchUrl(k, names)]); any = true; } catch (e) { err = e as Error; continue; }
         f = finalFromTsdb(g, body, tsdbV2Url(names));
         if (f) break;
       }
       if (!any && err) throw err;
       if (f?.unresolved) { if (!gameCoin) return { kind: "held", why: f.unresolved }; contra ??= { op: "TheSportsDB", why: f.unresolved }; }
-      else if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url, pens: f.pens, declared: f.declared, aet: f.aet });
+      else if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url, pens: f.pens, declared: f.declared, aet: f.aet, fetchedAt: src.at() });
       else pending.push(f ? `TheSportsDB has the game but not final: ${f.detail}` : "TheSportsDB has no final for the game yet");
     } catch (e) { errors.push(`TheSportsDB: ${(e as Error).message.slice(0, 80)}`); }
   }
@@ -685,11 +848,32 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps, o: { 
   let dOps: GameDeps = d;
   for (const id of [off, d.apiSportsKey ? "apisports.games" as const : null]) {
     if (!id) continue;
+    // 2026-10-18: API-Sports is read only inside its window (apiSportsWindow). A skipped read is "not answered": it never ends or starts
+    // a one-source hold, is never "API-Sports out" (dOps), and is never a disagreement. A remembered final stands as its read.
+    if (id === "apisports.games") {
+      const w = apiSportsWindow(g, d, nowMs, gameCoin);
+      if (w.kind === "skip") {
+        // review 2026-10-18: once the window has CLOSED (never before kickoff), a team coin counts API-Sports out (dOps), so a game
+        // only TheSportsDB can read takes its 12-hour hold instead of waiting for good. When TheSportsDB first shows a final after the
+        // window, API-Sports is read once more (lateApiSportsAt on the hold mark), in case it has the final by then.
+        const mark = w.closed && !gameCoin && d.holds ? d.holds.get(holdKeyOf(g)) : null;
+        const tsdbFinal = reads.some((r) => r.op === "TheSportsDB" && !!r.final);
+        const late = w.closed && !gameCoin && !!d.holds && tsdbFinal && mark?.lateApiSportsAt === undefined;
+        // (counted out only while TheSportsDB has a final: with none, the game simply waits for a read, never "held")
+        if (!late) { pending.push(w.why); if (w.closed && !gameCoin && tsdbFinal) dOps = { ...d, apiSportsKey: null }; continue; }
+        d.holds!.set(holdKeyOf(g), { ...(mark ?? { home: NO_SCORE, away: NO_SCORE, firstSeenAt: nowMs }), lateApiSportsAt: nowMs });
+      }
+      if (w.kind === "remembered") {
+        if (!(gameCoin && w.inRecord)) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(w.final), final: { home: w.final.home, away: w.final.away }, detail: w.final.detail ?? `API-Sports ${w.final.away}–${w.final.home} (final, read at ${iso(w.final.at)})`, url: w.final.url ?? "", pens: w.final.pens, declared: w.final.declared ?? null, aet: w.final.aet });
+        continue;
+      }
+    }
     try {
-      const c = await crossFinal(client, g, d, id);
+      const src = sourceReader(client, fresh(id), nowMs);
+      const c = await crossFinal(src.client, g, d, id);
       // F-4 re-review: an answer ends a running one-source hold; a final is remembered for the comparison below
-      secondSourceAnswered(d.holds, g, (d.now ?? Date.now)(), c.final && c.final.done ? { op: id, home: c.final.home, away: c.final.away } : null);
-      if (c.final && c.final.done) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(c.final), final: { home: c.final.home, away: c.final.away }, detail: c.final.detail, url: c.final.url, pens: c.final.pens, declared: c.final.declared, aet: c.final.aet });
+      secondSourceAnswered(d.holds, g, (d.now ?? Date.now)(), c.final && c.final.done ? { op: id, home: c.final.home, away: c.final.away, detail: c.final.detail, url: c.final.url, pens: c.final.pens, declared: c.final.declared, aet: c.final.aet } : null);
+      if (c.final && c.final.done) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(c.final), final: { home: c.final.home, away: c.final.away }, detail: c.final.detail, url: c.final.url, pens: c.final.pens, declared: c.final.declared, aet: c.final.aet, fetchedAt: src.at() });
       else pending.push(`${CROSS_LABEL[id]} has no final for the game yet`);
     } catch (e) { errors.push(`${CROSS_LABEL[id]}: ${(e as Error).message.slice(0, 80)}`); if (id === "apisports.games" && apiSportsOut(e)) dOps = { ...d, apiSportsKey: null }; }
   }
@@ -715,7 +899,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps, o: { 
   // read is remembered on the record (gameSchedule), and the on-chain settlement only confirms. Settled on the first score read
   // (TheSportsDB, then a league feed or API-Sports), the on-chain settlement last.
   if (gameCoin) {
-    const h = gameSchedule(d.firstReads, g, reads.map((r) => ({ op: r.op, winner: r.winner, final: r.final, detail: r.detail, url: r.url, declared: r.declared ?? null, pens: r.pens, aet: r.aet, ninety: r.ninety })), (d.now ?? Date.now)(), pending[0] ?? errors[0] ?? null, contra);
+    const h = gameSchedule(d.firstReads, g, reads.map((r) => ({ op: r.op, winner: r.winner, final: r.final, detail: r.detail, url: r.url, declared: r.declared ?? null, pens: r.pens, aet: r.aet, ninety: r.ninety, ...(r.fetchedAt !== undefined ? { fetchedAt: r.fetchedAt } : {}) })), (d.now ?? Date.now)(), pending[0] ?? errors[0] ?? null, contra);
     if (h.kind === "held") return { kind: "held", why: h.why };
     if (h.kind === "awaiting") return { kind: "awaiting", why: h.why, dueAt: h.dueAt };
     const mk = h.mark, mem = mk.reads ?? {};
@@ -731,7 +915,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps, o: { 
       if (named.size === 1) winner = [...named][0];
       else if (Object.values(mem).some((r) => r.pens)) return { kind: "held", why: "the game was decided on penalties, but no source names the winner — held" };
     }
-    return { kind: "settled", winner, final, settledOn: order[0], confirmedBy: andList(order.slice(1).map(opLabel)), ops: order, detail: order.map((o) => mem[o].detail).join("; "), url: mem[order[0]].url, settledBy: settledByOf(order), firstReadAt: mk.firstReadAt, ...(h.twoSources ? { twoSources: true } : {}) };
+    return { kind: "settled", winner, final, settledOn: order[0], confirmedBy: andList(order.slice(1).map(opLabel)), ops: order, detail: order.map((o) => mem[o].detail).join("; "), url: mem[order[0]].url, settledBy: settledByOf(order), firstReadAt: mk.firstReadAt, ...(h.twoSources ? { twoSources: true } : {}), ...(h.twice ? { twice: true } : {}) };
   }
   const primary = reads.find((r) => r.op === "on-chain payout") ?? reads.find((r) => r.op === "TheSportsDB");
   const others = reads.filter((r) => r !== primary);
@@ -785,20 +969,25 @@ const outcomeFor = (winner: "home" | "away" | "tie", g: Game, abbr: string, team
   return winner === "tie" ? "tie" : winner === us ? "win" : "loss";
 };
 
-/** What a GAME COIN's reading says after its operators (owner, 2026-10-16): the 12-hour rule, or two sources agreeing first. */
+/**
+ * What a GAME COIN's reading says after its operators: two sources agreeing (owner, 2026-10-16), or one source showing the same final
+ * twice (owner, 2026-10-18 evening). GAME_SCHEDULE_WORDS is the 12-hour form written until 2026-10-18 (SEAWIN and DENWIN carry it): it is
+ * no longer written, and the readers (settledTitle.ts, leagues.ts) still read it.
+ */
 export const GAME_SCHEDULE_WORDS = "burned 12 hours after the final was first read";
 export const GAME_TWO_SOURCE_WORDS = "burned when two sources had confirmed it";
+export const GAME_TWICE_WORDS = "burned when one source had confirmed the final twice";
 /**
  * How a reading's title says the game settled: "settled on X · confirmed by Y", or "settled on a licensed final score · TheSportsDB only,
- * confirmed after a 12 h hold". A game coin names every operator that confirmed by the time its burn was due: "settled on a licensed
- * final score · confirmed by the game's on-chain settlement · burned 12 hours after the final was first read" (no confirmer: "· no other
- * source answered"). Settled early because two sources agreed, the last part is GAME_TWO_SOURCE_WORDS instead.
+ * confirmed after a 12 h hold". A game coin names every operator that confirmed by the time it burned: "settled on a licensed final
+ * score · confirmed by the game's on-chain settlement · burned when two sources had confirmed it", or, settled on one source's final read
+ * twice, "settled on a licensed final score · no other source answered · burned when one source had confirmed the final twice".
  */
 export const settledWords = (v: Extract<GameVerdict, { kind: "settled" }>): string => (v.firstReadAt !== undefined
-  ? `settled on ${opLabel(v.settledOn)} · ${v.confirmedBy ? `confirmed by ${v.confirmedBy}` : "no other source answered"} · ${v.twoSources ? GAME_TWO_SOURCE_WORDS : GAME_SCHEDULE_WORDS}`
+  ? `settled on ${opLabel(v.settledOn)} · ${v.confirmedBy ? `confirmed by ${v.confirmedBy}` : "no other source answered"} · ${v.twoSources ? GAME_TWO_SOURCE_WORDS : GAME_TWICE_WORDS}`
   : v.singleSince !== undefined ? `settled on ${SETTLED_ON.TheSportsDB} · ${SINGLE_SOURCE_SETTLED_BY}` : `settled on ${SETTLED_ON[v.settledOn as keyof typeof SETTLED_ON] ?? opLabel(v.settledOn)} · confirmed by ${v.confirmedBy}`);
-/** A reading's method: the operators joined by "+" (a game coin's ends "+12h-after-first-read"), or "thesportsdb-only-12h-hold". */
-const methodOf = (v: Extract<GameVerdict, { kind: "settled" }>): string => (v.singleSince !== undefined ? "thesportsdb-only-12h-hold" : v.ops.map((o) => (o === "on-chain payout" ? "onchain-payout" : o === "TheSportsDB" ? "thesportsdb" : o)).join("+") + (v.firstReadAt !== undefined ? (v.twoSources ? "+two-sources-agreed" : "+12h-after-first-read") : ""));
+/** A reading's method: the operators joined by "+" (a game coin's ends "+two-sources-agreed" or "+one-source-read-twice"; until 2026-10-18 "+12h-after-first-read"), or "thesportsdb-only-12h-hold". */
+const methodOf = (v: Extract<GameVerdict, { kind: "settled" }>): string => (v.singleSince !== undefined ? "thesportsdb-only-12h-hold" : v.ops.map((o) => (o === "on-chain payout" ? "onchain-payout" : o === "TheSportsDB" ? "thesportsdb" : o)).join("+") + (v.firstReadAt !== undefined ? (v.twoSources ? "+two-sources-agreed" : "+one-source-read-twice") : ""));
 /** The measure-only notice for a game settled on one source (GameDeps.onSingleSource); a throwing listener never changes a reading. */
 const noteSingle = (d: GameDeps, seriesId: string | null, g: Game, v: Extract<GameVerdict, { kind: "settled" }>): void => {
   if (v.singleSince === undefined || !d.onSingleSource || !v.final) return;
@@ -808,7 +997,7 @@ const noteSingle = (d: GameDeps, seriesId: string | null, g: Game, v: Extract<Ga
 /** Settled readings for a team or game series since `sinceIso` (the keeper and the back-test). */
 export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number; seriesId?: string | null } = {}): Promise<ResolvedSelector> {
   // the deps' clock when the host gives one (the keeper's wall clock; a test's or rehearsal's moved clock), so the 6-hour read gate and a
-  // game coin's 12 hours are measured on the same clock
+  // game coin's two reads are measured on the same clock
   const now = o.nowMs ?? d.now?.() ?? Date.now();
   const ms = asMeetings(s);
   if (ms) return meetingsSettled(client, ms, d, now, o.seriesId ?? null);
@@ -817,7 +1006,7 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
   const tid = s.kind === "team" ? s.teamId : null;
   const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string }>();
   let awaiting = 0, dueAt: number | null = null; const refusals: string[] = [];
-  // a single-game coin (owner, 2026-10-16) burns 12 hours after its final is first read (gameSchedule); team coins keep their rules
+  // a single-game coin (owner, 2026-10-16) burns once two sources agree or one source shows the same final twice (gameSchedule, 2026-10-18); team coins keep their rules
   const sched = s.kind === "game" ? { schedule: "game" as const } : {};
   // semantics-verify items 79 and 80: a day's reading is one id (its UTC date) and the registry refuses a changed value for an id it
   // holds, so a day is read only once every game of it has a result. A game still awaiting holds its whole day (a doubleheader's first
@@ -898,7 +1087,7 @@ export function threeWayOf(markets: readonly GameHitMarket[], g: Game): { draw: 
   return { draw: draws[0], home: home.m, away: away.m, homeName: home.name, awayName: away.name };
 }
 type GameHits = { events: { url: string; markets: GameHitMarket[] }[] };
-export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "open" | "closed" | "all"; limit?: number }): Promise<GameHits>; eventsInWindow?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; eventsStarting?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; readChain(conditionId: string): Promise<{ resolved: boolean; outcome: number | null }> }): Pick<GameDeps, "market" | "payout"> {
+export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "open" | "closed" | "all"; limit?: number }): Promise<GameHits>; eventsInWindow?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; eventsStarting?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; readChain(conditionId: string, o?: { fresh?: boolean }): Promise<{ resolved: boolean; outcome: number | null }>; chainFetchedAt?(conditionId: string): number | null }): Pick<GameDeps, "market" | "payout"> {
   type Hit = { url: string; markets: GameHitMarket[] };
   const pick = (events: readonly Hit[], g: Game): GameMarket | null => {
     // walkthrough 2026-10-13: the CLOSEST moneyline of the two teams within 2 days (a playoff series lists the same two teams on
@@ -946,7 +1135,7 @@ export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "
       const r = await poly.search(`${g.away.nickname || g.away.name} vs ${g.home.nickname || g.home.name}`, { status: "all", limit: 10 });
       return pick(r.events, g);
     },
-    payout: async (id) => { const c = await poly.readChain(id); return { resolved: c.resolved, outcome: c.outcome }; },
+    payout: async (id, o) => { const c = await poly.readChain(id, o?.fresh ? { fresh: true } : {}); const at = poly.chainFetchedAt?.(id) ?? null; return { resolved: c.resolved, outcome: c.outcome, ...(at !== null ? { fetchedAt: at } : {}) }; },
   };
 }
 

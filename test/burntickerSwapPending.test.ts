@@ -143,7 +143,8 @@ describe("a signed swap is held before it is sent (swap/pending.ts)", () => {
     assert.match(panel, /runSwap\(ctx\(\)/);   // third prelaunch audit F05: runSwap wraps submitSwap in the flight
     assert.match(panel, /const busy = step !== "idle" \|\| pending !== null \|\| checking;/);
     assert.match(panel, /loadPending\(store, p\.network, p\.mint, ownerKey\)/);
-    assert.match(panel, /watch\.current\.check\(rec, \(r\) => reconcilePending\(ctx\(\), r\)\)/);
+    // review of audit 2026-10-18 F04: the read is captured so a final answer for a wallet no longer connected is kept for it
+    assert.match(panel, /watch\.current\.check\(rec, async \(r\) => \(read = await reconcilePending\(ctx\(\), r\)\)\)/);
     assert.ok(!/simulateSignSend/.test(panel), "the panel sends only through runSwap (submitSwap)");
   });
 });

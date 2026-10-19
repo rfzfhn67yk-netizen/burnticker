@@ -3,7 +3,7 @@ import { clientKey, readTextCapped } from "@/lib/burnticker/api/http";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { rpcUrlFor, type Network } from "@/lib/burnticker/networks";
 import { hostCluster } from "@/lib/burnticker/launchAvailability";
-import { RPC_FLIGHT_HEADER, RPC_FLIGHT_REFUSED_HEADER, RPC_PROXY_MAX_BODY, isFlightBody, rpcMethodsOf, rpcProxyRefusal } from "@/lib/burnticker/rpcProxy";
+import { RPC_BUDGET_REFUSAL, RPC_FLIGHT_HEADER, RPC_FLIGHT_REFUSED_HEADER, RPC_PROXY_MAX_BODY, isFlightBody, rpcMethodsOf, rpcProxyRefusal } from "@/lib/burnticker/rpcProxy";
 import { flightTokens, proxyLimiter } from "@/lib/burnticker/rpcFlight";
 import { BudgetHoldError, takeRpc } from "@/lib/burnticker/apiBudget";
 import { ensureWebApiBudget } from "@/lib/burnticker/server";
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   // token is named refused so the page stops sending it
   const take = (l: "flight" | "proxy") => takeRpc(rpcUrlFor(network), body, undefined, { lane: l });
   try { await take(lane).catch((e) => { if (!(e instanceof BudgetHoldError) || lane !== "flight") throw e; lane = "proxy"; tokenHeaders[RPC_FLIGHT_REFUSED_HEADER] = "1"; return take(lane); }); }
-  catch (e) { if (e instanceof BudgetHoldError) return refuse(503, -32005, "The site has used its network allowance for now. Please try again in a few minutes.", { "retry-after": "60", ...tokenHeaders }); throw e; }
+  catch (e) { if (e instanceof BudgetHoldError) return refuse(503, -32005, RPC_BUDGET_REFUSAL, { "retry-after": "60", ...tokenHeaders }); throw e; }
   try {
     const up = await fetch(rpcUrlFor(network), { method: "POST", headers: { "content-type": "application/json" }, body: text, signal: AbortSignal.timeout(20_000) });
     const answer = await up.text();

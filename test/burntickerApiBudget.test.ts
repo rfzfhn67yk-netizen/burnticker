@@ -22,7 +22,7 @@ function clock(start = T0) {
 }
 
 describe("the table", () => {
-  test("every process's share sums to at most 1, so all three together stay at or under 60% of each documented limit", () => {
+  test("every process's share sums to at most 1, so all three together stay at or under 60% of each documented limit (API-Sports: the plan itself)", () => {
     assert.equal(BUDGET_FRACTION, 0.6);
     for (const s of SOURCES) {
       const shares = s.shares ?? ROLE_SHARES;
@@ -32,9 +32,21 @@ describe("the table", () => {
         const b = budgetFor(s, role);
         for (const r of b.rates) {
           const stated = r.windowMs === 1_000 ? s.limit.perSec! : r.windowMs === 60_000 ? s.limit.perMin! : s.limit.perHour!;
-          assert.ok(r.perMs * r.windowMs <= stated * 0.6 + 1e-9, `${s.id}/${role} rate`);
+          assert.ok(r.perMs * r.windowMs <= stated * (s.fraction ?? 0.6) + 1e-9, `${s.id}/${role} rate`);
         }
       }
+      // every source but API-Sports keeps the 60%; API-Sports (fraction 1) is split by its shares alone
+      assert.equal(s.fraction ?? BUDGET_FRACTION, s.id.startsWith("apisports-") ? 1 : 0.6, `${s.id}: fraction`);
+    }
+  });
+  test("API-Sports (2026-10-18): one 0.85 keeper share of the plan's 100 a day, not 0.6 × 0.85 = 51; the site 15; together the plan, never more", () => {
+    for (const id of ["apisports-american-football", "apisports-football", "apisports-basketball"]) {
+      const k = budgetFor(specOf(id), "keeper"), w = budgetFor(specOf(id), "web");
+      assert.equal(k.perDay, 85, `${id} keeper day`);
+      assert.equal(w.perDay, 15, `${id} web day`);
+      assert.equal(budgetFor(specOf(id), "deficit").perDay, 0, `${id}: the $DEFICIT keeper never calls it`);
+      assert.ok(k.perDay + w.perDay <= specOf(id).limit.perDay!, `${id}: the processes together stay at or under the plan`);
+      assert.ok(Math.abs(k.rates[0].perMs * 60_000 - 8.5) < 1e-9 && Math.abs(w.rates[0].perMs * 60_000 - 1.5) < 1e-9, `${id}: 10 a minute split 8.5 and 1.5`);
     }
   });
   test("Helius: 10M credits a month at 60% is 200,000 a day, the keeper's 60% share of it 120,000; 50 rps → 18 rps for the keeper", () => {

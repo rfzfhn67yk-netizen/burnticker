@@ -46,6 +46,8 @@ export const SWAP_COPY = {
   /** review follow-up 2: a held swap released after 24 hours without an answer from the network (swap/pending.ts GIVE_UP_AFTER_MS) */
   unconfirmed: "We could not confirm whether your earlier swap went through. Check your wallet's history before you swap again.",
   balanceUnread: "This page could not read the wallet's new balance just now. The swap itself is confirmed.",
+  tryAgain: "Try again",
+  retrying: "Reading the pool again",
   noKeys: "The panel never sees your keys. Your wallet signs, and you can read every step before you approve it.",
 } as const;
 
@@ -85,6 +87,12 @@ export const REFUSAL = {
   operatorWallet: "This wallet is one of the operator's own wallets. The trust page's rule is that the operator's wallets do not trade platform coins, so this panel refuses it.",
   guardUnavailable: "This site could not load its list of operator wallets just now, so the panel is not swapping. Reload the page to try again, or use a link below.",
   wrongNetwork: "This site's connection is not on the coin's network, so nothing can be sent from here.",
+  /** prelaunch audit 2026-10-18 F03: a failed genesis read is an outage, not a different network; the panel retries on its own */
+  networkUnreadable: "This site could not reach the network just now, so the panel has not read the pool. It tries again on its own, or press Try again.",
+  readFailed: "This site could not read the pool just now. It tries again on its own, or press Try again.",
+  /** the same two once the background retries have run out (the panel no longer tries on its own) */
+  networkUnreadableManual: "This site could not reach the network just now, so the panel has not read the pool. Press Try again to read it again.",
+  readFailedManual: "This site could not read the pool just now. Press Try again to read it again.",
   migrating: "The curve is complete and the coin is moving to its Raydium pool. Swaps here pause until the pool is registered on this site.",
   graduatedNoPool: "The curve is complete. This panel swaps again once the coin's Raydium pool is registered on this site.",
   unsupported: "This coin's pool is set up in a way this panel does not handle. Use a link below.",

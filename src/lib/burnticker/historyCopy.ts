@@ -115,6 +115,7 @@ export const BOUNTY_COPY = {
 export const PRESS_COPY = {
   title: "Press kit",
   description: "Burnticker's logo files, the $DEFICIT mark, the receipt artwork, a short description and the contact address.",
+  missionTitle: "In one paragraph",
   boilerplateTitle: "About Burnticker",
   boilerplate: "Burnticker is a launchpad for Solana memecoins that burn on real-world results. Each coin locks one rule that names a public result, such as a game score or the national debt figure. When the result is published, fees from trading the coin buy back some of it from its pool, and everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it against the source.",
   notTitle: "What Burnticker is not",

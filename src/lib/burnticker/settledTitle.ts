@@ -1,7 +1,9 @@
 /**
  * THE "SETTLED ON …" PART OF A GAME READING'S TITLE, PARSED (review of b3249737, item 5). gameSettle.ts settledWords writes one of:
  *   settled on X · confirmed by Y
- *   settled on X · confirmed by Y · burned 12 hours after the final was first read        (a game coin)
+ *   settled on X · confirmed by Y · burned when one source had confirmed the final twice   (a game coin, since 2026-10-18)
+ *   settled on X · no other source answered · burned when one source had confirmed the final twice
+ *   settled on X · confirmed by Y · burned 12 hours after the final was first read        (a game coin until 2026-10-18; still read)
  *   settled on X · no other source answered · burned 12 hours after the final was first read
  *   settled on X · confirmed by Y · burned when two sources had confirmed it      (a game coin, two sources agreed first)
  *   settled on a licensed final score · TheSportsDB only, confirmed after a 12 h hold      (a team coin's one-source game)
@@ -26,7 +28,7 @@ export function settledParts(title: string): SettledPart[] {
   }
   return out;
 }
-/** One settled part as a sentence: "Settled on X and confirmed by Y.", "Settled on X; no other source answered; burned 12 hours …". */
+/** One settled part as a sentence: "Settled on X and confirmed by Y.", "Settled on X; no other source answered; burned when one source …". */
 export function settledSentence(p: SettledPart): string {
   return `Settled on ${p.on}${p.confirmedBy ? ` and confirmed by ${p.confirmedBy}` : ""}${p.notes.length ? `; ${p.notes.join("; ")}` : ""}.`;
 }

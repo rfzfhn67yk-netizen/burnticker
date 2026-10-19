@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, simulationFailureText, stepStatusText, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
 import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
 import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
@@ -38,7 +38,7 @@ const confirmFetch = retry429((u: string, init: { method: string; headers: Recor
  * so pinning a table needs no code release; until that answer arrives, or if it fails, nothing can be signed. The plan never carries an
  * opening purchase (hostedLaunch.ts): the creator trades on the curve after the create like anyone else.
  */
-export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true, onLive }: { plan: SignPlan; creator: string | null; title: string; notes?: string[]; coinHref: (ticker: string) => string; /** launch night 2026-10-13: every coin is live and recorded (the page drops its saved draft) */ onLive?: () => void; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean }) {
+export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true, onLive, onStartOver }: { /** F06: every launch plan carries its deadline (withPlanDeadline) */ plan: PreparedSignPlan; creator: string | null; title: string; notes?: string[]; coinHref: (ticker: string) => string; /** launch night 2026-10-13: every coin is live and recorded (the page drops its saved draft) */ onLive?: () => void; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean; /** F06: Start over once the plan is past its deadline (default: back to the review for a new plan) */ onStartOver?: () => void }) {
   const wallet = useWallet();
   const { connection } = useConnection();
   // recovery: what an earlier run (this tab, before a reload) left in storage for these drafts. Read in the initial state — the card
@@ -69,6 +69,22 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
   // launch audit 234: the replaced plan's signatures and mints stay readable in this tab's history (never a key)
   const startNewPlan = () => { archivePlanRecord(storage, planStorageKey(plan)); window.location.assign(resumeReviewHref(window.location.pathname)); };
+  // F06 (prelaunch audit 2026-10-18): past the plan's deadline no new step is signed here (the runner refuses it too, also after a long
+  // wallet wait); a step already sent can still be checked on chain and a landed coin recorded. The clock is read again when the deadline
+  // passes and whenever the tab is shown again (a tab left open overnight).
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => setClock(Date.now());
+    const timer = window.setTimeout(tick, Math.max(0, plan.deadlineAt - Date.now()) + 1_000);
+    document.addEventListener("visibilitychange", tick); window.addEventListener("focus", tick);
+    return () => { window.clearTimeout(timer); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
+  }, [plan.deadlineAt]);
+  const [ranOut, setRanOut] = useState(false);
+  const expired = ranOut || planPastDeadline(plan, clock);
+  // review fix: a coin whose create step is confirmed on chain but whose record was not accepted yet keeps the card (it can still be
+  // recorded after the deadline), and Start over never archives its plan record, so the reload notice can still find and record it
+  const unrecorded = planHasUnrecordedCoin(plan, done, confirmed);
+  const startOver = () => { if (!unrecorded) archivePlanRecord(storage, planStorageKey(plan)); if (onStartOver) onStartOver(); else window.location.assign(resumeReviewHref(window.location.pathname)); };
   const allLive = plan.confirms.length > 0 && plan.confirms.every((c) => confirmed.includes(c.mint));
   useEffect(() => { if (allLive) onLive?.(); }, [allLive]); // eslint-disable-line react-hooks/exhaustive-deps
   const n = plan.steps.length;
@@ -102,6 +118,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         storage,
       }, (i, sig) => setDone((d) => (d.length === i ? [...d, sig] : d)), done);
       setDone(r.signatures);
+      if (r.expired) setRanOut(true);
       if (r.error) {
         setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n));
         // AUDIT A C1 (5): a coin whose own create landed before the stop is recorded now (a LaunchLab pair whose B create failed: A exists)
@@ -124,7 +141,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   };
   // Launch on the review card was the decision; the wallet's own prompt is the signature — no second button on the happy path
   const [started, setStarted] = useState(false);
-  useEffect(() => { if (autoStart && !started && !problems.length && creator && wallet.signTransaction) { setStarted(true); void go(); } }, [autoStart, started, problems.length, creator, wallet.signTransaction]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autoStart && !started && !expired && !problems.length && creator && wallet.signTransaction) { setStarted(true); void go(); } }, [autoStart, started, expired, problems.length, creator, wallet.signTransaction]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Plain step names: "Create $RAYS26" for the transaction the mint signs; "Link the two coins" for a pair-curve set-up; else the bundle's. */
   const stepName = (t: SignPlan["steps"][number], i: number) => {
     const c = plan.confirms.find((x) => x.step === i);
@@ -167,13 +184,18 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
           {/* the trade links on the success screen (find-and-trade, 2026-10-14) */}
           <LaunchedTrade coins={plan.confirms} />
         </div>
+      ) : deadlineCardStartsOver({ expired, stoppedState: stopped?.state ?? null, done: done.length, steps: n, unrecorded }) ? (
+        <div className="space-y-2" data-plan-expired>
+          <p className="text-amber-300">{PLAN_EXPIRED_SENTENCE}</p>
+          <button type="button" data-decision="new-plan" className="rounded border border-amber-400 px-5 py-2 text-base font-semibold text-amber-300" onClick={startOver}>Start over</button>
+        </div>
       ) : stopped?.state === "abandoned" ? (
         <button type="button" data-decision="new-plan" className="rounded border border-amber-400 px-5 py-2 text-base font-semibold text-amber-300" onClick={startNewPlan}>Start a new plan</button>
       ) : problems.length > 0 ? (
         <div className="text-amber-400 text-xs"><p>Not signable here yet:</p><ul className="list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul>{pins === null && <button type="button" data-pin-retry className="mt-1 rounded border border-amber-400 px-2 py-1 text-amber-300" onClick={() => setPinTry((x) => x + 1)}>Read the setting again</button>}</div>
       ) : (
         <button type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-50" disabled={busy} onClick={go}>
-          {busy ? `Signing step ${Math.min(done.length + 1, n)} of ${n}…` : stopped?.state === "sent" ? `Check step ${(stopped.failedAt ?? 0) + 1} on chain and continue` : done.length >= n ? "Record the launch again" : done.length ? `Continue from step ${done.length + 1} of ${n}` : `Sign in your wallet (${n} step${n === 1 ? "" : "s"})`}
+          {busy ? `Signing step ${Math.min(done.length + 1, n)} of ${n}…` : stopped?.state === "sent" ? `Check step ${(stopped.failedAt ?? 0) + 1} on chain and continue` : expired && unrecorded ? RECORD_LANDED_LABEL : done.length >= n ? "Record the launch again" : done.length ? `Continue from step ${done.length + 1} of ${n}` : `Sign in your wallet (${n} step${n === 1 ? "" : "s"})`}
         </button>
       )}
       {!allLive && <p className="text-xs text-neutral-500" data-session-scope>{SESSION_SCOPE_LINE}</p>}

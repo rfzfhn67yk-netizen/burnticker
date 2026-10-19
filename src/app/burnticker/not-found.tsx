@@ -19,6 +19,7 @@ export default function NotFound() {
         <li><Link className="underline" href="/burnticker/leagues">Seasons</Link> <span className="block text-neutral-500">Browse the leagues and their scoreboards.</span></li>
         <li><Link className="underline" href="/burnticker/launch">Launch</Link> <span className="block text-neutral-500">Read how a coin is launched.</span></li>
         <li><Link className="underline" href="/burnticker/trust">Trust</Link> <span className="block text-neutral-500">Check the current status and every wallet.</span></li>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a full page load to the site root on purpose (a fresh start from a missing page) */}
         <li><a className="underline" href="/">The home page</a></li>
       </ul>
     </main>

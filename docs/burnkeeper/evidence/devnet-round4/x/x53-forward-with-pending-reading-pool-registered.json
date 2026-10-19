@@ -4,7 +4,7 @@
   "observed": "EndReadingsPending",
   "match": true,
   "exitCode": 0,
-  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint iJhkwouWchLzuXiwHsJsZRoARHXnPQxN7U5As28khNg --target 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz --sink-mint 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz --pair 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz:20261012",
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint iJhkwouWchLzuXiwHsJsZRoARHXnPQxN7U5As28khNg --target 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz --sink-mint 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz --pair 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz:20261012",
   "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6106}]}",
   "errorLogLines": [
     "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:256. Error Code: EndReadingsPending. Error Number: 6106. Error Message: forward_on_end: a reading inside the window is still unprocessed.",

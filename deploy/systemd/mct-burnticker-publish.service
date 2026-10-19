@@ -7,6 +7,9 @@ WorkingDirectory=%h/meme-coin-trader
 # --publish-only: the keepers' files (status.json, receipts.json, audit.json, ops.json, t/<ticker>/…) only; the brand pages ship with
 # `sh scripts/ops/deploy-sites.sh` by hand after a change to site/. Prints only what changed, so the log stays quiet.
 ExecStart=/bin/sh %h/meme-coin-trader/scripts/ops/deploy-sites.sh --publish-only
+# A oneshot has no start timeout by default, so one hung copy would hold every later minute's publish behind it. A pass takes a few
+# seconds; two minutes ends a stuck one and the timer's next run starts clean (2026-10-18 prelaunch audit A-32).
+TimeoutStartSec=120
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=TZ=America/Denver
 Environment=BURNTICKER_PUBLISH_DIR=%h/meme-coin-trader/data/burnticker-site

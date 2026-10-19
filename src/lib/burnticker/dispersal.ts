@@ -232,7 +232,32 @@ export function debtLine(d: Debt): string {
 // Persisted state (JSON-safe: bigints as strings)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-export interface DispersalReceipt { signature: string; at: number; spentLamports: bigint; throughDate: number; memo: string | null; slot: number | null }
+/**
+ * One landed piece. Fourth prelaunch audit F10 (2026-10-18): the amount is THIS transaction's own spend, read from its `carried` memo
+ * (clamped to the piece's requested maximum), never the change in the coin's carried balance (another cranker, a new reading or the
+ * rule's end path can move that in between). Until the memo is read the receipt is "pending" with spentLamports null, and the keeper
+ * reads it again on later wakes. A receipt written before this field existed reads as "landed".
+ */
+export interface DispersalReceipt {
+  signature: string;
+  at: number;
+  /** null while the transaction's own memo has not been read (status "pending"). */
+  spentLamports: bigint | null;
+  status: "landed" | "pending";
+  /** The piece's requested maximum (crank_carried max_spend), the clamp for the memo's amount. Absent on receipts from before F10. */
+  requestedLamports?: bigint;
+  /** The last wake that tried to read the memo (pending receipts only). */
+  checkedAt?: number;
+  /** How many times the memo was looked up while pending (the retry backoff is min(2^tries minutes, 6 h)). */
+  tries?: number;
+  /** Set when an unread memo was given up (three days after landing): no more lookups, one alert raised. */
+  gaveUpAt?: number;
+  /** The memo named more than the piece asked for: recorded at the request and alerted (a program bug or the wrong memo read). */
+  clamped?: boolean;
+  throughDate: number;
+  memo: string | null;
+  slot: number | null;
+}
 export interface DispersalState {
   window: DispersalWindow | null;
   debts: Debt[];
@@ -249,6 +274,13 @@ export interface DispersalState {
 }
 export const EMPTY_STATE: DispersalState = { window: null, debts: [], cursor: 0, inflight: null, receipts: [], alerted: null, retryAt: null };
 export const RECEIPTS_KEPT = 200;
+/** The receipts kept: at most RECEIPTS_KEPT, dropping the oldest LANDED ones first, so a pending receipt stays to be read. */
+export function keepReceipts(rs: DispersalReceipt[]): DispersalReceipt[] {
+  if (rs.length <= RECEIPTS_KEPT) return rs;
+  let drop = rs.length - RECEIPTS_KEPT;
+  const kept = rs.filter((r) => { if (drop > 0 && r.status !== "pending") { drop--; return false; } return true; });
+  return kept.slice(-RECEIPTS_KEPT);
+}
 
 export function stateToJson(s: DispersalState): string {
   return JSON.stringify(s, (_k, v) => (typeof v === "bigint" ? `${v}n` : v));
@@ -257,7 +289,9 @@ export function stateFromJson(j: string | null): DispersalState {
   if (!j) return { ...EMPTY_STATE };
   try {
     const s = JSON.parse(j, (_k, v) => (typeof v === "string" && /^-?\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v)) as DispersalState;
-    return { ...EMPTY_STATE, ...s };
+    // receipts written before F10 carry no status: they were recorded with an amount, so they read as landed
+    const receipts = (s.receipts ?? []).map((r) => ({ ...r, status: r.status === "pending" ? "pending" as const : "landed" as const, spentLamports: r.spentLamports ?? null }));
+    return { ...EMPTY_STATE, ...s, receipts };
   } catch { return { ...EMPTY_STATE }; }
 }
 

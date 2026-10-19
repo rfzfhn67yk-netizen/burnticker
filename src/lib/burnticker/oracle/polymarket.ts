@@ -154,10 +154,23 @@ export function parsePolySeries(s: string): PolySeries | null {
   return e ? { kind: "event", slug: e[1] } : null;
 }
 
-/** `*` = any run of characters (possibly empty); everything else literal; anchored at both ends. */
+/**
+ * `*` = any run of characters (possibly empty); everything else literal; anchored at both ends.
+ * Audit 2026-10-18 A-37: a linear two-pointer matcher (no RegExp). The old version joined the pieces with `.*` into one RegExp, which
+ * backtracks: six wildcards took seconds and froze the web process. This one backs up only to the last `*` seen, so the work is at most
+ * glob length times text length, and runs of `*` count as one.
+ */
 export function globMatch(glob: string, text: string): boolean {
-  const re = new RegExp(`^${glob.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
-  return re.test(text);
+  const g = glob.replace(/\*+/g, "*");
+  let gi = 0, ti = 0, star = -1, mark = 0;
+  while (ti < text.length) {
+    if (gi < g.length && g[gi] !== "*" && g[gi] === text[ti]) { gi++; ti++; }
+    else if (gi < g.length && g[gi] === "*") { star = gi++; mark = ti; }
+    else if (star >= 0) { gi = star + 1; ti = ++mark; }
+    else return false;
+  }
+  while (gi < g.length && g[gi] === "*") gi++;
+  return gi === g.length;
 }
 
 /**
@@ -391,7 +404,7 @@ export class PolymarketClient implements OracleAdapter {
   chainReads: string[] = [];
   /**
    * ONE SCHEDULE FOR EVERY SINGLE-GAME COIN (owner 2026-10-16): the keeper sets this to sources/polyGame.ts polyGameGate, and a one-market
-   * rule on a game moneyline then releases its result only on the game-coin schedule (once two sources agree, else 12 hours after the first
+   * rule on a game moneyline then releases its result only on the game-coin schedule (once two sources agree, else once one source has shown the same final twice; before 2026-10-18, 12 hours after the first
    * read, every source agreeing). Null (the web, tests): unchanged.
    */
   gameGate: ((rule: BurnRule, m: GammaMarket, ev: SettledEvent) => Promise<{ release: true } | { release: false; why: string; dueAt: number | null; held: boolean }>) | null = null;
@@ -435,16 +448,23 @@ export class PolymarketClient implements OracleAdapter {
     return p;
   }
 
-  /** The CTF payout vector of one condition. A resolved vector is cached for good (it cannot change); an unresolved one for 10 minutes. */
-  async readChain(conditionId: string): Promise<ConditionResolution> {
+  /**
+   * The CTF payout vector of one condition. A resolved vector is cached for good (it cannot change); an unresolved one for 10 minutes.
+   * `fresh` reads the RPC again whatever is cached (2026-10-18 review: a game coin settled on the payout alone checks it on a second RPC
+   * read, so one bad RPC answer is never counted twice); chainFetchedAt says when the answer now held was read.
+   */
+  async readChain(conditionId: string, o: { fresh?: boolean } = {}): Promise<ConditionResolution> {
     const hit = this.chainCache.get(conditionId);
-    if (hit && (hit.r.resolved || this.now() - hit.at < this.ttl)) return hit.r;
+    if (hit && !o.fresh && (hit.r.resolved || this.now() - hit.at < this.ttl)) return hit.r;
     const r = await readConditionResolution(conditionId, { rpcUrls: this.rpcUrls, fetchImpl: this.rpcFetch, timeoutMs: this.timeoutMs });
     this.chainReads.push(conditionId);
     this.rpcUrls = [r.rpcUrl, ...this.rpcUrls.filter((u) => u !== r.rpcUrl)];   // the RPC that answered goes first next time
     this.chainCache.set(conditionId, { at: this.now(), r });
     return r;
   }
+
+  /** When the payout vector held for a condition was read from the RPC (this client's clock), or null. */
+  chainFetchedAt(conditionId: string): number | null { return this.chainCache.get(conditionId)?.at ?? null; }
 
   /** One market by condition id, closed or open (Gamma lists a closed market only with closed=true). */
   async marketByCondition(id: string): Promise<GammaMarket | null> {

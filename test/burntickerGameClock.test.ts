@@ -1,9 +1,11 @@
-// ONE BURN SCHEDULE FOR EVERY SINGLE-GAME COIN (owner, 2026-10-16). A game coin (series kind `game`, and both coins of two teams in one
-// game) burns exactly 12 hours after its final is FIRST read by any operator (TheSportsDB, the game's on-chain settlement, a league feed,
-// API-Sports). Inside the 12 hours every other source that answers must agree, or the game is held; a source that never answers does not
-// delay it; the on-chain settlement confirms and never brings it forward. The first-read time is persisted in the status table
-// (statusFirstReadStore, FIRST_READ_STATUS_KEY), so a keeper restart keeps the clock and a pair's two coins share it. The live case of
-// 2026-10-16 (SEAWIN/DENWIN: TheSportsDB down all night, Polymarket resolved the Broncos) is replayed from a fixture. No network.
+// ONE BURN SCHEDULE FOR EVERY SINGLE-GAME COIN (owner, 2026-10-16; the 12-hour wait dropped by the owner 2026-10-18 evening: "game
+// results are final when the game ends"). A game coin (series kind `game`, and both coins of two teams in one game) burns on the cycle
+// two independent operators agree on its final, or once ONE operator (TheSportsDB, the game's on-chain settlement, a league feed,
+// API-Sports) has shown the same final on two keeper reads at least GAME_CONFIRM_GAP_MS (4 minutes, about one 5-minute cycle) apart. A
+// first print settles nothing alone; a changed print starts the count again. Every source that answers must agree, or the game is held; a
+// source that never answers does not delay it. Each source's reads are persisted in the status table (statusFirstReadStore,
+// FIRST_READ_STATUS_KEY), so a keeper restart keeps them and a pair's two coins share them. The live case of 2026-10-16 (SEAWIN/DENWIN:
+// TheSportsDB down all night, Polymarket resolved the Broncos) is replayed from a fixture. No network.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -17,8 +19,8 @@ import { settledLine, settledParts } from "@/lib/burnticker/settledTitle";
 import { gamesFromTitle } from "@/lib/burnticker/leagues";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
-import { gameSeries, parseEspnSeries, type EspnClient, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
-import { FIRST_READ_STATUS_KEY, GAME_BURN_DELAY_MS, GAME_SCHEDULE_WORDS, GAME_TWO_SOURCE_WORDS, gameKeyOf, gameSchedule, memoryFirstReadStore, releaseDispute, settleGame, settledWords, sportsSettled, statusFirstReadStore, tsdbV2DayUrl, tsdbV2EventUrl, type FirstReadStore, type GameDeps, type GameMarket, type GamePayout, type GameVerdict } from "@/lib/burnticker/sources/gameSettle";
+import { EspnClient as SportsClient, gameSeries, parseEspnSeries, type EspnClient, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
+import { FIRST_READ_STATUS_KEY, HOLD_STATUS_KEY, GAME_CONFIRM_GAP_MS, GAME_SCHEDULE_WORDS, GAME_TWICE_WORDS, GAME_TWO_SOURCE_WORDS, gameKeyOf, gameSchedule, memoryFirstReadStore, releaseDispute, settleGame, settledWords, sportsSettled, statusFirstReadStore, tsdbV2DayUrl, tsdbV2EventUrl, type FirstReadStore, type GameDeps, type GameMarket, type GamePayout, type GameVerdict } from "@/lib/burnticker/sources/gameSettle";
 import { isDisagreement } from "@/lib/burnticker/ops/feedHealth";
 import { GAME_AGREE_LINE, GAME_BURN_LINE, sportsConfirmationLine } from "@/lib/burnticker/sources/provenance";
 import { GAME_COIN_NOTE, nativeRule, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -36,6 +38,9 @@ const FIX = JSON.parse(fs.readFileSync(new URL("./fixtures/burnticker-gameclock/
 };
 const G = FIX.game;
 const H = 3_600_000;
+/** One keeper cycle (5 minutes): a second read one cycle later confirms a print (GAME_CONFIRM_GAP_MS is 4 minutes). */
+const C = 5 * 60_000;
+const GAP = GAME_CONFIRM_GAP_MS;
 const T0 = Date.parse("2026-10-16T08:00:00Z");
 const DEN = parseEspnSeries(gameSeries("nfl", G.eventId, "DEN", "win")) as EspnSeries;
 const SEA = parseEspnSeries(gameSeries("nfl", G.eventId, "SEA", "win")) as EspnSeries;
@@ -63,17 +68,19 @@ function deps(w: World, store: FirstReadStore, now: () => number): GameDeps {
 }
 const read = (w: World, store: FirstReadStore, t: number): Promise<GameVerdict> => settleGame(client(w), G, deps(w, store, () => t), { schedule: "game" });
 const statusTable = () => { const m = new Map<string, string>(); return { m, getStatus: (k: string) => m.get(k) ?? null, setStatus: (k: string, v: unknown) => { m.set(k, typeof v === "string" ? v : JSON.stringify(v)); } }; };
+/** The keeper's payout reader (polymarketGameReaders over readChain): each call noted, `fresh` when it must go to the RPC again. */
+const rpc = (outcome: () => number | null, calls: boolean[]) => async (_id: string, o?: { fresh?: boolean }): Promise<GamePayout> => { calls.push(!!o?.fresh); return { resolved: true, outcome: outcome() }; };
 
-describe("a game coin burns 12 hours after its final is first read", () => {
+describe("a game coin burns when two sources agree, or when one source has shown the same final twice", () => {
   test("TheSportsDB reads it first, the on-chain settlement agrees inside the window: two sources agree, so it burns on that cycle, naming both", async () => {
     const w = world(), store = memoryFirstReadStore();
     const a = await read(w, store, T0);
-    assert.equal(a.kind, "awaiting"); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + GAME_BURN_DELAY_MS);
+    assert.equal(a.kind, "awaiting"); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + GAP, "the keeper reads again for the second print");
     const m0 = store.get(gameKeyOf(G))!;
     assert.deepEqual({ firstReadAt: m0.firstReadAt, by: m0.by, winner: m0.winner, home: m0.home, away: m0.away, ops: m0.ops, startsAt: m0.startsAt }, { firstReadAt: T0, by: "TheSportsDB", winner: "home", home: 17, away: 14, ops: ["TheSportsDB"], startsAt: G.startsAt });
     w.paid = true;
-    const v = await read(w, store, T0 + 3 * H);
-    assert.equal(v.kind, "settled", "two independent sources agree: no 12-hour wait");
+    const v = await read(w, store, T0 + 2 * 60_000);
+    assert.equal(v.kind, "settled", "two independent sources agree: settled that cycle");
     if (v.kind !== "settled") return;
     assert.equal(v.winner, "home"); assert.deepEqual(v.final, { home: 17, away: 14 }); assert.equal(v.firstReadAt, T0); assert.equal(v.twoSources, true);
     assert.deepEqual(v.ops, ["TheSportsDB", "on-chain payout"]);
@@ -81,13 +88,13 @@ describe("a game coin burns 12 hours after its final is first read", () => {
     // through the coin's reader: one source waits; the cycle that reads the second burns
     const w1 = world(), s2 = memoryFirstReadStore();
     const first = await sportsSettled(client(w1), DEN, null, deps(w1, s2, () => T0), { nowMs: T0 });
-    assert.equal(first.events.length, 0); assert.equal(first.dueAt, T0 + GAME_BURN_DELAY_MS);
+    assert.equal(first.events.length, 0); assert.equal(first.dueAt, T0 + GAP);
     w1.paid = true;
-    const due = await sportsSettled(client(w1), DEN, null, deps(w1, s2, () => T0 + H), { nowMs: T0 + H });
+    const due = await sportsSettled(client(w1), DEN, null, deps(w1, s2, () => T0 + 2 * 60_000), { nowMs: T0 + 2 * 60_000 });
     assert.equal(due.events.length, 1); assert.equal(due.events[0].value, "1"); assert.match(due.events[0].method ?? "", /\+two-sources-agreed$/);
   });
 
-  test("the on-chain settlement reads it first, TheSportsDB disagrees: held with the disagree wording, no burn, until they agree; agreement restarts the 12 hours", async () => {
+  test("the on-chain settlement reads it first, TheSportsDB disagrees: held with the disagree wording, no burn, until they agree; then one source has to show the final twice", async () => {
     const w = world({ tsdb: "down", paid: true }), store = memoryFirstReadStore();
     assert.equal((await read(w, store, T0)).kind, "awaiting");
     assert.equal(store.get(gameKeyOf(G))?.by, "on-chain payout");
@@ -98,18 +105,19 @@ describe("a game coin burns 12 hours after its final is first read", () => {
     assert.match(h.kind === "held" ? h.why : "", /nothing burns for this game until/);
     assert.ok(store.get(gameKeyOf(G))?.disputed?.length, "the dispute is saved on the record");
     const r = await sportsSettled(client(w), DEN, null, deps(w, store, () => T0 + 13 * H), { nowMs: T0 + 13 * H });
-    assert.equal(r.events.length, 0, "past the 12 hours, a disagreement still holds the burn");
+    assert.equal(r.events.length, 0, "a disagreement still holds the burn, however long");
     assert.ok(r.refusals.some(isDisagreement), r.refusals.join(" | "));
     w.score = { home: 17, away: 14 };   // TheSportsDB corrects itself to the Broncos
     const again = await read(w, store, T0 + 14 * H);
-    assert.equal(again.kind, "awaiting", "agreement after a dispute is a new first read");
-    assert.equal(again.kind === "awaiting" ? again.dueAt : null, T0 + 14 * H + GAME_BURN_DELAY_MS);
+    assert.equal(again.kind, "awaiting", "agreement after a dispute is a new first read, and two sources no longer burn it at once");
+    assert.equal(again.kind === "awaiting" ? again.dueAt : null, T0 + 14 * H + GAP);
     assert.equal(store.get(gameKeyOf(G))?.disputed, null);
-    const v = await read(w, store, T0 + 26 * H);
+    const v = await read(w, store, T0 + 14 * H + C);
     assert.equal(v.kind, "settled"); assert.equal(v.kind === "settled" ? v.firstReadAt : null, T0 + 14 * H);
+    assert.equal(v.kind === "settled" ? v.twice : null, true); assert.equal(v.kind === "settled" ? v.twoSources : null, undefined);
   });
 
-  test("a disagreement is remembered: the dissenter going quiet never releases the burn; it settles 12 hours after the dissenter agrees", async () => {
+  test("a disagreement is remembered: the dissenter going quiet never releases the burn; it settles once a source shows the agreed final twice after the dissenter agrees", async () => {
     // TheSportsDB anchors the Broncos; at +8 h the market resolves to the Seahawks; at +12 h the Polygon read fails (not resolved)
     const w = world(), store = memoryFirstReadStore();
     const SEAHAWKS = { ...FIX.market, outcomes: ["Seahawks", "Broncos"] as [string, string] };
@@ -128,9 +136,9 @@ describe("a game coin burns 12 hours after its final is first read", () => {
     // the payout reads again and agrees with the Broncos
     w.tsdb = "up"; w.paid = true;
     const ok = await settleGame(client(w), G, dd(T0 + 15 * H, FIX.market), { schedule: "game" });
-    assert.equal(ok.kind, "awaiting"); assert.equal(ok.kind === "awaiting" ? ok.dueAt : null, T0 + 15 * H + GAME_BURN_DELAY_MS);
-    assert.equal((await settleGame(client(w), G, dd(T0 + 27 * H - 1, FIX.market), { schedule: "game" })).kind, "awaiting");
-    const v = await settleGame(client(w), G, dd(T0 + 27 * H, FIX.market), { schedule: "game" });
+    assert.equal(ok.kind, "awaiting"); assert.equal(ok.kind === "awaiting" ? ok.dueAt : null, T0 + 15 * H + GAP);
+    assert.equal((await settleGame(client(w), G, dd(T0 + 15 * H + 3 * 60_000, FIX.market), { schedule: "game" })).kind, "awaiting", "3 minutes is not a second cycle");
+    const v = await settleGame(client(w), G, dd(T0 + 15 * H + C, FIX.market), { schedule: "game" });
     assert.equal(v.kind, "settled"); assert.equal(v.kind === "settled" ? v.winner : null, "home");
   });
 
@@ -157,54 +165,57 @@ describe("a game coin burns 12 hours after its final is first read", () => {
     const w = world(), store = memoryFirstReadStore();
     await read(w, store, T0);
     const moved = { ...G, startsAt: "2026-10-16T01:20:00Z" };
-    const v = await settleGame(client(w), moved, deps(w, store, () => T0 + 12 * H), { schedule: "game" });
+    const v = await settleGame(client(w), moved, deps(w, store, () => T0 + C), { schedule: "game" });
     assert.equal(gameKeyOf(moved), `nfl:${G.eventId}`);
     assert.equal(store.get(gameKeyOf(G))?.startsAt, G.startsAt);
-    assert.equal(v.kind, "settled", "the same record, still due at T0 + 12 h");
+    assert.equal(v.kind, "settled", "the same record: the second read of the same final");
   });
 
-  test("only one source ever answers: the burn still falls at +12 h (TheSportsDB alone, or the on-chain settlement alone)", async () => {
+  test("only one source ever answers: it burns on that source's second read of the same final (TheSportsDB alone, or the on-chain settlement alone)", async () => {
     const w1 = world({ market: false }), s1 = memoryFirstReadStore();
-    await read(w1, s1, T0);
-    const v1 = await read(w1, s1, T0 + GAME_BURN_DELAY_MS);
+    assert.equal((await read(w1, s1, T0)).kind, "awaiting", "a first print settles nothing alone");
+    const v1 = await read(w1, s1, T0 + C);
     assert.equal(v1.kind, "settled");
-    if (v1.kind === "settled") { assert.deepEqual(v1.ops, ["TheSportsDB"]); assert.equal(settledWords(v1), "settled on a licensed final score · no other source answered · burned 12 hours after the final was first read"); }
+    if (v1.kind === "settled") { assert.deepEqual(v1.ops, ["TheSportsDB"]); assert.equal(v1.twice, true); assert.equal(settledWords(v1), "settled on a licensed final score · no other source answered · burned when one source had confirmed the final twice"); }
     const w2 = world({ tsdb: "down", paid: true }), s2 = memoryFirstReadStore();
     await read(w2, s2, T0);
-    assert.equal((await read(w2, s2, T0 + GAME_BURN_DELAY_MS - 1)).kind, "awaiting");
-    const v2 = await read(w2, s2, T0 + GAME_BURN_DELAY_MS);
+    assert.equal((await read(w2, s2, T0 + GAP - 1)).kind, "awaiting");
+    const v2 = await read(w2, s2, T0 + GAP);
     assert.equal(v2.kind, "settled");
     if (v2.kind === "settled") { assert.deepEqual(v2.ops, ["on-chain payout"]); assert.equal(v2.final, null); assert.match(settledWords(v2), /^settled on the game's on-chain settlement · no other source answered/); }
   });
 
-  test("a keeper restart at +6 h keeps the first-read time (the status table is the anchor)", async () => {
-    const reg = statusTable(), w = world();
+  test("a keeper restart keeps the first read (the status table is the anchor): the first read after the restart is the second print", async () => {
+    const reg = statusTable(), w = world({ market: false });
     await read(w, statusFirstReadStore(reg, () => T0), T0);
     assert.ok(reg.m.get(FIRST_READ_STATUS_KEY)?.includes(gameKeyOf(G)));
     // a new process: a new store over the same table
     const after = await read(w, statusFirstReadStore(reg, () => T0 + 6 * H), T0 + 6 * H);
-    assert.equal(after.kind, "awaiting"); assert.equal(after.kind === "awaiting" ? after.dueAt : null, T0 + GAME_BURN_DELAY_MS, "not 12 hours from the restart");
-    assert.equal((await read(w, statusFirstReadStore(reg, () => T0 + 12 * H), T0 + 12 * H)).kind, "settled");
+    assert.equal(after.kind, "settled", JSON.stringify(after));
+    assert.equal(after.kind === "settled" ? after.firstReadAt : null, T0);
   });
 
-  test("a corrected score inside the window restarts the 12 hours", async () => {
+  test("a changed print between the two reads starts the count again and marks the game held once", async () => {
     const w = world({ market: false }), store = memoryFirstReadStore();
     await read(w, store, T0);
     w.score = { home: 20, away: 14 };
-    const r = await read(w, store, T0 + 5 * H);
-    assert.equal(r.kind, "awaiting"); assert.equal(r.kind === "awaiting" ? r.dueAt : null, T0 + 5 * H + GAME_BURN_DELAY_MS);
-    assert.equal((await read(w, store, T0 + GAME_BURN_DELAY_MS)).kind, "awaiting");
-    assert.equal((await read(w, store, T0 + 5 * H + GAME_BURN_DELAY_MS)).kind, "settled");
+    const r = await read(w, store, T0 + C);
+    assert.equal(r.kind, "awaiting", "a different print is not a confirmation"); assert.equal(r.kind === "awaiting" ? r.dueAt : null, T0 + C + GAP);
+    assert.match(r.kind === "awaiting" ? r.why : "", /final changed/);
+    assert.equal(store.get(gameKeyOf(G))?.heldOnce, true);
+    assert.equal(store.get(gameKeyOf(G))?.firstReadAt, T0 + C, "the anchor moves to the new print");
+    const v = await read(w, store, T0 + 2 * C);
+    assert.equal(v.kind, "settled"); assert.deepEqual(v.kind === "settled" ? v.final : null, { home: 20, away: 14 });
   });
 
-  test("a pair's two coins share one anchor: the second coin read later still burns with the first", async () => {
-    const reg = statusTable(), w = world({ market: false });   // one source, so the 12 hours run
+  test("a pair's two coins share one record: the second coin read in the same cycle waits with the first, and both burn on the next", async () => {
+    const reg = statusTable(), w = world({ market: false });   // one source, so it has to show the final twice
     const at = (t: number) => deps(w, statusFirstReadStore(reg, () => t), () => t);
     await sportsSettled(client(w), DEN, null, at(T0), { nowMs: T0 });
-    const sea = await sportsSettled(client(w), SEA, null, at(T0 + 5 * H), { nowMs: T0 + 5 * H });
-    assert.equal(sea.events.length, 0); assert.equal(sea.dueAt, T0 + GAME_BURN_DELAY_MS, "SEAWIN's clock is DENWIN's");
+    const sea = await sportsSettled(client(w), SEA, null, at(T0 + 60_000), { nowMs: T0 + 60_000 });
+    assert.equal(sea.events.length, 0); assert.equal(sea.dueAt, T0 + GAP, "SEAWIN counts from DENWIN's first read");
     assert.equal(Object.keys(JSON.parse(reg.m.get(FIRST_READ_STATUS_KEY)!)).length, 1, "one first-read record for the game");
-    const [d, s] = [await sportsSettled(client(w), DEN, null, at(T0 + 12 * H), { nowMs: T0 + 12 * H }), await sportsSettled(client(w), SEA, null, at(T0 + 12 * H), { nowMs: T0 + 12 * H })];
+    const [d, s] = [await sportsSettled(client(w), DEN, null, at(T0 + C), { nowMs: T0 + C }), await sportsSettled(client(w), SEA, null, at(T0 + C), { nowMs: T0 + C })];
     assert.deepEqual([d.events.map((e) => e.value), s.events.map((e) => e.value)], [["1"], ["0"]]);
   });
 
@@ -224,16 +235,15 @@ describe("two independent sources agreeing burn at once (owner, 2026-10-16, seco
     assert.equal(v.kind, "settled", JSON.stringify(v));
     if (v.kind === "settled") { assert.equal(v.twoSources, true); assert.equal(v.firstReadAt, T0); assert.equal(v.winner, "home"); }
   });
-  test("one source and a flaky second (its read fails or is not resolved): waits for the 12 hours", async () => {
+  test("one source and a flaky second (its read fails or is not resolved): the one source's second read settles it", async () => {
     const w = world(), store = memoryFirstReadStore();
     const flaky = (t: number) => ({ ...deps(w, store, () => t), payout: async () => { throw new Error("Polygon RPC timeout"); } });
     assert.equal((await settleGame(client(w), G, flaky(T0), { schedule: "game" })).kind, "awaiting");
-    for (const t of [T0 + H, T0 + 6 * H]) {
-      const v = await settleGame(client(w), G, flaky(t), { schedule: "game" });
-      assert.equal(v.kind, "awaiting", "a failed read is not a read of the final"); assert.equal(v.kind === "awaiting" ? v.dueAt : null, T0 + GAME_BURN_DELAY_MS);
-    }
-    assert.equal((await read(w, store, T0 + 7 * H)).kind, "awaiting", "the market not resolved yet is not a read either");
-    assert.equal((await settleGame(client(w), G, flaky(T0 + GAME_BURN_DELAY_MS), { schedule: "game" })).kind, "settled");
+    const v = await settleGame(client(w), G, flaky(T0 + 2 * 60_000), { schedule: "game" });
+    assert.equal(v.kind, "awaiting", "a failed read is not a read of the final, and 2 minutes is not a second cycle"); assert.equal(v.kind === "awaiting" ? v.dueAt : null, T0 + GAP);
+    const u = await read(w, store, T0 + C);
+    assert.equal(u.kind, "settled", "the market not resolved yet is not a read; TheSportsDB's second read is");
+    assert.equal(u.kind === "settled" ? u.twice : null, true); assert.deepEqual(u.kind === "settled" ? u.ops : null, ["TheSportsDB"]);
   });
   test("two sources disagree: held, and the early path stays closed after they agree again", async () => {
     const w = world({ paid: true, score: { home: 14, away: 17 } }), store = memoryFirstReadStore();
@@ -241,17 +251,18 @@ describe("two independent sources agreeing burn at once (owner, 2026-10-16, seco
     assert.equal(h.kind, "held"); assert.ok(h.kind === "held" && isDisagreement(h.why));
     w.score = { home: 17, away: 14 };
     const again = await read(w, store, T0 + H);
-    assert.equal(again.kind, "awaiting", "a game once held waits the 12 hours even with two sources agreeing");
-    assert.equal((await read(w, store, T0 + 2 * H)).kind, "awaiting");
-    assert.equal((await read(w, store, T0 + H + GAME_BURN_DELAY_MS)).kind, "settled");
+    assert.equal(again.kind, "awaiting", "a game once held does not burn on two sources agreeing");
+    assert.equal((await read(w, store, T0 + H + 2 * 60_000)).kind, "awaiting");
+    const v = await read(w, store, T0 + H + C);
+    assert.equal(v.kind, "settled"); assert.equal(v.kind === "settled" ? v.twice : null, true); assert.equal(v.kind === "settled" ? v.twoSources : null, undefined);
   });
-  test("the same source twice never counts as two: waits", async () => {
+  test("the same source twice never counts as two sources: it settles on the one-source rule and says so", async () => {
     const w = world({ market: false }), store = memoryFirstReadStore();
     await read(w, store, T0);
-    for (const t of [T0 + H, T0 + 2 * H, T0 + 11 * H]) assert.equal((await read(w, store, t)).kind, "awaiting");
-    const v = await read(w, store, T0 + GAME_BURN_DELAY_MS);
+    const v = await read(w, store, T0 + C);
+    assert.equal(v.kind, "settled");
     assert.equal(v.kind === "settled" && v.twoSources, undefined);
-    assert.equal(v.kind === "settled" && settledWords(v), "settled on a licensed final score · no other source answered · burned 12 hours after the final was first read");
+    assert.equal(v.kind === "settled" && settledWords(v), "settled on a licensed final score · no other source answered · burned when one source had confirmed the final twice");
   });
   test("a split on chain read as a tie does not count as a second source", async () => {
     const w = world({ score: { home: 17, away: 17 } }), store = memoryFirstReadStore();
@@ -267,39 +278,44 @@ describe("two independent sources agreeing burn at once (owner, 2026-10-16, seco
     const r = releaseDispute(store.get(gameKeyOf(G))!, "away", "read by hand", T0 + 2 * H, ["on-chain payout"]);
     assert.ok(r.ok); if (!r.ok) return;
     store.set(gameKeyOf(G), r.next);
-    assert.equal((await read(w, store, T0 + 3 * H)).kind, "awaiting");
+    assert.equal((await read(w, store, T0 + 3 * H)).kind, "awaiting", "a read made before the release does not count as the first of the two");
+    const v = await read(w, store, T0 + 3 * H + C);
+    assert.equal(v.kind, "settled", JSON.stringify(v)); assert.equal(v.kind === "settled" ? v.twoSources : null, undefined);
   });
-  test("a source revising its own final holds the early path: 23-20, then 24-20, then the league feed 24-20 is not ready; ready 12 hours after the revision", () => {
+  test("a source revising its own final closes the two-source path: 23-20, then 24-20, then the league feed 24-20 is not ready; ready on TheSportsDB's second 24-20", () => {
     const store = memoryFirstReadStore(), NHL = { league: "nhl" as const, eventId: "2025020001", startsAt: "2026-10-15T23:00:00Z" };
     const tsdb = (home: number, away: number) => ({ op: "TheSportsDB", winner: (home > away ? "home" : "away") as "home" | "away", final: { home, away } });
     assert.equal(gameSchedule(store, NHL, [tsdb(23, 20)], T0).kind, "awaiting");
     const rev = gameSchedule(store, NHL, [tsdb(24, 20)], T0 + H);
-    assert.equal(rev.kind, "awaiting"); assert.equal(rev.kind === "awaiting" ? rev.dueAt : null, T0 + H + GAME_BURN_DELAY_MS);
+    assert.equal(rev.kind, "awaiting"); assert.equal(rev.kind === "awaiting" ? rev.dueAt : null, T0 + H + GAP);
     const two = gameSchedule(store, NHL, [{ op: "nhl.score", winner: "home", final: { home: 24, away: 20 } }], T0 + 2 * H);
-    assert.equal(two.kind, "awaiting", "two sources agree, but a revised final waits the 12 hours");
-    assert.equal(gameSchedule(store, NHL, [], T0 + H + GAME_BURN_DELAY_MS - 1).kind, "awaiting");
-    const v = gameSchedule(store, NHL, [], T0 + H + GAME_BURN_DELAY_MS);
-    assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.twoSources : null, undefined);
+    assert.equal(two.kind, "awaiting", "two sources agree, but a revised final does not burn on two sources");
+    assert.equal(gameSchedule(store, NHL, [], T0 + 30 * H).kind, "awaiting", "no new read: no second print");
+    const v = gameSchedule(store, NHL, [tsdb(24, 20)], T0 + 30 * H + C);
+    assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.twoSources : null, undefined); assert.equal(v.kind === "ready" ? v.twice : null, true);
   });
-  test("the three-way draw leg never counts toward the two sources: draw leg and TheSportsDB 1-1 wait; TheSportsDB and a league feed at 1-1 are ready", () => {
+  test("the three-way draw leg never counts toward the two sources or the two reads: draw leg and TheSportsDB 1-1 wait; TheSportsDB and a league feed at 1-1 are ready", () => {
     const EPL = { league: "eng.1" as const, eventId: "740100", startsAt: "2026-10-10T11:30:00Z" };
     const s1 = memoryFirstReadStore();
     const a = gameSchedule(s1, EPL, [{ op: "on-chain payout", winner: "tie", final: null, ninety: true }, { op: "TheSportsDB", winner: "tie", final: { home: 1, away: 1 } }], T0);
-    assert.equal(a.kind, "awaiting", JSON.stringify(a)); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + GAME_BURN_DELAY_MS);
+    assert.equal(a.kind, "awaiting", JSON.stringify(a)); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + GAP);
     const s2 = memoryFirstReadStore();
     const b = gameSchedule(s2, EPL, [{ op: "TheSportsDB", winner: "tie", final: { home: 1, away: 1 } }, { op: "apisports.games", winner: "tie", final: { home: 1, away: 1 } }], T0);
     assert.equal(b.kind, "ready"); assert.equal(b.kind === "ready" ? b.twoSources : null, true);
     // a win leg (decided inside 90 minutes) is a final and still counts with a score read
     const s3 = memoryFirstReadStore();
     assert.equal(gameSchedule(s3, EPL, [{ op: "on-chain payout", winner: "home", final: null, ninety: true }, { op: "TheSportsDB", winner: "home", final: { home: 2, away: 1 } }], T0).kind, "ready");
-    // the draw leg read again later, with no second score source: still the 12 hours
+    // the draw leg read again later, with no new score read: the draw leg's own two reads never count
     assert.equal(gameSchedule(s1, EPL, [{ op: "on-chain payout", winner: "tie", final: null, ninety: true }], T0 + 2 * H).kind, "awaiting");
+    // TheSportsDB's second 1-1: ready on the one-source rule
+    const t2 = gameSchedule(s1, EPL, [{ op: "TheSportsDB", winner: "tie", final: { home: 1, away: 1 } }], T0 + 2 * H + C);
+    assert.equal(t2.kind, "ready"); assert.equal(t2.kind === "ready" ? t2.twice : null, true);
   });
   test("the two-source words and every new public sentence pass the copy lint (no promises, no arrows, no payout)", () => {
     const cfg = loadCopyLintConfig();
     const two = `SEA 14 @ DEN 17 final (DEN win) · settled on a licensed final score · confirmed by the game's on-chain settlement · ${GAME_TWO_SOURCE_WORDS} · see this game on ESPN → https://www.espn.com/nfl/scoreboard/_/date/20261016`;
     const f = { marketPollMin: 5, feedPollMin: 60, guardMinMin: 5, guardMaxMin: 20, spendCapPct: 2, umaHours: 2, deficitReads: ["16:30"], deficitZone: "America/New_York" };
-    const said = [GAME_TWO_SOURCE_WORDS, GAME_SCHEDULE_WORDS, GAME_BURN_LINE, GAME_AGREE_LINE, GAME_COIN_NOTE, GAME_SETTLEMENT_WORDS, GAME_CROSS_WORDS,
+    const said = [GAME_TWO_SOURCE_WORDS, GAME_TWICE_WORDS, GAME_SCHEDULE_WORDS, GAME_BURN_LINE, GAME_AGREE_LINE, GAME_COIN_NOTE, GAME_SETTLEMENT_WORDS, GAME_CROSS_WORDS,
       TEMPLATES.find((t) => t.id === "matchup")!.settles, settledLine(two), gamesFromTitle("nfl", "2026-10-16", two)[0].source,
       ...settlementSections(f).sections.flatMap((s) => s.paragraphs).filter((p) => /game coin/i.test(p)),
       nativeSourceById(gameSeries("nfl", G.eventId, "DEN", "win"))!.sourceName];
@@ -313,41 +329,201 @@ describe("two independent sources agreeing burn at once (owner, 2026-10-16, seco
     assert.deepEqual(settledParts(two), [{ on: "a licensed final score", confirmedBy: "the game's on-chain settlement", notes: ["burned when two sources had confirmed it"] }]);
     assert.equal(gamesFromTitle("nfl", "2026-10-16", two)[0].source, "Settled on a licensed final score and confirmed by the game's on-chain settlement; burned when two sources had confirmed it.");
     assert.equal(settledLine(two), "settled on a licensed final score · confirmed by the game's on-chain settlement · burned when two sources had confirmed it");
+    const twice = `SEA 14 @ DEN 17 final (DEN win) · settled on the game's on-chain settlement · no other source answered · ${GAME_TWICE_WORDS} · see this game on ESPN → https://www.espn.com/nfl/scoreboard/_/date/20261016`;
+    assert.deepEqual(settledParts(twice), [{ on: "the game's on-chain settlement", confirmedBy: null, notes: ["no other source answered", "burned when one source had confirmed the final twice"] }]);
+    assert.equal(gamesFromTitle("nfl", "2026-10-16", twice)[0].source, "Settled on the game's on-chain settlement; no other source answered; burned when one source had confirmed the final twice.");
+    assert.equal(settledLine(twice), "settled on the game's on-chain settlement · no other source answered · burned when one source had confirmed the final twice");
+  });
+});
+
+describe("one source read twice (owner, 2026-10-18 evening: the 12-hour wait is dropped)", () => {
+  const NBA = { league: "nba" as const, eventId: "0022600001", startsAt: "2026-10-21T23:30:00Z" };
+  const tsdb = (home: number, away: number) => ({ op: "TheSportsDB", winner: (home > away ? "home" : home < away ? "away" : "tie") as "home" | "away" | "tie", final: { home, away } });
+  test("one read: awaiting, with the keeper's next read as the due time", () => {
+    const store = memoryFirstReadStore();
+    const a = gameSchedule(store, NBA, [tsdb(110, 101)], T0);
+    assert.equal(a.kind, "awaiting"); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + GAP);
+    assert.equal(store.get(gameKeyOf(NBA))?.reads?.TheSportsDB.since, T0);
+  });
+  test("the same final 5 minutes later: ready on the one-source rule", () => {
+    const store = memoryFirstReadStore();
+    gameSchedule(store, NBA, [tsdb(110, 101)], T0);
+    const v = gameSchedule(store, NBA, [tsdb(110, 101)], T0 + C);
+    assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.twice : null, true); assert.equal(v.kind === "ready" ? v.twoSources : null, undefined);
+  });
+  test("the same final again within 4 minutes is not a second cycle; a third read later confirms it", () => {
+    const store = memoryFirstReadStore();
+    gameSchedule(store, NBA, [tsdb(110, 101)], T0);
+    assert.equal(gameSchedule(store, NBA, [tsdb(110, 101)], T0 + 60_000).kind, "awaiting");
+    assert.equal(gameSchedule(store, NBA, [tsdb(110, 101)], T0 + GAP - 1).kind, "awaiting");
+    assert.equal(gameSchedule(store, NBA, [tsdb(110, 101)], T0 + GAP).kind, "ready", "counted from the first of the run, not the latest read");
+  });
+  test("a different print 5 minutes later: not ready, held once, and the count starts again from the new print", () => {
+    const store = memoryFirstReadStore();
+    gameSchedule(store, NBA, [tsdb(110, 101)], T0);
+    const r = gameSchedule(store, NBA, [tsdb(112, 101)], T0 + C);
+    assert.equal(r.kind, "awaiting"); assert.equal(store.get(gameKeyOf(NBA))?.heldOnce, true);
+    assert.equal(r.kind === "awaiting" ? r.dueAt : null, T0 + C + GAP);
+    assert.equal(gameSchedule(store, NBA, [tsdb(110, 101)], T0 + 2 * C).kind, "awaiting", "back to the first print is another change");
+    assert.equal(gameSchedule(store, NBA, [tsdb(110, 101)], T0 + 3 * C).kind, "ready");
+  });
+  test("two sources agree on the first read: ready at once", () => {
+    const store = memoryFirstReadStore();
+    const v = gameSchedule(store, NBA, [tsdb(110, 101), { op: "apisports.games", winner: "home", final: { home: 110, away: 101 } }], T0);
+    assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.twoSources : null, true);
+  });
+  test("a record written under the 12-hour rule (no `since`, the live SEAWIN and DENWIN records) confirms on its next read of the same final", () => {
+    const store = memoryFirstReadStore();
+    store.set(gameKeyOf(NBA), { firstReadAt: T0, by: "on-chain payout", winner: "home", home: null, away: null, ops: ["on-chain payout"], reads: { "on-chain payout": { winner: "home", home: null, away: null, at: T0, detail: "p", url: "" } }, startsAt: NBA.startsAt });
+    const v = gameSchedule(store, NBA, [{ op: "on-chain payout", winner: "home", final: null }], T0 + C);
+    assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.twice : null, true);
+  });
+  test("the new waiting lines are plain public English (no promises, dates, arrows or 'soon')", () => {
+    const cfg = loadCopyLintConfig(), store = memoryFirstReadStore();
+    const whys = [gameSchedule(store, NBA, [tsdb(110, 101)], T0), gameSchedule(store, NBA, [tsdb(110, 101)], T0 + 60_000), gameSchedule(store, NBA, [tsdb(112, 101)], T0 + C)]
+      .map((v) => (v.kind === "awaiting" ? v.why : ""));
+    assert.equal(whys.filter(Boolean).length, 3);
+    for (const t of [...whys, GAME_TWICE_WORDS, GAME_BURN_LINE]) {
+      assert.ok(lintCopy(t, cfg).ok, `${lintCopy(t, cfg).hits.map((h) => h.phrase).join(", ")}: ${t}`);
+      assert.doesNotMatch(t, /\bwill\b|\bsoon\b|payout|→|->|\d{4}-\d{2}-\d{2}/i, t);
+    }
+  });
+  test("the real client: a cached answer is never the second read; the confirming read is a fresh fetch (2 fetches before it settles)", async () => {
+    // review 2026-10-18 (HIGH): EspnClient keeps an answer 10 minutes, so a read GAME_CONFIRM_GAP_MS later used to be the same fetch
+    let t = T0;
+    const fetched: string[] = [];
+    const day = tsdbV2DayUrl(G.date), lookup = tsdbV2EventUrl(FIX.tsdbRow.idEvent);
+    const fetchImpl = (async (url: string) => {
+      fetched.push(url);
+      const body = url === day ? { filter: [FIX.tsdbRow] } : url === lookup ? { lookup: [FIX.tsdbRow] } : null;
+      return body ? { ok: true, status: 200, json: async () => body } : { ok: false, status: 404, json: async () => ({}) };
+    }) as unknown as import("@/lib/burnticker/oracle/types").FetchLike;
+    const real = new SportsClient({ fetchImpl, now: () => t, minIntervalMs: 0, tsdbKey: "k", apiSportsKey: null } as never);
+    const store = memoryFirstReadStore();
+    const dd: GameDeps = { tsdbKey: "k", apiSportsKey: null, firstReads: store, now: () => t, market: async () => null, payout: null };
+    const dayFetches = () => fetched.filter((u) => u === day).length;
+    assert.equal((await settleGame(real, G, dd, { schedule: "game" })).kind, "awaiting");
+    assert.equal(dayFetches(), 1);
+    // inside the cache: a read 2 minutes on is the same fetch, and confirms nothing
+    t = T0 + 2 * 60_000;
+    assert.equal((await settleGame(real, G, dd, { schedule: "game" })).kind, "awaiting");
+    assert.equal(dayFetches(), 1, "served from the cache");
+    // the due time: still inside the 10-minute cache, but the confirming read is fetched fresh
+    t = T0 + GAP;
+    const v = await settleGame(real, G, dd, { schedule: "game" });
+    assert.equal(dayFetches(), 2, "the confirming read is a new fetch");
+    assert.equal(v.kind, "settled", JSON.stringify(v)); assert.equal(v.kind === "settled" ? v.twice : null, true);
+    // a cached repeat stamped with its first fetch time never confirms: the record's read keeps the fetch time
+    const s2 = memoryFirstReadStore();
+    gameSchedule(s2, G, [{ op: "TheSportsDB", winner: "home", final: { home: 17, away: 14 }, fetchedAt: T0 }], T0);
+    assert.equal(gameSchedule(s2, G, [{ op: "TheSportsDB", winner: "home", final: { home: 17, away: 14 }, fetchedAt: T0 }], T0 + 9 * 60_000).kind, "awaiting", "the same fetch read again");
+    assert.equal(gameSchedule(s2, G, [{ op: "TheSportsDB", winner: "home", final: { home: 17, away: 14 }, fetchedAt: T0 + GAP }], T0 + 9 * 60_000).kind, "ready");
+  });
+  test("no source answered this cycle: no due time (the normal poll), not a read every minute on a quiet source's old print", () => {
+    const store = memoryFirstReadStore();
+    gameSchedule(store, NBA, [tsdb(110, 101)], T0);
+    for (const t of [T0 + H, T0 + 30 * H]) {
+      const v = gameSchedule(store, NBA, [], t);
+      assert.equal(v.kind, "awaiting"); assert.equal(v.kind === "awaiting" ? v.dueAt : 0, null);
+    }
+  });
+  // audit 2026-10-18 F07: a level final decided on penalties is a win for the declared side (item 78)
+  const CUPKEY = { league: "eng.1" as const, eventId: "740200", startsAt: "2026-10-10T11:30:00Z" };
+  const pens = (op: string, declared: "home" | "away") => ({ op, winner: "tie" as const, final: { home: 1, away: 1 }, declared, pens: true });
+  test("F07: a provider correcting only its shoot-out winner (1-1 throughout, home then away) has changed its final: the count starts again, held once", () => {
+    const store = memoryFirstReadStore();
+    assert.equal(gameSchedule(store, CUPKEY, [pens("TheSportsDB", "home")], T0).kind, "awaiting");
+    const r = gameSchedule(store, CUPKEY, [pens("TheSportsDB", "away")], T0 + C);
+    assert.equal(r.kind, "awaiting", "a winner-only correction is not a confirmation");
+    assert.match(r.kind === "awaiting" ? r.why : "", /final changed/);
+    assert.equal(store.get(gameKeyOf(CUPKEY))?.heldOnce, true);
+    assert.equal(store.get(gameKeyOf(CUPKEY))?.declared, "away");
+    const v = gameSchedule(store, CUPKEY, [pens("TheSportsDB", "away")], T0 + 2 * C);
+    assert.equal(v.kind, "ready", "the corrected print read twice"); assert.equal(v.kind === "ready" ? v.mark.declared : null, "away");
+  });
+  test("F07: two providers naming different shoot-out winners on the same 1-1 are a dispute, and it holds when the dissenter goes quiet", () => {
+    const store = memoryFirstReadStore();
+    const h = gameSchedule(store, CUPKEY, [pens("TheSportsDB", "home"), pens("apisports.games", "away")], T0);
+    assert.equal(h.kind, "held"); assert.ok(h.kind === "held" && isDisagreement(h.why));
+    assert.ok(store.get(gameKeyOf(CUPKEY))?.disputed?.length);
+    for (let i = 1; i <= 3; i++) assert.equal(gameSchedule(store, CUPKEY, [pens("TheSportsDB", "home")], T0 + i * C).kind, "held", "API-Sports quiet: still held");
+    // the dissenter reads again and agrees: the count starts from there
+    assert.equal(gameSchedule(store, CUPKEY, [pens("TheSportsDB", "home"), pens("apisports.games", "home")], T0 + 4 * C).kind, "awaiting");
+    assert.equal(gameSchedule(store, CUPKEY, [pens("TheSportsDB", "home")], T0 + 5 * C).kind, "ready");
+  });
+  test("F07: one provider naming the winner and one not naming any is no dispute", () => {
+    const store = memoryFirstReadStore();
+    const v = gameSchedule(store, CUPKEY, [pens("TheSportsDB", "home"), { op: "apisports.games", winner: "tie", final: { home: 1, away: 1 }, pens: true }], T0);
+    assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.mark.declared : null, "home");
+  });
+  test("re-review: a read fetched during a hold never counts toward the two (a payout served from its cache when the dispute clears)", async () => {
+    const w = world({ paid: true, score: { home: 14, away: 17 } }), store = memoryFirstReadStore();
+    let t = T0;
+    // the payout reader: a fresh read is fetched now; otherwise the answer cached at T0
+    const payout = async (_id: string, o?: { fresh?: boolean }): Promise<GamePayout> => ({ resolved: true, outcome: FIX.payout.outcome, fetchedAt: o?.fresh ? t : T0 });
+    const at = (x: number) => { t = x; return settleGame(client(w), G, { ...deps(w, store, () => t), payout }, { schedule: "game" }); };
+    assert.equal((await at(T0)).kind, "held", "the payout says the Broncos, TheSportsDB the Seahawks");
+    w.score = { home: 17, away: 14 };   // two hours later TheSportsDB corrects itself; the payout is served from its cache
+    const clear = T0 + 2 * H;
+    const a = await at(clear);
+    assert.equal(a.kind, "awaiting", "the dispute clears: not ready");
+    assert.equal(store.get(gameKeyOf(G))?.firstReadAt, clear, "the anchor is the clear, not the payout's cached fetch");
+    const b = await at(clear + 60_000);
+    assert.equal(b.kind, "awaiting", "the payout's fresh re-read a minute after the clear is its first read since the hold");
+    const v = await at(clear + C);
+    assert.equal(v.kind, "settled", JSON.stringify(v)); assert.equal(v.kind === "settled" ? v.twice : null, true);
+  });
+  test("a dispute still holds however many times each source repeats itself", () => {
+    const store = memoryFirstReadStore();
+    for (let i = 0; i < 4; i++) assert.equal(gameSchedule(store, NBA, [tsdb(110, 101), { op: "nba.cdn", winner: "away", final: { home: 99, away: 101 } }], T0 + i * C).kind, "held");
   });
 });
 
 describe("the live case of 2026-10-16, replayed: SEAWIN/DENWIN with TheSportsDB down all night and the Broncos' market resolved", () => {
   const downFrom = Date.parse(FIX.tsdbDown.from), downUntil = Date.parse(FIX.tsdbDown.until), paidAt = Date.parse(FIX.payout.resolvedAt);
-  async function replay(scheduleFollowsTsdb: boolean) {
+  async function replay(scheduleFollowsTsdb: boolean, step = H) {
     const reg = statusTable(), w = world({ scheduleFollowsTsdb, score: { home: 17, away: 14 } });
     const first: Record<string, number | null> = { DEN: null, SEA: null };
+    const events: Record<string, SettledEvent[]> = { DEN: [], SEA: [] };
     let firstRead: number | null = null;
-    for (let t = Date.parse(FIX.keeperFirstCycle); t < Date.parse(FIX.keeperFirstCycle) + 48 * H; t += H) {
+    for (let t = Date.parse(FIX.keeperFirstCycle); t < Date.parse(FIX.keeperFirstCycle) + 48 * H; t += step) {
       w.tsdb = t >= downFrom && t < downUntil ? "down" : "up"; w.paid = t >= paidAt;
       for (const [name, s] of [["DEN", DEN], ["SEA", SEA]] as const) {
         const d = deps(w, statusFirstReadStore(reg, () => t), () => t);
         const r = await sportsSettled(client(w), s, null, d, { nowMs: t }).catch(() => null);   // the schedule unreadable: the keeper's read fails
         if (firstRead === null && reg.m.get(FIRST_READ_STATUS_KEY)) firstRead = (Object.values(JSON.parse(reg.m.get(FIRST_READ_STATUS_KEY)!))[0] as { firstReadAt: number }).firstReadAt;
-        if (r?.events.length && first[name] === null) first[name] = t;
+        if (r?.events.length && first[name] === null) { first[name] = t; events[name] = r.events; }
       }
     }
-    return { first, firstRead, reg };
+    return { first, firstRead, reg, events };
   }
   test("the schedule down with TheSportsDB: nothing is read all night; the first successful read finds both sources agreeing, so both coins burn then", async () => {
     const { first, firstRead } = await replay(true);
     const c0 = Date.parse(FIX.keeperFirstCycle), back = c0 + Math.ceil((downUntil - c0) / H) * H;   // the first hourly cycle after the outage
     assert.equal(firstRead, back, "the keeper's first successful read is its first cycle after TheSportsDB answers again");
-    assert.equal(first.DEN, back, "TheSportsDB and the settled market agree on the first successful read: no 12-hour wait");
+    assert.equal(first.DEN, back, "TheSportsDB and the settled market agree on the first successful read: settled that cycle");
     assert.equal(first.SEA, first.DEN);
   });
-  test("the schedule cached, TheSportsDB's finals down: the resolved market is the first read and waits alone; DENWIN burns when TheSportsDB answers and agrees", async () => {
-    const { first, firstRead, reg } = await replay(false);
-    assert.equal(firstRead, Date.parse(FIX.keeperFirstCycle), "the payout was in before the first cycle, so the first cycle reads it");
-    const c0 = Date.parse(FIX.keeperFirstCycle), back = c0 + Math.ceil((downUntil - c0) / H) * H;
-    assert.equal(first.DEN, back, "the first cycle after TheSportsDB is back, inside the 12 hours");
-    assert.ok(first.DEN! < firstRead! + GAME_BURN_DELAY_MS);
+  test("the schedule cached, TheSportsDB's finals down: the resolved market is the first read and settles on its second read, the next 5-minute cycle", async () => {
+    const { first, firstRead, reg, events } = await replay(false, C);
+    const c0 = Date.parse(FIX.keeperFirstCycle);
+    assert.equal(firstRead, c0, "the payout was in before the first cycle, so the first cycle reads it");
+    assert.equal(first.DEN, c0 + C, "the second cycle of 2026-10-16 reads the same settlement again: burned then, with TheSportsDB still down");
+    assert.equal(first.SEA, c0 + C);
+    assert.ok(first.DEN! < downUntil);
     const mark = Object.values(JSON.parse(reg.m.get(FIRST_READ_STATUS_KEY)!))[0] as { by: string; ops: string[] };
-    assert.equal(mark.by, "on-chain payout"); assert.deepEqual(mark.ops, ["on-chain payout", "TheSportsDB"], "TheSportsDB is named once it agreed");
+    assert.equal(mark.by, "on-chain payout"); assert.deepEqual(mark.ops, ["on-chain payout", "TheSportsDB"], "TheSportsDB, read later in the replay, agreed");
+    assert.ok(events.DEN[0].title?.includes("no other source answered"), "settled before TheSportsDB answered");
+    // the same values the live keeper wrote under the 12-hour rule (DENWIN 1, SEAWIN 0): the registry skips them, it never refuses them
+    assert.deepEqual([events.DEN.map((e) => e.value), events.SEA.map((e) => e.value)], [["1"], ["0"]]);
+    assert.match(events.DEN[0].title ?? "", new RegExp(GAME_TWICE_WORDS));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bt-gameclock-")), live = openRegistry(path.join(dir, "r.db"));
+    const meta = { settlementSourceUrl: null, attestedBy: ["test"] };
+    for (const [name, evs] of Object.entries(events)) {
+      const key = `catalogue:${gameSeries("nfl", G.eventId, name, "win")}`;
+      assert.equal(live.putReadings("catalogue", key, evs.map((e) => ({ ...e, title: (e.title ?? "").replace(GAME_TWICE_WORDS, GAME_SCHEDULE_WORDS) })), meta), 1, "the live, old-form reading");
+      assert.equal(live.putReadings("catalogue", key, evs, meta), 0, `${name}: the new reading carries the same value, so it is skipped`);
+    }
   });
 });
 
@@ -364,7 +540,7 @@ describe("the copy says it plainly", () => {
       assert.ok(lintCopy(t, cfg).ok, `${lintCopy(t, cfg).hits.map((h) => h.phrase).join(", ")}: ${t}`);
       assert.doesNotMatch(t, /→|\w\/\w|payout/i, t);
     }
-    assert.equal(GAME_BURN_LINE, "A game coin burns once two sources agree on the final, or 12 hours after the first final if only one source answers.");
+    assert.equal(GAME_BURN_LINE, "A game coin burns once two sources agree on the final, or once one source has shown the same final twice a few minutes apart.");
     assert.ok(text.ruleBlock.includes(GAME_BURN_LINE), text.ruleBlock);
     assert.ok(ruleFacts(JSON.stringify(rule), true).window.includes(GAME_BURN_LINE));
     assert.ok(!sportsConfirmationLine().includes(GAME_BURN_LINE), "the team-coin footer does not carry the game-coin sentence");
@@ -391,19 +567,30 @@ describe("a one-market Polymarket coin on a game moneyline runs on the same sche
     assert.equal(g.league, "nfl"); assert.equal(g.away.abbr, "SEA"); assert.equal(g.home.abbr, "DEN");
     assert.equal(isGameMoneyline(M), true);
   });
-  test("the resolved payout alone waits 12 hours from its first read; TheSportsDB agreeing releases it at once; a disagreeing score holds it", async () => {
-    const w = world({ tsdb: "down" }), store = memoryFirstReadStore();
+  test("the resolved payout alone is released on its second read a cycle later; TheSportsDB agreeing releases it at once; a disagreeing score holds it", async () => {
+    const w = world({ tsdb: "down" }), store = memoryFirstReadStore(), calls: boolean[] = [];
     let t = T0;
-    const gate = polyGameGate({ client: () => client(w), deps: () => ({ ...deps(w, store, () => t) }) });
+    const gate = polyGameGate({ client: () => client(w), deps: () => ({ ...deps(w, store, () => t), payout: rpc(() => 1, calls) }) });
     const a = await gate(rule, M, ev("no"));   // NO = outcome 1 = the Broncos
-    assert.equal(a.release, false); assert.equal(a.release ? null : a.dueAt, T0 + GAME_BURN_DELAY_MS);
-    t = T0 + GAME_BURN_DELAY_MS - 1;
-    assert.equal((await gate(rule, M, ev("no"))).release, false, "one source: the 12 hours run");
+    assert.equal(a.release, false, "a first print settles nothing alone"); assert.equal(a.release ? null : a.dueAt, T0 + GAP);
+    t = T0 + GAP - 1;
+    assert.equal((await gate(rule, M, ev("no"))).release, false, "too soon for a second read");
+    assert.deepEqual(calls, [], "the settled event is the first read: the RPC is not read again until the confirming read");
+    t = T0 + C;
+    assert.equal((await gate(rule, M, ev("no"))).release, true, "the payout read the same way twice");
+    assert.deepEqual(calls, [true], "the confirming read went to the RPC again, past the cache");
+    // a second RPC read that says otherwise is no confirmation
+    const s3 = memoryFirstReadStore();
+    let t3 = T0;
+    const gate3 = polyGameGate({ client: () => client(w), deps: () => ({ ...deps(w, s3, () => t3), payout: rpc(() => 0, []) }) });
+    assert.equal((await gate3(rule, M, ev("no"))).release, false);
+    t3 = T0 + C;
+    assert.equal((await gate3(rule, M, ev("no"))).release, false, "the RPC read again names the other side");
     const s1 = memoryFirstReadStore(), w1 = world({ tsdb: "down" });
     let t1 = T0;
     const gate1 = polyGameGate({ client: () => client(w1), deps: () => deps(w1, s1, () => t1) });
     assert.equal((await gate1(rule, M, ev("no"))).release, false);
-    w1.tsdb = "up"; t1 = T0 + 2 * H;
+    w1.tsdb = "up"; t1 = T0 + 60_000;
     assert.equal((await gate1(rule, M, ev("no"))).release, true, "two sources agree: released on that cycle");
     const w2 = world({ score: { home: 14, away: 17 } }), s2 = memoryFirstReadStore();
     const gate2 = polyGameGate({ client: () => client(w2), deps: () => deps(w2, s2, () => T0) });
@@ -416,21 +603,42 @@ describe("a one-market Polymarket coin on a game moneyline runs on the same sche
     const pm = new PolymarketClient({ fetchImpl: (async () => ({ ok: false, status: 404, json: async () => ({}) })) as never });
     (pm as unknown as { candidates: unknown }).candidates = async () => ({ markets: [{ ...M, closed: true, closedTime: "2026-10-16T04:00:00Z", outcomeFigures: [] }], complete: true, pages: 1 });
     (pm as unknown as { readChain: unknown }).readChain = async () => ({ conditionId: FIX.market.conditionId, chainId: 137, contract: "0xctf", rpcUrl: "x", blockNumber: 1, outcomeSlotCount: 2, payoutDenominator: "1", payoutNumerators: ["0", "1"], resolved: true, payouts: ["0", "1"], outcome: 1 });
-    pm.gameGate = polyGameGate({ client: () => client(w), deps: () => deps(w, store, () => t) });
+    pm.gameGate = polyGameGate({ client: () => client(w), deps: () => ({ ...deps(w, store, () => t), payout: rpc(() => 1, []) }) });
     const first = await pm.settledSince(rule, null);
-    assert.equal(first.events.length, 0); assert.equal(first.awaitingFinal, 1); assert.equal(first.dueAt, T0 + GAME_BURN_DELAY_MS);
-    t = T0 + GAME_BURN_DELAY_MS;
+    assert.equal(first.events.length, 0); assert.equal(first.awaitingFinal, 1); assert.equal(first.dueAt, T0 + GAP);
+    t = T0 + C;
     const due = await pm.settledSince(rule, null);
     assert.equal(due.events.length, 1, JSON.stringify(due.refusals)); assert.equal(due.events[0].result, "no");
   });
-  test("a void payout burns nothing and is released 12 hours after it was first read; it never anchors a tie", async () => {
-    const w = world({ tsdb: "down" }), store = memoryFirstReadStore();
-    let t = T0;
-    const gate = polyGameGate({ client: () => client(w), deps: () => deps(w, store, () => t) });
+  test("a void payout burns nothing and is released when read void again a cycle later; it never anchors a tie", async () => {
+    const w = world({ tsdb: "down" }), store = memoryFirstReadStore(), calls: boolean[] = [];
+    let t = T0, outcome: number | null = null;
+    const gate = polyGameGate({ client: () => client(w), deps: () => ({ ...deps(w, store, () => t), payout: rpc(() => outcome, calls) }) });
     assert.equal((await gate(rule, M, ev("void"))).release, false);
     assert.equal(store.get(gameKeyOf(polyGameOf(M)!)), null, "no game record");
-    t = T0 + GAME_BURN_DELAY_MS;
-    assert.equal((await gate(rule, M, ev("void"))).release, true);
+    t = T0 + GAP - 1;
+    assert.equal((await gate(rule, M, ev("void"))).release, false);
+    // the RPC read again does not say void: not released, and the count starts again
+    t = T0 + C; outcome = 1;
+    assert.equal((await gate(rule, M, ev("void"))).release, false);
+    t = T0 + 2 * C; outcome = null;
+    assert.equal((await gate(rule, M, ev("void"))).release, true, "void again on the RPC");
+    assert.deepEqual(calls, [true, true]);
+  });
+  test("readChain keeps a resolved vector for good, but a fresh read goes to the RPC again; the keeper's payout reader passes it on", async () => {
+    const { polyClient, BUCS_CID, PM_NOW } = await import("./burntickerPolyHelpers.ts");
+    const { polymarketGameReaders } = await import("@/lib/burnticker/sources/gameSettle");
+    const pm = polyClient(), reads = (pm as unknown as { chainReads: string[] }).chainReads;
+    const r1 = await pm.readChain(BUCS_CID);
+    assert.equal(r1.resolved, true);
+    await pm.readChain(BUCS_CID);
+    assert.equal(reads.length, 1, "a resolved vector is cached");
+    const payout = polymarketGameReaders(pm).payout!;
+    await payout(BUCS_CID);
+    assert.equal(reads.length, 1);
+    const p = await payout(BUCS_CID, { fresh: true });
+    assert.equal(reads.length, 2, "the confirming read went to the RPC");
+    assert.equal(p?.fetchedAt, PM_NOW);
   });
   test("a yes/no market (CLARITY, TWOCUTS) is not a game: unchanged", async () => {
     const gate = polyGameGate({ client: () => client(world()), deps: () => deps(world(), memoryFirstReadStore(), () => T0) });
@@ -488,15 +696,15 @@ describe("which Polymarket markets are one game (one schedule for every game coi
     assert.equal(finalAfter(COV).game, true);
     assert.equal(finalAfter(CLARITY).game, undefined);
   });
-  test("a one-market coin on the Coventry leg waits 12 hours from its first read; CLARITY and TWOCUTS are released at once", async () => {
+  test("a one-market coin on the Coventry leg is released on its second read a cycle later; CLARITY and TWOCUTS are released at once", async () => {
     const store = memoryFirstReadStore();
     let t = T0;
-    const gate = polyGameGate({ client: () => client(world()), deps: () => deps(world(), store, () => t) });
+    const gate = polyGameGate({ client: () => client(world()), deps: () => ({ ...deps(world(), store, () => t), payout: rpc(() => 0, []) }) });
     const a = await gate(rule, COV, ev("yes"));
-    assert.equal(a.release, false, JSON.stringify(a)); assert.equal(a.release ? null : a.dueAt, T0 + GAME_BURN_DELAY_MS);
-    t = T0 + GAME_BURN_DELAY_MS - 1;
+    assert.equal(a.release, false, JSON.stringify(a)); assert.equal(a.release ? null : a.dueAt, T0 + GAP);
+    t = T0 + GAP - 1;
     assert.equal((await gate(rule, COV, ev("yes"))).release, false);
-    t = T0 + GAME_BURN_DELAY_MS;
+    t = T0 + C;
     assert.equal((await gate(rule, COV, ev("yes"))).release, true);
     assert.equal((await gate(rule, CLARITY, ev("yes"))).release, true);
     assert.equal((await gate(rule, TWOCUTS, ev("no"))).release, true);
@@ -506,7 +714,7 @@ describe("which Polymarket markets are one game (one schedule for every game coi
 describe("the title parts read back on the league page and the coin page", () => {
   const base = "SEA 14 @ DEN 17 final (DEN win)";
   const espn = "see this game on ESPN → https://www.espn.com/nfl/scoreboard/_/date/20261016";
-  test("with a confirmer, with none, the old form and the one-source form", () => {
+  test("with a confirmer, with none, the 12-hour form written until 2026-10-18 (live SEAWIN and DENWIN), the older form and the one-source form", () => {
     const withC = `${base} · settled on a licensed final score · confirmed by the game's on-chain settlement · burned 12 hours after the final was first read · ${espn}`;
     const none = `${base} · settled on the game's on-chain settlement · no other source answered · burned 12 hours after the final was first read · ${espn}`;
     const old = `${base} · settled on the game's on-chain payout · confirmed by a licensed final score · ${espn}`;
@@ -524,7 +732,7 @@ describe("the title parts read back on the league page and the coin page", () =>
 });
 
 describe("the operator's release of a stuck disagreement", () => {
-  test("releaseDispute: needs a note and a dispute; drops the other side's reads; restarts the 12 hours; a live dissenter disputes again", async () => {
+  test("releaseDispute: needs a note and a dispute; drops the other side's reads; moves the anchor; a live dissenter disputes again", async () => {
     const w = world({ tsdb: "down", paid: true }), store = memoryFirstReadStore();
     await read(w, store, T0);
     w.tsdb = "up"; w.score = { home: 14, away: 17 };
@@ -538,9 +746,10 @@ describe("the operator's release of a stuck disagreement", () => {
     store.set(gameKeyOf(G), r.next);
     assert.equal((await read(w, store, T0 + 4 * H)).kind, "held", "the payout still reads the Broncos: disputed again");
     w.paid = false; store.set(gameKeyOf(G), r.next);
-    assert.equal((await read(w, store, T0 + 15 * H)).kind, "settled", "with the payout quiet, the released result burns at release + 12 h");
+    assert.equal((await read(w, store, T0 + 15 * H)).kind, "awaiting", "the first read after the release");
+    assert.equal((await read(w, store, T0 + 15 * H + C)).kind, "settled", "with the payout quiet, the released result burns on TheSportsDB's second read after the release");
   });
-  test("a release that ignores the on-chain settlement: it still contradicts, the game goes on TheSportsDB and burns 12 hours after the release", async () => {
+  test("a release that ignores the on-chain settlement: it still contradicts, the game goes on TheSportsDB and burns on its second read after the release", async () => {
     const w = world({ tsdb: "down", paid: true }), store = memoryFirstReadStore();
     await read(w, store, T0);                                   // the settlement on chain reads the Broncos first
     w.tsdb = "up"; w.score = { home: 14, away: 17 };            // TheSportsDB reads SEA 17-14
@@ -553,9 +762,9 @@ describe("the operator's release of a stuck disagreement", () => {
     store.set(gameKeyOf(G), r.next);
     // the settlement on chain still reads the Broncos on every cycle (w.paid stays true)
     const a = await read(w, store, T0 + 4 * H);
-    assert.equal(a.kind, "awaiting", JSON.stringify(a)); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + 3 * H + GAME_BURN_DELAY_MS, "12 hours from the release");
-    assert.equal((await read(w, store, T0 + 3 * H + GAME_BURN_DELAY_MS - 1)).kind, "awaiting");
-    const v = await read(w, store, T0 + 3 * H + GAME_BURN_DELAY_MS);
+    assert.equal(a.kind, "awaiting", JSON.stringify(a)); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + 4 * H + GAP, "a second read after the release");
+    assert.equal((await read(w, store, T0 + 4 * H + GAP - 1)).kind, "awaiting");
+    const v = await read(w, store, T0 + 4 * H + C);
     assert.equal(v.kind, "settled", JSON.stringify(v));
     if (v.kind === "settled") { assert.equal(v.winner, "away"); assert.deepEqual(v.ops, ["TheSportsDB"], "the ignored source is not named"); }
     assert.deepEqual(store.get(gameKeyOf(G))?.ignored, ["on-chain payout"], "kept on the record");
@@ -565,6 +774,9 @@ describe("the operator's release of a stuck disagreement", () => {
     const reg = openRegistry(db);
     const m = { firstReadAt: T0, by: "on-chain payout", winner: "home", home: null, away: null, ops: ["on-chain payout"], reads: { "on-chain payout": { winner: "home", home: null, away: null, at: T0, detail: "p", url: "" }, TheSportsDB: { winner: "away", home: 14, away: 17, at: T0, detail: "t", url: "" } }, disputed: [{ op: "on-chain payout", winner: "home", home: null, away: null, at: T0 }, { op: "TheSportsDB", winner: "away", home: 14, away: 17, at: T0 }] };
     reg.setStatus(FIRST_READ_STATUS_KEY, { "nfl:2475453": m }, T0);
+    // the game's hold mark remembers finals too; a release drops the released sources' finals there (review 2026-10-18)
+    const fin = (home: number, away: number) => ({ home, away, at: T0 });
+    reg.setStatus(HOLD_STATUS_KEY, { "nfl:2475453:2026-10-16T00:15:00Z": { home: -1, away: -1, firstSeenAt: T0, finals: { "on-chain payout": fin(1, 0), "apisports.games": fin(14, 17) } }, "nfl:9:x": { home: -1, away: -1, firstSeenAt: T0, finals: { "on-chain payout": fin(1, 0) } } }, T0);
     reg.close?.();
     const run = (...a: string[]) => spawnSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--import", "./test/alias-hook.mjs", "scripts/burnticker-game-hold.mts", ...a, "--db", db], { encoding: "utf8" });
     const show = run("--show");
@@ -577,6 +789,9 @@ describe("the operator's release of a stuck disagreement", () => {
     assert.equal(ap.status, 0, ap.stderr);
     const after = JSON.parse(openRegistry(db).getStatus(FIRST_READ_STATUS_KEY)!)["nfl:2475453"];
     assert.equal(after.disputed, null); assert.equal(after.release.note, "read by hand"); assert.deepEqual(Object.keys(after.reads), ["TheSportsDB"]);
+    const marks = JSON.parse(openRegistry(db).getStatus(HOLD_STATUS_KEY)!);
+    assert.deepEqual(Object.keys(marks["nfl:2475453:2026-10-16T00:15:00Z"].finals), ["apisports.games"], "the released source's final is dropped from the hold mark");
+    assert.deepEqual(Object.keys(marks["nfl:9:x"].finals), ["on-chain payout"], "another game's mark is untouched");
     // --ignore is saved on the record (a second record, held the same way)
     {
       const r2 = openRegistry(db); r2.setStatus(FIRST_READ_STATUS_KEY, { ...JSON.parse(r2.getStatus(FIRST_READ_STATUS_KEY)!), "nfl:2475454": m }, T0); r2.close?.();
@@ -591,7 +806,7 @@ describe("the operator's release of a stuck disagreement", () => {
 // ---- a contradiction is remembered (review finding A) -----------------------------------------------------------------------------
 // A cup tie: the three-way settlement on chain pays a home win at 90 minutes while TheSportsDB says 1-1 after extra time, decided on
 // penalties. That is held. On a later cycle one Polygon leg fails to read, so the three-way read is "awaiting", not "held": the game must
-// stay held and must not settle on TheSportsDB's penalty winner 12 hours later.
+// stay held and must not settle on TheSportsDB's penalty winner later.
 const sideOf = (abbr: string, name: string, homeAway: "home" | "away", winner?: boolean) => ({ abbr, name, nickname: name, location: name, short: name, score: null, homeAway, record: null, ...(winner ? { winner } : {}) });
 const CUP: Game = { eventId: "740099", league: "eng.1", startsAt: "2026-10-10T11:30:00Z", date: "2026-10-10", name: "Leeds United at Arsenal", completed: true, state: "post", detail: "FT", home: sideOf("ARS", "Arsenal", "home", true), away: sideOf("LEE", "Leeds United", "away") } as unknown as Game;
 const LH = "0x" + "a".repeat(64), LD = "0x" + "b".repeat(64), LA = "0x" + "c".repeat(64);
@@ -619,9 +834,9 @@ describe("a contradiction found before the schedule sees the reads is remembered
     }
     // the same contradiction read again: still held, the anchor not moved
     assert.equal((await cup({ [LH]: YES, [LD]: NO, [LA]: NO }, T0 + 31 * H)).kind, "held");
-    // that source reads the game cleanly (the draw leg: level after 90): cleared, and the 12 hours start from that read
+    // that source reads the game cleanly (the draw leg: level after 90): cleared, and the anchor moves to that read
     const c = await cup({ [LH]: NO, [LD]: YES, [LA]: NO }, T0 + 40 * H);
-    assert.equal(c.kind, "awaiting", JSON.stringify(c)); assert.equal(c.kind === "awaiting" ? c.dueAt : null, T0 + 40 * H + GAME_BURN_DELAY_MS);
+    assert.equal(c.kind, "awaiting", JSON.stringify(c)); assert.equal(c.kind === "awaiting" ? c.dueAt : null, T0 + 40 * H + GAP);
     assert.equal(store.get(gameKeyOf(CUP))?.contradiction, null);
     const d = await cup({ [LH]: NO, [LD]: YES, [LA]: NO }, T0 + 52 * H);
     assert.equal(d.kind === "settled" && d.winner, "home", JSON.stringify(d));

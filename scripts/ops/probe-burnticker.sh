@@ -61,7 +61,7 @@ fresh() {  # fresh <label>: the generatedAt of the last body is younger than MAX
   else fail "$1  written ${a}s ago at $g (limit ${MAX_AGE}s): the keeper has stopped publishing"; fi
 }
 
-echo "probe $(date '+%Y-%m-%d %H:%M:%S %Z')  base $BASE  status $STATUS_BASE  deficit $DEFICIT_BASE"
+echo "probe $(date -u '+%Y-%m-%d %H:%M:%SZ')  base $BASE  status $STATUS_BASE  deficit $DEFICIT_BASE"
 page "home        " "$BASE/"
 if [ -n "$(header cf-ray)" ]; then info "the site answers through Cloudflare (cf-ray present)"; else info "the site answers directly, not through Cloudflare (no cf-ray header)"; fi
 if [ -n "$(header content-security-policy-report-only)" ]; then info "a report-only content security policy is sent on /"; fi
