@@ -14,6 +14,10 @@ Environment=NODE_ENV=production
 Environment=TZ=America/Denver
 Environment=BURNTICKER_DB=%h/meme-coin-trader/data/burnticker.db
 Environment=BURNTICKER_PUBLISH_DIR=%h/meme-coin-trader/data/burnticker-site
+# Burn dispersal (prelaunch audit 2026-10-18 A-1): round 5 of the burn program (crank_carried) is deployed, so the keeper spends carried
+# amounts in pieces and drains a finished rule's carry before its end. On a program with crank_carried the keeper refuses to start unless
+# this is 1, or 0 on purpose (then it raises bt-dispersal-off once a day). A value here wins over .env.local.
+Environment=BURNTICKER_DISPERSAL=1
 # BURNTICKER_CLUSTER, BURNTICKER_KEEPER_PUBKEY, BURNTICKER_FEE_WALLET, BURNTICKER_RPC_URL, BURNTICKER_PLATFORM_ID, BURNTICKER_PROGRAM_ID,
 # BURNTICKER_ALERT_WEBHOOK, BURNTICKER_ALERT_WEBHOOK_TOKEN live in .env.local on the host, read by run-burnticker-keeper.sh — never in this file.
 Restart=always

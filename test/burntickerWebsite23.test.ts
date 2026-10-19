@@ -87,7 +87,7 @@ describe("website-23: the posted body shape", () => {
     assert.match(page, /\? \{ pair: \{ \.\.\.settledPairBody\(settledPick, \{ ticker: tickerB, name: nameB, creatorDescription: profileB\.description, links: creatorLinks\([^\n]*\), descCtx: ctxB \} \}/);
     assert.match(page, /\.\.\.\(pairOn && ruleB \? \(settledPick\n/);
     assert.match(page, /const settledFields = settledPick \? \{ \.\.\.settledPairFields\(settledPick\), descCtx: ctxB \} : \{\};/);
-    assert.match(page, /\.\.\.profileBody\(profileB\), \.\.\.settledFields \} \}, meetingsOn \|\| settledPick \? "launchlab" : pairVenue\);/);
+    assert.match(page, /\.\.\.profileBody\(profileB\), \.\.\.settledFields \} \}, \(b\) => postPairLaunch\(\(u, init\) => launchFetch\(u, init as never\), b, meetingsOn \|\| settledPick \? "launchlab" : pairVenue\)\);/);   // review of block M: through sendWithProofFallback
     assert.match(page, /if \(pairOn && ruleB && !meetingsOn && !settledPick\) \{/, "never two separate launches");
     assert.match(page, /if \(pairOn && elPick\) return \{ a: candidatesPairRule\(elPick\.a\.conditionId, DEFAULT_SHARE\.oneShot\)/);
     assert.match(page, /if \(pairMode === "game" && gameSides\) \{ const f = oneGameShare\(dialsFor\(gamePairRule\(/);

@@ -8,6 +8,8 @@ import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 import { archivePlanRecord, chainReadDeps } from "@/lib/burnticker/launchRecovery";
+import { launchGateFromCatalogue, signGateOf } from "@/lib/burnticker/launchGateState";
+import { beforeUnloadGuard, holdPlan, planHoldsKeys } from "@/lib/burnticker/planHold";
 import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
 import { matchesSuffix } from "@/lib/burnticker/vanityMint";
 import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
@@ -68,7 +70,8 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   const problems = [...planProblems(plan, creator), ...pinProblems, ...planSizeProblems(plan.steps, creator, network), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet && !v0?.has(0) ? ["this wallet cannot sign version-0 transactions"] : [])];
   /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
   // launch audit 234: the replaced plan's signatures and mints stay readable in this tab's history (never a key)
-  const startNewPlan = () => { archivePlanRecord(storage, planStorageKey(plan)); window.location.assign(resumeReviewHref(window.location.pathname)); };
+  // review of block J: a coin whose create landed but was not recorded keeps its plan record here too (LaunchRecovery still finds it)
+  const startNewPlan = () => { if (!planHasUnrecordedCoin(plan, done, confirmed)) archivePlanRecord(storage, planStorageKey(plan)); window.location.assign(resumeReviewHref(window.location.pathname)); };
   // F06 (prelaunch audit 2026-10-18): past the plan's deadline no new step is signed here (the runner refuses it too, also after a long
   // wallet wait); a step already sent can still be checked on chain and a landed coin recorded. The clock is read again when the deadline
   // passes and whenever the tab is shown again (a tab left open overnight).
@@ -79,13 +82,25 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
     document.addEventListener("visibilitychange", tick); window.addEventListener("focus", tick);
     return () => { window.clearTimeout(timer); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
   }, [plan.deadlineAt]);
-  const [ranOut, setRanOut] = useState(false);
+  const [ranOut, setRanOut] = useState(false), [closedStop, setClosedStop] = useState(false);
   const expired = ranOut || planPastDeadline(plan, clock);
   // review fix: a coin whose create step is confirmed on chain but whose record was not accepted yet keeps the card (it can still be
   // recorded after the deadline), and Start over never archives its plan record, so the reload notice can still find and record it
   const unrecorded = planHasUnrecordedCoin(plan, done, confirmed);
   const startOver = () => { if (!unrecorded) archivePlanRecord(storage, planStorageKey(plan)); if (onStartOver) onStartOver(); else window.location.assign(resumeReviewHref(window.location.pathname)); };
   const allLive = plan.confirms.length > 0 && plan.confirms.every((c) => confirmed.includes(c.mint));
+  // prelaunch audit 2026-10-18 A-12: while this plan holds mint keys for steps not sent, the version notice offers no reload and leaving
+  // the page asks first (planHold.ts)
+  // review of block M: a plan stopped because launches closed holds nothing worth a prompt (no step can be sent), like an abandoned one
+  const holdsKeys = planHoldsKeys(plan, done.length, { abandoned: stopped?.state === "abandoned" || closedStop, finished: allLive || expired });
+  useEffect(() => {
+    const key = planStorageKey(plan);
+    holdPlan(key, holdsKeys);
+    if (!holdsKeys) return () => holdPlan(key, false);
+    const guard = beforeUnloadGuard(() => true);
+    window.addEventListener("beforeunload", guard);
+    return () => { window.removeEventListener("beforeunload", guard); holdPlan(key, false); };
+  }, [holdsKeys, plan]);
   useEffect(() => { if (allLive) onLive?.(); }, [allLive]); // eslint-disable-line react-hooks/exhaustive-deps
   const n = plan.steps.length;
   // launch audit 230: once live, the card stays as a completion card with an Open link per coin (no timed redirect)
@@ -99,9 +114,11 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   };
   const run = async () => {
     if (!creator || !wallet.signTransaction) return;
-    setBusy(true); setErr(null); setNotice(null);
+    setBusy(true); setErr(null); setNotice(null); setClosedStop(false);
     try {
       const r = await signAndSendPlan(plan, creator, {
+        // prelaunch audit 2026-10-18 A-11: launches closed while signing stop the plan before its next step (a fresh catalogue read)
+        launchGate: () => fetch("/api/burnticker/catalogue", { cache: "no-store" }).then((x) => (x.ok ? x.json() : Promise.reject(new Error(`HTTP ${x.status}`)))).then((j) => signGateOf(launchGateFromCatalogue(j)), () => "unknown" as const),
         latestBlockhash: () => connection.getLatestBlockhash("confirmed"),
         signTransaction: (tx) => wallet.signTransaction!(tx),
         // Phantom ticket 438485: dry-run each step before the wallet sees it (a transaction that fails on chain trips the wallet's warning)
@@ -120,7 +137,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
       setDone(r.signatures);
       if (r.expired) setRanOut(true);
       if (r.error) {
-        setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n));
+        setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n)); setClosedStop(!!r.closed);
         // AUDIT A C1 (5): a coin whose own create landed before the stop is recorded now (a LaunchLab pair whose B create failed: A exists)
         if (planConfirmations(plan, r.signatures).some((l) => !confirmed.includes(l.mint))) {
           const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });

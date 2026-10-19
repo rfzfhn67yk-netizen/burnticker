@@ -28,15 +28,16 @@ describe("tickers are not unique; coins resolve by mint", () => {
   before(async () => {
     w = await makeWorld();
     clearBadgeMemo();
-    // a second $BRONCO through the public launch API (prepareLaunch), then taken live
+    // prelaunch audit 2026-10-18 A-2 and its review: the launch API refuses a second $BRONCO, even from the same creator (every ticker is
+    // one coin). A shared ticker can still exist from before that rule, so the second live $BRONCO is written to the registry directly.
     twin = Keypair.generate().publicKey.toBase58();
     const r = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: twin, ticker: "BRONCO", name: "Bronco heat", rule: DENVER_HIGH, acknowledgements: { ruleLocked: true, noReturns: true } }) });
-    assert.equal(r.status, 200, JSON.stringify(await r.clone().json()).slice(0, 300));
-    const c = await callRoute(`${API}/launch/confirm`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ mint: twin, signature: "7".repeat(88) }) });
-    assert.equal(c.status, 200, JSON.stringify(await c.clone().json()).slice(0, 300));
+    assert.equal(r.status, 409, JSON.stringify(await r.clone().json()).slice(0, 300));
+    assert.equal((await r.json() as { code: string }).code, "ticker-taken");
+    w.registry.register({ mint: twin, ticker: "BRONCO", name: "Bronco heat", creator: CREATOR, description: "", imageUrl: null, links: [], rulesText: lockRule(DENVER_HIGH).text, feePda: "F", vault: null, tokenConfig: null, poolId: null, launchTx: "7".repeat(88), cluster: "devnet", platformId: null, baselineAt: new Date().toISOString(), status: "live" });
   });
 
-  test("two live coins with the same ticker both register (prepareLaunch and the registry)", () => {
+  test("two live coins with the same ticker (from before the one-coin rule) are both kept by the registry", () => {
     const held = w.registry.tokensByTicker("BRONCO");
     assert.deepEqual(held.map((t) => t.mint).sort(), [w.bronco.mint, twin].sort());
     assert.ok(held.every((t) => t.status === "live"));
@@ -155,7 +156,7 @@ describe("tickers are not unique; coins resolve by mint", () => {
     ]);
     assert.deepEqual(k.get("MintOne1111111111111111111111111111111111"), ["RAYS", "MintOne1111111111111111111111111111111111"]);
     assert.deepEqual(k.get("MintTwo1111111111111111111111111111111111"), ["MintTwo1111111111111111111111111111111111"]);
-    assert.deepEqual(k.get("MintSolo111111111111111111111111111111111"), ["SOLO"], "a ticker one coin holds keeps its path");
+    assert.deepEqual(k.get("MintSolo111111111111111111111111111111111"), ["SOLO", "MintSolo111111111111111111111111111111111"], "a ticker one coin holds keeps its path, and every coin has its mint path (prelaunch audit 2026-10-18 A-2)");
     assert.deepEqual(k.get("MintGone111111111111111111111111111111111"), ["MintGone111111111111111111111111111111111"]);
     // an older draft that launches after another coin on its ticker does not take the ticker path
     const d = siteKeysOf([

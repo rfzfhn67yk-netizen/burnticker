@@ -1,4 +1,4 @@
-import { plainPower } from "@/lib/burnticker/powerPlain";
+import { plainPower, UPGRADE_CAVEAT } from "@/lib/burnticker/powerPlain";
 import fs from "node:fs";
 import path from "node:path";
 import { PublicKey } from "@solana/web3.js";
@@ -7,6 +7,9 @@ import { decodePlatformConfig } from "@/lib/burnReceipts/accounts";
 import { platformPda } from "@/lib/burnReceipts/pda";
 import { capSentence, effectiveCap, type EffectiveCap } from "@/lib/burnticker/capInForce";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { programHashFact } from "@/lib/burnticker/programHash";
+import { publicChangelogMarkdown } from "@/lib/burnticker/changelogPublic";
+import { loadOperator, type OperatorWallet } from "@/lib/burnticker/trustpack/operator";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
 import { upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
 import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
@@ -182,6 +185,8 @@ export function readMarkdownLog(root: string, rel: string): MarkdownLog {
   const md = fs.readFileSync(file, "utf8");
   return { markdown: md, entries: (md.match(/^## /gm) ?? []).length, file: rel, present: true };
 }
+/** A-6: the changelog as visitors read it, with no monorepo commit in it (changelogPublic.ts). */
+const publicChangelog = (l: MarkdownLog): MarkdownLog => ({ ...l, markdown: publicChangelogMarkdown(l.markdown) });
 export function readIncidents(root = process.cwd()): { markdown: string; entries: number } { const l = readMarkdownLog(root, INCIDENTS_FILE); return { markdown: l.markdown, entries: l.entries }; }
 
 // ---- transparency (config/burnticker/transparency.json; the owner, 2026-10-09: "i dont want to hide anything") ----
@@ -214,8 +219,13 @@ export interface TransparencyBounty {
   recordedFunding?: { sol: number; date: string; transaction: string | null; source: string; evidence?: string } | null;
   reports?: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string };
 }
-/** A wallet row as rendered: the pubkey from the file, else from the named environment variable, else TODO. */
-export interface WalletRow extends TransparencyWallet { resolved: string | null; source: "file" | "env" | "todo" }
+/**
+ * A wallet row as rendered. ONE RECORD (prelaunch audit 2026-10-18 A-6: the trust page said "6 of 11 are not set" beside an operator
+ * page that listed every wallet): the address comes from config/burnticker/operator.json for the cluster, the record the operator page
+ * reads; then this file's own pubkey; then the named environment variable. A role the operator record does not list and nothing else
+ * names is "unlisted" (said so on the page, not counted as unset); "todo" is left only on a host without the operator record.
+ */
+export interface WalletRow extends TransparencyWallet { resolved: string | null; source: "operator" | "file" | "env" | "todo" | "unlisted" }
 
 const PUBKEY_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const FORBIDDEN_PHRASES = [/coming soon/i, /stay tuned/i];
@@ -266,12 +276,23 @@ export function transparencyProblems(j: Partial<TransparencyConfig> | null): str
   return out;
 }
 
-export function resolveWallets(cfg: TransparencyConfig, env: Readonly<Record<string, string | undefined>> = process.env): WalletRow[] {
-  return cfg.wallets.map((w) => {
+export function resolveWallets(cfg: TransparencyConfig, env: Readonly<Record<string, string | undefined>> = process.env, operatorWallets: readonly { role: string; label: string; pubkey: string }[] | null = null): WalletRow[] {
+  const op = new Map((operatorWallets ?? []).filter((w) => PUBKEY_RE.test(w.pubkey)).map((w) => [w.role, w]));
+  const rows: WalletRow[] = cfg.wallets.map((w): WalletRow => {
+    const o = op.get(w.role);
+    if (o) return { ...w, label: o.label, resolved: o.pubkey, source: "operator" };
     if (w.pubkey) return { ...w, resolved: w.pubkey, source: "file" };
     const v = w.envVar ? (env[w.envVar] ?? "").trim() : "";
-    return PUBKEY_RE.test(v) ? { ...w, resolved: v, source: "env" } : { ...w, resolved: null, source: "todo" };
+    if (PUBKEY_RE.test(v)) return { ...w, resolved: v, source: "env" };
+    return { ...w, resolved: null, source: operatorWallets ? "unlisted" : "todo" };
   });
+  // every role the operator record lists appears here too, under the record's own label (the two pages list the same keys)
+  for (const o of op.values()) if (!cfg.wallets.some((w) => w.role === o.role)) rows.push({ role: o.role, label: o.label, pubkey: o.pubkey, envVar: null, description: o.label, resolved: o.pubkey, source: "operator" });
+  return rows;
+}
+/** The operator record's wallets for the host's cluster (config/burnticker/operator.json); null when the file is absent or unreadable. */
+export function operatorWalletsFor(root: string, env: Readonly<Record<string, string | undefined>>): OperatorWallet[] | null {
+  try { return loadOperator(root).clusters[(env.BURNTICKER_CLUSTER ?? "").trim() === "mainnet" ? "mainnet" : "devnet"]?.wallets ?? null; } catch { return null; }
 }
 
 export interface TransparencySection {
@@ -287,14 +308,14 @@ export interface TransparencySection {
 /** The whole transparency block for the page. Pure given root + env (reads files, never the network). */
 export function buildTransparency(root = process.cwd(), env: Readonly<Record<string, string | undefined>> = process.env): TransparencySection {
   const cfg = loadTransparency(root);
-  const wallets = resolveWallets(cfg, env);
+  const wallets = resolveWallets(cfg, env, operatorWalletsFor(root, env));
   return {
     updatedAt: cfg.updatedAt, file: TRANSPARENCY_FILE, publicRepo: cfg.publicRepo,
     whoRunsThis: { ...cfg.whoRunsThis, operatorLine: OPERATOR_LINE, refuseListPresent: fs.existsSync(path.join(root, cfg.whoRunsThis.refuseListCode)) && fs.existsSync(path.join(root, cfg.whoRunsThis.refuseListConfig)) },
     howBuilt: { ...cfg.howBuilt, reviewsReadmePresent: fs.existsSync(path.join(root, cfg.howBuilt.reviewsDir, "README.md")), reportsPresent: cfg.howBuilt.reviews.map((r) => ({ id: r.id, present: !!r.reportPath && fs.existsSync(path.join(root, r.reportPath)) })) },
     wallets, walletsTodo: wallets.filter((w) => w.source === "todo").length, rehearsals: cfg.rehearsals,
     limitations: cfg.limitations, policies: cfg.policies,
-    decisions: readMarkdownLog(root, DECISIONS_FILE), changelog: readMarkdownLog(root, CHANGELOG_FILE),
+    decisions: readMarkdownLog(root, DECISIONS_FILE), changelog: publicChangelog(readMarkdownLog(root, CHANGELOG_FILE)),
   };
 }
 
@@ -311,12 +332,14 @@ export function programFacts(env: Readonly<Record<string, string | undefined>> =
   const id = (env.BURNTICKER_PROGRAM_ID ?? "").trim();
   const deployed = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(id);
   const out: ProgramFacts = {
-    programId: deployed ? id : null, deployed, buildHash: (env.BURNTICKER_PROGRAM_HASH ?? "").trim() || null,
+    // prelaunch audit 2026-10-18 A-4: the hash comes from config/burnticker/verified-build.json for the cluster (the read-back of the
+    // deployed bytes); BURNTICKER_PROGRAM_HASH is shown only when it equals that record, otherwise ignored and logged once
+    programId: deployed ? id : null, deployed, buildHash: programHashFact(env, root).hash,
     hostWiring: deployed ? `This site reads the burn program (burn_receipts) at ${id}.` : "This site is not connected to a burn program. Its pages use a stand-in that runs in memory and sends nothing to the chain.",
     chain: chainFacts(root),
     compiled: `The burn program's address, compiled into the program and its interface file (IDL), is ${BURN_RECEIPTS_IDL.address}.`,
     verify: deployed
-      ? [`solana program dump ${id} program.so`, "sha256sum program.so   # compare with the build hash above", "anchor verify or solana-verify   # against the tagged source; the register links the repository once it is published", `solana program show ${id}   # the upgrade authority must match the register`]
+      ? [`solana-verify get-program-hash ${id}   # must equal the build hash above (sha256 of the program bytes, trailing zero bytes removed)`, `solana program dump ${id} program.so && solana-verify get-executable-hash program.so   # the same number from a local copy`, "solana-verify verify-from-repo   # rebuilds the tagged public source and compares; docs/burnticker/VERIFIED-BUILD.md has the steps", `solana program show ${id}   # the upgrade authority must match the register`]
       : ["# This site is not connected to the program. Where it is deployed, and the hashes read back from the chain, are listed above. They come from config/burnticker/verified-build.json and docs/burnticker/VERIFIED-BUILD.md."],
   };
   // every coin's metadata, whatever the program's state (pin.ts; verify.ts verifyPinnedMetadata does the same three checks)
@@ -336,7 +359,8 @@ function chainFacts(root: string): ProgramChainFact[] {
 
 // ---- the audit (scripts/burnticker-audit.mts writes it) ----
 
-export interface AuditSummary { schema: "burnticker.audit/v1"; ranAt: string; tokens: number; receipts: number; mismatches: { ticker: string; eventId: string; checks: string[] }[]; chainChecked: boolean; ok: boolean }
+/** `executed`: receipts that moved something on chain (burned or forwarded); `chainError`: why the chain leg did not finish (A-6). */
+export interface AuditSummary { schema: "burnticker.audit/v1"; ranAt: string; tokens: number; receipts: number; executed?: number; /** review of A-6: confirmed receipts whose memo the chain showed and matched, and those it could not show */ chainVerified?: number; chainUnchecked?: number; mismatches: { ticker: string; eventId: string; checks: string[] }[]; chainChecked: boolean; chainError?: string | null; ok: boolean }
 export function readAudit(siteDir: string): AuditSummary | null {
   const file = path.join(siteDir, "audit.json");
   if (!fs.existsSync(file)) return null;
@@ -390,14 +414,15 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     transparency,
     statements: [
       `At graduation, ${LP_LOCKED_PCT}% of the LP is locked forever with Raydium's LP lock and can never be withdrawn. A creator cannot change this. The platform settings that do it are platformScale 1,000,000, creatorScale 0 and burnScale 0. The Fee Key belongs to the burn program's fee-keys account. Anyone can call the fee claim (claim_lock_fees), which splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury. That split is fixed in code, and the coin side is burned. The program also sets a minimum share of locked LP for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
-      `${postGraduationShareLine(postGraduationFeesFor(cluster))} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No admin key can change how the liquidity fees are split.`,
+      `${postGraduationShareLine(postGraduationFeesFor(cluster))} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No setting or admin key changes how the liquidity fees are split. ${UPGRADE_CAVEAT}`,
       "Creators get no cash from fees. The creator-fee slot pays 100% to the coin's burn pool.",
       "There is no team allocation. There is no presale, no private round and no airdrop to insiders. The platform holds no tokens at launch.",
       "Rules, readings and receipts are append-only. Database triggers refuse any update or delete. Changing a rule means launching a new token.",
       "The launch wizard has no referral codes, fee discounts or hidden settings. Every setting is in the coin's rules file (rules.json).",
       "Only settled results are shown. The site shows no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence. For example, a Burn Derby rule reads the settled moves of two outside coins, and derby admission refuses a Burnticker coin as an input. No page shows a market-implied chance for any coin, since that was removed on 2026-10-10. A coin page names only its venue and the next market's ticker and close time.",
       "Coins settle on first-party primary sources, each with an independent cross-read. These include Treasury, BLS, FRED, NWS, EDGAR and on-chain data. A sports game settles on the game's on-chain payout when a Polymarket moneyline market exists. Otherwise it settles on a licensed final score from TheSportsDB, under a commercial license. The league's official feed confirms that score (MLB's official feed, the NHL's official scores or the NBA's official feed), or a second licensed provider, API-Sports, does. A coin on a single game, or two teams in one game, burns once two of these sources agree on the final, or once one source has shown the same final twice a few minutes apart. Every source that answers must agree, and the game's on-chain settlement counts as one source. The coverage table below has the details. A coin can also settle on an on-chain Polymarket payout. That result is read from the payout vector of the Conditional Tokens contract on Polygon, and it counts only once the payout is on chain. Polymarket's Gamma API is used only to find markets, and no prices are shown. Kalshi is not a settlement input. Its Developer Agreement and Data Terms, reviewed on 2026-10-10, do not allow settling products on its data or sharing that data. The Kalshi adapter is for discovery only and is off by default, and the launch check refuses any Kalshi rule.",
-      `${capSentence(effective)} Today the keeper enforces this cap. Once the program is deployed, the program enforces it. Until then, that gap is open.`,
+      // prelaunch audit 2026-10-18 A-6: the program is deployed and enforces the cap; the old "once the program is deployed" line is retired
+      `${capSentence(effective)} The burn program enforces this cap on chain.`,
       "Anonymous creators are allowed, and the creator's wallet is always shown. One-shot markets are allowed, and their pages say 'resolves once on <date>'. Elections are allowed. Deaths, violence, terror, casualty counts and named private individuals are refused.",
       USE_OF_FEES,
       ...GATE_POLICY_IDS.map((id) => transparency.policies.find((p) => p.id === id)?.text).filter((t): t is string => !!t),

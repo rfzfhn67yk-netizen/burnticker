@@ -16,6 +16,7 @@ import { Keypair } from "@solana/web3.js";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { markLaneBusy } from "@/lib/burnticker/confirmBusy";
 import { bodyFingerprint, IDEMPOTENCY_KEY_RE, IdempotentRuns } from "@/lib/burnticker/api/idempotency";
+import { launchBodyOf } from "@/lib/burnticker/api/launchBody";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,8 @@ export async function POST(req: Request) {
   try { body = JSON.parse(text); } catch { return NextResponse.json({ error: "invalid JSON body" }, { status: 400 }); }
   // audit 2026-10-18 A-42: `null`, a number or an array parsed fine and then threw on the first field read (a bare 500)
   if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "The request body must be a JSON object.", code: "bad-body" }, { status: 400 });
+  // A-3 follow-up: only the fields a launch reads (api/launchBody.ts); an unknown field is dropped here
+  body = launchBodyOf(body);
   // AUDIT A C1 (6, 7; findings M1 and H4): `launched` records a launch that is ALREADY SIGNED AND ON CHAIN. It is taken whether launches
   // are open, closed or in preview (closing launches must not strand a coin that exists), and it is metered on the heavy bucket, not the
   // 10-an-hour write bucket (a creator who built a few bundles must still be able to record the one that landed). The chain decides.

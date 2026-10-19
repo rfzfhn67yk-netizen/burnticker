@@ -370,6 +370,12 @@ export function reconcilePending(p: { lastValidBlockHeight: number }, status: Ch
 }
 
 export interface SendDeps {
+  /**
+   * Prelaunch audit 2026-10-18 A-11: whether creator launches are still open on this site, read before each NEW step is built and again
+   * when the wallet returns it. "closed" stops the run before anything more is sent (a create after the closure is refused by the
+   * confirm); "unknown" (the read failed) lets the step go on, since the server still checks. Left out: not checked.
+   */
+  launchGate?(): Promise<"open" | "closed" | "unknown">;
   latestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }>;
   signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction>;
   /**
@@ -416,7 +422,7 @@ export interface SendDeps {
   expectedAccounts?(mints: string[]): Promise<"absent" | "present" | "unknown">;
 }
 /** `state` / `signature` describe the step at `failedAt` and are present only when a run stops. */
-export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true }
+export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true; /** A-11: stopped because creator launches closed */ closed?: true }
 
 export type ChainReadDeps = Pick<SendDeps, "getSignatureStatus" | "getBlockHeight" | "getTransaction" | "expectedAccounts">;
 /**
@@ -483,6 +489,8 @@ async function blockhashExpired(d: Pick<SendDeps, "isBlockhashValid">, blockhash
   try { return (await d.isBlockhashValid!(blockhash)) === false; } catch { return false; }
 }
 /** Said to the creator while the wallet is asked again. */
+/** A-11: the sentence when creator launches closed while a plan was being signed. */
+export const launchesClosedSentence = (i: number, n: number): string => `Creator launches were closed on this site while this launch was being signed, so step ${i + 1} of ${n} was not sent and nothing more is asked of your wallet. Any step already confirmed stays on chain`;
 export const resignSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} waited in the wallet longer than the network allows, so it was prepared again. This step was not sent. Approve it in your wallet once more.`;
 export const resignExhaustedSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} was not sent because the wallet took longer than the network allows, ${RESIGN_MAX + 1} times in a row. Press the button to try again, and approve the request in your wallet within a minute.`;
 /** A send error that proves the transaction never left the RPC node (preflight / blockhash refused); anything else may have landed. */
@@ -536,6 +544,13 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
   const now = d.now ?? (() => Date.now());
   // F06 (prelaunch audit 2026-10-18): past the plan's deadline no NEW step is signed or sent, from any card. The stored pending send was
   // settled above (a status check) whatever the time, and every step already confirmed stays; only building a new one stops here.
+  /** A-11: launches closed while this plan was being signed: no new step is sent */
+  const closedNow = async (i: number): Promise<SendResult | null> => {
+    if (!d.launchGate) return null;
+    let g: "open" | "closed" | "unknown";
+    try { g = await d.launchGate(); } catch { g = "unknown"; }
+    return g === "closed" ? { ...stop(i, "not-sent", launchesClosedSentence(i, n)), closed: true } : null;
+  };
   const pastDeadline = (i: number): SendResult | null => (planPastDeadline(plan, now()) ? { ...stop(i, "not-sent", planDeadlineSentence(i, n)), expired: true } : null);
   for (let i = signatures.length; i < n; i++) {
     let bh!: { blockhash: string; lastValidBlockHeight: number }, raw!: Uint8Array, pending!: PendingSend, sig = "";
@@ -544,6 +559,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
     let resigns = 0;
     for (;;) {
     { const late = pastDeadline(i); if (late) return late; }
+    { const shut = await closedNow(i); if (shut) return shut; }
     try {
       bh = await d.latestBlockhash();
       const fetchedAt = now();
@@ -559,6 +575,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       const signed = await d.signTransaction(built);
       // F06: the wallet can be held open for hours; the deadline is read again once it returns, before the transaction is kept or sent
       { const late = pastDeadline(i); if (late) return late; }
+      { const shut = await closedNow(i); if (shut) return shut; }   // A-11: and whether launches closed meanwhile
       const changed = walletReturnProblem(handed, signed, plan.steps[i], plan, lut ? [lut] : []);
       if (changed) {
         // 2026-10-14: what the wallet handed back, for the console (public bytes only: no key material is ever in a message)
@@ -711,6 +728,7 @@ export function sentRecoverySentence(p: Pick<PendingSend, "step" | "signature">,
 export function failureSentence(r0: SendResult, n: number): string {
   const r = { ...r0, error: r0.error?.replace(/\.+$/, "") };
   const before = r.signatures.length > 0;
+  if (r0.closed) return `${r.error}.`;   // A-11: no press can continue it while launches are closed
   if (r.state === "abandoned") return r0.error ?? "This plan is abandoned. The only safe thing to do is to start the launch again from the review, as a new plan.";
   if (r.state === "sent") return `${r.error}. Pressing the button again checks that transaction on chain first. A new one is built only once the chain shows the old one did not land.${before ? " The steps before it are confirmed on chain." : ""}`;
   if (r.state === "failed") return `${r.error}. ${before ? "The steps before it are confirmed on chain. " : ""}Pressing the button again builds step ${(r.failedAt ?? 0) + 1} of ${n} afresh.`;

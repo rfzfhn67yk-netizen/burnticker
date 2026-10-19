@@ -113,7 +113,8 @@ describe("234 a new plan keeps a read-only history of signatures and mints, neve
   test("the card's Start a new plan archives before it returns to the review", () => {
     const card = code(read("src/app/burnticker/launch/SignCard.tsx"));
     // launch night 2026-10-13: back to the review with the kept draft (launchDraftStore.ts resumeReviewHref)
-    assert.match(card, /const startNewPlan = \(\) => \{ archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(resumeReviewHref\(window\.location\.pathname\)\); \}/);
+    // review of block J (2026-10-18): unless a coin landed and was not recorded yet (its record stays for the recovery notice)
+    assert.match(card, /const startNewPlan = \(\) => \{ if \(!planHasUnrecordedCoin\(plan, done, confirmed\)\) archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(resumeReviewHref\(window\.location\.pathname\)\); \}/);
   });
 });
 

@@ -16,7 +16,8 @@ import { postPairLaunch, venueFrom409, type PairVenue } from "@/lib/burnticker/p
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { SignCard } from "./SignCard";
 import { MintAddressBlock, useMintPool } from "./MintSearch";
-import { secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
+import { base58, secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
+import { sendWithProofFallback, signLaunchRequest } from "@/lib/burnticker/walletProof";
 import { launchlabPlan, pairCurvePlan, withPlanDeadline } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { PAIR_REVIEW_LINE, winnerTakesBurnFacts } from "@/lib/burnticker/describe";
@@ -222,9 +223,15 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
       // 2026-10-14 night: the server's prepared address that ends in burn (no mint sent); when it has none ready, this browser finds one
       const got = await prepareIfCurrent(sentRev, () => curRev.current, () => withMintSource({ pool: mintPool, n: 1, stale: () => curRev.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE }, async (keys: GroundMint[] | null) => {
         const kA = keys?.[0];
-        const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, ...(kA ? { mint: kA.publicKey } : {}) }) });
-        const j = await r.json().catch(() => null);
-        if (!r.ok) throw new LaunchRequestError(r.status, j?.code ?? null, launchErrorMessage(r.status, j as LaunchErrorBody | null, r.headers.get("retry-after")));
+        // prelaunch audit 2026-10-18 A-3: the wallet signs the request (walletProof.ts)
+        const walletProof = await signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: [ticker], mints: kA ? [kA.publicKey] : [] }, base58);
+        // review of block M: a refused signature is sent once more unsigned (walletProof.ts sendWithProofFallback)
+        const j = await sendWithProofFallback({ ...body, ...(kA ? { mint: kA.publicKey } : {}), ...(walletProof ? { walletProof } : {}) }, async (sent) => {
+          const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(sent) });
+          const got = await r.json().catch(() => null);
+          if (!r.ok) throw new LaunchRequestError(r.status, got?.code ?? null, launchErrorMessage(r.status, got as LaunchErrorBody | null, r.headers.get("retry-after")));
+          return got;
+        });
         if (kA) mintPool?.consume(kA.publicKey);
         return { bundle: (j as { bundle: Bundle }).bundle, kA };
       }));
@@ -466,7 +473,10 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
         // 2026-10-14 night: the server's two prepared addresses (no mint sent); when it has none ready, this browser finds both in parallel
         const got = await prepareIfCurrent(sentRev, () => prepRev.current, () => withMintSource({ pool: mintPool, n: 2, stale: () => prepRev.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE }, async (keys: GroundMint[] | null) => {
           const [kA, kB] = keys ?? [];
-          const j = await postPairLaunch((u, init) => fetch(u, init), kA && kB ? { ...body, mint: kA.publicKey, pair: { ...body.pair, mint: kB.publicKey } } : body, v);
+          // prelaunch audit 2026-10-18 A-3: the wallet signs the request for both coins (walletProof.ts)
+          const walletProof = await signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: [body.ticker, body.pair.ticker], mints: kA && kB ? [kA.publicKey, kB.publicKey] : [] }, base58);
+          const sentBody = { ...(kA && kB ? { ...body, mint: kA.publicKey, pair: { ...body.pair, mint: kB.publicKey } } : body), ...(walletProof ? { walletProof } : {}) };
+          const j = await sendWithProofFallback(sentBody, (b) => postPairLaunch((u, init) => fetch(u, init), b, v));   // review of block M: unsigned once on a refused signature
           return { j, kA, kB };
         }));
         if ("stale" in got) { setErr(STALE_PREPARE_SENTENCE); return; }

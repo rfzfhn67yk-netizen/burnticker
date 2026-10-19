@@ -118,8 +118,10 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   // website-17 wiring item 3: the earned slots lead the public grid in rule order, each tagged with its rule's label; the rest keep their order
   const slots = home.data?.featuredSlots ?? [];
   const lead = firstPartyCards(home.data?.featured ?? [], tab, s, (v) => !!v.watchKey && watch.list.coins.includes(v.watchKey));
-  const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet)).map((v) => { const sl = slots.find((x) => x.ticker === v.ticker); return sl && v.group === "public" ? { ...v, tags: [{ label: sl.label, tone: "featured" as const }, ...v.tags] } : v; })
-    .sort((a, b) => { const r = (v: CardView) => { const k = v.group === "public" ? slots.findIndex((x) => x.ticker === v.ticker) : -1; return k < 0 ? slots.length : k; }; return r(a) - r(b); });
+  // prelaunch audit 2026-10-18 A-2: a slot belongs to one coin, matched by its mint (a ticker can be shared); an older answer without one by ticker
+  const slotIndex = (t: { ticker: string; mint: string }) => slots.findIndex((x) => (x.mint ? x.mint === t.mint : x.ticker === t.ticker));
+  const cards: CardView[] = coins.map((t) => { const v = cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet); const k = v.group === "public" ? slotIndex(t) : -1; return { v: k >= 0 ? { ...v, tags: [{ label: slots[k].label, tone: "featured" as const }, ...v.tags] } : v, k: k < 0 ? slots.length : k }; })
+    .sort((a, b) => a.k - b.k).map((x) => x.v);
   // the operator's own created coins first, then the registry's
   const allcards: CardView[] = [...lead, ...cards];
   const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : allcards.length, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });

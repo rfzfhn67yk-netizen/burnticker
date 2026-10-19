@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { loadTransparency, TRANSPARENCY_FILE } from "@/lib/burnticker/trust";
+import { plainPower } from "@/lib/burnticker/powerPlain";
 import { DEPLOY_EVIDENCE, loadVerifiedBuild, VERIFIED_BUILD_FILE, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { loadOperator, OPERATOR_FILE } from "@/lib/burnticker/trustpack/operator";
 import { CHECK_COPY, POWERS_SCOPE } from "@/lib/burnticker/trustpack/copy";
@@ -139,7 +140,7 @@ export function buildChecklist(root = process.cwd()): Checklist {
       const cls = OUTFLOW_BY_INSTRUCTION[name][ix.name];
       if (!cls) throw new Error(`${REGISTER_FILES[name]}: instruction ${ix.name} has no outflow class in checklist.ts OUTFLOW_BY_INSTRUCTION`);
       money.push({ program: name, instruction: ix.name, class: ix.class, signers: ix.signers.map((s) => s.role).join(" + "), outflow: OUTFLOW[cls], outflowClass: cls, funds: splitReviewRefs(ix.funds ?? "None.").text, sourceOnly: /^Round 5\b/.test(ix.can) });
-      if (ix.class === "privileged") { const c = splitReviewRefs(ix.can); powers.push({ program: name, instruction: ix.name, holder: ix.signers.map((s) => s.role).join(" + "), can: c.text, timelock: ix.timelock, funds: ix.funds, note: c.note }); }
+      if (ix.class === "privileged") { const c = splitReviewRefs(ix.can); powers.push({ program: name, instruction: ix.name, holder: ix.signers.map((s) => s.role).join(" + "), can: plainPower(c.text), timelock: ix.timelock, funds: ix.funds, note: c.note }); }
     }
   }
   const overFunds = powers.filter((p) => !/^None\.?$/.test(p.funds.trim()));
@@ -177,9 +178,9 @@ export function buildChecklist(root = process.cwd()): Checklist {
     schema: "burnticker.check/v1",
     generatedFrom: [REGISTER_FILES.burn_receipts, REGISTER_FILES.pair_curve, TRANSPARENCY_FILE, VERIFIED_BUILD_FILE, OPERATOR_FILE],
     programs: (["burn_receipts", "pair_curve"] as ProgramName[]).map((n) => ({ name: n, programId: regs[n].program.address_in_idl, idlSha256: regs[n].program.idl_sha256, register: REGISTER_FILES[n], privileged: regs[n].privileged_powers.length, overFunds: "none" as const })),
-    money, moneySource: moneySourceLine(money, build), nonPowers: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].non_powers.map((text) => ({ program: n, text }))),
+    money, moneySource: moneySourceLine(money, build), nonPowers: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].non_powers.map((text) => ({ program: n, text: plainPower(text) }))),
     powers, upgradeAuthority: (["burn_receipts", "pair_curve"] as ProgramName[]).map((n) => ({ program: n, holder: regs[n].upgrade_authority.holder_at_launch, sunset: regs[n].upgrade_authority.sunset })),
-    external: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].external_powers.map((e) => ({ program: n, power: e.power, holder: e.holder, effect: splitReviewRefs(e.effect ?? e.can ?? "").text }))),
+    external: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].external_powers.map((e) => ({ program: n, power: plainPower(e.power), holder: e.holder, effect: plainPower(splitReviewRefs(e.effect ?? e.can ?? "").text) }))),
     locked, notDone, build,
   };
 }

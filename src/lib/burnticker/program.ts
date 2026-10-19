@@ -84,6 +84,11 @@ export interface BurnProgramClient {
   /** A confirmed program transaction for this mint whose memo starts with `key` (the audit), or null. */
   findReceiptOnChain(mint: string, key: string): Promise<{ signature: string; slot: number | null; memo: string } | null>;
   /**
+   * The burn program's memo in one transaction (the audit reads a receipt's own signature; review of A-6, 2026-10-18): null when the
+   * transaction is not found; `memo: null` when it landed with no program memo; `failed` when it landed with an error.
+   */
+  memoOfTransaction?(signature: string): Promise<{ memo: string | null; slot: number | null; failed: boolean } | null>;
+  /**
    * LP LOCKED FOREVER (2026-10-10, lockFees.ts): the claim_lock_fees path — the locked LP's Fee Key at the program's fee-keys PDA and
    * the permissionless 80/20 claim. Optional: absent until the program change is bound, and the keeper then skips the claim crank.
    */
@@ -270,6 +275,10 @@ export class FakeBurnProgram implements BurnProgramClient {
     const f = this.tokens.get(mint);
     if (!f) return null;
     for (const [signature, l] of f.landed) if (!l.err && l.memo && l.memo.startsWith(key)) return { signature, slot: l.slot, memo: l.memo };
+    return null;
+  }
+  async memoOfTransaction(signature: string) {
+    for (const f of this.tokens.values()) { const l = f.landed.get(signature); if (l) return { memo: l.memo ?? null, slot: l.slot ?? null, failed: !!l.err }; }
     return null;
   }
 }

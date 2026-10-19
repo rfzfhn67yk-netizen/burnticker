@@ -239,7 +239,9 @@ describe("the real keeper script on a spent day (review items 1 and 2)", () => {
     const port = (x: http.Server) => (x.address() as { port: number }).port;
     const env = { PATH: process.env.PATH ?? "", HOME: dir, BURNTICKER_DB: db, BURNTICKER_PUBLISH_DIR: path.join(dir, "site"), BURNTICKER_CLUSTER: "devnet",
       BURNTICKER_RPC_URL: `http://127.0.0.1:${port(s1)}`, BURNTICKER_PROGRAM_ID: "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM", BURNTICKER_RPC_FALLBACK_URL: `http://127.0.0.1:${port(s2)}`,
-      BURNTICKER_SIGNER_PATH: keyFile, OWN_TOKENS_GENERATED_PATH: path.join(dir, "own.json") };
+      BURNTICKER_SIGNER_PATH: keyFile, OWN_TOKENS_GENERATED_PATH: path.join(dir, "own.json"),
+      // prelaunch audit 2026-10-18 A-1: the unit sets it; on a round-5 program the keeper refuses to start without it
+      BURNTICKER_DISPERSAL: "1" };
     const child = spawn(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--import", "./test/alias-hook.mjs", "scripts/burnticker-keeper.mts"], { cwd: process.cwd(), env: env as unknown as NodeJS.ProcessEnv, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout?.on("data", (d: Buffer) => { out += String(d); });

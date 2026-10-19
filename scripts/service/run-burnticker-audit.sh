@@ -3,7 +3,7 @@
 # token from the recorded readings and the locked rule, write <BURNTICKER_PUBLISH_DIR>/audit.json (the badge the platform index and
 # the trust page read) and EXIT NON-ZERO on any mismatch — the unit then shows as failed in `systemctl --user list-units --failed`,
 # and the keeper's alert check raises bt-audit-mismatch (and bt-audit-stale when this stops running). Reads no key, sends nothing.
-#   BURNTICKER_DB (data/burnticker.db) · BURNTICKER_PUBLISH_DIR (data/burnticker-site) · BURNTICKER_PROGRAM_ID (chain leg, once wired)
+#   BURNTICKER_DB (data/burnticker.db) · BURNTICKER_PUBLISH_DIR (data/burnticker-site) · BURNTICKER_PROGRAM_ID + BURNTICKER_RPC_URL + BURNTICKER_CLUSTER (the chain leg: a read-only program client, no key)
 set -eu
 cd "$(dirname "$0")/../.."
 . ./scripts/load-env.sh

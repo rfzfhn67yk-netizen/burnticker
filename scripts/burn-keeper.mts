@@ -53,8 +53,9 @@ import { solanaBuyback, solanaChain, type SolanaChain } from "../src/lib/burnKee
 import { cpmmProgramFor, launchLabProgramFor } from "../src/lib/burnKeeper/launchlab.ts";
 import { burnProgramIdFromEnv, burnPoolFor } from "../src/lib/burnKeeper/burnPool.ts";
 import { deficitDispersalLines, executeDispersal, executeProgramPending, executionModeFromEnv, legacyRefusal, type ProgramCycleReport, type ProgramPort } from "../src/lib/burnKeeper/programChain.ts";
-// BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
-import { dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
+// BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces; this keeper turns it on
+// only on its own explicit flag (review 4 of A-1), unlike the platform keeper.
+import { DEFICIT_DISPERSAL_NAME, DISPERSAL_FLAG, dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
 import type { DispersalAlert } from "../src/lib/burnticker/dispersalKeeper.ts";
 import { solanaProgramPort } from "../src/lib/burnKeeper/programAdapter.ts";
 import { fetchTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
@@ -296,6 +297,9 @@ function buildAttester(rt: Runtime) {
 
 const state = { feedRetryAt: 0, feedFailures: 0, lastPoll: null as { at: number; outcome: string } | null, lastError: null as string | null, stopping: false, lastProgram: null as ProgramCycleReport | null, nextDispersalAt: null as number | null };
 const DISPERSAL = dispersalEnabled(process.env);
+// review 4 of A-1: the $DEFICIT keeper decides on its own explicit flag; it records that decision for the platform keeper's ops.json
+const BT_DIR = path.dirname(process.env.BURNTICKER_DB?.trim() || REGISTRY_FILE);
+try { fs.mkdirSync(BT_DIR, { recursive: true }); fs.writeFileSync(path.join(BT_DIR, DEFICIT_DISPERSAL_NAME), `${JSON.stringify({ on: DISPERSAL, flag: DISPERSAL_FLAG, at: new Date().toISOString() })}\n`); } catch { /* ops.json then says "not reported" */ }
 /** bt-burn-behind and bt-dispersal-receipt land in the platform registry (where the phone push reads alerts) when it exists on this host; else only the log. */
 const BT_DB = process.env.BURNTICKER_DB?.trim() || REGISTRY_FILE;
 const dispersalAlert = (a: DispersalAlert): void => {

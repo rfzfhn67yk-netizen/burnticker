@@ -135,6 +135,8 @@ describe("F08: partial uploads stay inside the pin caps", () => {
       const before = count(w, `pin.budget.${day()}`);
       assert.equal(code(await prepareLaunch(w.p, { ...single("ORPHANED"), creator, name: `Orphaned ${client} ${creator.slice(0, 4)}` }, { register: true, mint: mintPk(), client })), "ok", who);
       assert.equal(count(w, `pin.budget.${day()}`), before + 1, `${who}: charged its own slot`);
+      // prelaunch audit 2026-10-18 A-2: another wallet may not take a ticker a live draft holds, so the first draft lapses before it
+      w.registry.expireDrafts(Date.now() + 2 * 86_400_000);
     }
     assert.equal(up.images().length, 1, "the public file itself is reused");
     const rec = JSON.parse(w.registry.getStatus(pinUploadKey(sha256Hex(up.images()[0].bytes)))!) as { unused: boolean };

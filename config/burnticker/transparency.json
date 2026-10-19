@@ -1,6 +1,6 @@
 {
   "schema": "burnticker.transparency/v1",
-  "updatedAt": "2026-10-10",
+  "updatedAt": "2026-10-18",
   "note": "Rendered on /burnticker/trust by src/lib/burnticker/trust.ts (loadTransparency). Facts only. A null pubkey is a TODO the owner fills in before launch; the page shows it as TODO, never as blank. The operator's name comes from OPERATOR_LINE in src/lib/burnticker/fees.ts, not from this file. `rehearsals` lists every throwaway coin created under the real platform config to prove the machinery; each is also on config/own-tokens.json so the operator's bots refuse it.",
   "publicRepo": {
     "url": "https://github.com/rfzfhn67yk-netizen/burnticker",
@@ -17,7 +17,7 @@
     "aiAssisted": true,
     "statement": "The program, the keeper, the platform and this page were written with AI help (Claude Code). The operator directed and reviewed the work. Three independent blind Claude reviews of the burn program (burn_receipts) and one re-check were done on 2026-10-09 and 2026-10-10. Two blind Claude reviews of the pair program (pair_curve) were done on 2026-10-10; their High findings were fixed and re-checked the same day. The pair-forward and LP-lock releases had their own blind reviews and a re-check on 2026-10-11. Four ChatGPT Codex review rounds of the public pull request were done on 2026-10-10 and 2026-10-11, each with a response to every finding. Every one of these is published in full. No security firm has audited any of it.",
     "firmAudit": false,
-    "firmAuditStatement": "No security firm has audited it. The burn program has had three independent blind AI reviews and one re-check. The pair program has had two blind AI reviews. Two adversarial ChatGPT Codex reviews were also done. Every review is published, and each ChatGPT review is published with its response. A public bounty adds one more check once it is published.",
+    "firmAuditStatement": "No security firm has audited it. The burn program has had three independent blind AI reviews and one re-check. The pair program has had two blind AI reviews. Two adversarial ChatGPT Codex reviews were also done. Every review is published, and each ChatGPT review is published with its response. A bounty wallet for security reports is funded, and its terms are still a draft; the bounty page shows both.",
     "reviews": [
       {
         "id": "claude-blind-1",

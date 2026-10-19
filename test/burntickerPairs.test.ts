@@ -152,7 +152,9 @@ describe("a Broncos pair through the keeper", () => {
     const sa = buildTokenStatus({ ...ia, implied: { chance: 0.58, marketTicker: "KXNFLGAME-26OCT12DENNYJ-DEN", closeTime: "2026-10-13T03:00:00Z", basis: "mid" } }, recA);
     const sb = buildTokenStatus({ ...ib, implied: { chance: 0.42, marketTicker: "KXNFLGAME-26OCT12DENNYJ-DEN", closeTime: "2026-10-13T03:00:00Z", basis: "mid" } }, recB);
     const t = pairTally(sa, sb, recA, recB);
-    assert.deepEqual({ ...t.lastSettlement!, burned: undefined }, { eventId: "KXNFLGAME-26OCT04DENSF-DEN", settledAt: t.lastSettlement!.settledAt, burnedSide: "A", result: "no", value: null, burned: undefined });
+    assert.deepEqual({ ...t.lastSettlement!, burned: undefined, facts: undefined }, { eventId: "KXNFLGAME-26OCT04DENSF-DEN", settledAt: t.lastSettlement!.settledAt, burnedSide: "A", result: "no", value: null, burned: undefined, facts: undefined });
+    // prelaunch audit 2026-10-18 A-5: who won and each side's receipt state, for the plain sentence
+    assert.deepEqual({ ...t.lastSettlement!.facts!, burned: undefined }, { wonSide: "A", burnedSide: "A", burned: undefined, winnerStatus: "confirmed", loserStatus: "forwarded", void: false });
     assert.ok(Number(t.lastSettlement!.burned) > 0);
     assert.ok(t.supplyPctA < 100 && t.supplyPctB < 100 && Math.abs(t.supplyPctA - (100 - sa.burned.pctOfSupply)) < 1e-9);
     assert.deepEqual(t.next, { market: "KXNFLGAME-26OCT12DENNYJ-DEN", closeTime: "2026-10-13T03:00:00Z", chanceA: null, chanceB: null }, "no odds for any coin (owner decision 2026-10-10): the oracle's chance is not carried");
@@ -164,14 +166,14 @@ describe("a Broncos pair through the keeper", () => {
     assert.equal(lines.splice(1, 1)[0], "Pair live: both pools registered, every settlement burns one side");
     assert.match(lines[1], /^Supply [\d,]+ : [\d,]+ \(\d+\.\d\d% : \d+\.\d\d% of the start\)$/);
     assert.equal(lines[2], "2 settlements · one market, inverted rules");
-    assert.match(lines[3], /^Last: KXNFLGAME-26OCT04DENSF-DEN settled NO → \$BRONCOS burned [\d,]+$/);
+    assert.match(lines[3], /^Last: \$BRONCOS won the last result and burned [\d,]+ tokens\. \$CHIEFS forwarded its share to \$BRONCOS's burn pool\.$/);   // A-5: by pair role, no arrow
     assert.equal(lines[4], "Next market: KXNFLGAME-26OCT12DENNYJ-DEN (closes 2026-10-13 03:00Z)");
     assert.equal(lines[5], `Scoreboard: https://burnticker.com/p/${pairId}/`);
     assert.deepEqual(lintCopy(post, loadCopyLintConfig()).hits.map((h) => `${h.phrase}:${h.rule}`), []);
     // The static pair page: scoreboard header, both receipts tables stacked, both rules.
     const html = renderPairHtml(t, sa, sb, recA, recB);
     assert.match(html, /<div class="score">\$BRONCOS 1 <span class="muted">:<\/span> 1 \$CHIEFS<\/div>/);
-    assert.match(html, /Last settlement[\s\S]*KXNFLGAME-26OCT04DENSF-DEN[\s\S]*settled NO/);
+    assert.match(html, /Last settlement[\s\S]*KXNFLGAME-26OCT04DENSF-DEN[\s\S]*won the last result and burned/); assert.ok(!/neither side burned/.test(html));   // A-5
     assert.doesNotMatch(html, /implied|58%|42%/, "no odds on the pair page"); assert.match(html, /closes 2026-10-13T03:00:00Z/);
     assert.ok(html.indexOf("<h2>Receipts — $BRONCOS</h2>") < html.indexOf("<h2>Receipts — $CHIEFS</h2>"), "A's table above B's");
     assert.match(html, /Scoreboard: this page/); assert.doesNotMatch(html, /\{SITE_URL\}/);

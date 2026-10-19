@@ -1,4 +1,3 @@
-import { receiptStatusWords } from "@/lib/burnticker/coinPage";
 import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
@@ -16,6 +15,8 @@ import type { TokenMeta } from "@/lib/burnticker/registry";
 export const AFFILIATION_LINE = "This coin is not affiliated with any team, league, candidate, agency or market.";
 import { parseReceiptMemo } from "@/lib/burnticker/receipt";
 import { fullSpendUnits, unitStep, windDownUnits, type SettledEvent } from "@/lib/burnticker/units";
+import { pairWords, unitsFormula, verifyCommand } from "@/lib/burnticker/receiptFormula";
+import { pairLastSentence, receiptStatusWords, type PairLastFacts } from "@/lib/burnticker/receiptWords";
 import { feedById } from "@/lib/burnticker/catalogue";
 import type { ImpliedChance } from "@/lib/burnticker/oracle/types";
 import type { AttesterRow, FeedState, ReadingRow, ReceiptRow, Registry, TokenRow, TokenState } from "@/lib/burnticker/registry";
@@ -84,7 +85,9 @@ export interface PairTally {
   supplyPctA: number; supplyPctB: number;
   settlements: number; voids: number;
   /** The latest settlement: its market ticker, the settled result (or value), which side it burned and how much. */
-  lastSettlement: { eventId: string; settledAt: string; burnedSide: "A" | "B" | null; result: string | null; value: string | null; burned: string | null } | null;
+  lastSettlement: { eventId: string; settledAt: string; burnedSide: "A" | "B" | null; result: string | null; value: string | null; burned: string | null;
+    /** prelaunch audit 2026-10-18 A-5: who won and each side's receipt state, for the plain sentence (receiptWords.ts pairLastSentence) */
+    facts?: PairLastFacts } | null;
   /** The next scheduled market (ticker, close time). chanceA/chanceB are always null: no odds for any coin (owner decision 2026-10-10). */
   next: { market: string | null; closeTime: string | null; chanceA: number | null; chanceB: number | null };
   /** Both or neither (2026-10-10): the pair's state, void date and who it waits on (null for a pair made before the clause). */
@@ -169,11 +172,16 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
   const burnedSide = (e: { A?: ReceiptJson; B?: ReceiptJson }): "A" | "B" | null => (e.A && e.A.status === "confirmed" && e.A.burned && e.A.burned !== "0" ? "A" : e.B && e.B.status === "confirmed" && e.B.burned && e.B.burned !== "0" ? "B" : null);
   const lastSide = last ? burnedSide(last[1]) : null;
   const lastRow = last ? (lastSide === "B" ? last[1].B : last[1].A ?? last[1].B) ?? null : null;
+  // A-5: the winner by pair role (a burn can still be waiting); null when the receipts carry no role (the sentence then names who burned)
+  const wonSide: "A" | "B" | null = !last ? null : last[1].A?.pairRole === "won" ? "A" : last[1].B?.pairRole === "won" ? "B" : null;
+  const sideRow = (x: "A" | "B" | null) => (!last || !x ? null : x === "A" ? last[1].A ?? null : last[1].B ?? null);
+  const lastFacts: PairLastFacts | undefined = last ? { wonSide, burnedSide: lastSide, burned: lastSide ? lastRow?.burned ?? null : null, winnerStatus: sideRow(wonSide)?.status ?? null, loserStatus: sideRow(wonSide === "A" ? "B" : wonSide === "B" ? "A" : null)?.status ?? null,
+    void: last[1].A?.status === "void" || last[1].B?.status === "void" || (lastRow?.result ?? null) === "void" } : undefined;
   const left = (s: TokenStatusJson) => Math.max(0, 100 - s.burned.pctOfSupply);
   return {
     pairId: a.pair?.pairId ?? b.pair?.pairId ?? "", a: sa, b: sb, burnsA: sa.burns, burnsB: sb.burns, burnedA: sa.burned, burnedB: sb.burned, supplyA: sa.supply, supplyB: sb.supply,
     supplyPctA: left(a), supplyPctB: left(b), settlements: events.length, voids,
-    lastSettlement: last ? { eventId: last[0], settledAt: last[1].settledAt, burnedSide: lastSide, result: lastRow?.result ?? null, value: lastRow?.value ?? null, burned: lastSide ? lastRow?.burned ?? null : null } : null,
+    lastSettlement: last ? { eventId: last[0], settledAt: last[1].settledAt, burnedSide: lastSide, result: lastRow?.result ?? null, value: lastRow?.value ?? null, burned: lastSide ? lastRow?.burned ?? null : null, facts: lastFacts } : null,
     next: { market: a.next.nextMarket ?? b.next.nextMarket, closeTime: a.next.nextCloseTime ?? b.next.nextCloseTime, chanceA: null, chanceB: b.next.impliedChance },
     clause: a.pair?.clause ?? b.pair?.clause ?? null,
     curveA: a.market?.curve ?? null, curveB: b.market?.curve ?? null,
@@ -292,7 +300,6 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
       if (JSON.stringify(b.mapping) !== JSON.stringify(ruleMappings(rule)[0]?.mapping ?? null)) checks.push(`${b.kind} mapping ≠ the rule's mapping`);
     } else if (!rd) checks.push("no recorded reading for this event");
     else if ((rd.result ?? null) !== (b.result ?? null) || (rd.value ?? null) !== (b.value ?? null)) checks.push("receipt result/value ≠ the recorded reading");
-    let recomputedUnits = b.units;
     if (!clock) try {
       // Winner takes the burn: a LOST receipt carries the units this coin would have had had it won — recomputed with the mirrored mapping.
       // a settled-event pair (two candidates in one race, two teams in one game; multiKeeper.planRace): the event decides, not the coin's
@@ -302,7 +309,6 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
       const map0 = ruleMappings(rule)[0]?.mapping ?? null;
       const s = settledPair ? (b.pairRole === "lost" ? { ...own, units: 1, mapping: map0 } : b.pairRole === "won" ? own : { ...own, units: 0, mapping: null })
         : unitStep(b.pairRole === "lost" ? pairMirrorRule(rule) : rule, ev, { value: b.prevValue, carryOut: b.carryIn }, feed?.carry ?? "none");
-      recomputedUnits = s.units;
       if (s.units !== b.units) checks.push(`units: recomputed ${s.units}, recorded ${b.units}`);
       if (JSON.stringify(s.mapping) !== JSON.stringify(b.mapping)) checks.push("mapping: recomputed differs from recorded");
     } catch (e) { checks.push(`recomputation failed: ${(e as Error).message}`); }
@@ -360,12 +366,16 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
       }
     }
     const verified = (b.status === "confirmed" || b.status === "forwarded" || b.status === "skipped" || b.status === "void" || b.status === "nothing" || b.status === "exhausted" || b.status === "voided") && checks.length === 0;
-    const curl = feed
-      ? `curl -s '${rd?.sourceUrl ?? feed.sourceUrl}'   # ${feed.sourceName}: the row for ${b.eventId}${b.prevValue !== null ? ` (previous reading ${b.prevValue})` : ""}; selection: ${JSON.stringify(feed.config.select)}`
-      : `curl -s '${rd?.sourceUrl ?? `https://api.elections.kalshi.com/trade-api/v2/markets/${b.eventId}`}' | jq '.market // .markets | if type=="array" then map({ticker, result, expiration_value, settlement_ts}) else {ticker, result, expiration_value, settlement_ts} end'`;
-    const formula = rule.kind === "binary"
+    // prelaunch audit 2026-10-18 A-5: the command for the source this reading came from (receiptFormula.ts), never one template for all
+    const curl = verifyCommand({ oracle: rule.oracle, eventId: b.eventId, settledAt: b.settledAt, sourceUrl: rd?.sourceUrl ?? null, method: rd?.method ?? null, proof: rd?.proof ?? null, pairRole: b.pairRole ?? null, ticker: i.token.ticker,
+      feedLine: feed ? `curl -s '${rd?.sourceUrl ?? feed.sourceUrl}'   # ${feed.sourceName}: the row for ${b.eventId}${b.prevValue !== null ? ` (previous reading ${b.prevValue})` : ""}; selection: ${JSON.stringify(feed.config.select)}` : null });
+    // a pair receipt the other side decided is told in words; a scalar receipt's units are an equation that is true (unitsFormula)
+    const fr = { value: b.value, prevValue: b.prevValue, carryIn: b.carryIn, units: b.units, result: b.result, pairRole: b.pairRole ?? null };
+    const words = clock ? null : pairWords(i.token.ticker, fr, !!rule.pair?.race || !!rule.pair?.game);
+    const unitsText = rule.kind === "binary" ? null : clock ? `units = ${b.units} (a ${b.kind} day of the rule's end)` : unitsFormula(rule, fr, feed?.carry ?? "none");
+    const formula = words ? words : rule.kind === "binary"
       ? `result = ${b.result ?? "?"}, so ${b.mapping ? (b.mapping.fractionOfPool !== undefined ? `spend ${b.mapping.fractionOfPool * 100}% of the pool` : `burn ${b.mapping.tokens} tokens`) : "nothing"}${!prog && i.locked.mode === "buyback" && b.poolLamports !== null ? `; spend = ${b.poolLamports} × ${b.mapping?.fractionOfPool ?? 0} = ${expectedSpend} lamports` : ""}`
-      : `units = floor((${b.value ?? "?"} − ${b.prevValue !== null && rule.scalar!.baseline === "previousSettlement" ? b.prevValue : rule.scalar!.baseline}${b.carryIn !== "0" ? ` + ${b.carryIn} carried` : ""}) / ${rule.scalar!.unit}) = ${recomputedUnits} (direction ${rule.scalar!.direction})${prog ? "" : i.locked.mode === "buyback" && b.poolLamports !== null ? `; spend = pool × (1 − (1 − ${b.mapping?.fractionOfPool ?? 0})^${b.units}) = ${b.poolLamports} × … = ${expectedSpend} lamports` : i.locked.mode === "vault" ? `; burn = ${b.units} × ${b.mapping?.tokens ?? 0} tokens` : ""}`;
+      : `${unitsText ?? ""}${prog ? "" : i.locked.mode === "buyback" && b.poolLamports !== null ? `; spend = pool × (1 − (1 − ${b.mapping?.fractionOfPool ?? 0})^${b.units}) = ${b.poolLamports} × … = ${expectedSpend} lamports` : i.locked.mode === "vault" ? `; burn = ${b.units} × ${b.mapping?.tokens ?? 0} tokens` : ""}`;
     const programFormula = prog && b.readingDate ? `; counted into program reading ${formatU32(b.readingDate)} (${readingUnits} ${readingUnits === 1 ? "unit" : "units"} from ${together.length} ${together.length === 1 ? "receipt" : "receipts"}). The program ${i.locked.mode === "buyback" ? `spends min(pool × (1 − (1 − ${bps}/10000)^${readingUnits}) + carried spend, 2% of the pool's SOL reserve)${b.lead && b.poolLamports !== null ? ` = rule spend ${expectedSpend} lamports from a ${b.poolLamports}-lamport pool` : ""} and burns everything the fee PDA holds` : `burns ${readingUnits} × ${b.mapping?.tokens ?? 0} tokens from its vault, shortfall carried`}` : "";
     const pend = (x: string | null, what: string) => (x === null ? `${what} is still pending` : x);
     const shortNote = b.shortOutRaw && b.shortOutRaw > ZERO ? ` ${rawToTokens(b.shortOutRaw, DECIMALS)} tokens were short and carry over to the next burn.` : "";
@@ -524,13 +534,13 @@ export function renderTokenHtml(s: TokenStatusJson, receipts: readonly ReceiptJs
   ].filter(Boolean).join("\n");
   const table = rows.length === 0 ? `<p class="muted">No receipts yet. The first result after launch starts the record.${s.rules.oneShot ? "" : " For a rule that compares with the previous reading, the first reading sets the starting point."}</p>` : `<div class="scroll"><table>
 <thead><tr><th>Settled</th><th>Market / period</th><th>Result</th><th>Value</th><th>Units</th><th>Spent</th><th>Bought</th><th>Burned</th><th>Tx</th><th>Source</th><th>Check</th></tr></thead><tbody>
-${rows.map((b) => `<tr><td>${esc(b.settledAt.slice(0, 19).replace("T", " "))}</td><td title="${esc(b.title)}"><code>${esc(b.market)}</code></td><td>${esc(b.result ?? "—")}</td><td class="num">${esc(b.value ?? "—")}</td><td class="num">${b.units}</td><td class="num">${b.status === "confirmed" ? esc(b.spent ?? "—") : "—"}</td><td class="num">${b.got === null ? "—" : fmt(b.got)}</td><td class="num">${b.status === "confirmed" ? fmt(b.burned ?? "0") : `<span class="muted" title="${esc(b.skippedReason ?? b.note)}">${esc(b.status)}</span>`}</td><td>${link(b.txUrl, b.signature, b.status === "planned" || b.status === "sending" ? (b.waitReason ? "waiting" : "pending") : "—")}</td><td>${b.settlementSourceUrl ? `<a href="${esc(b.settlementSourceUrl)}">source</a>` : ""}${b.sourceUrl ? ` <a href="${esc(b.sourceUrl)}">api</a>` : ""}</td><td>${check(b)}</td></tr>`).join("\n")}
+${rows.map((b) => `<tr><td>${esc(b.settledAt.slice(0, 19).replace("T", " "))}</td><td title="${esc(b.title)}"><code>${esc(b.market)}</code></td><td>${esc(b.result ?? "—")}</td><td class="num">${esc(b.value ?? "—")}</td><td class="num">${b.units}</td><td class="num">${b.status === "confirmed" ? esc(b.spent ?? "—") : "—"}</td><td class="num">${b.got === null ? "—" : fmt(b.got)}</td><td class="num">${b.status === "confirmed" ? fmt(b.burned ?? "0") : `<span class="muted" title="${esc(b.skippedReason ?? b.note)}">${esc(receiptStatusWords(b.status))}</span>`}</td><td>${link(b.txUrl, b.signature, b.status === "planned" || b.status === "sending" ? (b.waitReason ? "waiting" : "pending") : "—")}</td><td>${b.settlementSourceUrl ? `<a href="${esc(b.settlementSourceUrl)}">source</a>` : ""}${b.sourceUrl ? ` <a href="${esc(b.sourceUrl)}">api</a>` : ""}</td><td>${check(b)}</td></tr>`).join("\n")}
 </tbody></table></div>`;
   const verify = rows.slice(0, 60).map((b) => `<details><summary>${esc(utcDay(b.settledAt))}, ${esc(b.market)}: ${esc(b.result ?? b.value ?? "")}, ${b.units} ${b.units === 1 ? "unit" : "units"}, ${b.status === "confirmed" ? `${fmt(b.burned ?? "0")} ${t} burned` : esc(receiptStatusWords(b.status))}${b.verify.verified ? " ✓" : ""}</summary>
 <p>1. Read the settled result from the source:</p><pre><code>${esc(b.verify.curl)}</code></pre>${b.method ? `<p class="muted">The value was read by ${esc(b.method)}.</p>` : ""}
 <p>2. Apply the rule:</p><pre><code>${esc(b.verify.formula)}</code></pre>
 <p>3. Check that you get this: <strong>${esc(b.verify.expected)}</strong></p>
-<p>4. The receipt memo on chain${b.txUrl ? ` (<a href="${esc(b.txUrl)}">transaction</a>)` : ""}:</p><pre><code>${esc(b.memo ?? (b.status === "confirmed" ? "?" : `No transaction. The status is ${b.status}.`))}</code></pre>
+<p>4. The receipt memo on chain${b.txUrl ? ` (<a href="${esc(b.txUrl)}">transaction</a>)` : ""}:</p><pre><code>${esc(b.memo ?? (b.status === "confirmed" ? "?" : `No transaction yet: ${receiptStatusWords(b.status)}.`))}</code></pre>
 ${b.verify.checks.length ? `<p class="bad">Checks that did not pass: ${esc(b.verify.checks.join("; "))}</p>` : ""}
 </details>`).join("\n");
   return `<!doctype html>
@@ -620,7 +630,7 @@ export interface PlatformIndexToken {
    */
   siteKey?: string;
 }
-export interface AuditBadge { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean }
+export interface AuditBadge { ok: boolean; ranAt: string; receipts: number; /** A-6: receipts that moved something on chain; absent in older documents */ executed?: number; /** review 7: confirmed receipts the chain check verified */ chainVerified?: number; mismatches: number; chainChecked: boolean }
 export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: PlatformIndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary; winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null;
   /** owner 2026-10-14: the network the coins are on, for the index's trade links (absent on an older index) */
   cluster?: string }
@@ -706,12 +716,13 @@ export function renderPairHtml(tally: PairTally, a: TokenStatusJson, b: TokenSta
   const chance = (c: number | null) => (c === null ? "—" : `${(c * 100).toFixed(0)}%`);
   const sideTicker = (x: "A" | "B" | null) => (x === "A" ? `$${A}` : x === "B" ? `$${B}` : "neither side");
   const table = (s: TokenStatusJson, rs: readonly ReceiptJson[]) => rs.length === 0 ? `<p class="muted">No receipts yet for $${esc(s.ticker)}.</p>` : `<div class="scroll"><table><thead><tr><th>Settled</th><th>Market</th><th>Result</th><th>Units</th><th>Burned</th><th>Tx</th><th>Check</th></tr></thead><tbody>
-${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("T", " "))}</td><td><code>${esc(r.market)}</code></td><td>${esc(r.result ?? r.value ?? "—")}</td><td class="num">${r.units}</td><td class="num">${r.status === "confirmed" ? fmt(r.burned ?? "0") : r.status === "forwarded" ? `<span class="muted">forwarded ${esc(r.spent ?? "")} SOL</span>` : `<span class="muted">${esc(r.status)}</span>`}</td><td>${r.txUrl && r.signature ? `<a href="${esc(r.txUrl)}">${esc(r.signature.slice(0, 10))}…</a>` : "—"}</td><td>${r.verify.verified ? '<span class="ok">✓</span>' : r.status === "confirmed" ? `<span class="bad" title="${esc(r.verify.checks.join("; "))}">!</span>` : "…"}</td></tr>`).join("\n")}
+${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("T", " "))}</td><td><code>${esc(r.market)}</code></td><td>${esc(r.result ?? r.value ?? "—")}</td><td class="num">${r.units}</td><td class="num">${r.status === "confirmed" ? fmt(r.burned ?? "0") : r.status === "forwarded" ? `<span class="muted">forwarded ${esc(r.spent ?? "")} SOL</span>` : `<span class="muted">${esc(receiptStatusWords(r.status))}</span>`}</td><td>${r.txUrl && r.signature ? `<a href="${esc(r.txUrl)}">${esc(r.signature.slice(0, 10))}…</a>` : "—"}</td><td>${r.verify.verified ? '<span class="ok">✓</span>' : r.status === "confirmed" ? `<span class="bad" title="${esc(r.verify.checks.join("; "))}">!</span>` : "…"}</td></tr>`).join("\n")}
 </tbody></table></div>`;
   const tiles = [
     tile("Burns", `$${A} ${tally.burnsA} <span class="muted">:</span> ${tally.burnsB} $${B}`, `${tally.settlements === 1 ? "One result" : `${tally.settlements} results`} so far${tally.voids ? `, ${tally.voids} of them void` : ""}. Tokens burned ${fmt(tally.burnedA)} : ${fmt(tally.burnedB)}.`),
     tile("Supply", `${tally.supplyPctA.toFixed(2)}% <span class="muted">:</span> ${tally.supplyPctB.toFixed(2)}%`, `${fmt(tally.supplyA)} : ${fmt(tally.supplyB)}, out of ${fmt(a.supply.initial)} each`),
-    tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? `It settled ${esc((ls.result ?? ls.value ?? "—").toUpperCase())} on ${esc(utcDateTime(ls.settledAt))}, and ${ls.burnedSide ? `${sideTicker(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)} tokens` : ""}` : "neither side burned"}.` : "The first result after launch burns one side."),
+    // A-5: the sentence by pair role and pending state (receiptWords.ts), never "settled 0, neither side burned" for a waiting burn
+    tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? esc(pairLastSentence(ls.facts ?? { wonSide: null, burnedSide: ls.burnedSide, burned: ls.burned, winnerStatus: null, loserStatus: null, void: ls.result === "void" }, sideTicker("A"), sideTicker("B"), fmt) ?? "") : "The first result after launch burns one side."),
     tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : "The next result after launch."}`),
     ...(tally.attesterLine ? [tile("Reading signers", "1 key", esc(tally.attesterLine))] : []),
     ...(tally.unpaired ? [tile("Pair", "unpaired", `The pair was unlinked on ${esc(utcDay(tally.unpaired.at))} (${esc(tally.unpaired.reason)}). They are two separate coins now, and nothing moves between them.`)] : []),

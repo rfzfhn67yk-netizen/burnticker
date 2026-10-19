@@ -59,9 +59,9 @@ describe("the statement text", () => {
   });
   test("signed 2026-10-14: the status, text and signature sit on the lines the owner's todo names, and the signature verifies", () => {
     const lines = read("config/burnticker/operator.json").split("\n");
-    assert.match(lines[83], /"status": "2026-10-14"/);
-    assert.match(lines[86], /"message": "Burnticker operator statement\./);
-    assert.match(lines[87], /"signature": "65w3gbP5ZBEFy9FHiWvzh5ctAGv9EbigVH6o9BF69GpsDiZxxDeasytF9s3z1uBYSwRVNNzbjqCaAQnq64FPkZwx"/);
+    assert.match(lines[84], /"status": "2026-10-14"/);
+    assert.match(lines[87], /"message": "Burnticker operator statement\./);
+    assert.match(lines[88], /"signature": "65w3gbP5ZBEFy9FHiWvzh5ctAGv9EbigVH6o9BF69GpsDiZxxDeasytF9s3z1uBYSwRVNNzbjqCaAQnq64FPkZwx"/);
     assert.match(read("docs/burnticker/TODO-OWNER.md"), /Signed operator statement — DONE 2026-10-14/);
     assert.match(read("config/burnticker/operator.json"), /with one exception: \$REHEARSAL, a test coin/);
   });
@@ -89,7 +89,7 @@ describe("burnticker-sign-statement.mts (in a temp copy; the real operator.json 
       const after = fs.readFileSync(path.join(root, "config/burnticker/operator.json"), "utf8");
       assert.equal(after.split("\n").length, before.split("\n").length);
       const changed = before.split("\n").map((l, i) => (l === after.split("\n")[i] ? -1 : i)).filter((i) => i >= 0);
-      assert.deepEqual(changed, [83, 86, 87], "status, message, signature — nothing else");
+      assert.deepEqual(changed, [84, 87, 88], "status, message, signature — nothing else");
       const v = signedMessageView(loadOperator(root));
       assert.equal(v.status, "signed"); assert.equal(v.verified, true); assert.match(v.message, /Date: 2026-10-14\.$/);
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(root, { recursive: true, force: true }); }

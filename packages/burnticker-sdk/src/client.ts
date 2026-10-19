@@ -156,12 +156,13 @@ export class Burnticker {
 
   /**
    * Verify a receipt on THIS machine: re-read the settled result from the original source, re-apply the published rule, recompute
-   * the spend, read the memo from chain (with a connection). Pass a receipt object + { ticker, rulesText }, or a ticker and an event id.
+   * the spend, read the memo from chain (with a connection). Pass a receipt object + { ticker, rulesText, mint }, or a mint (or a ticker
+   * one coin holds) and an event id.
    */
   async verifyReceipt(receipt: ReceiptJson | string, o: Partial<VerifyOptions> & { eventId?: string } = {}): Promise<VerifyResult> {
     if (typeof receipt !== "string") {
-      if (!o.ticker || !o.rulesText) throw new Error("burnticker.verifyReceipt: with a receipt object, pass { ticker, rulesText }");
-      return verifyReceipt(receipt, { connection: this.options.connection, fetch: this.options.fetch, programId: this.options.programId, ...o, ticker: o.ticker, rulesText: o.rulesText });
+      if (!o.ticker || !o.rulesText || !o.mint) throw new Error("burnticker.verifyReceipt: with a receipt object, pass { ticker, rulesText, mint }");
+      return verifyReceipt(receipt, { connection: this.options.connection, fetch: this.options.fetch, programId: this.options.programId, ...o, ticker: o.ticker, rulesText: o.rulesText, mint: o.mint });
     }
     if (!o.eventId) throw new Error("burnticker.verifyReceipt(ticker, { eventId })");
     const t = await this.token(receipt);

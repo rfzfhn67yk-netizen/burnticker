@@ -5,8 +5,8 @@ export type { CoinCandidate } from "@/lib/burnticker/coinKey";
 
 /**
  * Resolving a coin from a URL key (owner decision 2026-10-12: tickers are not unique; coinKey.ts has the keying rule). A mint resolves
- * to that coin. A ticker resolves to its one non-expired coin, to its one launched coin when the others sharing it are drafts, to the list when several share it, and (as before) to the newest expired
- * draft when only expired drafts carry it. Server side; the registry is the only input.
+ * to that coin, whatever its status. A ticker resolves to its one LAUNCHED coin, or to the list when several launched coins share it;
+ * drafts are never found by ticker (prelaunch audit 2026-10-18 A-40). Server side; the registry is the only input.
  */
 export type CoinLookup = { kind: "one"; token: TokenRow } | { kind: "many"; ticker: string; tokens: TokenRow[] } | { kind: "none" };
 type Reader = Pick<Registry, "token" | "tokenByTicker" | "tokensByTicker">;
@@ -16,25 +16,24 @@ export function lookupCoin(r: Reader, rawKey: string): CoinLookup {
   const key = rawKey.trim();
   if (!key) return { kind: "none" };
   if (key.length >= 32 || isMintKey(key)) { const t = r.token(key); return t ? { kind: "one", token: t } : { kind: "none" }; }
-  const held = r.tokensByTicker(key);
-  // owner 2026-10-14 (/t/PHINFLWIN answered the chooser): a draft never shadows a launched coin. When exactly one of the coins on the
-  // ticker is launched, the ticker opens it; the drafts stay reachable by their mints.
-  const launched = held.filter((t) => t.status !== "draft");
-  if (held.length > 1 && launched.length === 1) return { kind: "one", token: launched[0] };
+  // prelaunch audit 2026-10-18 A-40: a ticker resolves LAUNCHED coins only. A draft (or a draft that expired unlaunched) is reachable by
+  // its mint alone, so watching a ticker never reveals a coin's mint and creator before the coin exists.
+  const held = r.tokensByTicker(key).filter(isLaunched);
   if (held.length > 1) return { kind: "many", ticker: key.toUpperCase(), tokens: held };
   if (held.length === 1) return { kind: "one", token: held[0] };
-  const t = r.tokenByTicker(key);
-  return t ? { kind: "one", token: t } : { kind: "none" };
+  return { kind: "none" };
 }
+
+const isLaunched = (t: Pick<TokenRow, "status">): boolean => t.status !== "draft" && t.status !== "expired";
 
 /** Whether this coin's ticker is shared with another non-expired coin (its links then use the mint). */
 export function tickerShared(r: Pick<Registry, "tokensByTicker">, t: Pick<TokenRow, "ticker">): boolean {
-  try { return r.tokensByTicker(t.ticker).length > 1; } catch { return false; }
+  try { return r.tokensByTicker(t.ticker).filter(isLaunched).length > 1; } catch { return false; }
 }
 
-/** The coin's web key from the registry: its ticker while it alone holds it, its mint once shared (an expired draft whose ticker a live coin now holds is keyed by its mint). */
+/** The coin's web key from the registry: a launched coin's ticker while it alone holds it, its mint once shared; a draft's mint always. */
 export function registryCoinKey(r: Pick<Registry, "tokensByTicker">, t: Pick<TokenRow, "ticker" | "mint"> & { status?: string }): string {
-  if (t.status === "expired") { try { return r.tokensByTicker(t.ticker).length ? t.mint : t.ticker; } catch { return t.ticker; } }
+  if (t.status === "draft" || t.status === "expired") return t.mint;   // A-40: a ticker never opens a coin that was not launched
   return coinKey(t, tickerShared(r, t));
 }
 

@@ -154,7 +154,7 @@ describe("website-21: the review", () => {
   test("launch: one LaunchLab pair (never two separate coins, never the pair curve), side B's description from the review", () => {
     assert.match(page, /if \(pairOn && ruleB && !meetingsOn && !settledPick\) \{/);
     assert.match(page, /const descB = meetingsOn \? \(reviewMeetings\?\.descriptionB \?\? finalDescriptionB\) : settledPick \? \(reviewSettled\?\.descriptionB \|\| finalDescriptionB\) : finalDescriptionB;/);
-    assert.match(page, /meetingsOn \|\| settledPick \? "launchlab" : pairVenue\);/);
+    assert.match(page, /meetingsOn \|\| settledPick \? "launchlab" : pairVenue\)\);/);   // review of block M: inside sendWithProofFallback
     // the preview and launch gates are the ones every pair uses
     assert.match(page, /blocked=\{walletBlocked\(pairOn \? "matchup" : launchTypeOf\(rule\), pairOn\)\}/);
     assert.match(page, /if \(!rule \|\| !reviewMatchesDraft\(reviewSlot, curRev\.current\)\) return;/);

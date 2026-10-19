@@ -24,7 +24,7 @@ interface View {
   links: { site: string; app: string; deficitSite: string; github: string; githubOrg: string; x: string[] };
   clusters: Record<"devnet" | "mainnet", ClusterCfg>;
   signedMessage: { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string };
-  neverBuys: { rule: string; rehearsalNote: string; line: string; status: "clear" | "explained" | "red" | "not-run"; report: null | { ranAt: string; holdings: { role: string; wallet: string; symbol: string; amountRaw: string; tokenAccount: string }[]; acquisitions: { role: string; wallet: string; symbol: string; amountRaw: string; signature: string; blockTime: string | null; explainedBy: string | null }[]; scanned: { tokenAccounts: number; transactions: number }; errors: string[] } };
+  neverBuys: { rule: string; rehearsalNote: string; line: string; status: "clear" | "explained" | "received" | "red" | "not-checked" | "not-run"; report: null | { ranAt: string; holdings: { role: string; wallet: string; symbol: string; amountRaw: string; tokenAccount: string }[]; acquisitions: { role: string; wallet: string; symbol: string; amountRaw: string; signature: string; blockTime: string | null; explainedBy: string | null }[]; scanned: { tokenAccounts: number; transactions: number }; errors: string[] } };
   placeholders: { path: string; value: string }[];
   deployments?: Record<"devnet" | "mainnet", Record<string, { readAt: string; matchesBuild: boolean } | null>>;
 }
@@ -33,7 +33,7 @@ const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
 const isTodo = (s: string) => /^TODO_/.test(s);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const clusterName = (c: string) => (c === "mainnet" ? "Mainnet" : "Devnet");
-const statusTone: Record<string, string> = { clear: "text-emerald-400", explained: "text-amber-300", red: "text-red-400", "not-run": "text-neutral-500" };
+const statusTone: Record<string, string> = { clear: "text-emerald-400", explained: "text-amber-300", received: "text-amber-300", red: "text-red-400", "not-checked": "text-neutral-500", "not-run": "text-neutral-500" };
 
 export default function OperatorPage() {
   const [v, setV] = useState<View | null>(null);

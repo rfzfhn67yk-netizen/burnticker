@@ -6,7 +6,10 @@ import { addReading, behind, debtLine, keepReceipts, markChunk, nextDueAt, recon
 /**
  * BURN DISPERSAL — THE KEEPER STEP (owner decision 2026-10-13 night; the pure plan is dispersal.ts). One call per coin per keeper wake,
  * shared by the platform keeper (multiKeeper.ts runCycle, every cycle) and the $DEFICIT keeper (scripts/burn-keeper.mts, which also
- * wakes at the next piece's time). Behind BURNTICKER_DISPERSAL=1 in both: off until crank_carried is deployed.
+ * wakes at the next piece's time). The two keepers decide apart (review 4 of A-1, 2026-10-18): the platform keeper through
+ * dispersal.ts keeperDispersalStart (its unit sets BURNTICKER_DISPERSAL=1, and it refuses to start on a round-5 program without 1 or 0);
+ * the $DEFICIT keeper only on its own explicit BURNTICKER_DISPERSAL=1 (dispersalEnabled), which it writes to DEFICIT_DISPERSAL_FILE at
+ * start so the platform keeper's ops.json can say whether it is on.
  *
  *   1. RESOLVE first: a piece whose signature was written ahead of its send is looked up; until it is final no second piece is signed
  *      (it could land beside it). Landed → its own receipt (signature, the program's `carried` memo, the amount from the memo).

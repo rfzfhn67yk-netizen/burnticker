@@ -120,6 +120,6 @@ describe("A-7: the keeper's off-box heartbeat", () => {
     assert.equal(s.match(/await heartbeat\.beat\(/g)?.length, 1, "one ping per cycle");
     const loop = s.indexOf("while (!stopping) {");
     assert.ok(s.indexOf("await heartbeat.beat(") > loop, "inside the cycle loop");
-    assert.match(s, /heartbeat: heartbeat\.state \}\)\);/);
+    assert.match(s, /heartbeat: heartbeat\.state, hostFacts \}\)\);/);   // A-1 adds the host facts after it
   });
 });

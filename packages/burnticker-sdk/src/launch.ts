@@ -2,6 +2,8 @@ import { Keypair, PublicKey, Transaction, type Connection } from "@solana/web3.j
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { transactionFrom, PLACEHOLDER_BLOCKHASH } from "@/lib/burnticker/transactions";
 import { DEFAULT_ON_END, lockRule } from "@/lib/burnticker/rules";
+import { signLaunchRequest } from "@/lib/burnticker/walletProof";
+import { base58 } from "@/lib/burnticker/vanityMint";
 import { compose, type Mapping, type Selector } from "./rules.ts";
 import type { ApiTransport } from "./http.ts";
 import type { LaunchBundleResponse, LaunchReview, UnsignedTx } from "./types.ts";
@@ -44,6 +46,12 @@ export interface LaunchOptions {
   /** Default true: register the DRAFT (reserves the ticker; the keeper attests readings only for registered coins). false = review only. */
   register?: boolean;
   allowMainnet?: boolean;
+  /**
+   * API 1.19.0 (prelaunch audit A-3): your wallet's signMessage (ed25519 over the bytes). Given, the request carries `walletProof`, a
+   * signature over the wallet, ticker, mint, a nonce and the time, so it may use the host's whole daily upload limit when the wallet
+   * holds the launch's cost. Without it the request shares the part of the limit that is not kept for signed requests.
+   */
+  signMessage?: (message: Uint8Array) => Promise<Uint8Array>;
 }
 
 export interface LaunchResult {
@@ -79,7 +87,10 @@ export async function buildLaunchBundle(api: ApiTransport, o: LaunchOptions, ctx
   const kp = o.mintKeypair ?? Keypair.generate();
   const wallet = new PublicKey(o.wallet).toBase58();
   const blockhash = ctx.connection ? (await ctx.connection.getLatestBlockhash("confirmed")).blockhash : null;
+  // a wallet that cannot (or will not) sign the text gives no proof; the request then goes unsigned
+  const walletProof = o.signMessage ? await signLaunchRequest(o.signMessage, { origin: api.origin, creator: wallet, tickers: [o.metadata.ticker.toUpperCase()], mints: [kp.publicKey.toBase58()] }, base58) : null;
   const res = await api.post<LaunchBundleResponse>("/launch/bundle", {
+    ...(walletProof ? { walletProof } : {}),
     creator: wallet, mint: kp.publicKey.toBase58(), ticker: o.metadata.ticker.toUpperCase(), name: o.metadata.name, description: o.metadata.description ?? "", imageUrl: o.metadata.imageUrl ?? null, links: o.metadata.links ?? [],
     rule: locked.rule, firstBuySol: o.firstBuySol ?? "0", acknowledgements: o.acknowledgements, register: o.register ?? true, ...(blockhash ? { recentBlockhash: blockhash } : {}),
   });

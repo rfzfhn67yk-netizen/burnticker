@@ -68,7 +68,8 @@
       },
       "wallets": [
         { "role": "dev-fee", "label": "Developer fee wallet (also the operator treasury)", "pubkey": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", "source": "owner, 2026-10-11" },
-        { "role": "keeper", "label": "Keeper key (signs every reading and pays the crank fees)", "pubkey": "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6", "source": "docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json" },
+        { "role": "keeper", "label": "$DEFICIT keeper key (signs $DEFICIT's Treasury readings and pays its crank fees)", "pubkey": "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6", "source": "docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json" },
+        { "role": "platform-keeper", "label": "Platform keeper key (signs the readings of every coin launched on the site and pays their crank fees)", "pubkey": "FQYod3oyUJNedCw3xbp6AHifyZmG4uNrD1XvLqtpGd5L", "source": "the attester recorded on every site coin's readings (GET /api/burnticker/v1/tokens/<ticker>, attesters)" },
         { "role": "deployer", "label": "Program deployer (handed the upgrade authority to the Squads vault)", "pubkey": "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P", "source": "owner, 2026-10-11" },
         { "role": "platform-admin", "label": "LaunchLab platform admin", "pubkey": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23", "source": "owner, 2026-10-11" },
         { "role": "squads-vault", "label": "Squads 2-of-3 vault (holds the upgrade and config authority; receives no fees)", "pubkey": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", "source": "created by the owner 2026-10-11; vault PDA derived from the multisig and checked" },

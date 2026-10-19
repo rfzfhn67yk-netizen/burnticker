@@ -74,7 +74,7 @@ and `pending` says what is missing), so nothing is signable on a cluster yet. Th
 | `bt.confirmLaunch(mint, signature)` | API | the draft goes live; settlements after this moment count (a draft not confirmed within 24 h expires and frees its ticker) |
 | `bt.feePdaFor(mint)` / `feePdaFor(programId, mint)` | local | the burn pool: `burn_receipts` `["fee", mint]`, LaunchLab's recorded creator for every coin |
 | `bt.tokens({ status, limit, offset })` · `bt.token(tickerOrMint)` · `bt.receipts(tickerOrMint)` | API | the registry list; one coin's status, receipts, `nextBurn`, `impliedChance` (display only), exact `rulesText` |
-| `bt.verifyReceipt(receipt, { ticker, rulesText })` or `bt.verifyReceipt(ticker, { eventId })` | source + RPC | the full recomputation on **your** machine (section 5) |
+| `bt.verifyReceipt(receipt, { ticker, rulesText, mint })` (the mint is required: a ticker can be shared) or `bt.verifyReceipt(mint, { eventId })` | source + RPC | the full recomputation on **your** machine (section 5) |
 | `bt.verifyOnServer(ticker, eventId)` | API | the same checks, run by the server |
 | `bt.crank(mint, crankerPubkey)` | RPC | the permissionless crank transaction for the next attested reading, unsigned |
 | `bt.subscribe(mint, onEvent, { ticker, pollMs, websocket, since })` | RPC or API | program events (decoded `emit_cpi` events) with `connection` + `programId`; otherwise receipts polled from the API |

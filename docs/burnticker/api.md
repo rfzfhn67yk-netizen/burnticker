@@ -139,6 +139,17 @@ first-listed team of a game), NO = slot 1. A reading is written only once the pa
 Rivalry pairs work on a Polymarket market exactly like a Kalshi one-shot (side A YES, side B NO). Team coins and matchup pairs stay
 on Kalshi: a Polymarket game is one market whose YES is whichever team its title lists first, with no per-team leg.
 
+## The wallet's signed launch request (API 1.19.0, 2026-10-18)
+
+`POST /launch/bundle` (and the wizard's launch route) accepts an optional `walletProof: { message, signature }`: the creator
+wallet's `signMessage` signature (base58), raw or as a Solana off-chain message (hardware wallets), over a short text naming this
+site and its origin, the wallet, the ticker(s), the mint(s) (or "chosen by this site"), a nonce and the time. A proof is spent once
+its prepare succeeds. It is checked before anything is counted, uploaded or prepared. A request with a valid signature, from a wallet
+that already holds the launch's cost, may use the whole daily upload limit; any other request shares the part that is not kept for
+signed ones (429 `upload-budget-unsigned`, or `upload-budget-unfunded` for a signed wallet below the cost). A signature that does not
+check out is refused with 401 `wallet-proof-invalid`. The SDK's `buildLaunchBundle` signs it when given `signMessage`. Top-level
+fields a launch does not read are dropped.
+
 ## 3. Calling it from a bot
 
 - **GET** routes are keyless and CORS-open (`Access-Control-Allow-Origin: *`), with `Cache-Control: public, max-age=N,

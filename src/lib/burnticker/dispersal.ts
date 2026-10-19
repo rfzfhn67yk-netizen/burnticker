@@ -295,6 +295,60 @@ export function stateFromJson(j: string | null): DispersalState {
   } catch { return { ...EMPTY_STATE }; }
 }
 
-/** BURNTICKER_DISPERSAL=1 turns the keeper's dispersal on (off until crank_carried is deployed). */
+/** BURNTICKER_DISPERSAL=1 turns dispersal on; =0 turns it off on purpose. Round 5 (crank_carried) is deployed on both clusters. */
 export const DISPERSAL_FLAG = "BURNTICKER_DISPERSAL";
+/** True only for an explicit BURNTICKER_DISPERSAL=1 (the raw flag; hosts decide through `dispersalDecision`). */
 export function dispersalEnabled(env: Readonly<Record<string, string | undefined>>): boolean { return env[DISPERSAL_FLAG]?.trim() === "1"; }
+
+/**
+ * ONE DECISION FOR BOTH HOSTS (prelaunch audit 2026-10-18 A-1). The keeper never drove crank_carried on the mainnet host because the flag
+ * was never set there, so a finished rule's owed carry would go to its end sink after the program's 30-day hold. The web host's copy of
+ * the flag decides which one-shot shares the launcher offers, so the two hosts could disagree.
+ *
+ *   BURNTICKER_DISPERSAL=1   on
+ *   BURNTICKER_DISPERSAL=0   off on purpose (allowed; the keeper raises bt-dispersal-off once a day)
+ *   unset                    on when the burn program deployed on the cluster has crank_carried (round 5 or later), off before that
+ *   anything else            off, and named as not understood
+ *
+ * The keeper is stricter than the web: on a program with crank_carried it refuses to start unless the flag is set one way or the other
+ * (`keeperDispersalStart`), so the keeper unit carries BURNTICKER_DISPERSAL=1 and a keeper never runs with dispersal off by accident.
+ */
+export type DispersalSource = "flag-on" | "flag-off" | "default-on" | "default-off" | "not-understood";
+export interface DispersalDecision { on: boolean; source: DispersalSource; crankCarried: boolean }
+/** `programRound`: the burn program round deployed on this host's cluster (verified-build.json); null when not known. */
+export function dispersalDecision(env: Readonly<Record<string, string | undefined>>, programRound: number | null): DispersalDecision {
+  const raw = (env[DISPERSAL_FLAG] ?? "").trim();
+  const crankCarried = programRound !== null && programRound >= 5;
+  if (raw === "1") return { on: true, source: "flag-on", crankCarried };
+  if (raw === "0") return { on: false, source: "flag-off", crankCarried };
+  if (raw === "") return { on: crankCarried, source: crankCarried ? "default-on" : "default-off", crankCarried };
+  return { on: false, source: "not-understood", crankCarried };
+}
+/** The keeper's start: refuse (with the sentence it exits on) when the program has crank_carried and the flag is neither 1 nor 0. */
+export function keeperDispersalStart(env: Readonly<Record<string, string | undefined>>, programRound: number | null): { ok: true; decision: DispersalDecision; line: string } | { ok: false; decision: DispersalDecision; reason: string } {
+  const d = dispersalDecision(env, programRound);
+  if (d.crankCarried && d.source !== "flag-on" && d.source !== "flag-off") {
+    return { ok: false, decision: d, reason: `The burn program on this cluster has crank_carried (round ${programRound}), but ${DISPERSAL_FLAG} is ${d.source === "not-understood" ? "set to a value other than 1 or 0" : "not set"}. Without dispersal a finished rule's carried amount goes to its end sink after 30 days instead of burning the coin. Set ${DISPERSAL_FLAG}=1 in the keeper unit (deploy/systemd/mct-burnticker-keeper.service), or ${DISPERSAL_FLAG}=0 to run without it on purpose.` };
+  }
+  return { ok: true, decision: d, line: dispersalLine(d) };
+}
+/**
+ * The file the $DEFICIT keeper records its own decision in at start (scripts/burn-keeper.mts), beside the platform registry it already
+ * writes its alerts to (BURNTICKER_DB's directory); the platform keeper reads it there for ops.json.
+ */
+export const DEFICIT_DISPERSAL_NAME = "burnkeeper-dispersal.json";
+/**
+ * The ops.json line for every process that decides (review 4 and 5 of A-1): the platform keeper, the web launcher (the keeper's record
+ * when the host has one, else the same rule on its own environment) and the $DEFICIT keeper (its own flag; null = not reported).
+ */
+export function dispersalHostLine(keeper: DispersalDecision, web: DispersalDecision & { follows?: "keeper" | "own-env" }, deficit: boolean | null): string {
+  const why = (d: DispersalDecision) => (d.source === "flag-on" ? `${DISPERSAL_FLAG}=1` : d.source === "flag-off" ? `${DISPERSAL_FLAG}=0` : d.source === "default-on" ? "unset, on for a round-5 program" : d.source === "default-off" ? "unset, no crank_carried" : `${DISPERSAL_FLAG} is not 1 or 0`);
+  const st = (d: DispersalDecision) => `${d.on ? "on" : "OFF"} (${why(d)})`;
+  return `burn dispersal: platform keeper ${st(keeper)}; web launcher ${web.follows === "keeper" ? `${web.on ? "on" : "OFF"} (follows the platform keeper's record)` : st(web)}; $DEFICIT keeper ${deficit === null ? "not reported" : deficit ? "on" : "off"} (its own flag)`;
+}
+/** One line for the keeper's log and ops.json. */
+export function dispersalLine(d: DispersalDecision): string {
+  if (d.on) return `burn dispersal: on (${d.source === "flag-on" ? `${DISPERSAL_FLAG}=1` : "the program has crank_carried"}): carried amounts are spent in crank_carried pieces over 6-hour windows`;
+  if (d.source === "flag-off") return `burn dispersal: OFF on purpose (${DISPERSAL_FLAG}=0)${d.crankCarried ? ": the program has crank_carried, so a finished rule's carried amount goes to its end sink after 30 days" : ""}`;
+  return `burn dispersal: off (${d.source === "not-understood" ? `${DISPERSAL_FLAG} is not 1 or 0` : "the program on this cluster has no crank_carried"})`;
+}

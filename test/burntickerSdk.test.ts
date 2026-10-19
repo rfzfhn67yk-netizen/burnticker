@@ -7,7 +7,7 @@ import { test, describe, before } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
-  Burnticker, BurntickerApiError, rules, fees, feePdaFor, verifyReceipt, crank, subscribe, decodeEventData, EVENT_IX_TAG, buildLaunchBundleOffline, FakeBurnProgram, FakeLaunchLab, compileUnsigned, PLACEHOLDER_PROGRAM_ID,
+  Burnticker, BurntickerApiError, rules, fees, feePdaFor, verifyReceipt, MINT_REQUIRED, crank, subscribe, decodeEventData, EVENT_IX_TAG, buildLaunchBundleOffline, FakeBurnProgram, FakeLaunchLab, compileUnsigned, PLACEHOLDER_PROGRAM_ID,
   type BurntickerEvent,
 } from "../packages/burnticker-sdk/src/index.ts";
 import { DEFAULT_ON_END, lockRule } from "@/lib/burnticker/rules";
@@ -157,7 +157,7 @@ describe("verifyReceipt (on the caller's machine)", () => {
   test("tampering fails the right check: units, a different memo on chain, a source that disagrees, a swapped rules.json", async () => {
     const t = await client().token("BRONCO");
     const r = t.receipts.find((x) => x.status === "confirmed")!;
-    const base = { ticker: "BRONCO", rulesText: t.rulesText, fetch: upstreamFetch, now: NOW };
+    const base = { ticker: "BRONCO", rulesText: t.rulesText, fetch: upstreamFetch, now: NOW, mint: w.bronco.mint };
     const bad = (v: Awaited<ReturnType<typeof verifyReceipt>>) => v.checks.filter((c) => c.ok === false).map((c) => c.id);
     // A program receipt (2026-10-10): the spend belongs to the reading (checked against the memo's unit count), so units tampering fails memo + units.
     assert.deepEqual(bad(await verifyReceipt({ ...r, units: 3 }, base)), ["memo", "units"]);
@@ -168,6 +168,13 @@ describe("verifyReceipt (on the caller's machine)", () => {
     assert.ok(bad(other).includes("rules")); assert.equal(other.verified, false);
     const noSource = await verifyReceipt(r, { ...base, fetch: async () => ({ ok: false, status: 503, json: async () => ({}) }) });
     assert.equal(noSource.checks.find((c) => c.id === "source")!.ok, null, "an unreachable source is 'not checked', never a pass");
+  });
+  test("prelaunch audit 2026-10-18 A-2: a receipt is verified only against a mint (a ticker alone can be another coin's)", async () => {
+    const t = await client().token("BRONCO");
+    const r = t.receipts.find((x) => x.status === "confirmed")!;
+    await assert.rejects(verifyReceipt(r, { ticker: "BRONCO", rulesText: t.rulesText, fetch: false } as never), (e: Error) => e.message === MINT_REQUIRED);
+    await assert.rejects(client().verifyReceipt(r, { ticker: "BRONCO", rulesText: t.rulesText, fetch: false }), /mint/);
+    assert.equal((await verifyReceipt(r, { ticker: "BRONCO", rulesText: t.rulesText, fetch: false, mint: t.status.mint })).checks.length > 0, true);
   });
   test("a catalogue receipt is re-read from the feed's own published request (config from /catalogue)", async () => {
     const v = await client({ fetch: routeFetch }).verifyReceipt("DEFICIT2", { eventId: "2026-10-08", now: NOW });

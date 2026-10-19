@@ -192,6 +192,9 @@ describe("expenses + the fee ledger (from chain, by month)", () => {
 describe("the never-buys monitor", () => {
   const OP = "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn", MINT = "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F", ATA = "4VcsuCXw3sQqWm4Sv36X7hwkup9owSXcjThwSibtCTzk";
   const bal = (amt: string) => [{ mint: MINT, owner: OP, uiTokenAmount: { amount: amt } }];
+  // review 3 of A-6: a buy is a transaction the wallet signed that ran a trading program (here the devnet LaunchLab curve)
+  const BUY = { message: { accountKeys: [OP, "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6"], header: { numRequiredSignatures: 1 }, instructions: [{ programIdIndex: 1 }] } };
+  const DUST = { message: { accountKeys: ["Attacker1111111111111111111111111111111111", OP, "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"], header: { numRequiredSignatures: 1 }, instructions: [{ programIdIndex: 2 }] } };
   const rpc = (txs: Record<string, unknown>, tokenSigs: string[], recent: string[]): Rpc => ({
     async call<T>(m: string, params: unknown[]): Promise<T> {
       if (m === "getTokenAccountsByOwner") return { value: (params[1] as { programId: string }).programId.startsWith("Tokenkeg") ? [{ pubkey: ATA, account: { data: { parsed: { info: { mint: MINT, owner: OP, tokenAmount: { amount: "0" } } } } } }] : [] } as T;
@@ -202,7 +205,7 @@ describe("the never-buys monitor", () => {
   });
   test("an acquisition recorded in the evidence is 'explained' (with the file); any other turns the line red; none is clear", async () => {
     const evidence = new Map([["sigKnown", "docs/burnkeeper/evidence/devnet-2026-10-10/curve-buy-1.json"]]);
-    const txs = { sigKnown: { blockTime: 1, meta: { err: null, preTokenBalances: bal("0"), postTokenBalances: bal("500") } }, sigNew: { blockTime: 2, meta: { err: null, preTokenBalances: bal("500"), postTokenBalances: bal("900") } }, sigSell: { blockTime: 3, meta: { err: null, preTokenBalances: bal("900"), postTokenBalances: bal("0") } } };
+    const txs = { sigKnown: { blockTime: 1, transaction: BUY, meta: { err: null, preTokenBalances: bal("0"), postTokenBalances: bal("500") } }, sigNew: { blockTime: 2, transaction: BUY, meta: { err: null, preTokenBalances: bal("500"), postTokenBalances: bal("900") } }, sigSell: { blockTime: 3, meta: { err: null, preTokenBalances: bal("900"), postTokenBalances: bal("0") } } };
     const base = { cluster: "devnet", wallets: [{ role: "keeper", pubkey: OP }], mints: [{ symbol: "DEFICIT", mint: MINT }], evidence, now: 0 };
     const a = await runNeverBuys({ ...base, rpc: rpc(txs, ["sigKnown", "sigSell"], ["sigSell"]) });
     assert.equal(a.status, "explained"); assert.equal(a.line, NEVER_BUYS_STATUS.explained);
@@ -212,6 +215,18 @@ describe("the never-buys monitor", () => {
     assert.equal(b.status, "red"); assert.equal(b.acquisitions.find((x) => x.signature === "sigNew")?.explainedBy, null);
     assert.equal(statusOf([]).status, "clear");
     assert.equal(walletMintDelta(txs.sigSell as never, OP, MINT), BigInt(-900));
+  });
+  test("review 3: a coin sent to an operator wallet is 'received', never red; a buy it signed is red; no wallet read is 'not checked'", async () => {
+    const txs = { sigDust: { blockTime: 4, transaction: DUST, meta: { err: null, preTokenBalances: bal("0"), postTokenBalances: bal("7") } }, sigBuy: { blockTime: 5, transaction: BUY, meta: { err: null, preTokenBalances: bal("7"), postTokenBalances: bal("907") } } };
+    const base = { cluster: "mainnet", wallets: [{ role: "keeper", pubkey: OP }], mints: [{ symbol: "DEFICIT", mint: MINT }], evidence: new Map<string, string>(), now: 0 };
+    const dust = await runNeverBuys({ ...base, rpc: rpc(txs, ["sigDust"], []) });
+    assert.equal(dust.status, "received"); assert.equal(dust.line, NEVER_BUYS_STATUS.received);
+    assert.deepEqual(dust.acquisitions.map((x) => [x.signature, x.how]), [["sigDust", "received"]]);
+    const buy = await runNeverBuys({ ...base, rpc: rpc(txs, ["sigDust", "sigBuy"], []) });
+    assert.equal(buy.status, "red");
+    const down: Rpc = { async call<T>(): Promise<T> { throw new Error("rpc down"); } };
+    const none = await runNeverBuys({ ...base, rpc: down });
+    assert.equal(none.status, "not-checked"); assert.equal(none.line, NEVER_BUYS_STATUS.notChecked);
   });
   test("the evidence index finds the rehearsal's real signatures (the receipts and the curve buys)", () => {
     const ev = evidenceSignatures(ROOT);

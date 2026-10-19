@@ -30,7 +30,7 @@ export function homeRowOf(status: TokenStatusJson, receipts: ReceiptJson[], key:
   const readiness = readinessFromStatus(status, receipts);
   return {
     coin: { ...homeCoinOf(status), cluster: status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(status, receipts, key), statusFacts: coinStatusFactsOf(status, receipts) },
-    slot: { ticker: status.ticker, group: status.cluster === "mainnet" && status.status !== "draft" ? "public" : "test", burns: receipts.filter((r) => r.status === "confirmed").map((r) => ({ settledAt: r.settledAt })), createdAt: status.launchedAt ?? null, poolRegistered: ["awaiting-event", "below-floor", "deferred", "burned"].includes(readiness.state) },
+    slot: { ticker: status.ticker, mint: status.mint, group: status.cluster === "mainnet" && status.status !== "draft" ? "public" : "test", burns: receipts.filter((r) => r.status === "confirmed").map((r) => ({ settledAt: r.settledAt })), createdAt: status.launchedAt ?? null, poolRegistered: ["awaiting-event", "below-floor", "deferred", "burned"].includes(readiness.state) },
     upcoming: upcomingFromStatus(status, receipts, key, mint),
   };
 }

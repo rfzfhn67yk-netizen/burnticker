@@ -19,7 +19,8 @@ import { CoinVsCoinTile, CVC_STORE, type TileAnswers } from "./CoinVsCoinTile";
 import { LAUNCH_START_EVENT } from "@/lib/burnticker/launchStart";
 import { SignCard } from "./SignCard";
 import { MintAddressBlock, useMintPool } from "./MintSearch";
-import { secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
+import { sendWithProofFallback, signLaunchRequest, type WalletProof } from "@/lib/burnticker/walletProof";
+import { base58, secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
 import { launchlabPlan, pairCurvePlan, withPlanDeadline } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { ReviewCard } from "./ReviewCard";
@@ -401,6 +402,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [focusField, setFocusField] = useState<string | null>(null);
   // website-22 (QA 9 item 41): a 429 or a 502 from the review or the back-test is retried after a pause, a few times, then said once;
   // a new draft starts the count again
+  // review of block M: the wallet's signature over the review's tickers, which lets the review count the creator's own drafts as theirs
+  const [reviewProof, setReviewProof] = useState<WalletProof | null>(null);
   const [reviewRetry, setReviewRetry] = useState<{ rev: string; n: number }>({ rev: "", n: 0 }), [btRetry, setBtRetry] = useState<{ key: string; n: number }>({ key: "", n: 0 });
   const searchRef = useRef<HTMLInputElement>(null), [focusSearch, setFocusSearch] = useState(false);
   const lastFollow = useRef<FollowId | null>(null);
@@ -966,7 +969,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     setReviewSlot((x) => reviewRequested(x, rev, seq));
     const t = setTimeout(() => {
       reviewAsked.current = { rev, retry: retryN };
-      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: renderWarnings(srcWarnings, ticker.toUpperCase(), tickerB.toUpperCase()), raiseSol, creatorDescription: profile.description, links: creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links, ...(pairOn && ruleB ? (settledPick
+      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ...(creator ? { creator } : {}), ...(creator && reviewProof ? { walletProof: reviewProof } : {}), ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: renderWarnings(srcWarnings, ticker.toUpperCase(), tickerB.toUpperCase()), raiseSol, creatorDescription: profile.description, links: creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links, ...(pairOn && ruleB ? (settledPick
             // website-23: a settled-event pair is reviewed as the one linked pair it launches as: side B in `pair` with the other market and
             // the race, or the other team; never a `companion`
             // website-24: side B's own describe context (candidate B's event words, or team B's game) rides as pair.descCtx
@@ -985,7 +988,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         });
     }, 600);
     return () => clearTimeout(t);
-  }, [step, reviewKey, gate.kind, reviewRetry.rev, reviewRetry.n]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, reviewKey, gate.kind, reviewRetry.rev, reviewRetry.n, creator, reviewProof]);   // eslint-disable-line react-hooks/exhaustive-deps -- A-2: the connected wallet's own coins never count as taken
   const shownReview = reviewFor(reviewSlot, reviewKey);
   const reviewCurrent = reviewMatchesDraft(reviewSlot, reviewKey);
   // website-21: a rivalry series pair's review block (the per-game and season-end money path, side B's description)
@@ -997,11 +1000,15 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // address) is said under the fields and blocks Launch, the same check the review and the bundle run
   // website-22: profileFieldProblems (ProfileFields.tsx) runs the server's own link check per field, so the page and the review say the same thing
   const linksOf = useCallback(() => ([["website", link], ["X", xUrl], ["Telegram", tg]] as const).filter(([, u]) => /^https:\/\/\S+$/.test(u.trim())).map(([label, u]) => ({ label, url: u.trim() })), [link, xUrl, tg]);
+  // review of block M: one signature over the review's tickers (no transaction, no fee); shown only for a ticker the review calls taken
+  const proveTicker = creator && wallet.signMessage ? () => { void signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: [ticker, ...(pairOn ? [tickerB] : [])].filter(Boolean).map((t) => t.toUpperCase()), mints: [] }, base58).then((p) => { if (p) setReviewProof(p); }); } : null;
   const launch = useCallback(async () => {
     if (!rule || !reviewMatchesDraft(reviewSlot, curRev.current)) return;   // A6: transactions are prepared only for the reviewed draft
     setBusy(true); setLaunchErr(null);
     // 409 / 429 / 503 → a plain sentence (pairLaunchClient.launchErrorMessage)
-    const post = async (body: Record<string, unknown>) => { const r = await launchFetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => null); if (!r.ok) throw new LaunchRequestError(r.status, j?.code ?? null, launchErrorMessage(r.status, j as LaunchErrorBody | null, r.headers.get("retry-after"))); return j; };
+    // review of block M: a refused signature (401 wallet-proof-invalid) is sent once more unsigned (walletProof.ts sendWithProofFallback)
+    const post = (body: Record<string, unknown>) => sendWithProofFallback(body, postOnce);
+    const postOnce = async (body: Record<string, unknown>) => { const r = await launchFetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => null); if (!r.ok) throw new LaunchRequestError(r.status, j?.code ?? null, launchErrorMessage(r.status, j as LaunchErrorBody | null, r.headers.get("retry-after"))); return j; };
     setPcOut(null);
     mark("launch");
     // pressing Launch is the acknowledgement (the line under the button states both); socials and a custom image are API-only; no launch built here carries an opening purchase (hostedLaunch.ts)
@@ -1027,6 +1034,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       // the key each bundle is signed with: this browser's own (checked against the bundle's mint), or the server's (checked to derive it and end in burn)
       const keyed = (bundle: Bundle, k: GroundMint | undefined) => (k ? withLocalKey(bundle, k) : withServerKey(bundle));
       const sentMint = (k: GroundMint | undefined) => (k ? { mint: k.publicKey } : {});
+      // prelaunch audit 2026-10-18 A-3: the wallet signs this press's request (no transaction, no fee), so the site's uploads and prepared
+      // addresses are spent only for a wallet that asked; one signature covers every ticker and mint of the press
+      const walletProof = await signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: pairOn && ruleB ? [sent.a, sent.b] : [sent.a], mints: [kA?.publicKey, kB?.publicKey].filter((m): m is string => !!m) }, base58);
+      if (walletProof) Object.assign(common, { walletProof });
       if (pairOn && ruleB && !meetingsOn && !settledPick) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         // website-18: each coin carries its own image, description and links (pinned in its own metadata file)
@@ -1053,7 +1064,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           // paragraph from it, the same one the review answers (review.settled.descriptionB)
           const descB = meetingsOn ? (reviewMeetings?.descriptionB ?? finalDescriptionB) : settledPick ? (reviewSettled?.descriptionB || finalDescriptionB) : finalDescriptionB;
           const settledFields = settledPick ? { ...settledPairFields(settledPick), descCtx: ctxB } : {};
-          const j = await postPairLaunch((u, init) => launchFetch(u, init as never), { ...body, pair: { ...sentMint(kB), ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: null, ...profileBody(profileB), ...settledFields } }, meetingsOn || settledPick ? "launchlab" : pairVenue);
+          const j = await sendWithProofFallback({ ...body, pair: { ...sentMint(kB), ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: null, ...profileBody(profileB), ...settledFields } }, (b) => postPairLaunch((u, init) => launchFetch(u, init as never), b, meetingsOn || settledPick ? "launchlab" : pairVenue));
           if (kA && kB) { mintPool?.consume(kA.publicKey); mintPool?.consume(kB.publicKey); }
           if (j.venue === "pair-curve") {
             // the pair curve's two mints: this page's own two (their keys are this page's), or the server's two (each key checked)
@@ -2056,7 +2067,6 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           { label: FACT_LABELS.ends, value: meetingsOn ? meetingsEndFact : settledPick ? settledEndFact : endLines.join(" ") || PERPETUAL_END_LINE, edit: null, extra: endChoiceReview },
           { label: FACT_LABELS.cost, value: costLine(shownReview.review && reviewCurrent ? shownReview.review.costs.totalSol : null, coinsN), edit: null },
         ] : null;
-        const coinsForName = coins;
         const two = pairOn && !!ruleB;
         // website-22 (QA 9 items 11 and 12, audit 10 item 10): every problem in the name step's fields, each with the field it belongs to,
         // so the review lists all of them (the note included) and each one's Edit link lands on its field
@@ -2076,10 +2086,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           ...identity.map((x) => ({ text: x, edit: () => editField("b", /ticker/.test(x) ? "ticker" : "name") })),
           ...serverFields.map((x) => ({ text: x.text, edit: () => editField(x.side, x.field) })),
         ];
+        // prelaunch audit 2026-10-18 (the Name step): the server's ticker problem (a held or lookalike ticker) is said under the field
+        const nameBlockers = profileBlockers.filter((b) => !serverFields.some((x) => x.field === "ticker" && x.text === (typeof b === "string" ? b : b.text)));
+        const serverTicker = (side: "a" | "b") => serverFields.find((x) => x.side === side && x.field === "ticker")?.text.replace(/^Coin [AB]\. /, "") ?? null;
+        const coinsForName = coins.map((c, i) => { const t = c.tickerIssue || serverTicker(i === 0 ? "a" : "b"); return t ? { ...c, tickerIssue: t } : c; });
         // QA 9 item 14: the image line is confirmed on step 4; Next waits, and says why beside it
         const rightsMissing = (!!profile.image && !profile.rights) || (two && !!profileB.image && !profileB.rights);
         // website-25 (QA 11 H5): Review stays disabled while any field on this step has a problem, as it already did for the image line
-        const nameStepBlocked = rightsMissing || !ready || profileBlockers.length > 0 || coins.some((c) => !!c.nameIssue || !!c.tickerIssue);
+        const nameStepBlocked = rightsMissing || !ready || nameBlockers.length > 0 || coinsForName.some((c) => !!c.nameIssue || !!c.tickerIssue);
         if (guide.follow && guide.phase === "name") {
           return <>
             {namesRemade && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-200" role="status" data-names-remade>{namesRemadeLine(pairOn ? 2 : 1)}</p>}
@@ -2088,8 +2102,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             image={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`, true, "a")}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false, "b")}</div> : imageField(profile, setProfile, null)}
             profile={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" who={`$${ticker || "A"}`} side="a" /><ProfileFields value={profileB} onChange={setProfileB} generated={genB} part="text" who={`$${tickerB || "B"}`} side="b" /></div> : <ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" side="a" />}
             note={pairOn ? null : { value: note, onChange: setNote, problem: noteProblem }}
-            tickerChecks={reviewCurrent ? rv?.tickers ?? null : null}
-            profileProblems={profileBlockers}
+            tickerChecks={reviewCurrent ? rv?.tickers ?? null : null} onProveTicker={proveTicker}
+            profileProblems={nameBlockers}
             next={<StickyAction>{nameStepBlocked && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>{rightsMissing ? IMAGE_RIGHTS_REQUIRED : NAME_STEP_BLOCKED}</p>}<button type="button" data-nav className={primary + " w-full sm:w-auto"} disabled={nameStepBlocked} onClick={() => setGuide((g) => ({ ...g, phase: "review" }))}>Review</button></StickyAction>} />
           </>;
         }
@@ -2156,7 +2170,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               budget={budget}
               dispute={reviewCurrent ? rv?.dispute ?? null : null}
               graduation={rv?.graduation ?? null}
-              tickerChecks={reviewCurrent ? rv?.tickers ?? null : null}
+              tickerChecks={reviewCurrent ? rv?.tickers ?? null : null} onProveTicker={proveTicker}
               notes={notes}
               simulator={reviewCurrent && rv?.simulation ? <SimulatorDisclosure simulation={rv.simulation} rule={rule} /> : null}
               namePrompt={!pairOn && text?.name === "Event Coin" ? "This question does not give a clear coin name: please name the coin (and check the ticker) before you launch." : null}

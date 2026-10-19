@@ -46,7 +46,7 @@ describe("the anti-clone guard lets a creator's own draft through on a retry", (
     const own = await launchGuardRefusal(w.p, { ticker: "RETRY2", name: "Retry coin", rule: null, mint, creator: CREATOR });
     assert.ok(!own || !/already registered/.test(own.error), own?.error);
     const other = await launchGuardRefusal(w.p, { ticker: "RETRY2", name: "Retry coin", rule: null, mint, creator: Keypair.generate().publicKey.toBase58() });
-    assert.match(other?.error ?? "", /already registered/);
+    assert.match(other?.error ?? "", /already registered|already the ticker of another Burnticker coin/, "prelaunch audit 2026-10-18 A-2: the ticker is refused first");
   });
 });
 

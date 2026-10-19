@@ -46,6 +46,7 @@
     "src/lib/burnticker/linkedShare.ts",
     "src/lib/burnticker/lockFees.ts",
     "src/lib/burnticker/lru.ts",
+    "src/lib/burnticker/mintSuffix.ts",
     "src/lib/burnticker/oracle/backtest.ts",
     "src/lib/burnticker/oracle/browse.ts",
     "src/lib/burnticker/oracle/events.ts",
@@ -66,7 +67,9 @@
     "src/lib/burnticker/transactions.ts",
     "src/lib/burnticker/trustpack/copy.ts",
     "src/lib/burnticker/units.ts",
-    "src/lib/burnticker/verify.ts"
+    "src/lib/burnticker/vanityMint.ts",
+    "src/lib/burnticker/verify.ts",
+    "src/lib/burnticker/walletProof.ts"
   ],
   "npm": [
     "@raydium-io/raydium-sdk-v2",

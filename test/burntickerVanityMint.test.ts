@@ -378,7 +378,7 @@ describe("the wiring, by each file's source", () => {
     assert.match(src, /withMintSource\(\{ pool: mintPool, n: 2, /); assert.match(src, /withMintSource\(\{ pool: mintPool, n: 1, /);
     assert.doesNotMatch(src, /useBurnChoice|launchMints|MintChoice|mintPool\.ensure\(/);
     assert.match(src, /kA && kB \? \{ \.\.\.body, mint: kA\.publicKey, pair: \{ \.\.\.body\.pair, mint: kB\.publicKey \} \} : body/);
-    assert.match(src, /JSON\.stringify\(\{ \.\.\.body, \.\.\.\(kA \? \{ mint: kA\.publicKey \} : \{\}\) \}\)/);
+    assert.match(src, /sendWithProofFallback\(\{ \.\.\.body, \.\.\.\(kA \? \{ mint: kA\.publicKey \} : \{\}\), \.\.\.\(walletProof \? \{ walletProof \} : \{\}\) \}/);   // review of block M: unsigned once on a refused signature   // A-3: with the wallet's signed request
     assert.match(src, /a: kA \? withLocalKey\(A, kA\) : withServerKey\(A\), b: kB \? withLocalKey\(B, kB\) : withServerKey\(B\)/);
     assert.match(src, /got\.ok\.kA \? withLocalKey\(got\.ok\.bundle, got\.ok\.kA\) : withServerKey\(got\.ok\.bundle\)/);
     assert.match(src, /serverKeyFor\(j\.pairCurve\.mints\.a, j\.mintSecretKeys\?\.a\)/);

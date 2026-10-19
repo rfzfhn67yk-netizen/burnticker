@@ -11,7 +11,7 @@ import crypto from "node:crypto";
 export const VERIFIED_BUILD_FILE = path.join("config", "burnticker", "verified-build.json");
 export type BuildVariant = "mainnet" | "devnet";
 export interface ProgramBuild { features: string[]; bytes: number; hash: string }
-export interface Deployed { hash: string; programData: string; upgradeAuthority: string; readAt: string; matchesBuild: boolean; /** the read-back's record: stored per program since round 5 (2026-10-16); else filled by the checklist from DEPLOY_EVIDENCE */ evidence?: string }
+export interface Deployed { hash: string; programData: string; upgradeAuthority: string; readAt: string; matchesBuild: boolean; /** the slot the deployed bytes were written at (recorded from round 5) */ slot?: number; /** the read-back's record: stored per program since round 5 (2026-10-16); else filled by the checklist from DEPLOY_EVIDENCE */ evidence?: string }
 /**
  * Where each network's deployed-bytes read is recorded (audit R05, 2026-10-11): the check page's build table names it per row. The
  * table's own `deployed.<network>.evidence` wins (round 5, 2026-10-16: burn_receipts reads back in mainnet-round5, pair_curve still in

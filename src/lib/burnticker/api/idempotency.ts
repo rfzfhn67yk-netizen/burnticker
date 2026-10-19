@@ -11,10 +11,14 @@ import crypto from "node:crypto";
 export const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,80}$/;
 export const IDEMPOTENCY_REUSED = "This launch request reused an earlier request's key with different details. Reload the page and press Launch again.";
 
-/** The fingerprint of a request body: everything except the key itself and the page's timing counters. */
+/**
+ * The fingerprint of a request body: everything except the key itself, the page's timing counters and the wallet's signature over the
+ * request (review of block M: each press signs with a new nonce, so a second press on the same draft must still be the same request,
+ * not a "reused key" that would make the page start a second draft with a second bank key and a second paid upload).
+ */
 export function bodyFingerprint(body: Record<string, unknown>): string {
-  const { idempotencyKey: _k, timings: _t, ...rest } = body;
-  void _k; void _t;
+  const { idempotencyKey: _k, timings: _t, walletProof: _w, ...rest } = body;
+  void _k; void _t; void _w;
   return crypto.createHash("sha256").update(JSON.stringify(rest)).digest("hex");
 }
 

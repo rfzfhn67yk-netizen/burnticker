@@ -141,6 +141,12 @@ export class ProgramBurnClient implements BurnProgramClient {
     }
     return null;
   }
+  /** One transaction's burn-program memo (the audit's per-receipt check): one getParsedTransaction, never a scan of the config account. */
+  async memoOfTransaction(signature: string) {
+    const t = await this.o.connection.getParsedTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    if (!t) return null;
+    return { memo: memoFromTransaction(t, this.o.programId), slot: t.slot ?? null, failed: t.meta?.err != null };
+  }
   /** True when this mint has a TokenConfig under the program (the keeper and the pages check before using a port). */
   async initialised(mint: string): Promise<boolean> { return !!(await fetchTokenConfig(this.o.connection, this.o.programId, new PublicKey(mint))); }
 }

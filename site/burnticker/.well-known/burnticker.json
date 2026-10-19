@@ -117,6 +117,7 @@
       "wallets": {
         "dev-fee": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
         "keeper": "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6",
+        "platform-keeper": "FQYod3oyUJNedCw3xbp6AHifyZmG4uNrD1XvLqtpGd5L",
         "deployer": "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P",
         "platform-admin": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23",
         "squads-vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",

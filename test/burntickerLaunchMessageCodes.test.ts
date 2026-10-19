@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { Keypair } from "@solana/web3.js";
 import { launchedErrorMessage, launchErrorMessage, LAUNCH_NOT_SEEN_YET_SENTENCE, UPLOAD_LIMIT_CODES } from "@/lib/burnticker/pairLaunchClient";
 import { confirmPlan, type SignPlan } from "@/lib/burnticker/signPlan";
-import { markLaunched, resetConfirmGuards, UPLOAD_BUSY_SENTENCE } from "@/lib/burnticker/api/handlers";
+import { markLaunched, resetConfirmGuards, UPLOAD_BUSY_SENTENCE, UNSIGNED_UPLOADS_SENTENCE, unfundedUploadsSentence } from "@/lib/burnticker/api/handlers";
 import { openRegistry } from "@/lib/burnticker/registry";
 import { lockRule } from "@/lib/burnticker/rules";
 import { limiter } from "@/lib/burnticker/api/http";
@@ -26,6 +26,12 @@ test("prepare 429: each upload limit shows the server's own sentence; only the c
     "upload-budget-client": "This connection has saved the details of 6 coins on this site today, which is the daily limit. Please try again after midnight UTC.",
     "upload-budget-creator": "This wallet has saved the details of 6 coins on this site today, which is the daily limit for one wallet. Please try again after midnight UTC.",
     "upload-busy": UPLOAD_BUSY_SENTENCE,
+    // prelaunch audit 2026-10-18 A-3: the unsigned share of the day's uploads is used up
+    "upload-budget-unsigned": UNSIGNED_UPLOADS_SENTENCE,
+    // A-3 follow-up: a signed wallet without the launch's cost, once the unsigned share is used up
+    "upload-budget-unfunded": unfundedUploadsSentence(57_000_000),
+    // review of block M: one proven wallet's own daily count, across connections
+    "upload-budget-wallet": "This wallet has saved the details of 6 coins on this site today, which is the daily limit for one wallet. Please try again after midnight UTC.",
   };
   assert.deepEqual([...UPLOAD_LIMIT_CODES].sort(), Object.keys(sentences).sort());
   for (const [code, error] of Object.entries(sentences)) {
