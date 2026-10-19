@@ -42,7 +42,8 @@ describe("host unit hygiene (A-32)", () => {
     assert.match(sh, /^UNITS=".*\bmct-burnticker-logrotate\.service mct-burnticker-logrotate\.timer\b.*"$/m);
     assert.match(sh, /^TIMERS=".*\bmct-burnticker-logrotate\.timer\b.*"$/m);
     // rendered as plain text (no sed), validated with logrotate -d before it replaces anything, and no logrotate binary is a STOP
-    assert.match(sh, /node scripts\/ops\/render-logrotate\.mjs deploy\/logrotate\/burnticker "\$\(pwd\)" "\$\(id -un\)" "\$\(id -gn\)" > "\$LR_NEW"/);
+    // L-5 (2026-10-19): the deploy installs from a release directory and names the release link (BT_UNITS_ROOT); by hand, this directory
+    assert.match(sh, /node scripts\/ops\/render-logrotate\.mjs deploy\/logrotate\/burnticker "\$\{BT_UNITS_ROOT:-\$\(pwd\)\}" "\$\(id -un\)" "\$\(id -gn\)" > "\$LR_NEW"/);
     assert.doesNotMatch(sh, /sed "s\|@REPO@/);
     assert.match(sh, /if ! \/usr\/sbin\/logrotate -d --state "\$LR_STATE" "\$LR_NEW"/);
     assert.ok(sh.indexOf("logrotate -d --state") < sh.indexOf('act cp "$LR_NEW" "$LR_DEST"'), "validated before it is installed");

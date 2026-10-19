@@ -11,6 +11,7 @@ import { DECIMALS, INCINERATOR_ADDRESS, TOTAL_SUPPLY, endSinkOf, ruleMappings, t
 import { FakeLockFees, fakeLockAddress, operatorTreasuryFor, type LockFeesClient } from "@/lib/burnticker/lockFees";
 import { FakePairForward, type PairForwardClient } from "@/lib/burnticker/pairForward";
 import { FakeEndSink, type EndSinkClient } from "@/lib/burnticker/endSinkClient";
+import { endSinkKindCode } from "@/lib/burnReceipts/endSink";
 
 /**
  * THE RECEIPTS PROGRAM, FROM THE BURNTICKER KEEPER'S SIDE (2026-10-10). Every registered token runs on the deployed burn_receipts
@@ -100,6 +101,11 @@ export interface BurnProgramClient {
    */
   memoOfTransaction?(signature: string): Promise<{ memo: string | null; slot: number | null; failed: boolean } | null>;
   /**
+   * I-14 (audit 2026-10-19): the coin's BurnTarget as the chain holds it (null = no account), so the keeper compares it with the prepare's
+   * expectation before a target crank (admissionAccounts.ts burnTargetMismatch). Optional: a client without it skips that check.
+   */
+  burnTargetOf?(mint: string): Promise<{ mint: string; targetMint: string; pool: string; feedId: string; repins: number } | null>;
+  /**
    * LP LOCKED FOREVER (2026-10-10, lockFees.ts): the claim_lock_fees path — the locked LP's Fee Key at the program's fee-keys PDA and
    * the permissionless 80/20 claim. Optional: absent until the program change is bound, and the keeper then skips the claim crank.
    */
@@ -159,10 +165,15 @@ export interface ExpectedTokenConfig {
   pairVoidBy: number | null;
   /** 0 the coin burns itself; 1 a pinned target (the program may move it to 2 once the target's pool is verified). */
   burnTargetKind: number;
+  /**
+   * I-14 (audit 2026-10-19): the token, pool and Pyth feed pin_burn_target pins beside initialize_token (the BurnTarget account, compared
+   * by admissionAccounts.ts). Absent on expectations stored before this was recorded: then only burnTargetKind is compared.
+   */
+  burnTarget?: { mint: string; pool: string; feedId: string } | null;
 }
 
 /** An ExpectedTokenConfig from the counter rule and the rest of initialize_token's arguments (programClient.ts, the fake). */
-export function expectedFromCounter(c: CounterRule, o: { rulesSha256: string; attesters: string[] | null; quorum: number | null; admin: string | null; llPlatform: string | null; endSink: ExpectedTokenConfig["endSink"]; pairVoidBy: number | null; burnTargetKind: number; floorKnown?: boolean }): ExpectedTokenConfig {
+export function expectedFromCounter(c: CounterRule, o: { rulesSha256: string; attesters: string[] | null; quorum: number | null; admin: string | null; llPlatform: string | null; endSink: ExpectedTokenConfig["endSink"]; pairVoidBy: number | null; burnTargetKind: number; burnTarget?: ExpectedTokenConfig["burnTarget"]; floorKnown?: boolean }): ExpectedTokenConfig {
   const r = c.rule;
   return {
     version: 1, feedId: c.feedId, memoPrefix: c.memoPrefix, memoSource: c.memoSource, rulesSha256: o.rulesSha256.toLowerCase(),
@@ -170,6 +181,7 @@ export function expectedFromCounter(c: CounterRule, o: { rulesSha256: string; at
       fractionPerUnitBps: r.fraction_per_unit_bps, slippageBps: r.slippage_bps, maxTwapDeviationBps: r.max_twap_deviation_bps, twapWindowSecs: r.twap_window_secs,
       floorLamports: o.floorKnown === false ? null : r.floor_lamports.toString(), reserveLamports: r.reserve_lamports.toString(), tokensPerUnit: r.tokens_per_unit.toString(), vaultAllocation: r.vault_allocation.toString() },
     attesters: o.attesters ? [...o.attesters] : null, quorum: o.quorum, admin: o.admin, llPlatform: o.llPlatform, endSink: o.endSink, pairVoidBy: o.pairVoidBy, burnTargetKind: o.burnTargetKind,
+    ...(o.burnTarget ? { burnTarget: { ...o.burnTarget } } : {}),
   };
 }
 
@@ -313,14 +325,21 @@ export class FakeBurnProgram implements BurnProgramClient {
       try {
         const c = counterRule(i.rule, i.ticker, i.selectorKey, { floorLamports: this.floorLamports });
         // F01: what the fake "encodes" (no admin or platform in memory: not compared)
-        expected = expectedFromCounter(c, { rulesSha256: i.rulesSha256, attesters: i.attesters, quorum: i.quorum, admin: null, llPlatform: null, endSink: null, pairVoidBy: i.pairMint ? i.pairVoidBy ?? null : 0, burnTargetKind: (i.rule as { burnTarget?: unknown }).burnTarget ? 1 : 0 });
+        const bt = (i.rule as { burnTarget?: { mint: string; pool: string; feedId: string } }).burnTarget;
+        // §45: the EndSink the rule pins (the program refuses one on the flagship itself)
+        // (a refusal is raised where it always was: after the coin's fake program exists)
+        let pinError: unknown = null, pin: ReturnType<typeof endSinkPin> = null;
+        try { pin = endSinkPin(i.rule, i.pairMint); } catch (e) { pinError = e; }
+        const pinned = pin && this.pinEndSinks && i.mint !== this.endSink.flagship ? { kind: pin.kind, sinkMint: pin.kind === "pair-winner" ? i.pairMint! : pin.kind === "mint" ? pin.sinkMint! : pin.kind === "incinerator" ? INCINERATOR_ADDRESS : this.endSink.flagship, minForwardLamports: pin.minForwardLamports } : null;
+        expected = expectedFromCounter(c, { rulesSha256: i.rulesSha256, attesters: i.attesters, quorum: i.quorum, admin: null, llPlatform: null,
+          endSink: pinned ? { kind: endSinkKindCode(pinned.kind), mint: pinned.sinkMint, minLamports: pinned.minForwardLamports.toString() } : null, pairVoidBy: i.pairMint ? i.pairVoidBy ?? null : 0, burnTargetKind: bt ? 1 : 0,
+          ...(bt ? { burnTarget: { mint: bt.mint, pool: bt.pool, feedId: bt.feedId } } : {}) });
         this.tokens.set(i.mint, new FakeProgram({ programId: this.programId, mint: i.mint, feePda: this.feePdaFor(i.mint), configAddress: tokenConfig, mode: i.mode, rulesSha256: i.rulesSha256, feedId: c.feedId, memoPrefix: c.memoPrefix, memoSource: c.memoSource,
           valueDecimals: 0, unitValue: BigInt(1), carryRule: CARRY_NONE, maxAbsDelta: c.rule.max_abs_delta, fractionPerUnitBps: c.rule.fraction_per_unit_bps, floorLamports: c.rule.floor_lamports,
           reserveLamports: c.rule.reserve_lamports, tokensPerUnit: c.rule.tokens_per_unit, vaultAllocation: c.rule.vault_allocation, attesters: i.attesters, quorum: i.quorum, heldKeys: this.heldKeys ?? i.attesters, decimals: DECIMALS, now: () => this.now() }));
         if (i.mode === "buyback" && this.autoRegisterPool) this.tokens.get(i.mint)!.registerPool();
-        // §45: the EndSink the rule pins (the program refuses one on the flagship itself)
-        const pin = endSinkPin(i.rule, i.pairMint);
-        if (pin && this.pinEndSinks && i.mint !== this.endSink.flagship) this.endSink.port(i.mint).pinned = { kind: pin.kind, sinkMint: pin.kind === "pair-winner" ? i.pairMint! : pin.kind === "mint" ? pin.sinkMint! : pin.kind === "incinerator" ? INCINERATOR_ADDRESS : this.endSink.flagship, minForwardLamports: pin.minForwardLamports };
+        if (pinError) throw pinError;
+        if (pinned) this.endSink.port(i.mint).pinned = pinned;
         this.lockFees.port(i.mint).memoPrefix = c.memoPrefix;
         // round 2: register_pool runs after register_fee_key through the lock path; it registers the pool on the coin's fake program too
         this.lockFees.port(i.mint).onRegisterPool = () => { const f = this.tokens.get(i.mint); if (f && !f.cfg.poolRegistered) f.registerPool(); };

@@ -1,6 +1,6 @@
 {
   "schema": "burnticker.current-status/v1",
-  "checkedAt": "2026-10-16",
+  "checkedAt": "2026-10-19",
   "note": "THE ONE HUMAN-MAINTAINED CURRENT-STATUS FILE (website brief 2026-10-11 §4). src/lib/burnticker/currentStatus.ts joins it with config/burnticker/verified-build.json, config/burnticker/operator.json, the host's environment and live chain reads (Squads time lock, program upgrade authority), and GET /api/burnticker/v1/current-status serves the result; the homepage, the trust, operator and status pages and the $DEFICIT pre-launch page render that one object. Facts only: no 'coming soon', no promised dates. History stays in the append-only logs listed under `historical`.",
   "deficit": {
     "servedAt": "https://deficit.burnticker.com/",

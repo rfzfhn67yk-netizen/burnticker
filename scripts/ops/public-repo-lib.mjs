@@ -325,6 +325,27 @@ function appendTag(manifest) {
   return { commit, dirty, idl, prog, allow, date };
 }
 
+/**
+ * RELEASE IDENTITY (audit 2026-10-19 I-13; src/lib/burnticker/releaseManifest.ts reads it). release.json at the public tree's root: the
+ * monorepo commit this tree was cut from, whether that working tree had uncommitted changes (the publish copies it as it is, by design),
+ * and a digest of every published file as the staged copies hold them: sha256 over the lines "<sha256>  <path>" (sha256sum's format),
+ * sorted by path, for every file except package.json, package-lock.json and release.json. A checkout of the public repository recomputes
+ * it with releaseManifest.ts TREE_RECIPE. The deploy adds the build id and the public checkout's commit to the build's copy.
+ */
+function treeDigest(dir, paths) {
+  const skip = new Set(["package.json", "package-lock.json", "release.json"]);
+  const lines = [...paths].filter((p) => !skip.has(p)).sort().map((p) => `${sha256(fs.readFileSync(path.join(dir, p)))}  ${p}\n`);
+  return { sha256: sha256(Buffer.from(lines.join(""), "utf8")), files: lines.length };
+}
+function writeRelease(manifest) {
+  const commit = git("rev-parse", "HEAD").trim();
+  const dirty = git("status", "--porcelain", "--untracked-files=no").trim().length > 0;
+  const tree = treeDigest(OUT, manifest.keys());
+  const rel = { schema: "burnticker.release/v1", publishedAt: new Date().toISOString(), monorepo: { commit, dirty }, publicTree: tree };
+  fs.writeFileSync(path.join(OUT, "release.json"), `${JSON.stringify(rel, null, 2)}\n`);
+  return rel;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 // 5. copy + verify
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -375,7 +396,7 @@ function rescanStaged(manifest) {
     else if (e.isFile()) files.push(e.name);
     else odd.push(e.name);
   }
-  const expected = new Set([...manifest.keys(), "package.json", "package-lock.json"]);
+  const expected = new Set([...manifest.keys(), "package.json", "package-lock.json", "release.json"]);
   const problems = [
     ...links.map((l) => `staged ${l}: is a symlink`),
     ...odd.map((o) => `staged ${o}: not a regular file`),
@@ -524,6 +545,8 @@ function main() {
   const pkg = generatePackageJson(external, declared);
   fs.writeFileSync(path.join(OUT, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   console.log(`wrote ${OUT} (${manifest.size} files + package.json with ${Object.keys(pkg.dependencies).length} dependencies, ${Object.keys(pkg.devDependencies).length} devDependencies)`);
+  const rel = writeRelease(manifest);
+  console.log(`wrote release.json: monorepo ${rel.monorepo.commit.slice(0, 12)}${rel.monorepo.dirty ? " (dirty)" : ""}, public tree ${rel.publicTree.sha256.slice(0, 16)}… over ${rel.publicTree.files} files`);
   if (!flag("no-lockfile") && !deriveLockfile()) process.exit(1);
   const staged = rescanStaged(manifest);
   if (staged.problems.length || staged.hits.length) {

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { cadenceMsFor, type CycleReport } from "@/lib/burnticker/multiKeeper";
+import { selectorIdle } from "@/lib/burnticker/readPlan";
 import type { FeedState, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
 import { readAudit, type AuditSummary } from "@/lib/burnticker/trust";
 import { PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
@@ -43,6 +44,8 @@ export type AlertSink = (kind: string, key: string, text: string, meta: Record<s
 
 export interface TokenSnapshot {
   mint: string; ticker: string; status: TokenRow["status"]; mode: string; selectorKey: string; liveSince: number; cadenceMs: number;
+  /** readPlan.ts selectorIdle: why the keeper correctly reads this selector no more (null: it is read); an idle selector is never stalled */
+  idle?: string | null;
   feed: FeedState;
   pending: { eventId: string; status: string; attempts: number; lastError: string | null }[];
   burns: number; burns24h: number; spent24hLamports: bigint;
@@ -89,15 +92,18 @@ function publishedPool(siteDir: string, ticker: string): { feePdaSol: string | n
 
 export function collectSnapshot(o: { registry: Registry; siteDir: string; now: number; paused?: boolean; balances?: BalanceSample | null; crankStreaks?: Record<string, number>; kalshiPollMs?: number }): BurntickerSnapshot {
   const { registry: reg, now } = o;
+  const live = reg.tokens("live");
   const tokens: TokenSnapshot[] = reg.tokens().map((t) => {
     let cadenceMs = 5 * 60_000;
     try { cadenceMs = cadenceMsFor(reg, { kalshiPollMs: o.kalshiPollMs }, reg.lockedRule(t).rule, t.selectorKey, now); } catch { /* an unreadable rule is the audit's finding, not a cadence */ }
+    let idle: string | null = null;
+    try { idle = t.status === "live" ? selectorIdle(reg, t.selectorKey, live.filter((x) => x.selectorKey === t.selectorKey)) : null; } catch { idle = null; }
     const rows: ReceiptRow[] = reg.receipts(t.mint);
     const confirmed = rows.filter((r) => r.status === "confirmed");
     const recent = confirmed.filter((r) => (r.confirmedAt ?? 0) >= now - 86_400_000);
     const att = reg.attesters(t.mint).filter((a) => a.active);
     return {
-      mint: t.mint, ticker: t.ticker, status: t.status, mode: t.mode, selectorKey: t.selectorKey, liveSince: Math.max(t.createdAt, Date.parse(t.baselineAt) || 0), cadenceMs,
+      mint: t.mint, ticker: t.ticker, status: t.status, mode: t.mode, selectorKey: t.selectorKey, liveSince: Math.max(t.createdAt, Date.parse(t.baselineAt) || 0), cadenceMs, idle,
       feed: reg.feedState(t.selectorKey),
       pending: rows.filter((r) => r.status === "planned" || r.status === "sending").map((r) => ({ eventId: r.eventId, status: r.status, attempts: r.attempts, lastError: r.lastError })),
       burns: confirmed.length, burns24h: recent.length, spent24hLamports: recent.reduce((a, r) => a + (r.spendLamports ?? BigInt(0)), BigInt(0)),
@@ -122,7 +128,12 @@ export function evaluateAlerts(s: BurntickerSnapshot): BurntickerAlert[] {
   for (const t of live) {
     if (seen.has(t.selectorKey)) continue; seen.add(t.selectorKey);
     const last = Math.max(t.feed.lastFetchAt ?? 0, t.feed.lastOkAt ?? 0, t.liveSince);
-    const limit = FEED_STALL_FACTOR * t.cadenceMs;
+    // THE READ PLAN (readPlan.ts, owner 2026-10-19): a selector the keeper correctly no longer reads is not stalled, and one planned for a
+    // later read (a game days away, a feed's next publish window) is judged from that planned time, not from its last read
+    if (t.idle) continue;
+    // (a failing read backing off is still judged on the cadence: failures keep alarming)
+    const planned = !t.feed.failures && t.feed.nextFetchAt !== null && t.feed.nextFetchAt !== undefined && t.feed.nextFetchAt > last ? t.feed.nextFetchAt - last : 0;
+    const limit = Math.max(FEED_STALL_FACTOR * t.cadenceMs, planned + (FEED_STALL_FACTOR - 1) * t.cadenceMs);
     if (!s.paused && s.now - last > limit) out.push({ kind: "bt-feed-stall", key: `bt-feed-stall:${t.selectorKey}`, text: `Burnticker feed ${t.selectorKey} ($${t.ticker}) not fetched for ${Math.round((s.now - last) / 60_000)} min (cadence ${Math.round(t.cadenceMs / 60_000)} min, limit ${Math.round(limit / 60_000)} min). ${t.feed.lastError ? `The last error was: ${t.feed.lastError.slice(0, 120)}. ` : ""}${t.feed.failures ? `It has failed ${t.feed.failures} ${t.feed.failures === 1 ? "time" : "times"} in a row.` : ""}`.trim(), meta: { selectorKey: t.selectorKey, lastFetchAt: t.feed.lastFetchAt, failures: t.feed.failures } });
     if (t.feed.lastError && /already recorded as/.test(t.feed.lastError)) out.push({ kind: "bt-reading-conflict", key: `bt-reading-conflict:${t.selectorKey}:${day}`, text: `Burnticker: the oracle for ${t.selectorKey} changed a recorded result — the registry refused the write and the key is HELD until someone looks: ${t.feed.lastError.slice(0, 160)}`, meta: { selectorKey: t.selectorKey } });
   }

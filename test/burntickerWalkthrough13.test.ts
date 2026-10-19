@@ -103,7 +103,7 @@ describe("walkthrough 13: the end of a team's season coin", () => {
 describe("walkthrough 13: disclosures that said more than the code does", () => {
   test("the operator's one disclosed purchase ($REHEARSAL, 0.1 SOL) is named wherever 'never trades' is said", () => {
     assert.ok(GUARDRAIL_DETAIL["no team buy"].text.includes(REHEARSAL_BUY_EXCEPTION));
-    assert.ok(GUARDRAIL_DETAIL["the platform never buys any coin"].text.includes(REHEARSAL_BUY_EXCEPTION));
+    assert.ok(GUARDRAIL_DETAIL["the platform buys no coin except one test coin"].text.includes(REHEARSAL_BUY_EXCEPTION));
     assert.ok(WHO_GETS_WHAT.find((w) => w.who === "Burnticker")!.text.includes(REHEARSAL_BUY_EXCEPTION));
     assert.match(USE_OF_FEES, /apart from a disclosed 0\.1 SOL purchase of the \$REHEARSAL test coin/);
     assert.match(read("config/burnticker/transparency.json"), /The operator bought 0\.1 SOL of it at creation/);

@@ -28,7 +28,14 @@
 #      swap back, restart and check. If the restart fails again on the previous build, it says the web is down and exits 1.
 #   The exit status of a failure survives the EXIT cleanup (it is never turned into 0).
 #
-# THE LIMIT (say it plainly): only the Next build is swapped back. The deploy has already mirrored the SOURCE (keepers and scripts run
+# RELEASE MODE (audit 2026-10-19 L-5): with BT_RELEASE=<a release directory holding its own source, node_modules and .next> and
+# BT_CURRENT=<the release link, ~mct/meme-coin-trader> (scripts/ops/release-host.sh), nothing is moved inside a running tree. The
+# swap is one atomic switch of the link to the new release (a new link renamed over the old one); the smoke is the same; a failure
+# switches the link back to the release that was serving, so the source, node_modules and the build all return together. The static
+# carry copies the serving release's own chunks into the new release's .next. On success the serving release is recorded in
+# <releases>/.previous, which is what a rollback (rollback-burnticker.sh --previous-release) switches back to with this same script.
+#
+# THE LIMIT (legacy mode only, say it plainly): only the Next build is swapped back. The deploy has already mirrored the SOURCE (keepers and scripts run
 # from it) and, when package-lock.json changed, run npm ci in place; neither is undone here. A failed web smoke therefore leaves the old
 # web build serving next to new source and node_modules. A full rollback is scripts/ops/rollback-burnticker.sh (a previous public commit,
 # shipped the normal way; docs/burnticker/ROLLBACK.md).
@@ -54,10 +61,28 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/bt-swap.XXXXXX")"
 # keep the script's own exit status through the cleanup (a shell that exits on an error otherwise reports the cleanup's 0)
 trap 'rc=$?; rm -rf "$TMP"; exit $rc' EXIT
 
-[ -f .next-staging/BUILD_ID ] || { echo "SWAP REFUSED: no staged build (.next-staging/BUILD_ID); the running build is untouched"; exit 1; }
-NEW="$(cat .next-staging/BUILD_ID)"
+# where the running build and the staged one are: one tree (legacy: .next and .next-staging) or two releases behind a link (release mode)
+RELEASE="${BT_RELEASE:-}"; LINK="${BT_CURRENT:-}"; PREV=""
+if [ -n "$RELEASE" ]; then
+  [ -n "$LINK" ] || { echo "SWAP REFUSED: BT_RELEASE needs BT_CURRENT, the release link; nothing was touched"; exit 1; }
+  [ -L "$LINK" ] || { echo "SWAP REFUSED: $LINK is not a release link (run release-host.sh migrate once); nothing was touched"; exit 1; }
+  RELEASE="$(cd "$RELEASE" 2>/dev/null && pwd -P)" || { echo "SWAP REFUSED: the release ${BT_RELEASE} does not exist; nothing was touched"; exit 1; }
+  PREV="$(readlink "$LINK")"
+  [ "$(cd "$PREV" 2>/dev/null && pwd -P)" != "$RELEASE" ] || { echo "SWAP REFUSED: $LINK already points at $RELEASE; nothing was touched"; exit 1; }
+  RUN="$LINK/.next"; STAGE="$RELEASE/.next"
+else
+  RUN=.next; STAGE=.next-staging
+fi
+# the atomic switch: a new link renamed over the old one (GNU mv -T; elsewhere perl's rename, the same rename(2))
+switch_link() {
+  tmp="$LINK.switch.$$"; rm -f "$tmp"; ln -s "$1" "$tmp"
+  mv -T "$tmp" "$LINK" 2>/dev/null || perl -e 'rename($ARGV[0], $ARGV[1]) or die "rename: $!\n"' "$tmp" "$LINK"
+}
+
+[ -f "$STAGE/BUILD_ID" ] || { echo "SWAP REFUSED: no staged build ($STAGE/BUILD_ID); the running build is untouched"; exit 1; }
+NEW="$(cat "$STAGE/BUILD_ID")"
 [ -n "$NEW" ] || { echo "SWAP REFUSED: the staged BUILD_ID is empty; the running build is untouched"; exit 1; }
-OLD=""; [ -f .next/BUILD_ID ] && OLD="$(cat .next/BUILD_ID)"
+OLD=""; [ -f "$RUN/BUILD_ID" ] && OLD="$(cat "$RUN/BUILD_ID")"
 
 # One request: prints "<status>" and leaves the body in $TMP/body. curl exits non-zero on no answer / timeout: status 000.
 get() { # $1 path, $2 max seconds
@@ -106,26 +131,32 @@ smoke() {
 # into the staged build. Only one build back is carried: the staged build records its own files in static-own.txt, so files carried
 # into it are not carried again next time and nothing piles up across deploys. A staged file is never overwritten.
 carry_static() {
-  [ -d .next/static ] && [ -d .next-staging/static ] || { echo "static carry: nothing to carry (no .next/static or no .next-staging/static)"; return 0; }
-  (cd .next-staging && find static -type f) > "$TMP/own"
-  if [ -f .next/static-own.txt ]; then cp .next/static-own.txt "$TMP/prev"; else (cd .next && find static -type f) > "$TMP/prev"; fi
+  [ -d "$RUN/static" ] && [ -d "$STAGE/static" ] || { echo "static carry: nothing to carry (no $RUN/static or no $STAGE/static)"; return 0; }
+  (cd "$STAGE" && find static -type f) > "$TMP/own"
+  if [ -f "$RUN/static-own.txt" ]; then cp "$RUN/static-own.txt" "$TMP/prev"; else (cd "$RUN" && find static -type f) > "$TMP/prev"; fi
   n=0
   while IFS= read -r f; do
-    [ -n "$f" ] && [ -f ".next/$f" ] || continue
-    [ -e ".next-staging/$f" ] && continue
-    mkdir -p ".next-staging/$(dirname "$f")" && cp -p ".next/$f" ".next-staging/$f" && n=$((n + 1))
+    [ -n "$f" ] && [ -f "$RUN/$f" ] || continue
+    [ -e "$STAGE/$f" ] && continue
+    mkdir -p "$STAGE/$(dirname "$f")" && cp -p "$RUN/$f" "$STAGE/$f" && n=$((n + 1))
   done < "$TMP/prev"
-  cp "$TMP/own" .next-staging/static-own.txt
+  # a release that already has its list (a rollback target) keeps it, so files carried into it are never counted as its own
+  if [ -z "$RELEASE" ] || [ ! -f "$STAGE/static-own.txt" ]; then cp "$TMP/own" "$STAGE/static-own.txt"; fi
   echo "static carry: kept $n static files of the running build${OLD:+ $OLD} servable from the new build"
 }
 carry_static
 
 STARTED=$(date +%s)
 # the deploy reads this line: from here on .next may change, so a failure is never "before the swap" (A-9, audit 2026-10-18)
-echo "SWAP STARTED: moving build $NEW into .next (the running build${OLD:+ $OLD} goes to .next-old)"
-rm -rf .next-old
-if [ -d .next ]; then mv .next .next-old; fi
-mv .next-staging .next
+if [ -n "$RELEASE" ]; then
+  echo "SWAP STARTED: switching $LINK to release $(basename "$RELEASE") (build $NEW); the serving release $(basename "$PREV")${OLD:+ (build $OLD)} stays in place"
+  switch_link "$RELEASE"
+else
+  echo "SWAP STARTED: moving build $NEW into .next (the running build${OLD:+ $OLD} goes to .next-old)"
+  rm -rf .next-old
+  if [ -d .next ]; then mv .next .next-old; fi
+  mv .next-staging .next
+fi
 # restart: runs the restart command; on a non-zero exit sets WHY and returns 1 (the smoke never runs, the rollback path does)
 restart() {
   if sh -c "$RESTART"; then return 0; else rc=$?; WHY="the restart command failed (exit $rc)"; return 1; fi
@@ -133,10 +164,29 @@ restart() {
 WHY="the restart or the smoke did not finish"
 T0=$(date +%s); ID0=$(unit_id)
 if restart && smoke "$NEW" "$DEADLINE" "$T0" "$ID0"; then
-  echo "web is up on build $NEW (smoke passed in $(( $(date +%s) - STARTED )) s; the previous build${OLD:+ $OLD} is kept in .next-old until the next deploy)"
+  if [ -n "$RELEASE" ]; then
+    printf '%s\n' "$PREV" > "$(dirname "$RELEASE")/.previous"
+    echo "web is up on build $NEW (smoke passed in $(( $(date +%s) - STARTED )) s; release $(basename "$RELEASE"); the previous release $(basename "$PREV")${OLD:+ (build $OLD)} is kept for a rollback)"
+  else
+    echo "web is up on build $NEW (smoke passed in $(( $(date +%s) - STARTED )) s; the previous build${OLD:+ $OLD} is kept in .next-old until the next deploy)"
+  fi
   exit 0
 fi
 echo "WEB SMOKE FAILED for build $NEW within ${DEADLINE} s: $WHY"
+if [ -n "$RELEASE" ]; then
+  switch_link "$PREV"
+  : > "$RELEASE/.failed"
+  echo "SWAPPED BACK: $LINK points at the previous release $(basename "$PREV") again; the failed release $(basename "$RELEASE") stays in place, marked .failed"
+  echo "WHOLE RELEASE SWAPPED BACK: the previous release's source, node_modules and build serve again (only the systemd units this deploy installed stay)"
+  T1=$(date +%s); ID1=$(unit_id); WHY="the restart or the smoke did not finish"
+  RWHY=""; restart || RWHY="$WHY"
+  if smoke "$OLD" "$BACK_DEADLINE" "$T1" "$ID1"; then
+    echo "ROLLED BACK: the web is up on the previous build ${OLD:-(no BUILD_ID)} in release $(basename "$PREV")${RWHY:+ (the restart command reported a failure, $RWHY, but the previous build answers)}"
+  else
+    echo "ROLLBACK DID NOT ANSWER EITHER: ${RWHY:+$RWHY; }$WHY. $LINK points at the previous release $(basename "$PREV") but the web is down; act now (docs/burnticker/ROLLBACK.md)"
+  fi
+  exit 1
+fi
 if [ ! -d .next-old ]; then
   echo "NO PREVIOUS BUILD to swap back to (first deploy on this host); build $NEW stays in place and the web is NOT healthy"
   exit 1

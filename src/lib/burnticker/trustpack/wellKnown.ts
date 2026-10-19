@@ -1,4 +1,4 @@
-import { loadOperator, type Cluster } from "@/lib/burnticker/trustpack/operator";
+import { loadOperator, TODO_RE, type Cluster } from "@/lib/burnticker/trustpack/operator";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { loadTransparency } from "@/lib/burnticker/trust";
 import { lpLockPolicyJson } from "@/lib/burnticker/lockFees";
@@ -9,8 +9,10 @@ import { lpLockPolicyJson } from "@/lib/burnticker/lockFees";
  * belong to each other. Since 2026-10-10 each cluster also names its LP lock (LP locked forever; its fees fund the burn). Generated from config/burnticker/operator.json, the verified-build table and transparency.json by
  * `scripts/burnticker-trustpack.mts well-known --write` into BOTH public/.well-known/ (the Next app) and site/burnticker/.well-known/
  * (what Caddy serves at https://burnticker.com/.well-known/burnticker.json); the test holds both equal to this function's output.
- * Placeholders stay TODO_… strings, never blanks.
+ * Placeholders stay TODO_… strings in config/burnticker/operator.json (the owner fills them; the operator page says each in words). I-1
+ * (audit 2026-10-19): this public file states an unset value as null with a sentence saying why, never the raw TODO_ marker.
  */
+const unset = (v: string | null | undefined): string | null => (v && TODO_RE.test(v) ? null : v ?? null);
 
 export const WELL_KNOWN_PATHS = ["public/.well-known/burnticker.json", "site/burnticker/.well-known/burnticker.json"] as const;
 
@@ -34,8 +36,8 @@ export function buildWellKnown(root = process.cwd()): Record<string, unknown> {
     schema: "burnticker.well-known/v1",
     name: "Burnticker",
     updatedAt: op.updatedAt,
-    operator: { name: op.operator.name, state: op.operator.state, country: op.operator.country, contact: op.operator.contact, security: op.operator.security, entity: op.operator.entity },
-    links: { site: op.links.site, app: op.links.app, deficitSite: op.links.deficitSite, github: op.links.github, githubOrg: op.links.githubOrg, x: op.links.x },
+    operator: { name: op.operator.name, state: op.operator.state, country: op.operator.country, contact: op.operator.contact, security: op.operator.security, entity: unset(op.operator.entity), ...(unset(op.operator.entity) === null ? { entityPending: op.operator.entityPending ?? "No legal entity has been formed." } : {}) },
+    links: { site: op.links.site, app: op.links.app, deficitSite: op.links.deficitSite, github: op.links.github, githubOrg: unset(op.links.githubOrg), x: op.links.x },
     clusters: { devnet: cluster("devnet"), mainnet: cluster("mainnet") },
     security: { policy: `${op.links.github}/blob/main/SECURITY.md`, contact: op.operator.security, bountyWallet: t.howBuilt.bounty.wallet ?? "TODO_BOUNTY_WALLET", firmAudit: false },
     trust: {

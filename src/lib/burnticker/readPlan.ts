@@ -1,0 +1,118 @@
+import { isOneShot, type BurnRule } from "@/lib/burnticker/rules";
+
+/**
+ * THE KEEPER'S READ PLAN (owner 2026-10-19: "the keeper is only checking for results when it needs to"). Every selector used to be read
+ * on a fixed cadence (a feed's pollEverySec, five minutes for a market) from launch until the coin was retired. Now each read is planned:
+ *
+ *   NEVER   a selector no live coin needs any more: every coin on it has had its rule end recorded, or it is a one-shot (one market, one
+ *           game, one launch, one milestone; rules.ts isOneShot) whose single result is already recorded. selectorIdle says why.
+ *   DUE     the adapter's `dueAt` (oracle/types.ts ResolvedSelector): the earliest moment a new result CAN exist. A game is read at its
+ *           start plus the settle gap and then every few minutes until its final is confirmed (sources/gameSettle.ts gameDueAt); a team
+ *           or rivalry coin at its next listed game; a market at its stated close (Kalshi close_time; Polymarket's Gamma end date, with
+ *           Gamma's own closed flag checked hourly before it and no Polygon read until it closes). Honoured whether it is sooner or later
+ *           than the selector's poll, never sooner than READ_PLAN_MIN_GAP_MS and never later than READ_PLAN_MAX_IDLE_MS (the schedule is
+ *           looked at again at least weekly).
+ *   WINDOW  a published feed whose record states when it publishes (sources.json `readWindow`): read at its poll inside the window
+ *           until a read brings a new reading, then not again until the next window opens (Treasury's Debt to the Penny: business days
+ *           after 15:00 Eastern; a "read once per complete UTC day" feed: shortly after 00:00 UTC).
+ *   POLL    anything else: the selector's poll, as before.
+ *
+ * A failed read keeps the existing backoff (multiKeeper.ts fetchDue). Pure and client-safe.
+ */
+
+export const READ_PLAN_MIN_GAP_MS = 60_000;
+export const READ_PLAN_MAX_IDLE_MS = 7 * 86_400_000;
+
+/** When a published feed's new period can appear (sources.json `readWindow`). */
+export interface ReadWindow {
+  /** The publisher's clock: "UTC" or an IANA zone ("America/New_York"). */
+  tz: string;
+  /** Which local days the window opens: every day, or Monday to Friday (business days; a holiday costs one window of reads). */
+  days: "all" | "weekdays";
+  /** The local time the window opens, "HH:MM". */
+  opensAt: string;
+  /** How long the window stays open; inside it the feed is read at its poll until a read brings a new reading. */
+  hours: number;
+}
+
+const H = 3_600_000, DAY = 86_400_000;
+
+/** The zone's offset from UTC at an instant, in ms (local = utc + offset). */
+export function tzOffsetMs(tz: string, utcMs: number): number {
+  if (tz === "UTC") return 0;
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(utcMs));
+  const n = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const asUtc = Date.UTC(n("year"), n("month") - 1, n("day"), n("hour") % 24, n("minute"), n("second"));
+  return asUtc - Math.floor(utcMs / 1000) * 1000;
+}
+
+/** The UTC instant of a local wall time (the day's local midnight in `localDayMs`, a UTC-midnight timestamp, plus HH:MM). */
+function localToUtc(tz: string, localDayMs: number, hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  const wall = localDayMs + (h || 0) * H + (m || 0) * 60_000;
+  let utc = wall - tzOffsetMs(tz, wall);
+  utc = wall - tzOffsetMs(tz, utc);   // a second pass settles a DST edge
+  return utc;
+}
+
+const opensOn = (w: ReadWindow, localDayMs: number): boolean => { const d = new Date(localDayMs).getUTCDay(); return w.days === "all" || (d >= 1 && d <= 5); };
+
+/** The window openings around `now` (UTC instants), from two local days back to eight ahead, in order. */
+function openings(w: ReadWindow, now: number): number[] {
+  const localNow = now + tzOffsetMs(w.tz, now);
+  const today = Math.floor(localNow / DAY) * DAY;
+  const out: number[] = [];
+  for (let i = -2; i <= 8; i++) { const day = today + i * DAY; if (opensOn(w, day)) out.push(localToUtc(w.tz, day, w.opensAt)); }
+  return out;
+}
+
+/** The window open at `now` (its opening instant), or null. */
+export function openWindowAt(w: ReadWindow, now: number): number | null {
+  for (const o of openings(w, now)) if (o <= now && now < o + w.hours * H) return o;
+  return null;
+}
+
+/** The next window opening strictly after `now`. */
+export function nextWindowOpen(w: ReadWindow, now: number): number {
+  return openings(w, now).find((o) => o > now) ?? now + DAY;
+}
+
+/**
+ * A windowed feed's next read after a good read: inside an open window that has not brought a new reading yet, one poll later (if that
+ * is still inside it); otherwise the next opening.
+ */
+export function windowNextAt(w: ReadWindow, now: number, wroteNew: boolean, pollMs: number): number {
+  const open = openWindowAt(w, now);
+  if (open !== null && !wroteNew) { const t = now + pollMs; if (t < open + w.hours * H) return t; }
+  return nextWindowOpen(w, now);
+}
+
+/** The adapter's dueAt as the next read, bounded (null when the adapter gave none, or one already past). */
+export function dueNextAt(dueAt: number | null | undefined, now: number): number | null {
+  if (dueAt === null || dueAt === undefined || !Number.isFinite(dueAt)) return null;
+  return Math.min(Math.max(dueAt, now + READ_PLAN_MIN_GAP_MS), now + READ_PLAN_MAX_IDLE_MS);
+}
+
+/** What selectorIdle reads from the registry (a stub without ruleEnd or lastReading is read as "nothing recorded"). */
+export interface IdleRegistry<T> {
+  ruleEnd?(mint: string): unknown;
+  lastReading?(key: string): unknown;
+  lockedRule(t: T): { rule: BurnRule };
+}
+
+/**
+ * Why a selector needs no read at all, or null when it does: every coin on it has had its rule end recorded, or it is a one-shot whose
+ * single result is recorded (a decided or voided one-shot never settles again).
+ */
+export function selectorIdle<T extends { mint: string }>(reg: IdleRegistry<T>, key: string, tokens: readonly T[]): string | null {
+  if (!tokens.length) return "no live coin uses it";
+  const ended = (m: string): boolean => { try { const e = reg.ruleEnd?.(m); return e !== null && e !== undefined; } catch { return false; } };
+  if (tokens.every((t) => ended(t.mint))) return "every coin on it has ended its rule";
+  let rule: BurnRule;
+  try { rule = reg.lockedRule(tokens[0]).rule; } catch { return null; }
+  let recorded = false;
+  try { recorded = !!reg.lastReading?.(key); } catch { recorded = false; }
+  // a derby one-shot keeps its boundary samples in the readings table, so only a market or a first-party one-shot is judged by its reading
+  if (recorded && rule.oracle !== "derby" && isOneShot({ market: rule.market, oracle: rule.oracle, derby: rule.derby, series: rule.series })) return "a one-shot whose result is recorded";
+  return null;
+}

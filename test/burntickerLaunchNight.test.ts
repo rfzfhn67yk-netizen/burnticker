@@ -171,7 +171,8 @@ describe("5: a page from an earlier build says so", () => {
     const vc = read("src/app/burnticker/_components/VersionCheck.tsx");
     assert.match(vc, /window\.addEventListener\("focus", onFocus\)/); assert.match(vc, /mayCheck\(last\.current, now\)/);
     assert.equal((vc.match(/location\.reload\(\)/g) ?? []).length, 1, "the one reload is the button's"); assert.match(vc, /onClick=\{\(\) => window\.location\.reload\(\)\}/);
-    assert.match(read("src/app/api/burnticker/build/route.ts"), /\{ build: currentBuildId\(\), startedAt: processStartedAtMs\(\) \}, \{ headers: \{ "cache-control": "no-store" \} \}/);
+    // I-13 (2026-10-19): the release record rides along; build and startedAt are unchanged
+    assert.match(read("src/app/api/burnticker/build/route.ts"), /const build = currentBuildId\(\);[\s\S]*\{ build, startedAt: processStartedAtMs\(\), release \}, \{ headers: \{ "cache-control": "no-store" \} \}/);
   });
 });
 

@@ -163,6 +163,13 @@ async function preflightNative(rule: BurnRule, deps: PreflightDeps, now: number)
   return result(rule, now, part, null);
 }
 
+/** The launch check's chain reads for a Polymarket series: the newest settled markets only. */
+export const PREFLIGHT_CHAIN_READS = 3;
+/** What the launch check says when today's Polygon requests are used up (apiBudget.ts hold; it lifts at 00:00 UTC). */
+export const POLYGON_HOLD_REASON = "The Polygon reads this site may make today are used up, so the on-chain payout cannot be checked right now. They start again at 00:00 UTC. Please try this check again after that.";
+/** A day hold on the Polygon source (never a busy rate bucket), also when the RPC reader wrapped it. */
+const polygonHeld = (e: unknown): boolean => /today's request budget is spent/.test(String((e as { message?: unknown } | null)?.message ?? ""));
+
 async function preflightPolymarket(rule: BurnRule, deps: PreflightDeps, now: number): Promise<PreflightResult> {
   const pm = deps.polymarket;
   const id = selectorOf(rule);
@@ -174,7 +181,7 @@ async function preflightPolymarket(rule: BurnRule, deps: PreflightDeps, now: num
     try { m = await pm.marketByCondition(rule.market); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: safeErrorText(e, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${rule.market}. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
     if (!m) return result(rule, now, { primary: primaryBase }, { code: "unknown-selector", reason: `Polymarket does not know the market ${rule.market}.` });
     let chain;
-    try { chain = await pm.readChain(rule.market); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 160) } }, { code: "primary-unreadable", reason: `The on-chain payout for ${rule.market} could not be read on Polygon. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
+    try { chain = await pm.readChain(rule.market); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 160) } }, { code: "primary-unreadable", reason: polygonHeld(e) ? POLYGON_HOLD_REASON : `The on-chain payout for ${rule.market} could not be read on Polygon. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
     const cr = chainResult(chain), gr = gammaResult(m);
     const at = settledAtOf(m) ?? new Date(now).toISOString();
     const primary = { ...primaryBase, lastReading: cr ? { id: rule.market, value: null, result: cr, at } : null };
@@ -186,7 +193,8 @@ async function preflightPolymarket(rule: BurnRule, deps: PreflightDeps, now: num
   }
   const since = new Date((pm.clock?.() ?? now) - 30 * 86_400_000).toISOString();
   let chainRead, gammaRead;
-  try { chainRead = await pm.settledSince(rule, since, { limitPages: 2 }); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 160) } }, { code: "primary-unreadable", reason: `This rule's settled markets could not be read on Polygon. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
+  // 2026-10-19: the check proves the reader on the newest few settled markets (PREFLIGHT_CHAIN_READS), not a 30-day backlog of up to 40
+  try { chainRead = await pm.settledSince(rule, since, { limitPages: 2, chainCap: PREFLIGHT_CHAIN_READS }); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 160) } }, { code: "primary-unreadable", reason: polygonHeld(e) ? POLYGON_HOLD_REASON : `This rule's settled markets could not be read on Polygon. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
   try { gammaRead = await pm.gammaSettled(rule, since, 2); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: safeErrorText(e, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${id}. The error was: ${safeErrorText(e, 120)}`, status: 502 }); }
   const last = chainRead.events[chainRead.events.length - 1] ?? null;
   const g = last ? gammaRead.events.find((e) => e.id === last.id) ?? null : null;

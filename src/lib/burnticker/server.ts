@@ -4,6 +4,7 @@ import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
 import { LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { envGameDeps, polymarketGameReaders } from "@/lib/burnticker/sources/gameSettle";
+import { statusPayoutStore } from "@/lib/burnticker/oracle/payoutStore";
 import { allowHostedMetadata, customImagesEnabled, uploaderFromEnv, type PinUploader } from "@/lib/burnticker/pin";
 import fs from "node:fs";
 import path from "node:path";
@@ -152,7 +153,10 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const derbyHermes = (env.BURNTICKER_PYTH_API_KEY ?? "").trim() ? HermesClient.fromEnv(env) : null;
   const derby = new DerbyAdapter({ registry, hermes: derbyHermes, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now() });
   // Team coins: games settle on their Polymarket on-chain payout where a moneyline market exists, else TheSportsDB (gameSettle.ts).
-  setNativeClients({ games: { ...envGameDeps(env), ...(polymarketDiscoveryEnabled(env) ? polymarketGameReaders(polymarket) : { market: null, payout: null }) } });
+  // 2026-10-19 (the web's Polygon share held at 09:19 Denver): a reported payout vector is stored in the registry the first time any role
+  // reads it and served from there; a game read on this host never waits on Polygon (nonBlocking: stored or held now, else "not read yet")
+  polymarket.payoutStore = statusPayoutStore(registry, "web");
+  setNativeClients({ games: { ...envGameDeps(env), ...(polymarketDiscoveryEnabled(env) ? polymarketGameReaders(polymarket, { nonBlocking: true }) : { market: null, payout: null }) } });
   cached = {
     registry, derbyPools, derbyHermes, seasonSchedule: (league, days) => espnClient().upcoming(league, days), teamSeason: (league, team, year) => espnClient().season(league, team, year),
     oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, kalshi, polymarket, program, launchLab, cluster,

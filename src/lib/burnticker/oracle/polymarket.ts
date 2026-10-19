@@ -4,8 +4,9 @@ import type { EventResult, SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { finalAfter, statedSource, type FinalAfter, type StatedSource } from "@/lib/burnticker/sources/polyStated";
 import { DEFAULT_POLYGON_RPCS, POLYGON_CHAIN_ID, POLYMARKET_CTF, readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
-import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { apiBudget, sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 import { LruMap } from "@/lib/burnticker/lru";
+import type { PayoutStore } from "@/lib/burnticker/oracle/payoutStore";
 
 /**
  * THE POLYMARKET ORACLE (2026-10-10; the owner: "do both" — Polymarket as a full second adjudicated oracle, tier 1, beside Kalshi).
@@ -44,6 +45,17 @@ export const POLYMARKET_SITE = "https://polymarket.com";
 export const POLYGONSCAN_CTF = `https://polygonscan.com/address/${POLYMARKET_CTF}#readContract`;
 export const POLY_UA = "burnticker/0.1 (+https://github.com/; event-indexed burn receipts; settled results only)";
 export const POLY_TTL_MS = 600_000;
+/** An UNRESOLVED payout vector is kept in memory this long per condition (owner 2026-10-19); a reported one is stored for good (payoutStore.ts). */
+export const CHAIN_UNRESOLVED_TTL_MS = 300_000;
+/**
+ * A background read for a page build (peekOrSchedule) runs only while the site has used less than this share of its day of Polygon
+ * requests, so pages can never put the source on hold and the launch check keeps the rest.
+ */
+export const BACKGROUND_BUDGET_SHARE = 0.5;
+/** At most this many background reads start per CHAIN_UNRESOLVED_TTL_MS window (a team coin's back-test lists a season of games). */
+export const BACKGROUND_READS_PER_WINDOW = 8;
+/** Before a one-market coin's stated close, Gamma's closed flag is checked this often (no Polygon read until it closes). */
+export const POLY_PRECLOSE_CHECK_MS = 3_600_000;
 
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const num = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null);
@@ -374,6 +386,10 @@ export interface PolymarketClientOpts {
   /** At most this many on-chain reads per settledSince call (oldest first); the rest wait for the next cycle. */
   chainCap?: number;
   ttlMs?: number;
+  /** How long an unresolved payout vector is kept in memory (CHAIN_UNRESOLVED_TTL_MS). */
+  chainTtlMs?: number;
+  /** Reported payout vectors, stored the first time any role reads them (payoutStore.ts); null keeps them in memory only. */
+  payoutStore?: PayoutStore | null;
   /** The refuse list over market questions (server.ts passes config/burnticker/refuse.json; null in pure tests). */
   refuse?: TitleRefuser | null;
 }
@@ -396,6 +412,14 @@ export class PolymarketClient implements OracleAdapter {
   // prelaunch audit M8 (2026-10-15): bounded; a search URL is per query, so the cache grew with every distinct visitor query
   private cache = new LruMap<string, { at: number; body: unknown }>(1_000);
   private chainCache = new LruMap<string, { at: number; r: ConditionResolution }>(5_000);
+  private chainTtl: number;
+  /** One RPC read per condition at a time: concurrent callers share it. */
+  private chainInflight = new Map<string, Promise<ConditionResolution>>();
+  /** When a background read (peekOrSchedule) last started per condition, so a page build schedules at most one per CHAIN_UNRESOLVED_TTL_MS. */
+  private backgroundAt = new LruMap<string, number>(5_000);
+  private backgroundStarts: number[] = [];
+  /** Reported payout vectors (payoutStore.ts): the server and the keeper set the registry's store; null in pure tests. */
+  payoutStore: PayoutStore | null;
   private lastAt = 0;
   private chain: Promise<void> = Promise.resolve();
   /** Gamma requests actually sent (the tests' politeness checks). */
@@ -421,6 +445,8 @@ export class PolymarketClient implements OracleAdapter {
     this.pageSize = o.pageSize ?? 50;
     this.chainCap = o.chainCap ?? 40;
     this.ttl = o.ttlMs ?? POLY_TTL_MS;
+    this.chainTtl = o.chainTtlMs ?? CHAIN_UNRESOLVED_TTL_MS;
+    this.payoutStore = o.payoutStore ?? null;
     this.refuse = o.refuse ?? null;
   }
 
@@ -449,18 +475,72 @@ export class PolymarketClient implements OracleAdapter {
   }
 
   /**
-   * The CTF payout vector of one condition. A resolved vector is cached for good (it cannot change); an unresolved one for 10 minutes.
-   * `fresh` reads the RPC again whatever is cached (2026-10-18 review: a game coin settled on the payout alone checks it on a second RPC
+   * The CTF payout vector of one condition. A REPORTED vector is immutable on chain (reportPayouts cannot run twice), so the first one read
+   * by any role is stored (payoutStore, the registry's status table) and every later read is served from it, across restarts and roles;
+   * an unresolved one is kept in memory for CHAIN_UNRESOLVED_TTL_MS (5 minutes). Concurrent reads of one condition share one RPC read.
+   * `fresh` reads the RPC again whatever is held (2026-10-18 review: a game coin settled on the payout alone checks it on a second RPC
    * read, so one bad RPC answer is never counted twice); chainFetchedAt says when the answer now held was read.
    */
   async readChain(conditionId: string, o: { fresh?: boolean } = {}): Promise<ConditionResolution> {
+    if (!o.fresh) { const held = this.peekChain(conditionId); if (held) return held; }
+    const cid = conditionId.toLowerCase();
+    const key = `${cid}${o.fresh ? "#fresh" : ""}`;
+    const running = this.chainInflight.get(key);
+    if (running) return running;
+    const p = (async () => {
+      const r = await readConditionResolution(conditionId, { rpcUrls: this.rpcUrls, fetchImpl: this.rpcFetch, timeoutMs: this.timeoutMs });
+      this.chainReads.push(conditionId);
+      this.rpcUrls = [r.rpcUrl, ...this.rpcUrls.filter((u) => u !== r.rpcUrl)];   // the RPC that answered goes first next time
+      const at = this.now();
+      this.chainCache.set(conditionId, { at, r });
+      if (r.resolved) this.payoutStore?.put(r, { readAt: at, proof: proofOf(r) });
+      return r;
+    })();
+    this.chainInflight.set(key, p);
+    try { return await p; } finally { this.chainInflight.delete(key); }
+  }
+
+  /**
+   * The payout vector held for a condition WITHOUT reading the chain: the stored reported vector, else what this client read within the
+   * last CHAIN_UNRESOLVED_TTL_MS (a reported one read in this process is kept for good). Null: not read yet.
+   */
+  peekChain(conditionId: string): ConditionResolution | null {
     const hit = this.chainCache.get(conditionId);
-    if (hit && !o.fresh && (hit.r.resolved || this.now() - hit.at < this.ttl)) return hit.r;
-    const r = await readConditionResolution(conditionId, { rpcUrls: this.rpcUrls, fetchImpl: this.rpcFetch, timeoutMs: this.timeoutMs });
-    this.chainReads.push(conditionId);
-    this.rpcUrls = [r.rpcUrl, ...this.rpcUrls.filter((u) => u !== r.rpcUrl)];   // the RPC that answered goes first next time
-    this.chainCache.set(conditionId, { at: this.now(), r });
-    return r;
+    if (hit && (hit.r.resolved || this.now() - hit.at < this.chainTtl)) return hit.r;
+    const stored = this.payoutStore?.get(conditionId) ?? null;
+    if (stored) { this.chainCache.set(conditionId, { at: stored.readAt, r: stored.r }); return stored.r; }
+    return null;
+  }
+
+  /**
+   * FOR A PAGE BUILD (owner 2026-10-19: no Polygon read on a page build): what peekChain holds, now; when nothing is held, one read is
+   * started in the background (never awaited) at most once per condition per CHAIN_UNRESOLVED_TTL_MS, and only while this process has
+   * used less than BACKGROUND_BUDGET_SHARE of its day of Polygon requests. The page shows "not read yet" until a later build finds it.
+   */
+  peekOrSchedule(conditionId: string): ConditionResolution | null {
+    const held = this.peekChain(conditionId);
+    if (held) return held;
+    const now = this.now();
+    const last = this.backgroundAt.get(conditionId);
+    if (last !== undefined && now - last < this.chainTtl) return null;
+    try {
+      const src = sourceForUrl(this.rpcUrls[0] ?? "");
+      const b = apiBudget();
+      if (b.isHeld(src) || b.used(src) >= BACKGROUND_BUDGET_SHARE * b.dayBudget(src)) return null;
+    } catch { /* the budget is advisory here; take() still guards every request */ }
+    this.backgroundStarts = this.backgroundStarts.filter((t) => now - t < this.chainTtl);
+    if (this.backgroundStarts.length >= BACKGROUND_READS_PER_WINDOW) return null;
+    this.backgroundStarts.push(now);
+    this.backgroundAt.set(conditionId, now);
+    this.readChain(conditionId).catch(() => { /* not read yet; the next window may try again */ });
+    return null;
+  }
+
+  /** readChain, but an unresolved vector read less than `maxAgeMs` ago is answered from memory (a reported one always is). */
+  async readChainAtMost(conditionId: string, maxAgeMs: number): Promise<ConditionResolution> {
+    const hit = this.chainCache.get(conditionId);
+    if (hit && !hit.r.resolved && this.now() - hit.at < maxAgeMs) return hit.r;
+    return this.readChain(conditionId);
   }
 
   /** When the payout vector held for a condition was read from the RPC (this client's clock), or null. */
@@ -542,16 +622,29 @@ export class PolymarketClient implements OracleAdapter {
    * at most chainCap per call); resolvePolymarket keeps only payout vectors the chain has. Throws when every chain read failed, so the
    * keeper backs off instead of recording nothing.
    */
-  async settledSince(rule: BurnRule, sinceIso: string | null, opts: { limitPages?: number } = {}): Promise<ResolvedSelector> {
+  async settledSince(rule: BurnRule, sinceIso: string | null, opts: { limitPages?: number; /** at most this many chain reads, the NEWEST closed markets (the launch check: proof the reader works, not a backlog) */ chainCap?: number } = {}): Promise<ResolvedSelector> {
     const scan = await this.candidates(rule, { closed: true, sinceIso, pages: opts.limitPages });
-    const wanted = scan.markets.filter((m) => polySelectorMatches(rule, m) && (rule.market !== null || m.closed) && (sinceIso === null || (settledAtOf(m) ?? "9") > sinceIso))
-      .sort((a, b) => (settledAtOf(a) ?? "9").localeCompare(settledAtOf(b) ?? "9"));
-    const toRead = wanted.slice(0, this.chainCap);
+    // NOT BEFORE THE STATED CLOSE (owner 2026-10-19): one market that Gamma lists open with its end date still ahead has no payout to read
+    // yet, so Polygon is not asked; the next read is the end date, or Gamma's own closed flag an hour later (an early resolution is
+    // still seen within the hour, from Gamma alone)
+    const now = this.now();
+    let notBefore: number | null = null;
+    const wanted = scan.markets.filter((m) => {
+      if (!polySelectorMatches(rule, m)) return false;
+      if (rule.market !== null && !m.closed) {
+        const end = m.endDate ? Date.parse(m.endDate) : NaN;
+        if (Number.isFinite(end) && end > now) { notBefore = Math.min(end, now + POLY_PRECLOSE_CHECK_MS); return false; }
+      }
+      return (rule.market !== null || m.closed) && (sinceIso === null || (settledAtOf(m) ?? "9") > sinceIso);
+    }).sort((a, b) => (settledAtOf(a) ?? "9").localeCompare(settledAtOf(b) ?? "9"));
+    const toRead = opts.chainCap !== undefined ? wanted.slice(-Math.max(0, opts.chainCap)) : wanted.slice(0, this.chainCap);
     const cands: PolyCandidate[] = [];
     let failed = 0;
     for (const m of toRead) {
       if (this.refuse?.([m.question, ...(m.eventTitle ? [m.eventTitle] : [])]).length) { cands.push({ market: m, chain: null }); continue; }
-      try { cands.push({ market: m, chain: await this.readChain(m.conditionId) }); } catch (e) { failed++; cands.push({ market: m, chain: null, chainError: (e as Error).message }); }
+      // past its end date but not closed on Gamma (UMA has not resolved it yet, or a dispute runs for days): the chain is asked at most
+      // hourly, Gamma's closed flag at the market cadence; once Gamma closes it, every cycle until the payout vector is on chain
+      try { cands.push({ market: m, chain: await this.readChainAtMost(m.conditionId, rule.market !== null && !m.closed ? POLY_PRECLOSE_CHECK_MS : this.chainTtl) }); } catch (e) { failed++; cands.push({ market: m, chain: null, chainError: (e as Error).message }); }
     }
     if (toRead.length > 0 && failed === toRead.length) throw new Error(`polymarket: every on-chain read failed (${cands[0].chainError?.slice(0, 160)})`);
     const r = resolvePolymarket(rule, cands, { sinceIso, refuse: this.refuse });
@@ -565,7 +658,8 @@ export class PolymarketClient implements OracleAdapter {
       }
       r.events = kept;
     }
-    if (wanted.length > toRead.length) { r.refusals.push(`${wanted.length - toRead.length} more closed ${wanted.length - toRead.length === 1 ? "market waits" : "markets wait"} for the next cycle, because each cycle reads at most ${this.chainCap} results on chain.`); r.awaitingFinal += wanted.length - toRead.length; }
+    if (notBefore !== null && !r.dueAt) r.dueAt = notBefore;
+    if (opts.chainCap === undefined && wanted.length > toRead.length) { r.refusals.push(`${wanted.length - toRead.length} more closed ${wanted.length - toRead.length === 1 ? "market waits" : "markets wait"} for the next cycle, because each cycle reads at most ${this.chainCap} results on chain.`); r.awaitingFinal += wanted.length - toRead.length; }
     if (!scan.complete) r.refusals.push(`The scan stopped after ${scan.pages} ${scan.pages === 1 ? "page" : "pages"} of ${this.pageSize}, before reaching ${sinceIso ?? "the start"}. This rule settles more markets than one cycle reads.`);
     return r;
   }

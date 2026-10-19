@@ -100,7 +100,7 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
     const p = programFacts({}, ROOT);
     assert.match(p.hostWiring, /^This site is not connected to a burn program\./);
     const br = p.chain.find((c) => c.library === "burn_receipts")!;
-    assert.match(br.devnet, /^deployed/); assert.match(br.mainnet, /^deployed \(read 2026-10-16\)/);   // the round-5 read-back (third prelaunch audit, 2026-10-16)
+    assert.match(br.devnet, /^deployed/); assert.match(br.mainnet, /^deployed \(read 2026-10-16, and the bytes match the recorded build; upgrade authority 8zsH/);   // the round-5 read-back (third prelaunch audit, 2026-10-16)
     assert.match(p.compiled, /^The burn program's address, compiled into the program and its interface file \(IDL\), is AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM\.$/);
     assert.ok(!p.verify.some((v) => /not deployed yet/.test(v)), "no 'not deployed' line on a host that is merely not wired");
     const page = read("src/app/burnticker/trust/page.tsx");

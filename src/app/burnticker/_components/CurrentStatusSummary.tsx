@@ -48,7 +48,7 @@ export function CurrentStatusSummary({ card, compact = false }: { card: string; 
       <ul className="mt-1 list-disc pl-5 text-xs text-neutral-200 space-y-0.5">{s.lines.map((l) => <SummaryLine key={l} l={l} />)}</ul>
       <p className="mt-1 text-xs text-neutral-500">{s.host.line}</p>
       <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-300">The deployed programs and who can upgrade them</summary>
-        <ul className="mt-1 space-y-1">{s.programs.map((p) => <li key={p.name}><code>{p.name}</code> <code className="text-neutral-500 break-all">{p.programId}</code>, {p.version}. {p.devnet.deployed ? `It is deployed on devnet${p.devnet.matchesBuild ? ", and its bytes match the build" : ""}. ${upgradeAuthorityText(p.devnet)}` : "It is not deployed on devnet."} {p.mainnet.line}</li>)}</ul>
+        <ul className="mt-1 space-y-1">{s.programs.map((p) => <li key={p.name}><code>{p.name}</code> <code className="text-neutral-500 break-all">{p.programId}</code>, {p.version}. {p.devnet.deployed ? `It is deployed on devnet${p.devnet.matchesBuild ? ", and its bytes match the build" : ""}. ${upgradeAuthorityText(p.devnet, "devnet")}` : "It is not deployed on devnet."} {p.mainnet.line}</li>)}</ul>
         <ul className="mt-1 space-y-1">{s.upgradeAuthority.map((u) => <li key={u.cluster}>{u.line} The vault is <code className="break-all">{u.vault}</code>, and it needs {u.threshold} approvals. <span className="text-neutral-500">{u.why}</span></li>)}</ul>
       </details>
       <details className="mt-1 text-xs"><summary className="cursor-pointer text-neutral-300">Where each kind of result comes from</summary>

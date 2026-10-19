@@ -223,6 +223,33 @@
 			import security
 			import app_fallback_page
 		}
+		# audit 2026-10-19 P-2: a path the static site does not have answered a 0-byte white page. It now gets the site's 404 page (links
+		# home and to /burnticker), and any other static error the site's error page, with the real status. The app's own 404s never come
+		# here (reverse_proxy passes them through), so this cannot touch an app answer.
+		@static_404 {
+			expression {err.status_code} == 404
+			not path /api/burnticker/*
+		}
+		handle @static_404 {
+			import security
+			root * /var/www/burnticker/notfound
+			rewrite * /index.html
+			header Cache-Control "no-store"
+			file_server {
+				status 404
+			}
+		}
+		# an API path keeps Caddy's plain error (a bot reads the status, not a page)
+		@static_err not path /api/burnticker/*
+		handle @static_err {
+			import security
+			root * /var/www/burnticker/error
+			rewrite * /index.html
+			header Cache-Control "no-store"
+			file_server {
+				status {err.status_code}
+			}
+		}
 	}
 
 	# The public status page also lives under /status/ on the apex (relative links need the trailing slash).

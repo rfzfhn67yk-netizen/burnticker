@@ -129,6 +129,8 @@ export function selectorMatches(rule: BurnRule, m: KalshiMarket): boolean {
 export const marketApiUrl = (ticker: string): string => `${KALSHI_API}/markets/${encodeURIComponent(ticker)}`;
 export const seriesApiUrl = (ticker: string): string => `${KALSHI_API}/series/${encodeURIComponent(ticker)}`;
 export const settledMarketsUrl = (series: string, limit = 200, cursor: string | null = null): string => `${KALSHI_API}/markets?series_ticker=${encodeURIComponent(series)}&status=settled&limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+/** A series' closed markets that are not settled yet (the keeper's next-read check: one of them keeps the poll). */
+export const closedMarketsUrl = (series: string, limit = 100): string => `${KALSHI_API}/markets?series_ticker=${encodeURIComponent(series)}&status=closed&limit=${limit}`;
 export const openMarketsUrl = (series: string, limit = 100): string => `${KALSHI_API}/markets?series_ticker=${encodeURIComponent(series)}&status=open&limit=${limit}`;
 export const eventsUrl = (series: string, status = "open", cursor: string | null = null): string => `${KALSHI_API}/events?series_ticker=${encodeURIComponent(series)}&status=${encodeURIComponent(status)}&with_nested_markets=true&limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
 export const seriesListUrl = (category?: string): string => `${KALSHI_API}/series${category ? `?category=${encodeURIComponent(category)}` : ""}`;
@@ -305,7 +307,18 @@ export class KalshiClient implements OracleAdapter {
       rule.market ? parseMarketsBody({ markets: [(await this.get(marketApiUrl(rule.market), this.ttl.settled) as { market?: unknown })?.market] }).markets : this.settledMarkets(series, sinceIso, opts.limitPages),
       this.seriesInfo(series).catch(() => null),
     ]);
-    return resolveSelector(rule, markets, { nowMs: this.now(), sinceIso, settlementSourceUrl: info?.settlementSource?.url ?? null });
+    const r = resolveSelector(rule, markets, { nowMs: this.now(), sinceIso, settlementSourceUrl: info?.settlementSource?.url ?? null });
+    // THE NEXT READ (owner 2026-10-19): nothing can settle before a market's stated close, so with nothing awaiting the next read is the
+    // earliest close among the selector's open markets (one market: its own close; a series: the open list, one cached read)
+    if (r.awaitingFinal === 0) {
+      const now = this.now();
+      // a series market that has closed but is not settled yet is on neither list: while one exists the poll stays (it settles soon)
+      const closedWaiting = rule.market ? false : await this.get(closedMarketsUrl(series), this.ttl.open).then((b) => parseMarketsBody(b).markets.some((m) => selectorMatches(rule, m) && !isFinal(m, now)), () => true);
+      const open = rule.market ? markets.filter((m) => !isFinal(m, now)) : closedWaiting ? [] : await this.openMarkets(series).then((ms) => ms.filter((m) => selectorMatches(rule, m))).catch(() => [] as KalshiMarket[]);
+      const next = open.map((m) => (m.closeTime ? Date.parse(m.closeTime) : NaN)).filter((t) => Number.isFinite(t) && t > now).sort((a, b) => a - b)[0];
+      if (next !== undefined) r.dueAt = next;
+    }
+    return r;
   }
 
   /** Open (or closed / settled) events of one series with their nested markets; cached 10 minutes per series; at most `pages` pages of 200. */

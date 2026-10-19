@@ -5,7 +5,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { validateRule } from "@/lib/burnticker/rules";
-import { eventValue, fixtureFetch, impliedChanceFrom, isFinal, KalshiClient, parseMarketsBody, parseSeriesBody, resolveSelector, selectorMatches, settledMarketsUrl, seriesApiUrl, openMarketsUrl, seriesListUrl, type KalshiMarket } from "@/lib/burnticker/oracle/kalshi";
+import { eventValue, fixtureFetch, impliedChanceFrom, isFinal, KalshiClient, parseMarketsBody, parseSeriesBody, resolveSelector, selectorMatches, settledMarketsUrl, seriesApiUrl, openMarketsUrl, closedMarketsUrl, seriesListUrl, type KalshiMarket } from "@/lib/burnticker/oracle/kalshi";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { loadRefuseList, nameRefusals, parseRefuseList, refusalsFor } from "@/lib/burnticker/oracle/refuse";
 import { gammaResult, parseGammaMarket, settledMarketUrl } from "@/lib/burnticker/oracle/polymarket";
@@ -150,6 +150,8 @@ describe("kalshi: the client", () => {
     [settledMarketsUrl("KXNFLGAME")]: fx("kalshi/KXNFLGAME.settled.json"),
     [seriesApiUrl("KXNFLGAME")]: fx("kalshi/series.KXNFLGAME.json"),
     [openMarketsUrl("KXHIGHDEN")]: fx("kalshi/KXHIGHDEN.open.json"),
+    // the keeper's next-read check (2026-10-19): a series' closed, not yet settled markets, then its open ones
+    [closedMarketsUrl("KXNFLGAME")]: { cursor: "", markets: [] }, [openMarketsUrl("KXNFLGAME")]: { cursor: "", markets: [] },
     [seriesListUrl("Sports")]: { series: [(fx("kalshi/series.KXNFLGAME.json") as { series: unknown }).series] },
     [seriesListUrl("Climate and Weather")]: { series: [(fx("kalshi/series.KXHIGHDEN.json") as { series: unknown }).series] },
   };

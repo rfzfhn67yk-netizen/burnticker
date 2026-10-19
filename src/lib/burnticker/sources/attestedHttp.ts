@@ -1,3 +1,4 @@
+import type { ReadWindow } from "@/lib/burnticker/readPlan";
 import type { BurnRule, Direction } from "@/lib/burnticker/rules";
 import { canonicalDecimal, numToDec, type CarryPolicy, type SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
@@ -49,6 +50,8 @@ export interface FanOutBody { __parts: { key?: string; day?: string; body: unkno
 
 export interface HttpSourceConfig {
   id: string; kind: "attested-http"; tier: Tier; title: string; sourceName: string; sourceUrl: string; cadence: string; pollEverySec: number;
+  /** When the publisher's new period can appear (readPlan.ts ReadWindow, owner 2026-10-19): the keeper reads inside it only. Absent: the poll. */
+  readWindow?: ReadWindow;
   request: { url: string; method?: "GET" | "POST"; body?: string; headers?: Record<string, string>; format: "json" | "csv" | "text"; fanOut?: FanOut };
   select: SelectRows & {
     /** Scalar series: the row's value field (or CSV column). */

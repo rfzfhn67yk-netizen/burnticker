@@ -14,7 +14,7 @@ Shared facts every pitch may use (and nothing else):
 | A coin's own trading fees buy it back on its own pool and the `burn_receipts` program burns everything bought, in one instruction, with a memo | Powers Register `crank_buyback` (`docs/burn-receipts/powers-register.md`) |
 | Settled on a primary source with an independent cross-read, or on the on-chain payout of an adjudicated Polymarket market | `docs/burnticker/SETTLEMENT-COVERAGE.md` (5 settleable · 6 adjudicated-only · 0 uncovered) |
 | Creators earn nothing; the creator-fee slot pays the burn pool, 100 % | `src/lib/burnticker/fees.ts` (`CREATOR_FEE_SLICE_BPS = 0`, `BURN_POOL_CURVE_BPS = 50`) |
-| Zero team allocation; the platform never buys any coin, including its own | `config/burnticker/transparency.json` policies `no-creator-cash`, `platform-never-buys` |
+| Zero team allocation; the platform buys no coin except one test coin, including its own | `config/burnticker/transparency.json` policies `no-creator-cash`, `platform-never-buys` |
 | LP locked forever at graduation; its fees fund the burn (80 % burned, 20 % operator, fixed in code) | `src/lib/burnticker/lockFees.ts` (`LP_LOCKED_PCT = 100`, `LOCK_FEE_BURN_BPS = 8000`, `LOCK_FEE_OPERATOR_BPS = 2000`); decisions.md 2026-10-10 "LP locked forever" |
 | The operator earns 20 % of post-graduation LP fees (4.2 bps of volume), besides the 25 bps curve fee — say it when the fee comes up | `fees.ts` `POST_GRADUATION_FEES`; the trust page and `/fees/ledger` show it |
 | Rules locked at launch (hash in the on-chain config and in every receipt) | Powers Register `initialize_token` ("change anything afterwards" is listed under cannot) |
@@ -37,11 +37,11 @@ Coins that burn on real-world results, and every burn has a receipt you can reco
 ```text pitch
 A Solana launchpad where a coin burns when a real result settles: a game, a Treasury figure, a weather reading.
 The coin's own fees buy it back and a program burns all of it, with the numbers in the memo.
-Creators earn nothing, zero team allocation, LP locked forever (its fees fund the burn), and the platform never buys any coin.
+Creators earn nothing, zero team allocation, LP locked forever (its fees fund the burn), and the platform buys no coin except one test coin.
 ```
 
 ```text pitch
-Burnticker is a Solana memecoin launchpad built on Raydium LaunchLab. Each coin carries one locked rule: which settled result burns it and what share of its own fee pool each burn spends. When the result settles on its primary source and a second publisher agrees, the burn_receipts program buys the coin on its own pool and burns everything it bought, in one instruction, and the memo on that transaction is the receipt — source, reading, units, spent, burned, rule hash. Creators earn nothing from fees (the creator slot pays the burn pool, 100%), there is no team allocation, the LP is locked forever at graduation with its fees split by code (80% to the burn pool, 20% to the operator), and the platform never buys any coin. A memecoin: the rule says what supply does, not what price does.
+Burnticker is a Solana memecoin launchpad built on Raydium LaunchLab. Each coin carries one locked rule: which settled result burns it and what share of its own fee pool each burn spends. When the result settles on its primary source and a second publisher agrees, the burn_receipts program buys the coin on its own pool and burns everything it bought, in one instruction, and the memo on that transaction is the receipt — source, reading, units, spent, burned, rule hash. Creators earn nothing from fees (the creator slot pays the burn pool, 100%), there is no team allocation, the LP is locked forever at graduation with its fees split by code (80% to the burn pool, 20% to the operator), and the platform buys no coin except one test coin. A memecoin: the rule says what supply does, not what price does.
 ```
 
 **Proof:** a real program burn with its memo — devnet rehearsal, 2026-10-06, 23 units → 4,010,874.87 test $DEFICIT burned, transaction

@@ -111,7 +111,7 @@ export interface CurrentStatus {
   phase: { label: string; line: string };
   host: { cluster: string; programIdWired: boolean; creatorLaunchesOpen: boolean; /** website-12: a launch started on this site can be signed (siteLaunchState.canSign) */ canSign: boolean; line: string };
   networks: { cluster: Cluster; role: string; deployment: string; since: string | null }[];
-  programs: { name: string; programId: string; version: string; note: string; verifiedBuild: string; devnet: { deployed: boolean; matchesBuild: boolean | null; upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt: string | null; recordedUpgradeAuthority: string | null }; mainnet: { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string } }[];
+  programs: { name: string; programId: string; version: string; note: string; verifiedBuild: string; devnet: { deployed: boolean; matchesBuild: boolean | null; upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt: string | null; recordedUpgradeAuthority: string | null }; mainnet: { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string; matchesBuild?: boolean | null } }[];
   upgradeAuthority: { cluster: Cluster; vault: string; multisig: string; threshold: string; members: number | null; timeLockSecs: number | null; timeLockSource: "chain" | "unavailable"; plannedTimeLockSecs: number; plannedFrom: string | null; why: string; line: string }[];
   attesters: StatusFileFull["attesters"]; settlement: StatusFileFull["settlement"]; reviews: StatusFileFull["reviews"];
   releaseRequirements: StatusFileFull["releaseRequirements"]; design: string[]; historical: StatusFileFull["historical"];
@@ -133,9 +133,15 @@ export function devnetAuthority(live: ProgramRead | undefined, recorded: string 
  * successful chain read; "not deployed" only when the read succeeded (or no read was made and the record says so); "unknown" when a
  * read was made and failed before it reached this program.
  */
-export function mainnetDeployment(recorded: boolean, facts: ChainFacts | undefined, programId: string): { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string } {
+export function mainnetDeployment(recorded: boolean, facts: ChainFacts | undefined, programId: string, build?: { matchesBuild: boolean; upgradeAuthority: string; readAt?: string } | null): { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string; matchesBuild?: boolean | null } {
   const live = facts?.programs[programId];
-  if (recorded || live?.deployed) return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: "It is deployed on mainnet." };
+  if (recorded || live?.deployed) {
+    // I-1 (audit 2026-10-19): the mainnet read-back is stated too (bytes and authority), never only devnet's
+    const auth = live?.deployed && live.authorityRead === "decoded" ? (live.upgradeAuthority ? `Its mainnet upgrade authority is ${live.upgradeAuthority}, read from chain.` : "It has no mainnet upgrade authority, read from chain.")
+      : build ? `Its mainnet upgrade authority is ${build.upgradeAuthority}, as recorded in verified-build.json${build.readAt ? ` on ${build.readAt}` : ""}.` : "";
+    const bytes = build ? (build.matchesBuild ? " Its bytes there match this repository's recorded build." : " Its bytes there DO NOT match the recorded build.") : "";
+    return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: `It is deployed on mainnet.${bytes}${auth ? ` ${auth}` : ""}`, ...(build ? { matchesBuild: build.matchesBuild } : {}) };
+  }
   if (live) return { deployed: false, source: "chain", line: "It is not deployed on mainnet yet." };
   if (facts) return { deployed: null, source: "unavailable", line: "Its mainnet deployment is unknown because the chain read failed." };
   return { deployed: false, source: "verified-build", line: "It is not deployed on mainnet yet." };
@@ -177,7 +183,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     return {
       name: p.library, programId: p.programId, version: meta.version, note: meta.note, verifiedBuild: vb.kind,
       devnet: { deployed: liveDev ? liveDev.deployed : !!dev, matchesBuild: dev ? dev.matchesBuild : null, ...devnetAuthority(liveDev, dev?.upgradeAuthority, devReadFailed), recordedAt: dev?.readAt ?? null, recordedUpgradeAuthority: dev?.upgradeAuthority ?? null },
-      mainnet: mainnetDeployment(!!p.deployed.mainnet, i.chain.mainnet, p.programId),
+      mainnet: mainnetDeployment(!!p.deployed.mainnet, i.chain.mainnet, p.programId, p.deployed.mainnet),
     };
   });
   const upgradeAuthority = (["mainnet", "devnet"] as Cluster[]).map((c) => {
@@ -200,7 +206,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     st.deficit.firstBurnPath.line,
     // Claude audit 2 item 2c: one sentence per program when both networks agree it is deployed
     ...programs.map((p) => (p.devnet.deployed && p.mainnet.deployed === true
-      ? `${cap(plainName(p.name))} (${p.name}) is deployed on devnet${p.devnet.matchesBuild ? ", where its bytes match this repository's build," : ""} and on mainnet.`
+      ? `${cap(plainName(p.name))} (${p.name}) is deployed on devnet and on mainnet.${p.devnet.matchesBuild && p.mainnet.matchesBuild ? " On both networks its bytes match this repository's recorded build." : p.mainnet.matchesBuild ? " On mainnet its bytes match this repository's recorded build." : p.devnet.matchesBuild ? " On devnet its bytes match this repository's build." : ""}`
       : `${cap(plainName(p.name))} (${p.name}) is ${p.devnet.deployed ? `deployed on devnet${p.devnet.matchesBuild ? ", and its bytes match this repository's build" : ""}` : "not on devnet"}. ${p.mainnet.line}`)),
     st.attesters.line,
     // audit 4 BT-12: who can authorise an upgrade and how much notice there is, in the top-level summary (keys vs controllers)
