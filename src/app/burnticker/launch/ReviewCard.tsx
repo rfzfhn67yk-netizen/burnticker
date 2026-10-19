@@ -18,6 +18,7 @@ import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
 import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, PAIR_DIAGRAM_LABEL, UPFRONT_LABEL, lpDisclosureFor, profileMoreLabel, shareExample, type LaunchVenue } from "@/lib/burnticker/guidedLaunch";
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
+import { freeRowLead } from "@/lib/burnticker/tickerSwap";
 import { fieldLinkText, nameFieldId } from "./fieldChecks";
 import { PROVE_TICKER_LABEL } from "@/lib/burnticker/walletProof";
 import { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX, reservedLineSaid } from "./pageCopy";
@@ -276,7 +277,7 @@ export function ReviewCard(p: ReviewCardProps) {
   const chip = (on: boolean) => `rounded-full border px-3 py-1 text-sm ${on ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`;
   // continuous audit HB-7: the reserved-ticker refusal is said once; when the field's own problem already says it, the box only offers the free tickers
   const reservedSaid = (side: "A" | "B"): boolean => { const c = p.coins[side === "A" ? 0 : 1]; return reservedLineSaid([c?.tickerIssue ?? null, ...fieldProblems.map((x) => x.text)]); };
-  const tickerCheckList = <>{(p.tickerChecks ?? []).filter((t) => (t.reserved && (!reservedSaid(t.side) || t.suggestions.length > 0)) || (t.taken && (t.suggestions.length > 0 || !!p.onProveTicker))).map((t) => {
+  const tickerCheckList = <>{(p.tickerChecks ?? []).filter((t) => (t.reserved && (!reservedSaid(t.side) || t.suggestions.length > 0)) || (t.taken && (t.suggestions.length > 0 || !!p.onProveTicker)) || (!!t.lookalike && t.suggestions.length > 0)).map((t) => {
         const coin = p.coins[t.side === "A" ? 0 : 1];
         return (
           <div key={t.side} className="min-w-0 break-words rounded border border-amber-400/40 p-2 text-xs text-amber-200" role="status" data-ticker-check={t.side}>
@@ -284,7 +285,8 @@ export function ReviewCard(p: ReviewCardProps) {
             {t.reserved && !reservedSaid(t.side) && <p>{many ? `Coin ${t.side}: ` : ""}{RESERVED_TICKER_LINE}</p>}
             {/* review of block M: the review treats a ticker as yours only with your wallet's signature; one press asks for it */}
             {t.taken && p.onProveTicker && <p className="mt-1"><button type="button" data-decision="name" data-prove-ticker className="underline text-neutral-200" onClick={p.onProveTicker}>{PROVE_TICKER_LABEL}</button></p>}
-            {t.suggestions.length > 0 && coin && <p className="mt-1 flex flex-wrap items-center gap-2">Free: {t.suggestions.map((s) => <button key={s} type="button" data-decision="name" className="rounded border border-neutral-600 px-2 py-0.5 font-mono" onClick={() => coin.onTicker(s)}>${s}</button>)}</p>}
+            {/* HB-30: one row per refused field, saying which field its free tickers are for */}
+            {t.suggestions.length > 0 && coin && <p className="mt-1 flex flex-wrap items-center gap-2" data-free-for={t.side}>{freeRowLead(t.side, t.ticker, many)} {t.suggestions.map((s) => <button key={s} type="button" data-decision="name" aria-label={`Use $${s} for Coin ${t.side}`} className="rounded border border-neutral-600 px-2 py-0.5 font-mono" onClick={() => coin.onTicker(s)}>${s}</button>)}</p>}
           </div>
         );
       })}</>;

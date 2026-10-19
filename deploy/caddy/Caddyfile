@@ -265,6 +265,23 @@
 	# and a browser fetches a font from another origin only with this header.
 	header /fonts/* Access-Control-Allow-Origin "*"
 
+	# HS-9 (continuous audit 2026-10-19): every app page polls /deploying.json each 20 s (DeployNotice.tsx). With no deploy running the
+	# file is absent, and the 404 filled the browser console; now the idle answer is {"deploying":false}, 200, no-store. While a deploy
+	# runs, scripts/ops/deploy-burnticker-host.sh writes the real file and this matcher stops matching, so the deploy's own file wins.
+	@deploy_idle {
+		path /deploying.json
+		not file {
+			root /var/www/burnticker
+			try_files /deploying.json
+		}
+	}
+	handle @deploy_idle {
+		import security
+		header Content-Type "application/json; charset=utf-8"
+		header Cache-Control "no-store"
+		respond `{"deploying":false}` 200
+	}
+
 	# The platform's static receipts site: landing page, index.json, audit.json, ops.json, tokens.html, t/<ticker>/{index.html,status.json,receipts.json,rules.json}.
 	handle {
 		root * /var/www/burnticker

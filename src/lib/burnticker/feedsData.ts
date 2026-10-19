@@ -16,7 +16,7 @@ import { webReadPlatform } from "@/lib/burnticker/webReadCache";
  * be read is skipped (the home card says "Unavailable" for it); a registry that cannot be read at all makes `ok` false, and the routes
  * answer 503 instead of an empty feed that would read as "nothing happened".
  */
-export interface FeedData { ok: boolean; events: ActivityEvent[]; upcoming: UpcomingRow[]; tickers: Set<string>; /** the launched coins (tickers are not unique; a coin feed resolves by mint) */ coins?: { ticker: string; mint: string }[] }
+export interface FeedData { ok: boolean; /** when this copy was built (unix ms): the feeds stamp lastBuildDate from it, so two requests inside the memo window render the same bytes */ builtAt?: number; events: ActivityEvent[]; upcoming: UpcomingRow[]; tickers: Set<string>; /** the launched coins (tickers are not unique; a coin feed resolves by mint) */ coins?: { ticker: string; mint: string }[] }
 
 export const DEFICIT_TICKER = "DEFICIT";
 
@@ -50,7 +50,7 @@ export async function collectFeedData(p: Platform, now = Date.now(), root = proc
   for (const e of events) tickers.add(e.ticker.toUpperCase());
   const sched = deficitRuleSchedule(root);
   if (keeper && sched && !upcoming.some((u) => u.ticker === DEFICIT_TICKER)) { const k = upcomingFromKeeper(keeper.status, keeper.burns, sched); if (k) upcoming.unshift(k); }
-  return { ok: true, events, upcoming: hidesDevnet(p.cluster) ? upcoming.filter((u) => u.network !== "devnet") : upcoming, tickers, coins: listed };
+  return { ok: true, builtAt: now, events, upcoming: hidesDevnet(p.cluster) ? upcoming.filter((u) => u.network !== "devnet") : upcoming, tickers, coins: listed };
 }
 
 /** How many coins a feed rebuild reads at once. */

@@ -3,6 +3,7 @@
 // generator for both coins of a two-team pair, the direction in the names; H6 the season-over offer on the Burns step and the league
 // page's greyed teams; H7 the pair check at pick time; M1 the Follows chip asks first; M6 the race picker's width and state order; L2/L3/L4
 // field polish; WIRING-SOURCES7 page items. Pure pieces are tested directly; page wiring is pinned by its source.
+import { PAIR_LINK_ACCOUNT_BYTES, launchLabCostLamports, rentLamports, solText } from "@/lib/burnticker/launchCost";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -112,7 +113,9 @@ describe("H4: the coin comparison's cost is the server's two-coin estimate for i
     const one = (buildLaunchReview({ rule: m.rule, ticker: "WIFVSHIB", name: "WIF vs SHIB" } as never, { env: { BURNTICKER_CLUSTER: "mainnet", [CREATOR_LAUNCHES_FLAG]: "1" }, reserved: new Set() }) as { review: import("@/lib/burnticker/launchReview").LaunchReview }).review;
     const ll = review(false), pc = review(true);
     assert.equal(ll.venue, "launchlab"); assert.equal(pc.venue, "pair-curve");
-    assert.equal(Number(ll.costs.totalSol), Math.round(Number(one.costs.totalSol) * 2 * 1e4) / 1e4);
+    // HS-6: twice one coin, plus the rent of the two accounts that link them (measured, listed among the costs)
+    assert.equal(ll.costs.totalSol, solText(launchLabCostLamports(m.rule!.reserveSol, 2) + 2 * rentLamports(PAIR_LINK_ACCOUNT_BYTES)));
+    assert.ok(Math.abs(Number(ll.costs.totalSol) - Number(one.costs.totalSol) * 2 - (2 * rentLamports(PAIR_LINK_ACCOUNT_BYTES)) / 1e9) < 2e-4);
     assert.ok(Number(pc.costs.totalSol) < Number(ll.costs.totalSol));
     assert.match(pairCostSentence(pc.costs.totalSol, pc.venue), /for both coins on the pair curve\. That is less than two separate coins, because the pair curve has no LaunchLab pool/);
     assert.equal(pairCostSentence(ll.costs.totalSol, ll.venue), `The estimated cost is about ${ll.costs.totalSol} SOL for both coins.`);
@@ -128,14 +131,15 @@ describe("H8: both coins of a two-team pair regenerate together, and the names s
   const ars = { abbr: "ARS", code: "ARS", nickname: "Arsenal", name: "Arsenal" }, tot = { abbr: "TOT", code: "TOT", nickname: "Tottenham Hotspur", name: "Tottenham Hotspur" };
   test("winPairNames: Wins in the name, WIN in the ticker, whole words within 32 bytes", () => {
     const n = winPairNames(ars, tot);
-    for (const s of [n.a, n.b]) { assert.ok(new TextEncoder().encode(s.name).length <= 32, s.name); assert.match(s.name, / Wins vs /); assert.match(s.ticker, /^[A-Z0-9]{2,10}$/); assert.match(s.ticker, /WIN$/); }
+    for (const s of [n.a, n.b]) { assert.ok(new TextEncoder().encode(s.name).length <= 32, s.name); assert.match(s.name, / over /); assert.match(s.ticker, /^[A-Z0-9]{2,10}$/); assert.match(s.ticker, /WIN$/); }
     assert.equal(n.a.ticker, "ARSWIN"); assert.equal(n.b.ticker, "TOTWIN");
     const long = winPairNames({ abbr: "WOL", nickname: "Wolverhampton Wanderers", name: "Wolverhampton Wanderers" }, { abbr: "BHA", nickname: "Brighton & Hove Albion", name: "Brighton & Hove Albion" });
     for (const s of [long.a, long.b]) { assert.ok(new TextEncoder().encode(s.name).length <= 32, s.name); assert.doesNotMatch(s.name, /\b(vs|&)$/); }
   });
   test("page wiring: one generator for the four fields, reset together when the subject changes, and said once", () => {
     assert.match(page, /if \(nameAuto && \(name !== pairGen\.a\.name \|\| nameB !== pairGen\.b\.name\)\) \{ setName\(pairGen\.a\.name\); setNameB\(pairGen\.b\.name\); \}/);
-    assert.match(page, /if \(tickerAuto && \(ticker !== pairGen\.a\.ticker \|\| tickerB !== pairGen\.b\.ticker\)\) \{ setTicker\(pairGen\.a\.ticker\); setTickerB\(pairGen\.b\.ticker\); \}/);
+    // HB-30 (run 3): the generated tickers pass through the swap map of refused tickers (fixGen)
+    assert.match(page, /const ga = fixGen\(pairGen\.a\.ticker\), gb = fixGen\(pairGen\.b\.ticker\);\n    if \(tickerAuto && \(ticker !== ga \|\| tickerB !== gb\)\) \{ setTicker\(ga\); setTickerB\(gb\); \}/);
     assert.match(page, /if \(flow === "pair" && pairGen\) return pairGen\.a\.ticker;/);
     assert.match(page, /if \(pairMode === "season"\) return seasonPairNames\(/);
     assert.match(page, /setEditedFor\(null\); if \(editedFor !== null\) setNamesRemade\(true\);/);

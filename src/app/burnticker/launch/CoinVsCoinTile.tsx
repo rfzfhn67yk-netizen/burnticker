@@ -129,7 +129,8 @@ function CoinPicker({ label, value, onPick, exclude, initial, locked = false }: 
       <ul className="max-h-56 overflow-y-auto divide-y divide-neutral-800 rounded border border-neutral-800">
         {shown.map((h) => (
           <li key={`${h.source}:${h.feed ?? h.mint}`}>
-            <button disabled={!h.underlying} data-decision="what" onClick={() => onPick(h)} className={`w-full text-left px-2 py-1.5 text-sm ${h.underlying ? "hover:bg-neutral-900" : "opacity-60 cursor-not-allowed"}`}>
+            {/* continuous audit HB-34: the row's own words name the button */}
+            <button type="button" disabled={!h.underlying} data-decision="what" aria-label={`${h.label || `${h.symbol}, ${h.name}`}, from ${h.source === "pyth" ? "Pyth" : "Jupiter"}${h.why ? `. ${h.why}` : ""}`} onClick={() => onPick(h)} className={`w-full text-left px-2 py-1.5 text-sm ${h.underlying ? "hover:bg-neutral-900" : "opacity-60 cursor-not-allowed"}`}>
               {h.label ? <span className="font-medium" data-hit-label>{h.label}</span> : <><span className="font-medium">{h.symbol}</span> <span className="text-xs text-neutral-500">{h.name}</span></>} <span className="ml-1 rounded bg-neutral-800 px-1.5 text-[10px]">{h.source === "pyth" ? "Pyth" : "Jupiter"}</span>
               {h.why && <span className="block text-[11px] text-neutral-500">{h.why}</span>}
             </button>

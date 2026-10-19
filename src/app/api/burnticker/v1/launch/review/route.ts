@@ -4,7 +4,7 @@ import { withLaunchFailureAlert } from "@/lib/burnticker/api/launchFailAlert";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { oneShotVoidBy } from "@/lib/burnticker/api/handlers";
 import { settledPairInput } from "@/lib/burnticker/launchPreflight";
-import type { LockedRule } from "@/lib/burnticker/rules";
+import type { BurnRule, LockedRule } from "@/lib/burnticker/rules";
 import { statedCtx } from "@/lib/burnticker/coinText";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { isTeamRule, tickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
@@ -108,7 +108,8 @@ export async function POST(req: Request) {
       const reg = platform().registry, reserved = loadReserved();
       const creator = typeof (body as { creator?: unknown }).creator === "string" ? String((body as { creator: string }).creator) : null;
       const team = isTeamRule((body as { rule?: unknown }).rule);   // HB-6: team words only for a team coin
-      tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker, team })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status: x.status, creator: x.creator })), reserved, existing: existingRows, creator });
+      const ruleA = (body as { rule?: unknown }).rule as Pick<BurnRule, "oracle" | "series"> | null | undefined;
+      tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker, team, rule: c.side === "A" ? ruleA ?? null : null })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status: x.status, creator: x.creator })), reserved, existing: existingRows, creator });
     } catch { tickers = []; }
     return ok({ ...r.review, existing, tickers });
   }));

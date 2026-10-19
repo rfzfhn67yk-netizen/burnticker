@@ -87,6 +87,23 @@ export interface HomeCoin extends Pick<IndexCoin, "ticker" | "burns" | "lastBurn
   rank?: string | null;
 }
 
+/**
+ * HS-5 (continuous audit 2026-10-19): the "Follow the season" sentence on the home page. "3 team coins are on the scoreboards of 25
+ * leagues" read as if three coins spanned 25 leagues; the counts are now said apart: how many team coins there are and which leagues
+ * they are in, then how many leagues have a scoreboard. Every number comes from the leagues index (leagues.ts leagueIndex), never typed.
+ */
+export interface SeasonsCounts { teamCoins: number; leagues: number; /** the labels of the leagues that hold at least one team coin */ coinLeagues: readonly string[] }
+const ARTICLE_LESS = /^(La Liga|Serie A|Ligue 1|Liga MX|Brasileir|College |NCAA )/;
+/** A league's label in a sentence: "the NFL", "the Premier League", "La Liga", "college football". */
+export const leagueInSentence = (label: string): string => (/^College /.test(label) ? label.toLowerCase() : ARTICLE_LESS.test(label) ? label : `the ${label}`);
+export function seasonsStripLine(s: SeasonsCounts): string {
+  if (s.teamCoins === 0) return `No team coin has launched yet, so all ${s.leagues} league scoreboards are empty. Each one fills in from its coins' own receipts.`;
+  const n = s.teamCoins, coins = `${n} team coin${n === 1 ? "" : "s"} so far`;
+  const names = s.coinLeagues.map(leagueInSentence);
+  const where = names.length === 1 ? (n === 1 ? `, in ${names[0]}` : `, all in ${names[0]}`) : names.length === 2 ? `, in ${names[0]} and ${names[1]}` : names.length > 2 ? `, across ${names.length} leagues` : "";
+  return `${coins}${where}. Scoreboards are ready for ${s.leagues} league${s.leagues === 1 ? "" : "s"}.`;
+}
+
 export const NO_EVENTS_LINE = "Nothing has happened on chain yet. Burns, signed readings, graduations and pool registrations appear here once they are recorded.";
 export const UNAVAILABLE = "Unavailable";
 const OWN_TOKENS = path.join("config", "own-tokens.json");

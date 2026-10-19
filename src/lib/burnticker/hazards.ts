@@ -43,7 +43,7 @@ export const HAZARD_KINDS: readonly { id: HazardKindId; label: string; publisher
 
 /** Step 3: the two patterns a natural-disaster coin offers (the fade side stays available on the per-event form, as on any feed). */
 export const HAZARD_PATTERNS = {
-  every: { label: "Every time it happens", sentence: "The coin burns a share of its pool for each qualifying event, such as each earthquake at the magnitude or each storm that reaches the category." },
+  every: { label: "Every time it happens", sentence: "The coin burns a share of its pool for each qualifying event the source reports." },
   once: { label: "Once, on the next one", sentence: "The coin burns its whole pool once, on the first qualifying event after launch." },
 } as const;
 /**
@@ -52,6 +52,29 @@ export const HAZARD_PATTERNS = {
  */
 export const HAZARD_ONCE_HALF_SENTENCE = "The coin burns its whole pool, or half of it, once, on the first qualifying event after launch.";
 export const hazardOnceSentence = (dispersal: boolean): string => (dispersal ? HAZARD_ONCE_HALF_SENTENCE : HAZARD_PATTERNS.once.sentence);
+/**
+ * Continuous audit HB-32 (run 3): the "Every time it happens" card on a hurricane coin spoke of earthquakes and magnitudes. Each kind
+ * now says its own event and its own threshold words, matching the controls above ("or stronger" for a storm's category).
+ */
+export const HAZARD_EVERY_SENTENCES: Readonly<Record<HazardKindId, string>> = {
+  quake: "The coin burns a share of its pool for each earthquake at or above the magnitude you pick.",
+  hurricane: "The coin burns a share of its pool for each storm that reaches the strength you pick, category 1 or stronger, or any named storm.",
+  tornado: "The coin burns a share of its pool for each tornado report in the area you pick.",
+  wildfire: "The coin burns a share of its pool for each 100,000 acres added to the year's national total of acres burned.",
+  volcano: "The coin burns a share of its pool each time the USGS raises the alert level at a U.S. volcano it monitors.",
+};
+/** The hazard kind a series belongs to (either pattern), or null for any other series. */
+export function hazardKindOf(series: string | null | undefined): HazardKindId | null {
+  const s = series ?? "";
+  if (!s) return null;
+  if (parseUsgsSeries(s) || parseUsgsNextSeries(s)) return "quake";
+  if (parseNhcSeries(s)) return "hurricane";
+  if (parseSpcSeries(s)) return "tornado";
+  if (parseNifcSeries(s)) return "wildfire";
+  if (parseVolcanoSeries(s)) return "volcano";
+  return null;
+}
+export const hazardEverySentence = (series: string | null | undefined): string => { const k = hazardKindOf(series); return k ? HAZARD_EVERY_SENTENCES[k] : HAZARD_PATTERNS.every.sentence; };
 
 /** The season-over reason for a hurricane one-shot (the same words as the review's refusal). */
 export const HAZARD_SEASON_OVER = "This hurricane season is over, so a coin on its next storm is not offered.";
@@ -171,7 +194,7 @@ export function hazardPatternOptions(rule: BurnRule, nowMs: number, o: { dispers
   const fadeReason = once ? PATTERN_REASON.oneShotFade : dialsFor(rule).inverse ? null : PATTERN_REASON.oneShotFade;
   const mk = (id: PatternId, reason: string | null, label?: string, sentence?: string): PatternOption => ({ id, label: label ?? PATTERNS[id].label, sentence: sentence ?? PATTERNS[id].sentence, available: reason === null, reason });
   return {
-    options: [mk("every", null, HAZARD_PATTERNS.every.label, HAZARD_PATTERNS.every.sentence), mk("fade", fadeReason), mk("once", onceReason, HAZARD_PATTERNS.once.label, hazardOnceSentence(o.dispersal === true)), mk("winner", PATTERN_REASON.needsTwo)],
+    options: [mk("every", null, HAZARD_PATTERNS.every.label, hazardEverySentence(series)), mk("fade", fadeReason), mk("once", onceReason, HAZARD_PATTERNS.once.label, hazardOnceSentence(o.dispersal === true)), mk("winner", PATTERN_REASON.needsTwo)],
     preselected: once ? "once" : rule.inverse ? "fade" : "every",
   };
 }

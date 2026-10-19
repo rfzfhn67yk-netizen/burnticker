@@ -1,4 +1,4 @@
-import { DEPLOY_NOTICE_TEXT } from "@/lib/burnticker/deployNotice";
+import { DEPLOY_NOTICE_TEXT, readDeployMarker } from "@/lib/burnticker/deployNotice";
 
 /**
  * THE ERROR PAGE'S WORDS (audit 2026-10-15 H7). A page that throws shows these inside the site's header and footer (error.tsx), or on its
@@ -18,5 +18,5 @@ export const ERROR_COPY = {
 
 /** True when the deploy marker exists (DeployNotice.tsx's check): the only time the error page mentions an update. */
 export async function deployRunning(fetchFn: typeof fetch = fetch, path = "/deploying.json"): Promise<boolean> {
-  try { const r = await fetchFn(`${path}?t=${Date.now()}`, { cache: "no-store" }); return r.ok && (r.headers.get("content-type") ?? "").includes("json"); } catch { return false; }
+  return readDeployMarker(fetchFn, path);   // HS-9: {"deploying":false} is the idle answer
 }

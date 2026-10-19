@@ -290,7 +290,7 @@ describe("the coin text: clinical, plain, one window sentence", () => {
     ["usgs.quakenext:6.5/japan", 0.5, false, /next earthquake of magnitude 6\.5 or more in Japan and its coast/],
     ["nhc.storms:al", 0.02, false, /burns for every named storm in the Atlantic/],
     ["nhc.storms:ep", 0.02, true, /burns on every day no new named storm in the eastern Pacific is counted/],
-    ["nhc.hurricanes:ep.3", 0.05, false, /burns for every hurricane of category 3 or higher in the eastern Pacific/],
+    ["nhc.hurricanes:ep.3", 0.05, false, /burns for every hurricane of category 3 or stronger in the eastern Pacific/],
     ["nhc.next:al.3.2026", 1, false, /burns once on the next category 3 hurricane in the Atlantic this season/],
     ["spc.tornadoes:US", 0.01, false, /burns for every tornado report in the United States/],
     ["spc.tornadoes:OK", 0.02, true, /burns on every day with no tornado report in Oklahoma/],

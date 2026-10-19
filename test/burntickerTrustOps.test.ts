@@ -639,10 +639,12 @@ describe("4 · incident policy, the trust page section, the static fallback", ()
     const landing = fs.readFileSync(path.join(ROOT, "site/burnticker/index.html"), "utf8");
     const shared = html.slice(html.indexOf(":root{"), html.indexOf("/* END shared tokens */"));
     assert.ok(landing.includes(shared), "the fallback's tokens are the landing's, verbatim");
-    assert.match(html, /The app is catching up\. Burns are run by the program on chain/);
+    assert.match(html, /The app is being updated and is back within a minute or two\. Burns are run by the program on chain/);   // HB-31: said once
     assert.doesNotMatch(html, /unaffected/, "review 2 §3.10: an outage page does not assert what it has not checked");
     const wk = JSON.parse(fs.readFileSync(path.join(ROOT, "site/burnticker/.well-known/burnticker.json"), "utf8"));
-    for (const p of Object.values(wk.clusters.devnet.programs) as { programId: string }[]) assert.ok(html.includes(`https://solscan.io/account/${p.programId}?cluster=devnet`), p.programId);
+    // continuous audit HB-31: the mainnet host lists its mainnet programs, linked without a cluster parameter
+    for (const p of Object.values(wk.clusters.mainnet.programs) as { programId: string }[]) assert.ok(html.includes(`https://solscan.io/account/${p.programId}">`), p.programId);
+    assert.doesNotMatch(html, /cluster=devnet|\(devnet\)/);
     const lint = lintCopy(staticText(html), loadCopyLintConfig(ROOT));
     assert.equal(lint.hits.length, 0, JSON.stringify(lint.hits));
   });

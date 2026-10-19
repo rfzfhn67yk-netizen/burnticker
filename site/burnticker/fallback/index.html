@@ -215,11 +215,13 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       <div class="sh">BURNTICKER</div><div class="ss">THE APP IS CATCHING UP</div>
       <div class="dash"></div>
       <p>The app is being updated and is back within a minute or two. Burns are run by the program on chain.</p>
-      <p>The app is catching up. Burns are run by the program on chain. Receipts that were already published stay on chain and on the static site. This page does not check them.</p>
+      <p>Receipts that were already published stay on chain and on the static site. This page does not check them.</p>
       <div class="dash"></div>
       <div id="programs">
-<div class="row"><span>burn_receipts</span><b><a href="https://solscan.io/account/AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM?cluster=devnet">AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM</a> (devnet)</b></div>
-<div class="row"><span>pair_curve</span><b><a href="https://solscan.io/account/2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN?cluster=devnet">2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN</a> (devnet)</b></div>
+<!-- site-shell:programs:begin -->
+<div class="row"><span>burn_receipts</span><b><a href="https://solscan.io/account/AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM">AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM</a> (mainnet)</b></div>
+<div class="row"><span>pair_curve</span><b><a href="https://solscan.io/account/2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN">2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN</a> (mainnet)</b></div>
+<!-- site-shell:programs:end -->
       </div>
       <div class="dash"></div>
       <div id="coins"><div class="row"><span>coins</span><b>see the list below</b></div></div>
@@ -290,12 +292,13 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   var B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
   function solscan(addr, cluster) { return "https://solscan.io/account/" + addr + (cluster === "mainnet" ? "" : "?cluster=" + cluster); }
   function row(label, addr, cluster) { return el("div", { class: "row" }, [el("span", { text: label }), el("b", null, [el("a", { href: solscan(addr, cluster), text: addr }), " (" + cluster + ")"])]); }
-  fetch("/.well-known/burnticker.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (wk) {
-    var box = document.getElementById("programs"), rows = [];
-    ["mainnet", "devnet"].forEach(function (c) { var cl = wk.clusters && wk.clusters[c]; if (!cl || !cl.programs) return; Object.keys(cl.programs).forEach(function (n) { var p = cl.programs[n]; if (p && p.deployed && B58.test(p.programId)) rows.push(row(n, p.programId, c)); }); });
-    if (rows.length) { box.textContent = ""; rows.forEach(function (x) { box.appendChild(x); }); }
+  // continuous audit HB-31: this host runs mainnet; only the cluster the keeper reports (mainnet when it cannot be read) is listed
+  var cl = fetch("/status/status.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (st) { return st && st.keeper && typeof st.keeper.cluster === "string" && /^[a-z]+$/.test(st.keeper.cluster) ? st.keeper.cluster : "mainnet"; }).catch(function () { return "mainnet"; });
+  Promise.all([fetch("/.well-known/burnticker.json", { cache: "no-store" }).then(function (r) { return r.json(); }), cl]).then(function (x) {
+    var wk = x[0], c = x[1], box = document.getElementById("programs"), rows = [], cp = wk.clusters && wk.clusters[c];
+    if (cp && cp.programs) Object.keys(cp.programs).forEach(function (n) { var p = cp.programs[n]; if (p && p.deployed && B58.test(p.programId)) rows.push(row(n, p.programId, c)); });
+    if (rows.length) { box.textContent = ""; rows.forEach(function (r) { box.appendChild(r); }); }
   }).catch(function () {});
-  var cl = fetch("/status/status.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (st) { return st && st.keeper && st.keeper.cluster === "mainnet" ? "mainnet" : "devnet"; }).catch(function () { return "devnet"; });
   Promise.all([fetch("/index.json", { cache: "no-store" }).then(function (r) { return r.json(); }), cl]).then(function (x) {
     var ix = x[0], cluster = x[1], box = document.getElementById("coins"), toks = (ix.tokens || []).filter(function (t) { return t.status === "live" && B58.test(t.mint); }).slice(0, 12);
     if (!toks.length) return;

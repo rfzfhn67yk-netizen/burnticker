@@ -259,6 +259,16 @@ export const raceLevelSentence = (over = "over four weeks", unit: "days" | "week
 const isDailyRace = (r: BurnRule): boolean => r.oracle === "derby" && r.derby?.selector === "coinvs" && !r.derby.flip;
 /** The season-end sentence of a rivalry series coin (endText's result line). */
 export const MEETINGS_END_RESULT = "When both teams' seasons are over, the coin of the team that won fewer of the games between them sends the rest of its pool, and any fees that arrive later, to the other coin's burn pool, or to $DEFICIT's burn if that coin is not live. The coin of the team that won more burns down what is left on itself. Then the coin retires.";
+/**
+ * HS-10 (continuous audit 2026-10-19): a rivalry series follows the two teams' games in ONE league season, so its end names that season
+ * ("When the 2026–27 season is over, playoffs included, ..."), the label from the league table (espn.ts seasonLabel); a rule whose
+ * series cannot be read keeps MEETINGS_END_RESULT's two-seasons wording.
+ */
+export function meetingsEndResult(r: BurnRule): string {
+  const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
+  if (e?.kind !== "team" || e.window.kind !== "meetings") return MEETINGS_END_RESULT;
+  return MEETINGS_END_RESULT.replace("When both teams' seasons are over,", `When the ${seasonLabel(e.league, e.window.year)} season is over${noPlayoffs(e.league) ? "" : ", playoffs included"},`);
+}
 const isMeetingsSeries = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e?.kind === "team" && e.window.kind === "meetings"; };
 export interface EndText { kind: "perpetual" | "self" | "flagship" | "pair-winner" | "champion" | "mint" | "incinerator"; result: string; void: string | null; line: string }
 export function endText(r: BurnRule, o: { team?: string | null; party?: boolean } = {}): EndText {
@@ -274,7 +284,7 @@ export function endText(r: BurnRule, o: { team?: string | null; party?: boolean 
   const full = oneShotFull(r) && !r.pair && !championPathRule(r);
   const noBurn = full && hasNoBurnOutcome(r) ? ` ${ONE_SHOT_NO_BURN_LINE}` : "";
   if (sink === "incinerator") return mk("incinerator", full ? `${ONE_SHOT_REST_INCINERATOR}${noBurn} No coin is swapped for it. Then the coin retires.` : INCINERATOR_END_RESULT, VOID);
-  if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", MEETINGS_END_RESULT, `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
+  if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", meetingsEndResult(r), `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", o.party ? PARTIES_END_RESULT : CANDIDATES_END_RESULT, VOID);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
   // qa-12 L2: a two-coin daily race ends on its season tally (derby/adapter.ts recordTally; endSinkKeeper's pair winner burns itself down)

@@ -78,6 +78,23 @@ export function placeholders(j: unknown, at = "$"): { path: string; value: strin
   return out;
 }
 
+/**
+ * Continuous audit HB-34/HB-35 (run 3): the public API served "TODO_ENTITY" and "TODO_GITHUB_ORG". The config keeps its TODO_ values
+ * (docs/burnticker/TODO-OWNER.md tracks them), but a public answer carries null in their place: a value that is a placeholder, or a
+ * string holding one, is null, and the placeholder list says in words what is not named yet.
+ */
+export function withoutPlaceholders<T>(x: T): T {
+  if (typeof x === "string") return (/TODO_[A-Z0-9_]+/.test(x) ? null : x) as T;
+  if (Array.isArray(x)) return x.map((v) => withoutPlaceholders(v)) as T;
+  if (x && typeof x === "object") return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, withoutPlaceholders(v)])) as T;
+  return x;
+}
+export const NOT_NAMED_YET = "Not named yet.";
+/** The public placeholder list: each path, null for its value, and a plain note (copy.ts placeholderSentence). */
+export function publicPlaceholders(j: unknown, sentence: (token: string) => string): { path: string; value: null; note: string }[] {
+  return placeholders(j).map((p) => ({ path: p.path, value: null, note: `${NOT_NAMED_YET} ${sentence(p.value)}` }));
+}
+
 /** The wallet a role resolves to on a cluster (null while it is a TODO). */
 export function walletOf(cfg: OperatorConfig, cluster: Cluster, role: string): string | null {
   const w = cfg.clusters[cluster].wallets.find((x) => x.role === role);

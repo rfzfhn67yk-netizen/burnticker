@@ -5,7 +5,7 @@ import { dialsFor } from "@/lib/burnticker/dials";
 import { CANDIDATES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 import { oneShotFull } from "@/lib/burnticker/nextResult";
-import { LIVE_NOW, gameSeries, isPairOutcome, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
+import { LIVE_NOW, gameSeries, isPairOutcome, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, seasonLabel, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 import { DESCRIPTION_MAX, descriptionRoomProblem, linkProblem } from "@/lib/burnticker/creatorProfile";
@@ -734,6 +734,23 @@ export const RIVALRY_SERIES_LINE = "A linked pair. Each game between them burns 
 export const MEETINGS_WINNER_LINE = "After each game between the two teams, the coin of the team that won spends its own share and the other coin's share for that game, both burning the winning coin. A draw moves nothing.";
 export const MEETINGS_END_LABEL = "The rest goes to the series winner";
 export const MEETINGS_END_LINE = "When both seasons are over, the coin of the team that won fewer of their games sends what is left to the other coin's burn. If they won the same number, nothing moves and each coin burns down what is left on itself.";
+/** HS-10: the season a rivalry series rule follows (its league and season year), read from the rule's own series; null for any other rule. */
+export function meetingsSeasonOf(r: Pick<BurnRule, "oracle" | "series"> | null | undefined): { league: LeagueId; year: number } | null {
+  const e = r && r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
+  return e?.kind === "team" && e.window.kind === "meetings" ? { league: e.league, year: e.window.year } : null;
+}
+/** HS-10: "When the 2026–27 season is over, playoffs included," for one league season (the label from the league table, never typed). */
+export const oneSeasonOverClause = (s: { league: LeagueId; year: number }): string => `When the ${seasonLabel(s.league, s.year)} season is over${noPlayoffs(s.league) ? "" : ", playoffs included"},`;
+/**
+ * HS-10 (continuous audit 2026-10-19): the "When it ends" line of a rivalry series. Two teams in one league season end together, so the
+ * line names that season ("When the 2026–27 season is over, playoffs included, ..."); a pair whose sides follow different league seasons,
+ * or a rule that cannot be read, keeps the two-seasons wording (MEETINGS_END_LINE).
+ */
+export function meetingsEndLine(a: Pick<BurnRule, "oracle" | "series"> | null | undefined, b?: Pick<BurnRule, "oracle" | "series"> | null): string {
+  const sa = meetingsSeasonOf(a), sb = b ? meetingsSeasonOf(b) : sa;
+  if (!sa || !sb || sa.league !== sb.league || sa.year !== sb.year) return MEETINGS_END_LINE;
+  return MEETINGS_END_LINE.replace("When both seasons are over,", oneSeasonOverClause(sa)).replace("burns down what is left on itself.", "burns down what is left on itself over four weeks.");
+}
 export const MEETINGS_NONE_LINE = "The league's schedule lists no game between these two teams this season, so this option is not offered for them.";
 /** rules.ts DEFAULT_ON_END, copied (rules.ts is not client-safe); test/burntickerRivalrySeriesReview.test.ts pins the two equal. */
 export const MEETINGS_ON_END = { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } as const;
@@ -954,8 +971,12 @@ export const LINK_FIELDS = [["x", "X"], ["telegram", "Telegram"], ["website", "W
 export const linkFieldProblem = (label: string, raw: string): string | null => (raw.trim() ? linkProblem(label, raw.trim()) : null);
 /** The id of a profile field on the page (side "a" or "b"), so the review's Edit link can focus it. */
 
-/** Audit 10 item 17: what the pair's estimate leaves out, beside "Launch both". */
-export const PAIR_COST_EXCLUSIONS = "The estimate covers creating both coins. It leaves out the account that links the two coins, whose rent is not measured yet, and any fee your wallet adds.";
+/**
+ * Audit 10 item 17: what the pair's estimate leaves out, beside "Launch both". HS-6 (continuous audit 2026-10-19): the rent of the two
+ * accounts that link the coins is measured and listed among the costs (launchCost.ts PAIR_LINK_ACCOUNT_BYTES), so only the wallet's own
+ * fee is left out.
+ */
+export const PAIR_COST_EXCLUSIONS = "This is an estimate for both coins. It leaves out any fee your wallet adds. Your wallet shows the exact amount before you approve.";
 
 /** Audit 10 item 24: the share is a share of the coin's burn pool (its budget for burns), never of the coin's supply; said once on the review. */
 // qa-12 L7: a one-shot coin's 100% reads as the whole pool on its one result, not as an odd "100% is never a share"

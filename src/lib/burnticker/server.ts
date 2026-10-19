@@ -262,10 +262,13 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
       operator: operatorPowersSummary(loadPowersRegister()),
     };
   }
-  const [implied, info] = await impliedInfo();
-  const [supplyRaw, feePdaLamports, vaultRaw] = await Promise.all([supplyRead(), p.program.feePdaBalanceLamports(t.mint).catch(() => null), locked.mode === "vault" ? p.program.vaultBalanceRaw(t.mint).catch(() => null) : Promise.resolve(null)]);
-  const market = await marketRead(supplyRaw);
-  const programBlock = await programRead();
+  // continuous audit HB-35 (pair page "Loading" for 8 s, pair badge 5 s): the reads that do not depend on one another start together. The
+  // oracle info, the supply and pool balances, the program block, the LP lock and the pair counterpart were five phases one after another.
+  const programP = programRead(), lpP = lpLockBlock(p.registry, p.program, p.cluster, t.mint), pairP = pairCounterpart(p, t);
+  // an early failure is still thrown where it was awaited before; these handlers only keep it from being reported as unhandled meanwhile
+  for (const x of [programP, lpP, pairP] as Promise<unknown>[]) x.catch(() => {});
+  const [[implied, info], [supplyRaw, feePdaLamports, vaultRaw]] = await Promise.all([impliedInfo(), Promise.all([supplyRead(), p.program.feePdaBalanceLamports(t.mint).catch(() => null), locked.mode === "vault" ? p.program.vaultBalanceRaw(t.mint).catch(() => null) : Promise.resolve(null)])]);
+  const [market, programBlock] = await Promise.all([marketRead(supplyRaw), programP]);
   // indexer-1 (WIRING.md step 1): the graduated pool's market cap, the holder count and the lifecycle dates, read on chain; each read
   // returns its own "unavailable" reason, never a guess
   const poolRegistered = registeredOf(programBlock);
@@ -279,8 +282,8 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     market, cpmm, holders, dates,
     // sources-2 (WIRING-SOURCES.md section 2): a one-market Polymarket coin's stated source and dispute window, from the same Gamma read
     stated: info && "stated" in info && info.stated ? info.stated : null,
-    lp: await lpLockBlock(p.registry, p.program, p.cluster, t.mint),
-    pair: await pairCounterpart(p, t),
+    lp: await lpP,
+    pair: await pairP,
     lifecycle: lifecycleFrom(p.registry, t, locked.rule, feePdaLamports),
     meta: p.registry.tokenMeta(t.mint),
     token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,

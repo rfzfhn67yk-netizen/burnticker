@@ -84,7 +84,7 @@ export function nhcText(s: NhcSeries, spends: string, inverse: boolean): { name:
   const src = "Each storm counts once, and each UTC day is read the day after it ends.";
   if (s.kind === "next") return { name: `Next Category ${s.cat} ${b.code}`, ticker: `NEXT${b.code}${s.cat}`.slice(0, 10), oneLiner: `burns once on the next category ${s.cat} hurricane in ${b.label} this season`, oneShot: true,
     block: `On the first day after launch that a storm in ${b.label} reaches category ${s.cat}, ${spends} once, with a receipt on chain. ${src} With no such storm by November 30, the season's end, nothing burns.` };
-  const what = s.kind === "storms" ? `named storm in ${b.label}` : `hurricane of category ${s.cat} or higher in ${b.label}`;
+  const what = s.kind === "storms" ? `named storm in ${b.label}` : `hurricane of category ${s.cat} or stronger in ${b.label}`;
   const short = s.kind === "storms" ? "Named Storms" : `Category ${s.cat}`;
   const tk = s.kind === "storms" ? `${b.code}STORM` : `${b.code}CAT${s.cat}`;
   if (inverse) return { name: `Calm Days ${b.code}`, ticker: `CALM${b.code}`.slice(0, 10), oneLiner: `burns on every day no new ${what} is counted`, oneShot: false,

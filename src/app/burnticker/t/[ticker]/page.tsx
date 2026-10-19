@@ -225,7 +225,7 @@ export default function TokenPage() {
         </div>
       </header>
 
-      {s.pair && <Link href={s.pair.pageUrl} className={card + " block"}><span className="text-xs text-neutral-400">This coin is one side of a rivalry pair. Burns so far:</span> <span className="font-mono">${s.ticker} {s.pair.tally.burnsThis} : {s.pair.tally.burnsOther} ${s.pair.counterpart.ticker}</span> <span className="text-xs underline">Open the pair page</span></Link>}
+      {s.pair && <Link href={s.pair.pageUrl} className={card + " block"} aria-label={`Open the pair page for $${s.ticker} and $${s.pair.counterpart.ticker}`}><span className="text-xs text-neutral-400">This coin is one side of a rivalry pair. Burns so far:</span> <span className="font-mono">${s.ticker} {s.pair.tally.burnsThis} : {s.pair.tally.burnsOther} ${s.pair.counterpart.ticker}</span> <span className="text-xs underline">Open the pair page</span></Link>}
       {/* website-26 (WIRING-FEATURES item 12): a Coin vs Coin coin's live scoreboard */}
       {s.derbyScoreboard && <ScoreboardCard s={s.derbyScoreboard} card={card} />}
 

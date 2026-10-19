@@ -12,6 +12,7 @@ import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
 import { seasonStatus, type SeasonSchedule } from "@/lib/burnticker/seasonOver";
 import { seasonYearAt, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { boundedMemo } from "@/lib/burnticker/boundedMemo";
 
 export const dynamic = "force-dynamic";
 
@@ -26,15 +27,19 @@ type Params = { params: Promise<{ league: string; season: string }> };
  * website-25 (WIRING-SOURCES7 H6): the teams whose season is over, from one bounded schedule read (seasonOver.ts seasonStatus, the same
  * read /v1/sports/teams makes), for the current season only. Null when the schedule cannot be read, so nothing is greyed on a guess.
  */
+// continuous audit HB-31 / HB-35: the schedule read is remembered per league for ten minutes and a cold page waits at most 1.5 s for it
+// (it was read afresh, up to 3 s, on every render); the read finishes in the background for the next visitor
+const overMemo = boundedMemo<Set<string>>({ freshMs: 10 * 60_000, coldWaitMs: 1_500 });
 async function seasonOverTeams(league: LeagueId, year: number): Promise<Set<string> | null> {
   if (year !== seasonYearAt(league, Date.now())) return null;
   let sched: SeasonSchedule | null | undefined = null;
   try { sched = platform().seasonSchedule; } catch { return null; }
   if (!sched) return null;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const games = await Promise.race([sched(league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 3_000); })]);
-  clearTimeout(timer);
-  return games ? new Set(teamsOf(league).map((t) => t.abbr).filter((a) => seasonStatus(a, games, true).status === "over")) : null;
+  const read = sched;
+  return overMemo.get(`${league}:${year}`, async () => {
+    const games = await read(league, 8);
+    return new Set(teamsOf(league).map((t) => t.abbr).filter((a) => seasonStatus(a, games, true).status === "over"));
+  });
 }
 
 function load(league: string, season: string, seasonOver: ReadonlySet<string> | null = null): { page: LeagueSeasonPage | null; err: string | null; shared?: Set<string> } {

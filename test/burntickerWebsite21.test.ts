@@ -7,7 +7,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
-import { describeRule, endText, MEETINGS_END_RESULT, windowBadge } from "@/lib/burnticker/describe";
+import { describeRule, endText, meetingsEndResult, windowBadge } from "@/lib/burnticker/describe";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { LEAGUES, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
 import {
@@ -85,7 +85,7 @@ describe("website-21: step 2, the third rivalry option and its meetings list", (
       const n = meetingsPairNames(ts[0], ts[1]);
       assert.match(n.a.ticker, /^[A-Z0-9]{2,10}$/, lg); assert.notEqual(n.a.ticker, n.b.ticker, lg);
       const end = endSentences(paired(r.a, "A"));
-      assert.equal(end.kind, "pair-winner", lg); assert.equal(end.sentences[0], MEETINGS_END_RESULT.split(/(?<=\.)\s+(?=[A-Z$])/)[0], lg);
+      assert.equal(end.kind, "pair-winner", lg); assert.equal(end.sentences[0], meetingsEndResult(r.a).split(/(?<=\.)\s+(?=[A-Z$])/)[0], lg);   // HS-10: the one league season, named
     }
     assert.deepEqual(meetingsPairNames(PHI, BOS), { a: { name: "76ers vs Celtics, 76ers side", ticker: "PHIVBOS" }, b: { name: "Celtics vs 76ers, Celtics side", ticker: "BOSVPHI" } });
     assert.equal(isMeetingsSelector("KXNBAGAME"), false); assert.equal(isMeetingsSelector(null), false);
@@ -132,7 +132,7 @@ describe("website-21: the review", () => {
       assert.ok("review" in out, JSON.stringify(out));
       assert.deepEqual(out.review.problems, []);
       assert.equal(out.review.venue, "launchlab");
-      assert.equal(out.review.end.result, MEETINGS_END_RESULT);
+      assert.equal(out.review.end.result, meetingsEndResult(r.a));   // HS-10
       assert.ok(out.review.meetings);
       assert.deepEqual(out.review.meetings!.flow.steps.map((s) => s.title), ["Where fees come from", "After each game between them", "At the end of the season"]);
       for (const s of [out.review.meetings!.flow.oneLiner, ...out.review.meetings!.flow.steps.map((x) => x.text), ...out.review.meetings!.flow.outcomes.flatMap((o) => [o.when, o.then]), out.review.meetings!.flow.never]) assert.doesNotMatch(s, /\bwill\b|\bESPN\b/i, s);
@@ -145,7 +145,7 @@ describe("website-21: the review", () => {
     assert.match(page, /\? \{ pair: \{ ticker: tickerB\.toUpperCase\(\), name: nameB, creatorDescription: profileB\.description, links: creatorLinks/);
     assert.match(page, /\{reviewMeetings\?\.flow && <FundsFlowView flow=\{reviewMeetings\.flow\} open \/>\}/);
     assert.match(card, /export function FundsFlowView\(\{ flow, open = false, saidAbove = null \}: \{ flow: FundsFlow; open\?: boolean; saidAbove\?: string \| null \}\)/);
-    assert.match(page, /meetingsOn \? <EndSection title=\{MEETINGS_END_LABEL\} sentences=\{\[MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE\]\} options=\{\[\]\} \/>/);
+    assert.match(page, /meetingsOn \? <EndSection title=\{MEETINGS_END_LABEL\} sentences=\{\[meetingsEndLine\(rule\), MEETINGS_DEADLINE_LINE\]\} options=\{\[\]\} \/>/);
     assert.match(steps, /\{title && <p className="font-medium text-amber-200" data-end-title>\{title\}<\/p>\}/);
     assert.match(page, /const facts = meetingsOn \? null :/, "never winnerTakesBurnFacts or matchupFacts for this option");
     assert.match(page, /durations=\{pairOn && !elPick && !meetingsOn \?/);
@@ -210,7 +210,7 @@ describe("website-21: audit 7 items 15 and 16", () => {
 
 describe("website-21: the guided review's Ends fact", () => {
   test("a rivalry series pair's Ends fact names the one end, its sentence and the 30-day deadline; the step-2 scope line covers the third option", async () => {
-    assert.match(page, /const meetingsEndFact = `\$\{MEETINGS_END_LABEL\}\. \$\{MEETINGS_END_LINE\} \$\{MEETINGS_DEADLINE_LINE\}`;/);
+    assert.match(page, /const meetingsEndFact = `\$\{MEETINGS_END_LABEL\}\. \$\{meetingsEndLine\(rule\)\} \$\{MEETINGS_DEADLINE_LINE\}`;/);
     assert.match(page, /\{ label: FACT_LABELS\.ends, value: meetingsOn \? meetingsEndFact :/);
     plain(`${MEETINGS_END_LABEL}. ${MEETINGS_END_LINE} ${MEETINGS_DEADLINE_LINE}`);
     const { RIVALRY_SCOPE_LINE } = await import("@/lib/burnticker/guidedLaunch");

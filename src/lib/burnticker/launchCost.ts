@@ -13,6 +13,15 @@ export const TOKEN_CONFIG_BYTES = 863;
  * min_forward_lamports 8, created_at 8, reserved 32.
  */
 export const END_SINK_ACCOUNT_BYTES = 8 + 1 + 1 + 32 + 1 + 32 + 8 + 8 + 32;
+/**
+ * HS-6 (continuous audit 2026-10-19): the PairLink account each coin of a two-coin pair gets (programs/burn-receipts state.rs PairLink,
+ * created with 8 + PairLink::INIT_SPACE by instructions/pair.rs new_link, from initialize_token on LaunchLab or link_pair on the pair
+ * curve): discriminator 8, version 1, bump 1, mint 32, pair_mint 32, paired 1, witness 1, created_at 8, pairing_deadline 8, paired_at 8,
+ * attester_set_hash 32. A pair makes two, one per coin.
+ */
+export const PAIR_LINK_ACCOUNT_BYTES = 8 + 1 + 1 + 32 + 32 + 1 + 1 + 8 + 8 + 8 + 32;
+/** The rent line for a pair's two PairLink accounts, in the review's cost list. */
+export const PAIR_LINK_RENT_LABEL = `Rent for the two accounts that link the coins to each other, ${PAIR_LINK_ACCOUNT_BYTES} bytes each. It stays with the coins.`;
 /** LaunchLab create's account rent (pool state, two vaults, metadata), measured on the 2026-10-10 rehearsal (REHEARSAL-RUNSHEET §0.1). */
 export const LAUNCHLAB_CREATE_RENT_SOL = 0.03;
 export const LAMPORTS_PER_SIGNATURE = 5000;

@@ -1,6 +1,6 @@
 import "server-only";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
-import { tokenPageData, type Platform } from "@/lib/burnticker/server";
+import { tokenPageData, type Platform, type TokenPageOpts } from "@/lib/burnticker/server";
 import { findToken, flagshipToken } from "@/lib/burnticker/api/v1";
 import { readKeeperFiles } from "@/lib/burnticker/deficitQueue";
 import { registryCoinKey } from "@/lib/burnticker/coinLookup";
@@ -17,8 +17,11 @@ import { safeParam } from "@/lib/burnticker/safeParam";
 const memo = new Map<string, { at: number; v: BadgeJson }>();
 const MAX = 500;
 
-async function side(p: Platform, t: TokenRow, origin: string, now: number): Promise<SideInput> {
-  const d = await tokenPageData(p, t, now);
+/** HB-35: what a pair card reads (tokenPageInput lite and without the market reads); exported for the source test. */
+export const PAIR_BADGE_READ: TokenPageOpts = { lite: true, live: false };
+
+async function side(p: Platform, t: TokenRow, origin: string, now: number, opts: TokenPageOpts = {}): Promise<SideInput> {
+  const d = await tokenPageData(p, t, now, opts);
   return { status: d.status, receipts: d.receipts, rule: p.registry.lockedRule(t).rule, origin, now, key: registryCoinKey(p.registry, t) };
 }
 
@@ -91,7 +94,9 @@ export async function pairBadgeData(p: Platform, pairId: string, origin: string,
   const key = `pair:${pairId}:${origin}`;
   const hit = memo.get(key);
   if (hit && now - hit.at < BADGE_CACHE_SEC * 1000) return hit.v;
-  const [sa, sb] = await Promise.all([side(p, a, origin, now), side(p, b, origin, now)]);
+  // continuous audit HB-35: the pair card reads the registry and one parallel program read per side (no market, holder or date reads it
+  // never shows); the full coin-page read took about 5 s cold
+  const [sa, sb] = await Promise.all([side(p, a, origin, now, PAIR_BADGE_READ), side(p, b, origin, now, PAIR_BADGE_READ)]);
   const v = pairBadge(pairId, sa, sb);
   remember(key, now, v);
   return v;

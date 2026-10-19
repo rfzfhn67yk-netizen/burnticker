@@ -26,7 +26,7 @@ export function EndChoicePicker({ model, value, onChange, sinks, who = null, loc
       <div className="min-w-0 space-y-1" role="radiogroup" aria-label={endChoiceLabel(model)}>
         {model.options.map((o) => (
           <label key={o.kind} className="flex min-w-0 cursor-pointer items-start gap-2 rounded border border-neutral-800 px-2 py-1.5 text-sm" data-end-option={o.kind}>
-            <input type="radio" name={name} className="mt-1" checked={value.kind === o.kind} onChange={() => onChange(o.kind === "coin" && picked ? picked : { kind: o.kind })} />
+            <input type="radio" name={name} value={o.kind} aria-label={o.line} className="mt-1" checked={value.kind === o.kind} onChange={() => onChange(o.kind === "coin" && picked ? picked : { kind: o.kind })} />
             <span className="min-w-0 break-words text-neutral-100">{o.line}</span>
           </label>
         ))}
