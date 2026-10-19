@@ -254,10 +254,10 @@ describe("B-7: a decided coin says so above its swap panel", () => {
   test("the loser: who lost, who won, that a swap cannot make it burn, and where its pool goes (HS-1)", () => {
     assert.equal(decidedSwapWarning(s({ ticker: "SEAWIN", profile: { sideName: "Seahawks" }, pair: { counterpart: { name: "Denver", ticker: "DENWIN" }, clause: PAIR.clause } as never }), [lost], "Broncos"), "$SEAWIN lost. The Broncos beat the Seahawks on 16 October 2026. Swapping into $SEAWIN now cannot make it burn. At the end, its burn pool goes to $DENWIN's burn if both coins graduate by 14 November 2026. If they do not, the pair is voided and $SEAWIN's pool burns down on $SEAWIN over four weeks.");
   });
-  test("a repeating rule or a pending one-shot has no line; a void one says nothing burns", () => {
+  test("a repeating rule or a pending one-shot has no line; a voided pair result says its pool winds down (PROD-05)", () => {
     assert.equal(decidedSwapWarning(s({ next: { result: "recurring" } }), []), null);
     assert.equal(decidedSwapWarning(s({ next: { result: "pending" } }), []), null);
-    assert.equal(decidedSwapWarning(s({ next: { result: "void" } }), [{ status: "void", units: 0, settledAt: SETTLED }]), "This coin's one result was voided on 16 October 2026. No further result is read for it. Nothing burns on it.");
+    assert.equal(decidedSwapWarning(s({ next: { result: "void" } }), [{ status: "void", units: 0, settledAt: SETTLED }]), "This coin's one result was voided on 16 October 2026. No burn happens for the result. Its burn pool winds down on this coin once the rule ends.");
   });
   test("the coin page prints it above the swap panel", () => {
     const page = fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8");

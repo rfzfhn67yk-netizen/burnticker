@@ -265,3 +265,47 @@ describe("HB-27: the incident log and the changelog record today", () => {
     clean(pub);
   });
 });
+
+// PROD-05 (external audit 2026-10-19T2119Z, terminal-warning.test.mjs ported): a voided pair is not "nothing burns". The keeper voids a
+// pending pair and ends both coins in winddown, so the warning tells the end-of-rule burn apart from the game result, dated by the void.
+describe("PROD-05: a voided pair's warning tells the winddown from the game result, dated by the void", () => {
+  const VBASE = { status: "live", ticker: "AUDITA", name: "Audit A", rules: { oneShot: true }, next: { result: "void" }, selectorKey: "catalogue:espn.game:nfl-123-SEA-win", oracle: "catalogue", profile: { sideName: "Seahawks", badge: "ONE-SHOT · Oct 15, 2026" }, market: { phase: "curve" }, pair: { counterpart: { name: "Broncos", ticker: "AUDITB", sideName: "Broncos" }, clause: { state: "voided", voidBy: "2026-10-17" } }, lifecycle: { ended: { mode: "winddown" } } } as unknown as DecidedWarningInput;
+  const voided = { status: "voided", units: 1, settledAt: "2026-10-17", pairRole: "lost" as const, kind: "binary", result: "loss" };
+  const wdRow = { status: "confirmed", units: 1, settledAt: "2026-10-18", kind: "winddown", burned: "100" };
+  const WINDING = "The pair was voided. No burn happens for the game result. Its burn pool now winds down on this coin.";
+  for (const ends of [[], [wdRow]]) test(`the auditor's fixture: voided pair with ${ends.length} confirmed end receipts explains the winddown`, () => {
+    const line = decidedSwapWarning(VBASE, [voided, ...ends])!;
+    assert.match(line, /wind|pool.*down/i);
+    assert.doesNotMatch(line, /Nothing burns on it\./);
+    assert.equal(line, WINDING, "no date: the clause records no void time, and the game's day is never the void's");
+    clean(line);
+  });
+  test("the auditor's control: a pending event has no decided warning", () => assert.equal(decidedSwapWarning({ ...VBASE, next: { result: "pending" } } as DecidedWarningInput, []), null));
+  test("dated by the clause's own void time when recorded, never by the badge's game day", () => {
+    const line = decidedSwapWarning({ ...VBASE, pair: { ...VBASE.pair!, clause: { state: "voided", voidBy: "2026-11-14", decidedAt: "2026-11-15T00:05:00.000Z" } } } as DecidedWarningInput, [voided])!;
+    assert.equal(line, "The pair was voided on 15 November 2026. No burn happens for the game result. Its burn pool now winds down on this coin.");
+    assert.doesNotMatch(line, /15 October/);
+  });
+  test("before, during and after the winddown; waiting and live pairs keep their own lines", () => {
+    const before = decidedSwapWarning({ ...VBASE, lifecycle: { ended: null } } as DecidedWarningInput, [voided])!;
+    assert.equal(before, "The pair was voided. No burn happens for the game result. Its burn pool winds down on this coin once the rule ends.");
+    assert.equal(decidedSwapWarning({ ...VBASE, lifecycle: null } as DecidedWarningInput, [voided, wdRow]), WINDING, "an end receipt alone shows the winddown");
+    const after = decidedSwapWarning({ ...VBASE, lifecycle: { ended: { mode: "winddown" }, windDown: { days: 28, done: 28 } } } as DecidedWarningInput, [voided, wdRow])!;
+    assert.equal(after, "The pair was voided. No burn happens for the game result. Its burn pool has wound down on this coin.");
+    for (const l of [before, after]) { assert.doesNotMatch(l, /Nothing burns/); clean(l); }
+    // a waiting or live pair that is decided, not voided, is unchanged (HS-1 / B-7)
+    assert.match(decidedSwapWarning(SEA(), [lost])!, /^\$SEAWIN lost\./);
+    assert.match(decidedSwapWarning(SEA({ pair: { ...PAIR, clause: { state: "live", voidBy: "2026-11-14" } } as never }), [lost])!, /^\$SEAWIN lost\./);
+  });
+  test("a single voided market: nothing burns only while nothing does; its void receipt dates it", () => {
+    const single = { ...VBASE, selectorKey: "polymarket:0xabc", oracle: "polymarket", pair: null, lifecycle: { ended: null } } as unknown as DecidedWarningInput;
+    const v = { status: "void", units: 0, settledAt: "2026-10-20T01:00:00Z", kind: "binary" };
+    assert.equal(decidedSwapWarning(single, [v]), "This coin's one result was voided on 20 October 2026. No further result is read for it. Nothing burns on it.");
+    assert.equal(decidedSwapWarning({ ...single, lifecycle: { ended: { mode: "winddown" } } } as DecidedWarningInput, [v, wdRow]), "This coin's one result was voided on 20 October 2026. No burn happens for the result. Its burn pool now winds down on this coin.");
+  });
+  test("the card sentence of a voided coin whose rule ended says its pool burns down", () => {
+    const f = coinStatusFactsOf({ status: "live", ticker: "AUDITA", name: "Audit A", rules: { oneShot: true }, profile: { badge: "ONE-SHOT" } }, [voided, wdRow]);
+    assert.equal(f.ended, "winddown");
+    assert.doesNotMatch(coinStatusSentence(f), /Nothing burns/);
+  });
+});

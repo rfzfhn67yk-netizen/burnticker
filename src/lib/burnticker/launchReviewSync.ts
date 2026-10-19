@@ -82,6 +82,30 @@ export function reviewProofExpiresAt(proof: ReviewProofLike | null, maxAgeMs: nu
   const f = proof ? parse(proof.message) : null, at = f ? Date.parse(f.issuedAt) : NaN;
   return Number.isFinite(at) ? at + maxAgeMs : null;
 }
+/**
+ * THE PROOF KEPT ACROSS A RELOAD (synthetic creator b-reload-relaunch). A press of Launch signs a request over the draft's tickers
+ * (walletProof.ts), and the prepare writes the draft under that ticker. The page held the proof in memory only, so after a wallet refusal
+ * and a reload the kept review asked without one; the review then cannot tell the creator from a stranger (block M) and refused the
+ * creator's own unlaunched draft as "already the ticker of another Burnticker coin", with Launch off. The page keeps the latest proof in
+ * this tab's sessionStorage and reads it back on load: the review accepts it for any mints and after it was spent, still only for its own
+ * wallet and tickers (usableReviewProof) and only inside its age limit (read here, and dropped by the page when it runs out). A draft
+ * whose create was recorded as sent is unaffected: the prepare still refuses a second mint with launch-pending.
+ */
+export const REVIEW_PROOF_STORE = "burnticker.launch.proof.v1";
+/** The stored text for a proof (null clears the slot). */
+export const keptReviewProofText = (proof: ReviewProofLike | null): string | null => (proof ? JSON.stringify({ message: proof.message, signature: proof.signature }) : null);
+/** The proof read back from the slot: a well-formed proof whose text parses and is inside its age limit at `now`, else null. */
+export function keptReviewProof(raw: string | null | undefined, maxAgeMs: number, parse: ProofParse, now = Date.now()): ReviewProofLike | null {
+  if (!raw) return null;
+  let v: unknown;
+  try { v = JSON.parse(raw); } catch { return null; }
+  const p = v as Partial<ReviewProofLike> | null;
+  if (!p || typeof p !== "object" || typeof p.message !== "string" || typeof p.signature !== "string" || p.message.length > 1_000 || p.signature.length > 120) return null;
+  const proof = { message: p.message, signature: p.signature };
+  const at = reviewProofExpiresAt(proof, maxAgeMs, parse);
+  return at !== null && at > now ? proof : null;
+}
+
 /** The part of the revision that says who asks: the wallet (or none) and the signature of the proof sent with it (or none). */
 export function reviewIdentity(creator: string, proof: ReviewProofLike | null): [string, string] {
   return [creator || "", creator && proof ? proof.signature : ""];
