@@ -26,6 +26,8 @@ export const PROGRAM_IDS: Record<Network, { burn_receipts: string; pair_curve: s
  */
 export const LOOKUP_TABLES: Record<Network, { address: string | null; authority: string | null }> = {
   devnet: { address: "Es59YYRMUEJj1rNTXcrCDueJ78P2GKrHPe3BaKqqRmkZ", authority: null },   // made and frozen 2026-10-15 from the synthetic creator's devnet wallet (tx 3TS5fqUV…)
+  // 2026-10-19 (CPMM tier 14): this frozen 21-entry table lacks index 21 (tier 14), so the code that lists it is refused here; a new
+  // 22-entry table is created, frozen and pinned on the host (BURNTICKER_LOOKUP_TABLE) before that code is published, then compiled in here
   mainnet: { address: "8DZaHFo6UnJk5br29BcRQZmdEKRpzKJTCyz1dRsHhJ2T", authority: null },
 };
 

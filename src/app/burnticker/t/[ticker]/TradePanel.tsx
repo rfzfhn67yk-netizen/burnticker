@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { balanceLine, capLine, DEFAULT_SLIPPAGE_BPS, feeLine, holdsLine, REFUSAL, SLIPPAGE_CHOICES_BPS, SWAP_COPY, SWAP_NOTICE } from "@/lib/burnticker/swap/copy";
+import { balanceLine, capLine, DEFAULT_SLIPPAGE_BPS, feeLine, holdsLine, poolFeeLine, REFUSAL, SLIPPAGE_CHOICES_BPS, SWAP_COPY, SWAP_NOTICE } from "@/lib/burnticker/swap/copy";
 import { formatAmount, parseAmount } from "@/lib/burnticker/swap/math";
 import { balanceRefusal, buildSwap, coinRefusal, feeBps, marketRefusal, quoteSwap, requoteRefusal, walletRefusal, type Balances, type Market, type Network, type Quote, type Side } from "@/lib/burnticker/swap/plan";
 import { connectionOn, explorerTxUrl, readBalances, readMarket } from "@/lib/burnticker/swap/chain";
-import { browserSwapStore, loadPending, PendingWatch, reconcilePending, runSwap, saveOutcome, takeOutcome, type LastOutcome, type PendingSwap, type SwapOutcome } from "@/lib/burnticker/swap/pending";
+import { browserSwapStore, httpPendingRemote, loadPending, loadRemotePending, PendingWatch, reconcilePending, runSwap, saveOutcome, takeOutcome, type LastOutcome, type PendingSwap, type SwapOutcome } from "@/lib/burnticker/swap/pending";
 import type { SwapGuard } from "@/lib/burnticker/swap/guard";
 import { isBudgetRefusal, withFlight } from "@/lib/burnticker/rpcProxy";
 
@@ -119,6 +119,8 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
   const [pendingBox, setPendingBox] = useState<Keyed<PendingSwap>>(null);
   const [checkingKey, setCheckingKey] = useState<string | null>(null);
   const store = useMemo(() => browserSwapStore(), []);
+  // continuous audit 2026-10-19 SEC-02: the server's copy of a held swap, so a browser cleared after an ambiguous send still finds it
+  const remote = useMemo(() => (typeof window !== "undefined" && typeof fetch === "function" ? httpPendingRemote((u, i) => fetch(u, i)) : null), []);
   // review 3d: one status read at a time, and a late answer never re-holds a settled swap
   const watch = useRef(new PendingWatch());
   const market = keyed(marketBox, mKey), marketErr = keyed(marketErrBox, mKey), readErrRaw = keyed(readErrBox, ctxKey), balances = keyed(balBox, ctxKey);
@@ -215,10 +217,12 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
   const walletNo = who ? walletRefusal(who, p.operatorWallets) : null;
   const inputNo = text.trim() === "" ? null : amount === null ? REFUSAL.amountFormat(inDecimals) : amount <= BigInt(0) ? REFUSAL.amount : quote && quote.amountOut <= BigInt(0) ? REFUSAL.noOutput : null;
   const balanceNo = quote && balances ? balanceRefusal(side, quote.amountIn, balances, { sol, tokens: tok, ticker: p.ticker }) : null;
-  const blocked = walletNo ?? readErr ?? marketErr ?? inputNo ?? balanceNo;
+  // SEC-02: a browser that does not keep the swap's record cannot swap here (nothing is signed or sent), and the panel says why
+  const storeNo = who && !store ? REFUSAL.storageUnavailable : null;
+  const blocked = walletNo ?? storeNo ?? readErr ?? marketErr ?? inputNo ?? balanceNo;
   const busy = step !== "idle" || pending !== null || checking;
 
-  const ctx = useCallback(() => ({ conn: connection, store, network: p.network, mint, owner: wallet.publicKey as PublicKey }), [connection, store, p.network, mint, wallet.publicKey]);
+  const ctx = useCallback(() => ({ conn: connection, store, remote, network: p.network, mint, owner: wallet.publicKey as PublicKey }), [connection, store, remote, p.network, mint, wallet.publicKey]);
   // F04: an outcome is shown only for the context (`key`) its swap or status read was started for, and only while that is still current
   const show = useCallback((o: SwapOutcome, earlier: boolean, key: string) => {
     if (key !== live.current) {
@@ -265,9 +269,11 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
       const last = takeOutcome(store, p.network, p.mint, ownerKey) ?? memo ?? null;
       if (last?.done) setDoneBox({ key, v: { signature: last.signature, balance: last.done.balance, earlier: last.done.earlier } });
       else if (last?.err) setErrBox({ key, v: last.err });
+      // SEC-02: no record in this browser: the server's copy of this wallet's held swap, held and settled the same way
+      if (!rec && remote) void loadRemotePending(remote, store, p.network, p.mint, ownerKey).then((r) => { if (r && live.current === key && !watch.current.current) { watch.current.hold(r); setPendingBox({ key, v: r }); void check(r); } });
     }, 0);
     return () => clearTimeout(t);
-  }, [store, p.network, p.mint, ownerKey, check]);
+  }, [store, remote, p.network, p.mint, ownerKey, check]);
   // review follow-up 2: the check backs off after repeated read errors (PendingWatch.delayMs), instead of every 5 seconds forever
   useEffect(() => { if (!pending) return; let t: ReturnType<typeof setTimeout>, alive = true; const tick = async () => { await check(pending); if (alive) t = setTimeout(tick, watch.current.delayMs()); }; t = setTimeout(tick, watch.current.delayMs()); return () => { alive = false; clearTimeout(t); }; }, [pending, check]);
 
@@ -329,7 +335,7 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1" data-swap-quote>
           <dt className="text-neutral-500">{side === "sol-in" ? SWAP_COPY.tokensOut : SWAP_COPY.solOut}</dt><dd className="font-mono">{fmtOut(quote.amountOut)}</dd>
           <dt className="text-neutral-500">{SWAP_COPY.minimumOut}</dt><dd className="font-mono">{fmtOut(minOut)}</dd>
-          {fees && <><dt className="text-neutral-500">{SWAP_COPY.fee}</dt><dd data-swap-fee>{feeLine({ totalBps: fees.totalBps, burnPoolBps: fees.burnPoolBps ?? p.poolBurnBps, feeText: quote.feeUnit === "SOL" ? sol(quote.feeRaw) : tok(quote.feeRaw), burnPoolText: quote.feeUnit === "SOL" ? sol(quote.burnPoolRaw) : tok(quote.burnPoolRaw), unit: quote.feeUnit === "SOL" ? "SOL" : `$${p.ticker}`, rest: market?.kind === "curve" ? { raydiumBps: fees.raydiumBps, platformBps: fees.platformBps } : null })}</dd></>}
+          {fees && <><dt className="text-neutral-500">{SWAP_COPY.fee}</dt><dd data-swap-fee>{market?.kind === "cpmm" ? poolFeeLine(quote.legs, (x, u) => (u === "SOL" ? `${formatAmount(x, SOL_DECIMALS, SOL_DECIMALS)} SOL` : `${tok(x)} $${p.ticker}`)) : feeLine({ totalBps: fees.totalBps, burnPoolBps: fees.burnPoolBps ?? p.poolBurnBps, feeText: quote.feeUnit === "SOL" ? sol(quote.feeRaw) : tok(quote.feeRaw), burnPoolText: quote.feeUnit === "SOL" ? sol(quote.burnPoolRaw) : tok(quote.burnPoolRaw), unit: quote.feeUnit === "SOL" ? "SOL" : `$${p.ticker}`, rest: market?.kind === "curve" ? { raydiumBps: fees.raydiumBps, platformBps: fees.platformBps } : null })}</dd></>}
         </dl>
       )}
       {quote?.capped && <p className="text-neutral-300">{capLine(sol(quote.amountIn))}</p>}

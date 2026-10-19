@@ -593,9 +593,10 @@ designed values are in `src/lib/burnticker/fees.ts`. The table gives fees in bas
 | Phase, per unit of volume | Raydium | Burnticker (developer / operator) | Burn pool (fee PDA) | Nobody |
 |---|---|---|---|---|
 | Bonding curve (LaunchLab) | 25 bps | 25 bps (platform `feeRate` 2,500 ppm) | 50 bps (`creatorFeeRate` 5,000 ppm, the maximum) | none |
-| After graduation (CPMM tier 9: 25 bps trade fee + 75 bps creator fee) | 4 bps of trade fee (3 RAY buyback + 1 treasury) + 3.75 bps (5 % of the creator fee) | 4.2 bps (20 % of the locked LP's 21 bps, by `claim_lock_fees`) | 16.8 bps (80 % of the locked LP's fees) + 71.25 bps (Raydium's fixed 75 bps creator fee, less 5 %) | none |
+| After graduation, new coins (CPMM tier 14: 75 bps trade fee + 50 bps creator fee) | 12 bps of trade fee (9 protocol + 3 fund) + 2.5 bps (5 % of the creator fee) | 12.6 bps (20 % of the locked LP's 63 bps, by `claim_lock_fees`) | 50.4 bps (80 % of the locked LP's fees) + 47.5 bps (Raydium's fixed 50 bps creator fee, less 5 %) | none |
+| After graduation, coins created before the change (CPMM tier 9: 25 bps trade fee + 75 bps creator fee) | 4 bps of trade fee (3 protocol + 1 fund) + 3.75 bps (5 % of the creator fee) | 4.2 bps (20 % of the locked LP's 21 bps) | 16.8 bps (80 % of the locked LP's fees) + 71.25 bps (Raydium's fixed 75 bps creator fee, less 5 %) | none |
 | Pair curve (`pair_curve`, §5.4) | 0 | 25 bps | 75 bps | none |
-| Pair coin after graduation (CPMM tier 9, public `initialize`, creator fee off) | 4 bps of trade fee | 4.2 bps (20 % of the locked LP's fees) | 16.8 bps (80 % of the locked LP's fees; public pool creation cannot turn the creator fee on) | none |
+| Pair coin after graduation (CPMM tier 14 for new pairs, public `initialize`, creator fee off) | 12 bps of trade fee | 12.6 bps (20 % of the locked LP's fees) | 50.4 bps (80 % of the locked LP's fees; public pool creation cannot turn the creator fee on) | none |
 
 - **The LP is locked forever, and its fees fund the burn.** The owner decided this on 2026-10-10, replacing "all graduation LP is burned".
   100 % of every coin's graduation LP is locked with Raydium's LP lock (LaunchLab `platformScale` 1,000,000, creator 0, burn 0; pair
@@ -605,16 +606,18 @@ designed values are in `src/lib/burnticker/fees.ts`. The table gives fees in bas
   to the operator treasury, which on mainnet is the developer fee wallet `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5` (the owner's
   wallet, not the Squads vault). The coin side is burned. No admin key or config field can change the split.
   Per swap after graduation, that was about 21.55 basis points toward the burn on CPMM tier 0 (16.8 + 4.75; it was 4.75 with the LP
-  burned) and 4.2 basis points to the operator. **After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.** The treasury is compiled into the mainnet
+  burned) and 4.2 basis points to the operator. For new coins, **after graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%.** Coins created before the change keep the tier they pinned: about 0.88% to the burn pool, about 0.04% to the operator and about 0.08% to Raydium on tier 9. The treasury is compiled into the mainnet
   build (the owner chose it on 2026-10-11). A build with no treasury pinned refuses every claim with `TreasuryNotPinned`, and the fees
   stay in the lock.
-- **The Raydium pool tier is 9.** The owner decided this on 2026-10-12, replacing tier 0. The LaunchLab platform's `cpConfigId` names
-  Raydium CPMM AmmConfig index 9 (`LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC`): the same 25 bps trade fee as tier 0 and a 75 bps
-  creator fee instead of 5 bps. Per 1 SOL of volume after graduation, traders pay 100 bps. The burn pool gets about 88.05 bps
-  (16.8 from the locked LP + 71.25 from the creator fee after Raydium's 5 % share), the operator 4.2 bps, and Raydium 7.75 bps.
-  `burn_receipts` pins the platform's `cpConfigId` into each coin at `initialize_token`, so a coin keeps the tier it pinned. The vault
-  changes the platform's `cpConfigId` in a separate signed step. Devnet has no matching creator-fee tier, so the rehearsal stays on its
-  index 0 (25 bps trade, 25 bps creator fee). The ids and rates live in `src/lib/burnticker/cpmmTier.ts`.
+- **The Raydium pool tier is 14 for new coins.** The owner decided this, replacing tier 9 (which replaced tier 0). The LaunchLab
+  platform's `cpConfigId` names Raydium CPMM AmmConfig index 14 (`52MZUkNsRYzP4gn2mCaLTVtJQy2tpoF79hp5K1HhAxxX`): a 75 bps trade fee
+  and a 50 bps creator fee. Per 1 SOL of volume after graduation, traders pay 125 bps. The burn pool gets 97.90 bps (50.4 from the
+  locked LP + 47.5 from the creator fee after Raydium's 5 % share), the operator 12.6 bps, and Raydium 14.50 bps.
+  `burn_receipts` pins the platform's `cpConfigId` into each coin at `initialize_token`, so a coin keeps the tier it pinned. Coins
+  created before the change stay on tier 9 (`LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC`; traders pay 100 bps, about 88.05 to the burn
+  pool, 4.2 to the operator, 7.75 to Raydium), or tier 0 for the earliest, and each coin's page states its own split. The platform
+  admin changes the platform's `cpConfigId` in a separate signed step. Devnet has no matching creator-fee tier, so the rehearsal stays
+  on its index 0 (25 bps trade, 25 bps creator fee). The ids and rates live in `src/lib/burnticker/cpmmTier.ts`.
 - **In rivalry pairs, the winner takes the burn.** The owner decided this on 2026-10-11 (section 5.5). In a pair, fees from both coins
   burn the winner's supply. At each result, the loser's burn-pool spend for that result moves to the winner's burn pool
   (`forward_to_winner`) instead of buying the loser's coin. This changes where a pair's burn-pool SOL is spent. It does not change any

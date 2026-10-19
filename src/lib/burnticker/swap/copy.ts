@@ -75,6 +75,36 @@ export function feeLine(i: { totalBps: number; burnPoolBps: number; feeText: str
   const head = `The swap pays a ${pct(i.totalBps)} fee (${i.feeText} ${i.unit}). ${shareOfFee(i.burnPoolBps, i.totalBps)} (${pct(i.burnPoolBps)} of the swap, ${i.burnPoolText} ${i.unit}) goes to this coin's burn pool`;
   return i.rest ? `${head}; the rest goes to ${restParts(i.rest)}.` : `${head}, which pays for its burns.`;
 }
+/** One fee leg as the pool fee line reads it (swap/plan.ts FeeLeg; repeated here structurally so copy.ts imports nothing from plan.ts). */
+export interface FeeLegText { kind: "curve" | "trade" | "creator"; amountRaw: bigint; unit: "SOL" | "tokens"; basis: "input" | "output"; bps: number; burnPoolRaw: bigint | null; burnedRaw: bigint; raydiumRaw: bigint; operatorRaw: bigint }
+const basisText = (l: Pick<FeeLegText, "unit" | "basis">): string => `${l.unit === "SOL" ? "SOL" : "tokens"} ${l.basis === "input" ? "in" : "out"}`;
+/**
+ * CONTINUOUS AUDIT 2026-10-19 SEC-01: the fee line for a swap in a graduated pool, one sentence per fee leg, each in its own unit, from
+ * the quote's own amounts. `fmt` writes a raw amount with its unit ("0.000013511 SOL", "2,500 $TEST"). The burn pool's part is always a
+ * part of the leg it is named in.
+ */
+export function poolFeeLine(legs: readonly FeeLegText[], fmt: (raw: bigint, unit: "SOL" | "tokens") => string): string {
+  const out: string[] = [];
+  for (const l of legs) {
+    const amt = (x: bigint) => fmt(x, l.unit);
+    if (l.kind === "trade") {
+      const lp = l.amountRaw - l.raydiumRaw;
+      const lpLine = l.unit === "SOL"
+        ? `${amt(l.burnPoolRaw ?? BigInt(0))} of it goes to this coin's burn pool when those fees are claimed, and ${amt(l.operatorRaw)} to the operator.`
+        : "The coin side of the liquidity's fees is burned when they are claimed.";
+      out.push(`Trading fee: ${amt(l.amountRaw)} (${pct(l.bps)} of the ${basisText(l)}). Raydium keeps ${amt(l.raydiumRaw)}. The locked liquidity's share is ${amt(lp)}. ${lpLine}`);
+    } else if (l.kind === "creator") {
+      const from = l.basis === "output" ? `, taken from the ${basisText(l)} before it reaches your wallet` : "";
+      const to = l.burnPoolRaw === null ? "It goes to this coin's burn pool, less Raydium's share." : `${amt(l.burnPoolRaw)} of it goes to this coin's burn pool${l.raydiumRaw > BigInt(0) ? `, and Raydium keeps ${amt(l.raydiumRaw)}` : ""}.`;
+      out.push(`Creator fee: ${amt(l.amountRaw)} (${pct(l.bps)} of the ${basisText(l)})${from}. ${to}`);
+    } else {
+      out.push(`Fee: ${amt(l.amountRaw)} (${pct(l.bps)} of the ${basisText(l)}). ${amt(l.burnPoolRaw ?? BigInt(0))} of it goes to this coin's burn pool.`);
+    }
+  }
+  out.push("The amount out shown is after every fee.");
+  return out.join(" ");
+}
+
 /** The curve's other legs on their own sentence. */
 export const curveSplitLine = (raydiumBps: number, platformBps: number): string => `The rest goes to ${restParts({ raydiumBps, platformBps })}.`;
 
@@ -107,6 +137,8 @@ export const REFUSAL = {
   slippage: (now: string, min: string, slip: string) => `The pool moved since the quote. The swap would now give ${now}, below your minimum of ${min} at ${slip} slippage. Nothing was sent. Check the new quote and try again.`,
   simulation: (why: string) => `The network's test run of this swap failed, so nothing was sent. ${why}`,
   cannotSign: "This wallet cannot sign transactions.",
+  /** continuous audit 2026-10-19 SEC-02: the browser does not keep the swap's record (blocked site data, a private window, a full quota) */
+  storageUnavailable: "This browser is not keeping data for this site, so the panel cannot hold a record of your swap while it settles. Nothing was sent. Allow site data for this site and reload, or use a link below.",
   rejected: "The wallet did not sign, so nothing was sent.",
   notConfirmed: (sig: string) => `The swap was sent but not confirmed in time. Check transaction ${sig} on the explorer before you try again.`,
   failed: (why: string) => `The swap failed on chain, and the wallet keeps what it had except the network fee. ${why}`,

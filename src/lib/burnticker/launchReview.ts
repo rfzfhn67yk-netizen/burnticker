@@ -8,7 +8,8 @@ import { pairCurveEnabled } from "@/lib/burnKeeper/pairCurveCrank";
 import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS as PAIR_DEV_FEE_BPS, FEE_BPS as PAIR_FEE_BPS } from "@/lib/pairCurve/pricing";
 import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS } from "@/lib/burnticker/fees";
 import { governanceLines } from "@/lib/burnticker/currentStatusText";
-import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
+import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT } from "@/lib/burnticker/fees";
+import { capSentenceAway } from "@/lib/burnticker/capInForce";
 import { describeRule, endText, settledPairSentence, type DescribeCtx } from "@/lib/burnticker/describe";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
@@ -213,7 +214,7 @@ export const PREREQUISITE_STATES = [
   "Queued: a result is due, and the burn waits for the next run of the program.",
   "Delayed: the program held the burn, for example because the pool's price moved too far. The SOL stays in the burn pool.",
   "Below the floor: the amount due was smaller than the minimum spend fixed at launch, so nothing was bought.",
-  `Capped: each burn pool spends from at most the burn-pool cap, ${PRE_AUDIT_POOL_CAP_SOL} SOL unless the platform's multisig raises it through a public 48-hour wait. Anything above that waits until the cap rises or ends.`,
+  "Capped: each burn pool spends from at most the burn-pool cap, and anything above it waits until the cap rises or ends. An audit is not required for either.",
 ];
 const solOf = (lamports: bigint): string => (Number(lamports) / 1e9).toLocaleString("en-US", { maximumFractionDigits: 3 });
 /**
@@ -541,7 +542,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     costs: { lines, totalSol: sol(total), note: costNote },
     prerequisites: [
       prerequisiteLineFor(venue, venue === "launchlab" ? raiseSol : null),
-      `Until the program is audited, each burn pool spends from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL. Fees above that amount wait.`,
+      capSentenceAway(null),   // continuous audit 2026-10-19 ACC-01: the cap helper's words (this line used to promise an audit-gated cap)
       "Every burn needs a reading that the operator's keeper signs. Today one signature is enough, and the operator holds it.",
     ],
     venue,

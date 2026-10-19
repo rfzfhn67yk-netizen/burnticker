@@ -2,7 +2,7 @@
 // no request generation and no owner check, so wallet A's late balance overwrote wallet B's while B was connected ("This wallet holds 10
 // SOL" for a wallet holding 2). These run the whole Swap component (test/burntickerTradePanelHarness.ts) through both completion orders,
 // a held swap's status read outstanding across a switch, and a swap that completes for A after the visitor switched to B.
-import { describe, test, afterEach } from "node:test";
+import { describe, test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair, type PublicKey, type VersionedTransaction } from "@solana/web3.js";
 import { SwapHarness, ACCOUNTS, FX, deferred } from "./burntickerTradePanelHarness.ts";
@@ -16,6 +16,7 @@ const props = { ticker: "AUDIT", mint: MINT, status: "live", cluster: "devnet", 
 const SOL = 1_000_000_000;
 class MemStore implements SwapStore { m = new Map<string, string>(); getItem(k: string) { return this.m.get(k) ?? null; } setItem(k: string, v: string) { this.m.set(k, v); } removeItem(k: string) { this.m.delete(k); } }
 const g = globalThis as { localStorage?: SwapStore };
+beforeEach(() => { g.localStorage = new MemStore(); });   // SEC-02: a browser that keeps records (a test can replace it)
 afterEach(() => { delete g.localStorage; });
 
 /** An RPC whose balance and status answers can be held per wallet and released in any order. */

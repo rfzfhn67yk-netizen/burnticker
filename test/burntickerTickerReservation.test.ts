@@ -210,14 +210,16 @@ describe("F04: the registry's reservations", () => {
     try {
       const file = path.join(dir, "r.db");
       const r = openRegistry(file);
-      assert.equal(REGISTRY_SCHEMA_VERSION, 2);
-      assert.equal(r.schemaVersion()?.version, 2);
-      assert.match(r.schemaVersion()!.note, /^2026-10-19: .*ticker_reservations/);
+      // B-2 (third audit 2026-10-19) added version 3 (draft_sends) on top
+      assert.equal(REGISTRY_SCHEMA_VERSION, 3);
+      assert.equal(r.schemaVersion()?.version, 3);
+      assert.match(String((r.db.prepare("SELECT note FROM schema_version WHERE version = 2").get() as { note: string }).note), /^2026-10-19: .*ticker_reservations/);
+      assert.match(r.schemaVersion()!.note, /^2026-10-19: .*draft_sends/);
       // make it a version-1 file: no reservations table, no version-2 row
       r.db.exec("DROP TRIGGER schema_version_no_delete; DROP TABLE ticker_reservations; DELETE FROM schema_version WHERE version = 2");
       r.db.close();
       const again = openRegistry(file);
-      assert.equal(again.schemaVersion()?.version, 2, "opening a version-1 file brings it to version 2");
+      assert.equal(again.schemaVersion()?.version, 3, "opening a version-1 file brings it to the current version");
       assert.ok(again.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ticker_reservations'").get(), "the table is added");
       assert.deepEqual(again.reserveTicker("FILE", "w", null), { ok: true });
       again.db.close();

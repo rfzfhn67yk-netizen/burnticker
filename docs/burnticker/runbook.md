@@ -663,3 +663,46 @@ Then `caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy`, a
 fail the TLS handshake). Turn the Cloudflare setting on before reloading Caddy, or every visitor is refused. Certificate renewal over
 HTTP-01 on port 80 is unaffected (client_auth applies to TLS only). The two layers combine well: ufw keeps strangers off the port, and
 origin pulls keep a Cloudflare customer who points their own zone at this address from reaching the app.
+
+## External web check
+
+The keeper's heartbeat (above, "Heartbeat") says the keeper runs. It says nothing about the site: a hung web process, a dead Caddy, a
+broken origin certificate or a Cloudflare misroute were caught by nobody (audit 2026-10-19 I-11 / B-4). Monitoring stays on
+Healthchecks.io (owner decision 2026-10-19), which cannot poll a URL, so the box probes itself through the public path and pings.
+
+What runs: `mct-burnticker-web-probe.timer` fires `mct-burnticker-web-probe.service` every 5 minutes, which runs
+`scripts/service/burnticker-web-probe.sh`. It makes one GET of `https://burnticker.com/api/burnticker/v1/current-status` (the host is
+`BURNTICKER_WEB_PROBE_HOST`, default `burnticker.com`), so the request goes DNS, Cloudflare, the origin, Caddy, Next. A 20-second limit,
+no retry. Good means HTTP 200 and a JSON body whose `schema` is `burnticker.current-status/v1`; then it GETs the check's ping URL.
+Anything else (another status, a timeout, a TLS or DNS failure, a body that is not that JSON) POSTs `<ping URL>/fail` with a short body
+such as `code=503 HTTP 503`. Each run appends one line to `logs/burnticker-web-probe.log` and writes `data/web-probe-last.json`; the
+keeper reads that file, and ops.json prints `- external web check: configured, last ok <time>` (or FAILING with the code, or not
+configured). The ping URL carries the check's token: it is never logged, written or published. Until the URL is set the probe makes no
+request and logs `skipped` once a day. `sh scripts/service/burnticker-web-probe.sh --check` prints what a run would do and the last
+outcome, and sends nothing.
+
+Owner setup (once):
+
+1. In Healthchecks.io, create a check named **Burnticker web**: period 10 minutes, grace 10 minutes (two missed 5-minute runs before it
+   counts as late). Attach email and the existing push integration (the same one the keeper heartbeat's check uses).
+2. Copy its ping URL and put it on its own line of the shared env file on the box: `BURNTICKER_WEB_HEARTBEAT_URL=<the ping URL>` in
+   `.env.local` (shared/ under release directories). The probe reads only that one line of the file.
+3. Reinstall the units as mct: `sh scripts/ops/install-burnticker-units.sh` (each deploy does this too). It copies both units and enables
+   and starts the timer; `systemctl --user list-timers mct-burnticker-web-probe.timer` shows the next run.
+4. Verify: within 10 minutes the check turns green in Healthchecks, `tail -n 3 logs/burnticker-web-probe.log` shows `ok: HTTP 200`,
+   and the next ops.json says `external web check: configured, last ok ...`. To see a red once on purpose, pause the check's
+   integrations, run `systemctl --user stop mct-burnticker-web` for one probe, then start it again.
+
+What a red check means: either the probe reached the site and the answer was wrong (a `/fail` ping; the Healthchecks event body has
+the code), or the pings stopped (the box, its network or the timer is down; the keeper heartbeat's check usually goes red with it). The
+first three things to look at:
+
+1. `tail -n 20 logs/burnticker-web-probe.log`: the code and reason of each run. `code=000 timed out` or `could not connect` is the
+   network, Cloudflare or Caddy; `HTTP 502`/`504` is Caddy up with Next down or hung; `HTTP 5xx` from Cloudflare with a cf-ray and no
+   origin answer is the origin; `HTTP 200 but ...` is a wrong page in front of the app (a Cloudflare challenge or a stale build).
+2. The web process: `systemctl --user status mct-burnticker-web`, `tail -n 50 logs/burnticker-web.log`, and from the box
+   `curl -sS -m 10 -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/api/burnticker/v1/current-status` (the port the web unit
+   listens on). Good here and bad through the public name means Caddy or Cloudflare. Hung: `systemctl --user restart mct-burnticker-web`.
+3. Caddy and the edge: as root `systemctl status caddy` and `journalctl -u caddy -n 50`, then `curl -sI https://burnticker.com/burnticker`
+   from off the box (a cf-ray header and the status) and the Cloudflare dashboard's status for the zone. No pings at all (not `/fail`):
+   `systemctl --user list-timers 'mct-burnticker-*'` and whether the box is up.

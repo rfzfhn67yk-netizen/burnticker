@@ -120,13 +120,16 @@ describe("a signed swap is held before it is sent (swap/pending.ts)", () => {
     assert.equal((await run(chain({ statuses: [() => null], height: () => 101 + EXPIRY_MARGIN_BLOCKS }), s3)).kind, "expired");
   });
 
-  test("a browser without storage still holds the swap in the panel's memory (held)", async () => {
+  test("continuous audit SEC-02: a browser without storage is refused before anything is signed or sent (it used to send and hold in memory)", async () => {
     const c = chain({ statusThrows: 99 });
-    const first = await run(c, null);
-    assert.equal(first.kind, "pending");
-    const again = await submitSwap(ctx(c, null), { side: "sol-in", ixs, sign, pollMs: 1, held: first.kind === "pending" ? first.pending : null });
+    await assert.rejects(run(c, null), (e: Error) => e.message === REFUSAL.storageUnavailable);
+    assert.equal(c.sends, 0);
+    // the panel's memory of an earlier pending swap still settles it first (nothing new is sent)
+    const store = new MemStore(), c2 = chain({ statusThrows: 99 });
+    const first = await run(c2, store);
+    const again = await submitSwap(ctx(c2, null), { side: "sol-in", ixs, sign, pollMs: 1, held: first.kind === "pending" ? first.pending : null });
     assert.equal(again.kind, "pending");
-    assert.equal(c.sends, 1);
+    assert.equal(c2.sends, 1);
   });
 
   test("reconcileSubmitted: a read error is pending, never expired; the signature helper reads the wallet's signature", async () => {

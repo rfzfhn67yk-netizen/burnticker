@@ -2,8 +2,8 @@ import { PublicKey } from "@solana/web3.js";
 import { feeSplit as liveFeeSplit, PPM, ppmToBps, type AmmConfigView, type GlobalConfigView, type PlatformView } from "@/lib/burnKeeper/launch";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCKED_PCT, LP_POLICY_LINE, feeKeysPda, operatorTreasuryRecord } from "@/lib/burnticker/lockFees";
-import { CPMM_CONFIG_ID, CPMM_TIER, cpmmTierLabel, postGraduationBps, type CpmmCluster } from "@/lib/burnticker/cpmmTier";
-import { PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
+import { CPMM_CONFIG_ID, CPMM_PLATFORM_TIERS, CPMM_TIER, cpmmTierLabel, cpmmTierOf, postGraduationBps, tierForPin, type CpmmCluster } from "@/lib/burnticker/cpmmTier";
+import { EARLIER_COINS_LINE, PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 
 /**
  * BURNTICKER FEE SPLIT — the one place the DESIGNED numbers live (the owner, 2026-10-09; sources: docs/burnkeeper/fees.md, read from
@@ -29,6 +29,11 @@ import { PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine } from "@/lib/burntic
  *     fee is 75 bps (71.25 bps to the burn pool, 3.75 bps to Raydium at collection). Traders pay 100 bps; ≈ 88.05 bps go to the burn pool,
  *     4.2 bps to the operator, 7.75 bps to Raydium (tier 0 was 30 / 21.55 / 4.2 / 4.25). Every number in code derives from cpmmTier.ts.
  *     A coin keeps the tier it pinned at initialize_token; devnet stays on its index 0 (creator fee 25 bps, no protocol share).
+ *   · CPMM FEE TIER 14 FOR NEW COINS (owner decision 2026-10-19): coins initialised after the platform's cpConfigId moves to index 14
+ *     pay a 75 bps trade fee (63 bps LP → 50.4 burn pool + 12.6 operator; 9 + 3 Raydium) and a 50 bps creator fee (47.5 burn pool,
+ *     2.5 Raydium): traders pay 125 bps; 97.90 burn pool, 12.6 operator, 14.50 Raydium. Every function below that describes ONE coin
+ *     takes that coin's pinned AmmConfig (TokenConfig.ll_cp_config) and reads its tier (cpmmTier.ts tierForPin); without a pin it
+ *     describes the tier new coins get (CPMM_TIER).
  *
  * Units: parts per million of volume on chain (100 ppm = 1 bp); bps here; "per 1 SOL of volume" on the pages = bps / 10,000 SOL.
  */
@@ -49,18 +54,20 @@ export const PLATFORM_SCALE_PPM = BigInt(1_000_000);
 /** The CPMM tier each cluster's platform points at (cpmmTier.ts) and its per-swap breakdown; every post-graduation number below derives from it. */
 export { CPMM_CONFIG_ID, CPMM_TIER, cpmmTierLabel };
 const clusterOf = (cluster: string): CpmmCluster => (cluster === "devnet" ? "devnet" : cluster === "localnet" ? "localnet" : "mainnet");
-export const postGraduationBpsFor = (cluster: string) => postGraduationBps(CPMM_TIER[clusterOf(cluster)], LOCK_FEE_BURN_BPS);
+/** The tier a coin pinned (its TokenConfig.ll_cp_config), else the tier new coins get on the cluster. */
+export const tierFor = (cluster: string, cpConfig?: string | null) => tierForPin(clusterOf(cluster), cpConfig);
+export const postGraduationBpsFor = (cluster: string, cpConfig?: string | null) => postGraduationBps(tierFor(cluster, cpConfig), LOCK_FEE_BURN_BPS);
 const MAINNET_POST = postGraduationBpsFor("mainnet");
-/** Post-graduation on mainnet (CPMM AmmConfig index 9): trade fee 25 bps, creator fee 75 bps fixed per tier, 5% of it to the protocol at collection. */
+/** Post-graduation on mainnet for new coins (CPMM AmmConfig index 14): trade fee 75 bps, creator fee 50 bps fixed per tier, 5% of it to the protocol at collection. */
 export const CPMM_TIER_INDEX = CPMM_TIER.mainnet.index;
 export const CPMM_TRADE_BPS = MAINNET_POST.tradeFee;
 export const CPMM_CREATOR_BPS = MAINNET_POST.creatorFee;
 export const CPMM_CREATOR_SHARE_TO_PROTOCOL = CPMM_TIER.mainnet.creatorFeeShareRate / 1_000_000;
-/** The locked LP's share of the CPMM trade fee: 84% = 21 bps, split by claim_lock_fees. */
+/** The locked LP's share of the CPMM trade fee: 84% = 63 bps on tier 14, split by claim_lock_fees. */
 export const CPMM_LP_BPS = MAINNET_POST.lpFees;
-export const LP_FEES_TO_BURN_POOL_BPS = MAINNET_POST.lpToBurnPool;      // 16.8
-export const LP_FEES_TO_OPERATOR_BPS = MAINNET_POST.lpToOperator;       // 4.2
-/** The creator fee net of Raydium's share (71.25 bps) and the burn pool's whole per-swap take after graduation (88.05 bps). */
+export const LP_FEES_TO_BURN_POOL_BPS = MAINNET_POST.lpToBurnPool;      // 50.4 (16.8 on tier 9)
+export const LP_FEES_TO_OPERATOR_BPS = MAINNET_POST.lpToOperator;       // 12.6 (4.2 on tier 9)
+/** The creator fee net of Raydium's share (47.5 bps) and the burn pool's whole per-swap take after graduation (97.90 bps; 88.05 on tier 9). */
 export const CREATOR_FEE_TO_BURN_POOL_BPS = MAINNET_POST.creatorToBurnPool;
 export const BURN_POOL_POST_GRADUATION_BPS = MAINNET_POST.burnPoolTotal;
 
@@ -88,8 +95,8 @@ const ppmText = (ppm: number): string => ppm.toLocaleString("en-US");
  * also gets Raydium's creator fee less Raydium's share. The operator's line is stated as plainly as the developer's curve slice. The
  * operator leg's recipient is the cluster's record (audit R03: one record, lockFees.ts).
  */
-export function postGraduationFeesFor(cluster: string): FeeSplit {
-  const t = CPMM_TIER[clusterOf(cluster)], b = postGraduationBpsFor(cluster);
+export function postGraduationFeesFor(cluster: string, cpConfig?: string | null): FeeSplit {
+  const t = tierFor(cluster, cpConfig), b = postGraduationBpsFor(cluster, cpConfig);
   const lpShare = ppmPct(1_000_000 - t.protocolFeeRate - t.fundFeeRate);
   const creatorShareText = t.creatorFeeShareRate > 0 ? `, plus ${ppmPct(t.creatorFeeShareRate)} of the creator fee when that fee is collected` : "";
   return {
@@ -103,7 +110,7 @@ export function postGraduationFeesFor(cluster: string): FeeSplit {
     totalBps: b.tradersPay,
   };
 }
-/** The mainnet split (what the pages state; the trust page passes its own cluster). */
+/** The mainnet split for new coins (what the generic pages state; a coin's page passes its pin, the trust page the live platform's tier). */
 export const POST_GRADUATION_FEES: FeeSplit = postGraduationFeesFor("mainnet");
 
 /**
@@ -134,9 +141,9 @@ export const OPERATOR_SHARE_LINE = postGraduationShareLine(POST_GRADUATION_FEES)
  */
 export function devFeeLineFor(venue: "launchlab" | "pair-curve" | null = null): string {
   const curve = `Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume.`;
-  if (venue === "launchlab") return `${curve} ${OPERATOR_SHARE_LINE}`;
+  if (venue === "launchlab") return `${curve} ${OPERATOR_SHARE_LINE} ${EARLIER_COINS_LINE}`;
   if (venue === "pair-curve") return `${curve} ${PAIR_OPERATOR_SHARE_LINE}`;
-  return `${curve} ${OPERATOR_SHARE_LINE} LaunchLab rates; pair-curve pairs differ.`;
+  return `${curve} ${OPERATOR_SHARE_LINE} LaunchLab rates for new coins; pair-curve pairs differ. ${EARLIER_COINS_LINE}`;
 }
 export const DEV_FEE_LINE = devFeeLineFor(null);
 export const USE_OF_FEES = `${DEV_FEE_LINE} The operator's part of the liquidity fees is fixed in code, and the coin side of those fees is burned. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own, apart from a disclosed 0.1 SOL purchase of the $REHEARSAL test coin when it was created. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.`;
@@ -167,16 +174,16 @@ export function devFeeWallet(env: Readonly<Record<string, string | undefined>> =
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? v : null;
 }
 
-/** One sentence for the review step and the token page. States the split; says nothing about price. */
-export function feeSplitSentence(cluster = "mainnet"): string {
+/** One sentence for the review step and the token page (pass the coin's pinned AmmConfig). States the split; says nothing about price. */
+export function feeSplitSentence(cluster = "mainnet", cpConfig?: string | null): string {
   const c = CURVE_FEES.legs;
   const to = (label: string) => (label === "burn pool" ? "the burn pool" : label === "Raydium protocol" ? "Raydium" : label);
   const legs = c.map((l) => `${bpsPerSol(l.bps)} SOL to ${to(l.label)}`);
-  const t = CPMM_TIER[clusterOf(cluster)], b = postGraduationBpsFor(cluster);
+  const t = tierFor(cluster, cpConfig), b = postGraduationBpsFor(cluster, cpConfig);
   const creatorLine = t.creatorFeeShareRate > 0
     ? `Most of the burn pool's share, ${bpsPerSol(b.creatorToBurnPool)} SOL per 1 SOL, comes from Raydium's fixed CPMM creator fee of ${bpsPerSol(b.creatorFee)} SOL per 1 SOL, after Raydium's ${ppmPct(t.creatorFeeShareRate)} share.`
     : `Of the burn pool's share, ${bpsPerSol(b.creatorToBurnPool)} SOL per 1 SOL comes from Raydium's fixed CPMM creator fee.`;
-  return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). ${postGraduationShareLine(postGraduationFeesFor(cluster))} In all, each trade in the Raydium pool pays ${b.tradersPay / 100}% in fees. ${LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. The operator's part of those liquidity fees is fixed in code, and the coin side of them is burned. ${creatorLine} The coin's creator on LaunchLab is the burn program's fee account, so the creator-fee slot can only pay the burn pool. The human creator receives no cash from fees, and the keeper only pays network fees.`;
+  return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). ${postGraduationShareLine(postGraduationFeesFor(cluster, cpConfig))} In all, each trade in the Raydium pool pays ${b.tradersPay / 100}% in fees. ${LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. The operator's part of those liquidity fees is fixed in code, and the coin side of them is burned. ${creatorLine} The coin's creator on LaunchLab is the burn program's fee account, so the creator-fee slot can only pay the burn pool. The human creator receives no cash from fees, and the keeper only pays network fees.`;
 }
 
 /** The platform-config dials these constants translate to (what scripts/burnticker-platform-config.mts builds). */
@@ -197,10 +204,24 @@ export function compareLivePlatform(p: PlatformView, devWallet: string | null, b
     row("platform vesting slice, ppm", "0", p.platformVestingScale.toString()),
     row("CPMM pool creator override", "default (launch creator = the keeper)", p.platformCpCreator.equals(PublicKey.default) ? "default (launch creator = the keeper)" : p.platformCpCreator.toBase58()),
     row("platform claim-fee wallet", devWallet ?? "BURNTICKER_FEE_WALLET unset", p.platformClaimFeeWallet.toBase58()),
-    // the tier new coins graduate into; a coin keeps the tier it pinned at initialize_token, so each side names its tier
-    row("Raydium pool fee tier for new coins (cpConfigId)", cpmmTierLabel(CPMM_CONFIG_ID[clusterOf(cluster)]), cpmmTierLabel(p.cpConfigId.toBase58())),
+    platformTierRow(p.cpConfigId.toBase58(), cluster),
   ];
 }
+
+/**
+ * The trust row for the tier new coins get (owner decision 2026-10-19). The LIVE platform's cpConfigId is the truth for new coins; it
+ * matches when it is a tier the code accepts on this cluster (CPMM_PLATFORM_TIERS: the target, then tier 9 while the owner's platform
+ * update is pending), so the code can ship before the on-chain change without a false alarm. A coin keeps the tier it pinned at
+ * initialize_token, and its page reads that pin, so this row speaks only for coins created from now on.
+ */
+export function platformTierRow(liveCpConfigId: string, cluster = "mainnet"): LiveVsDesigned {
+  const accepted = CPMM_PLATFORM_TIERS[clusterOf(cluster)], target = accepted[0];
+  const designed = accepted.length > 1 ? `${cpmmTierLabel(target.id)}; ${accepted.slice(1).map((t) => cpmmTierLabel(t.id)).join(", ")} until the platform is updated` : cpmmTierLabel(target.id);
+  return { field: "Raydium pool fee tier for new coins (cpConfigId)", designed, live: cpmmTierLabel(liveCpConfigId), matches: accepted.some((t) => t.id === liveCpConfigId) };
+}
+
+/** The tier the live platform gives new coins, when it is a listed tier (null: unlisted or not read). */
+export const liveNewCoinTier = (liveCpConfigId: string | null | undefined) => (liveCpConfigId ? cpmmTierOf(liveCpConfigId) : null);
 
 const feeKeysPdaOrNull = (programId: string): string => { try { return feeKeysPda(programId).toBase58(); } catch { return "invalid program id"; } };
 

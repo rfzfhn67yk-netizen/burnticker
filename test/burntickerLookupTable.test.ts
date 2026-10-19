@@ -5,7 +5,7 @@
 // production signing path (signPlan.ts signAndSendPlan, the table verified by lookupTable.ts), and measure what reaches sendRaw.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { AddressLookupTableAccount, Keypair, PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
+import { AddressLookupTableAccount, Keypair, PublicKey, Transaction, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { getPdaPlatformVault } from "@raydium-io/raydium-sdk-v2";
 import { base58ToBytes, buildStepTx, launchlabPlan, pairCurvePlan, signAndSendPlan, PACKET_LIMIT, type SignPlan } from "@/lib/burnticker/signPlan";
 import { expectedLookupTable, LOOKUP_TABLE_ENTRIES, LOOKUP_TABLE_MISMATCH, lookupTableKeys, lookupTableProblems, planNetwork, planSizeProblems, v0WireSize, verifiedLookupTable, type LookupTableReader } from "@/lib/burnticker/lookupTable";
@@ -14,6 +14,7 @@ import { BURNTICKER_PLATFORM, LAUNCHLAB_PROGRAM_ID, LAUNCHLAB_VAULT_AUTH, NATIVE
 import { feeKeysPda } from "@/lib/burnReceipts/pda";
 import { cpiEventAuthority, DEFAULT_SOL_CONFIG } from "@/lib/burnKeeper/launch";
 import { DEFAULT_CP_CONFIG } from "@/lib/burnticker/pairCurveLaunch";
+import { CPMM_MAINNET_TIER_9, CPMM_MAINNET_TIER_14 } from "@/lib/burnticker/cpmmTier";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import fs from "node:fs";
 import path from "node:path";
@@ -74,8 +75,10 @@ describe("the lookup table holds every fixed account the real bundles reference"
       const want = [
         PROGRAM_IDS[n].burn_receipts, ev(PROGRAM_IDS[n].burn_receipts), PROGRAM_IDS[n].pair_curve, ev(PROGRAM_IDS[n].pair_curve),
         ll.toBase58(), DEFAULT_SOL_CONFIG[n].toBase58(), BURNTICKER_PLATFORM[n].toBase58(), LAUNCHLAB_VAULT_AUTH[n].toBase58(), cpiEventAuthority(ll).toBase58(),
-        getPdaPlatformVault(ll, BURNTICKER_PLATFORM[n], NATIVE_MINT).publicKey.toBase58(), DEFAULT_CP_CONFIG[n], feeKeysPda(new PublicKey(PROGRAM_IDS[n].burn_receipts)).toBase58(), OPERATOR_TREASURY[n].toBase58(),
+        // mainnet index 10 stays the 2026-10-12 tier (9): the frozen table's prefix; the new-coin tier (14) is appended at index 21
+        getPdaPlatformVault(ll, BURNTICKER_PLATFORM[n], NATIVE_MINT).publicKey.toBase58(), n === "mainnet" ? CPMM_MAINNET_TIER_9.id : DEFAULT_CP_CONFIG[n], feeKeysPda(new PublicKey(PROGRAM_IDS[n].burn_receipts)).toBase58(), OPERATOR_TREASURY[n].toBase58(),
         "11111111111111111111111111111111", TOKEN_PROGRAM_ID.toBase58(), TOKEN_2022_PROGRAM_ID.toBase58(), ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(), "SysvarRent111111111111111111111111111111111", "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s", NATIVE_MINT.toBase58(), MEMO_PROGRAM_ID.toBase58(),
+        ...(n === "mainnet" ? [CPMM_MAINNET_TIER_14.id] : []),
       ];
       assert.deepEqual(lookupTableKeys(n), want, `${n}: the table's order and values`);
       assert.equal(operator.clusters[n].launchlabPlatform, BURNTICKER_PLATFORM[n].toBase58(), "operator.json's platform is the table's");
@@ -236,10 +239,43 @@ describe("the browser verifies the table before signing (lookup table mismatch �
   });
   test("pinned per network in networks.ts; until the owner creates a table the card refuses to sign there; the card wires the verified table", () => {
     for (const x of NETWORKS) assert.ok(x in LOOKUP_TABLES && "address" in LOOKUP_TABLES[x] && "authority" in LOOKUP_TABLES[x]);
-    for (const x of NETWORKS) assert.equal(LOOKUP_TABLE_ENTRIES[x].length, 21);
+    assert.equal(LOOKUP_TABLE_ENTRIES.devnet.length, 21);
+    assert.equal(LOOKUP_TABLE_ENTRIES.mainnet.length, 22, "tier 14 appended at index 21 (owner decision 2026-10-19)");
     const card = fs.readFileSync(path.join(ROOT, "src/app/burnticker/launch/SignCard.tsx"), "utf8");
     // launch-10 (2026-10-12): the pin comes from the host at runtime (GET /api/burnticker/launch); test/burntickerHostedLaunch.test.ts
     assert.match(card, /lookupTable: \(\) => verifiedLookupTable\(connection, network, pin\)/);
     assert.match(card, /lookupTablePinProblems\(network, pin\)/);
+  });
+});
+
+describe("CPMM tier 14 in the mainnet table (owner decision 2026-10-19): the frozen 21-entry table cannot hold it, so a new table must be pinned first", () => {
+  const key = Keypair.generate().publicKey, pin = { address: key.toBase58(), authority: null };
+  const keys = lookupTableKeys("mainnet"), old21 = keys.slice(0, 21);
+  test("the definition: tier 9 stays at index 10 (the frozen table's prefix), tier 14 is index 21, nothing else moved", () => {
+    assert.equal(keys[10], CPMM_MAINNET_TIER_9.id);
+    assert.equal(keys[21], CPMM_MAINNET_TIER_14.id);
+    assert.equal(keys.indexOf(CPMM_MAINNET_TIER_14.id), 21, "once");
+    assert.equal(DEFAULT_CP_CONFIG.mainnet, CPMM_MAINNET_TIER_14.id, "new pair-curve pools name tier 14");
+  });
+  test("the frozen 21-entry table (8DZaHFo6…) is refused by this code; a 22-entry table passes it, and the older code's 21-entry list is its prefix", async () => {
+    assert.deepEqual(lookupTableProblems("mainnet", key.toBase58(), table(key, old21).state, pin), [`index 21: expected ${CPMM_MAINNET_TIER_14.id} (Raydium CPMM AmmConfig tier 14 (new coins, pair curve)), found nothing`]);
+    await assert.rejects(verifiedLookupTable(reader(table(key, old21)), "mainnet", pin), /lookup table mismatch — nothing was sent \(index 21: expected 52MZUk/);
+    assert.deepEqual(lookupTableProblems("mainnet", key.toBase58(), table(key, keys).state, pin), []);
+    // the code released before this one checks only the first 21 entries and tolerates more: the new table passes it too
+    assert.deepEqual(table(key, keys).state.addresses.slice(0, 21).map((a) => a.toBase58()), old21);
+  });
+  test("without the entry a pair-curve step that names tier 14 grows by 31 bytes (a static key instead of a table index); a single coin never names it", async () => {
+    const { pc, creator } = await pairCurveSet("mainnet");
+    const payer = creator.publicKey.toBase58();
+    const size = (ixs: typeof pc.transactions[number]["instructions"], addresses: string[]) => {
+      const msg = new TransactionMessage({ payerKey: creator.publicKey, recentBlockhash: BH, instructions: ixs.map(toIx) }).compileToV0Message([table(key, addresses)]);
+      return 1 + 64 * msg.header.numRequiredSignatures + msg.serialize().length;
+    };
+    const naming = pc.transactions.filter((t) => t.instructions.some((ix) => ix.keys.some((k) => k.pubkey === CPMM_MAINNET_TIER_14.id)));
+    assert.ok(naming.length > 0, "init_pair names the AmmConfig");
+    for (const t of naming) assert.equal(size(t.instructions, old21) - size(t.instructions, keys), 31, t.label);
+    assert.equal(v0WireSize(naming[0].instructions, payer, "mainnet"), size(naming[0].instructions, keys));
+    const single = await singleCoin("mainnet");
+    assert.ok(!single.bundle.transactions.some((t) => t.instructions.some((ix) => ix.programId === CPMM_MAINNET_TIER_14.id || ix.keys.some((k) => k.pubkey === CPMM_MAINNET_TIER_14.id || k.pubkey === CPMM_MAINNET_TIER_9.id))), "a LaunchLab coin reads the AmmConfig from the platform, not as an account");
   });
 });

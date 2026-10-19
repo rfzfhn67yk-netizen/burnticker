@@ -288,7 +288,7 @@ describe("re-review: no echoed error carries an RPC or feed address with its key
     const v1 = read("src/lib/burnticker/api/v1.ts");
     assert.ok(!/fail\(\d+, \(e as Error\)\.message|e\.message\.slice/.test(v1), "v1.ts");
     const h = read("src/lib/burnticker/api/handlers.ts");
-    assert.match(h, /takeLiveFromChain\([^\n]*\n  catch \(e\) \{\n(?:    \/\/[^\n]*\n)*    if \(e instanceof RevivalTickerHeldError\)[^\n]*\n    return fail\(409, safeErrorText\(e, 600\), \{ code: "launch-race" \}\);/);
+    assert.match(h, /takeLiveFromChain\([^\n]*\n  catch \(e\) \{\n(?:    \/\/[^\n]*\n)*    if \(e instanceof RevivalTickerHeldError\)[^\n]*\n(?:    \/\/[^\n]*\n|    if \(e instanceof TickerAlreadyLiveError\)[^\n]*\n)*    return fail\(409, safeErrorText\(e, 600\), \{ code: "launch-race" \}\);/);
     assert.ok(!/fail\(\d+, \(e as Error\)\.message/.test(h), "handlers.ts");
   });
 });

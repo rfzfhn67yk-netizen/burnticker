@@ -32,7 +32,7 @@ const burnProgram = new PublicKey(opt("program") ?? process.env.BURNTICKER_PROGR
 const feeKeys = feeKeysPda(burnProgram);
 const treasury = operatorTreasuryFor(cluster);
 
-// The CPMM AmmConfig the platform points at, per cluster (cpmmTier.ts): mainnet tier 9 (owner decision 2026-10-12), devnet index 0.
+// The CPMM AmmConfig the platform points at, per cluster (cpmmTier.ts): mainnet tier 14 (owner decision 2026-10-19; was tier 9 from 2026-10-12), devnet index 0.
 const TIER = CPMM_TIER[cluster];
 const CP_CONFIG = new PublicKey(TIER.id);
 const admin = new PublicKey(adminS);

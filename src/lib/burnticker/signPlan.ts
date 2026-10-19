@@ -4,6 +4,7 @@ import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { CONFIRM_LANE_BUSY_CODE, CONFIRM_LANE_BUSY_RETRY_SEC } from "@/lib/burnticker/confirmBusy";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { PLAN_EXPIRED_SENTENCE, PLAN_SIGNABLE_MS, planExpired } from "@/lib/burnticker/planAge";
+import { planGateOf, type PlanGate } from "@/lib/burnticker/launchGateAdmission";
 
 // Prelaunch audit 2026-10-18 F06: the plan-age guard, from the shared runner's own module (every signing entry point imports this one)
 export { planExpired, PLAN_EXPIRED_SENTENCE, PLAN_SIGNABLE_MS };
@@ -279,7 +280,11 @@ export interface PlanRecord {
   stepSigners?: number[];
   /** the network fees already paid: every step that landed (confirmed, or rejected on chain — a rejected transaction still pays) */
   paid?: { step: number; signature: string; lamports: number }[];
+  /** SEC-03: the launch gate read "open" right before the plan's FIRST step was sent (written once, before that send) */
+  gate?: PlanGate;
 }
+
+export { planGateOf, type PlanGate } from "@/lib/burnticker/launchGateAdmission";
 
 /** A string store (sessionStorage in the browser). */
 export interface PlanStorage { get(key: string): string | null; set(key: string, value: string): void; remove(key: string): void; /** every key held (the reload recovery lists stored launches) */ keys?(): string[] }
@@ -326,6 +331,7 @@ export function loadPlanRecord(storage: PlanStorage | null | undefined, plan: Si
     pending: isPending(j.pending) ? j.pending : null,
     failed: j.failed && Number.isInteger(j.failed.step) && typeof j.failed.signature === "string" ? j.failed : null,
     updatedAt: Number(j.updatedAt) || 0, paid: paidOf(j.paid),
+    ...(planGateOf(j.gate) ? { gate: planGateOf(j.gate) } : {}),
   };
 }
 const paidOf = (p: unknown): { step: number; signature: string; lamports: number }[] => (Array.isArray(p) ? p.filter((x) => x && Number.isInteger(x.step) && typeof x.signature === "string" && Number.isFinite(x.lamports)) : []);
@@ -373,7 +379,9 @@ export interface SendDeps {
   /**
    * Prelaunch audit 2026-10-18 A-11: whether creator launches are still open on this site, read before each NEW step is built and again
    * when the wallet returns it. "closed" stops the run before anything more is sent (a create after the closure is refused by the
-   * confirm); "unknown" (the read failed) lets the step go on, since the server still checks. Left out: not checked.
+   * confirm). Continuous audit 2026-10-19 SEC-03: "unknown" (the read failed: a catalogue error or a 429) now STOPS the step too, with a
+   * sentence asking the creator to try again; before, it let the step go on, and a create could land after a closure nobody saw.
+   * Left out: not checked.
    */
   launchGate?(): Promise<"open" | "closed" | "unknown">;
   latestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }>;
@@ -408,6 +416,12 @@ export interface SendDeps {
   isBlockhashValid?(blockhash: string): Promise<boolean>;
   /** a sentence for the creator while the run goes on (the wallet is asked to sign a rebuilt step) */
   onNotice?(text: string): void;
+  /**
+   * B-2 (third audit 2026-10-19): told of each signed step just after it is written ahead and before it is sent (the step, its signature
+   * and the signed transaction, base64). The card reports a create to the site, so the creator's next prepare of the same ticker is
+   * refused while this one can still land. Awaited for at most SENT_REPORT_WAIT_MS; a failure or a slow answer never stops the send.
+   */
+  onSent?(step: number, signature: string, txBase64: string): Promise<void> | void;
   /** the clock (tests); Date.now by default */
   now?(): number;
   /**
@@ -422,7 +436,7 @@ export interface SendDeps {
   expectedAccounts?(mints: string[]): Promise<"absent" | "present" | "unknown">;
 }
 /** `state` / `signature` describe the step at `failedAt` and are present only when a run stops. */
-export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true; /** A-11: stopped because creator launches closed */ closed?: true }
+export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true; /** A-11: stopped because creator launches closed */ closed?: true; /** SEC-03: stopped because the launch gate could not be read (pressing again reads it again) */ gateUnread?: true; /** SEC-03: the open gate read before the plan's first step was sent (it goes with the confirm) */ gate?: PlanGate }
 
 export type ChainReadDeps = Pick<SendDeps, "getSignatureStatus" | "getBlockHeight" | "getTransaction" | "expectedAccounts">;
 /**
@@ -489,10 +503,27 @@ async function blockhashExpired(d: Pick<SendDeps, "isBlockhashValid">, blockhash
   try { return (await d.isBlockhashValid!(blockhash)) === false; } catch { return false; }
 }
 /** Said to the creator while the wallet is asked again. */
+/** SEC-03: the sentence when the launch gate could not be read before a step (a catalogue error or a 429): nothing is sent; pressing again reads it again. */
+export const launchGateUnreadSentence = (i: number, n: number): string => `This site could not read whether creator launches are open just now, so step ${i + 1} of ${n} was not sent. Wait a moment, then press the button to try again`;
 /** A-11: the sentence when creator launches closed while a plan was being signed. */
 export const launchesClosedSentence = (i: number, n: number): string => `Creator launches were closed on this site while this launch was being signed, so step ${i + 1} of ${n} was not sent and nothing more is asked of your wallet. Any step already confirmed stays on chain`;
 export const resignSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} waited in the wallet longer than the network allows, so it was prepared again. This step was not sent. Approve it in your wallet once more.`;
 export const resignExhaustedSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} was not sent because the wallet took longer than the network allows, ${RESIGN_MAX + 1} times in a row. Press the button to try again, and approve the request in your wallet within a minute.`;
+/**
+ * B-2: the card's SendDeps.onSent. A step that confirms a draft (plan.confirms: the coin's create) is reported to the launch route as
+ * `{ action: "sent", mint, sentTx }`, once per draft it confirms; any other step (the lock step) is not.
+ */
+export function sentReporter(plan: Pick<SignPlan, "confirms">, post: (body: { action: "sent"; mint: string; sentTx: string }) => Promise<unknown>): NonNullable<SendDeps["onSent"]> {
+  return async (step, _signature, txBase64) => { await Promise.all(plan.confirms.filter((c) => c.step === step).map((c) => post({ action: "sent", mint: c.mint, sentTx: txBase64 }).catch(() => undefined))); };
+}
+/** B-2: how long a send waits for the site to record it (SendDeps.onSent) before it goes ahead anyway. */
+export const SENT_REPORT_WAIT_MS = 2_000;
+async function reportSent(onSent: NonNullable<SendDeps["onSent"]>, p: PendingSend): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { await Promise.race([Promise.resolve().then(() => onSent(p.step, p.signature, p.tx)), new Promise<void>((r) => { timer = setTimeout(r, SENT_REPORT_WAIT_MS); })]); }
+  catch { /* the report never stops the send */ }
+  finally { if (timer) clearTimeout(timer); }
+}
 /** A send error that proves the transaction never left the RPC node (preflight / blockhash refused); anything else may have landed. */
 const SEND_REFUSED = /simulation failed|preflight|blockhash not found|insufficient funds/i;
 
@@ -507,7 +538,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
   const signatures: string[] = (rec.confirmed.length > prior.length ? rec.confirmed : prior).slice(0, n);
   rec.confirmed = signatures;
   const save = () => savePlanRecord(store, plan, rec);
-  const stop = (i: number, state: Exclude<StepState, "confirmed">, error: string, signature?: string): SendResult => ({ signatures: [...signatures], failedAt: i, error, state, ...(signature ? { signature } : {}) });
+  const stop = (i: number, state: Exclude<StepState, "confirmed">, error: string, signature?: string): SendResult => ({ signatures: [...signatures], failedAt: i, error, state, ...(signature ? { signature } : {}), ...(rec.gate ? { gate: rec.gate } : {}) });
   const signersAt = (i: number) => plan.steps[i]?.signers.length ?? 1;
   const adopt = (i: number, sig: string) => { signatures.push(sig); notePaid(rec, i, sig, signersAt(i)); rec.pending = null; rec.failed = null; save(); onStep?.(i, sig); };
   /** settles a pending send against the chain: adopted when confirmed; cleared (rebuildable) when it failed or expired unlanded */
@@ -545,11 +576,16 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
   // F06 (prelaunch audit 2026-10-18): past the plan's deadline no NEW step is signed or sent, from any card. The stored pending send was
   // settled above (a status check) whatever the time, and every step already confirmed stays; only building a new one stops here.
   /** A-11: launches closed while this plan was being signed: no new step is sent */
+  // SEC-03 (continuous audit 2026-10-19): an unreadable gate stops the step as well (it used to let it go on)
+  let gateReadAt = 0;
   const closedNow = async (i: number): Promise<SendResult | null> => {
     if (!d.launchGate) return null;
     let g: "open" | "closed" | "unknown";
     try { g = await d.launchGate(); } catch { g = "unknown"; }
-    return g === "closed" ? { ...stop(i, "not-sent", launchesClosedSentence(i, n)), closed: true } : null;
+    if (g === "closed") return { ...stop(i, "not-sent", launchesClosedSentence(i, n)), closed: true };
+    if (g !== "open") return { ...stop(i, "not-sent", launchGateUnreadSentence(i, n)), gateUnread: true };
+    gateReadAt = now();
+    return null;
   };
   const pastDeadline = (i: number): SendResult | null => (planPastDeadline(plan, now()) ? { ...stop(i, "not-sent", planDeadlineSentence(i, n)), expired: true } : null);
   for (let i = signatures.length; i < n; i++) {
@@ -576,6 +612,8 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       // F06: the wallet can be held open for hours; the deadline is read again once it returns, before the transaction is kept or sent
       { const late = pastDeadline(i); if (late) return late; }
       { const shut = await closedNow(i); if (shut) return shut; }   // A-11: and whether launches closed meanwhile
+      // SEC-03: the open read right before the FIRST step's send is kept (once, saved with the pending send below) and goes with the confirm
+      if (i === 0 && !rec.gate && gateReadAt > 0) rec.gate = { state: "open", at: gateReadAt };
       const changed = walletReturnProblem(handed, signed, plan.steps[i], plan, lut ? [lut] : []);
       if (changed) {
         // 2026-10-14: what the wallet handed back, for the console (public bytes only: no key material is ever in a message)
@@ -594,6 +632,8 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       if (!hasSignature(first)) throw new Error("the wallet returned the transaction without its signature");
       pending = { step: i, signature: bytesToBase58(first), tx: Buffer.from(raw).toString("base64"), blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight, sentAt: Date.now() };
       rec.pending = pending; rec.failed = null; save(); // written BEFORE the send
+      // B-2: the site hears of the send before it happens (bounded wait; never stops the send)
+      if (d.onSent) await reportSent(d.onSent, pending);
     } catch (e) {
       const m = (e as Error).message ?? String(e);
       return stop(i, "not-sent", /reject|denied|cancel/i.test(m) ? `Step ${i + 1} of ${n} was not signed in the wallet` : `Step ${i + 1} of ${n} failed. The error was: ${m.slice(0, 200)}`);
@@ -628,7 +668,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
     if (c.err) { notePaid(rec, i, sig, signersAt(i)); rec.pending = null; rec.failed = { step: i, signature: sig }; save(); return stop(i, "failed", chainRejected(i, n, c.err), sig); }
     adopt(i, sig);
   }
-  return { signatures, failedAt: null, error: null };
+  return { signatures, failedAt: null, error: null, ...(rec.gate ? { gate: rec.gate } : {}) };
 }
 
 /** Each step's state for the card: confirmed up to the signatures, the stopped step's state, not sent after it ("abandoned" carries on to every later step). */
@@ -754,7 +794,7 @@ export interface ConfirmResult { confirmed: string[]; error: string | null; tran
  * `transport: true`, keeping what was recorded. Mints in `already` are skipped. A 503 with the confirm lane's busy code (confirmBusy.ts)
  * is retried on its own, up to `busyRetries` times (6), after its Retry-After: a stranger's burst never needs the creator's press.
  */
-export async function confirmPlan(fetchFn: FetchLike, plan: SignPlan, sigs: string[], message: (status: number, body: LaunchErrorBody | null, retryAfter: string | null) => string, o: { already?: string[]; retries?: number; waitMs?: number; sleep?: (ms: number) => Promise<void>; url?: string; busyRetries?: number } = {}): Promise<ConfirmResult> {
+export async function confirmPlan(fetchFn: FetchLike, plan: SignPlan, sigs: string[], message: (status: number, body: LaunchErrorBody | null, retryAfter: string | null) => string, o: { already?: string[]; retries?: number; waitMs?: number; sleep?: (ms: number) => Promise<void>; url?: string; busyRetries?: number; /** SEC-03: the plan record's gate read, sent with each confirm */ gate?: PlanGate | null } = {}): Promise<ConfirmResult> {
   const confirmed = [...(o.already ?? [])];
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   for (const l of planConfirmations(plan, sigs)) {
@@ -762,7 +802,7 @@ export async function confirmPlan(fetchFn: FetchLike, plan: SignPlan, sigs: stri
     for (let attempt = 0, busy = 0; ; attempt++) {
       let r: Awaited<ReturnType<FetchLike>>;
       try {
-        r = await fetchFn(o.url ?? "/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "launched", mint: l.mint, launchTx: l.launchTx }) });
+        r = await fetchFn(o.url ?? "/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "launched", mint: l.mint, launchTx: l.launchTx, ...(planGateOf(o.gate) ? { gate: planGateOf(o.gate) } : {}) }) });
       } catch (e) {
         return { confirmed, error: `The launch could not be recorded: the server did not answer (${String((e as Error).message ?? e).slice(0, 80)}). Press the button again to record it.`, transport: true };
       }
@@ -872,7 +912,7 @@ function parseStoredRecord(raw: string | null): StoredLaunch["rec"] | null {
   if (j.pending != null && !(isPending(j.pending) && inPlan(j.pending.step))) return null;
   if (j.failed != null && !(Number.isInteger(j.failed.step) && inPlan(j.failed.step) && typeof j.failed.signature === "string")) return null;
   const confirms = j.confirms;
-  return { v: 1 as const, mints: confirms.map((c) => c.mint), confirmed: [...j.confirmed], recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [], pending: j.pending ?? null, failed: j.failed ?? null, updatedAt: Number(j.updatedAt) || 0, confirms, steps, paid: paidOf(j.paid), together: typeof j.together === "boolean" ? j.together : j.venue === "pair-curve" || j.venue === "launchlab" ? j.venue === "pair-curve" : legacyTogether(confirms, steps), ...(j.venue === "pair-curve" || j.venue === "launchlab" ? { venue: j.venue } : {}), ...(Array.isArray(j.stepSigners) ? { stepSigners: [...j.stepSigners] } : {}) };
+  return { v: 1 as const, mints: confirms.map((c) => c.mint), confirmed: [...j.confirmed], recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [], pending: j.pending ?? null, failed: j.failed ?? null, updatedAt: Number(j.updatedAt) || 0, confirms, steps, paid: paidOf(j.paid), together: typeof j.together === "boolean" ? j.together : j.venue === "pair-curve" || j.venue === "launchlab" ? j.venue === "pair-curve" : legacyTogether(confirms, steps), ...(j.venue === "pair-curve" || j.venue === "launchlab" ? { venue: j.venue } : {}), ...(Array.isArray(j.stepSigners) ? { stepSigners: [...j.stepSigners] } : {}), ...(planGateOf(j.gate) ? { gate: planGateOf(j.gate) } : {}) };
 }
 
 /**
@@ -923,7 +963,7 @@ export async function recoverStoredLaunch(storage: PlanStorage, s: StoredLaunch,
   const plan = { confirms: rec.confirms, confirmTogether: rec.together === true } as unknown as SignPlan;
   const partial = rec.confirmed.length < rec.steps;
   if (partial && !planConfirmations(plan, rec.confirmed).some((l) => !rec.recorded.includes(l.mint))) return { text: storedLaunchSentence({ key: s.key, rec }), done: false, rec };
-  const c = await confirmPlan(fetchFn, plan, rec.confirmed, message, { already: rec.recorded });
+  const c = await confirmPlan(fetchFn, plan, rec.confirmed, message, { already: rec.recorded, gate: rec.gate ?? null });
   rec.recorded = c.confirmed;
   const done = rec.confirms.every((x) => rec.recorded.includes(x.mint));
   if (done) { try { storage.remove(s.key); } catch { /* ignore */ } } else save();

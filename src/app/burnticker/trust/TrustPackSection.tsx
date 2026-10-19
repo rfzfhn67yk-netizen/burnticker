@@ -11,7 +11,7 @@ import { denverTime } from "@/lib/burnticker/denverTime";
  * balance once it exists (GET /api/burnticker/v1/bounty; TODO_BOUNTY_WALLET until then), with the decided reports.
  */
 interface Bounty { wallet: string | null; walletTodo: string | null; balanceLamports: string | null; error: string | null; recordedFunding?: { sol: number; date: string; transaction: string | null; source?: string; transactions?: { signature: string; lamports: string; blockTime: string | null; explorerUrl: string }[] } | null; balanceReadAt?: string; reconciliation?: { line: string; differenceLamports: string | null } | null; rangeSol: number[]; status: string; reports: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string } }
-interface Op { cluster: string; neverBuys: { line: string; status: string } }
+interface Op { cluster: string; neverBuys: { line: string; status: string; /** ACC-02: what was checked and what could not be read */ scopeLine?: string | null; report?: { ranAt: string } | null } }
 
 const PAGES = [
   { href: "/burnticker/check", title: "Check this yourself", what: "It shows where money can go, who can do what, what is locked and what is not done. It also lists the build hashes and has a receipt checker that runs in your browser." },
@@ -29,7 +29,9 @@ export default function TrustPackSection({ card }: { card: string }) {
       <h2 className="font-medium">{TRUSTPACK_SECTION_COPY.title}</h2>
       <p className="text-xs text-neutral-300">{TRUSTPACK_SECTION_COPY.intro}</p>
       <ul className="text-xs list-disc pl-5 mt-1">{PAGES.map((p) => <li key={p.href}><Link className="underline" href={p.href}>{p.title}</Link>. {p.what}</li>)}</ul>
-      {op && <p className={`text-xs mt-2 ${tone}`}>On {op.cluster}, a monitor checks that the operator never buys a platform coin. {op.neverBuys.line}</p>}
+      {op && <p className={`text-xs mt-2 ${tone}`} data-never-buys>On {op.cluster}, a monitor checks that the operator never buys a platform coin. {op.neverBuys.line}</p>}
+      {/* continuous audit 2026-10-19 ACC-02: the scope of the check (recent history only), what could not be read, the named exception */}
+      {op?.neverBuys.scopeLine && <p className="text-xs text-neutral-400" data-never-buys-scope>{op.neverBuys.scopeLine}{op.neverBuys.report?.ranAt ? ` It last ran at ${denverTime(op.neverBuys.report.ranAt)}.` : ""} <Link className="underline" href="/burnticker/operator">The full report</Link> lists every wallet, holding and read error.</p>}
       <h3 className="text-xs font-medium mt-3">{TRUSTPACK_SECTION_COPY.bountyTitle}</h3>
       {!b ? (bounty.failure ? <ReadFailurePanel what="The bounty wallet" failure={bounty.failure} triedAt={bounty.triedAt} loading={bounty.loading} retry={bounty.retry} /> : <p className="text-xs text-neutral-500">Loading…</p>) : b.wallet
         ? <ul className="text-xs space-y-0.5" data-bounty><li><code className="break-all">{b.wallet}</code> (mainnet)</li>

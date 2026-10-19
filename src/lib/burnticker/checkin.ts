@@ -6,6 +6,7 @@ import { publishSite, toJson } from "@/lib/burnKeeper/statusPage";
 import { computeFeedHealth, type FeedHealth } from "@/lib/burnticker/ops/feedHealth";
 import { conditionLines, conditionsView, readConditionMemory, type ActiveCondition, type ConditionRecord, type OpsSignals } from "@/lib/burnticker/ops/conditions";
 import { heartbeatLine, type HeartbeatState } from "@/lib/burnticker/ops/heartbeat";
+import { webProbeLine, type WebProbeFact } from "@/lib/burnticker/ops/unitHealth";
 import { collectSnapshot, devFeeDelta, lamportsToSol, registryAlertRows, solStr, type BurntickerSnapshot, type WebhookState } from "@/lib/burnticker/alerts";
 
 /**
@@ -45,16 +46,19 @@ export interface HostFacts {
   /** BURNTICKER_STATUS_HEARTBEAT_URL is set (the off-box dead-man's switch) */ heartbeatConfigured: boolean;
   /** BURNTICKER_BACKUP_DEST is set, or the last backup run saw one */ backupDestConfigured: boolean;
   /** where the trust page's program hash comes from (programHash.ts programHashSourceLine) */ programHashSource: string;
+  /** I-11 / B-4 (2026-10-19): the external web check (ops/unitHealth.ts webProbeFact); absent in older documents. Never the URL. */
+  webProbe?: WebProbeFact | null;
 }
 /** The webhook as a host fact: with phone push configured and no webhook, it is not used by the owner's decision, never "not set". */
 export const WEBHOOK_PUSH_ONLY = "not used (push only, owner decision 2026-10-18)";
 const webhookFact = (configured: boolean, push: boolean): string => (configured ? "BURNTICKER_ALERT_WEBHOOK set" : push ? `BURNTICKER_ALERT_WEBHOOK ${WEBHOOK_PUSH_ONLY}` : "BURNTICKER_ALERT_WEBHOOK NOT SET (and no phone push: alerts stay on this host)");
-export function hostFactLines(h: HostFacts): string[] {
+export function hostFactLines(h: HostFacts, now: number = Date.now()): string[] {
   const yn = (b: boolean, name: string, why: string) => (b ? `${name} set` : `${name} NOT SET (${why})`);
   return [
     `- host: ${h.dispersal.line}`,
     `- host: ${webhookFact(h.webhookConfigured, h.pushConfigured)} · ${yn(h.pushConfigured, "BURNTICKER_PUSH_URL", "no alert reaches a phone")} · ${yn(h.heartbeatConfigured, "BURNTICKER_STATUS_HEARTBEAT_URL", "a dead host is seen by nobody")} · ${yn(h.backupDestConfigured, "BURNTICKER_BACKUP_DEST", "backups stay on the box")}`,
     `- host: ${h.programHashSource}`,
+    ...(h.webProbe ? [webProbeLine(h.webProbe, now)!] : []),
   ];
 }
 /** The host signals for the conditions: what the keeper passed, plus a keeper refusal read from the alert rows. */
@@ -93,7 +97,7 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
   out.push(...conditionLines(conditionsView(s, i.health ?? null, i.conditionMemory ?? {}, now, signalsOf(i)), now));
   const hb = heartbeatLine(i.heartbeat, now); if (hb) out.push(hb);
   if (i.webhook) out.push(`- alert webhook: ${i.webhook.configured ? `${i.webhook.lastError ? `FAILING (${i.webhook.lastError})` : i.webhook.lastOkAt ? `ok, last delivery ${ago(now, i.webhook.lastOkAt)}` : "configured, nothing delivered yet"}` : i.hostFacts?.pushConfigured ? WEBHOOK_PUSH_ONLY : "not configured (alerts stay on the Burnticker host; set BURNTICKER_ALERT_WEBHOOK)"}`);
-  if (i.hostFacts) out.push(...hostFactLines(i.hostFacts));
+  if (i.hostFacts) out.push(...hostFactLines(i.hostFacts, now));
   if (i.alerts === null) out.push(`- bt- alerts last 24 h: unavailable (alert table not readable on this host)`);
   else {
     const al = i.alerts.filter((a) => a.kind.startsWith("bt-"));

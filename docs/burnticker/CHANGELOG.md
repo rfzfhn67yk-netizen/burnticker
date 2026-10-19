@@ -1777,3 +1777,17 @@ commit is recorded against the later tag, and a release with no pins commit stay
 - allowlist sha256 (config/public-repo.allowlist): `ba75de0310da1a6e37add425fa6db1f05fdcbed048ff9a06c550c3b803c9f0c7`
 - files published: 2411
 - public commit: `df511e405697f5800072323568bcb18f76631cd3`
+
+## 2026-10-19 — Raydium CPMM fee tier 14 for new coins (client side; no publish, no deploy)
+
+- Owner decision (decisions.md): coins created after the platform change graduate into Raydium CPMM tier 14 (`52MZUkNsRYzP4gn2mCaLTVtJQy2tpoF79hp5K1HhAxxX`). Traders pay 1.25 % per swap; 97.90 bps go to the burn pool, 12.6 bps to the operator and 14.50 bps to Raydium. Coins created before the change keep the tier they pinned (tier 9 for most, tier 0 for the earliest).
+- Each coin's page states the split of the tier that coin pinned (TokenConfig.ll_cp_config); the trust page states the tier the live platform gives new coins and accepts tier 9 there until the platform update lands.
+- The mainnet lookup table definition keeps tier 9 at index 10 and adds tier 14 at index 21; the frozen table cannot be extended, so a new table is created, frozen and pinned before this code is published.
+
+## 2026-10-19 — publish from de9305a587ec
+
+- monorepo commit: `de9305a587eca613bc96e76734fec12250588bc9` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `cae0acbae59d464d3fddea5258afe06fbadff3caf9061e69a93416b30ec448a5`
+- files published: 2431

@@ -54,6 +54,8 @@ export interface MarketJson {
   /** The CPMM pool the curve migrated to, as registered in the burn program (null before graduation or with no program read). */
   graduatedPool: string | null;
   holders: { count: number | null; countNote: string; top: HolderRow[] | null; topNote: string;
+    /** third audit 2026-10-19 B-6: the holders that are wallets (the curve, the pool, the burn pool and program addresses left out); absent before */
+    wallets?: number | null;
     /** indexer-1 (holders.ts readHolders): the ten largest wallets, labelled, and their share of supply with and without the labelled ones */
     top10?: HolderTopJson[] | null; top10Pct?: number | null; top10PctUnlabelled?: number | null };
   trade: TradeLinks; chart: ChartJson; readAt: string | null; error: string | null;

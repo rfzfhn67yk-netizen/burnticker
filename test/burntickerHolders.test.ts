@@ -155,6 +155,6 @@ describe("summarizeHolders", () => {
     const s = summarizeHolders([{ owner: "b", amountRaw: BigInt(5) }, { owner: "a", amountRaw: BigInt(5) }, { owner: "b", amountRaw: BigInt(5) }, { owner: "c", amountRaw: BigInt(0) }], BigInt(20), 0);
     assert.equal(s.holders, 2); assert.deepEqual(s.top10.map((t) => [t.owner, t.amount, t.pct]), [["b", "10", 50], ["a", "5", 25]]); assert.equal(s.top10Pct, 75);
     assert.equal(summarizeHolders([{ owner: "a", amountRaw: BigInt(1) }], BigInt(0), 0).top10Pct, null);
-    assert.deepEqual(summarizeHolders([], BigInt(10), 0), { holders: 0, top10: [], top10Pct: null, top10PctUnlabelled: null }, "a real zero: the chain listed no holder");
+    assert.deepEqual(summarizeHolders([], BigInt(10), 0), { holders: 0, wallets: 0, top10: [], top10Pct: null, top10PctUnlabelled: null }, "a real zero: the chain listed no holder");
   });
 });

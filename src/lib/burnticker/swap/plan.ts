@@ -4,6 +4,7 @@ import { CURVE_TRADING, type CpmmConfig, type CurveConfig, type CurvePlatform, t
 import { cpmmCreatorFeeOnInput, cpmmSwapIn, curveRates, curveSolIn, curveTokensIn, minOut, PPM } from "@/lib/burnticker/swap/math";
 import { associatedTokenAddress, cpmmSwapBaseInputIx, curveBuyExactInIx, curveSellExactInIx, TOKEN_PROGRAM_ID, WSOL_MINT, wrapSwap } from "@/lib/burnticker/swap/instructions";
 import { REFUSAL, SLIPPAGE_CHOICES_BPS } from "@/lib/burnticker/swap/copy";
+import { cpmmTierOf } from "@/lib/burnticker/cpmmTier";
 
 /**
  * THE SWAP PLAN (swap-1, 2026-10-14): the panel's decisions as pure functions, so the page, the devnet proof
@@ -76,24 +77,71 @@ export interface Quote {
   /** "SOL" or "tokens": the curve charges in SOL; the CPMM trade fee is in the input token */
   feeUnit: "SOL" | "tokens";
   capped: boolean;
+  /** continuous audit 2026-10-19 SEC-01: every fee this swap pays, each in its own unit, from the same math as the amount out */
+  legs: FeeLeg[];
 }
 
 /**
- * The quote. On the curve the burn pool's part is LaunchLab's creator fee (the creator is the coin's burn pool). In the CPMM pool the
- * burn pool's share of each swap (its creator fee, less Raydium's share, plus 80% of the locked LP's fees, claimed later) is given in
- * basis points by the page's fee table; `poolBurnBps` passes it so the quote can show it in the input unit.
+ * ONE FEE THE SWAP PAYS (continuous audit 2026-10-19 SEC-01). A swap from tokens to SOL in a graduated pool pays a trade fee in tokens
+ * (taken from the tokens in) AND a creator fee in SOL (taken from the SOL out); the review used to show only the first and then named a
+ * burn-pool share larger than that whole fee. Each leg now carries its amount, unit, basis (the side it is taken from), rate and where
+ * it goes, every part in the leg's own unit and never more than the leg:
+ *   curve    LaunchLab's fee, in SOL (from the SOL in, or from the SOL out on a swap to SOL): burn pool (the creator slot), Raydium, Burnticker
+ *   trade    the CPMM trade fee, in the input token: Raydium's protocol and fund parts; the rest is the locked liquidity's, claimed later
+ *            (SOL side: LP_SOL_FEES_TO_BURN_POOL_BPS to the burn pool, the rest to the operator; coin side: burned)
+ *   creator  the CPMM creator fee, in the input or output token by the pool's creator_fee_on: the burn pool, less Raydium's share
+ *            (cpmmTier.ts creatorFeeShareRate; null when the pool's fee tier is not one this site knows)
+ */
+export interface FeeLeg {
+  kind: "curve" | "trade" | "creator";
+  amountRaw: bigint;
+  unit: "SOL" | "tokens";
+  basis: "input" | "output";
+  /** the leg's rate in basis points of its basis */
+  bps: number;
+  /** the part that reaches this coin's burn pool, in `unit`; null when it cannot be told (an unlisted fee tier) */
+  burnPoolRaw: bigint | null;
+  /** coin-side liquidity fees, burned when claimed (tokens) */
+  burnedRaw: bigint;
+  raydiumRaw: bigint;
+  /** Burnticker's curve platform slot */
+  platformRaw: bigint;
+  /** the operator's part of the locked liquidity's SOL fees */
+  operatorRaw: bigint;
+}
+/** The locked liquidity's SOL fees that claim_lock_fees pays the burn pool (burnReceipts/constants.ts LOCK_FEE_BURN_BPS; a test pins the two equal). */
+export const LP_SOL_FEES_TO_BURN_POOL_BPS = 8_000;
+
+/**
+ * The quote. On the curve the burn pool's part is LaunchLab's creator fee (the creator is the coin's burn pool). In the CPMM pool each
+ * fee leg is split from the pool's own AmmConfig (SEC-01): `legs` says what each costs and where it goes. `poolBurnBps` (the page's fee
+ * table) is no longer used for an amount; it is kept so callers that pass it keep working.
  */
 export function quoteSwap(m: Market, side: Side, amount: bigint, poolBurnBps = 0): Quote {
+  void poolBurnBps;
   if (m.kind === "curve") {
     const r = curveRates(m.config, m.platform);
     const q = side === "sol-in" ? curveSolIn(m.pool, r, amount) : curveTokensIn(m.pool, r, amount);
-    return { side, amountIn: q.amountIn, amountOut: q.amountOut, feeRaw: q.fee.total, burnPoolRaw: q.fee.creator, feeUnit: "SOL", capped: q.capped };
+    const leg: FeeLeg = { kind: "curve", amountRaw: q.fee.total, unit: "SOL", basis: side === "sol-in" ? "input" : "output", bps: Number(r.protocolFeeRate + r.platformFeeRate + r.creatorFeeRate) / 100, burnPoolRaw: q.fee.creator, burnedRaw: BigInt(0), raydiumRaw: q.fee.protocol, platformRaw: q.fee.platform, operatorRaw: BigInt(0) };
+    return { side, amountIn: q.amountIn, amountOut: q.amountOut, feeRaw: q.fee.total, burnPoolRaw: q.fee.creator, feeUnit: "SOL", capped: q.capped, legs: [leg] };
   }
   const solIn = side === "sol-in";
   const inputIsToken0 = solIn === m.solIsToken0;
   const q = cpmmSwapIn(amount, solIn ? m.reserveSol : m.reserveToken, solIn ? m.reserveToken : m.reserveSol, m.config, cpmmCreatorFeeOnInput(m.creatorFeeOn, inputIsToken0), m.enableCreatorFee);
-  const fee = q.tradeFee + (q.creatorFeeOnInput ? q.creatorFee : BigInt(0));
-  return { side, amountIn: amount, amountOut: q.amountOut, feeRaw: fee, burnPoolRaw: (amount * BigInt(Math.round(poolBurnBps * 100))) / PPM, feeUnit: solIn ? "SOL" : "tokens", capped: false };
+  const ZERO = BigInt(0), inUnit = solIn ? "SOL" as const : "tokens" as const, outUnit = solIn ? "tokens" as const : "SOL" as const;
+  // the trade fee: Raydium's protocol and fund parts (each rounded down, as raydium-cp-swap does), the rest the locked liquidity's
+  const raydiumTrade = (q.tradeFee * m.config.protocolFeeRate) / PPM + (q.tradeFee * m.config.fundFeeRate) / PPM;
+  const lp = q.tradeFee - raydiumTrade;
+  const lpBurnPool = solIn ? (lp * BigInt(LP_SOL_FEES_TO_BURN_POOL_BPS)) / BigInt(10_000) : ZERO;
+  const legs: FeeLeg[] = [{ kind: "trade", amountRaw: q.tradeFee, unit: inUnit, basis: "input", bps: Number(m.config.tradeFeeRate) / 100, burnPoolRaw: lpBurnPool, burnedRaw: solIn ? ZERO : lp, raydiumRaw: raydiumTrade, platformRaw: ZERO, operatorRaw: solIn ? lp - lpBurnPool : ZERO }];
+  if (q.creatorFee > ZERO) {
+    const tier = cpmmTierOf(m.pool.ammConfig.toBase58());
+    const toBurn = tier ? (q.creatorFee * (PPM - BigInt(tier.creatorFeeShareRate))) / PPM : null;
+    legs.push({ kind: "creator", amountRaw: q.creatorFee, unit: q.creatorFeeOnInput ? inUnit : outUnit, basis: q.creatorFeeOnInput ? "input" : "output", bps: Number(m.config.creatorFeeRate) / 100, burnPoolRaw: toBurn, burnedRaw: ZERO, raydiumRaw: toBurn === null ? ZERO : q.creatorFee - toBurn, platformRaw: ZERO, operatorRaw: ZERO });
+  }
+  const fee = q.tradeFee + (q.creatorFeeOnInput ? q.creatorFee : ZERO);
+  const inUnitBurn = legs.reduce((a, l) => a + (l.unit === inUnit ? l.burnPoolRaw ?? ZERO : ZERO), ZERO);
+  return { side, amountIn: amount, amountOut: q.amountOut, feeRaw: fee, burnPoolRaw: inUnitBurn, feeUnit: inUnit, capped: false, legs };
 }
 
 /** The fee rates in basis points for the fee line: the curve's from its two config accounts, the CPMM's from its AmmConfig. */

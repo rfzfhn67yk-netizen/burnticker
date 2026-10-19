@@ -40,6 +40,7 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *   and (second audit 2026-10-19 I-11) the keeper's reading and pair alerts: reading-unresolved, race-held, late-reading (low),
  *   revised-reading (as reading-conflict), the eight pair alerts as pair-result / pair-forward / pair-link; config-mismatch (urgent: the
  *   keeper fence held a coin, I-15), revival-ticker-held (I-16) and registry-newer (urgent: an older build on a newer file, I-17)
+ *   ticker-live       a second coin on a ticker that already has a live coin was refused at confirm; its creator paid for it (B-2)
  *   keeper-stale      the public status file is stale for more than two hours: pushed by scripts/ops/keeper-status-check.sh, which runs
  *                     every minute from the publish timer and so still works when the keeper is down (listed here for the runbook)
  *
@@ -61,9 +62,11 @@ export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "cr
   | "audit-mismatch" | "audit-stale" | "keeper-balance-low" | "reading-conflict" | "reading-implausible" | "foreign-reading" | "keeper-takeover"
   | "feed-stale" | "feed-disagree" | "derby-withheld" | "cap-binding" | "pin-orphan"
   // merged from the main branch
-  | "dispersal-receipt" | "dispersal-off" | "never-buys-red" | "pin-budget" | "launch-after-closure"
+  | "dispersal-receipt" | "dispersal-off" | "never-buys-red" | "pin-budget" | "launch-after-closure" | "launch-admitted-after-closure"
   // second audit 2026-10-19 I-11 / I-15 / I-16: recorded but never pushed until now
-  | "reading-unresolved" | "race-held" | "late-reading" | "pair-result" | "pair-forward" | "pair-link" | "config-mismatch" | "revival-ticker-held" | "registry-newer";
+  | "reading-unresolved" | "race-held" | "late-reading" | "pair-result" | "pair-forward" | "pair-link" | "config-mismatch" | "revival-ticker-held" | "registry-newer"
+  // third audit 2026-10-19 B-2
+  | "ticker-live";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -90,6 +93,8 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-pin-budget": "pin-budget",
   // A-11: a create that landed after creator launches closed (draftReconciler.ts and the confirm route, once per coin)
   "bt-launch-after-closure": "launch-after-closure",
+  // continuous audit 2026-10-19 SEC-03: a create after the closure admitted under the signing grace (launchGateAdmission.ts), once per coin
+  "bt-launch-admitted-after-closure": "launch-admitted-after-closure",
   // prelaunch audit H6 re-review: a coin held because this build cannot check its stored title filter is a burn that is not running
   "rule-filter-unsupported": "crank-refused",
   // A-7 (second audit 2026-10-18): recorded in the registry, and now pushed too
@@ -130,6 +135,8 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "revival-ticker-held": "revival-ticker-held",
   // I-17: an older build opened a registry file a newer build migrated, so new launches are refused (registry.ts constructor)
   "registry-schema-newer": "registry-newer",
+  // B-2: a second coin on a ticker that already has a live coin was refused at confirm (registry.ts takeLiveFromChain)
+  "launch-ticker-live": "ticker-live",
 };
 export const PUSH_TITLE: Record<PushKind, string> = {
   "keeper-refused": "Burnticker keeper refused to start",
@@ -164,6 +171,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "never-buys-red": "Burnticker operator wallet traded for a platform coin",
   "pin-budget": "Burnticker uploads half used",
   "launch-after-closure": "Burnticker coin created after launches closed",
+  "launch-admitted-after-closure": "Burnticker coin admitted after launches closed",
   "reading-unresolved": "Burnticker reading needs a look",
   "race-held": "Burnticker pair waiting on one side",
   "late-reading": "Burnticker result arrived late",
@@ -173,6 +181,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "config-mismatch": "Burnticker coin held: its settings differ",
   "revival-ticker-held": "Burnticker coin not taken live: ticker in use",
   "registry-newer": "Burnticker launches stopped: older build running",
+  "ticker-live": "Burnticker second coin on a live ticker",
 };
 /** Kinds pushed at low priority: a note, not trouble that needs someone now. */
 export const PUSH_LOW_PRIORITY: ReadonlySet<PushKind> = new Set(["backup-offbox", "cap-binding", "pin-orphan", "late-reading"]);
@@ -208,6 +217,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "never-buys-red": "The daily check of the operator wallets found one that traded for a platform coin outside any recorded rehearsal (a coin only sent to it is listed, not pushed). The operator and trust pages now show this in red. The line below names the wallet and the transaction.",
   "pin-budget": "Half of today's uploads for new coins are used. If many come from launch requests no wallet signed, someone may be filling the limit on purpose; the part kept for signed requests still lets real creators launch. The line below has the counts.",
   "launch-after-closure": "A coin was created on chain after creator launches were closed, so the site did not take it live. Its creator was probably signing when launches closed. It exists and can trade, but no burn runs for it until the operator decides. The line below has the command that takes it live.",
+  "launch-admitted-after-closure": "A coin was created on chain just after creator launches were closed, and the site took it live because its creator started signing while launches were open. Check that this is expected. The line below names the coin, its create and the times.",
   "reading-unresolved": "A reading for one coin is on chain but does not carry the value the keeper sent, and the keeper cannot read what became of its own send. That coin is held until someone compares the two. The line below names the reading and the transaction.",
   "race-held": "One side of a pair has a final result and the other does not yet. Neither coin burns or forwards until both are final. The line below names the two coins.",
   "late-reading": "A result arrived after the keeper had already moved past it. Its change is already inside the next result the keeper counted, so it is not counted again. This is a notice; nothing is lost.",
@@ -217,6 +227,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "config-mismatch": "The keeper holds a coin because its settings on chain are not the ones the site built for it at launch. Nothing is attested or burned for that coin until someone looks. The line below names the coin and the first setting that differs.",
   "revival-ticker-held": "A coin was created on chain in time from a draft the site had marked expired, but its ticker now belongs to another creator's coin or draft, so it was not taken live. The coin exists and can trade, but no burn runs for it until the operator decides. The line below names both.",
   "registry-newer": "The registry file was last opened by a newer build than the one running now, which usually means a rollback. Pages and the keeper keep reading, but new launches are refused until the newer build is back.",
+  "ticker-live": "A coin was created on chain for a ticker that already has a live coin on the site, so it was not taken live. Its creator paid for this second create; it exists and can trade, but no burn runs for it until the operator decides. The line below names both coins.",
   "single-source": "A coin's game settled on TheSportsDB alone for the first time. Polymarket had no market for it and no league feed could read it, so its final score had to stand unchanged for 12 hours first. This is a notice only; nothing needs doing.",
 };
 

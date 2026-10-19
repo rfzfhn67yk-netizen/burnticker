@@ -170,6 +170,30 @@ export interface ExpectedTokenConfig {
    * by admissionAccounts.ts). Absent on expectations stored before this was recorded: then only burnTargetKind is compared.
    */
   burnTarget?: { mint: string; pool: string; feedId: string } | null;
+  /**
+   * B-1 (third audit 2026-10-19): the LaunchLab initialize_v2 arguments and venue accounts the bundle encoded (launchCreateArgs.ts
+   * expectedCreateFromBundle), compared by the confirm step with the create that landed. Absent on expectations stored before this was
+   * recorded: then admission.ts expectedConfigFor fills it from what the draft row and the bundle recipe fix (fallback: true).
+   */
+  launchCreate?: ExpectedLaunchCreate | null;
+}
+
+/**
+ * WHAT THE LAUNCHLAB CREATE WRITES (B-1, third audit 2026-10-19): Raydium LaunchLab initialize_v2's arguments and the accounts that
+ * place the coin (global config, platform, pool, quote mint). JSON-safe: amounts as decimal strings, keys in base58. A `null` field is
+ * not known for this draft and is not compared (a fallback for a draft prepared before the arguments were stored).
+ */
+export interface ExpectedLaunchCreate {
+  version: 1;
+  /** Rebuilt from the draft row and the bundle recipe (no stored arguments). */
+  fallback?: true;
+  decimals: number; name: string | null; symbol: string | null; uri: string | null;
+  /** 0 = the constant-product curve the site always builds. */
+  curveIndex: number; supply: string; totalSellA: string | null; totalFundRaisingB: string | null; migrateType: number;
+  /** Fallback only (the raise is not stored on the draft row): the raises this site could have built for the draft's network. */
+  raise?: { minLamports: string; maxLamports: string; presetsLamports: string[] | null } | null;
+  totalLockedAmount: string | null; cliffPeriod: string | null; unlockPeriod: string | null; cpmmCreatorFeeOn: number;
+  globalConfig: string | null; platform: string | null; poolId: string | null; quoteMint: string;
 }
 
 /** An ExpectedTokenConfig from the counter rule and the rest of initialize_token's arguments (programClient.ts, the fake). */

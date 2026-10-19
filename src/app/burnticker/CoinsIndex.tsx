@@ -20,6 +20,7 @@ import { FIRST_PARTY_CARD_IDS, GRID_TABS, cardMatches, firstPartyCards, gridStat
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
 import { sharedTickers } from "@/lib/burnticker/coinKey";
 import { rereadDue } from "@/lib/burnticker/rereadCache";
+import { LIST_COPY, browserStorage, collapsedLine, groupCoins, readOpenOnly, withListLines, writeOpenOnly } from "@/lib/burnticker/coinsList";
 
 /**
  * THE COINS PAGE (/burnticker; list-first since 2026-10-12: Claude site audit 2 item 5, ChatGPT audit 6 A5 and A10, Codex review 5
@@ -44,6 +45,11 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const [tab, setTab] = useState<GridTab>("new");
   const [q, setQ] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  // owner 2026-10-19 (coinsList.ts): "Open only" is off by default and remembered per browser; the retired and void line starts closed
+  const [openOnly, setOpenOnly] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
+  useEffect(() => { setOpenOnly(readOpenOnly(browserStorage())); }, []);
+  const toggleOpenOnly = (on: boolean) => { setOpenOnly(on); writeOpenOnly(browserStorage(), on); };
   const home = useHome();
   const searchBox = useRef<HTMLInputElement>(null);
   // ChatGPT audit 6 item 24: the filter row scrolls sideways on narrow screens; the edge that still has more fades
@@ -120,11 +126,17 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const lead = firstPartyCards(home.data?.featured ?? [], tab, s, (v) => !!v.watchKey && watch.list.coins.includes(v.watchKey));
   // prelaunch audit 2026-10-18 A-2: a slot belongs to one coin, matched by its mint (a ticker can be shared); an older answer without one by ticker
   const slotIndex = (t: { ticker: string; mint: string }) => slots.findIndex((x) => (x.mint ? x.mint === t.mint : x.ticker === t.ticker));
-  const cards: CardView[] = coins.map((t) => { const v = cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet); const k = v.group === "public" ? slotIndex(t) : -1; return { v: k >= 0 ? { ...v, tags: [{ label: slots[k].label, tone: "featured" as const }, ...v.tags] } : v, k: k < 0 ? slots.length : k }; })
+  // owner 2026-10-19 (coinsList.ts): open coins first (the tab's own order, earned slots leading), then the decided coins under their
+  // dividers, then one collapsed line for the retired and void coins. Settled coins are never hidden unless the visitor picks "Open only".
+  const groups = groupCoins(coins, openOnly);
+  const toCards = (list: typeof coins): CardView[] => list.map((t) => { const v = withListLines(cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet), t.listing, { now }); const k = v.group === "public" ? slotIndex(t) : -1; return { v: k >= 0 ? { ...v, tags: [{ label: slots[k].label, tone: "featured" as const }, ...v.tags] } : v, k: k < 0 ? slots.length : k }; })
     .sort((a, b) => a.k - b.k).map((x) => x.v);
+  const cards: CardView[] = toCards(groups.open);
+  const waitingCards = toCards(groups.decidedWaiting), endedCards = toCards(groups.decidedEnded), closedCards = toCards(groups.closed);
   // the operator's own created coins first, then the registry's
   const allcards: CardView[] = [...lead, ...cards];
-  const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : allcards.length, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });
+  const listedCount = allcards.length + waitingCards.length + endedCards.length + closedCards.length;
+  const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : listedCount, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });
   const rule = GRID_TABS.find((t) => t.id === tab)!.rule;
 
   return (
@@ -140,6 +152,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
         </div>
         <p className="text-xs text-neutral-500" id="bt-tab-rule">{rule}{tab === "following" ? ` ${WATCH_NOTE}` : ""}{tab !== "pairs" ? " Each coin's curve completes at the raise its creator chose, and the card reads it from the coin's own pool." : ""}</p>
 
+        {tab !== "pairs" && <label className="flex w-fit items-center gap-2 text-xs text-neutral-300" title={LIST_COPY.openOnlyHint}><input type="checkbox" checked={openOnly} onChange={(e) => toggleOpenOnly(e.target.checked)} data-open-only /> {LIST_COPY.openOnly}</label>}
         <div id="bt-coins-panel" role="tabpanel" aria-describedby="bt-tab-rule" data-grid-state={state.kind}>
           {tab === "following" && watch.ambiguous.filter((a) => a.kind === "coins").map((a) => (
             <div key={a.ticker} className="mb-3 rounded-md border border-amber-700/60 p-3 text-xs" role="status" data-watch-ambiguous={a.ticker}>
@@ -156,7 +169,15 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
             {state.note && <p className="mb-2 text-xs text-amber-300" role="status">{state.note}</p>}
             {tab !== "pairs" && <p className="mb-2 text-xs text-neutral-400" data-featured-rules>{FEATURED_RULES_LINE}</p>}
             {tab !== "pairs" ? (
-              <CardGrid cards={allcards} now={now} />
+              <div className="space-y-4" data-coins-groups>
+                {allcards.length > 0 && <CardGrid cards={allcards} now={now} />}
+                {waitingCards.length > 0 && <section aria-labelledby="bt-decided-waiting" data-list-group="decided-waiting"><h2 id="bt-decided-waiting" className="mb-2 border-t border-neutral-800 pt-3 text-sm font-medium text-neutral-300">{LIST_COPY.decidedWaiting}</h2><CardGrid cards={waitingCards} now={now} /></section>}
+                {endedCards.length > 0 && <section aria-labelledby="bt-decided-ended" data-list-group="decided-ended"><h2 id="bt-decided-ended" className="mb-2 border-t border-neutral-800 pt-3 text-sm font-medium text-neutral-300">{LIST_COPY.decidedEnded}</h2><CardGrid cards={endedCards} now={now} /></section>}
+                {closedCards.length > 0 && <section data-list-group="closed" className="border-t border-neutral-800 pt-3">
+                  <button type="button" className="text-sm text-neutral-300 underline" aria-expanded={showClosed} aria-controls="bt-closed-coins" onClick={() => setShowClosed((x) => !x)}>{collapsedLine(closedCards.length)} <span className="text-neutral-500">{showClosed ? LIST_COPY.hide : LIST_COPY.show}</span></button>
+                  <div id="bt-closed-coins" hidden={!showClosed} className="mt-2"><CardGrid cards={closedCards} now={now} /></div>
+                </section>}
+              </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 {pairs.map((p) => (

@@ -17,9 +17,10 @@ import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURNTICKER_PLATFORM as PROGRAM_BURNT
  *   coin side burned outright
  *
  * Integer lamports: the operator's share is floor(sol × 2,000 / 10,000) and the burn pool gets the rest, so any odd lamport goes to the
- * burn pool (`splitLockFees`). Post-graduation economics per swap (mainnet CPMM tier 9, owner decision 2026-10-12; cpmmTier.ts): trade fee
- * 25 bps = 21 LP (→ 16.8 burned + 4.2 operator) + 3 RAY buyback + 1 Raydium treasury; plus the 75 bps creator fee, 71.25 bps of it to the
- * burn pool (88.05 bps to the burn pool in all).
+ * burn pool (`splitLockFees`). Post-graduation economics per swap for new coins (mainnet CPMM tier 14, owner decision 2026-10-19;
+ * cpmmTier.ts): trade fee 75 bps = 63 LP (→ 50.4 burn pool + 12.6 operator) + 9 RAY buyback + 3 Raydium treasury; plus the 50 bps creator
+ * fee, 47.5 bps of it to the burn pool (97.90 bps to the burn pool in all). Coins created before keep the tier they pinned (tier 9: 16.8 +
+ * 71.25 = 88.05 burn pool, 4.2 operator). The policy block below states the new-coin tier.
  *
  * THIS FILE IS THE ADAPTER the keeper, the pages and the API code against (the program change, its IDL and the verified build are the
  * program builder's). The names, seeds and accounts below are the program's final interface (LOCK_FEES_INTERFACE); the fake

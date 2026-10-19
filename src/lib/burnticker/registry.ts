@@ -152,6 +152,10 @@ CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_
 -- prepares for one unused ticker cannot both pass and both register. One row per ticker; a row past expires_at is free; the creator's
 -- draft (register) or the end of the prepare (releaseTicker) removes it. A working table, not a record: rows are deleted.
 CREATE TABLE IF NOT EXISTS ticker_reservations (ticker TEXT PRIMARY KEY, creator TEXT NOT NULL, mint TEXT, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
+-- B-2 (third audit 2026-10-19): a draft whose LaunchLab create was SENT (the launch page posts the creator-signed create just before it
+-- sends it; launchPending.ts checks the signatures). Its creator's next prepare of the same ticker is refused as launch-pending until the
+-- send can no longer land, so a refresh while the first create is in flight never builds and pays for a second coin. Append-only.
+CREATE TABLE IF NOT EXISTS draft_sends (mint TEXT NOT NULL, signature TEXT NOT NULL, sent_at INTEGER NOT NULL, PRIMARY KEY (mint, signature));
 `;
 
 /**
@@ -167,6 +171,7 @@ CREATE TABLE IF NOT EXISTS ticker_reservations (ticker TEXT PRIMARY KEY, creator
 export const REGISTRY_MIGRATIONS: readonly { version: number; note: string }[] = [
   { version: 1, note: "2026-10-18: schema versions start. Everything before this date is applied in place on open (burns' program-execution columns and readings.proof 2026-10-10, the tokens ticker-uniqueness rebuild, lock_fee_claims paid/pending, token_flags.synthetic 2026-10-15, tokens_expired_final narrowed to the verified revival 2026-10-15), so a file of any earlier age is at version 1 once opened." },
   { version: 2, note: "2026-10-19: adds the ticker_reservations table (ticker, creator, mint, expires_at, created_at), the short hold a prepare takes on a ticker before it uploads, so two creators cannot both register one unused ticker (third prelaunch audit F04)." },
+  { version: 3, note: "2026-10-19: adds the append-only draft_sends table (mint, signature, sent_at): a draft whose create the launch page reported as sent, so its creator cannot prepare a second coin on the same ticker while it can still land (third audit B-2)." },
 ];
 export const REGISTRY_SCHEMA_VERSION = REGISTRY_MIGRATIONS[REGISTRY_MIGRATIONS.length - 1].version;
 
@@ -196,6 +201,8 @@ CREATE TRIGGER IF NOT EXISTS tokens_expired_final BEFORE UPDATE OF status ON tok
   AND NOT (NEW.status = 'live' AND OLD.launch_tx IS NULL AND NEW.launch_tx IS NOT NULL AND EXISTS (SELECT 1 FROM draft_revivals r WHERE r.mint = OLD.mint AND r.launch_tx = NEW.launch_tx))
   BEGIN SELECT RAISE(ABORT, 'tokens: an expired draft stays expired (build a fresh bundle) unless its launch is verified on chain (draft_revivals)'); END;
 CREATE TRIGGER IF NOT EXISTS draft_revivals_no_update BEFORE UPDATE ON draft_revivals BEGIN SELECT RAISE(ABORT, 'draft_revivals: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS draft_sends_no_update BEFORE UPDATE ON draft_sends BEGIN SELECT RAISE(ABORT, 'draft_sends: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS draft_sends_no_delete BEFORE DELETE ON draft_sends BEGIN SELECT RAISE(ABORT, 'draft_sends: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS draft_revivals_no_delete BEFORE DELETE ON draft_revivals BEGIN SELECT RAISE(ABORT, 'draft_revivals: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS tokens_expire_drafts_only BEFORE UPDATE OF status ON tokens WHEN NEW.status = 'expired' AND OLD.status <> 'draft' AND OLD.status <> 'expired'
   BEGIN SELECT RAISE(ABORT, 'tokens: only a draft can expire'); END;
@@ -405,11 +412,25 @@ export class Registry {
     if (t.launchTx === launchTx) return { changed: false, revived: false, withinWindow };
     if (t.status !== "draft" && t.status !== "expired") throw new Error(`registry: ${mint} is ${t.status}, not a draft: only a draft goes live`);
     if (!withinWindow && !(o.late && o.source === "operator")) throw new Error(`registry: the launch of ${mint} landed at ${baselineAt}, after its draft's 24-hour window; only the operator can take it live (--late)`);
-    if (t.status === "draft" && withinWindow) return { changed: this.markLaunched(mint, launchTx, poolId, baselineAt), revived: false, withinWindow };
+    // B-2 (third audit 2026-10-19): a ticker is one live coin. When another coin on this ticker is already live (the same creator's
+    // second draft, built while the first create was pending, or any race that slipped past prepare) this one is refused, judged in the
+    // same transaction as the change, and the owner is told (the alert is written in that transaction; the throw comes after it commits).
+    // Every way a draft goes live passes here: the confirm, the draft reconciler and the operator's revive.
+    if (t.status === "draft" && withinWindow) {
+      const live = this.tx(() => {
+        const other = this.liveTickerHolder(t, mint);
+        if (other) { this.recordTickerLiveAlert(t, mint, launchTx, other, o.source, now); return other; }
+        return { changed: this.markLaunched(mint, launchTx, poolId, baselineAt) };
+      });
+      if ("mint" in live) throw new TickerAlreadyLiveError(normTicker(t.ticker), mint, live.mint, live.creator === t.creator);
+      return { changed: live.changed, revived: false, withinWindow };
+    }
     // second audit 2026-10-19 I-16: an expired draft freed its ticker at 24 hours, so another creator may hold it now (a draft or a coin).
     // Reviving it would put two live coins on one ticker: refused, judged in the same transaction as the revival, and the owner is told
     // (the alert is written in that transaction too; the throw comes after it commits). The same creator's rows never block.
+    let doubled: { mint: string; creator: string } | null = null;
     const held = this.tx(() => {
+      { const other = this.liveTickerHolder(t, mint); if (other) { this.recordTickerLiveAlert(t, mint, launchTx, other, o.source, now); doubled = other; return null; } }
       if (t.status === "expired") {
         const other = this.db.prepare("SELECT mint, creator, status FROM tokens WHERE ticker=? AND status <> 'expired' AND creator <> ? AND mint <> ? ORDER BY created_at LIMIT 1").get(normTicker(t.ticker), t.creator, mint) as { mint: string; creator: string; status: string } | undefined;
         if (other) {
@@ -422,8 +443,28 @@ export class Registry {
       if (Number(r.changes) !== 1) throw new Error(`registry: ${mint} changed while it was being confirmed; read it again`);
       return null;
     });
+    if (doubled) { const d = doubled as { mint: string; creator: string }; throw new TickerAlreadyLiveError(normTicker(t.ticker), mint, d.mint, d.creator === t.creator); }
     if (held) throw new RevivalTickerHeldError(normTicker(t.ticker), mint, held);
     return { changed: true, revived: true, withinWindow };
+  }
+  /** B-2: another coin on this row's ticker that is live (or paused), whoever made it, or null. */
+  private liveTickerHolder(t: TokenRow, mint: string): { mint: string; creator: string } | null {
+    const r = this.db.prepare("SELECT mint, creator FROM tokens WHERE ticker=? AND mint <> ? AND launch_tx IS NOT NULL AND status IN ('live','paused') ORDER BY created_at LIMIT 1").get(normTicker(t.ticker), mint) as { mint: string; creator: string } | undefined;
+    return r ? { mint: String(r.mint), creator: String(r.creator) } : null;
+  }
+  private recordTickerLiveAlert(t: TokenRow, mint: string, launchTx: string, other: { mint: string; creator: string }, source: string, now: number): void {
+    const same = other.creator === t.creator;
+    this.recordAlert({ kind: TICKER_LIVE_ALERT_KIND, key: `${TICKER_LIVE_ALERT_KIND}:${mint}`, text: `$${t.ticker}: a second coin was created on chain (${mint.slice(0, 8)}…, ${launchTx.slice(0, 12)}…) while ${same ? "the same creator's" : "another"} $${t.ticker} is already live (${other.mint.slice(0, 8)}…), so it was not taken live (${source}). The creator paid for both creates.`, meta: { ticker: t.ticker, mint, launchTx, liveMint: other.mint, sameCreator: same, source } }, now);
+  }
+
+  // ---- create sends (B-2, third audit 2026-10-19) ----
+  /** Records that a draft's create was sent with `signature` (the caller checked the creator's and the mint's signatures). True when new. */
+  recordCreateSent(mint: string, signature: string, now = Date.now()): boolean {
+    return Number(this.db.prepare("INSERT OR IGNORE INTO draft_sends (mint, signature, sent_at) VALUES (?,?,?)").run(mint, signature, now).changes) === 1;
+  }
+  /** Every send recorded for a draft, oldest first. */
+  createSends(mint: string): { signature: string; sentAt: number }[] {
+    return (this.db.prepare("SELECT signature, sent_at FROM draft_sends WHERE mint=? ORDER BY sent_at, signature").all(mint) as Row[]).map((r) => ({ signature: String(r.signature), sentAt: Number(r.sent_at) }));
   }
   /** Whether a ticker is held by a token that is not expired (expiring stale drafts first). */
   tickerTaken(ticker: string, now = Date.now()): boolean {
@@ -839,6 +880,13 @@ export const REVIVAL_TICKER_HELD_ALERT_KIND = "revival-ticker-held";
 export class RevivalTickerHeldError extends Error {
   readonly ticker: string; readonly mint: string; readonly heldBy: string;
   constructor(ticker: string, mint: string, heldBy: string) { super(`registry: the expired draft ${mint} is not revived: its ticker ${ticker} is held by another creator's coin (${heldBy})`); this.name = "RevivalTickerHeldError"; this.ticker = ticker; this.mint = mint; this.heldBy = heldBy; }
+}
+/** B-2 (third audit 2026-10-19): the alert kind recorded when a second coin on a live ticker is refused at confirm. */
+export const TICKER_LIVE_ALERT_KIND = "launch-ticker-live";
+/** B-2: takeLiveFromChain refused a draft because another coin on its ticker is already live (`sameCreator`: that coin is this creator's). */
+export class TickerAlreadyLiveError extends Error {
+  readonly ticker: string; readonly mint: string; readonly liveMint: string; readonly sameCreator: boolean;
+  constructor(ticker: string, mint: string, liveMint: string, sameCreator: boolean) { super(`registry: ${mint} is not taken live: the ticker ${ticker} already has a live coin (${liveMint})`); this.name = "TickerAlreadyLiveError"; this.ticker = ticker; this.mint = mint; this.liveMint = liveMint; this.sameCreator = sameCreator; }
 }
 /** Second audit 2026-10-19 I-17: the alert kind recorded when the registry file is newer than this build. */
 export const REGISTRY_NEWER_ALERT_KIND = "registry-schema-newer";

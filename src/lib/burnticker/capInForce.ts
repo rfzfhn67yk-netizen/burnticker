@@ -40,14 +40,30 @@ export function effectiveCap(platform: Pick<PlatformConfigAccount, "burn_pool_ca
 const sol = (lamports: string): string => { const n = BigInt(lamports); const whole = n / BigInt(1_000_000_000), frac = n % BigInt(1_000_000_000); return frac === BigInt(0) ? whole.toLocaleString("en-US") : `${whole.toLocaleString("en-US")}.${frac.toString().padStart(9, "0").replace(/0+$/, "")}`; };
 const day = (ts: number): string => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", day: "numeric", year: "numeric" }).format(new Date(ts * 1000));
 
-/** How the cap changes, in plain words (the trust page and the fees page). */
-export const CAP_MECHANISM_SENTENCE = `The cap can only be raised, by the platform's multisig through a public ${CAP_TIMELOCK_SECS / 3600}-hour wait, and it ends on its own by ${day(DEFAULT_CAP_SUNSET_TS)} at the latest. SOL above the cap stays in the coin's own fee account and is spent once the cap rises or ends. Publishing an audit does not change the cap by itself.`;
+/**
+ * How the cap changes, in plain words (the trust page, the fees page, the launch review, the token pages). Continuous audit 2026-10-19
+ * ACC-01: it says outright that no audit is needed for a raise or for the end (the launch review still said "until the program is
+ * audited"); every surface now takes its cap words from this file.
+ */
+export const CAP_MECHANISM_SENTENCE = `The platform authority can raise the cap after a public ${CAP_TIMELOCK_SECS / 3600}-hour wait, and it expires by ${day(DEFAULT_CAP_SUNSET_TS)} at the latest. An audit is not required for either change. SOL above the cap stays in the coin's own fee account and is spent once the cap rises or ends.`;
 
 /** The cap in force, in one sentence, from what was read on chain (null when it was not read). */
 export function capSentence(e: EffectiveCap | null): string {
-  if (!e) return `Each burn pool spends from at most the burn-pool cap, which is ${sol(DEFAULT_BURN_POOL_CAP_LAMPORTS.toString())} SOL unless the platform's multisig has raised it. ${CAP_MECHANISM_SENTENCE}`;
+  if (!e) return `The default burn-pool cap is ${sol(DEFAULT_BURN_POOL_CAP_LAMPORTS.toString())} SOL. ${CAP_MECHANISM_SENTENCE}`;
   if (e.capLamports === null) return `The burn-pool cap ended on ${day(e.sunsetTs)}, so each burn pool now spends from all of its SOL.`;
   const where = e.source === "platform-config" ? "read from the platform's settings on chain" : "the program's default, because the platform's settings have not been created";
   const pend = e.pending ? ` A raise to ${sol(e.pending.capLamports)} SOL is waiting and can be applied from ${day(e.pending.etaTs)}.` : "";
   return `Each burn pool spends from at most ${sol(e.capLamports)} SOL today (${where}). The cap ends on ${day(e.sunsetTs)}.${pend} ${CAP_MECHANISM_SENTENCE}`;
+}
+
+/** ACC-01: the same sentence on a page other than Trust (the launch review, the wallet summary, a token page): an unread cap points to Trust. */
+export function capSentenceAway(e: EffectiveCap | null): string {
+  return e ? capSentence(e) : `${capSentence(null)} The Trust page shows the cap in force.`;
+}
+
+/** ACC-01: SOL held above the cap, for a token page's burn-pool tile: the cap read (or the default when unread), and what releases it. */
+export function capHeldSentence(queuedSol: string, e: EffectiveCap | null): string {
+  if (e && e.capLamports === null) return `${queuedSol} SOL was held above the burn-pool cap, which has ended, so it can be spent now.`;
+  const cap = e && e.capLamports !== null ? `the ${sol(e.capLamports)} SOL burn-pool cap` : `the default ${sol(DEFAULT_BURN_POOL_CAP_LAMPORTS.toString())} SOL burn-pool cap`;
+  return `${queuedSol} SOL is held above ${cap} until the cap rises or ends. An audit is not required for either.`;
 }

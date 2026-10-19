@@ -28,7 +28,7 @@ function throwawayKey(dir: string): { file: string; pub: string; priv: crypto.Ke
   return { file, pub: b58encode(pub), priv: privateKey };
 }
 /** The real file was signed on 2026-10-14; this puts the template back (status, {DATE}, no signature; the file keeps {PUBKEY}, the page fills it) so the signing tests run from the unsigned state. */
-const SIGNED_AT = "2026-10-14";
+const SIGNED_AT = "2026-10-19";
 function unsigned(real: string): string {
   return real.replace(`"status": "${SIGNED_AT}"`, '"status": "TODO_SIGNED_MESSAGE"').replace(`Date: ${SIGNED_AT}.`, "Date: {DATE}.").replace(/"signature": "[1-9A-HJ-NP-Za-km-z]{80,96}"/, '"signature": null');
 }

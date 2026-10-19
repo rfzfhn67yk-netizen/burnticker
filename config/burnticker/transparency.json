@@ -241,7 +241,7 @@
     {
       "id": "cap-25",
       "status": "live design",
-      "text": "Before the audit, each burn pool spends from at most 25 SOL per burn day. SOL above the cap stays in the fee account until the next day. In the program, the cap is part of the platform settings (PlatformConfig) and ends after at most 365 days. It can only be raised through a public 48 h time lock. The keeper applies the same cap. On a network where the program's platform settings account does not exist yet, the program still enforces its built-in default of 25 SOL until 2027-10-01 (state.rs default_active_cap)."
+      "text": "The default burn-pool cap is 25 SOL: each burn pool spends from at most 25 SOL per burn day, and SOL above the cap stays in the fee account until the cap allows it. In the program, the cap is part of the platform settings (PlatformConfig) and ends after at most 365 days. The platform authority can raise it only through a public 48 h time lock. An audit is not required for a raise or for the end. The keeper applies the same cap. On a network where the program's platform settings account does not exist yet, the program still enforces its built-in default of 25 SOL until 2027-10-01 (state.rs default_active_cap)."
     },
     {
       "id": "devnet-rehearsal",
@@ -300,8 +300,8 @@
     },
     {
       "id": "signed-operator-message",
-      "status": "not done",
-      "text": "The operator's statement was first signed on 2026-10-14 by the mainnet developer fee wallet (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5). On 2026-10-19 its text changed to name both keeper keys, so it is waiting to be signed again by the same wallet, and /burnticker/operator shows it as not signed yet until then. Once signed, that page checks the signature with ed25519 each time and shows the result and the time of the check."
+      "status": "done",
+      "text": "The operator's statement was first signed on 2026-10-14 by the mainnet developer fee wallet (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5). On 2026-10-19 its text changed to name both keeper keys, and the same wallet signed the new text that day. /burnticker/operator checks the signature with ed25519 each time and shows the result and the time of the check."
     },
     {
       "id": "paircurve-findings-open",
@@ -345,7 +345,7 @@
     },
     {
       "id": "lp-locked-forever",
-      "text": "The LP is locked forever, and its fees fund the burn. After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%. At graduation, 100 % of every coin's LP is locked with Raydium's LP lock and can never be withdrawn. The Fee Key NFT belongs to an account of the burn program (the PDA [\"fee_keys\"]), not to a person. Anyone can call the fee claim (claim_lock_fees). It sends the SOL side 80 % to the coin's burn pool and 20 % to the operator treasury (on mainnet, the developer fee wallet 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5), and it burns the coin side. The split is compiled into the program as LOCK_FEE_BURN_BPS = 8000 and LOCK_FEE_OPERATOR_BPS = 2000. No admin key or config field can change it. The owner decided this on 2026-10-10 (decisions.md). It replaced the burned-LP policy of 2026-10-09."
+      "text": "The LP is locked forever, and its fees fund the burn. For new coins: After graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%. Coins created before the change keep the tier they pinned (tier 9: about 0.88% to the burn pool, about 0.04% to the operator, about 0.08% to Raydium). At graduation, 100 % of every coin's LP is locked with Raydium's LP lock and can never be withdrawn. The Fee Key NFT belongs to an account of the burn program (the PDA [\"fee_keys\"]), not to a person. Anyone can call the fee claim (claim_lock_fees). It sends the SOL side 80 % to the coin's burn pool and 20 % to the operator treasury (on mainnet, the developer fee wallet 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5), and it burns the coin side. The split is compiled into the program as LOCK_FEE_BURN_BPS = 8000 and LOCK_FEE_OPERATOR_BPS = 2000. No admin key or config field can change it. The owner decided this on 2026-10-10 (decisions.md). It replaced the burned-LP policy of 2026-10-09."
     },
     {
       "id": "no-return-marketing",

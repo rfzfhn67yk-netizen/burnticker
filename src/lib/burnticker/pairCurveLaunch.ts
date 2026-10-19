@@ -32,8 +32,8 @@ export { pairCurveEnabled, PAIR_CURVE_FLAG };
 
 export const PAIR_CURVE_BADGE = { id: "pair-curve", label: "Pair curve", text: "Both coins graduate together, or neither does. One launch program runs the pair." } as const;
 
-/** The Raydium CPMM AmmConfig the platform points at, per cluster (cpmmTier.ts: mainnet tier 9, devnet index 0). init_pair re-checks it against the TokenConfigs' pin. */
-/** A pair coin's pool after graduation: mainnet tier 9 opened by the public initialize, so the creator fee is off (fees string below). */
+/** The Raydium CPMM AmmConfig new coins get, per cluster (cpmmTier.ts: mainnet tier 14 since the 2026-10-19 decision, devnet index 0). init_pair re-checks it against the TokenConfigs' pin, so until the platform names tier 14 set BURNTICKER_CP_CONFIG_ID to the live one. */
+/** A pair coin's pool after graduation: the mainnet new-coin tier (14) opened by the public initialize, so the creator fee is off (fees string below). */
 const PAIR_POST = postGraduationBps({ ...CPMM_TIER.mainnet, creatorFeeRate: 0 }, LOCK_FEE_BURN_BPS);
 export const DEFAULT_CP_CONFIG: Record<"mainnet" | "devnet" | "localnet", string> = CPMM_CONFIG_ID;
 

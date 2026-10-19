@@ -36,7 +36,8 @@ export const wizardMayRender = (s: LaunchGateState): s is Extract<LaunchGateStat
 export const wizardMaySign = (s: LaunchGateState): boolean => s.kind === "open";
 /**
  * Prelaunch audit 2026-10-18 A-11: the sign card's gate before each step (signPlan.ts SendDeps.launchGate), from a fresh catalogue read.
- * Closed or preview: "closed" (no new step is sent). A read that failed: "unknown" (the step goes on; the server still checks).
+ * Closed or preview: "closed" (no new step is sent). A read that failed: "unknown", which stops the step too (continuous audit 2026-10-19
+ * SEC-03: it used to let the step go on).
  */
 export const signGateOf = (s: LaunchGateState): "open" | "closed" | "unknown" => (wizardMaySign(s) ? "open" : s.kind === "closed" || s.kind === "preview" ? "closed" : "unknown");
 

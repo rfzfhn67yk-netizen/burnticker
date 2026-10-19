@@ -210,7 +210,8 @@ describe("no market cap / price for any Burnticker coin (Claims and UI trust bou
 
   // Erratum 2026-10-12 (owner decision): a coin card's market cap, a bare number read from the coin's own curve. The index card carries the
   // field (declared once, read once from the curve), the card prints it in its row; nothing else reads a market-data field.
-  const CARD_MCAP = /^marketCap(\?: string \| null;|: c\?\.marketCap \?\? s\.market\?\.pool\?\.marketCap \?\? null, holders: s\.market\?\.holders\.count \?\? null,)$/;
+  // third audit 2026-10-19 B-6: the index card's holders are the wallets (program accounts left out, cardView.ts walletHolders)
+  const CARD_MCAP = /^marketCap(\?: string \| null;|: c\?\.marketCap \?\? s\.market\?\.pool\?\.marketCap \?\? null, holders: walletHolders\(s\.market\?\.holders\),)$/;
   // the coin page's market facts read the same curve field (coinPage.ts marketFacts); its one mention is the status type's curve shape
   const PAGE_MCAP = (f: string, l: string) => f === "src/app/burnticker/t/[ticker]/page.tsx" && /^interface Market \{.*progressPct: number; poolId: string; marketCap\?: string \| null \} \| null;/.test(l.trim());
   test("no UI source reads a market-data field (cap, fdv, price, bid/ask, outcome prices) except the card's own curve read", () => {

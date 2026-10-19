@@ -29,7 +29,7 @@ const PAGE = 1000;
 
 export interface HolderTopRow { owner: string; amount: string; pct: number | null; label: string | null }
 export type HoldersRead =
-  | { state: "read"; source: "das" | "program-accounts"; holders: number; tokenAccounts: number; top10: HolderTopRow[]; top10Pct: number | null; top10PctUnlabelled: number | null; supply: string; readAt: string }
+  | { state: "read"; source: "das" | "program-accounts"; holders: number; /** B-6: the holders that are wallets (programOwnedOwner excluded) */ wallets?: number; tokenAccounts: number; top10: HolderTopRow[]; top10Pct: number | null; top10PctUnlabelled: number | null; supply: string; readAt: string }
   | { state: "unavailable"; reason: string; /** the RPC's own error, when there was one */ detail?: string; readAt: string };
 
 export const UNAVAILABLE_NO_INDEX = "This RPC cannot count holders. It has no token-account index, and it refused to list the coin's accounts.";
@@ -47,8 +47,19 @@ export function poolOwnerLabels(cluster: string): Record<string, string> {
   return out;
 }
 
+/**
+ * THIRD PRELAUNCH AUDIT 2026-10-19 B-6: "Holders 1" on every coin nobody had traded (that one holder is the bonding curve's vault). The
+ * labels that name a program's own account (the curve, the trading pool, the burn pool) and any owner that is not a wallet key (an
+ * off-curve program address) are not counted as holders; `wallets` is the count without them.
+ */
+export const PROGRAM_OWNER_LABELS: readonly string[] = ["bonding curve", "trading pool", "burn pool"];
+export function programOwnedOwner(owner: string, labels: Record<string, string> = {}): boolean {
+  if (labels[owner] && PROGRAM_OWNER_LABELS.includes(labels[owner])) return true;
+  try { return !PublicKey.isOnCurve(new PublicKey(owner).toBytes()); } catch { return false; }
+}
+
 /** Wallet balances → the read (count, top ten, shares). Pure; exported for tests. */
-export function summarizeHolders(balances: Iterable<{ owner: string; amountRaw: bigint }>, supplyRaw: bigint, decimals: number, labels: Record<string, string> = {}): { holders: number; top10: HolderTopRow[]; top10Pct: number | null; top10PctUnlabelled: number | null } {
+export function summarizeHolders(balances: Iterable<{ owner: string; amountRaw: bigint }>, supplyRaw: bigint, decimals: number, labels: Record<string, string> = {}): { holders: number; wallets: number; top10: HolderTopRow[]; top10Pct: number | null; top10PctUnlabelled: number | null } {
   const byOwner = new Map<string, bigint>();
   for (const b of balances) if (b.amountRaw > BigInt(0)) byOwner.set(b.owner, (byOwner.get(b.owner) ?? BigInt(0)) + b.amountRaw);
   const sorted = [...byOwner.entries()].sort((a, b) => (a[1] === b[1] ? (a[0] < b[0] ? -1 : 1) : a[1] > b[1] ? -1 : 1));
@@ -57,6 +68,7 @@ export function summarizeHolders(balances: Iterable<{ owner: string; amountRaw: 
   const top = sorted.slice(0, 10), topU = sorted.filter(([o]) => !labels[o]).slice(0, 10);
   return {
     holders: byOwner.size,
+    wallets: [...byOwner.keys()].filter((o) => !programOwnedOwner(o, labels)).length,
     top10: top.map(([owner, raw]) => ({ owner, amount: rawToTokens(raw, decimals), pct: pct(raw), label: labels[owner] ?? null })),
     top10Pct: sorted.length ? pct(sum(top)) : null,
     top10PctUnlabelled: topU.length ? pct(sum(topU)) : null,
@@ -133,7 +145,7 @@ export async function readHolders(rpc: Rpc, i: { cluster: string; mint: string; 
   else { v = await readBalances(rpc, i.mint, now); cache.set(ck, { at: now, v }); }
   if (!("rows" in v)) return v;
   const s = summarizeHolders(v.rows, v.supplyRaw, v.decimals, i.labels ?? {});
-  return { state: "read", source: v.source, holders: s.holders, tokenAccounts: v.rows.length, top10: s.top10, top10Pct: s.top10Pct, top10PctUnlabelled: s.top10PctUnlabelled, supply: rawToTokens(v.supplyRaw, v.decimals), readAt: v.readAt };
+  return { state: "read", source: v.source, holders: s.holders, wallets: s.wallets, tokenAccounts: v.rows.length, top10: s.top10, top10Pct: s.top10Pct, top10PctUnlabelled: s.top10PctUnlabelled, supply: rawToTokens(v.supplyRaw, v.decimals), readAt: v.readAt };
 }
 
 const transient = (m: string) => /rate-limited|HTTP 5\d\d|HTTP 429|fetch failed|timed? ?out|ECONN|ENOTFOUND|socket/i.test(m);

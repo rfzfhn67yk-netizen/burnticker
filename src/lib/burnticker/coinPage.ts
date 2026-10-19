@@ -5,7 +5,7 @@ import { GAME_BURN_LINE } from "@/lib/burnticker/sources/provenance";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { resolvesOnce } from "@/lib/burnticker/nextResult";
 import type { DateReadJson, LifecycleDatesJson } from "@/lib/burnticker/pageTypes";
-import { MCAP_POOL_MEANING, NOT_READ } from "@/lib/burnticker/cardView";
+import { MCAP_POOL_MEANING, NOT_READ, NO_HOLDERS, NO_TRADES, NO_TRADES_WHY, noTradesYet } from "@/lib/burnticker/cardView";
 
 // rules.ts reads files (node:fs) and cannot ship to the browser; these two values mirror it and test/burntickerCoinPage.test.ts pins them.
 export const RULES_SCHEMA = "burnticker.rules/v1";
@@ -41,7 +41,9 @@ export function pairCardTitle(seriesTitle: string | null | undefined, a: string,
 }
 
 /** "There is 1 holder." / "There are 12 holders." (prelaunch audit 2026-10-16: the page said "There are 1 holders."). */
-export const holdersCountSentence = (n: number): string => (n === 1 ? "There is 1 holder." : `There are ${n.toLocaleString("en-US")} holders.`);
+/** B-6 (third audit 2026-10-19): the count is of wallets (holders.ts programOwnedOwner left out), so 0 says no holder yet. */
+export const HOLDERS_NONE_SENTENCE = "No wallet holds this coin yet. The bonding curve holds the supply.";
+export const holdersCountSentence = (n: number): string => (n === 0 ? HOLDERS_NONE_SENTENCE : n === 1 ? "There is 1 holder." : `There are ${n.toLocaleString("en-US")} holders.`);
 
 export function holdersShareLine(top10Pct: number | null | undefined, top10PctUnlabelled: number | null | undefined): string {
   const pct = (n: number) => `${n.toFixed(2)}%`;
@@ -292,11 +294,11 @@ export function marketFacts(i: FactInput): FactRow[] {
     { key: "network", label: "Network", value: `Solana ${i.cluster}`, note: i.cluster === "mainnet" ? "The real Solana network, where trades use real SOL." : "A practice network whose tokens have no money value." },
     { key: "mint", label: "Mint address", value: i.mint, note: "The coin's unique address. Copy it to find the coin in a wallet.", href: i.mintUrl },
     { key: "quote", label: "Traded against", value: quote, note: "The coin trades against SOL, Solana's own coin." },
-    { key: "mcap", label: "Market cap", ...(!live ? na(notLaunched) : i.curve?.marketCap && i.phase !== "graduated" ? { value: `${dec2(i.curve.marketCap)} ${quote}`, note: "The curve's current SOL per token times the total supply, read from the pool on chain." } : i.phase === "graduated" && i.pool?.marketCap ? { value: `${dec2(i.pool.marketCap)} ${quote}`, note: MCAP_POOL_MEANING } : { value: NOT_READ_HERE, note: i.phase === "graduated" ? i.poolNote || NOT_READ.mcapPool : i.curveNote || "This site has not read the coin's curve." }) },
+    { key: "mcap", label: "Market cap", ...(!live ? na(notLaunched) : i.curve && noTradesYet(i.phase, i.curve.raised) ? { value: NO_TRADES, note: NO_TRADES_WHY } : i.curve?.marketCap && i.phase !== "graduated" ? { value: `${dec2(i.curve.marketCap)} ${quote}`, note: "The curve's current SOL per token times the total supply, read from the pool on chain." } : i.phase === "graduated" && i.pool?.marketCap ? { value: `${dec2(i.pool.marketCap)} ${quote}`, note: MCAP_POOL_MEANING } : { value: NOT_READ_HERE, note: i.phase === "graduated" ? i.poolNote || NOT_READ.mcapPool : i.curveNote || "This site has not read the coin's curve." }) },
     { key: "curve", label: i.phase === "graduated" ? "Trading pool" : "Curve", ...(!live ? na(notLaunched) : i.phase === "graduated" ? { value: i.graduatedPool ?? "Graduated", note: "The curve is complete. The coin trades in its own Raydium pool, and that pool's liquidity is locked." } : i.curve ? { value: `${dec2(i.curve.raised)} / ${dec2(i.curve.threshold)} ${quote} raised`, note: i.phase === "migrating" ? "The curve is full, and the coin is moving to its Raydium pool." : "The coin graduates to its own Raydium pool when the curve has raised its full amount." } : { value: NOT_READ_HERE, note: i.curveNote || "This site has not read the coin's curve." }) },
     { key: "volume", label: "Trading volume, 24 hours", value: NOT_READ_HERE, note: "This site does not read trading volume. The chart on this page, when there is one, comes from GeckoTerminal." },
     { key: "liquidity", label: "Liquidity", ...liquidityRow(i, live) },
-    { key: "holders", label: "Holders", value: typeof i.holdersCount === "number" ? i.holdersCount.toLocaleString("en-US") : NOT_READ_HERE, note: typeof i.holdersCount === "number" ? null : i.holdersNote },
+    { key: "holders", label: "Holders", value: typeof i.holdersCount === "number" ? (i.holdersCount === 0 ? NO_HOLDERS : i.holdersCount.toLocaleString("en-US")) : NOT_READ_HERE, note: typeof i.holdersCount === "number" ? (i.holdersCount === 0 ? HOLDERS_NONE_SENTENCE : null) : i.holdersNote },
     { key: "creator", label: "Creator", value: i.creator, note: "The wallet that launched the coin.", href: i.creatorUrl },
     { key: "launched", label: "Launched", value: i.launchedAt ? denverDay(i.launchedAt) : NOT_LAUNCHED, note: i.launchedAt ? null : notLaunched },
     ...(i.dates ? [dateRow("graduated", "Graduated", i.dates.graduated, i.cluster), dateRow("registered", "Pool registered", i.dates.registered, i.cluster)] : []),

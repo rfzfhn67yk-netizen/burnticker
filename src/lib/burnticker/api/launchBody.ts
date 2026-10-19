@@ -5,8 +5,9 @@
  * their own readers. Pure.
  */
 export const LAUNCH_BODY_FIELDS: readonly string[] = [
-  // the record of a landed launch (the page route's action: "launched")
-  "action", "launchTx",
+  // the record of a landed launch (the page route's action: "launched"), of a create about to be sent (action: "sent"; B-2),
+  // and the plan record's launch-gate read (SEC-03)
+  "action", "launchTx", "sentTx", "gate",
   // the coin
   "creator", "mint", "ticker", "name", "description", "descCtx", "note", "imageUrl", "links", "rule", "firstBuySol", "raiseSol", "acknowledgements",
   // the creator's own profile (website-15 item 13)

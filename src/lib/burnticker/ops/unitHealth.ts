@@ -30,6 +30,8 @@ export const EXPECTED_UNITS: readonly { unit: string; what: string }[] = [
   { unit: "mct-burnticker-mintbank.service", what: "the mint key bank (prepared coin addresses for launches)" },
   { unit: "mct-burnticker-synth.timer", what: "the nightly synthetic creator's timer" },
   { unit: "mct-burnticker-backup.timer", what: "the 6-hourly database backup's timer" },
+  // I-11 / B-4 (2026-10-19): the 5-minute external web check (it runs, and skips, even before the owner sets its ping URL)
+  { unit: "mct-burnticker-web-probe.timer", what: "the 5-minute external web check's timer" },
 ];
 /** The units only the PRIMARY host runs (review of A-7): a standby keeper's host serves no site and runs no $DEFICIT keeper. */
 export const PRIMARY_ONLY_UNITS: ReadonlySet<string> = new Set(["mct-burnticker-web.service", "mct-burnkeeper.service"]);
@@ -205,3 +207,40 @@ export async function runUnitCheck(o: { sink: AlertSink; now: number; root?: str
   return { raised, active: alerts, note };
 }
 let noted = false;
+
+/**
+ * THE EXTERNAL WEB CHECK (audit 2026-10-19 I-11 / B-4). scripts/service/burnticker-web-probe.sh, every 5 minutes, GETs the public
+ * current-status through Cloudflare and pings a Healthchecks.io check (BURNTICKER_WEB_HEARTBEAT_URL) on a good answer, "<url>/fail"
+ * otherwise. It writes data/web-probe-last.json; this reads it for the ops facts, so ops.json and the Trust/ops page can say
+ * "external web check: configured, last ok <time>". The URL carries the check's token and is in neither the file nor anything here.
+ */
+export interface WebProbeStatus { configured: boolean; outcome: "ok" | "fail" | "skipped" | "refused"; at: string; code?: string | null; reason?: string | null; lastOkAt?: string | null; pinged?: boolean }
+/** What ops.json carries (names, outcomes and times only). */
+export interface WebProbeFact { configured: boolean; outcome: WebProbeStatus["outcome"] | null; at: string | null; lastOkAt: string | null; code: string | null; reason: string | null }
+export const WEB_PROBE_FILE = path.join("data", "web-probe-last.json");
+/** The timer fires every 5 minutes; a status older than this means the probe stopped running. */
+export const WEB_PROBE_STALE_MS = 20 * 60_000;
+const OUTCOMES = new Set(["ok", "fail", "skipped", "refused"]);
+export function readWebProbeStatus(root: string): WebProbeStatus | null {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(root, WEB_PROBE_FILE), "utf8")) as WebProbeStatus;
+    return j && typeof j.at === "string" && OUTCOMES.has(j.outcome) ? j : null;
+  } catch { return null; }
+}
+/** The fact: configured when the keeper's environment names the URL or the probe's last run saw one. Never the URL. */
+export function webProbeFact(s: WebProbeStatus | null, env: Readonly<Record<string, string | undefined>> = {}): WebProbeFact {
+  const configured = !!env.BURNTICKER_WEB_HEARTBEAT_URL?.trim() || s?.configured === true;
+  return { configured, outcome: s?.outcome ?? null, at: s?.at ?? null, lastOkAt: s?.lastOkAt ?? null, code: s?.code ?? null, reason: s?.reason ?? null };
+}
+/** The ops line. */
+export function webProbeLine(f: WebProbeFact | null | undefined, now: number): string | null {
+  if (!f) return null;
+  const ago = (iso: string | null): string => { const t = Date.parse(iso ?? ""); return Number.isFinite(t) ? `${Math.max(0, Math.round((now - t) / 60_000))} min ago (${iso})` : "never"; };
+  if (!f.configured) return "- external web check: not configured (set BURNTICKER_WEB_HEARTBEAT_URL to the Healthchecks check's ping URL, so a hung site or a dead Caddy is noticed)";
+  if (!f.at || f.outcome === "skipped") return "- external web check: configured, no result yet (the probe runs every 5 minutes: systemctl --user list-timers mct-burnticker-web-probe.timer)";
+  const at = Date.parse(f.at);
+  const stale = Number.isFinite(at) && now - at > WEB_PROBE_STALE_MS ? `; the probe has not run for ${Math.round((now - at) / 60_000)} min (systemctl --user list-timers mct-burnticker-web-probe.timer)` : "";
+  if (f.outcome === "refused") return `- external web check: configured, REFUSED (the ping URL is not https or ends in /fail; nothing is sent)${stale}`;
+  if (f.outcome === "fail") return `- external web check: configured, FAILING (code ${f.code ?? "?"}${f.reason ? `, ${f.reason}` : ""}) ${ago(f.at)}; last ok ${ago(f.lastOkAt)}${stale}`;
+  return `- external web check: configured, last ok ${ago(f.lastOkAt ?? f.at)}${stale}`;
+}

@@ -1,4 +1,5 @@
 import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
+import { capHeldSentence, capSentenceAway } from "@/lib/burnticker/capInForce";
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
@@ -31,7 +32,7 @@ import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { buildMarketJson, type CpmmMarket, type MarketInput } from "@/lib/burnticker/market";
 import { allLinks, coinLinks } from "@/lib/burnticker/tradeLinks";
 import type { HoldersRead } from "@/lib/burnticker/holders";
-import { onlyPoolHolders } from "@/lib/burnticker/cardView";
+import { onlyPoolHolders, walletHolders } from "@/lib/burnticker/cardView";
 import type { LifecycleDates } from "@/lib/burnticker/lifecycleDates";
 import type { FinalAfter, StatedSource } from "@/lib/burnticker/sources/polyStated";
 import { ruleOneLiner, ruleReadingDirection, ruleSideName } from "@/lib/burnticker/coinCard";
@@ -137,6 +138,8 @@ export function sideSummary(s: Pick<TokenStatusJson, "ticker" | "name" | "mint" 
 
 /** The fee-flow sentence every coin page carries (the app's coin page, t/[ticker]/page.tsx, prints the same words). */
 export const FEE_FLOW_LINE = `Creator fees go to the burn pool and are burned. The liquidity is locked forever. ${OPERATOR_SHARE_LINE}`;
+/** The same line for one coin, from the post-graduation split its page carries (the tier it pinned; 2026-10-19). */
+export const feeFlowLine = (post: Pick<FeeSplit, "legs">): string => `Creator fees go to the burn pool and are burned. The liquidity is locked forever. ${postGraduationShareLine(post)}`;
 
 /** A draft's lifecycle line: the launch was prepared but never signed, so nothing exists on chain (never "This coin is live."). */
 export const NOT_CREATED_LINE = "This coin is not created yet. Nothing is on chain.";
@@ -429,13 +432,14 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     addresses: (() => { let feeWsol: string | null = null; try { feeWsol = i.chain.programId ? burnPoolAddresses(i.chain.programId, t.mint).feeWsol : null; } catch { feeWsol = null; } return { mint: t.mint, mintUrl: addr(t.mint)!, feePda: t.feePda, feePdaUrl: addr(t.feePda)!, feeWsol, feeWsolUrl: addr(feeWsol), vault: t.vault, vaultUrl: addr(t.vault), creator: t.creator, creatorUrl: addr(t.creator)!, programId: i.chain.programId, poolId: t.poolId, launchTx: t.launchTx, launchTxUrl: t.launchTx ? explorerUrl(i.chain.cluster, t.launchTx) : null }; })(),
     supply: { initial: TOTAL_SUPPLY, current: rawToTokens(current, DECIMALS), source: i.chain.supplyRaw !== null ? "chain" : "registry" },
     burned: { total: rawToTokens(totalRaw, DECIMALS), pctOfSupply: pct(totalRaw, supplyRaw), count: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, last30d: rawToTokens(last30, DECIMALS), lastAt: lastBurn?.settledAt ?? null },
-    pool: (() => { const spendable = i.chain.feePdaLamports === null ? null : spendablePool(i.chain.feePdaLamports, rule.reserveSol); const c = spendable === null ? null : capPool(spendable); return { feePdaSol: sol(i.chain.feePdaLamports), spendableSol: c === null ? null : sol(c.pool), reserveSol: rule.reserveSol, vaultBalance: i.chain.vaultRaw === null ? null : rawToTokens(i.chain.vaultRaw, DECIMALS), vaultAllocation: allocation === null ? null : allocation.toString(), shortfallOutstanding: rawToTokens(lastFinal?.shortOutRaw ?? ZERO, DECIMALS), capSol: PRE_AUDIT_POOL_CAP_SOL, queuedSol: c === null ? null : sol(c.queued), queuedNote: `Burns spend from at most the burn-pool cap, ${PRE_AUDIT_POOL_CAP_SOL} SOL unless the platform's multisig has raised it. Fee income above that is held in the coin's own fee account and spent once the cap rises or ends. The keeper enforces this cap today, and the program enforces it once it is deployed.` }; })(),
+    pool: (() => { const spendable = i.chain.feePdaLamports === null ? null : spendablePool(i.chain.feePdaLamports, rule.reserveSol); const c = spendable === null ? null : capPool(spendable); return { feePdaSol: sol(i.chain.feePdaLamports), spendableSol: c === null ? null : sol(c.pool), reserveSol: rule.reserveSol, vaultBalance: i.chain.vaultRaw === null ? null : rawToTokens(i.chain.vaultRaw, DECIMALS), vaultAllocation: allocation === null ? null : allocation.toString(), shortfallOutstanding: rawToTokens(lastFinal?.shortOutRaw ?? ZERO, DECIMALS), capSol: PRE_AUDIT_POOL_CAP_SOL, queuedSol: c === null ? null : sol(c.queued), queuedNote: `${capSentenceAway(null)} The keeper enforces this cap today, and the program enforces it once it is deployed.` }; })(),
     // NO ODDS FOR ANY COIN (owner decision 2026-10-10): impliedChance is always null — the field stays for schema compatibility only.
     // audit 7 F08: the next RESULT (none for a decided or voided one-shot) and the keeper's next SOURCE CHECK are different times
     next: { nextCheckAt, impliedChance: null, impliedBasis: i.implied?.chance == null ? (i.implied?.basis ?? null) : null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime, awaitingFinal: i.selectorPending, ...nextTimes({ oneShot, receipts: i.receipts, nextCloseTime, nextCheckAt, burnedOnly: isFirstSnowRule(rule) }) },
     feed: { lastEventId: i.state.lastEventId, lastValue: i.state.lastValue, lastSettledAt: i.state.lastSettledAt, readings: i.readings.length, lastFetchAt: i.feedState.lastFetchAt ? new Date(i.feedState.lastFetchAt).toISOString() : null, lastError: i.feedState.lastError, failures: i.feedState.failures },
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
-    fees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(i.chain.cluster), sentence: feeSplitSentence(i.chain.cluster), creatorSliceBps: 0 },
+    // owner decision 2026-10-19: a coin's post-graduation numbers come from the tier IT pinned (TokenConfig.ll_cp_config), not the new-coin tier
+    fees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(i.chain.cluster, i.chain.program?.config?.cpConfig), sentence: feeSplitSentence(i.chain.cluster, i.chain.program?.config?.cpConfig), creatorSliceBps: 0 },
     health: { pending: i.receipts.filter((b) => b.status === "planned" || b.status === "sending").length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
     trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
@@ -544,7 +548,7 @@ export function renderTokenHtml(s: TokenStatusJson, receipts: readonly ReceiptJs
   const tiles = [
     tile("Supply", fmt(s.supply.current), `of ${fmt(s.supply.initial)}, read from the ${s.supply.source === "chain" ? "chain" : "registry"}`),
     tile("Burned", fmt(s.burned.total), `${s.burned.pctOfSupply.toFixed(2)}% of supply, in ${s.burned.count} ${s.burned.count === 1 ? "burn" : "burns"}. ${fmt(s.burned.last30d)} in the last 30 days.`),
-    s.mode === "buyback" ? tile("Burn pool", s.pool.feePdaSol === null ? "—" : `${esc(s.pool.feePdaSol)} SOL`, `${esc(s.pool.spendableSol ?? "An unknown amount of")} SOL can be spent after a ${esc(s.pool.reserveSol)} SOL reserve.${s.pool.queuedSol && s.pool.queuedSol !== "0" ? ` ${esc(s.pool.queuedSol)} SOL is held above the ${s.pool.capSol} SOL cap until the audit.` : ""}`) : tile("Vault", s.pool.vaultBalance === null ? "—" : fmt(s.pool.vaultBalance), `The allocation is ${fmt(s.pool.vaultAllocation ?? "0")}. The vault still owes ${fmt(s.pool.shortfallOutstanding)}.`),
+    s.mode === "buyback" ? tile("Burn pool", s.pool.feePdaSol === null ? "—" : `${esc(s.pool.feePdaSol)} SOL`, `${esc(s.pool.spendableSol ?? "An unknown amount of")} SOL can be spent after a ${esc(s.pool.reserveSol)} SOL reserve.${s.pool.queuedSol && s.pool.queuedSol !== "0" ? ` ${esc(capHeldSentence(s.pool.queuedSol, null))}` : ""}`) : tile("Vault", s.pool.vaultBalance === null ? "—" : fmt(s.pool.vaultBalance), `The allocation is ${fmt(s.pool.vaultAllocation ?? "0")}. The vault still owes ${fmt(s.pool.shortfallOutstanding)}.`),
     tile("Next possible burn", `<span id="next" data-at="${esc(s.next.nextCheckAt ?? "")}">${esc(s.next.nextCheckAt ?? (s.rules.oneShot ? "resolves once" : "—"))}</span>`, s.next.awaitingFinal ? `${s.next.awaitingFinal === 1 ? "One result is" : `${s.next.awaitingFinal} results are`} waiting for the market to make it final.` : "This is the next time the source is read."),
   ].filter(Boolean).join("\n");
   const table = rows.length === 0 ? `<p class="muted">No receipts yet. The first result after launch starts the record.${s.rules.oneShot ? "" : " For a rule that compares with the previous reading, the first reading sets the starting point."}</p>` : `<div class="scroll"><table>
@@ -609,7 +613,7 @@ ${lpLockHtml(s.lp)}
 <h2>Addresses</h2>
 <ul class="addr"><li><span class="muted">Mint</span> <a href="${esc(s.addresses.mintUrl)}"><code>${esc(s.addresses.mint)}</code></a></li><li><span class="muted">Burn pool. This is the burn program's fee account, and it is also the coin's creator on LaunchLab. Anyone can deposit and nobody can withdraw. The keeper only pays network fees.</span> <a href="${esc(s.addresses.feePdaUrl)}"><code>${esc(s.addresses.feePda)}</code></a></li>${s.addresses.feeWsol ? `<li><span class="muted">The burn pool's wrapped SOL account, where claimed curve fees land</span> <a href="${esc(s.addresses.feeWsolUrl)}"><code>${esc(s.addresses.feeWsol)}</code></a></li>` : ""}${s.addresses.vault ? `<li><span class="muted">Vault</span> <a href="${esc(s.addresses.vaultUrl)}"><code>${esc(s.addresses.vault)}</code></a></li>` : ""}<li><span class="muted">Creator</span> <a href="${esc(s.addresses.creatorUrl)}"><code>${esc(s.addresses.creator)}</code></a></li><li><span class="muted">Burn program</span> <code>${esc(s.addresses.programId)}</code></li>${s.addresses.launchTx ? `<li><span class="muted">Launch</span> <a href="${esc(s.addresses.launchTxUrl)}"><code>${esc(s.addresses.launchTx)}</code></a></li>` : ""}</ul>
 ${s.disclosure.eventContract ? `<p class="rule">${esc(s.disclosure.eventContract)}</p>` : ""}
-<p class="rule">${s.lifecycle ? `${esc(s.lifecycle.line)} ` : ""}${esc(FEE_FLOW_LINE)}</p>
+<p class="rule">${s.lifecycle ? `${esc(s.lifecycle.line)} ` : ""}${esc(feeFlowLine(s.fees.postGraduation))}</p>
 <footer>${esc(s.disclosure.disclaimer)} ${s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and ${s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.${s.health.lastError ? ` The last error was: ${esc(s.health.lastError)}` : ""}</footer>
 </main>
 <script>
@@ -668,9 +672,9 @@ export function indexToken(s: TokenStatusJson): PlatformIndexToken {
     ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: null, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null,
     imageUrl: s.profile?.imageUrl ?? null, creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [], oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot, badge: s.profile?.badge ?? null,
     phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null, raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null,
-    marketCap: c?.marketCap ?? s.market?.pool?.marketCap ?? null, holders: s.market?.holders.count ?? null,
+    marketCap: c?.marketCap ?? s.market?.pool?.marketCap ?? null, holders: walletHolders(s.market?.holders),
     holdersNote: s.market && s.market.holders.count === null ? s.market.holders.countNote || null : null, poolNote: s.market?.poolNote ?? null,
-    holdersOnlyPools: onlyPoolHolders(s.market?.holders.count ?? null, s.market?.holders.top10 ?? null),
+    holdersOnlyPools: s.market?.holders.wallets === 0 || onlyPoolHolders(s.market?.holders.count ?? null, s.market?.holders.top10 ?? null),
     stated: s.stated ?? null,
   };
 }

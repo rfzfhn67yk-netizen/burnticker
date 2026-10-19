@@ -2,7 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 import { configPda, feePda } from "@/lib/burnReceipts/pda";
 import { launchVenueOf, type LaunchExpectation, type LaunchVerifier } from "@/lib/burnticker/launchVerify";
 import { expectedConfigFor, type ExpectedHost } from "@/lib/burnticker/admission";
-import { DRAFT_GRACE_MS, DRAFT_TTL_MS, inDraftWindow, RevivalTickerHeldError, type Registry, type TokenRow } from "@/lib/burnticker/registry";
+import { DRAFT_GRACE_MS, DRAFT_TTL_MS, inDraftWindow, RevivalTickerHeldError, TickerAlreadyLiveError, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
 import { CREATOR_LAUNCHES_CLOSED_AT_FLAG } from "@/lib/burnticker/launchAvailability";
 
@@ -258,6 +258,9 @@ export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport
           // I-16: the ticker went to another creator after this draft expired (the registry alerted the owner): logged, and asked again
           // after a backoff (the other draft may expire in turn), never every sweep
           if (e instanceof RevivalTickerHeldError) { d.log(`  [drafts] $${t.ticker} ${t.mint}: created on chain in time, but its ticker is held by another creator's coin now (${e.heldBy}): not revived`); backoff(st, now); save(t.mint, st); }
+          // B-2 (third audit 2026-10-19): another coin on this ticker is already live (the registry alerted the owner): never taken live by
+          // the keeper, logged, and asked again only after a backoff
+          if (e instanceof TickerAlreadyLiveError) { d.log(`  [drafts] $${t.ticker} ${t.mint}: created on chain, but ${e.sameCreator ? "the same creator's" : "another"} $${t.ticker} is already live (${e.liveMint}): not taken live`); backoff(st, now); save(t.mint, st); }
           continue;
         }
         save(t.mint, { done: true });
@@ -391,6 +394,21 @@ export function alertLaunchAfterClosure(reg: Pick<Registry, "getStatus" | "setSt
   return true;
 }
 
+/** Continuous audit 2026-10-19 SEC-03: a create after the closure that the confirm ADMITTED under the signing grace (launchGateAdmission.ts). */
+export const ADMITTED_AFTER_CLOSURE_ALERT_KIND = "bt-launch-admitted-after-closure";
+export const ADMITTED_AFTER_CLOSURE_STATUS_PREFIX = "drafts.admittedAfterClosure.";
+/**
+ * SEC-03: the owner hears once per coin when the confirm takes a create live that landed after the closure, because its plan record shows
+ * the first step was sent while launches were open. Nothing is refused; the alert says what was admitted and when.
+ */
+export function alertLaunchAdmittedAfterClosure(reg: Pick<Registry, "getStatus" | "setStatus" | "recordAlert">, t: Pick<TokenRow, "mint" | "ticker">, launchTx: string, blockTimeMs: number, closedAt: number, gateAt: number, now: number): boolean {
+  const key = ADMITTED_AFTER_CLOSURE_STATUS_PREFIX + t.mint;
+  if (reg.getStatus(key)) return false;
+  reg.setStatus(key, launchTx, now);
+  reg.recordAlert({ kind: ADMITTED_AFTER_CLOSURE_ALERT_KIND, key: `${ADMITTED_AFTER_CLOSURE_ALERT_KIND}:${t.mint}`, text: `$${t.ticker} was created on chain at ${new Date(blockTimeMs).toISOString()}, after creator launches closed at ${new Date(closedAt).toISOString()}. It was taken live because its creator's page read launches as open at ${new Date(gateAt).toISOString()}, right before the first step was sent. Its create is ${launchTx}.`, meta: { mint: t.mint, launchTx, blockTimeMs, closedAt, gateAt } }, now);
+  return true;
+}
+
 /**
  * THE OPERATOR'S PATH (scripts/burnticker-draft-revive.mts; AUDIT A C1 (4), review (1)): verify `launchTx` on chain for this draft and,
  * with `apply`, take it live. A create after the draft's window needs `late` (it is recorded in draft_revivals with within_window 0).
@@ -406,6 +424,10 @@ export async function reviveDraft(reg: Registry, verifier: LaunchVerifier, o: { 
   if (!withinWindow && !o.late) return { ok: false, reason: `the create landed at ${baselineAt}, after the draft's 24-hour window: pass --late to take it live anyway (it is recorded as late)` };
   if (!o.apply) return { ok: true, applied: false, baselineAt, withinWindow };
   try { reg.takeLiveFromChain(o.mint, o.launchTx, t.poolId, v.blockTimeMs, { source: "operator", note: o.note.trim(), late: o.late }); }
-  catch (e) { if (e instanceof RevivalTickerHeldError) return { ok: false, reason: `refused: $${t.ticker} is held by another creator's coin now (${e.heldBy}); two live coins never share a ticker` }; throw e; }
+  catch (e) {
+    if (e instanceof RevivalTickerHeldError) return { ok: false, reason: `refused: $${t.ticker} is held by another creator's coin now (${e.heldBy}); two live coins never share a ticker` };
+    if (e instanceof TickerAlreadyLiveError) return { ok: false, reason: `refused: ${e.sameCreator ? "the same creator's" : "another"} $${t.ticker} is already live (${e.liveMint}); two live coins never share a ticker` };
+    throw e;
+  }
   return { ok: true, applied: true, baselineAt, withinWindow };
 }

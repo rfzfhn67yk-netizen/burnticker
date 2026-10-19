@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { platform, tokenPageData } from "@/lib/burnticker/server";
 import { buildPlatformIndex } from "@/lib/burnticker/tokenPage";
-import { homeData, type HomeCoin } from "@/lib/burnticker/home";
+import { auditForIndex, homeData, type HomeCoin } from "@/lib/burnticker/home";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import { readAudit } from "@/lib/burnticker/trust";
 import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
@@ -117,7 +117,7 @@ async function buildHomeBody(): Promise<{ body: unknown; n: number; chainCoins: 
     }
   } catch (e) { console.error("[burnticker/home] the coin registry could not be read:", e); coins = null; registered = null; }
   let audit = null;
-  try { const a = readAudit(p.publishDir); audit = a ? { ok: a.ok, ranAt: a.ranAt, receipts: a.receipts, mismatches: a.mismatches.length, chainChecked: a.chainChecked } : null; } catch { audit = null; }
+  try { const a = readAudit(p.publishDir); audit = auditForIndex(a); } catch { audit = null; }
   const index = coins === null ? null : buildPlatformIndex(statuses, now, audit);
   let status: unknown = null;
   try { status = await currentStatusLive(); } catch { status = null; }

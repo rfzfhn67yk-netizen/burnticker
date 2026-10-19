@@ -24,7 +24,7 @@ interface View {
   links: { site: string; app: string; deficitSite: string; github: string; githubOrg: string; x: string[] };
   clusters: Record<"devnet" | "mainnet", ClusterCfg>;
   signedMessage: { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string };
-  neverBuys: { rule: string; rehearsalNote: string; line: string; status: "clear" | "explained" | "received" | "red" | "not-checked" | "not-run"; report: null | { ranAt: string; holdings: { role: string; wallet: string; symbol: string; amountRaw: string; tokenAccount: string }[]; acquisitions: { role: string; wallet: string; symbol: string; amountRaw: string; signature: string; blockTime: string | null; explainedBy: string | null }[]; scanned: { tokenAccounts: number; transactions: number }; errors: string[] } };
+  neverBuys: { rule: string; rehearsalNote: string; line: string; status: "clear" | "explained" | "received" | "red" | "not-checked" | "not-run" | "holding" | "incomplete"; scopeLine?: string | null; stale?: boolean; report: null | { ranAt: string; holdings: { role: string; wallet: string; symbol: string; amountRaw: string; tokenAccount: string }[]; acquisitions: { role: string; wallet: string; symbol: string; amountRaw: string; signature: string; blockTime: string | null; explainedBy: string | null }[]; scanned: { tokenAccounts: number; transactions: number }; errors: string[]; scope?: { since: string | null } } };
   placeholders: { path: string; value: string }[];
   deployments?: Record<"devnet" | "mainnet", Record<string, { readAt: string; matchesBuild: boolean } | null>>;
 }
@@ -33,7 +33,7 @@ const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
 const isTodo = (s: string) => /^TODO_/.test(s);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const clusterName = (c: string) => (c === "mainnet" ? "Mainnet" : "Devnet");
-const statusTone: Record<string, string> = { clear: "text-emerald-400", explained: "text-amber-300", received: "text-amber-300", red: "text-red-400", "not-checked": "text-neutral-500", "not-run": "text-neutral-500" };
+const statusTone: Record<string, string> = { clear: "text-emerald-400", explained: "text-amber-300", received: "text-amber-300", red: "text-red-400", holding: "text-red-400", incomplete: "text-amber-300", "not-checked": "text-neutral-500", "not-run": "text-neutral-500" };
 
 export default function OperatorPage() {
   const [v, setV] = useState<View | null>(null);
@@ -91,6 +91,8 @@ export default function OperatorPage() {
           <p className="text-xs text-neutral-300">{OPERATOR_COPY.neverBuysIntro} {v.neverBuys.rule}</p>
           <p className={`text-sm mt-2 ${statusTone[v.neverBuys.status]}`}>{clusterName(v.cluster)} result. {v.neverBuys.line}{v.neverBuys.report ? ` It last ran at ${v.neverBuys.report.ranAt} and read ${plural(v.neverBuys.report.scanned.tokenAccounts, "token account", "token accounts")} and ${plural(v.neverBuys.report.scanned.transactions, "transaction", "transactions")}.` : ""}</p>
           {!v.neverBuys.report && <p className="text-xs text-neutral-500">{OPERATOR_COPY.neverBuysNotRun}</p>}
+          {/* continuous audit 2026-10-19 ACC-02: the scope (recent history only), what could not be read, the named exception */}
+          {v.neverBuys.scopeLine && <p className="text-xs text-neutral-400 mt-1" data-never-buys-scope>{v.neverBuys.scopeLine}{v.neverBuys.report?.scope?.since ? ` The oldest transaction checked is from ${v.neverBuys.report.scope.since}.` : ""}</p>}
           <p className="text-xs text-neutral-400 mt-1">{v.neverBuys.rehearsalNote}</p>
           {v.neverBuys.report && v.neverBuys.report.acquisitions.length > 0 && <div className="overflow-x-auto mt-2"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Wallet</th><th className="p-2">Coin</th><th className="p-2 text-right">Raw amount received</th><th className="p-2">Transaction</th><th className="p-2">Explained by</th></tr></thead>
             <tbody>{v.neverBuys.report.acquisitions.map((a) => <tr key={`${a.signature}-${a.symbol}-${a.wallet}`} className="border-t border-neutral-800 align-top"><td className="p-2">{a.role}</td><td className="p-2">${a.symbol}</td><td className="p-2 text-right tabular-nums">{a.amountRaw}</td><td className="p-2"><a className="underline" href={`https://explorer.solana.com/tx/${a.signature}${v.cluster === "devnet" ? "?cluster=devnet" : ""}`}><code>{a.signature.slice(0, 12)}…</code></a></td><td className={`p-2 ${a.explainedBy ? "text-neutral-400" : "text-red-400"}`}>{a.explainedBy ?? "Not explained"}</td></tr>)}</tbody></table></div>}

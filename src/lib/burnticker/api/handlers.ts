@@ -1,6 +1,7 @@
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { burnRealFromEnv, burnSolEnabledFromEnv, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
-import { alertLaunchAfterClosure, alertLaunchLate, recordedClosure } from "@/lib/burnticker/draftReconciler";
+import { alertLaunchAdmittedAfterClosure, alertLaunchAfterClosure, alertLaunchLate, recordedClosure } from "@/lib/burnticker/draftReconciler";
+import { admitAfterClosure, planGateOf } from "@/lib/burnticker/launchGateAdmission";
 import { webDispersalOn } from "@/lib/burnticker/programHash";
 import type { Platform } from "@/lib/burnticker/server";
 import { Keypair, PublicKey } from "@solana/web3.js";
@@ -43,12 +44,13 @@ import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEE
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
-import { inDraftWindow, RegistrySchemaNewerError, RevivalTickerHeldError, TickerTakenError, wideRule } from "@/lib/burnticker/registry";
+import { inDraftWindow, RegistrySchemaNewerError, RevivalTickerHeldError, TickerAlreadyLiveError, TickerTakenError, wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalMessage, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { buildLaunchBundle, buildPairBundles, defaultVoidBy, launchProblems, raiseProblem, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
 import { MAINNET_OFF_SENTENCE, NO_OPENING_PURCHASE_SENTENCE, VAULT_HIDDEN_SENTENCE, requestedOpeningPurchase } from "@/lib/burnticker/hostedLaunch";
 import { launchVenueOf } from "@/lib/burnticker/launchVerify";
+import { expectedCreateFromBundle } from "@/lib/burnticker/launchCreateArgs";
 import { expectedConfigFor, expectedConfigKey, expectedHostOf, loadExpectedConfig, mergeExpected, pairCurveExpected } from "@/lib/burnticker/admission";
 import { buildPairCurveLaunch, pairCurveEnabled, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
@@ -82,6 +84,7 @@ export async function oneShotVoidBy(p: Platform, locked: LockedRule): Promise<st
 }
 import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
 import { launchGuardRefusal, tickerTakenRefusal } from "@/lib/burnticker/launchGuards";
+import { launchPendingRefusal, verifySentCreate } from "@/lib/burnticker/launchPending";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 import { isSingleOfficialSource, singleSourceSentence } from "@/lib/burnticker/singleSource";
 
@@ -798,6 +801,13 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     held.push(() => p.registry.releaseTicker(ticker, input.creator));
     return null;
   };
+  // B-2 (third audit 2026-10-19): the same creator's earlier draft of this ticker whose create was sent and may still land (or has
+  // landed) refuses a second coin: the creator finishes that launch from the page's recovery notice (launchPending.ts)
+  const pendingRefusal = async (ticker: string, mint: string | null, sideB: boolean): Promise<{ error: ApiResult } | null> => {
+    const lp = await launchPendingRefusal(p, { creator: input.creator, ticker, exceptMint: mint });
+    return lp ? { error: fail(lp.status, sideB ? sideBRefusal(lp.error) : lp.error, lp.extra) } : null;
+  };
+  if (registers) { const lp = await pendingRefusal(input.ticker, o.mint ?? null, false); if (lp) return lp; }
   if (registers) { const h = holdTicker(input.ticker, o.mint ?? null, false); if (h) return h; }
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
   // (Polymarket: the payout vector + Gamma) — and creation refused if anything fails. Kalshi is always refused here: its terms forbid
@@ -1038,7 +1048,10 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     // audit F01: every value initialize_token was built with, so the confirm step and the keeper can compare the chain field by field (a
     // pair-curve side's create is the same instruction re-encoded with policy 2; a retry of this draft keeps its earlier floors accepted)
     if (bundle.expectedConfig && token.mint === bundle.mint) {
-      const next = poolId === null ? pairCurveExpected(bundle.expectedConfig, bundle.addresses.platformId) : bundle.expectedConfig;
+      const config = poolId === null ? pairCurveExpected(bundle.expectedConfig, bundle.addresses.platformId) : bundle.expectedConfig;
+      // B-1 (third audit 2026-10-19): and every argument of the LaunchLab create the bundle encodes (its own initialize_v2, decoded)
+      const create = poolId === null ? null : expectedCreateFromBundle(bundle.transactions, bundle.mint);
+      const next = create ? { ...config, launchCreate: create } : config;
       p.registry.setStatus(expectedConfigKey(token.mint), JSON.stringify(mergeExpected(loadExpectedConfig(p.registry, token.mint), next)));
     }
     p.registry.putTokenMeta({ mint: token.mint, creatorNote, metadataUri: pin?.metadataUri ?? null, metadataTx: pin?.metadataTx ?? null, metadataSha256: pin?.metadataSha256 ?? null, imageUri: pin?.imageUri ?? null, imageTx: pin?.imageTx || null, imageSha256: pin?.imageSha256 || null, hosted: !pin });
@@ -1069,6 +1082,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
     { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}), creator: input.creator, tickerOwner }); if (g) return { error: fail(g.status, sideBRefusal(g.error), g.extra) }; }
+    if (registers && side.ticker !== input.ticker) { const lp = await pendingRefusal(side.ticker, o.mintB ?? null, true); if (lp) return lp; }   // B-2: side B's ticker too
     if (registers && side.ticker !== input.ticker) { const h = holdTicker(side.ticker, o.mintB ?? null, true); if (h) return h; }   // F04: side B's ticker too
     // two candidates: both markets must be named outcomes of the one race the body names (Polymarket's own index of open races)
     if (settled?.shape === "candidates" && settled.bundle.race) {
@@ -1301,7 +1315,7 @@ export function launchesClosedAt(p: Pick<Platform, "registry">, env: Record<stri
  * draft's window (24 h + DRAFT_GRACE_MS) it goes live whether or not a sweep ran; after it, only the operator script (--late) takes it
  * live. While launches are closed or in preview, only a create that landed before the closure is recorded.
  */
-export async function markLaunched(p: Platform, mint: string, launchTx: string, now = Date.now(), client = "unknown"): Promise<ApiResult> {
+export async function markLaunched(p: Platform, mint: string, launchTx: string, now = Date.now(), client = "unknown", gate: unknown = null): Promise<ApiResult> {
   const t = p.registry.token(mint);
   if (!t) return fail(404, "There is no draft for this mint.");
   if (!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(launchTx)) return fail(400, "The launch transaction must be a transaction signature.");
@@ -1355,16 +1369,38 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   if (!inDraftWindow(t.createdAt, v.blockTimeMs)) { alertLaunchLate(p.registry, t, launchTx, v.blockTimeMs, now); return fail(409, `This launch landed at ${baselineAt}, more than 24 hours after its draft was made, so it is not recorded here. Please build a new launch.`, { code: "launch-late" }); }
   const closedAt = launchesClosedAt(p, process.env, now);
   // prelaunch audit 2026-10-18 A-11: the owner hears once per coin, with the operator's command (draftReconciler.alertLaunchAfterClosure)
-  if (closedAt !== null && v.blockTimeMs > closedAt) { try { alertLaunchAfterClosure(p.registry, t, launchTx, v.blockTimeMs, closedAt, now); } catch { /* the alert never changes the answer */ } return fail(403, `This launch landed at ${baselineAt}, after creator launches closed, so it is not recorded.`, { code: "launch-after-closure" }); }
+  // continuous audit 2026-10-19 SEC-03: a create after the closure whose plan record shows its first step was sent while launches were
+  // open is admitted (launchGateAdmission.ts, bounded) and the owner told; without a consistent gate record it stays refused, as before
+  const admit = admitAfterClosure({ closedAt, blockTimeMs: v.blockTimeMs, draftCreatedAt: t.createdAt, gate });
+  if (!admit.admit) { try { alertLaunchAfterClosure(p.registry, t, launchTx, v.blockTimeMs, closedAt!, now); } catch { /* the alert never changes the answer */ } return fail(403, `This launch landed at ${baselineAt}, after creator launches closed, so it is not recorded.`, { code: "launch-after-closure" }); }
+  if (admit.reason === "open-gate-record") { try { alertLaunchAdmittedAfterClosure(p.registry, t, launchTx, v.blockTimeMs, closedAt!, planGateOf(gate)!.at, now); } catch { /* the alert never changes the answer */ } }
   let r: ReturnType<Platform["registry"]["takeLiveFromChain"]>;
   try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); }
   catch (e) {
     // second audit 2026-10-19 I-16: the expired draft's ticker went to another creator's draft or coin, so it is not revived (the
     // registry recorded the owner's alert in the same step)
     if (e instanceof RevivalTickerHeldError) return fail(409, `This draft had expired, and its ticker $${e.ticker} now belongs to another Burnticker coin, so it is not taken live here. The site's operator has been told.`, { code: "revival-ticker-held" });
+    // B-2 (third audit 2026-10-19): a ticker is one live coin; the registry recorded the owner's alert in the same step
+    if (e instanceof TickerAlreadyLiveError) return fail(409, `${e.sameCreator ? "You already have a live" : "There is already a live"} $${e.ticker} on this site (mint ${e.liveMint}), and a ticker is one coin here, so this second $${e.ticker} is not taken live. The site's operator has been told.`, { code: "ticker-live", liveMint: e.liveMint });
     return fail(409, safeErrorText(e, 600), { code: "launch-race" });
   }
   return ok({ ok: true, token: p.registry.token(mint), ...(r.revived ? { revived: true } : {}), note: `The launch transaction was read from the chain. The start time is its block time, ${baselineAt}. Results settled after this moment count.${r.revived ? " This draft had been marked expired, and the chain shows its coin was created in time, so it is live now." : ""}` });
+}
+
+/**
+ * B-2 (third audit 2026-10-19): the launch page reports a create it is about to send (POST /api/burnticker/launch { action: "sent", mint,
+ * sentTx }: the signed transaction, base64). Recorded only for an unlaunched draft, when the transaction is that draft's create signed by
+ * its creator and its mint (launchPending.ts verifySentCreate), so nobody else can mark a draft. From then until the send can no longer
+ * land, the creator's next prepare of the same ticker is refused as launch-pending. Re-sending the same report is a no-op.
+ */
+export function markCreateSent(p: Pick<Platform, "registry">, mint: string, sentTx: unknown, now = Date.now()): ApiResult {
+  const t = p.registry.token(mint);
+  if (!t) return fail(404, "There is no draft for this mint.");
+  if (t.launchTx || (t.status !== "draft" && t.status !== "expired")) return ok({ ok: true, recorded: false, note: "This coin is already launched." });
+  const v = verifySentCreate(t, sentTx);
+  if (!v.ok) return fail(v.status, v.reason, { code: "sent-refused" });
+  const fresh = p.registry.recordCreateSent(mint, v.signature, now);
+  return ok({ ok: true, recorded: fresh, signature: v.signature });
 }
 
 /**

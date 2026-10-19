@@ -100,6 +100,8 @@ scripts/service/run-burnticker-mintbank.sh
 # 2026-10-16 audit F-7 / F-32: the 6-hourly database backup's entrypoint and the synthetic creator's stale Playwright lock cleanup
 scripts/service/run-burnticker-backup.sh
 scripts/service/playwright-dirlock.sh
+# I-11 / B-4 (2026-10-19): the 5-minute external web check (Healthchecks.io ping); test/burntickerWebProbe.test.ts runs it
+scripts/service/burnticker-web-probe.sh
 scripts/ops/deploy-sites.sh
 scripts/ops/keeper-status-check.sh
 scripts/ops/probe-burnticker.sh

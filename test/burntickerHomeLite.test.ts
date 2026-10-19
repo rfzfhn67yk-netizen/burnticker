@@ -4,7 +4,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, Keypair } from "@solana/web3.js";
 import { tokenPageData, tokenPageInput } from "@/lib/burnticker/server";
 import { buildPlatformIndex } from "@/lib/burnticker/tokenPage";
 import { homeRowOf } from "@/lib/burnticker/homeRow";
@@ -38,7 +38,7 @@ function rpcFetch(mint: string, calls: string[]): typeof fetch {
     calls.push(method);
     let result: unknown = null;
     if (method === "getAccountInfo") { const d = Buffer.alloc(82); d.writeBigUInt64LE(BigInt("1000000000000000"), 36); d[44] = 6; d[45] = 1; result = { context: { slot: 7 }, value: { owner: TOKEN_PROGRAM, data: [d.toString("base64"), "base64"] } }; }
-    else if (method === "getTokenAccounts") result = { token_accounts: [1, 2, 3].map((k) => ({ owner: new PublicKey(Buffer.alloc(32, k)).toBase58(), address: new PublicKey(Buffer.alloc(32, 10 + k)).toBase58(), amount: String(1000 * k), mint })) };
+    else if (method === "getTokenAccounts") result = { token_accounts: [1, 2, 3].map((k) => ({ owner: Keypair.fromSeed(Uint8Array.from(Buffer.alloc(32, k))).publicKey.toBase58(), address: new PublicKey(Buffer.alloc(32, 10 + k)).toBase58(), amount: String(1000 * k), mint })) };
     else if (method === "getTransaction") result = { slot: 7, blockTime: CREATED_AT, meta: { err: null, logMessages: [`Program ${LAUNCHLAB_DEVNET.toBase58()} invoke [1]`, "Program log: Instruction: InitializeV2", `Program ${LAUNCHLAB_DEVNET.toBase58()} success`] }, transaction: { message: { accountKeys: [mint] } } };
     else if (method === "getSignaturesForAddress") result = [];
     void params;

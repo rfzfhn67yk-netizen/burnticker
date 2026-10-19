@@ -7,6 +7,7 @@ import { cardAge } from "@/lib/burnticker/cardAge.mjs";
 import { coinWatchKey } from "@/lib/burnticker/watchlist";
 import { coinLinks, type CoinLinks } from "@/lib/burnticker/tradeLinks";
 import { coinStatusSentence, type CoinStatusFacts } from "@/lib/burnticker/coinStatus";
+import type { CoinListing } from "@/lib/burnticker/coinsList";
 /**
  * ONE COIN CARD, ONE FIELD ORDER (website-10, 2026-10-12; rebuilt by website-13 the same day for Claude site audit 2 item 7 and ChatGPT
  * audit 6 A10 / A11, with the owner's decision to show the market cap). Every surface that lists coins prints the same rows in the same
@@ -47,6 +48,12 @@ export interface CardView {
    * (coinStatus.ts). Shown on the card above the "Details" expander; null or absent when the state was not read (the card shows the rule).
    */
   status?: string | null;
+  /**
+   * the Coins page (owner 2026-10-19, coinsList.ts): a decided coin's one result line, and an open coin's next-result line, built in the
+   * browser in the viewer's zone; absent elsewhere
+   */
+  resultLine?: string | null;
+  nextLine?: string | null;
   /** the rule in one line */
   rule: string;
   /** when the next result settles */
@@ -133,6 +140,8 @@ export function onlyPoolHolders(count: number | null | undefined, top: readonly 
   const pools = (top ?? []).filter((r) => r.label !== null && POOL_HOLDER_LABELS.includes(r.label)).length;
   return pools > 0 && count <= pools;
 }
+/** B-6: the holder count a card shows: the wallets (program accounts left out) when read, else the raw count, else null. */
+export const walletHolders = (h: { count: number | null; wallets?: number | null } | null | undefined): number | null => (h ? (typeof h.wallets === "number" ? h.wallets : h.count) : null);
 export function holdersCell(count: number | null | undefined, onlyPools: boolean, note: string | null): CardCell {
   if (typeof count === "number" && onlyPools) return { text: NO_HOLDERS, why: NO_HOLDERS_WHY };
   if (typeof count === "number") return { text: groupDigits(count), why: null };
@@ -257,9 +266,14 @@ export function emptyLabels(v: CardView): Record<(typeof EMPTY_ROWS)[number], st
 export const CURVE_BASIS = "from the curve";
 export const NO_TRADES = "No trades yet";
 export const NO_TRADES_WHY = "Nobody has traded on this coin's curve yet, so there is no figure to show.";
-/** Whether the coin is still on its curve and the curve was read at exactly nothing raised. */
+/**
+ * Third prelaunch audit 2026-10-19 B-6: an untraded LaunchLab curve reads 1 lamport raised ("0.000000001"), not 0, so the card showed a
+ * 28 SOL market cap on coins nobody had traded. Below NO_TRADE_DUST_SOL raised, the curve counts as untraded.
+ */
+export const NO_TRADE_DUST_SOL = 0.001;
+/** Whether the coin is still on its curve and the curve was read at nothing raised (below NO_TRADE_DUST_SOL). */
 export const noTradesYet = (phase: IndexCoin["phase"] | undefined, raised: string | null | undefined): boolean =>
-  phase !== "graduated" && phase !== "migrating" && raised !== null && raised !== undefined && raised.trim() !== "" && Number(raised) === 0;
+  phase !== "graduated" && phase !== "migrating" && raised !== null && raised !== undefined && raised.trim() !== "" && Number.isFinite(Number(raised)) && Number(raised) < NO_TRADE_DUST_SOL;
 export function mcapText(value: string, quote: string | null | undefined, phase: IndexCoin["phase"] | undefined, raised: string | null = null): string {
   if (noTradesYet(phase, raised)) return NO_TRADES;
   return `${groupDigits(value)} ${quote ?? "SOL"}${phase === "graduated" ? "" : ` ${CURVE_BASIS}`}`;
@@ -308,6 +322,8 @@ export interface IndexCoin {
   rank?: string | null;
   /** coin card status 2026-10-18: the facts the status sentence is built from (coinStatus.ts coinStatusFactsOf), when the route read them */
   statusFacts?: CoinStatusFacts | null;
+  /** owner 2026-10-19: the coin's group on the Coins page, its result and its next-result facts (coinsList.ts), when the route built them */
+  listing?: CoinListing | null;
 }
 
 /** "14.81" from a decimal string, two places at most. */

@@ -72,13 +72,13 @@ import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
 import { Heartbeat, heartbeatUrlFromEnv, heartbeatVerdict } from "../src/lib/burnticker/ops/heartbeat.ts";
-import { readBackupStatus, runUnitCheck } from "../src/lib/burnticker/ops/unitHealth.ts";
+import { readBackupStatus, readWebProbeStatus, runUnitCheck, webProbeFact } from "../src/lib/burnticker/ops/unitHealth.ts";
 import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 // PROGRAM HASH CHECK (prelaunch audit 2026-10-18 A-4): once a Denver day, the burn program's bytes on chain against verified-build.json
 import { compareProgramToRecord, hostProgramRound, programHashFact, programHashSourceLine, readProgramDataHash, webDispersal, writeKeeperDispersal } from "../src/lib/burnticker/programHash.ts";
 import { denverDate } from "../src/lib/burnticker/alerts.ts";
 // NEVER-BUYS MONITOR (prelaunch audit 2026-10-18 A-6): the keeper runs it once a day
-import { evidenceSignatures, NEVER_BUYS_FILE, neverBuysMints, runNeverBuys } from "../src/lib/burnticker/trustpack/neverBuys.ts";
+import { evidenceSignatures, NEVER_BUYS_FILE, neverBuysExceptions, neverBuysMints, runNeverBuys } from "../src/lib/burnticker/trustpack/neverBuys.ts";
 import { loadOperator } from "../src/lib/burnticker/trustpack/operator.ts";
 import { jsonRpc } from "../src/lib/burnticker/trustpack/receiptCheck.ts";
 import { publishSite, toJson } from "../src/lib/burnKeeper/statusPage.ts";
@@ -338,7 +338,9 @@ function neverBuysCheck(now: number): void {
       try { const st = JSON.parse(fs.readFileSync(path.join("config", "burnticker", "current-status.json"), "utf8")) as { deficit?: { launch?: { mint?: string } } }; if (cluster === "mainnet" && st.deficit?.launch?.mint) deficit = [{ symbol: "DEFICIT", mint: st.deficit.launch.mint }]; } catch { deficit = []; }
       const wallets = op.wallets.filter((w) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.pubkey)).map((w) => ({ role: w.role, pubkey: w.pubkey }));
       const mints = neverBuysMints(registry.tokens(), cluster, op.platformMints, deficit);
-      const r = await runNeverBuys({ rpc: jsonRpc(RPC, fetch, { attempts: 4, minIntervalMs: 150 }), cluster, wallets, mints, evidence: evidenceSignatures(process.cwd()), now });
+      // continuous audit 2026-10-19 ACC-02: the disclosed mainnet test coins (transparency.json `rehearsals`) are in scope, as named exceptions
+      const exceptions = cluster === "mainnet" ? neverBuysExceptions(process.cwd()) : [];
+      const r = await runNeverBuys({ rpc: jsonRpc(RPC, fetch, { attempts: 4, minIntervalMs: 150 }), cluster, wallets, mints, evidence: evidenceSignatures(process.cwd()), now, exceptions });
       publishSite(SITE, { [NEVER_BUYS_FILE]: toJson(r) });
       neverBuysDay = denverDate(now);
       log(`  [never-buys] ${r.status}: ${wallets.length} wallet(s), ${mints.length} coin(s), ${r.scanned.transactions} transaction(s) read${r.errors.length ? `, ${r.errors.length} read error(s)` : ""}`);
@@ -404,7 +406,9 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   let deficitDispersal: boolean | null = null;
   try { deficitDispersal = (JSON.parse(fs.readFileSync(path.join(path.dirname(DB), DEFICIT_DISPERSAL_NAME), "utf8")) as { on?: unknown }).on === true; } catch { deficitDispersal = null; }
   const hostFacts = { dispersal: { on: dispersal.on, line: dispersalHostLine(dispersal, webDispersal(process.env), deficitDispersal) }, webhookConfigured: webhook.configured, pushConfigured: !!pushConfigFromEnv(process.env), heartbeatConfigured: !!process.env.BURNTICKER_STATUS_HEARTBEAT_URL?.trim(),
-    backupDestConfigured: !!process.env.BURNTICKER_BACKUP_DEST?.trim() || readBackupStatus(process.cwd())?.destConfigured === true, programHashSource: programHashSourceLine(programHashFact(process.env, process.cwd(), { log })) };
+    backupDestConfigured: !!process.env.BURNTICKER_BACKUP_DEST?.trim() || readBackupStatus(process.cwd())?.destConfigured === true, programHashSource: programHashSourceLine(programHashFact(process.env, process.cwd(), { log })),
+    // I-11 / B-4 (2026-10-19): the external web check's last outcome (data/web-probe-last.json; never the URL)
+    webProbe: webProbeFact(readWebProbeStatus(process.cwd()), process.env) };
   publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state, hostFacts }));
   try { registry.setStatus(CONDITIONS_KEY, foldConditions(memory, activeConditions(r.snapshot, health, { ...signals, alerts, lastCycleAt: r.snapshot?.lastCycle?.at ?? null }), now), now); } catch (e) { log(`  [ops] condition memory not written: ${(e as Error).message.slice(0, 120)}`); }
 }
