@@ -1,0 +1,105 @@
+{
+ "note": "The never-buys monitor (trustpack/neverBuys.ts) reads a version-1 transaction: the envelope (version 1, the message's transactionConfig, signatures under transaction.signatures, meta's key order) is the real devnet v1 answer in v1-ledger-devnet.json; the account keys, instruction and token balances are the existing test case 'a coin sent to an operator wallet is received, never red' (test/burntickerTrustPack.test.ts), so the expected verdict is 'received'. Synthesised 2026-10-19.",
+ "wallet": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+ "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+ "expected": "received",
+ "getTransaction": {
+  "blockTime": 1792415537,
+  "meta": {
+   "computeUnitsConsumed": 39,
+   "costUnits": 1431,
+   "err": null,
+   "fee": 5000,
+   "innerInstructions": [],
+   "loadedAddresses": {
+    "readonly": [],
+    "writable": []
+   },
+   "logMessages": [
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+    "Program log: Instruction: Transfer",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success"
+   ],
+   "postBalances": [
+    995000,
+    2039280,
+    1
+   ],
+   "postTokenBalances": [
+    {
+     "accountIndex": 1,
+     "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+     "owner": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+     "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+     "uiTokenAmount": {
+      "amount": "7",
+      "decimals": 6,
+      "uiAmount": 0.000007,
+      "uiAmountString": "0.000007"
+     }
+    }
+   ],
+   "preBalances": [
+    1000000,
+    2039280,
+    1
+   ],
+   "preTokenBalances": [
+    {
+     "accountIndex": 1,
+     "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+     "owner": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+     "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+     "uiTokenAmount": {
+      "amount": "0",
+      "decimals": 6,
+      "uiAmount": null,
+      "uiAmountString": "0"
+     }
+    }
+   ],
+   "rewards": [],
+   "status": {
+    "Ok": null
+   }
+  },
+  "slot": 512809123,
+  "transaction": {
+   "message": {
+    "accountKeys": [
+     "Attacker1111111111111111111111111111111111",
+     "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    ],
+    "header": {
+     "numRequiredSignatures": 1,
+     "numReadonlySignedAccounts": 0,
+     "numReadonlyUnsignedAccounts": 1
+    },
+    "instructions": [
+     {
+      "programIdIndex": 2,
+      "accounts": [
+       0,
+       1
+      ],
+      "data": "3Bxs4NN8M2Yn4TLb",
+      "stackHeight": 1
+     }
+    ],
+    "recentBlockhash": "FzhkAWaHAyWPdCp6y3DZ3QDiubaATToz4B3tC7nMeyi9",
+    "transactionConfig": {
+     "computeUnitLimit": 48,
+     "heapSize": null,
+     "loadedAccountsDataSizeLimit": 256000,
+     "priorityFee": 0
+    }
+   },
+   "signatures": [
+    "31asXsjmAVwuegJWiU7D8AwNWatsXoGB5Sb83zeTraWgguzTdKYTuVTxDi4Z4xA7HBMtH33kStSBqohKQqk4bgHE"
+   ]
+  },
+  "transactionIndex": 1,
+  "version": 1
+ }
+}

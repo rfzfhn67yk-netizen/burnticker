@@ -135,7 +135,7 @@ export class ProgramBurnClient implements BurnProgramClient {
     for (const s of sigs) {
       if (s.err !== null) continue;
       // The burn program's own Memo CPI (review-2 F10), never a Memo log line another instruction could have written.
-      const t = await c.getParsedTransaction(s.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+      const t = await c.getParsedTransaction(s.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
       const memo = memoFromTransaction(t, this.o.programId);
       if (memo && memo.startsWith(key)) return { signature: s.signature, slot: s.slot ?? null, memo };
     }
@@ -143,7 +143,7 @@ export class ProgramBurnClient implements BurnProgramClient {
   }
   /** One transaction's burn-program memo (the audit's per-receipt check): one getParsedTransaction, never a scan of the config account. */
   async memoOfTransaction(signature: string) {
-    const t = await this.o.connection.getParsedTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    const t = await this.o.connection.getParsedTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
     if (!t) return null;
     return { memo: memoFromTransaction(t, this.o.programId), slot: t.slot ?? null, failed: t.meta?.err != null };
   }

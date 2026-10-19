@@ -132,7 +132,7 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
     return { signature: s.signature, raw: s.raw, blockhash: s.blockhash, lastValidBlockHeight: s.lastValidBlockHeight };
   };
   const parsedTx = async (signature: string) => {
-    const t = await c.getParsedTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    const t = await c.getParsedTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
     return t?.meta && !t.meta.err ? t : null;
   };
   const port: ProgramPort = {

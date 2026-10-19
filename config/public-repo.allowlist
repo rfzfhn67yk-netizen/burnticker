@@ -133,6 +133,11 @@ scripts/ops/verified-build.sh
 scripts/ops/reproducible-build-host.sh
 public/.well-known/burnticker.json
 test/fixtures/burnticker-trustpack/**
+# the version-1 transaction fixtures (Phantom v1 scope step 0, 2026-10-19; test/burntickerTxVersion1.test.ts replays them through every
+# launch-path reader that parses the RPC's JSON itself): a real devnet v1 read, the $DEFICIT receipt re-enveloped, a received coin
+test/fixtures/burnticker/v1-ledger-devnet.json
+test/fixtures/burnticker/v1-receipt-check-devnet.json
+test/fixtures/burnticker/v1-never-buys-devnet.json
 test/fixtures/burnticker-season/**
 test/fixtures/burnticker-ops/**
 scripts/ops/codex-setup.sh

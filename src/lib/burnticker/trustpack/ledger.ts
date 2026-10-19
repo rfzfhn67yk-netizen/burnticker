@@ -94,7 +94,7 @@ export async function readWalletHistory(rpc: Rpc, wallet: string, o: { maxSignat
   }
   const entries: LedgerEntry[] = [];
   for (const s of sigs.slice(0, max)) {
-    const tx = await rpc.call<TxJson | null>("getTransaction", [s.signature, { encoding: "json", maxSupportedTransactionVersion: 0, commitment: "confirmed" }]);
+    const tx = await rpc.call<TxJson | null>("getTransaction", [s.signature, { encoding: "json", maxSupportedTransactionVersion: 1, commitment: "confirmed" }]);
     if (!tx?.meta) continue;
     const keys = [...tx.transaction.message.accountKeys, ...(tx.meta.loadedAddresses?.writable ?? []), ...(tx.meta.loadedAddresses?.readonly ?? [])];
     const i = keys.indexOf(wallet);

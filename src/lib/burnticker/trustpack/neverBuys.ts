@@ -107,7 +107,7 @@ export async function runNeverBuys(i: { rpc: Rpc; cluster: string; wallets: { ro
     const key = `${w.pubkey}:${sig}`;
     if (seen.has(key)) return;
     seen.add(key);
-    const tx = await i.rpc.call<TxJson | null>("getTransaction", [sig, { encoding: "json", maxSupportedTransactionVersion: 0, commitment: "confirmed" }]);
+    const tx = await i.rpc.call<TxJson | null>("getTransaction", [sig, { encoding: "json", maxSupportedTransactionVersion: 1, commitment: "confirmed" }]);
     transactions++;
     if (!tx?.meta || tx.meta.err) return;
     for (const m of i.mints) {

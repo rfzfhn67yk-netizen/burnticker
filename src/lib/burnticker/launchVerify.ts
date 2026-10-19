@@ -68,7 +68,7 @@ type CompiledIx = { programIdIndex: number; accountKeyIndexes: number[]; data: U
 
 /** The slice of @solana/web3.js Connection this needs: getTransaction and getAccountInfo (tests pass a fake). */
 export interface TxReader {
-  getTransaction(signature: string, opts: { commitment: "confirmed" | "finalized"; maxSupportedTransactionVersion: 0 }): Promise<{
+  getTransaction(signature: string, opts: { commitment: "confirmed" | "finalized"; maxSupportedTransactionVersion: 1 }): Promise<{
     blockTime?: number | null;
     meta: { err: unknown; loadedAddresses?: { writable: Key[]; readonly: Key[] } | null } | null;
     transaction: { message: { header: { numRequiredSignatures: number }; staticAccountKeys?: Key[]; accountKeys?: Key[]; compiledInstructions?: CompiledIx[] } };
@@ -113,7 +113,7 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       const program = o.burnProgramId;
       if (busy()) return { ok: false, status: 503, reason: CONFIRM_LANE_BUSY_REASON };
       let tx: Awaited<ReturnType<TxReader["getTransaction"]>>;
-      try { tx = await reader.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }); }
+      try { tx = await reader.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 1 }); }
       catch (e) { return { ok: false, status: 502, reason: `the launch transaction could not be read from the RPC just now (${safeErrorText(e, 120)}); retry` }; }
       if (!tx) return { ok: false, status: 404, reason: "no confirmed transaction with this signature on this cluster (yet): send the launch, wait for confirmation, then confirm" };
       // F05 (prelaunch audit 2026-10-18): who signed it is decided FIRST, for every transaction the chain holds (failed or not, with or
