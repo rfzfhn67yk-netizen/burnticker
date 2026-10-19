@@ -47,6 +47,7 @@
     "src/lib/burnticker/lockFees.ts",
     "src/lib/burnticker/lru.ts",
     "src/lib/burnticker/mintSuffix.ts",
+    "src/lib/burnticker/nextResult.ts",
     "src/lib/burnticker/oracle/backtest.ts",
     "src/lib/burnticker/oracle/browse.ts",
     "src/lib/burnticker/oracle/events.ts",

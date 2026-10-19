@@ -11,7 +11,7 @@ import { OG_IMAGE_PATH, ogImageHeaderRule } from "@/lib/burnticker/pageMeta";
 import { EDGE_JSON_CACHE, EDGE_PAGE_CACHE, EDGE_SLOW_JSON, pageCacheHeaderRules } from "@/lib/burnticker/edgeCache";
 import { CATALOGUE_SESSION_MS, keepCatalogue, keptCatalogue, loadCatalogue, reloadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { STALE_AFTER_MS as LAUNCH_STATE_STALE_MS } from "@/lib/burnticker/launchAvailability";
-import { reviewRequestDue } from "@/lib/burnticker/launchReviewSync";
+import { EMPTY_REVIEW_SLOT, reviewAnswered, reviewRequestDue, reviewRequested } from "@/lib/burnticker/launchReviewSync";
 
 const read = (f: string) => fs.readFileSync(f, "utf8");
 // deploy/cloudflare/CACHE-RULES.md is private (not in the public tree): the public gate skips the assertions that read it
@@ -97,7 +97,9 @@ describe("A-22: the origin says what an edge may keep", () => {
   test("the JSON reads: catalogue, trust, home, tokens, the pair answer, the pinned file", () => {
     assert.ok(sMax(EDGE_SLOW_JSON["cache-control"]) >= 30 && sMax(EDGE_JSON_CACHE["cache-control"]) >= 30);
     assert.match(read("src/app/api/burnticker/catalogue/route.ts"), /\{ headers: EDGE_SLOW_JSON \}/, "before: no Cache-Control at all");
-    assert.match(read("src/app/api/burnticker/trust/route.ts"), /"cache-control": "public, max-age=30, s-maxage=60, stale-while-revalidate=120"/);
+    // audit 7 F06: the trust route's headers come from trustServe.ts (a degraded copy is no-store)
+    assert.match(read("src/lib/burnticker/trustServe.ts"), /TRUST_CACHE_CONTROL = "public, max-age=30, s-maxage=60, stale-while-revalidate=120"/);
+    assert.match(read("src/app/api/burnticker/trust/route.ts"), /serveTrust\(trustSwr, "page", buildTrust\)/);
     assert.match(read("src/app/api/burnticker/trust/ops/route.ts"), /s-maxage=30, stale-while-revalidate=60/);
     for (const f of ["src/app/api/burnticker/home/route.ts", "src/app/api/burnticker/tokens/route.ts"]) assert.match(read(f), /"public, max-age=10, s-maxage=15, stale-while-revalidate=30"/, f);
     assert.match(read("src/app/api/burnticker/pairs/[pairId]/route.ts"), /headers: \{ \.\.\.EDGE_JSON_CACHE, "x-pair-memo": got\.state \}/);
@@ -135,13 +137,15 @@ describe("A-22: the client asks less", () => {
     keepCatalogue({ getItem: () => null, setItem: () => { throw new Error("QuotaExceededError"); } }, {}, now);
     reloadCatalogue();
   });
-  test("the review is asked once per draft revision and retry round", () => {
-    assert.equal(reviewRequestDue(null, "r1", 0), true);
-    assert.equal(reviewRequestDue({ rev: "r1", retry: 0 }, "r1", 0), false, "before: asked again when the gate finished loading");
-    assert.equal(reviewRequestDue({ rev: "r1", retry: 0 }, "r2", 0), true);
-    assert.equal(reviewRequestDue({ rev: "r1", retry: 0 }, "r1", 1), true);
+  test("the review is asked once per draft revision (audit 7 F02: judged against the slot, not the last key asked)", () => {
+    assert.equal(reviewRequestDue(EMPTY_REVIEW_SLOT, "r1"), true);
+    const inFlight = reviewRequested(EMPTY_REVIEW_SLOT, "r1", 1);
+    assert.equal(reviewRequestDue(inFlight, "r1"), false, "before: asked again when the gate finished loading");
+    assert.equal(reviewRequestDue(reviewAnswered(inFlight, "r1", { rev: "r1", seq: 1, review: "ok" }), "r1"), false);
+    assert.equal(reviewRequestDue(inFlight, "r2"), true);
     const page = read("src/app/burnticker/launch/page.tsx");
-    assert.match(page, /if \(!reviewRequestDue\(reviewAsked\.current, reviewKey, retryN\)\) return;/);
+    assert.match(page, /reviewer\.want\(reviewKey, active \? \{ rule,/);
+    assert.match(page, /\}, \[step, reviewKey, gate\.kind\]\);/, "the gate's loading flag and the key are the only triggers; the requester decides");
     assert.match(page, /sinksFor\(realNet, \(\) => getJson<\{ sinks: SinkCoin\[\] \}>\(`\$\{V1\}\/sinks\?network=\$\{realNet\}`\)\)/, "the sink list once a minute per network");
   });
   test("footer, legal words and the activity ticker do not prefetch every page they link", () => {

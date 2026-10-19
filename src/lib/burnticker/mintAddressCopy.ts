@@ -68,11 +68,20 @@ export function mintSearchView(s: GrindSnapshot): MintSearchView {
 }
 
 /**
- * Shown under the Launch button from the press until the wallet opens (owner, 2026-10-14: "people need to know the coin is launching
- * while it builds so they don't exit out"). The prepare step pins the coin's art and rule on Arweave and runs the pre-launch check,
- * which can take up to a minute.
+ * THE WAITING LINES (owner decision 2026-10-19: creators did not know the launch takes time, and saw only a spinner). One plain line for
+ * each wait: the prepare after Launch is pressed (the start of LAUNCHING_NOTICE, under the review card's button), the chain's
+ * confirmation after each wallet signature, and the read-back after the last confirmation (both on the sign card, SignCard.tsx).
  */
-export const LAUNCHING_NOTICE = "Your coin is being prepared: its art and rule are being pinned on Arweave and the pre-launch check is running. This can take up to a minute. Keep this tab open; your wallet opens when it is ready.";
+export const PREPARING_LAUNCH_LINE = "Preparing the launch: pinning the coin's details and building its transactions. This takes a few seconds.";
+/** Under the review card's Launch button from the press until the wallet opens (owner, 2026-10-14: "people need to know the coin is
+ * launching while it builds so they don't exit out"): the preparing line, then what to do meanwhile. */
+export const LAUNCHING_NOTICE = `${PREPARING_LAUNCH_LINE} Keep this tab open; your wallet opens when it is ready.`;
+export const CHAIN_CONFIRM_LINE = "Waiting for the chain to confirm. A few seconds.";
+export const READ_BACK_LINE = "Writing the coin's accounts on chain. The coin page opens when they are read back.";
+/** The sign card's wait: the wallet has the transaction ("wallet"), the chain is confirming it ("chain"), the coin is being read back ("record"). */
+export type LaunchWaitPhase = "wallet" | "chain" | "record" | null;
+/** The line the sign card shows while it runs; none while the wallet itself is asking, and none when idle. */
+export const waitLineFor = (busy: boolean, phase: LaunchWaitPhase): string | null => (!busy ? null : phase === "chain" ? CHAIN_CONFIRM_LINE : phase === "record" ? READ_BACK_LINE : null);
 
 /** Above the Launch button when a launch signs more than one transaction (owner, 2026-10-14: say so before the wallet opens). */
 export const signsLine = (n: number): string => `Your wallet asks ${n} times, once for each transaction, in order. Progress is kept between them, so a later step can be retried without redoing an earlier one.`;

@@ -362,7 +362,7 @@ describe("the wiring, by each file's source", () => {
     assert.match(src, /const mintPool = useMintPool\(\)/);
     assert.match(src, /const mintsNeeded = pairOn \? 2 : 1/);
     assert.doesNotMatch(src, /useBurnChoice|launchMints|MintChoice|plainMint|mintPool\.ensure\(/, "no switch, no plain keys, no search started by the page itself");
-    assert.match(src, /prepareIfCurrent\(sentRev, \(\) => curRev\.current, \(\) => withMintSource\(\{ pool: mintPool, n: mintsNeeded, stale: \(\) => curRev\.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE \}, async \(keys: GroundMint\[\] \| null\)/, "the server's keys first; an edit while searching sends nothing");
+    assert.match(src, /prepareIfCurrent\(sentRev, \(\) => curDraft\.current, \(\) => withMintSource\(\{ pool: mintPool, n: mintsNeeded, stale: \(\) => curDraft\.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE \}, async \(keys: GroundMint\[\] \| null\)/, "the server's keys first; an edit while searching sends nothing");
     assert.match(src, /const keyed = \(bundle: Bundle, k: GroundMint \| undefined\) => \(k \? withLocalKey\(bundle, k\) : withServerKey\(bundle\)\)/);
     assert.match(src, /const sentMint = \(k: GroundMint \| undefined\) => \(k \? \{ mint: k\.publicKey \} : \{\}\)/);
     assert.equal((src.match(/\.\.\.sentMint\(kA\)/g) ?? []).length, 2, "the one coin and side A (and the matchup's first coin)");

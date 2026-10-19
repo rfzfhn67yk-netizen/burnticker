@@ -8,9 +8,10 @@ import { CREATOR, makeWorld, type World } from "./burntickerApiHelpers.ts";
 describe("a creator's own unfinished draft is reused on a retry (registry.ownDraft)", () => {
   let w: World;
   before(async () => { w = await makeWorld(); });
-  const draftOf = (mint: string, creator = CREATOR) => {
+  // F04 (2026-10-19): another creator's open draft holds a ticker, so the other creator's draft below takes its own ticker
+  const draftOf = (mint: string, creator = CREATOR, ticker = "RETRY") => {
     const live = w.registry.tokens("live")[0];
-    return w.registry.register({ mint, ticker: "RETRY", name: "Retry coin", creator, description: "", imageUrl: null, links: [], rulesText: live.rulesJson, feePda: live.feePda, vault: null, tokenConfig: live.tokenConfig, poolId: null, launchTx: null, cluster: live.cluster, platformId: live.platformId, baselineAt: live.baselineAt, status: "draft" } as Parameters<World["registry"]["register"]>[0]);
+    return w.registry.register({ mint, ticker, name: "Retry coin", creator, description: "", imageUrl: null, links: [], rulesText: live.rulesJson, feePda: live.feePda, vault: null, tokenConfig: live.tokenConfig, poolId: null, launchTx: null, cluster: live.cluster, platformId: live.platformId, baselineAt: live.baselineAt, status: "draft" } as Parameters<World["registry"]["register"]>[0]);
   };
   test("same mint, same creator, still a draft: found; the handler reuses the row instead of inserting again", () => {
     const mint = Keypair.generate().publicKey.toBase58();
@@ -20,7 +21,7 @@ describe("a creator's own unfinished draft is reused on a retry (registry.ownDra
   });
   test("another creator's draft, a live coin, or an unknown mint: not an own draft", () => {
     const mint = Keypair.generate().publicKey.toBase58();
-    draftOf(mint, Keypair.generate().publicKey.toBase58());
+    draftOf(mint, Keypair.generate().publicKey.toBase58(), "RETRYB");
     assert.equal(w.registry.ownDraft(mint, CREATOR), null);
     const live = w.registry.tokens("live")[0];
     assert.equal(w.registry.ownDraft(live.mint, live.creator), null);

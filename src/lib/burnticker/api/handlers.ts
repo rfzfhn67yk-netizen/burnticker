@@ -1,5 +1,5 @@
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
-import { burnRealFromEnv, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
+import { burnRealFromEnv, burnSolEnabledFromEnv, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
 import { alertLaunchAfterClosure, alertLaunchLate, recordedClosure } from "@/lib/burnticker/draftReconciler";
 import { webDispersalOn } from "@/lib/burnticker/programHash";
 import type { Platform } from "@/lib/burnticker/server";
@@ -9,7 +9,7 @@ import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_L
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
 import { liveSinks } from "@/lib/burnticker/endSinks";
-import { identityRefusals, ruleRefusals, sampleEligibility, settledPairInput, settledPairSinkProblems } from "@/lib/burnticker/launchPreflight";
+import { burnRealRefusal, identityRefusals, ruleRefusals, sampleEligibility, settledPairInput, settledPairSinkProblems } from "@/lib/burnticker/launchPreflight";
 import { teamTicker } from "@/lib/burnticker/tickers";
 import { knownLookalike } from "@/lib/burnticker/ops/cloneServe";
 export { sampleEligibility };
@@ -30,6 +30,7 @@ import { CROSS_LABEL, countedOfficialOf } from "@/lib/burnticker/sources/gameSet
 import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
 import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBadge";
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
+import { IMAGE_URL_REFUSED, imageUrlSent } from "@/lib/burnticker/imagePin";
 import { seasonOverFor, seasonStatus } from "@/lib/burnticker/seasonOver";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, sha256Hex, uploadMayHaveCompleted, type PinHooks, type PinnedCoin } from "@/lib/burnticker/pin";
@@ -42,12 +43,13 @@ import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEE
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
-import { inDraftWindow, wideRule } from "@/lib/burnticker/registry";
+import { inDraftWindow, RegistrySchemaNewerError, RevivalTickerHeldError, TickerTakenError, wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalMessage, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { buildLaunchBundle, buildPairBundles, defaultVoidBy, launchProblems, raiseProblem, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
 import { MAINNET_OFF_SENTENCE, NO_OPENING_PURCHASE_SENTENCE, VAULT_HIDDEN_SENTENCE, requestedOpeningPurchase } from "@/lib/burnticker/hostedLaunch";
 import { launchVenueOf } from "@/lib/burnticker/launchVerify";
+import { expectedConfigFor, expectedConfigKey, expectedHostOf, loadExpectedConfig, mergeExpected, pairCurveExpected } from "@/lib/burnticker/admission";
 import { buildPairCurveLaunch, pairCurveEnabled, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
@@ -79,7 +81,7 @@ export async function oneShotVoidBy(p: Platform, locked: LockedRule): Promise<st
   return null;
 }
 import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
-import { launchGuardRefusal } from "@/lib/burnticker/launchGuards";
+import { launchGuardRefusal, tickerTakenRefusal } from "@/lib/burnticker/launchGuards";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 import { isSingleOfficialSource, singleSourceSentence } from "@/lib/burnticker/singleSource";
 
@@ -639,10 +641,17 @@ const reservedPins = new Map<string, number>();
 const reservedOf = (k: string): number => reservedPins.get(k) ?? 0;
 function adjustReserved(k: string, d: number): void { const n = reservedOf(k) + d; if (n > 0) reservedPins.set(k, n); else reservedPins.delete(k); }
 
+/** Second audit 2026-10-19 I-17: the answer to a launch while an older build runs on a newer registry file. */
+const REGISTRY_NEWER_REFUSAL = "New coins cannot be launched on this site for the moment. Everything already launched keeps working. Please try again later.";
+
 async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>, o: PrepareOptions, held: (() => void)[], onOk: (() => void)[] = []): Promise<PrepareResult> {
   if (o.dryRun) o = { ...o, register: false, mint: null, mintB: null, mintKeypair: null, mintKeypairB: null };   // a dry run never registers and holds no key
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
-  const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
+  const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
+  // NO IMAGE BY WEB ADDRESS (owner decision 2026-10-19; imagePin.ts IMAGE_URL_REFUSED): the image is uploaded bytes (`image`) or the
+  // generated receipt art. Any imageUrl, on either side, is refused before anything else is read, for the dry run too.
+  if (imageUrlSent(b.imageUrl)) return { error: fail(400, IMAGE_URL_REFUSED, { code: "image-url-refused" }) };
+  if (b.pair && typeof b.pair === "object" && imageUrlSent((b.pair as { imageUrl?: unknown }).imageUrl)) return { error: fail(400, `Side B: ${IMAGE_URL_REFUSED}`, { code: "image-url-refused" }) };
   // NO BURN POOL IS EVER LEFT BEHIND (owner, 2026-10-10): every new launch carries the onEnd clause unless the rule names its own —
   // since §45 with the end sink (rules.ts DEFAULT_ON_END / defaultOnEndFor; it is part of the canonical rule, so the hash locks it).
   if (input.rule && typeof input.rule === "object" && !Array.isArray(input.rule) && (input.rule as { onEnd?: unknown }).onEnd === undefined) input.rule = { ...(input.rule as object), onEnd: defaultOnEndFor(input.rule) };
@@ -665,6 +674,8 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   if (input.rule && typeof input.rule === "object" && eventLevelRule(input.rule as Parameters<typeof eventLevelRule>[0])) return { error: fail(400, EVENT_LEVEL_REFUSAL, { code: "pick-one-outcome" }) };
   let locked: LockedRule;
   try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, safeErrorText(e, 600)) }; }
+  // owner decision 2026-10-19: a rule that pins a real token is refused while BURNTICKER_BURN_REAL_ENABLED is off (the page hides it)
+  { const br = burnRealRefusal(locked.rule.burnTarget); if (br) return { error: fail(br.status, br.message, { code: br.code, problems: [br.message] }) }; }
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): the same rule refusals the read-only review lists, in order:
   // vault mode, a venue this host has off, an oracle no coin launches on yet, a source's fixed unit / launchability / decided result, the
   // reserve bounds and an unsafe title regex. The first one answers; every one is in `problems`.
@@ -674,7 +685,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   // the end-sink picker: a rule naming a coin to take the rest is checked against the live coins on this network (endSinks.ts); an
   // unreadable registry leaves the list empty, so the named coin is refused (fail closed)
   const sinks = locked.rule.onEnd?.mint ? (() => { try { return liveSinks(p.registry, p.cluster); } catch { return []; } })() : null;
-  { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), dispersal: webDispersalOn(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: [o.mint, o.mintB, bankA, bankB].filter((x): x is string => !!x), partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
+  { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), burnSol: burnSolEnabledFromEnv(process.env), dispersal: webDispersalOn(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: [o.mint, o.mintB, bankA, bankB].filter((x): x is string => !!x), partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   // sources-7 (QA walkthrough 11 H6): a season rule on a team whose season is over, from the platform's schedule port (one bounded read)
   { const so = await seasonOverFor(locked.rule, p.seasonSchedule); if (so) return { error: fail(so.status, so.message, { code: so.code, next: so.next, problems: [so.message] }) }; }
   const list = loadRefuseList();
@@ -716,9 +727,6 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   const uploaded = upA.up;
   const textProblems = creatorTextProblems({ name: input.name, ticker: input.ticker, note, description: creatorText, linkLabels: input.links.map((l) => String(l?.label ?? "")) });
   if (textProblems.length) return { error: fail(403, `This launch is refused: ${textProblems.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(textProblems.flatMap((x) => x.categories))], problems: textProblems.map((x) => x.reason) }) };
-  // THE IMAGE IS THE GENERATED RECEIPT ART (owner decision 2026-10-10); a creator's own image only with BURNTICKER_CUSTOM_IMAGES_ENABLED.
-  if (input.imageUrl && !p.customImages) return { error: fail(400, "This site does not take custom images. Every coin's image is its generated receipt art.", { code: "custom-image-off" }) };
-  if (input.imageUrl && (body as { imageRights?: unknown }).imageRights !== true) return { error: fail(400, `Confirm the image line first: "${RIGHTS_LINE}"`, { code: "image-rights" }) };
   const native = locked.rule.oracle === "catalogue" ? nativeSourceById(locked.rule.series!) : null;
   if (native) {
     // the source's fixed-unit check ran in ruleRefusals above
@@ -773,8 +781,24 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   // review of block M: a prepare that registers nothing (a dry run, register: false) is a free question, so the own-draft ticker exemption
   // applies there only when the request carries that wallet's own signed request (else "not taken" would tell anyone who owns a draft)
   const registers = o.register && !o.dryRun;
+  // second audit 2026-10-19 I-17: an older build running on a registry file a newer build migrated (a rollback) does not know the newer
+  // file's guards, so it takes no new launch; reads and dry runs go on (the registry alerted the owner when it opened the file)
+  if (registers && typeof p.registry.newerSchemaVersion === "number") return { error: fail(503, REGISTRY_NEWER_REFUSAL, { code: "registry-newer", retryAfterSec: 600 }) };
   const tickerOwner = registers ? input.creator : provenReviewCreator({ creator: input.creator, walletProof: (body as { walletProof?: unknown }).walletProof, ticker: input.ticker, pair: b.pair ?? null }, [publicOrigin()]);
   { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null, creator: input.creator, tickerOwner }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
+  /**
+   * Third prelaunch audit 2026-10-19 F04: the mint lock above is per mint, so two creators' prepares for one unused ticker (different
+   * mints) both passed the guard. The registry is the arbiter: a prepare that registers holds the ticker in the registry right after its
+   * guard passes, so the second creator is refused here, before anything is uploaded. The hold is given back when the prepare ends
+   * (its draft holds the ticker from then on), and lapses on its own after 15 minutes. A dry run holds nothing.
+   */
+  const holdTicker = (ticker: string, mint: string | null, sideB: boolean): { error: ApiResult } | null => {
+    const r = p.registry.reserveTicker(ticker, input.creator, mint);
+    if (!r.ok) { const g = tickerTakenRefusal(p, ticker, input.creator); return { error: fail(g.status, sideB ? sideBRefusal(g.error) : g.error, g.extra) }; }
+    held.push(() => p.registry.releaseTicker(ticker, input.creator));
+    return null;
+  };
+  if (registers) { const h = holdTicker(input.ticker, o.mint ?? null, false); if (h) return h; }
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
   // (Polymarket: the payout vector + Gamma) — and creation refused if anything fails. Kalshi is always refused here: its terms forbid
   // settling products on its data. BURNTICKER_PREFLIGHT_STRICT=0 skips it (the test hook does, for the suite).
@@ -956,7 +980,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     };
     try {
       if (!uploader) throw new Error("this site has no Arweave uploader set up");
-      const pin = await pinCoin(uploader, { ticker, mint: knownMint, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, imageUrl, image }, hooks);
+      const pin = await pinCoin(uploader, { ticker, mint: knownMint, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, image }, hooks);
       pins.set(ticker, pin);
       return { pin };
     } catch (e) {
@@ -995,6 +1019,13 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     }
     return { error: r };
   };
+  /** F04: register() refused a draft whose ticker another creator holds (the hold lapsed, or a path that took none): 409, files counted as orphans. */
+  const tickerTakenAnswer = (e: unknown, sideBTicker: string | null): { error: ApiResult } | null => {
+    if (e instanceof RegistrySchemaNewerError) return { error: fail(503, REGISTRY_NEWER_REFUSAL, { code: "registry-newer", retryAfterSec: 600 }) };   // I-17 backstop
+    if (!(e instanceof TickerTakenError)) return null;
+    const g = tickerTakenRefusal(p, e.ticker, input.creator);
+    return raceRefusal(fail(g.status, sideBTicker !== null && e.ticker === sideBTicker.toUpperCase() ? sideBRefusal(g.error) : g.error, g.extra));
+  };
   const uriFor = (ticker: string) => (m: string) => { const pin = pins.get(ticker); return pin ? pin.metadataUri : o.register ? `${publicOrigin()}/api/burnticker/metadata/${m}` : "ar://pending-upload-at-launch"; };
   const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: uriFor(input.ticker), keeperPubkey: p.keeperPubkey, allowMainnet: p.allowMainnet === true };
   const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[], creatorNote = "", poolId: string | null = bundle.addresses.poolId): TokenRow => {
@@ -1004,6 +1035,12 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     const pin = pins.get(ticker) ?? null;
     // F4: the identity the metadata file was made from, recorded once with the draft (a retry is compared against it)
     { const id = identities.get(ticker); if (id && !p.registry.getStatus(draftIdentityKey(token.mint))) p.registry.setStatus(draftIdentityKey(token.mint), id); }
+    // audit F01: every value initialize_token was built with, so the confirm step and the keeper can compare the chain field by field (a
+    // pair-curve side's create is the same instruction re-encoded with policy 2; a retry of this draft keeps its earlier floors accepted)
+    if (bundle.expectedConfig && token.mint === bundle.mint) {
+      const next = poolId === null ? pairCurveExpected(bundle.expectedConfig, bundle.addresses.platformId) : bundle.expectedConfig;
+      p.registry.setStatus(expectedConfigKey(token.mint), JSON.stringify(mergeExpected(loadExpectedConfig(p.registry, token.mint), next)));
+    }
     p.registry.putTokenMeta({ mint: token.mint, creatorNote, metadataUri: pin?.metadataUri ?? null, metadataTx: pin?.metadataTx ?? null, metadataSha256: pin?.metadataSha256 ?? null, imageUri: pin?.imageUri ?? null, imageTx: pin?.imageTx || null, imageSha256: pin?.imageSha256 || null, hosted: !pin });
     return token;
   };
@@ -1016,7 +1053,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     // WIRING-MEDIA-RECOVERY item 235: a restart after side A's create landed on chain must not make a second A. A draft this creator
     // registered for the same side-A ticker and name whose mint exists on chain is that A: the new plan is refused, naming the mint.
     { const prior = await createdSideA(p, input); if (prior) return { error: fail(409, `Side A, $${input.ticker}, was already created on chain from an earlier plan as mint ${prior}. A new plan would create a second $${input.ticker}. Finish that pair from the launch history, or pick a different ticker and name.`, { code: "pair-side-a-created", mint: prior }) }; }
-    const side = { ticker: String(b.pair.ticker ?? "").toUpperCase(), name: String(b.pair.name ?? ""), description: String(b.pair.description ?? ""), imageUrl: b.pair.imageUrl ? String(b.pair.imageUrl) : null, links: Array.isArray(b.pair.links) ? b.pair.links as { label: string; url: string }[] : [] };
+    const side = { ticker: String(b.pair.ticker ?? "").toUpperCase(), name: String(b.pair.name ?? ""), description: String(b.pair.description ?? ""), imageUrl: null as string | null, links: Array.isArray(b.pair.links) ? b.pair.links as { label: string; url: string }[] : [] };
     // website-18 (the owner: "I also don't see the ability to change the thumbnail pic"): side B carries its own creator description,
     // links and uploaded image, checked like side A's and pinned in its own metadata file
     const pb = b.pair as PairSideInput;
@@ -1026,13 +1063,13 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     if ("error" in upB) return upB;
     const sideText = creatorTextProblems({ name: side.name, ticker: side.ticker, note: "", description: creatorTextB, linkLabels: side.links.map((l) => String(l?.label ?? "")) });
     if (sideText.length) return { error: fail(403, `Side B is refused: ${sideText.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(sideText.map((x) => x.category))], problems: sideText.map((x) => x.reason) }) };
-    if (side.imageUrl && !p.customImages) return { error: fail(400, "Side B cannot use a custom image. This site does not take custom images. Every coin's image is its generated receipt art.", { code: "custom-image-off" }) };
     const bProblems = launchProblems({ ...input, ...side });
     if (bProblems.length) return { error: fail(400, `Side B has a problem: ${bProblems.join("; ")}`, { problems: bProblems }) };
     const bRefusals = nameRefusals(list, side.name, side.ticker);
     { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
     { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}), creator: input.creator, tickerOwner }); if (g) return { error: fail(g.status, sideBRefusal(g.error), g.extra) }; }
+    if (registers && side.ticker !== input.ticker) { const h = holdTicker(side.ticker, o.mintB ?? null, true); if (h) return h; }   // F04: side B's ticker too
     // two candidates: both markets must be named outcomes of the one race the body names (Polymarket's own index of open races)
     if (settled?.shape === "candidates" && settled.bundle.race) {
       if (p.polymarketDiscovery === false) return { error: fail(503, POLYMARKET_UNAVAILABLE) };
@@ -1047,6 +1084,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     const btRaw = pb.burnTarget;
     if (btRaw !== undefined && btRaw !== null) { const bp = burnTargetShapeProblems(btRaw); if (bp.length) return { error: fail(400, `Side B: ${bp.join("; ")}`, { code: "burn-target", problems: bp }) }; }
     const btB = btRaw === undefined || btRaw === null ? null : (btRaw as BurnTargetField);
+    { const br = burnRealRefusal(btB); if (br) return { error: fail(br.status, `Side B: ${br.message}`, { code: br.code, problems: [br.message] }) }; }
     // audit 2026-10-15 F3: a retry of the creator's own unfinished pair (same side-A address) keeps the pair id and the void date its
     // side-A draft recorded; a fresh pair id or a new 30-day date would make the same request a different rule
     const ownA = o.mint ? p.registry.ownDraft(o.mint, input.creator) : null;
@@ -1101,8 +1139,11 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
       if (settled) { const sp = settledPairSinkProblems({ rule: lockRule(JSON.parse(pair.a.rules.text)).rule, mint: pair.a.mint }, { rule: lockRule(JSON.parse(pair.b.rules.text)).rule, mint: pair.b.mint }); if (sp.length) return { error: fail(400, sp.join(" "), { code: "settled-pair-sinks", problems: sp }) }; }
       const pairCurve = pairCurveEnabled(process.env) && !isMeetingsRule(locked.rule) && !settled ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
       if (o.register) { const race = draftRaceRefusal([[pair.a.mint, input.ticker], [pair.b.mint, side.ticker]]); if (race) return race; }
-      const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note, pairCurve ? null : pair.a.addresses.poolId) : null;
-      const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links, "", pairCurve ? null : pair.b.addresses.poolId) : null;
+      let tokenA: TokenRow | null = null, tokenB: TokenRow | null = null;
+      try {
+        tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note, pairCurve ? null : pair.a.addresses.poolId) : null;
+        tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links, "", pairCurve ? null : pair.b.addresses.poolId) : null;
+      } catch (e) { const t = tickerTakenAnswer(e, side.ticker); if (t) return t; throw e; }   // F04: another creator's draft took a ticker first
       const row = tokenA && tokenB ? (() => { const had = p.registry.pair(pair.pairId); return had && had.mintA === tokenA.mint && had.mintB === tokenB.mint ? had : p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint); })() : null;
       return { pair: { pairId: pair.pairId, selector: pair.selector, notes: pair.notes, row, bundles: { a: pair.a, b: pair.b }, tokens: { a: tokenA, b: tokenB }, seriesTitle, preflight, ...(pairCurve ? { pairCurve } : {}) } };
     } catch (e) {
@@ -1124,7 +1165,9 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     if (bundle.mint !== chosenMint) throw new Error("the coin's mint changed between the pin and the build; please try again");
     // an uploaded image is shown from its pinned Arweave copy (the card and the coin page read the registry's image)
     if (o.register) { const race = draftRaceRefusal([[bundle.mint, input.ticker]]); if (race) return race; }
-    const token = o.register ? register(bundle, input.ticker, uploaded && pr.pin ? pr.pin.imageUri : input.imageUrl, input.links, note) : null;
+    let token: TokenRow | null = null;
+    try { token = o.register ? register(bundle, input.ticker, uploaded && pr.pin ? pr.pin.imageUri : null, input.links, note) : null; }
+    catch (e) { const t = tickerTakenAnswer(e, null); if (t) return t; throw e; }   // F04: another creator's draft took the ticker first
     return { ok: { bundle, token, seriesTitle, locked, preflight } };
   } catch (e) {
     return { error: fail(400, safeErrorText(e, 600)) };
@@ -1294,7 +1337,8 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   if (limited(perMint, CONFIRM_VERIFY_PER_MINT_HOUR)) return tooMany(perMint);
   // Review-2 F3: the verifier checks the launch's CONTENT (initialize_token for this mint, the on-chain TokenConfig's rules hash, the
   // venue) — and nothing is written to the registry unless it passes: a refused confirmation leaves status, baseline and launch_tx alone.
-  const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, p.registry.pairOf(mint)) });
+  // audit F01: and every rule parameter, key and pin initialize_token was built with (the stored expectation, else the locked rule's)
+  const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, p.registry.pairOf(mint)), config: expectedConfigFor(p.registry, t, expectedHostOf(p)) });
   // review L1: a slot is taken only by an answer about the transaction itself: it passed, or it was refused for its content or state
   // (422 / 409). RPC trouble (502, 503) and a throw (budget hold) never take one. F05 (prelaunch audit 2026-10-18): a refusal takes one
   // only when the verifier says affirmatively that this coin's mint and creator signed it; a missing answer is not proof, so a stranger's
@@ -1313,7 +1357,13 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   // prelaunch audit 2026-10-18 A-11: the owner hears once per coin, with the operator's command (draftReconciler.alertLaunchAfterClosure)
   if (closedAt !== null && v.blockTimeMs > closedAt) { try { alertLaunchAfterClosure(p.registry, t, launchTx, v.blockTimeMs, closedAt, now); } catch { /* the alert never changes the answer */ } return fail(403, `This launch landed at ${baselineAt}, after creator launches closed, so it is not recorded.`, { code: "launch-after-closure" }); }
   let r: ReturnType<Platform["registry"]["takeLiveFromChain"]>;
-  try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); } catch (e) { return fail(409, safeErrorText(e, 600), { code: "launch-race" }); }
+  try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); }
+  catch (e) {
+    // second audit 2026-10-19 I-16: the expired draft's ticker went to another creator's draft or coin, so it is not revived (the
+    // registry recorded the owner's alert in the same step)
+    if (e instanceof RevivalTickerHeldError) return fail(409, `This draft had expired, and its ticker $${e.ticker} now belongs to another Burnticker coin, so it is not taken live here. The site's operator has been told.`, { code: "revival-ticker-held" });
+    return fail(409, safeErrorText(e, 600), { code: "launch-race" });
+  }
   return ok({ ok: true, token: p.registry.token(mint), ...(r.revived ? { revived: true } : {}), note: `The launch transaction was read from the chain. The start time is its block time, ${baselineAt}. Results settled after this moment count.${r.revived ? " This draft had been marked expired, and the chain shows its coin was created in time, so it is live now." : ""}` });
 }
 

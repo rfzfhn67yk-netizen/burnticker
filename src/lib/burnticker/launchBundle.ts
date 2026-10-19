@@ -5,14 +5,14 @@ import { base58Encode } from "@/lib/burnKeeper/solana";
 import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type GlobalConfigView, type LaunchInput as SdkLaunchInput, type PlatformView } from "@/lib/burnKeeper/launch";
 import { CURVE_FEES, postGraduationFeesFor, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, LP_LOCKED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
-import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, defaultOnEndFor, PAIR_CLAUSE, isOneShot, type BurnRule, PAIR_ORACLES, pairIdFor, isMeetingsRule, meetingsMirrorId, gameMirrorId, GAME_WIN_SERIES_RE, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, descriptionFooter, endSinkOf, invertMapping, lockRule, DEFAULT_ON_END, defaultOnEndFor, PAIR_CLAUSE, isOneShot, type BurnRule, PAIR_ORACLES, pairIdFor, isMeetingsRule, meetingsMirrorId, gameMirrorId, GAME_WIN_SERIES_RE, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { isRaisePreset, RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
 import { LINKED_ONE_SHOT_REFUSAL as LINKED_ONE_SHOT_REFUSAL_TEXT } from "@/lib/burnticker/linkedShare";
 import { isoDate, seasonEndMs } from "@/lib/burnticker/derby/spec";
 import { nameProblem } from "@/lib/burnticker/launchFields";
 import { DESCRIPTION_TOTAL_LIMIT, isWebLink, linksProblems } from "@/lib/burnticker/creatorProfile";
-import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
-import { PIN_IX_LABEL_PREFIX, createAfterPinText, lockRuleStepText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import { PLACEHOLDER_PROGRAM_ID, bundleSelectorKey, programExpressible, type BurnProgramClient, type ExpectedTokenConfig, type SerializedIx } from "@/lib/burnticker/program";
+import { PIN_IX_LABEL_PREFIX, createAfterPinText, incineratorStepText, lockRuleStepText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 
 /**
  * THE LAUNCH BUNDLE (LAUNCHPAD-PATH §1 step 6; 2026-10-09). The wallet signs, in two transactions since 2026-10-15 (launchTransactions):
@@ -111,6 +111,8 @@ export class SdkLaunchLab implements LaunchLabClient {
 }
 
 export interface LaunchInput {
+  /** imageUrl: the address the registry row shows. The launch handler only ever sets it to the creator's uploaded image's own pinned
+   *  copy (or null for the generated art); a caller's web address is refused there (imagePin.ts IMAGE_URL_REFUSED, 2026-10-19). */
   creator: string; ticker: string; name: string; description: string; imageUrl: string | null; links: { label: string; url: string }[];
   rule: unknown;
   firstBuySol: string;
@@ -147,6 +149,8 @@ export interface LaunchBundle {
   burnPoolAuthority: string;
   transactions: { label: string; signers: ("creator" | "mint")[]; instructions: SerializedIx[] }[];
   notes: string[];
+  /** Audit F01: the TokenConfig initialize_token encodes (program.ts ExpectedTokenConfig); the host stores it with the draft and the confirm step compares the chain against it. */
+  expectedConfig?: ExpectedTokenConfig | null;
 }
 
 /**
@@ -263,7 +267,8 @@ export function launchTransactions(input: Pick<LaunchInput, "ticker" | "firstBuy
   if (!bt) {
     if (pins.length) throw new Error("launch: the program client pinned a burn pool for a rule that burns its own coin");
     return [
-      { label: lockRuleStepText(input.ticker, { link: link && paired }), signers: ["creator", "mint"], instructions: initIxs },
+      // owner decision 2026-10-19: a single coin on the incinerator end says the EndSink pin in its lock step (initialize_token pins it)
+      { label: !paired && endSinkOf(locked.rule) === "incinerator" ? incineratorStepText(input.ticker) : lockRuleStepText(input.ticker, { link: link && paired }), signers: ["creator", "mint"], instructions: initIxs },
       { label: `${createAfterPinText(input.ticker)} (LaunchLab create${firstBuy})`, signers: ["creator", "mint"], instructions: createIxs },
     ];
   }
@@ -291,9 +296,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
   const pool = burnPoolAddresses(deps.program.programId, mint);
   const feePda = pool.feePda;
   if (deps.program.feePdaFor(mint) !== feePda) throw new Error(`launch: the program client's fee PDA ${deps.program.feePdaFor(mint)} ≠ burn_receipts ["fee", mint] ${feePda}`);
-  const selectorKey = locked.rule.oracle === "derby" ? `derby:${locked.rule.series}` : locked.rule.oracle === "catalogue" ? `catalogue:${locked.rule.series}`
-    : locked.rule.oracle === "polymarket" ? (locked.rule.market ? `polymarket:market:${locked.rule.market}` : `polymarket:${locked.rule.series}:${locked.rule.kind}`)
-    : locked.rule.market ? `kalshi:market:${locked.rule.market}` : `kalshi:${locked.rule.series}`;
+  const selectorKey = bundleSelectorKey(locked.rule);
   const init = await deps.program.initializeToken({ mint, creator: input.creator, ticker: input.ticker, rulesSha256: locked.sha256, selectorKey, mode: locked.mode, attesters: deps.attesters, quorum: deps.quorum, vault, rule: locked.rule, ...(deps.pairMint ? { pairMint: deps.pairMint, partnerFirst: !!deps.partnerFirst, pairVoidBy: pairVoidByOf(locked.rule) } : {}) });
   const alloc = allocationFor(locked);
   const burnPoolAuthority = feePda;
@@ -318,6 +321,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
     fees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(input.cluster), creatorSliceBps: CREATOR_FEE_SLICE_BPS, sentence: feeSplitSentence(input.cluster), devFeeWallet: deps.devFeeWallet },
     burnPoolAuthority,
     transactions: launchTransactions(input, locked, init.instructions, create.instructions, !!deps.partnerFirst, !!deps.pairMint),
+    expectedConfig: init.expected ?? null,
     notes: [...create.notes, `LaunchLab's recorded creator is the burn program's fee PDA ${burnPoolAuthority} (its WSOL ATA ${pool.feeWsol} receives the claimed curve fees), not the human creator and not the keeper — the keeper only pays gas; the creator-fee slot pays the burn pool 100% (owner, 2026-10-09; review finding H-2)`, `${LP_POLICY_LINE}: ${LP_LOCKED_PCT}% of the graduation LP locked with Raydium's LP lock and its Fee Key owned by the burn program (platform config, not creator-configurable); team allocation 0%`, "the first burn needs fee income or a seed deposit into the burn pool; anyone can deposit, nobody can withdraw", "no referral code, fee discount or hidden parameter exists: every parameter is in rules.json"],
   };
 }

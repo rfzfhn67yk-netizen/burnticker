@@ -16,6 +16,7 @@ import { githubText, parseGithubSeries } from "@/lib/burnticker/sources/github";
 import { parseYoutubeSeries, youtubeText } from "@/lib/burnticker/sources/youtube";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { CATALOGUE_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
 import { highLastDay, highText } from "@/lib/burnticker/derby/high";
 import { paramName } from "@/lib/burnticker/paramNames";
 import { fitName } from "@/lib/burnticker/launchFields";
@@ -177,6 +178,15 @@ export const namedSinkFallback = (x: string): string => `if ${x} is not live the
 export const INCINERATOR_WORDS = "Solana's incinerator, which nothing can spend from";
 /** The end result sentence of a coin whose end sink is the incinerator (endText's result line). */
 export const INCINERATOR_END_RESULT = `When the rule ends on a result, the SOL left in the pool, and any fees that arrive later, is sent to ${INCINERATOR_WORDS}. No coin is swapped for it. Then the coin retires.`;
+/**
+ * ONE BURN OF THE WHOLE POOL (owner decision 2026-10-19; nextResult.ts oneShotFull): a coin that resolves once and spends 100 % has no
+ * "rest of a losing coin" after its burn. What its end sends on is what reaches the pool later: trading fees and the reserve the rule
+ * keeps back. A one-shot with an outcome that burns nothing (a market's other answer) says that the whole pool takes the same way then.
+ */
+export const ONE_SHOT_REST_DEFICIT = "After its one burn, anything that reaches this coin's pool later, trading fees and the kept reserve, goes to $DEFICIT's burn.";
+export const ONE_SHOT_REST_INCINERATOR = "After its one burn, anything that reaches this coin's pool later, trading fees and the kept reserve, is sent to Solana's incinerator and burned.";
+export const oneShotRestCoin = (x: string): string => `After its one burn, anything that reaches this coin's pool later, trading fees and the kept reserve, goes to ${x}'s burn; ${namedSinkFallback(x)}.`;
+export const ONE_SHOT_NO_BURN_LINE = "If the rule ends without its burn, the whole pool goes the same way.";
 const sinkPhrase = (k: "flagship" | "pair-winner" | "mint" | "incinerator", r?: Pick<BurnRule, "onEnd">): string => (k === "pair-winner" ? "whatever is left burns the winning coin, or $DEFICIT if there isn't one," : k === "incinerator" ? `whatever SOL is left is sent to ${INCINERATOR_WORDS},` : k === "mint" && r ? `whatever is left burns ${sinkTickerOf(r)}, or $DEFICIT if ${sinkTickerOf(r)} is not live then,` : "whatever is left burns $DEFICIT,");
 /** The window sentence's ending: the four-week burn-down, or (end sinks) where the leftover burns. */
 const burnDown = (r: BurnRule): string => { const k = describeEndSink(r); return k ? `${sinkPhrase(k, r)} and the coin retires` : BURN_DOWN; };
@@ -257,7 +267,10 @@ export function endText(r: BurnRule, o: { team?: string | null; party?: boolean 
   // the coin description says the same void sentence (END_SINK_VOID_SENTENCE is this text at the default 28 days)
   const VOID = days === 28 ? voidSentenceFor(r) : voidSentenceFor(r).replace("over four weeks", over);
   if (!sink) return mk("self", `When the rule ends, the coin's own burn pool burns down what is left ${over}, then the coin retires. A retired coin's pool keeps burning any fees it still receives. This end only burns this coin and sends nothing to another coin.`, null);
-  if (sink === "incinerator") return mk("incinerator", INCINERATOR_END_RESULT, VOID);
+  // owner decision 2026-10-19: one burn of the whole pool ends on what reaches the pool later (never the losing-path words)
+  const full = oneShotFull(r) && !r.pair && !championPathRule(r);
+  const noBurn = full && hasNoBurnOutcome(r) ? ` ${ONE_SHOT_NO_BURN_LINE}` : "";
+  if (sink === "incinerator") return mk("incinerator", full ? `${ONE_SHOT_REST_INCINERATOR}${noBurn} No coin is swapped for it. Then the coin retires.` : INCINERATOR_END_RESULT, VOID);
   if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", MEETINGS_END_RESULT, `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", o.party ? PARTIES_END_RESULT : CANDIDATES_END_RESULT, VOID);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
@@ -266,6 +279,8 @@ export function endText(r: BurnRule, o: { team?: string | null; party?: boolean 
   if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
   if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team", sinkTickerOf(r)); return mk("champion", `${won} ${lost}`, VOID); }
   // end-sink picker: the coin the creator named, and end.rs's fall-through when that coin is not live at the end
+  if (sink === "mint" && full) { const x = sinkTickerOf(r); return mk("mint", `${oneShotRestCoin(x)}${noBurn} Then the coin retires.`, VOID); }
+  if (sink === "flagship" && full) return mk("flagship", `${ONE_SHOT_REST_DEFICIT}${noBurn} Then the coin retires.`, VOID);
   if (sink === "mint") { const x = sinkTickerOf(r); return mk("mint", `When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to ${x}'s burn; ${namedSinkFallback(x)}. Then the coin retires.`, VOID); }
   return mk("flagship", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to $DEFICIT's burn. Then the coin retires.", VOID);
 }

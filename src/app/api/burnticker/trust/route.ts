@@ -4,7 +4,7 @@ import { buildTrustPage, jsonSafe, web3ChainReader } from "@/lib/burnticker/trus
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import { publicRelease, readReleases } from "@/lib/burnticker/history";
 import { clientKey, limiter } from "@/lib/burnticker/api/http";
-import { TRUST_DELTA_CACHE, trustSwr } from "@/lib/burnticker/trustServe";
+import { serveTrust, TRUST_DELTA_CACHE, trustSwr } from "@/lib/burnticker/trustServe";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +26,12 @@ async function buildTrust(): Promise<unknown> {
 /**
  * The trust page's data: the Powers Register, the LIVE platform config from chain, the developer fee ledger from chain, team wallets,
  * attesters per token, program facts, incidents, the last audit. Kept and refreshed in the background (trustServe.ts, prelaunch audit
- * C2), rate limited per visitor.
+ * C2) with a maximum age and a rebuild timeout (audit 7 F06), rate limited per visitor.
  */
 export async function GET(req: Request) {
   const rl = limiter.take(clientKey(req), "read");
   if (!rl.ok) return NextResponse.json({ error: `Too many requests. Please try again in ${rl.retryAfterSec} seconds.`, code: "rate-limited" }, { status: 429, headers: { "retry-after": String(rl.retryAfterSec), "cache-control": "no-store" } });
-  const r = await trustSwr.get("page", "1", buildTrust);
-  if (!r) return NextResponse.json({ loading: true, error: "the trust page is being read; try again in a few seconds", code: "trust-loading", retryAfterSec: 5 }, { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } });
-  return NextResponse.json(r.value, { headers: { "cache-control": "public, max-age=30, s-maxage=60, stale-while-revalidate=120", "x-trust-memo": r.state } });
+  // audit 7 F06: bounded staleness and a rebuild timeout (trustServe.ts); past the bound the last verified copy is served marked degraded
+  const r = await serveTrust(trustSwr, "page", buildTrust);
+  return NextResponse.json(r.body, { status: r.status, headers: r.headers });
 }

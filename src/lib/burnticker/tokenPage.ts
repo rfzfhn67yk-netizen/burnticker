@@ -4,6 +4,8 @@ import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } 
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
 import { CURVE_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_SHARE_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
+import { isFirstSnowRule, nextTimes, resolvesOnce } from "@/lib/burnticker/nextResult";
+import { sourceText } from "@/lib/burnticker/launchPreflight";
 import { badgeFromText, CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
 // website-21 (WIRING-RIVALRY-SERIES gap): a rivalry series pair reads two series, one per team, never one shared market
 import { isMeetingsSelector, MEETINGS_PAIR_PAGE_LINE } from "@/lib/burnticker/guidedLaunch";
@@ -23,6 +25,7 @@ import type { AttesterRow, FeedState, ReadingRow, ReceiptRow, Registry, TokenRow
 import type { LifecycleJson, PairClauseJson, PairCounterpart, PairForwardJson, PairSideSummary, ReceiptJson, StatedJson, TokenProgramJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
 import { pairDailyText, platformDailyText, tokenDayText } from "@/lib/launch/dailyPost";
 import { parseBuybackMemo as parseProgramBuybackMemo, parseDebtMemo as parseProgramVaultMemo } from "@/lib/burnReceipts/memo";
+import { parseTargetMemo } from "@/lib/burnReceipts/memoV3";
 import { buybackSpend as programBuybackSpend, formatDate as formatU32 } from "@/lib/burnReceipts/math";
 import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { buildMarketJson, type CpmmMarket, type MarketInput } from "@/lib/burnticker/market";
@@ -336,12 +339,17 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
         if (b.lead && b.spendLamports !== null && fm.lamports !== b.spendLamports) checks.push("forward memo lamports ≠ the recorded amount");
       }
     } else if (prog && b.memo) {
-      const pm = i.locked.mode === "buyback" ? parseProgramBuybackMemo(b.memo) : parseProgramVaultMemo(b.memo);
-      if (!pm) checks.push(`memo does not parse (program ${i.locked.mode === "buyback" ? "v2" : "v1"})`);
+      // audit 7 F05: a coin with a burn target (round 5) writes the v3 target memo (crank_target_burn); its `own` field is the coin's own
+      // fee tokens burned (the receipt's burnRaw), `burn` the target's, and `target` must be the rule's pinned mint
+      const pinned = rule.burnTarget?.mint ?? null;
+      const tm = i.locked.mode === "buyback" && pinned ? parseTargetMemo(b.memo) : null;
+      const pm = tm ?? (i.locked.mode === "buyback" ? parseProgramBuybackMemo(b.memo) : parseProgramVaultMemo(b.memo));
+      if (!pm) checks.push(`memo does not parse (program ${pinned ? "v3 target or v2" : i.locked.mode === "buyback" ? "v2" : "v1"})`);
       else {
         if (pm.prefix !== i.token.ticker || (b.readingDate !== null && pm.recordDate !== formatU32(b.readingDate)) || pm.units !== readingUnits || BigInt(pm.now) - BigInt(pm.prev) !== BigInt(readingUnits)) checks.push("memo fields ≠ the receipts counted into this reading");
         if (pm.rulesSha12 !== sha12) checks.push(`memo rules hash ${pm.rulesSha12} ≠ the published rule ${sha12}`);
-        if (b.lead && b.burnRaw !== null && pm.burn !== rawToTokens(b.burnRaw, DECIMALS)) checks.push("memo burn ≠ recorded burn");
+        if (tm && tm.target !== pinned) checks.push(`memo target ${tm.target} ≠ the rule's pinned token ${pinned}`);
+        if (b.lead && b.burnRaw !== null && (tm ? tm.own : pm.burn) !== rawToTokens(b.burnRaw, DECIMALS)) checks.push("memo burn ≠ recorded burn");
         if (b.lead && "spent" in pm && b.spendLamports !== null && (pm.spent !== b.spendLamports.toString() || (b.poolLamports !== null && pm.pool !== b.poolLamports.toString()))) checks.push("memo pool/spent ≠ the program's recorded amounts");
         if (b.lead === false && ((b.burnRaw ?? ZERO) > ZERO || (b.spendLamports ?? ZERO) > ZERO)) checks.push("a non-lead receipt carries amounts");
       }
@@ -408,16 +416,23 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
   const activeAtt = i.attesters.filter((a) => a.active);
   const program = buildTokenProgram(i);
   const lastBurn = [...confirmed].filter((b) => (b.burnRaw ?? ZERO) > ZERO).sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
+  // audit 7 F08: one-shot-ness is rules.ts isOneShot (a one-game catalogue coin has no market and is one-shot), never re-derived here;
+  // launch wizard audit 2026-10-19 F14: plus the first snow, which the keeper ends after its one burning day (nextResult.ts resolvesOnce)
+  const oneShot = resolvesOnce(rule);
+  // F11: the statement names the source and its unit in words, as the review does (launchPreflight.ts sourceText)
+  const src = (() => { try { return sourceText(rule, i.now); } catch { return null; } })();
+  const nextCheckAt = i.nextCheckAt ? new Date(i.nextCheckAt).toISOString() : null, nextCloseTime = i.implied?.closeTime ?? null;
   return {
     schema: TOKEN_STATUS_SCHEMA, generatedAt: new Date(i.now).toISOString(), ticker: t.ticker, name: t.name, mint: t.mint, cluster: i.chain.cluster, status: t.status, launchedAt: i.dates?.created.state === "read" ? i.dates.created.at : t.launchTx ? t.baselineAt : null,
     oracle: rule.oracle, selectorKey: t.selectorKey, seriesTitle: i.seriesTitle, mode: i.locked.mode,
-    rules: { sha256: i.locked.sha256, sha12: i.locked.sha12, statement: ruleStatement(rule, { seriesTitle: i.seriesTitle }), file: "rules.json", oneShot: !!rule.market },
+    rules: { sha256: i.locked.sha256, sha12: i.locked.sha12, statement: ruleStatement(rule, { seriesTitle: i.seriesTitle, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), file: "rules.json", oneShot },
     addresses: (() => { let feeWsol: string | null = null; try { feeWsol = i.chain.programId ? burnPoolAddresses(i.chain.programId, t.mint).feeWsol : null; } catch { feeWsol = null; } return { mint: t.mint, mintUrl: addr(t.mint)!, feePda: t.feePda, feePdaUrl: addr(t.feePda)!, feeWsol, feeWsolUrl: addr(feeWsol), vault: t.vault, vaultUrl: addr(t.vault), creator: t.creator, creatorUrl: addr(t.creator)!, programId: i.chain.programId, poolId: t.poolId, launchTx: t.launchTx, launchTxUrl: t.launchTx ? explorerUrl(i.chain.cluster, t.launchTx) : null }; })(),
     supply: { initial: TOTAL_SUPPLY, current: rawToTokens(current, DECIMALS), source: i.chain.supplyRaw !== null ? "chain" : "registry" },
     burned: { total: rawToTokens(totalRaw, DECIMALS), pctOfSupply: pct(totalRaw, supplyRaw), count: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, last30d: rawToTokens(last30, DECIMALS), lastAt: lastBurn?.settledAt ?? null },
     pool: (() => { const spendable = i.chain.feePdaLamports === null ? null : spendablePool(i.chain.feePdaLamports, rule.reserveSol); const c = spendable === null ? null : capPool(spendable); return { feePdaSol: sol(i.chain.feePdaLamports), spendableSol: c === null ? null : sol(c.pool), reserveSol: rule.reserveSol, vaultBalance: i.chain.vaultRaw === null ? null : rawToTokens(i.chain.vaultRaw, DECIMALS), vaultAllocation: allocation === null ? null : allocation.toString(), shortfallOutstanding: rawToTokens(lastFinal?.shortOutRaw ?? ZERO, DECIMALS), capSol: PRE_AUDIT_POOL_CAP_SOL, queuedSol: c === null ? null : sol(c.queued), queuedNote: `Burns spend from at most the burn-pool cap, ${PRE_AUDIT_POOL_CAP_SOL} SOL unless the platform's multisig has raised it. Fee income above that is held in the coin's own fee account and spent once the cap rises or ends. The keeper enforces this cap today, and the program enforces it once it is deployed.` }; })(),
     // NO ODDS FOR ANY COIN (owner decision 2026-10-10): impliedChance is always null — the field stays for schema compatibility only.
-    next: { nextCheckAt: i.nextCheckAt ? new Date(i.nextCheckAt).toISOString() : null, impliedChance: null, impliedBasis: i.implied?.chance == null ? (i.implied?.basis ?? null) : null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime: i.implied?.closeTime ?? null, awaitingFinal: i.selectorPending },
+    // audit 7 F08: the next RESULT (none for a decided or voided one-shot) and the keeper's next SOURCE CHECK are different times
+    next: { nextCheckAt, impliedChance: null, impliedBasis: i.implied?.chance == null ? (i.implied?.basis ?? null) : null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime, awaitingFinal: i.selectorPending, ...nextTimes({ oneShot, receipts: i.receipts, nextCloseTime, nextCheckAt, burnedOnly: isFirstSnowRule(rule) }) },
     feed: { lastEventId: i.state.lastEventId, lastValue: i.state.lastValue, lastSettledAt: i.state.lastSettledAt, readings: i.readings.length, lastFetchAt: i.feedState.lastFetchAt ? new Date(i.feedState.lastFetchAt).toISOString() : null, lastError: i.feedState.lastError, failures: i.feedState.failures },
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
     fees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(i.chain.cluster), sentence: feeSplitSentence(i.chain.cluster), creatorSliceBps: 0 },

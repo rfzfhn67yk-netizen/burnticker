@@ -20,7 +20,7 @@ import { PROGRESS_STEPS, progressOf } from "@/lib/burnticker/progress";
 import { readinessOf, READINESS_ORDER, type ReadinessInput } from "@/lib/burnticker/readiness";
 import { burnWalkthrough } from "@/lib/burnticker/burnWalkthrough";
 import { parseWatchlist, toggleWatch, WATCH_EMPTY, WATCH_KEY, WATCH_NOTE } from "@/lib/burnticker/watchlist";
-import { NO_END_LINE, RETIREMENT_FACTS, RETIREMENT_HEADING } from "@/lib/burnticker/retirementCopy";
+import { LEFTOVER_SEE_END, NO_END_LINE, RETIREMENT_FACTS, RETIREMENT_HEADING, retirementFacts } from "@/lib/burnticker/retirementCopy";
 import { NO_FEE_REVENUE_LINE, WHY_CREATE, onboardingSentences } from "@/lib/burnticker/creatorCopy";
 import { coinPreview, receiptPreview } from "@/lib/burnticker/sharePreview";
 import { DUPLICATE_LINES } from "@/lib/burnticker/duplicateRule";
@@ -312,15 +312,16 @@ describe("item 8: the local watchlist (browser only, nothing sent)", () => {
   });
 });
 
-describe("item 9: retirement in practical terms (the shipped 28-day wind-down; one module)", () => {
-  test("five questions answered from the implementation; the sink is not described; every page reads the one module", () => {
+describe("item 9: retirement in practical terms (one module; the end sink since the launch wizard audit 2026-10-19 F9)", () => {
+  test("five questions answered from the implementation; the leftover answer follows the rule's end; every page reads the one module", () => {
     assert.deepEqual(RETIREMENT_FACTS.map((f) => f.q), ["Can holders still sell?", "Does trading continue?", "Do fees still come in?", "Which burns stop?", "What happens to what is left?"]);
-    assert.match(RETIREMENT_FACTS[4].a, /over 28 days, and then the coin retires/);
-    const mod = read("src/lib/burnticker/retirementCopy.ts");
-    assert.match(mod, /END-SINK SWITCH/); assert.doesNotMatch(RETIREMENT_FACTS.map((f) => f.a).join(" "), /sink|another coin's|flagship/i);
-    for (const f of RETIREMENT_FACTS) { clean(f.q, f.q); clean(f.a, f.q); }
+    // launch wizard audit F9: the general answer says the end sink and the void wind-down, never "nothing is sent to another coin"
+    assert.match(RETIREMENT_FACTS[4].a, /\$DEFICIT's burn/); assert.match(RETIREMENT_FACTS[4].a, /over 28 days/);
+    assert.doesNotMatch(RETIREMENT_FACTS.map((f) => f.a).join(" "), /Nothing is sent to another coin/);
+    assert.doesNotMatch(read("src/lib/burnticker/retirementCopy.ts"), /END-SINK SWITCH/);
+    for (const f of [...RETIREMENT_FACTS, ...retirementFacts(LEFTOVER_SEE_END)]) { clean(f.q, f.q); clean(f.a, f.q); }
     clean(RETIREMENT_HEADING, "heading"); clean(NO_END_LINE, "no end");
-    assert.match(read("src/app/burnticker/t/[ticker]/page.tsx"), /<RetirementFacts className="mt-1" \/>/); assert.match(read("src/app/burnticker/launch/ReviewCard.tsx"), /<RetirementFacts className="mt-1" open \/>/, "website-15 item 12: inside the one collapsed end-of-rule block");
+    assert.match(read("src/app/burnticker/t/[ticker]/page.tsx"), /<RetirementFacts className="mt-1" leftover=\{LEFTOVER_SEE_END\} \/>/); assert.match(read("src/app/burnticker/launch/ReviewCard.tsx"), /<RetirementFacts className="mt-1" open leftover=\{LEFTOVER_SEE_END\} \/>/, "website-15 item 12: inside the one collapsed end-of-rule block");
   });
 });
 

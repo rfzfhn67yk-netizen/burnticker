@@ -52,7 +52,7 @@ describe("the statement text", () => {
     const t = JSON.parse(unsigned(read("config/burnticker/operator.json"))).signedMessage.message as string;
     assert.ok(t.includes("{PUBKEY}") && t.includes("{DATE}"), "the template form has both blanks");
     const main = op.clusters.mainnet;
-    for (const v of [main.programs.burn_receipts, main.programs.pair_curve, main.squads.vault, walletOf(op, "mainnet", "keeper")!, "FQYod3oyUJNedCw3xbp6AHifyZmG4uNrD1X99o8iNo1x", op.operator.contact, "https://burnticker.com/burnticker/operator"]) assert.ok(m.includes(v), v);
+    for (const v of [main.programs.burn_receipts, main.programs.pair_curve, main.squads.vault, walletOf(op, "mainnet", "keeper")!, "FQYod3oyUJNedCw3xbp6AHifyZmG4uNrD1XvLqtpGd5L", op.operator.contact, "https://burnticker.com/burnticker/operator"]) assert.ok(m.includes(v), v);
     assert.match(m, /Two of its three members must approve any change\. I hold two of those member keys, and one other person holds the third\./);
     assert.match(m, /except Squads member C/, "the third signer's key is not claimed as the operator's");
     assert.doesNotMatch(m, /TODO_|Shane|Cassidy/i, "no name");

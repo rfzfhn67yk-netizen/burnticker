@@ -14,11 +14,11 @@
 // Needs BURNTICKER_RPC_URL and BURNTICKER_PROGRAM_ID (and BURNTICKER_CLUSTER=mainnet on mainnet). Normally the keeper's reconciler does
 // this on its own within a few minutes; this is for a coin older than its 14-day lookback or a host without the keeper.
 import fs from "node:fs";
-import { Connection } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { openRegistry, REGISTRY_FILE } from "@/lib/burnticker/registry";
 import { connectionLaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
 import { reviveDraft } from "@/lib/burnticker/draftReconciler";
-import { LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { BURNTICKER_PLATFORM, LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 
 const args = process.argv.slice(2);
 const arg = (k: string): string | null => { const i = args.indexOf(k); return i >= 0 && i + 1 < args.length ? args[i + 1] : null; };
@@ -31,6 +31,12 @@ if (!rpc || !programId) { console.error("BURNTICKER_RPC_URL and BURNTICKER_PROGR
 const cluster = process.env.BURNTICKER_CLUSTER?.trim() === "mainnet" ? "mainnet" : "devnet";
 const reg = openRegistry(db);
 const verifier = connectionLaunchVerifier(new Connection(rpc, "confirmed") as unknown as TxReader, { burnProgramId: programId, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() });
-const r = await reviveDraft(reg, verifier, { mint, launchTx: tx, note, late, apply });
+// second audit 2026-10-19 I-15: a draft with no stored expectation is compared on what this host encodes into every launch: the keeper
+// key as sole attester (BURNTICKER_KEEPER_PUBKEY), the config authority (BURNTICKER_ADMIN) and the LaunchLab platform
+// (BURNTICKER_PLATFORM_ID, else the pin compiled for the cluster). A missing keeper key fails closed (no attester is expected).
+const keyOf = (v: string | undefined): string | null => (v && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v.trim()) ? v.trim() : null);
+const pin = BURNTICKER_PLATFORM[cluster];
+const host = { keeperPubkey: keyOf(process.env.BURNTICKER_KEEPER_PUBKEY), admin: keyOf(process.env.BURNTICKER_ADMIN), llPlatform: keyOf(process.env.BURNTICKER_PLATFORM_ID) ?? (pin && !pin.equals(PublicKey.default) ? pin.toBase58() : null) };
+const r = await reviveDraft(reg, verifier, { mint, launchTx: tx, note, late, apply, host });
 if (!r.ok) { console.error(r.reason); process.exit(1); }
 console.log(JSON.stringify({ mint, launchTx: tx, ...r, ...(r.applied ? { status: reg.token(mint)!.status } : { next: "run again with --apply" }) }));

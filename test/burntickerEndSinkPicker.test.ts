@@ -62,7 +62,8 @@ describe("the end sentences say the named coin and end.rs's fall-through", () =>
     const r = lockRule(named(ONE)).rule;
     const e = endText(r);
     assert.equal(e.kind, "mint");
-    assert.equal(e.result, "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to $LAD's burn; if $LAD is not live then, to $DEFICIT's burn. Then the coin retires.");
+    // owner decision 2026-10-19: ONE spends its whole pool in one burn, so its end names what reaches the pool later (describe.ts oneShotRestCoin)
+    assert.equal(e.result, "After its one burn, anything that reaches this coin's pool later, trading fees and the kept reserve, goes to $LAD's burn; if $LAD is not live then, to $DEFICIT's burn. If the rule ends without its burn, the whole pool goes the same way. Then the coin retires.");
     clean(e.result);
     const d = describeRule(lockRule(named(poly())).rule, { ticker: "YES" });
     assert.match(d.paragraph, /whatever is left burns \$LAD, or \$DEFICIT if \$LAD is not live then, and the coin retires/);

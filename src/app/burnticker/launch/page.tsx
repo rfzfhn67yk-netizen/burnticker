@@ -19,7 +19,7 @@ import { CoinVsCoinTile, CVC_STORE, type TileAnswers } from "./CoinVsCoinTile";
 import { LAUNCH_START_EVENT } from "@/lib/burnticker/launchStart";
 import { SignCard } from "./SignCard";
 import { MintAddressBlock, useMintPool } from "./MintSearch";
-import { sendWithProofFallback, signLaunchRequest, type WalletProof } from "@/lib/burnticker/walletProof";
+import { parseWalletProof, PROOF_MAX_AGE_MS, sendWithProofFallback, signLaunchRequest, type WalletProof } from "@/lib/burnticker/walletProof";
 import { base58, secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
 import { launchlabPlan, pairCurvePlan, withPlanDeadline } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
@@ -34,7 +34,7 @@ import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { LaunchRecovery } from "./LaunchRecovery";
 import { LAUNCH_GATE_LOADING, launchGateFromCatalogue, wizardMayRender, wizardMaySign, type LaunchGateState } from "@/lib/burnticker/launchGateState";
 import { availabilityFromCatalogue, launchTypeOf, PREVIEW_BANNER, siteLaunchStateFromCatalogue, SITE_LAUNCH_STATE_LOADING, type LaunchAvailabilityModel, type LaunchType, type SiteLaunchState } from "@/lib/burnticker/launchAvailability";
-import { draftRevision, EMPTY_REVIEW_SLOT, reviewAnswered, reviewFor, reviewMatchesDraft, reviewRequested, REVIEW_UPDATING, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
+import { createReviewRequester, EMPTY_REVIEW_SLOT, launchRevisions, reviewFor, reviewIdentity, reviewMatchesDraft, reviewProofExpiresAt, REVIEW_UPDATING, usableReviewProof, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
 import { DEFAULT_SHARE, SLICED_ABOVE, isRaisePreset, shareOf, SHARE_PRESETS, presetRowLabel, pctLabel as presetPct, snapToPreset, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, LINKED_ONE_SHOT_LINE, shareShapeOf, sharePresetsForRule, type RaisePreset } from "@/lib/burnticker/launchPresets";
 import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
@@ -48,7 +48,7 @@ import { NAME_STEP_BLOCKED, fieldRuleSentence, isLintLine, noteIssue, profileIss
 import { CLOSE_PASSED_CHIP, JUMP_CONFIRM_LINE, JUMP_CONFIRM_NO, JUMP_CONFIRM_YES, NO_SECOND_CHECK, pairBudgetLine, TEAMS_NONE_LINE, TEAMS_UNREAD_LINE, humanDay, leagueButtonName, leagueButtonTitle, winPairNames } from "./pageCopy";
 import { teamAdvancedDefaults } from "@/lib/burnticker/creatorCopy";
 import { nameProblem, tickerProblem, wxThresholdProblem } from "@/lib/burnticker/launchFields";
-import { composeRule, fieldsFromRule, launchBody, migrateLinkedShare } from "@/lib/burnticker/launchDraft";
+import { composeRule, END_CHOICE_RESET_NOTICE, endChoiceOffered, fieldsFromRule, launchBody, migrateLinkedShare } from "@/lib/burnticker/launchDraft";
 import { preparedRulesCheckWeb, PREPARED_MISSING_LINE } from "@/lib/burnticker/preparedRules";
 import { filterOutcomes, outcomesShownLine } from "@/lib/burnticker/oracle/outcomeFilter";
 import { VERSION_CHECK_EVENT } from "@/lib/burnticker/buildVersion";
@@ -73,7 +73,6 @@ import { SimulatorDisclosure } from "./SimulatorDisclosure";
 import { END_CHOICE_DEFAULT, endChoiceModel, withEndChoice, type EndChoice } from "@/lib/burnticker/guidedLaunch";
 import type { SinkCoin } from "@/lib/burnticker/endSinks";
 import { RereadCache } from "@/lib/burnticker/rereadCache";
-import { reviewRequestDue } from "@/lib/burnticker/launchReviewSync";
 import { EndSection, FollowStep, GuidedTop, PatternStep, RivalryKindStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import { creatorLinks } from "@/lib/burnticker/creatorProfile";
@@ -88,7 +87,7 @@ import { HAZARD_FOLLOW, HAZARD_KINDS, HAZARD_MEASURES, hazardControls, hazardPat
 import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, activeUnit, eventForSide, followForRule, keptProfileLine, keptProfileParts, KEPT_PROFILE_FRESH, KEPT_PROFILE_REUSE, IMAGE_RIGHTS_REQUIRED, oneGameShare, PAIR_COST_EXCLUSIONS, mappingWarning, partyMarketWarning, pickDescribesRule, renderWarnings, reviewBlockers, shareOfBudgetLine, rivalrySeasonLine, stablePatternOptions, teamLine, triggerText, whichAnswer, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, pairDiagramLabel, namesRemadeLine, budgetCopy, oneShotSentences, candidateFacts, candidatesPairRule, endSentences, gamePairFacts, gamePairRule, matchupFacts, pairIdentityProblems, pairNames, pairTickers, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { PICKER_PAGE, pickerPage } from "@/lib/burnticker/polySearch";
-import { keyRotatingFetch, newPrepareKey } from "@/lib/burnticker/prepareKey";
+import { draftKeys, keyRotatingFetch } from "@/lib/burnticker/prepareKey";
 import { PLAN_EXPIRED_SENTENCE, planExpired, planExpiresInMs } from "@/lib/burnticker/planAge";
 
 /**
@@ -318,6 +317,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // linked pair keeps the pair winner and shows no choice; an independent pair's two coins pick their own.
   const [endA, setEndA] = useState<EndChoice>(END_CHOICE_DEFAULT);
   const [endB, setEndB] = useState<EndChoice>(END_CHOICE_DEFAULT);
+  // launch wizard audit 2026-10-19 F4: a restored end choice the host no longer offers falls back to the default, said in one line
+  const endRestored = useRef(false), [endNotice, setEndNotice] = useState<string | null>(null);
   const [sinks, setSinks] = useState<SinkCoin[] | null>(null);
   // "Launch one like this": the source coin's dials, applied once to the rule the new pick builds
   const [pendingDials, setPendingDials] = useState<{ fraction: number; side: string | null; window: string | null; games: number | null; league: boolean; from: string; inverse?: boolean } | null>(null);
@@ -404,7 +405,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // a new draft starts the count again
   // review of block M: the wallet's signature over the review's tickers, which lets the review count the creator's own drafts as theirs
   const [reviewProof, setReviewProof] = useState<WalletProof | null>(null);
-  const [reviewRetry, setReviewRetry] = useState<{ rev: string; n: number }>({ rev: "", n: 0 }), [btRetry, setBtRetry] = useState<{ key: string; n: number }>({ key: "", n: 0 });
+  const [btRetry, setBtRetry] = useState<{ key: string; n: number }>({ key: "", n: 0 });
   const searchRef = useRef<HTMLInputElement>(null), [focusSearch, setFocusSearch] = useState(false);
   const lastFollow = useRef<FollowId | null>(null);
   // sources-6 (QA 9 #28): college football lists the FBS first; "Show all divisions" asks for every team
@@ -475,9 +476,19 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       set("profileText", (v: PT) => { setProfile((x) => ({ ...x, ...words(v) })); if (v.hadImage) setImageGone(true); });
       set("profileBText", (v: PT) => { setProfileB((x) => ({ ...x, ...words(v) })); if (v.hadImage) setImageGone(true); });
       // the end-sink picker: each coin's end choice (a picked coin keeps its mint and ticker; the review re-checks it is still live)
-      set("endA", setEndA); set("endB", setEndB);
+      set("endA", setEndA); set("endB", setEndB); if (s.endA !== undefined || s.endB !== undefined) endRestored.current = true;
       set("uq", setUq); set("origin", setOrigin); set("editedFor", setEditedFor); set("eventInfo", setEventInfo); set("srcWarnings", setSrcWarnings); set("bq", setBq); set("wx", setWx); set("draft", setDraft); set("flavour", setFlavour); set("flavourB", setFlavourB); set("cardCtx", setCardCtx); set("cardYear", setCardYear); set("cardSet", setCardSet); set("nameAuto", setNameAuto); set("tickerAuto", setTickerAuto); set("ownImage", setOwnImage); set("note", setNote);
   };
+  // F4: checked once the launch state is read (a loading state offers nothing, so it would reset every saved choice)
+  useEffect(() => {
+    if (!endRestored.current || site.read === "loading") return;
+    endRestored.current = false;
+    const o = { sinkPicker: site.sinkPicker.available, burnSol: site.burnSol.available };
+    const badA = !endChoiceOffered(endA, o), badB = !endChoiceOffered(endB, o);
+    if (badA) setEndA(END_CHOICE_DEFAULT);
+    if (badB) setEndB(END_CHOICE_DEFAULT);
+    if (badA || badB) setEndNotice(END_CHOICE_RESET_NOTICE);
+  }, [site, endA, endB]);
   // WIRING-AUDIT12 P1-1: a saved linked pair on one result with a share other than 100 % is set to 100 % on resume, and said
   const resumeFrom = (saved: Record<string, unknown>) => { const { draft: d, notice } = migrateLinkedShare(saved); restoreFrom(d); if (notice) setShareNotice(notice); };
   useEffect(() => {
@@ -944,32 +955,41 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const btFresh = btFor === btKey && !!bt;
   // L06: the read-only review payload (POST /v1/launch/review) for the pre-wallet summary — the server's numbers, debounced. A6: every
   // request carries the draft's revision; an answer for an older revision or an older request is dropped (launchReviewSync.ts)
-  const reviewSeq = useRef(0);
-  const reviewAsked = useRef<{ rev: string; retry: number } | null>(null);
+  // audit 7 F03: the proof rides only for the wallet that signed it and the tickers it covers, and is dropped at its age limit; the
+  // wallet and the proof are part of the revision, so a connect, disconnect, switch, new proof or expiry asks again
+  const sentProof = usableReviewProof(reviewProof, creator, [ticker, ...(pairOn ? [tickerB] : [])], parseWalletProof);
+  useEffect(() => {
+    if (!reviewProof) return;
+    const at = reviewProofExpiresAt(reviewProof, PROOF_MAX_AGE_MS, parseWalletProof) ?? 0;
+    const t = setTimeout(() => setReviewProof((p) => (p === reviewProof ? null : p)), Math.max(0, at - Date.now()));
+    return () => clearTimeout(t);
+  }, [reviewProof]);
   // item 253 (launch integrity): the whole profile, image included, is part of the draft's revision, so a prepare answer for an older
   // profile is set aside
-  const reviewKey = draftRevision([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB, pairVenue] : null, srcWarnings, textCtx, raiseSol, profileRevision(profile), pairOn ? profileRevision(profileB) : ""]);
+  // second audit 2026-10-19 I-12: two revisions (launchReviewSync.ts launchRevisions). draftKey (no wallet, no proof) is the prepare key
+  // and the stale-press check; reviewKey (the draft plus the wallet and its proof) is the review requester's key
+  const { draft: draftKey, review: reviewKey } = launchRevisions([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB, pairVenue] : null, srcWarnings, textCtx, raiseSol, profileRevision(profile), pairOn ? profileRevision(profileB) : ""], reviewIdentity(creator, sentProof));
   const curRev = useRef(reviewKey); curRev.current = reviewKey;
+  const curDraft = useRef(draftKey); curDraft.current = draftKey;
   // audit 2026-10-15 M2: one prepare per draft. The key stays the same for one draft revision (a double press or the same request sent
   // again gets the first answer, the same draft and the same addresses); an edit makes a new draft and a new key (api/idempotency.ts).
-  const prepareKey = useRef<{ rev: typeof reviewKey; key: string } | null>(null);
-  const draftPrepareKey = (rev: typeof reviewKey): string => {
-    if (!prepareKey.current || prepareKey.current.rev !== rev) prepareKey.current = { rev, key: newPrepareKey() };
-    return prepareKey.current.key;
-  };
   // review 2026-10-15 item 1: on idempotency-key-reused the draft gets a new key and the request is sent once more (prepareKey.ts)
-  const rotatePrepareKey = (): string => { const key = newPrepareKey(); prepareKey.current = { rev: curRev.current, key }; return key; };
+  const [prepareKeys] = useState(() => draftKeys());
+  const rotatePrepareKey = (): string => prepareKeys.rotate(curDraft.current);
   const launchFetch = keyRotatingFetch((u, init) => fetch(u, init), rotatePrepareKey);
+  // audit 7 F02: the debounce, the request, late and out-of-order answers and the retry ladder live in createReviewRequester; the slot
+  // moves to a revision only when its request is sent, so a draft edited and put back inside the debounce keeps its review
+  // website-22 (QA 9 item 41): a busy or briefly unreachable server is asked again after a pause (2, 4, 8 s) for this draft only
+  const [reviewer] = useState(() => createReviewRequester<LaunchReview, Record<string, unknown>>({
+    send: (body) => getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    onSlot: setReviewSlot, debounceMs: 600, retryMax: RETRY_MAX, transient: transientRead, retryingLine: RETRYING_LINE,
+    describe: (e) => `${(e as Error).message} (${detailOf(e)})`,
+  }));
+  useEffect(() => () => reviewer.cancel(), [reviewer]);
   useEffect(() => {
-    if (step !== "review" || !rule || gate.kind === "loading") return;
-    // A-22 (2026-10-18): a draft already asked about (same revision, same retry round) is not asked again
-    const retryN = reviewRetry.rev === reviewKey ? reviewRetry.n : 0;
-    if (!reviewRequestDue(reviewAsked.current, reviewKey, retryN)) return;
-    const seq = ++reviewSeq.current, rev = reviewKey;
-    setReviewSlot((x) => reviewRequested(x, rev, seq));
-    const t = setTimeout(() => {
-      reviewAsked.current = { rev, retry: retryN };
-      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ...(creator ? { creator } : {}), ...(creator && reviewProof ? { walletProof: reviewProof } : {}), ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: renderWarnings(srcWarnings, ticker.toUpperCase(), tickerB.toUpperCase()), raiseSol, creatorDescription: profile.description, links: creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links, ...(pairOn && ruleB ? (settledPick
+    // A-22 (2026-10-18): a draft whose review is held or in flight is not asked again (reviewRequestDue, against the slot)
+    const active = step === "review" && !!rule && gate.kind !== "loading";
+    reviewer.want(reviewKey, active ? { rule, ...(creator ? { creator } : {}), ...(sentProof ? { walletProof: sentProof } : {}), ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: renderWarnings(srcWarnings, ticker.toUpperCase(), tickerB.toUpperCase()), raiseSol, creatorDescription: profile.description, links: creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links, ...(pairOn && ruleB ? (settledPick
             // website-23: a settled-event pair is reviewed as the one linked pair it launches as: side B in `pair` with the other market and
             // the race, or the other team; never a `companion`
             // website-24: side B's own describe context (candidate B's event words, or team B's game) rides as pair.descCtx
@@ -977,18 +997,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             : meetingsOn
             // website-21: a rivalry series pair is reviewed as the linked pair it launches as (side B rides in `pair`; never a two-coin `companion`)
             ? { pair: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, links: creatorLinks({ x: profileB.x, telegram: profileB.telegram, website: profileB.website }).links } }
-            : { companion: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, rule: ruleB } }) : {}) }) })
-        .then((j) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
-        .catch((e) => {
-          reviewAsked.current = null;   // a failed read may be asked again (a later visit to this step, or the retry below)
-          // website-22 (QA 9 item 41): a busy or briefly unreachable server is asked again after a pause (2, 4, 8 s) for this draft only
-          const n = reviewRetry.rev === rev ? reviewRetry.n : 0, again = transientRead(e) && n < RETRY_MAX;
-          setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: again ? RETRYING_LINE : `${(e as Error).message} (${detailOf(e)})` }));
-          if (again) setTimeout(() => { if (curRev.current === rev) setReviewRetry({ rev, n: n + 1 }); }, 2000 * 2 ** n);
-        });
-    }, 600);
-    return () => clearTimeout(t);
-  }, [step, reviewKey, gate.kind, reviewRetry.rev, reviewRetry.n, creator, reviewProof]);   // eslint-disable-line react-hooks/exhaustive-deps -- A-2: the connected wallet's own coins never count as taken
+            : { companion: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, rule: ruleB } }) : {}) } : null);
+  }, [step, reviewKey, gate.kind]);   // eslint-disable-line react-hooks/exhaustive-deps -- the body belongs to the render its key was built in; A-2 and F03: the wallet and its proof are in the key
   const shownReview = reviewFor(reviewSlot, reviewKey);
   const reviewCurrent = reviewMatchesDraft(reviewSlot, reviewKey);
   // website-21: a rivalry series pair's review block (the per-game and season-end money path, side B's description)
@@ -1013,14 +1023,15 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     mark("launch");
     // pressing Launch is the acknowledgement (the line under the button states both); socials and a custom image are API-only; no launch built here carries an opening purchase (hostedLaunch.ts)
     flowStats.current.decisions++;
-    const idempotencyKey = draftPrepareKey(curRev.current);
+    const idempotencyKey = prepareKeys.keyFor(curDraft.current);
     const common = { creator, firstBuySol: "0", raiseSol, idempotencyKey, acknowledgements: { ruleLocked: true, noReturns: true }, timings: { ...stepTimes.current, screens: flowStats.current.screens, decisions: flowStats.current.decisions } };
     // item 253: the prepare answer applies only to the draft it was asked for; an edit while it was in flight sets no plan and never
     // reaches the wallet (preparedLaunch.ts prepareIfCurrent). The sign card's tickers are the ones sent, not the form's.
-    const sentRev = curRev.current, sent = { a: ticker.toUpperCase(), b: tickerB.toUpperCase() };
+    // I-12: the stale check follows the draft only (a proof expiring or a wallet change mid-press keeps the paid prepare current)
+    const sentRev = curDraft.current, sent = { a: ticker.toUpperCase(), b: tickerB.toUpperCase() };
     // WIRING-AUDIT12 P1-2: the bundles' rules are checked against the review's prepared rules before any wallet request; a difference
     // keeps the wallet closed and sends the creator back to the review with the sentences
-    const preparedOnReview = reviewFor(reviewSlot, sentRev).review?.prepared ?? null;
+    const preparedOnReview = reviewFor(reviewSlot, curRev.current).review?.prepared ?? null;
     const checkBeforeWallet = async (a: Bundle, b: Bundle | null) => {
       const lines = preparedOnReview ? await preparedRulesCheckWeb(preparedOnReview, { a: { text: a.rules.text, sha256: a.rules.sha256, mint: a.mint }, b: b ? { text: b.rules.text, sha256: b.rules.sha256 } : null }) : [PREPARED_MISSING_LINE];
       if (lines.length) throw new Error(lines.join(" "));
@@ -1029,7 +1040,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       // the mint addresses: the server's prepared ones (no mint sent, keys = null); when it has none ready, this browser's search finds
       // them (the panel above Launch counts) and the press goes on with their public keys. An edit made while the search ran sets the
       // press aside before anything more is sent (withMintSource's stale check, and prepareIfCurrent's).
-      const out = await prepareIfCurrent(sentRev, () => curRev.current, () => withMintSource({ pool: mintPool, n: mintsNeeded, stale: () => curRev.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE }, async (keys: GroundMint[] | null): Promise<() => void> => {
+      const out = await prepareIfCurrent(sentRev, () => curDraft.current, () => withMintSource({ pool: mintPool, n: mintsNeeded, stale: () => curDraft.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE }, async (keys: GroundMint[] | null): Promise<() => void> => {
       const [kA, kB] = keys ?? [];
       // the key each bundle is signed with: this browser's own (checked against the bundle's mint), or the server's (checked to derive it and end in burn)
       const keyed = (bundle: Bundle, k: GroundMint | undefined) => (k ? withLocalKey(bundle, k) : withServerKey(bundle));
@@ -2014,7 +2025,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           const realExtra = pairOn || !rule || rule.vault ? null : realOneOffered
             ? <BurnRealChoice side="one" who={`$${ticker.toUpperCase() || "TICKER"}`} picks={SINGLE_REAL_PICKS} value={realOne} onChange={setRealOne} network={realNet} locked={busy} />
             // WIRING-AUDIT12 item 15: only where a target could be set (this condition), one tap away
-            : site.burnReal.line ? <details className="text-xs text-neutral-400" data-burn-real-waiting><summary className="cursor-pointer">What is not offered yet</summary><p className="mt-1">{site.burnReal.line}</p></details> : null;
+            // launch wizard audit 2026-10-19 F16: and only where the creator expects the choice, a rule that came with a burn target (a
+            // "launch one like this" link or a template of such a coin); every other coin says nothing about a feature this site does not offer
+            : site.burnReal.line && rule0?.burnTarget ? <details className="text-xs text-neutral-400" data-burn-real-waiting><summary className="cursor-pointer">What is not offered yet</summary><p className="mt-1">{site.burnReal.line}</p></details> : null;
           return <PatternStep drain={drain} preview={preview} options={options} value={curPattern} onPick={pickPattern} shares={shareOptions} share={shareValue} onShare={setShare} shareLine={linkedOneShotRow ? LINKED_ONE_SHOT_LINE : null} pairLabel={pairOn && !!ruleB} math={budget.math} notice={patternNotice ?? shareNotice} extra={hazardExtra || realExtra || seasonExtra || drainWarn || resultsExtra ? <>{seasonExtra}{resultsExtra}{drainWarn && <p className="text-xs text-amber-300" role="status" data-drain-warning>{drainWarn}</p>}{hazardExtra}{realExtra}</> : null} next={seasonBlocked ? <StickyAction><button type="button" data-nav disabled className={primary + " w-full sm:w-auto"}>Next</button></StickyAction> : nextBtn("Next", "name")} />;
         }
         // the end, stated on the review (the server adds the default end, with the $DEFICIT sink, to a rule sent without one)
@@ -2034,6 +2047,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         // (withWinning false) states only where the rest goes when the team does not win; the name step's picker stands alone and keeps it
         const endChoiceFor = (withWinning: boolean) => choiceA?.offered || choiceB?.offered ? (
           <div className={`grid min-w-0 gap-3 ${choiceA?.offered && choiceB?.offered ? "md:grid-cols-2" : ""}`} data-end-choices>
+            {endNotice && <p className="text-xs text-amber-300 md:col-span-2" role="status" data-end-notice>{endNotice}</p>}
             {choiceA?.offered && <EndChoicePicker model={choiceA} hideWinning={!withWinning} value={endA} onChange={(c) => { flowStats.current.decisions++; setEndA(c); }} sinks={sinks} who={pairOn && ruleB ? `$${ticker.toUpperCase() || "A"}` : null} locked={busy} side="a" />}
             {choiceB?.offered && <EndChoicePicker model={choiceB} hideWinning={!withWinning} value={endB} onChange={(c) => { flowStats.current.decisions++; setEndB(c); }} sinks={sinks} who={`$${tickerB.toUpperCase() || "B"}`} locked={busy} side="b" />}
           </div>

@@ -1,8 +1,9 @@
 import { utcDateTime } from "@/lib/burnticker/utcWords";
-import { windowKindOf, PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
-import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
+import { describeEndSink, endText, windowKindOf, PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
+import { parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 import { GAME_BURN_LINE } from "@/lib/burnticker/sources/provenance";
 import type { BurnRule } from "@/lib/burnticker/rules";
+import { resolvesOnce } from "@/lib/burnticker/nextResult";
 import type { DateReadJson, LifecycleDatesJson } from "@/lib/burnticker/pageTypes";
 import { MCAP_POOL_MEANING, NOT_READ } from "@/lib/burnticker/cardView";
 
@@ -92,9 +93,13 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
   if (j.schema === RULES_SCHEMA) {
     const r = j as unknown as BurnRule;
     const m = r.kind === "binary" ? r.binary?.onYes ?? r.binary?.onNo ?? null : r.scalar?.perUnit ?? null;
-    const each = r.kind === "binary" ? "Each result that fires the rule" : "Each unit";
+    // launch wizard audit 2026-10-19 F10: a rule that resolves once has one result, never "each unit"; a coin with a pinned burn target
+    // spends its pool on that token (rules.ts burnTarget), never "on this coin"
+    const once = oneShot || resolvesOnce(r);
+    const each = once ? "The one result that fires the rule" : r.kind === "binary" ? "Each result that fires the rule" : "Each unit";
+    const on = r.burnTarget?.symbol ? `on ${r.burnTarget.symbol}` : "on this coin";
     const dial = m?.tokens !== undefined ? `${each} burns ${m.tokens.toLocaleString("en-US")} tokens from the coin's vault.`
-      : typeof m?.fractionOfPool === "number" ? `${each} spends ${pct(m.fractionOfPool)} of the burn pool on this coin and burns what it gets.` : null;
+      : typeof m?.fractionOfPool === "number" ? `${each} spends ${pct(m.fractionOfPool)} of the burn pool ${on} and burns what it gets.` : null;
     const kind = windowKindOf(r);
     const window = kind === "perpetual" ? PERPETUAL_SENTENCE
       // owner 2026-10-16: a single-game coin burns once two sources agree, else once one source has shown the same final twice (gameSettle.ts gameSchedule, 2026-10-18)
@@ -102,10 +107,7 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
       : kind === "next" ? "This coin covers a fixed number of games, and then its rule ends."
       : kind === "post" ? "This coin covers one postseason, and then its rule ends."
       : "This coin covers one season, and then its rule ends.";
-    const days = r.onEnd?.windDownDays ?? WIND_DOWN_DAYS;
-    const end = kind === "perpetual" ? "The rule has no end, so nothing winds down."
-      : `When the rule ends, whatever is left in the burn pool is burned down over ${days} days, and then the coin retires.`;
-    return { dial, window, end };
+    return { dial, window, end: kind === "perpetual" ? "The rule has no end, so nothing winds down." : ruleEndLine(r, once) };
   }
   const bb = (j.buyback ?? null) as { fractionPerUnit?: string } | null;
   const f = bb?.fractionPerUnit !== undefined ? Number(bb.fractionPerUnit) : NaN;
@@ -115,6 +117,27 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
     end: oneShot ? "When the rule ends, whatever is left in the burn pool is burned down, and then the coin retires." : "The rule has no end, so nothing winds down.",
   };
 }
+
+/**
+ * THE END ON THE COIN PAGE (launch wizard audit 2026-10-19 F9): the same end as the locked statement and the review, from the rule's own
+ * onEnd clause through describe.ts endText (describeEndSink is rules.ts endSinkOf, pinned equal by a test). A rule with an end sink sends
+ * what is left at a resolved end to that sink's burn ($DEFICIT, the pair winner, a coin the creator named, or Solana's incinerator), and
+ * only a void end burns down on this coin; a rule without one burns down on itself. A one-shot that spends its whole pool on its one
+ * result says what "what is left" is then: the SOL the rule keeps back for fees, an amount too small to spend, and later fees.
+ */
+export function ruleEndLine(r: BurnRule, once: boolean = resolvesOnce(r)): string {
+  const days = r.onEnd?.windDownDays ?? WIND_DOWN_DAYS;
+  if (!describeEndSink(r)) return `When the rule ends, whatever is left in the burn pool is burned down over ${days} days, and then the coin retires.`;
+  const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
+  const nick = e?.kind === "team" ? teamByAbbr(e.league, e.abbr)?.nickname ?? null : null;
+  const line = endText(r, { team: nick ? `the ${nick}` : null }).line;
+  const m = r.kind === "binary" ? r.binary?.onYes ?? r.binary?.onNo ?? null : r.scalar?.perUnit ?? null;
+  // describe.ts endText may say this itself (the end step's own wording); then it is not said twice
+  const whole = once && typeof m?.fractionOfPool === "number" && m.fractionOfPool >= 1 && !/kept back/.test(line);
+  return whole ? `${line} ${oneShotLeftover(r.reserveSol)}` : line;
+}
+/** What is left after a one-shot spends its whole pool on its one result (F9's nuance). */
+export const oneShotLeftover = (reserveSol: string): string => `This coin spends its whole pool on its one result, so what is left then is the ${reserveSol} SOL the rule keeps back for fees, any amount too small to spend, and fees that arrive later.`;
 
 /**
  * THE RULE IN BRIEF (prelaunch audit 2026-10-18, optional polish): the Rule tab opens on two short sentences, what fires a burn and what
@@ -180,8 +203,8 @@ export function voidSentence(j: Record<string, unknown>): string {
   if (!r.onEnd) return RULE_VOID_SENTENCE;
   const n = r.onEnd.windDownDays;
   const span = n % 7 === 0 ? `${n / 7 === 4 ? "four" : n / 7} weeks` : `${n} days`;
-  const d = r.derby as { selector?: string; flip?: boolean; once?: boolean } | undefined;
-  const oneShot = !!r.market || !!r.pair?.game || (r.oracle === "derby" && (d?.flip === true || d?.once === true));
+  // audit 7 F08: rules.ts isOneShot, not a hand derivation (a one-game catalogue coin, a pair game, a market, a derby flip or once)
+  const oneShot = resolvesOnce(r);
   return oneShot ? `A voided result ends the rule, and what is left burns down over ${span}.` : `A voided result burns nothing, and if the rule ends void, what is left burns down over ${span}.`;
 }
 

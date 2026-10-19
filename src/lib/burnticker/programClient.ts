@@ -9,7 +9,7 @@ import { assertSolUsd } from "@/lib/burnKeeper/rules";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { programClusterOf, solanaProgramPort } from "@/lib/burnKeeper/programAdapter";
 import type { Cluster } from "@/lib/burnKeeper/solana";
-import { counterRule, endSinkPin, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
+import { counterRule, endSinkPin, expectedFromCounter, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
 import { ChainEndSink } from "@/lib/burnticker/endSinkChain";
 import { endSinkKindCode } from "@/lib/burnReceipts/endSink";
 import { ChainLockFees } from "@/lib/burnticker/lockFeesChain";
@@ -93,10 +93,12 @@ export class ProgramBurnClient implements BurnProgramClient {
     // policies 0 and 2: the program refuses unless launchlab_platform == BURNTICKER_PLATFORM (round 2) — pass the host's or the pinned one
     const pin = PROGRAM_BURNTICKER_PLATFORM[programClusterOf(this.o.cluster)];
     const launchlabPlatform = this.o.launchLabPlatform ?? (pin && !pin.equals(PublicKey.default) ? pin : undefined);
+    const attesters = i.attesters.map((a) => operatorAttester(new PublicKey(a)));
+    const pairVoidBy = i.pairMint ? i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) : 0;
     const ix = initializeTokenIx({ programId: this.o.programId, payer: creator, creator, mint, ...(launchlabPlatform ? { launchlabPlatform } : {}), args: {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
-      attesters: i.attesters.map((a) => operatorAttester(new PublicKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: this.o.admin,
-    }, layout: initializeTokenLayoutFromEnv() === "r5" ? "r5" : (this.o.endSinksLive ?? endSinksLiveFromEnv()) ? "r4" : initializeTokenLayoutFromEnv(), ...(endSink ? { endSink } : {}), ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) } : {}) });
+      attesters, quorum: i.quorum, fixed_pool: PublicKey.default, admin: this.o.admin,
+    }, layout: initializeTokenLayoutFromEnv() === "r5" ? "r5" : (this.o.endSinksLive ?? endSinksLiveFromEnv()) ? "r4" : initializeTokenLayoutFromEnv(), ...(endSink ? { endSink } : {}), ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy } : {}) });
     // Round 5: a rule with a burn target pins it right after initialize_token, while the coin's mint does not exist yet (the same mint
     // signature). Refused unless the host says the program is round 5, and unless the pool passes the program's admission now.
     const pins: SerializedIx[] = [];
@@ -109,7 +111,21 @@ export class ProgramBurnClient implements BurnProgramClient {
       // (launchBundle.ts launchTransactions: init + pin + create together exceed the packet limit).
       pins.push(serialize(pinBurnTargetIx({ programId: this.o.programId, payer: creator, mint, targetMint: a.targetMint, pool: a.pool, ammConfig: a.ammConfig, wsolVault: a.wsolVault, targetVault: a.targetVault, feedId: bt.feedId }), `burn_receipts.pin_burn_target (${bt.symbol} ${bt.mint} on ${a.poolKind === 1 ? "AMM v4" : "CPMM"} pool ${bt.pool}, Pyth feed ${bt.feedId.slice(0, 12)}…; after initialize_token, before the coin's mint exists)`));
     }
-    return { tokenConfig: configPda(this.o.programId, mint).toBase58(), instructions: [...[serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`}${i.pairMint ? `; pair_mint ${i.pairMint}${i.partnerFirst ? " (completes the pairing)" : " (provisional for 7 days)"}` : ""})`)], ...pins] };
+    // audit F01: exactly the values encoded above, so the confirm step and the keeper can compare the chain field by field (the program
+    // stores a vault-mode coin's platform as the default key, so it is compared only for a buyback coin)
+    const expected = expectedFromCounter(c, { rulesSha256: i.rulesSha256, attesters: attesters.map((a) => a.key.toBase58()), quorum: i.quorum, admin: this.o.admin.toBase58(),
+      llPlatform: launchlabPlatform && c.rule.mode === MODE_BUYBACK ? launchlabPlatform.toBase58() : null,
+      endSink: endSink ? { kind: endSink.kind, mint: endSink.sinkMint ? endSink.sinkMint.toBase58() : null, minLamports: BigInt(endSink.minForwardLamports).toString() } : null,
+      pairVoidBy, burnTargetKind: bt ? 1 : 0 });
+    return { tokenConfig: configPda(this.o.programId, mint).toBase58(), expected, instructions: [...[serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`}${i.pairMint ? `; pair_mint ${i.pairMint}${i.partnerFirst ? " (completes the pairing)" : " (provisional for 7 days)"}` : ""})`)], ...pins] };
+  }
+  /** I-15: the config authority this client encodes (BURNTICKER_ADMIN), or null when it has none. A public key, never a secret. */
+  get adminKey(): string | null { return this.o.admin ? this.o.admin.toBase58() : null; }
+  /** I-15: the LaunchLab platform initialize_token names (the host's BURNTICKER_PLATFORM_ID, else the pin compiled for the cluster). */
+  get launchLabPlatformKey(): string | null {
+    const pin = PROGRAM_BURNTICKER_PLATFORM[programClusterOf(this.o.cluster)];
+    const k = this.o.launchLabPlatform ?? (pin && !pin.equals(PublicKey.default) ? pin : null);
+    return k ? k.toBase58() : null;
   }
   feePdaFor(mint: string) { return burnPoolFor(this.o.programId, new PublicKey(mint)).feePda.toBase58(); }
   vaultFor(mint: string) { return vaultAddress(this.o.programId, new PublicKey(mint)).toBase58(); }

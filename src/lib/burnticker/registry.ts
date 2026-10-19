@@ -148,6 +148,10 @@ CREATE TABLE IF NOT EXISTS token_flags (mint TEXT PRIMARY KEY, test INTEGER NOT 
 CREATE TABLE IF NOT EXISTS draft_revivals (mint TEXT PRIMARY KEY, launch_tx TEXT NOT NULL, block_time_ms INTEGER NOT NULL, within_window INTEGER NOT NULL, source TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS token_meta (mint TEXT PRIMARY KEY, creator_note TEXT NOT NULL DEFAULT '', metadata_uri TEXT, metadata_tx TEXT, metadata_sha256 TEXT, image_uri TEXT, image_tx TEXT, image_sha256 TEXT, hosted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL, note TEXT NOT NULL);
+-- THIRD PRELAUNCH AUDIT 2026-10-19 F04: a ticker held for a prepare that is still checking and uploading (reserveTicker), so two creators'
+-- prepares for one unused ticker cannot both pass and both register. One row per ticker; a row past expires_at is free; the creator's
+-- draft (register) or the end of the prepare (releaseTicker) removes it. A working table, not a record: rows are deleted.
+CREATE TABLE IF NOT EXISTS ticker_reservations (ticker TEXT PRIMARY KEY, creator TEXT NOT NULL, mint TEXT, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
 `;
 
 /**
@@ -162,6 +166,7 @@ CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_
  */
 export const REGISTRY_MIGRATIONS: readonly { version: number; note: string }[] = [
   { version: 1, note: "2026-10-18: schema versions start. Everything before this date is applied in place on open (burns' program-execution columns and readings.proof 2026-10-10, the tokens ticker-uniqueness rebuild, lock_fee_claims paid/pending, token_flags.synthetic 2026-10-15, tokens_expired_final narrowed to the verified revival 2026-10-15), so a file of any earlier age is at version 1 once opened." },
+  { version: 2, note: "2026-10-19: adds the ticker_reservations table (ticker, creator, mint, expires_at, created_at), the short hold a prepare takes on a ticker before it uploads, so two creators cannot both register one unused ticker (third prelaunch audit F04)." },
 ];
 export const REGISTRY_SCHEMA_VERSION = REGISTRY_MIGRATIONS[REGISTRY_MIGRATIONS.length - 1].version;
 
@@ -294,6 +299,13 @@ export function nextFreePairId(base: string, taken: (id: string) => boolean): st
 export class Registry {
   readonly db: DatabaseSync;
   readonly file: string;
+  /**
+   * Second audit 2026-10-19 I-17: the schema version recorded in the file when it is NEWER than this code's (REGISTRY_SCHEMA_VERSION),
+   * else null. A rollback to older code after a migration would otherwise run without the newer tables' guards (ticker_reservations
+   * at version 2). Reads keep working; new launches fail closed (reserveTicker and register of a draft throw RegistrySchemaNewerError,
+   * and the prepare route answers 503), and the owner is alerted once a day.
+   */
+  readonly newerSchemaVersion: number | null = null;
   constructor(file: string) {
     // audit A-13 (2026-10-18): under a test, the checkout's own ./data/burnticker.db (the live registry on the host) is refused
     refuseDefaultDataFileUnderTest(file, REGISTRY_FILE, "registry");
@@ -323,7 +335,17 @@ export class Registry {
     // every change above has run: record each schema version this file has not recorded yet (REGISTRY_MIGRATIONS)
     const at = Date.now(), ins = this.db.prepare("INSERT OR IGNORE INTO schema_version (version, applied_at, note) VALUES (?,?,?)");
     for (const m of REGISTRY_MIGRATIONS) ins.run(m.version, at, m.note);
+    // I-17: a file a newer build migrated: say so, and refuse new launches (reads go on)
+    const recorded = this.schemaVersion()?.version ?? 0;
+    if (recorded > REGISTRY_SCHEMA_VERSION) {
+      this.newerSchemaVersion = recorded;
+      try {
+        this.recordAlert({ kind: REGISTRY_NEWER_ALERT_KIND, key: `${REGISTRY_NEWER_ALERT_KIND}:${recorded}`, text: `The registry file is at schema version ${recorded} and this build only knows up to version ${REGISTRY_SCHEMA_VERSION}, so an older build is running on a newer file (a rollback). Pages and the keeper keep reading; new launches are refused until the newer build is back.`, meta: { recorded, code: REGISTRY_SCHEMA_VERSION } }, at);
+      } catch { /* the refusal stands without the alert */ }
+    }
   }
+  /** I-17: throws when the file is newer than this code (new launches fail closed). */
+  private assertSchemaKnown(): void { if (this.newerSchemaVersion !== null) throw new RegistrySchemaNewerError(this.newerSchemaVersion, REGISTRY_SCHEMA_VERSION); }
 
   /** The highest schema version recorded in this file (REGISTRY_MIGRATIONS), and when it was reached. */
   schemaVersion(): { version: number; appliedAt: number; note: string } | null {
@@ -384,11 +406,23 @@ export class Registry {
     if (t.status !== "draft" && t.status !== "expired") throw new Error(`registry: ${mint} is ${t.status}, not a draft: only a draft goes live`);
     if (!withinWindow && !(o.late && o.source === "operator")) throw new Error(`registry: the launch of ${mint} landed at ${baselineAt}, after its draft's 24-hour window; only the operator can take it live (--late)`);
     if (t.status === "draft" && withinWindow) return { changed: this.markLaunched(mint, launchTx, poolId, baselineAt), revived: false, withinWindow };
-    this.tx(() => {
+    // second audit 2026-10-19 I-16: an expired draft freed its ticker at 24 hours, so another creator may hold it now (a draft or a coin).
+    // Reviving it would put two live coins on one ticker: refused, judged in the same transaction as the revival, and the owner is told
+    // (the alert is written in that transaction too; the throw comes after it commits). The same creator's rows never block.
+    const held = this.tx(() => {
+      if (t.status === "expired") {
+        const other = this.db.prepare("SELECT mint, creator, status FROM tokens WHERE ticker=? AND status <> 'expired' AND creator <> ? AND mint <> ? ORDER BY created_at LIMIT 1").get(normTicker(t.ticker), t.creator, mint) as { mint: string; creator: string; status: string } | undefined;
+        if (other) {
+          this.recordAlert({ kind: REVIVAL_TICKER_HELD_ALERT_KIND, key: `${REVIVAL_TICKER_HELD_ALERT_KIND}:${mint}`, text: `$${t.ticker}: an expired draft's coin was created on chain in time (${launchTx.slice(0, 12)}…), but the ticker now belongs to another creator's ${other.status === "draft" ? "draft" : "coin"} (${String(other.mint).slice(0, 8)}…), so it was not taken live (${o.source}). Two live coins never share a ticker; the operator decides what happens to this one.`, meta: { mint, launchTx, other: String(other.mint), source: o.source } }, now);
+          return String(other.mint);
+        }
+      }
       this.db.prepare("INSERT INTO draft_revivals (mint, launch_tx, block_time_ms, within_window, source, note, at) VALUES (?,?,?,?,?,?,?)").run(mint, launchTx, blockTimeMs, withinWindow ? 1 : 0, o.source, (o.note ?? "").slice(0, 300), now);
       const r = this.db.prepare("UPDATE tokens SET launch_tx=?, pool_id=COALESCE(?, pool_id), baseline_at=?, status='live' WHERE mint=? AND status=? AND launch_tx IS NULL").run(launchTx, poolId, baselineAt, mint, t.status);
       if (Number(r.changes) !== 1) throw new Error(`registry: ${mint} changed while it was being confirmed; read it again`);
+      return null;
     });
+    if (held) throw new RevivalTickerHeldError(normTicker(t.ticker), mint, held);
     return { changed: true, revived: true, withinWindow };
   }
   /** Whether a ticker is held by a token that is not expired (expiring stale drafts first). */
@@ -397,7 +431,55 @@ export class Registry {
     return !!this.db.prepare("SELECT 1 FROM tokens WHERE ticker=? AND status <> 'expired'").get(ticker.toUpperCase());
   }
   close(): void { this.db.close(); }
-  tx<T>(fn: () => T): T { this.db.exec("BEGIN IMMEDIATE"); try { const v = fn(); this.db.exec("COMMIT"); return v; } catch (e) { this.db.exec("ROLLBACK"); throw e; } }
+  /**
+   * One transaction. F04 (2026-10-19): a call inside another transaction runs as a savepoint of it (before: "cannot start a transaction
+   * within a transaction"), so a failure rolls back only its own writes and the outer transaction decides the rest.
+   */
+  tx<T>(fn: () => T): T {
+    if (this.db.isTransaction) {
+      const sp = `tx_${++this.savepoints}`;
+      this.db.exec(`SAVEPOINT ${sp}`);
+      try { const v = fn(); this.db.exec(`RELEASE ${sp}`); return v; } catch (e) { this.db.exec(`ROLLBACK TO ${sp}`); this.db.exec(`RELEASE ${sp}`); throw e; }
+    }
+    this.db.exec("BEGIN IMMEDIATE"); try { const v = fn(); this.db.exec("COMMIT"); return v; } catch (e) { this.db.exec("ROLLBACK"); throw e; }
+  }
+  private savepoints = 0;
+
+  // ---- ticker reservations (third prelaunch audit 2026-10-19 F04) ----
+  /**
+   * Who else holds this ticker right now: a token row of ANOTHER creator that is a draft or a coin (any status but 'expired'), or an
+   * unexpired reservation of another creator. The caller has expired stale drafts. The creator's own draft or reservation never counts
+   * (a retry of their own unfinished draft). Tickers of old coins stay shared (owner 2026-10-12): only a new draft is ever refused.
+   */
+  private tickerHolder(ticker: string, creator: string, now: number): "token" | "reservation" | null {
+    if (this.db.prepare("SELECT 1 FROM tokens WHERE ticker=? AND status <> 'expired' AND creator <> ? LIMIT 1").get(ticker, creator)) return "token";
+    if (this.db.prepare("SELECT 1 FROM ticker_reservations WHERE ticker=? AND creator <> ? AND expires_at > ?").get(ticker, creator, now)) return "reservation";
+    return null;
+  }
+  /**
+   * F04: holds a ticker for a prepare that is about to check, upload and register a draft (`ttlMs`, 15 minutes by default). Refused when
+   * another creator's draft or coin holds the ticker, or another creator's unexpired reservation does; the same creator renews its own.
+   * The registry is the arbiter, so two processes (or two routes) racing for one ticker get one reservation.
+   */
+  reserveTicker(ticker: string, creator: string, mint: string | null, now = Date.now(), ttlMs = 15 * 60_000): { ok: true } | { ok: false; heldBy: "reservation" | "token" } {
+    this.assertSchemaKnown();
+    const t = normTicker(ticker);
+    return this.tx(() => {
+      this.expireDrafts(now);
+      const heldBy = this.tickerHolder(t, creator, now);
+      if (heldBy) return { ok: false as const, heldBy };
+      this.db.prepare(`INSERT INTO ticker_reservations (ticker, creator, mint, expires_at, created_at) VALUES (?,?,?,?,?)
+        ON CONFLICT(ticker) DO UPDATE SET creator=excluded.creator, mint=excluded.mint, expires_at=excluded.expires_at, created_at=excluded.created_at`).run(t, creator, mint, now + ttlMs, now);
+      return { ok: true as const };
+    });
+  }
+  /** F04: gives back the caller's own reservation of a ticker (another creator's is never touched). */
+  releaseTicker(ticker: string, creator: string): void { this.db.prepare("DELETE FROM ticker_reservations WHERE ticker=? AND creator=?").run(normTicker(ticker), creator); }
+  /** F04: the reservation of a ticker, if any (expired ones included; `expiresAt` says). */
+  tickerReservation(ticker: string): { ticker: string; creator: string; mint: string | null; expiresAt: number; createdAt: number } | null {
+    const r = this.db.prepare("SELECT * FROM ticker_reservations WHERE ticker=?").get(normTicker(ticker)) as Row | undefined;
+    return r ? { ticker: String(r.ticker), creator: String(r.creator), mint: r.mint === null ? null : String(r.mint), expiresAt: Number(r.expires_at), createdAt: Number(r.created_at) } : null;
+  }
 
   // ---- ops alerts (the keeper's local record + dedupe; alerts.ts) ----
   /** Records an alert once per key per Denver day; returns the row when new, null when that key was already raised today. */
@@ -420,12 +502,19 @@ export class Registry {
   register(i: RegisterInput, now = Date.now()): TokenRow {
     const locked: LockedRule = lockRule(JSON.parse(i.rulesText));
     if (locked.text !== i.rulesText) throw new Error("registry: rules text is not canonical");
-    this.expireDrafts(now);   // owner 2026-10-12: tickers are not unique, so a held ticker no longer refuses; stale drafts still expire here
-    this.db.prepare(`INSERT INTO tokens (mint, ticker, name, creator, description, image_url, links_json, oracle, selector_key, rules_json, rules_sha, mode, fee_pda, vault, token_config, pool_id, launch_tx, cluster, platform_id, baseline_at, created_at, status)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(i.mint, i.ticker, i.name, i.creator, i.description, i.imageUrl, JSON.stringify(i.links), locked.rule.oracle, selectorKeyOf(locked.rule), locked.text, locked.sha256, locked.mode, i.feePda, i.vault, i.tokenConfig, i.poolId, i.launchTx, i.cluster, i.platformId, i.baselineAt, now, i.status);
-    this.db.prepare("INSERT OR IGNORE INTO token_state (mint, carry_out, updated_at) VALUES (?, '0', ?)").run(i.mint, now);
-    return this.token(i.mint)!;
+    if (i.status === "draft") this.assertSchemaKnown();   // I-17: no new draft on a file a newer build migrated
+    return this.tx(() => {
+      this.expireDrafts(now);   // owner 2026-10-12: tickers are not unique for old coins; stale drafts still expire here
+      // F04 (2026-10-19): a new DRAFT is refused when another creator's draft, coin or unexpired reservation holds its ticker (checked in
+      // the same transaction as the insert, so two racing prepares cannot both pass); a row already live on chain is recorded as it is
+      if (i.status === "draft" && this.tickerHolder(normTicker(i.ticker), i.creator, now)) throw new TickerTakenError(normTicker(i.ticker));
+      this.db.prepare(`INSERT INTO tokens (mint, ticker, name, creator, description, image_url, links_json, oracle, selector_key, rules_json, rules_sha, mode, fee_pda, vault, token_config, pool_id, launch_tx, cluster, platform_id, baseline_at, created_at, status)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(i.mint, i.ticker, i.name, i.creator, i.description, i.imageUrl, JSON.stringify(i.links), locked.rule.oracle, selectorKeyOf(locked.rule), locked.text, locked.sha256, locked.mode, i.feePda, i.vault, i.tokenConfig, i.poolId, i.launchTx, i.cluster, i.platformId, i.baselineAt, now, i.status);
+      this.db.prepare("INSERT OR IGNORE INTO token_state (mint, carry_out, updated_at) VALUES (?, '0', ?)").run(i.mint, now);
+      this.db.prepare("DELETE FROM ticker_reservations WHERE ticker=? AND creator=?").run(normTicker(i.ticker), i.creator);   // F04: the draft holds it now
+      return this.token(i.mint)!;
+    });
   }
   /**
    * The creator's OWN unfinished draft for a mint (status draft, no launch transaction, same creator), or null. A retry of the same
@@ -737,6 +826,28 @@ export const REGISTRY_FILE = path.join("data", "burnticker.db");
  * revision a second time and never replaces the recorded value: the source's key holds, and the alert names the key, the period and both
  * values (multiKeeper.ts fetchDue).
  */
+/** F04 (2026-10-19): register() refused a new draft because another creator's draft, coin or reservation holds its ticker. */
+export class TickerTakenError extends Error {
+  readonly ticker: string;
+  constructor(ticker: string) { super(`registry: the ticker ${ticker} is held by another creator`); this.name = "TickerTakenError"; this.ticker = ticker; }
+}
+const normTicker = (t: string): string => t.trim().replace(/^\$/, "").toUpperCase();
+
+/** Second audit 2026-10-19 I-16: the alert kind recorded when an expired draft's revival is refused because its ticker is held. */
+export const REVIVAL_TICKER_HELD_ALERT_KIND = "revival-ticker-held";
+/** I-16: takeLiveFromChain refused to revive an expired draft whose ticker another creator's draft or coin holds now. */
+export class RevivalTickerHeldError extends Error {
+  readonly ticker: string; readonly mint: string; readonly heldBy: string;
+  constructor(ticker: string, mint: string, heldBy: string) { super(`registry: the expired draft ${mint} is not revived: its ticker ${ticker} is held by another creator's coin (${heldBy})`); this.name = "RevivalTickerHeldError"; this.ticker = ticker; this.mint = mint; this.heldBy = heldBy; }
+}
+/** Second audit 2026-10-19 I-17: the alert kind recorded when the registry file is newer than this build. */
+export const REGISTRY_NEWER_ALERT_KIND = "registry-schema-newer";
+/** I-17: a new launch was refused because the registry file was migrated by a newer build (a rollback is running). */
+export class RegistrySchemaNewerError extends Error {
+  readonly recorded: number; readonly known: number;
+  constructor(recorded: number, known: number) { super(`registry: the file is at schema version ${recorded}, newer than this build's ${known}; new launches are refused`); this.name = "RegistrySchemaNewerError"; this.recorded = recorded; this.known = known; }
+}
+
 export class RevisedReadingError extends Error {
   readonly selectorKey: string; readonly eventId: string; readonly recorded: string | null; readonly now: string | null;
   constructor(selectorKey: string, eventId: string, recorded: string | null, now: string | null) {

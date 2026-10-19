@@ -37,16 +37,18 @@ const SINGLE = { schema: BURNTICKER_RULES_SCHEMA, oracle: "kalshi", series: "KXN
 const ENV = { BURNTICKER_CLUSTER: "devnet", BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" } as Record<string, string>;
 
 describe("the launch state says whether round 5 is deployed (never a date)", () => {
-  test("the env name is the library's; only r5 turns the choice on", () => {
+  test("the env name is the library's; r5 and BURNTICKER_BURN_REAL_ENABLED together turn the choice on", () => {
     assert.equal(BURN_REAL_LAYOUT_ENV, INITIALIZE_TOKEN_LAYOUT_ENV);
     assert.equal(burnRealFromEnv({}), false); assert.equal(burnRealFromEnv({ [BURN_REAL_LAYOUT_ENV]: "r4" }), false); assert.equal(burnRealFromEnv({ [BURN_REAL_LAYOUT_ENV]: " r5 " }), true);
     assert.deepEqual(siteLaunchState({ ...ENV }).burnReal, { available: false, line: BURN_REAL_WAITING });
-    assert.deepEqual(siteLaunchState({ ...ENV, [BURN_REAL_LAYOUT_ENV]: "r5" }).burnReal, { available: true, line: null });
+    // owner decision 2026-10-19: r5 alone keeps it off; BURNTICKER_BURN_REAL_ENABLED turns it on (test/burntickerOwner1019.test.ts)
+    assert.deepEqual(siteLaunchState({ ...ENV, [BURN_REAL_LAYOUT_ENV]: "r5" }).burnReal, { available: false, line: BURN_REAL_WAITING });
+    assert.deepEqual(siteLaunchState({ ...ENV, [BURN_REAL_LAYOUT_ENV]: "r5", BURNTICKER_BURN_REAL_ENABLED: "1" }).burnReal, { available: true, line: null });
     plain(BURN_REAL_WAITING);
     assert.match(BURN_REAL_WAITING, /not offered on this site yet/); assert.doesNotMatch(BURN_REAL_WAITING, /round/);   // audit 12 item 15: no release names
   });
   test("the catalogue carries it to the browser; a missing or stale reading is waiting (fail closed)", () => {
-    const on = { cluster: "devnet", launches: catalogueLaunches({ ...ENV, [BURN_REAL_LAYOUT_ENV]: "r5" }) };
+    const on = { cluster: "devnet", launches: catalogueLaunches({ ...ENV, [BURN_REAL_LAYOUT_ENV]: "r5", BURNTICKER_BURN_REAL_ENABLED: "1" }) };
     assert.equal(siteLaunchStateFromCatalogue(on).burnReal.available, true);
     assert.equal(siteLaunchStateFromCatalogue({ cluster: "devnet", launches: catalogueLaunches(ENV) }).burnReal.available, false);
     assert.equal(siteLaunchStateFromCatalogue({ cluster: "devnet", launches: { creators: true } }).burnReal.available, false);
@@ -197,7 +199,8 @@ describe("the page wiring and the words", () => {
     // WIRING-AUDIT12 item 15: only where a target could be set, inside "What is not offered yet"
     assert.match(tile, /const realChoices = !a \|\| !b \? null : !realOn \? \(burnReal\?\.line && \(pickA \|\| pickB\) \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{burnReal\.line\}<\/p><\/details> : null\)/);
     assert.match(page, /const realOneOffered = site\.burnReal\.available && !pairOn && !!rule0 && !rule0\.vault;/);
-    assert.match(page, /: site\.burnReal\.line \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{site\.burnReal\.line\}<\/p><\/details> : null;/);
+    // launch wizard audit 2026-10-19 F16: on a single coin only for a rule that came with a burn target
+    assert.match(page, /: site\.burnReal\.line && rule0\?\.burnTarget \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{site\.burnReal\.line\}<\/p><\/details> : null;/);
     // default off; one switch per Coin vs Coin side, the suggested tokens for a single coin
     assert.match(tile, /useState<SideReal>\(SIDE_REAL_OFF\), \[realB, setRealB\] = useState<SideReal>\(SIDE_REAL_OFF\)/);
     assert.match(tile, /<BurnRealChoice side="a" who=\{`\$\$\{TA\}`\} picks=\{\[pickA\]\}/);

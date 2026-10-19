@@ -158,7 +158,7 @@ describe("website-21: the review", () => {
     // the preview and launch gates are the ones every pair uses
     assert.match(page, /blocked=\{walletBlocked\(pairOn \? "matchup" : launchTypeOf\(rule\), pairOn\)\}/);
     assert.match(page, /if \(!rule \|\| !reviewMatchesDraft\(reviewSlot, curRev\.current\)\) return;/);
-    assert.match(page, /const out = await prepareIfCurrent\(sentRev, \(\) => curRev\.current,/);
+    assert.match(page, /const out = await prepareIfCurrent\(sentRev, \(\) => curDraft\.current,/);
   });
 });
 

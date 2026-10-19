@@ -6,6 +6,7 @@ import { configPda, feePda } from "@/lib/burnReceipts/pda";
 import { decodePair, pairPda } from "@/lib/pairCurve/accounts";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { CONFIRM_LANE_BUSY_REASON } from "@/lib/burnticker/confirmBusy";
+import { configMismatch, type ExpectedTokenConfig } from "@/lib/burnticker/admission";
 
 /**
  * LAUNCH CONFIRMATION IS VERIFIED ON CHAIN (2026-10-10; ChatGPT/Codex PR review N1 — tightened 2026-10-11 by the second review's F3).
@@ -45,6 +46,11 @@ export interface LaunchExpectation {
   /** The draft's locked rules sha256 (hex; registry rules_sha) — the TokenConfig must lock exactly this. */
   rulesSha: string;
   venue: LaunchVenue;
+  /**
+   * Audit F01: every value initialize_token was built with (admission.ts expectedConfigFor: the stored expectation, else the fallback
+   * from the locked rule). The TokenConfig on chain must hold exactly these; absent = only the rules sha256 is compared (older callers).
+   */
+  config?: ExpectedTokenConfig | null;
 }
 
 export interface LaunchVerifier {
@@ -178,6 +184,9 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       // TokenConfig is already on chain under this program, for this mint and creator, locking the draft's rule (checked here and below),
       // with step 3's create under the draft's platform. A lock step alone never passes: step 3 requires the create.
       if (hex(cfg.rules_sha256) !== expect.rulesSha.toLowerCase()) return { ok: false, status: 422, reason: `the TokenConfig on chain locks another rule (rules sha256 ${short(hex(cfg.rules_sha256))}) than this draft's (${short(expect.rulesSha)}): ${NOT_THIS}` };
+      // audit F01: the sha is a label the program never recomputes; the parameters it stores are what it runs, so each is compared with
+      // what the host encoded (an edited unsigned transaction with fraction 10,000 bps under the advertised rule is refused here)
+      if (expect.config) { const m = configMismatch(cfg, expect.config); if (m) return { ok: false, status: 422, reason: `${m}: ${NOT_THIS}` }; }
 
       // 3. the venue the draft expects, completed
       const v = expect.venue;

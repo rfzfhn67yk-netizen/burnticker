@@ -1,7 +1,8 @@
 import { PublicKey } from "@solana/web3.js";
 import { configPda, feePda } from "@/lib/burnReceipts/pda";
 import { launchVenueOf, type LaunchExpectation, type LaunchVerifier } from "@/lib/burnticker/launchVerify";
-import { DRAFT_GRACE_MS, DRAFT_TTL_MS, inDraftWindow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
+import { expectedConfigFor, type ExpectedHost } from "@/lib/burnticker/admission";
+import { DRAFT_GRACE_MS, DRAFT_TTL_MS, inDraftWindow, RevivalTickerHeldError, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
 import { CREATOR_LAUNCHES_CLOSED_AT_FLAG } from "@/lib/burnticker/launchAvailability";
 
@@ -88,6 +89,11 @@ export interface ReconcileDeps {
   lookbackMs?: number;
   /** the keeper's environment: BURNTICKER_CREATOR_LAUNCHES_CLOSED_AT is read from it (the keeper passes process.env explicitly) */
   env: Record<string, string | undefined>;
+  /**
+   * Second audit 2026-10-19 I-15: what this host encodes into every launch (the keeper key, the config authority, the LaunchLab
+   * platform), compared for a draft with no stored expectation (admission.ts fallbackExpectedConfig). Absent: those fields are not compared.
+   */
+  host?: ExpectedHost;
 }
 
 /**
@@ -247,7 +253,13 @@ export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport
       let revived = t.status === "expired", withinWindow = true, changed = true;
       if (!d.dryRun) {
         try { const r = reg.takeLiveFromChain(t.mint, hit.signature, t.poolId, hit.blockTimeMs, { source: "reconciler", note: "the browser never confirmed this launch; the keeper read it from the chain" }, now); revived = r.revived; withinWindow = r.withinWindow; changed = r.changed; }
-        catch (e) { out.errors.push(`$${t.ticker}: ${(e as Error).message.slice(0, 120)}`); continue; }
+        catch (e) {
+          out.errors.push(`$${t.ticker}: ${(e as Error).message.slice(0, 120)}`);
+          // I-16: the ticker went to another creator after this draft expired (the registry alerted the owner): logged, and asked again
+          // after a backoff (the other draft may expire in turn), never every sweep
+          if (e instanceof RevivalTickerHeldError) { d.log(`  [drafts] $${t.ticker} ${t.mint}: created on chain in time, but its ticker is held by another creator's coin now (${e.heldBy}): not revived`); backoff(st, now); save(t.mint, st); }
+          continue;
+        }
         save(t.mint, { done: true });
         // review (5): alert only when this sweep took it live (a browser confirm that won the race is not news)
         if (changed) reg.recordAlert({ kind: "draft-reconciled", key: `draft-reconciled:${t.mint}`, text: `$${t.ticker} was created on chain but never confirmed by the browser. The keeper verified its create (${hit.signature.slice(0, 12)}…) and took it live${revived ? " (the draft had been marked expired)" : ""}.`, meta: { mint: t.mint, launchTx: hit.signature, revived, withinWindow } }, now);
@@ -267,7 +279,7 @@ function backoff(st: ScanState, now: number): void {
   st.backoffMs = b; st.nextAt = now + b;
 }
 
-const expectOf = (d: ReconcileDeps, t: TokenRow): LaunchExpectation => ({ mint: t.mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, d.registry.pairOf(t.mint)) });
+const expectOf = (d: ReconcileDeps, t: TokenRow): LaunchExpectation => ({ mint: t.mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, d.registry.pairOf(t.mint)), config: expectedConfigFor(d.registry, t, d.host) });
 
 /**
  * F-2: the address whose history holds the create. The coin's fee PDA (["fee", mint], the burn pool) is an account of initialize_token
@@ -383,16 +395,17 @@ export function alertLaunchAfterClosure(reg: Pick<Registry, "getStatus" | "setSt
  * THE OPERATOR'S PATH (scripts/burnticker-draft-revive.mts; AUDIT A C1 (4), review (1)): verify `launchTx` on chain for this draft and,
  * with `apply`, take it live. A create after the draft's window needs `late` (it is recorded in draft_revivals with within_window 0).
  */
-export async function reviveDraft(reg: Registry, verifier: LaunchVerifier, o: { mint: string; launchTx: string; note: string; late: boolean; apply: boolean }): Promise<{ ok: true; applied: boolean; baselineAt: string; withinWindow: boolean } | { ok: false; reason: string }> {
+export async function reviveDraft(reg: Registry, verifier: LaunchVerifier, o: { mint: string; launchTx: string; note: string; late: boolean; apply: boolean; host?: ExpectedHost }): Promise<{ ok: true; applied: boolean; baselineAt: string; withinWindow: boolean } | { ok: false; reason: string }> {
   const t = reg.token(o.mint);
   if (!t) return { ok: false, reason: `no coin with mint ${o.mint}` };
   if (t.status !== "draft" && t.status !== "expired") return { ok: false, reason: `$${t.ticker} is ${t.status}; only a draft or an expired draft is taken live` };
   if (!o.note.trim()) return { ok: false, reason: "a revival needs --note: one plain sentence saying why" };
-  const v = await verifier.verify(o.launchTx, { mint: o.mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, reg.pairOf(o.mint)) });
+  const v = await verifier.verify(o.launchTx, { mint: o.mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, reg.pairOf(o.mint)), config: expectedConfigFor(reg, t, o.host) });
   if (!v.ok) return { ok: false, reason: `refused (${v.status}): ${v.reason}` };
   const withinWindow = inDraftWindow(t.createdAt, v.blockTimeMs), baselineAt = new Date(v.blockTimeMs).toISOString();
   if (!withinWindow && !o.late) return { ok: false, reason: `the create landed at ${baselineAt}, after the draft's 24-hour window: pass --late to take it live anyway (it is recorded as late)` };
   if (!o.apply) return { ok: true, applied: false, baselineAt, withinWindow };
-  reg.takeLiveFromChain(o.mint, o.launchTx, t.poolId, v.blockTimeMs, { source: "operator", note: o.note.trim(), late: o.late });
+  try { reg.takeLiveFromChain(o.mint, o.launchTx, t.poolId, v.blockTimeMs, { source: "operator", note: o.note.trim(), late: o.late }); }
+  catch (e) { if (e instanceof RevivalTickerHeldError) return { ok: false, reason: `refused: $${t.ticker} is held by another creator's coin now (${e.heldBy}); two live coins never share a ticker` }; throw e; }
   return { ok: true, applied: true, baselineAt, withinWindow };
 }

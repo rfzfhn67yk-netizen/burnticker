@@ -42,7 +42,7 @@ const dialLine = fraction !== null ? `${(fraction * 100).toLocaleString("en-US",
   : r.rule?.burnPerUnitTokens ? `${r.rule.burnPerUnitTokens} tokens per unit` : "see the rules file";
 const description = `${r.statement}\n\nRule: ${dialLine}; rules sha256 ${loaded.sha256}. Memecoin: the rule says what supply does, not what price does. Not advice.`;
 // pinCoin's `rule` only feeds the generated art; we pin our own PNG, so the BurnRule is not consulted (metadataJson does not read it).
-const input: PinInput = { ticker, mint: r.mint, name, description, oneLiner: r.statement.slice(0, 140), rule: {} as BurnRule, rulesSha256: loaded.sha256, origin, links, imageUrl: null };
+const input: PinInput = { ticker, mint: r.mint, name, description, oneLiner: r.statement.slice(0, 140), rule: {} as BurnRule, rulesSha256: loaded.sha256, origin, links };
 
 const tags = [{ name: "App-Name", value: "Burnticker" }, { name: "Ticker", value: ticker }, { name: "Rules-Sha256", value: loaded.sha256 }];
 async function pin(uploader: PinUploader) {

@@ -102,8 +102,6 @@ export interface PinInput {
   description: string;
   oneLiner: string; rule: BurnRule; rulesSha256: string; origin: string;
   links: { label: string; url: string }[];
-  /** A custom image by URL (API only): pinned by URL as given instead of the receipt art. */
-  imageUrl?: string | null;
   /** website-15 item 13: the creator's uploaded image, already checked (creatorProfile.ts decodeCreatorImage); uploaded as given. */
   image?: { bytes: Uint8Array; contentType: string; /** the creator's receipt-mark choice, recorded in the metadata's attributes */ badge?: boolean } | null;
 }
@@ -157,8 +155,7 @@ export async function pinCoin(uploader: PinUploader, i: PinCoinInput, hooks: Pin
   if (i.image) {
     const up = await put("image", i.image.bytes, i.image.contentType);
     imageUri = up.url; imageTx = up.id; imageSha256 = sha256Hex(i.image.bytes); imageType = i.image.contentType;
-  } else if (i.imageUrl) { imageUri = i.imageUrl; imageTx = ""; imageSha256 = ""; }
-  else {
+  } else {   // no image by web address (owner decision 2026-10-19, imagePin.ts IMAGE_URL_REFUSED): uploaded bytes or the receipt art
     const svg = renderCoinSvg({ ticker: i.ticker, oneLiner: i.oneLiner, rule: i.rule, sha256: i.rulesSha256 });
     const sharp = (await import("sharp")).default;
     const png = new Uint8Array(await sharp(Buffer.from(svg)).png().toBuffer());

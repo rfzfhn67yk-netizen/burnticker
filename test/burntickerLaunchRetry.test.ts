@@ -208,7 +208,7 @@ describe("M2: one prepare per draft", () => {
     assert.match(route, /takeMintKeys/);
     assert.ok(!/bank\?\.take\(tickers\)[\s\S]*prepareLaunch\(p, body, \{ register: true/.test(route.slice(0, route.indexOf("async function prepareAnswer"))), "no key is taken before the prepare");
     const page = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
-    assert.match(page, /const idempotencyKey = draftPrepareKey\(curRev\.current\);/);
+    assert.match(page, /const idempotencyKey = prepareKeys\.keyFor\(curDraft\.current\);/);
   });
 });
 

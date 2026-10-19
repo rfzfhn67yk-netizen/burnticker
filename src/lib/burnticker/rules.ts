@@ -3,6 +3,7 @@ import { derbySeriesId, derbySpecProblems, derbyStatement, isDerbySeries, type D
 import { inverseRefusal, KEEPER_ONE_SHOT_RE, PAIR_OUTCOME_SERIES_RE } from "@/lib/burnticker/inverse";
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { regexProblem } from "@/lib/burnticker/safeRegex";
+import { hasNoBurnOutcome, isFirstSnowRule, oneShotFull, resolvesOnce } from "@/lib/burnticker/nextResult";
 
 /**
  * BURNTICKER RULES (2026-10-09; the owner's redesign the same evening: the event space is OPEN). A rule is a SELECTOR plus an
@@ -316,11 +317,8 @@ export function endSelfOnLossProblem(r: Pick<BurnRule, "onEnd" | "pair" | "kind"
   return END_SELF_ON_LOSS_REFUSAL;
 }
 export const ONE_SHOT_MAX_FRACTION = 1;
-/**
- * Resolves once: one market, a derby flippening, or (sources-2, 2026-10-12) a first-party one-shot that has exactly one reading ever: a
- * named launch (ll2.launch), a star or channel milestone (github.milestone, youtube.milestone). The keeper ends those after the reading.
- */
-export const isOneShot = (r: Pick<BurnRule, "market" | "oracle" | "derby"> & { series?: string | null }): boolean => r.market !== null || (r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip === true) || (r.oracle === "derby" && r.derby?.selector === "high" && r.derby.once === true) || (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? ""));
+// Resolves once. audit 7 F08: the definition lives in nextResult.ts (client-safe, so the coin page and the creator views use the same one); same name here
+export { isOneShot } from "@/lib/burnticker/nextResult";
 
 /** ChatGPT audit 6 item 27: the share limits in words, from RULE_BOUNDS (the OpenAPI document, the field help and /about read this). */
 export const shareLimitsText = (): string => `A rule that repeats spends ${Math.round(RULE_BOUNDS.fractionOfPool.min * 100)}% to ${Math.round(RULE_BOUNDS.fractionOfPool.max * 100)}% of the burn pool per unit (fractionOfPool ${RULE_BOUNDS.fractionOfPool.min} to ${RULE_BOUNDS.fractionOfPool.max}). A rule that resolves once (one market, a named launch, a milestone, the flippening) may spend up to ${Math.round(ONE_SHOT_MAX_FRACTION * 100)}% (up to ${ONE_SHOT_MAX_FRACTION.toFixed(2)}). A single game and the first snow are not drained at once, so they keep the repeating limits.`;
@@ -707,19 +705,29 @@ export function winnerTakesBurnText(r: Pick<BurnRule, "pair" | "market">): strin
  * champion (espn.ts CHAMPION_KNOWN: MLB, the NBA, the NHL, the NFL); test/burntickerWalkthrough13.test.ts pins it to espn.ts championSeries.
  */
 export const CHAMPION_SERIES_RE = /^espn\.team:(mlb|nba|nhl|nfl)-[A-Z0-9]{2,6}\.\d{1,7}-win-s\d{4}$/;
-export function onEndText(r: Pick<BurnRule, "onEnd" | "set" | "pair" | "kind" | "binary" | "scalar">, endDate: string | null = null): string {
+// launch wizard audit 2026-10-19 F11: `voidWords` names what voids THIS rule (a one-shot reading), else the general list stands
+export function onEndText(r: Pick<BurnRule, "onEnd" | "set" | "pair" | "kind" | "binary" | "scalar">, endDate: string | null = null, voidWords: string | null = null): string {
   if (!r.onEnd) return "";
   const sink = endSinkOf(r);
   if (sink) {
     const weeks0 = r.onEnd.windDownDays % 7 === 0 ? `${r.onEnd.windDownDays / 7 === 4 ? "four" : r.onEnd.windDownDays / 7} weeks` : `${r.onEnd.windDownDays} days`;
     const where = sink === "pair-winner" ? "the winning coin's burn pool when the partner coin won the last result and is still live, and $DEFICIT's burn pool otherwise" : sink === "mint" ? `$${r.onEnd.ticker}'s burn pool (coin ${r.onEnd.mint}) when that coin is live then, and $DEFICIT's burn pool otherwise` : "$DEFICIT's burn pool (the platform's flagship coin)";
-    if (sink === "incinerator") return ` When the rule ends with a result${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}, whatever SOL is left in the burn pool is sent to Solana's incinerator (${INCINERATOR_ADDRESS}), which nothing can spend from, and so is any fee income that arrives after that; no coin is swapped for it, nothing is refunded and nobody is paid. When the rule ends void (a voided market or a cancelled season), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
+    // owner decision 2026-10-19 (nextResult.ts oneShotFull): one burn of the whole pool; what the end sends on is what reaches the pool later
+    const once = oneShotFull(r as BurnRule) && !r.pair;
+    if (once) {
+      const voidTail = ` When the rule ends void (${voidWords ?? "a voided market or a cancelled season"}), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
+      const later = `The rule resolves once${endDate ? ` (${endDate} at the latest)` : ""} and spends the whole burn pool in that one burn. After it, whatever reaches the burn pool later (trading fees that arrive after the burn, the reserve the rule keeps back on every crank, and rounding)`;
+      const noBurn = hasNoBurnOutcome(r) ? ` If the rule ends with the result that burns nothing, whatever is left in the burn pool goes the same way.` : "";
+      if (sink === "incinerator") return ` ${later} is sent to Solana's incinerator (${INCINERATOR_ADDRESS}), which nothing can spend from; no coin is swapped for it, nothing is refunded and nobody is paid.${noBurn}${voidTail}`;
+      return ` ${later} moves to ${where} and burns that coin; nothing is refunded and nobody is paid.${noBurn}${voidTail}`;
+    }
+    if (sink === "incinerator") return ` When the rule ends with a result${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}, whatever SOL is left in the burn pool is sent to Solana's incinerator (${INCINERATOR_ADDRESS}), which nothing can spend from, and so is any fee income that arrives after that; no coin is swapped for it, nothing is refunded and nobody is paid. When the rule ends void (${voidWords ?? "a voided market or a cancelled season"}), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
     // walkthrough 13: the champion path (describe.ts championPathRule, endSinkKeeper championVerdict) is in the statement too; the coin's
     // description said it and the keeper does it, but the locked rule's statement sent every result end to the sink
     const full = r as Partial<BurnRule>;
     const champion = (sink === "flagship" || sink === "mint") && full.oracle === "catalogue" && !full.inverse && !full.set && CHAMPION_SERIES_RE.test(full.series ?? "");
-    if (champion) return ` When the season ends and the team won the championship (its last game is a win this coin burned on), whatever is left in the burn pool burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires. When the rule ends with any other result, whatever is left in the burn pool moves to ${where} and burns that coin, and so does any fee income that arrives after that; nothing is refunded and nobody is paid. When the rule ends void (a voided market, a voided pair or a cancelled season), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
-    return ` When the rule ends with a result${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}, whatever is left in the burn pool moves to ${where} and burns that coin, and so does any fee income that arrives after that; nothing is refunded and nobody is paid. When the rule ends void (a voided market, a voided pair or a cancelled season), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
+    if (champion) return ` When the season ends and the team won the championship (its last game is a win this coin burned on), whatever is left in the burn pool burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires. When the rule ends with any other result, whatever is left in the burn pool moves to ${where} and burns that coin, and so does any fee income that arrives after that; nothing is refunded and nobody is paid. When the rule ends void (${voidWords ?? "a voided market, a voided pair or a cancelled season"}), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
+    return ` When the rule ends with a result${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}, whatever is left in the burn pool moves to ${where} and burns that coin, and so does any fee income that arrives after that; nothing is refunded and nobody is paid. When the rule ends void (${voidWords ?? "a voided market, a voided pair or a cancelled season"}), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
   }
   const lg = r.set && r.set.forwardBps > 0 ? ` and ${Math.round(r.set.forwardBps) / 100}% of the leftover burns the winning coin of set ${r.set.id} once the program's forward_to_winner instruction is live (queued, not deployed); when it is not — or there is no winning coin, or it is not graduated — all of it stays here`: "";
   const weeks = r.onEnd.windDownDays % 7 === 0 ? `${r.onEnd.windDownDays / 7 === 4 ? "four" : r.onEnd.windDownDays / 7} weeks` : `${r.onEnd.windDownDays} days`;
@@ -756,6 +764,14 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
   const dir = s.direction === "up" ? "above" : s.direction === "down" ? "below" : "away from (either direction)";
   const pair = r.pair?.game ? ` One-game pair ${r.pair.pairId}, side ${r.pair.side}: the other coin counts the other team's win in the same game (${r.pair.game.series[r.pair.side === "A" ? 1 : 0]}). The game counts once both results are final: the coin of the team that won burns, the other coin's pool moves to its burn, and a draw moves nothing between them.${pairClauseText(r)}${winnerTakesBurnText(r)}`
     : r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.${pairClauseText(r)}${winnerTakesBurnText(r)}` : "";
+  // LAUNCH WIZARD AUDIT 2026-10-19 F11: a catalogue rule that resolves once (the next earthquake, hurricane, tornado day, wildfire,
+  // volcano warning or record TVL day, a named launch, a milestone, a single game, the first snow) has one qualifying reading, spent once;
+  // it never read "each time ... every full 1 above a fixed baseline of 0 is one unit ... per unit". Derived text, not hashed.
+  if (r.oracle === "catalogue" && resolvesOnce(r)) {
+    const game = /^espn\.game:/.test(r.series ?? "");
+    const voidWords = game ? (r.pair ? "a cancelled game or a voided pair" : "a voided or cancelled game") : isFirstSnowRule(r) ? "a voided reading, or a season that ends with no first snow" : r.pair ? "a voided reading or a voided pair" : "a voided reading";
+    return `This rule resolves once. It fires on the first reading of ${what} after launch that counts${names.unitLabel ? ` (${names.unitLabel})` : ""}, and on that one result the keeper ${mapText(s.perUnit, "once")}. No later reading burns again.${pair} ${game ? "A voided or cancelled game" : "A voided reading"} burns nothing. Settled results only; prices are never read.${onEndText(r, null, voidWords)}`;
+  }
   // a catalogue count ("1 win", "1 launch") from a baseline of 0 reads as a count; any other unit as "every <unit> <direction> <baseline>"
   const unitWords = names.unitLabel ? names.unitLabel : `full ${s.unit}`;
   const counted = r.oracle === "catalogue" && s.baseline === 0 && s.direction === "up" && !!names.unitLabel;

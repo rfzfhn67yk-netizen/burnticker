@@ -271,10 +271,11 @@ describe("QA 9 items 24, 36, 37, 41 and 43, audit 10 items 16, 20, 22 and 24", (
   });
   test("41: a 429 or 502 is asked again after a pause, a few times, for that draft only", () => {
     assert.match(page, /const transientRead = \(e: unknown\): boolean => \/\^HTTP \(429\|502\|503\|504\)\\b\//);
-    assert.match(page, /const n = reviewRetry\.rev === rev \? reviewRetry\.n : 0, again = transientRead\(e\) && n < RETRY_MAX;/);
-    assert.match(page, /\}, \[step, reviewKey, gate\.kind, reviewRetry\.rev, reviewRetry\.n, creator, reviewProof\]\);/);   // review of block M: and the wallet's signature over the review's tickers   // A-2: the wallet rides with the review
+    // audit 7 F02: the review's ladder lives in createReviewRequester (test/burntickerReviewRequester.test.ts drives it with fake timers)
+    assert.match(page, /onSlot: setReviewSlot, debounceMs: 600, retryMax: RETRY_MAX, transient: transientRead, retryingLine: RETRYING_LINE,/);
+    // review of block M and A-2: the wallet and its signature ride with the review; audit 7 F03: both are part of the revision
+    assert.match(page, /profileRevision\(profileB\) : ""\], reviewIdentity\(creator, sentProof\)\);/);
     assert.match(page, /if \(transientRead\(e\) && n < RETRY_MAX\) setTimeout\(\(\) => \{ setBtRetry\(\{ key, n: n \+ 1 \}\); setBtFor\(\(f\) => \(f === key \? "" : f\)\); setBtErr\(null\); \}, 2000 \* 2 \*\* n\);/);
-    assert.match(page, /\}, 600\);\n    return \(\) => clearTimeout\(t\);\n  \}, \[step, reviewKey/, "the review is debounced");
   });
   test("43 and audit 10 item 20: accessible names on the comparison, the candidate picks and the state selector", () => {
     assert.match(tile, /aria-label=\{`Search for the \$\{lower1\(label\)\}`\}/); assert.match(tile, /aria-label=\{`Change the \$\{lower1\(label\)\}`\}/);

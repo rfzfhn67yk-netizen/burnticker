@@ -15,7 +15,7 @@ import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
 import { nextTimeRow, OVERDUE_CHECK_NOTE, PUBLISHER_DECIDES, selectorTitle } from "@/lib/burnticker/coinSourceLine";
 import { espnSeriesTitle, parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { receiptStatusWords, RECEIPT_STATUS_WORDS } from "@/lib/burnticker/coinPage";
-import { creatorNextLine, DECIDED_BURNED, DECIDED_WAITING } from "@/lib/burnticker/creatorBenefits";
+import { creatorNextLine, DECIDED_BURNED, DECIDED_VOID, DECIDED_WAITING } from "@/lib/burnticker/creatorBenefits";
 import { NO_WIN_YET, READ_NOTHING_COUNTED, isWinCoin, settlementOf, upcomingFromStatus } from "@/lib/burnticker/upcoming";
 import { coinHref } from "@/lib/burnticker/launchRecovery";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
@@ -151,7 +151,8 @@ describe("item 4: links after a launch and the creator summary on Your coins go 
   });
   test("the creator summary carries the mint; Your coins and the coin page match on it, and Your coins links the mint page", () => {
     assert.match(read("src/app/burnticker/creator/[wallet]/summary/route.ts"), /ticker: c\.ticker, mint: c\.mint,/);
-    assert.match(read("src/lib/burnticker/creatorServe.ts"), /name: s\.name, mint: s\.mint,/);
+    // audit 7: the registry-only projection carries the mint (creatorServe.ts baseOf)
+    assert.match(read("src/lib/burnticker/creatorServe.ts"), /name: t\.name, mint: t\.mint,/);
     const me = read("src/app/burnticker/me/page.tsx");
     assert.match(me, /find\(\(x\) => x\.mint === mint\)/); assert.match(me, /rankOf\(c\.mint\)/); assert.doesNotMatch(me, /rankOf\(c\.ticker\)/);
     assert.match(me, /href=\{coinCanonicalHref\(c\.mint\)\}>\$\{c\.ticker\}<\/Link>/);
@@ -206,9 +207,10 @@ describe("A-26: times say what they are; decided coins say so; a past time is ne
     const one = (receipts: { status: string; kind?: string; settledAt?: string }[], graduated = false, nextAt: string | null = null) => creatorNextLine({ oneShot: true, receipts, graduated, nextAt }, now);
     assert.equal(one([{ status: "planned", kind: "event", settledAt: "2026-10-16T01:00:00Z" }]), DECIDED_WAITING);
     assert.equal(one([{ status: "confirmed", kind: "event", settledAt: "2026-10-16T01:00:00Z" }], true), DECIDED_BURNED);
-    // an end receipt after the result does not hide it; a skipped, voided or failed result decides nothing
+    // an end receipt after the result does not hide it; a skipped or failed result decides nothing; audit 7 F08: a voided one-shot says so
     assert.equal(one([{ status: "confirmed", kind: "event", settledAt: "2026-10-16T01:00:00Z" }, { status: "skipped", kind: "winddown", settledAt: "2026-10-17T01:00:00Z" }], true), DECIDED_BURNED);
-    for (const st of ["skipped", "void", "voided", "nothing", "exhausted"]) assert.equal(one([{ status: st, kind: "event", settledAt: "2026-10-16T01:00:00Z" }], false, "2026-10-19T19:00:00Z"), "19 October 2026", st);
+    for (const st of ["skipped", "nothing", "exhausted"]) assert.equal(one([{ status: st, kind: "event", settledAt: "2026-10-16T01:00:00Z" }], false, "2026-10-19T19:00:00Z"), "19 October 2026", st);
+    for (const st of ["void", "voided"]) assert.equal(one([{ status: st, kind: "event", settledAt: "2026-10-16T01:00:00Z" }], false, "2026-10-19T19:00:00Z"), DECIDED_VOID, st);
     assert.equal(creatorNextLine({ oneShot: false, receipts: [], graduated: false, nextAt: "2026-10-18T19:00:00Z" }, now), "Was due on 18 October 2026 and is overdue");
     assert.equal(creatorNextLine({ oneShot: false, receipts: [], graduated: false, nextAt: "2026-10-19T19:00:00Z" }, now), "19 October 2026");
     assert.equal(creatorNextLine({ oneShot: false, receipts: [], graduated: false, nextAt: null }, now), "None scheduled");

@@ -44,3 +44,6 @@ export function withholdStaleMarket<M extends { curve: unknown; curveNote: strin
   const note = `${staleSnapshotLine(ageMs)} ${STALE_WITHHELD}`;
   return { ...m, curve: null, curveNote: note, pool: null, poolNote: note } as M;
 }
+
+/** Audit 7 F06: the trust page's line once its copy is past the trust memo's bound (the same 15 minutes as a coin page). */
+export const trustStaleLine = (ageMs: number): string => `${staleSnapshotLine(ageMs)} The facts below are the last copy that was read in full.`;

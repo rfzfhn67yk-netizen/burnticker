@@ -5,8 +5,9 @@ import { assertSignableGenesis, type Cluster as ProgramCluster, LAUNCHLAB_PROGRA
 import { anchorErrorName, assertClusterAllowed, carriedPaceView, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
 import { type PrivateSender, privateSenderFromEnv } from "@/lib/burnKeeper/privateSend";
 import { submitReadingIx } from "@/lib/burnReceipts/instructions";
+import { findProcessingTx } from "@/lib/burnReceipts/processing";
 import { END_STATE_LIVE, END_STATE_RESOLVED, END_STATE_VOID } from "@/lib/burnReceipts/endSink";
-import { configPda, feePda, launchlabCreatorFeeVault, readingPda } from "@/lib/burnReceipts/pda";
+import { configPda, feePda, launchlabCreatorFeeVault } from "@/lib/burnReceipts/pda";
 import type { Cosignature, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
 import { planGraduatedCreatorFeeClaim } from "@/lib/burnKeeper/creatorFees";
 import { CPMM_PROGRAM_ID as KEEPER_CPMM, launchLabProgramFor } from "@/lib/burnKeeper/launchlab";
@@ -215,17 +216,9 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
     },
     blockHeight: () => c.getBlockHeight("confirmed"),
     async memoOf(signature, recordDate) { return memoFromTransaction(await parsedTx(signature), o.programId, recordDate); },
-    async findCrankTx(recordDate) {
-      const sigs = await c.getSignaturesForAddress(readingPda(o.programId, config, recordDate), { limit: 25 }, "confirmed");
-      for (const s of sigs) {
-        if (s.err !== null) continue;
-        const t = await parsedTx(s.signature);
-        const logs = t?.meta?.logMessages ?? null;
-        // a crank, or (winner takes the burn) the forward_to_winner that processed this reading — review RL-1
-        if (logs && logs.some((l) => /Instruction: (Crank(Buyback|Vault|NoUnits)|ForwardToWinner)/.test(l))) return { signature: s.signature, slot: s.slot ?? null, memo: memoFromTransaction(t, o.programId, recordDate) };
-      }
-      return null;
-    },
+    // audit 7 F05: the shared list of processing instructions (crank_target_burn included), bound to this program, this coin's config and
+    // this reading's date and account — never a log-name match (review RL-1: forward_to_winner is one of them)
+    async findCrankTx(recordDate) { return findProcessingTx(c, { programId: o.programId, config, recordDate }); },
     async claimCreatorFees() {
       await checkCluster();
       const sent: string[] = [], notes: string[] = [];

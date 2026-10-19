@@ -123,7 +123,11 @@ export interface TokenStatusJson {
   burned: { total: string; pctOfSupply: number; count: number; last30d: string; /** settled time of the latest confirmed burn */ lastAt: string | null };
   pool: { feePdaSol: string | null; spendableSol: string | null; reserveSol: string; vaultBalance: string | null; vaultAllocation: string | null; shortfallOutstanding: string; capSol: number; queuedSol: string | null; queuedNote: string };
   /** impliedChance is always null: no odds or prices for any coin (owner decision 2026-10-10). */
-  next: { nextCheckAt: string | null; impliedChance: number | null; impliedBasis: string | null; nextMarket: string | null; nextCloseTime: string | null; awaitingFinal: number };
+  /**
+   * audit 7 F08: `nextCheckAt` / `nextSourceCheckAt` is the keeper's next read of the source (a poll, not a result); `nextResultAt` is when
+   * a new result can arrive (null for a decided or voided one-shot); `result` is "recurring" or the one-shot's pending / decided / void.
+   */
+  next: { nextCheckAt: string | null; impliedChance: number | null; impliedBasis: string | null; nextMarket: string | null; nextCloseTime: string | null; awaitingFinal: number; result?: "recurring" | "pending" | "decided" | "void"; nextResultAt?: string | null; nextSourceCheckAt?: string | null };
   feed: { lastEventId: string | null; lastValue: string | null; lastSettledAt: string | null; readings: number; lastFetchAt: string | null; lastError: string | null; failures: number };
   attesters: { pubkey: string; role: string; active: boolean }[]; quorum: number;
   fees: { curve: FeeSplit; postGraduation: FeeSplit; sentence: string; creatorSliceBps: 0 };

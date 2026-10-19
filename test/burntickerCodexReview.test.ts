@@ -37,6 +37,9 @@ import { accountDiscriminator, decodeType, encodeType } from "@/lib/burnReceipts
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { BRONCOS, DEBT_RULE, DENVER_HIGH, FRED_GFDEBTN_CSV, NOW } from "./burntickerHelpers.ts";
 import { encodeV1Message } from "./burntickerV1Helpers.ts";
+import { applyExpected } from "./burntickerAdmissionHelpers.ts";
+import { expectedConfigFor } from "@/lib/burnticker/admission";
+import type { ExpectedTokenConfig } from "@/lib/burnticker/program";
 
 const POST = { "content-type": "application/json", origin: "http://bt.test" };
 const ATTESTER = "KeeperDataKey1111111111111111111111111111111";
@@ -60,7 +63,9 @@ class RealInitProgram extends FakeBurnProgram {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: i.attesters.map((a) => operatorAttester(attesterKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: F3_ADMIN,
     }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst } : {}) });
-    return { tokenConfig: r.tokenConfig, instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (real encoding; test)", keys: ix.keys.map((k) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })), dataBase64: Buffer.from(ix.data).toString("base64") }] };
+    // audit F01: the expectation names what this encoding holds (the admin and the attester keys as encoded)
+    const expected = r.expected ? { ...r.expected, admin: F3_ADMIN.toBase58(), attesters: i.attesters.map((a) => attesterKey(a).toBase58()) } : undefined;
+    return { tokenConfig: r.tokenConfig, ...(expected ? { expected } : {}), instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (real encoding; test)", keys: ix.keys.map((k) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })), dataBase64: Buffer.from(ix.data).toString("base64") }] };
   }
 }
 
@@ -72,9 +77,10 @@ const encodeAcc = (idl: typeof BURN_RECEIPTS_IDL | typeof PAIR_CURVE_IDL, name: 
   return Buffer.concat([accountDiscriminator(idl, name), encodeType(idl, t, v)]);
 };
 type ChainAcc = [string, { owner: PublicKey; data: Buffer }];
-const tokenConfigAcc = (programId: string, mint: string, o: { creator: string; rulesSha: string; policy?: number; burnTargetKind?: number; pairState?: number }): ChainAcc => [configPda(new PublicKey(programId), new PublicKey(mint)).toBase58(), { owner: new PublicKey(programId), data: encodeAcc(BURN_RECEIPTS_IDL, "TokenConfig", (v) => {
+const tokenConfigAcc = (programId: string, mint: string, o: { creator: string; rulesSha: string; policy?: number; burnTargetKind?: number; pairState?: number; exp?: ExpectedTokenConfig | null }): ChainAcc => [configPda(new PublicKey(programId), new PublicKey(mint)).toBase58(), { owner: new PublicKey(programId), data: encodeAcc(BURN_RECEIPTS_IDL, "TokenConfig", (v) => {
   v.mint = new PublicKey(mint); v.creator = new PublicKey(o.creator); v.rules_sha256 = Buffer.from(o.rulesSha, "hex"); v.registration_policy = o.policy ?? 0; v.pair_state = o.pairState ?? 0;
   (v.rule as Record<string, unknown>).pool_policy = o.policy ?? 0; v.version = 1; v.burn_target_kind = o.burnTargetKind ?? 0;
+  if (o.exp) applyExpected(v, o.exp);   // audit F01: the config holds what the draft encoded, field by field
 }) }];
 const pairAcc = (mintA: string, mintB: string, creator: string, shaA: string, shaB: string): ChainAcc => [pairPda(new PublicKey(mintA), new PublicKey(mintB)).toBase58(), { owner: PAIR_CURVE_PROGRAM_ID, data: encodeAcc(PAIR_CURVE_IDL, "Pair", (v) => {
   v.mints = [new PublicKey(mintA), new PublicKey(mintB)]; v.creator = new PublicKey(creator); v.rules_sha256_a = Buffer.from(shaA, "hex"); v.rules_sha256_b = Buffer.from(shaB, "hex"); v.version = 1;
@@ -460,7 +466,7 @@ describe("N6 — with the pair curve enabled the wizard route never hands out tw
     };
     const a = w.registry.tokenByTicker("DENVER")!, b = w.registry.tokenByTicker("CHIEFS")!;
     // the chain after the whole set landed: both TokenConfigs (registration policy 2) and the Pair init_pair created
-    const accounts = [tokenConfigAcc(w.p.program.programId, a.mint, { creator: CREATOR, rulesSha: a.rulesSha, policy: 2 }), tokenConfigAcc(w.p.program.programId, b.mint, { creator: CREATOR, rulesSha: b.rulesSha, policy: 2 }), pairAcc(a.mint, b.mint, CREATOR, a.rulesSha, b.rulesSha)];
+    const accounts = [tokenConfigAcc(w.p.program.programId, a.mint, { creator: CREATOR, rulesSha: a.rulesSha, policy: 2, exp: expectedConfigFor(w.registry, a) }), tokenConfigAcc(w.p.program.programId, b.mint, { creator: CREATOR, rulesSha: b.rulesSha, policy: 2, exp: expectedConfigFor(w.registry, b) }), pairAcc(a.mint, b.mint, CREATOR, a.rulesSha, b.rulesSha)];
     const verifierFor = (t: (typeof j.pairCurve.transactions)[number]) => connectionLaunchVerifier(chainReader(landed(t), accounts), { burnProgramId: w.p.program.programId, launchLabProgramId: null, pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() });
     const [tx1, tx2, tx3] = j.pairCurve.transactions;
     const exp = (t: typeof a) => ({ mint: t.mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, w.registry.pairOf(t.mint)) });
@@ -591,7 +597,7 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     return VersionedMessage.deserialize(t.serializeMessage());
   };
   const landed = (message: unknown, blockTime = NOW / 1000) => ({ blockTime, meta: { err: null, loadedAddresses: { writable: [], readonly: [] } }, transaction: { message } });
-  const tokenConfig = (mint: string, o: { creator?: string; rulesSha: string; policy?: number; burnTargetKind?: number; pairState?: number }) => tokenConfigAcc(PROGRAM, mint, { creator: o.creator ?? CREATOR_F3, rulesSha: o.rulesSha, policy: o.policy, burnTargetKind: o.burnTargetKind, pairState: o.pairState })[1];
+  const tokenConfig = (mint: string, o: { creator?: string; rulesSha: string; policy?: number; burnTargetKind?: number; pairState?: number; exp?: ExpectedTokenConfig | null }) => tokenConfigAcc(PROGRAM, mint, { creator: o.creator ?? CREATOR_F3, rulesSha: o.rulesSha, policy: o.policy, burnTargetKind: o.burnTargetKind, pairState: o.pairState, exp: o.exp })[1];
   const pairAccount = (mintA: string, mintB: string, shaA: string, shaB: string) => pairAcc(mintA, mintB, CREATOR_F3, shaA, shaB)[1];
   const chain = chainReader;
   const cfgAt = (mint: string) => configPda(new PublicKey(PROGRAM), new PublicKey(mint)).toBase58();
@@ -763,7 +769,7 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     const j = await r.json() as { transactions: { instructions: { programId: string; keys: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; dataBase64: string }[] }[] };
     const before = w.registry.token(mint)!;
     assert.equal(before.status, "draft");
-    const cfg: [string, { owner: PublicKey; data: Buffer }] = [cfgAt(mint), tokenConfig(mint, { rulesSha: before.rulesSha })];
+    const cfg: [string, { owner: PublicKey; data: Buffer }] = [cfgAt(mint), tokenConfig(mint, { rulesSha: before.rulesSha, exp: expectedConfigFor(w.registry, before) })];
     const confirm = (sig: string) => callRoute(`${API}/launch/confirm`, { method: "POST", headers: POST, body: JSON.stringify({ mint, signature: sig }) });
     // the report's forgery
     const ix = SystemProgram.transfer({ fromPubkey: creatorKp.publicKey, toPubkey: creatorKp.publicKey, lamports: 0 });

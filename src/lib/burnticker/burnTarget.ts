@@ -140,6 +140,8 @@ export const pinStepText = (ticker: string, symbol: string, o: { link?: boolean;
  * initialize_token completes the pairing.
  */
 export const lockRuleStepText = (ticker: string, o: { link?: boolean } = {}): string => `Lock in $${ticker}'s rule${o.link ? " and link the two coins" : ""}`;
+/** Owner decision 2026-10-19: a single coin on the incinerator end pins its EndSink (kind INCINERATOR) in that same first transaction. */
+export const incineratorStepText = (ticker: string): string => `Lock in $${ticker}'s rule and pin its end to Solana's incinerator`;
 /** The create step that follows a pin on LaunchLab, or a pair coin's lock step. */
 export const createAfterPinText = (ticker: string): string => `Create $${ticker}`;
 /** What the review says about the pin, once, when any coin pins a token. */

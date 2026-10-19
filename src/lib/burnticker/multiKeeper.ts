@@ -13,6 +13,7 @@ import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitStep, unitS
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { solToLamports } from "@/lib/burnKeeper/rules";
 import { derbyProofHash } from "@/lib/burnticker/derby/adapter";
+import { expectedConfigFor, viewMismatch, type ExpectedHost } from "@/lib/burnticker/admission";
 import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type BurnProgramClient } from "@/lib/burnticker/program";
 import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFeesKeeper";
 import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForward";
@@ -70,6 +71,12 @@ export interface KeeperDeps {
   derby?: { sample(tokens: readonly TokenRow[]): Promise<unknown>; plan(): string[]; /** Why and when a derby token's rule ended (season over, flippening settled, knocked out, voided). */ ended?(t: TokenRow): { reason: string; atMs: number } | null };
   /** The keeper's data key (attester v1); recorded on every reading. */
   attester: string;
+  /**
+   * Second audit 2026-10-19 I-15: what this host encodes into every launch, for the fence of a coin with no stored expectation
+   * (admission.ts fallbackExpectedConfig). The keeper script always passes it (admission.ts expectedHostOf: its signing key, the program
+   * client's config authority and platform). Absent (test rigs): those fields are not compared, as before.
+   */
+  expectedHost?: ExpectedHost;
   /**
    * THE SECOND SIGNER (signer-2, 2026-10-12; attesters/cosign.ts). When set, every reading is first sent to the signer host, which
    * recomputes it and co-signs the exact message only when it agrees. A listed key's signature joins the reading; a disagreement is an
@@ -487,6 +494,17 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
     : cfg.feedId !== want.feedId || cfg.valueDecimals !== 0 || cfg.unitValue !== BigInt(1) ? `the TokenConfig is not this token's unit counter (feed ${cfg.feedId})`
     : cfg.mode !== locked.mode ? `the TokenConfig is in ${cfg.mode} mode, the rule is ${locked.mode}` : null;
   if (mismatch) { d.log(`  [program] $${t.ticker}: REFUSED — ${mismatch}`); return hold(mismatch, pending, "error"); }
+  // audit F01: the parameters the program runs are the ones initialize_token stored, whatever the sha says — compared with what the host
+  // encoded at prepare (or what the locked rule alone fixes, for a draft prepared before that was stored). Nothing is signed for a coin
+  // whose config differs; the owner hears once a day.
+  const exp = expectedConfigFor(reg, t, d.expectedHost);
+  const off = exp ? viewMismatch(cfg, exp) : null;
+  if (off) {
+    d.log(`  [program] $${t.ticker}: REFUSED — ${off}`);
+    const text = `$${t.ticker}: the coin's TokenConfig on chain differs from the one this site built for it (${off}). Nothing is attested or cranked for it.`;
+    try { if (reg.recordAlert({ kind: "config-mismatch", key: `config-mismatch:${mint}`, text, meta: { mint } }, d.now())) d.log(`  [alert] config-mismatch: ${text}`); } catch { /* the alert never changes the hold */ }
+    return hold(off, pending, "error");
+  }
 
   // 1. ATTEST the closed days.
   const r = await submitCounterReadings(d, t, port, cfg, out);
@@ -507,14 +525,20 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
 
   // 3. ADOPT readings already processed on chain (cranking is permissionless; a lost confirmation). Review RL-1: a reading processed by
   // forward_to_winner (outcome "forwarded") — another cranker's forward, one that won the 72 h race, or the keeper's own whose confirmation
-  // was lost — is adopted from its write-ahead `forward:<date>` signature or the chain (findCrankTx matches ForwardToWinner too).
+  // was lost — is adopted from its write-ahead `forward:<date>` signature or the chain. Audit 7 F05: the chain search recognises every
+  // processing instruction (burnReceipts/processing.ts PROCESSING_INSTRUCTIONS: the cranks, crank_target_burn and forward_to_winner),
+  // bound to this program, this reading's date and its Reading account; a found transaction whose kind contradicts the Reading's outcome
+  // (a forward for a burned reading, or a crank for a forwarded one), or a burn whose memo for this date is missing, is held, not adopted.
   for (const D of [...new Set(counted.map((b) => b.readingDate!))]) {
     const rd = await port.reading(D);
     if (!rd?.processed) continue;
     const fwd = rd.outcome === "forwarded";
     const res = await resolveSent(d, port, mint, `${fwd ? "forward" : "crank"}:${formatDate(D)}`);
-    const tx = "landed" in res ? { signature: res.landed.signature, slot: res.landed.slot, memo: await port.memoOf(res.landed.signature, D) } : await port.findCrankTx(D);
+    const found = "landed" in res ? null : await port.findCrankTx(D);
+    const tx = "landed" in res ? { signature: res.landed.signature, slot: res.landed.slot, memo: await port.memoOf(res.landed.signature, D) } : found;
     if (!tx) { hold(`processed on chain; its ${fwd ? "forward" : "crank"} transaction is not found yet`, reg.receiptsForReading(mint, D)); continue; }
+    if (found && found.forwards !== undefined && found.forwards !== fwd) { hold(`processed on chain as ${rd.outcome}, but the transaction found (${found.signature.slice(0, 12)}…, ${found.instruction ?? "unknown"}) is not a ${fwd ? "forward" : "crank"}`, reg.receiptsForReading(mint, D)); continue; }
+    if (found && found.memo === null && (rd.outcome === "burned" || rd.outcome === "short")) { hold(`processed on chain; the transaction found (${found.signature.slice(0, 12)}…) carries no program memo for ${formatDate(D)}`, reg.receiptsForReading(mint, D)); continue; }
     recordCrank(d, t, cfg, D, rd, tx, true, out);
     if (fwd && pairCtx) await adoptForward(d, pairCtx, D, rd, tx);
   }

@@ -1,6 +1,6 @@
 // THE DESCRIPTION IS GENERATED AND LOCKED; THE METADATA IS PINNED (owner decisions 2026-10-10). Through the launch pipeline: a draft
-// whose name / ticker / note claims an affiliation (or carries a link) is refused with the category named; a custom image is off by
-// default; the registry's description is the generated text whatever the request sent; the metadata JSON pinned on Arweave (a fake
+// whose name / ticker / note claims an affiliation (or carries a link) is refused with the category named; an image by web address is
+// refused; the registry's description is the generated text whatever the request sent; the metadata JSON pinned on Arweave (a fake
 // Irys) carries it byte for byte; the token page carries the standing line, the creator's note in its own box and the pin; a failed
 // upload refuses the launch unless hosted metadata is allowed; the post-creation gate reads is_mutable / authorities / the URI.
 import { test, describe } from "node:test";
@@ -40,14 +40,13 @@ describe("the creator's text is linted; the image is the receipt art", () => {
     assert.equal(long.error.status, 400);
   });
 
-  test("a custom image is refused unless BURNTICKER_CUSTOM_IMAGES_ENABLED", async () => {
+  test("an image by web address is refused, with custom images on or off (owner decision 2026-10-19)", async () => {
     const w = await makeWorld();
     const r = await prepareLaunch(w.p, body({ imageUrl: "https://example.org/x.png" }), { register: false }) as Err;
-    assert.equal(r.error.status, 400); assert.equal(r.error.body.code, "custom-image-off");
+    assert.equal(r.error.status, 400); assert.equal(r.error.body.code, "image-url-refused");
     w.p.customImages = true;
-    // website-15 item 13: an image of the creator's own carries the rights line they confirm
-    assert.equal((await prepareLaunch(w.p, body({ imageUrl: "https://example.org/x.png" }), { register: false }) as Err).error.body.code, "image-rights");
-    assert.ok(!("error" in await prepareLaunch(w.p, body({ imageUrl: "https://example.org/x.png", imageRights: true }), { register: false })));
+    // the rights line belongs to an uploaded image (burntickerWebsite18 / burntickerImageUrlRefused); an address is refused even with it
+    assert.equal((await prepareLaunch(w.p, body({ imageUrl: "https://example.org/x.png", imageRights: true }), { register: false }) as Err).error.body.code, "image-url-refused");
   });
 });
 
