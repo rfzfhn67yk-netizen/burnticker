@@ -272,7 +272,11 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
     const onKey = tokens.filter((x) => x.selectorKey === key);
     const idle = selectorIdle(d.registry, key, onKey);
     const need = attestReadAt(d, onKey, st.lastOkAt);
-    if (idle && need === null) { out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue; }
+    if (idle && need === null) {
+      // HB-28: an idle selector has no next read, so none is left in feed_state for a page to print (a failing read keeps its backoff)
+      if (st.nextFetchAt !== null && st.failures === 0) d.registry.setFeedState({ ...st, nextFetchAt: null });
+      out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue;
+    }
     const dueAt = st.failures > 0 && st.nextFetchAt !== null ? st.nextFetchAt
       : idle ? need
       : st.nextFetchAt === null ? null : need !== null && need < st.nextFetchAt ? need : st.nextFetchAt;

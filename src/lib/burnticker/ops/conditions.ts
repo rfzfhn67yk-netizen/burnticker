@@ -76,7 +76,9 @@ export function activeConditions(snapshot: BurntickerSnapshot | null, health: re
   if (snapshot) {
     for (const a of evaluateAlerts(snapshot)) {
       if (a.kind === "bt-daily-summary") continue;
-      add({ id: a.kind === "bt-feed-stall" ? a.key : a.kind, kind: a.kind, label: a.kind === "bt-feed-stall" ? `${a.kind}(${a.key.slice("bt-feed-stall:".length)})` : a.kind, source: "keeper", text: a.text });
+      // a stall and (HB-29) an overdue read are per selector: the label names it, the text names the coin, the due time and why
+      const perKey = a.kind === "bt-feed-stall" || a.kind === "bt-feed-overdue";
+      add({ id: perKey ? a.key : a.kind, kind: a.kind, label: perKey ? `${a.kind}(${a.key.slice(a.kind.length + 1)})` : a.kind, source: "keeper", text: a.text });
     }
   }
   for (const h of health ?? []) {

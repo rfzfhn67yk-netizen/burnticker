@@ -42,6 +42,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *   and (second audit 2026-10-19 I-11) the keeper's reading and pair alerts: reading-unresolved, race-held, late-reading (low),
  *   revised-reading (as reading-conflict), the eight pair alerts as pair-result / pair-forward / pair-link; config-mismatch (urgent: the
  *   keeper fence held a coin, I-15), revival-ticker-held (I-16) and registry-newer (urgent: an older build on a newer file, I-17)
+ *   feed-overdue      a live coin whose result is still open has a source read more than one cadence past its planned time (alerts.ts
+ *                     bt-feed-overdue, HB-29: the live $NEXTM6 went unread for hours with nothing raised)
  *   ticker-live       a second coin on a ticker that already has a live coin was refused at confirm; its creator paid for it (B-2)
  *   keeper-stale      the public status file is stale for more than two hours: pushed by scripts/ops/keeper-status-check.sh, which runs
  *                     every minute from the publish timer and so still works when the keeper is down (listed here for the runbook)
@@ -70,7 +72,9 @@ export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "cr
   // third audit 2026-10-19 B-2
   | "ticker-live"
   // HB-1 2026-10-19: a service that stopped on its own and was started again by systemd (the web's out-of-memory stops)
-  | "unit-restarted";
+  | "unit-restarted"
+  // HB-29 2026-10-19: a live coin's source read is overdue while its result is still open
+  | "feed-overdue";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -114,6 +118,8 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-takeover": "keeper-takeover",
   "bt-feed-stale": "feed-stale",
   "bt-feed-disagree": "feed-disagree",
+  // HB-29 (continuous audit 2026-10-19): the live $NEXTM6's source went unread for hours while ops showed no condition
+  "bt-feed-overdue": "feed-overdue",
   "derby-withheld": "derby-withheld",
   "bt-cap-binding": "cap-binding",
   "bt-pin-orphan": "pin-orphan",
@@ -171,6 +177,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "foreign-reading": "Burnticker keeper holding its sends",
   "keeper-takeover": "Burnticker standby keeper took over",
   "feed-stale": "Burnticker source stale",
+  "feed-overdue": "Burnticker source read overdue",
   "feed-disagree": "Burnticker sources disagree",
   "derby-withheld": "Burnticker Derby result withheld",
   "cap-binding": "Burnticker burn pool above its cap",
@@ -218,6 +225,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "foreign-reading": "The keeper holds its sends for a coin because another record of the same coin disagrees about what happened. Nothing is sent for it until someone reconciles the two.",
   "keeper-takeover": "The standby keeper took over from the leader. Check why the leader stopped, and make sure only one keeper sends.",
   "feed-stale": "A source has not given a new reading for longer than it should. No new reading means no burn. Check the source by hand.",
+  "feed-overdue": "A live coin's source was due a read and has not been read, while the coin's result is still open. Its rule cannot settle until the source is read. The line below names the source, the coin, the due time and why the read did not happen.",
   "feed-disagree": "The second source for a feed disagrees with the first. The reading is held back, and nothing burns until the two agree.",
   "derby-withheld": "A Burn Derby or record-close result was withheld because it could not be settled cleanly. The line below says why.",
   "cap-binding": "A burn pool holds more than the pre-audit cap allows. The excess is queued, not spent. This is a notice; nothing is lost.",

@@ -133,7 +133,10 @@ function loop(o: { rule: BurnRule; key: string; adapter: (rule: BurnRule) => Pro
   const registry = {
     feedState: (k: string): FeedState => feeds.get(k) ?? { selectorKey: k, lastFetchAt: null, lastOkAt: null, failures: 0, lastError: null, nextFetchAt: null },
     setFeedState: (s: FeedState) => { feeds.set(s.selectorKey, s); },
+    // HB-29: a one-shot is decided by a reading after the coin's baseline with a receipt for that coin; the stub's planning pass is
+    // modelled as "every written reading has its receipt"
     lockedRule: () => ({ rule: o.rule }), lastReading: () => (written ? { id: "x", at: "2026-10-16" } : null),
+    readings: () => (written ? [{ id: "x", at: "2026-10-16" }] : []), receipt: () => (written ? { kind: "scalar", status: "planned" } : null),
     getStatus: (k: string) => status.get(k) ?? null, setStatus: (k: string, v: unknown) => { status.set(k, typeof v === "string" ? v : JSON.stringify(v)); },
     putReadings: (_o: string, _k: string, events: unknown[]) => { written += events.length; return events.length; },
     recordAlert: () => null, ruleEnd: () => (o.ruleEnded ? { mode: "winddown" } : null), pending: () => (o.pending ?? []) as ReceiptRow[],
@@ -141,7 +144,7 @@ function loop(o: { rule: BurnRule; key: string; adapter: (rule: BurnRule) => Pro
   const adapter = { id: "stub", settledSince: async (rule: BurnRule) => { reads++; return o.adapter(rule); } };
   const clock = { now: Date.parse("2026-10-19T15:00:00Z") };
   const d = { registry, oracles: { kalshi: adapter, catalogue: adapter, polymarket: adapter }, attester: "k", log: () => {}, now: () => clock.now, dryRun: true } as unknown as KeeperDeps;
-  const tokens = [{ selectorKey: o.key, ticker: "T", mint: "m", status: "live" } as unknown as TokenRow];
+  const tokens = [{ selectorKey: o.key, ticker: "T", mint: "m", status: "live", baselineAt: "2026-10-01T00:00:00Z" } as unknown as TokenRow];
   return { d, tokens, feeds, clock, get reads() { return reads; } };
 }
 
@@ -212,8 +215,8 @@ describe("the loop honours the plan", () => {
   });
 
   test("selectorIdle: a one-shot with its result; every rule ended; a recurring rule is never idle by its readings", () => {
-    const reg = (o: { reading: boolean; ended: boolean; rule: unknown }) => ({ ruleEnd: () => (o.ended ? {} : null), lastReading: () => (o.reading ? {} : null), lockedRule: () => ({ rule: validateRule(o.rule) as BurnRule }) });
-    const t = [{ mint: "m" }];
+    const reg = (o: { reading: boolean; ended: boolean; rule: unknown }) => ({ ruleEnd: () => (o.ended ? {} : null), readings: () => (o.reading ? [{ id: "e" }] : []), receipt: () => (o.reading ? { kind: "binary", status: "planned" } : null), lockedRule: () => ({ rule: validateRule(o.rule) as BurnRule }) });
+    const t = [{ mint: "m", baselineAt: "2026-10-01T00:00:00Z" }];
     assert.match(selectorIdle(reg({ reading: true, ended: false, rule: PM_BUCS }), "k", t)!, /one-shot/);
     assert.equal(selectorIdle(reg({ reading: false, ended: false, rule: PM_BUCS }), "k", t), null);
     assert.equal(selectorIdle(reg({ reading: true, ended: false, rule: BRONCOS }), "k", t), null);
