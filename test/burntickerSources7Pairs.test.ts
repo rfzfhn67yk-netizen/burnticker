@@ -83,13 +83,15 @@ describe("H3: one fee split on the review, from one source", () => {
       lint(fees);
     }
   });
-  test("mainnet: about 0.88% to the burn pool and Raydium about 0.08%, never the pair curve's 0.17% and 0.04%, on the series and settled pairs", () => {
+  test("mainnet (new coins, tier 14): about 0.98% to the burn pool and Raydium about 0.15%, never the pair curve's own split, on the series and settled pairs", () => {
     const main = postGraduationShareLine(sharesForCluster("mainnet"));
-    assert.match(main, /about 0\.88%.*about 0\.08%/);
+    assert.match(main, /about 0\.98%.*about 0\.15%/);
+    const pairLine = postGraduationShareLine(sharesForCluster("mainnet", { pair: true }));
     for (const f of [meetingsFundsFlow({ a: "A", b: "B" }, { a: "Arsenal", b: "Tottenham Hotspur" }), settledPairFundsFlow("game", { a: "A", b: "B" }, { a: "Arsenal", b: "Tottenham Hotspur" }), settledPairFundsFlow("candidates", { a: "A", b: "B" }, { a: "X", b: "Y" })]) {
       const t = f.steps[0].text;
       assert.ok(t.includes(main), t);
-      assert.doesNotMatch(t, /0\.17%|creator fee/);
+      assert.ok(!t.includes(pairLine), t);
+      assert.doesNotMatch(t, /creator fee/);
     }
     // the pair curve's own coins keep the pair curve's split (its pools open with Raydium's creator fee off)
     assert.ok(pairFundsFlow("winner-takes-the-burn").steps[0].text.includes(postGraduationShareLine(sharesForCluster("mainnet", { pair: true }))));

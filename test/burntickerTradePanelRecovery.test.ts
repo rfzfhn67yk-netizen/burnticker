@@ -3,7 +3,7 @@
 // as "not on the coin's network". These run the WHOLE Swap component (test/burntickerTradePanelHarness.ts) from an RPC that refuses at
 // first: the sentence is the right one, a "Try again" (and a background retry with backoff) recovers without a reload, and with the
 // ordinary lane spent the Try again still works through a bounded flight.
-import { describe, test } from "node:test";
+import { describe, test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import type { PublicKey } from "@solana/web3.js";
 import { SwapHarness, ACCOUNTS, FX, FakeDocument, newKey } from "./burntickerTradePanelHarness.ts";
@@ -12,6 +12,13 @@ import { decodeCurvePool } from "@/lib/burnticker/swap/layouts";
 import { REFUSAL, SWAP_COPY } from "@/lib/burnticker/swap/copy";
 import { RPC_BUDGET_REFUSAL, flightUnderWay, isBudgetRefusal } from "@/lib/burnticker/rpcProxy";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
+import type { SwapStore } from "@/lib/burnticker/swap/pending";
+
+// continuous audit 2026-10-19 SEC-02: the panel swaps only in a browser that keeps its records, so each run has a working localStorage
+class MemStore implements SwapStore { m = new Map<string, string>(); getItem(k: string) { return this.m.get(k) ?? null; } setItem(k: string, v: string) { this.m.set(k, v); } removeItem(k: string) { this.m.delete(k); } }
+const g = globalThis as { localStorage?: SwapStore };
+beforeEach(() => { g.localStorage = new MemStore(); });
+afterEach(() => { delete g.localStorage; });
 
 const MINT = decodeCurvePool(Buffer.from(FX.curvePool.data!, "base64")).mintA.toBase58();
 const props = { ticker: "AUDIT", mint: MINT, status: "live", cluster: "devnet", network: "devnet", graduatedPool: null, poolBurnBps: 100, links: [], operatorWallets: [] };

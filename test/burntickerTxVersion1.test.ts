@@ -193,7 +193,7 @@ describe("raw JSON-RPC readers (one v1 fixture each)", () => {
       getTransaction: (p) => (p[0] === LEDGER.signature ? NEVER.getTransaction : null),
     });
     const r = await runNeverBuys({ rpc, cluster: "devnet", wallets: [{ role: "keeper", pubkey: OP }], mints: [{ symbol: "DEFICIT", mint: MINT }], evidence: new Map(), now: 0 });
-    assert.equal(r.status, NEVER.expected);
+    assert.equal(NEVER.expected, "received"); assert.equal(r.status, "holding");   // ACC-02 (2026-10-19): it still holds the 7 units, a finding
     assert.deepEqual(r.acquisitions.map((a) => [a.signature, a.amountRaw, a.how]), [[LEDGER.signature, "7", "received"]]);
     assert.deepEqual(r.errors, []);
   });

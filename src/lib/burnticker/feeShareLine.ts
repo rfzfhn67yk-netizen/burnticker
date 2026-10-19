@@ -1,7 +1,7 @@
 /**
  * THE OPERATOR'S POST-GRADUATION SHARE, STATED FROM THE WHOLE (the owner, 2026-10-12, on the trust page: "dev fees are wrong, it's showing
- * I'm getting 20%"). The 20% is the operator's share of the locked pool's LIQUIDITY fees only, which on mainnet tier 9 is 4.2 bps of a swap
- * that pays 100 bps in all. Every public sentence about that share leads with the per-swap whole and names the 20% only as the liquidity-fee
+ * I'm getting 20%"). The 20% is the operator's share of the locked pool's LIQUIDITY fees only, which on mainnet tier 14 (new coins since
+ * the 2026-10-19 decision) is 12.6 bps of a swap that pays 125 bps in all (4.2 of 100 on tier 9). Every public sentence about that share leads with the per-swap whole and names the 20% only as the liquidity-fee
  * split. Client-safe (cpmmTier.ts and type imports only): the client pages build the line from the FeeSplit their JSON carries or from the
  * tier record, fees.ts from the designed split, so no number in the sentence is typed.
  */
@@ -45,7 +45,7 @@ export function sharesForCluster(cluster: CpmmCluster = "mainnet", opts: { pair?
 
 /**
  * The one sentence: "After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the
- * locked pool's liquidity fees. Raydium keeps about 0.08%." (mainnet tier 9). Takes a post-graduation FeeSplit or the shares.
+ * locked pool's liquidity fees. Raydium keeps about 0.08%." (mainnet tier 9; tier 14 reads 0.98% / 0.13% / 0.15%). Takes a post-graduation FeeSplit or the shares.
  */
 export function postGraduationShareLine(s: SplitLike | PostGraduationShares): string {
   const v = "legs" in s ? sharesFromSplit(s) : s;
@@ -57,7 +57,13 @@ export function operatorShareClause(v: PostGraduationShares = sharesForCluster("
   return `${aboutPct(v.operator)} of every swap (${v.operatorPctOfLp}% of the locked pool's liquidity fees)`;
 }
 
-/** The mainnet line, client-safe (what the shared copy modules print). */
+/**
+ * Coins created before the 2026-10-19 tier change keep the tier they pinned, so a sentence that states the new-coin shares without naming
+ * a coin adds this line (no date in public prose). A coin's own page states its own split instead.
+ */
+export const EARLIER_COINS_LINE = "Coins created before the latest pool fee change keep the fees they started with, and each coin's page shows its own split.";
+
+/** The mainnet line for new coins, client-safe (what the shared copy modules print). */
 export const OPERATOR_SHARE_LINE = postGraduationShareLine(sharesForCluster("mainnet"));
 /** The mainnet line for a pair coin (creator fee off). */
 export const PAIR_OPERATOR_SHARE_LINE = postGraduationShareLine(sharesForCluster("mainnet", { pair: true }));

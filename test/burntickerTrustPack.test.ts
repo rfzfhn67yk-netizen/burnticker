@@ -295,7 +295,7 @@ describe("the six v1 routes (API 1.5.0)", () => {
     const op0 = await (await callRoute(`${API}/operator`)).json(); ok("OperatorView", op0);
     assert.equal(op0.neverBuys.status, "not-run"); assert.equal(op0.signedMessage.status, loadOperator().signedMessage.signature ? "signed" : "todo");
     assert.ok(op0.placeholders.some((p: { value: string }) => p.value === "TODO_ENTITY"));
-    fs.writeFileSync(path.join(dir, NEVER_BUYS_FILE), JSON.stringify({ schema: "burnticker.never-buys/v1", ranAt: "2026-10-10T00:00:00Z", cluster: "devnet", status: "explained", line: NEVER_BUYS_STATUS.explained, wallets: [], mints: [], holdings: [], acquisitions: [], scanned: { tokenAccounts: 0, transactions: 0 }, errors: [] }));
+    fs.writeFileSync(path.join(dir, NEVER_BUYS_FILE), JSON.stringify({ schema: "burnticker.never-buys/v1", ranAt: new Date().toISOString(), cluster: "devnet", status: "explained", line: NEVER_BUYS_STATUS.explained, wallets: [], mints: [], holdings: [], acquisitions: [], scanned: { tokenAccounts: 0, transactions: 0 }, errors: [] }));
     const op1 = await (await callRoute(`${API}/operator`)).json(); assert.equal(op1.neverBuys.status, "explained");
     const b = await callRoute(`${API}/bounty`); const bb = await b.json(); ok("Bounty", bb);
     assert.equal(bb.wallet, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u"); assert.equal(bb.walletTodo, null); assert.deepEqual(bb.rangeSol, [5, 10]);

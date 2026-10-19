@@ -292,14 +292,14 @@ A bot that follows receipts, previews a launch or queues posts can start from `p
 
 Owner decision 2026-10-10: graduation LP is locked forever (Raydium's LP lock), the Fee Key is owned by the burn program's
 `["fee_keys"]` PDA, and the permissionless `claim_lock_fees` pays 80 % of the LP fees' SOL side to the coin's burn pool and 20 % to the
-operator treasury (fixed in code; the coin side is burned). On mainnet: After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%. All additions, nothing removed:
+operator treasury (fixed in code; the coin side is burned). On mainnet, for new coins: After graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%. Coins created before the change keep the tier they pinned (tier 9: about 0.88% to the burn pool, about 0.04% to the operator, about 0.08% to Raydium). All additions, nothing removed:
 
 - `GET /tokens/{ticker}` → `status.lp` (`LpLock`): `policy` "locked-forever", `lockProgram`, `feeKey` (the Fee Key NFT mint; null before
   graduation), `feeKeyOwner` (the fee-keys PDA), `lockedLiquidity`, `feeKeyRecord`, `lockedPct`, `split` { burnBps 8000, operatorBps
   2000 }, `operatorTreasury` (null = not pinned on this cluster: claims refuse `TreasuryNotPinned`), `lastClaim` { at, signature, sol,
   toBurnPool, toOperator, tokenBurnedRaw, txUrl, line } and `totals`. `status.trust.lpBurnedPct` is 0 from 1.8.0; read `lpLockedPct`.
 - `GET /trust` → `lpLock` (`LpLockPolicy`): the cluster's lock program and authority, the fee-keys PDA, the treasury, the split and the
-  per-swap numbers for the host's cluster (mainnet CPMM tier 9: 16.8 bps to the burn pool, 4.2 bps to the operator, 88.05 bps to the burn pool with the creator fee; it was 21.55 on tier 0); `fees.designed`
+  per-swap numbers for new coins on the host's cluster (mainnet CPMM tier 14: 50.4 bps to the burn pool, 12.6 bps to the operator, 97.9 bps to the burn pool with the creator fee; 16.8 / 4.2 / 88.05 on tier 9 and 21.55 on tier 0); `fees.designed.postGraduation` is the tier the live platform gives new coins, and `GET /tokens/{ticker}` → `status.fees` is the tier that coin pinned; `fees.designed`
   gains `lpLockedPct` and `lpFeeSplit`.
 - `GET /fees/ledger` → `lpFees`: the operator's LP-fee line (claims, SOL to the operator and to burn pools, the treasury).
 - A claim's receipt is its memo, `<PREFIX>|lockfees|wsol=…|burnpool=…|operator=…|burned=…|nft=<first 12 of the Fee Key>|v1`; the SDK's

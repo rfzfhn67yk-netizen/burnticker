@@ -8,6 +8,7 @@ import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { CONFIRM_LANE_BUSY_REASON } from "@/lib/burnticker/confirmBusy";
 import { configMismatch, type ExpectedTokenConfig } from "@/lib/burnticker/admission";
 import { admissionAccountsMismatch, pairPartnerOf } from "@/lib/burnticker/admissionAccounts";
+import { LAUNCHLAB_INITIALIZE_V2, LL_SLOTS, createArgsMismatch, decodeInitializeV2, type DecodedInitializeV2 } from "@/lib/burnticker/launchCreateArgs";
 
 /**
  * LAUNCH CONFIRMATION IS VERIFIED ON CHAIN (2026-10-10; ChatGPT/Codex PR review N1 — tightened 2026-10-11 by the second review's F3).
@@ -20,7 +21,8 @@ import { admissionAccountsMismatch, pairPartnerOf } from "@/lib/burnticker/admis
  *      locking the draft's rules sha256 (so the rule the page shows is the rule the program holds);
  *   3. the venue the draft expects, completed: a LaunchLab coin — the SAME transaction carries LaunchLab's initialize_v2 for this mint
  *      under the draft's platform with the burn pool (fee PDA) as the recorded creator, and the TokenConfig's registration policy is
- *      "creator is the fee PDA"; a pair-curve coin — the TokenConfig's registration policy is the pair curve, and the pair's Pair account
+ *      "creator is the fee PDA", and (B-1, third audit 2026-10-19) the create's ARGUMENTS and config / pool / quote accounts are what the
+ *      draft's bundle encoded (launchCreateArgs.ts: name, symbol, metadata address, decimals, supply, curve, raise, lock); a pair-curve coin — the TokenConfig's registration policy is the pair curve, and the pair's Pair account
  *      (init_pair, the set's last transaction) exists on chain, owned by pair_curve, naming both mints in order, this creator and this
  *      side's rules sha256.
  *
@@ -94,9 +96,10 @@ const INIT_CREATOR = slot("creator"), INIT_MINT = slot("mint");
 /**
  * Raydium LaunchLab initialize_v2: sha256("global:initialize_v2")[0..8] (= the SDK's anchorDataBuf.initializeV2) and its account
  * order (SDK instrument.ts; src/lib/burnKeeper/launch.ts INIT_V2_ROLES): 0 payer, 1 creator (recorded; the burn pool), 3 platform_config, 6 base_mint.
+ * B-1 (third audit 2026-10-19): its arguments are decoded and compared too (launchCreateArgs.ts).
  */
-export const LAUNCHLAB_INITIALIZE_V2 = Buffer.from([67, 153, 175, 39, 218, 16, 38, 32]);
-const LL_PAYER = 0, LL_CREATOR = 1, LL_PLATFORM = 3, LL_MINT = 6;
+export { LAUNCHLAB_INITIALIZE_V2 };
+const { payer: LL_PAYER, creator: LL_CREATOR, platform: LL_PLATFORM, mint: LL_MINT } = LL_SLOTS;
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const short = (s: string) => `${s.slice(0, 12)}…`;
@@ -201,7 +204,17 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
         const creates = ixs.filter((ix) => ix.program === o.launchLabProgramId && ix.data.length >= 8 && ix.data.subarray(0, 8).equals(LAUNCHLAB_INITIALIZE_V2) && ix.accounts[LL_MINT] === expect.mint);
         if (!creates.length && splitCreate) return { ok: false, status: 422, reason: `the transaction neither calls the burn_receipts program (initialize_token) nor creates this coin's LaunchLab curve (initialize_v2 for mint ${expect.mint}): ${NOT_THIS}` };
         if (!creates.length) return { ok: false, status: 422, reason: `the transaction does not create this coin's LaunchLab curve (initialize_v2 for mint ${expect.mint}): ${NOT_THIS}` };
-        if (!creates.some((ix) => ix.accounts[LL_PAYER] === expect.creator && ix.accounts[LL_PLATFORM] === v.platformId && ix.accounts[LL_CREATOR] === burnPool)) return { ok: false, status: 422, reason: `the LaunchLab create is not under this draft's platform ${v.platformId}, paid by its creator, with the burn pool ${burnPool} as LaunchLab's creator: ${NOT_THIS}` };
+        const placed = creates.filter((ix) => ix.accounts[LL_PAYER] === expect.creator && ix.accounts[LL_PLATFORM] === v.platformId && ix.accounts[LL_CREATOR] === burnPool);
+        if (!placed.length) return { ok: false, status: 422, reason: `the LaunchLab create is not under this draft's platform ${v.platformId}, paid by its creator, with the burn pool ${burnPool} as LaunchLab's creator: ${NOT_THIS}` };
+        // B-1 (third audit 2026-10-19): the create's ARGUMENTS (name, symbol, metadata address, decimals, supply, curve, raise, lock) and
+        // its config and pool accounts, against what this draft's bundle encoded (expect.config.launchCreate: stored at prepare, else the
+        // fallback from the draft row) and what every coin shares. Every create of this mint in the transaction must pass.
+        for (const ix of placed) {
+          let args: DecodedInitializeV2;
+          try { args = decodeInitializeV2(ix.data); } catch (e) { return { ok: false, status: 422, reason: `the LaunchLab create's arguments do not decode (${safeErrorText(e, 80)}): ${NOT_THIS}` }; }
+          const m = createArgsMismatch(args, ix.accounts, expect.config?.launchCreate ?? null);
+          if (m) return { ok: false, status: 422, reason: `${m}: ${NOT_THIS}` };
+        }
         return { ok: true, blockTimeMs };
       }
       if (v.kind === "pair-curve") {

@@ -157,8 +157,10 @@ describe("the activity line (review item 4, brief rule 3; Codex review 5 F3): re
 
 describe("the platform strip and the one-line status (Claude site audit 2 items 8 and 9)", () => {
   test("numbers from the index and the public audit: 0 is a number; no index is unavailable", () => {
-    assert.deepEqual(homeStats({ burns: 0, burnedTokens: "0" }, { ok: true, receipts: 0, mismatches: 0, chainChecked: false }), { burnedTokens: "0", burns: 0, receiptsVerified: 0, receiptsWhy: "The public audit checked the published receipts against their rules. It did not read the chain on this run." });
-    assert.equal(homeStats({ burns: 3, burnedTokens: "10" }, { ok: false, receipts: 5, mismatches: 2 })!.receiptsVerified, 3);
+    // third audit 2026-10-19 B-5: the figure counts only receipts the chain check verified (test/burntickerCoinsList.test.ts has the rest)
+    assert.deepEqual(homeStats({ burns: 0, burnedTokens: "0" }, { ok: true, receipts: 0, mismatches: 0, chainChecked: false }), { burnedTokens: "0", burns: 0, receiptsVerified: 0, receiptsRecorded: 0, receiptsWhy: "No burn has run yet, so no receipt is verified on chain. No receipt is recorded yet." });
+    assert.equal(homeStats({ burns: 3, burnedTokens: "10" }, { ok: false, receipts: 5, mismatches: 2 })!.receiptsVerified, 0, "an audit record without chainVerified counts none as verified on chain");
+    assert.equal(homeStats({ burns: 3, burnedTokens: "10" }, { ok: true, receipts: 5, executed: 3, chainVerified: 3, mismatches: 0, chainChecked: true })!.receiptsVerified, 3);
     assert.equal(homeStats({ burns: 0, burnedTokens: "0" }, null)!.receiptsVerified, null);
     assert.equal(homeStats(null, null), null);
     const home = read("site/burnticker/index.html");

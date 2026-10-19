@@ -255,6 +255,24 @@ export const SCHEMAS: Record<string, Schema> = {
   SinkCoin: obj({ mint: PUBKEY, ticker: str, name: str, rule: str }, ["mint", "ticker", "name", "rule"], { description: "since 1.17.0: a live coin that can take another coin's rest when its rule ends (onEnd.mint), with its one-line rule" }),
   SinkList: obj({ network: str, sinks: arr(ref("SinkCoin")), count: int, fallback: str }, ["network", "sinks", "count", "fallback"], { description: "since 1.17.0: the coins a new rule may name in onEnd.mint; `fallback` is the sentence for a named coin that is not live when the rule ends" }),
   TokenList: obj({ tokens: arr(ref("TokenSummary")), count: int, total: int, cluster: str }, ["tokens", "count", "total"]),
+  // owner 2026-10-19 (coinsList.ts): the Coins page's list (GET /api/burnticker/tokens, the site's own route, not a /v1 operation) sends
+  // each coin's `listing`; documented here because this file is the one schema source. No /v1 answer changed, so the version did not move.
+  CoinListing: obj({
+    group: { enum: ["open", "decided-waiting", "decided-ended", "retired", "void"], description: "where the Coins page lists the coin: open first, then decided and waiting to graduate, decided and ended, and one collapsed line for retired and void coins" },
+    result: nullable(obj({
+      outcome: { enum: ["won", "lost", "draw", "settled", "void", "ended"] },
+      words: { ...nstr, description: "a market's settled outcome in words (Yes, No, a named outcome); null for a game side" },
+      settledAt: { ...nstr, description: "when the result settled, or when the rule ended (ISO)" },
+      next: { enum: ["burn-after-graduation", "burned", "burn-waiting", "no-burn-losing", "no-burn", "end-sink", "nothing"], description: "what happens after the result" },
+      sink: { ...nstr, description: "an ended coin's end sink in words; null otherwise" },
+    }, ["outcome", "settledAt", "next"])),
+    next: nullable(obj({
+      shape: { enum: ["game", "season", "feed", "market", "one-shot"] },
+      at: { ...nstr, description: "game and season: the keeper's next planned read of the source (status next.nextSourceCheckAt); market: its stated close. A time a result is read, never a burn time" },
+      cadence: { ...nstr, description: "feed: the source's own cadence words from the catalogue" },
+      windowEnd: { ...nstr, description: "one-shot: the end of its window as a day, from its badge" },
+    }, ["shape", "at"])),
+  }, ["group", "result", "next"], { description: "Each coin on the site's Coins list (GET /api/burnticker/tokens, field `tokens[].listing`), built from the status the route already read and the registry's locked rule; no extra chain or source read. Null when the route could not build it (the page lists the coin as open)." }),
   Receipt: obj({
     eventId: str, settledAt: str, oracle: str, market: str, result: nstr, value: nstr, title: nstr, method: nstr, sourceUrl: nstr, settlementSourceUrl: nstr,
     units: int, kind: str, note: str, prevValue: nstr, carryIn: str, mapping: nullable(ref("BurnMapping")),

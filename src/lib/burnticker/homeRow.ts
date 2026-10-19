@@ -1,7 +1,7 @@
 import type { HomeCoin } from "@/lib/burnticker/home";
 import type { TokenStatusJson, ReceiptJson } from "@/lib/burnticker/tokenPage";
 import { eventsFromStatus } from "@/lib/burnticker/activity";
-import { onlyPoolHolders } from "@/lib/burnticker/cardView";
+import { onlyPoolHolders, walletHolders } from "@/lib/burnticker/cardView";
 import { coinStatusFactsOf } from "@/lib/burnticker/coinStatus";
 import { readinessFromStatus } from "@/lib/burnticker/readiness";
 import { upcomingFromStatus, type UpcomingRow } from "@/lib/burnticker/upcoming";
@@ -19,8 +19,8 @@ export function homeCoinOf(s: TokenStatusJson): HomeCoin {
   return {
     ticker: s.ticker, mint: s.mint, burns: s.burned.count, burned: s.burned.total, pctOfSupply: s.burned.pctOfSupply, lastBurnAt: s.burned.lastAt ?? null,
     launchedAt: s.launchedAt ?? null, phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null,
-    raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null, marketCap: c?.marketCap ?? null, holders: s.market?.holders.count ?? null,
-    holdersOnlyPools: onlyPoolHolders(s.market?.holders.count ?? null, s.market?.holders.top10 ?? null),
+    raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null, marketCap: c?.marketCap ?? null, holders: walletHolders(s.market?.holders),
+    holdersOnlyPools: s.market?.holders.wallets === 0 || onlyPoolHolders(s.market?.holders.count ?? null, s.market?.holders.top10 ?? null),
   };
 }
 

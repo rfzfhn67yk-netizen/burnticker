@@ -14,7 +14,7 @@ import { launchLabPoolId, WSOL_MINT } from "@/lib/burnKeeper/launchlab";
  * create path, with `enable_creator_fee = true` and `creator_fee_on` taken from the launch (cpmmCreatorFeeOn — OnlyTokenB = fees always on
  * the SOL side). The CPMM pool's `pool_creator` is the LAUNCH CREATOR when the platform's `platform_cp_creator` is the default pubkey
  * (Raydium's own platform leaves it default; ours does too) — i.e. the fee PDA. From then on every CPMM swap charges AmmConfig.
- * creator_fee_rate of volume (5 bps on mainnet tier 0, 75 bps on tier 9: src/lib/burnticker/cpmmTier.ts) INTO THE POOL'S OWN COUNTERS (PoolState.creator_fees_token_0/1).
+ * creator_fee_rate of volume (5 bps on mainnet tier 0, 75 bps on tier 9, 50 bps on tier 14: src/lib/burnticker/cpmmTier.ts) INTO THE POOL'S OWN COUNTERS (PoolState.creator_fees_token_0/1).
  *
  * HOW THE FEES REACH THE BURN POOL. `collect_creator_fee_permissionless` on the CPMM program: ANY payer signs (the keeper pays the
  * fee), `creator` is constrained to `pool_state.pool_creator` (the fee PDA — no signature from it), the destinations are the creator's

@@ -27,7 +27,8 @@ describe("market cap: never a curve figure on an empty curve", () => {
     assert.deepEqual(mcapCell({ cap: null, phase: "curve", raised: "0" }), { text: NO_TRADES, why: NO_TRADES_WHY });
   });
   test("once there is a trade, the figure carries its basis in words, never \"(curve-implied)\"", () => {
-    const v = cardViewFromIndex({ ...COIN, raised: "0.00000004", progressPct: 0.0001 }, null);
+    // third audit 2026-10-19 B-6: an untraded curve reads 1 lamport raised, so a trade is a raise of NO_TRADE_DUST_SOL or more
+    const v = cardViewFromIndex({ ...COIN, raised: "0.05", progressPct: 0.06 }, null);
     assert.deepEqual(v.mcap, { text: "28 SOL from the curve", why: CARD_MEANINGS.mcap });
     assert.doesNotMatch(v.mcap.text!, /implied|\(/);
   });

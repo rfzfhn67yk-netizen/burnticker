@@ -178,3 +178,25 @@ number derives from it.
 | **Traders pay** | **100** | (30 on tier 0) |
 | **To the burn pool, per swap** | **≈ 88.05** | (21.55 on tier 0) |
 | Operator / Raydium | 4.2 / 7.75 | (4.2 / 4.25 on tier 0) |
+
+## 2026-10-19 — Raydium CPMM fee tier 14 for new coins (coins created before keep their tier)
+
+The owner decided that every coin initialised after the platform change graduates into Raydium CPMM AmmConfig index 14
+(`52MZUkNsRYzP4gn2mCaLTVtJQy2tpoF79hp5K1HhAxxX`) instead of index 9 (`LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC`). Tier 14 was read
+from mainnet that day: a 75 bps trade fee (protocol 12 % and fund 4 % of it, as on tier 9) and a 50 bps creator fee (5 % of it to Raydium
+at collection). The reasons given: the operator's share of each swap rises from 4.2 to 12.6 bps (its fixed 20 % of the locked
+pool's liquidity fees, which grow with the trade fee), the burn pool's share rises from about 88.05 to 97.90 bps, and traders pay 1.25 %
+per swap instead of 1 %. `burn_receipts` pins the platform's `cpConfigId` into each coin at `initialize_token`, so coins created before
+the change keep the tier they pinned (tier 9 for most, tier 0 for the earliest), and each coin's page states the split of its own pin.
+The platform admin changes the LaunchLab platform's `cpConfigId` in a separate signed step
+(`scripts/launchlab-platform-cp-config.mts`). Ids and rates: `src/lib/burnticker/cpmmTier.ts`; every page number derives from it.
+
+| Per swap after graduation (CPMM tier 14) | bps of volume | goes to |
+|---|---|---|
+| LP fees (84 % of the 75 bps trade fee) | 63 | the locked LP's Fee Key, split by `claim_lock_fees`: 50.4 burn pool, 12.6 operator |
+| Raydium protocol and fund fees | 9 + 3 | Raydium |
+| Creator fee (50 bps, less Raydium's 5 % share) | 47.5 | the coin's burn pool, spent on the coin and burned |
+| Raydium's share of the creator fee | 2.5 | Raydium |
+| **Traders pay** | **125** | (100 on tier 9) |
+| **To the burn pool, per swap** | **97.90** | (about 88.05 on tier 9) |
+| Operator / Raydium | 12.6 / 14.50 | (4.2 / 7.75 on tier 9) |

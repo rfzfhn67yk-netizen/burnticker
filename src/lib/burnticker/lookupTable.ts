@@ -1,6 +1,6 @@
 import { AddressLookupTableAccount, PublicKey, TransactionInstruction, TransactionMessage } from "@solana/web3.js";
 import { LOOKUP_TABLES, NETWORKS, type Network } from "@/lib/burnticker/networks";
-import { CPMM_CONFIG_ID } from "@/lib/burnticker/cpmmTier";
+import { CPMM_CONFIG_ID, CPMM_MAINNET_TIER_9, CPMM_TIER } from "@/lib/burnticker/cpmmTier";
 
 /**
  * THE PER-NETWORK ADDRESS LOOKUP TABLE (re-check 2026-10-11, "known oversized single launch"). A real single-coin launch — burn_receipts
@@ -19,6 +19,14 @@ import { CPMM_CONFIG_ID } from "@/lib/burnticker/cpmmTier";
  * pin needs no code release), checks it is active, that every entry is at its index, and that its authority is the pinned operations key or none
  * (frozen); otherwise "lookup table mismatch — nothing was sent". The transaction is then compiled against THIS list (the verified
  * prefix), never against whatever else the table holds. Client-safe: web3.js, networks.ts and cpmmTier.ts only.
+ *
+ * CPMM TIER 14 (owner decision 2026-10-19). Index 10 of the mainnet table is the AmmConfig of 2026-10-12 (tier 9) and the table at
+ * 8DZaHFo6… is frozen, so it can neither be changed nor extended. The mainnet list therefore keeps tier 9 at index 10 and appends tier 14
+ * (CPMM_TIER.mainnet) at index 21: a NEW table holding these 22 entries is a superset of the old 21, so the code released before it still
+ * verifies it (entries past its list are tolerated), and this code refuses the old 21-entry table ("index 21: expected …, found nothing")
+ * rather than sign against it. Order: create, freeze and verify the new table and pin it on the host (BURNTICKER_LOOKUP_TABLE) BEFORE
+ * this list is published. Without the entry a pair-curve step names tier 14 as a static key: 32 bytes in the message instead of a 1-byte
+ * table index, +31 bytes per step that references it.
  */
 
 export interface LookupTableEntry { key: string; what: string }
@@ -34,7 +42,7 @@ const COMMON_TAIL: readonly LookupTableEntry[] = [
   { key: "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr", what: "Memo program" },
 ];
 
-/** The table's entries per network, in table order (21 each). */
+/** The table's entries per network, in table order (21 on devnet; 22 on mainnet since tier 14 was appended). */
 export const LOOKUP_TABLE_ENTRIES: Record<Network, readonly LookupTableEntry[]> = {
   devnet: [
     { key: "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM", what: "burn_receipts program" },
@@ -63,10 +71,11 @@ export const LOOKUP_TABLE_ENTRIES: Record<Network, readonly LookupTableEntry[]> 
     { key: "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh", what: "LaunchLab authority PDA" },
     { key: "2DPAtwB8L12vrMRExbLuyGnC7n2J5LNoZQSejeQGpwkr", what: "LaunchLab event authority PDA" },
     { key: "EcXnhWsJmc6vcart32M5ZXMmmCzXE3fiUz9qxqrWQKSn", what: "LaunchLab platform fee vault (Burnticker platform, WSOL)" },
-    { key: CPMM_CONFIG_ID.mainnet, what: "Raydium CPMM AmmConfig (pair curve)" },
+    { key: CPMM_MAINNET_TIER_9.id, what: "Raydium CPMM AmmConfig tier 9 (coins created before the tier 14 change)" },
     { key: "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3", what: "burn_receipts fee_keys PDA" },
     { key: "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", what: "operator treasury" },
     ...COMMON_TAIL,
+    { key: CPMM_TIER.mainnet.id, what: "Raydium CPMM AmmConfig tier 14 (new coins, pair curve)" },
   ],
 };
 

@@ -45,9 +45,14 @@ describe("rules + fees (local, no network)", () => {
     assert.equal(s.totalBps, 100); assert.equal(s.creatorSliceBps, 0);
     assert.deepEqual(s.amounts!.map((a) => a.lamports), ["2500000", "2500000", "5000000"]);
     const post = fees.split({ phase: "post-graduation", volumeSol: "2" });
-    // mainnet CPMM tier 9: 75 bps creator fee less Raydium's 5% = 71.25 bps of 2 SOL
+    // new coins on mainnet CPMM tier 14: 50 bps creator fee less Raydium's 5% = 47.5 bps of 2 SOL
     assert.equal(post.amounts!.find((a) => a.label === "burn pool")!.lamports, String((BigInt(2_000_000_000) * BigInt(Math.round(CREATOR_FEE_TO_BURN_POOL_BPS * 100))) / BigInt(1_000_000)), "the creator-fee leg of 2 SOL");
-    assert.equal(post.amounts!.find((a) => a.label === "burn pool")!.lamports, "14250000");
+    assert.equal(post.amounts!.find((a) => a.label === "burn pool")!.lamports, "9500000");
+    assert.equal(post.totalBps, 125);
+    // a coin that pinned tier 9 (created before the change): 75 bps creator fee less 5% = 71.25 bps of 2 SOL
+    const post9 = fees.split({ phase: "post-graduation", volumeSol: "2", cpConfig: "LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC" });
+    assert.equal(post9.amounts!.find((a) => a.label === "burn pool")!.lamports, "14250000");
+    assert.equal(post9.totalBps, 100);
     assert.throws(() => fees.split({ volumeSol: "abc" }));
   });
   test("feePdaFor = burn_receipts [\"fee\", mint] — the same address the bundle records as LaunchLab's creator", () => {

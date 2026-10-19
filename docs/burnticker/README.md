@@ -113,7 +113,7 @@ the LP locked forever (its fees fund the burn: about 0.17% of every swap goes to
 - **Flag:** `BURNTICKER_PAIR_CURVE_ENABLED=1` (default off) makes the wizard's matchup / election pair launch through pair_curve:
   `src/lib/burnticker/pairCurveLaunch.ts` turns `buildPairBundles`' two LaunchLab bundles into three transactions (mint A + its
   TokenConfig with registration policy 2, the same for B, `init_pair`) and exports the badge (`PAIR_CURVE_BADGE`); the launch API returns
-  it as `pair.pairCurve`. `BURNTICKER_CP_CONFIG_ID` overrides the AmmConfig (default: the tier the platform points at, `src/lib/burnticker/cpmmTier.ts`: mainnet index 9, devnet index 0). Off = the LaunchLab
+  it as `pair.pairCurve`. `BURNTICKER_CP_CONFIG_ID` overrides the AmmConfig (default: the tier the platform points at, `src/lib/burnticker/cpmmTier.ts`: mainnet index 14 for new coins, devnet index 0). Off = the LaunchLab
   path with the rules-level "both or neither" clause.
 - **Client:** `src/lib/pairCurve/{pricing,accounts,client,idl}.ts` — the curve math mirrored in bigint, PDAs and Pair decoding, IDL-driven
   builders, the crank planner.
@@ -567,11 +567,11 @@ Sources: [Unchained](https://unchainedcrypto.com/kalshi-powered-tokenized-predic
 ## 9. Owner decisions baked in (2026-10-09)
 
 Developer slice 25 bps of curve volume via the platform slot to `BURNTICKER_FEE_WALLET`; creators earn no cash from fees (creator-fee
-slot → burn pool, 100 %, 50 bps cap); graduation LP 100 % locked forever since 2026-10-10 (was: burned). After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.
+slot → burn pool, 100 %, 50 bps cap); graduation LP 100 % locked forever since 2026-10-10 (was: burned). For new coins: After graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%. Coins created before the change keep the tier they pinned (tier 9: about 0.88% to the burn pool, about 0.04% to the operator, about 0.08% to Raydium).
 The Fee Key is owned by the burn program and
 claim_lock_fees pays 80 % of the LP fees to the burn pool and 20 % to the operator (fixed in code), plus Raydium's fixed CPMM
-creator fee to the burn pool (CPMM tier 9 since the 2026-10-12 decision: 75 bps, 71.25 bps/SOL to the burn pool after Raydium's 5 %;
-it was tier 0's 4.75 bps; a coin keeps the tier it pinned at initialize_token); no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";
+creator fee to the burn pool (CPMM tier 14 for new coins since the 2026-10-19 decision: 50 bps, 47.5 bps/SOL to the burn pool after Raydium's 5 %,
+with a 75 bps trade fee; tier 9 before it: 75 bps creator fee, 71.25 bps/SOL; tier 0 before that: 4.75 bps; a coin keeps the tier it pinned at initialize_token); no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";
 keeper-enforced today, program-enforced later — that seam is open); refuse list as above with elections allowed; anonymous creators
 allowed, wallet always shown; one-shot markets allowed; hosting on one VPS behind Caddy.
 

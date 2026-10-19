@@ -5,9 +5,9 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { CPMM_TIER, postGraduationBps } from "@/lib/burnticker/cpmmTier";
+import { CPMM_MAINNET_TIER_9, CPMM_TIER, postGraduationBps } from "@/lib/burnticker/cpmmTier";
 import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS } from "@/lib/burnReceipts/constants";
-import { LOCK_FEE_BURN_BPS_MIRROR, OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, aboutPct, operatorShareClause, postGraduationShareLine, sharesForCluster, sharesFromSplit } from "@/lib/burnticker/feeShareLine";
+import { EARLIER_COINS_LINE, LOCK_FEE_BURN_BPS_MIRROR, OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, aboutPct, operatorShareClause, postGraduationShareLine, sharesForCluster, sharesFromSplit } from "@/lib/burnticker/feeShareLine";
 import { OPERATOR_SHARE_LINE as FEES_OPERATOR_SHARE_LINE, POST_GRADUATION_FEES, USE_OF_FEES, feeSplitSentence, postGraduationFeesFor, BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
 import { FEE_FLOW_LINE } from "@/lib/burnticker/tokenPage";
 import { GUARDRAIL_DETAIL, WHO_GETS_WHAT } from "@/lib/burnticker/safeguards";
@@ -31,8 +31,10 @@ describe("the operator's share sentence (fees copy, 2026-10-12)", () => {
     assert.equal(FEES_OPERATOR_SHARE_LINE, EXPECTED);
     assert.equal(postGraduationShareLine(POST_GRADUATION_FEES), EXPECTED);
     assert.deepEqual(sharesFromSplit(POST_GRADUATION_FEES), sharesForCluster("mainnet"));
-    // tier 9 as read on 2026-10-12, so a silent tier change is seen here
-    assert.equal(EXPECTED, "After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.");
+    // new coins on tier 14 as read on 2026-10-19 (it was 0.88% / 0.04% / 0.08% on tier 9), so a silent tier change is seen here
+    assert.equal(EXPECTED, "After graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%.");
+    // a coin that pinned tier 9 keeps its own line
+    assert.equal(postGraduationShareLine(postGraduationFeesFor("mainnet", CPMM_MAINNET_TIER_9.id)), "After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.");
   });
 
   test("a pair coin's pool (creator fee off) has its own line, and the pair funds flow prints it", async () => {
@@ -58,7 +60,7 @@ describe("the operator's share sentence (fees copy, 2026-10-12)", () => {
     assert.ok(GUARDRAIL_DETAIL["LP locked forever, its fees fund the burn"].text.endsWith(EXPECTED));
     assert.ok(WHO_GETS_WHAT.find((w) => w.who === "Burnticker")!.text.includes(EXPECTED));
     assert.ok(OPERATOR_COPY.devFeeNote.endsWith(`after a coin graduates, ${operatorShareClause()}.`));
-    assert.match(lpFeeLine("mainnet", null).title, /^Operator: about 0\.04% of every swap \(20% of the locked pool's liquidity fees\), after graduation$/);
+    assert.match(lpFeeLine("mainnet", null).title, /^Operator: about 0\.13% of every swap \(20% of the locked pool's liquidity fees\), after graduation$/);
     for (const f of ["docs/burnticker/WHITEPAPER.md", "site/burnticker/whitepaper.html", "config/burnticker/transparency.json", "docs/burnticker/README.md", "docs/burnticker/api.md", "site/deficit/index.html"])
       assert.ok(read(f).includes(EXPECTED.split(" — ")[0].replace("After graduation, ", "")), `${f} states the operator's share from the whole`);
   });
@@ -72,7 +74,7 @@ describe("the operator's share sentence (fees copy, 2026-10-12)", () => {
   });
 
   test("the sentences are copy-lint clean and contain no future tense", () => {
-    for (const s of [EXPECTED, USE_OF_FEES, FEE_FLOW_LINE, OPERATOR_COPY.devFeeNote, feeSplitSentence(), feeSplitSentence("devnet")]) {
+    for (const s of [EXPECTED, USE_OF_FEES, FEE_FLOW_LINE, OPERATOR_COPY.devFeeNote, feeSplitSentence(), feeSplitSentence("devnet"), feeSplitSentence("mainnet", CPMM_MAINNET_TIER_9.id), EARLIER_COINS_LINE]) {
       const r = lintCopy(s, undefined);
       assert.ok(r.ok, `${s}\n${r.hits.map((h) => h.phrase).join(", ")}`);
       assert.doesNotMatch(s, /\bwill\b/);

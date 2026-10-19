@@ -3,7 +3,12 @@ import { MODE_BUYBACK, POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constan
 import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { bundleSelectorKey, counterRule, expectedFromCounter, type ExpectedTokenConfig } from "@/lib/burnticker/program";
 import type { LockedRule } from "@/lib/burnticker/rules";
-import type { Registry, TokenRow } from "@/lib/burnticker/registry";
+import type { Registry, TokenMeta, TokenRow } from "@/lib/burnticker/registry";
+import { allocationFor } from "@/lib/burnticker/launchBundle";
+import { RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
+import { DECIMALS } from "@/lib/burnticker/rules";
+import { SITE_RAISE_MAX_LAMPORTS, SITE_RAISE_MIN_LAMPORTS, baselineExpectedCreate, validExpectedCreate } from "@/lib/burnticker/launchCreateArgs";
+import type { ExpectedLaunchCreate } from "@/lib/burnticker/program";
 
 export type { ExpectedTokenConfig } from "@/lib/burnticker/program";
 
@@ -192,16 +197,47 @@ export function mergeExpected(prev: ExpectedTokenConfig | null, next: ExpectedTo
 }
 
 /**
- * The expectation every verify and the keeper use: the stored one, else the fallback from the locked rule and the host's own launch
- * facts (I-15; `host` omitted = those fields not compared). Null when neither can be made.
+ * B-1 (third audit 2026-10-19): the LaunchLab create a draft prepared before its arguments were stored was built with, as far as the draft
+ * row and the bundle recipe (launchBundle.ts buildLaunchBundle) fix it: the name (the row's, trimmed as the bundle trims it) and the
+ * symbol (the ticker), decimals 6 and one billion tokens, the curve split and the lock from the rule's mode (allocationFor; a vault coin's
+ * curve share depends on LaunchLab's global config, so it is not compared), the creator fee on the SOL side, the metadata address from
+ * the registry's token_meta (a hosted devnet file: not compared), the platform and the pool from the row. The raise is not stored on the
+ * row, so it must be one the site could build on the draft's network (the presets on mainnet, 0.1 to 85 SOL elsewhere).
  */
-export function expectedConfigFor(registry: Pick<Registry, "getStatus" | "lockedRule" | "pairOf">, t: TokenRow, host?: ExpectedHost): ExpectedTokenConfig | null {
+export function fallbackExpectedCreate(t: Pick<TokenRow, "name" | "ticker" | "poolId" | "platformId" | "cluster">, locked: LockedRule, meta: Pick<TokenMeta, "metadataUri" | "hosted"> | null): ExpectedLaunchCreate {
+  const base = baselineExpectedCreate();
+  const scale = BigInt(10) ** BigInt(DECIMALS);
+  let alloc: ReturnType<typeof allocationFor> | null = null;
+  try { alloc = allocationFor(locked); } catch { alloc = null; }
+  const lam = (sol: string) => (BigInt(Math.round(Number(sol) * 100)) * BigInt(10_000_000)).toString();
+  return {
+    ...base, name: t.name.trim(), symbol: t.ticker, uri: meta && !meta.hosted && meta.metadataUri ? meta.metadataUri : null,
+    totalSellA: alloc && locked.mode === "buyback" ? (alloc.curve * scale).toString() : null,
+    raise: t.cluster === "mainnet" ? { minLamports: SITE_RAISE_MIN_LAMPORTS, maxLamports: SITE_RAISE_MAX_LAMPORTS, presetsLamports: RAISE_PRESETS_SOL.map(lam) } : base.raise,
+    totalLockedAmount: alloc ? (alloc.locked * scale).toString() : null, cliffPeriod: alloc ? String((alloc.cliffDays ?? 0) * 86_400) : null, unlockPeriod: alloc ? String((alloc.vestDays ?? 0) * 86_400) : null,
+    platform: t.platformId, poolId: t.poolId,
+  };
+}
+
+/**
+ * The expectation every verify and the keeper use: the stored one, else the fallback from the locked rule and the host's own launch
+ * facts (I-15; `host` omitted = those fields not compared). Null when neither can be made. B-1: a LaunchLab draft's expectation always
+ * carries its LaunchLab create (`launchCreate`): the stored arguments, else fallbackExpectedCreate.
+ */
+export function expectedConfigFor(registry: Pick<Registry, "getStatus" | "lockedRule" | "pairOf"> & Partial<Pick<Registry, "tokenMeta">>, t: TokenRow, host?: ExpectedHost): ExpectedTokenConfig | null {
   const stored = loadExpectedConfig(registry, t.mint);
-  if (stored) return stored;
+  const withCreate = (e: ExpectedTokenConfig): ExpectedTokenConfig => {
+    if (t.poolId === null) return e;   // a pair-curve side: no LaunchLab create
+    if (validExpectedCreate(e.launchCreate)) return e;
+    let meta: TokenMeta | null = null;
+    try { meta = registry.tokenMeta?.(t.mint) ?? null; } catch { meta = null; }
+    try { return { ...e, launchCreate: fallbackExpectedCreate(t, registry.lockedRule(t), meta) }; } catch { return { ...e, launchCreate: baselineExpectedCreate() }; }
+  };
+  if (stored) return withCreate(stored);
   try {
     const paired = !!registry.pairOf(t.mint);
     const pairCurve = t.poolId === null && paired;
-    return fallbackExpectedConfig(registry.lockedRule(t), t.ticker, undefined, { pairCurve, launchLab: t.poolId !== null, paired, ...(host ? { host } : {}) });
+    return withCreate(fallbackExpectedConfig(registry.lockedRule(t), t.ticker, undefined, { pairCurve, launchLab: t.poolId !== null, paired, ...(host ? { host } : {}) }));
   } catch { return null; }
 }
 

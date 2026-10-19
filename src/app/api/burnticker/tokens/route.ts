@@ -9,6 +9,9 @@ import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
 import { chainRows, memoWindowMs, webReadPlatform } from "@/lib/burnticker/webReadCache";
+import { coinListingOf } from "@/lib/burnticker/coinsListServe";
+import type { CoinListing } from "@/lib/burnticker/coinsList";
+import { auditForIndex } from "@/lib/burnticker/home";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +61,7 @@ async function buildIndex(): Promise<{ body: unknown; memoMs: number }> {
   const statuses = [];
   const ready = new Map<string, Readiness>();
   const facts = new Map<string, CoinStatusFacts>();
+  const listings = new Map<string, CoinListing>();
   // owner decision 2026-10-12: a mainnet host lists no registry row on the devnet cluster (devnetHide.ts)
   // owner 2026-10-14: a coin the operator marked test is not listed (testCoins.ts); /burnticker/test-coins lists it
   // block G re-review Low 3: draft and expired-draft mints are not listed publicly (the same rule as GET /v1/tokens)
@@ -68,10 +72,18 @@ async function buildIndex(): Promise<{ body: unknown; memoMs: number }> {
   for (const r of reads) { if (r.status !== "fulfilled") continue; /* a token whose page fails is left out, not invented */ const d = r.value; statuses.push(d.status); ready.set(d.status.mint, readinessFromStatus(d.status, d.receipts)); }
   // review H2: each coin's status facts, with its pair's other coin's status when it was read (the winning side is named by its team)
   for (const r of reads) { if (r.status !== "fulfilled") continue; const d = r.value; const other = d.status.pair ? statuses.find((x) => x.mint === d.status.pair!.counterpart.mint) ?? null : null; facts.set(d.status.mint, coinStatusFactsOf(d.status, d.receipts, other)); }
+  // owner 2026-10-19 (coinsList.ts): each coin's group on the Coins page, its result line and its next-result facts, from the status and
+  // receipts read above and the registry's locked rule (no further chain or source read)
+  for (const [i, r] of reads.entries()) {
+    if (r.status !== "fulfilled") continue;
+    const d = r.value;
+    try { listings.set(d.status.mint, coinListingOf({ status: d.status, receipts: d.receipts, facts: facts.get(d.status.mint) ?? null, rule: p.registry.lockedRule(tokens[i]).rule })); } catch (e) { console.error(`[burnticker/tokens] ${d.status.ticker}: no listing:`, e); }
+  }
   const audit = readAudit(p.publishDir);
-  const index = buildPlatformIndex(statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null);
+  // third audit 2026-10-19 B-5: the badge counts executed and chain-verified receipts, so they travel with the audit summary
+  const index = buildPlatformIndex(statuses, now, auditForIndex(audit));
   // website-17 wiring item 2: each coin's rank line (coinRank.ts), null when the registry could not be ranked (never a guessed rank)
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   console.info(`[burnticker/tokens] built in ${Date.now() - started} ms, ${statuses.length} coins`);
-  return { memoMs: memoWindowMs(chainRows(tokens).length), body: { ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.mint) ?? null, rank: ranks?.get(t.mint)?.line ?? null, statusFacts: facts.get(t.mint) ?? null })), cluster: p.cluster, stubs: p.stubs } };
+  return { memoMs: memoWindowMs(chainRows(tokens).length), body: { ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.mint) ?? null, rank: ranks?.get(t.mint)?.line ?? null, statusFacts: facts.get(t.mint) ?? null, listing: listings.get(t.mint) ?? null })), cluster: p.cluster, stubs: p.stubs } };
 }

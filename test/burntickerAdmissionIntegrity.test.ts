@@ -13,13 +13,13 @@ import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { counterRule, expectedFromCounter, type ExpectedTokenConfig } from "@/lib/burnticker/program";
 import { lockRule } from "@/lib/burnticker/rules";
 import { openRegistry } from "@/lib/burnticker/registry";
-import { LAUNCHLAB_INITIALIZE_V2, connectionLaunchVerifier, type LaunchExpectation, type TxReader } from "@/lib/burnticker/launchVerify";
+import { connectionLaunchVerifier, type LaunchExpectation, type TxReader } from "@/lib/burnticker/launchVerify";
 import { configMismatch, expectedConfigFor, expectedConfigKey, fallbackExpectedConfig, loadExpectedConfig, mergeExpected, viewMismatch } from "@/lib/burnticker/admission";
 import { markLaunched, prepareLaunch } from "@/lib/burnticker/api/handlers";
 import { limiter } from "@/lib/burnticker/api/http";
 import { lintCopy } from "@/lib/launch/copyLint";
 import { ATTESTER, CREATOR, makeWorld } from "./burntickerApiHelpers.ts";
-import { applyExpected } from "./burntickerAdmissionHelpers.ts";
+import { WSOL, applyExpected, createData } from "./burntickerAdmissionHelpers.ts";
 import { BRONCOS, NOW } from "./burntickerHelpers.ts";
 
 const RULE = { ...BRONCOS, pair: null };
@@ -52,22 +52,24 @@ const slotOf = (n: string) => INIT.accounts.findIndex((a) => a.name === n);
 
 /**
  * A landed launch (lock + create in one message, as before the split): burn_receipts initialize_token for this mint and creator, and
- * LaunchLab initialize_v2 under the platform with the burn pool as LaunchLab's creator. The verifier reads the discriminators and the
- * account slots, so the instruction bodies are only their discriminators.
+ * LaunchLab initialize_v2 under the platform with the burn pool as LaunchLab's creator. initialize_token's body is only its
+ * discriminator (the verifier reads its account slots); the create carries real arguments (B-1: the verifier decodes them).
  */
-function launchTx(mint: string, creator: string) {
+const POOL = Keypair.generate().publicKey.toBase58();
+function launchTx(mint: string, creator: string, llData: Uint8Array = createData()) {
   const burnPool = feePda(PROGRAM, new PublicKey(mint)).toBase58();
-  const keys = [creator, mint, PROGRAM.toBase58(), LL.toBase58(), burnPool, PLATFORM.toBase58(), Keypair.generate().publicKey.toBase58()];
+  const keys = [creator, mint, PROGRAM.toBase58(), LL.toBase58(), burnPool, PLATFORM.toBase58(), POOL, WSOL, Keypair.generate().publicKey.toBase58()];
   const at = (k: string) => keys.indexOf(k), filler = keys.length - 1;
   const initAccounts = INIT.accounts.map(() => filler);
   initAccounts[slotOf("creator")] = at(creator); initAccounts[slotOf("mint")] = at(mint);
-  const llAccounts = [at(creator), at(burnPool), filler, at(PLATFORM.toBase58()), filler, filler, at(mint)];
+  // B-1: the create's real arguments (the SDK's encoding) and its pool (5) and quote mint (7) accounts
+  const llAccounts = [at(creator), at(burnPool), filler, at(PLATFORM.toBase58()), filler, at(POOL), at(mint), at(WSOL)];
   const pk = (k: string) => new PublicKey(k);
   return {
     blockTime: NOW / 1000, meta: { err: null, loadedAddresses: { writable: [], readonly: [] } },
     transaction: { message: { header: { numRequiredSignatures: 2 }, staticAccountKeys: keys.map(pk), compiledInstructions: [
       { programIdIndex: at(PROGRAM.toBase58()), accountKeyIndexes: initAccounts, data: new Uint8Array(INIT.discriminator) },
-      { programIdIndex: at(LL.toBase58()), accountKeyIndexes: llAccounts, data: new Uint8Array(LAUNCHLAB_INITIALIZE_V2) },
+      { programIdIndex: at(LL.toBase58()), accountKeyIndexes: llAccounts, data: llData },
     ] } },
   };
 }
@@ -160,7 +162,11 @@ describe("F01 through the host: the expectation is stored at prepare and passed 
     const c = await markLaunched(w.p, mint, "5".repeat(88), Date.now(), "test");
     assert.equal(c.status, 200, JSON.stringify(c.body));
     assert.ok(seen, "the verifier was asked");
-    assert.deepEqual((seen as unknown as LaunchExpectation).config, stored, "the stored expectation, not a rebuilt one");
+    // B-1: the stored expectation, not a rebuilt one; this world's placeholder LaunchLab client encodes no real create, so its create
+    // expectation is the fallback from the draft row
+    const { launchCreate, ...passed } = (seen as unknown as LaunchExpectation).config!;
+    assert.deepEqual(passed, stored, "the stored expectation, not a rebuilt one");
+    assert.equal(launchCreate?.fallback, true); assert.equal(launchCreate?.symbol, "EXPECT");
   });
 
   test("a retry of the same draft prices the floor again: both floors are accepted, nothing else loosens", async () => {
@@ -228,7 +234,10 @@ describe("F01 fallback: a draft prepared before expectations were stored", () =>
     assert.equal(fb.fallback, true);
     assert.equal(fb.rule.fractionPerUnitBps, 200);
     reg.setStatus(expectedConfigKey(mint), JSON.stringify(honest()));
-    assert.deepEqual(expectedConfigFor(reg, t), honest());
+    // B-1: a LaunchLab draft's expectation always carries its create; one stored before the arguments were is given the fallback
+    const { launchCreate, ...storedRest } = expectedConfigFor(reg, t)!;
+    assert.deepEqual(storedRest, honest());
+    assert.equal(launchCreate?.fallback, true); assert.equal(launchCreate?.symbol, TICKER); assert.equal(launchCreate?.name, "Honest");
     reg.setStatus(expectedConfigKey(mint), "not json");
     assert.equal(expectedConfigFor(reg, t)!.fallback, true, "an unreadable expectation falls back, never skips the check");
   });
@@ -294,7 +303,7 @@ describe("I-15: the fallback is filled from the host's own launch facts", () => 
       const fb = hostFallback();
       const s = setup(attack ? (v) => { (v.attesters as { kind: number; key: PublicKey }[])[0] = { kind: 0, key: Keypair.generate().publicKey }; } : undefined, fb);
       const reg = openRegistry(":memory:");
-      reg.register({ mint: s.expect.mint, ticker: TICKER, name: "Honest", creator: s.expect.creator, description: "d", imageUrl: null, links: [], rulesText: LOCKED.text, feePda: "f", vault: null, tokenConfig: "c", poolId: "pool", launchTx: null, cluster: "devnet", platformId: PLATFORM.toBase58(), baselineAt: new Date(NOW).toISOString(), status: "draft" }, NOW - 60_000);
+      reg.register({ mint: s.expect.mint, ticker: TICKER, name: "Honest", creator: s.expect.creator, description: "d", imageUrl: null, links: [], rulesText: LOCKED.text, feePda: "f", vault: null, tokenConfig: "c", poolId: POOL, launchTx: null, cluster: "devnet", platformId: PLATFORM.toBase58(), baselineAt: new Date(NOW).toISOString(), status: "draft" }, NOW - 60_000);
       assert.equal(loadExpectedConfig(reg, s.expect.mint), null, "a draft prepared before expectations were stored");
       const p = { registry: reg, launchVerifier: s.verifier, keeperPubkey: ATT[0], platformId: PLATFORM.toBase58(), program: { adminKey: ADMIN, launchLabPlatformKey: PLATFORM.toBase58() } } as unknown as Parameters<typeof markLaunched>[0];
       const r = await markLaunched(p, s.expect.mint, "5".repeat(88), NOW + 1000, `i15-${attack}`);

@@ -135,7 +135,7 @@ export function buildMarketJson(i: { cluster: string; mint: string; status: stri
   const curveNote = curve ? "" : i.status === "draft" || i.status === "expired" ? "This coin is not launched, so there is no curve yet." : !i.read ? "This site has not read the LaunchLab pool, because no RPC is set up." : i.read.poolError ? `The LaunchLab pool could not be read (${i.read.poolError}).` : "The LaunchLab pool account was not found.";
   return {
     phase, curve, curveNote, graduatedPool: i.graduatedPool,
-    holders: { count: h?.state === "read" ? h.holders : null, countNote: !h ? HOLDER_COUNT_NOTE : h.state === "read" ? "" : h.reason, top: i.read?.top ?? null, topNote: i.read?.top ? "These are the 20 largest token accounts, with their owners looked up on chain." : !i.read ? "This site has not read the holders, because no RPC is set up." : "The holders were not read.",
+    holders: { count: h?.state === "read" ? h.holders : null, wallets: h?.state === "read" && typeof h.wallets === "number" ? h.wallets : null, countNote: !h ? HOLDER_COUNT_NOTE : h.state === "read" ? "" : h.reason, top: i.read?.top ?? null, topNote: i.read?.top ? "These are the 20 largest token accounts, with their owners looked up on chain." : !i.read ? "This site has not read the holders, because no RPC is set up." : "The holders were not read.",
       top10: h?.state === "read" ? h.top10 : null, top10Pct: h?.state === "read" ? h.top10Pct : null, top10PctUnlabelled: h?.state === "read" ? h.top10PctUnlabelled : null },
     trade: tradeLinks(i.cluster, i.mint, phase, i.status), chart: chartFor(i.cluster, curve ? i.poolId : null, i.graduatedPool, phase),
     readAt: i.read?.readAt ? new Date(i.read.readAt).toISOString() : null, error: i.read?.error ?? null,

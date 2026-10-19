@@ -276,7 +276,9 @@ describe("private review 9 F1: old ticker follows migrate only against the compl
     assert.match(c.moneySource, /8 of them are new in round 5\. They belong to the burn program \(burn_receipts\), which runs round 5, so they are on the deployed program too\./);
     assert.match(c.moneySource, new RegExp(`the burn program \\(burn_receipts\\) at round 5, from commit ${c.build.sourceCommit.slice(0, 10)}, and the pair program \\(pair_curve\\) at round 4, from commit 29f6f5de19\\.`));
     const { DEV_FEE_LINE, devFeeLineFor } = await import("@/lib/burnticker/fees");
-    assert.match(DEV_FEE_LINE, /LaunchLab rates; pair-curve pairs differ\.$/);
+    const { EARLIER_COINS_LINE } = await import("@/lib/burnticker/feeShareLine");
+    // owner decision 2026-10-19: the shares are the new-coin tier; coins created before keep theirs (no date in the line)
+    assert.ok(DEV_FEE_LINE.endsWith(` LaunchLab rates for new coins; pair-curve pairs differ. ${EARLIER_COINS_LINE}`), DEV_FEE_LINE);
     assert.doesNotMatch(devFeeLineFor("launchlab"), /pair-curve/);
   });
 });

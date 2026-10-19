@@ -3,7 +3,7 @@ import { launchFailureOf } from "@/lib/burnticker/api/launchFailAlert";
 import { pairCurveRequiredFor } from "@/lib/burnticker/pairVenueRule";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { platform } from "@/lib/burnticker/server";
-import { launchesClosedAt, markLaunched, prepareLaunch } from "@/lib/burnticker/api/handlers";
+import { launchesClosedAt, markCreateSent, markLaunched, prepareLaunch } from "@/lib/burnticker/api/handlers";
 import { clientKey, edgeJson, fail, limiter, MAX_JSON_BODY, readTextGated } from "@/lib/burnticker/api/http";
 import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
@@ -80,12 +80,21 @@ export async function POST(req: Request) {
     const p = platform();
     const bank: MintBankPort | null = p.mintBank !== undefined ? p.mintBank : webMintBank();
     const mint = String(body.mint ?? "");
-    const r = await markLaunched(p, mint, String(body.launchTx ?? ""), Date.now(), clientKey(req));
+    const r = await markLaunched(p, mint, String(body.launchTx ?? ""), Date.now(), clientKey(req), body.gate ?? null);   // SEC-03: the plan record's gate read
     // the mint is live: its prepared key (if it came from the bank) is spent, and its sealed secret is wiped
     if (r.status === 200) { try { bank?.markCreated(mint); } catch { /* the bank service also marks it from the registry */ } }
     // review of A-38: the confirm lane's "try again shortly" 503 carries its own code and Retry-After (the sign card retries it)
     const m = markLaneBusy(r);
     return edgeJson(m.body, m.status, m.headers ?? {});
+  }
+  // B-2 (third audit 2026-10-19): `sent` records a create the page is about to send (the creator-signed transaction), so the creator's
+  // next prepare of the same ticker is refused as launch-pending while it can still land. Like `launched`, taken whether launches are
+  // open or not (a create in flight must never be lost track of), on the confirm bucket.
+  if (body.action === "sent") {
+    const rls = limiter.take(clientKey(req), "confirm");
+    if (!rls.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.confirm.human}; retry in ${rls.retryAfterSec}s`, code: "confirm-busy", retryAfterSec: rls.retryAfterSec }, { status: 429, headers: { "retry-after": String(rls.retryAfterSec) } });
+    const r = markCreateSent(platform(), String(body.mint ?? ""), body.sentTx, Date.now());
+    return edgeJson(r.body, r.status, { "cache-control": "no-store" });
   }
   // BURNTICKER_CREATOR_LAUNCHES_ENABLED off (the default): no creator launch — the operator's coins launch through the CLI. In preview
   // mode (BURNTICKER_CREATOR_LAUNCHES_PREVIEW) the refusal says so (code launches-closed, preview: true): nothing builds or sends.

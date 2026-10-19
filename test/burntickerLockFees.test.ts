@@ -5,7 +5,7 @@
 // refusal, backs off, resolves a dropped send from the write-ahead signature, and signs nothing in a dry run.
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { operatorShareClause } from "@/lib/burnticker/feeShareLine";
+import { operatorShareClause, sharesForCluster } from "@/lib/burnticker/feeShareLine";
 import { PublicKey } from "@solana/web3.js";
 import { openRegistry, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { FakeBurnProgram } from "@/lib/burnticker/program";
@@ -319,7 +319,7 @@ describe("the fee ledger's operator LP-fee line", () => {
     const claims = [{ solLamports: BigInt(10), toBurnPoolLamports: BigInt(8), toOperatorLamports: BigInt(2) }, { solLamports: BigInt(59456045), toBurnPoolLamports: BigInt(47564836), toOperatorLamports: BigInt(11891209) }];
     const d = lpFeeLine("devnet", claims);
     assert.deepEqual([d.claims, d.solLamports, d.toOperatorLamports, d.toBurnPoolLamports, d.treasury, d.source], [2, "59456055", "11891211", "47564844", OPERATOR_TREASURY.devnet, "keeper records"]);
-    assert.equal(d.title, `Operator: ${operatorShareClause()}, after graduation`);
+    assert.equal(d.title, `Operator: ${operatorShareClause(sharesForCluster("devnet"))}, after graduation`, "devnet's own tier (4.2 bps); mainnet new coins are 12.6");
     const m = lpFeeLine("mainnet", null);
     assert.deepEqual([m.claims, m.treasury, m.treasuryPinned, m.source], [0, "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", true, "none"], "mainnet pinned (owner, 2026-10-11)");
     assert.doesNotMatch(m.note, /TreasuryNotPinned/);

@@ -273,6 +273,8 @@ describe("the synthetic creator's exit: scenario failures are the report's, not 
       "mct-burnticker-backup.timer       loaded active   waiting Burnticker backup",
       "mct-burnticker-synth.service      loaded inactive dead    Burnticker synthetic creator",
       "mct-burnticker-synth.timer        loaded active   waiting Nightly Burnticker synthetic creator",
+      // publish 92: the external web check's timer is expected too (ops/unitHealth EXPECTED_UNITS)
+      "mct-burnticker-web-probe.timer    loaded active   waiting Burnticker external web check",
     ].join("\n");
     assert.deepEqual(unitAlerts(parseUnitList(list), EXPECTED_UNITS), []);
   });

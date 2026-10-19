@@ -12,9 +12,9 @@ import { publicChangelogMarkdown } from "@/lib/burnticker/changelogPublic";
 import { loadOperator, type OperatorWallet } from "@/lib/burnticker/trustpack/operator";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
 import { upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
-import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
+import { EARLIER_COINS_LINE, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { lpLockPolicyJson, operatorTreasuryRecord, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
-import { compareLivePlatform, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
+import { compareLivePlatform, liveNewCoinTier, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
 import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
 
 /**
@@ -404,12 +404,17 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
   const platformId = (env.BURNTICKER_PLATFORM_ID ?? "").trim() || null;
   const cluster = i.cluster ?? ((env.BURNTICKER_CLUSTER ?? "").trim() || "devnet");
   const effective = await readEffectiveCap(i.reader, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null, now);
+  const livePlatform = await readLivePlatform(i.reader, platformId, env, now, cluster);
+  // owner decision 2026-10-19: the per-swap split this page states for NEW coins is the tier the LIVE platform names (when it is a listed
+  // tier); without a read it is the code's new-coin tier. A coin created earlier keeps its own pin, stated on its own page.
+  const liveCp = livePlatform.view ? String(livePlatform.view.cpConfigId) : null;
+  const newCoinFees = postGraduationFeesFor(cluster, liveNewCoinTier(liveCp) ? liveCp : null);
   return {
     generatedAt: new Date(now).toISOString(), cluster,
     operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
     powers, operator: operatorPowersSummary(powers),
-    livePlatform: await readLivePlatform(i.reader, platformId, env, now, cluster),
-    designedFees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(cluster), devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: LP_FEES_TO_BURN_POOL_BPS, operatorBps: LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
+    livePlatform,
+    designedFees: { curve: CURVE_FEES, postGraduation: newCoinFees, devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: newCoinFees.legs.find((l) => l.label === "burn pool (LP fees)")?.bps ?? LP_FEES_TO_BURN_POOL_BPS, operatorBps: newCoinFees.legs.find((l) => l.label === "Burnticker (operator, LP fees)")?.bps ?? LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
     lpLock: lpLockPolicyJson(cluster, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null),
     // skipFeeLedger: the public API's /v1/trust does not serve the ledger, so it does not read it (C2)
     feeLedger: i.skipFeeLedger ? { wallet: devFeeWallet(env), entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "Not read for this answer." } : await readFeeLedger(i.reader, devFeeWallet(env), 200, { deltaCache: i.deltaCache }),
@@ -417,7 +422,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     transparency,
     statements: [
       `At graduation, ${LP_LOCKED_PCT}% of the LP is locked forever with Raydium's LP lock and can never be withdrawn. A creator cannot change this. The platform settings that do it are platformScale 1,000,000, creatorScale 0 and burnScale 0. The Fee Key belongs to the burn program's fee-keys account. Anyone can call the fee claim (claim_lock_fees), which splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury. That split is fixed in code, and the coin side is burned. The program also sets a minimum share of locked LP for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
-      `${postGraduationShareLine(postGraduationFeesFor(cluster))} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No setting or admin key changes how the liquidity fees are split. ${UPGRADE_CAVEAT}`,
+      `${postGraduationShareLine(newCoinFees)} ${EARLIER_COINS_LINE} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No setting or admin key changes how the liquidity fees are split. ${UPGRADE_CAVEAT}`,
       "Creators get no cash from fees. The creator-fee slot pays 100% to the coin's burn pool.",
       "There is no team allocation. There is no presale, no private round and no airdrop to insiders. The platform holds no tokens at launch.",
       "Rules, readings and receipts are append-only. Database triggers refuse any update or delete. Changing a rule means launching a new token.",

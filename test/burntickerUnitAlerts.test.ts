@@ -22,6 +22,7 @@ const LIST = [
   "mct-burnticker-synth.timer        loaded active   waiting Nightly Burnticker synthetic creator",
   "mct-rehearsal-keeper.service      loaded failed   failed  Burnticker $REHEARSAL keeper (one cycle; mainnet)",
   "mct-burnticker-backup.timer       loaded active   waiting Every 6 hours",
+  "mct-burnticker-web-probe.timer    loaded active   waiting Every 5 minutes",
 ].join("\n");
 
 describe("the phone push covers the cases that matter (F-5)", () => {
@@ -48,7 +49,7 @@ describe("the keeper's unit check (F-5, F-9)", () => {
   test("any mct-* unit in the failed state is an alert, and each expected unit must be running", async () => {
     const { unitAlerts, parseUnitList, EXPECTED_UNITS } = await import("@/lib/burnticker/ops/unitHealth");
     const units = parseUnitList(LIST);
-    assert.equal(units.length, 8);
+    assert.equal(units.length, 9);
     const a = unitAlerts(units, EXPECTED_UNITS);
     assert.equal(a.length, 1, "one combined alert");
     assert.equal(a[0].kind, "bt-unit-failed");

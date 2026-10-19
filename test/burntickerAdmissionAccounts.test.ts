@@ -12,13 +12,13 @@ import { END_SINK_FLAGSHIP, END_SINK_MINT, END_SINK_PAIR_WINNER, FLAGSHIP_MINT }
 import { LAUNCHLAB_PROGRAM } from "@/lib/burnKeeper/launchlab";
 import { counterRule, expectedFromCounter, type ExpectedTokenConfig } from "@/lib/burnticker/program";
 import { lockRule } from "@/lib/burnticker/rules";
-import { LAUNCHLAB_INITIALIZE_V2, connectionLaunchVerifier, type LaunchExpectation, type TxReader } from "@/lib/burnticker/launchVerify";
+import { connectionLaunchVerifier, type LaunchExpectation, type TxReader } from "@/lib/burnticker/launchVerify";
 import { admissionAccountsMismatch, burnTargetHold, burnTargetMismatch, endSinkMismatch, readAdmissionAccounts } from "@/lib/burnticker/admissionAccounts";
 import { endSinkHold } from "@/lib/burnticker/endSinkKeeper";
 import { expectedConfigKey } from "@/lib/burnticker/admission";
 import { lintCopy } from "@/lib/launch/copyLint";
 import { encodeAccount } from "./burntickerApiHelpers.ts";
-import { applyExpected } from "./burntickerAdmissionHelpers.ts";
+import { WSOL, applyExpected, createData } from "./burntickerAdmissionHelpers.ts";
 import { BRONCOS, NOW } from "./burntickerHelpers.ts";
 
 const RULE = { ...BRONCOS, pair: null };
@@ -62,16 +62,17 @@ const INIT = BURN_RECEIPTS_IDL.instructions.find((i) => i.name === "initialize_t
 const slotOf = (n: string) => INIT.accounts.findIndex((a) => a.name === n);
 function launchTx(mint: string, creator: string) {
   const burnPool = feePda(PROGRAM, new PublicKey(mint)).toBase58();
-  const keys = [creator, mint, PROGRAM.toBase58(), LL.toBase58(), burnPool, PLATFORM.toBase58(), Keypair.generate().publicKey.toBase58()];
+  const keys = [creator, mint, PROGRAM.toBase58(), LL.toBase58(), burnPool, PLATFORM.toBase58(), WSOL, Keypair.generate().publicKey.toBase58()];
   const at = (k: string) => keys.indexOf(k), filler = keys.length - 1;
   const initAccounts = INIT.accounts.map(() => filler);
   initAccounts[slotOf("creator")] = at(creator); initAccounts[slotOf("mint")] = at(mint);
-  const llAccounts = [at(creator), at(burnPool), filler, at(PLATFORM.toBase58()), filler, filler, at(mint)];
+  // B-1: the create carries real arguments (the SDK's encoding) and SOL as its quote mint (account 7)
+  const llAccounts = [at(creator), at(burnPool), filler, at(PLATFORM.toBase58()), filler, filler, at(mint), at(WSOL)];
   return {
     blockTime: NOW / 1000, meta: { err: null, loadedAddresses: { writable: [], readonly: [] } },
     transaction: { message: { header: { numRequiredSignatures: 2 }, staticAccountKeys: keys.map((k) => new PublicKey(k)), compiledInstructions: [
       { programIdIndex: at(PROGRAM.toBase58()), accountKeyIndexes: initAccounts, data: new Uint8Array(INIT.discriminator) },
-      { programIdIndex: at(LL.toBase58()), accountKeyIndexes: llAccounts, data: new Uint8Array(LAUNCHLAB_INITIALIZE_V2) },
+      { programIdIndex: at(LL.toBase58()), accountKeyIndexes: llAccounts, data: createData() },
     ] } },
   };
 }

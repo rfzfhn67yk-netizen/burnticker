@@ -43,6 +43,8 @@ export { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 export type { ActivityEvent } from "@/lib/burnticker/activity";
 export interface HomeStats {
   burnedTokens: string; burns: number; receiptsVerified: number | null; receiptsWhy: string | null;
+  /** B-5 (third audit 2026-10-19): the receipts the audit recomputed; receiptsVerified counts only those the chain check verified */
+  receiptsRecorded?: number | null;
   /** website-15 item 15: the devnet practice burns, shown with a "(devnet)" mark while mainnet has no burn; null when none were read */
   devnet?: { burns: number; burnedTokens: string } | null;
 }
@@ -281,16 +283,30 @@ export function withDevnet(s: HomeStats | null, samples: SampleList | null): Hom
   return { ...s, devnet: { burns: conf.length, burnedTokens: String(Math.round(total * 1e6) / 1e6) } };
 }
 
-/** The platform strip from the index totals and the public audit; null when the index could not be read. */
-export function homeStats(totals: { burns: number; burnedTokens: string } | null, audit: { ok: boolean; receipts: number; mismatches: number; chainChecked?: boolean } | null): HomeStats | null {
+/** The audit summary the index and the home carry: the counts the strip and the badge need (trust.ts readAudit's record), or null. */
+export function auditForIndex(a: { ok: boolean; ranAt: string; receipts: number; executed?: number; chainVerified?: number; mismatches: readonly unknown[]; chainChecked: boolean } | null): { ok: boolean; ranAt: string; receipts: number; executed?: number; chainVerified?: number; mismatches: number; chainChecked: boolean } | null {
+  if (!a) return null;
+  return { ok: a.ok, ranAt: a.ranAt, receipts: a.receipts, ...(typeof a.executed === "number" ? { executed: a.executed } : {}), ...(typeof a.chainVerified === "number" ? { chainVerified: a.chainVerified } : {}), mismatches: a.mismatches.length, chainChecked: a.chainChecked };
+}
+
+/**
+ * The platform strip from the index totals and the public audit; null when the index could not be read. Third prelaunch audit
+ * 2026-10-19 B-5: "Receipts verified 3 ... against the chain" was shown while the audit record said 0 executed and 0 chain-verified. The
+ * figure counts only receipts the chain check verified (audit.json chainVerified); the audit's recomputation of recorded receipts is
+ * said as that (the trust page's words, auditBadge.ts auditHeadline), and `receiptsRecorded` carries how many receipts are recorded.
+ */
+export function homeStats(totals: { burns: number; burnedTokens: string } | null, audit: { ok: boolean; receipts: number; executed?: number; chainVerified?: number; mismatches: number; chainChecked?: boolean } | null, cluster: string | null = null): HomeStats | null {
   if (!totals) return null;
-  return {
-    burnedTokens: totals.burnedTokens, burns: totals.burns,
-    receiptsVerified: audit ? Math.max(0, audit.receipts - audit.mismatches) : null,
-    receiptsWhy: !audit ? "The public audit has not run on this site yet."
-      : audit.chainChecked === false ? "The public audit checked the published receipts against their rules. It did not read the chain on this run."
-      : "The public audit checked each receipt against its rule and the chain.",
-  };
+  if (!audit) return { burnedTokens: totals.burnedTokens, burns: totals.burns, receiptsVerified: null, receiptsRecorded: null, receiptsWhy: "The public audit has not run on this site yet." };
+  const net = cluster === "mainnet" || cluster === "devnet" ? `${cluster} ` : "";
+  const n = audit.receipts, executed = audit.executed ?? null;
+  const verified = audit.chainChecked === true && typeof audit.chainVerified === "number" ? audit.chainVerified : 0;
+  const recorded = n === 0 ? "No receipt is recorded yet." : `The audit recomputed ${n === 1 ? "the 1 recorded receipt" : `the ${n} recorded receipts`} from their readings and rules. This is a recomputation of recorded receipts.`;
+  const why = executed === 0 || (executed === null && n === 0) ? `No ${net}burn has run yet, so no receipt is verified on chain. ${recorded}`
+    : audit.chainChecked !== true ? `This run did not read the chain, so no receipt is counted as verified on chain. ${recorded}`
+    : typeof audit.chainVerified !== "number" ? `This audit record does not say which receipts the chain showed, so none is counted as verified on chain. ${recorded}`
+    : `${verified === 1 ? "1 receipt was" : `${verified} receipts were`} checked against the chain. ${recorded}`;
+  return { burnedTokens: totals.burnedTokens, burns: totals.burns, receiptsVerified: verified, receiptsRecorded: n, receiptsWhy: why };
 }
 
 type NetworkRow = { cluster: string; deployment?: string; since?: string | null };
@@ -342,7 +358,7 @@ export function mainnetRecordEvents(root = process.cwd()): ActivityEvent[] {
   return out;
 }
 
-export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(), now = Date.now(), index: { totals: { burns: number; burnedTokens: string }; audit: { ok: boolean; receipts: number; mismatches: number; chainChecked?: boolean } | null } | null = null, statusRecord: unknown = undefined, launch: SiteLaunchState | null = null, keeper: KeeperFiles | null = null, upcoming: UpcomingSet | null = null, rehearsalCurve: RehearsalCurve = null, host: string = siteCluster(), tests: TestCoinKeys = testCoinKeys(root)): HomeData {
+export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(), now = Date.now(), index: { totals: { burns: number; burnedTokens: string }; audit: { ok: boolean; receipts: number; executed?: number; chainVerified?: number; mismatches: number; chainChecked?: boolean } | null } | null = null, statusRecord: unknown = undefined, launch: SiteLaunchState | null = null, keeper: KeeperFiles | null = null, upcoming: UpcomingSet | null = null, rehearsalCurve: RehearsalCurve = null, host: string = siteCluster(), tests: TestCoinKeys = testCoinKeys(root)): HomeData {
   let samples: SampleList | null = null;
   try { samples = sampleReceipts(root); } catch { samples = null; }
   let featured: CardView[] = [];
@@ -356,7 +372,7 @@ export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(
   // owner decision 2026-10-12: a mainnet host serves no devnet item (devnetHide.ts); a devnet host keeps them
   const out = publicHomeData({
     schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: sortEvents([...activityEvents(tokens ?? [], samples, 40, keeper), ...records], 12), noEvents: NO_EVENTS_LINE,
-    raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming: upcoming ?? upcomingSet([], [], tokens === null ? null : tokens.length), stats: withDevnet(homeStats(index?.totals ?? null, index?.audit ?? null), samples),
+    raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming: upcoming ?? upcomingSet([], [], tokens === null ? null : tokens.length), stats: withDevnet(homeStats(index?.totals ?? null, index?.audit ?? null, host ?? null), samples),
     // legitimacy pass: the one surface hint of the history pages, the dated counts (reviews published, releases since Oct 10)
     statusLine: [homeStatusLine(rec), historyCountsLine(historyCounts(root)), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,
   }, host);

@@ -7,7 +7,7 @@ import { checkReceiptTx, classifySignatureInput, jsonRpc, PUBLIC_RPC, type Rpc, 
 import { isPubkey, isSignature } from "@/lib/burnticker/trustpack/base58";
 import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
 import { loadOperator, pinnedDevFeeWallet, placeholders, signedMessageView, type Cluster } from "@/lib/burnticker/trustpack/operator";
-import { readNeverBuys } from "@/lib/burnticker/trustpack/neverBuys";
+import { neverBuysScopeLine, readNeverBuys, type NeverBuysReport } from "@/lib/burnticker/trustpack/neverBuys";
 import { NEVER_BUYS_STATUS } from "@/lib/burnticker/trustpack/copy";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { explorerUrl, rpcUrlFor } from "@/lib/burnticker/networks";
@@ -85,6 +85,20 @@ export function deploymentsOf(root = process.cwd()): Record<Cluster, Record<stri
   return out;
 }
 
+/** ACC-02: a report older than this (the keeper runs it daily) no longer describes the wallets today. */
+export const NEVER_BUYS_STALE_MS = 48 * 3_600_000;
+/**
+ * Continuous audit 2026-10-19 ACC-02: the monitor as Trust and Operator show it: its line, the scope sentence (what was checked, recent
+ * history only, what could not be read, the named exception) and whether the last run is too old. A stale run is "incomplete", unless
+ * it found something red, which stays red.
+ */
+export function neverBuysView(o: { rule: string; rehearsalNote: string }, nb: NeverBuysReport | null, now = Date.now()) {
+  if (!nb) return { rule: o.rule, rehearsalNote: o.rehearsalNote, report: null, line: NEVER_BUYS_STATUS.notRun, status: "not-run" as const, scopeLine: null, stale: false };
+  const ran = Date.parse(nb.ranAt), stale = !Number.isFinite(ran) || now - ran > NEVER_BUYS_STALE_MS;
+  const old = stale && nb.status !== "red";
+  return { rule: o.rule, rehearsalNote: o.rehearsalNote, report: nb, line: old ? NEVER_BUYS_STATUS.stale : nb.line, status: old ? "incomplete" as const : nb.status, scopeLine: neverBuysScopeLine(nb), stale };
+}
+
 export function v1Operator(p: Pick<Platform, "cluster" | "publishDir">, root = process.cwd()): ApiResult {
   const op = loadOperator(root), cluster = pageCluster(p);
   const nb = readNeverBuys(p.publishDir);
@@ -93,7 +107,7 @@ export function v1Operator(p: Pick<Platform, "cluster" | "publishDir">, root = p
     operator: op.operator, links: op.links,
     clusters: op.clusters,
     signedMessage: signedMessageView(op),
-    neverBuys: { rule: op.neverBuys.rule, rehearsalNote: op.neverBuys.rehearsalNote, report: nb, line: nb ? nb.line : NEVER_BUYS_STATUS.notRun, status: nb ? nb.status : "not-run" },
+    neverBuys: neverBuysView(op.neverBuys, nb),
     placeholders: placeholders(op),
     wellKnown: "/.well-known/burnticker.json",
     deployments: deploymentsOf(root),

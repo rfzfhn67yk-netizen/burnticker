@@ -28,12 +28,24 @@ export interface Holding { wallet: string; role: string; tokenAccount: string; m
  * wallet, so a receipt is listed and never turns the line red.
  */
 export interface Acquisition { wallet: string; role: string; signature: string; mint: string; symbol: string; amountRaw: string; blockTime: string | null; explainedBy: string | null; how?: "acquired" | "received" }
+/** A disclosed exception to the rule (transparency.json `rehearsals`): the mainnet REHEARSAL coin the operator swapped into at creation. */
+export interface NeverBuysException { symbol: string; mint: string; note: string }
 export interface NeverBuysReport {
   schema: "burnticker.never-buys/v1"; ranAt: string; cluster: string;
-  /** "received": only inbound transfers; "not-checked": every wallet read failed, so nothing was checked (never "clear") */
-  status: "clear" | "explained" | "received" | "red" | "not-checked"; line: string;
+  /**
+   * "received": only inbound transfers; "not-checked": every wallet read failed, so nothing was checked (never "clear"). Continuous audit
+   * 2026-10-19 ACC-02: "holding": an operator wallet holds a platform coin now (outside a named exception), however it got there;
+   * "incomplete": a wallet read failed or a transaction could not be read, so there is no conclusion for those records (never "clear").
+   */
+  status: "clear" | "explained" | "received" | "red" | "not-checked" | "holding" | "incomplete"; line: string;
   wallets: { role: string; pubkey: string }[]; mints: { symbol: string; mint: string }[];
   holdings: Holding[]; acquisitions: Acquisition[]; scanned: { tokenAccounts: number; transactions: number }; errors: string[];
+  /** ACC-02: what was checked: the transaction windows (recent history only), and the oldest transaction time seen (null when none) */
+  scope?: { wallets: number; mints: number; transactions: number; perTokenAccount: number; recentPerWallet: number; since: string | null; recentHistoryOnly: true; windowsFull: number };
+  /** ACC-02: what could not be read */
+  incomplete?: { wallets: string[]; nullTransactions: string[] };
+  /** ACC-02: the disclosed exceptions in scope, named */
+  exceptions?: NeverBuysException[];
 }
 
 /** Every 86–88-character base58 token in the evidence files → the first file that names it. */
@@ -89,30 +101,48 @@ export function walletMintDelta(tx: TxJson, wallet: string, mint: string): bigin
   return sum(tx.meta?.postTokenBalances) - sum(tx.meta?.preTokenBalances);
 }
 
-export function statusOf(acq: Acquisition[], o: { allReadsFailed?: boolean } = {}): { status: NeverBuysReport["status"]; line: string } {
+export function statusOf(acq: Acquisition[], o: { allReadsFailed?: boolean; incomplete?: boolean; holdings?: readonly Holding[]; exceptionMints?: ReadonlySet<string> } = {}): { status: NeverBuysReport["status"]; line: string } {
   const bought = acq.filter((a) => (a.how ?? "acquired") === "acquired");
   if (bought.some((a) => !a.explainedBy)) return { status: "red", line: NEVER_BUYS_STATUS.red };
   if (o.allReadsFailed) return { status: "not-checked", line: NEVER_BUYS_STATUS.notChecked };
+  // continuous audit 2026-10-19 ACC-02: a coin an operator wallet holds NOW is a finding, however long ago it arrived (outside a named exception)
+  if ((o.holdings ?? []).some((h) => BigInt(h.amountRaw) > BigInt(0) && !o.exceptionMints?.has(h.mint))) return { status: "holding", line: NEVER_BUYS_STATUS.holding };
+  // ACC-02: a wallet or a transaction that could not be read means no conclusion, never "clear"
+  if (o.incomplete) return { status: "incomplete", line: NEVER_BUYS_STATUS.incomplete };
   if (bought.length) return { status: "explained", line: NEVER_BUYS_STATUS.explained };
   if (acq.length) return { status: "received", line: NEVER_BUYS_STATUS.received };
   return { status: "clear", line: NEVER_BUYS_STATUS.clear };
 }
 
-export async function runNeverBuys(i: { rpc: Rpc; cluster: string; wallets: { role: string; pubkey: string }[]; mints: { symbol: string; mint: string }[]; evidence: Map<string, string>; recentPerWallet?: number; perTokenAccount?: number; now?: number }): Promise<NeverBuysReport> {
-  const symbolOf = new Map(i.mints.map((m) => [m.mint, m.symbol]));
-  const holdings: Holding[] = [], acquisitions: Acquisition[] = [], errors: string[] = [];
+/**
+ * Continuous audit 2026-10-19 ACC-02: the run now says what it checked and what it could not. It reads RECENT history only (the last
+ * `perTokenAccount` transactions of each coin account and the last `recentPerWallet` of each wallet), so a "clear" result says so and is
+ * never a lifetime guarantee; a wallet read that failed or a transaction the RPC returned as null makes it "incomplete"; a coin a wallet
+ * holds now is a finding whenever it arrived; and the disclosed exceptions (`exceptions`: the mainnet REHEARSAL coin) are in scope and
+ * named, their purchases explained by the disclosure instead of being left out.
+ */
+export async function runNeverBuys(i: { rpc: Rpc; cluster: string; wallets: { role: string; pubkey: string }[]; mints: { symbol: string; mint: string }[]; evidence: Map<string, string>; recentPerWallet?: number; perTokenAccount?: number; now?: number; exceptions?: readonly NeverBuysException[] }): Promise<NeverBuysReport> {
+  const exceptions = (i.exceptions ?? []).filter((x) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(x.mint));
+  const exceptionOf = new Map(exceptions.map((x) => [x.mint, x]));
+  const mints = [...i.mints, ...exceptions.filter((x) => !i.mints.some((m) => m.mint === x.mint)).map((x) => ({ symbol: x.symbol, mint: x.mint }))];
+  const symbolOf = new Map(mints.map((m) => [m.mint, m.symbol]));
+  const perTokenAccount = i.perTokenAccount ?? 100, recentPerWallet = i.recentPerWallet ?? 25;
+  const holdings: Holding[] = [], acquisitions: Acquisition[] = [], errors: string[] = [], nullTransactions: string[] = [];
   const seen = new Set<string>();
-  let tokenAccounts = 0, transactions = 0;
+  let tokenAccounts = 0, transactions = 0, windowsFull = 0, oldest: number | null = null;
   const examine = async (sig: string, w: { role: string; pubkey: string }) => {
     const key = `${w.pubkey}:${sig}`;
     if (seen.has(key)) return;
     seen.add(key);
     const tx = await i.rpc.call<TxJson | null>("getTransaction", [sig, { encoding: "json", maxSupportedTransactionVersion: 1, commitment: "confirmed" }]);
     transactions++;
-    if (!tx?.meta || tx.meta.err) return;
-    for (const m of i.mints) {
+    if (!tx?.meta) { nullTransactions.push(sig); return; }   // ACC-02: not read is not clear
+    if (tx.blockTime) oldest = oldest === null ? tx.blockTime : Math.min(oldest, tx.blockTime);
+    if (tx.meta.err) return;
+    for (const m of mints) {
       const d = walletMintDelta(tx, w.pubkey, m.mint);
-      if (d > BigInt(0)) acquisitions.push({ wallet: w.pubkey, role: w.role, signature: sig, mint: m.mint, symbol: m.symbol, amountRaw: d.toString(), blockTime: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null, explainedBy: i.evidence.get(sig) ?? null, how: walletBought(tx, w.pubkey) ? "acquired" : "received" });
+      const exc = exceptionOf.get(m.mint);
+      if (d > BigInt(0)) acquisitions.push({ wallet: w.pubkey, role: w.role, signature: sig, mint: m.mint, symbol: m.symbol, amountRaw: d.toString(), blockTime: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null, explainedBy: i.evidence.get(sig) ?? (exc ? `disclosed exception: ${exc.note}` : null), how: walletBought(tx, w.pubkey) ? "acquired" : "received" });
     }
   };
   for (const w of i.wallets) {
@@ -124,17 +154,42 @@ export async function runNeverBuys(i: { rpc: Rpc; cluster: string; wallets: { ro
           if (!symbolOf.has(info.mint)) continue;
           tokenAccounts++;
           holdings.push({ wallet: w.pubkey, role: w.role, tokenAccount: a.pubkey, mint: info.mint, symbol: symbolOf.get(info.mint)!, amountRaw: info.tokenAmount.amount });
-          const sigs = await i.rpc.call<{ signature: string }[]>("getSignaturesForAddress", [a.pubkey, { limit: i.perTokenAccount ?? 100, commitment: "confirmed" }]);
+          const sigs = await i.rpc.call<{ signature: string }[]>("getSignaturesForAddress", [a.pubkey, { limit: perTokenAccount, commitment: "confirmed" }]);
+          if (sigs.length >= perTokenAccount) windowsFull++;
           for (const s of sigs) await examine(s.signature, w);
         }
       }
-      const recent = await i.rpc.call<{ signature: string }[]>("getSignaturesForAddress", [w.pubkey, { limit: i.recentPerWallet ?? 25, commitment: "confirmed" }]);
+      const recent = await i.rpc.call<{ signature: string }[]>("getSignaturesForAddress", [w.pubkey, { limit: recentPerWallet, commitment: "confirmed" }]);
+      if (recent.length >= recentPerWallet) windowsFull++;
       for (const s of recent) await examine(s.signature, w);
     } catch (e) { errors.push(`${w.role} ${w.pubkey.slice(0, 8)}…: ${(e as Error).message.slice(0, 160)}`); }
   }
   const failedWallets = new Set(errors.map((e) => e.split(" ")[0]));
-  const st = statusOf(acquisitions, { allReadsFailed: i.wallets.length > 0 && i.wallets.every((w) => failedWallets.has(w.role)) });
-  return { schema: "burnticker.never-buys/v1", ranAt: new Date(i.now ?? Date.now()).toISOString(), cluster: i.cluster, status: st.status, line: st.line, wallets: i.wallets, mints: i.mints, holdings, acquisitions: acquisitions.sort((a, b) => (a.blockTime ?? "").localeCompare(b.blockTime ?? "")), scanned: { tokenAccounts, transactions }, errors };
+  if (nullTransactions.length) errors.push(`${nullTransactions.length} transaction${nullTransactions.length === 1 ? "" : "s"} could not be read (the node returned nothing): ${nullTransactions.slice(0, 3).map((s) => `${s.slice(0, 12)}…`).join(", ")}`);
+  const st = statusOf(acquisitions, { allReadsFailed: i.wallets.length > 0 && i.wallets.every((w) => failedWallets.has(w.role)), incomplete: failedWallets.size > 0 || nullTransactions.length > 0, holdings, exceptionMints: new Set(exceptionOf.keys()) });
+  const since = oldest === null ? null : new Date((oldest as number) * 1000).toISOString();
+  return {
+    schema: "burnticker.never-buys/v1", ranAt: new Date(i.now ?? Date.now()).toISOString(), cluster: i.cluster, status: st.status, line: st.line, wallets: i.wallets, mints, holdings,
+    acquisitions: acquisitions.sort((a, b) => (a.blockTime ?? "").localeCompare(b.blockTime ?? "")), scanned: { tokenAccounts, transactions }, errors,
+    scope: { wallets: i.wallets.length, mints: mints.length, transactions, perTokenAccount, recentPerWallet, since, recentHistoryOnly: true, windowsFull },
+    incomplete: { wallets: i.wallets.filter((w) => failedWallets.has(w.role)).map((w) => w.role), nullTransactions },
+    exceptions,
+  };
+}
+
+/**
+ * ACC-02: the scope sentence shown under the status line on Trust and Operator: what was checked, that it is recent history only, what
+ * could not be read, and the named exceptions. Data in plain words; the times are shown beside it by the page.
+ */
+export function neverBuysScopeLine(r: Pick<NeverBuysReport, "scope" | "incomplete" | "exceptions" | "wallets" | "mints" | "scanned">): string {
+  const s = r.scope, n = (k: number, one: string, many: string) => `${k.toLocaleString("en-US")} ${k === 1 ? one : many}`;
+  const parts = [s
+    ? `Checked ${n(s.wallets, "wallet", "wallets")} and ${n(s.mints, "listed coin", "listed coins")}: ${n(s.transactions, "transaction", "transactions")}, the last ${s.perTokenAccount} for each coin account and the last ${s.recentPerWallet} for each wallet. This checks recent history only, not every transaction the wallets ever made.`
+    : `Checked ${n(r.wallets.length, "wallet", "wallets")} and ${n(r.mints.length, "listed coin", "listed coins")}: ${n(r.scanned.transactions, "transaction", "transactions")} of recent history. This checks recent history only, not every transaction the wallets ever made.`];
+  const miss = r.incomplete;
+  if (miss && (miss.wallets.length || miss.nullTransactions.length)) parts.push(`Not read: ${[miss.wallets.length ? n(miss.wallets.length, "wallet", "wallets") : "", miss.nullTransactions.length ? n(miss.nullTransactions.length, "transaction", "transactions") : ""].filter(Boolean).join(" and ")}. No conclusion is available for those records.`);
+  for (const x of r.exceptions ?? []) parts.push(`The disclosed $${x.symbol} purchase is a named exception and is listed below when it appears in the transactions checked.`);
+  return parts.join(" ");
 }
 
 /**
@@ -147,6 +202,17 @@ export function neverBuysMints(tokens: readonly { ticker: string; mint: string; 
   for (const m of [...listed, ...extra]) if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(m.mint)) out.set(m.mint, { symbol: m.symbol, mint: m.mint });
   for (const t of tokens) if (t.cluster === cluster && t.status !== "draft" && t.status !== "expired" && !out.has(t.mint)) out.set(t.mint, { symbol: t.ticker, mint: t.mint });
   return [...out.values()];
+}
+
+/**
+ * ACC-02: the disclosed exceptions, from config/burnticker/transparency.json `rehearsals` (the mainnet REHEARSAL coin the operator
+ * swapped 0.1 SOL into at creation, also in config/own-tokens.json). An unreadable file gives none.
+ */
+export function neverBuysExceptions(root = process.cwd()): NeverBuysException[] {
+  try {
+    const t = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "transparency.json"), "utf8")) as { rehearsals?: { symbol?: string; mint?: string; date?: string }[] };
+    return (t.rehearsals ?? []).flatMap((r) => (r.symbol && r.mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(r.mint) ? [{ symbol: r.symbol, mint: r.mint, note: `the operator's disclosed $${r.symbol} test purchase (transparency.json rehearsals)` }] : []));
+  } catch { return []; }
 }
 
 export function readNeverBuys(publishDir: string): NeverBuysReport | null {

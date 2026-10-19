@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, sentReporter, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
 import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
 import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
@@ -132,6 +132,9 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         // launch night 2026-10-13: a wallet slower than the blockhash's life gets the step rebuilt and is asked again (signPlan.ts)
         isBlockhashValid: async (b) => (await connection.isBlockhashValid(b, { commitment: "confirmed" })).value,
         onNotice: (t) => setNotice(t),
+        // B-2 (third audit 2026-10-19): the site records the coin's create just before it is sent, so pressing Launch again after a
+        // refresh while it is pending is refused (launch-pending) instead of building and paying for a second coin
+        onSent: sentReporter(plan, (body) => fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store" })),
         // launch recovery 255: status, height, the transaction history and the accounts a step creates, before anything is called unlanded
         ...chainReadDeps(connection),
         storage,
@@ -143,7 +146,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         // AUDIT A C1 (5): a coin whose own create landed before the stop is recorded now (a LaunchLab pair whose B create failed: A exists)
         if (planConfirmations(plan, r.signatures).some((l) => !confirmed.includes(l.mint))) {
           setPhase("record");
-          const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
+          const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed, gate: r.gate ?? null });
           setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
           // review (9): a failed record of the coin that landed is said too, beside why the run stopped
           if (c.error) setErr(`${failureSentence(r, n)} ${c.error}`);
@@ -151,7 +154,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         return; }
       setStopped(null);
       setPhase("record");
-      const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
+      const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed, gate: r.gate ?? null });
       setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
       if (c.error) setErr(`All ${n} transaction${n === 1 ? " is" : "s are"} confirmed on chain. ${c.error}`);
     } catch (e) {

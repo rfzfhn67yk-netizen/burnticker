@@ -17,7 +17,7 @@ import path from "node:path";
 import { buildChecklist, checklistMarkdown } from "../src/lib/burnticker/trustpack/checklist.ts";
 import { WELL_KNOWN_PATHS, wellKnownText } from "../src/lib/burnticker/trustpack/wellKnown.ts";
 import { buildFeeLedgerDoc, FEE_LEDGER_FILE, loadExpenses, readWalletHistory } from "../src/lib/burnticker/trustpack/ledger.ts";
-import { evidenceSignatures, NEVER_BUYS_FILE, runNeverBuys } from "../src/lib/burnticker/trustpack/neverBuys.ts";
+import { evidenceSignatures, NEVER_BUYS_FILE, neverBuysExceptions, runNeverBuys } from "../src/lib/burnticker/trustpack/neverBuys.ts";
 import { loadOperator, pinnedDevFeeWallet, type Cluster } from "../src/lib/burnticker/trustpack/operator.ts";
 import { checkReceiptTx, jsonRpc, PUBLIC_RPC } from "../src/lib/burnticker/trustpack/receiptCheck.ts";
 import { sampleReceipts, DEVNET_PROGRAM_ID } from "../src/lib/burnticker/trustpack/samples.ts";
@@ -60,7 +60,7 @@ switch (cmd) {
   case "never-buys": {
     const op = loadOperator(ROOT), cl = op.clusters[CLUSTER];
     const wallets = cl.wallets.filter((w) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.pubkey)).map((w) => ({ role: w.role, pubkey: w.pubkey }));
-    const r = await runNeverBuys({ rpc: jsonRpc(RPC_URL, fetch, { attempts: 8, minIntervalMs: 150 }), cluster: CLUSTER, wallets, mints: cl.platformMints.map((m) => ({ symbol: m.symbol, mint: m.mint })), evidence: evidenceSignatures(ROOT) });
+    const r = await runNeverBuys({ rpc: jsonRpc(RPC_URL, fetch, { attempts: 8, minIntervalMs: 150 }), cluster: CLUSTER, wallets, mints: cl.platformMints.map((m) => ({ symbol: m.symbol, mint: m.mint })), evidence: evidenceSignatures(ROOT), exceptions: CLUSTER === "mainnet" ? neverBuysExceptions(ROOT) : [] });
     publish(NEVER_BUYS_FILE, r);
     console.log(`${CLUSTER}: ${r.status} — ${r.line}`);
     for (const a of r.acquisitions) console.log(`  ${a.role} +${a.amountRaw} $${a.symbol} ${a.signature.slice(0, 16)}… ${a.explainedBy ? `explained by ${a.explainedBy}` : "UNEXPLAINED"}`);

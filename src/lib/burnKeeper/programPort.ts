@@ -40,6 +40,9 @@ export interface ProgramConfigView {
   ruleEnded?: boolean;
   /** The end state itself (live / resolved / void); absent on older ports = live. */
   endState?: "live" | "resolved" | "void";
+  /** The Raydium CPMM AmmConfig the coin pinned at initialize_token (TokenConfig.ll_cp_config): its fee tier after graduation (cpmmTier.ts
+   *  tierForPin; owner decision 2026-10-19, new coins tier 14 and earlier coins the tier they pinned). Absent on older ports. */
+  cpConfig?: string;
 }
 
 /** planCarried's "not now" answers. "too-soon" (round-5 review R5-8): the piece fits the coin's carried budget at `nextAtMs`. */

@@ -81,7 +81,7 @@ export function simulationReason(err: unknown, logs: readonly string[] | null): 
  */
 export interface SendResult { signature: string; status: "confirmed" | "failed" | "expired" | "pending"; error?: string; lastValidBlockHeight?: number }
 /** The identity of a signed swap, known before it is sent (the signature is the wallet's, the expiry is the blockhash's). */
-export interface Submitted { signature: string; lastValidBlockHeight: number }
+export interface Submitted { signature: string; lastValidBlockHeight: number; /** SEC-02: the signed transaction, serialized (the server's copy of the hold checks the wallet signed it) */ raw?: Uint8Array }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 /** Base58 of raw bytes (the transaction signature's printed form). */
@@ -116,11 +116,11 @@ const short = (e: unknown): string => String((e as Error)?.message ?? e).slice(0
  * Review 2026-10-15 (3b): a wallet may replace the blockhash before it signs. The expiry is then not the compiled one: it is held with a
  * conservative bound instead (`signedExpiry`), so a swap is never called expired while its real blockhash could still land.
  */
-export async function simulateSignSend(conn: SwapSender, payer: PublicKey, ixs: TransactionInstruction[], signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>, onStep: (s: "simulating" | "signing" | "sending" | "confirming") => void = () => {}, pollMs = 1500, onSubmit: (s: Submitted) => void = () => {}): Promise<SendResult> {
+export async function simulateSignSend(conn: SwapSender, payer: PublicKey, ixs: TransactionInstruction[], signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>, onStep: (s: "simulating" | "signing" | "sending" | "confirming") => void = () => {}, pollMs = 1500, onSubmit: (s: Submitted) => void | Promise<void> = () => {}): Promise<SendResult> {
   // prelaunch audit C2 re-review 3: the proxy's flight token rides this run's reads and sends only (rpcProxy.ts withFlight)
   return withFlight(() => simulateSignSendRun(conn, payer, ixs, signTransaction, onStep, pollMs, onSubmit));
 }
-async function simulateSignSendRun(conn: SwapSender, payer: PublicKey, ixs: TransactionInstruction[], signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>, onStep: (s: "simulating" | "signing" | "sending" | "confirming") => void, pollMs: number, onSubmit: (s: Submitted) => void): Promise<SendResult> {
+async function simulateSignSendRun(conn: SwapSender, payer: PublicKey, ixs: TransactionInstruction[], signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>, onStep: (s: "simulating" | "signing" | "sending" | "confirming") => void, pollMs: number, onSubmit: (s: Submitted) => void | Promise<void>): Promise<SendResult> {
   onStep("simulating");
   const { tx, blockhash: compiledBlockhash, lastValidBlockHeight: compiledLast } = await compile(conn, payer, ixs);
   const sim = await conn.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" });
@@ -130,7 +130,7 @@ async function simulateSignSendRun(conn: SwapSender, payer: PublicKey, ixs: Tran
   try { signed = await signTransaction(tx); } catch { throw new Error(REFUSAL.rejected); }
   const local = signatureOf(signed);
   const lastValidBlockHeight = await signedExpiry(conn, compiledBlockhash, signed, compiledLast);
-  if (local) onSubmit({ signature: local, lastValidBlockHeight });
+  if (local) await onSubmit({ signature: local, lastValidBlockHeight, raw: signed.serialize() });
   onStep("sending");
   let signature: string;
   // the wallet's own signature is the swap's identity (the record already holds it); the RPC's answer is used only when there is none
@@ -139,7 +139,7 @@ async function simulateSignSendRun(conn: SwapSender, payer: PublicKey, ixs: Tran
     if (!local) throw e;
     return { signature: local, status: "pending", error: short(e), lastValidBlockHeight };
   }
-  if (!local) onSubmit({ signature, lastValidBlockHeight });
+  if (!local) await onSubmit({ signature, lastValidBlockHeight });
   onStep("confirming");
   for (;;) {
     let st: { err: unknown; confirmationStatus?: string } | null;

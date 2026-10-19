@@ -111,6 +111,9 @@ the platform. The facts a reviewer checks instead:
 - **CPMM tier 9 (owner decision 2026-10-12, after this review).** The platform's `cpConfigId` moves to AmmConfig index 9 (25 bps trade
   fee + 75 bps creator fee): traders pay 100 bps per swap; burn pool 16.8 + 71.25 = 88.05 bps; operator 4.2 bps; Raydium 4 + 3.75 =
   7.75 bps. A coin keeps the tier it pinned at initialize_token. Numbers derive from `src/lib/burnticker/cpmmTier.ts`.
+- **CPMM tier 14 for new coins (owner decision 2026-10-19, after this review).** AmmConfig index 14 (75 bps trade fee + 50 bps creator
+  fee): traders pay 125 bps per swap; burn pool 50.4 + 47.5 = 97.90 bps; operator 12.6 bps; Raydium 9 + 3 + 2.5 = 14.50 bps. Coins
+  created before keep tier 9 (or tier 0); each coin's page reads its own pin (TokenConfig.ll_cp_config).
 
 ## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)
 

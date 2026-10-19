@@ -147,11 +147,11 @@
           "fixedInCode": true
         },
         "perSwapAfterGraduationBps": {
-          "lpFees": 21,
-          "toBurnPool": 16.8,
-          "toOperator": 4.2,
-          "creatorFeeToBurnPool": 71.25,
-          "burnedTotal": 88.05
+          "lpFees": 63,
+          "toBurnPool": 50.4,
+          "toOperator": 12.6,
+          "creatorFeeToBurnPool": 47.5,
+          "burnedTotal": 97.9
         },
         "instructions": {
           "register": "register_fee_key",
