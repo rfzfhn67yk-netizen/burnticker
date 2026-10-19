@@ -12,7 +12,41 @@ import { utcDay } from "@/lib/burnticker/utcWords";
 export interface DecidedWarningInput extends StatusInput {
   next: { result?: "recurring" | "pending" | "decided" | "void" };
   market?: { phase: "curve" | "migrating" | "graduated" | null; curve?: { threshold: string; quote: string } | null } | null;
-  pair?: (NonNullable<StatusInput["pair"]> & { counterpart: { name: string; ticker: string; sideName?: string | null }; clause?: { state: "live" | "waiting" | "voided"; voidBy: string } | null }) | null;
+  pair?: (NonNullable<StatusInput["pair"]> & { counterpart: { name: string; ticker: string; sideName?: string | null }; clause?: { state: "live" | "waiting" | "voided"; voidBy: string; decidedAt?: string | null } | null }) | null;
+  lifecycle?: { ended: { mode: "drain" | "winddown" } | null; windDown?: { days: number; done: number } | null } | null;
+}
+
+/**
+ * PROD-05 (external audit 2026-10-19): a voided one-shot is not "nothing burns". The void stops the burn for the RESULT, but the keeper
+ * then ends the rule (multiKeeper.ts voids a pending pair and ends both coins in winddown), and the end-of-rule burns run on the coin. So
+ * the void line says two things apart: no burn for the result, and what the burn pool does at the end. It is dated by the void itself
+ * (a pair's clause decidedAt; a single market's void receipt), never by the game's day, and carries no date when none is recorded.
+ */
+export const VOID_TAILS = {
+  winddown: "Its burn pool now winds down on this coin.",
+  drain: "Its burn pool is now being spent down on this coin.",
+  woundDown: "Its burn pool has wound down on this coin.",
+  pending: "Its burn pool winds down on this coin once the rule ends.",
+} as const;
+const END_RECEIPT_KINDS = new Set(["winddown", "drain", "sweep"]);
+export function voidedLine(s: Pick<DecidedWarningInput, "pair" | "lifecycle" | "selectorKey">, receipts: readonly ReceiptInput[]): string {
+  const pair = s.pair && !s.pair.unpaired ? s.pair : null;
+  const ends = receipts.filter((r) => END_RECEIPT_KINDS.has(r.kind ?? ""));
+  const mode = s.lifecycle?.ended?.mode ?? (ends.some((r) => r.kind === "drain") ? "drain" : ends.length ? "winddown" : null);
+  const wd = s.lifecycle?.windDown;
+  const tail = mode === "drain" ? VOID_TAILS.drain
+    : mode === "winddown" ? (wd && wd.days > 0 && wd.done >= wd.days ? VOID_TAILS.woundDown : VOID_TAILS.winddown)
+    : pair ? VOID_TAILS.pending : null;
+  // the void's own date: a pair's clause records when it voided; a single coin's void receipt is the void reading
+  const voidRow = [...receipts].filter((r) => !END_RECEIPT_KINDS.has(r.kind ?? "") && (r.status === "void" || r.status === "voided")).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
+  // the pair itself voided (its clause): dated only by the clause's own void time; otherwise the result was voided (a cancelled game, a
+  // voided market), dated by its void receipt
+  const pairVoided = pair?.clause?.state === "voided";
+  const at = pairVoided ? pair!.clause!.decidedAt ?? null : voidRow?.settledAt ?? null;
+  const on = at ? ` on ${utcDay(at)}` : "";
+  const what = /(?:^|:)espn\.game:/.test(s.selectorKey ?? "") ? "the game result" : "the result";
+  if (pairVoided) return `The pair was voided${on}. No burn happens for ${what}. ${tail}`;
+  return tail ? `This coin's one result was voided${on}. No burn happens for ${what}. ${tail}` : `This coin's one result was voided${on}. ${NO_FURTHER_RESULT} Nothing burns on it.`;
 }
 
 /**
@@ -57,7 +91,7 @@ export function decidedSwapWarning(s: DecidedWarningInput, receipts: readonly Re
   const latest = [...receipts].filter((r) => !["winddown", "drain", "sweep"].includes(r.kind ?? "")).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
   const day = gameDayOf(s, latest?.settledAt ?? null);
   const on = day ? ` on ${utcDay(day)}` : "";
-  if (s.next.result === "void" || d?.outcome === "void") return `This coin's one result was voided${on}. ${NO_FURTHER_RESULT} Nothing burns on it.`;
+  if (s.next.result === "void" || d?.outcome === "void") return voidedLine(s, receipts);
   const side = f.sideName;
   const pair = f.pair && s.pair ? s.pair : null;
   const winnerName = d?.outcome === "this" ? side : d?.outcome === "other" ? otherSideName : null;

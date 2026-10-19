@@ -46,7 +46,7 @@ import path from "node:path";
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { SyntheticWallet, walletShimSource, LIGHTHOUSE_PROGRAM, SLOW_DEFAULT_MS, ed25519Verify, type WalletMode } from "./burnticker-synth/wallet.mts";
 import { fabricatedLookupTableData, expectedEntries } from "./burnticker-synth/stubChain.mts";
-import { bankPlan, browserRpcKind, describeStall, DEFAULT_SYNTH_LEAGUES, huntRateLine, huntWaitMs, HUNT_WAIT_CEILING_MS, mintSourceOf, nameStepFills, pairTickersFor, pickRivals, pickTeam, rpcCallsOf, type ListedTeam, type StallState } from "./burnticker-synth/plan.mts";
+import { bankPlan, browserRpcKind, describeStall, DEFAULT_SYNTH_LEAGUES, huntRateLine, huntWaitMs, HUNT_WAIT_CEILING_MS, mintSourceOf, nameStepFills, pairTickersFor, pickRivals, pickTeam, prepareStepsOf, preparesOf, rpcCallsOf, sourceCardSelector, USE_SOURCE_SELECTOR, type ListedTeam, type StallState } from "./burnticker-synth/plan.mts";
 import { expectedTries, mintWorkerCount } from "../src/lib/burnticker/vanityMint.ts";
 
 // ---- arguments -------------------------------------------------------------------------------------------------------------------
@@ -293,10 +293,10 @@ async function reviewEvent(page: any, ticker: string): Promise<void> {
 async function reviewPublished(page: any, ticker: string): Promise<void> {
   await gotoLaunch(page);
   await clickText(page, "Published data");
-  await clickText(page, "U.S. national debt (Debt to the Penny)", 30_000);
-  // the card's own button
-  const card = page.locator("text=use this source →").first();
-  await card.click();
+  // the debt card, by its title, and that card's own button (publish 91-93: the button lost its arrow and the old selector found nothing)
+  const card = page.locator(sourceCardSelector()).filter({ hasText: "U.S. national debt (Debt to the Penny)" }).first();
+  try { await card.waitFor({ timeout: 30_000 }); } catch { fail(`The Published data list never showed the national debt card. The page shows: ${(await mainText(page)).slice(0, 300)}`); }
+  await card.locator(USE_SOURCE_SELECTOR).first().click();
   await throughToReview(page, ticker);
 }
 
@@ -396,7 +396,7 @@ async function reviewRivalry(page: any, tickers: readonly [string, string], mode
 
 /** Where the launch's addresses came from, for the report (and the pair edge case: the bank hands both keys or neither). */
 function mintLine(seen: Observed, addresses: 1 | 2): string {
-  const prepares = seen.launchPosts.filter((p) => p.body.action !== "launched");
+  const prepares = preparesOf(seen.launchPosts);
   const src = mintSourceOf(prepares.map((p) => ({ status: p.status, code: p.json?.code ?? null, ownMint: typeof p.body.mint === "string" })));
   if (src === "bank") return addresses === 2 ? "addresses: both from the host's bank (no search)" : "address: from the host's bank (no search)";
   if (src === "browser") return addresses === 2
@@ -534,9 +534,7 @@ function mintsOf(seen: Observed): string[] {
 
 /** How many transactions the prepared launch asks the wallet for (a single coin is two since 2026-10-15: its rule locked, then created). */
 function stepsOf(seen: Observed): number {
-  const j = [...seen.launchPosts].reverse().find((p) => p.body.action !== "launched" && p.json?.code !== "mint-bank-empty")?.json ?? {};
-  const n = (b: any) => (Array.isArray(b?.transactions) ? b.transactions.length : 0);
-  return n(j.bundle) + n(j.bundles?.a) + n(j.bundles?.b) + n(j.pairCurve) || 1;
+  return prepareStepsOf(seen.launchPosts);
 }
 
 /** The launch went through: in stub chain, the page handed a fully signed, unexpired transaction to the network (with the wallet's
@@ -664,7 +662,7 @@ const SCENARIOS: Scenario[] = [
       c.wallet.mode = "lighthouse"; c.wallet.queue = [];
       await reviewEvent(page, tickerFor("DP"));
       await pressLaunch(page, { double: true, seen });
-      const prepares = seen.launchPosts.filter((p) => p.body.action !== "launched");
+      const prepares = preparesOf(seen.launchPosts);
       // with an empty bank the page asks once, is told mint-bank-empty, searches, and asks once more with its own mint: that is one launch
       const real = prepares.filter((p) => p.json?.code !== "mint-bank-empty");
       if (real.length !== 1) fail(`Two quick presses sent ${real.length} launch requests (expected one).`, prepares.map((p) => `${p.status} ${p.json?.code ?? "ok"}`));
@@ -688,7 +686,7 @@ const SCENARIOS: Scenario[] = [
       const second = await signOutcome(page);
       const text = await mainText(page);
       if (/already registered/i.test(text)) fail(`The retry was refused as already registered: ${second.text}`);
-      const prepares = seen.launchPosts.filter((p) => p.body.action !== "launched" && p.json?.code !== "mint-bank-empty");
+      const prepares = preparesOf(seen.launchPosts).filter((p) => p.json?.code !== "mint-bank-empty");
       if (prepares.length !== 1) fail(`The retry prepared a new launch (${prepares.length} launch requests) instead of reusing the draft.`);
       // and the other way back: start over from the review and launch again; the earlier draft must not block it
       return { detail: [`first press: ${first.text}`, ...(await assertLaunched(page, seen, second, { expectGuard: true }))] };
@@ -708,7 +706,7 @@ const SCENARIOS: Scenario[] = [
       if (got === "alert") { const a = (await lastAlert(page)) ?? ""; fail(a); }
       const out = await signOutcome(page);
       if (/already registered|different rule or ticker/i.test(await mainText(page))) fail(`The relaunch was refused: ${out.text}`);
-      return { detail: [`first press: ${first.text}`, `launch requests: ${seen.launchPosts.filter((p) => p.body.action !== "launched").map((p) => `${p.status} ${p.json?.code ?? "ok"}`).join(", ")}`, ...(await assertLaunched(page, seen, out, { expectGuard: true }))] };
+      return { detail: [`first press: ${first.text}`, `launch requests: ${preparesOf(seen.launchPosts).map((p) => `${p.status} ${p.json?.code ?? "ok"}`).join(", ")}`, ...(await assertLaunched(page, seen, out, { expectGuard: true }))] };
     }),
   },
   { id: "b-reload-pair", title: "Reload after step 1 of a pair offers the right next step", run: async () => { throw new Skip("Not driven yet: needs a pair whose step 1 lands on chain (real chain only); the pair form itself is driven by a-rivalry-game."); } },
@@ -739,7 +737,7 @@ const SCENARIOS: Scenario[] = [
       const t0 = now();
       const got = await pressLaunch(page, { seen });
       await watch;
-      const prepares = seen.launchPosts.filter((p) => p.body.action !== "launched");
+      const prepares = preparesOf(seen.launchPosts);
       // 2026-10-18: a prepare refused before the bank is asked (the pin cap, upload-budget-creator) was read as "the bank handed a key",
       // so the run said the empty bank was filled. The source is judged only from an answer that says it (mintSourceOf); none: the
       // launch's own refusal is the failure

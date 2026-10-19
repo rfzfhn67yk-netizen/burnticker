@@ -23,6 +23,35 @@ export function bankPlan(scenario: string, o: { base: string; emptyBase: string 
   return { base: o.base, expect: o.expectEnv || null, why: o.expectEnv ? `BURNTICKER_SYNTH_EXPECT_BANK=${o.expectEnv}` : "no expectation: the report says which source the host used" };
 }
 
+/**
+ * WHICH LAUNCH REQUESTS ARE PREPARES (publish 93). The launch route takes three kinds of POST: the prepare (no `action`), the page's
+ * `action: "sent"` report of a create it is about to send (B-2, and since SEC-05 the send waits for its answer) and the
+ * `action: "launched"` confirm. The scenarios counted every request that was not `launched` as a prepare, so after SEC-05 one press read
+ * as two launch requests (b-reject-retry), the step count came from the `sent` answer, which has no transactions (b-double-press: "2
+ * wallet requests for one launch of 1 transaction"), and the `sent` body's mint read as an address searched in the browser.
+ */
+export const isPrepareBody = (body: Record<string, unknown> | null | undefined): boolean => !body || typeof body.action !== "string";
+/** The prepares among the launch requests, in order (an answer saying the bank was empty is kept: callers decide on it). */
+export function preparesOf<P extends { body: Record<string, unknown> | null | undefined }>(posts: readonly P[]): P[] {
+  return posts.filter((p) => isPrepareBody(p.body));
+}
+/** How many transactions the last answered prepare asks the wallet for (single bundle, pair bundles, pair curve); 1 when none says. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function prepareStepsOf(posts: readonly { body: Record<string, unknown> | null | undefined; json: any }[]): number {
+  const j = [...preparesOf(posts)].reverse().find((p) => p.json?.code !== "mint-bank-empty")?.json ?? {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const n = (b: any) => (Array.isArray(b?.transactions) ? b.transactions.length : 0);
+  return n(j.bundle) + n(j.bundles?.a) + n(j.bundles?.b) + n(j.pairCurve) || 1;
+}
+
+/**
+ * THE PUBLISHED-DATA CARD (a-published). The card's button lost its arrow in the copy pass (second audit A-30: "use this source"), so the
+ * scenario's `text=use this source →` matched nothing and the click waited out its 30 s. The page marks each card with its source id and
+ * its pick button, and the scenario clicks the button inside the card whose title it named.
+ */
+export const USE_SOURCE_SELECTOR = "button[data-use-source]";
+export const sourceCardSelector = (id?: string): string => (id ? `[data-source-card="${id.replace(/["\\]/g, "")}"]` : "[data-source-card]");
+
 /** Where a launch's addresses came from, read from the launch requests the page made. */
 export function mintSourceOf(prepares: readonly { status: number | null; code: string | null; ownMint: boolean }[]): "bank" | "browser" | "none" {
   if (prepares.some((p) => p.code === "mint-bank-empty") || prepares.some((p) => p.ownMint)) return "browser";

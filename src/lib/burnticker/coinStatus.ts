@@ -167,7 +167,8 @@ export function coinStatusFactsOf(s: StatusInput, receipts: readonly ReceiptInpu
   return {
     status, ticker: s.ticker, name: s.name, window, games, side: sideOf(s.profile?.oneLiner), fade: fadeOf(s.profile?.oneLiner), readingDirection: s.profile?.readingDirection ?? null, sideName: s.profile?.sideName ?? null, phase, poolReady, pair, decision,
     lastBurn: confirmed ? { tokens: confirmed.burned ?? "0", at: confirmed.settledAt } : null,
-    ended: s.lifecycle?.ended?.mode ?? null,
+    // PROD-05: an end receipt shows the rule ended even when the caller did not pass the lifecycle block
+    ended: s.lifecycle?.ended?.mode ?? (byTime.some((r) => r.kind === "drain") ? "drain" : byTime.some((r) => r.kind === "winddown") ? "winddown" : null),
     waiting: window === "one-shot" && !decision ? waitingSentenceOf(s.oracle, s.selectorKey) : null,
   };
 }
@@ -291,7 +292,8 @@ export function coinStatusSentence(f: CoinStatusFacts): string {
     const d = f.decision;
     if (!d) return f.pair?.waiting ? STATUS_SENTENCES.waitingPair : f.waiting ?? STATUS_SENTENCES.waitingMarket;
     const head = decidedHead(f, d);
-    const tail = d.outcome === "void" ? DECIDED_TAILS.void
+    // PROD-05: a voided one-shot whose rule has ended still burns down its pool; "Nothing burns on it" only while nothing does
+    const tail = d.outcome === "void" ? (f.ended === "winddown" ? DECIDED_TAILS.notThisWinddown : f.ended === "drain" ? DECIDED_TAILS.notThisDrain : DECIDED_TAILS.void)
       : !d.burnsThis && d.outcome === "other" && f.pair ? (f.ended || d.forwarded ? DECIDED_TAILS.toWinner : DECIDED_TAILS.notThis)
       : !d.burnsThis ? (f.ended === "winddown" ? DECIDED_TAILS.notThisWinddown : f.ended === "drain" ? DECIDED_TAILS.notThisDrain : DECIDED_TAILS.notThis)
       : d.hold === null ? lastBurnSentence(f) ?? DECIDED_TAILS.other

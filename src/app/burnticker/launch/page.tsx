@@ -34,7 +34,7 @@ import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { LaunchRecovery } from "./LaunchRecovery";
 import { LAUNCH_GATE_LOADING, launchGateFromCatalogue, wizardMayRender, wizardMaySign, type LaunchGateState } from "@/lib/burnticker/launchGateState";
 import { availabilityFromCatalogue, launchTypeOf, PREVIEW_BANNER, siteLaunchStateFromCatalogue, SITE_LAUNCH_STATE_LOADING, type LaunchAvailabilityModel, type LaunchType, type SiteLaunchState } from "@/lib/burnticker/launchAvailability";
-import { createReviewRequester, EMPTY_REVIEW_SLOT, launchRevisions, reviewFor, reviewIdentity, reviewMatchesDraft, reviewProofExpiresAt, REVIEW_UPDATING, usableReviewProof, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
+import { createReviewRequester, EMPTY_REVIEW_SLOT, keptReviewProof, keptReviewProofText, launchRevisions, REVIEW_PROOF_STORE, reviewFor, reviewIdentity, reviewMatchesDraft, reviewProofExpiresAt, REVIEW_UPDATING, usableReviewProof, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
 import { DEFAULT_SHARE, SLICED_ABOVE, isRaisePreset, shareOf, SHARE_PRESETS, presetRowLabel, pctLabel as presetPct, snapToPreset, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, LINKED_ONE_SHOT_LINE, shareShapeOf, sharePresetsForRule, type RaisePreset } from "@/lib/burnticker/launchPresets";
 import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
@@ -157,6 +157,8 @@ interface EventHit { eventTicker: string; seriesTicker: string; title: string; s
 /** The web UI's shares come from launchPresets.ts (docs/burnticker/ui-conventions.md § Presets, not dials); the API takes any share. */
 const PUB = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const STORE = DRAFT_STORE;
+/** Keeps a signed launch request for the review after a reload (launchReviewSync.ts keptReviewProof); private mode keeps nothing. */
+function keepReviewProof(p: WalletProof): void { try { sessionStorage.setItem(REVIEW_PROOF_STORE, keptReviewProofText(p) ?? ""); } catch { /* no memory, no harm */ } }
 /** The draft to offer (launchDraftStore.ts pickOffer): the named one in progress, else the kept one that reached the review. */
 const readOffer = (): Record<string, unknown> | null => {
   const read = (k: string): Record<string, unknown> | null => { try { const v = JSON.parse(sessionStorage.getItem(k) ?? "null") as unknown; return v && typeof v === "object" ? v as Record<string, unknown> : null; } catch { return null; } };
@@ -587,7 +589,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // name, a ticker or an image of the creator's own would be lost
   // website-20 pass A item 10: once anything is chosen, Start over asks first (it is the secondary action beside Back)
   const needsConfirm = !!guide.follow || step !== "choose" || (!nameAuto && !!name.trim()) || (!tickerAuto && !!ticker.trim()) || !!profile.image || !!profileB.image;
-  const startOver = (force = false) => { if (!force && needsConfirm) { setConfirmOver(true); return; } setPrevFollow(null); setConfirmOver(false); try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); sessionStorage.removeItem(CVC_STORE); } catch { /* ignore */ } try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ } window.scrollTo({ top: 0 }); onReset(); };
+  const startOver = (force = false) => { if (!force && needsConfirm) { setConfirmOver(true); return; } setPrevFollow(null); setConfirmOver(false); try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); sessionStorage.removeItem(CVC_STORE); sessionStorage.removeItem(REVIEW_PROOF_STORE); } catch { /* ignore */ } try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ } window.scrollTo({ top: 0 }); onReset(); };
   // owner, 2026-10-12: "Launch a coin" again while on this page shows step 1, with the draft kept and offered (launchStart.ts)
   useEffect(() => {
     const h = () => {
@@ -600,7 +602,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     return () => window.removeEventListener(LAUNCH_START_EVENT, h);
   }, []);
   /** launch night 2026-10-13: once every coin is live and recorded, the draft that made them is no longer offered */
-  const dropDraft = () => { launched.current = true; try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); } catch { /* ignore */ } setSavedDraft(null); };
+  const dropDraft = () => { launched.current = true; try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); sessionStorage.removeItem(REVIEW_PROOF_STORE); } catch { /* ignore */ } setSavedDraft(null); };
   const resumeDraft = () => { if (savedDraft) resumeFrom(savedDraft); setSavedDraft(null); window.scrollTo({ top: 0 }); };
 
   // site audit #18: the one shared catalogue read (catalogueClient.ts) — the header's availability uses the same promise
@@ -983,6 +985,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     const t = setTimeout(() => setReviewProof((p) => (p === reviewProof ? null : p)), Math.max(0, at - Date.now()));
     return () => clearTimeout(t);
   }, [reviewProof]);
+  // synthetic creator b-reload-relaunch (launchReviewSync.ts keptReviewProof): the latest signed request over this draft's tickers is kept
+  // in this tab, so a reload's kept review still counts the creator's own unlaunched draft as theirs; read back once on load
+  useEffect(() => { let raw: string | null = null; try { raw = sessionStorage.getItem(REVIEW_PROOF_STORE); } catch { raw = null; } const kept = keptReviewProof(raw, PROOF_MAX_AGE_MS, parseWalletProof); if (kept) setReviewProof((p) => p ?? kept); }, []);
   // item 253 (launch integrity): the whole profile, image included, is part of the draft's revision, so a prepare answer for an older
   // profile is set aside
   // second audit 2026-10-19 I-12: two revisions (launchReviewSync.ts launchRevisions). draftKey (no wallet, no proof) is the prepare key
@@ -1030,7 +1035,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // website-22: profileFieldProblems (ProfileFields.tsx) runs the server's own link check per field, so the page and the review say the same thing
   const linksOf = useCallback(() => ([["website", link], ["X", xUrl], ["Telegram", tg]] as const).filter(([, u]) => /^https:\/\/\S+$/.test(u.trim())).map(([label, u]) => ({ label, url: u.trim() })), [link, xUrl, tg]);
   // review of block M: one signature over the review's tickers (no transaction, no fee); shown only for a ticker the review calls taken
-  const proveTicker = creator && wallet.signMessage ? () => { void signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: [ticker, ...(pairOn ? [tickerB] : [])].filter(Boolean).map((t) => t.toUpperCase()), mints: [] }, base58).then((p) => { if (p) setReviewProof(p); }); } : null;
+  const proveTicker = creator && wallet.signMessage ? () => { void signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: [ticker, ...(pairOn ? [tickerB] : [])].filter(Boolean).map((t) => t.toUpperCase()), mints: [] }, base58).then((p) => { if (p) { setReviewProof(p); keepReviewProof(p); } }); } : null;
   const launch = useCallback(async () => {
     if (!rule || !reviewMatchesDraft(reviewSlot, curRev.current)) return;   // A6: transactions are prepared only for the reviewed draft
     setBusy(true); setLaunchErr(null);
@@ -1067,7 +1072,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       // prelaunch audit 2026-10-18 A-3: the wallet signs this press's request (no transaction, no fee), so the site's uploads and prepared
       // addresses are spent only for a wallet that asked; one signature covers every ticker and mint of the press
       const walletProof = await signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: pairOn && ruleB ? [sent.a, sent.b] : [sent.a], mints: [kA?.publicKey, kB?.publicKey].filter((m): m is string => !!m) }, base58);
-      if (walletProof) Object.assign(common, { walletProof });
+      if (walletProof) { Object.assign(common, { walletProof }); keepReviewProof(walletProof); }
       if (pairOn && ruleB && !meetingsOn && !settledPick) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         // website-18: each coin carries its own image, description and links (pinned in its own metadata file)
@@ -1798,7 +1803,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               {bq.trim() && <p className="text-xs text-neutral-400" data-active-filter>Showing {cats.find((c) => c.id === cat)?.label ?? cat} sources matching “{bq.trim()}”. <button type="button" data-nav className="underline" onClick={() => setBq("")}>Show all in this category</button></p>}
               {!cardsBusy && cards && cards.length === 0 && <div className="rounded border border-dashed border-neutral-700 p-4 text-sm text-neutral-400" data-empty-filter><p>This site has no source in this category{bq ? ` matching “${bq}”` : ""} yet.</p>{bq.trim() && <p className="mt-2 flex flex-wrap gap-3"><button type="button" data-nav className="underline" onClick={() => setBq("")}>Clear the filter</button><button type="button" data-nav className="underline" onClick={() => { setUq(bq.trim()); setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); setFocusSearch(true); }}>Search all sources for “{bq.trim()}”</button></p>}</div>}
               <div className={`grid gap-2 lg:grid-cols-2${cardsBusy ? " opacity-50" : ""}`} aria-busy={cardsBusy}>{/* snag 18: a source this host has no key for is not listed at all */}{(cards ?? []).filter((c) => c.launchable.ok || !/needs a key|API_KEY|not configured|licen[cs]ed key/i.test(c.launchable.why ?? "")).map((c) => (
-                <div key={c.id} className={`rounded-lg border p-3 text-sm ${c.launchable.ok ? "border-neutral-800 bg-neutral-900" : "border-neutral-900 opacity-70"}`}>
+                <div key={c.id} data-source-card={c.id} className={`rounded-lg border p-3 text-sm ${c.launchable.ok ? "border-neutral-800 bg-neutral-900" : "border-neutral-900 opacity-70"}`}>
                   <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
                     <span className={`bt-chip bt-chip-${c.venue}`}>{c.venue === "feed" ? "Feed" : c.venueLabel}</span>
                     <span className="text-neutral-500">{c.tierLabel}</span>
@@ -1816,7 +1821,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     {c.configure?.kind === "team" ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => { const lg = c.configure!.kind === "team" ? c.configure!.league : null; begin("team"); setTimeout(() => setLeagueSeries(lg), 0); }}>pick a team</button>
                     : c.configure?.kind === "weather" ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => setWx({ metric: c.configure!.kind === "weather" ? c.configure!.metric : "high", station: "DEN", threshold: c.configure!.kind === "weather" && c.configure!.metric === "rain" ? "0.50" : "90" })}>choose a station</button>
                     : c.launchable.ok && c.pick.oracle === "polymarket" && !c.pick.market ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" data-pick-outcome onClick={() => { setGuide((g) => ({ follow: g.follow ? "market" : null, phase: g.follow ? "which" : g.phase, pairKind: null })); begin("single"); setQ2(c.title.replace(/\s*\(\d+ markets?\)\s*$/i, "")); }}>pick one outcome</button>
-                    : c.launchable.ok ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => {
+                    : c.launchable.ok ? <button data-decision="what" data-use-source disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => {
                       const src = c.pick.oracle === "catalogue" ? sources.find((x) => x.id === c.pick.series) : undefined;
                       markOrigin("browse"); setSrcWarnings([]); setShareNotice(null);
                       setPick({ ...c.pick, source: src }); setFilter(""); setKind(c.kind);
