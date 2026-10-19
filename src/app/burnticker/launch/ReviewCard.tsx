@@ -17,6 +17,8 @@ import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
 import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, PAIR_DIAGRAM_LABEL, UPFRONT_LABEL, lpDisclosureFor, profileMoreLabel, shareExample, type LaunchVenue } from "@/lib/burnticker/guidedLaunch";
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
+import { fieldLinkText, nameFieldId } from "./fieldChecks";
+import { PROVE_TICKER_LABEL } from "@/lib/burnticker/walletProof";
 import { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX } from "./pageCopy";
 import type { FundsFlow } from "@/lib/burnticker/pairFundsFlow";
 
@@ -97,6 +99,8 @@ export interface ReviewCardProps {
   graduation?: string[] | null;
   /** website-19 (owner, 2026-10-12): the coins already holding a side's ticker, with free suggestions; a warning, never a refusal. */
   tickerChecks?: TickerCheck[] | null;
+  /** review of block M: asks the wallet to sign the review's tickers, so the creator's own unfinished launch counts as theirs */
+  onProveTicker?: (() => void) | null;
   /** website-19 (snag 11): extra plain lines under the rule sentence, such as a result due before graduation. */
   notes?: string[] | null;
   /** website-26 (WIRING-FEATURES item 11): a daily race's fight line (derby/tile.ts fightLead), the card's first line; null otherwise. */
@@ -250,9 +254,12 @@ export function ReviewCard(p: ReviewCardProps) {
   const many = p.coins.length > 1;
   // website-25 (QA 11 H5): on the name step the Edit link moves focus to the field itself
   const fieldEdit = (side: "a" | "b", f: "name" | "ticker") => (p.mode === "review" && p.publicProfile ? () => p.publicProfile!.edit(side, f) : p.mode === "name" ? () => { const el = document.getElementById(`bt-profile-${side}-${f}`); el?.scrollIntoView({ block: "center" }); el?.focus({ preventScroll: true }); } : null);
-  const fieldProblems: { key: string; text: string; edit: (() => void) | null }[] = [...p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; const side = i === 0 ? "a" as const : "b" as const; return ([[nameProblem(c.name) || c.nameIssue || null, "name"], [tickerProblem(c.ticker) || c.tickerIssue || null, "ticker"]] as const).filter(([x]) => !!x).map(([x, f]) => ({ key: c.key, text: `${who}${x}`, edit: fieldEdit(side, f) })); }), ...(p.profileProblems ?? []).map((x) => ({ key: "profile", text: blockerText(x), edit: typeof x === "string" ? null : x.edit ?? null }))]
+  const fieldProblems: { key: string; text: string; edit: (() => void) | null; field?: { side: "a" | "b"; f: "name" | "ticker" } }[] = [...p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; const side = i === 0 ? "a" as const : "b" as const; return ([[nameProblem(c.name) || c.nameIssue || null, "name"], [tickerProblem(c.ticker) || c.tickerIssue || null, "ticker"]] as const).filter(([x]) => !!x).map(([x, f]) => ({ key: c.key, text: `${who}${x}`, edit: fieldEdit(side, f), field: { side, f } })); }), ...(p.profileProblems ?? []).map((x) => ({ key: "profile", text: blockerText(x), edit: typeof x === "string" ? null : x.edit ?? null }))]
     .filter((x, i, all) => all.findIndex((y) => y.text === x.text) === i);
-  const problemList = (label: string, id?: string) => <ul id={id} className="list-disc space-y-0.5 pl-5 text-xs text-red-400" aria-label={label} data-blockers>{fieldProblems.map((x) => <li key={x.text} className="break-words">{x.text}{x.edit && <> <button type="button" data-nav className="underline text-neutral-300" onClick={x.edit}>Edit</button></>}</li>)}</ul>;
+  // prelaunch audit 2026-10-18 (the Name step): a name or ticker problem is said once, under its field; here it is a link to that field
+  const problemList = (label: string, id?: string) => <ul id={id} className="list-disc space-y-0.5 pl-5 text-xs text-red-400" aria-label={label} data-blockers>{fieldProblems.map((x) => (p.mode === "name" && x.field
+    ? <li key={x.text} className="break-words"><a href={`#${nameFieldId(x.field.side, x.field.f)}`} data-nav data-field-link={x.field.f} className="underline text-neutral-300" onClick={(e) => { e.preventDefault(); x.edit?.(); }}>{fieldLinkText(x.field.f, many ? (x.field.side === "a" ? "A" : "B") : null)}</a></li>
+    : <li key={x.text} className="break-words">{x.text}{x.edit && <> <button type="button" data-nav className="underline text-neutral-300" onClick={x.edit}>Edit</button></>}</li>))}</ul>;
   // owner, 2026-10-12 ("whenever i type 2 letters when naming a coin it accepts those 2 letters as the name and moves on"): the editor
   // used to be open only WHILE a field had a problem or the name prompt applied, so the second typed letter cleared the problem and the
   // fields vanished under the creator's cursor. Once the editor opens for any reason it stays open until the creator presses done.
@@ -265,11 +272,14 @@ export function ReviewCard(p: ReviewCardProps) {
   useEffect(() => { if (modal.visible) modalWasOpen.current = true; else if (modalWasOpen.current) { modalWasOpen.current = false; if (!p.creator) launchBtn.current?.focus(); } }, [modal.visible]); // eslint-disable-line react-hooks/exhaustive-deps
   const launch = () => { if (!p.ready || p.busy || p.blocked) return; if (!p.creator) { modal.setVisible(true); return; } p.onLaunch(); };
   const chip = (on: boolean) => `rounded-full border px-3 py-1 text-sm ${on ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`;
-  const tickerCheckList = <>{(p.tickerChecks ?? []).filter((t) => t.warning || t.reserved).map((t) => {
+  const tickerCheckList = <>{(p.tickerChecks ?? []).filter((t) => t.reserved || (t.taken && (t.suggestions.length > 0 || !!p.onProveTicker))).map((t) => {
         const coin = p.coins[t.side === "A" ? 0 : 1];
         return (
           <div key={t.side} className="min-w-0 break-words rounded border border-amber-400/40 p-2 text-xs text-amber-200" role="status" data-ticker-check={t.side}>
-            {t.reserved ? <p>{many ? `Coin ${t.side}: ` : ""}{RESERVED_TICKER_LINE}</p> : <p>{many ? `Coin ${t.side}: ` : ""}${t.ticker} is in use by <a className="underline" href={t.inUse[0].href}>{t.inUse[0].name}</a>: {t.inUse[0].rule.replace(/\.$/, "")}.{t.inUse.length > 1 ? ` It is also used by ${t.inUse.length - 1} other coin${t.inUse.length === 2 ? "" : "s"}.` : ""} You can keep it, or pick a free one.</p>}
+            {/* A-2: a ticker another creator holds is refused under the field itself (the review's problem); only the free tickers are offered here */}
+            {t.reserved && <p>{many ? `Coin ${t.side}: ` : ""}{RESERVED_TICKER_LINE}</p>}
+            {/* review of block M: the review treats a ticker as yours only with your wallet's signature; one press asks for it */}
+            {t.taken && p.onProveTicker && <p className="mt-1"><button type="button" data-decision="name" data-prove-ticker className="underline text-neutral-200" onClick={p.onProveTicker}>{PROVE_TICKER_LABEL}</button></p>}
             {t.suggestions.length > 0 && coin && <p className="mt-1 flex flex-wrap items-center gap-2">Free: {t.suggestions.map((s) => <button key={s} type="button" data-decision="name" className="rounded border border-neutral-600 px-2 py-0.5 font-mono" onClick={() => coin.onTicker(s)}>${s}</button>)}</p>}
           </div>
         );

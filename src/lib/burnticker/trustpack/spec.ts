@@ -42,7 +42,7 @@ export const TRUSTPACK_SCHEMAS: Record<string, Schema> = {
   OperatorView: obj({
     schema: { const: "burnticker.operator-view/v1" }, cluster: str, operator: { type: "object" }, links: { type: "object" }, clusters: { type: "object" },
     signedMessage: obj({ status: { enum: ["todo", "signed", "invalid"] }, signer: nstr, message: str, signature: nstr, verified: nbool, how: str, detail: str }, ["status", "message", "verified"]),
-    neverBuys: obj({ rule: str, rehearsalNote: str, report: { anyOf: [{ type: "object" }, { type: "null" }] }, line: str, status: { enum: ["clear", "explained", "red", "not-run"] } }, ["rule", "line", "status"]),
+    neverBuys: obj({ rule: str, rehearsalNote: str, report: { anyOf: [{ type: "object" }, { type: "null" }] }, line: str, status: { enum: ["clear", "explained", "received", "red", "not-checked", "not-run"] } }, ["rule", "line", "status"]),
     placeholders: arr(obj({ path: str, value: str }, ["path", "value"])), wellKnown: str,
     deployments: { type: "object", description: "Added in audit 4 (additive): per network, per program, the deployed bytes recorded in config/burnticker/verified-build.json ({ readAt, matchesBuild } or null = no deployment recorded)" },
   }, ["schema", "operator", "clusters", "signedMessage", "neverBuys", "placeholders"], { description: "Who runs the platform, every operator wallet per cluster (TODO placeholders shown), the signed-statement slot with its ed25519 check, and the never-buys monitor's last report." }),

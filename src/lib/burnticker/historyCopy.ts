@@ -29,8 +29,8 @@ export const CHANGELOG_COPY = {
   intro: "Every time the source code is published to the public repository, the publish script adds an entry to the changelog file. This page reads the published changelog file.",
   sinceLine: (n: number, since: string): string => `There ${n === 1 ? "has been 1 release" : `have been ${n.toLocaleString("en-US")} releases`} since ${since}.`,
   publicLink: "Open the public repository at this commit",
-  noPublic: "The public commit for this release was not recorded in the changelog.",
-  source: "Cut from source commit",
+  // A-6: a release is named by its public commit only; the monorepo commit it was cut from is private and never shown
+  noPublic: "This release was published before the changelog named public commits, so it has no link.",
   unavailable: "The changelog file could not be read on this site just now.",
   fileLine: "The file behind this page is",
 };
@@ -78,7 +78,8 @@ export const BOUNTY_COPY = {
   description: "How to report a security problem in Burnticker, what is in scope, the bounty wallet and its balance, and every decided report.",
   intro: "If you find a way to break Burnticker's programs, its keeper or this site, please report it privately. A valid report can be paid from the bounty wallet.",
   draft: "The terms in SECURITY.md are still a draft, and the exact amount for each severity is not final.",
-  range: (lo: number, hi: number): string => `The amount set aside is ${lo} to ${hi} SOL for each valid report, paid from the developer fee.`,
+  // prelaunch audit 2026-10-18 A-30: "5 to 10 SOL for each valid report" read as money on hand while 5 SOL was funded in all
+  range: (lo: number, hi: number, funded: number | null = null): string => `The draft terms set aside ${lo} to ${hi} SOL for each valid report, paid from the developer fee.${funded ? ` The bounty wallet was funded with ${funded} SOL in all, so today it can pay one report at the low end. It grows from the developer fee.` : ""}`,
   walletTitle: "The bounty wallet",
   walletLine: "This mainnet wallet is held by the operator and is separate from the Squads vault.",
   balance: "Balance read from a mainnet node",

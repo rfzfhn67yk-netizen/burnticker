@@ -50,7 +50,7 @@ describe("the plan (pure)", () => {
     assert.deepEqual(later.messages.filter((m) => m.kind !== "daily").map((m) => [m.kind, m.priority]), [["keeper-takeover", "high"], ["feed-stale", "high"], ["feed-disagree", "high"], ["derby-withheld", "high"], ["cap-binding", "low"], ["pin-orphan", "low"]]);
   });
   test("the five states map to pushes; everything else stays in the registry only", () => {
-    assert.deepEqual(Object.values(PUSH_KIND_OF_ALERT).sort(), ["api-budget", "audit-mismatch", "audit-stale", "backup-failed", "backup-offbox", "burn-behind", "cap-binding", "crank-refused", "crank-refused", "derby-withheld", "dispersal-receipt", "feed-disagree", "feed-down", "feed-stale", "foreign-reading", "keeper-balance-low", "keeper-refused", "keeper-takeover", "launch-failed", "launch-late", "mint-bank-low", "pin-failed", "pin-failed", "pin-orphan", "reading-conflict", "reading-implausible", "signer-disagree", "single-source", "synthetic-failed", "unit-failed"]);
+    assert.deepEqual(Object.values(PUSH_KIND_OF_ALERT).sort(), ["api-budget", "audit-mismatch", "audit-stale", "backup-failed", "backup-offbox", "burn-behind", "cap-binding", "crank-refused", "crank-refused", "derby-withheld", "dispersal-off", "dispersal-receipt", "feed-disagree", "feed-down", "feed-stale", "foreign-reading", "keeper-balance-low", "keeper-refused", "keeper-takeover", "launch-after-closure", "launch-failed", "launch-late", "mint-bank-low", "never-buys-red", "pin-budget", "pin-failed", "pin-failed", "pin-orphan", "reading-conflict", "reading-implausible", "signer-disagree", "single-source", "synthetic-failed", "unit-failed"]);
     const { messages } = planPushes({ now: DAWN, state: settled(DAWN), alerts: [alert(DAWN - 60_000, "cosigner-disagree"), alert(DAWN - 50_000, "bt-feed-stall"), alert(DAWN - 40_000, "bt-daily-summary")] });
     assert.deepEqual(messages.map((m) => m.kind), ["signer-disagree"]);
     assert.equal(messages[0].priority, "high");
@@ -140,7 +140,7 @@ describe("runPushCheck on a real registry with a fake sink", () => {
   test("the keeper script wires the refusal, the five-minute check and the banner", () => {
     const k = fs.readFileSync(path.join(ROOT, "scripts/burnticker-keeper.mts"), "utf8");
     // 2026-10-15: a stop during the startup wait exits quietly; any other refusal still pushes
-    assert.match(k, /await buildProgram\(\)\.catch\(async \(e: unknown\) => \{\n  if \(stopping\) \{[^\n]*process\.exit\(0\); \}\n  await pushKeeperRefused\(/);
+    assert.match(k, /await buildProgram\(\)\.catch\(async \(e: unknown\) => \{\n  if \(stopping\) \{[^\n]*process\.exit\(0\); \}\n  if \(!HAND_RUN\) await pushKeeperRefused\(/);   // review 6 of A-1: a hand run prints, the service pushes
     assert.match(k, /await runPushCheck\(\{ registry, env: process[.]env, now, log \}\)/);
   });
 });

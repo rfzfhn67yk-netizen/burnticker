@@ -329,11 +329,11 @@ describe("N3 — SDK verification never accepts a memo-only transaction as a bur
     assert.match(chain.detail, /never calls the burn program/);
     assert.equal(v.verified, false);
   });
-  test("without programId + mint the chain check is 'not checked', never a pass — even when a memo matches", async () => {
+  test("without programId the chain check is 'not checked', never a pass — even when a memo matches", async () => {
     const { rec, tok, base } = await setup();
     const c = new FakeConnection();
     c.txs.set(rec.signature!, programReceiptTx(c, { programId: PLACEHOLDER_PROGRAM_ID, mint: tok.mint, memo: rec.memo!, burnedRaw: BigInt(1), memoOnly: true }));
-    const v = await verifyReceipt(rec, { ...base, programId: undefined, mint: undefined, connection: c as never });
+    const v = await verifyReceipt(rec, { ...base, programId: undefined, connection: c as never });
     assert.equal(v.checks.find((x) => x.id === "chain")!.ok, null);
   });
   test("the real thing passes: the program's own Memo CPI + burn of the mint + a processed Reading with the same burned amount", async () => {

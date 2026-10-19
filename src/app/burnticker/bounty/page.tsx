@@ -17,13 +17,13 @@ export const dynamic = "force-dynamic";
  * contact are read from config/burnticker/transparency.json. /.well-known/security.txt names this page as its policy.
  */
 export default function BountyPage() {
-  let range: [number, number] | null = null, contact = SECURITY_CONTACT;
-  try { const b = loadTransparency().howBuilt.bounty; range = b.rangeSol; contact = b.contact ?? SECURITY_CONTACT; } catch { range = null; }
+  let range: [number, number] | null = null, contact = SECURITY_CONTACT, funded: number | null = null;
+  try { const b = loadTransparency().howBuilt.bounty; range = b.rangeSol; contact = b.contact ?? SECURITY_CONTACT; funded = b.recordedFunding?.sol ?? null; } catch { range = null; }
   const terms = `${PUBLIC_REPO_URL}/blob/${PUBLIC_REPO_COMMIT}/SECURITY.md`;
   return (
     <Page>
       <PageHeader title={BOUNTY_COPY.title} intro={BOUNTY_COPY.intro}>
-        <p className="bt-body-text">{BOUNTY_COPY.draft}{range ? <> {BOUNTY_COPY.range(range[0], range[1])}</> : null}</p>
+        <p className="bt-body-text">{BOUNTY_COPY.draft}{range ? <> {BOUNTY_COPY.range(range[0], range[1], funded)}</> : null}</p>
       </PageHeader>
       <Panel title={BOUNTY_COPY.howTitle} id="report">
         <ul className="bt-bullets">{BOUNTY_COPY.how.map((t) => <li key={t}>{t}</li>)}</ul>

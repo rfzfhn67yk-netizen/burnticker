@@ -34,6 +34,11 @@ export function launchGateFromCatalogue(body: unknown, failure: string | null = 
 export const wizardMayRender = (s: LaunchGateState): s is Extract<LaunchGateState, { kind: "open" | "preview" }> => s.kind === "open" || s.kind === "preview";
 /** True only when the wizard may ask for a bundle and open the wallet (open mode). */
 export const wizardMaySign = (s: LaunchGateState): boolean => s.kind === "open";
+/**
+ * Prelaunch audit 2026-10-18 A-11: the sign card's gate before each step (signPlan.ts SendDeps.launchGate), from a fresh catalogue read.
+ * Closed or preview: "closed" (no new step is sent). A read that failed: "unknown" (the step goes on; the server still checks).
+ */
+export const signGateOf = (s: LaunchGateState): "open" | "closed" | "unknown" => (wizardMaySign(s) ? "open" : s.kind === "closed" || s.kind === "preview" ? "closed" : "unknown");
 
 /** The closed page's network line: what this host shows while creator launches are closed. */
 export function closedNetworkLine(cluster: string | null): string {

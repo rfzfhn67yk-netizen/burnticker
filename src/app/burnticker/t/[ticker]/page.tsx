@@ -18,12 +18,13 @@ import { ReadinessPanel } from "../../_components/ReadinessPanel";
 import { readinessFromStatus } from "@/lib/burnticker/readiness";
 import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
+import { receiptStatusWords } from "@/lib/burnticker/receiptWords";
 import { targetActionSentence, targetTrustCopy } from "@/lib/burnticker/burnTarget";
 import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnReal";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
 import { counted, finiteNumber, fixed, grouped, headOf, joinList, listOf } from "@/lib/burnticker/safeFormat";
-import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersCountSentence, holdersShareLine, initialTab, marketFacts, READ_FULL_RULE, receiptStatusWords, ruleBrief, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
+import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersCountSentence, holdersShareLine, initialTab, marketFacts, READ_FULL_RULE, ruleBrief, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
 import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
@@ -310,7 +311,7 @@ export default function TokenPage() {
             <p className="mt-2">1. Read the settled result from the source:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.curl}</pre>{b.method && <p className="text-xs text-neutral-500">The value was read by {b.method}.</p>}
             <p>2. Apply the rule:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.formula}</pre>
             <p>3. Check that you get this: <strong>{b.verify.expected}</strong></p>
-            <p>4. The receipt memo on chain{b.txUrl && <> (<a className="underline" href={b.txUrl}>transaction</a>)</>}:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.memo ?? `No transaction. The status is ${b.status}.`}</pre>
+            <p>4. The receipt memo on chain{b.txUrl && <> (<a className="underline" href={b.txUrl}>transaction</a>)</>}:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.memo ?? `No transaction yet: ${receiptStatusWords(b.status)}.`}</pre>
             {(b.verify?.checks?.length ?? 0) > 0 && <p className="text-red-400">Checks that did not pass: {joinList(b.verify.checks, "; ")}</p>}
           </details>)}
         </section>

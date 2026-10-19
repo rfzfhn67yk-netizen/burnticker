@@ -78,6 +78,8 @@ export interface Platform {
   pinDailyCap?: number;
   /** audit 2026-10-15 H4: coins one creator wallet may pin per UTC day (BURNTICKER_PIN_CREATOR_DAILY_CAP; handlers.DEFAULT_PIN_CREATOR_DAILY_CAP) */
   pinCreatorDailyCap?: number;
+  /** prelaunch audit 2026-10-18 A-3: uploads a day kept for wallet-signed launch requests (BURNTICKER_PIN_SIGNED_RESERVE; default 10) */
+  pinSignedReserve?: number;
   /** BURNTICKER_ALLOW_MAINNET_LAUNCHES on a mainnet host (hostedLaunch.ts): the owner's explicit allowance; absent/false = mainnet launches refused. */
   allowMainnet?: boolean;
   /** Reads a launch transaction from the chain before a draft goes live (launchVerify.ts; review N1). Null/absent (no RPC): confirmations are refused. */
@@ -160,6 +162,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     pinDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) : undefined,
     // the synthetic creator's devnet instance may raise this (BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP); ignored on mainnet
     pinCreatorDailyCap: pinCreatorDailyCapFromEnv(env),
+    pinSignedReserve: /^\d+$/.test((env.BURNTICKER_PIN_SIGNED_RESERVE ?? "").trim()) ? Number((env.BURNTICKER_PIN_SIGNED_RESERVE ?? "").trim()) : undefined,
     // Review-2 F3: the verifier decodes initialize_token and reads the TokenConfig (and the Pair) — it needs the program ids it checks
     // against; without BURNTICKER_PROGRAM_ID it refuses every confirmation (fail closed).
     // C2 (2026-10-15 prelaunch audit): the verifier reads in the "confirm" lane, so anonymous traffic cannot spend what a confirmation needs

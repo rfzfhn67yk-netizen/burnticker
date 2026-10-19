@@ -518,7 +518,7 @@ on, pairs launch on two LaunchLab curves under the rules-level "both or neither"
   pool that the pair program recorded for that mint, at its `pair_curve` address, created by the pair's vault on the pinned `cpConfigId`,
   with ≥ 90 % of the creation LP burned or locked (section 4.7).
 - **Powers.** The pair program has no powers over funds. It has no admin, no parameter update and no withdraw. Its upgrade authority is
-  the same Squads vault as the settlement program's, and it is to be finalised before the first public pair
+  the same Squads vault as the settlement program's, which holds it on mainnet today
   (`docs/burn-receipts/pair-curve-powers-register.md`). Two blind reviews on 2026-10-10 found five High issues in the first version. All
   of them are fixed and were re-run on devnet (`docs/burn-receipts/CHANGELOG.md`).
 

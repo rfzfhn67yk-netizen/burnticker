@@ -95,7 +95,9 @@ export const TRUSTPACK_SECTION_COPY = {
 export const NEVER_BUYS_STATUS = {
   clear: "Clear. No operator wallet holds or has received a platform coin.",
   explained: "Rehearsal only. The operator wallets received devnet test coins only in rehearsal transactions, each recorded in the evidence files listed below.",
-  red: "Red. An operator wallet received a platform coin outside any recorded rehearsal. See the list below.",
+  red: "Red. An operator wallet traded for a platform coin outside any recorded rehearsal. See the list below.",
+  received: "Clear. A platform coin was sent to an operator wallet that did not trade for it. Anyone can send a token to a public wallet, so it is listed below and does not count against the rule.",
+  notChecked: "Not checked. The last run could not read any operator wallet, so it says nothing about them.",
   notRun: "The monitor has not run on this site yet.",
 } as const;
 

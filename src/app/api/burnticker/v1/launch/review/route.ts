@@ -12,6 +12,8 @@ import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { platform } from "@/lib/burnticker/server";
 import { liveSinks, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { lookalikeRows } from "@/lib/burnticker/launchGuards";
+import { provenReviewCreator } from "@/lib/burnticker/walletProofCheck";
+import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { seasonNotStartedLine, seasonOverFor } from "@/lib/burnticker/seasonOver";
 import { espnClient, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { lastSeasonBacktest } from "@/lib/burnticker/lastSeason";
@@ -54,6 +56,9 @@ export async function POST(req: Request) {
     if (launchModeFromEnv(process.env) === "closed") { const r = globalRefusal(process.env)!; return fail(r.status, r.body.error, { code: r.body.code, preview: false }); }
     const body = await readJson(req);
     if (!body) return fail(400, "invalid JSON body");
+    // review of block M: the creator's own drafts count as theirs only when the request carries that wallet's signed request over these
+    // tickers; a claimed wallet alone is dropped, so asking with someone else's wallet never reveals who owns a draft
+    { const proven = provenReviewCreator(body, [publicOrigin()]); if (proven) (body as Record<string, unknown>).creator = proven; else delete (body as Record<string, unknown>).creator; }
     // A9: the time lock beside the review is the one last read from chain (the trust page's cache); a production host refreshes it in
     // the background so the next review has it. Never awaited here: the review reads no chain.
     const cluster = hostCluster(process.env) === "mainnet" ? "mainnet" : "devnet";
@@ -95,12 +100,14 @@ export async function POST(req: Request) {
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];
     try { existing = existingCoinsFor((body as { rule?: unknown }).rule, platform().registry.tokens()); } catch { existing = []; }
-    // website-19 (owner, 2026-10-12: tickers are not enforced unique): the coins already holding each side's ticker, as a warning with two
-    // free suggestions; the creator may keep the ticker. A registry that cannot be read leaves the list empty.
+    // prelaunch audit 2026-10-18 A-2 / A-40: a ticker another creator's coin holds is refused (the ticker field carries the sentence, from
+    // identityRefusals above) with two free tickers that pass the launch's own check; only launched coins are described, never a draft.
+    // A registry that cannot be read leaves the list empty.
     let tickers: TickerCheck[] = [];
     try {
       const reg = platform().registry, reserved = loadReserved();
-      tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson })), reserved });
+      const creator = typeof (body as { creator?: unknown }).creator === "string" ? String((body as { creator: string }).creator) : null;
+      tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status: x.status, creator: x.creator })), reserved, existing: existingRows, creator });
     } catch { tickers = []; }
     return ok({ ...r.review, existing, tickers });
   }));

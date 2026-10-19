@@ -34,6 +34,28 @@ export interface CheckinInput {
   signals?: Pick<OpsSignals, "units" | "budget"> | null;
   /** Second audit A-7: the keeper's off-box heartbeat (ops/heartbeat.ts); absent = not known on this host. */
   heartbeat?: HeartbeatState | null;
+  /** Prelaunch audit 2026-10-18 A-1 / R1: the five host facts the code depends on, as the keeper sees them; absent = not reported. */
+  hostFacts?: HostFacts | null;
+}
+/** The host configuration the code depends on (names and yes/no only; never a value). */
+export interface HostFacts {
+  /** burn dispersal: on or off, and why (dispersal.ts dispersalLine) */ dispersal: { on: boolean; line: string };
+  /** BURNTICKER_ALERT_WEBHOOK is set */ webhookConfigured: boolean;
+  /** BURNTICKER_PUSH_URL is set: alerts reach the owner's phone. Owner decision 2026-10-18: push only, so a missing webhook is no gap */ pushConfigured: boolean;
+  /** BURNTICKER_STATUS_HEARTBEAT_URL is set (the off-box dead-man's switch) */ heartbeatConfigured: boolean;
+  /** BURNTICKER_BACKUP_DEST is set, or the last backup run saw one */ backupDestConfigured: boolean;
+  /** where the trust page's program hash comes from (programHash.ts programHashSourceLine) */ programHashSource: string;
+}
+/** The webhook as a host fact: with phone push configured and no webhook, it is not used by the owner's decision, never "not set". */
+export const WEBHOOK_PUSH_ONLY = "not used (push only, owner decision 2026-10-18)";
+const webhookFact = (configured: boolean, push: boolean): string => (configured ? "BURNTICKER_ALERT_WEBHOOK set" : push ? `BURNTICKER_ALERT_WEBHOOK ${WEBHOOK_PUSH_ONLY}` : "BURNTICKER_ALERT_WEBHOOK NOT SET (and no phone push: alerts stay on this host)");
+export function hostFactLines(h: HostFacts): string[] {
+  const yn = (b: boolean, name: string, why: string) => (b ? `${name} set` : `${name} NOT SET (${why})`);
+  return [
+    `- host: ${h.dispersal.line}`,
+    `- host: ${webhookFact(h.webhookConfigured, h.pushConfigured)} · ${yn(h.pushConfigured, "BURNTICKER_PUSH_URL", "no alert reaches a phone")} · ${yn(h.heartbeatConfigured, "BURNTICKER_STATUS_HEARTBEAT_URL", "a dead host is seen by nobody")} · ${yn(h.backupDestConfigured, "BURNTICKER_BACKUP_DEST", "backups stay on the box")}`,
+    `- host: ${h.programHashSource}`,
+  ];
 }
 /** The host signals for the conditions: what the keeper passed, plus a keeper refusal read from the alert rows. */
 const signalsOf = (i: CheckinInput): OpsSignals => ({ ...(i.signals ?? {}), alerts: i.alerts ?? null, lastCycleAt: i.snapshot?.lastCycle?.at ?? null });
@@ -41,7 +63,7 @@ const signalsOf = (i: CheckinInput): OpsSignals => ({ ...(i.signals ?? {}), aler
 export const OPS_SCHEMA = "burnticker.ops/v1";
 /** `conditions`: the active conditions' labels (ops/conditions.ts, the same list the check-in prints); `conditionDetail` and `recovered`
  *  carry the rest (added 2026-10-16, F06; absent in older documents). */
-export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; conditionDetail?: ActiveCondition[]; recovered?: ConditionRecord[]; webhook: WebhookState | null; /** added 2026-10-18 (A-7) */ heartbeat?: HeartbeatState | null }
+export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; conditionDetail?: ActiveCondition[]; recovered?: ConditionRecord[]; webhook: WebhookState | null; /** added 2026-10-18 (A-7) */ heartbeat?: HeartbeatState | null; /** A-1: absent in older documents */ hostFacts?: HostFacts | null }
 
 const ago = (now: number, ts: number | null): string => (ts === null || !ts ? "never" : `${Math.round((now - ts) / 60_000)} min ago`);
 
@@ -70,7 +92,8 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
   // F06: the one aggregator (keeper-level conditions + every source's health), the same list ops.json carries
   out.push(...conditionLines(conditionsView(s, i.health ?? null, i.conditionMemory ?? {}, now, signalsOf(i)), now));
   const hb = heartbeatLine(i.heartbeat, now); if (hb) out.push(hb);
-  if (i.webhook) out.push(`- alert webhook: ${i.webhook.configured ? `${i.webhook.lastError ? `FAILING (${i.webhook.lastError})` : i.webhook.lastOkAt ? `ok, last delivery ${ago(now, i.webhook.lastOkAt)}` : "configured, nothing delivered yet"}` : "not configured (alerts stay on the Burnticker host; set BURNTICKER_ALERT_WEBHOOK)"}`);
+  if (i.webhook) out.push(`- alert webhook: ${i.webhook.configured ? `${i.webhook.lastError ? `FAILING (${i.webhook.lastError})` : i.webhook.lastOkAt ? `ok, last delivery ${ago(now, i.webhook.lastOkAt)}` : "configured, nothing delivered yet"}` : i.hostFacts?.pushConfigured ? WEBHOOK_PUSH_ONLY : "not configured (alerts stay on the Burnticker host; set BURNTICKER_ALERT_WEBHOOK)"}`);
+  if (i.hostFacts) out.push(...hostFactLines(i.hostFacts));
   if (i.alerts === null) out.push(`- bt- alerts last 24 h: unavailable (alert table not readable on this host)`);
   else {
     const al = i.alerts.filter((a) => a.kind.startsWith("bt-"));
@@ -84,7 +107,7 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
 /** The block as the keeper publishes it for other hosts (the check-in there, the owner's phone). */
 export function buildOpsJson(i: CheckinInput & { now: number; host?: string }): OpsJson {
   const v = conditionsView(i.snapshot, i.health ?? null, i.conditionMemory ?? {}, i.now, signalsOf(i));
-  return { schema: OPS_SCHEMA, generatedAt: new Date(i.now).toISOString(), host: i.host ?? "burnticker", lines: burntickerCheckinLines(i), conditions: v.active.map((c) => c.label), conditionDetail: v.active, recovered: v.recovered, webhook: i.webhook ?? null, heartbeat: i.heartbeat ?? null };
+  return { schema: OPS_SCHEMA, generatedAt: new Date(i.now).toISOString(), host: i.host ?? "burnticker", lines: burntickerCheckinLines(i), conditions: v.active.map((c) => c.label), conditionDetail: v.active, recovered: v.recovered, webhook: i.webhook ?? null, heartbeat: i.heartbeat ?? null, hostFacts: i.hostFacts ?? null };
 }
 export function publishOps(siteDir: string, ops: OpsJson): void { publishSite(siteDir, { "ops.json": toJson(ops) }); }
 

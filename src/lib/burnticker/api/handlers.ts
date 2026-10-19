@@ -1,9 +1,10 @@
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { burnRealFromEnv, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
-import { alertLaunchLate, recordedClosure } from "@/lib/burnticker/draftReconciler";
-import { dispersalEnabled } from "@/lib/burnticker/dispersal";
+import { alertLaunchAfterClosure, alertLaunchLate, recordedClosure } from "@/lib/burnticker/draftReconciler";
+import { webDispersalOn } from "@/lib/burnticker/programHash";
 import type { Platform } from "@/lib/burnticker/server";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import { launchLabCostLamports, solText } from "@/lib/burnticker/launchCost";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
@@ -32,6 +33,7 @@ import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } fro
 import { seasonOverFor, seasonStatus } from "@/lib/burnticker/seasonOver";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, sha256Hex, uploadMayHaveCompleted, type PinHooks, type PinnedCoin } from "@/lib/burnticker/pin";
+import { checkWalletProof, provenReviewCreator, spendProof } from "@/lib/burnticker/walletProofCheck";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { describeRule } from "@/lib/burnticker/describe";
 import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
@@ -604,10 +606,15 @@ type PrepareResult = { error: ApiResult } | { ok: PreparedLaunch } | { pair: Pre
  * F04: the pin slots a prepare reserved are released when it ends, whatever it answered (a successful upload has already been charged).
  */
 export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: PrepareOptions): Promise<PrepareResult> {
-  const held: (() => void)[] = [];
+  const held: (() => void)[] = [], onOk: (() => void)[] = [];
   const mints = o.register && !o.dryRun ? [o.mint, o.mintB].filter((m): m is string => typeof m === "string" && m.length > 0) : [];
   const unlock = await lockMints(mints);
-  try { return await prepareLaunchUnlocked(p, body, o, held); }
+  try {
+    const r = await prepareLaunchUnlocked(p, body, o, held, onOk);
+    // review of block M: what runs only when the prepare succeeded (the wallet's signed request is spent)
+    if (!("error" in r) && o.register && !o.dryRun) for (const f of onOk) { try { f(); } catch { /* never changes the answer */ } }
+    return r;
+  }
   finally { for (const f of held.splice(0)) { try { f(); } catch { /* a release never changes the answer */ } } unlock(); }
 }
 
@@ -632,7 +639,7 @@ const reservedPins = new Map<string, number>();
 const reservedOf = (k: string): number => reservedPins.get(k) ?? 0;
 function adjustReserved(k: string, d: number): void { const n = reservedOf(k) + d; if (n > 0) reservedPins.set(k, n); else reservedPins.delete(k); }
 
-async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>, o: PrepareOptions, held: (() => void)[]): Promise<PrepareResult> {
+async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>, o: PrepareOptions, held: (() => void)[], onOk: (() => void)[] = []): Promise<PrepareResult> {
   if (o.dryRun) o = { ...o, register: false, mint: null, mintB: null, mintKeypair: null, mintKeypairB: null };   // a dry run never registers and holds no key
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
   const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
@@ -667,7 +674,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   // the end-sink picker: a rule naming a coin to take the rest is checked against the live coins on this network (endSinks.ts); an
   // unreadable registry leaves the list empty, so the named coin is refused (fail closed)
   const sinks = locked.rule.onEnd?.mint ? (() => { try { return liveSinks(p.registry, p.cluster); } catch { return []; } })() : null;
-  { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), dispersal: dispersalEnabled(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: [o.mint, o.mintB, bankA, bankB].filter((x): x is string => !!x), partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
+  { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), dispersal: webDispersalOn(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: [o.mint, o.mintB, bankA, bankB].filter((x): x is string => !!x), partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   // sources-7 (QA walkthrough 11 H6): a season rule on a team whose season is over, from the platform's schedule port (one bounded read)
   { const so = await seasonOverFor(locked.rule, p.seasonSchedule); if (so) return { error: fail(so.status, so.message, { code: so.code, next: so.next, problems: [so.message] }) }; }
   const list = loadRefuseList();
@@ -763,7 +770,11 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     // the request's rule does not; the pair branch expands the request with the recorded pair id and void date and compares there
     if (own.ticker !== input.ticker || (!b.pair && own.rulesJson !== locked.text)) return { error: fail(409, OWN_DRAFT_CHANGED, { code: "own-draft-changed" }) };
   }
-  { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null, creator: input.creator }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
+  // review of block M: a prepare that registers nothing (a dry run, register: false) is a free question, so the own-draft ticker exemption
+  // applies there only when the request carries that wallet's own signed request (else "not taken" would tell anyone who owns a draft)
+  const registers = o.register && !o.dryRun;
+  const tickerOwner = registers ? input.creator : provenReviewCreator({ creator: input.creator, walletProof: (body as { walletProof?: unknown }).walletProof, ticker: input.ticker, pair: b.pair ?? null }, [publicOrigin()]);
+  { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null, creator: input.creator, tickerOwner }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
   // (Polymarket: the payout vector + Gamma) — and creation refused if anything fails. Kalshi is always refused here: its terms forbid
   // settling products on its data. BURNTICKER_PREFLIGHT_STRICT=0 skips it (the test hook does, for the suite).
@@ -789,7 +800,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   // creators, made up or real, never escapes the client count). Checked for every side a launch will
   // pin BEFORE a bank key is taken or anything is uploaded; only an upload that succeeded is counted.
   const day = new Date().toISOString().slice(0, 10), client = o.client ?? "unknown";
-  const budgetKeys = { global: `pin.budget.${day}`, client: `pin.budget.${day}.client.${client}`, clientReal: `pin.budget.${day}.client.${client}.real`, clientCreator: `pin.budget.${day}.client.${client}.creator.${input.creator}` };
+  const budgetKeys = { wallet: `pin.budget.${day}.wallet.${input.creator}`, global: `pin.budget.${day}`, client: `pin.budget.${day}.client.${client}`, clientReal: `pin.budget.${day}.client.${client}.real`, clientCreator: `pin.budget.${day}.client.${client}.creator.${input.creator}` };
   // third prelaunch audit F04: a slot reserved by a prepare still uploading counts like a charged one (the cap was checked before the
   // awaited upload and charged after it, so three prepares at once with a cap of one all pinned)
   const chargedOf = (k: string) => Number(p.registry.getStatus(k) ?? 0) || 0;
@@ -803,15 +814,47 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
    * several wallets that launched cannot pass the connection's cap, and strangers with made-up creators (the plain client bucket) cannot
    * use up what a real creator on the same connection draws from.
    */
-  const myKeys = (): string[] => [budgetKeys.global, ...(!perRequester ? [] : realCreator ? [budgetKeys.clientCreator, budgetKeys.clientReal] : [budgetKeys.client])];
+  // review of block M: a wallet that proved control is also counted by itself, across every connection, so one funded wallet behind many
+  // addresses cannot spend the reserve kept for signed requests
+  const myKeys = (): string[] => [budgetKeys.global, ...(!perRequester ? [] : realCreator ? [budgetKeys.clientCreator, budgetKeys.clientReal] : [budgetKeys.client]), ...(perRequester && signed ? [budgetKeys.wallet] : [])];
+  /**
+   * Prelaunch audit 2026-10-18 A-3: whether the creator's wallet signed this request (walletProof.ts), checked before anything is
+   * counted, uploaded or taken from the mint bank. No proof: an unsigned request (it may still use the unsigned part of the day's
+   * uploads). A proof that does not hold: refused, with the reason. In-process callers (scripts, the operator's tools) count as signed.
+   */
+  let signed = false, funded = true, costLamports = 0;
+  // A-3 follow-up: a signature costs nothing to make, so a signed request reaches the reserve only when its wallet already holds the
+  // launch's own cost (the review's quoted total); a signed wallet below that shares the unsigned part like an unsigned request
+  const trusted = () => (signed && funded) || !perRequester;
+  // at most a fifth of the day's cap, so a small cap (a test host, a cautious owner) is not all kept back
+  const signedReserve = () => { const cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP; return Math.max(0, Math.min(p.pinSignedReserve ?? DEFAULT_PIN_SIGNED_RESERVE, Math.floor(cap / 5))); };
+  const proveWallet = async (tickers: string[], mints: (string | null | undefined)[], coins: number): Promise<{ error: ApiResult } | null> => {
+    const raw = (body as { walletProof?: unknown }).walletProof;
+    if (raw === undefined || raw === null) { signed = false; return null; }
+    const want = { creator: input.creator, tickers, mints: mints.filter((m): m is string => !!m) };
+    // review of block M: the text names this site (its public origin), and is spent once its prepare succeeds (walletProofCheck.ts)
+    const c = checkWalletProof(raw, { ...want, origins: [publicOrigin()] });
+    if (c.ok) onOk.push(() => spendProof(raw, want));
+    if (!c.ok) return { error: fail(401, `${WALLET_PROOF_REFUSED} The reason was: ${c.reason}.`, { code: "wallet-proof-invalid" }) };
+    signed = true;
+    if (perRequester) {
+      try { costLamports = launchLabCostLamports(locked.rule.reserveSol, coins); } catch { costLamports = launchLabCostLamports("0.02", coins); }
+      funded = await walletCovers(p, input.creator, costLamports);
+    }
+    return null;
+  };
   const budgetRefusal = (n: number): { error: ApiResult } | null => {
     if (n <= 0 || !p.uploader) return null;
     const cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP, mine = p.pinCreatorDailyCap ?? DEFAULT_PIN_CREATOR_DAILY_CAP;
     // review follow-up 8: a cap reached only because other prepares hold slots while they upload is "busy", not "used up"
     const over = (k: string, limit: number, usedUp: string, code: string): { error: ApiResult } | null =>
       countOf(k) + n <= limit ? null : chargedOf(k) + n <= limit ? { error: fail(429, UPLOAD_BUSY_SENTENCE, { code: "upload-busy", retryAfterSec: 60 }) } : { error: fail(429, usedUp, { code }) };
-    const g = over(budgetKeys.global, cap, `This site has used up its daily upload limit of ${cap} coins. Please try again after midnight UTC.`, "upload-budget");
+    // prelaunch audit 2026-10-18 A-3: a request the creator's wallet did not sign may use the daily limit less the part kept for signed
+    // requests, so strangers with made-up wallets can never use up what a real creator needs
+    const g = over(budgetKeys.global, cap, `This site has used up its daily upload limit of ${cap} coins. Please try again after midnight UTC.`, "upload-budget")
+      ?? (trusted() ? null : signed ? over(budgetKeys.global, Math.max(0, cap - signedReserve()), unfundedUploadsSentence(costLamports), "upload-budget-unfunded") : over(budgetKeys.global, Math.max(0, cap - signedReserve()), UNSIGNED_UPLOADS_SENTENCE, "upload-budget-unsigned"));
     if (g || !perRequester) return g;
+    { const w = signed ? over(budgetKeys.wallet, mine, `This wallet has saved the details of ${mine} coins on this site today, which is the daily limit for one wallet. Please try again after midnight UTC.`, "upload-budget-wallet") : null; if (w) return w; }
     if (realCreator) return over(budgetKeys.clientCreator, mine, `This wallet has saved the details of ${mine} coins on this site today, which is the daily limit for one wallet. Please try again after midnight UTC.`, "upload-budget-creator")
       ?? over(budgetKeys.clientReal, mine, `This connection has saved the details of ${mine} coins on this site today, which is the daily limit. Please try again after midnight UTC.`, "upload-budget-client");
     return over(budgetKeys.client, mine, `This connection has saved the details of ${mine} coins on this site today, which is the daily limit. Please try again after midnight UTC.`, "upload-budget-client");
@@ -836,6 +879,11 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     charged++;
     if (reserved > 0) { reserved--; for (const k of myKeys()) adjustReserved(k, -1); }
     for (const k of myKeys()) p.registry.setStatus(k, String(chargedOf(k) + 1));
+    // A-3: the owner's phone hears once a day when half of the day's uploads are used (push.ts bt-pin-budget)
+    try {
+      const cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP, used = chargedOf(budgetKeys.global);
+      if (cap > 0 && used >= Math.ceil(cap / 2)) p.registry.recordAlert({ kind: "bt-pin-budget", key: `bt-pin-budget:${day}`, text: pinBudgetAlertText(used, cap, signedReserve()), meta: { day, used, cap, reserve: signedReserve() } });
+    } catch { /* the alert never changes the answer */ }
   };
   /** Whether a side pins a new file: not when it retries the creator's own draft that already has its metadata (F4 reuses it). */
   const pinsNew = (knownMint: string | null): number => {
@@ -984,7 +1032,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     const bRefusals = nameRefusals(list, side.name, side.ticker);
     { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
-    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}), creator: input.creator }); if (g) return { error: fail(g.status, `Side B is refused. ${g.error}`, g.extra) }; }
+    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}), creator: input.creator, tickerOwner }); if (g) return { error: fail(g.status, sideBRefusal(g.error), g.extra) }; }
     // two candidates: both markets must be named outcomes of the one race the body names (Polymarket's own index of open races)
     if (settled?.shape === "candidates" && settled.bundle.race) {
       if (p.polymarketDiscovery === false) return { error: fail(503, POLYMARKET_UNAVAILABLE) };
@@ -1009,6 +1057,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     const pairIdChoice = recorded ? { pairId: recorded.pairId } : { pairIdPick: (base: string) => p.registry.freePairId(base) };
     // audit 2026-10-15 H4: every check above has passed; only now are the bank keys taken (a refusal before this point takes none)
     // review 2026-10-15 (5): both sides' pins are checked against the caps before a key is taken or side A is pinned
+    { const pf = await proveWallet([input.ticker, side.ticker], [o.mint, o.mintB], 2); if (pf) return pf; }   // A-3: before the budget, the keys and the uploads
     { const ob = reservePins(pinsNew(o.mint ?? null) + pinsNew(o.mintB ?? null)); if (ob) return ob; }
     if (o.takeMintKeys) { const t = o.takeMintKeys([input.ticker, side.ticker]); if ("error" in t) return t; if (t.keys.length < 2) return { error: fail(503, "This site could not prepare two addresses for the pair.", { code: "mint-bank-empty" }) }; o = { ...o, mintKeypair: t.keys[0], mintKeypairB: t.keys[1] }; }
     // F09 (prelaunch audit 2026-10-18): both mints are chosen here, before anything is pinned, so each side's metadata names its own mint
@@ -1062,6 +1111,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   }
   if (locked.rule.pair) return { error: fail(400, "A rule that names a pair is launched through the pair steps. Send side B as a pair with its own ticker and name.") };
   // audit 2026-10-15 H4: every check has passed; only now is the bank key taken
+  { const pf = await proveWallet([input.ticker], [o.mint], 1); if (pf) return pf; }   // A-3: before the budget, the key and the upload
   { const ob = reservePins(pinsNew(o.mint ?? null)); if (ob) return ob; }   // review 2026-10-15 (5): before the key
   if (o.takeMintKeys) { const t = o.takeMintKeys([input.ticker]); if ("error" in t) return t; o = { ...o, mintKeypair: t.keys[0] }; }
   // F09 (prelaunch audit 2026-10-18): the mint is chosen here, before anything is pinned, so the metadata names this coin's own mint
@@ -1081,6 +1131,8 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   }
 }
 
+/** Review of block M (copy): a side B guard refusal in one sentence ("Side B is refused. This launch is refused." said it twice). */
+export const sideBRefusal = (error: string): string => (/^This launch is refused\. /.test(error) ? error.replace(/^This launch is refused\. /, "Side B is refused. ") : `Side B is refused. ${error}`);
 /** Review follow-up 8: a cap reached only by slots other prepares are holding while they upload. */
 export const UPLOAD_BUSY_SENTENCE = "This site is busy saving other coins' details right now. Please try again in a minute.";
 /** Coins pinned on Arweave per UTC day per host when BURNTICKER_PIN_DAILY_CAP is not set (review N4). */
@@ -1103,6 +1155,45 @@ export function pinCreatorDailyCapFromEnv(env: Readonly<Record<string, string | 
   if ((env.BURNTICKER_CLUSTER ?? "").trim() !== "devnet" || !Number.isInteger(n) || n <= (base ?? DEFAULT_PIN_CREATOR_DAILY_CAP) || n > 1000) return base;
   return n;
 }
+/**
+ * Prelaunch audit 2026-10-18 A-3: of the host's daily uploads, this many are kept for requests the creator's wallet signed (the launch
+ * page always asks for the signature) when BURNTICKER_PIN_SIGNED_RESERVE is not set, and never more than a fifth of the daily cap.
+ * Unsigned requests share the rest.
+ */
+export const DEFAULT_PIN_SIGNED_RESERVE = 10;
+export const UNSIGNED_UPLOADS_SENTENCE = "This site has used up today's uploads for launch requests that a wallet did not sign. The launch page asks your wallet to sign the request, which costs nothing; a signed request can use the part of the daily limit kept for signed requests. Or try again after midnight UTC.";
+/** A-3 follow-up: a signed wallet that does not hold the launch's cost shares the unsigned uploads; this is said when those are used up. */
+export const unfundedUploadsSentence = (costLamports: number): string => `This wallet signed the request, but it holds less than this launch costs (about ${solText(costLamports)} SOL), so it shares today's uploads for unsigned requests, and those are used up. Put the launch cost in the wallet first, then press Launch again.`;
+/** How long a wallet's balance read is kept (per wallet, this process). */
+export const WALLET_BALANCE_CACHE_MS = 60_000;
+/** The balance cache's size bound (review of block M). */
+export const WALLET_BALANCE_CACHE_MAX = 1_000;
+/** For tests: the wallets whose balance is cached, oldest first. */
+export const cachedBalanceWallets = (): string[] => [...balances.keys()];
+const balances = new Map<string, { at: number; lamports: number | null }>();
+export function resetWalletBalances(): void { balances.clear(); }
+/**
+ * A-3 follow-up: whether `wallet` holds at least `lamports`, read once per prepare through the host's budgeted connection (p.market) and
+ * kept 60 s per wallet. A read that fails, or a malformed wallet, counts as not covered (the request shares the unsigned uploads). A
+ * host with no chain connection cannot check and does not hold signed creators back.
+ */
+export async function walletCovers(p: Pick<Platform, "market">, wallet: string, lamports: number, now = Date.now()): Promise<boolean> {
+  const m = p.market as (Platform["market"] & { getBalance?(pk: PublicKey, c?: "confirmed"): Promise<number> }) | null | undefined;
+  if (!m || typeof m.getBalance !== "function") return true;
+  let hit = balances.get(wallet);
+  if (!hit || now - hit.at >= WALLET_BALANCE_CACHE_MS) {
+    let v: number | null;
+    try { v = await m.getBalance(new PublicKey(wallet), "confirmed"); } catch { v = null; }
+    hit = { at: now, lamports: typeof v === "number" && Number.isFinite(v) ? v : null };
+  }
+  // review of block M: least recently used first out, at most WALLET_BALANCE_CACHE_MAX wallets
+  balances.delete(wallet); balances.set(wallet, hit);
+  while (balances.size > WALLET_BALANCE_CACHE_MAX) { const oldest = balances.keys().next().value; if (oldest === undefined) break; balances.delete(oldest); }
+  return hit.lamports !== null && hit.lamports >= lamports;
+}
+export const WALLET_PROOF_REFUSED = "This launch request carries a wallet signature that does not check out, so nothing was saved or prepared. Press Launch again to sign a new one.";
+/** The bt-pin-budget alert's line. */
+export const pinBudgetAlertText = (used: number, cap: number, reserve: number): string => `Half of today's uploads are used: ${used} of ${cap} coins have been saved on Arweave since midnight UTC. Unsigned launch requests stop at ${Math.max(0, cap - reserve)}; the last ${reserve} are kept for requests a wallet signed.`;
 
 /**
  * AUDIT A C1 review (8; re-review 1, 3): confirmations are metered on the heavy bucket, and expired drafts' mints are listed publicly, so
@@ -1219,7 +1310,8 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
   // F-3: the owner hears once per coin (draftReconciler.alertLaunchLate), with the operator's command that can still take it live
   if (!inDraftWindow(t.createdAt, v.blockTimeMs)) { alertLaunchLate(p.registry, t, launchTx, v.blockTimeMs, now); return fail(409, `This launch landed at ${baselineAt}, more than 24 hours after its draft was made, so it is not recorded here. Please build a new launch.`, { code: "launch-late" }); }
   const closedAt = launchesClosedAt(p, process.env, now);
-  if (closedAt !== null && v.blockTimeMs > closedAt) return fail(403, `This launch landed at ${baselineAt}, after creator launches closed, so it is not recorded.`, { code: "launch-after-closure" });
+  // prelaunch audit 2026-10-18 A-11: the owner hears once per coin, with the operator's command (draftReconciler.alertLaunchAfterClosure)
+  if (closedAt !== null && v.blockTimeMs > closedAt) { try { alertLaunchAfterClosure(p.registry, t, launchTx, v.blockTimeMs, closedAt, now); } catch { /* the alert never changes the answer */ } return fail(403, `This launch landed at ${baselineAt}, after creator launches closed, so it is not recorded.`, { code: "launch-after-closure" }); }
   let r: ReturnType<Platform["registry"]["takeLiveFromChain"]>;
   try { r = p.registry.takeLiveFromChain(mint, launchTx, t.poolId, v.blockTimeMs, { source: "confirm" }, now); } catch (e) { return fail(409, safeErrorText(e, 600), { code: "launch-race" }); }
   return ok({ ok: true, token: p.registry.token(mint), ...(r.revived ? { revived: true } : {}), note: `The launch transaction was read from the chain. The start time is its block time, ${baselineAt}. Results settled after this moment count.${r.revived ? " This draft had been marked expired, and the chain shows its coin was created in time, so it is live now." : ""}` });

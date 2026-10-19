@@ -25,7 +25,8 @@ import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx, sideBDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX, descriptionRoom, descriptionRoomProblem } from "@/lib/burnticker/creatorProfile";
 import { nameProblem } from "@/lib/burnticker/launchFields";
-import { dispersalEnabled } from "@/lib/burnticker/dispersal";
+// prelaunch audit 2026-10-18 A-1: the same dispersal decision as the keeper (default on for a round-5 program)
+import { webDispersalOn } from "@/lib/burnticker/programHash";
 import { LINKED_ONE_SHOT_LINE, presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
 import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_UNAVAILABLE_LINE, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
@@ -54,7 +55,7 @@ import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, 
  */
 
 /** `pair` = side B of a registered pair (its rule is derived from side A's); `companion` = a second, independent coin launched alongside (a matchup's other team). */
-export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** two candidates in one race: candidate B's market and the race slug */ market?: unknown; race?: unknown; /** two teams in one game: the other team */ opp?: unknown; /** a settled pair's side B: its own describe context (candidate B's event words, or team B's game), as `descCtx` is side A's */ descCtx?: unknown; /** round 5: side B's own pinned token (burnTarget.ts BurnTargetField); side A's is in `rule` */ burnTarget?: unknown; /** the two candidates' or teams' names, for the money path */ names?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
+export interface ReviewInput { rule?: unknown; /** A-2: the connected wallet, when the page has one (its own coins' tickers are not refused) */ creator?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** two candidates in one race: candidate B's market and the race slug */ market?: unknown; race?: unknown; /** two teams in one game: the other team */ opp?: unknown; /** a settled pair's side B: its own describe context (candidate B's event words, or team B's game), as `descCtx` is side A's */ descCtx?: unknown; /** round 5: side B's own pinned token (burnTarget.ts BurnTargetField); side A's is in `rule` */ burnTarget?: unknown; /** the two candidates' or teams' names, for the money path */ names?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
 export interface ReviewCost { label: string; sol: string; kind: "rent" | "reserve" | "fee" }
 export interface LaunchReview {
   schema: "burnticker.launch-review/v1";
@@ -302,7 +303,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const now = o.now ?? Date.now();
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): every rule refusal the bundle route makes, as problems
   const settled = settledPairInput(body.pair);
-  for (const x of ruleRefusals(locked, { programRound5: burnRealFromEnv(env), dispersal: dispersalEnabled(env), kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks: o.sinks ?? null })) problems.push(x.message);
+  for (const x of ruleRefusals(locked, { programRound5: burnRealFromEnv(env), dispersal: webDispersalOn(env, o.root), kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks: o.sinks ?? null })) problems.push(x.message);
   // sources-7 H7: a coin against its own staked or wrapped form (derby/spec.ts wrapperPairProblem), as the tile and admission refuse it
   { const d = locked.rule.derby; if (d?.selector === "coinvs") { const w = wrapperPairProblem(d.a, d.b); if (w) problems.push(w); } }
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
@@ -340,7 +341,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   let reserved: ReadonlySet<string> = new Set();
   try { reserved = o.reserved ?? loadReserved(); } catch { /* an unreadable list refuses nothing here; the launch route reads it again */ }
   const descOf = (i: number) => { const d = i === 0 ? (body as { creatorDescription?: unknown }).creatorDescription : second?.creatorDescription; return typeof d === "string" ? d : ""; };
-  sides.forEach((s, i) => { for (const x of identityRefusals({ ticker: s.ticker, name: s.name, description: descOf(i), note: i === 0 ? note : "" }, { reserved, existing: o.existing ?? null, rule: i === 0 ? locked.rule : null })) onField(s.side, x.field, x.message, two); });
+  sides.forEach((s, i) => { for (const x of identityRefusals({ ticker: s.ticker, name: s.name, description: descOf(i), note: i === 0 ? note : "" }, { reserved, existing: o.existing ?? null, rule: i === 0 ? locked.rule : null, creator: typeof (body as { creator?: unknown }).creator === "string" ? (body as { creator: string }).creator : null })) onField(s.side, x.field, x.message, two); });
   if (note.length > NOTE_MAX) onField("A", "note", `The note can be at most ${NOTE_MAX} characters.`, false);
   // audit 7 item 3: the creator's links, checked exactly as the bundle checks them (creatorProfile.ts linksProblems)
   if ((body as { links?: unknown }).links !== undefined) for (const x of linksProblems((body as { links?: unknown }).links)) onField("A", "links", x, false);
@@ -376,7 +377,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // audit 6 item 8: the bundle route takes any share inside the rule's bounds, so a share off the web launcher's preset row is a warning
   // audit 12 item 1: a linked one-shot pair's row is 100 % only; a share off it is refused by ruleRefusals, so it is not repeated here
   const linkedOneShot = !!pair && shareShapeOf(locked.rule, { linked: true }) === "linkedOneShot";
-  const pp = linkedOneShot ? null : presetProblem(locked.rule, { dispersal: dispersalEnabled(env) });
+  const pp = linkedOneShot ? null : presetProblem(locked.rule, { dispersal: webDispersalOn(env, o.root) });
   // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none
   const raiseSol = body.raiseSol === undefined || body.raiseSol === null ? DEFAULT_RAISE_SOL : String(body.raiseSol);
   const rp = raiseProblem(raiseSol, cluster);

@@ -55,6 +55,25 @@ const PAGE = 1000;
 export interface DraftChainReader {
   getMultipleAccountsInfo(keys: PublicKey[], commitment: "confirmed"): Promise<({ owner: { toBase58(): string } | PublicKey; data: Uint8Array } | null)[]>;
   getSignaturesForAddress(address: PublicKey, opts: { limit: number; before?: string; until?: string }, commitment: "confirmed"): Promise<{ signature: string; err: unknown; blockTime?: number | null }[]>;
+  /**
+   * Prelaunch audit 2026-10-18 A-18: the signers of up to SIGNER_BATCH transactions in ONE batched read (null where a transaction was not
+   * served). Every lock and create is signed by the coin's new mint, so a transaction the mint did not sign (dust sent to the fee PDA by
+   * anyone) is dropped without a verification. Optional: a reader without it verifies every transaction, as before.
+   */
+  signersOf?(signatures: string[]): Promise<(string[] | null)[]>;
+}
+
+/** A-18: transactions whose signers are read in one batch, and batches per sweep. */
+export const SIGNER_BATCH = 100;
+export const SIGNER_BATCHES_PER_SWEEP = 10;
+
+/** A-18: the keeper's batched signer read on a web3.js Connection (getTransactions: one JSON-RPC batch per call). */
+export function withSignerReads<C extends { getTransactions(sigs: string[], o: { commitment: "confirmed"; maxSupportedTransactionVersion: 0 }): Promise<({ transaction: { message: { header: { numRequiredSignatures: number }; staticAccountKeys?: { toBase58(): string }[]; accountKeys?: { toBase58(): string }[] } } } | null)[]> }>(conn: C): C & Pick<DraftChainReader, "signersOf"> {
+  const signersOf = async (signatures: string[]): Promise<(string[] | null)[]> => {
+    const txs = await conn.getTransactions(signatures, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    return txs.map((t) => { if (!t) return null; const m = t.transaction.message, keys = m.staticAccountKeys ?? m.accountKeys ?? []; return keys.slice(0, m.header.numRequiredSignatures).map((k) => k.toBase58()); });
+  };
+  return Object.assign(conn, { signersOf });
 }
 
 export interface ReconcileDeps {
@@ -96,6 +115,9 @@ export interface ReconcileReport {
   late: { mint: string; ticker: string; launchTx: string; blockTimeMs: number }[];
   pages: number;
   verified: number;
+  /** A-18: transactions dropped without a verification because the coin's mint did not sign them, and the batched signer reads */
+  notSignedByMint: number;
+  signerReads: number;
   errors: string[];
 }
 
@@ -121,7 +143,7 @@ interface ScanState { done?: boolean; until?: string; nextAt?: number; backoffMs
 const windowEnd = (t: TokenRow) => t.createdAt + DRAFT_TTL_MS + DRAFT_GRACE_MS;
 
 export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport> {
-  const out: ReconcileReport = { skipped: false, checked: 0, takenLive: [], onChainNoCreate: [], finished: [], late: [], pages: 0, verified: 0, errors: [] };
+  const out: ReconcileReport = { skipped: false, checked: 0, takenLive: [], onChainNoCreate: [], finished: [], late: [], pages: 0, verified: 0, notSignedByMint: 0, signerReads: 0, errors: [] };
   const reg = d.registry, now = d.now();
   const last = Number(reg.getStatus(RECONCILE_STATUS_KEY) ?? 0);
   if (Number.isFinite(last) && last > 0 && now - last < (d.intervalMs ?? RECONCILE_INTERVAL_MS)) { out.skipped = true; return out; }
@@ -166,6 +188,7 @@ export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport
     const walkers = new Map(ready.map((x) => [x.t, walker(d, x.t, x.st, out, oldest.get(x.t.mint) ?? null)] as const));
     // 2. VERIFY: round robin, one transaction per draft per round, each draft's OLDEST unchecked transaction first
     const active = new Set(ready), found = new Map<TokenRow, { signature: string; blockTimeMs: number }>(), stuck = new Set<TokenRow>();
+    const mintSigned = new Map<string, boolean>();   // A-18: mint:signature → whether the draft's mint signed it (from the batched reads)
     while (active.size && out.verified < VERIFY_PER_SWEEP) {
       for (const x of [...active]) {
         if (out.verified >= VERIFY_PER_SWEEP) break;
@@ -174,6 +197,14 @@ export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport
         try { head = await w.head(); }
         catch (e) { if (isBudgetHold(e)) throw e; out.errors.push(`$${x.t.ticker}: ${(e as Error).message.slice(0, 120)}`); stuck.add(x.t); active.delete(x); continue; }
         if (head === null) { active.delete(x); continue; }
+        // A-18: a transaction the coin's mint did not sign is never its lock or create: dropped here, at no verification
+        if (d.reader.signersOf && !mintSigned.has(`${x.t.mint}:${head}`) && out.signerReads < SIGNER_BATCHES_PER_SWEEP) {
+          const batch = w.upcoming(SIGNER_BATCH);
+          out.signerReads++;
+          try { const got = await d.reader.signersOf(batch); batch.forEach((sig, i) => { const g = got[i]; if (Array.isArray(g)) mintSigned.set(`${x.t.mint}:${sig}`, g.includes(x.t.mint)); }); }
+          catch (e) { if (isBudgetHold(e)) throw e; /* unread: the transaction is verified as before */ }
+        }
+        if (mintSigned.get(`${x.t.mint}:${head}`) === false) { w.consume(head); out.notSignedByMint++; continue; }
         out.verified++;
         let v: Awaited<ReturnType<LaunchVerifier["verify"]>>;
         try { v = await d.verifier.verify(head, expectOf(d, x.t)); }
@@ -208,7 +239,11 @@ export async function reconcileDrafts(d: ReconcileDeps): Promise<ReconcileReport
       }
       const closedAt = recordedClosure(reg, d.env);
       // re-review 2: a closure is not final (launches may reopen, or a wrong closure time is corrected): back off, never finish
-      if (closedAt !== null && hit.blockTimeMs > closedAt) { out.errors.push(`$${t.ticker}: its create landed after creator launches closed; not taken live`); backoff(st, now); save(t.mint, st); continue; }
+      if (closedAt !== null && hit.blockTimeMs > closedAt) {
+        out.errors.push(`$${t.ticker}: its create landed after creator launches closed; not taken live`);
+        if (!d.dryRun) alertLaunchAfterClosure(reg, t, hit.signature, hit.blockTimeMs, closedAt, now);   // A-11: once per coin
+        backoff(st, now); save(t.mint, st); continue;
+      }
       let revived = t.status === "expired", withinWindow = true, changed = true;
       if (!d.dryRun) {
         try { const r = reg.takeLiveFromChain(t.mint, hit.signature, t.poolId, hit.blockTimeMs, { source: "reconciler", note: "the browser never confirmed this launch; the keeper read it from the chain" }, now); revived = r.revived; withinWindow = r.withinWindow; changed = r.changed; }
@@ -285,7 +320,7 @@ async function page(d: ReconcileDeps, t: TokenRow, st: ScanState, out: Reconcile
  * marks the head judged; an exhausted page is dropped from the walk. A page the node does not serve in full, or a judged transaction it
  * no longer shows, throws: the draft backs off and the walk resumes from the same place, never from the start.
  */
-function walker(d: ReconcileDeps, t: TokenRow, st: ScanState, out: ReconcileReport, first: Sig[] | null): { head(): Promise<string | null>; consume(sig: string): void } {
+function walker(d: ReconcileDeps, t: TokenRow, st: ScanState, out: ReconcileReport, first: Sig[] | null): { head(): Promise<string | null>; consume(sig: string): void; upcoming(n: number): string[] } {
   const address = scanAddress(new PublicKey(d.burnProgramId), t.mint), lo = t.createdAt - 60_000;
   const judgeable = (got: Sig[]) => got.filter((r) => (r.err === null || r.err === undefined) && !(typeof r.blockTime === "number" && r.blockTime * 1000 < lo)).map((r) => r.signature).reverse();
   let rows: string[] | null = first ? judgeable(first) : null;
@@ -314,6 +349,8 @@ function walker(d: ReconcileDeps, t: TokenRow, st: ScanState, out: ReconcileRepo
     },
     // re-review Low 2: progress resets the backoff
     consume(sig: string) { if (st.walk) st.walk.through = sig; delete st.backoffMs; },
+    /** A-18: the head and the transactions after it on the same page (call after head()) */
+    upcoming(n: number) { const w = st.walk; if (!rows || !w) return []; const at = w.through ? rows.indexOf(w.through) + 1 : 0; return rows.slice(at, at + n); },
   };
 }
 
@@ -323,6 +360,22 @@ export function alertLaunchLate(reg: Pick<Registry, "getStatus" | "setStatus" | 
   if (reg.getStatus(key)) return false;
   reg.setStatus(key, launchTx, now);
   reg.recordAlert({ kind: LATE_ALERT_KIND, key: `${LATE_ALERT_KIND}:${t.mint}`, text: `$${t.ticker} was created on chain at ${new Date(blockTimeMs).toISOString()}, after its draft's 24-hour window, so it was not taken live. Its create is ${launchTx}. To take it live anyway (recorded as late): ${REVIVE_SCRIPT} --mint ${t.mint} --tx ${launchTx} --late --note "<why>" --apply`, meta: { mint: t.mint, launchTx, blockTimeMs } }, now);
+  return true;
+}
+
+/** Prelaunch audit 2026-10-18 A-11: a create that landed after creator launches closed raises this alert once per mint. */
+export const AFTER_CLOSURE_ALERT_KIND = "bt-launch-after-closure";
+export const AFTER_CLOSURE_STATUS_PREFIX = "drafts.afterClosure.";
+/**
+ * A-11: closing creator launches is the owner's incident response, and a create that lands after it (a creator who was signing at that
+ * moment) is refused by the confirm and held back by this reconciler, so nobody was told. The owner now hears once per coin, with the
+ * operator's command that takes it live if it should be (the revive script does not read the closure).
+ */
+export function alertLaunchAfterClosure(reg: Pick<Registry, "getStatus" | "setStatus" | "recordAlert">, t: Pick<TokenRow, "mint" | "ticker">, launchTx: string, blockTimeMs: number, closedAt: number, now: number): boolean {
+  const key = AFTER_CLOSURE_STATUS_PREFIX + t.mint;
+  if (reg.getStatus(key)) return false;
+  reg.setStatus(key, launchTx, now);
+  reg.recordAlert({ kind: AFTER_CLOSURE_ALERT_KIND, key: `${AFTER_CLOSURE_ALERT_KIND}:${t.mint}`, text: `$${t.ticker} was created on chain at ${new Date(blockTimeMs).toISOString()}, after creator launches closed at ${new Date(closedAt).toISOString()}, so it was not taken live. It exists on chain and can trade, but no burn runs for it. Its create is ${launchTx}. To take it live anyway: ${REVIVE_SCRIPT} --mint ${t.mint} --tx ${launchTx} --note "<why>" --apply`, meta: { mint: t.mint, launchTx, blockTimeMs, closedAt } }, now);
   return true;
 }
 

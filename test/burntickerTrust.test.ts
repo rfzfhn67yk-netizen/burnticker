@@ -97,7 +97,18 @@ describe("buildTransparency / buildTrustPage", () => {
     assert.equal(t.whoRunsThis.refuseListPresent, true);
     assert.equal(t.howBuilt.reviewsReadmePresent, true);
     assert.deepEqual(t.howBuilt.reportsPresent.map((r) => r.present), Array(13).fill(true), "the nine Claude reports and the four ChatGPT/Codex reports all exist");
-    assert.equal(t.walletsTodo, t.wallets.length - 1, "every wallet row but the $DEFICIT mint is still a TODO");
+    // prelaunch audit 2026-10-18 A-6: one record. The addresses come from operator.json for the cluster (the operator page's record), so
+    // nothing the operator page lists reads "not set" here; a role that record does not list is "unlisted", not unset
+    assert.equal(t.walletsTodo, 0, "no wallet the operator record lists is shown as not set");
+    for (const cl of ["devnet", "mainnet"] as const) {
+      const op = JSON.parse(fs.readFileSync(path.join(ROOT, "config", "burnticker", "operator.json"), "utf8")) as { clusters: Record<string, { wallets: { role: string; pubkey: string }[] }> };
+      const rows = buildTransparency(ROOT, { BURNTICKER_CLUSTER: cl }).wallets;
+      for (const w of op.clusters[cl].wallets) assert.equal(rows.find((r) => r.role === w.role)?.resolved, w.pubkey, `${cl} ${w.role} reads the operator record`);
+    }
+    const main = buildTransparency(ROOT, { BURNTICKER_CLUSTER: "mainnet" }).wallets;
+    const keepers = main.filter((w) => /keeper/i.test(w.role));
+    assert.equal(new Set(keepers.map((w) => w.label)).size, keepers.length, "the two keeper keys carry distinct names");
+    assert.ok(main.some((w) => w.role === "platform-keeper" && w.resolved === "FQYod3oyUJNedCw3xbp6AHifyZmG4uNrD1XvLqtpGd5L"));
     assert.ok(t.decisions.entries >= 9 && t.changelog.entries >= 1);
   });
 

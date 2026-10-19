@@ -81,17 +81,15 @@ describe("A-22: the origin says what an edge may keep", () => {
     assert.match(endpoint("search").description, /Not cached \(no-store\)/);
     assert.match(read("src/lib/burnticker/api/http.ts"), /ep\.cacheSec > 0 \? `public, max-age=\$\{ep\.cacheSec\}[^`]*` : "no-store"/);
   });
-  test("review item 4: a 404 from the app is never kept (Caddy rewrites it to no-store; the Cloudflare rule's 404 TTL is No store)", () => {
+  test("review item 4: a 404 from the app is never kept at the edge (the Cloudflare rule's 404 TTL is No store; Caddy leaves the app's 404 untouched)", () => {
     const caddy = read("deploy/caddy/Caddyfile");
-    const i = caddy.indexOf("@upstream_404 status 404");
-    assert.ok(i > 0 && i > caddy.search(/handle \{\s*reverse_proxy/), "inside the pages' reverse_proxy");
-    const block = caddy.slice(caddy.indexOf("handle_response @upstream_404 {", i), caddy.indexOf("copy_response\n", caddy.indexOf("handle_response @upstream_404 {", i)) + 14);
-    assert.match(block, /copy_response_headers \{\s*exclude Cache-Control\s*\}\s*header Cache-Control "no-store"\s*copy_response/);
+    assert.ok(!caddy.includes("@upstream_404"), "the handle_response rewrite was removed on 2026-10-18 (it answered 520 through Cloudflare)");
     if (!fs.existsSync(CF_DOC)) return;
     const doc = read(CF_DOC);
     assert.ok(doc.includes("Status code TTL: 404 = No store"));
     assert.doesNotMatch(doc, /404 pages included|a 404, also `HIT`/, "before: the doc said 404s were kept");
   });
+
   test("no page reads a cookie or a request header, so a kept page is the same for every visitor", () => {
     const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : /\.(tsx|ts)$/.test(e.name) ? [`${d}/${e.name}`] : []));
     for (const f of walk("src/app/burnticker").filter((f) => /(page|layout)\.tsx$/.test(f))) assert.doesNotMatch(read(f), /from "next\/headers"/, f);

@@ -70,11 +70,12 @@ describe("H9: impersonating tickers and names", () => {
       assert.equal(c.reserved, true);
       for (const s of c.suggestions) { assert.equal(isReserved(s, reserved), false, s); assert.doesNotMatch(s, /^(DEFICIT|BURNTICK|REHEARSA)/, s); }
     }
-    assert.deepEqual(checks[0].suggestions, ["AVS2", "AVS3"], "the rule's ticker is taken, so its free variants");
+    // prelaunch audit 2026-10-18 A-2: a digit ending reads as the same letters (a lookalike the launch refuses), so a word is added instead
+    assert.deepEqual(checks[0].suggestions, ["AVSFANS", "AVSCLUB"], "the rule's ticker is taken, so its free variants");
     assert.deepEqual(checks[1].suggestions, [], "no rule ticker: nothing is suggested");
-    assert.deepEqual(checks[2].suggestions, ["AVSL", "AVSL2"]);
+    assert.deepEqual(checks[2].suggestions, ["AVSL", "AVSLFANS"]);
     // a ticker only in use (not reserved) still gets its own free variants
     const inUse = tickerChecks([{ side: "A", ticker: "LAD" }], { inUse: (t) => (t === "LAD" ? [{ mint: "m", name: "Dodgers", ticker: "LAD", rulesJson: "{}" }] : []), reserved });
-    assert.deepEqual(inUse[0].suggestions, ["LAD2", "LAD3"]);
+    assert.deepEqual(inUse[0].suggestions, ["LADFANS", "LADCLUB"]);
   });
 });

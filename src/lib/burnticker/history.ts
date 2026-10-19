@@ -88,6 +88,16 @@ export function collapseRepublishes(releases: readonly Release[]): (Release & { 
   return out;
 }
 
+/**
+ * WHAT A VISITOR SEES OF A RELEASE (prelaunch audit 2026-10-18 A-6): its date, its public commit and its lines. The monorepo commit
+ * (`source`) is how the changelog file keys a release; the changelog page, the trust API and the trust page's changelog text leave it
+ * out. It is not secret everywhere (review 7): monorepo commits are also in verified-build.json's sourceCommit, in the well-known file's
+ * trust.sourceCommit, and in the CHANGELOG.md the publish script copies into the public repository verbatim.
+ */
+export interface PublicRelease { date: string; publicCommit: string | null; publicUrl: string | null; lines: string[]; times?: number }
+export const publicRelease = (r: Release & { times?: number }): PublicRelease => ({ date: r.date, publicCommit: r.publicCommit, publicUrl: r.publicUrl, lines: r.lines, ...(r.times !== undefined ? { times: r.times } : {}) });
+
+
 export function readReleases(root = process.cwd()): Release[] | null {
   try { return parseChangelog(fs.readFileSync(path.join(root, CHANGELOG_FILE), "utf8")); } catch { return null; }
 }

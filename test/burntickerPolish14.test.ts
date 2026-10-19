@@ -210,6 +210,6 @@ describe("11. /changelog: a run of republishes is one entry with a count", () =>
   test("a single republish is left as it was; the page renders the collapsed list", () => {
     const one: Release[] = parseChangelog([rel("aaaaaaaaaaaa", 5), rel("aaaaaaaaaaaa", 5), rel("cccccccccccc", 7)].join("\n"));
     assert.deepEqual(collapseRepublishes(one).map((r) => r.lines[0]), [RELEASE_LINES.first, RELEASE_LINES.sameSource, "7 files were published, 2 more than the release before."].map((x, i) => (i === 2 ? one[2].lines[0] : x)));
-    assert.match(read("src/app/burnticker/changelog/page.tsx"), /\{collapseRepublishes\(releases\)\.reverse\(\)\.map\(\(r, k\) => \(/);
+    assert.match(read("src/app/burnticker/changelog/page.tsx"), /\{collapseRepublishes\(releases\)\.map\(publicRelease\)\.reverse\(\)\.map\(\(r, k\) => \(/);
   });
 });

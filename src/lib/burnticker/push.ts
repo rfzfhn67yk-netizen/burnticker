@@ -19,6 +19,9 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *                     (gameSettle.ts; the keeper records bt-single-source once per coin)
  *   mint-bank-low     the mint key bank has had fewer than BURNTICKER_MINT_BANK_LOW prepared addresses for more than an hour
  *                     (scripts/burnticker-mint-bank.mts records bt-mint-bank-low; launches still work through the browser search)
+ *   pin-budget        half of the day's Arweave uploads for launches are used (api/handlers.ts bt-pin-budget, once per UTC day)
+ *   launch-after-closure  a coin was created on chain after creator launches closed (draftReconciler.ts / the confirm route record
+ *                     bt-launch-after-closure once per coin, with the revive command)
  *   launch-late       a coin was created on chain after its draft's 24-hour window, so it was not taken live; the alert carries the
  *                     operator command that can (draftReconciler.ts and the confirm route record bt-launch-late once per coin)
  *   synthetic-failed  the nightly synthetic creator (scripts/burnticker-synthetic-creator.mts, mct-burnticker-synth.timer) failed a
@@ -32,6 +35,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *   and (second audit 2026-10-18 A-7) the serious kinds that used to stay in the registry only: audit-mismatch, audit-stale,
  *   keeper-balance-low, reading-conflict, reading-implausible, foreign-reading, keeper-takeover, feed-stale, feed-disagree,
  *   derby-withheld, and at low priority cap-binding and pin-orphan (alerts.ts, ops/keeperOps.ts, ops/feedHealth.ts, derby, api)
+ *   dispersal-off     the keeper runs with BURNTICKER_DISPERSAL=0 on a program that has crank_carried (allowed; once a Denver day; A-1)
+ *   never-buys-red    the keeper's daily never-buys run found an operator wallet that received a platform coin outside any rehearsal (A-6)
  *   keeper-stale      the public status file is stale for more than two hours: pushed by scripts/ops/keeper-status-check.sh, which runs
  *                     every minute from the publish timer and so still works when the keeper is down (listed here for the runbook)
  *
@@ -53,7 +58,7 @@ export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "cr
   | "audit-mismatch" | "audit-stale" | "keeper-balance-low" | "reading-conflict" | "reading-implausible" | "foreign-reading" | "keeper-takeover"
   | "feed-stale" | "feed-disagree" | "derby-withheld" | "cap-binding" | "pin-orphan"
   // merged from the main branch
-  | "dispersal-receipt";
+  | "dispersal-receipt" | "dispersal-off" | "never-buys-red" | "pin-budget" | "launch-after-closure";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -76,6 +81,10 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-backup-offbox-stale": "backup-offbox",
   // prelaunch audit 2026-10-16 F-3 (block G review M3): a create after its draft window reaches the phone
   "bt-launch-late": "launch-late",
+  // prelaunch audit 2026-10-18 A-3: half of the day's Arweave uploads are used (api/handlers.ts, once per UTC day)
+  "bt-pin-budget": "pin-budget",
+  // A-11: a create that landed after creator launches closed (draftReconciler.ts and the confirm route, once per coin)
+  "bt-launch-after-closure": "launch-after-closure",
   // prelaunch audit H6 re-review: a coin held because this build cannot check its stored title filter is a burn that is not running
   "rule-filter-unsupported": "crank-refused",
   // A-7 (second audit 2026-10-18): recorded in the registry, and now pushed too
@@ -91,6 +100,10 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "derby-withheld": "derby-withheld",
   "bt-cap-binding": "cap-binding",
   "bt-pin-orphan": "pin-orphan",
+  // prelaunch audit 2026-10-18 A-1: BURNTICKER_DISPERSAL=0 on a program with crank_carried (allowed; once a Denver day)
+  "bt-dispersal-off": "dispersal-off",
+  // A-6: the keeper's daily never-buys run found an operator wallet that received a platform coin outside any recorded rehearsal
+  "bt-never-buys-red": "never-buys-red",
 };
 export const PUSH_TITLE: Record<PushKind, string> = {
   "keeper-refused": "Burnticker keeper refused to start",
@@ -121,6 +134,10 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "derby-withheld": "Burnticker Derby result withheld",
   "cap-binding": "Burnticker burn pool above its cap",
   "pin-orphan": "Burnticker upload saved for nothing",
+  "dispersal-off": "Burnticker burn dispersal is off",
+  "never-buys-red": "Burnticker operator wallet traded for a platform coin",
+  "pin-budget": "Burnticker uploads half used",
+  "launch-after-closure": "Burnticker coin created after launches closed",
 };
 /** Kinds pushed at low priority: a note, not trouble that needs someone now. */
 export const PUSH_LOW_PRIORITY: ReadonlySet<PushKind> = new Set(["backup-offbox", "cap-binding", "pin-orphan"]);
@@ -140,7 +157,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "backup-offbox": "The backups on the host are fine, but none has been copied to the backup destination for a day. A lost disk would lose them. The line below says since when.",
   "backup-failed": "The database backup did not finish, or none has finished for too long. The copies already made are still there. The line below says why.",
   "launch-late": "A coin was created on chain more than 24 hours after its draft was made, so the site did not take it live. It exists and can trade, but no burn runs for it until the operator decides. The line below has the command that takes it live as late.",
-  "audit-mismatch": "The hourly public audit recomputed the receipts and at least one does not match what was recorded. Nobody outside can trust that receipt until someone looks. The line below names it.",
+  "audit-mismatch": "The public audit found something that does not match. Either a receipt does not recompute from its reading and rule, or the burn program on chain is not the build the trust pages name. The line below says which.",
   "audit-stale": "The hourly public audit has not run for more than three hours, so nothing is checking the receipts. Check the audit timer and its log.",
   "keeper-balance-low": "The keeper's key holds less than 0.05 SOL. It pays the fees for every burn, so burns stop landing when it runs out. Top it up.",
   "reading-conflict": "A source changed a result the registry had already recorded. The registry refused the new value and the coin is held until someone looks.",
@@ -152,6 +169,10 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "derby-withheld": "A Burn Derby or record-close result was withheld because it could not be settled cleanly. The line below says why.",
   "cap-binding": "A burn pool holds more than the pre-audit cap allows. The excess is queued, not spent. This is a notice; nothing is lost.",
   "pin-orphan": "Files were saved on Arweave for a draft that another request registered first. They are not used, and the fee for them is spent.",
+  "dispersal-off": "The keeper runs with burn dispersal turned off on purpose. A finished rule's carried amount then goes to its end sink after 30 days instead of burning the coin.",
+  "never-buys-red": "The daily check of the operator wallets found one that traded for a platform coin outside any recorded rehearsal (a coin only sent to it is listed, not pushed). The operator and trust pages now show this in red. The line below names the wallet and the transaction.",
+  "pin-budget": "Half of today's uploads for new coins are used. If many come from launch requests no wallet signed, someone may be filling the limit on purpose; the part kept for signed requests still lets real creators launch. The line below has the counts.",
+  "launch-after-closure": "A coin was created on chain after creator launches were closed, so the site did not take it live. Its creator was probably signing when launches closed. It exists and can trade, but no burn runs for it until the operator decides. The line below has the command that takes it live.",
   "single-source": "A coin's game settled on TheSportsDB alone for the first time. Polymarket had no market for it and no league feed could read it, so its final score had to stand unchanged for 12 hours first. This is a notice only; nothing needs doing.",
 };
 

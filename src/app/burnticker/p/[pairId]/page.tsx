@@ -20,6 +20,7 @@ import { TermNote } from "../../_components/Term";
 import { CurveBar } from "../../_components/CoinCard";
 import { BURNS_AFTER_GRADUATION, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, READ_FULL_RULE, ruleBrief, ruleFacts, type CoinTab } from "@/lib/burnticker/coinPage";
 import { fixed, grouped } from "@/lib/burnticker/safeFormat";
+import { pairLastSentence, type PairLastFacts } from "@/lib/burnticker/receiptWords";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { PairSeedHeading, usePairSeed } from "./PairSeed";
 
@@ -40,7 +41,7 @@ interface Receipt { eventId: string; settledAt: string; result: string | null; v
 interface Side { rulesText?: string; status: { ticker: string; name: string; mint: string; cluster?: string; market?: { phase: "curve" | "migrating" | "graduated" | null; curve: { raised: string; threshold: string; progressPct: number; quote: string } | null; curveNote: string; graduatedPool: string | null; holders: { count: number | null; countNote: string; top: { account: string; owner: string | null; pct: number; label: string | null }[] | null; topNote: string }; trade: { links: { id: string; label: string; url: string }[]; note: string | null }; chart: { embedUrl: string | null; pageUrl: string | null; note: string } } | null; disclosure?: { disclaimer: string; eventContract: string | null }; supply: { current: string; initial: string }; burned: { total: string; count: number; pctOfSupply: number }; rules: { statement: string; sha256: string; oneShot?: boolean }; next: { impliedChance: number | null; nextMarket: string | null }; status: string; lp?: { lockedPct: number; feeKey: string | null; feeKeyOwner: string | null; lockProgram: string; split: { burnBps: number; operatorBps: number }; urls: { feeKey: string | null; feeKeyOwner: string | null; lockProgram: string | null }; lastClaim: { line: string; txUrl: string | null } | null } | null }; receipts: Receipt[] }
 interface Tally {
   burnsA: number; burnsB: number; burnedA: string; burnedB: string; supplyA: string; supplyB: string; supplyPctA: number; supplyPctB: number; settlements: number; voids: number;
-  lastSettlement: { eventId: string; settledAt: string; burnedSide: "A" | "B" | null; result: string | null; value: string | null; burned: string | null } | null;
+  lastSettlement: { eventId: string; settledAt: string; burnedSide: "A" | "B" | null; result: string | null; value: string | null; burned: string | null; facts?: PairLastFacts } | null;
   next: { market: string | null; closeTime: string | null; chanceA: number | null; chanceB: number | null };
   /** Winner takes the burn (API 1.10.0): fees from both coins burn the winner's supply; forwarded SOL each way. */
   winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string;
@@ -134,7 +135,7 @@ export default function PairPage() {
         <TermNote ids={["receipt", "burnPool"]} />
         <div className="grid md:grid-cols-3 gap-2">
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">supply left</div><div className="text-lg tabular-nums">{fixed(t.supplyPctA)}% <span className="text-neutral-500">:</span> {fixed(t.supplyPctB)}%</div><div className="text-xs text-neutral-500 tabular-nums">{fmt(t.supplyA)} : {fmt(t.supplyB)}, out of {fmt(d.a.status.supply?.initial)} each</div></div>
-          <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">last settlement</div>{ls ? <><div><code>{ls.eventId}</code></div><div className="text-xs text-neutral-500">It settled {(ls.result ?? ls.value ?? "—").toUpperCase()} on {utcDateTime(ls.settledAt)}, and {ls.burnedSide ? `${sideName(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)} tokens` : ""}` : "neither side burned"}.</div></> : <div className="text-xs text-neutral-500">None yet. The first result after launch burns one side.</div>}</div>
+          <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">last settlement</div>{ls ? <><div><code>{ls.eventId}</code></div><div className="text-xs text-neutral-500">{pairLastSentence(ls.facts ?? { wonSide: null, burnedSide: ls.burnedSide, burned: ls.burned, winnerStatus: null, loserStatus: null, void: ls.result === "void" }, sideName("A"), sideName("B"), fmt)}</div></> : <div className="text-xs text-neutral-500">None yet. The first result after launch burns one side.</div>}</div>
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">next scheduled market</div>{t.next.market ? <div><code>{t.next.market}</code></div> : <div>—</div>}</div>
         </div>
       </section>

@@ -54,7 +54,7 @@ import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusFirstReadS
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG, PairScanCache } from "../src/lib/burnKeeper/pairCurveCrank.ts";
 import { CycleAccountCache } from "../src/lib/burnticker/cycleAccountCache.ts";
-import { reconcileDrafts, type DraftChainReader } from "../src/lib/burnticker/draftReconciler.ts";
+import { reconcileDrafts, withSignerReads, type DraftChainReader } from "../src/lib/burnticker/draftReconciler.ts";
 import { connectionLaunchVerifier, type TxReader } from "../src/lib/burnticker/launchVerify.ts";
 import { LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
 import { onPrivateSend } from "../src/lib/burnKeeper/privateSend.ts";
@@ -70,10 +70,20 @@ import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
 import { Heartbeat, heartbeatUrlFromEnv, heartbeatVerdict } from "../src/lib/burnticker/ops/heartbeat.ts";
-import { runUnitCheck } from "../src/lib/burnticker/ops/unitHealth.ts";
+import { readBackupStatus, runUnitCheck } from "../src/lib/burnticker/ops/unitHealth.ts";
 import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
-// BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
-import { dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
+// PROGRAM HASH CHECK (prelaunch audit 2026-10-18 A-4): once a Denver day, the burn program's bytes on chain against verified-build.json
+import { compareProgramToRecord, hostProgramRound, programHashFact, programHashSourceLine, readProgramDataHash, webDispersal, writeKeeperDispersal } from "../src/lib/burnticker/programHash.ts";
+import { denverDate } from "../src/lib/burnticker/alerts.ts";
+// NEVER-BUYS MONITOR (prelaunch audit 2026-10-18 A-6): the keeper runs it once a day
+import { evidenceSignatures, NEVER_BUYS_FILE, neverBuysMints, runNeverBuys } from "../src/lib/burnticker/trustpack/neverBuys.ts";
+import { loadOperator } from "../src/lib/burnticker/trustpack/operator.ts";
+import { jsonRpc } from "../src/lib/burnticker/trustpack/receiptCheck.ts";
+import { publishSite, toJson } from "../src/lib/burnKeeper/statusPage.ts";
+// BURN DISPERSAL (owner decision 2026-10-13): carried amounts are spent in crank_carried pieces. Round 5 (crank_carried) is deployed, so
+// on a real program with crank_carried the keeper refuses to start unless BURNTICKER_DISPERSAL is 1 (the unit sets it) or 0 on purpose
+// (prelaunch audit 2026-10-18 A-1; dispersal.ts keeperDispersalStart).
+import { DEFICIT_DISPERSAL_NAME, dispersalHostLine, keeperDispersalStart, type DispersalDecision } from "../src/lib/burnticker/dispersal.ts";
 import { cachedMarketReader, cachedPublishProgram, coinChainReads, connectionBatchReader, KeeperReadCache, signatureFingerprints, withLockFees, type BatchReader, type MultipleAccountsReader } from "../src/lib/burnticker/keeperReadCache.ts";
 import { clearStaleRestartRequest, takeRestartRequest } from "../src/lib/burnticker/restartRequest.ts";
 import { budgetStatusLines, budgetTopMethodLines, budgetedRpcConfig, configureApiBudget, publicRpcFor, retryThroughBudgetHold, setDescribeFallback, statusTableStore, verifyRpcFallback, withEssential } from "../src/lib/burnticker/apiBudget.ts";
@@ -82,6 +92,8 @@ const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
 const log = (s: string) => console.log(`[${new Date().toISOString().replace("T", " ").slice(0, 19)}Z] ${s}`);
 const ONCE = flag("once"), DRY = flag("dry-run");
+// review 6 of A-1: a run by hand (--once or --dry-run) never pushes a start refusal to the owner's phone; it prints it and exits 1
+const HAND_RUN = ONCE || DRY;
 const ALERTS = !ONCE || flag("alerts");
 const ALERT_EVERY_MS = 5 * 60_000;
 const DB = process.env.BURNTICKER_DB?.trim() || REGISTRY_FILE;
@@ -186,7 +198,7 @@ async function buildProgram(): Promise<{ program: BurnProgramClient; real: boole
 // A startup refusal (mainnet without the flag, the treasury's key file, a key that does not match) reaches the owner's phone before the process exits.
 const built = await buildProgram().catch(async (e: unknown) => {
   if (stopping) { log(`stopped during startup: ${(e as Error).message.slice(0, 160)}`); process.exit(0); }
-  await pushKeeperRefused({ registry, env: process.env, now: Date.now(), reason: (e as Error).message, log }); throw e;
+  if (!HAND_RUN) await pushKeeperRefused({ registry, env: process.env, now: Date.now(), reason: (e as Error).message, log }); throw e;
 });
 const program = built.program;
 log(`claim_lock_fees crank: ${program.lockFees ? `on (fee-keys PDA ${program.lockFees.feeKeysPda()}, operator treasury ${program.lockFees.operatorTreasury() ?? "NOT PINNED on this cluster — claims wait, the fees stay in the lock"})` : "off (no lock-fee client)"}`);
@@ -196,7 +208,28 @@ const derbyPools = connectionPoolPort(new Connection(process.env.BURNTICKER_DERB
 const derby = new DerbyAdapter({ registry, hermes: process.env.BURNTICKER_PYTH_API_KEY?.trim() ? HermesClient.fromEnv(process.env) : null, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), log,
   alert: (key, text) => { registry.recordAlert({ kind: "derby-withheld", key, text, meta: null }); } });
 const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, derby: { sample: (t) => derby.sample(t), plan: () => derby.plan(), ended: (t) => derby.ended(t) }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE), kalshiEnabled: kalshiEnabled(process.env) };
-if (dispersalEnabled(process.env)) { deps.dispersal = true; log("burn dispersal: on (BURNTICKER_DISPERSAL=1): carried amounts are spent in crank_carried pieces over 6-hour windows"); }
+// A-1: the round comes from config/burnticker/verified-build.json for this cluster and program id (the fake program has none)
+const dispersalStart = keeperDispersalStart(process.env, built.real ? hostProgramRound(process.env) : null);
+if (!dispersalStart.ok) {
+  log(`refusing to start: ${dispersalStart.reason}`);
+  // review 6: a hand run (--once or --dry-run) prints the sentence and exits 1; only the service pushes it to the phone
+  if (!HAND_RUN) await pushKeeperRefused({ registry, env: process.env, now: Date.now(), reason: dispersalStart.reason, log });
+  else console.error(`keeper refused (hand run, not pushed): ${dispersalStart.reason}`);
+  registry.close();
+  process.exit(1);
+}
+const dispersal: DispersalDecision = dispersalStart.decision;
+if (dispersal.on) deps.dispersal = true;
+const dispersalStartLine = dispersalStart.line;
+// review 5 of A-1: the web launcher reads this record, so the two hosts' processes decide alike (a dry run records nothing)
+if (!DRY) writeKeeperDispersal(dispersal, { ...process.env, BURNTICKER_DB: DB });
+log(dispersalStartLine);
+/** An explicit BURNTICKER_DISPERSAL=0 on a program with crank_carried is allowed, and raised once a Denver day (bt-dispersal-off). */
+function dispersalOffAlert(now: number): void {
+  if (dispersal.source !== "flag-off" || !dispersal.crankCarried) return;
+  const a = registry.recordAlert({ kind: "bt-dispersal-off", key: "bt-dispersal-off", text: "Burn dispersal is off on purpose (BURNTICKER_DISPERSAL=0) although the burn program has crank_carried. A finished rule's carried amount goes to its end sink after 30 days instead of burning the coin. Set BURNTICKER_DISPERSAL=1 in the keeper unit to turn it on.", meta: null }, now);
+  if (a) log(`  [alert] bt-dispersal-off: burn dispersal is off on purpose`);
+}
 // signer-2 (2026-10-12): the second reading signer on its own host — unset BURNTICKER_COSIGNER_URL = no cosigner, nothing changes.
 const cosigner = cosignerFromEnv(process.env);
 if (cosigner) { deps.cosigner = cosigner; log(`second signer: ${process.env.BURNTICKER_COSIGNER_URL?.trim().replace(/\/\/[^/@]*@/, "//")} (each reading is co-signed there or held)`); }
@@ -223,7 +256,8 @@ const batchReader: BatchReader | null = built.chain ? connectionBatchReader(buil
 // AUDIT A C1: THE DRAFT RECONCILER (draftReconciler.ts) — a coin created on chain whose browser never confirmed it is taken live from the
 // chain (its TokenConfig in one getMultipleAccounts per sweep, then its create verified exactly as the browser's confirm is). Its own
 // connection: the reads must not be served from the cycle cache. Read-only; it sends nothing.
-const draftConn = built.chain && PROGRAM_ID && RPC ? new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }, RPC_FALLBACK)) : null;
+// prelaunch audit 2026-10-18 A-18: with batched signer reads, dust sent to a draft's fee PDA costs no verification
+const draftConn = built.chain && PROGRAM_ID && RPC ? withSignerReads(new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }, RPC_FALLBACK))) : null;
 const draftVerifier = draftConn ? connectionLaunchVerifier(draftConn as unknown as TxReader, { burnProgramId: PROGRAM_ID, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null;
 const cachedMarket: MarketReader | null = marketReader ? cachedMarketReader(marketReader, readCache, (poolId) => registry.tokens().find((x) => x.poolId === poolId)?.mint ?? null) : null;
 
@@ -266,7 +300,7 @@ async function publishAll(now: number): Promise<void> {
   const audit = readAudit(SITE);
   // owner 2026-10-14: a test coin keeps its own page but has no row in the index (testCoins.ts)
   const tests = testCoinKeys(process.cwd(), registry);
-  publishPlatformIndex(SITE, statuses.filter((s) => !tests.mints.has(s.mint)), now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null, receiptsByTicker, siteKeys);
+  publishPlatformIndex(SITE, statuses.filter((s) => !tests.mints.has(s.mint)), now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, executed: audit.executed, chainVerified: audit.chainVerified, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null, receiptsByTicker, siteKeys);
 }
 
 
@@ -279,6 +313,53 @@ const { sink, state: webhook } = sinkFromEnv(process.env, { log, local: registry
 const heartbeat = new Heartbeat(heartbeatUrlFromEnv(process.env), fetch, log);
 let lastAlertAt = 0;
 let heldNotedDay = "";
+// A-6: THE NEVER-BUYS MONITOR, once a Denver day (trustpack/neverBuys.ts): every operator wallet in config/burnticker/operator.json for
+// this cluster against every platform coin the registry holds, $DEFICIT and the listed mints; <site>/never-buys.json is what the operator
+// and trust pages read. It runs beside the cycle (a few hundred plain reads), never blocking it; an unexplained acquisition is pushed.
+let neverBuysDay = "", neverBuysRunning = false;
+function neverBuysCheck(now: number): void {
+  if (!RPC || DRY || neverBuysRunning || neverBuysDay === denverDate(now)) return;
+  neverBuysRunning = true;
+  void (async () => {
+    try {
+      const op = loadOperator(process.cwd()).clusters[cluster];
+      let deficit: { symbol: string; mint: string }[] = [];
+      try { const st = JSON.parse(fs.readFileSync(path.join("config", "burnticker", "current-status.json"), "utf8")) as { deficit?: { launch?: { mint?: string } } }; if (cluster === "mainnet" && st.deficit?.launch?.mint) deficit = [{ symbol: "DEFICIT", mint: st.deficit.launch.mint }]; } catch { deficit = []; }
+      const wallets = op.wallets.filter((w) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.pubkey)).map((w) => ({ role: w.role, pubkey: w.pubkey }));
+      const mints = neverBuysMints(registry.tokens(), cluster, op.platformMints, deficit);
+      const r = await runNeverBuys({ rpc: jsonRpc(RPC, fetch, { attempts: 4, minIntervalMs: 150 }), cluster, wallets, mints, evidence: evidenceSignatures(process.cwd()), now });
+      publishSite(SITE, { [NEVER_BUYS_FILE]: toJson(r) });
+      neverBuysDay = denverDate(now);
+      log(`  [never-buys] ${r.status}: ${wallets.length} wallet(s), ${mints.length} coin(s), ${r.scanned.transactions} transaction(s) read${r.errors.length ? `, ${r.errors.length} read error(s)` : ""}`);
+      if (r.status === "red") {
+        const a = registry.recordAlert({ kind: "bt-never-buys-red", key: "bt-never-buys-red", text: `An operator wallet traded for a platform coin outside any recorded rehearsal: ${r.acquisitions.filter((x) => !x.explainedBy && (x.how ?? "acquired") === "acquired").slice(0, 3).map((x) => `${x.role} +${x.amountRaw} $${x.symbol} (${x.signature.slice(0, 12)}…)`).join("; ")}.`, meta: { acquisitions: r.acquisitions.length } }, now);
+        if (a) log(`  [alert] bt-never-buys-red`);
+      }
+    } catch (e) { log(`  [never-buys] failed, retried at the next check: ${(e as Error).message.slice(0, 160)}`); }
+    finally { neverBuysRunning = false; }
+  })();
+}
+// A-4: the day the program check last answered (a failed read is retried at the next alert check, never counted as a mismatch)
+let programCheckDay = "";
+async function programHashCheck(now: number): Promise<void> {
+  if (!RPC || !PROGRAM_ID || !built.real || programCheckDay === denverDate(now)) return;
+  const record = programHashFact(process.env, process.cwd(), { log });
+  if (!record.hash || record.programId !== PROGRAM_ID) { programCheckDay = denverDate(now); log(`  [program-check] skipped: config/burnticker/verified-build.json has no ${record.cluster} record for ${PROGRAM_ID}`); return; }
+  const conn = new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }, RPC_FALLBACK));
+  let chain;
+  try { chain = await readProgramDataHash({ accountBytes: async (a) => (await conn.getAccountInfo(new PublicKey(a), "confirmed"))?.data ?? null }, PROGRAM_ID, (b) => new PublicKey(b).toBase58()); }
+  catch (e) { log(`  [program-check] read failed, retried at the next check: ${(e as Error).message.slice(0, 160)}`); return; }
+  // review 2: an account that is absent, short or not a ProgramData account is a read that did not answer, like a thrown one: retried at
+  // the next check, no alert, the day not marked checked
+  if (!chain) { log(`  [program-check] the program's ProgramData account did not read back, retried at the next check`); return; }
+  programCheckDay = denverDate(now);
+  const diff = compareProgramToRecord(record, chain);
+  registry.setStatus("programHash.check", { at: now, cluster: record.cluster, recordHash: record.hash, recordSlot: record.slot, chainHash: chain.hash, chainSlot: chain.slot, ok: !diff }, now);
+  if (!diff) { log(`  [program-check] the burn program on ${record.cluster} equals verified-build.json (${record.hash.slice(0, 8)}…, slot ${chain.slot})`); return; }
+  log(`  [program-check] ${diff}`);
+  const a = registry.recordAlert({ kind: "bt-audit-mismatch", key: `bt-program-hash:${record.cluster}`, text: diff, meta: { recordHash: record.hash, recordSlot: record.slot, chainHash: chain.hash, chainSlot: chain.slot } }, now);
+  if (a) log(`  [alert] bt-audit-mismatch: ${diff.slice(0, 160)}`);
+}
 let holdLiftNoted = true;
 async function opsCheck(now: number, paused: boolean): Promise<void> {
   let balances: { at: number; keeperLamports: bigint | null; devFeeLamports: bigint | null } | null = null;
@@ -286,6 +367,9 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
     balances = { at: now, keeperLamports: isPubkey(attester) ? await rpcBalanceLamports(RPC, attester) : null, devFeeLamports: isPubkey(FEE_WALLET) ? await rpcBalanceLamports(RPC, FEE_WALLET) : null };
     recordBalanceSample(registry, balances);
   }
+  try { await programHashCheck(now); } catch (e) { log(`  [program-check] failed: ${(e as Error).message.slice(0, 160)}`); }
+  dispersalOffAlert(now);
+  neverBuysCheck(now);
   const r = await runBurntickerAlertCheck({ registry, siteDir: SITE, now, paused, balances, crankStreaks: tracker.snapshot(), sink });
   budget.flush();
   const budgetLines = budgetStatusLines(budget.lines());
@@ -304,7 +388,13 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   const health = ops.feedHealth(), memory = readConditionMemory(registry);
   // second audit 2026-10-18 A-7: failed units, backups and budget holds are conditions too (a keeper refusal is read from the alert rows)
   const signals = { units: unitCheck.active, budget: budget.lines() };
-  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state }));
+  // A-1: the host facts (names and yes/no only)
+  // review 4 and 5: every process's dispersal decision (this keeper, the web launcher's from its own env file, the $DEFICIT keeper's record)
+  let deficitDispersal: boolean | null = null;
+  try { deficitDispersal = (JSON.parse(fs.readFileSync(path.join(path.dirname(DB), DEFICIT_DISPERSAL_NAME), "utf8")) as { on?: unknown }).on === true; } catch { deficitDispersal = null; }
+  const hostFacts = { dispersal: { on: dispersal.on, line: dispersalHostLine(dispersal, webDispersal(process.env), deficitDispersal) }, webhookConfigured: webhook.configured, pushConfigured: !!pushConfigFromEnv(process.env), heartbeatConfigured: !!process.env.BURNTICKER_STATUS_HEARTBEAT_URL?.trim(),
+    backupDestConfigured: !!process.env.BURNTICKER_BACKUP_DEST?.trim() || readBackupStatus(process.cwd())?.destConfigured === true, programHashSource: programHashSourceLine(programHashFact(process.env, process.cwd(), { log })) };
+  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state, hostFacts }));
   try { registry.setStatus(CONDITIONS_KEY, foldConditions(memory, activeConditions(r.snapshot, health, { ...signals, alerts, lastCycleAt: r.snapshot?.lastCycle?.at ?? null }), now), now); } catch (e) { log(`  [ops] condition memory not written: ${(e as Error).message.slice(0, 120)}`); }
 }
 

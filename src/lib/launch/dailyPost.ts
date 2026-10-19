@@ -3,6 +3,7 @@ import { dateIn } from "@/lib/burnKeeper/schedule";
 import type { PairKind, PairTally, PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
 import { byCoin } from "@/lib/burnticker/coinKey";
+import { pairLastSentence } from "@/lib/burnticker/receiptWords";
 
 /**
  * THE DAILY POST (the owner, 2026-10-09: "come up with a daily post for updates we can post on the website and twitter"). Five
@@ -331,11 +332,10 @@ export function pairStateLine(t: Pick<PairTally, "a" | "b" | "clause" | "kind">)
 export function pairDailyText(t: PairTally, site?: string | null, tag?: string | null): string {
   const A = `$${t.a.ticker}`, B = `$${t.b.ticker}`;
   const ls = t.lastSettlement;
-  const outcome = ls ? (ls.result ?? ls.value ?? "—").toUpperCase() : "";
   const kind = kindOf(t), copy = PAIR_KIND_COPY[kind];
+  // prelaunch audit 2026-10-18 A-5: the last result by pair role and pending state (receiptWords.ts); "neither side burned" only when true
   const last = !ls ? PAIR_NO_SETTLEMENT_LINE
-    : ls.burnedSide ? `Last: ${ls.eventId} settled ${outcome} → ${ls.burnedSide === "A" ? A : B} burned${ls.burned ? ` ${fmtInt(ls.burned)}` : ""}`
-    : `Last: ${ls.eventId} settled ${outcome} → neither side burned${ls.result === "void" ? " (void)" : ""}`;
+    : `Last: ${pairLastSentence(ls.facts ?? { wonSide: null, burnedSide: ls.burnedSide, burned: ls.burned, winnerStatus: null, loserStatus: null, void: ls.result === "void" }, A, B, fmtInt)}`;
   return [
     pairShareLine(t),
     pairStateLine(t),

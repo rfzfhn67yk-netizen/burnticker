@@ -198,7 +198,7 @@ describe("website-17's wiring, applied by website-16 (WIRING-17.md items 1 to 5)
   test("home grid: the earned slots lead the public cards with their labels; the rules line once above the grid", () => {
     assert.match(read("src/app/api/burnticker/home/route.ts"), /featuredSlots: slots/);
     const idx = read("src/app/burnticker/CoinsIndex.tsx");
-    assert.match(idx, /tags: \[\{ label: sl\.label, tone: "featured" as const \}, \.\.\.v\.tags\]/); assert.equal((idx.match(/\{FEATURED_RULES_LINE\}/g) ?? []).length, 1);
+    assert.match(idx, /tags: \[\{ label: slots\[k\]\.label, tone: "featured" as const \}, \.\.\.v\.tags\]/);   // prelaunch audit 2026-10-18 A-2: matched by mint assert.equal((idx.match(/\{FEATURED_RULES_LINE\}/g) ?? []).length, 1);
   });
   test("launch page: the benefits list and the example tickets after the onboarding block; Coin vs Coin searches every asset", () => {
     const launch = read("src/app/burnticker/launch/page.tsx");

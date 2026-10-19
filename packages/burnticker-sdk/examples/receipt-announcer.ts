@@ -15,11 +15,11 @@ async function main(): Promise<void> {
   const bt = new Burnticker({ apiBase: process.env.BURNTICKER_API ?? "https://burnticker.com/api/burnticker/v1", connection });
   const { tokens } = await bt.tokens({ status: "live" });
   for (const t of tokens) {
-    const rulesText = (await bt.token(t.ticker)).rulesText;
+    const rulesText = (await bt.token(t.mint)).rulesText;
     // No programId given, so subscribe() polls the public API's receipts (with programId + connection it decodes program events).
     bt.subscribe(t.mint, (e: BurntickerEvent) => {
       if (e.kind !== "receipt" || e.receipt.status !== "confirmed") return;
-      void bt.verifyReceipt(e.receipt, { ticker: t.ticker, rulesText }).then((v) => {
+      void bt.verifyReceipt(e.receipt, { ticker: t.ticker, rulesText, mint: t.mint }).then((v) => {
         const r = e.receipt;
         announce(`BURN $${t.ticker} burned ${r.burned} — ${r.market} settled ${r.result ?? r.value} (${r.settledAt.slice(0, 10)})\n${v.verified ? "verified from source + rule" : `NOT verified: ${v.checks.filter((c) => c.ok === false).map((c) => c.detail).join("; ")}`}${r.txUrl ? `\n${r.txUrl}` : ""}`);
       });

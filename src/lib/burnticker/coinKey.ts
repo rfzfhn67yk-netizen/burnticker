@@ -7,10 +7,9 @@
  *   the mint once the ticker is shared. Every endpoint also takes the mint, always. A ticker that several coins share answers with the
  *   list of coins (the page shows a chooser, the APIs a 300 with the candidates) instead of picking one.
  *   The coin page's canonical URL is always the mint URL, the one address that never turns into a chooser.
- *   Static per-coin publishing (the keeper's site dir t/<key>/): the "owner" of a ticker keeps t/<TICKER> (so every path published
- *   before tickers were shared stays put); every coin whose ticker is shared ALSO publishes at t/<MINT>, and every other coin on that
- *   ticker publishes at t/<MINT> only. The owner is the earliest LAUNCHED coin holding the ticker (by launch time, then registration
- *   order); with none launched, the earliest non-expired draft; with only expired drafts, the newest of those (as tokenByTicker).
+ *   Static per-coin publishing (the keeper's site dir t/<key>/), keyed by mint (prelaunch audit 2026-10-18 A-2): every coin publishes
+ *   at t/<MINT>. The "owner" of a ticker also keeps t/<TICKER> (so every path published before tickers were shared stays put); the owner
+ *   is the earliest LAUNCHED coin holding the ticker (by launch time, then registration order). A draft never owns a ticker directory.
  * Tickers are 2 to 12 letters and digits, and mints are 32 to 44 base58 characters, so the two key spaces never overlap.
  */
 
@@ -57,9 +56,10 @@ export function siteKeysOf(coins: readonly SiteCoin[]): Map<string, string[]> {
     const held = list.filter((x) => x.c.status !== "expired");
     const launched = held.filter((x) => x.c.status !== "draft");
     const order = (a: { c: SiteCoin; i: number }, b: { c: SiteCoin; i: number }) => (a.c.launchedAt ?? "").localeCompare(b.c.launchedAt ?? "") || a.i - b.i;
-    const owner = launched.length ? [...launched].sort(order)[0] : held.length ? held[0] : list[list.length - 1];
-    const shared = held.length > 1;
-    for (const { c } of list) out.set(c.mint, c === owner.c ? (shared ? [c.ticker, c.mint] : [c.ticker]) : [c.mint]);
+    // prelaunch audit 2026-10-18 A-2: only a LAUNCHED coin ever owns t/<TICKER> (a draft never takes it), and every coin is also
+    // published at t/<MINT>, the directory that never changes hands
+    const owner = launched.length ? [...launched].sort(order)[0] : null;
+    for (const { c } of list) out.set(c.mint, owner && c === owner.c ? [c.ticker, c.mint] : [c.mint]);
   }
   return out;
 }

@@ -123,8 +123,9 @@ describe("lookalike refusal", () => {
     assert.equal(lookalikeRefusal(rays27, EX), null, "a team's next-season coin is not a lookalike of its own last-season coin");
     assert.ok(lookalikeRefusal({ ...rays27, rule: null }, EX), "the same ticker without the team rule is refused");
   });
-  test("the exact same ticker is the registry's 'ticker taken', not repeated here; hits name the field", () => {
-    assert.deepEqual(lookalikeHits({ ticker: "DEFICIT", name: "zzzzz" }, EX), []);
+  // prelaunch audit 2026-10-18 A-2: the exact same ticker is a hit too (the registry check it was left to was never called)
+  test("the exact same ticker is refused here as well; hits name the field", () => {
+    assert.deepEqual(lookalikeHits({ ticker: "DEFICIT", name: "zzzzz" }, EX).map((h) => [h.field, h.how]), [["ticker", "same-letters"]]);
     const h = lookalikeHits({ ticker: "QQQQ", name: "Bronco Burn" }, EX);
     assert.equal(h[0].field, "name");
   });

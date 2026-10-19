@@ -12,8 +12,8 @@ const bt = new Burnticker({ apiBase: "https://<host>/api/burnticker/v1" });
 const rule = rules.compose({ series: "KXNFLGAME", filter: { tickerIncludes: "-DEN" } }, { kind: "binary", binary: { onYes: { fractionOfPool: 0.02 } } });
 console.log(rules.sha256(rule));                         // the hash every receipt of such a coin cites
 console.log((await bt.kalshi.backtest(rule)).sentence);  // what it would have burned over the last 12 months
-const coin = await bt.token("BRONCO");                   // status, receipts, next burn, implied chance (display only)
-console.log(await bt.verifyReceipt(coin.receipts[0], { ticker: coin.ticker, rulesText: coin.rulesText }));
+const coin = await bt.token("<MINT>");                   // by mint: a ticker can be shared by two coins
+console.log(await bt.verifyReceipt(coin.receipts[0], { ticker: coin.ticker, rulesText: coin.rulesText, mint: coin.status.mint }));
 ```
 
 Surface, the receipt verification walk-through, the crank, events, and what you cannot do (change a rule, claim a fee, adopt an

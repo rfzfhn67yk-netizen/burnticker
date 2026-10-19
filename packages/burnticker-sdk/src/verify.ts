@@ -38,7 +38,11 @@ export interface VerifyOptions {
    * on its own is never a burn: without programId + mint the chain check is "not checked", never a pass.
    */
   programId?: PublicKey | string;
-  mint?: PublicKey | string;
+  /**
+   * The coin's mint: REQUIRED (prelaunch audit 2026-10-18 A-2). A ticker alone is not an identity: two coins can carry the same ticker
+   * and the same rule, so a receipt checked by ticker could be another coin's. Read it from GET /tokens/{mint} → status.mint.
+   */
+  mint: PublicKey | string;
   now?: number;
 }
 
@@ -120,8 +124,12 @@ export async function readChainMemo(connection: Connection, signature: string, e
   return { found: true, err, memo: p.memo, provenance: { ok: true, detail: `${p.detail}; Reading ${addr.toBase58().slice(0, 8)}… is program-owned, processed, burned ${r.burned}` } };
 }
 
+/** A-2: the error a verification without the coin's mint throws. */
+export const MINT_REQUIRED = "verifyReceipt needs the coin's mint: a ticker can be shared by two coins, so it does not say which coin a receipt belongs to.";
+
 /** Every check (rules, memo, source, units, spend, chain), each ok: true | false | null (not checkable here). */
 export async function verifyReceipt(receipt: ReceiptLike, o: VerifyOptions): Promise<VerifyResult> {
+  if (!o.mint || !String(o.mint).trim()) throw new Error(MINT_REQUIRED);
   const now = o.now ?? Date.now();
   const rule = rulesFromText(o.rulesText).rule;
   const cfg = (o.sourceConfig ?? null) as (HttpSourceConfig & { carry?: CarryPolicy }) | null;

@@ -1650,3 +1650,93 @@ written before one public commit, the commit is recorded against the later tag. 
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
 - allowlist sha256 (config/public-repo.allowlist): `c36e2d2b710a001b0fe24d30b17b5a56292e7f6f5d6790c71723ed0c3366ecdd`
 - files published: 2339
+## 2026-10-18 — more public commits recorded after the fact (no publish, no deploy)
+
+The public commit of each publish below was named only in the monorepo commit that pinned it (the publish script's "pins" step).
+These lines record it here, under the same rule as the 2026-10-12 section: when two tags were written before one public commit, the
+commit is recorded against the later tag, and a release with no pins commit stays unlinked. From this date the pins step writes a
+`- public commit:` line into the entry it pins.
+
+- publish from 01815cf87b01: public commit `98d6d92c23242874746e7256f4da75f9b95da714`
+- publish from 123b3650e179: public commit `d064add32951ad162fe1d8d3f89301884bb82787`
+- publish from 133468e10225: public commit `7bcc6a5b6d25a79a3b7dd3ca82041a54b5f3d4ec`
+- publish from 13cab4c6e9b5: public commit `0fcbfa6859917495d743f4f9ec21148459f7c29a`
+- publish from 13f85aabc19a: public commit `7729f6d69b80cf136300f8bd9f6cb2df2a6109eb`
+- publish from 169979f84c32: public commit `f7459b8e6d1b125b4c4bc5a13a2e28e77e0d3057`
+- publish from 16cbda77dedb: public commit `2b6adfafe4b2a6d3f1fdb7ce48c313bd90136412`
+- publish from 17e55c75ada1: public commit `795030db1dcf537d20c777722a30dda3b23019f1`
+- publish from 22d96b3e3468: public commit `4321c9e9af6872214a33dea2acb953f7d3b8f5c5`
+- publish from 2306859c6a43: public commit `002bbddad91d509fd32d594b1e2dc399b4b6938f`
+- publish from 2866d02e8db8: public commit `354c7cce26fc125d9bfbc9d2a2753f76150bb299`
+- publish from 2cc94a922f4f: public commit `0d1a26cb54be0892286980a495676b4aea7e8eb4`
+- publish from 2e9bb2ad2491: public commit `8dd2d5f42c92006e910b5318e8bd2680eed7f3dc`
+- publish from 3559dca546b9: public commit `d0ecec7353b9b7580f25929806ef6543f7c8f936`
+- publish from 36e008780251: public commit `c7c68d872da64ac113837c7741db57c060cefa69`
+- publish from 37271c63dbd5: public commit `29dac25ceeddc4a5d834fb7b16340a0fdd4a0431`
+- publish from 3983a396a61c: public commit `913ce3091cd03daaf9a96ce74dad3397f9523df0`
+- publish from 3bfeff788e79: public commit `2c5547c2306940c28ad494d0cec7c53953f1e06e`
+- publish from 3ff396161e0f: public commit `9c65999abbe3a7b0712759afaaf22745f3f31e9b`
+- publish from 42d0d50171dc: public commit `6fcc3aa525995a8c076f70d7dcf95b14640d18ab`
+- publish from 4a49f8d5a442: public commit `c5b606399727e5d0771c7f06f213c5f2b89f264e`
+- publish from 4c5b2e1262bd: public commit `5c775f8f682655c2995f1abc0ba09e45bcb71bc5`
+- publish from 501496455f6f: public commit `0cddd0d1c55837b96620ac471c1efa8b843a29a7`
+- publish from 509cf95a3704: public commit `74156660eb4baaa97224f4c02a8eba599a2598e2`
+- publish from 51032098f12e: public commit `66a4e805758c765901cad62fa4fde803a4460680`
+- publish from 51e83d82b5ce: public commit `0b37dc9074355c9f3205fab75eab4ba4cdc92f7e`
+- publish from 5607faf0bc93: public commit `d27e1d02e9590b561ac30b88fe4079e73ef86b9b`
+- publish from 562d0ae7294a: public commit `4de2c1a71838e9ffe6887db916a3376e53bd7bf6`
+- publish from 581f74143e28: public commit `a147a6f79126c7a9450f2d4a44ac33398a0d704b`
+- publish from 59f06bddb555: public commit `bc4194d4140307cf8f47a79b877ead8bf3a9131c`
+- publish from 5becd849bb50: public commit `0cfd60761872bab2c11f5132122a70c645fe37c7`
+- publish from 5bed488aeaa4: public commit `d3081aa6e887228552ba7747d4553e6882f2057f`
+- publish from 5bf5d4c201b3: public commit `85e7c31b1d8fa79176a8e061334b98ab7e81b629`
+- publish from 692f81de8c03: public commit `bf5b3a45afc49153474a9ee1c2a44977388df36c`
+- publish from 7118476d29dc: public commit `e0307e3f656523ba37f8fc3a7deb697d9f1a9168`
+- publish from 71197526511d: public commit `2f2f94f9d252eceea84dd249f3e67f94ab381a29`
+- publish from 74269b31326a: public commit `7277ed4c176bf7396a07ebfeedafcb06ce2e16b3`
+- publish from 77e96808a081: public commit `a05f8f721af64b43adfcf12c80d0e6c0d0a58dbf`
+- publish from 788e8854fab6: public commit `67ea2e2f05b9a4d81f8e8b2229a50228d8682533`
+- publish from 86e4bfa95667: public commit `c1e5e97d15b72f0eb3c3d53dddddc485be2a54d4`
+- publish from 88609032112a: public commit `97814709a37d98308d70615b72d6867da3e9975a`
+- publish from 88b0c5344f80: public commit `0c206f57352e4a9e12e5cc6fd885e899f39bcda3`
+- publish from 8be3d70411d0: public commit `7522ce5c41a50175e63af73831e0ba270af4598a`
+- publish from 90b7ac1465f7: public commit `81180868b32d2b70debfecfed254a10e802fd0bc`
+- publish from 9152548adc17: public commit `bf277c996915631525f39a149ab9f62bf56f97e1`
+- publish from 91bc62f07511: public commit `9949250484e98d3754e0cde934d8ea6e94e51246`
+- publish from 9d09423cb81f: public commit `e158ab95d24086da63754bc22ecd3402f63a421c`
+- publish from a313df08fd3f: public commit `a1140178503818a36404346088fa86a14138c71d`
+- publish from a4a9daeac22c: public commit `b9470d4418e4ab6014b2277db5048e1676c4cc36`
+- publish from af2a8442ee68: public commit `80b21e6bbbd7f03d502b33ffe471e6ffaefb3b63`
+- publish from b0611ab7049c: public commit `b71bff67e40eef79ffdcf0d4b5878a9c1adbca19`
+- publish from b6c0e3eccbba: public commit `7fc1ad7a43229bc297321294a1deaa28c1886411`
+- publish from ba488d44dd4d: public commit `9231928caf5189109c1a82897e25b0dc04855e07`
+- publish from bc2f774e6ffd: public commit `c959d4802a2978e811744b12fb7a6d39e2701ee5`
+- publish from bf2d13b80f00: public commit `aa350321fbbcb71b91654a25d6c4cc6a3b9f361a`
+- publish from c56186d0a2df: public commit `6a32f087bc32894d7ecbce9090f5a1d5a90d211b`
+- publish from c5f1f4f09d9b: public commit `f7019a50b38ed6c7c850f771cb96434cc5dc3664`
+- publish from cdcff99dca18: public commit `938e75cc2adc6d6e597c0e573b306fb5cfed11cc`
+- publish from ce6b1e12c6a1: public commit `a8b0a065745dfad0de74dd879b43c747649596b1`
+- publish from d55ba81412cd: public commit `f95f667de11ebbb38ab6b0f8228bee538e4a9d49`
+- publish from d7657fe07454: public commit `99b76e5dcbd34ed9f68a57fc61430661341b285d`
+- publish from e14e4e2ff5d4: public commit `bade3215ba599b600ea0a9fa486cce9a6288e8b1`
+- publish from e96dec284202: public commit `dba062a7115b0ede1479e264d97f23158cfb7282`
+- publish from ea7527829e92: public commit `9735326815d6cce49d01f02479125bd0c5c61e48`
+- publish from f1e6afd44995: public commit `a441321356fe4a2d56848a6a3ecbc7172cc8e6c4`
+- publish from f535462884dd: public commit `bc9914371d1830574ae9610cecf8104ba67d7889`
+- publish from 8ed97cbeeffc: public commit `a8b095fb45e35adf5a4d17763e3417c6cfca248a`
+
+## 2026-10-18 — publish from 7caf1eb4c062
+
+- monorepo commit: `7caf1eb4c06251610609daac234c04091b170b71` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `c36e2d2b710a001b0fe24d30b17b5a56292e7f6f5d6790c71723ed0c3366ecdd`
+- files published: 2365
+
+## 2026-10-18 — publish from d7c1ddb5a7ba
+
+- monorepo commit: `d7c1ddb5a7bad08f0a8b1687be0a0ec4c66213e2` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `c36e2d2b710a001b0fe24d30b17b5a56292e7f6f5d6790c71723ed0c3366ecdd`
+- files published: 2365

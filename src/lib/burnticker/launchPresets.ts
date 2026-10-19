@@ -29,7 +29,7 @@ export type ShareShape = keyof typeof SHARE_PRESETS;
 
 /** What decides a linked pair's row: `linked` is true for a pair whose two coins are linked (side B of a registered pair, never a Matchup's independent companion). */
 export interface ShareCtx { linked?: boolean;
-  /** review 10 F1: the host runs burn dispersal (BURNTICKER_DISPERSAL=1, crank_carried on the program), so a single one-shot may burn 50 % */
+  /** review 10 F1: the host runs burn dispersal (programHash.ts hostDispersal: BURNTICKER_DISPERSAL, default on for a round-5 program), so a single one-shot may burn 50 % */
   dispersal?: boolean }
 /** The rule's preset row: one-shot when the fraction dial runs to 100 % (dials.ts), else recurring; a linked one-shot pair is 100 % only. */
 export function shareShapeOf(rule: BurnRule, c: ShareCtx = {}): ShareShape {

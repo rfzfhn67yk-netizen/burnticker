@@ -42,10 +42,10 @@ export function saveState(dir: string, s: FollowState): void {
   fs.writeFileSync(path.join(dir, `follow-${s.ticker}.json`), `${JSON.stringify(s, null, 2)}\n`);
 }
 
-async function verdictFor(bt: Burnticker, ticker: string, r: ReceiptJson, mode: VerifyMode, rulesText: string | null): Promise<string | null> {
+async function verdictFor(bt: Burnticker, ticker: string, r: ReceiptJson, mode: VerifyMode, coin: { rulesText: string; mint: string } | null): Promise<string | null> {
   if (mode === "none" || r.status !== "confirmed") return null;
   try {
-    const v = mode === "server" ? await bt.verifyOnServer(ticker, r.eventId) : await bt.verifyReceipt(r, { ticker, rulesText: rulesText! });
+    const v = mode === "server" ? await bt.verifyOnServer(ticker, r.eventId) : await bt.verifyReceipt(r, { ticker, rulesText: coin!.rulesText, mint: coin!.mint });
     const failed = v.checks.filter((c) => c.ok === false).map((c) => c.id);
     const open = v.checks.filter((c) => c.ok === null).map((c) => c.id);
     return v.verified ? `verified (${mode})${open.length ? `; not checkable here: ${open.join(", ")}` : ""}` : `NOT verified (${mode}): ${failed.join(", ") || "see the checks"}`;
@@ -56,9 +56,9 @@ async function verdictFor(bt: Burnticker, ticker: string, r: ReceiptJson, mode: 
 export async function followOnce(bt: Burnticker, ticker: string, state: FollowState, o: { api: string; verify: VerifyMode }): Promise<{ lines: string[]; state: FollowState }> {
   const { receipts } = await bt.receipts(ticker);
   const fresh = newReceipts(state, receipts);
-  const rulesText = o.verify === "local" && fresh.some((r) => r.status === "confirmed") ? (await bt.token(ticker)).rulesText : null;
+  const coin = o.verify === "local" && fresh.some((r) => r.status === "confirmed") ? await bt.token(ticker).then((t) => ({ rulesText: t.rulesText, mint: t.status.mint })) : null;
   const lines: string[] = [];
-  for (const r of fresh) lines.push(formatReceipt(ticker, r, o.api, await verdictFor(bt, ticker, r, o.verify, rulesText)));
+  for (const r of fresh) lines.push(formatReceipt(ticker, r, o.api, await verdictFor(bt, ticker, r, o.verify, coin)));
   return { lines, state: { ticker, seen: [...state.seen, ...fresh.map(receiptKey)] } };
 }
 

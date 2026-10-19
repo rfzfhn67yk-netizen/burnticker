@@ -27,6 +27,8 @@ export const FEATURED_RULES_LINE = "The first cards after $DEFICIT follow three 
 
 export interface FeaturedInput {
   ticker: string;
+  /** prelaunch audit 2026-10-18 A-2: the coin's mint, the slot's key (a ticker can be shared); a caller without one is keyed by ticker */
+  mint?: string | null;
   /** "public" mainnet coins only take a slot */
   group: "public" | "test";
   /** confirmed receipts' settle times (ISO) */
@@ -36,9 +38,10 @@ export interface FeaturedInput {
   /** the coin's pool is registered and verified with the burn program; null when not read (never counted as registered) */
   poolRegistered: boolean | null;
 }
-export interface FeaturedSlot { rule: FeaturedRule; label: string; ticker: string }
+export interface FeaturedSlot { rule: FeaturedRule; label: string; ticker: string; /** A-2: the coin the slot belongs to (cards match it by mint, never by a ticker another coin may share) */ mint: string | null }
 
 const t = (iso: string | null | undefined): number => { const v = iso ? Date.parse(iso) : NaN; return Number.isFinite(v) ? v : -Infinity; };
+const keyOf = (c: FeaturedInput): string => c.mint || `ticker:${c.ticker}`;
 const newestBurn = (c: FeaturedInput): number => c.burns.reduce((m, b) => Math.max(m, t(b.settledAt)), -Infinity);
 
 /** The slots, in rule order; a rule no coin meets is left out. */
@@ -47,10 +50,10 @@ export function featuredSlots(coins: readonly FeaturedInput[], nowMs: number): F
   const taken = new Set<string>();
   const out: FeaturedSlot[] = [];
   const pick = (rule: FeaturedRule, cands: FeaturedInput[], score: (c: FeaturedInput) => number, tie: (c: FeaturedInput) => number) => {
-    const best = cands.filter((c) => !taken.has(c.ticker)).sort((a, b) => score(b) - score(a) || tie(b) - tie(a) || a.ticker.localeCompare(b.ticker))[0];
+    const best = cands.filter((c) => !taken.has(keyOf(c))).sort((a, b) => score(b) - score(a) || tie(b) - tie(a) || a.ticker.localeCompare(b.ticker) || keyOf(a).localeCompare(keyOf(b)))[0];
     if (!best) return;
-    taken.add(best.ticker);
-    out.push({ rule, label: FEATURED_LABELS[rule], ticker: best.ticker });
+    taken.add(keyOf(best));
+    out.push({ rule, label: FEATURED_LABELS[rule], ticker: best.ticker, mint: best.mint ?? null });
   };
   const week = (c: FeaturedInput) => c.burns.filter((b) => { const x = t(b.settledAt); return x <= nowMs && nowMs - x < WEEK_MS; }).length;
   pick("week-receipts", pool.filter((c) => week(c) > 0), week, newestBurn);

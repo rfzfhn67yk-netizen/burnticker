@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { collapseRepublishes, readReleases, RELEASES_SINCE } from "@/lib/burnticker/history";
+import { collapseRepublishes, publicRelease, readReleases, RELEASES_SINCE } from "@/lib/burnticker/history";
 import { CHANGELOG_COPY } from "@/lib/burnticker/historyCopy";
 import { longDay } from "@/lib/burnticker/cardView";
 import { CHANGELOG_FILE } from "@/lib/burnticker/trust";
@@ -29,13 +29,13 @@ export default function ChangelogPage() {
       {!releases ? <EmptyState kind="unavailable" body={CHANGELOG_COPY.unavailable} /> : releases.length === 0 ? <EmptyState kind="no-activity" /> : (
         <ol className="bt-list" aria-label={CHANGELOG_COPY.title}>
           {/* walkthrough 13: a run of republishes of one source is one entry with a count (history.ts collapseRepublishes) */}
-          {collapseRepublishes(releases).reverse().map((r, k) => (
-            <li key={`${r.source}-${k}`} className="bt-panel" data-release={r.source}>
+          {/* prelaunch audit 2026-10-18 A-6: a release is shown by its public commit; the monorepo commit never leaves the server */}
+          {collapseRepublishes(releases).map(publicRelease).reverse().map((r, k) => (
+            <li key={`${r.date}-${k}`} className="bt-panel" data-release={r.publicCommit ?? `unlinked-${r.date}`}>
               <p className="bt-eyebrow"><time dateTime={r.date}>{longDay(r.date) ?? r.date}</time></p>
               <ul className="bt-bullets">{r.lines.map((l) => <li key={l}>{l}</li>)}</ul>
               <p className="bt-meta">
                 {r.publicUrl ? <a className="underline" href={r.publicUrl} target="_blank" rel="noreferrer">{CHANGELOG_COPY.publicLink} <code>{r.publicCommit!.slice(0, 7)}</code></a> : <span>{CHANGELOG_COPY.noPublic}</span>}
-                <span className="bt-meta-sep"> </span><span>{CHANGELOG_COPY.source} <code>{r.source}</code>.</span>
               </p>
             </li>
           ))}

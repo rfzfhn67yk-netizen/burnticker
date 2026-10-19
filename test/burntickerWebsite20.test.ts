@@ -167,7 +167,7 @@ describe("WIRING-PARITY audit 7 #3: a refused link blocks Launch", () => {
     assert.match(fields, /export const linkFieldProblem = \(label: string, raw: string\): string \| null => \(raw\.trim\(\) \? linkProblem\(label, raw\.trim\(\)\) : null\);/);
     // website-25: through fieldChecks.ts profileIssues (profileFieldProblems plus the description's wording rules)
     assert.match(page, /issuesA = profileIssues\(profile, genA\)/); assert.match(page, /\.\.\.issuesA\.map\(\(x\) => \(\{ text: `\$\{sideTag\("a"\)\}\$\{x\.text\}`/);
-    assert.match(page, /profileProblems=\{profileBlockers\}/); assert.match(page, /profileProblems=\{allBlockers\}/);
+    assert.match(page, /profileProblems=\{nameBlockers\}/);   // prelaunch audit 2026-10-18: the name step's list without the ticker problem said under the field assert.match(page, /profileProblems=\{allBlockers\}/);
     assert.match(page, /links: creatorLinks\(\{ x: profile\.x, telegram: profile\.telegram, website: profile\.website \}\)\.links/);
   });
 });

@@ -125,3 +125,11 @@ export function serverFieldProblems(problems: readonly string[], clientSaid: Rea
   }
   return out;
 }
+
+/**
+ * Prelaunch audit 2026-10-18 (the owner's UX list, the wizard's Name step): a name or ticker problem is said ONCE, under its field. The
+ * list beside the Review button links to that field by this short label instead of repeating the sentence.
+ */
+export const fieldLinkText = (field: "name" | "ticker", coin: "A" | "B" | null): string => (coin ? `Go to the ${field} of coin ${coin}` : `Go to the ${field}`);
+/** The id of a name-step field (ReviewCard's inputs), so a link can point at it. */
+export const nameFieldId = (side: "a" | "b", field: "name" | "ticker"): string => `bt-profile-${side}-${field}`;

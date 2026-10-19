@@ -14,7 +14,7 @@ export { ApiTransport, BurntickerApiError, type Fetch } from "./http.ts";
 export { rules, compose, validate, canonical, sha256, lock, type Selector, type Mapping, type Validation } from "./rules.ts";
 export { fees, split, type SplitResult, type FeeAmount } from "./fees.ts";
 export { buildLaunchBundle, feePdaFor, assertNotMainnet, MAINNET_GENESIS, type LaunchOptions, type LaunchResult } from "./launch.ts";
-export { verifyReceipt, readChainMemo, memoFromLogs, burnProvenance, type VerifyOptions, type Provenance, type ChainTx } from "./verify.ts";
+export { verifyReceipt, MINT_REQUIRED, readChainMemo, memoFromLogs, burnProvenance, type VerifyOptions, type Provenance, type ChainTx } from "./verify.ts";
 export { crank, DEFERRABLE_ERRORS, type CrankPlan, type CrankContext } from "./crank.ts";
 export { subscribe, decodeEventData, eventsFromTransaction, base58Decode, EVENT_IX_TAG, type SubscribeOptions, type Subscription } from "./events.ts";
 export type * from "./types.ts";

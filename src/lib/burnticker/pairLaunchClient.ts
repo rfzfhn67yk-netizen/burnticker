@@ -27,7 +27,7 @@ export interface LaunchErrorBody { error?: string; code?: string; retryAfterSec?
 export const LAUNCH_NOT_SEEN_YET_SENTENCE = "The server has not seen this launch on chain yet, so it kept checking. It can take a minute to show up. Wait a minute and press the button again; nothing is lost.";
 
 /** A-19: the prepare's 429 codes for the daily upload limits and for uploads busy right now (api/handlers.ts budgetRefusal). */
-export const UPLOAD_LIMIT_CODES: ReadonlySet<string> = new Set(["upload-budget", "upload-budget-client", "upload-budget-creator", "upload-busy"]);
+export const UPLOAD_LIMIT_CODES: ReadonlySet<string> = new Set(["upload-budget", "upload-budget-client", "upload-budget-creator", "upload-busy", "upload-budget-unsigned", "upload-budget-unfunded", "upload-budget-wallet"]);
 const UPLOAD_LIMIT_FALLBACK = "This site has reached a daily limit for saving coin details. Please try again later.";
 /** How long a 429 asks to wait, in words. */
 const waitText = (retryAfterHeader: string | null | undefined, body: LaunchErrorBody | null): string => {
@@ -41,7 +41,8 @@ export function launchErrorMessage(status: number, body: LaunchErrorBody | null,
   const code = body?.code ?? "";
   if (status === 409 && code === "pair-curve-required") return "On this site a matchup launches as one pair curve: both coins graduate together or neither does. Press the button again to build that.";
   if (status === 409 && code === "pair-curve-unavailable") return "The pair curve is not switched on here, so the two coins launch separately. Press the button again to build those.";
-  if (status === 409 && code === "ticker-taken") return `${body?.error ?? "That ticker is taken"}. Pick another ticker.`;
+  // prelaunch audit 2026-10-18 A-2: the server's sentence already asks for another ticker (and may name free ones); never a doubled stop
+  if (status === 409 && code === "ticker-taken") { const t = asSentence(body?.error) || "That ticker is already taken."; return /\bpick\b/i.test(t) ? t : `${t} Pick another ticker.`; }
   if (status === 429) {
     // second prelaunch audit 2026-10-18 A-19: chosen by CODE. The daily upload limits and the busy answer carry the server's own
     // sentence (which limit, and when it resets); only the connection's request limit is "too many launch requests".

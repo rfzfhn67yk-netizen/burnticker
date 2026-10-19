@@ -320,7 +320,7 @@ describe("the keeper, the API and the SDK (on the fakes)", () => {
     const t = await bt.token("BUCS");
     const r = t.receipts.find((x) => x.eventId === BUCS_CID)!;
     const gammaFetch = gammaFixtureFetch(GAMMA_TABLE);
-    const v = await verifyReceipt(r, { ticker: "BUCS", rulesText: t.rulesText, fetch: ((url: string) => gammaFetch(url)) as never, polygonFetch: rpcFixtureFetch(CHAIN) as never, polygonRpcUrls: ["https://polygon-rpc.test"] });
+    const v = await verifyReceipt(r, { ticker: "BUCS", rulesText: t.rulesText, mint: t.status.mint, fetch: ((url: string) => gammaFetch(url)) as never, polygonFetch: rpcFixtureFetch(CHAIN) as never, polygonRpcUrls: ["https://polygon-rpc.test"] });
     assert.equal(v.checks.find((c) => c.id === "source")!.ok, true, JSON.stringify(v.checks));
     assert.equal(v.checks.find((c) => c.id === "units")!.ok, true);
   });

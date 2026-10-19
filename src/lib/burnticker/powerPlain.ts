@@ -25,6 +25,15 @@ export function plainPower(s: string): string {
     .replace(/^STRANDING RECOVERY:\s*/, "If a coin's pool stops working: ")
     .replace(/^VETO:\s*/, "Veto: ")
     .replace(/\bRAISING\b/g, "raising").replace(/\bSAME\b/g, "same").replace(/\bAND\b/g, "and").replace(/\bOR\b/g, "or")
+    // prelaunch audit 2026-10-18 A-6: the check page's register text had arrow chains and a LaunchLab field name
+    .replace(/\s*→\s*/g, ", then ")
+    .replace(/\bmigrateCpLockNftScale;\s*/g, "")
     .replace(/\s{2,}/g, " ");
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
+
+/**
+ * What a compiled constant really means (prelaunch audit 2026-10-18 A-6: "no key can change it" on a program that can be upgraded): only
+ * an upgrade of the program could change it, and an upgrade needs the Squads vault. Shared by the trust page's statements and its LP block. Client-safe.
+ */
+export const UPGRADE_CAVEAT = "Only an upgrade of the program could change it. An upgrade needs 2 of the 3 keys of the Squads vault, and for now there is no waiting period before an approved upgrade runs.";

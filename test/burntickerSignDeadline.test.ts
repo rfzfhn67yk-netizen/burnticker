@@ -18,8 +18,8 @@ const read = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8");
 const T0 = Date.parse("2026-10-18T12:00:00Z");
 const BH = "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi";
 const creatorKp = Keypair.generate(), CREATOR = creatorKp.publicKey.toBase58();
-const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const secret58 = (kp: Keypair) => { let x = BigInt("0x" + Buffer.from(kp.secretKey).toString("hex")), s = ""; while (x > BigInt(0)) { s = B58[Number(x % BigInt(58))] + s; x /= BigInt(58); } return s; };
+// bytesToBase58 keeps a leading zero byte as "1" (a BigInt encoder dropped it, so about 1 key in 256 decoded wrong and the run flaked)
+const secret58 = (kp: Keypair) => bytesToBase58(kp.secretKey);
 const ix = (signer: string, lamports = 1) => ({ programId: "11111111111111111111111111111111", label: "test", dataBase64: Buffer.from([2, 0, 0, 0, lamports, 0, 0, 0, 0, 0, 0, 0]).toString("base64"), keys: [{ pubkey: CREATOR, isSigner: true, isWritable: true }, { pubkey: signer, isSigner: true, isWritable: true }] });
 /** A two-step LaunchLab bundle with a real fresh mint key (the tile's high-record coin is one; its pair is two). */
 const bundle = (ticker: string): LaunchlabBundleLike => {
@@ -50,6 +50,18 @@ function deps(clock: { t: number }, o: { walletWaitMs?: number; loseConfirmAt?: 
     storage: memoryPlanStorage(),
   };
 }
+
+describe("the test's own key encoder", () => {
+  test("a secret key whose first byte is 0 keeps it (the 1-in-256 flake)", async () => {
+    const kp = Keypair.fromSeed(new Uint8Array(32));   // an all-zero seed: the secret key's first byte is 0
+    assert.equal(kp.secretKey[0], 0);
+    const s = secret58(kp);
+    assert.ok(s.startsWith("1"), s);
+    const plan = launchlabPlan([{ mint: kp.publicKey.toBase58(), ticker: "ZERO", ready: true, pending: [], mintSecretKey: s, transactions: [{ label: "lock the rule", signers: ["creator", "mint"], instructions: [ix(kp.publicKey.toBase58())] }] }]);
+    const r = await signAndSendPlan(withPlanDeadline(plan, T0), CREATOR, deps({ t: T0 }));
+    assert.equal(r.error, null, String(r.error));
+  });
+});
 
 describe("planExpired, from the shared runner's module", () => {
   test("is the plan-age guard itself, exported from signPlan for every signing entry point", () => {

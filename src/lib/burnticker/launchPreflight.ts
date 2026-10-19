@@ -55,7 +55,7 @@ export interface RuleCtx { kalshiEnabled?: boolean; now?: number; /** the launch
   /** end-sink picker (endSinks.ts): the live coins on this network a rule may name in onEnd.mint; absent = not checked here */ sinks?: readonly SinkCoin[] | null;
   /** this launch's own mints, and the other side of this coin's pair: neither may take the rest */ own?: readonly string[]; partners?: readonly string[];
   /** round 5: the host's burn program is round 5 (BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5); false refuses the incinerator end */ programRound5?: boolean;
-  /** review 10 F1: the host runs burn dispersal (BURNTICKER_DISPERSAL=1); anything but true refuses a single one-shot under 100 % with an end sink */ dispersal?: boolean }
+  /** review 10 F1: the host runs burn dispersal (programHash.ts hostDispersal, the keeper's decision); anything but true refuses a single one-shot under 100 % with an end sink */ dispersal?: boolean }
 
 /**
  * THE RIVALRY SERIES' OWN REFUSALS (sources/espn.ts window `meetings`). A head-to-head season series is launched only as a pair, one coin
@@ -191,7 +191,7 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
 }
 
 export interface IdentityInput { ticker: string; name: string; description?: string; note?: string }
-export interface IdentityCtx { /** false: the caller runs the refuse list's name patterns itself (the bundle route folds them into its refusals) */ refuseList?: boolean; reserved?: ReadonlySet<string>; majors?: ReadonlySet<string>; existing?: readonly LookalikeExisting[] | null; rule?: Pick<BurnRule, "oracle" | "series"> | null }
+export interface IdentityCtx { /** false: the caller runs the refuse list's name patterns itself (the bundle route folds them into its refusals) */ refuseList?: boolean; reserved?: ReadonlySet<string>; majors?: ReadonlySet<string>; existing?: readonly LookalikeExisting[] | null; rule?: Pick<BurnRule, "oracle" | "series"> | null; /** A-2: the creator's wallet, when known: an identical ticker of their own coin is not refused */ creator?: string | null }
 
 /** A side's name, ticker and texts: the refuse list's name patterns, reserved names, major coins, control characters, lookalikes. */
 /**
@@ -229,7 +229,7 @@ export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): (Pref
   { const mp = majorProblem(s, majors); if (mp) out.push({ status: 403, code: "major-ticker", message: mp, field: isReserved(s.ticker, majors) ? "ticker" : "name" }); }
   { const ot = otherTeamTickerProblem(s.ticker, ctx.rule); if (ot) out.push({ status: 403, code: "other-team-ticker", message: ot, field: "ticker" }); }
   if (ctx.refuseList !== false) try { const nr = nameRefusals(loadRefuseList(), s.name, s.ticker); if (nr.length) out.push({ status: 403, code: "refused", message: `This launch is refused: ${nr.map((x) => x.reason).join("; ")}`, field: "name" }); } catch { /* the bundle reads it again */ }
-  if (ctx.existing) { const look = lookalikeRefusal({ ticker: s.ticker, name: s.name, rule: ctx.rule ?? null }, ctx.existing); if (look) out.push({ status: 409, code: "lookalike", message: look.reason, field: "ticker" }); }
+  if (ctx.existing) { const look = lookalikeRefusal({ ticker: s.ticker, name: s.name, rule: ctx.rule ?? null, creator: ctx.creator ?? null }, ctx.existing); if (look) out.push({ status: 409, code: "lookalike", message: look.reason, field: "ticker" }); }
   return out;
 }
 

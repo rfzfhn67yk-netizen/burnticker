@@ -418,7 +418,8 @@ describe("an abandoned plan after a reload (F4 residual): confirmed / pending re
     assert.match(card, /st === "abandoned" && <span[^>]*>· \{stepStatusText\("abandoned"\)\}/);
     assert.match(card, /stopped\?\.state === "abandoned" \? \(\s*<button[^>]*data-decision="new-plan"[^>]*onClick=\{startNewPlan\}>Start a new plan<\/button>/);
     // launch night 2026-10-13: back to the review with the kept draft (launchDraftStore.ts resumeReviewHref)
-    assert.match(card, /const startNewPlan = \(\) => \{ archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(resumeReviewHref\(window\.location\.pathname\)\); \}/);
+    // review of block J (2026-10-18): a landed but unrecorded coin keeps its record (planHasUnrecordedCoin)
+    assert.match(card, /const startNewPlan = \(\) => \{ if \(!planHasUnrecordedCoin\(plan, done, confirmed\)\) archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(resumeReviewHref\(window\.location\.pathname\)\); \}/);
     assert.match(card, /planAbandoned\(plan, stored\)/);
     assert.ok(!/odds|price|chance/i.test(card.replace(/\/\*[\s\S]*?\*\//g, "")));
   });
