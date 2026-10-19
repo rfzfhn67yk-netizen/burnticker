@@ -99,3 +99,63 @@ describe("bounded maps (M8)", () => {
     assert.ok((new KalshiClient() as unknown as { cache: unknown }).cache instanceof LruMap);
   });
 });
+
+// HB-1 (2026-10-19): the live web process ran out of its 2 GB heap twice; 410 MB of a 533 MB local heap at the same point was the
+// Polymarket client's 1,000-entry cache of whole Gamma answers. The caches are bounded by size as well as by entries.
+describe("size-bounded response caches (HB-1)", () => {
+  test("a weighted LruMap never holds more than its weight budget under repeated distinct keys, and keeps its count in step", () => {
+    const m = new LruMap<string, { body: string }>(1_000, { maxWeight: 10_000, weigh: (e) => e.body.length });
+    for (let i = 0; i < 5_000; i++) {
+      m.set(`k${i}`, { body: "x".repeat(100 + (i % 7) * 300) });
+      assert.ok(m.weight <= 10_000, `weight ${m.weight} after ${i + 1} sets`);
+    }
+    assert.equal(m.weight, [...m.values()].reduce((a, e) => a + e.body.length, 0), "the running total matches the entries held");
+    assert.ok(m.size < 1_000 && m.size > 0);
+    // the newest entries are the ones kept, and get() still moves a key to the newest end without changing the weight
+    assert.ok(m.has("k4999"));
+    const w = m.weight; m.get([...m.keys()][0]); assert.equal(m.weight, w);
+    // replacing, deleting and clearing keep the total exact
+    m.set("k4999", { body: "y" }); assert.equal(m.weight, [...m.values()].reduce((a, e) => a + e.body.length, 0));
+    m.delete("k4999"); assert.equal(m.weight, [...m.values()].reduce((a, e) => a + e.body.length, 0));
+    m.clear(); assert.equal(m.weight, 0); assert.equal(m.size, 0);
+  });
+  test("one entry heavier than the whole budget is held alone until the next set", () => {
+    const m = new LruMap<string, string>(10, { maxWeight: 5, weigh: (v) => v.length });
+    m.set("a", "1"); m.set("big", "0123456789");
+    assert.deepEqual([...m.keys()], ["big"]);
+    m.set("b", "2");
+    assert.deepEqual([...m.keys()], ["b"]);
+  });
+  test("without weigh the map is bounded by entries only, as before", () => {
+    const m = new LruMap<string, string>(3);
+    for (let i = 0; i < 100; i++) m.set(String(i), "x".repeat(1_000));
+    assert.equal(m.size, 3); assert.equal(m.weight, 0);
+  });
+  test("the Polymarket cache stays under POLY_CACHE_BYTES however many distinct heavy searches arrive", async () => {
+    const { PolymarketClient } = await import("@/lib/burnticker/oracle/polymarket");
+    const { POLY_CACHE_BYTES, jsonBytes } = await import("@/lib/burnticker/lru");
+    const big = { events: Array.from({ length: 100 }, (_, i) => ({ id: i, title: "t".repeat(20_000) })) };   // about 2 MB of JSON
+    const c = new PolymarketClient({ fetchImpl: async () => ({ ok: true, status: 200, json: async () => big }), minIntervalMs: 0 } as never);
+    const cache = (c as unknown as { cache: LruMap<string, unknown> }).cache;
+    for (let i = 0; i < 80; i++) await c.get(`https://gamma-api.polymarket.com/public-search?q=distinct${i}`);
+    assert.ok(cache.weight <= POLY_CACHE_BYTES, `weight ${cache.weight}`);
+    assert.equal(cache.size, Math.floor(POLY_CACHE_BYTES / jsonBytes(big)));
+    assert.ok((c as unknown as { requests: string[] }).requests.length === 80);
+  });
+  test("the upstream clients' request logs keep the newest REQUEST_LOG_MAX", async () => {
+    const { REQUEST_LOG_MAX, logRequest } = await import("@/lib/burnticker/lru");
+    const list: string[] = [];
+    for (let i = 0; i < REQUEST_LOG_MAX * 3; i++) logRequest(list, `u${i}`);
+    assert.equal(list.length, REQUEST_LOG_MAX);
+    assert.equal(list[list.length - 1], `u${REQUEST_LOG_MAX * 3 - 1}`);
+  });
+  test("the NWS, FEC and Hermes caches are bounded maps", async () => {
+    const { NwsClient } = await import("@/lib/burnticker/sources/nws");
+    const { FecClient } = await import("@/lib/burnticker/sources/fec");
+    const { HermesClient } = await import("@/lib/burnticker/derby/pyth");
+    for (const c of [new NwsClient(), new FecClient({ apiKey: "x" }), new HermesClient({ apiKey: null })]) {
+      const cache = (c as unknown as { cache: unknown }).cache;
+      assert.ok(cache instanceof LruMap && Number.isFinite(cache.maxWeight), c.constructor.name);
+    }
+  });
+});

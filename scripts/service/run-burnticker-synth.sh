@@ -106,6 +106,18 @@ if [ "${1:-}" = --fill-bank ] || [ "${1:-}" = --bank-status ]; then
   bank_fill 0; CODE=$?; tail -n 1 logs/burnticker-synth-bank.log; exit $CODE
 fi
 
+# --serve (2026-10-19, the owner's real-wallet devnet check): start ONLY the devnet instance on 127.0.0.1:$PORT, with the same blanked
+# environment and the devnet bank when there is one, and hold it until this process is stopped. No scenarios, no bank top-up, no
+# Playwright. Loopback only: reach it with an ssh tunnel (ssh -N -L 3100:127.0.0.1:3100 <host>) so a browser wallet sees http://localhost.
+if [ "${1:-}" = --serve ]; then
+  WEB=""
+  trap '[ -z "$WEB" ] || kill "$WEB" 2>/dev/null || true' EXIT INT TERM
+  if [ $HAVE_BANK = 1 ]; then start_web "$PORT" "$BANK" 1; else start_web "$PORT" "$D/empty-bank.db" 0; fi; WEB=$!
+  wait_web "$PORT"
+  echo "[$(stamp)] devnet instance serving on 127.0.0.1:$PORT (build $(cat .next/BUILD_ID), $([ $HAVE_BANK = 1 ] && echo 'devnet bank' || echo 'no bank: launches search in the browser')); stop with Ctrl-C or kill $$"
+  wait "$WEB"; exit $?
+fi
+
 # audit 2026-10-16 F-32: a Playwright install lock left by a hung installer (over an hour old, no installer alive) is removed first
 sh ./scripts/service/playwright-dirlock.sh || true
 

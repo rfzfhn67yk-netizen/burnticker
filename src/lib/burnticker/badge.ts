@@ -80,8 +80,10 @@ export function badgeSide(i: SideInput): BadgeSide {
   };
 }
 
-const nextOf = (s: TokenStatusJson): string | null => s.next.nextCloseTime ?? s.next.nextCheckAt ?? null;
-const nextNote = (s: TokenStatusJson): string => (s.rules.oneShot && !nextOf(s) ? "resolves once" : s.next.nextCloseTime ? "the next market close the venue lists" : s.next.nextCheckAt ? "the keeper's next read of the source" : "no result scheduled");
+/** Continuous audit run 2, HB-28: a one-shot whose one result is in (or was voided) has no next read, so its embed never says "overdue". */
+const settledOnce = (s: TokenStatusJson): boolean => s.next.result === "decided" || s.next.result === "void";
+const nextOf = (s: TokenStatusJson): string | null => (settledOnce(s) ? null : s.next.nextCloseTime ?? s.next.nextCheckAt ?? null);
+const nextNote = (s: TokenStatusJson): string => (settledOnce(s) ? (s.next.result === "void" ? "result voided" : "result decided") : s.rules.oneShot && !nextOf(s) ? "resolves once" : s.next.nextCloseTime ? "the next market close the venue lists" : s.next.nextCheckAt ? "the keeper's next read of the source" : "no result scheduled");
 
 export function snippets(o: { origin: string; embedPath: string; badgePath: string; pagePath: string; alt: string; width?: number; height?: number }): Snippets {
   const base = o.origin.replace(/\/$/, "");

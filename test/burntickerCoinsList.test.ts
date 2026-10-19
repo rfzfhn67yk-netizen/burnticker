@@ -50,7 +50,8 @@ const PAIR = { counterpart: { name: "Seahawks coin", ticker: "SEAWIN" }, clause:
 function fixtures() {
   return [
     { ticker: "OPEN", status: "live", listing: listingFor(base({ check: "2026-10-20T20:25:00Z" }), [], FEED) },
-    { ticker: "WAIT", status: "live", listing: listingFor(base({ oneShot: true, result: "decided", profile: { sideName: "Broncos", badge: "ONE-SHOT · Oct 16, 2026" }, pair: PAIR }), [won], PAIR_A) },
+    // HB-15: a one-game coin's result is dated by its badge day (the live DENWIN badge reads Oct 15, 2026)
+    { ticker: "WAIT", status: "live", listing: listingFor(base({ oneShot: true, result: "decided", profile: { sideName: "Broncos", badge: "ONE-SHOT · Oct 15, 2026" }, pair: PAIR }), [won], PAIR_A) },
     { ticker: "ENDED", status: "live", listing: listingFor(base({ oneShot: true, result: "decided", market: { phase: "graduated" } }), [{ status: "nothing", units: 0, settledAt: SETTLED, kind: "binary", result: "no" }], MARKET) },
     { ticker: "RETIRED", status: "retired", listing: listingFor(base({ status: "retired" }), [], FEED) },
     { ticker: "VOID", status: "live", listing: listingFor(base({ oneShot: true, result: "void" }), [{ status: "void", units: 0, settledAt: SETTLED, kind: "binary" }], MARKET) },
@@ -250,8 +251,8 @@ describe("B-7: a decided coin says so above its swap panel", () => {
   test("the winner: the result, no further result, the burn depends on both graduating by the void date", () => {
     assert.equal(decidedSwapWarning(s({}), [won]), "This coin's one result is in: Broncos won on 16 October 2026. No further result is read for it. Its burn happens only if both $DENWIN and $SEAWIN reach their 85 SOL raise and register a pool by 14 November 2026 (UTC). If not, the pair is voided and no burn for this result happens.");
   });
-  test("the loser: it burns nothing of its own", () => {
-    assert.equal(decidedSwapWarning(s({ ticker: "SEAWIN", profile: { sideName: "Seahawks" }, pair: { counterpart: { name: "Denver", ticker: "DENWIN" }, clause: PAIR.clause } as never }), [lost], "Broncos"), "This coin's one result is in: Broncos won on 16 October 2026, so this coin is on the losing side. No further result is read for it. The losing side burns nothing of its own.");
+  test("the loser: who lost, who won, that a swap cannot make it burn, and where its pool goes (HS-1)", () => {
+    assert.equal(decidedSwapWarning(s({ ticker: "SEAWIN", profile: { sideName: "Seahawks" }, pair: { counterpart: { name: "Denver", ticker: "DENWIN" }, clause: PAIR.clause } as never }), [lost], "Broncos"), "$SEAWIN lost. The Broncos beat the Seahawks on 16 October 2026. Swapping into $SEAWIN now cannot make it burn. At the end, its burn pool goes to $DENWIN's burn if both coins graduate by 14 November 2026. If they do not, the pair is voided and $SEAWIN's pool burns down on $SEAWIN over four weeks.");
   });
   test("a repeating rule or a pending one-shot has no line; a void one says nothing burns", () => {
     assert.equal(decidedSwapWarning(s({ next: { result: "recurring" } }), []), null);

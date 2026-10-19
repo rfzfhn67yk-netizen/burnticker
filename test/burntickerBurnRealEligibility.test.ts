@@ -6,7 +6,13 @@ import { readFileSync } from "node:fs";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { prepareLaunch } from "@/lib/burnticker/api/handlers";
 import { BURN_REAL_WAITING, catalogueLaunches, siteLaunchState, siteLaunchStateFromCatalogue } from "@/lib/burnticker/launchAvailability";
-import { REAL_BURN_DROPPED_NOTICE, REAL_BURN_FAMILY_REFUSAL, dropIneligibleBurnTarget, realBurnAllowed, realBurnFamily, realBurnFamilyProblem } from "@/lib/burnticker/burnRealEligibility";
+import { REAL_BURN_DROPPED_NOTICE, REAL_BURN_FAMILY_REFUSAL, dropIneligibleBurnTarget, ownReferenceMints, realBurnAllowed, realBurnFamily, realBurnFamilyProblem, realBurnNotOwnCoin } from "@/lib/burnticker/burnRealEligibility";
+import { ownRealPicks, realPickFor } from "@/app/burnticker/launch/burnReal";
+import { endSinkOf, lockRule } from "@/lib/burnticker/rules";
+import { gamePairRule, meetingsPairRules } from "@/lib/burnticker/guidedLaunch";
+import { BURN_REAL_WAITING as WAITING } from "@/lib/burnticker/launchAvailability";
+import { BONK as BONK_U, WIF as WIF_U, WIF_FEED, WIF_MINT, coinvsRule } from "./burntickerDerbyHelpers.ts";
+import type { CoinVsSpec } from "@/lib/burnticker/derby/spec";
 import { changeRuleEdgeIds, isMovingBaselineChangeRule } from "@/lib/burnticker/changeRule";
 import { endChoicesFor, perCoinEndLines } from "@/lib/burnticker/pairEnds";
 import { HAZARD_KINDS, HAZARD_ONCE_HALF_SENTENCE, HAZARD_PATTERNS, hazardOnceSentence, hazardPatternOptions } from "@/lib/burnticker/hazards";
@@ -29,6 +35,10 @@ const ON = { ...R5, BURNTICKER_BURN_REAL_ENABLED: "1" };
 const DEVNET_R5 = { BURNTICKER_CLUSTER: "devnet", BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1", BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "r5" };
 const NOW = Date.parse("2026-08-01T12:00:00Z");   // inside the Atlantic hurricane season, so every hazard's one-shot exists
 const debt = (): BurnRule => ({ ...DEBT_RULE }) as unknown as BurnRule;
+// a Coin comparison pair: side A is measured on WIF, side B on BONK; each may burn only its own pitted coin
+const SPEC: CoinVsSpec = { selector: "coinvs", a: WIF_U, b: BONK_U, window: "daily", measure: "pct", season: { start: new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10), days: 7 }, flip: false };
+const WIF_T = { mint: WIF_MINT, pool: BONK.pool, symbol: "WIF", feedId: WIF_FEED };
+const cvc = (): BurnRule => coinvsRule(SPEC);
 const rule = (series: string, f = 0.02): BurnRule => ({ ...firstPartyRule(series, f), onEnd: { ...ON_END_DEFAULT } }) as BurnRule;
 const quakeNext = (f = 1): BurnRule => ({ ...applyDial(firstPartyRule("usgs.quakenext:7", 0.02), "fraction", f), onEnd: { ...ON_END_DEFAULT } }) as BurnRule;
 const HAZARD_SERIES = HAZARD_KINDS.flatMap((k) => [k.every, k.once(2026)]);
@@ -43,30 +53,35 @@ const review = (body: Record<string, unknown>, env: Record<string, string>) => {
 };
 
 describe("HB-12 + PROD-01: the real-token burn contract (burnRealEligibility.ts)", () => {
-  test("natural disasters, teams, markets and other pairs may not burn a real token; published data and Coin vs Coin may", () => {
+  test("only a Coin comparison coin may burn another token; natural disasters, teams, markets, published data and other pairs may not", () => {
     for (const s of HAZARD_SERIES) { assert.equal(realBurnFamily(rule(s)), "natural-disaster", s); assert.equal(realBurnAllowed(rule(s)), false, s); }
     assert.equal(HAZARD_SERIES.length, 10, "earthquake, hurricane, tornado, wildfire and volcano, both patterns");
     assert.equal(realBurnFamily(BRONCOS as unknown as BurnRule), "event-outcome");
     assert.equal(realBurnFamily(rule("espn.team:nfl-DEN-loss")), "team");
     assert.equal(realBurnFamily({ ...debt(), pair: { pairId: "p", side: "A", counterpartMint: null } } as BurnRule), "pair");
     assert.equal(realBurnFamily({ ...debt(), vault: { share: 0.1, vestDays: 365, cliffDays: 0 } } as BurnRule), "vault");
-    assert.equal(realBurnFamily({ ...debt(), oracle: "derby" } as BurnRule), "coin-comparison");
+    assert.equal(realBurnFamily(cvc()), "coin-comparison");
+    assert.equal(realBurnFamily({ ...debt(), oracle: "derby" } as BurnRule), "other-derby", "a derby coin that is not Coin vs Coin");
     assert.equal(realBurnFamily(debt()), "published-data");
-    assert.equal(realBurnAllowed(debt()), true);
+    // owner 2026-10-19: only a Coin comparison coin may burn another token; published data no longer may
+    assert.equal(realBurnAllowed(debt()), false);
+    assert.equal(realBurnAllowed(cvc()), true);
     assert.equal(realBurnAllowed(null), false);
     assert.equal(realBurnFamilyProblem(rule("usgs.quakes:6"), BONK), REAL_BURN_FAMILY_REFUSAL);
     assert.equal(realBurnFamilyProblem(rule("usgs.quakes:6"), null), null, "nothing named, nothing refused");
-    assert.equal(realBurnFamilyProblem(debt(), BONK), null);
+    assert.equal(realBurnFamilyProblem(debt(), BONK), REAL_BURN_FAMILY_REFUSAL);
+    clean(realBurnNotOwnCoin("WIF")); clean(WAITING);
+    assert.doesNotMatch(WAITING, /WIF|BONK/, "the waiting line names no fixed token");
     clean(REAL_BURN_FAMILY_REFUSAL); clean(REAL_BURN_DROPPED_NOTICE);
   });
-  test("flag on: the review refuses a token on every hazard (both patterns) and accepts it on the debt; flag off: refused everywhere", () => {
+  test("flag on: the review refuses a token on every hazard (both patterns) and on the debt; flag off: refused everywhere", () => {
     for (const s of HAZARD_SERIES) {
       const r0 = rule(s, s.includes("next") || /tornadoday|firesize|volcanowarning/.test(s) ? 1 : 0.02);
       const rv = review({ rule: { ...r0, burnTarget: BONK } }, ON);
       assert.ok(rv.problems.includes(REAL_BURN_FAMILY_REFUSAL), `${s}: ${rv.problems.join(" | ")}`);
       assert.equal(rv.signable, false, s);
     }
-    assert.deepEqual(review({ rule: { ...debt(), burnTarget: BONK } }, ON).problems, []);
+    assert.deepEqual(review({ rule: { ...debt(), burnTarget: BONK } }, ON).problems, [REAL_BURN_FAMILY_REFUSAL]);
     const off = review({ rule: { ...debt(), burnTarget: BONK } }, R5);
     assert.ok(off.problems.includes(BURN_REAL_WAITING)); assert.equal(off.signable, false);
     assert.equal(siteLaunchState(R5).burnReal.available, false, "flag off: the page offers the choice nowhere");
@@ -80,23 +95,127 @@ describe("HB-12 + PROD-01: the real-token burn contract (burnRealEligibility.ts)
     const r = await prepareLaunch(w.p, body, { register: false }) as { error?: { status: number; body: { error: string; code: string } } };
     assert.equal(r.error?.status, 400); assert.equal(r.error?.body.code, "burn-real-family"); assert.equal(r.error?.body.error, REAL_BURN_FAMILY_REFUSAL);
   });
-  test("a stale draft: a token saved on an earthquake rule is dropped on resume with one notice; a debt rule's is kept; no draft is untouched", () => {
+  test("a stale draft: a token saved on an earthquake or debt rule is dropped on resume with one notice; a Coin comparison side's own coin is kept; no draft is untouched", () => {
     const saved = { flow: "single", draft: { key: "k", a: { ...quakeNext(1), burnTarget: BONK }, b: null } };
     const { draft, notice } = dropIneligibleBurnTarget(saved);
     assert.equal(notice, REAL_BURN_DROPPED_NOTICE);
     assert.equal((draft.draft as { a: { burnTarget?: unknown } }).a.burnTarget, undefined);
     assert.equal(draft.flow, "single");
-    const keep = { draft: { key: "k", a: { ...debt(), burnTarget: BONK }, b: null } };
-    assert.deepEqual(dropIneligibleBurnTarget(keep), { draft: keep, notice: null });
+    const keep = { draft: { key: "k", a: { ...cvc(), burnTarget: WIF_T }, b: null } };
+    assert.deepEqual(dropIneligibleBurnTarget(keep), { draft: keep, notice: null }, "a Coin comparison side's own coin is kept");
+    const pub = dropIneligibleBurnTarget({ draft: { key: "k", a: { ...debt(), burnTarget: BONK }, b: null } });
+    assert.equal(pub.notice, REAL_BURN_DROPPED_NOTICE, "published data may not keep one either");
     const none = { flow: "single" };
     assert.deepEqual(dropIneligibleBurnTarget(none), { draft: none, notice: null });
   });
   test("the page: the picker and the 'not offered yet' line follow the contract; resume normalises; a Coin comparison pair says nothing with the flag off", () => {
-    assert.match(page, /const realOneOffered = site\.burnReal\.available && !pairOn && !!rule0 && !rule0\.vault && realBurnAllowed\(rule0\);/);
+    assert.match(page, /const realOneOffered = site\.burnReal\.available && !pairOn && !!rule0 && !rule0\.vault && realBurnAllowed\(rule0\) && realOnePicks\.length > 0;/);
+    assert.match(page, /const realOnePicks = useMemo\(\(\) => ownRealPicks\(rule0\), \[rule0\]\);/);
+    assert.doesNotMatch(page, /SINGLE_REAL_PICKS/);
     assert.match(page, /: site\.burnReal\.line && rule0\?\.burnTarget && realBurnAllowed\(rule0\) \? <details/);
     assert.match(page, /dropIneligibleBurnTarget\(d0\); restoreFrom\(d\);/);
     assert.match(tile, /const realChoices = !a \|\| !b \|\| !realOn \? null : \(/);
     assert.doesNotMatch(tile, /data-burn-real-waiting/);
+  });
+});
+
+describe("owner 2026-10-19: a Coin comparison coin burns only the coin it is measured against, whatever the two coins are", () => {
+  test("the reference mints follow the pitted coins, not a fixed list (any two coins with a Solana mint)", () => {
+    assert.deepEqual(ownReferenceMints(cvc(), "A"), { symbol: "WIF", mints: [WIF_MINT] });
+    assert.deepEqual(ownReferenceMints(cvc(), "B"), { symbol: "BONK", mints: [BONK.mint] });
+    const MEW = { symbol: "MEW", pyth: "a".repeat(64), mint: "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5", pool: null, cross: "jup:MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5" };
+    const POP = { symbol: "POPCAT", pyth: "b".repeat(64), mint: "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", pool: null, cross: "jup:7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr" };
+    const other = { ...cvc(), derby: { ...SPEC, a: MEW, b: POP } } as BurnRule;
+    assert.deepEqual(ownReferenceMints(other, "A"), { symbol: "MEW", mints: [MEW.mint] });
+    assert.equal(realBurnFamilyProblem(other, { ...WIF_T, mint: MEW.mint, symbol: "MEW" }, "A"), null);
+    assert.equal(realBurnFamilyProblem(other, { ...WIF_T, mint: POP.mint, symbol: "POPCAT" }, "B"), null);
+    assert.equal(realBurnFamilyProblem(other, WIF_T, "A"), realBurnNotOwnCoin("MEW"), "WIF is not in this comparison");
+    assert.equal(realBurnFamilyProblem(other, { ...WIF_T, mint: POP.mint }, "A"), realBurnNotOwnCoin("MEW"), "side A may not burn side B's coin");
+    assert.deepEqual(ownRealPicks(other, "A").map((x) => x.symbol), ["MEW"]);
+    assert.deepEqual(ownRealPicks(other, "B").map((x) => x.symbol), ["POPCAT"]);
+    assert.deepEqual(ownRealPicks(debt()), [], "no menu for any other coin");
+  });
+  test("the review: each side burning its own pitted coin raises no burn problem; any other mint is refused for that side", () => {
+    const ok = review({ rule: { ...cvc(), burnTarget: WIF_T }, ticker: "TEAMWIF", name: "Team WIF", pair: { ticker: "TEAMBONK", name: "Team BONK", burnTarget: BONK } }, ON);
+    const burnish = (ps: string[]) => ps.filter((x) => /measured against|burns its own token|burnTarget/.test(x));
+    assert.deepEqual(burnish(ok.problems), [], ok.problems.join(" | "));
+    const wrongA = review({ rule: { ...cvc(), burnTarget: BONK }, ticker: "TEAMWIF", name: "Team WIF", pair: { ticker: "TEAMBONK", name: "Team BONK" } }, ON);
+    assert.ok(wrongA.problems.includes(realBurnNotOwnCoin("WIF")), wrongA.problems.join(" | "));
+    const wrongB = review({ rule: cvc(), ticker: "TEAMWIF", name: "Team WIF", pair: { ticker: "TEAMBONK", name: "Team BONK", burnTarget: WIF_T } }, ON);
+    assert.ok(wrongB.problems.includes(`Coin B. ${realBurnNotOwnCoin("BONK")}`), wrongB.problems.join(" | "));
+  });
+  test("the bundle route refuses a Coin comparison side that names a token other than its own pitted coin (side A and side B)", async (t) => {
+    const was = process.env.BURNTICKER_BURN_REAL_ENABLED; process.env.BURNTICKER_BURN_REAL_ENABLED = "1";
+    t.after(() => { if (was === undefined) delete process.env.BURNTICKER_BURN_REAL_ENABLED; else process.env.BURNTICKER_BURN_REAL_ENABLED = was; });
+    const w = await makeWorld();
+    const base = { creator: CREATOR, ticker: "TEAMWIF", name: "Team WIF", firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true } };
+    type Out = { error?: { status: number; body: { error: string; code: string } } };
+    const a = await prepareLaunch(w.p, { ...base, rule: { ...cvc(), burnTarget: BONK }, pair: { ticker: "TEAMBONK", name: "Team BONK", description: "", imageUrl: null, links: [] } }, { register: false }) as Out;
+    assert.equal(a.error?.status, 400); assert.equal(a.error?.body.code, "burn-real-family"); assert.equal(a.error?.body.error, realBurnNotOwnCoin("WIF"));
+    const b = await prepareLaunch(w.p, { ...base, ticker: "TEAMWIG", rule: cvc(), pair: { ticker: "TEAMBONQ", name: "Team BONQ", description: "", imageUrl: null, links: [], burnTarget: WIF_T } }, { register: false }) as Out;
+    assert.equal(b.error?.status, 400, JSON.stringify(b.error?.body).slice(0, 300)); assert.equal(b.error?.body.code, "burn-real-family"); assert.equal(b.error?.body.error, `Side B: ${realBurnNotOwnCoin("BONK")}`);
+  });
+});
+
+describe("PROD-04: the selected pitted coin's mint is its identity; a symbol never substitutes another mint", () => {
+  // the external audit's fixture (2026-10-19T2049Z reference-identity): a coin labelled WIF or BONK with its own, different mint and feed
+  const MEW_MINT = "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5";
+  const selected = { ...WIF_U, mint: MEW_MINT, pyth: "a".repeat(64), cross: `jup:${MEW_MINT}` };
+  const specWith = (a: typeof WIF_U, b: typeof WIF_U): CoinVsSpec => ({ ...SPEC, a, b });
+  test("the picker keeps the selected mint and feed whatever the symbol says (WIF, BONK, an unfamiliar one)", () => {
+    for (const known of [WIF_U, BONK_U]) {
+      const u = { ...known, mint: MEW_MINT, pyth: "a".repeat(64), cross: `jup:${MEW_MINT}` };
+      const p = realPickFor(u)!;
+      assert.equal(p.mint, MEW_MINT, known.symbol); assert.equal(p.feedId, "a".repeat(64), known.symbol);
+    }
+    assert.equal(realPickFor({ ...selected, symbol: "AUDITCOIN" })!.mint, MEW_MINT);
+    assert.equal(realPickFor(WIF_U)!.mint, WIF_MINT, "the real WIF keeps its own mint");
+  });
+  test("the guard: both sides, WIF and BONK labels: the canonical mint is refused, the selected one accepted, by review and route", async (t) => {
+    for (const known of [WIF_U, BONK_U]) for (const side of ["A", "B"] as const) {
+      const other = { ...known, mint: MEW_MINT, pyth: "a".repeat(64), cross: `jup:${MEW_MINT}` };
+      const r = coinvsRule(specWith(side === "A" ? other : { ...WIF_U, symbol: "OTHER" }, side === "B" ? other : { ...BONK_U, symbol: "OTHER" }));
+      assert.equal(realBurnFamilyProblem(r, { mint: known.mint }, side), realBurnNotOwnCoin(known.symbol), `${known.symbol} ${side}`);
+      assert.equal(realBurnFamilyProblem(r, { mint: MEW_MINT }, side), null, `${known.symbol} ${side}`);
+      assert.deepEqual(ownReferenceMints(r, side), { symbol: known.symbol, mints: [MEW_MINT] });
+      // restored drafts keep only the selected mint
+      const saved = { draft: { key: "audit", a: side === "A" ? { ...r, burnTarget: { mint: known.mint } } : null, b: side === "B" ? { ...r, burnTarget: { mint: known.mint } } : null } };
+      const cleaned = dropIneligibleBurnTarget(saved).draft.draft as Record<string, { burnTarget?: unknown } | null>;
+      assert.equal(cleaned[side.toLowerCase()]!.burnTarget, undefined, `${known.symbol} ${side} draft`);
+      const kept = { draft: { key: "audit", a: side === "A" ? { ...r, burnTarget: { mint: MEW_MINT } } : null, b: side === "B" ? { ...r, burnTarget: { mint: MEW_MINT } } : null } };
+      assert.equal(dropIneligibleBurnTarget(kept).notice, null);
+    }
+    const rule = coinvsRule(specWith(selected, BONK_U));
+    const canon = { ...WIF_T }, own = { ...WIF_T, mint: MEW_MINT, feedId: "a".repeat(64) };
+    const body = (bt: unknown) => ({ rule: { ...rule, burnTarget: bt }, ticker: "TEAMWIF", name: "Team WIF", pair: { ticker: "TEAMBONK", name: "Team BONK" } });
+    assert.ok(review(body(canon), ON).problems.includes(realBurnNotOwnCoin("WIF")));
+    assert.ok(!review(body(own), ON).problems.some((x) => /measured against|burns its own token/.test(x)));
+    const was = process.env.BURNTICKER_BURN_REAL_ENABLED; process.env.BURNTICKER_BURN_REAL_ENABLED = "1";
+    t.after(() => { if (was === undefined) delete process.env.BURNTICKER_BURN_REAL_ENABLED; else process.env.BURNTICKER_BURN_REAL_ENABLED = was; });
+    const w = await makeWorld();
+    const r1 = await prepareLaunch(w.p, { creator: CREATOR, ticker: "TEAMWIF", name: "Team WIF", firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, rule: { ...rule, burnTarget: canon }, pair: { ticker: "TEAMBONK", name: "Team BONK", description: "", imageUrl: null, links: [] } }, { register: false }) as { error?: { status: number; body: { error: string; code: string } } };
+    assert.equal(r1.error?.status, 400); assert.equal(r1.error?.body.code, "burn-real-family"); assert.equal(r1.error?.body.error, realBurnNotOwnCoin("WIF"));
+    const r2 = await prepareLaunch(w.p, { creator: CREATOR, ticker: "TEAMWIH", name: "Team WIH", firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, rule: { ...rule, burnTarget: own }, pair: { ticker: "TEAMBONH", name: "Team BONH", description: "", imageUrl: null, links: [] } }, { register: false }) as { error?: { body: { code: string } } };
+    assert.notEqual(r2.error?.body.code, "burn-real-family", "the selected mint passes the guard");
+  });
+});
+
+describe("owner 2026-10-19: team and candidate rivalries keep burning each other through the pair, untouched by the contract", () => {
+  test("a rivalry names no token, so the contract has nothing to refuse; the series pair reviews with no burn refusal", () => {
+    const m = meetingsPairRules("nba", "PHI", "BOS", 2026);
+    for (const r of [m.a, m.b, gamePairRule("nba", "0022500001", "PHI")]) assert.equal(realBurnFamilyProblem(r, undefined), null);
+    const rv = review({ rule: m.a, ticker: "PHISER", name: "Sixers Series", pair: { ticker: "BOSSER", name: "Celtics Series" } }, ON);
+    assert.ok(!rv.problems.some((x) => x === REAL_BURN_FAMILY_REFUSAL || /measured against/.test(x)), rv.problems.join(" | "));
+    assert.equal(rv.meetings !== undefined, true, "reviewed as the linked series pair it launches as");
+  });
+  test("a one-game rivalry builds with the burn flag on: both sides winner takes the burn, each end naming the other (pair-winner)", async (t) => {
+    const was = process.env.BURNTICKER_BURN_REAL_ENABLED; process.env.BURNTICKER_BURN_REAL_ENABLED = "1";
+    t.after(() => { if (was === undefined) delete process.env.BURNTICKER_BURN_REAL_ENABLED; else process.env.BURNTICKER_BURN_REAL_ENABLED = was; });
+    const w = await makeWorld();
+    const r = await prepareLaunch(w.p, { creator: CREATOR, ticker: "PHIGX", name: "76ers Game X", description: "", firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, rule: gamePairRule("nba", "0022500001", "PHI"), pair: { ticker: "BOSGX", name: "Celtics Game X", opp: "BOS" } }, { register: false });
+    assert.ok("pair" in r, JSON.stringify("error" in r ? r.error.body : r).slice(0, 400)); if (!("pair" in r)) return;
+    const ra = lockRule(JSON.parse(r.pair.bundles.a.rules.text)).rule, rb = lockRule(JSON.parse(r.pair.bundles.b.rules.text)).rule;
+    for (const x of [ra, rb]) { assert.equal(x.pair?.winnerTakesBurn, true); assert.equal(endSinkOf(x), "pair-winner"); assert.equal(x.burnTarget, undefined); }
   });
 });
 

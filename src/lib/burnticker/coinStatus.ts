@@ -55,11 +55,15 @@ export interface CoinStatusFacts {
   lastBurn: { tokens: string; at: string } | null;
   /** the rule ended on a live coin: its pool is spent at once (drain) or a little each day (winddown) */
   ended: "drain" | "winddown" | null;
+  /** continuous audit run 2, HB-16: what an undecided one-shot waits for, by its source (a market, the next earthquake, a feed); absent on older facts */
+  waiting?: string | null;
 }
 
 /** The few status.json fields the facts read (pageTypes.ts TokenStatusJson), so a test can pass a small object. */
 export interface StatusInput {
   status: string; ticker: string; name: string;
+  /** the rule's oracle and selector (status.json oracle, selectorKey): which source an undecided one-shot waits for (HB-16) */
+  oracle?: string | null; selectorKey?: string | null;
   rules: { oneShot: boolean };
   profile?: { badge?: string | null; oneLiner?: string | null; sideName?: string | null; readingDirection?: "up" | "down" | null } | null;
   market?: { phase: "curve" | "migrating" | "graduated" | null } | null;
@@ -109,6 +113,28 @@ export function sideOf(oneLiner: string | null | undefined): "win" | "lose" | "n
   return null;
 }
 
+/**
+ * HB-16: the waiting sentence of an undecided one-shot, by its source. Only a market (Polymarket, Kalshi) waits for "the market to settle";
+ * the next-earthquake coin waits for the next qualifying earthquake; a game waits for its final; any other feed waits for its source.
+ * With no oracle in the input (an older caller), the market sentence stays.
+ */
+export function waitingSentenceOf(oracle: string | null | undefined, selectorKey: string | null | undefined): string {
+  if (!oracle || oracle === "polymarket" || oracle === "kalshi") return STATUS_SENTENCES.waitingMarket;
+  const quake = /(?:^|:)usgs\.quakenext:(\d(?:\.5)?)(?:\/|$)/.exec(selectorKey ?? "");
+  if (quake) return `Waiting for the next magnitude ${quake[1]} earthquake.`;
+  if (oracle === "espn" || /(?:^|:)espn\./.test(selectorKey ?? "")) return STATUS_SENTENCES.waitingGame;
+  return STATUS_SENTENCES.waitingSource;
+}
+
+const BADGE_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** The day a one-shot badge states ("ONE-SHOT · Oct 15, 2026" gives "2026-10-15"); null when it states none. Client-safe. */
+export function badgeDay(badge: string | null | undefined): string | null {
+  const m = /ONE-SHOT\s*·\s*([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(badge ?? "");
+  if (!m) return null;
+  const mo = BADGE_MONTHS.indexOf(m[1]);
+  return mo < 0 ? null : `${m[3]}-${String(mo + 1).padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+}
+
 const NO_BURN = new Set(["nothing", "void", "voided", "forwarded", "exhausted"]);
 
 /** `other`: the pair's other coin's status, when the caller read it (its side's name names the winner on the losing side). */
@@ -142,6 +168,7 @@ export function coinStatusFactsOf(s: StatusInput, receipts: readonly ReceiptInpu
     status, ticker: s.ticker, name: s.name, window, games, side: sideOf(s.profile?.oneLiner), fade: fadeOf(s.profile?.oneLiner), readingDirection: s.profile?.readingDirection ?? null, sideName: s.profile?.sideName ?? null, phase, poolReady, pair, decision,
     lastBurn: confirmed ? { tokens: confirmed.burned ?? "0", at: confirmed.settledAt } : null,
     ended: s.lifecycle?.ended?.mode ?? null,
+    waiting: window === "one-shot" && !decision ? waitingSentenceOf(s.oracle, s.selectorKey) : null,
   };
 }
 
@@ -175,6 +202,8 @@ export const STATUS_SENTENCES = {
   retired: "Retired. No new result burns it.",
   paused: "Paused. Burns wait until the operator resumes it.",
   waitingMarket: "Waiting for the market to settle.",
+  waitingGame: "Waiting for the game's final result.",
+  waitingSource: "Waiting for its source to publish the result.",
   waitingPair: "Waiting for both coins in the pair to reach a trading pool.",
   endedDrain: "The rule has ended. Its burn pool is being spent down.",
   endedWinddown: "The rule has ended. Its burn pool burns down a little each day.",
@@ -260,7 +289,7 @@ export function coinStatusSentence(f: CoinStatusFacts): string {
   if (f.status === "paused") return STATUS_SENTENCES.paused;
   if (f.window === "one-shot") {
     const d = f.decision;
-    if (!d) return f.pair?.waiting ? STATUS_SENTENCES.waitingPair : STATUS_SENTENCES.waitingMarket;
+    if (!d) return f.pair?.waiting ? STATUS_SENTENCES.waitingPair : f.waiting ?? STATUS_SENTENCES.waitingMarket;
     const head = decidedHead(f, d);
     const tail = d.outcome === "void" ? DECIDED_TAILS.void
       : !d.burnsThis && d.outcome === "other" && f.pair ? (f.ended || d.forwarded ? DECIDED_TAILS.toWinner : DECIDED_TAILS.notThis)

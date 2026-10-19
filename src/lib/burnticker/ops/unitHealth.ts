@@ -10,16 +10,21 @@ import type { AlertSink } from "@/lib/burnticker/alerts";
  *
  *   bt-unit-failed    ANY `mct-*` user unit in the failed state, and each unit in EXPECTED_UNITS that is not running (stopped, or not
  *                     installed at all), in ONE alert per cycle keyed by the set of units (unitAlerts)
+ *   bt-unit-restarted (HB-1, 2026-10-19) a service whose systemd restart counter (NRestarts) rose since the last check, by fewer than
+ *                     RESTART_LOOP_MIN: it stopped on its own and Restart= started it again. The web process ran out of memory twice that day
+ *                     and was "active" again five seconds later each time, so neither bt-unit-failed rule saw it. Units that exit on purpose
+ *                     after a deploy (SELF_RESTARTING_UNITS) and oneshot jobs are left out. One alert per unit and restart count.
  *   bt-backup-failed  data/backups/last-backup.json (scripts/service/run-burnticker-backup.sh) says the last run failed, or the last good
  *                     run is older than BACKUP_STALE_MS (two missed 6-hour runs and a margin), or (fourth prelaunch audit, 2026-10-18)
  *                     the file is missing or unreadable BACKUP_STATUS_GRACE_MS after the keeper started, where the backup timer is
  *                     installed (its first run is due within six hours, so no status by then means no backup has finished)
+ *   bt-backup-offbox-stale  (B-3 / OPS-1, 2026-10-19) also when the off-box pull receipt (data/offbox-pull.json) is older than 12 hours
  *
  * The units are read with `systemctl --user list-units 'mct-*' --all --plain --no-legend --no-pager`. Where that cannot run (the Mac, a
  * host without a user bus) nothing is raised and the check says so in its note. Both kinds reach the phone (push.ts).
  */
 export interface UnitRow { unit: string; load: string; active: string; sub: string; description: string }
-export interface UnitAlert { kind: "bt-unit-failed" | "bt-backup-failed" | "bt-backup-offbox-stale"; key: string; text: string; meta: Record<string, unknown> }
+export interface UnitAlert { kind: "bt-unit-failed" | "bt-unit-restarted" | "bt-backup-failed" | "bt-backup-offbox-stale"; key: string; text: string; meta: Record<string, unknown> }
 /** The units the Burnticker host must keep running (install-burnticker-units.sh installs them). */
 export const EXPECTED_UNITS: readonly { unit: string; what: string }[] = [
   // A-7 (second audit 2026-10-18): the core units too, so a stopped web or $DEFICIT keeper raises an alert (the Burnticker keeper
@@ -51,8 +56,14 @@ const PROCESS_STARTED_AT = Date.now();
  */
 export const RESTART_LOOP_MIN = 3;
 export interface UnitCheckState { activating: Set<string>; restarts: Map<string, number> }
+/**
+ * HB-1: the units that exit by design and are started again by Restart=always, so a rise of their counter is not news: the Burnticker
+ * keeper and the mint bank leave after their cycle when a deploy asks (scripts/ops/request-keeper-restart.sh). A crash loop of either is
+ * still caught by the RESTART_LOOP_MIN rule.
+ */
+export const SELF_RESTARTING_UNITS: ReadonlySet<string> = new Set(["mct-burnticker-keeper.service", "mct-burnticker-mintbank.service"]);
 const unitState: UnitCheckState = { activating: new Set(), restarts: new Map() };
-/** `systemctl --user show -p Id -p NRestarts` output: unit → restarts. */
+/** `systemctl --user show -p Id -p NRestarts` output: unit to restarts. */
 export function parseRestarts(stdout: string): Map<string, number> {
   const out = new Map<string, number>();
   for (const block of stdout.split(/\n\s*\n/)) {
@@ -60,6 +71,21 @@ export function parseRestarts(stdout: string): Map<string, number> {
     if (id && Number.isFinite(n)) out.set(id, n);
   }
   return out;
+}
+/** `systemctl --user show -p Id -p MemoryPeak` output: unit to its memory peak in bytes (HB-1). A unit without one ("[not set]",
+ * "infinity", or a systemd too old to report it) is left out. */
+export function parseMemoryPeaks(stdout: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const block of stdout.split(/\n\s*\n/)) {
+    const id = /^Id=(.+)$/m.exec(block)?.[1]?.trim(), raw = /^MemoryPeak=(\d+)$/m.exec(block)?.[1];
+    const n = raw === undefined ? NaN : Number(raw);
+    if (id && Number.isFinite(n) && n > 0 && n < 2 ** 60) out.set(id, n);
+  }
+  return out;
+}
+/** Bytes as a short reading for an alert line: "2.4 GB", "690 MB". */
+export function formatBytes(n: number): string {
+  return n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`;
 }
 /** `systemctl --user show -p Id -p Type` output: the units whose Type is oneshot (a timer's job; a long run is not a crash loop). */
 export function parseOneshot(stdout: string): Set<string> {
@@ -73,7 +99,7 @@ export function parseOneshot(stdout: string): Set<string> {
 export function systemctlShowRestarts(units: readonly string[]): Promise<string> {
   const env = { ...process.env };
   if (!env.XDG_RUNTIME_DIR && typeof process.getuid === "function") env.XDG_RUNTIME_DIR = `/run/user/${process.getuid()}`;
-  return new Promise((res, rej) => execFile("systemctl", ["--user", "show", "-p", "Id", "-p", "NRestarts", "-p", "Type", ...units], { env, timeout: 5_000, maxBuffer: 256 * 1024 }, (e, stdout) => (e ? rej(e) : res(String(stdout)))));
+  return new Promise((res, rej) => execFile("systemctl", ["--user", "show", "-p", "Id", "-p", "NRestarts", "-p", "Type", "-p", "MemoryPeak", ...units], { env, timeout: 5_000, maxBuffer: 256 * 1024 }, (e, stdout) => (e ? rej(e) : res(String(stdout)))));
 }
 /**
  * The crash loops since the last check, and the state for the next one. A-7 (second audit 2026-10-18): only a unit waiting to restart
@@ -90,6 +116,35 @@ export function loopingUnits(units: readonly UnitRow[], restarts: Map<string, nu
     if (before !== undefined && n - before >= RESTART_LOOP_MIN && !looping.some((x) => x.unit === u)) looping.push({ unit: u, why: `${n - before} restarts since the last check` });
   }
   return { looping, next: { activating, restarts: restarts ?? prev.restarts } };
+}
+
+/**
+ * HB-1: the units that restarted on their own since the last check (their NRestarts rose by 1 to RESTART_LOOP_MIN - 1; a larger rise is
+ * a crash loop, said by loopingUnits). Nothing is said on the first read of a unit (no earlier count) or when the count went down (a
+ * manual start resets it). Oneshot jobs and SELF_RESTARTING_UNITS are skipped.
+ */
+export function restartedUnits(restarts: Map<string, number> | null, prev: UnitCheckState, oneshot: ReadonlySet<string> = new Set(), skip: ReadonlySet<string> = SELF_RESTARTING_UNITS): { unit: string; before: number; now: number }[] {
+  const out: { unit: string; before: number; now: number }[] = [];
+  for (const [u, n] of restarts ?? []) {
+    if (oneshot.has(u) || skip.has(u)) continue;
+    const before = prev.restarts.get(u);
+    if (before !== undefined && n > before && n - before < RESTART_LOOP_MIN) out.push({ unit: u, before, now: n });
+  }
+  return out;
+}
+/** One bt-unit-restarted alert per unit, keyed by the unit and its new restart count, so each further restart is a new alert. */
+export function restartAlerts(restarted: readonly { unit: string; before: number; now: number }[], peaks: ReadonlyMap<string, number> = new Map()): UnitAlert[] {
+  return restarted.map((r) => {
+    const peak = peaks.get(r.unit);
+    const times = r.now - r.before === 1 ? "once" : `${r.now - r.before} times`;
+    const peakLine = peak !== undefined ? ` Its memory peak since it started again is ${formatBytes(peak)}.` : "";
+    return {
+      kind: "bt-unit-restarted" as const,
+      key: `bt-unit-restarted:${r.unit}:${r.now}`,
+      text: `${r.unit} stopped on its own and systemd started it again (${times} since the last check; restart count ${r.now}).${peakLine} Read the reason with journalctl --user -u ${r.unit} -n 80 (an out-of-memory stop says "JavaScript heap out of memory" in its log).`,
+      meta: { unit: r.unit, restartsBefore: r.before, restarts: r.now, memoryPeakBytes: peak ?? null },
+    };
+  });
 }
 
 /** The ACTIVE states that count as running. */
@@ -134,16 +189,77 @@ const hash = (s: string): string => { let h = 0; for (let i = 0; i < s.length; i
 export interface BackupStatus { ok: boolean; at: string; files?: string[]; offBox?: string; error?: string | null; /** a destination is set (BURNTICKER_BACKUP_DEST) */ destConfigured?: boolean; /** the last run whose copies left the box */ lastOffBoxAt?: string | null; /** the first run that saw a destination */ firstConfiguredAt?: string | null }
 /** A low-priority note when a destination is set but nothing has left the box for this long (F-7 review). */
 export const OFFBOX_STALE_MS = 24 * 3_600_000;
-export function backupAlerts(s: BackupStatus | null, now: number): UnitAlert[] {
-  if (!s) return [];
-  const out = [...backupRunAlerts(s, now)];
-  // F-7 review: a destination is set, and no copy has left the box for a day (never, counted from when the destination was first seen)
-  const ref = s.destConfigured ? Date.parse(s.lastOffBoxAt ?? s.firstConfiguredAt ?? "") : NaN;
+export function backupAlerts(s: BackupStatus | null, now: number, pull: OffboxPullReceipt | null = null): UnitAlert[] {
+  const pullOut = offboxPullAlerts(pull, now);
+  if (!s) return pullOut;
+  const out = [...backupRunAlerts(s, now), ...pullOut];
+  // F-7 review: a destination is set, and no copy has left the box for a day (never, counted from when the destination was first seen).
+  // B-3 / OPS-1 (2026-10-19): a fresh pull receipt is a healthy off-box copy, so the destination's own staleness is not raised beside it.
+  const ref = s.destConfigured && offboxPullFact(pull, now).offBox !== "pulled" ? Date.parse(s.lastOffBoxAt ?? s.firstConfiguredAt ?? "") : NaN;
   if (Number.isFinite(ref) && now - ref > OFFBOX_STALE_MS) {
     const h = Math.floor((now - ref) / 3_600_000);
     out.push({ kind: "bt-backup-offbox-stale", key: "bt-backup-offbox-stale", text: s.lastOffBoxAt ? `No backup has been copied off the box for ${h} hours (the last copy left at ${s.lastOffBoxAt}). The copies on the box are fine. Read logs/burnticker-backup.log.` : `A backup destination has been set for ${h} hours, and no copy has left the box yet. Read logs/burnticker-backup.log.`, meta: { lastOffBoxAt: s.lastOffBoxAt ?? null, offBox: s.offBox ?? null } });
   }
   return out;
+}
+/**
+ * THE OFF-BOX PULL RECEIPT (auditors' B-3 / OPS-1, 2026-10-19). The off-box copy is not pushed by the backup unit (BURNTICKER_BACKUP_DEST
+ * stays unset by design): the operator's own machine pulls the host's backups every six hours over ssh, checks each database copy with
+ * PRAGMA quick_check, stores it in the operator's own storage, and at the end of a good pull writes data/offbox-pull.json on the host
+ * (atomically, owned by the app user, mode 0640). The backup status alone therefore read "no off-box copy" while one ran. This reads the
+ * receipt: "pulled" while it is younger than OFFBOX_PULL_STALE_MS (two pull periods), "stale" when older, "none" when absent or not a
+ * receipt this check accepts. The receipt carries counts, a time and a method name only; any key outside OFFBOX_PULL_KEYS makes it
+ * unreadable, so a secret, a path or a passphrase can never ride along into ops.json.
+ */
+export const OFFBOX_PULL_FILE = path.join("data", "offbox-pull.json");
+export const OFFBOX_PULL_SCHEMA = "burnticker.offbox-pull/v1";
+/** The one accepted method name (neutral on purpose: ops.json is public and names no storage service). */
+export const OFFBOX_PULL_METHOD = "operator-pull";
+/** Two missed 6-hour pulls. */
+export const OFFBOX_PULL_STALE_MS = 12 * 3_600_000;
+export const OFFBOX_PULL_KEYS: readonly string[] = ["schema", "pulledAt", "method", "files", "dbQuickCheck", "retentionDays", "host"];
+export const OFFBOX_PULL_FILE_KEYS: readonly string[] = ["db", "secretsBundle"];
+export interface OffboxPullReceipt { schema: typeof OFFBOX_PULL_SCHEMA; pulledAt: string; method: typeof OFFBOX_PULL_METHOD; files: { db: number; secretsBundle: boolean }; dbQuickCheck: "ok"; retentionDays: number; host: string | null }
+/** What hostFacts and ops.json carry: a state, a time and the method name. Never the receipt's host, never a path. */
+export interface OffboxPullFact { offBox: "pulled" | "stale" | "none"; lastOffBoxAt: string | null; offBoxMethod: string | null; offBoxPulledAt: string | null }
+const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+/** The receipt, or null when it is not exactly the v1 shape (unknown keys, wrong types, a failed check, a time in the future). */
+export function parseOffboxPull(raw: string, now: number = Date.now()): OffboxPullReceipt | null {
+  let j: unknown;
+  try { j = JSON.parse(raw); } catch { return null; }
+  if (!isObj(j) || Object.keys(j).some((k) => !OFFBOX_PULL_KEYS.includes(k))) return null;
+  const f = j.files;
+  if (!isObj(f) || Object.keys(f).some((k) => !OFFBOX_PULL_FILE_KEYS.includes(k))) return null;
+  if (j.schema !== OFFBOX_PULL_SCHEMA || j.dbQuickCheck !== "ok") return null;
+  if (typeof j.pulledAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(j.pulledAt)) return null;
+  const at = Date.parse(j.pulledAt);
+  if (!Number.isFinite(at) || at - now > 5 * 60_000) return null;
+  if (j.method !== OFFBOX_PULL_METHOD) return null;
+  if (!Number.isInteger(f.db) || (f.db as number) < 1 || typeof f.secretsBundle !== "boolean") return null;
+  if (!Number.isInteger(j.retentionDays) || (j.retentionDays as number) < 1) return null;
+  if (j.host !== undefined && (typeof j.host !== "string" || !/^[A-Za-z0-9,._-]{1,64}$/.test(j.host))) return null;
+  return { schema: OFFBOX_PULL_SCHEMA, pulledAt: j.pulledAt, method: OFFBOX_PULL_METHOD, files: { db: f.db as number, secretsBundle: f.secretsBundle }, dbQuickCheck: "ok", retentionDays: j.retentionDays as number, host: typeof j.host === "string" ? j.host : null };
+}
+export function readOffboxPull(root: string, now: number = Date.now()): OffboxPullReceipt | null {
+  try { return parseOffboxPull(fs.readFileSync(path.join(root, OFFBOX_PULL_FILE), "utf8"), now); } catch { return null; }
+}
+export function offboxPullFact(r: OffboxPullReceipt | null, now: number): OffboxPullFact {
+  if (!r) return { offBox: "none", lastOffBoxAt: null, offBoxMethod: null, offBoxPulledAt: null };
+  const fresh = now - Date.parse(r.pulledAt) <= OFFBOX_PULL_STALE_MS;
+  return { offBox: fresh ? "pulled" : "stale", lastOffBoxAt: r.pulledAt, offBoxMethod: r.method, offBoxPulledAt: r.pulledAt };
+}
+/** The pull's own alert: a receipt older than OFFBOX_PULL_STALE_MS (no receipt at all raises nothing: there may be no pull yet). */
+export function offboxPullAlerts(r: OffboxPullReceipt | null, now: number): UnitAlert[] {
+  if (!r || offboxPullFact(r, now).offBox !== "stale") return [];
+  return [{ kind: "bt-backup-offbox-stale", key: "bt-backup-offbox-pull-stale", text: `The off-box backup pull has not reported for more than 12 hours. The last pull was at ${r.pulledAt}. Check the Mac's backup agent.`, meta: { offBox: "stale", offBoxMethod: r.method, offBoxPulledAt: r.pulledAt } }];
+}
+/** The ops line (null for a document without the fact). */
+export function offboxPullLine(f: Partial<Pick<OffboxPullFact, "offBox" | "offBoxMethod" | "offBoxPulledAt">> | null | undefined, now: number): string | null {
+  if (!f?.offBox) return null;
+  if (f.offBox === "none") return "- off-box backup pull: none (no receipt in data/offbox-pull.json)";
+  const t = Date.parse(f.offBoxPulledAt ?? "");
+  const ago = Number.isFinite(t) ? `${Math.max(0, Math.floor((now - t) / 3_600_000))} h ago (${f.offBoxPulledAt})` : "at an unknown time";
+  return f.offBox === "pulled" ? `- off-box backup pull: pulled (${f.offBoxMethod ?? "?"}), last pull ${ago}` : `- off-box backup pull: STALE (${f.offBoxMethod ?? "?"}), last pull ${ago}; more than 12 hours, check the pulling machine's backup agent`;
 }
 function backupRunAlerts(s: BackupStatus, now: number): UnitAlert[] {
   if (!s.ok) return [{ kind: "bt-backup-failed", key: "bt-backup-failed", text: `The database backup at ${s.at} failed: ${String(s.error ?? "no reason given").slice(0, 200)}. Read logs/burnticker-backup.log.`, meta: { at: s.at, offBox: s.offBox ?? null } }];
@@ -191,14 +307,18 @@ export async function runUnitCheck(o: { sink: AlertSink; now: number; root?: str
     const services = units.filter((u) => u.unit.endsWith(".service")).map((u) => u.unit);
     const shown = services.length ? await (o.showRestarts ?? systemctlShowRestarts)(services).catch(() => null) : null;
     const restarts = shown === null ? null : parseRestarts(shown);
-    const l = loopingUnits(units, restarts, state, shown === null ? new Set() : parseOneshot(shown));
+    const oneshot = shown === null ? new Set<string>() : parseOneshot(shown);
+    const l = loopingUnits(units, restarts, state, oneshot);
+    // HB-1: a single restart between checks (an out-of-memory stop) of a unit that never exits on purpose; a loop is said above instead
+    const restarted = restartedUnits(restarts, state, oneshot).filter((r) => !l.looping.some((x) => x.unit === r.unit));
     state.activating = l.next.activating; state.restarts = l.next.restarts;
     alerts.push(...unitAlerts(units, expectedUnits(o.env ?? process.env), l.looping));
+    alerts.push(...restartAlerts(restarted, shown === null ? new Map() : parseMemoryPeaks(shown)));
     backupTimerInstalled = units.some((u) => u.unit === "mct-burnticker-backup.timer" && u.load !== "not-found");
   }
   catch (e) { note = `the unit check could not list the units (${String((e as Error)?.message ?? e).slice(0, 120)}); nothing raised for units`; }
   const b = readBackupStatusFile(o.root ?? process.cwd());
-  alerts.push(...backupAlerts(b.status, o.now));
+  alerts.push(...backupAlerts(b.status, o.now, readOffboxPull(o.root ?? process.cwd(), o.now)));
   // no readable status at all: said only on the host (the units listed, the backup timer installed), after the timer's first run was due
   if (b.problem && backupTimerInstalled && o.now - (o.startedAt ?? PROCESS_STARTED_AT) >= BACKUP_STATUS_GRACE_MS) alerts.push(missingBackupStatusAlert(b.problem));
   const raised: UnitAlert[] = [];

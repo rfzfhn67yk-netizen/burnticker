@@ -20,7 +20,7 @@ import { teamTicker } from "@/lib/burnticker/tickers";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { parseUsgsSeries, USGS_MAGNITUDES } from "@/lib/burnticker/sources/usgs";
 import { isHazardSeries } from "@/lib/burnticker/hazards";
-import { championshipCode, describeRule, tickerFrom, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
+import { describeRule, tickerFrom, titleSuggest, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { DEFAULT_SHARE, pctLabel, shareOf } from "@/lib/burnticker/launchPresets";
 import { scheduleProblem, SPORTS_CHIP } from "@/lib/burnticker/sources/provenance";
@@ -243,8 +243,7 @@ async function championshipCard(t: EspnTeam, d: SearchDeps, ti: TeamIntent = { y
   if (m.closed) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: [otherYear, `The ${t.nickname} outcome is closed on Polymarket. The team is out, or the market has already settled.`].filter(Boolean).join(" "), ...rel });
   const rule = ti.negated ? polyRuleNo(m.conditionId, DEFAULT_SHARE.oneShot) : polyRule(m.conditionId, DEFAULT_SHARE.oneShot);
   const phrase = `${teamRef(t)} win ${champ}`;
-  const code = championshipCode(t.league);
-  const suggest = ti.negated ? { name: fitName(`${t.nickname} Fall Short`), ticker: `NO${teamTicker(t.abbr, { league: t.league, window: "title" })}`.slice(0, 10) } : { name: fitName(`${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`), ticker: teamTicker(t.abbr, { league: t.league, window: "title" }) };   // audit 6 item 6: the one generator
+  const suggest = titleSuggest(t, ti.negated);   // audit 6 item 6: the one generator (describe.ts titleSuggest, HB-20: the server's review uses it too)
   const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: ev.endDate, suggest };
   const text = describeRule(rule, { ticker: "", ...descCtx });
   const side = ti.negated ? `the NO side: it burns only if the market settles NO, meaning ${teamRef(t)} did not win ${champ}. A voided or cancelled market never counts as a NO` : `the YES side: it burns if Polymarket's payout says ${teamRef(t)} won ${champ}`;

@@ -5,7 +5,8 @@
  * split. Client-safe (cpmmTier.ts and type imports only): the client pages build the line from the FeeSplit their JSON carries or from the
  * tier record, fees.ts from the designed split, so no number in the sentence is typed.
  */
-import { CPMM_TIER, postGraduationBps, type CpmmCluster } from "@/lib/burnticker/cpmmTier";
+import { CPMM_MAINNET_TIER_14, CPMM_MAINNET_TIER_9, CPMM_TIER, CPMM_TIER_14_SINCE, postGraduationBps, type CpmmCluster, type CpmmTier } from "@/lib/burnticker/cpmmTier";
+import { utcDateTime } from "@/lib/burnticker/utcWords";
 import type { FeeSplit } from "@/lib/burnticker/fees";
 
 /**
@@ -57,11 +58,28 @@ export function operatorShareClause(v: PostGraduationShares = sharesForCluster("
   return `${aboutPct(v.operator)} of every swap (${v.operatorPctOfLp}% of the locked pool's liquidity fees)`;
 }
 
+/** The shares for one tier record (a coin's own pin, or a named tier in the site-wide copy). */
+export function sharesForTier(tier: CpmmTier): PostGraduationShares {
+  const b = postGraduationBps(tier, LOCK_FEE_BURN_BPS_MIRROR);
+  return { burnPool: b.burnPoolTotal, operator: b.lpToOperator, raydium: b.raydiumTotal, operatorPctOfLp: pctOf(b.lpToOperator, b.lpFees) };
+}
+const tradersPayPct = (t: CpmmTier): string => `${(t.tradeFeeRate + t.creatorFeeRate) / 10_000}%`;
+/** "19 October 2026, 20:17 UTC": the tier-14 cutover in words (utcWords.ts), the one way public prose names it. */
+export const TIER_14_CUTOVER_WORDS = utcDateTime(CPMM_TIER_14_SINCE);
+
 /**
- * Coins created before the 2026-10-19 tier change keep the tier they pinned, so a sentence that states the new-coin shares without naming
- * a coin adds this line (no date in public prose). A coin's own page states its own split instead.
+ * BOTH TIERS IN ONE LINE (continuous audit run 2, HB-13): a site-wide sentence that states the new-coin shares (tier 14) adds this line,
+ * which names the cutover and gives the tier-9 split the coins created before it still pay. A coin's own page states its own split
+ * (tokenPage.ts, from its pin), never this.
  */
-export const EARLIER_COINS_LINE = "Coins created before the latest pool fee change keep the fees they started with, and each coin's page shows its own split.";
+export const EARLIER_COINS_LINE = (() => {
+  const t9 = sharesForTier(CPMM_MAINNET_TIER_9);
+  // short enough for the footer on every page (the static home keeps its word budget, test/burntickerHome.test.ts)
+  return `Coins created from ${TIER_14_CUTOVER_WORDS} use fee tier ${CPMM_MAINNET_TIER_14.index} (${tradersPayPct(CPMM_MAINNET_TIER_14)} per swap). Earlier coins, mostly on tier ${CPMM_MAINNET_TIER_9.index}, pay ${tradersPayPct(CPMM_MAINNET_TIER_9)}: ${aboutPct(t9.burnPool)} to the burn pool, ${aboutPct(t9.operator).replace(/^about /, "")} to the operator.`;
+})();
+
+/** The operator's share on the earlier tier, for a sentence that already gives the new-coin share (the fee ledger, the operator note). */
+export const EARLIER_OPERATOR_CLAUSE = `${operatorShareClause(sharesForTier(CPMM_MAINNET_TIER_9))} on coins created before ${TIER_14_CUTOVER_WORDS}, which stay on tier ${CPMM_MAINNET_TIER_9.index}`;
 
 /** The mainnet line for new coins, client-safe (what the shared copy modules print). */
 export const OPERATOR_SHARE_LINE = postGraduationShareLine(sharesForCluster("mainnet"));

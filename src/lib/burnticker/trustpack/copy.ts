@@ -5,7 +5,7 @@
  * future tense about what the platform does next, never the word "audit" for a review, and no venue named that the settlement rules
  * exclude. Text quoted from the Powers Registers is the program's own documentation and is rendered as data.
  */
-import { operatorShareClause } from "@/lib/burnticker/feeShareLine";
+import { EARLIER_OPERATOR_CLAUSE, operatorShareClause } from "@/lib/burnticker/feeShareLine";
 
 /** Private review 10 (2026-10-14): what the keys can and cannot do with funds, said specifically (the checker page and CHECK-THIS-YOURSELF.md). */
 export const POWERS_SCOPE = "These keys cannot withdraw a burn pool to a personal wallet. A finished rule's remainder can be forwarded to its end sink (the winner or $DEFICIT) by the keeper's signed reading; reading signers decide qualifying results; the upgrade authority can replace the program.";
@@ -60,7 +60,7 @@ export const OPERATOR_COPY = {
   walletsTitle: "Operator wallets",
   walletsIntro: "Only public keys are shown, each with where it comes from. The devnet keys are copied from the rehearsal records. The mainnet keys are the addresses the operator set up.",
   /** under the mainnet table: what the developer fee wallet receives (the table cell names the role only) */
-  devFeeNote: `The developer fee wallet is also the operator treasury. It receives the 0.25% fee on curve trades, the launch fees, and, after a coin graduates, ${operatorShareClause()}.`,
+  devFeeNote: `The developer fee wallet is also the operator treasury. It receives the 0.25% fee on curve trades, the launch fees, and its share of each graduated pool's swaps: ${operatorShareClause()} on new coins, and ${EARLIER_OPERATOR_CLAUSE}.`,
   signedTitle: "Signed statement",
   signedPending: "The developer fee wallet listed above is the one that signs it. The text to sign is below.",
   neverBuysTitle: "Never buys a platform coin",

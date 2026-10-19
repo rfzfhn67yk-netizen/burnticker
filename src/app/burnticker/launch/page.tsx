@@ -40,7 +40,7 @@ import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { PreWalletSummary } from "./PreWalletSummary";
 import { BurnRealChoice } from "./BurnRealChoice";
-import { SINGLE_REAL_PICKS, SIDE_REAL_OFF, realBlockers, realField, realReviewNotes, withRealBurn, type SideReal } from "./burnReal";
+import { ownRealPicks, SIDE_REAL_OFF, realBlockers, realField, realReviewNotes, withRealBurn, type SideReal } from "./burnReal";
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
 import { BACKTEST_SLOW } from "@/lib/burnticker/api/backtestWait";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileFieldId, type ProfileUpdate, type ProfileValue } from "./ProfileFields";
@@ -662,7 +662,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     return () => clearTimeout(t);
   }, [uq, closingSoon]);
   // browse: the categories once, then one category's cards (debounced text filter)
-  useEffect(() => { if (flow === "browse" && !cats.length) getJson<{ categories: BrowseCategory[] }>(`${V1}/browse`).then((j) => setCats(j.categories)).catch((e) => setBrowseErr([String((e as Error).message)])); }, [flow, cats.length]);
+  useEffect(() => { if (flow === "browse" && !cats.length) getJson<{ categories: BrowseCategory[] }>(`${V1}/browse${guide.follow === "number" ? "?venue=feed" : ""}`).then((j) => setCats(j.categories)).catch((e) => setBrowseErr([String((e as Error).message)])); }, [flow, cats.length, guide.follow]);
   // L11: the previous category's cards are cleared the moment the category changes, and only the answer to the LATEST request is shown
   const browseSeq = useRef(0), browseCat = useRef<string | null>(null);
   useEffect(() => {
@@ -670,9 +670,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     const seq = ++browseSeq.current;
     if (browseCat.current !== cat) { browseCat.current = cat; setCards(null); setBrowseErr([]); setDrill(null); setWx(null); }
     setCardsBusy(true);
-    const t = setTimeout(() => { getJson<{ cards: SourceCardT[]; errors: string[] }>(`${V1}/browse?category=${encodeURIComponent(cat)}${bq.trim() ? `&q=${encodeURIComponent(bq.trim())}` : ""}`).then((j) => { if (seq !== browseSeq.current) return; setCards(j.cards); setBrowseErr(j.errors ?? []); }).catch((e) => { if (seq !== browseSeq.current) return; setCards([]); setBrowseErr([`${(e as Error).message} (${detailOf(e)})`]); }).finally(() => { if (seq === browseSeq.current) setCardsBusy(false); }); }, bq ? 350 : 0);
+    const t = setTimeout(() => { getJson<{ cards: SourceCardT[]; errors: string[] }>(`${V1}/browse?category=${encodeURIComponent(cat)}${guide.follow === "number" ? "&venue=feed" : ""}${bq.trim() ? `&q=${encodeURIComponent(bq.trim())}` : ""}`).then((j) => { if (seq !== browseSeq.current) return; setCards(j.cards); setBrowseErr(j.errors ?? []); }).catch((e) => { if (seq !== browseSeq.current) return; setCards([]); setBrowseErr([`${(e as Error).message} (${detailOf(e)})`]); }).finally(() => { if (seq === browseSeq.current) setCardsBusy(false); }); }, bq ? 350 : 0);
     return () => clearTimeout(t);
-  }, [flow, step, cat, bq]);
+  }, [flow, step, cat, bq, guide.follow]);
   // L11: nested loading always ends: events, "none open", or the error (a request that hangs is cut after 15 seconds)
   useEffect(() => { if (!drill) { setDrillEvents(null); setDrillErr(null); return; } let live = true; setDrillErr(null); setDrillEvents(null); getJson<{ events: EventHit[] }>(`${V1}/kalshi/events?series=${encodeURIComponent(drill)}`, { signal: AbortSignal.timeout(15_000) }).then((j) => { if (live) setDrillEvents(j.events.slice(0, 12)); }).catch((e) => { if (live) { setDrillEvents([]); setDrillErr(`The events could not be read just now (${detailOf(e)}).`); } }); return () => { live = false; }; }, [drill]);
   useEffect(() => { if (!q.trim()) { setHits([]); return; } const t = setTimeout(() => { fetch(`/api/burnticker/oracle/search?q=${encodeURIComponent(q.trim())}`).then((r) => r.json()).then((j) => setHits(j.results ?? [])).catch(() => setHits([])); }, 350); return () => clearTimeout(t); }, [q]);
@@ -764,13 +764,15 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const baseRuleB: BurnRule | null = useMemo(() => (pairRules ? pairRules.b : null), [pairRules]);
   const baseKey = JSON.stringify([baseRule, baseRuleB]);
   const rule0: BurnRule | null = draft && draft.key === baseKey ? draft.a : baseRule;
-  // website-24 (WIRING-ROUND5): a single buyback coin may burn a real token (WIF, BONK) instead of itself, once the launch state says the
+  // website-24 (WIRING-ROUND5): a coin may burn the coin it is measured against instead of itself, once the launch state says the
   // round-5 program is deployed; default off. The pinned field joins the hashed rule only after its pool passed the admission read.
   const [realOne, setRealOne] = useState<SideReal>(SIDE_REAL_OFF);
   const realNet = (site.cluster ?? cluster) === "mainnet" ? "mainnet" : "devnet";
   // HB-12 + PROD-01 (2026-10-19): and only on a rule family that may burn a real token (burnRealEligibility.ts: published data; never a
   // natural disaster, a team, a market or a pair), the same contract the review and the bundle route enforce
-  const realOneOffered = site.burnReal.available && !pairOn && !!rule0 && !rule0.vault && realBurnAllowed(rule0);
+  // owner 2026-10-19: no fixed menu; the only token a coin may burn is the coin it is measured against (burnReal.ts ownRealPicks)
+  const realOnePicks = useMemo(() => ownRealPicks(rule0), [rule0]);
+  const realOneOffered = site.burnReal.available && !pairOn && !!rule0 && !rule0.vault && realBurnAllowed(rule0) && realOnePicks.length > 0;
   const fieldOne = realOneOffered ? realField(realOne, realNet) : null;
   const fieldOneKey = fieldOne ? JSON.stringify(fieldOne) : "";
   // a linked pair (a rivalry series, a settled-event pair, a registered pair) keeps the pair-winner end; every other coin takes its choice
@@ -1466,7 +1468,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     {c.shape !== "tile" && <span className="bt-chip">{c.shape === "pair" ? "two coins" : c.shape}</span>}
                     {badgeText && fold(badgeText) !== fold(c.shape) && <span className="bt-chip bt-chip-window">{badgeText}</span>}
                   </div>
-                  {c.alternative && <p className="mt-1 text-[11px] text-amber-300" data-alternative>This is a related rule. It is not the exact event you typed.</p>}
+                  {c.alternative && <p className="mt-1 text-[11px] text-amber-300" data-alternative>{entry?.template ? "A related rule from the same source." : "This is a related rule. It is not the exact event you typed."}</p>}
                   <div className="mt-1 font-medium leading-snug break-words">{title}</div>
                   <div className="text-xs text-neutral-400 break-words">{c.subtitle}</div>
                   {c.interpreted && <p className="mt-1 text-xs text-neutral-300 break-words" data-interpreted>{c.interpreted}</p>}
@@ -1715,7 +1717,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                         {/* one outcome = one yes/no market (the owner's Best Picture case): pick a name; "every market" is Advanced only */}
                         {/* owner, 2026-10-12 ("difficult to tell which 'burn if this one wins' matched the 76ers, too much dead space in between"): the
                             whole row is the button, lit on hover and focus, so the name and its action read as one line */}
-                        <ul className="mt-1 text-xs text-neutral-400">{(allOut?.slug === e.slug && allOut.markets ? filterOutcomes(allOut.markets, allOut.text, { limit: allOut.limit }).shown : e.markets).map((m) => <li key={m.conditionId}><button type="button" data-decision="what" disabled={m.closed} onClick={() => pickPoly(m)} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800 focus-visible:text-neutral-100 disabled:opacity-50 disabled:hover:bg-transparent"><span className="min-w-0 truncate">{m.outcome ?? m.question}{m.outcome ? null : <span className="text-neutral-500"> (YES = {m.yes}, NO = {m.no})</span>}{m.closePassed && !e.closePassed && <> {closePassedChip}</>}</span><span className="shrink-0 underline group-disabled:no-underline">{m.closed ? "closed" : m.outcome ? "burn if this one wins" : "burn on this market"}</span></button></li>)}</ul>
+                        <ul className="mt-1 text-xs text-neutral-400">{(allOut?.slug === e.slug && allOut.markets ? filterOutcomes(allOut.markets, allOut.text, { limit: allOut.limit }).shown : e.markets).map((m) => <li key={m.conditionId}><button type="button" data-decision="what" disabled={m.closed} onClick={() => pickPoly(m)} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800 focus-visible:text-neutral-100 disabled:opacity-50 disabled:hover:bg-transparent"><span className="min-w-0 truncate">{m.outcome ?? m.question}{m.outcome ? null : <span className="text-neutral-500"> (YES = {m.yes}, NO = {m.no})</span>}{m.closePassed && !e.closePassed && <> {closePassedChip}</>}</span><span className="shrink-0 underline group-disabled:no-underline">{m.closed ? "closed" : m.outcome ? (/\bwins?\b|winner/i.test(m.question ?? "") ? "burn if this one wins" : "burn if this resolves YES") : "burn on this market"}</span></button></li>)}</ul>
                         {/* WIRING-AUDIT12 item 13: "Show all N" reads every outcome of the event, then a filter and paging here */}
                         {e.marketCount > e.markets.length && allOut?.slug !== e.slug && <p className="mt-1 text-[11px] text-neutral-500" data-show-all>Showing {e.markets.length} of {e.marketCount}. <button type="button" data-nav className="underline" onClick={() => showAllOutcomes(e)}>Show all {e.marketCount}</button></p>}
                         {allOut?.slug === e.slug && (() => {
@@ -2040,7 +2042,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           ) : null;
           // website-24 (WIRING-ROUND5): what the coin burns, itself (the default) or a real token; the waiting line until round 5 is deployed
           const realExtra = pairOn || !rule || rule.vault ? null : realOneOffered
-            ? <BurnRealChoice side="one" who={`$${ticker.toUpperCase() || "TICKER"}`} picks={SINGLE_REAL_PICKS} value={realOne} onChange={setRealOne} network={realNet} locked={busy} />
+            ? <BurnRealChoice side="one" who={`$${ticker.toUpperCase() || "TICKER"}`} picks={realOnePicks} value={realOne} onChange={setRealOne} network={realNet} locked={busy} />
             // WIRING-AUDIT12 item 15: only where a target could be set (this condition), one tap away
             // launch wizard audit 2026-10-19 F16: and only where the creator expects the choice, a rule that came with a burn target (a
             // "launch one like this" link or a template of such a coin); every other coin says nothing about a feature this site does not offer

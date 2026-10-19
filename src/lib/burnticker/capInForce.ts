@@ -67,3 +67,10 @@ export function capHeldSentence(queuedSol: string, e: EffectiveCap | null): stri
   const cap = e && e.capLamports !== null ? `the ${sol(e.capLamports)} SOL burn-pool cap` : `the default ${sol(DEFAULT_BURN_POOL_CAP_LAMPORTS.toString())} SOL burn-pool cap`;
   return `${queuedSol} SOL is held above ${cap} until the cap rises or ends. An audit is not required for either.`;
 }
+
+/**
+ * WHO ENFORCES THE CAP (continuous audit run 2, HB-14): the burn program has been deployed since round 5 and applies the cap at every crank
+ * (crank_common.rs active_cap). One sentence on every surface (the trust page, a token page's pool note); never "the keeper enforces this
+ * cap today" or "once it is deployed".
+ */
+export const CAP_ENFORCED_SENTENCE = "The burn program enforces this cap on chain.";

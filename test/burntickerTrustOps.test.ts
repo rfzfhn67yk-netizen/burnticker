@@ -611,7 +611,8 @@ describe("4 · incident policy, the trust page section, the static fallback", ()
     const pol = fs.readFileSync(path.join(ROOT, "docs/burnticker/INCIDENTS.md"), "utf8");
     for (const s of ["## What counts as an incident", "## The 48-hour rule", "## Where it is published", "## Who signs it"]) assert.ok(pol.includes(s), s);
     assert.ok(fs.existsSync(path.join(ROOT, "docs/burnticker/incidents/TEMPLATE.md")));
-    assert.ok(fs.readFileSync(path.join(ROOT, "docs/burnticker/incidents/LOG.md"), "utf8").includes("(No incidents recorded.)"));
+    // continuous audit run 2, HB-27: the first "## " entry (2026-10-19) replaced the empty-log placeholder
+    assert.match(fs.readFileSync(path.join(ROOT, "docs/burnticker/incidents/LOG.md"), "utf8"), /^## 2026-10-19 /m);
     assert.ok(!fs.readdirSync(path.join(ROOT, "docs/burnticker")).includes("incidents.md"), "migrated into the folder");
     assert.match(fs.readFileSync(path.join(ROOT, "config/public-repo/overlay/SECURITY.md"), "utf8"), /docs\/burnticker\/INCIDENTS\.md/);
     const lint = lintCopy(pol, loadCopyLintConfig(ROOT));

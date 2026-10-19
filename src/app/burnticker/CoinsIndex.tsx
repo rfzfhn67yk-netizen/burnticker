@@ -14,7 +14,7 @@ import { WATCH_FORGET, WATCH_NOTE, coinWatchKey, fetchCoinInventory, watchAmbigu
 import { SEASONS_LINKS } from "./_components/nav";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
-import { CARD_MEANINGS, cardViewFromIndex, featuredLine, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
+import { CARD_MEANINGS, cardViewFromIndex, featuredHeading, featuredLine, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
 import { pairCardTitle } from "@/lib/burnticker/coinPage";
 import { FIRST_PARTY_CARD_IDS, GRID_TABS, cardMatches, firstPartyCards, gridState, liveCoinsTotal, searchKey, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
@@ -202,7 +202,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
           with $DEFICIT in the list and test coins hidden, a mainnet host has nothing left here, and the group is not shown */}
       {(!home.data || home.error || featured.length > 0 || (home.data.featured.some((v) => !firstParty(v)) && !!s)) && <section className="space-y-3" aria-labelledby="bt-featured-h" data-group="test">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="bt-featured-h" className="text-lg font-semibold">Featured coin and test receipts</h2>
+          <h2 id="bt-featured-h" className="text-lg font-semibold">{featuredHeading(home.data ? home.data.featured.filter((v) => !firstParty(v)) : null)}</h2>
           <details className="text-xs text-neutral-400"><summary className="cursor-pointer">What the card rows mean</summary>
             <ul className="mt-1 max-w-xl list-disc space-y-1 pl-4">{Object.values(CARD_MEANINGS).map((m) => <li key={m}>{m}</li>)}</ul>
           </details>

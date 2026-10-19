@@ -143,7 +143,7 @@ export function devFeeLineFor(venue: "launchlab" | "pair-curve" | null = null): 
   const curve = `Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume.`;
   if (venue === "launchlab") return `${curve} ${OPERATOR_SHARE_LINE} ${EARLIER_COINS_LINE}`;
   if (venue === "pair-curve") return `${curve} ${PAIR_OPERATOR_SHARE_LINE}`;
-  return `${curve} ${OPERATOR_SHARE_LINE} LaunchLab rates for new coins; pair-curve pairs differ. ${EARLIER_COINS_LINE}`;
+  return `${curve} ${OPERATOR_SHARE_LINE} ${EARLIER_COINS_LINE} Pair coins differ.`;
 }
 export const DEV_FEE_LINE = devFeeLineFor(null);
 export const USE_OF_FEES = `${DEV_FEE_LINE} The operator's part of the liquidity fees is fixed in code, and the coin side of those fees is burned. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own, apart from a disclosed 0.1 SOL purchase of the $REHEARSAL test coin when it was created. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.`;

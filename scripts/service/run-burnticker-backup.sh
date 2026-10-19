@@ -128,7 +128,7 @@ DEST_TARGET=${DEST#rclone:}
 OFFBOX="skipped"
 if [ -n "$ERR" ]; then OFFBOX="not tried"
 elif [ -n "$RAW_DEST" ] && { [ -z "$DEST" ] || [ -z "$DEST_TARGET" ]; }; then OFFBOX="refused"; ERR="refused the destination: BURNTICKER_BACKUP_DEST is set but names no place"; say "backup FAILED: $ERR"
-elif [ -z "$DEST" ]; then say "off-box copy SKIPPED: BURNTICKER_BACKUP_DEST is not set (the owner names a destination: docs/burnticker/TODO-OWNER.md). The copies are on this host only."
+elif [ -z "$DEST" ]; then say "off-box copy SKIPPED: BURNTICKER_BACKUP_DEST is not set (the owner names a destination: docs/burnticker/TODO-OWNER.md). This run copies nothing off the box; a pull from separate storage records itself in data/offbox-pull.json."
 elif [ -z "$OFFBOX_FILES" ]; then OFFBOX="nothing to copy"
 elif case "$DEST_TARGET" in -*) true ;; *) false ;; esac; then OFFBOX="refused"; ERR="refused the destination: BURNTICKER_BACKUP_DEST starts with -, which scp or rclone would read as an option"; say "backup FAILED: $ERR"
 else

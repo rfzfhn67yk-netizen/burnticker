@@ -17,6 +17,21 @@ export const SAMPLE_SETS = [
 ] as const;
 
 export interface SampleReceipt { ticker: string; recordDate: string; units: number; status: string; signature: string; memo: string; explorerUrl: string; evidence: string; rulesPath: string; rulesSha256: string | null }
+/**
+ * Continuous audit run 2, HB-26: what the public API serves. The receipts are labelled as devnet practice examples, and no repository path
+ * leaves the server: each rules text is keyed by the coin's ticker ("DEFICIT.rules.json") and the evidence is named in words.
+ */
+export const DEVNET_EXAMPLE_NOTE = "These are practice receipts from the devnet rehearsal, offered as examples for the checker. They are not mainnet coins.";
+export const DEVNET_EVIDENCE_WORDS = "the devnet rehearsal's published burn records";
+export interface PublicSampleList extends Omit<SampleList, "receipts"> { example: true; note: string; receipts: SampleReceipt[] }
+export const publicRulesKey = (ticker: string): string => `${ticker}.rules.json`;
+export const publicSample = (r: SampleReceipt): SampleReceipt => ({ ...r, evidence: DEVNET_EVIDENCE_WORDS, rulesPath: publicRulesKey(r.ticker) });
+export function publicSampleReceipts(l: SampleList): PublicSampleList {
+  const rules: Record<string, string> = {};
+  for (const r of l.receipts) if (l.rules[r.rulesPath] !== undefined) rules[publicRulesKey(r.ticker)] = l.rules[r.rulesPath];
+  return { ...l, example: true, note: DEVNET_EXAMPLE_NOTE, receipts: l.receipts.map(publicSample), rules };
+}
+
 export interface SampleList { cluster: "devnet"; programId: string; rpc: string; receipts: SampleReceipt[]; rules: Record<string, string>; /** the featured receipt (config/burnticker/current-status.json `demo`), pre-selected by /burnticker/check?demo=1 */ featured: string | null }
 
 /** The receipt verifier's program: the one per-network configuration (networks.ts, audit 4 BT-01) — the mint verifier reads the same. */

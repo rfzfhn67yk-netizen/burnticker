@@ -52,14 +52,16 @@ describe("F1/F2: the round-5 burn target is off unless the owner's flag is on (f
     for (const env of [MAINNET, R5]) {
       const rv = review({ ...debt(), burnTarget: BONK }, env);
       assert.equal(siteLaunchState(env).burnReal.available, false, "the page hides the choice on this host");
-      assert.deepEqual(rv.problems, [BURN_REAL_WAITING]);
+      // owner 2026-10-19: a published-data coin may not burn another token at all, so the family refusal joins the waiting line
+      assert.deepEqual(rv.problems, [BURN_REAL_WAITING, REAL_BURN_FAMILY_REFUSAL]);
       assert.equal(rv.signable, false);
     }
   });
-  test("FIXED: on an r5 host with BURNTICKER_BURN_REAL_ENABLED on, the burn target is offered and accepted on a published-data coin (HB-12: a natural disaster is refused)", () => {
+  test("FIXED: on an r5 host with BURNTICKER_BURN_REAL_ENABLED on, only a Coin comparison coin may burn another token: published data and natural disasters are refused (test/burntickerBurnRealEligibility.test.ts has the Coin comparison case)", () => {
     const on = { ...R5, BURNTICKER_BURN_REAL_ENABLED: "1" };
     assert.equal(siteLaunchState(on).burnReal.available, true);
-    assert.equal(review({ ...debt(), burnTarget: BONK }, on).signable, true);
+    const pub = review({ ...debt(), burnTarget: BONK }, on);
+    assert.equal(pub.signable, false); assert.deepEqual(pub.problems, [REAL_BURN_FAMILY_REFUSAL]);
     // HB-12 + PROD-01 (2026-10-19): a natural-disaster coin may not burn another token (burnRealEligibility.ts)
     const quake = review({ ...quakeNext(1), burnTarget: BONK }, on);
     assert.equal(quake.signable, false);

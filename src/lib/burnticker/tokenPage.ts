@@ -1,5 +1,5 @@
 import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
-import { capHeldSentence, capSentenceAway } from "@/lib/burnticker/capInForce";
+import { CAP_ENFORCED_SENTENCE, capHeldSentence, capSentenceAway } from "@/lib/burnticker/capInForce";
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
@@ -141,6 +141,14 @@ export const FEE_FLOW_LINE = `Creator fees go to the burn pool and are burned. T
 /** The same line for one coin, from the post-graduation split its page carries (the tier it pinned; 2026-10-19). */
 export const feeFlowLine = (post: Pick<FeeSplit, "legs">): string => `Creator fees go to the burn pool and are burned. The liquidity is locked forever. ${postGraduationShareLine(post)}`;
 
+/** A coin that is trading and still reading its source. */
+export const LIVE_LINE = "This coin is live.";
+/** Continuous audit run 2, HB-25: a one-shot whose one result is in (or was voided) is not "live" in the reading sense; it says so. */
+export const DECIDED_LINE = "This coin's one result is in, so no further result is read for it.";
+export const VOIDED_LINE = "This coin's result was voided, so no further result is read for it.";
+/** The lifecycle line once the next block is known: a decided or voided one-shot never reads "This coin is live.". */
+export const lifecycleLineFor = (line: string, result: string): string => (line !== LIVE_LINE ? line : result === "decided" ? DECIDED_LINE : result === "void" ? VOIDED_LINE : line);
+
 /** A draft's lifecycle line: the launch was prepared but never signed, so nothing exists on chain (never "This coin is live."). */
 export const NOT_CREATED_LINE = "This coin is not created yet. Nothing is on chain.";
 /** An expired draft's lifecycle line. */
@@ -162,7 +170,7 @@ export function lifecycleFrom(reg: Pick<Registry, "ruleEnd" | "receipts" | "getS
     : t.status === "retired" ?`This coin is retired.${lastSweep ? ` Its pool was last swept on ${lastSweep}.` : ""} ${poolNote}`
     : end?.mode === "drain" ? `This coin is spending its whole burn pool, one day at a time, up to the cap for each run. It has done so on ${dr.length === 1 ? "one day" : `${dr.length} days`} so far.`
     : end ? `This coin is winding down. It is on day ${Math.max(1, wd.length)} of ${days ?? "an unknown number"}.`
-    : "This coin is live.";
+    : LIVE_LINE;
   return { ended: end ? { reason: end.reason, at: new Date(end.at).toISOString(), mode: end.mode } : null, windDown: end?.mode === "winddown" && days ? { days, done, unitsPerDay: f > 0 ? windDownUnits(f, days) : null } : null, lastSweep, line, fees: FEE_FLOW_LINE };
 }
 
@@ -425,6 +433,9 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
   // F11: the statement names the source and its unit in words, as the review does (launchPreflight.ts sourceText)
   const src = (() => { try { return sourceText(rule, i.now); } catch { return null; } })();
   const nextCheckAt = i.nextCheckAt ? new Date(i.nextCheckAt).toISOString() : null, nextCloseTime = i.implied?.closeTime ?? null;
+  const times = nextTimes({ oneShot, receipts: i.receipts, nextCloseTime, nextCheckAt, burnedOnly: isFirstSnowRule(rule) });
+  // continuous audit run 2, HB-13: the coin's post-graduation split, from the tier IT pinned; fees.sentence and lifecycle.fees both read it
+  const postGraduation = postGraduationFeesFor(i.chain.cluster, i.chain.program?.config?.cpConfig);
   return {
     schema: TOKEN_STATUS_SCHEMA, generatedAt: new Date(i.now).toISOString(), ticker: t.ticker, name: t.name, mint: t.mint, cluster: i.chain.cluster, status: t.status, launchedAt: i.dates?.created.state === "read" ? i.dates.created.at : t.launchTx ? t.baselineAt : null,
     oracle: rule.oracle, selectorKey: t.selectorKey, seriesTitle: i.seriesTitle, mode: i.locked.mode,
@@ -432,14 +443,14 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     addresses: (() => { let feeWsol: string | null = null; try { feeWsol = i.chain.programId ? burnPoolAddresses(i.chain.programId, t.mint).feeWsol : null; } catch { feeWsol = null; } return { mint: t.mint, mintUrl: addr(t.mint)!, feePda: t.feePda, feePdaUrl: addr(t.feePda)!, feeWsol, feeWsolUrl: addr(feeWsol), vault: t.vault, vaultUrl: addr(t.vault), creator: t.creator, creatorUrl: addr(t.creator)!, programId: i.chain.programId, poolId: t.poolId, launchTx: t.launchTx, launchTxUrl: t.launchTx ? explorerUrl(i.chain.cluster, t.launchTx) : null }; })(),
     supply: { initial: TOTAL_SUPPLY, current: rawToTokens(current, DECIMALS), source: i.chain.supplyRaw !== null ? "chain" : "registry" },
     burned: { total: rawToTokens(totalRaw, DECIMALS), pctOfSupply: pct(totalRaw, supplyRaw), count: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, last30d: rawToTokens(last30, DECIMALS), lastAt: lastBurn?.settledAt ?? null },
-    pool: (() => { const spendable = i.chain.feePdaLamports === null ? null : spendablePool(i.chain.feePdaLamports, rule.reserveSol); const c = spendable === null ? null : capPool(spendable); return { feePdaSol: sol(i.chain.feePdaLamports), spendableSol: c === null ? null : sol(c.pool), reserveSol: rule.reserveSol, vaultBalance: i.chain.vaultRaw === null ? null : rawToTokens(i.chain.vaultRaw, DECIMALS), vaultAllocation: allocation === null ? null : allocation.toString(), shortfallOutstanding: rawToTokens(lastFinal?.shortOutRaw ?? ZERO, DECIMALS), capSol: PRE_AUDIT_POOL_CAP_SOL, queuedSol: c === null ? null : sol(c.queued), queuedNote: `${capSentenceAway(null)} The keeper enforces this cap today, and the program enforces it once it is deployed.` }; })(),
+    pool: (() => { const spendable = i.chain.feePdaLamports === null ? null : spendablePool(i.chain.feePdaLamports, rule.reserveSol); const c = spendable === null ? null : capPool(spendable); return { feePdaSol: sol(i.chain.feePdaLamports), spendableSol: c === null ? null : sol(c.pool), reserveSol: rule.reserveSol, vaultBalance: i.chain.vaultRaw === null ? null : rawToTokens(i.chain.vaultRaw, DECIMALS), vaultAllocation: allocation === null ? null : allocation.toString(), shortfallOutstanding: rawToTokens(lastFinal?.shortOutRaw ?? ZERO, DECIMALS), capSol: PRE_AUDIT_POOL_CAP_SOL, queuedSol: c === null ? null : sol(c.queued), queuedNote: `${capSentenceAway(null)} ${CAP_ENFORCED_SENTENCE}` }; })(),
     // NO ODDS FOR ANY COIN (owner decision 2026-10-10): impliedChance is always null — the field stays for schema compatibility only.
     // audit 7 F08: the next RESULT (none for a decided or voided one-shot) and the keeper's next SOURCE CHECK are different times
-    next: { nextCheckAt, impliedChance: null, impliedBasis: i.implied?.chance == null ? (i.implied?.basis ?? null) : null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime, awaitingFinal: i.selectorPending, ...nextTimes({ oneShot, receipts: i.receipts, nextCloseTime, nextCheckAt, burnedOnly: isFirstSnowRule(rule) }) },
+    next: { nextCheckAt, impliedChance: null, impliedBasis: i.implied?.chance == null ? (i.implied?.basis ?? null) : null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime, awaitingFinal: i.selectorPending, ...times },
     feed: { lastEventId: i.state.lastEventId, lastValue: i.state.lastValue, lastSettledAt: i.state.lastSettledAt, readings: i.readings.length, lastFetchAt: i.feedState.lastFetchAt ? new Date(i.feedState.lastFetchAt).toISOString() : null, lastError: i.feedState.lastError, failures: i.feedState.failures },
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
     // owner decision 2026-10-19: a coin's post-graduation numbers come from the tier IT pinned (TokenConfig.ll_cp_config), not the new-coin tier
-    fees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(i.chain.cluster, i.chain.program?.config?.cpConfig), sentence: feeSplitSentence(i.chain.cluster, i.chain.program?.config?.cpConfig), creatorSliceBps: 0 },
+    fees: { curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence(i.chain.cluster, i.chain.program?.config?.cpConfig), creatorSliceBps: 0 },
     health: { pending: i.receipts.filter((b) => b.status === "planned" || b.status === "sending").length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
     trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
@@ -448,7 +459,7 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), sideName: ruleSideName(rule), readingDirection: ruleReadingDirection(rule), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
     pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
     market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market, cpmm: i.cpmm, holders: i.holders, dates: i.dates }),
-    lifecycle: i.lifecycle ?? null,
+    lifecycle: i.lifecycle ? { ...i.lifecycle, line: lifecycleLineFor(i.lifecycle.line, times.result), fees: feeFlowLine(postGraduation) } : null,
     stated: i.stated && rule.oracle === "polymarket" && rule.market ? { phrase: i.stated.resolutionSource.phrase, text: i.stated.resolutionSource.text, crossRead: i.stated.resolutionSource.crossRead ? { text: i.stated.resolutionSource.crossRead.text } : null, finalAfter: { text: i.stated.finalAfter.text, ifDisputed: i.stated.finalAfter.ifDisputed } } : null,
     pair: i.pair ? { ...i.pair, tally: { burnsThis: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnsOther: i.pair.counterpart.burns, burnedThis: rawToTokens(totalRaw, DECIMALS), burnedOther: i.pair.counterpart.burned, supplyThis: rawToTokens(current, DECIMALS), supplyOther: i.pair.counterpart.supply }, pageUrl: `/burnticker/p/${i.pair.pairId}` } : null,
   };

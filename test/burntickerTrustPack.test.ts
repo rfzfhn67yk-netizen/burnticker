@@ -291,7 +291,7 @@ describe("the six v1 routes (API 1.5.0)", () => {
     limiter.reset();
     const check = await callRoute(`${API}/check`); assert.equal(check.status, 200); ok("Check", await check.json());
     const rec = await callRoute(`${API}/check/receipts`); assert.equal(rec.status, 200); const r = await rec.json(); ok("CheckReceipts", r);
-    assert.equal(r.receipts.length, 7); assert.ok(r.rules["config/burnkeeper/deficit.devnet.rules.json"]);
+    assert.equal(r.receipts.length, 7); assert.ok(r.rules["DEFICIT.rules.json"]); assert.equal(r.example, true);   // HB-26: keyed by ticker, no repository path
     const op0 = await (await callRoute(`${API}/operator`)).json(); ok("OperatorView", op0);
     assert.equal(op0.neverBuys.status, "not-run"); assert.equal(op0.signedMessage.status, loadOperator().signedMessage.signature ? "signed" : "todo");
     assert.ok(op0.placeholders.some((p: { value: string }) => p.value === "TODO_ENTITY"));

@@ -644,6 +644,8 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     // a voided or unsettled market as no burn (units.ts unitStep, onVoid "skip"), and the one-shot then ends void: never a NO.
     const phrase0 = (ctx.eventPhrase ?? "the market's event happens").replace(/\s*\(resolves once\)$/, "");
     const id = eventIdentity(phrase0), phrase = id.verb ? id.phrase : phrase0, not = negatePhrase(phrase);
+    const titleTeamNo = ctx.suggest ? null : titleTeamOfPhrase(phrase0);
+    if (titleTeamNo) ctx = { ...ctx, suggest: titleSuggest(titleTeamNo, true) };
     const settle = ctx.stated ? statedSentences(ctx.stated, ctx.stated.finalAfter) : `The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}.`;
     return build(fitName(`${id.verb && id.confident ? id.name : "Event"} No`), `NO${tickerFrom(id.ticker)}`.slice(0, 10), `burns if the Polymarket market settles NO, meaning ${not}`,
       (t) => `If the Polymarket market settles NO, meaning ${not}, ${spends(r, t)} once, with a receipt on chain. ${settle} If it settles YES, nothing burns. A voided or cancelled market never counts as a NO, and nothing burns for it.`, oneShotSentence(r, ctx.endsAt), "one-shot");
@@ -652,6 +654,8 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const phrase0 = (ctx.eventPhrase ?? "the market resolves YES").replace(/\s*\(resolves once\)$/, "");
     // L12 (launch audit 5): the name and ticker come from the event's subject and outcome (eventIdentity.ts), never its last word
     const id = eventIdentity(phrase0), phrase = id.verb ? id.phrase : phrase0;
+    const titleTeam = ctx.suggest ? null : titleTeamOfPhrase(phrase0);
+    if (titleTeam) ctx = { ...ctx, suggest: titleSuggest(titleTeam) };
     return build(id.verb && id.confident ? id.name : "Event Coin", id.verb && id.confident ? id.ticker : tickerFrom(id.ticker), `burns if ${phrase}`,
       (t) => ctx.stated ? `If it happens, ${spends(r, t)} once, with a receipt on chain. ${statedSentences(ctx.stated, ctx.stated.finalAfter)} Nothing happens otherwise.` : `If it happens, ${spends(r, t)} once, with a receipt on chain. The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}. Nothing happens otherwise.`, oneShotSentence(r, ctx.endsAt), "one-shot");
   }
@@ -715,6 +719,27 @@ export function badgeFromText(r: BurnRule, description: string, retired = false)
 
 /** The championship short code for a league ("WS" for MLB) — the one-shot coin's ticker suffix. */
 export const championshipCode = (league: string): string => CHAMP_CODE[league] ?? "CHAMP";
+
+/**
+ * THE TEAM-TITLE NAME AND TICKER (continuous audit run 2, HB-20): the one generator the search card, the launch page (teamTicker with the
+ * "title" window) and the server's review all use, so a title coin is suggested as $COLCUP everywhere, never $AVALANCHE on the server.
+ */
+export function titleSuggest(t: { abbr: string; league: LeagueId; nickname: string }, negated = false): { name: string; ticker: string } {
+  const code = championshipCode(t.league);
+  const ticker = teamTicker(t.abbr, { league: t.league, window: "title" });
+  return negated ? { name: fitName(`${t.nickname} Fall Short`), ticker: `NO${ticker}`.slice(0, 10) } : { name: fitName(`${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`), ticker };
+}
+/** The championship words search.ts CHAMPIONSHIP names each title with, back to the league ("the 2027 NHL championship" → nhl). */
+const TITLE_WORDS: readonly [RegExp, LeagueId][] = [[/^the \d{4} World Series$/, "mlb"], [/^the \d{4} pro football championship$/, "nfl"], [/^the \d{4} NBA championship$/, "nba"], [/^the \d{4} NHL championship$/, "nhl"]];
+/** A team-title phrase ("the Avalanche win the 2027 NHL championship") to its team, or null for any other event. */
+export function titleTeamOfPhrase(phrase: string): { abbr: string; league: LeagueId; nickname: string } | null {
+  const m = /^(?:the )?(.+?) (?:win|wins|will win) (the .+)$/i.exec(phrase.trim());
+  if (!m) return null;
+  const league = TITLE_WORDS.find(([re]) => re.test(m[2]))?.[1];
+  if (!league) return null;
+  const hits = findTeams(m[1]).filter((t) => t.league === league && t.nickname.toLowerCase() === m[1].toLowerCase());
+  return hits.length === 1 ? { abbr: hits[0].abbr, league, nickname: hits[0].nickname } : null;
+}
 export { LEAGUES };
 
 /** The launch route's description limit (launchBundle.launchProblems; raised from 400 on 10-10 for the window sentence). Every template

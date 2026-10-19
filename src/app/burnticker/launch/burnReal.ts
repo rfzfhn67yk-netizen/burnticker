@@ -33,13 +33,25 @@ const HEX64 = /^[0-9a-f]{64}$/;
  */
 export function realPickFor(u: { symbol: string; pyth: string | null; mint: string | null; pool?: string | null } | null | undefined): RealPick | null {
   if (!u) return null;
-  const s = SUGGESTED_TARGETS.find((t) => t.symbol === u.symbol.toUpperCase());
-  const mint = s?.mint ?? u.mint, feedId = s?.feedId ?? (u.pyth ?? "").toLowerCase();
+  // PROD-04 (2026-10-19): the selected coin's own mint and feed are its identity; the symbol is a label (derby/spec.ts). A suggested
+  // token only fills a missing feed when its MINT is this coin's mint, never replaces the mint or feed because the symbol matches.
+  const mint = u.mint;
+  const s = mint ? SUGGESTED_TARGETS.find((t) => t.mint === mint) : undefined;
+  const feedId = (u.pyth ?? s?.feedId ?? "").toLowerCase();
   if (!mint || !HEX64.test(feedId)) return null;
   return { symbol: u.symbol.toUpperCase(), mint, feedId, pool: u.pool ?? "" };
 }
-/** The single-coin choices: the suggested tokens (WIF, BONK), no pool yet. */
-export const SINGLE_REAL_PICKS: readonly RealPick[] = SUGGESTED_TARGETS.map((t) => ({ symbol: t.symbol, mint: t.mint, feedId: t.feedId, pool: "" }));
+/**
+ * OWNER DECISION 2026-10-19: no fixed menu of tokens (WIF and BONK were only an example). A coin may burn only the coin it is measured
+ * against, which only a Coin comparison coin has (burnRealEligibility.ts): side A its first coin, side B its second. Empty for every
+ * other rule, so a single coin of any other kind is offered nothing.
+ */
+export function ownRealPicks(rule: BurnRule | null | undefined, side: "A" | "B" = "A"): RealPick[] {
+  const d = rule?.oracle === "derby" && rule.derby?.selector === "coinvs" ? rule.derby : null;
+  if (!d) return [];
+  const p = realPickFor(side === "A" ? d.a : d.b);
+  return p ? [p] : [];
+}
 
 /** Why a Coin vs Coin side offers no real burn (no Solana mint or no Pyth feed). */
 export const realNotOffered = (symbol: string): string => `${symbol} cannot be burned for real here: that needs a Solana mint and a Pyth feed, so this side's coin burns itself.`;

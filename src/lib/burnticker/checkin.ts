@@ -6,7 +6,7 @@ import { publishSite, toJson } from "@/lib/burnKeeper/statusPage";
 import { computeFeedHealth, type FeedHealth } from "@/lib/burnticker/ops/feedHealth";
 import { conditionLines, conditionsView, readConditionMemory, type ActiveCondition, type ConditionRecord, type OpsSignals } from "@/lib/burnticker/ops/conditions";
 import { heartbeatLine, type HeartbeatState } from "@/lib/burnticker/ops/heartbeat";
-import { webProbeLine, type WebProbeFact } from "@/lib/burnticker/ops/unitHealth";
+import { offboxPullLine, webProbeLine, type OffboxPullFact, type WebProbeFact } from "@/lib/burnticker/ops/unitHealth";
 import { collectSnapshot, devFeeDelta, lamportsToSol, registryAlertRows, solStr, type BurntickerSnapshot, type WebhookState } from "@/lib/burnticker/alerts";
 
 /**
@@ -48,6 +48,12 @@ export interface HostFacts {
   /** where the trust page's program hash comes from (programHash.ts programHashSourceLine) */ programHashSource: string;
   /** I-11 / B-4 (2026-10-19): the external web check (ops/unitHealth.ts webProbeFact); absent in older documents. Never the URL. */
   webProbe?: WebProbeFact | null;
+  /** B-3 / OPS-1 (2026-10-19): the off-box pull receipt (ops/unitHealth.ts offboxPullFact, data/offbox-pull.json): "pulled" under 12 hours
+   *  old, "stale" older, "none" absent. backupDestConfigured stays its own fact (the pull needs no destination). Absent in older documents. */
+  offBox?: OffboxPullFact["offBox"];
+  /** the last pull (= offBoxPulledAt), null when none */ lastOffBoxAt?: string | null;
+  /** the receipt's method name (a fixed word; never a host or a path) */ offBoxMethod?: string | null;
+  offBoxPulledAt?: string | null;
 }
 /** The webhook as a host fact: with phone push configured and no webhook, it is not used by the owner's decision, never "not set". */
 export const WEBHOOK_PUSH_ONLY = "not used (push only, owner decision 2026-10-18)";
@@ -56,9 +62,10 @@ export function hostFactLines(h: HostFacts, now: number = Date.now()): string[] 
   const yn = (b: boolean, name: string, why: string) => (b ? `${name} set` : `${name} NOT SET (${why})`);
   return [
     `- host: ${h.dispersal.line}`,
-    `- host: ${webhookFact(h.webhookConfigured, h.pushConfigured)} · ${yn(h.pushConfigured, "BURNTICKER_PUSH_URL", "no alert reaches a phone")} · ${yn(h.heartbeatConfigured, "BURNTICKER_STATUS_HEARTBEAT_URL", "a dead host is seen by nobody")} · ${yn(h.backupDestConfigured, "BURNTICKER_BACKUP_DEST", "backups stay on the box")}`,
+    `- host: ${webhookFact(h.webhookConfigured, h.pushConfigured)} · ${yn(h.pushConfigured, "BURNTICKER_PUSH_URL", "no alert reaches a phone")} · ${yn(h.heartbeatConfigured, "BURNTICKER_STATUS_HEARTBEAT_URL", "a dead host is seen by nobody")} · ${yn(h.backupDestConfigured, "BURNTICKER_BACKUP_DEST", h.offBox === "pulled" || h.offBox === "stale" ? "the off-box copy is pulled instead; see the off-box line" : "backups stay on the box")}`,
     `- host: ${h.programHashSource}`,
     ...(h.webProbe ? [webProbeLine(h.webProbe, now)!] : []),
+    ...(h.offBox ? [offboxPullLine(h, now)!] : []),
   ];
 }
 /** The host signals for the conditions: what the keeper passed, plus a keeper refusal read from the alert rows. */

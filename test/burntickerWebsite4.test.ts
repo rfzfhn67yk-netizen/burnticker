@@ -2,7 +2,7 @@
 // its own file (test/burntickerF1Authority.test.ts); the rest are pinned here, one describe per item.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
+import { EARLIER_COINS_LINE, OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import fs from "node:fs";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
@@ -47,7 +47,8 @@ describe("item 3: zero data → one explanation and one evidence link; populated
     assert.match(p, /const cards: CardView\[\] = toCards\(groups\.open\);/);
     assert.ok(p.indexOf('className="bt-tabs" role="tablist"') < p.indexOf("<CardGrid cards={allcards}"), "tabs above the grid");
     assert.ok(p.indexOf("<CardGrid cards={allcards}") < p.indexOf("<CardGrid cards={featured}"), "the test group after the tab's results");
-    assert.match(p, /<h2 id="bt-featured-h" className="text-lg font-semibold">Featured coin and test receipts<\/h2>/);
+    // continuous audit run 2, HB-17: the heading names test receipts only once the data shows a test coin (cardView.ts featuredHeading)
+    assert.match(p, /<h2 id="bt-featured-h" className="text-lg font-semibold">\{featuredHeading\(home\.data \? home\.data\.featured\.filter\(\(v\) => !firstParty\(v\)\) : null\)\}<\/h2>/);
     assert.match(p, /\{ix && ix\.tokens\.length > 0 && \(\s*<section className="grid grid-cols-2/, "no zero totals before a coin is registered");
     assert.doesNotMatch(p, /NO_WALLET_LINE/, "website-13: the repeated no-wallet line is gone");
     assert.match(p, /\{state\.kind === "loading" && <SkeletonGrid n=\{3\}/, "skeleton cards while loading (review item 18)");
@@ -135,7 +136,8 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
   test("Trust: the current summary carries control and money once; the long disclosures sit behind one evidence disclosure; no 'nobody is paid'", async () => {
     const { buildCurrentStatus } = await import("@/lib/burnticker/currentStatus");
     const money = buildCurrentStatus({ env: {}, chain: {}, now: 0 }).lines.find((l) => l.startsWith("The operator earns"))!;
-    assert.equal(money, `The operator earns 0.25% of curve trading volume. ${OPERATOR_SHARE_LINE} The coin side of the liquidity fees is burned. Creators take no cash from fees.`);
+    // continuous audit run 2, HB-13: the money line names both fee tiers
+    assert.equal(money, `The operator earns 0.25% of curve trading volume. ${OPERATOR_SHARE_LINE} ${EARLIER_COINS_LINE} The coin side of the liquidity fees is burned. Creators take no cash from fees.`);
     clean(money, "money line");
     const page = read("src/app/burnticker/trust/page.tsx");
     const at = (m: string) => { const i = page.indexOf(m); assert.ok(i >= 0, m); return i; };

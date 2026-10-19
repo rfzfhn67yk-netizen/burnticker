@@ -5,7 +5,7 @@ import type { FetchLike, ImpliedChance, OpenMarketSummary, OracleAdapter, Resolv
 import { aliasLookup, buildTeams, matchEvents, matchupLeagues, parseEventsBody, seasonStart, type EventHit, type KalshiEvent, type MatchupLeague, type TeamRow } from "@/lib/burnticker/oracle/events";
 import { categoryPage, parseBrowseSeriesList, parseTagsByCategories, seriesExample, summariseEvents, type BrowseSeries, type CategoryPage, type KalshiCategory } from "@/lib/burnticker/oracle/browse";
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
-import { LruMap } from "@/lib/burnticker/lru";
+import { KALSHI_CACHE_BYTES, LruMap, bodyBytes, logRequest } from "@/lib/burnticker/lru";
 
 /**
  * THE KALSHI ORACLE (the PRIMARY event source; the owner, 2026-10-09). Public, keyless: https://api.elections.kalshi.com/trade-api/v2
@@ -228,7 +228,8 @@ export class KalshiClient implements OracleAdapter {
   private pageCap: number;
   private ttl: { series: number; settled: number; open: number };
   // prelaunch audit M8 (2026-10-15): bounded; a search or event URL is per query, so the cache grew with every distinct query
-  private cache = new LruMap<string, { at: number; body: unknown }>(1_000);
+  // HB-1 (2026-10-19): and by size (KALSHI_CACHE_BYTES of JSON); one category's series list is about 2 MB of heap
+  private cache = new LruMap<string, { at: number; body: unknown }>(1_000, { maxWeight: KALSHI_CACHE_BYTES, weigh: bodyBytes });
   private lastAt = 0;
   private chain: Promise<void> = Promise.resolve();
   /** Requests actually sent (for the tests' politeness checks). */
@@ -252,7 +253,7 @@ export class KalshiClient implements OracleAdapter {
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.lastAt = this.now();
       await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts), before the timeout starts
-      this.requests.push(url);
+      logRequest(this.requests, url);
       const ac = new AbortController(); const t = setTimeout(() => ac.abort(), this.timeoutMs);
       try {
         const res = await this.fetchImpl(url, { signal: ac.signal, headers: { accept: "application/json", "user-agent": KALSHI_UA } });

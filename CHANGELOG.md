@@ -1802,6 +1802,15 @@ commit is recorded against the later tag, and a release with no pins commit stay
 - files published: 2435
 - public commit: `a0cb2632db60e70efa393877caa73f47a577dc27`
 
+## 2026-10-19 — what publish 92 changed for visitors (written by hand; the publish entry above lists its files)
+
+- A new coin's create step is checked against the arguments LaunchLab expects before anything is sent.
+- A second coin on a ticker that already has a live coin is refused, even when it comes from the same creator.
+- The home page's public audit strip counts only completed burns, and says so when there are none yet.
+- A coin with no trades says "No trades yet" and "No holders yet" instead of showing zero figures.
+- A coin whose one result is in shows a plain warning above the swap panel.
+- A web check reads the public status page every five minutes. The first rollout of publish 92 switched back once; the incident log has the details.
+
 ## 2026-10-19 — publish from 810d9bc32af6
 
 - monorepo commit: `810d9bc32af60ff74e4957750eaf9964201a99a6` (the working tree had uncommitted changes when this tag was written)
@@ -1810,3 +1819,19 @@ commit is recorded against the later tag, and a release with no pins commit stay
 - allowlist sha256 (config/public-repo.allowlist): `cae0acbae59d464d3fddea5258afe06fbadff3caf9061e69a93416b30ec448a5`
 - files published: 2440
 - public commit: `0230d30eb9841c5bfd7c1f2aa0af2320ec825c6e`
+
+## 2026-10-19 — publish from e9e4e0df1c64
+
+- monorepo commit: `e9e4e0df1c64f391137fd01a7703d5300437ab17` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `cae0acbae59d464d3fddea5258afe06fbadff3caf9061e69a93416b30ec448a5`
+- files published: 2442
+
+## 2026-10-19 — publish from ab8cde0209d3
+
+- monorepo commit: `ab8cde0209d3219b97a6d5a8aba25461b0a8578b` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
+- allowlist sha256 (config/public-repo.allowlist): `cae0acbae59d464d3fddea5258afe06fbadff3caf9061e69a93416b30ec448a5`
+- files published: 2442

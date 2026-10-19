@@ -63,8 +63,14 @@ export const EMBED_HEADERS: Record<string, string> = {
  * keeper's next read of the source, or a market close the venue lists. Never a countdown, and a time already past says it is overdue
  * (prelaunch audit 2026-10-18, A-26). `before` and `after` surround the time; with no time, `before` is the whole line.
  */
+/** The line with no time, by the badge's note (HB-28: a decided or voided one-shot says its result is in and no read is due). */
+export const NO_NEXT_LINES: Readonly<Record<string, string>> = {
+  "resolves once": "This rule resolves once.",
+  "result decided": "This coin's one result is in, so no further read is due.",
+  "result voided": "This coin's result was voided, so no further read is due.",
+};
 export function nextLine(b: Pick<BadgeJson, "nextSettlementAt" | "nextSettlementNote">, nowMs: number): { before: string; at: string | null; utc: string | null; after: string } {
-  if (!b.nextSettlementAt) return { before: b.nextSettlementNote === "resolves once" ? "This rule resolves once." : "No result is scheduled.", at: null, utc: null, after: "" };
+  if (!b.nextSettlementAt) return { before: NO_NEXT_LINES[b.nextSettlementNote] ?? "No result is scheduled.", at: null, utc: null, after: "" };
   const past = Date.parse(b.nextSettlementAt) <= nowMs, close = /market close/.test(b.nextSettlementNote);
   const before = close ? (past ? "The market was scheduled to close on " : "The market is scheduled to close on ") : (past ? "This site was due to read the source on " : "This site next reads the source on ");
   const after = close ? (past ? ". The result counts once the source settles it." : ".") : (past ? ", and that read is overdue." : ".");

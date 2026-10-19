@@ -29,8 +29,12 @@ cd "$(dirname "$0")/../.."
 UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer mct-burnticker-backup.service mct-burnticker-backup.timer mct-burnticker-web-probe.service mct-burnticker-web-probe.timer mct-burnticker-logrotate.service mct-burnticker-logrotate.timer mct-burnticker-synth.service mct-burnticker-synth.timer mct-burnticker-synthbank.service mct-burnticker-synthbank.timer"
 ENABLE="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-mintbank.service"
 TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer mct-burnticker-backup.timer mct-burnticker-web-probe.timer mct-burnticker-logrotate.timer"
-CHECK=0; START=0
-for a in "$@"; do case "$a" in --check) CHECK=1 ;; --start) START=1 ;; *) echo "unknown flag $a"; exit 2 ;; esac; done
+# --defer-timers (continuous audit run 2, HB-24): enable a timer that is not running yet but do not start it. The deploy installs the units
+# from the NEW release before the release link is switched, so a timer added by this release would fire against the OLD tree, where its
+# script does not exist yet (publish 92: mct-burnticker-web-probe failed four times and raised bt-unit-failed). The deploy runs this
+# script again after the switch, without the flag, and that run starts it.
+CHECK=0; START=0; DEFER_TIMERS=0
+for a in "$@"; do case "$a" in --check) CHECK=1 ;; --start) START=1 ;; --defer-timers) DEFER_TIMERS=1 ;; *) echo "unknown flag $a"; exit 2 ;; esac; done
 if [ "$(uname -s)" != "Linux" ]; then echo "systemd user units are a Linux thing; on the Mac nothing to install (the keepers run on the Burnticker VPS)"; exit 0; fi
 DEST="$HOME/.config/systemd/user"
 say() { printf '%s\n' "$*"; }
@@ -75,7 +79,9 @@ for u in $ENABLE; do
   if systemctl --user is-enabled "$u" >/dev/null 2>&1; then say "  enabled: $u"; else act systemctl --user enable "$u"; fi
 done
 for t in $TIMERS; do
-  if systemctl --user is-active "$t" >/dev/null 2>&1; then say "  timer active: $t"; else act systemctl --user enable --now "$t"; fi
+  if systemctl --user is-active "$t" >/dev/null 2>&1; then say "  timer active: $t"
+  elif [ "$DEFER_TIMERS" = 1 ]; then act systemctl --user enable "$t"; say "  deferred: $t starts after the release link is switched"
+  else act systemctl --user enable --now "$t"; fi
 done
 if [ "$START" = 1 ]; then for u in $ENABLE; do act systemctl --user start "$u"; done; fi
 

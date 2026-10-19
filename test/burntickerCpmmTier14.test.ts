@@ -62,7 +62,10 @@ describe("a coin's numbers come from the tier it pinned", () => {
   });
   test("the token page and the program port carry the pin (TokenConfig.ll_cp_config) into the fee table, the sentence and the HTML line", () => {
     const tp = read("src/lib/burnticker/tokenPage.ts");
-    assert.match(tp, /postGraduation: postGraduationFeesFor\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig\), sentence: feeSplitSentence\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig\)/);
+    // continuous audit run 2, HB-13: one pinned split feeds fees.postGraduation, fees.sentence and lifecycle.fees
+    assert.match(tp, /const postGraduation = postGraduationFeesFor\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig\);/);
+    assert.match(tp, /fees: \{ curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig\)/);
+    assert.match(tp, /fees: feeFlowLine\(postGraduation\) \}/);
     assert.match(tp, /\$\{esc\(feeFlowLine\(s\.fees\.postGraduation\)\)\}/);
     assert.match(read("src/lib/burnKeeper/programAdapter.ts"), /cpConfig: c\.ll_cp_config\.toBase58\(\)/);
   });
