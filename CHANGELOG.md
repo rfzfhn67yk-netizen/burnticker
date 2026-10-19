@@ -1776,3 +1776,4 @@ commit is recorded against the later tag, and a release with no pins commit stay
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `c62c29fdfa430c45f97e8d5b6cccb726ee1d74293a5266e29968394cad0d5178`
 - allowlist sha256 (config/public-repo.allowlist): `ba75de0310da1a6e37add425fa6db1f05fdcbed048ff9a06c550c3b803c9f0c7`
 - files published: 2411
+- public commit: `df511e405697f5800072323568bcb18f76631cd3`
