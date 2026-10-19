@@ -12,7 +12,7 @@ import { lookalikeHits, sameTickerSentence, type LookalikeExisting } from "@/lib
  * A reserved name is a refusal too (reservedNames.ts). The review route runs it on every keystroke's review request.
  */
 export interface InUseCoin { mint: string; name: string; ticker: string; href: string; rule: string }
-export interface TickerCheck { side: "A" | "B"; ticker: string; inUse: InUseCoin[]; /** A-2: another creator's coin (launched or a draft) holds this ticker */ taken: boolean; reserved: boolean; suggestions: string[]; /** the refusal sentence when taken (it names no coin), else null */ warning: string | null }
+export interface TickerCheck { side: "A" | "B"; ticker: string; inUse: InUseCoin[]; /** A-2: another creator's coin (launched or a draft) holds this ticker */ taken: boolean; reserved: boolean; /** HB-30: the ticker reads as, or is one letter from, an existing coin's ticker (the launch's lookalike rule) */ lookalike?: boolean; suggestions: string[]; /** the refusal sentence when taken (it names no coin), else null */ warning: string | null }
 /** `status` and `creator` may be left out by a caller that only has launched coins (then each row counts as another creator's launched coin). */
 export interface TickerRow { mint: string; name: string; ticker: string; rulesJson: string; status?: string; creator?: string }
 
@@ -56,7 +56,7 @@ export function freeTickers(ticker: string, deps: { inUse: (ticker: string) => r
   return out;
 }
 
-export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; generated?: string | null; /** HB-6: a team coin (isTeamRule); only then are team words offered */ team?: boolean }[], deps: { inUse: (ticker: string) => readonly TickerRow[]; reserved: ReadonlySet<string>; /** the registry's rows (launchGuards.ts lookalikeRows); with none, the holders found by `inUse` */ existing?: readonly LookalikeExisting[] | null; /** the connected wallet, when the review knows it: its own coins never count */ creator?: string | null }): TickerCheck[] {
+export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; generated?: string | null; /** HB-6: a team coin (isTeamRule); only then are team words offered */ team?: boolean; /** HB-30: the side's rule, so another window of the same team is not a lookalike (lookalike.ts) */ rule?: Pick<BurnRule, "oracle" | "series"> | null }[], deps: { inUse: (ticker: string) => readonly TickerRow[]; reserved: ReadonlySet<string>; /** the registry's rows (launchGuards.ts lookalikeRows); with none, the holders found by `inUse` */ existing?: readonly LookalikeExisting[] | null; /** the connected wallet, when the review knows it: its own coins never count */ creator?: string | null }): TickerCheck[] {
   const own = new Set(sides.map((s) => s.ticker.toUpperCase()));
   // review of block M: only the (proven) creator's own unfinished draft is exempt; their own launched coin holds the ticker like any other
   const holders = (t: string): TickerRow[] => deps.inUse(t).filter((x) => !(deps.creator && x.creator === deps.creator && (x.status ?? "live") === "draft"));
@@ -80,6 +80,8 @@ export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; 
     // A-40: launched coins only; a draft holding the ticker makes it taken without being described
     const inUse = held.filter((t) => (t.status ?? "live") !== "draft").map((t) => ({ mint: t.mint, name: t.name, ticker: t.ticker, href: `/burnticker/t/${t.mint}`, rule: oneLine(t.rulesJson) }));
     const reserved = isReserved(ticker, deps.reserved), taken = held.length > 0;
-    return { side: s.side, ticker, inUse, taken, reserved, suggestions: reserved || taken ? fromRule(s.generated, ticker, !!s.team) : [], warning: taken ? inUseWarning(ticker, held) : null };
+    // HB-30: a ticker one letter from (or reading as) another coin's is refused by the launch too, so it gets its own free tickers
+    const lookalike = !taken && lookalikeHits({ ticker, name: "", rule: s.rule ?? null, creator: deps.creator ?? null }, existing).some((h) => h.field === "ticker");
+    return { side: s.side, ticker, inUse, taken, reserved, lookalike, suggestions: reserved || taken || lookalike ? fromRule(s.generated, ticker, !!s.team) : [], warning: taken ? inUseWarning(ticker, held) : null };
   });
 }

@@ -3,6 +3,7 @@ import CoinsIndex, { type SeasonsPreview } from "./CoinsIndex";
 import { platform } from "@/lib/burnticker/server";
 import { leagueIndex } from "@/lib/burnticker/leagues";
 import { leagueData } from "@/lib/burnticker/leaguesServe";
+import { seasonsStripLine } from "@/lib/burnticker/home";
 
 // site audit #12 (2026-10-11): the coins index is titled like every other app page ("Coins · Burnticker"); the page itself is the client
 // component in ./CoinsIndex.tsx, so this server file can carry the metadata. Since 2026-10-12 it is also the home (list first) and reads
@@ -13,8 +14,10 @@ export const dynamic = "force-dynamic";
 function seasonsPreview(): SeasonsPreview | null {
   try {
     const ix = leagueIndex(leagueData(platform()).coins, Date.now());
+    // HS-5: the leagues that hold a team coin in any season, so the sentence says where the coins are (never typed)
+    const coinLeagues = ix.sports.flatMap((s) => s.leagues).filter((l) => l.seasons.some((x) => x.coins > 0)).map((l) => l.label);
     return {
-      leagues: ix.totals.leagues, teamCoins: ix.totals.teamCoins,
+      leagues: ix.totals.leagues, teamCoins: ix.totals.teamCoins, line: seasonsStripLine({ teamCoins: ix.totals.teamCoins, leagues: ix.totals.leagues, coinLeagues }),
       sports: ix.sports.map((s) => ({ id: s.id, label: s.label, leagues: s.leagues.map((l) => ({ id: l.id, label: l.label, href: l.current.href, coins: l.coinsThisSeason })) })),
     };
   } catch { return null; }

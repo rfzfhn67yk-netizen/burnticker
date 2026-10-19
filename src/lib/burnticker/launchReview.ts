@@ -40,7 +40,7 @@ import type { SeasonOverRefusal } from "@/lib/burnticker/seasonOver";
 import type { LastSeasonBacktest } from "@/lib/burnticker/lastSeason";
 import { simulateResults, type Simulation } from "@/lib/burnticker/simulator";
 import { wrapperPairProblem } from "@/lib/burnticker/derby/spec";
-import { END_SINK_ACCOUNT_BYTES, LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, decimalSolToLamports, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
+import { END_SINK_ACCOUNT_BYTES, LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, PAIR_LINK_ACCOUNT_BYTES, PAIR_LINK_RENT_LABEL, TOKEN_CONFIG_BYTES, decimalSolToLamports, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
 
 /**
  * THE READ-ONLY REVIEW PAYLOAD (ChatGPT launch audit 5, L02 / L06, 2026-10-11): everything a creator should see before connecting a
@@ -198,7 +198,7 @@ function meetingsReview(rule: BurnRule, tickerA: string, tickerB: string, ctx: O
   return { flow: meetingsFundsFlow({ a: tickerA || "A", b: tickerB || "B" }, { a, b }, { playoffs: !noPlayoffs(e.league), fees: postGraduationFeesFor(cluster) }), descriptionB: describeRule(ruleB, { ...ctx, ticker: tickerB || "TICKER" }).paragraph };
 }
 
-export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
+export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, PAIR_LINK_ACCOUNT_BYTES, PAIR_LINK_RENT_LABEL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
 
 /** The deployed end-of-rule behaviour, in one sentence (the end-of-rule sink, program round 4, is not deployed and is not described). */
 export const WIND_DOWN_LINE = `When the rule ends, the coin's own burn pool burns down what is left over ${DEFAULT_WIND_DOWN_DAYS} days. Then the coin retires. A retired coin's pool keeps burning any fees it still receives. The wind-down only burns this coin and sends nothing to another coin.`;
@@ -500,6 +500,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     lines[3] = { label: "Network fees for two signatures per transaction. Priority fees are extra.", sol: sol(fee * steps.length), kind: "fee" };
     costNote = "This is an estimate. Your wallet shows the exact amount before you approve. The reserve stays in the coin's burn pool, and the rent stays with the new accounts.";
   }
+  // HS-6: a two-coin pair (either venue) makes one PairLink per coin; its rent is listed, never left out as "not measured yet"
+  if (coins > 1 && (pair || venue === "pair-curve")) { const linkRent = 2 * rentLamports(PAIR_LINK_ACCOUNT_BYTES); lines.push({ label: PAIR_LINK_RENT_LABEL, sol: sol(linkRent), kind: "rent" }); total += linkRent; }
   if (incinerator) { lines.push({ label: incineratorRentLabel(coins > 1 ? tk(0) : ticker || "TICKER"), sol: sol(endSinkRent), kind: "rent" }); total += endSinkRent; }
   if (incineratorB) { lines.push({ label: incineratorRentLabel(tk(1)), sol: sol(endSinkRent), kind: "rent" }); total += endSinkRent; }
   for (const x of pins) { lines.push({ label: `Rent for the account that pins ${x.symbol}'s pool to $${x.ticker}, which is ${x.bytes} bytes.`, sol: x.rentSol, kind: "rent" }); total += pinRent; }

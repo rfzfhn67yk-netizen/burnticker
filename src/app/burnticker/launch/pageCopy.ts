@@ -18,14 +18,15 @@ export function pairCostSentence(totalSol: string, venue: "launchlab" | "pair-cu
 
 /**
  * QA walkthrough 11 H8 and M3: the generated names and tickers of a two-team linked pair say which way it burns. One game and every game
- * between them both burn the coin of the team that won ("Arsenal Wins vs Spurs", $ARSWIN); the season pair keeps its own generator
- * ("Arsenal 2026 Losses"). Whole words only, at most 32 bytes (fitName), tickers 10 characters at most.
+ * between them both burn the coin of the team that won ("Arsenal over Spurs", $ARSWIN; HS-8, continuous audit 2026-10-19: "Arsenal Wins vs
+ * Spurs" read as a sentence with a grammar error); the season pair keeps its own generator ("Arsenal 2026 Losses"). Whole words only, at
+ * most 32 bytes (fitName), tickers 10 characters at most and unchanged. A name the creator typed is never replaced by this.
  */
 export function winPairNames(a: { abbr: string; code?: string | null; nickname: string | null; name: string }, b: { abbr: string; code?: string | null; nickname: string | null; name: string }): { a: { name: string; ticker: string }; b: { name: string; ticker: string } } {
   const code = (t: typeof a) => (t.code ?? t.abbr).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
   const one = (x: typeof a, y: typeof a) => {
     const nx = x.nickname ?? x.name, ny = y.nickname ?? y.name;
-    return { name: fitName([`${nx} Wins vs ${ny}`, `${shortTeamName(nx)} Wins vs ${shortTeamName(ny)}`, `${nx} Wins vs ${code(y)}`, `${shortTeamName(nx)} Wins vs ${code(y)}`, `${code(x)} Wins vs ${code(y)}`]), ticker: `${code(x)}WIN`.slice(0, 10) };
+    return { name: fitName([`${nx} over ${ny}`, `${shortTeamName(nx)} over ${shortTeamName(ny)}`, `${nx} over ${code(y)}`, `${shortTeamName(nx)} over ${code(y)}`, `${code(x)} over ${code(y)}`]), ticker: `${code(x)}WIN`.slice(0, 10) };
   };
   return { a: one(a, b), b: one(b, a) };
 }

@@ -18,6 +18,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ feed: string }>
   // audit 2026-10-16 F-11: the memoised copy (feedsData.ts cachedFeedData), no per-coin chain read per request
   try { data = await cachedFeedData(platform()); } catch { return feedError(503, FEED_COPY.unavailable); }
   if (!data.ok) return feedError(503, FEED_COPY.unavailable);
-  const doc = f.name === "receipts" ? receiptsFeed(data.events, publicOrigin(), now) : nextResultsFeed(data.upcoming, publicOrigin(), now);
+  const at = data.builtAt ?? now; // the copy's own build time, not this request's clock
+  const doc = f.name === "receipts" ? receiptsFeed(data.events, publicOrigin(), at) : nextResultsFeed(data.upcoming, publicOrigin(), at);
   return feedResponse(req, doc, f.fmt);
 }

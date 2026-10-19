@@ -251,7 +251,7 @@ describe("QA 9 item 38, audit 10 items 13 and 17: Coin comparison walks the real
     assert.match(tile, /<PatternStep preview=/);
   });
   test("the cost sits beside Launch both, with what it leaves out", () => {
-    plain(PAIR_COST_EXCLUSIONS); assert.match(PAIR_COST_EXCLUSIONS, /rent is not measured yet/);
+    plain(PAIR_COST_EXCLUSIONS); assert.doesNotMatch(PAIR_COST_EXCLUSIONS, /not measured yet/);   // HS-6: the link accounts are measured and listed
     assert.match(tile, /costNote=\{shown\.review\?\.venue === "pair-curve" \? shown\.review\.costs\.note : PAIR_COST_EXCLUSIONS\}/); assert.match(page, /costNote=\{venue === "linked" \|\| venue === "pair-curve" \? PAIR_COST_EXCLUSIONS : null\}/);
     assert.match(card, /\{p\.costNote && <span className="block text-xs text-neutral-400" data-cost-note>\{p\.costNote\}<\/span>\}/);
   });

@@ -59,3 +59,13 @@ export function finalDelaySentence(days: number): string | null {
 }
 
 export const edgeCase =(item: number): string | null => RULE_EDGE_CASES.find((e) => e.item === item)?.sentence ?? null;
+
+/**
+ * Continuous audit HB-33 (run 3): the review's general unusual cases, only where they can happen. The minimum-burn case (164, with its
+ * 2% limit on one burn) is about a share of the pool per result, so a one-shot that burns the whole pool once does not list it; the
+ * leftover-to-another-coin case (168) is listed only when the leftover can go to another coin (a linked pair, or an end that names a
+ * coin). The fingerprint (174) applies to every rule.
+ */
+export function reviewEdgeIds(o: { oneShotFull: boolean; otherCoin: boolean }): number[] {
+  return [...(o.oneShotFull ? [] : [164]), ...(o.otherCoin ? [168] : []), 174];
+}

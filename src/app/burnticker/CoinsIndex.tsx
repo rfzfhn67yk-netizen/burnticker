@@ -34,7 +34,7 @@ import { LIST_COPY, browserStorage, collapsedLine, groupCoins, readOpenOnly, wit
 interface IndexToken extends IndexCoin { oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; pctOfSupply: number; raised: string | null; threshold: string | null; quote: string | null }
 interface PairSide { ticker: string; name: string; burns: number; burned: string; supply: string; lastBurnAt: string | null }
 interface Index { generatedAt?: string; tokens: IndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSide; b: PairSide }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean } | null; cluster: string; stubs: string[] }
-export interface SeasonsPreview { leagues: number; teamCoins: number; sports: { id: string; label: string; leagues: { id: string; label: string; href: string; coins: number }[] }[] }
+export interface SeasonsPreview { leagues: number; teamCoins: number; /** HS-5: home.ts seasonsStripLine, made on the server */ line: string; sports: { id: string; label: string; leagues: { id: string; label: string; href: string; coins: number }[] }[] }
 
 const fmt = (s: string) => s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 const readQuery = () => { try { return new URLSearchParams(window.location.search).get("q") ?? ""; } catch { return ""; } };
@@ -239,7 +239,7 @@ function SeasonsStrip({ seasons }: { seasons: SeasonsPreview | null }) {
         <p className="text-sm">{SEASONS_LINKS.map((l, i) => <span key={l.href}>{i > 0 && " · "}<Link className="underline" href={l.href}>{l.label}</Link></span>)}</p>
       </div>
       {!seasons ? <p className="text-sm text-neutral-400">The leagues could not be read just now.</p> : <>
-        <p className="text-sm text-neutral-400">{seasons.teamCoins === 0 ? `No team coin has launched yet, so all ${seasons.leagues} league scoreboards are empty. Each one fills in from its coins' own receipts.` : `${seasons.teamCoins} team coin${seasons.teamCoins === 1 ? " is" : "s are"} on the scoreboards of ${seasons.leagues} leagues. A board ranks a league's team coins by their receipts.`}</p>
+        <p className="text-sm text-neutral-400">{seasons.line}</p>
         <dl className="mt-3 space-y-2 text-sm">{seasons.sports.map((sp) => (
           <div key={sp.id} className="sm:flex sm:gap-4">
             <dt className="font-medium text-neutral-200 sm:w-28 sm:shrink-0">{sp.label}</dt>

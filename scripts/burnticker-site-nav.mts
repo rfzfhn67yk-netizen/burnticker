@@ -80,6 +80,17 @@ export function cardAgeScript(): string {
   return `<script>\nwindow.btCardAge = ${cardAge.toString()};\n</script>`;
 }
 
+/**
+ * Continuous audit HB-31: the fallback page's program table, written from the published well-known file's MAINNET cluster (the host
+ * runs mainnet), each address linked to solscan without a cluster parameter. It was hand-written with "(devnet)" labels and links.
+ */
+export function fallbackProgramsHtml(read: (f: string) => string = (f) => fs.readFileSync(path.join(ROOT, f), "utf8")): string {
+  const wk = JSON.parse(read("site/burnticker/.well-known/burnticker.json")) as { clusters?: Record<string, { programs?: Record<string, { programId?: string; deployed?: boolean }> }> };
+  const progs = wk.clusters?.mainnet?.programs ?? {};
+  return Object.entries(progs).filter(([, p]) => p.deployed && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(p.programId ?? ""))
+    .map(([n, p]) => `<div class="row"><span>${esc(n)}</span><b><a href="https://solscan.io/account/${p.programId}">${p.programId}</a> (mainnet)</b></div>`).join("\n");
+}
+
 /** Every marked region: file, region name, renderer. */
 export const REGIONS: Region[] = [
   ...shell("site/burnticker/index.html", ""),
@@ -87,6 +98,7 @@ export const REGIONS: Region[] = [
   { file: "site/burnticker/index.html", name: "age-core", render: cardAgeScript },
   ...shell("site/burnticker/status/index.html", SITE_ORIGIN),
   ...shell("site/burnticker/fallback/index.html", ""),
+  { file: "site/burnticker/fallback/index.html", name: "programs", render: () => fallbackProgramsHtml() },
   // audit 2026-10-19 P-2: the static 404 and error pages Caddy serves for paths outside the app
   ...shell("site/burnticker/notfound/index.html", ""),
   ...shell("site/burnticker/error/index.html", ""),

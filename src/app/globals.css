@@ -396,3 +396,10 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-empty-row > div { min-width: 0; }
 /* the phone tab bar's icons (siteNav.mjs SITE_ICONS): one inline SVG set, no icon font */
 .bt-icon { width: 20px; height: 20px; display: block; }
+/* HS-3 (continuous audit 2026-10-19): on a phone the launch page's small text controls (Edit, Back, Start over, the step chips, and the
+   Templates and Your coins links) were 16 px tall. Below the sm width each is at least 24 by 24 CSS px; the desktop layout is unchanged.
+   Buttons centre their own text; the header links become inline-flex so the height applies to them too. */
+@media (max-width: 639px) {
+  [data-launch-main] [data-nav] { min-height: 24px; min-width: 24px; }
+  [data-launch-main] > header a { display: inline-flex; align-items: center; min-height: 24px; min-width: 24px; }
+}

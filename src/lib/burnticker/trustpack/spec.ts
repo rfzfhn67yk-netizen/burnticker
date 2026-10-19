@@ -43,9 +43,9 @@ export const TRUSTPACK_SCHEMAS: Record<string, Schema> = {
     schema: { const: "burnticker.operator-view/v1" }, cluster: str, operator: { type: "object" }, links: { type: "object" }, clusters: { type: "object" },
     signedMessage: obj({ status: { enum: ["todo", "signed", "invalid"] }, signer: nstr, message: str, signature: nstr, verified: nbool, how: str, detail: str }, ["status", "message", "verified"]),
     neverBuys: obj({ rule: str, rehearsalNote: str, report: { anyOf: [{ type: "object" }, { type: "null" }] }, line: str, status: { enum: ["clear", "explained", "received", "red", "not-checked", "not-run", "holding", "incomplete"] }, scopeLine: nstr, stale: bool }, ["rule", "line", "status"]),
-    placeholders: arr(obj({ path: str, value: str }, ["path", "value"])), wellKnown: str,
+    placeholders: arr(obj({ path: str, value: { type: "null" }, note: str }, ["path", "value", "note"], { description: "since HB-35: value is always null and note says in words what is not named yet; no TODO_ string is served" })), wellKnown: str,
     deployments: { type: "object", description: "Added in audit 4 (additive): per network, per program, the deployed bytes recorded in config/burnticker/verified-build.json ({ readAt, matchesBuild } or null = no deployment recorded)" },
-  }, ["schema", "operator", "clusters", "signedMessage", "neverBuys", "placeholders"], { description: "Who runs the platform, every operator wallet per cluster (TODO placeholders shown), the signed-statement slot with its ed25519 check, and the never-buys monitor's last report." }),
+  }, ["schema", "operator", "clusters", "signedMessage", "neverBuys", "placeholders"], { description: "Who runs the platform, every operator wallet per cluster (a value not named yet is null), the signed-statement slot with its ed25519 check, and the never-buys monitor's last report." }),
   CurrentStatus: obj({
     schema: { const: "burnticker.current-status/v1" }, checkedAt: str, readAt: str, source: str,
     phase: obj({ label: str, line: str }, ["label", "line"]), host: { type: "object", description: "this host's wiring: the cluster it reads, whether a program id is wired, whether creator launches are open" },

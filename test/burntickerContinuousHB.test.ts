@@ -131,7 +131,7 @@ describe("HB-11: the reference-coin search ranks what was typed", () => {
   test("WIF first; names that only mention it after; unrelated coins dropped", () => {
     const hits = [hit("SWORDCAT", "cat wif sword"), hit("BAGUETTE", "Baguette"), hit("SWORDDOG", "Sword Dog", false), hit("KWIF", "Kitten Wif Hat"), hit("WIF", "dogwifhat", false), hit("KWH", "Kilowatt")];
     const out = rankDerbyHits(hits, "wif").map((h) => h.symbol);
-    assert.deepEqual(out, ["WIF", "KWIF", "SWORDCAT"]);
+    assert.deepEqual(out, ["WIF", "KWIF"], "run 3 (HB-11 reopened): a name that only mentions the word is dropped");
     assert.deepEqual(rankDerbyHits(hits, "KWHmint").map((h) => h.symbol), ["KWH"], "a mint finds its coin");
   });
 });

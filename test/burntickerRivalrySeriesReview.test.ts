@@ -9,7 +9,7 @@ import { MEETINGS_END_REFUSAL, MEETINGS_FADE_REFUSAL, MEETINGS_SINGLE_REFUSAL, m
 import { DEFAULT_ON_END, lockRule, validateRule, WIND_DOWN_ON_END, type BurnRule } from "@/lib/burnticker/rules";
 import { buildPairBundles, FakeLaunchLab, MEETINGS_END_SINK_REFUSAL } from "@/lib/burnticker/launchBundle";
 import { FakeBurnProgram } from "@/lib/burnticker/program";
-import { describeRule, endText, MEETINGS_END_RESULT, MEETINGS_LEVEL_SENTENCE, WINDOW_SENTENCE, windowKindOf } from "@/lib/burnticker/describe";
+import { describeRule, endText, MEETINGS_LEVEL_SENTENCE, meetingsEndResult, WINDOW_SENTENCE, windowKindOf } from "@/lib/burnticker/describe";
 import { meetingsFundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_NONE_LINE, MEETINGS_ON_END, MEETINGS_WINNER_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, meetingsPairNames, meetingsPairRules, patternOptions, patternWords, teamTickerForRule } from "@/lib/burnticker/guidedLaunch";
 import { sportsRivalry } from "@/lib/burnticker/api/handlers";
@@ -69,7 +69,7 @@ describe("item 3: what a creator reads (per game and at the season's end)", () =
     assert.ok("review" in r);
     const v = r.review;
     assert.equal(v.end.kind, "pair-winner");
-    assert.equal(v.end.result, MEETINGS_END_RESULT);
+    assert.equal(v.end.result, meetingsEndResult(meetingsRule()));   // HS-10: "When the 2025–26 season is over, playoffs included, ..."
     assert.ok(v.end.void!.startsWith(MEETINGS_LEVEL_SENTENCE));
     const desc = v.coins[0].description!;
     assert.match(desc, /^\$PHIVBOS burns when the 76ers beat the Celtics\./);

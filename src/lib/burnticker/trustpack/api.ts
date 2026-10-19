@@ -6,9 +6,9 @@ import { publicSample, publicSampleReceipts, sampleReceipts, DEVNET_PROGRAM_ID }
 import { checkReceiptTx, classifySignatureInput, jsonRpc, PUBLIC_RPC, type Rpc, type SourceFetch } from "@/lib/burnticker/trustpack/receiptCheck";
 import { isPubkey, isSignature } from "@/lib/burnticker/trustpack/base58";
 import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
-import { loadOperator, pinnedDevFeeWallet, placeholders, signedMessageView, type Cluster } from "@/lib/burnticker/trustpack/operator";
+import { loadOperator, pinnedDevFeeWallet, publicPlaceholders, signedMessageView, withoutPlaceholders, type Cluster } from "@/lib/burnticker/trustpack/operator";
 import { neverBuysScopeLine, readNeverBuys, type NeverBuysReport } from "@/lib/burnticker/trustpack/neverBuys";
-import { NEVER_BUYS_STATUS } from "@/lib/burnticker/trustpack/copy";
+import { NEVER_BUYS_STATUS, placeholderSentence } from "@/lib/burnticker/trustpack/copy";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { explorerUrl, rpcUrlFor } from "@/lib/burnticker/networks";
 import fs from "node:fs";
@@ -102,13 +102,14 @@ export function neverBuysView(o: { rule: string; rehearsalNote: string }, nb: Ne
 export function v1Operator(p: Pick<Platform, "cluster" | "publishDir">, root = process.cwd()): ApiResult {
   const op = loadOperator(root), cluster = pageCluster(p);
   const nb = readNeverBuys(p.publishDir);
+  // HB-34/35 (run 3): no TODO_ string reaches the public answer; an unnamed value is null and the list says so in words
   return ok({
     schema: "burnticker.operator-view/v1", cluster,
-    operator: op.operator, links: op.links,
-    clusters: op.clusters,
+    operator: withoutPlaceholders(op.operator), links: withoutPlaceholders(op.links),
+    clusters: withoutPlaceholders(op.clusters),
     signedMessage: signedMessageView(op),
     neverBuys: neverBuysView(op.neverBuys, nb),
-    placeholders: placeholders(op),
+    placeholders: publicPlaceholders(op, placeholderSentence),
     wellKnown: "/.well-known/burnticker.json",
     deployments: deploymentsOf(root),
   });
