@@ -56,7 +56,10 @@ export interface ProgressFacts {
 }
 
 export function progressOf(r: Readiness, f: ProgressFacts = {}): ProgressView {
-  const done = PROGRESS_DONE[r.state];
+  // continuous audit run 2, HB-25: a coin on its curve with nothing raised yet has not traded, so "Trading on curve" is its current step,
+  // not a done one (the $DEFICIT card read "Trading on curve" done beside "No trades yet")
+  const untraded = r.state === "on-curve" && typeof f.raisedSol === "number" && f.raisedSol < CURVE_STARTED_SOL;
+  const done = untraded ? 1 : PROGRESS_DONE[r.state];
   const na = new Set(f.notApplicable ?? []);
   // a coin that is not created has no current step: nothing is lit (website-15 item 6)
   const steps = PROGRESS_STEPS.map((label, k) => ({ label, state: (na.has(label) ? "na" : k < done ? "done" : k === done && done > 0 ? "current" : "todo") as ProgressStepState }));

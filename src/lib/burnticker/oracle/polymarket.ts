@@ -5,7 +5,7 @@ import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesS
 import { finalAfter, statedSource, type FinalAfter, type StatedSource } from "@/lib/burnticker/sources/polyStated";
 import { DEFAULT_POLYGON_RPCS, POLYGON_CHAIN_ID, POLYMARKET_CTF, readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 import { apiBudget, sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
-import { LruMap } from "@/lib/burnticker/lru";
+import { LruMap, POLY_CACHE_BYTES, bodyBytes, logRequest } from "@/lib/burnticker/lru";
 import type { PayoutStore } from "@/lib/burnticker/oracle/payoutStore";
 
 /**
@@ -409,8 +409,9 @@ export class PolymarketClient implements OracleAdapter {
   private chainCap: number;
   private ttl: number;
   readonly refuse: TitleRefuser | null;
-  // prelaunch audit M8 (2026-10-15): bounded; a search URL is per query, so the cache grew with every distinct visitor query
-  private cache = new LruMap<string, { at: number; body: unknown }>(1_000);
+  // prelaunch audit M8 (2026-10-15): bounded; a search URL is per query, so the cache grew with every distinct visitor query.
+  // HB-1 (2026-10-19): and bounded by size (POLY_CACHE_BYTES of JSON): 1,000 whole Gamma answers outgrew the web's 2 GB heap
+  private cache = new LruMap<string, { at: number; body: unknown }>(1_000, { maxWeight: POLY_CACHE_BYTES, weigh: bodyBytes });
   private chainCache = new LruMap<string, { at: number; r: ConditionResolution }>(5_000);
   private chainTtl: number;
   /** One RPC read per condition at a time: concurrent callers share it. */
@@ -459,7 +460,7 @@ export class PolymarketClient implements OracleAdapter {
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.lastAt = this.now();
       await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts)
-      this.requests.push(url);
+      logRequest(this.requests, url);
       const ac = new AbortController(); const t = setTimeout(() => ac.abort(), this.timeoutMs);
       try {
         const res = await this.fetchImpl(url, { signal: ac.signal, headers: { accept: "application/json", "user-agent": POLY_UA } });

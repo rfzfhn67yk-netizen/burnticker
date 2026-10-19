@@ -39,6 +39,12 @@ function baseOf(w: string): string | null {
 const titleCase = (w: string) => (w ? w[0].toUpperCase() + w.slice(1) : w);
 const tickerOf = (s: string, suffix: string) => { const base = s.toUpperCase().replace(/[^A-Z0-9]/g, ""); return (base.slice(0, Math.max(2, 10 - suffix.length)) + suffix).slice(0, 10); };
 
+/**
+ * Continuous audit run 2, HB-20: team nicknames that do not end in "s" but take a plural verb ("the Avalanche win", never "wins"); the
+ * pinned description is permanent, so the agreement matters. The list is every such nickname in the ESPN team table (MLB, NBA, NHL, WNBA).
+ */
+export const PLURAL_NICKNAMES: ReadonlySet<string> = new Set(["red sox", "white sox", "heat", "thunder", "magic", "jazz", "avalanche", "wild", "kraken", "lightning", "mammoth", "dream", "sky", "sun", "fever", "lynx", "liberty", "mercury", "fire", "storm", "tempo"]);
+
 export interface EventIdentity { subject: string; verb: string | null; rest: string; phrase: string; name: string; ticker: string; confident: boolean }
 
 export function eventIdentity(question: string): EventIdentity {
@@ -52,7 +58,7 @@ export function eventIdentity(question: string): EventIdentity {
   }
   const subject = words.slice(0, vi).join(" "), verb = baseOf(words[vi])!, restWords = words.slice(vi + 1), rest = restWords.length ? ` ${restWords.join(" ")}` : "";
   const bare = subject.replace(/^the\s+/i, "").replace(/\s*\([A-Z]\)$/, "").trim();
-  const plural = /^the\s+/i.test(subject) && /s$/i.test(bare) && !/ss$/i.test(bare);
+  const plural = /^the\s+/i.test(subject) && ((/s$/i.test(bare) && !/ss$/i.test(bare)) || PLURAL_NICKNAMES.has(bare.toLowerCase()));
   const conj = plural ? verb : conjugate(verb);
   const phrase = `${subject} ${conj}${rest}`;
   const parts = bare.split(/\s+/);

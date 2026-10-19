@@ -77,12 +77,28 @@ export const FOLLOW_CHOICES: readonly { id: FollowId; label: string; line: strin
 
 export type PatternId = "every" | "fade" | "once" | "winner";
 export const PATTERNS: Record<PatternId, { label: string; sentence: string }> = {
-  every: { label: "Every time it happens", sentence: "The coin spends a share of its pool each time the thing happens: each win, each $1B, each unit." },
+  every: { label: "Every time it happens", sentence: "The coin spends a share of its pool each time the thing happens." },
   fade: { label: "When it does not happen", sentence: "The coin spends a share of its pool on each day or reading where the thing does not happen." },
   once: { label: "Once, when it settles", sentence: "The coin spends a large share of its pool one time, when a market or a single result settles." },
   winner: { label: "Winner takes the burn", sentence: "Two coins are linked. When a result fires one coin's rule, that coin's own pool and the other coin's share for the result are both spent burning that coin. The winning coin's supply shrinks; the other coin's does not." },
 };
 export const PATTERN_ORDER: readonly PatternId[] = ["every", "fade", "once", "winner"];
+
+/**
+ * Continuous audit run 2, HB-18: the "Every time it happens" card names the unit the picked rule actually has, never a list of every
+ * possible unit ("each win, each $1B, each unit" on a weather coin). A rule that counts steps of a figure (the debt, a count) says
+ * steps; a rule read as yes or no each day or reading (a city's high reaching a line) says days or readings; a team says game results.
+ */
+export const EVERY_SENTENCES = {
+  scalar: "The coin spends a share of its pool for each step the figure moves, in the step size the rule sets.",
+  reading: "The coin spends a share of its pool on each day or reading where the thing happens.",
+  team: "The coin spends a share of its pool after each game result its rule counts.",
+} as const;
+export function everySentenceFor(r: Pick<BurnRule, "kind" | "oracle" | "series"> | null | undefined, follow?: FollowId | null): string {
+  if (!r) return PATTERNS.every.sentence;
+  if (follow === "team" || (r.oracle === "catalogue" && /^espn\./.test(r.series ?? ""))) return EVERY_SENTENCES.team;
+  return r.kind === "scalar" ? EVERY_SENTENCES.scalar : EVERY_SENTENCES.reading;
+}
 
 /** The reserved-name refusal (reservedNames.ts reads the list; this sentence is client-safe). */
 export const RESERVED_REFUSAL = "That name is reserved for the platform.";
@@ -168,7 +184,7 @@ const plainInverseReason = (r: BurnRule): string => {
 /** The four patterns for the thing picked, each available or greyed with its reason, and the one chosen already. */
 export function patternOptions(i: PatternInput): { options: PatternOption[]; preselected: PatternId } {
   const r = i.rule;
-  const mk = (id: PatternId, reason: string | null): PatternOption => ({ id, ...PATTERNS[id], available: reason === null, reason });
+  const mk = (id: PatternId, reason: string | null): PatternOption => ({ id, ...PATTERNS[id], ...(id === "every" ? { sentence: everySentenceFor(r, i.follow) } : {}), available: reason === null, reason });
   // a coin against another coin: each day's winner takes the burn, or once, the flippening (the first day one passes the other)
   if (i.follow === "coins") return { options: [mk("every", PATTERN_REASON.derbyEvery), mk("fade", PATTERN_REASON.derbyFade), mk("once", null), mk("winner", null)], preselected: (r as { derby?: { flip?: boolean } } | null)?.derby?.flip ? "once" : "winner" };
   // two candidates in one race (owner 2026-10-13: the linked form is the only form): winner takes the burn and nothing else

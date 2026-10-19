@@ -30,6 +30,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *                     registry's (key, day) key), so its readings are held (audit 2026-10-16 F-5)
  *   unit-failed       a systemd user unit mct-* failed, or an expected one (mint bank, synthetic creator's timer, backup timer) is not
  *                     running (ops/unitHealth.ts, the keeper's unit check; F-5 / F-9)
+ *   unit-restarted    a service's systemd restart counter rose since the last check: it stopped on its own and was started again, such as
+ *                     the web after running out of memory (ops/unitHealth.ts bt-unit-restarted, one per unit and restart count; HB-1)
  *   backup-failed     the last database backup failed, none finished for 13 hours, or no backup status exists 8 hours after the keeper
  *                     started (ops/unitHealth.ts from data/backups/last-backup.json)
  *   and (second audit 2026-10-18 A-7) the serious kinds that used to stay in the registry only: audit-mismatch, audit-stale,
@@ -66,7 +68,9 @@ export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "cr
   // second audit 2026-10-19 I-11 / I-15 / I-16: recorded but never pushed until now
   | "reading-unresolved" | "race-held" | "late-reading" | "pair-result" | "pair-forward" | "pair-link" | "config-mismatch" | "revival-ticker-held" | "registry-newer"
   // third audit 2026-10-19 B-2
-  | "ticker-live";
+  | "ticker-live"
+  // HB-1 2026-10-19: a service that stopped on its own and was started again by systemd (the web's out-of-memory stops)
+  | "unit-restarted";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -84,8 +88,11 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   // day), a failed or missing systemd unit and a failed or stale backup (ops/unitHealth.ts, the keeper's unit check)
   "bt-feed-down": "feed-down",
   "bt-unit-failed": "unit-failed",
+  // HB-1 (continuous audit 2026-10-19): the web ran out of memory twice and was "active" again in 5 s, so nothing was raised
+  "bt-unit-restarted": "unit-restarted",
   "bt-backup-failed": "backup-failed",
-  // F-7 review: a destination is set but no copy left the box for a day; a low-priority push (PUSH_LOW_PRIORITY)
+  // F-7 review: a destination is set but no copy left the box for a day, or (B-3 / OPS-1) the off-box pull receipt is older than 12 hours;
+  // a low-priority push (PUSH_LOW_PRIORITY)
   "bt-backup-offbox-stale": "backup-offbox",
   // prelaunch audit 2026-10-16 F-3 (block G review M3): a create after its draft window reaches the phone
   "bt-launch-late": "launch-late",
@@ -152,6 +159,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "synthetic-failed": "Burnticker test launch failed",
   "feed-down": "Burnticker source down",
   "unit-failed": "Burnticker service failed",
+  "unit-restarted": "Burnticker service restarted on its own",
   "backup-failed": "Burnticker backup failed",
   "backup-offbox": "Burnticker backup not copied off the box",
   "launch-late": "Burnticker coin created too late",
@@ -198,7 +206,8 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "synthetic-failed": "Last night's test creator could not finish every launch on the devnet copy of the site. A real creator may hit the same problem. The lines below name each check that failed and what the page said.",
   "feed-down": "A source the keeper reads has failed several reads in a row. Readings from it are held, and nothing burns on a guess. It starts again by itself when the source answers. The line below names the source.",
   "unit-failed": "A service on the Burnticker host has failed or is not running. The line below names it and says how to read its log.",
-  "backup-offbox": "The backups on the host are fine, but none has been copied to the backup destination for a day. A lost disk would lose them. The line below says since when.",
+  "unit-restarted": "A service on the Burnticker host stopped and systemd started it again. The line below names the unit, the restart count and the memory peak. Read the journal for the reason.",
+  "backup-offbox": "The backups on the host are fine, but no copy has left the box for too long: the backup destination has taken none for a day, or the off-box pull has not reported for 12 hours. A lost disk would lose them. The line below says since when.",
   "backup-failed": "The database backup did not finish, or none has finished for too long. The copies already made are still there. The line below says why.",
   "launch-late": "A coin was created on chain more than 24 hours after its draft was made, so the site did not take it live. It exists and can trade, but no burn runs for it until the operator decides. The line below has the command that takes it live as late.",
   "audit-mismatch": "The public audit found something that does not match. Either a receipt does not recompute from its reading and rule, or the burn program on chain is not the build the trust pages name. The line below says which.",
@@ -226,7 +235,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "pair-link": "The site's record of a pair and the chain disagree about whether the two coins are linked, or one side never got its partner. The pages may show the wrong state for that pair. The line below names it.",
   "config-mismatch": "The keeper holds a coin because its settings on chain are not the ones the site built for it at launch. Nothing is attested or burned for that coin until someone looks. The line below names the coin and the first setting that differs.",
   "revival-ticker-held": "A coin was created on chain in time from a draft the site had marked expired, but its ticker now belongs to another creator's coin or draft, so it was not taken live. The coin exists and can trade, but no burn runs for it until the operator decides. The line below names both.",
-  "registry-newer": "The registry file was last opened by a newer build than the one running now, which usually means a rollback. Pages and the keeper keep reading, but new launches are refused until the newer build is back.",
+  "registry-newer": "The registry file was last opened by a newer build than the one running now, which usually means a rollback. Pages and the keeper keep reading, but new launches are refused until the newer build is back. This is expected while a deploy is switching back to the previous release, and it clears when the newer build is serving again. If it lasts more than a few minutes, the rollback has stalled.",
   "ticker-live": "A coin was created on chain for a ticker that already has a live coin on the site, so it was not taken live. Its creator paid for this second create; it exists and can trade, but no burn runs for it until the operator decides. The line below names both coins.",
   "single-source": "A coin's game settled on TheSportsDB alone for the first time. Polymarket had no market for it and no league feed could read it, so its final score had to stand unchanged for 12 hours first. This is a notice only; nothing needs doing.",
 };

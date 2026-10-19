@@ -113,6 +113,52 @@ describe("the keeper's unit check (F-5, F-9)", () => {
     assert.ok(raised.some((x) => /mct-burnticker-mintbank\.service is restarting over and over \(4 restarts/.test(x)));
   });
 
+  test("HB-1: a service that restarted on its own once since the last check raises bt-unit-restarted with its count and memory peak", async () => {
+    const { runUnitCheck, parseMemoryPeaks } = await import("@/lib/burnticker/ops/unitHealth");
+    const raised: { kind: string; key: string; text: string }[] = [];
+    const sink = async (kind: string, key: string, text: string) => { raised.push({ kind, key, text }); return true; };
+    // the web, the keeper (exits by design after a deploy) and the publish job (oneshot) all move their counters by one
+    const show = (web: number, keeper: number, pub: number, peak = "2576980378") => async () =>
+      `Id=mct-burnticker-web.service\nType=simple\nNRestarts=${web}\nMemoryPeak=${peak}\n\nId=mct-burnticker-keeper.service\nType=simple\nNRestarts=${keeper}\nMemoryPeak=247800000\n\nId=mct-burnticker-publish.service\nType=oneshot\nNRestarts=${pub}\nMemoryPeak=[not set]\n`;
+    const state = { activating: new Set<string>(), restarts: new Map<string, number>() };
+    const t = Date.parse("2026-10-19T17:45:00Z");
+    await runUnitCheck({ sink, now: t, root: os.tmpdir(), listUnits: async () => LIST, showRestarts: show(0, 3, 0), state });
+    assert.ok(!raised.some((x) => x.kind === "bt-unit-restarted"), "the first read is the baseline");
+    await runUnitCheck({ sink, now: t + 300_000, root: os.tmpdir(), listUnits: async () => LIST, showRestarts: show(1, 4, 1), state });
+    const r = raised.filter((x) => x.kind === "bt-unit-restarted");
+    assert.equal(r.length, 1, JSON.stringify(raised));
+    assert.equal(r[0].key, "bt-unit-restarted:mct-burnticker-web.service:1");
+    assert.match(r[0].text, /^mct-burnticker-web\.service stopped on its own and systemd started it again \(once since the last check; restart count 1\)\. Its memory peak since it started again is 2\.6 GB\./);
+    assert.match(r[0].text, /journalctl --user -u mct-burnticker-web\.service/);
+    assert.ok(!raised.some((x) => /restarting over and over/.test(x.text)), "one restart is not a loop");
+    // the next restart is a new alert (its own key); an unchanged count is silent; a count that went down (a manual start) is a new baseline
+    raised.length = 0;
+    await runUnitCheck({ sink, now: t + 600_000, root: os.tmpdir(), listUnits: async () => LIST, showRestarts: show(1, 4, 1), state });
+    assert.equal(raised.filter((x) => x.kind === "bt-unit-restarted").length, 0);
+    await runUnitCheck({ sink, now: t + 900_000, root: os.tmpdir(), listUnits: async () => LIST, showRestarts: show(2, 4, 1, "[not set]"), state });
+    const again = raised.filter((x) => x.kind === "bt-unit-restarted");
+    assert.equal(again.length, 1); assert.equal(again[0].key, "bt-unit-restarted:mct-burnticker-web.service:2");
+    assert.doesNotMatch(again[0].text, /memory peak/, "no peak reported: nothing invented");
+    raised.length = 0;
+    await runUnitCheck({ sink, now: t + 1_200_000, root: os.tmpdir(), listUnits: async () => LIST, showRestarts: show(0, 4, 1), state });
+    await runUnitCheck({ sink, now: t + 1_500_000, root: os.tmpdir(), listUnits: async () => LIST, showRestarts: show(0, 4, 1), state });
+    assert.equal(raised.filter((x) => x.kind === "bt-unit-restarted").length, 0);
+    // three or more between checks is the crash-loop alert alone
+    await runUnitCheck({ sink, now: t + 1_800_000, root: os.tmpdir(), listUnits: async () => LIST, showRestarts: show(3, 4, 1), state });
+    assert.equal(raised.filter((x) => x.kind === "bt-unit-restarted").length, 0);
+    assert.ok(raised.some((x) => /mct-burnticker-web\.service is restarting over and over \(3 restarts/.test(x.text)));
+    // it reaches the phone, in plain words
+    assert.equal(PUSH_KIND_OF_ALERT["bt-unit-restarted"], "unit-restarted");
+    assert.equal(PUSH_TITLE["unit-restarted"], "Burnticker service restarted on its own");
+    assert.match(PUSH_LEAD["unit-restarted"], /stopped and systemd started it again/);
+    assert.deepEqual([...parseMemoryPeaks("Id=a.service\nMemoryPeak=690500000\n\nId=b.service\nMemoryPeak=infinity\n\nId=c.service\nMemoryPeak=18446744073709551615\n")], [["a.service", 690500000]]);
+  });
+
+  test("HB-1: the unit check asks systemctl for MemoryPeak with the restart counts", () => {
+    const src = fs.readFileSync("src/lib/burnticker/ops/unitHealth.ts", "utf8");
+    assert.match(src, /"-p", "NRestarts", "-p", "Type", "-p", "MemoryPeak"/);
+  });
+
   test("the backup status file: a failed run and a stale one raise bt-backup-failed; a good recent run raises nothing", async () => {
     const { backupAlerts } = await import("@/lib/burnticker/ops/unitHealth");
     const now = Date.parse("2026-10-16T20:00:00Z");

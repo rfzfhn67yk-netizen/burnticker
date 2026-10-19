@@ -406,15 +406,17 @@ export const venueFlags = (p: Platform): VenueFlags => ({ kalshi: p.kalshiEnable
  * its tags, then (Kalshi enabled) Kalshi series of its categories, the four series soonest-listed with their next event. A venue that
  * fails is named in `errors` and the rest of the page still renders.
  */
-export async function browse(p: Platform, q: { category?: string | null; q?: string | null }, now = Date.now()): Promise<ApiResult> {
-  const venues = venueFlags(p);
+export async function browse(p: Platform, q: { category?: string | null; q?: string | null; venue?: string | null }, now = Date.now()): Promise<ApiResult> {
+  // continuous audit run 2, HB-21: `venue=feed` (the Published data step) lists public-data feeds only, never markets
+  const feedsOnly = q.venue === "feed";
+  const venues = feedsOnly ? { ...venueFlags(p), polymarket: false, kalshi: false } : venueFlags(p);
   let cats;
   try { cats = loadCategories(); } catch (e) { return fail(500, safeErrorText(e, 600)); }
   const feeds = (catalogueSources(now).sources as unknown as (FeedCardInput & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion");
   // sources-3 (2026-10-12): the weather tile folded into Science, Space & Weather; an old link or a saved draft asking for it lands there
   const asked = q.category?.trim() || null;
   const id = asked === "weather" ? "science" : asked;
-  if (!id) return ok({ categories: categoryList(cats, feeds, venues), venues, note: "These are Burnticker's categories. Each one lists our own feeds and Polymarket events. It also lists Kalshi series when this site has Kalshi turned on." });
+  if (!id) return ok({ categories: categoryList(cats, feeds, venues, { feedsOnly }), venues, note: "These are Burnticker's categories. Each one lists our own feeds and Polymarket events. It also lists Kalshi series when this site has Kalshi turned on." });
   const c = cats.find((x) => x.id === id);
   if (!c) return fail(404, `There is no category called "${id}". The categories are ${cats.map((x) => x.id).join(", ")}.`);
   const errors: string[] = [];
@@ -433,7 +435,7 @@ export async function browse(p: Platform, q: { category?: string | null; q?: str
       } catch (e) { errors.push(`Kalshi's ${cat} series could not be read. The reason given was: ${safeErrorText(e, 100)}`); }
     }
   }
-  const cards = categoryCards(c, { feeds, polymarket, kalshi }, { q: q.q ?? null });
+  const cards = categoryCards(c, { feeds, polymarket, kalshi }, { q: q.q ?? null, feedsOnly });
   return ok({ category: { id: c.id, label: c.label, blurb: c.blurb }, venues, cards, counts: { feeds: cards.filter((x) => x.venue === "feed").length, polymarket: cards.filter((x) => x.venue === "polymarket").length, kalshi: cards.filter((x) => x.venue === "kalshi").length }, errors, note: venues.kalshi ? "Our own feeds come first. Prediction markets come after them." : "Our own feeds come first. Kalshi is not turned on for this site." });
 }
 
@@ -680,9 +682,9 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, safeErrorText(e, 600)) }; }
   // owner decision 2026-10-19: a rule that pins a real token is refused while BURNTICKER_BURN_REAL_ENABLED is off (the page hides it)
   { const br = burnRealRefusal(locked.rule.burnTarget); if (br) return { error: fail(br.status, br.message, { code: br.code, problems: [br.message] }) }; }
-  // HB-12 + PROD-01 (2026-10-19): only the families burnRealEligibility.ts allows may name a token to burn (never a natural disaster,
-  // a team, a market or a pair other than Coin vs Coin), so the API cannot do what the page never offers
-  { const fp = realBurnFamilyProblem(locked.rule, locked.rule.burnTarget); if (fp) return { error: fail(400, fp, { code: REAL_BURN_FAMILY_CODE, problems: [fp] }) }; }
+  // HB-12 + PROD-01 (2026-10-19): only a Coin comparison side may name a token to burn, and only its own pitted coin
+  // (burnRealEligibility.ts), so the API cannot do what the page never offers
+  { const fp = realBurnFamilyProblem(locked.rule, locked.rule.burnTarget, "A"); if (fp) return { error: fail(400, fp, { code: REAL_BURN_FAMILY_CODE, problems: [fp] }) }; }
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): the same rule refusals the read-only review lists, in order:
   // vault mode, a venue this host has off, an oracle no coin launches on yet, a source's fixed unit / launchability / decided result, the
   // reserve bounds and an unsafe title regex. The first one answers; every one is in `problems`.
@@ -1103,7 +1105,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     if (btRaw !== undefined && btRaw !== null) { const bp = burnTargetShapeProblems(btRaw); if (bp.length) return { error: fail(400, `Side B: ${bp.join("; ")}`, { code: "burn-target", problems: bp }) }; }
     const btB = btRaw === undefined || btRaw === null ? null : (btRaw as BurnTargetField);
     { const br = burnRealRefusal(btB); if (br) return { error: fail(br.status, `Side B: ${br.message}`, { code: br.code, problems: [br.message] }) }; }
-    { const fp = realBurnFamilyProblem(locked.rule, btB); if (fp) return { error: fail(400, `Side B: ${fp}`, { code: REAL_BURN_FAMILY_CODE, problems: [fp] }) }; }
+    { const fp = realBurnFamilyProblem(locked.rule, btB, "B"); if (fp) return { error: fail(400, `Side B: ${fp}`, { code: REAL_BURN_FAMILY_CODE, problems: [fp] }) }; }
     // audit 2026-10-15 F3: a retry of the creator's own unfinished pair (same side-A address) keeps the pair id and the void date its
     // side-A draft recorded; a fresh pair id or a new 30-day date would make the same request a different rule
     const ownA = o.mint ? p.registry.ownDraft(o.mint, input.creator) : null;

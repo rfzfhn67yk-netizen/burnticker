@@ -130,7 +130,7 @@ describe("a pair's side B carries its own pinned token (item 1)", () => {
     // its shape passes; the bundle itself still puts a pinned token in side B's rule (launchlabPair above, the Coin vs Coin case)
     const r = await prepareLaunch(w.p, body, { register: false }) as { pair?: unknown; error?: { status: number; body: { error: string; code: string } } };
     assert.equal(r.pair, undefined);
-    assert.equal(r.error?.status, 400); assert.equal(r.error?.body.code, "burn-real-family"); assert.match(r.error!.body.error, /^Side B: Only a coin on published data/);
+    assert.equal(r.error?.status, 400); assert.equal(r.error?.body.code, "burn-real-family"); assert.match(r.error!.body.error, /^Side B: Only a Coin comparison coin/);
     const bad = await prepareLaunch(w.p, { ...body, ticker: "MILEHJ", pair: { ...body.pair, ticker: "ARROWHE", burnTarget: { ...WIF, mint: "nope" } } }, { register: false }) as { error?: { status: number; body: { error: string; code: string } } };
     assert.equal(bad.error?.status, 400); assert.equal(bad.error?.body.code, "burn-target"); assert.match(bad.error!.body.error, /^Side B: burnTarget\.mint/);
   });

@@ -196,7 +196,10 @@ export function kalshiCard(s: BrowseSeries & { refused: string[] }): SourceCard 
 }
 
 /** The category list: per category, how many sources each venue contributes on this host (feeds counted; Polymarket tags named; Kalshi categories named only when enabled). */
-export function categoryList(cats: readonly CategoryDef[], feeds: readonly FeedCardInput[], venues: VenueFlags): { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[]; guided: string | null; adjudicatedOnly: boolean }[] {
+export function categoryList(cats: readonly CategoryDef[], feeds: readonly FeedCardInput[], venues: VenueFlags, o: { feedsOnly?: boolean } = {}): { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[]; guided: string | null; adjudicatedOnly: boolean }[] {
+  // continuous audit run 2, HB-21: the Published data step asks for feeds only; markets belong to Event outcome, so a feeds-only list
+  // names no Polymarket tag or Kalshi category and leaves out a category with no feed of its own (sports, elections)
+  if (o.feedsOnly) return categoryList(cats, feeds, { ...venues, polymarket: false, kalshi: false }).filter((c) => c.feeds > 0 && !c.guided);
   return cats.map((c) => ({ id: c.id, label: c.label, blurb: c.blurb, feeds: venues.feeds ? feeds.filter((f) => c.feeds.includes(baseId(f.id)) && !f.resolved).length + (c.native?.length ?? 0) : 0, polymarket: venues.polymarket ? c.polymarket : [], kalshi: venues.kalshi ? c.kalshi : [], guided: c.guided ?? null, adjudicatedOnly: c.adjudicatedOnly ?? false }));
 }
 
@@ -221,7 +224,8 @@ export function eventFitsCategory(id: string, title: string): boolean {
   return !homes.length || homes.includes(id);
 }
 /** One category's cards: feeds first (in the config's order), then Polymarket events, then Kalshi series; an optional text filter over title and source. */
-export function categoryCards(c: CategoryDef, parts: { feeds: readonly FeedCardInput[]; polymarket: readonly PolyEventHit[]; kalshi: readonly (BrowseSeries & { refused: string[] })[] }, o: { q?: string | null } = {}): SourceCard[] {
+export function categoryCards(c: CategoryDef, parts: { feeds: readonly FeedCardInput[]; polymarket: readonly PolyEventHit[]; kalshi: readonly (BrowseSeries & { refused: string[] })[] }, o: { q?: string | null; feedsOnly?: boolean } = {}): SourceCard[] {
+  if (o.feedsOnly) return categoryCards(c, { feeds: parts.feeds, polymarket: [], kalshi: [] }, { q: o.q });
   const order = (id: string) => { const i = c.feeds.indexOf(baseId(id)); return i < 0 ? 999 : i; };
   // QA pass 9 #33: a one-time source whose result is already in is not offered, so it is not listed either
   const feeds = parts.feeds.filter((f) => c.feeds.includes(baseId(f.id)) && !f.resolved).sort((a, b) => order(a.id) - order(b.id)).map(feedCard);

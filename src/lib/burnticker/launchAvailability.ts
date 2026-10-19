@@ -61,7 +61,8 @@ export const PAIRS_BLOCKER = "On mainnet this site has not turned on the program
  */
 export const BURN_REAL_LAYOUT_ENV = "BURNTICKER_INITIALIZE_TOKEN_LAYOUT";
 // audit 12 item 15: said plainly, with no release name; the page shows it only where a burn target could be set (WIRING-AUDIT12)
-export const BURN_REAL_WAITING = "Burning a real token, such as WIF or BONK, instead of the coin's own is not offered on this site yet. Every coin made here burns its own token.";
+// owner 2026-10-19: WIF and BONK were only an example; a Coin comparison coin burns the coin it is measured against
+export const BURN_REAL_WAITING = "Burning the coin a Coin comparison coin is measured against, instead of its own, is not offered on this site yet. Every coin made here burns its own token.";
 export const burnRealFromEnv = (env: Env = process.env): boolean => (env[BURN_REAL_LAYOUT_ENV] ?? "").trim() === "r5";
 /**
  * OWNER DECISION 2026-10-19: burning a real token is OFF by default, even on a round-5 host. BURNTICKER_BURN_REAL_ENABLED (1, true, on or

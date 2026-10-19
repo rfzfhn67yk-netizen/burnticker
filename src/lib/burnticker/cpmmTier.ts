@@ -41,6 +41,11 @@ export const CPMM_MAINNET_TIER_0: CpmmTier = { cluster: "mainnet", index: 0, id:
 export const CPMM_MAINNET_TIER_9: CpmmTier = { cluster: "mainnet", index: 9, id: "LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC", tradeFeeRate: 2_500, protocolFeeRate: 120_000, fundFeeRate: 40_000, creatorFeeRate: 7_500, creatorFeeShareRate: 50_000 };
 /** Mainnet AmmConfig index 14: the tier new coins graduate into under the 2026-10-19 decision (read from mainnet 2026-10-19). */
 export const CPMM_MAINNET_TIER_14: CpmmTier = { cluster: "mainnet", index: 14, id: "52MZUkNsRYzP4gn2mCaLTVtJQy2tpoF79hp5K1HhAxxX", tradeFeeRate: 7_500, protocolFeeRate: 120_000, fundFeeRate: 40_000, creatorFeeRate: 5_000, creatorFeeShareRate: 50_000 };
+/**
+ * When the mainnet platform's cpConfigId moved to tier 14 (continuous audit run 2, HB-13: 2026-10-19 20:17 UTC). Coins initialised before it
+ * pinned tier 9 (tier 0 for the earliest); coins initialised after it pin tier 14. Public prose prints it through utcWords.ts, never bare.
+ */
+export const CPMM_TIER_14_SINCE = "2026-10-19T20:17:00Z";
 /** Devnet AmmConfig index 0 (the rehearsal platform's pin; devnet has no creator-fee tier like mainnet's index 9). */
 export const CPMM_DEVNET_TIER_0: CpmmTier = { cluster: "devnet", index: 0, id: "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy", tradeFeeRate: 2_500, protocolFeeRate: 120_000, fundFeeRate: 40_000, creatorFeeRate: 2_500, creatorFeeShareRate: 0 };
 

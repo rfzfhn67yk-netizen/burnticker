@@ -347,7 +347,7 @@ export class Registry {
     if (recorded > REGISTRY_SCHEMA_VERSION) {
       this.newerSchemaVersion = recorded;
       try {
-        this.recordAlert({ kind: REGISTRY_NEWER_ALERT_KIND, key: `${REGISTRY_NEWER_ALERT_KIND}:${recorded}`, text: `The registry file is at schema version ${recorded} and this build only knows up to version ${REGISTRY_SCHEMA_VERSION}, so an older build is running on a newer file (a rollback). Pages and the keeper keep reading; new launches are refused until the newer build is back.`, meta: { recorded, code: REGISTRY_SCHEMA_VERSION } }, at);
+        this.recordAlert({ kind: REGISTRY_NEWER_ALERT_KIND, key: `${REGISTRY_NEWER_ALERT_KIND}:${recorded}`, text: `The registry file is at schema version ${recorded} and this build only knows up to version ${REGISTRY_SCHEMA_VERSION}, so an older build is running on a newer file (a rollback). Pages and the keeper keep reading; new launches are refused until the newer build is back. ${REGISTRY_NEWER_EXPECTED}`, meta: { recorded, code: REGISTRY_SCHEMA_VERSION } }, at);
       } catch { /* the refusal stands without the alert */ }
     }
   }
@@ -907,6 +907,8 @@ export class TickerAlreadyLiveError extends Error {
   readonly ticker: string; readonly mint: string; readonly liveMint: string; readonly sameCreator: boolean;
   constructor(ticker: string, mint: string, liveMint: string, sameCreator: boolean) { super(`registry: ${mint} is not taken live: the ticker ${ticker} already has a live coin (${liveMint})`); this.name = "TickerAlreadyLiveError"; this.ticker = ticker; this.mint = mint; this.liveMint = liveMint; this.sameCreator = sameCreator; }
 }
+/** Continuous audit run 2, HB-24: a rollback window raises this alert by design, so the alert says so (the publish-92 rollback did). */
+export const REGISTRY_NEWER_EXPECTED = "This is expected while a deploy is switching back to the previous release, and it clears when the newer build is serving again. If it lasts more than a few minutes, the rollback has stalled.";
 /** Second audit 2026-10-19 I-17: the alert kind recorded when the registry file is newer than this build. */
 export const REGISTRY_NEWER_ALERT_KIND = "registry-schema-newer";
 /** I-17: a new launch was refused because the registry file was migrated by a newer build (a rollback is running). */

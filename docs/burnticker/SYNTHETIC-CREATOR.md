@@ -131,6 +131,10 @@ systemctl --user start mct-burnticker-synthbank.service       # the first fill, 
 systemctl --user enable --now mct-burnticker-synthbank.timer  # the nightly top-up at 06:00 UTC
 ```
 
+A real wallet on devnet: `sh scripts/service/run-burnticker-synth.sh --serve` starts only the devnet instance on 127.0.0.1:3100 (same
+blanked environment, the devnet bank when there is one) and holds it until stopped. It is loopback only; from another machine open an
+ssh tunnel (`ssh -N -L 3100:127.0.0.1:3100 <host>`) and browse http://localhost:3100/burnticker/launch with the wallet set to devnet.
+
 Optional lines in `devnet-synth.env`: `BURNTICKER_SYNTH_BANK_SIZE` (default 12), `BURNTICKER_SYNTH_BANK_FILL_S` (default 300),
 `BURNTICKER_SYNTH_EMPTY_PORT` (default 3101). Without `BURNTICKER_SYNTH_BANK_KEY` the run is as before: one instance, every launch
 searches in the browser.

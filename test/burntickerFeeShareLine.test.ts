@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { CPMM_MAINNET_TIER_9, CPMM_TIER, postGraduationBps } from "@/lib/burnticker/cpmmTier";
 import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS } from "@/lib/burnReceipts/constants";
-import { EARLIER_COINS_LINE, LOCK_FEE_BURN_BPS_MIRROR, OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, aboutPct, operatorShareClause, postGraduationShareLine, sharesForCluster, sharesFromSplit } from "@/lib/burnticker/feeShareLine";
+import { EARLIER_COINS_LINE, EARLIER_OPERATOR_CLAUSE, LOCK_FEE_BURN_BPS_MIRROR, OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, aboutPct, operatorShareClause, postGraduationShareLine, sharesForCluster, sharesFromSplit } from "@/lib/burnticker/feeShareLine";
 import { OPERATOR_SHARE_LINE as FEES_OPERATOR_SHARE_LINE, POST_GRADUATION_FEES, USE_OF_FEES, feeSplitSentence, postGraduationFeesFor, BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
 import { FEE_FLOW_LINE } from "@/lib/burnticker/tokenPage";
 import { GUARDRAIL_DETAIL, WHO_GETS_WHAT } from "@/lib/burnticker/safeguards";
@@ -59,8 +59,9 @@ describe("the operator's share sentence (fees copy, 2026-10-12)", () => {
     assert.ok(FEE_FLOW_LINE.endsWith(EXPECTED));
     assert.ok(GUARDRAIL_DETAIL["LP locked forever, its fees fund the burn"].text.endsWith(EXPECTED));
     assert.ok(WHO_GETS_WHAT.find((w) => w.who === "Burnticker")!.text.includes(EXPECTED));
-    assert.ok(OPERATOR_COPY.devFeeNote.endsWith(`after a coin graduates, ${operatorShareClause()}.`));
-    assert.match(lpFeeLine("mainnet", null).title, /^Operator: about 0\.13% of every swap \(20% of the locked pool's liquidity fees\), after graduation$/);
+    // continuous audit run 2, HB-13: the new-coin share first, then the tier-9 share of coins created before the cutover
+    assert.ok(OPERATOR_COPY.devFeeNote.endsWith(`its share of each graduated pool's swaps: ${operatorShareClause()} on new coins, and ${EARLIER_OPERATOR_CLAUSE}.`));
+    assert.match(lpFeeLine("mainnet", null).title, /^Operator: about 0\.13% of every swap \(20% of the locked pool's liquidity fees\) on new coins, and about 0\.04% of every swap \(20% of the locked pool's liquidity fees\) on coins created before 19 October 2026, 20:17 UTC, which stay on tier 9, after graduation$/);
     for (const f of ["docs/burnticker/WHITEPAPER.md", "site/burnticker/whitepaper.html", "config/burnticker/transparency.json", "docs/burnticker/README.md", "docs/burnticker/api.md", "site/deficit/index.html"])
       assert.ok(read(f).includes(EXPECTED.split(" — ")[0].replace("After graduation, ", "")), `${f} states the operator's share from the whole`);
   });

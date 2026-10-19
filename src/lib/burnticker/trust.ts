@@ -5,7 +5,7 @@ import { PublicKey } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodePlatformConfig } from "@/lib/burnReceipts/accounts";
 import { platformPda } from "@/lib/burnReceipts/pda";
-import { capSentence, effectiveCap, type EffectiveCap } from "@/lib/burnticker/capInForce";
+import { CAP_ENFORCED_SENTENCE, capSentence, effectiveCap, type EffectiveCap } from "@/lib/burnticker/capInForce";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { programHashFact } from "@/lib/burnticker/programHash";
 import { publicChangelogMarkdown } from "@/lib/burnticker/changelogPublic";
@@ -430,7 +430,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
       "Only settled results are shown. The site shows no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence. For example, a Burn Derby rule reads the settled moves of two outside coins, and derby admission refuses a Burnticker coin as an input. No page shows a market-implied chance for any coin, since that was removed on 2026-10-10. A coin page names only its venue and the next market's ticker and close time.",
       "Coins settle on first-party primary sources, each with an independent cross-read. These include Treasury, BLS, FRED, NWS, EDGAR and on-chain data. A sports game settles on the game's on-chain payout when a Polymarket moneyline market exists. Otherwise it settles on a licensed final score from TheSportsDB, under a commercial license. The league's official feed confirms that score (MLB's official feed, the NHL's official scores or the NBA's official feed), or a second licensed provider, API-Sports, does. A coin on a single game, or two teams in one game, burns once two of these sources agree on the final, or once one source has shown the same final twice a few minutes apart. Every source that answers must agree, and the game's on-chain settlement counts as one source. The coverage table below has the details. A coin can also settle on an on-chain Polymarket payout. That result is read from the payout vector of the Conditional Tokens contract on Polygon, and it counts only once the payout is on chain. Polymarket's Gamma API is used only to find markets, and no prices are shown. Kalshi is not a settlement input. Its Developer Agreement and Data Terms, reviewed on 2026-10-10, do not allow settling products on its data or sharing that data. The Kalshi adapter is for discovery only and is off by default, and the launch check refuses any Kalshi rule.",
       // prelaunch audit 2026-10-18 A-6: the program is deployed and enforces the cap; the old "once the program is deployed" line is retired
-      `${capSentence(effective)} The burn program enforces this cap on chain.`,
+      `${capSentence(effective)} ${CAP_ENFORCED_SENTENCE}`,
       "Anonymous creators are allowed, and the creator's wallet is always shown. One-shot markets are allowed, and their pages say 'resolves once on <date>'. Elections are allowed. Deaths, violence, terror, casualty counts and named private individuals are refused.",
       USE_OF_FEES,
       ...GATE_POLICY_IDS.map((id) => transparency.policies.find((p) => p.id === id)?.text).filter((t): t is string => !!t),

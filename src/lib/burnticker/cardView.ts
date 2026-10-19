@@ -290,6 +290,15 @@ const COUNT_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven"
  * The sentence above the featured cards, counted from the cards actually shown (ChatGPT audit 6 item 22: the page said "two disclosed
  * test coins" while a mainnet host showed one). Null when no card is shown.
  */
+/**
+ * Continuous audit run 2, HB-17: the featured group's heading. It names test receipts only once the home data shows a test coin in the
+ * group; while loading, on error, or on a host with no test coin (mainnet) it is "Featured coin", never a word about tests.
+ */
+export const FEATURED_HEADING = "Featured coin";
+export const FEATURED_TEST_HEADING = "Featured coin and test receipts";
+export function featuredHeading(testCards: readonly unknown[] | null | undefined): string {
+  return testCards && testCards.length > 0 ? FEATURED_TEST_HEADING : FEATURED_HEADING;
+}
 export function featuredLine(cards: readonly Pick<CardView, "id" | "tags">[]): string | null {
   if (!cards.length) return null;
   const deficit = cards.some((c) => c.id === "deficit");

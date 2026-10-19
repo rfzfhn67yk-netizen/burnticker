@@ -6,6 +6,7 @@ import { fromScaled } from "@/lib/burnticker/units";
 import { DERBY_BOUNDARY_TOLERANCE_SEC, DERBY_MAX_CONF_RATIO, INDEX_PROXY_SYMBOLS, indexProxiesEnabled, PYTH_ID_RE } from "@/lib/burnticker/derby/spec";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { LruMap, jsonBytes } from "@/lib/burnticker/lru";
 
 /**
  * PYTH — Burn Derby's PRIMARY source (2026-10-10). Pyth publishes signed price updates (accumulator updates whose Merkle root is signed by
@@ -97,7 +98,9 @@ export class HermesClient {
   private readonly apiKey: string | null;
   private readonly minIntervalMs: number;
   private last = 0;
-  private cache = new Map<string, unknown>();
+  // HB-1 (2026-10-19): kept for good, it gained one answer per (feed, boundary) for the life of the web process; now the newest 5,000
+  // and at most 8 MB of JSON (an evicted boundary is read again: the answer is immutable, so the read gives the same price)
+  private cache = new LruMap<string, unknown>(5_000, { maxWeight: 8 * 1024 * 1024, weigh: jsonBytes });
   constructor(o: { fetchImpl?: FetchLike; baseUrl?: string; apiKey?: string | null; minIntervalMs?: number } = {}) {
     this.fetchImpl = o.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
     this.baseUrl = o.baseUrl ?? HERMES_URL;

@@ -9,7 +9,7 @@ import type { BurnMapping } from "@/lib/burnticker/rules";
  */
 
 /** Rivalry pairs: one side's summary, and the other side as seen from a token. */
-export interface PairSideSummary { ticker: string; name: string; mint: string; burns: number; burned: string; supply: string; lastBurnAt: string | null }
+export interface PairSideSummary { ticker: string; name: string; mint: string; burns: number; burned: string; supply: string; lastBurnAt: string | null; /** HB-22: the side the other coin's rule is about ("Broncos"), when it names one */ sideName?: string | null }
 /**
  * A clause pair's live state (both or neither, 2026-10-10): `live` once both pools registered, `waiting` (on side A, B or both) before,
  * `voided` when voidBy ended without both — no event burns ever, both coins on the fallback clock. Null for a pair made before the clause.

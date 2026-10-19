@@ -1,4 +1,5 @@
 import "server-only";
+import { ruleSideName } from "@/lib/burnticker/coinCard";
 import type { MintBankPort } from "@/lib/burnticker/mintBank";
 import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
@@ -301,7 +302,10 @@ export async function pairCounterpart(p: Platform, t: TokenRow): Promise<PairCou
   // Winner takes the burn (API 1.10.0): the flag from this coin's locked rule, and every forward between the two coins.
   let winnerTakesBurn = false;
   try { winnerTakesBurn = pairWinnerTakesBurn(p.registry.lockedRule(t).rule); } catch { winnerTakesBurn = false; }
-  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards: pairForwardsJson(p.registry, pair.pairId, other.cluster), unpaired: pairUnlinked(p.registry, pair.pairId), ...(await pairChainFields(p.program.pairForward ? (a, b) => p.program.pairForward!.port(a, b).links() : undefined, pair.mintA, pair.mintB, side)) };
+  // continuous audit run 2, HB-22 / HS-1: the other side's name from its own locked rule, so the losing side's warning can name the winner
+  let otherSideName: string | null = null;
+  try { otherSideName = ruleSideName(p.registry.lockedRule(other).rule); } catch { otherSideName = null; }
+  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null, sideName: otherSideName }, clause, winnerTakesBurn, forwards: pairForwardsJson(p.registry, pair.pairId, other.cluster), unpaired: pairUnlinked(p.registry, pair.pairId), ...(await pairChainFields(p.program.pairForward ? (a, b) => p.program.pairForward!.port(a, b).links() : undefined, pair.mintA, pair.mintB, side)) };
 }
 
 export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), opts: TokenPageOpts = {}): Promise<{ status: TokenStatusJson; receipts: ReceiptJson[]; readings: TokenPageInput["readings"]; rulesText: string; stubs: string[] }> {

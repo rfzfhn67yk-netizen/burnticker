@@ -1,4 +1,4 @@
-import { coinStatusFactsOf, type ReceiptInput, type StatusInput } from "@/lib/burnticker/coinStatus";
+import { badgeDay, coinStatusFactsOf, type ReceiptInput, type StatusInput } from "@/lib/burnticker/coinStatus";
 import { utcDay } from "@/lib/burnticker/utcWords";
 
 /**
@@ -12,7 +12,33 @@ import { utcDay } from "@/lib/burnticker/utcWords";
 export interface DecidedWarningInput extends StatusInput {
   next: { result?: "recurring" | "pending" | "decided" | "void" };
   market?: { phase: "curve" | "migrating" | "graduated" | null; curve?: { threshold: string; quote: string } | null } | null;
-  pair?: (NonNullable<StatusInput["pair"]> & { counterpart: { name: string; ticker: string }; clause?: { state: "live" | "waiting" | "voided"; voidBy: string } | null }) | null;
+  pair?: (NonNullable<StatusInput["pair"]> & { counterpart: { name: string; ticker: string; sideName?: string | null }; clause?: { state: "live" | "waiting" | "voided"; voidBy: string } | null }) | null;
+}
+
+/**
+ * Continuous audit run 2, HS-1 and HB-22: the losing side of a decided one-game pair says who lost, who won and on which day, that a swap
+ * cannot make it burn, and where its pool goes at the end. Built from the pair record (the other side's name, the void date) and the
+ * result; dates through utcWords.ts. "Swapping into", never "buying": the copy lint refuses calls to buy.
+ */
+const NO_ARTICLE_LEAGUES = new Set(["cfb", "mcbb", "wcbb"]);
+/** "the Broncos" for a US pro team; "Arsenal" for a club (a soccer league id has a dot) or a college. */
+export function teamRef(name: string, selectorKey: string | null | undefined): string {
+  const league = /(?:^|:)espn\.(?:game|team):([a-z0-9.]+)-/.exec(selectorKey ?? "")?.[1] ?? null;
+  return league && (league.includes(".") || NO_ARTICLE_LEAGUES.has(league)) ? name : `the ${name}`;
+}
+const cap1 = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+/** The game's day: the date the coin's badge states (the rule's local game day, as the header shows it), else the receipt's day. */
+export function gameDayOf(s: Pick<DecidedWarningInput, "profile" | "selectorKey">, settledAt: string | null): string | null {
+  const fromBadge = /(?:^|:)espn\.game:/.test(s.selectorKey ?? "") ? badgeDay(s.profile?.badge) : null;
+  return fromBadge ?? settledAt;
+}
+export function losingPairLine(i: { ticker: string; otherTicker: string; sideName: string | null; otherSideName: string | null; selectorKey?: string | null; gameDay: string | null; voidBy: string | null }): string {
+  const on = i.gameDay ? ` on ${utcDay(i.gameDay)}` : "";
+  const beat = i.otherSideName && i.sideName ? `${cap1(teamRef(i.otherSideName, i.selectorKey))} beat ${teamRef(i.sideName, i.selectorKey)}${on}.`
+    : i.otherSideName ? `${cap1(teamRef(i.otherSideName, i.selectorKey))} won${on}.`
+    : `The other side won${on}.`;
+  const by = i.voidBy ? ` by ${utcDay(i.voidBy)}` : "";
+  return `$${i.ticker} lost. ${beat} Swapping into $${i.ticker} now cannot make it burn. At the end, its burn pool goes to $${i.otherTicker}'s burn if both coins graduate${by}. If they do not, the pair is voided and $${i.ticker}'s pool burns down on $${i.ticker} over four weeks.`;
 }
 
 export const NO_FURTHER_RESULT = "No further result is read for it.";
@@ -22,12 +48,15 @@ const raiseWords = (m: DecidedWarningInput["market"]): string => {
 };
 
 /** The line, or null when the coin's one result is not in (a repeating rule, or a one-shot still waiting). */
-export function decidedSwapWarning(s: DecidedWarningInput, receipts: readonly ReceiptInput[], otherSideName: string | null = null): string | null {
+export function decidedSwapWarning(s: DecidedWarningInput, receipts: readonly ReceiptInput[], otherSideNameArg: string | null = null): string | null {
   if (s.next.result !== "decided" && s.next.result !== "void") return null;
+  // HB-22: the other side's name from the caller, else from the pair record the status JSON carries (server.ts pairCounterpart)
+  const otherSideName = otherSideNameArg || s.pair?.counterpart?.sideName || null;
   const f = coinStatusFactsOf(s, receipts, otherSideName ? { profile: { sideName: otherSideName } } : null);
   const d = f.decision;
   const latest = [...receipts].filter((r) => !["winddown", "drain", "sweep"].includes(r.kind ?? "")).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
-  const on = latest ? ` on ${utcDay(latest.settledAt)}` : "";
+  const day = gameDayOf(s, latest?.settledAt ?? null);
+  const on = day ? ` on ${utcDay(day)}` : "";
   if (s.next.result === "void" || d?.outcome === "void") return `This coin's one result was voided${on}. ${NO_FURTHER_RESULT} Nothing burns on it.`;
   const side = f.sideName;
   const pair = f.pair && s.pair ? s.pair : null;
@@ -38,6 +67,7 @@ export function decidedSwapWarning(s: DecidedWarningInput, receipts: readonly Re
     : d?.result && /^(yes|no)$/i.test(d.result) ? `This coin's one result is in: the market settled ${d.result.charAt(0).toUpperCase()}${d.result.slice(1).toLowerCase()}${on}.`
     : `This coin's one result is in${on}.`;
   if (!d) return `${head} ${NO_FURTHER_RESULT}`;
+  if (d.outcome === "other" && pair) return losingPairLine({ ticker: s.ticker, otherTicker: pair.counterpart.ticker, sideName: side, otherSideName, selectorKey: s.selectorKey, gameDay: day, voidBy: pair.clause?.voidBy ?? null });
   if (!d.burnsThis || d.outcome === "other") return `${head} ${NO_FURTHER_RESULT} ${d.outcome === "other" ? "The losing side burns nothing of its own." : "This coin burns nothing on it."}`;
   if (d.hold === null) return `${head} ${NO_FURTHER_RESULT} Its burn is done.`;
   if (pair) {

@@ -88,7 +88,7 @@ export const v1ElectionPair = (p: Platform, q: URLSearchParams): Promise<ApiResu
 export const v1SportsTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsTeams(p, { league: q.get("league"), q: q.get("q"), division: q.get("division") });
 export const v1SportsGames = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsGames(p, { league: q.get("league"), q: q.get("q") });
 export const v1SportsRivalry = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsRivalry(p, { league: q.get("league"), a: q.get("a"), b: q.get("b") });
-export const v1Browse = (p: Platform, q: URLSearchParams): Promise<ApiResult> => browse(p, { category: q.get("category"), q: q.get("q") });
+export const v1Browse = (p: Platform, q: URLSearchParams): Promise<ApiResult> => browse(p, { category: q.get("category"), q: q.get("q"), venue: q.get("venue") });
 export const v1KalshiCategories = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiCategories(p, { category: q.get("category"), tag: q.get("tag"), q: q.get("q"), limit: q.get("limit"), offset: q.get("offset"), events: q.get("events"), polymarket: q.get("polymarket") });
 export const v1Backtest = (p: Platform, body: Record<string, unknown>): Promise<ApiResult> => runBacktest(p, body);
 export const v1PolymarketSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => polymarketSearch(p, { q: q.get("q"), status: q.get("status"), closingSoon: q.get("closingSoon") });

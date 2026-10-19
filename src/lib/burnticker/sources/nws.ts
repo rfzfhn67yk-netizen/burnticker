@@ -1,6 +1,7 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { LruMap, NWS_CACHE_BYTES, bodyBytes, logRequest } from "@/lib/burnticker/lru";
 
 /**
  * THE NWS DAILY CLIMATE ADAPTER (tier 4, first-party, public domain; 2026-10-10 — Weather & Climate gets a first-party source). It reads
@@ -144,7 +145,7 @@ export const cliListUrl = (station: string): string => `${NWS_API}/products/type
 export const productUrl = (id: string): string => `${NWS_API}/products/${id}`;
 
 export class NwsClient {
-  private fetchImpl: FetchLike; private ttl: number; private now: () => number; private cache = new Map<string, { at: number; body: unknown }>(); private lastAt = 0; private minInterval: number; private chain: Promise<void> = Promise.resolve();
+  private fetchImpl: FetchLike; private ttl: number; private now: () => number; private cache = new LruMap<string, { at: number; body: unknown }>(500, { maxWeight: NWS_CACHE_BYTES, weigh: bodyBytes }); private lastAt = 0; private minInterval: number; private chain: Promise<void> = Promise.resolve();
   requests: string[] = [];
   constructor(o: { fetchImpl?: FetchLike; now?: () => number; ttlMs?: number; minIntervalMs?: number } = {}) { this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.ttl = o.ttlMs ?? 1_800_000; this.minInterval = o.minIntervalMs ?? 300; }
   async get(url: string, ttl = this.ttl): Promise<unknown> {
@@ -152,7 +153,7 @@ export class NwsClient {
     const run = async () => {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       await takeOrThrow(sourceForUrl(url));   // the request budget (apiBudget.ts)
-      this.lastAt = this.now(); this.requests.push(url);
+      this.lastAt = this.now(); logRequest(this.requests, url);
       const res = await this.fetchImpl(url, { headers: { accept: "application/geo+json", "user-agent": NWS_UA }, signal: AbortSignal.timeout(10_000) });   // prelaunch audit H1: every source read ends
       if (!res.ok) throw new Error(`NWS HTTP ${res.status} for ${url.slice(0, 100)}`);
       const body = await res.json(); this.cache.set(url, { at: this.now(), body }); return body;

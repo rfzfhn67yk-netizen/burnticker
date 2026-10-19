@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import type { CoinStatusFacts } from "@/lib/burnticker/coinStatus";
+import { badgeDay, type CoinStatusFacts } from "@/lib/burnticker/coinStatus";
 import type { CoinListing, ListGroup, ListNext, ListResult, ResultNext } from "@/lib/burnticker/coinsList";
 import { isOneShot, resolvesOnce } from "@/lib/burnticker/nextResult";
 import { championPathRule, describeEndSink, sinkTickerOf } from "@/lib/burnticker/describe";
@@ -26,15 +26,9 @@ export interface ListingStatus {
 export interface ListingReceipt { status: string; settledAt: string; kind?: string | null; result?: string | null }
 
 const END_KINDS = new Set(["winddown", "drain", "sweep"]);
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** The window end a one-shot badge states ("ONE-SHOT · Oct 31, 2026" → "2026-10-31"); null when it states none. */
-export function badgeWindowEnd(badge: string | null | undefined): string | null {
-  const m = /ONE-SHOT\s*·\s*([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(badge ?? "");
-  if (!m) return null;
-  const mo = MONTHS.indexOf(m[1]);
-  return mo < 0 ? null : `${m[3]}-${String(mo + 1).padStart(2, "0")}-${m[2].padStart(2, "0")}`;
-}
+/** The window end a one-shot badge states ("ONE-SHOT · Oct 31, 2026" → "2026-10-31"); null when it states none (coinStatus.ts badgeDay). */
+export const badgeWindowEnd = badgeDay;
 
 /** A feed's cadence in the catalogue's own words, when they pass the copy lint; null otherwise. */
 export function cadenceOf(rule: Pick<BurnRule, "oracle" | "series">): string | null {
@@ -95,7 +89,12 @@ export function listNextOf(s: ListingStatus, rule: BurnRule): ListNext | null {
 /** One coin's group, result and next-result facts. `facts` may be null (the route could not build them): the coin is then open. */
 export function coinListingOf(i: { status: ListingStatus; receipts: readonly ListingReceipt[]; facts: CoinStatusFacts | null; rule: BurnRule }): CoinListing {
   const s = i.status;
-  const latest = [...i.receipts].filter((r) => !END_KINDS.has(r.kind ?? "")).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
+  const latestRow = [...i.receipts].filter((r) => !END_KINDS.has(r.kind ?? "")).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
+  // continuous audit run 2, HB-15: a one-game coin's result is dated by the game's day as its badge and rule state it (the local day), not
+  // the UTC day its reading is keyed by (Seahawks at Broncos: Oct 15 in Denver, 2026-10-16 in UTC)
+  const espnGame = i.rule.oracle === "catalogue" && i.rule.series ? parseEspnSeries(i.rule.series)?.kind === "game" : false;
+  const gameDay = espnGame || !!(i.rule.pair as { game?: unknown } | null | undefined)?.game ? badgeDay(s.profile?.badge) : null;
+  const latest = latestRow && gameDay ? { ...latestRow, settledAt: gameDay } : latestRow;
   if (s.status === "retired") return { group: "retired", result: null, next: null };
   const d = i.facts?.decision ?? null;
   const ended = s.lifecycle?.ended ?? null;

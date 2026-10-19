@@ -447,8 +447,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   if (targets.some(Boolean) && !burnRealEnabledFromEnv(env) && !problems.includes(BURN_REAL_WAITING)) problems.push(BURN_REAL_WAITING);
   // HB-12 + PROD-01: a token to burn only on a family that may have one (burnRealEligibility.ts); side B of a linked pair is judged by side
   // A's rule (it is built from it), a Matchup's coin B by its own rule
-  for (const [r, t, who] of [[locked.rule, targets[0], ""], [pair ? locked.rule : companionLocked?.rule ?? null, targets[1], "Coin B. "]] as [BurnRule | null, BurnTargetField | null, string][]) {
-    const fp = realBurnFamilyProblem(r, t); if (fp && !problems.includes(`${who}${fp}`)) problems.push(`${who}${fp}`);
+  for (const [r, t, who, side] of [[locked.rule, targets[0], "", "A"], [pair ? locked.rule : companionLocked?.rule ?? null, targets[1], "Coin B. ", "B"]] as [BurnRule | null, BurnTargetField | null, string, "A" | "B"][]) {
+    const fp = realBurnFamilyProblem(r, t, side); if (fp && !problems.includes(`${who}${fp}`)) problems.push(`${who}${fp}`);
   }
   const pins: LaunchReview["pins"] = [];
   const pinRent = rentLamports(BURN_TARGET_ACCOUNT_BYTES);

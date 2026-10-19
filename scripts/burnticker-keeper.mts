@@ -72,7 +72,7 @@ import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
 import { Heartbeat, heartbeatUrlFromEnv, heartbeatVerdict } from "../src/lib/burnticker/ops/heartbeat.ts";
-import { readBackupStatus, readWebProbeStatus, runUnitCheck, webProbeFact } from "../src/lib/burnticker/ops/unitHealth.ts";
+import { offboxPullFact, readBackupStatus, readOffboxPull, readWebProbeStatus, runUnitCheck, webProbeFact } from "../src/lib/burnticker/ops/unitHealth.ts";
 import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 // PROGRAM HASH CHECK (prelaunch audit 2026-10-18 A-4): once a Denver day, the burn program's bytes on chain against verified-build.json
 import { compareProgramToRecord, hostProgramRound, programHashFact, programHashSourceLine, readProgramDataHash, webDispersal, writeKeeperDispersal } from "../src/lib/burnticker/programHash.ts";
@@ -408,7 +408,9 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   const hostFacts = { dispersal: { on: dispersal.on, line: dispersalHostLine(dispersal, webDispersal(process.env), deficitDispersal) }, webhookConfigured: webhook.configured, pushConfigured: !!pushConfigFromEnv(process.env), heartbeatConfigured: !!process.env.BURNTICKER_STATUS_HEARTBEAT_URL?.trim(),
     backupDestConfigured: !!process.env.BURNTICKER_BACKUP_DEST?.trim() || readBackupStatus(process.cwd())?.destConfigured === true, programHashSource: programHashSourceLine(programHashFact(process.env, process.cwd(), { log })),
     // I-11 / B-4 (2026-10-19): the external web check's last outcome (data/web-probe-last.json; never the URL)
-    webProbe: webProbeFact(readWebProbeStatus(process.cwd()), process.env) };
+    webProbe: webProbeFact(readWebProbeStatus(process.cwd()), process.env),
+    // B-3 / OPS-1 (2026-10-19): the off-box pull receipt (data/offbox-pull.json): pulled / stale / none, its time and method only
+    ...offboxPullFact(readOffboxPull(process.cwd(), now), now) };
   publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state, hostFacts }));
   try { registry.setStatus(CONDITIONS_KEY, foldConditions(memory, activeConditions(r.snapshot, health, { ...signals, alerts, lastCycleAt: r.snapshot?.lastCycle?.at ?? null }), now), now); } catch (e) { log(`  [ops] condition memory not written: ${(e as Error).message.slice(0, 120)}`); }
 }

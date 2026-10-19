@@ -16,7 +16,7 @@ import { rentLamports, LAMPORTS_PER_SIGNATURE } from "@/lib/burnticker/launchCos
 import { candidatesPairRule } from "@/lib/burnticker/guidedLaunch";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import {
-  BURN_TARGET_BYTES, PIN_NOTE, POOL_FIELD_LABEL, REAL_OFF_LINE, SIDE_REAL_OFF, SINGLE_REAL_PICKS, admissionFrom, admissionKey, admissionUrl, checkingLine, lockStepLabel, noPoolLine,
+  BURN_TARGET_BYTES, PIN_NOTE, POOL_FIELD_LABEL, REAL_OFF_LINE, SIDE_REAL_OFF, ownRealPicks, admissionFrom, admissionKey, admissionUrl, checkingLine, lockStepLabel, noPoolLine,
   pinStepLabel, poolFieldHelp, realBlockers, realField, realHeldLine, realNotOffered, realPickFor, realReadSentence, realReviewNotes, receiptRealLine, ruleRealBurn, withPinSteps, withRealBurn, type SideReal,
 } from "@/app/burnticker/launch/burnReal";
 
@@ -59,11 +59,15 @@ describe("the launch state says whether round 5 is deployed (never a date)", () 
 
 describe("the choice, the admission and the hashed field", () => {
   test("a Coin vs Coin side's pick is its reference coin (suggested mint and feed first); no mint or no Pyth feed is not offered", () => {
-    assert.deepEqual(realPickFor({ symbol: "bonk", pyth: null, mint: null, pool: null }), { symbol: "BONK", mint: BONK.mint, feedId: BONK.feedId, pool: "" });
+    // PROD-04 (2026-10-19): a symbol never supplies a mint; a coin with no mint of its own is not offered, and a suggested token only
+    // fills a missing feed when its mint is this coin's mint
+    assert.equal(realPickFor({ symbol: "bonk", pyth: null, mint: null, pool: null }), null);
+    assert.deepEqual(realPickFor({ symbol: "bonk", pyth: null, mint: BONK.mint, pool: null }), { symbol: "BONK", mint: BONK.mint, feedId: BONK.feedId, pool: "" });
     assert.deepEqual(realPickFor({ symbol: "MEW", pyth: "a".repeat(64), mint: POOL, pool: "p" }), { symbol: "MEW", mint: POOL, feedId: "a".repeat(64), pool: "p" });
     assert.equal(realPickFor({ symbol: "ETH", pyth: "b".repeat(64), mint: null }), null);
     assert.equal(realPickFor({ symbol: "SHIB", pyth: null, mint: POOL }), null);
-    assert.deepEqual(SINGLE_REAL_PICKS.map((p) => p.symbol), ["WIF", "BONK"]);
+    // owner 2026-10-19: no fixed WIF/BONK menu; a single coin is offered only the coin it is measured against (none outside Coin vs Coin)
+    assert.deepEqual(ownRealPicks(null), []);
   });
   test("the admission URL names everything the route checks; its answer is shown in the library's words", () => {
     const u = new URL(admissionUrl(BONK_PICK, "mainnet", null), "http://x");
@@ -201,14 +205,14 @@ describe("the page wiring and the words", () => {
     assert.match(tile, /const realChoices = !a \|\| !b \|\| !realOn \? null : \(/);
     assert.doesNotMatch(tile, /data-burn-real-waiting/);
     // HB-12 + PROD-01: and on a single coin only for a rule family that may burn a real token (burnRealEligibility.ts)
-    assert.match(page, /const realOneOffered = site\.burnReal\.available && !pairOn && !!rule0 && !rule0\.vault && realBurnAllowed\(rule0\);/);
+    assert.match(page, /const realOneOffered = site\.burnReal\.available && !pairOn && !!rule0 && !rule0\.vault && realBurnAllowed\(rule0\) && realOnePicks\.length > 0;/);
     // launch wizard audit 2026-10-19 F16: on a single coin only for a rule that came with a burn target
     assert.match(page, /: site\.burnReal\.line && rule0\?\.burnTarget && realBurnAllowed\(rule0\) \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{site\.burnReal\.line\}<\/p><\/details> : null;/);
     // default off; one switch per Coin vs Coin side, the suggested tokens for a single coin
     assert.match(tile, /useState<SideReal>\(SIDE_REAL_OFF\), \[realB, setRealB\] = useState<SideReal>\(SIDE_REAL_OFF\)/);
     assert.match(tile, /<BurnRealChoice side="a" who=\{`\$\$\{TA\}`\} picks=\{\[pickA\]\}/);
     assert.match(tile, /<BurnRealChoice side="b" who=\{`\$\$\{TB\}`\} picks=\{\[pickB\]\}/);
-    assert.match(page, /<BurnRealChoice side="one" [^>]*picks=\{SINGLE_REAL_PICKS\}/);
+    assert.match(page, /<BurnRealChoice side="one" [^>]*picks=\{realOnePicks\}/);
     assert.match(choice, /targetChoiceLabel\(picks\[0\]\.symbol\)/);
     assert.match(choice, /data-burn-real-verdict=\{a\.ok \? "held" : "refused"\}>\{a\.line\}/);
     // side B's own pinned token rides in `pair` (the review and the launch); the library must hash it (WIRING-ROUND5.md, left for the library)

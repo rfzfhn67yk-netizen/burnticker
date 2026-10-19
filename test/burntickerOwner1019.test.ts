@@ -3,6 +3,7 @@
 // turns it off), checked end to end for a single coin; (3) a coin that resolves once and spends 100 % says what reaches its pool after the
 // one burn instead of the losing-path words; (4) three plain waiting lines while the launch prepares, confirms and is read back.
 import { describe, test } from "node:test";
+import { REAL_BURN_FAMILY_REFUSAL } from "@/lib/burnticker/burnRealEligibility";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
@@ -79,8 +80,10 @@ describe("1. burning a real token is off by default", () => {
   });
   test("the review: a pinned token (side A, side B or a Matchup companion) is one plain problem while the flag is off", () => {
     const off = review({ ...debt(), burnTarget: BONK }, R5);
-    assert.deepEqual(off.problems, [BURN_REAL_WAITING]); assert.equal(off.signable, false);
-    assert.deepEqual(review({ ...debt(), burnTarget: BONK }, { ...R5, [BURN_REAL_ENABLED_FLAG]: "1" }).problems, []);
+    // owner 2026-10-19: a published-data coin may not burn another token at all (only a Coin comparison coin, its own pitted coin;
+    // test/burntickerBurnRealEligibility.test.ts), so the family refusal joins the waiting line and stays when the flag is on
+    assert.deepEqual(off.problems, [BURN_REAL_WAITING, REAL_BURN_FAMILY_REFUSAL]); assert.equal(off.signable, false);
+    assert.deepEqual(review({ ...debt(), burnTarget: BONK }, { ...R5, [BURN_REAL_ENABLED_FLAG]: "1" }).problems, [REAL_BURN_FAMILY_REFUSAL]);
     assert.deepEqual(review(debt(), R5).problems, [], "a coin that burns itself is unaffected");
     plain(BURN_REAL_WAITING);
   });
@@ -100,9 +103,9 @@ describe("1. burning a real token is off by default", () => {
     const b = await withEnv({ [BURN_REAL_ENABLED_FLAG]: undefined }, () => prepareLaunch(w.p, pairBody, { register: false }) as Promise<Out>);
     assert.equal(b.error?.status, 400); assert.equal(b.error?.body.code, "burn-real-off"); assert.equal(b.error?.body.error, `Side B: ${BURN_REAL_WAITING}`);
     // HB-12 + PROD-01 (2026-10-19): with the flag on, a team pair still may not burn another token (burnRealEligibility.ts); the
-    // published-data coin that may is covered in test/burntickerBurnRealEligibility.test.ts
+    // Coin comparison coin that may is covered in test/burntickerBurnRealEligibility.test.ts
     const on = await withEnv({ [BURN_REAL_ENABLED_FLAG]: "1" }, () => prepareLaunch(w.p, { ...pairBody, ticker: "MILEHY", pair: { ...pairBody.pair, ticker: "ARROWHY" } }, { register: false }) as Promise<Out>);
-    assert.equal(on.error?.status, 400); assert.equal(on.error?.body.code, "burn-real-family"); assert.match(on.error!.body.error, /^Side B: Only a coin on published data/);
+    assert.equal(on.error?.status, 400); assert.equal(on.error?.body.code, "burn-real-family"); assert.match(on.error!.body.error, /^Side B: Only a Coin comparison coin/);
   });
 });
 

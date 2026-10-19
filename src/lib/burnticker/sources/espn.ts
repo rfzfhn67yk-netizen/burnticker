@@ -7,7 +7,7 @@ import { PROVIDER_TEAM_IDS } from "@/lib/burnticker/sources/providerTeams";
 import { FBS_TEAM_IDS } from "@/lib/burnticker/sources/fbs";
 import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { type: "json" };
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
-import { LruMap } from "@/lib/burnticker/lru";
+import { LruMap, SPORTS_CACHE_BYTES, bodyBytes, logRequest } from "@/lib/burnticker/lru";
 
 /**
  * TEAMS, LEAGUES, SERIES AND SCHEDULES FOR TEAM COINS (the file keeps its old name; since 2026-10-10 NOTHING here reads ESPN). The team
@@ -694,7 +694,7 @@ export class EspnClient {
   constructor(o: EspnClientOpts = {}) {
     this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.fetchClock = o.fetchClock ?? this.now; this.minInterval = o.minIntervalMs ?? 250; this.ttl = o.ttlMs ?? 600_000;
     this.timeoutMs = o.timeoutMs ?? SPORTS_FETCH_TIMEOUT_MS; this.scheduleTimeoutMs = o.scheduleTimeoutMs ?? SEASON_SCHEDULE_TIMEOUT_MS; this.failBase = o.failBaseMs ?? FAIL_BACKOFF_MS.base; this.failMax = o.failMaxMs ?? FAIL_BACKOFF_MS.max;
-    this.cache = new LruMap(o.maxCached ?? 500); this.failures = new LruMap(500);
+    this.cache = new LruMap<string, { at: number; body: unknown; ttl?: number }>(o.maxCached ?? 500, { maxWeight: SPORTS_CACHE_BYTES, weigh: bodyBytes }); this.failures = new LruMap(500);   // HB-1: the cache by size as well
     this.tsdbKey = o.tsdbKey === undefined ? ((process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null) : o.tsdbKey;
     this.apiSportsKey = o.apiSportsKey === undefined ? ((process.env.BURNTICKER_APISPORTS_KEY ?? "").trim() || null) : o.apiSportsKey;
   }
@@ -729,7 +729,7 @@ export class EspnClient {
     const run = async () => {
       const wait = (this.lastAt.get(source) ?? 0) + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       await takeOrThrow(source);   // the request budget (apiBudget.ts): waits for its bucket; a spent day budget skips the read
-      this.lastAt.set(source, this.now()); this.requests.push(redactKey(url));
+      this.lastAt.set(source, this.now()); logRequest(this.requests, redactKey(url));
       try {
         const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers }, signal: AbortSignal.timeout(limitMs) });
         if (!res.ok) throw new Error(`HTTP ${res.status} for ${redactKey(url).slice(0, 120)}`);

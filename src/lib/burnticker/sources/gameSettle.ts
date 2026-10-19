@@ -416,7 +416,17 @@ export const CROSS_LABEL: Record<CrossId, string> = { "mlb.statsapi": "MLB's off
 /** How the primary is named outside the sources table and the trust page (TheSportsDB is named there, with "data: TheSportsDB"). */
 export const SETTLED_ON: Record<"on-chain payout" | "TheSportsDB", string> = { "on-chain payout": "the game's on-chain payout", TheSportsDB: "a licensed final score" };
 /** The public ESPN scoreboard page for the game's day — a plain human link on each game row and receipt, never fetched (no ESPN reads). */
-export const espnGameUrl = (league: LeagueId, date: string): string => { const [sport, lg] = LEAGUES[league].path.split("/"); const d = date.slice(0, 10).replace(/-/g, ""); return sport === "soccer" ? `https://www.espn.com/soccer/scoreboard/_/date/${d}/league/${lg}` : `https://www.espn.com/${lg}/scoreboard/_/date/${d}`; };
+/**
+ * Continuous audit run 2, HB-15: ESPN files a game under its US Eastern calendar day (Seahawks at Broncos, kickoff 2026-10-16T00:15Z, is on
+ * ESPN's 20261015 scoreboard), not the UTC day the reading is keyed by. With the game's start time the link uses the Eastern day.
+ */
+export const espnScoreboardDay = (date: string, startsAt?: string | null): string => {
+  const t = startsAt ? Date.parse(startsAt) : NaN;
+  if (!Number.isFinite(t)) return date.slice(0, 10);
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t));
+  return /^\d{4}-\d{2}-\d{2}$/.test(p) ? p : date.slice(0, 10);
+};
+export const espnGameUrl = (league: LeagueId, date: string, startsAt?: string | null): string => { const [sport, lg] = LEAGUES[league].path.split("/"); const d = espnScoreboardDay(date, startsAt).replace(/-/g, ""); return sport === "soccer" ? `https://www.espn.com/soccer/scoreboard/_/date/${d}/league/${lg}` : `https://www.espn.com/${lg}/scoreboard/_/date/${d}`; };
 /** The league's cross-read: its own official feed where one exists, else the second licensed provider. */
 export const crossIdOf = (league: LeagueId): CrossId => (league === "mlb" ? "mlb.statsapi" : league === "nhl" ? "nhl.score" : league === "nba" ? "nba.cdn" : "apisports.games");
 /** Whether the cross-read can be read on this host (API-Sports needs its key). */
@@ -1051,7 +1061,7 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
     // one unit when the result is in the coin's set: its one outcome, or two of the three (espn.ts outcomeHits; a tie is a draw)
     if (outcomeHits(s.outcome, out)) cur.value++;
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
-    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
+    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date, g.startsAt)}`);
     cur.method = methodOf(v);
     noteSingle(d, o.seriesId ?? null, g, v);
     byDay.set(g.date, cur);
@@ -1203,7 +1213,7 @@ export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: 
     const cur = byDay.get(g.date) ?? { value: 0, titles: [], url: v.url, method: "" };
     cur.value += out === "win" ? 1 : out === "loss" ? -1 : 0;
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
-    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}, head to head) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
+    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}, head to head) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date, g.startsAt)}`);
     cur.method = methodOf(v);
     noteSingle(d, seriesId, g, v);
     byDay.set(g.date, cur);

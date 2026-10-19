@@ -2,7 +2,7 @@ import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import type { Platform } from "@/lib/burnticker/server";
 import { loadTransparency } from "@/lib/burnticker/trust";
 import { buildChecklist } from "@/lib/burnticker/trustpack/checklist";
-import { sampleReceipts, DEVNET_PROGRAM_ID } from "@/lib/burnticker/trustpack/samples";
+import { publicSample, publicSampleReceipts, sampleReceipts, DEVNET_PROGRAM_ID } from "@/lib/burnticker/trustpack/samples";
 import { checkReceiptTx, classifySignatureInput, jsonRpc, PUBLIC_RPC, type Rpc, type SourceFetch } from "@/lib/burnticker/trustpack/receiptCheck";
 import { isPubkey, isSignature } from "@/lib/burnticker/trustpack/base58";
 import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
@@ -31,7 +31,7 @@ export const pageCluster = (p: Pick<Platform, "cluster">): Cluster => (p.cluster
 export const serverRpcUrl = (cluster: Cluster, env: Readonly<Record<string, string | undefined>> = process.env): string => rpcUrlFor(cluster, env);
 
 export const v1Check = (root = process.cwd()): ApiResult => ok(buildChecklist(root));
-export const v1CheckReceipts = (root = process.cwd()): ApiResult => ok(sampleReceipts(root));
+export const v1CheckReceipts = (root = process.cwd()): ApiResult => ok(publicSampleReceipts(sampleReceipts(root)));
 
 export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSource?: SourceFetch | null; root?: string } = {}): Promise<ApiResult> {
   // QA 11 L8: a plain refusal, before any RPC call
@@ -43,7 +43,7 @@ export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSou
     rulesText: s ? samples.rules[s.rulesPath] ?? null : null,
     fetchSource: o.fetchSource === undefined ? budgetedFetch((u: string) => fetch(u, { headers: { accept: "application/json", "user-agent": "burnticker-check/1 (receipt verification)" } })) : o.fetchSource,
   });
-  return ok({ ...result, ranOn: "server (the same code the /burnticker/check page runs in your browser)", sample: s ?? null });
+  return ok({ ...result, ranOn: "server (the same code the /burnticker/check page runs in your browser)", sample: s ? publicSample(s) : null });
 }
 
 let ledgerCache: { at: number; key: string; doc: FeeLedgerDoc } | null = null;
