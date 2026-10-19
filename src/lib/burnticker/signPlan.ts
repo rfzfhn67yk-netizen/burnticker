@@ -419,9 +419,17 @@ export interface SendDeps {
   /**
    * B-2 (third audit 2026-10-19): told of each signed step just after it is written ahead and before it is sent (the step, its signature
    * and the signed transaction, base64). The card reports a create to the site, so the creator's next prepare of the same ticker is
-   * refused while this one can still land. Awaited for at most SENT_REPORT_WAIT_MS; a failure or a slow answer never stops the send.
+   * refused while this one can still land.
+   * SEC-05 (continuous audit 2026-10-19): for a step that confirms a draft (plan.confirms names it: a coin's create) the answer is one
+   * SentAck per draft that step confirms, and the step is sent ONLY when every one is acknowledged (the site recorded that very mint)
+   * within sentReportWaitMs (SENT_REPORT_WAIT_MS). A throw, a slow answer, a refusal or a missing acknowledgement stops the run at that
+   * step before anything is sent (SendResult.unrecorded, or .pendingElsewhere when another attempt of the launch is recorded); the signed
+   * transaction is dropped and the next press builds and signs it again. A step that confirms nothing (the lock step) is not held back.
+   * Left out: not checked (the send goes ahead, as before B-2).
    */
-  onSent?(step: number, signature: string, txBase64: string): Promise<void> | void;
+  onSent?(step: number, signature: string, txBase64: string): Promise<SentAck[] | void> | SentAck[] | void;
+  /** SEC-05: how long a create waits for the site's acknowledgement (tests); SENT_REPORT_WAIT_MS by default */
+  sentReportWaitMs?: number;
   /** the clock (tests); Date.now by default */
   now?(): number;
   /**
@@ -436,7 +444,7 @@ export interface SendDeps {
   expectedAccounts?(mints: string[]): Promise<"absent" | "present" | "unknown">;
 }
 /** `state` / `signature` describe the step at `failedAt` and are present only when a run stops. */
-export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true; /** A-11: stopped because creator launches closed */ closed?: true; /** SEC-03: stopped because the launch gate could not be read (pressing again reads it again) */ gateUnread?: true; /** SEC-03: the open gate read before the plan's first step was sent (it goes with the confirm) */ gate?: PlanGate }
+export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true; /** A-11: stopped because creator launches closed */ closed?: true; /** SEC-03: stopped because the launch gate could not be read (pressing again reads it again) */ gateUnread?: true; /** SEC-05: stopped because the site did not acknowledge recording the create first (nothing was sent; pressing again signs it again) */ unrecorded?: true; /** SEC-05: stopped because the site already holds another attempt of this launch (nothing was sent) */ pendingElsewhere?: true; /** SEC-03: the open gate read before the plan's first step was sent (it goes with the confirm) */ gate?: PlanGate }
 
 export type ChainReadDeps = Pick<SendDeps, "getSignatureStatus" | "getBlockHeight" | "getTransaction" | "expectedAccounts">;
 /**
@@ -510,18 +518,55 @@ export const launchesClosedSentence = (i: number, n: number): string => `Creator
 export const resignSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} waited in the wallet longer than the network allows, so it was prepared again. This step was not sent. Approve it in your wallet once more.`;
 export const resignExhaustedSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} was not sent because the wallet took longer than the network allows, ${RESIGN_MAX + 1} times in a row. Press the button to try again, and approve the request in your wallet within a minute.`;
 /**
- * B-2: the card's SendDeps.onSent. A step that confirms a draft (plan.confirms: the coin's create) is reported to the launch route as
- * `{ action: "sent", mint, sentTx }`, once per draft it confirms; any other step (the lock step) is not.
+ * SEC-05 (continuous audit 2026-10-19): the sentence when a coin's create was signed but the site did not acknowledge recording it first
+ * (the report failed, timed out, was refused or did not name the mint). The create was never sent; the next press signs it again.
  */
-export function sentReporter(plan: Pick<SignPlan, "confirms">, post: (body: { action: "sent"; mint: string; sentTx: string }) => Promise<unknown>): NonNullable<SendDeps["onSent"]> {
-  return async (step, _signature, txBase64) => { await Promise.all(plan.confirms.filter((c) => c.step === step).map((c) => post({ action: "sent", mint: c.mint, sentTx: txBase64 }).catch(() => undefined))); };
+export const sendUnrecordedSentence = (i: number, n: number, before = false): string => `Step ${i + 1} of ${n} was not sent because this site could not record it first. ${before ? "Nothing was charged for this step. The steps before it are confirmed on chain." : "Nothing was sent and nothing was charged."} Wait a moment, then press the button to try again.`;
+/** SEC-05: the sentence when the site refused the report because another attempt of this launch (another mint) is already recorded. */
+export const sendPendingElsewhereSentence = (i: number, n: number, before = false): string => `Step ${i + 1} of ${n} was not sent because this site already holds another launch of this coin from your wallet, which may still land. ${before ? "Nothing was charged for this step. The steps before it are confirmed on chain." : "Nothing was sent and nothing was charged."} Check that launch first. If it does not land, press the button again in a few minutes.`;
+/** SEC-05: the site's answer to one `sent` report. Only `acknowledged: true` lets a create be sent. */
+export interface SentAck { acknowledged: boolean; reason?: string; /** the site refused it because another attempt of this launch is recorded (409 launch-pending / ticker-taken / ticker-live) */ pending?: boolean }
+const PENDING_CODES = new Set(["launch-pending", "ticker-taken", "ticker-live"]);
+/**
+ * SEC-05: the acknowledgement in a `sent` answer: a 2xx whose body names the recorded row for exactly this mint (`recorded: { mint, sentAt }`).
+ * Anything else (another status, an unreadable body, `recorded: false` for a coin already launched, another mint) is not acknowledged.
+ */
+export function sentAckOf(status: number, body: unknown, mint: string): SentAck {
+  const b = (body && typeof body === "object" ? body : {}) as { recorded?: unknown; code?: unknown };
+  if (status === 409 && typeof b.code === "string" && PENDING_CODES.has(b.code)) return { acknowledged: false, pending: true, reason: b.code };
+  if (status < 200 || status >= 300) return { acknowledged: false, reason: `HTTP ${status}` };
+  const r = b.recorded as { mint?: unknown; sentAt?: unknown } | null | undefined;
+  if (!r || typeof r !== "object" || r.mint !== mint || typeof r.sentAt !== "number" || !Number.isFinite(r.sentAt)) return { acknowledged: false, reason: "the answer did not name the recorded send" };
+  return { acknowledged: true };
 }
-/** B-2: how long a send waits for the site to record it (SendDeps.onSent) before it goes ahead anyway. */
-export const SENT_REPORT_WAIT_MS = 2_000;
-async function reportSent(onSent: NonNullable<SendDeps["onSent"]>, p: PendingSend): Promise<void> {
+/**
+ * B-2: the card's SendDeps.onSent. A step that confirms a draft (plan.confirms: the coin's create) is reported to the launch route as
+ * `{ action: "sent", mint, sentTx }`, once per draft it confirms; any other step (the lock step) is not. SEC-05: each report's answer
+ * comes back as a SentAck (`post` reads the response; sentAckOf), and a post that throws is an unacknowledged report, never swallowed.
+ */
+export function sentReporter(plan: Pick<SignPlan, "confirms">, post: (body: { action: "sent"; mint: string; sentTx: string }) => Promise<SentAck>): (step: number, signature: string, txBase64: string) => Promise<SentAck[]> {
+  return (step, _signature, txBase64) => Promise.all(plan.confirms.filter((c) => c.step === step).map(async (c): Promise<SentAck> => {
+    try { const a = await post({ action: "sent", mint: c.mint, sentTx: txBase64 }); return a && typeof a === "object" && typeof a.acknowledged === "boolean" ? a : { acknowledged: false, reason: "no acknowledgement" }; }
+    catch (e) { return { acknowledged: false, reason: String((e as Error)?.message ?? e).slice(0, 120) }; }
+  }));
+}
+/** SEC-05: how long a create waits for the site's acknowledgement (SendDeps.onSent) before the run stops without sending it. */
+export const SENT_REPORT_WAIT_MS = 8_000;
+/**
+ * SEC-05: reports a signed step and says whether it may be sent. A step that confirms no draft: told, never held back (bounded wait, errors
+ * ignored). A step that confirms drafts: "ok" only when an acknowledgement came back for every one of them in time; "pending" when the site
+ * named another recorded attempt; otherwise (timeout, throw, refusal, missing or short answer) "unrecorded".
+ */
+async function reportSent(onSent: NonNullable<SendDeps["onSent"]>, p: PendingSend, confirming: number, waitMs: number): Promise<"ok" | "unrecorded" | "pending"> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  try { await Promise.race([Promise.resolve().then(() => onSent(p.step, p.signature, p.tx)), new Promise<void>((r) => { timer = setTimeout(r, SENT_REPORT_WAIT_MS); })]); }
-  catch { /* the report never stops the send */ }
+  const TIMEOUT = Symbol("timeout");
+  try {
+    const got = await Promise.race([Promise.resolve().then(() => onSent(p.step, p.signature, p.tx)), new Promise<typeof TIMEOUT>((r) => { timer = setTimeout(() => r(TIMEOUT), waitMs); })]);
+    if (confirming === 0) return "ok";
+    if (got === TIMEOUT || !Array.isArray(got) || got.length !== confirming) return "unrecorded";
+    if (got.some((a) => a?.pending === true)) return "pending";
+    return got.every((a) => a?.acknowledged === true) ? "ok" : "unrecorded";
+  } catch { return confirming === 0 ? "ok" : "unrecorded"; }
   finally { if (timer) clearTimeout(timer); }
 }
 /** A send error that proves the transaction never left the RPC node (preflight / blockhash refused); anything else may have landed. */
@@ -632,8 +677,17 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       if (!hasSignature(first)) throw new Error("the wallet returned the transaction without its signature");
       pending = { step: i, signature: bytesToBase58(first), tx: Buffer.from(raw).toString("base64"), blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight, sentAt: Date.now() };
       rec.pending = pending; rec.failed = null; save(); // written BEFORE the send
-      // B-2: the site hears of the send before it happens (bounded wait; never stops the send)
-      if (d.onSent) await reportSent(d.onSent, pending);
+      // B-2: the site hears of the send before it happens. SEC-05: a coin's create is sent only once the site acknowledges recording it;
+      // otherwise the write-ahead record is cleared (this transaction was never sent) and the run stops here, before any broadcast
+      if (d.onSent) {
+        const heard = await reportSent(d.onSent, pending, mintsAt(i).length, d.sentReportWaitMs ?? SENT_REPORT_WAIT_MS);
+        if (heard !== "ok") {
+          // SEC-03 kept honest: a gate read taken for a first step that was never sent is dropped, so the next attempt records its own
+          rec.pending = null; if (i === 0) delete rec.gate; save();
+          const before = signatures.length > 0;
+          return heard === "pending" ? { ...stop(i, "not-sent", sendPendingElsewhereSentence(i, n, before)), pendingElsewhere: true } : { ...stop(i, "not-sent", sendUnrecordedSentence(i, n, before)), unrecorded: true };
+        }
+      }
     } catch (e) {
       const m = (e as Error).message ?? String(e);
       return stop(i, "not-sent", /reject|denied|cancel/i.test(m) ? `Step ${i + 1} of ${n} was not signed in the wallet` : `Step ${i + 1} of ${n} failed. The error was: ${m.slice(0, 200)}`);
@@ -769,6 +823,7 @@ export function failureSentence(r0: SendResult, n: number): string {
   const r = { ...r0, error: r0.error?.replace(/\.+$/, "") };
   const before = r.signatures.length > 0;
   if (r0.closed) return `${r.error}.`;   // A-11: no press can continue it while launches are closed
+  if (r0.unrecorded || r0.pendingElsewhere) return `${r.error}.`;   // SEC-05: the sentence already says what was sent and what to do
   if (r.state === "abandoned") return r0.error ?? "This plan is abandoned. The only safe thing to do is to start the launch again from the review, as a new plan.";
   if (r.state === "sent") return `${r.error}. Pressing the button again checks that transaction on chain first. A new one is built only once the chain shows the old one did not land.${before ? " The steps before it are confirmed on chain." : ""}`;
   if (r.state === "failed") return `${r.error}. ${before ? "The steps before it are confirmed on chain. " : ""}Pressing the button again builds step ${(r.failedAt ?? 0) + 1} of ${n} afresh.`;

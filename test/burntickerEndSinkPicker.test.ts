@@ -247,7 +247,7 @@ describe("the launch state and the page wiring", () => {
     assert.match(page, /burnSol: site\.burnSol\.available/);
     assert.match(page, /\$\{V1\}\/sinks\?network=\$\{realNet\}/);
     assert.match(page, /label: FACT_LABELS\.ends, [^\n]*extra: endChoiceReview/);
-    assert.match(page, /const snapshot = JSON\.stringify\(\{ guide,[^\n]*cardSet, endA, endB, nameAuto, tickerAuto, editedFor, ownImage, note \}\);/);
+    assert.match(page, /const snapshot = JSON\.stringify\(\{ guide,[^\n]*cardSet, endA, endB, nameAuto, tickerAuto, editedFor, ownImage, note, srcSuggest \}\);/);   // PROD-02: the source suggestion is saved too
     for (const k of ["prepareIfCurrent(sentRev", "setEditedFor(", "reviewMatchesDraft(reviewSlot, curRev.current)"]) assert.ok(page.includes(k), k);
     assert.match(picker, /role="radiogroup"/); assert.match(picker, /data-sink-search/); assert.match(picker, /s\.rule/);
     assert.match(card, /f\.extra && <div/); assert.match(card, /data-name-end-choice/); assert.match(page, /<ReviewCard mode="name" endChoice=\{endChoiceBlock\}/);

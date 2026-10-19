@@ -65,6 +65,9 @@ async function compile() {
   const sandbox: Record<string, unknown> = { exports: exp, require: stub, console, Date, Promise, BigInt, setTimeout: (fn: () => void, ms?: number) => h!.addTimer(fn, ms ?? 0), clearTimeout: (id?: number) => h!.clearTimer(id), Error, String, Number, Math, JSON };
   // the page's visibility: undefined unless a test sets harness.doc, so `typeof document` reads as it would without a DOM
   Object.defineProperty(sandbox, "document", { get: () => h?.doc, enumerable: true });
+  // continuous audit 2026-10-19T1919Z SEC-02: the server's copy of a held swap; fetch (and window) exist only when a test sets harness.fetch
+  Object.defineProperty(sandbox, "fetch", { get: () => h?.fetch, enumerable: true });
+  Object.defineProperty(sandbox, "window", { get: () => (h?.fetch ? {} : undefined), enumerable: true });
   vm.runInNewContext(out, sandbox);
   compiled = { Swap: exp.Swap as (p: unknown) => El, bind: (x) => { h = x; } };
   return compiled;
@@ -77,12 +80,15 @@ export class SwapHarness {
   el: El | null = null;
   /** a stand-in for document's visibility (visibilityState and visibilitychange); undefined means no DOM */
   doc: FakeDocument | undefined;
+  /** a stand-in for fetch (the panel's server copy of a held swap); undefined means the panel runs without one. Set it before mount. */
+  fetch: ((url: string, init?: { method?: string; body?: string }) => Promise<{ ok: boolean; json(): Promise<unknown> }>) | undefined;
   Swap: (p: unknown) => El; props: Record<string, unknown>; wallet: FakeWallet; conn: unknown;
   constructor(Swap: (p: unknown) => El, props: Record<string, unknown>, wallet: FakeWallet, conn: unknown) { this.Swap = Swap; this.props = props; this.wallet = wallet; this.conn = conn; }
 
-  static async mount(props: Record<string, unknown>, wallet: FakeWallet, conn: unknown): Promise<SwapHarness> {
+  static async mount(props: Record<string, unknown>, wallet: FakeWallet, conn: unknown, opts: { fetch?: SwapHarness["fetch"] } = {}): Promise<SwapHarness> {
     const c = await compile();
     const h = new SwapHarness(c.Swap, props, wallet, conn);
+    h.fetch = opts.fetch;
     c.bind(h);
     h.render();
     await h.settle();

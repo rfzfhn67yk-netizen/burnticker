@@ -84,7 +84,7 @@ export async function oneShotVoidBy(p: Platform, locked: LockedRule): Promise<st
 }
 import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
 import { launchGuardRefusal, tickerTakenRefusal } from "@/lib/burnticker/launchGuards";
-import { launchPendingRefusal, verifySentCreate } from "@/lib/burnticker/launchPending";
+import { CREATE_SEND_PENDING_MS, LAUNCH_PENDING_CODE, launchPendingRefusal, launchPendingSentence, ownLiveTickerSentence, verifySentCreate } from "@/lib/burnticker/launchPending";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 import { isSingleOfficialSource, singleSourceSentence } from "@/lib/burnticker/singleSource";
 
@@ -1392,15 +1392,27 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
  * sentTx }: the signed transaction, base64). Recorded only for an unlaunched draft, when the transaction is that draft's create signed by
  * its creator and its mint (launchPending.ts verifySentCreate), so nobody else can mark a draft. From then until the send can no longer
  * land, the creator's next prepare of the same ticker is refused as launch-pending. Re-sending the same report is a no-op.
+ *
+ * SEC-05 (continuous audit 2026-10-19): the answer is the acknowledgement the page waits for before it sends the create, so it is
+ * authoritative. 200 only once the draft_sends row is written, naming it: `{ ok: true, recorded: { mint, sentAt }, fresh, signature }`.
+ * 409 launch-pending (or ticker-taken) when another attempt of this creator's ticker on a different mint is recorded and can still land,
+ * has landed, or is live (launchPendingRefusal, then the same judgement again inside the transaction that writes the row, so two racing
+ * reports for two mints cannot both be recorded). 503 when the row cannot be written. Anything but the named row: the page does not send.
  */
-export function markCreateSent(p: Pick<Platform, "registry">, mint: string, sentTx: unknown, now = Date.now()): ApiResult {
+export async function markCreateSent(p: Pick<Platform, "registry" | "market">, mint: string, sentTx: unknown, now = Date.now()): Promise<ApiResult> {
   const t = p.registry.token(mint);
   if (!t) return fail(404, "There is no draft for this mint.");
   if (t.launchTx || (t.status !== "draft" && t.status !== "expired")) return ok({ ok: true, recorded: false, note: "This coin is already launched." });
   const v = verifySentCreate(t, sentTx);
   if (!v.ok) return fail(v.status, v.reason, { code: "sent-refused" });
-  const fresh = p.registry.recordCreateSent(mint, v.signature, now);
-  return ok({ ok: true, recorded: fresh, signature: v.signature });
+  const ticker = t.ticker.trim().replace(/^\$/, "").toUpperCase();
+  const lp = await launchPendingRefusal(p, { creator: t.creator, ticker, exceptMint: mint }, now);
+  if (lp) return fail(lp.status, lp.error, lp.extra);
+  let r: ReturnType<Platform["registry"]["recordCreateSentExclusive"]>;
+  try { r = p.registry.recordCreateSentExclusive(mint, v.signature, CREATE_SEND_PENDING_MS, now); }
+  catch { return fail(503, "This site could not record the launch just now, so it was not sent. Wait a moment, then try again.", { code: "sent-unrecorded" }); }
+  if (!r.ok) return r.live ? fail(409, r.sameCreator ? ownLiveTickerSentence(ticker, r.otherMint) : `There is already a live $${ticker} on this site (mint ${r.otherMint}), and a ticker is one coin here, so this $${ticker} was not sent.`, { code: "ticker-taken", mint: r.otherMint }) :fail(409, launchPendingSentence(ticker, r.otherMint, false), { code: LAUNCH_PENDING_CODE, mint: r.otherMint });
+  return ok({ ok: true, recorded: { mint, sentAt: r.sentAt }, fresh: r.fresh, signature: v.signature });
 }
 
 /**

@@ -118,6 +118,9 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
   // audit 2026-10-15 F2: a signed swap this tab has not seen settle (swap/pending.ts). While it is held nothing else is sent.
   const [pendingBox, setPendingBox] = useState<Keyed<PendingSwap>>(null);
   const [checkingKey, setCheckingKey] = useState<string | null>(null);
+  // continuous audit 2026-10-19T1919Z SEC-02: with no record in this browser, the server's copy is read before a swap is offered.
+  // "reading" holds the swap button; "unknown" (the read failed) refuses a new swap and offers Check again, which reads it again
+  const [recoveryBox, setRecoveryBox] = useState<Keyed<"reading" | "unknown">>(null);
   const store = useMemo(() => browserSwapStore(), []);
   // continuous audit 2026-10-19 SEC-02: the server's copy of a held swap, so a browser cleared after an ambiguous send still finds it
   const remote = useMemo(() => (typeof window !== "undefined" && typeof fetch === "function" ? httpPendingRemote((u, i) => fetch(u, i)) : null), []);
@@ -126,7 +129,7 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
   const market = keyed(marketBox, mKey), marketErr = keyed(marketErrBox, mKey), readErrRaw = keyed(readErrBox, ctxKey), balances = keyed(balBox, ctxKey);
   // review follow-up: once the background retries have run out, the sentence no longer says the panel tries again on its own
   const readErr = readErrRaw && !auto ? (readErrRaw === REFUSAL.networkUnreadable ? REFUSAL.networkUnreadableManual : REFUSAL.readFailedManual) : readErrRaw;
-  const err = keyed(errBox, ctxKey), done = keyed(doneBox, ctxKey), pending = keyed(pendingBox, ctxKey), checking = checkingKey === ctxKey;
+  const err = keyed(errBox, ctxKey), done = keyed(doneBox, ctxKey), pending = keyed(pendingBox, ctxKey), checking = checkingKey === ctxKey, recovery = keyed(recoveryBox, ctxKey);
   const setErr = (m: string | null) => setErrBox(m === null ? null : { key: ctxKey, v: m });
 
   const decimals = market ? (market.kind === "curve" ? market.pool.decimalsA : 6) : 6;
@@ -219,7 +222,10 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
   const balanceNo = quote && balances ? balanceRefusal(side, quote.amountIn, balances, { sol, tokens: tok, ticker: p.ticker }) : null;
   // SEC-02: a browser that does not keep the swap's record cannot swap here (nothing is signed or sent), and the panel says why
   const storeNo = who && !store ? REFUSAL.storageUnavailable : null;
-  const blocked = walletNo ?? storeNo ?? readErr ?? marketErr ?? inputNo ?? balanceNo;
+  // 1919Z SEC-02: an earlier swap may still be settling and the site could not check: no new swap until a read answers
+  const recoveryNo = who && recovery === "unknown" ? REFUSAL.recoveryUnknown : null;
+  const blocked = walletNo ?? storeNo ?? recoveryNo ?? readErr ?? marketErr ?? inputNo ?? balanceNo;
+  const recoveryWait = !!who && recovery === "reading";
   const busy = step !== "idle" || pending !== null || checking;
 
   const ctx = useCallback(() => ({ conn: connection, store, remote, network: p.network, mint, owner: wallet.publicKey as PublicKey }), [connection, store, remote, p.network, mint, wallet.publicKey]);
@@ -257,6 +263,17 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
       else if (read && (read as SwapOutcome).kind !== "pending" && key !== live.current) show(read, true, key);
     } finally { setCheckingKey((k) => (k === key ? null : k)); }
   }, [ctx, show]);
+  // SEC-02: no record in this browser: the server's copy of this wallet's held swap, held and settled the same way (1919Z: only an
+  // answer that says there is none clears the way; a failed read leaves the panel refusing with Check again)
+  const readRemote = useCallback(async (network: Network, coin: string, owner: string | null, key: string) => {
+    if (!remote || !owner) { setRecoveryBox((b) => (b && b.key === key ? null : b)); return; }
+    setRecoveryBox({ key, v: "reading" });
+    const r = await loadRemotePending(remote, store, network, coin, owner);
+    if (live.current !== key) { setRecoveryBox((b) => (b && b.key === key ? null : b)); return; }
+    if (r.kind === "unknown") { setRecoveryBox({ key, v: "unknown" }); return; }
+    setRecoveryBox((b) => (b && b.key === key ? null : b));
+    if (r.kind === "held" && !watch.current.current) { watch.current.hold(r.rec); setPendingBox({ key, v: r.rec }); void check(r.rec); }
+  }, [remote, store, check]);
   // the connected wallet's own held swap (review 3c): another wallet's record never shows here or blocks this one
   // (review follow-up) with it, the wallet's kept last outcome from while another wallet was connected, shown once
   useEffect(() => {
@@ -269,16 +286,15 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
       const last = takeOutcome(store, p.network, p.mint, ownerKey) ?? memo ?? null;
       if (last?.done) setDoneBox({ key, v: { signature: last.signature, balance: last.done.balance, earlier: last.done.earlier } });
       else if (last?.err) setErrBox({ key, v: last.err });
-      // SEC-02: no record in this browser: the server's copy of this wallet's held swap, held and settled the same way
-      if (!rec && remote) void loadRemotePending(remote, store, p.network, p.mint, ownerKey).then((r) => { if (r && live.current === key && !watch.current.current) { watch.current.hold(r); setPendingBox({ key, v: r }); void check(r); } });
+      if (!rec) void readRemote(p.network, p.mint, ownerKey, key); else setRecoveryBox((b) => (b && b.key === key ? null : b));
     }, 0);
     return () => clearTimeout(t);
-  }, [store, remote, p.network, p.mint, ownerKey, check]);
+  }, [store, p.network, p.mint, ownerKey, check, readRemote]);
   // review follow-up 2: the check backs off after repeated read errors (PendingWatch.delayMs), instead of every 5 seconds forever
   useEffect(() => { if (!pending) return; let t: ReturnType<typeof setTimeout>, alive = true; const tick = async () => { await check(pending); if (alive) t = setTimeout(tick, watch.current.delayMs()); }; t = setTimeout(tick, watch.current.delayMs()); return () => { alive = false; clearTimeout(t); }; }, [pending, check]);
 
   async function go() {
-    if (!wallet.publicKey || !quote || minOut === null || blocked || busy || amount === null || pending) return;
+    if (!wallet.publicKey || !quote || minOut === null || blocked || busy || recoveryWait || amount === null || pending) return;
     if (!wallet.signTransaction) { setErr(REFUSAL.cannotSign); return; }
     // F04: this swap belongs to the context it was started in; its results are written under that key and dropped if it is not current
     const key = ctxKey, mk = mKey, mine = () => live.current === key;
@@ -308,8 +324,12 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
       } });
       show(out, false, key);
       if (out.kind === "confirmed") { const kept = fresh as Market | null, after = await readMarket(connection, p.network, mint, pool).catch(() => null); if (after ?? kept) setMarketBox({ key: mk, v: (after ?? kept)! }); }
-    } catch (e) { if (mine()) setErrBox({ key, v: String((e as Error).message ?? e) }); }
-    finally { setStep("idle"); }
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      // 1919Z SEC-02: the read before the send failed: the panel shows the unknown state and its Check again, not a one-off error
+      if (msg === REFUSAL.recoveryUnknown) { setRecoveryBox({ key, v: "unknown" }); return; }
+      if (mine()) setErrBox({ key, v: msg });
+    } finally { setStep("idle"); }
   }
 
   const venue = market?.kind === "cpmm" ? SWAP_COPY.poolVenue : SWAP_COPY.curveVenue;
@@ -341,10 +361,11 @@ function Swap(p: TradePanelProps & { network: Network; operatorWallets: string[]
       {quote?.capped && <p className="text-neutral-300">{capLine(sol(quote.amountIn))}</p>}
       <p className="text-[11px] text-neutral-500">{SWAP_COPY.slippageNote}</p>
       {!wallet.connected ? <button type="button" className="bt-launch-btn block w-full text-center" onClick={() => modal.setVisible(true)}>{SWAP_COPY.connect}</button>
-        : <button type="button" className="bt-launch-btn block w-full text-center disabled:opacity-50" disabled={!quote || !!blocked || busy} onClick={() => void go()} data-swap-button>{step !== "idle" ? STEP_TEXT[step] : SWAP_COPY.swapButton}</button>}
+        : <button type="button" className="bt-launch-btn block w-full text-center disabled:opacity-50" disabled={!quote || !!blocked || busy || recoveryWait} onClick={() => void go()} data-swap-button>{step !== "idle" ? STEP_TEXT[step] : SWAP_COPY.swapButton}</button>}
       {wallet.connected && balances && <p className="text-[11px] text-neutral-500">{holdsLine(sol(balances.lamports), tok(balances.tokens), p.ticker)}</p>}
       {(err ?? blocked) && <p className="text-neutral-200" role="alert" data-swap-refusal>{err ?? blocked}</p>}
       {readErr && <button type="button" className="rounded border border-neutral-700 px-2 py-0.5 disabled:opacity-50" disabled={retrying} onClick={() => void retryNow()} data-swap-retry>{retrying ? SWAP_COPY.retrying : SWAP_COPY.tryAgain}</button>}
+      {recoveryNo && <button type="button" className="rounded border border-neutral-700 px-2 py-0.5" onClick={() => void readRemote(p.network, p.mint, ownerKey, ctxKey)} data-swap-recovery-retry>{SWAP_COPY.checkAgain}</button>}
       {pending && <div className="rounded border border-amber-500/60 p-2 text-amber-200" role="status" data-swap-pending>
         <p>{SWAP_COPY.pending} <a className="underline" href={explorerTxUrl(p.network, pending.signature)} rel="noopener" target="_blank">{SWAP_COPY.receiptLink}</a>.</p>
         <button type="button" className="mt-1 rounded border border-neutral-700 px-2 py-0.5 disabled:opacity-50" disabled={checking} onClick={() => void check(pending)}>{checking ? SWAP_COPY.checking : SWAP_COPY.checkAgain}</button>
