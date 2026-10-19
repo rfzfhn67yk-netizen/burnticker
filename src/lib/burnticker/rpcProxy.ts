@@ -80,6 +80,21 @@ export const flightUnderWay = (): boolean => flightsUnderWay > 0;
 export const FLIGHT_RETRY_AFTER_MS = 2 * 60_000;
 
 /**
+ * The proxy's answer when its lane is spent for now (route.ts: 503, JSON-RPC -32005). Prelaunch audit 2026-10-18 F03 review: the swap
+ * panel's Try again may re-read inside a flight only after the ordinary lane refused for THIS reason (a flight read costs 4 or 5 of the
+ * token's FLIGHT_TOKEN_CALLS, which the swap itself needs), so the page has to recognise it; web3.js puts the body in the error text.
+ */
+export const RPC_BUDGET_REFUSAL = "The site has used its network allowance for now. Please try again in a few minutes.";
+/** True when an error (or any error in its `cause` chain) is the proxy's spent-lane refusal. */
+export function isBudgetRefusal(e: unknown): boolean {
+  for (let x: unknown = e, n = 0; x && n < 5; x = (x as { cause?: unknown }).cause, n++) {
+    const m = typeof x === "string" ? x : String((x as { message?: unknown }).message ?? "");
+    if (m.includes("used its network allowance")) return true;
+  }
+  return false;
+}
+
+/**
  * The wallet connection's fetch (ShellWalletProviders, the launch page's WalletProviders): while a send is under way (withFlight), a
  * body made only of FLIGHT_METHODS sent to this site's proxy carries the flight token, fetched once and reused until it is near its
  * expiry. A token that cannot be fetched, or one the proxy refused, is not asked for again for FLIGHT_RETRY_AFTER_MS (no re-mint storm);

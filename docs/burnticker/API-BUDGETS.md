@@ -37,13 +37,23 @@ agree. `test/burntickerApiBudget.test.ts` fails if a source in the code is missi
 - **Lanes on the site's Helius slice (2026-10-15 prelaunch audit C2, tightened after its blind review).** Anonymous traffic could
   spend the site's whole day, after which launch confirmations and wallet sends failed until midnight UTC. The web role's Helius day is
   now split (`LANE_SPLIT` in `apiBudget.ts`), and each lane stops at its own ceiling:
-  - `confirm`, 10% of the day: the launch verifier on the server, reachable from no browser.
-  - `flight`, 15% of the day and a quarter of the rate: a browser swap or launch carrying a flight token from
+  - `confirm`, 10% of the day and 15% of the rate: the launch verifier on the server. Anyone can reach it through
+    `POST /v1/launch/confirm` and the launch page's record of a landed launch (both limited per visitor), so while its rate is spent
+    the verifier reads nothing and answers 503 with the code `confirm-lane-busy` and `Retry-After: 3` instead of queueing a
+    real confirmation behind made-up ones. The sign card retries that answer on its own, up to six times.
+  - `flight`, 15% of the day and a fifth of the rate: a browser swap or launch carrying a flight token from
     `/api/burnticker/rpc/flight`. A token is bound to the visitor that minted it, good for 24 build/send/confirm calls over 10 minutes,
     12 an hour per visitor and 10,000 a day for the whole site (the lane ceiling bounds the spend).
-  - `proxy`, at most 35% of the day and half the rate: the browser proxy without a token. Nothing in it is essential.
+  - `proxy`, at most 35% of the day and half of the shared bucket's rate: the browser proxy without a token. Nothing in it is essential.
   - `general`: every other site read, up to the day less the two reserves, counted without the reserved lanes' spend, so a busy
     confirm or flight lane never holds the pages.
+  - Rates: the confirm and flight lanes each own their slice of the per-second rate and never wait on the shared bucket, which holds
+    the rest (65%). Ordinary readers reserve tokens even when that puts the shared bucket in debt, so before this split a
+    flood of reads made every confirmation and wallet send wait about 19 seconds and then fail as busy.
+  - Sends: Helius's separate send rate is split the same way. A wallet send carrying a flight token has half of the site's send
+    rate to itself; sends through the proxy without a token share the other half with the site's own, so junk sends cannot delay it.
+    Sends without a token are still forwarded: an old WebKit cannot get a token, and a visitor whose token request is refused or
+    whose flight lane is spent falls back to the proxy lane.
 
   Past a ceiling, only the calls that finish a send already in flight (sendTransaction, getSignatureStatuses, getBlockHeight) pass, and
   they still count. The proxy is limited per visitor by calls, not requests (60 at once, then one a second), before its body is read.
@@ -55,7 +65,7 @@ agree. `test/burntickerApiBudget.test.ts` fails if a source in the code is missi
 ## The table
 
 "Budget/day" is the keeper's figure, or another role's where the keeper does not call the source. Each figure is the documented
-limit × 0.6 × the role's share. "Calls per cycle" is counted from the code paths. It is an estimate, not a measurement: from the
+limit × 0.6 × the role's share, except API-Sports: its plan × the role's share (keeper 0.85, web 0.15), with no 0.6 on top. "Calls per cycle" is counted from the code paths. It is an estimate, not a measurement: from the
 first day after deploy, the status lines measure it.
 
 | id | provider | documented limit (source, read 2026-10-13) | where the code calls it | calls per cycle today (estimate) | budget (keeper unless noted) |
@@ -68,7 +78,7 @@ first day after deploy, the status lines measure it.
 | `nhl-api` | NHL api-web.nhle.com | No published limit; house default | `espn.ts` EspnClient.get | 1 to 2 per NHL coin per hourly poll | as `mlb-stats` |
 | `nba-cdn` | NBA cdn.nba.com | No published limit; house default (the feed answers 403 today, `NBA_OFFICIAL_ANSWERS` false) | `espn.ts` EspnClient.get | 0 while it answers 403 | as `mlb-stats` |
 | `espn` | ESPN site endpoints (the soccer scoreboard cross-read) | No published limit; house default | `gameSettle.ts` through EspnClient.get | 1 per soccer settlement read | as `mlb-stats` |
-| `apisports-american-football`, `apisports-football`, `apisports-basketball` | API-Sports (`BURNTICKER_APISPORTS_KEY`), one source per sport's API host (added 2026-10-16, audit F-4; before, these hosts fell under the house default) | Free plan: 100 requests a day and 10 a minute on each sport's API (api-sports.io pricing) | `gameSettle.ts` cross-read (fixtures of a game's date); `espn.ts` EspnClient.apiSportsDays (the NFL day listing while TheSportsDB cannot be read: at most 4 dates, each kept 6 h, today 2 h) | 1 to 2 per game settlement read (each answer kept 30 min); 0 while TheSportsDB answers | keeper 0.85: 51/day, 5.1/min; web 0.15: 9/day, 0.9/min. Spent or refused: settlement counts API-Sports out and a game takes the TheSportsDB-only path |
+| `apisports-american-football`, `apisports-football`, `apisports-basketball` | API-Sports (`BURNTICKER_APISPORTS_KEY`), one source per sport's API host (added 2026-10-16, audit F-4; before, these hosts fell under the house default) | Free plan: 100 requests a day and 10 a minute on each sport's API (api-sports.io pricing) | `gameSettle.ts` cross-read (fixtures of a game's date); `espn.ts` EspnClient.apiSportsDays (the NFL day listing while TheSportsDB cannot be read: at most 4 dates, each kept 6 h, today 2 h) | 1 to 2 per game settlement read (each answer kept 30 min), only from the game's start until API-Sports' final is remembered or 36 hours after the start (`gameSettle.ts` apiSportsWindow, 2026-10-18): about 8 reads per game (a final about 3.5 hours after the start), plus one fresh read to confirm the final when API-Sports is the only source that answers a game coin, so at most about 27 on a day with three NFL game coins, and about 27 a week for three games a week (before the window, every 5-minute cycle read every NFL game coin, about 96 a game a day, and the 51 were spent by 13:00 UTC); 0 for the day listing while TheSportsDB answers | keeper 0.85 of the plan itself (no 0.6 on top, since 2026-10-18; the two factors stacked left 51 a day, spent before the games ended): 85/day, 8.5/min; web 0.15: 15/day, 1.5/min. Spent or refused: settlement counts API-Sports out and a game takes the TheSportsDB-only path |
 | `polymarket-gamma` | Polymarket Gamma | 300 per 10 s on /markets (the tightest endpoint the code reads), 500 on /events, 4,000 general, per IP (docs.polymarket.com/quickstart/introduction/rate-limits). 30/s used | `oracle/polymarket.ts` PolymarketClient.get (the keeper and the site); `verify.ts` | 1 to 3 per Polymarket selector per 5 min poll (cached 10 min); seriesInfo for display 1 per coin per 10 min when discovery is on | keeper 0.6: 10.8/s; web 0.4: 7.2/s |
 | `alchemy-polygon` | Alchemy Polygon Mainnet (app "Burnticker keeper", first in `BURNTICKER_POLYGON_RPC_URLS`) | Free tier: 330 CU/s throughput, 30M CU a month, eth_call 26 CU (Alchemy pricing page, read 2026-10-14) | the same readers as `polygon-rpc` | the same reads as `polygon-rpc`, served here first | 10/s, 100,000/day, half keeper, half web |
 | `polygon-rpc` | Polygon public RPCs (`polygon-bor.publicnode.com`, `1rpc.io/matic`, `polygon-rpc.com`, `polygon-bor-rpc.publicnode.com`, `polygon.drpc.org`; `BURNTICKER_POLYGON_RPC_URLS`) | None published by polygon-rpc.com or publicnode. 1rpc says 1,000/day (its pages conflict: 1,000 or 20,000). dRPC's free-tier figures come from search snippets only. Own limit since 2026-10-14: 4/s, 60/min, 2,000/day, split half keeper, half web (the house 0.5/s refused a launch preflight, which reads a payout with three calls in a row) | `burnKeeper/attesters/polymarketOnchain.ts` rpc() (the payout vector, read by `polymarket.ts` and `verify.ts`) | 3 eth_call + 1 eth_blockNumber per condition read; one read per due game or market settlement | keeper 0.6: 720/day, under 1rpc's 1,000/day even if every call went there |

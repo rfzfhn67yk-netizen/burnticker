@@ -1,3 +1,4 @@
+import { safeParam } from "@/lib/burnticker/safeParam";
 import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { reviewProjection } from "@/lib/burnticker/projection";
 import { feedById, loadFixture, previewFromFixture } from "@/lib/burnticker/catalogue";
@@ -37,8 +38,8 @@ import path from "node:path";
 
 const ZERO = BigInt(0);
 
-/** decodeURIComponent that never throws (a malformed escape is looked up as written, and simply not found). */
-const decode = (s: string): string => { try { return decodeURIComponent(s); } catch { return s; } };
+/** A route param as Next decoded it, never decoded again (audit 2026-10-18 A-42: %2541 answered "A"). */
+const decode = safeParam;
 
 /** A coin by mint address, or by ticker (case-insensitive) when one coin holds it; tickers are not unique (owner 2026-10-12, coinKey.ts). */
 export function findCoin(p: Platform, id: string): CoinLookup { return lookupCoin(p.registry, id); }

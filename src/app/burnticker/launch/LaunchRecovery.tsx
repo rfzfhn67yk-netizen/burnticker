@@ -5,6 +5,10 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { browserPlanStorage, listStoredLaunches, recordFailureSentence, recoverStoredLaunch, storedLaunchSentence, withPlanLock, PLAN_LOCKED_SENTENCE, type StoredLaunch } from "@/lib/burnticker/signPlan";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
+import { retry429 } from "@/lib/burnticker/retry429";
+
+/** Second prelaunch audit 2026-10-18 A-20: the recovery's launch record asks again after a 429, as the signing card's does. */
+const recoveryFetch = retry429((u: string, init: { method: string; headers: Record<string, string>; body: string }) => fetch(u, init));
 import { afterRecoveryCheck, archivePlanRecord, chainReadDeps, nothingSentAbandoned, readLaunchHistory, recoveryErrorSentence, storedLaunchAction, RECOVERY_BUTTON, START_NEW_LINE, type LaunchHistoryEntry, type RecoveryView } from "@/lib/burnticker/launchRecovery";
 
 /**
@@ -36,7 +40,7 @@ export function LaunchRecovery() {
     setBusy(s.key);
     const before = storage.get(s.key);
     try {
-      const locked = await withPlanLock(s.key, () => recoverStoredLaunch(storage, s, chainReadDeps(connection), (u, init) => fetch(u, init), (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage)));
+      const locked = await withPlanLock(s.key, () => recoverStoredLaunch(storage, s, chainReadDeps(connection), recoveryFetch, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage)));
       if (!locked.ran) { setText((t) => ({ ...t, [s.key]: PLAN_LOCKED_SENTENCE })); return; }
       const r = locked.value;
       setText((t) => ({ ...t, [s.key]: r.text }));

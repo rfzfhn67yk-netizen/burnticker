@@ -1,0 +1,15 @@
+[Unit]
+Description=Burnticker log rotation (logs/*.log daily, keep 14, compressed; deploy/logrotate/burnticker) — fired daily by mct-burnticker-logrotate.timer
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/meme-coin-trader
+# The config is the repo's template rendered by scripts/ops/install-burnticker-units.sh; the state file is the service user's own
+# (these are user units: the system logrotate run neither sees these files nor may write their state).
+ExecStart=/usr/sbin/logrotate --state %h/.local/state/burnticker-logrotate.status %h/.config/burnticker/logrotate.conf
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+TimeoutStartSec=600
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-logrotate.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-logrotate.log

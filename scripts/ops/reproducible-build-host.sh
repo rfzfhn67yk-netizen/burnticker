@@ -16,7 +16,7 @@
 # Exit 0 = every built program's executable hash equals the deployed program's hash on mainnet. Exit 1 = a difference (the table says
 # which). Exit 2 = it could not run (wrong architecture, a failed install, a failed build).
 set -euo pipefail
-COMMIT="a8b095fb45e35adf5a4d17763e3417c6cfca248a"
+COMMIT="0482a38a9e96794901ab38baa9a81a801fdaf4b4"
 # pair_curve runs round 4 (it was not upgraded in round 5). It links the burn_receipts crate (its constants, the CPMM pool reader and the
 # TokenConfig type), so building it from a round-5 tree gives other bytes without any change of its own. Public commit 7e7bab58 (2026-10-12)
 # carries exactly the program tree of monorepo 29f6f5de, the source of pair_curve's deployed bytes; pair_curve is built there.
@@ -48,7 +48,7 @@ SHA[pair_curve]="8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded
 EXE[pair_curve]="567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895"
 LIBS=(burn_receipts pair_curve)
 WS="programs/burn-receipts"
-say() { printf '[%s] %s\n' "$(date -u '+%H:%M:%S')" "$*"; }
+say() { printf '[%s] %s\n' "$(date -u '+%H:%M:%SZ')" "$*"; }
 
 [ "$(uname -m)" = x86_64 ] || { echo "this server is $(uname -m): use an x86 server type, not ARM. solana-verify's build image is amd64."; exit 2; }
 

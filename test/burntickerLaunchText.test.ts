@@ -90,7 +90,7 @@ describe("generated, locked, pinned", () => {
     assert.equal((await verifyPinnedMetadata({ ...page.status.pinned!, expectedDescription: "tampered" }, fetchPin)).ok, false);
     assert.equal((await verifyPinnedMetadata({ ...page.status.pinned!, metadataSha256: "0".repeat(64) }, fetchPin)).ok, false);
     // the hosted reference JSON serves the same bytes
-    assert.equal(metadataJson({ ticker: t.ticker, name: t.name, description: metadataDescription(locked, t.description), oneLiner: "", rule: locked.rule, rulesSha256: t.rulesSha, origin: "https://burnticker.com", links: t.links }, meta.imageUri!), new TextDecoder().decode(pinnedBytes));
+    assert.equal(metadataJson({ ticker: t.ticker, mint: t.mint, name: t.name, description: metadataDescription(locked, t.description), oneLiner: "", rule: locked.rule, rulesSha256: t.rulesSha, origin: "https://burnticker.com", links: t.links }, meta.imageUri!), new TextDecoder().decode(pinnedBytes));
   });
 
   test("a failed upload refuses the launch; only BURNTICKER_ALLOW_HOSTED_METADATA falls back to hosted (and says so)", async () => {

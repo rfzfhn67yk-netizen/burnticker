@@ -12,5 +12,5 @@ cd "$(dirname "$0")/../.."
 . ./scripts/load-env.sh
 load_env_local .
 mkdir -p logs
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] starting the second reading signer (cluster ${BURNTICKER_COSIGNER_CLUSTER:-unset})"
+echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] starting the second reading signer (cluster ${BURNTICKER_COSIGNER_CLUSTER:-unset})"
 exec node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-signer.mts "$@"

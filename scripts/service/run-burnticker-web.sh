@@ -10,8 +10,8 @@ load_env_local .
 export PORT="${PORT:-3000}"
 BIND="${MCT_BIND_HOST:-127.0.0.1}"
 if [ ! -f .next/BUILD_ID ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] no production build in .next — ship one from the Mac (docs/burnticker/deploy.md)"
+  echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] no production build in .next — ship one from the Mac (docs/burnticker/deploy.md)"
   exit 1
 fi
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] starting burnticker web on $BIND:$PORT (build $(cat .next/BUILD_ID))"
+echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] starting burnticker web on $BIND:$PORT (build $(cat .next/BUILD_ID))"
 exec ./node_modules/.bin/next start -H "$BIND" -p "$PORT"

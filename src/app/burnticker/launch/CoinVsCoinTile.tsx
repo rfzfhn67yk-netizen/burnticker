@@ -16,7 +16,7 @@ import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { SignCard } from "./SignCard";
 import { MintAddressBlock, useMintPool } from "./MintSearch";
 import { secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
-import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
+import { launchlabPlan, pairCurvePlan, withPlanDeadline } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { PAIR_REVIEW_LINE, winnerTakesBurnFacts } from "@/lib/burnticker/describe";
 import { draftRevision, EMPTY_REVIEW_SLOT, reviewAnswered, reviewFor, reviewMatchesDraft, reviewRequested, REVIEW_UPDATING, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
@@ -207,8 +207,9 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
     return () => clearTimeout(t);
   }, [reviewKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = reviewFor(slot, reviewKey), reviewCurrent = reviewMatchesDraft(slot, reviewKey);
-  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [out, setOut] = useState<{ bundle: Bundle; ticker: string } | null>(null);
-  const signPlan = useMemo(() => (out ? launchlabPlan([out.bundle]) : null), [out]);
+  // F06 (prelaunch audit 2026-10-18): `at` = when this tile received the prepared plan; the plan's deadline is counted from it
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [out, setOut] = useState<{ bundle: Bundle; ticker: string; at: number } | null>(null);
+  const signPlan = useMemo(() => (out ? withPlanDeadline(launchlabPlan([out.bundle]), out.at) : null), [out]);
   const launch = async () => {
     if (!rule || !text || !creator || !reviewMatchesDraft(slot, curRev.current)) return;
     // the UTC day turned since the record was read: read it again for a launch today, then the creator presses Launch again
@@ -227,7 +228,7 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
         return { bundle: (j as { bundle: Bundle }).bundle, kA };
       }));
       if ("stale" in got) { setErr(STALE_PREPARE_SENTENCE); return; }
-      setOut({ bundle: got.ok.kA ? withLocalKey(got.ok.bundle, got.ok.kA) : withServerKey(got.ok.bundle), ticker });
+      setOut({ bundle: got.ok.kA ? withLocalKey(got.ok.bundle, got.ok.kA) : withServerKey(got.ok.bundle), ticker, at: Date.now() });
     } catch (e) { setErr(String((e as Error).message ?? e)); } finally { setBusy(false); }
   };
   const sh = highShares(once);
@@ -289,7 +290,7 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
         mintSearch={<MintAddressBlock pool={mintPool} />}
         summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
         blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
-      {out && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${out.ticker}`} coinHref={(t) => `/burnticker/t/${t}`} />}
+      {out && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${out.ticker}`} coinHref={(t) => `/burnticker/t/${t}`} onStartOver={() => { setOut(null); setErr(null); setNow(Date.now()); }} />}
     </>);
   }
 }
@@ -384,7 +385,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
   const [fp, setFp] = useState<Fingerprint | null>(null);
   const hashLatest = useRef(createLatest()).current;
   // launch integrity 252: the prepared set carries the tickers it was prepared with; the signing card never reads the form again
-  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [out, setOut] = useState<{ pairId: string; a: Bundle; b: Bundle; notes: string[]; tickers: { a: string; b: string } } | null>(null);
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [out, setOut] = useState<{ pairId: string; a: Bundle; b: Bundle; notes: string[]; tickers: { a: string; b: string }; /** F06: when this tile received the plan */ at: number } | null>(null);
   const creator = wallet.publicKey?.toBase58() ?? "";
   // WIRING-SEMANTICS item 72: `now` is re-read whenever the UTC day turns (checked each minute, and again right before Launch), so a
   // draft that crosses 00:00 UTC is rebuilt and re-hashed for the new first day instead of being refused at launch
@@ -445,7 +446,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
   // launch (the owner's cut list); a 409 naming the other venue switches it and the build is retried once.
   const [venue, setVenue] = useState<PairVenue>(pairCurve ? "pair-curve" : "launchlab");
   useEffect(() => { setVenue(pairCurve ? "pair-curve" : "launchlab"); }, [pairCurve]);
-  const [pcOut, setPcOut] = useState<{ pairId: string; pc: PairCurveLaunchBundle; keys: { a: string; b: string } | null; notes: string[]; tickers: { a: string; b: string } } | null>(null);
+  const [pcOut, setPcOut] = useState<{ pairId: string; pc: PairCurveLaunchBundle; keys: { a: string; b: string } | null; notes: string[]; tickers: { a: string; b: string }; /** F06: when this tile received the plan */ at: number } | null>(null);
   const prepared = pcOut ?? out;
   // 2026-10-14 night: the server's two prepared addresses; the in-browser search (MintSearch.tsx) only when it has none ready
   const mintPool = useMintPool();
@@ -473,14 +474,14 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
         if (j.venue === "pair-curve") {
           if (kA && kB && (j.pairCurve.mints.a !== kA.publicKey || j.pairCurve.mints.b !== kB.publicKey)) throw new Error(MINT_MISMATCH_LINE);
           const keysAB = kA && kB ? { a: secretBase58(kA), b: secretBase58(kB) } : { a: secretBase58(serverKeyFor(j.pairCurve.mints.a, j.mintSecretKeys?.a)), b: secretBase58(serverKeyFor(j.pairCurve.mints.b, j.mintSecretKeys?.b)) };
-          setPcOut({ pairId: j.pair.pairId, pc: j.pairCurve, keys: keysAB, notes: j.pair.notes ?? [], tickers });
+          setPcOut({ pairId: j.pair.pairId, pc: j.pairCurve, keys: keysAB, notes: j.pair.notes ?? [], tickers, at: Date.now() });
         }
         else {
           // WIRING-AUDIT12 P1-2: the bundles' rules against the review's prepared rules, before any wallet request
           const A = j.bundles.a as Bundle, B = j.bundles.b as Bundle, prep = reviewFor(slot, reviewKey).review?.prepared ?? null;
           const lines = prep ? await preparedRulesCheckWeb(prep, { a: { text: A.rules.text, sha256: A.rules.sha256, mint: A.mint }, b: { text: B.rules.text, sha256: B.rules.sha256 } }) : [PREPARED_MISSING_LINE];
           if (lines.length) { setErr(lines.join(" ")); onPhase?.("review"); return; }
-          setOut({ pairId: j.pair.pairId, a: kA ? withLocalKey(A, kA) : withServerKey(A), b: kB ? withLocalKey(B, kB) : withServerKey(B), notes: j.pair.notes ?? [], tickers });
+          setOut({ pairId: j.pair.pairId, a: kA ? withLocalKey(A, kA) : withServerKey(A), b: kB ? withLocalKey(B, kB) : withServerKey(B), notes: j.pair.notes ?? [], tickers, at: Date.now() });
         }
       } catch (e) { const nv = venueFrom409(e); if (nv) setVenue(nv); setErr(String((e as Error).message ?? e)); }
     };
@@ -495,7 +496,8 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
   // launch integrity 252: everything the launch body carries, so a change during preparation (a profile link, an image) is seen too
   const prepRev = useRef(""); prepRev.current = draftRevision([reviewKey, fraction, flip, profileRevision(profA), profileRevision(profB)]);
   // the signing plan is built once from the prepared answer (its tickers included) and never from the form
-  const signPlan = useMemo(() => (pcOut ? pairCurvePlan(pcOut.pc, pcOut.keys, pcOut.tickers) : out ? launchlabPlan([out.a, out.b]) : null), [pcOut, out]);
+  // F06 (prelaunch audit 2026-10-18): with its deadline, counted from when this tile received the plan
+  const signPlan = useMemo(() => (pcOut ? withPlanDeadline(pairCurvePlan(pcOut.pc, pcOut.keys, pcOut.tickers), pcOut.at) : out ? withPlanDeadline(launchlabPlan([out.a, out.b]), out.at) : null), [pcOut, out]);
   const seqRef = useRef(0);
   useEffect(() => {
     if (!ruleA) return;
@@ -659,7 +661,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
           summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
           blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
         {!out && !pcOut && <details className="text-xs text-neutral-300"><summary className="cursor-pointer">What this creates, in full</summary><ul className="mt-1 min-w-0 list-disc space-y-0.5 break-words pl-5" aria-label="What this creates" data-derby-facts><li>{realList.length ? `${model.spec.a.symbol} and ${model.spec.b.symbol} are reference feeds. ${realReadSentence({ a: model.spec.a.symbol, b: model.spec.b.symbol }, realList)}` : x.references}</li><li>{x.created}</li><li>{x.window}</li><li>{x.start}</li><li>{x.end}</li><li>{x.tie}</li><li>{x.missing}</li>{flip && <li>{edgeCase(66)}</li>}{flip && <li>{edgeCase(70)}</li>}<li>{edgeCase(72)}</li><li>{edgeCase(62)}</li>{realList.map((r) => <li key={r.ticker} data-burn-real-fact>${r.ticker}: {targetActionSentence(r.symbol)}</li>)}</ul></details>}
-        {prepared && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${prepared.tickers.a} and $${prepared.tickers.b}`} coinHref={(t) => `/burnticker/t/${t}`} />}
+        {prepared && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${prepared.tickers.a} and $${prepared.tickers.b}`} coinHref={(t) => `/burnticker/t/${t}`} onStartOver={() => { setOut(null); setPcOut(null); setErr(null); setNow(Date.now()); }} />}
         {(pcOut || out) && <p className="text-xs"><a className="underline" href={`/burnticker/p/${(pcOut ?? out)!.pairId}`}>Open the pair page →</a></p>}
       </div>
     );

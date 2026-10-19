@@ -18,5 +18,5 @@ load_env_local .
 umask 077
 export BURNTICKER_MINT_BANK_PATH="${BURNTICKER_MINT_BANK_PATH:-data/burnticker-mintbank.db}"
 mkdir -p data logs
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] starting the mint key bank ($BURNTICKER_MINT_BANK_PATH)"
+echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] starting the mint key bank ($BURNTICKER_MINT_BANK_PATH)"
 exec node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-mint-bank.mts "$@"

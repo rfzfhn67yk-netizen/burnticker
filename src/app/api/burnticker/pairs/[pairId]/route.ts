@@ -5,11 +5,15 @@ import { pairDailyText } from "@/lib/launch/dailyPost";
 import { derbyPairBlock } from "@/lib/burnticker/api/derby";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { pairLifecycle, pairSideHrefs } from "@/lib/burnticker/publicPairs";
+import { heavyRefusal, pageLimiter } from "@/lib/burnticker/api/http";
 
 export const dynamic = "force-dynamic";
 
 /** One rivalry pair: both sides' status + receipts + exact rules.json text, the running tally (last settlement with its result, next market) and the share line. */
-export async function GET(_req: Request, { params }: { params: Promise<{ pairId: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ pairId: string }> }) {
+  // audit 2026-10-18 A-38: two full coin-page reads (and the derby block) per request, so the heavy sizes per client
+  const refused = heavyRefusal(req, pageLimiter);
+  if (refused) return refused;
   const { pairId } = await params;
   const p = platform();
   const pair = p.registry.pair(pairId);

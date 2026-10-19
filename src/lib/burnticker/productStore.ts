@@ -6,9 +6,14 @@ import { fold } from "@/lib/burnticker/textMatch";
  * file (kept out of registry.ts; created on first use like the derby store). Nothing here can identify a person: no IP, no user id, no
  * session id, no wallet, no cookie, no third party. docs/burnticker/transparency.md § Privacy says the same.
  *
- *   search_misses   a search that found no card (logged by the server) or found cards but got no "Use this" click before the person
+ *   search misses   a search that found no card (logged by the server) or found cards but got no "Use this" click before the person
  *                   searched again or left (reported by the page): the query folded to plain words (≤ 80 characters; anything that
- *                   looks like a wallet address, an e-mail or a long number dropped), the card count, the reason, the UTC hour.
+ *                   looks like a wallet address, an e-mail or a long number dropped) and the reason, kept as COUNTS (audit 2026-10-18
+ *                   A-41): one row per UTC day and query (search_miss_counts), each count capped at MISS_COUNT_CAP, at most
+ *                   MISS_QUERIES_PER_DAY queries a day (later ones only add to the day's totals in search_miss_days), and both tables
+ *                   pruned after MISS_RETENTION_DAYS. The first version appended one row per miss (search_misses, append-only by
+ *                   trigger): one client at the read bucket's rate wrote about 173,000 rows a day and nothing could delete them. That
+ *                   table is no longer written; its old rows still count in the summary.
  *   launch_timings  per launch draft: how long each wizard step took (seconds between the page's own step timestamps, which are sent
  *                   with the launch bundle request only and kept as durations, never as clock times).
  */
@@ -17,12 +22,20 @@ CREATE TABLE IF NOT EXISTS search_misses (id INTEGER PRIMARY KEY AUTOINCREMENT, 
 CREATE INDEX IF NOT EXISTS search_misses_by_hour ON search_misses (hour);
 CREATE TRIGGER IF NOT EXISTS search_misses_no_update BEFORE UPDATE ON search_misses BEGIN SELECT RAISE(ABORT, 'search_misses: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS search_misses_no_delete BEFORE DELETE ON search_misses BEGIN SELECT RAISE(ABORT, 'search_misses: append-only'); END;
+CREATE TABLE IF NOT EXISTS search_miss_counts (day TEXT NOT NULL, query TEXT NOT NULL, no_card INTEGER NOT NULL DEFAULT 0, no_click INTEGER NOT NULL DEFAULT 0, last_hour TEXT NOT NULL, PRIMARY KEY (day, query));
+CREATE TABLE IF NOT EXISTS search_miss_days (day TEXT PRIMARY KEY, no_card INTEGER NOT NULL DEFAULT 0, no_click INTEGER NOT NULL DEFAULT 0, queries INTEGER NOT NULL DEFAULT 0, over_cap INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS launch_timings (mint TEXT PRIMARY KEY, created_at INTEGER NOT NULL, steps_json TEXT NOT NULL);
 CREATE TRIGGER IF NOT EXISTS launch_timings_no_update BEFORE UPDATE ON launch_timings BEGIN SELECT RAISE(ABORT, 'launch_timings: written once'); END;
 CREATE TRIGGER IF NOT EXISTS launch_timings_no_delete BEFORE DELETE ON launch_timings BEGIN SELECT RAISE(ABORT, 'launch_timings: append-only'); END;
 `;
 
 export type MissReason = "no-card" | "no-click";
+/** The most distinct queries kept for one UTC day; later queries only add to the day's totals. */
+export const MISS_QUERIES_PER_DAY = 2_000;
+/** One query's count for one day stops here (a script repeating one query cannot make it look like the top miss for long). */
+export const MISS_COUNT_CAP = 500;
+/** Days of counts kept; older days are deleted on the first miss of a new day. */
+export const MISS_RETENTION_DAYS = 90;
 /** The wizard's steps in order; a duration is from the previous step to this one. */
 export const STEPS = ["search", "card", "create", "review", "launch"] as const;
 export type Step = (typeof STEPS)[number];
@@ -39,20 +52,47 @@ const pct = (xs: number[], p: number): number | null => { if (!xs.length) return
 
 export class ProductStore {
   private db: DatabaseSync;
+  private prunedDay = "";
   constructor(db: DatabaseSync) { this.db = db; this.db.exec(PRODUCT_SCHEMA); }
-  /** Logs one miss; returns false when the query anonymises to nothing. */
+  /**
+   * Counts one miss (A-41): the day's totals always; the query's own count while the day holds fewer than MISS_QUERIES_PER_DAY queries,
+   * capped at MISS_COUNT_CAP. Returns false when the query anonymises to nothing or the day is full.
+   */
   logMiss(o: { query: string; cards: number; reason: MissReason }, now = Date.now()): boolean {
     const q = anonymiseQuery(o.query);
     if (q.length < 3) return false;
-    this.db.prepare("INSERT INTO search_misses (hour, query, cards, reason) VALUES (?,?,?,?)").run(hourBucket(now), q, Math.max(0, Math.min(99, Math.round(o.cards))), o.reason);
+    const hour = hourBucket(now), day = hour.slice(0, 10), col = o.reason === "no-card" ? "no_card" : "no_click";
+    if (this.prunedDay !== day) this.pruneMisses(now);
+    this.db.prepare(`INSERT INTO search_miss_days (day, ${col}) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET ${col} = ${col} + 1`).run(day);
+    const had = this.db.prepare("SELECT 1 FROM search_miss_counts WHERE day=? AND query=?").get(day, q);
+    if (had) { this.db.prepare(`UPDATE search_miss_counts SET ${col} = MIN(${col} + 1, ?), last_hour = ? WHERE day=? AND query=?`).run(MISS_COUNT_CAP, hour, day, q); return true; }
+    const d = this.db.prepare("SELECT queries FROM search_miss_days WHERE day=?").get(day) as { queries: number };
+    if (d.queries >= MISS_QUERIES_PER_DAY) { this.db.prepare("UPDATE search_miss_days SET over_cap = over_cap + 1 WHERE day=?").run(day); return false; }
+    this.db.prepare(`INSERT INTO search_miss_counts (day, query, ${col}, last_hour) VALUES (?,?,1,?)`).run(day, q, hour);
+    this.db.prepare("UPDATE search_miss_days SET queries = queries + 1 WHERE day=?").run(day);
     return true;
   }
+  /** Deletes counts older than MISS_RETENTION_DAYS (the count tables carry no append-only trigger). Returns the rows deleted. */
+  pruneMisses(now = Date.now()): number {
+    this.prunedDay = hourBucket(now).slice(0, 10);
+    const cutoff = new Date(now - MISS_RETENTION_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const a = Number(this.db.prepare("DELETE FROM search_miss_counts WHERE day < ?").run(cutoff).changes);
+    const b = Number(this.db.prepare("DELETE FROM search_miss_days WHERE day < ?").run(cutoff).changes);
+    return a + b;
+  }
   missSummary(sinceMs: number, top = 25): { since: string; total: number; noCard: number; noClick: number; queries: { query: string; misses: number; noCard: number; noClick: number; lastHour: string }[] } {
-    const since = hourBucket(sinceMs);
-    const rows = this.db.prepare("SELECT query, reason, hour FROM search_misses WHERE hour >= ? ORDER BY hour").all(since) as { query: string; reason: string; hour: string }[];
+    const since = hourBucket(sinceMs), sinceDay = since.slice(0, 10);
     const by = new Map<string, { query: string; misses: number; noCard: number; noClick: number; lastHour: string }>();
-    for (const r of rows) { const x = by.get(r.query) ?? { query: r.query, misses: 0, noCard: 0, noClick: 0, lastHour: r.hour }; x.misses++; if (r.reason === "no-card") x.noCard++; else x.noClick++; x.lastHour = r.hour; by.set(r.query, x); }
-    return { since, total: rows.length, noCard: rows.filter((r) => r.reason === "no-card").length, noClick: rows.filter((r) => r.reason === "no-click").length, queries: [...by.values()].sort((a, b) => b.misses - a.misses || a.query.localeCompare(b.query)).slice(0, top) };
+    const add = (query: string, noCard: number, noClick: number, hour: string) => { const x = by.get(query) ?? { query, misses: 0, noCard: 0, noClick: 0, lastHour: hour }; x.misses += noCard + noClick; x.noCard += noCard; x.noClick += noClick; if (hour > x.lastHour) x.lastHour = hour; by.set(query, x); };
+    let noCard = 0, noClick = 0;
+    // rows from the first version (one per miss; no longer written)
+    const legacy = this.db.prepare("SELECT query, reason, hour FROM search_misses WHERE hour >= ? ORDER BY hour").all(since) as { query: string; reason: string; hour: string }[];
+    for (const r of legacy) { const c = r.reason === "no-card" ? 1 : 0; add(r.query, c, 1 - c, r.hour); noCard += c; noClick += 1 - c; }
+    // the day counts (whole UTC days: a count carries no hour of its own)
+    for (const r of this.db.prepare("SELECT query, no_card, no_click, last_hour FROM search_miss_counts WHERE day >= ?").all(sinceDay) as { query: string; no_card: number; no_click: number; last_hour: string }[]) add(r.query, r.no_card, r.no_click, r.last_hour);
+    const t = this.db.prepare("SELECT COALESCE(SUM(no_card),0) AS c, COALESCE(SUM(no_click),0) AS k FROM search_miss_days WHERE day >= ?").get(sinceDay) as { c: number; k: number };
+    noCard += Number(t.c); noClick += Number(t.k);
+    return { since, total: noCard + noClick, noCard, noClick, queries: [...by.values()].sort((a, b) => b.misses - a.misses || a.query.localeCompare(b.query)).slice(0, top) };
   }
   /**
    * Stores a draft's step durations once (seconds), with the screens shown and the decisions made from landing to Launch when the page

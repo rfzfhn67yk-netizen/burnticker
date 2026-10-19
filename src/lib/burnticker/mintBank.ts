@@ -5,6 +5,7 @@ import path from "node:path";
 // relative with their extensions so scripts/burnticker-mint-bank.mts loads this file without the alias hook
 import { MINT_SUFFIXES } from "./mintSuffix.ts";
 import { base58, groundMintProblem, type GroundMint } from "./vanityMint.ts";
+import { refuseDefaultDataFileUnderTest } from "./testGuard.ts";
 
 /**
  * THE MINT KEY BANK (owner, 2026-10-14 night: "the BURN vanity address is mandatory. Save them like pump.fun does so they launch
@@ -101,6 +102,7 @@ export class MintBank implements MintBankPort {
 
   constructor(file: string, o: MintBankOptions) {
     this.key = parseBankKey(o.key);   // first: no key, no file is touched
+    refuseDefaultDataFileUnderTest(file, MINT_BANK_DEFAULT_PATH, "mint bank");   // audit A-13: never the checkout's own bank under a test
     this.suffixes = o.suffixes ?? MINT_SUFFIXES;
     this.file = file;
     const mem = file === ":memory:";

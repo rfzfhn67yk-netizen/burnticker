@@ -4,7 +4,7 @@
   "observed": "none",
   "match": true,
   "exitCode": 0,
-  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx --target 4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F --sink-mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX",
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx --target 4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F --sink-mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX",
   "simulationErr": null,
   "errorLogLines": [],
   "stderr": [

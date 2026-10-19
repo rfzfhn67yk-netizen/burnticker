@@ -20,7 +20,7 @@ import { candidateFacts, candidatesPairRule, gamePairFacts, gamePairRule, patter
 import { settledPairFundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { TEMPLATES } from "@/lib/burnticker/templates";
 import { nativeRule, setNativeClients } from "@/lib/burnticker/sources/native";
-import { FIRST_READ_STATUS_KEY, GAME_BURN_DELAY_MS, statusFirstReadStore } from "@/lib/burnticker/sources/gameSettle";
+import { FIRST_READ_STATUS_KEY, GAME_CONFIRM_GAP_MS, statusFirstReadStore } from "@/lib/burnticker/sources/gameSettle";
 import { gameSeries } from "@/lib/burnticker/sources/espn";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
@@ -232,11 +232,11 @@ describe("two teams in one game through the keeper", () => {
     assert.equal(resultAt, firstRead, "settled on the cycle that first read both sources, not 12 hours later");
     assert.equal(results(w).get(20251103)?.winner, w.a.mint);
   });
-  test("owner 2026-10-16: with one source, both coins wait 12 hours from the first read of the final (persisted, shared), and the keeper reads again when it falls due", async () => {
+  test("owner 2026-10-18 evening: with one source, both coins burn once that source shows the same final on a second read (persisted, shared); the keeper reads again for it", async () => {
     const g = game(START, "PHI", "BOS", 120, 100), all = [g, ...FILLER];
     const w = await gameWorld(g);
     setNativeClients({ espn: scheduleClient(all, () => w.clock.now), games: { ...fakeDeps(all, () => w.clock.now), payout: async () => ({ resolved: false, outcome: null }), firstReads: statusFirstReadStore(w.registry, () => w.clock.now) } });
-    const step = 50 * 60_000;   // off the hourly poll grid, so a burn on time needs the due-time read
+    const step = 50 * 60_000;   // off the hourly poll grid
     let firstRead: number | null = null, resultAt: number | null = null;
     while (w.clock.now < Date.parse("2025-11-08T00:00:00Z") && resultAt === null) {
       await runCycle(w.deps);
@@ -246,8 +246,8 @@ describe("two teams in one game through the keeper", () => {
       else w.clock.now += step;
     }
     assert.ok(firstRead !== null && resultAt !== null, w.logs.slice(-8).join("\n"));
-    assert.ok(resultAt! >= firstRead! + GAME_BURN_DELAY_MS, "never before the 12 hours");
-    assert.ok(resultAt! - (firstRead! + GAME_BURN_DELAY_MS) < step, `read on the first cycle at or after the due time (${new Date(resultAt!).toISOString()} vs ${new Date(firstRead! + GAME_BURN_DELAY_MS).toISOString()})`);
+    assert.ok(resultAt! >= firstRead! + GAME_CONFIRM_GAP_MS, "never on the first read alone");
+    assert.ok(resultAt! - firstRead! <= step, `burned on the next read of the same final, not 12 hours later (${new Date(resultAt!).toISOString()} vs first read ${new Date(firstRead!).toISOString()})`);
     assert.equal(results(w).get(20251103)?.winner, w.a.mint);
   });
   test("BOS wins at PHI: the mirror", async () => {

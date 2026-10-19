@@ -4,7 +4,7 @@
   "observed": "none",
   "match": true,
   "exitCode": 0,
-  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts init-kind --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint ~/.config/meme-coin-trader/devnet/r4x-xa-mint.json --rules config/burnkeeper/r4x-xa.rules.json --platform GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf --attester D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn --kind 0",
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts init-kind --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint ~/.config/meme-coin-trader/devnet/r4x-xa-mint.json --rules config/burnkeeper/r4x-xa.rules.json --platform GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf --attester D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn --kind 0",
   "simulationErr": null,
   "errorLogLines": [],
   "stderr": [],

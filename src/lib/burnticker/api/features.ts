@@ -1,3 +1,4 @@
+import { safeParam } from "@/lib/burnticker/safeParam";
 import { tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { fail, ok, okRaw, type ApiResult } from "@/lib/burnticker/api/http";
 import { lookupCoin, sharedTickerBody } from "@/lib/burnticker/coinLookup";
@@ -18,7 +19,8 @@ import type { TokenRow } from "@/lib/burnticker/registry";
  * operator only, never posts). Read-only apart from the operator's "used" marks, which go to their own append-only file.
  */
 const ZERO = BigInt(0);
-const decode = (s: string): string => { try { return decodeURIComponent(s); } catch { return s; } };
+/** A route param as Next decoded it, never decoded again (audit 2026-10-18 A-42: %2541 answered "A"). */
+const decode = safeParam;
 const pageOf = (t: Pick<TokenRow, "mint">): string => coinCanonicalHref(t.mint);
 
 /** One launched coin by mint (or by a ticker one coin holds); a 300 for a shared ticker, a 404 otherwise. Drafts count as found. */

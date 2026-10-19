@@ -54,7 +54,7 @@ export function settlementSections(f: SettlementFacts): { intro: string; section
         "A result counts only when it is final.",
         "A game counts when its feed marks it final.",
         "A game with no Polymarket market and no league feed counts on TheSportsDB alone, once its final score has stood unchanged for 12 hours.",
-        "A game coin burns once two sources agree on the final, or 12 hours after the first final if only one source answers. Every source that reads the game must agree, and a disagreement holds the burn until they do. The game's on-chain settlement counts as one source.",
+        "A game coin burns once two sources agree on the final, or once one source has shown the same final twice a few minutes apart. Every source that reads the game must agree, and a disagreement holds the burn until they do. The game's on-chain settlement counts as one source.",
         `A Polymarket market counts only after its on-chain payout is recorded. That follows UMA's dispute window of about ${hours(f.umaHours)}, and longer if a proposal is disputed.`,
         "A scheduled publisher's number counts when it is posted.",
       ] },
@@ -66,7 +66,7 @@ export function settlementSections(f: SettlementFacts): { intro: string; section
       { id: "times", heading: "Typical times after the event", paragraphs: [
         `Sports results and scheduled data: about ${f.marketPollMin} to ${f.marketPollMin + f.guardMaxMin} minutes.`,
         "A game settled on TheSportsDB alone: about 12 hours after its final score is first read.",
-        "A game coin, or two teams in one game: once two sources agree on the final, or 12 hours after the first final if only one source answers.",
+        "A game coin, or two teams in one game: once two sources agree on the final, or once one source has shown the same final twice a few minutes apart.",
         `Polymarket markets: about ${hours(f.umaHours)}, plus a few minutes.`,
         "$DEFICIT: within about an hour of the read that first sees each new Treasury figure, which is posted on the business day after the day it describes.",
       ] },

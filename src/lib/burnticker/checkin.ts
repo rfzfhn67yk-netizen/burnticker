@@ -4,7 +4,8 @@ import { openRegistry, REGISTRY_FILE, type Registry } from "@/lib/burnticker/reg
 import { attesterStatusLine } from "@/lib/burnticker/fees";
 import { publishSite, toJson } from "@/lib/burnKeeper/statusPage";
 import { computeFeedHealth, type FeedHealth } from "@/lib/burnticker/ops/feedHealth";
-import { conditionLines, conditionsView, readConditionMemory, type ActiveCondition, type ConditionRecord } from "@/lib/burnticker/ops/conditions";
+import { conditionLines, conditionsView, readConditionMemory, type ActiveCondition, type ConditionRecord, type OpsSignals } from "@/lib/burnticker/ops/conditions";
+import { heartbeatLine, type HeartbeatState } from "@/lib/burnticker/ops/heartbeat";
 import { collectSnapshot, devFeeDelta, lamportsToSol, registryAlertRows, solStr, type BurntickerSnapshot, type WebhookState } from "@/lib/burnticker/alerts";
 
 /**
@@ -29,12 +30,18 @@ export interface CheckinInput {
   health?: readonly FeedHealth[] | null;
   /** The keeper's condition memory (ops/conditions.ts CONDITIONS_KEY), for the "recovered" line. */
   conditionMemory?: Readonly<Record<string, ConditionRecord>> | null;
+  /** Second audit A-7: the keeper's unit check and request budget (the alert rows and the last cycle are added here from the input). */
+  signals?: Pick<OpsSignals, "units" | "budget"> | null;
+  /** Second audit A-7: the keeper's off-box heartbeat (ops/heartbeat.ts); absent = not known on this host. */
+  heartbeat?: HeartbeatState | null;
 }
+/** The host signals for the conditions: what the keeper passed, plus a keeper refusal read from the alert rows. */
+const signalsOf = (i: CheckinInput): OpsSignals => ({ ...(i.signals ?? {}), alerts: i.alerts ?? null, lastCycleAt: i.snapshot?.lastCycle?.at ?? null });
 
 export const OPS_SCHEMA = "burnticker.ops/v1";
 /** `conditions`: the active conditions' labels (ops/conditions.ts, the same list the check-in prints); `conditionDetail` and `recovered`
  *  carry the rest (added 2026-10-16, F06; absent in older documents). */
-export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; conditionDetail?: ActiveCondition[]; recovered?: ConditionRecord[]; webhook: WebhookState | null }
+export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; conditionDetail?: ActiveCondition[]; recovered?: ConditionRecord[]; webhook: WebhookState | null; /** added 2026-10-18 (A-7) */ heartbeat?: HeartbeatState | null }
 
 const ago = (now: number, ts: number | null): string => (ts === null || !ts ? "never" : `${Math.round((now - ts) / 60_000)} min ago`);
 
@@ -61,7 +68,8 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
   const feeds = [...new Map(live.map((t) => [t.selectorKey, t])).values()];
   if (feeds.length) out.push(`- feeds: ${feeds.map((t) => `${t.selectorKey} ok ${ago(now, t.feed.lastOkAt)}${t.feed.failures ? ` (${t.feed.failures} failing)` : ""}`).join(" · ")}`);
   // F06: the one aggregator (keeper-level conditions + every source's health), the same list ops.json carries
-  out.push(...conditionLines(conditionsView(s, i.health ?? null, i.conditionMemory ?? {}, now), now));
+  out.push(...conditionLines(conditionsView(s, i.health ?? null, i.conditionMemory ?? {}, now, signalsOf(i)), now));
+  const hb = heartbeatLine(i.heartbeat, now); if (hb) out.push(hb);
   if (i.webhook) out.push(`- alert webhook: ${i.webhook.configured ? `${i.webhook.lastError ? `FAILING (${i.webhook.lastError})` : i.webhook.lastOkAt ? `ok, last delivery ${ago(now, i.webhook.lastOkAt)}` : "configured, nothing delivered yet"}` : "not configured (alerts stay on the Burnticker host; set BURNTICKER_ALERT_WEBHOOK)"}`);
   if (i.alerts === null) out.push(`- bt- alerts last 24 h: unavailable (alert table not readable on this host)`);
   else {
@@ -75,8 +83,8 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
 
 /** The block as the keeper publishes it for other hosts (the check-in there, the owner's phone). */
 export function buildOpsJson(i: CheckinInput & { now: number; host?: string }): OpsJson {
-  const v = conditionsView(i.snapshot, i.health ?? null, i.conditionMemory ?? {}, i.now);
-  return { schema: OPS_SCHEMA, generatedAt: new Date(i.now).toISOString(), host: i.host ?? "burnticker", lines: burntickerCheckinLines(i), conditions: v.active.map((c) => c.label), conditionDetail: v.active, recovered: v.recovered, webhook: i.webhook ?? null };
+  const v = conditionsView(i.snapshot, i.health ?? null, i.conditionMemory ?? {}, i.now, signalsOf(i));
+  return { schema: OPS_SCHEMA, generatedAt: new Date(i.now).toISOString(), host: i.host ?? "burnticker", lines: burntickerCheckinLines(i), conditions: v.active.map((c) => c.label), conditionDetail: v.active, recovered: v.recovered, webhook: i.webhook ?? null, heartbeat: i.heartbeat ?? null };
 }
 export function publishOps(siteDir: string, ops: OpsJson): void { publishSite(siteDir, { "ops.json": toJson(ops) }); }
 

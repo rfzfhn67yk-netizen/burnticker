@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { edgeJson } from "@/lib/burnticker/api/http";
+import { edgeJson, heavyRefusal } from "@/lib/burnticker/api/http";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { checkTargetAdmission, TARGET_MIN_WSOL_RESERVE_LAMPORTS } from "@/lib/burnReceipts/burnTarget";
 import { admissionLine, burnTargetShapeProblems } from "@/lib/burnticker/burnTarget";
@@ -23,6 +23,9 @@ export async function GET(req: Request) {
   const shape = burnTargetShapeProblems({ mint: q.get("mint") ?? "", pool: q.get("pool") ?? "", symbol, feedId: (q.get("feed") ?? "").toLowerCase() });
   const coin = q.get("coin");
   if (shape.length || (coin !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(coin))) return NextResponse.json({ ok: false, problems: [...shape, ...(coin !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(coin) ? ["coin must be a base58 address"] : [])] }, { status: 400 });
+  // audit 2026-10-18 A-38: up to four RPC reads per request, so the heavy bucket per client (it had no limit)
+  const refused = heavyRefusal(req);
+  if (refused) return refused;
   ensureWebApiBudget();
   const connection = new Connection(rpcUrlFor(network), budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }));
   try {

@@ -11,7 +11,9 @@ import type { AlertSink } from "@/lib/burnticker/alerts";
  *   bt-unit-failed    ANY `mct-*` user unit in the failed state, and each unit in EXPECTED_UNITS that is not running (stopped, or not
  *                     installed at all), in ONE alert per cycle keyed by the set of units (unitAlerts)
  *   bt-backup-failed  data/backups/last-backup.json (scripts/service/run-burnticker-backup.sh) says the last run failed, or the last good
- *                     run is older than BACKUP_STALE_MS (two missed 6-hour runs and a margin)
+ *                     run is older than BACKUP_STALE_MS (two missed 6-hour runs and a margin), or (fourth prelaunch audit, 2026-10-18)
+ *                     the file is missing or unreadable BACKUP_STATUS_GRACE_MS after the keeper started, where the backup timer is
+ *                     installed (its first run is due within six hours, so no status by then means no backup has finished)
  *
  * The units are read with `systemctl --user list-units 'mct-*' --all --plain --no-legend --no-pager`. Where that cannot run (the Mac, a
  * host without a user bus) nothing is raised and the check says so in its note. Both kinds reach the phone (push.ts).
@@ -20,11 +22,27 @@ export interface UnitRow { unit: string; load: string; active: string; sub: stri
 export interface UnitAlert { kind: "bt-unit-failed" | "bt-backup-failed" | "bt-backup-offbox-stale"; key: string; text: string; meta: Record<string, unknown> }
 /** The units the Burnticker host must keep running (install-burnticker-units.sh installs them). */
 export const EXPECTED_UNITS: readonly { unit: string; what: string }[] = [
+  // A-7 (second audit 2026-10-18): the core units too, so a stopped web or $DEFICIT keeper raises an alert (the Burnticker keeper
+  // runs this check, so it is listed for a host where a second keeper instance or a manual check reads the units)
+  { unit: "mct-burnticker-web.service", what: "the Burnticker website" },
+  { unit: "mct-burnticker-keeper.service", what: "the Burnticker keeper (readings and burns)" },
+  { unit: "mct-burnkeeper.service", what: "the $DEFICIT burn keeper" },
   { unit: "mct-burnticker-mintbank.service", what: "the mint key bank (prepared coin addresses for launches)" },
   { unit: "mct-burnticker-synth.timer", what: "the nightly synthetic creator's timer" },
   { unit: "mct-burnticker-backup.timer", what: "the 6-hourly database backup's timer" },
 ];
+/** The units only the PRIMARY host runs (review of A-7): a standby keeper's host serves no site and runs no $DEFICIT keeper. */
+export const PRIMARY_ONLY_UNITS: ReadonlySet<string> = new Set(["mct-burnticker-web.service", "mct-burnkeeper.service"]);
+/** The expected units for this host: all of them on the primary (BURNTICKER_KEEPER_ROLE leader or unset), less PRIMARY_ONLY_UNITS on a standby. */
+export function expectedUnits(env: Readonly<Record<string, string | undefined>>): readonly { unit: string; what: string }[] {
+  const standby = (env.BURNTICKER_KEEPER_ROLE ?? "").trim().toLowerCase() === "standby";
+  return standby ? EXPECTED_UNITS.filter((e) => !PRIMARY_ONLY_UNITS.has(e.unit)) : EXPECTED_UNITS;
+}
 export const BACKUP_STALE_MS = 13 * 3_600_000;
+/** How long after the keeper starts a missing or unreadable backup status is an alert: the 6-hour timer's first run and a margin. */
+export const BACKUP_STATUS_GRACE_MS = 8 * 3_600_000;
+/** The keeper's start, the grace's origin when the caller names none. */
+const PROCESS_STARTED_AT = Date.now();
 /**
  * F-5 re-review: a crash loop under Restart=always never shows "failed". It is caught two ways between consecutive checks: the unit is
  * `activating` (auto-restart) at both, or its NRestarts counter rose by RESTART_LOOP_MIN or more (one restart is a deploy's).
@@ -41,17 +59,31 @@ export function parseRestarts(stdout: string): Map<string, number> {
   }
   return out;
 }
+/** `systemctl --user show -p Id -p Type` output: the units whose Type is oneshot (a timer's job; a long run is not a crash loop). */
+export function parseOneshot(stdout: string): Set<string> {
+  const out = new Set<string>();
+  for (const block of stdout.split(/\n\s*\n/)) {
+    const id = /^Id=(.+)$/m.exec(block)?.[1]?.trim();
+    if (id && /^Type=oneshot$/m.test(block)) out.add(id);
+  }
+  return out;
+}
 export function systemctlShowRestarts(units: readonly string[]): Promise<string> {
   const env = { ...process.env };
   if (!env.XDG_RUNTIME_DIR && typeof process.getuid === "function") env.XDG_RUNTIME_DIR = `/run/user/${process.getuid()}`;
-  return new Promise((res, rej) => execFile("systemctl", ["--user", "show", "-p", "Id", "-p", "NRestarts", ...units], { env, timeout: 5_000, maxBuffer: 256 * 1024 }, (e, stdout) => (e ? rej(e) : res(String(stdout)))));
+  return new Promise((res, rej) => execFile("systemctl", ["--user", "show", "-p", "Id", "-p", "NRestarts", "-p", "Type", ...units], { env, timeout: 5_000, maxBuffer: 256 * 1024 }, (e, stdout) => (e ? rej(e) : res(String(stdout)))));
 }
-/** The crash loops since the last check, and the state for the next one. */
-export function loopingUnits(units: readonly UnitRow[], restarts: Map<string, number> | null, prev: UnitCheckState): { looping: { unit: string; why: string }[]; next: UnitCheckState } {
+/**
+ * The crash loops since the last check, and the state for the next one. A-7 (second audit 2026-10-18): only a unit waiting to restart
+ * (`sub` auto-restart) counts as starting again, so a oneshot timer job in the middle of a long run (publish, backup, audit, the nightly
+ * synthetic creator: `activating start`) is never "restarting over and over"; oneshot units are skipped in both rules.
+ */
+export function loopingUnits(units: readonly UnitRow[], restarts: Map<string, number> | null, prev: UnitCheckState, oneshot: ReadonlySet<string> = new Set()): { looping: { unit: string; why: string }[]; next: UnitCheckState } {
   const looping: { unit: string; why: string }[] = [];
-  const activating = new Set(units.filter((u) => u.active === "activating").map((u) => u.unit));
+  const activating = new Set(units.filter((u) => u.active === "activating" && u.sub === "auto-restart" && !oneshot.has(u.unit)).map((u) => u.unit));
   for (const u of activating) if (prev.activating.has(u)) looping.push({ unit: u, why: "it was starting again at two checks in a row" });
   for (const [u, n] of restarts ?? []) {
+    if (oneshot.has(u)) continue;
     const before = prev.restarts.get(u);
     if (before !== undefined && n - before >= RESTART_LOOP_MIN && !looping.some((x) => x.unit === u)) looping.push({ unit: u, why: `${n - before} restarts since the last check` });
   }
@@ -122,7 +154,18 @@ function backupRunAlerts(s: BackupStatus, now: number): UnitAlert[] {
 }
 
 export function readBackupStatus(root: string): BackupStatus | null {
-  try { const j = JSON.parse(fs.readFileSync(path.join(root, "data", "backups", "last-backup.json"), "utf8")) as BackupStatus; return typeof j?.at === "string" ? j : null; } catch { return null; }
+  return readBackupStatusFile(root).status;
+}
+/** The status, or why there is none: the file is missing, or it is there but not a status this check can read. */
+export function readBackupStatusFile(root: string): { status: BackupStatus | null; problem: "missing" | "malformed" | null } {
+  let raw: string;
+  try { raw = fs.readFileSync(path.join(root, "data", "backups", "last-backup.json"), "utf8"); } catch { return { status: null, problem: "missing" }; }
+  try { const j = JSON.parse(raw) as BackupStatus; return typeof j?.at === "string" ? { status: j, problem: null } : { status: null, problem: "malformed" }; } catch { return { status: null, problem: "malformed" }; }
+}
+/** The alert for no readable backup status (once the grace has passed and the backup timer is installed). */
+export function missingBackupStatusAlert(problem: "missing" | "malformed"): UnitAlert {
+  const why = problem === "missing" ? "The file data/backups/last-backup.json is not there." : "The status file could not be read.";
+  return { kind: "bt-backup-failed", key: "bt-backup-failed", text: `No backup status was found. ${why} So there is no sign that any database backup has finished. Check systemctl --user list-timers mct-burnticker-backup.timer and logs/burnticker-backup.log.`, meta: { problem } };
 }
 
 /** `systemctl --user list-units 'mct-*'` for this user (the runtime dir is named when the environment lacks it). */
@@ -136,23 +179,29 @@ export function systemctlListUnits(): Promise<string> {
  * The keeper's hook (one line in opsCheck): reads the units and the backup status, raises each alert through `sink` (the registry's
  * one-per-key-per-day table, then the webhook), and answers what it raised. Never throws.
  */
-export async function runUnitCheck(o: { sink: AlertSink; now: number; root?: string; listUnits?: () => Promise<string>; showRestarts?: (units: readonly string[]) => Promise<string>; state?: UnitCheckState; log?: (s: string) => void }): Promise<{ raised: UnitAlert[]; note: string | null }> {
+export async function runUnitCheck(o: { sink: AlertSink; now: number; root?: string; listUnits?: () => Promise<string>; showRestarts?: (units: readonly string[]) => Promise<string>; state?: UnitCheckState; log?: (s: string) => void; /** the grace's origin (default: this process's start) */ startedAt?: number; /** the host environment, for the keeper role (default process.env) */ env?: Readonly<Record<string, string | undefined>> }): Promise<{ raised: UnitAlert[]; active: UnitAlert[]; note: string | null }> {
   const alerts: UnitAlert[] = [];
   let note: string | null = null;
+  let backupTimerInstalled = false;
   const state = o.state ?? unitState;
   try {
     const units = parseUnitList(await (o.listUnits ?? systemctlListUnits)());
     const services = units.filter((u) => u.unit.endsWith(".service")).map((u) => u.unit);
-    const restarts = services.length ? await (o.showRestarts ?? systemctlShowRestarts)(services).then(parseRestarts, () => null) : null;
-    const l = loopingUnits(units, restarts, state);
+    const shown = services.length ? await (o.showRestarts ?? systemctlShowRestarts)(services).catch(() => null) : null;
+    const restarts = shown === null ? null : parseRestarts(shown);
+    const l = loopingUnits(units, restarts, state, shown === null ? new Set() : parseOneshot(shown));
     state.activating = l.next.activating; state.restarts = l.next.restarts;
-    alerts.push(...unitAlerts(units, EXPECTED_UNITS, l.looping));
+    alerts.push(...unitAlerts(units, expectedUnits(o.env ?? process.env), l.looping));
+    backupTimerInstalled = units.some((u) => u.unit === "mct-burnticker-backup.timer" && u.load !== "not-found");
   }
   catch (e) { note = `the unit check could not list the units (${String((e as Error)?.message ?? e).slice(0, 120)}); nothing raised for units`; }
-  alerts.push(...backupAlerts(readBackupStatus(o.root ?? process.cwd()), o.now));
+  const b = readBackupStatusFile(o.root ?? process.cwd());
+  alerts.push(...backupAlerts(b.status, o.now));
+  // no readable status at all: said only on the host (the units listed, the backup timer installed), after the timer's first run was due
+  if (b.problem && backupTimerInstalled && o.now - (o.startedAt ?? PROCESS_STARTED_AT) >= BACKUP_STATUS_GRACE_MS) alerts.push(missingBackupStatusAlert(b.problem));
   const raised: UnitAlert[] = [];
   for (const a of alerts) { try { if (await o.sink(a.kind, a.key, a.text, a.meta, o.now)) raised.push(a); } catch { /* the channel failing never stops the keeper */ } }
   if (note && !noted) { noted = true; o.log?.(`  [units] ${note}`); }
-  return { raised, note };
+  return { raised, active: alerts, note };
 }
 let noted = false;

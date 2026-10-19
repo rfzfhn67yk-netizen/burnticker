@@ -23,6 +23,7 @@ export default function BurntickerError({ error, retry, reset }: { error: Error 
       <div className="flex flex-wrap gap-3 text-sm">
         <button type="button" className="bt-launch-btn" onClick={again} data-error-retry>{ERROR_COPY.retry}</button>
         <Link className="underline self-center" href="/burnticker">{ERROR_COPY.coins}</Link>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a full page load on purpose: after an error, nothing of the broken page's state is kept */}
         <a className="underline self-center" href="/">{ERROR_COPY.home}</a>
       </div>
       {error?.digest && <p className="text-xs text-neutral-500 break-all">{ERROR_COPY.reference}: <span className="font-mono">{error.digest}</span></p>}

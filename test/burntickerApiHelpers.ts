@@ -170,7 +170,10 @@ export const ROUTE_MODULES = ROUTES.map((r) => r[1]);
 
 type Handler = (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
 
-/** Calls the v1 route for a URL under API, as Next would (params decoded the way Next passes them: still URL-encoded segments). */
+/**
+ * Calls the v1 route for a URL under API, as Next would: each param decoded ONCE (audit 2026-10-18 A-42: live, /v1/tokens/%2541
+ * answered "no token called A", so Next had decoded the segment and the handler decoded it again; handlers no longer decode).
+ */
 export async function callRoute(url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<Response> {
   const u = new URL(url);
   const rest = u.pathname.replace(/^\/api\/burnticker\/v1/, "");
@@ -181,7 +184,8 @@ export async function callRoute(url: string, init: { method?: string; headers?: 
     const method = (init.method ?? "GET").toUpperCase();
     const h = route[method];
     if (!h) return new Response(JSON.stringify({ error: "method not allowed" }), { status: 405 });
-    const params = Object.fromEntries(names.map((n, i) => [n, m[i + 1]]));
+    const once = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };   // a malformed escape never reaches a route (src/proxy.ts)
+    const params = Object.fromEntries(names.map((n, i) => [n, once(m[i + 1])]));
     return h(new Request(url, { method, headers: { host: HOST, ...(init.headers ?? {}) }, body: init.body }), { params: Promise.resolve(params) });
   }
   return new Response(JSON.stringify({ error: "no route" }), { status: 404 });

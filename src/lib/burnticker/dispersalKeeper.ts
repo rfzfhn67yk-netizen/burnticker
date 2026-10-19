@@ -1,7 +1,7 @@
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { CARRIED_BUDGET_WINDOW_SECS } from "@/lib/burnReceipts/constants";
 import { carriedBudgetReadySec } from "@/lib/burnReceipts/math";
-import { addReading, behind, debtLine, markChunk, nextDueAt, RECEIPTS_KEPT, reconcile, seedOf, stateFromJson, stateToJson, step, type Debt, type DispersalState } from "@/lib/burnticker/dispersal";
+import { addReading, behind, debtLine, keepReceipts, markChunk, nextDueAt, reconcile, seedOf, stateFromJson, stateToJson, step, type Debt, type DispersalState } from "@/lib/burnticker/dispersal";
 
 /**
  * BURN DISPERSAL — THE KEEPER STEP (owner decision 2026-10-13 night; the pure plan is dispersal.ts). One call per coin per keeper wake,
@@ -10,6 +10,10 @@ import { addReading, behind, debtLine, markChunk, nextDueAt, RECEIPTS_KEPT, reco
  *
  *   1. RESOLVE first: a piece whose signature was written ahead of its send is looked up; until it is final no second piece is signed
  *      (it could land beside it). Landed → its own receipt (signature, the program's `carried` memo, the amount from the memo).
+ *      Fourth prelaunch audit F10: a receipt's amount comes ONLY from its own transaction's memo, clamped to the piece's requested
+ *      maximum. While the memo cannot be read the receipt is pending with no amount, and later wakes read it again (a few per wake).
+ *      The change in the coin's carried balance is never a piece's spend: another cranker, a new reading or the rule's end path can
+ *      move it in between. That balance still drives the debts and the plan (step 2 and the window), which follow the chain.
  *   2. ACCOUNT: a new crank cursor means a reading's crank landed; its Reading account says what it spent and carried, and the debts
  *      (one per reading not fully spent) drain oldest-first down to the chain's carried amount. The chain is the record.
  *   3. ALERT once per reading (bt-burn-behind) when it is not fully spent 24 hours after it landed.
@@ -62,8 +66,15 @@ export interface DispersalDeps {
   now(): number;
   dryRun: boolean;
   /** registry.recordAlert (deduped per key per day) — the $DEFICIT keeper logs instead when it has no registry. */
-  alert?(a: { kind: "bt-burn-behind"; key: string; text: string; meta: Record<string, unknown> | null }): void;
+  alert?(a: DispersalAlert): void;
 }
+
+/**
+ * The dispersal step's phone alerts: bt-burn-behind (a reading not fully spent a day after it landed) and bt-dispersal-receipt (a
+ * piece's receipt the keeper cannot settle from its own transaction: its memo unread after three days, or naming more than the piece
+ * asked for). Both reach the phone through push.ts.
+ */
+export interface DispersalAlert { kind: "bt-burn-behind" | "bt-dispersal-receipt"; key: string; text: string; meta: Record<string, unknown> | null }
 
 export interface DispersalReport {
   action: "off" | "idle" | "wait" | "sent" | "landed" | "refused" | "dry-run";
@@ -85,6 +96,25 @@ const spentFromMemo = (memo: string | null): bigint | null => {
   const m = memo ? /\|carried\|.*?\|spent=(\d+)\|/.exec(memo) : null;
   return m ? BigInt(m[1]) : null;
 };
+/** How many pending receipts one wake tries to read (each is one transaction lookup), least recently tried first. */
+export const PENDING_READS_PER_WAKE = 3;
+/** A pending receipt is read again only after min(2^tries minutes, 6 h) since its last try. */
+export const PENDING_BACKOFF_MAX_MS = 6 * 3_600_000;
+/** After this long since the piece landed, an unread memo is given up: one alert, no more lookups. */
+export const PENDING_GIVE_UP_MS = 3 * 24 * 3_600_000;
+export const pendingRetryDelayMs = (tries: number): number => Math.min(2 ** Math.min(tries, 30) * 60_000, PENDING_BACKOFF_MAX_MS);
+/**
+ * A piece's own spend, proven by its transaction's `carried` memo and clamped to what the piece asked for; null when the memo is not
+ * readable (yet). `clamped` says the memo named more than the request: the program caps a piece's spend at its request, so this is a
+ * program bug or the wrong memo picked. The receipt is marked and an alert is raised (clampAlert).
+ */
+async function provenSpend(port: ProgramPort, signature: string, requested: bigint | undefined): Promise<{ memo: string | null; spent: bigint | null; clamped: boolean }> {
+  const memo = await port.memoOf(signature).catch(() => null);
+  const m = spentFromMemo(memo);
+  if (m === null) return { memo, spent: null, clamped: false };
+  return requested !== undefined && m > requested ? { memo, spent: requested, clamped: true } : { memo, spent: m, clamped: false };
+}
+const NOT_READ = "spend not yet read";
 
 export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
   const now = d.now();
@@ -95,6 +125,11 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
     return { ...r, nextDueAt: due, lines: st.debts.map(debtLine), behind: behind(st.debts, now) };
   };
   const port = d.port;
+  const raise = (a: DispersalAlert): void => { if (d.alert) d.alert(a); d.log(`  [alert] ${a.kind} ${a.text}`); };
+  const clampAlert = (signature: string, requested: bigint, p: { clamped: boolean; memo: string | null }): void => {
+    if (!p.clamped) return;
+    raise({ kind: "bt-dispersal-receipt", key: `${d.mint}:${signature}:clamped`, text: `$${d.ticker}: the burn dispersal piece ${signature} has a memo that names more than the piece asked for (${sol(requested)} SOL). Its receipt is recorded at the requested amount and marked for a look. The program should never allow this, so either the program or the memo the keeper read is wrong.`, meta: { mint: d.mint, signature, requestedLamports: requested.toString(), memo: p.memo, reason: "clamped" } });
+  };
   if (!port.planCarried || !port.poolSolReserve) return out({ action: "off", why: "this program client has no crank_carried" });
   const cfg = await port.config();
 
@@ -105,10 +140,12 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
     const f = st.inflight;
     const [s] = await port.signatureStatuses([f.signature]);
     if (s && s.confirmed && !s.err) {
-      const memo = await port.memoOf(f.signature);
-      const spent = spentFromMemo(memo) ?? (cfg && f.carriedBefore > cfg.carriedSpendLamports ? f.carriedBefore - cfg.carriedSpendLamports : cfg ? Z : f.lamports);
-      st = landed(st, f.signature, spent, memo, s.slot, now, f.chunkIndex);
-      d.log(`  [dispersal] $${d.ticker}: a piece landed after a restart: ${sol(spent)} SOL · ${f.signature}`);
+      // F10: the amount is the transaction's own (its memo), never f.carriedBefore − the carried balance now: another cranker, a new
+      // reading or the end path may have moved that balance since the write-ahead. Unread memo → a pending receipt, read again later.
+      const p = await provenSpend(port, f.signature, f.lamports);
+      st = landed(st, f.signature, p, s.slot, now, f.chunkIndex, f.lamports);
+      clampAlert(f.signature, f.lamports, p);
+      d.log(`  [dispersal] $${d.ticker}: a piece landed after a restart: ${p.spent !== null ? `${sol(p.spent)} SOL` : `${NOT_READ} (its transaction's memo is not readable yet; the piece asked for at most ${sol(f.lamports)} SOL); it is read again on later wakes`}${clampNote(p, f.lamports)} · ${f.signature}`);
     } else if (s && s.err) {
       if (st.window && st.window.done === f.chunkIndex) st = { ...st, window: markChunk(st.window, Z) };
       st = { ...st, inflight: null };
@@ -117,6 +154,27 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
       st = { ...st, inflight: null };
       d.log(`  [dispersal] $${d.ticker}: the piece ${f.signature.slice(0, 12)}… expired without landing; it is planned again`);
     } else return out({ action: "wait", why: `piece ${f.signature.slice(0, 12)}… not final yet`, nextDueAt: now + 15_000 });
+  }
+
+  // 1b. READ pending receipts (F10): a landed piece whose memo was not readable when it was recorded. Its amount is filled in only from
+  // its own memo; until then it stays pending. A few per wake, least recently tried first, each only after its backoff
+  // (min(2^tries minutes, 6 h) since the last try). Three days after the piece landed an unread memo is given up: one
+  // bt-dispersal-receipt alert, no more lookups; the receipt stays pending with no amount. A dry run looks nothing up.
+  const due = (r: DispersalState["receipts"][number]): boolean => r.status === "pending" && !r.gaveUpAt && now >= (r.checkedAt ?? r.at) + pendingRetryDelayMs(r.tries ?? 0);
+  const pending = d.dryRun ? [] : st.receipts.filter(due).sort((a, b) => (a.checkedAt ?? a.at) - (b.checkedAt ?? b.at)).slice(0, PENDING_READS_PER_WAKE);
+  for (const r of pending) {
+    const p = await provenSpend(port, r.signature, r.requestedLamports);
+    const tries = (r.tries ?? 0) + 1;
+    const gaveUp = p.spent === null && now - r.at >= PENDING_GIVE_UP_MS;
+    st = { ...st, receipts: st.receipts.map((x) => (x.signature !== r.signature ? x : p.spent !== null
+      ? { ...x, status: "landed" as const, spentLamports: p.spent, memo: p.memo, checkedAt: now, tries, ...(p.clamped ? { clamped: true } : {}) }
+      : { ...x, checkedAt: now, tries, ...(gaveUp ? { gaveUpAt: now } : {}) })) };
+    if (p.spent !== null) {
+      if (r.requestedLamports !== undefined) clampAlert(r.signature, r.requestedLamports, p);
+      d.log(`  [dispersal] $${d.ticker}: the piece ${r.signature.slice(0, 12)}…'s spend is now read: ${sol(p.spent)} SOL${r.requestedLamports !== undefined ? clampNote(p, r.requestedLamports) : ""} · ${r.signature}`);
+    } else if (gaveUp) {
+      raise({ kind: "bt-dispersal-receipt", key: `${d.mint}:${r.signature}:unread`, text: `$${d.ticker}: spend not read for the burn dispersal piece ${r.signature} after three days and ${tries} tries. Its receipt has no amount and the keeper has stopped asking. The coin's carried total still matches the chain.`, meta: { mint: d.mint, signature: r.signature, tries, landedAt: r.at, reason: "unread" } });
+    }
   }
 
   // LIFECYCLE. An ENDED rule is NOT a reason to stop (round-5 review R5-3 / R5-4, the program deployed on mainnet 2026-10-15):
@@ -208,19 +266,31 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
     d.log(`  [dispersal] $${d.ticker}: the piece failed on chain (${c.err.slice(0, 80)}); ${afterRefusal(c.err)}`);
     return out({ action: "refused", why: c.err, signature: tx.signature });
   }
-  const memo = await port.memoOf(tx.signature);
+  // F10: the receipt's amount is the memo's (clamped to the request); the carried balance after only reconciles the debts (aggregate)
+  const p = await provenSpend(port, tx.signature, lamports);
   const after = await port.config();
-  const spent = spentFromMemo(memo) ?? (after && cfg.carriedSpendLamports > after.carriedSpendLamports ? cfg.carriedSpendLamports - after.carriedSpendLamports : lamports);
-  st = landed(st, tx.signature, spent, memo, c.slot, now, idx);
+  st = landed(st, tx.signature, p, c.slot, now, idx, lamports);
+  clampAlert(tx.signature, lamports, p);
   if (after) st = { ...st, debts: reconcile(st.debts, after.carriedSpendLamports, after.crankCursor, now) };
-  d.log(`  [dispersal] $${d.ticker}: spent ${sol(spent)} SOL of the carried amount (piece ${idx + 1} of ${st.window?.chunks.length ?? "?"} this window) · ${tx.signature}${memo ? ` · ${memo}` : ""}`);
-  return out({ action: "landed", signature: tx.signature, spentLamports: spent });
+  const what = p.spent !== null ? `spent ${sol(p.spent)} SOL of the carried amount` : `a piece of at most ${sol(lamports)} SOL landed; ${NOT_READ} (its transaction's memo is not readable yet; it is read again on later wakes)`;
+  d.log(`  [dispersal] $${d.ticker}: ${what}${clampNote(p, lamports)} (piece ${idx + 1} of ${st.window?.chunks.length ?? "?"} this window) · ${tx.signature}${p.memo ? ` · ${p.memo}` : ""}`);
+  return out({ action: "landed", signature: tx.signature, ...(p.spent !== null ? { spentLamports: p.spent } : { why: NOT_READ }) });
 }
 
-function landed(st: DispersalState, signature: string, spent: bigint, memo: string | null, slot: number | null, now: number, chunkIndex: number): DispersalState {
-  const window = st.window && st.window.done === chunkIndex ? markChunk(st.window, spent, now) : st.window ? { ...st.window, expectedCarried: st.window.expectedCarried - spent, lastAtMs: now } : null;
-  const receipts = [...st.receipts, { signature, at: now, spentLamports: spent, throughDate: st.cursor, memo, slot }].slice(-RECEIPTS_KEPT);
-  return { ...st, window, inflight: null, receipts };
+const clampNote = (p: { clamped: boolean }, requested: bigint): string => (p.clamped ? ` (its memo named more than the piece asked for; recorded at the requested ${sol(requested)} SOL)` : "");
+
+/**
+ * Records a landed piece. `spent` is the transaction's proven amount, or null (a pending receipt). The window is a plan, not a record:
+ * an unread piece advances it by its requested size, and the next step re-plans against the chain's carried amount if that differs.
+ */
+function landed(st: DispersalState, signature: string, p: { spent: bigint | null; memo: string | null; clamped: boolean }, slot: number | null, now: number, chunkIndex: number, requested: bigint): DispersalState {
+  const { spent, memo } = p;
+  const planned = spent ?? requested;
+  const window = st.window && st.window.done === chunkIndex ? markChunk(st.window, planned, now) : st.window ? { ...st.window, expectedCarried: st.window.expectedCarried - planned, lastAtMs: now } : null;
+  const receipt = spent !== null
+    ? { signature, at: now, spentLamports: spent, status: "landed" as const, requestedLamports: requested, ...(p.clamped ? { clamped: true } : {}), throughDate: st.cursor, memo, slot }
+    : { signature, at: now, spentLamports: null, status: "pending" as const, requestedLamports: requested, checkedAt: now, tries: 1, throughDate: st.cursor, memo, slot };
+  return { ...st, window, inflight: null, receipts: keepReceipts([...st.receipts.filter((r) => r.signature !== signature), receipt]) };
 }
 
 const sol = (l: bigint): string => (Number(l) / 1e9).toFixed(4);

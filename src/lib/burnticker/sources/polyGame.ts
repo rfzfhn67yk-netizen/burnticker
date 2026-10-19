@@ -2,23 +2,24 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
 import { ourTeam, type EspnClient, type EspnTeam, type Game, type GameSide, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { isGameMoneyline } from "@/lib/burnticker/gameCoin";
-import { GAME_BURN_DELAY_MS, POLY_LEAGUE_TAG, gameSchedule, settleGame, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
+import { GAME_CONFIRM_GAP_MS, POLY_LEAGUE_TAG, confirmingRead, gameKeyOf, gameSchedule, settleGame, type GameDeps, type GamePayout, type ScheduleRead } from "@/lib/burnticker/sources/gameSettle";
 
 /**
  * A POLYMARKET-ORACLE COIN ON ONE GAME (owner, 2026-10-16: ONE burn schedule for every single-game coin; review of b3249737 item 4). A
  * one-market rule (`market`: a condition id) whose market is a sports game moneyline (Gamma sportsMarketType "moneyline", a game start,
  * two team outcomes) used to settle the moment its payout was on chain. It now runs on the game-coin schedule (gameSettle.ts gameSchedule):
  * the resolved payout is a read like any other, TheSportsDB and the league's feed are read for the same game and must agree, and the
- * reading is released as soon as two of them agree on the final, or 12 hours after the final was first read when only one answers. Recurring tag and event series (every game of a team, a
- * whole night) keep their own cadence, like team coins.
+ * reading is released as soon as two of them agree on the final, or, when only one answers, once that one has shown the same final on
+ * two reads a few minutes apart (owner, 2026-10-18 evening: the 12-hour wait is gone; gameSettle.ts GAME_CONFIRM_GAP_MS). Recurring tag
+ * and event series (every game of a team, a whole night) keep their own cadence, like team coins.
  *
  * A soccer yes/no leg of a game's three-way moneyline ("Will Coventry City FC win on 2026-10-12?", gameCoin.ts isGameMoneyline) is one
  * game too. Its outcomes are Yes and No, not two teams, so polyGameOf finds no game and its settlement on chain is the only read: it is
- * released 12 hours after that settlement was first read, on the same record, and never sooner.
+ * released once that settlement has been read the same way twice, GAME_CONFIRM_GAP_MS apart, on the same record.
  *
  * The keeper sets PolymarketClient.gameGate to polyGameGate(...) (scripts/burnticker-keeper.mts); without it (the web, a test) nothing
- * changes. A VOID payout (a split: a postponed or cancelled game) burns nothing; it too waits 12 hours from when it was first read, so a
- * corrected market still counts, and it never anchors a tie that a score read has not seen.
+ * changes. A VOID payout (a split: a postponed or cancelled game) burns nothing; it too is released only when read void again
+ * GAME_CONFIRM_GAP_MS or more after it was first read, and it never anchors a tie that a score read has not seen.
  */
 export interface PolyGameMarket { conditionId: string; question: string; outcomes: string[]; sportsMarketType: string | null; gameStartTime?: string | null; eventSlug: string | null; tags: string[] }
 
@@ -52,22 +53,35 @@ export function polyGameGate(o: { client: () => EspnClient; deps: () => GameDeps
   return async (rule, m, ev) => {
     if (!rule.market || !isGameMoneyline(m)) return { release: true };
     const d = o.deps(), store = d.firstReads ?? null, now = (d.now ?? Date.now)();
-    if (!store) return { release: false, why: "a game market's result waits 12 hours from its first read, and this process keeps no record of that read", dueAt: null, held: false };
+    if (!store) return { release: false, why: "a game market's result is released once it has been read twice, and this process keeps no record of the first read", dueAt: null, held: false };
     const g = polyGameOf(m);
     const key = g ?? { league: "polymarket" as LeagueId, eventId: m.conditionId, startsAt: m.gameStartTime ?? "" };
     if (ev.result === "void") {
-      // nothing burns on a void; it is released 12 hours after it was first read, never anchoring a tie for the score reads
-      const k = `${key.league}:${key.eventId}:void`, mk = store.get(k);
-      if (!mk) { store.set(k, { firstReadAt: now, by: "on-chain payout", winner: "tie", home: null, away: null, ops: ["on-chain payout"] }); return { release: false, why: `the game's market settled void; it is released 12 hours later, at ${new Date(now + GAME_BURN_DELAY_MS).toISOString()}`, dueAt: now + GAME_BURN_DELAY_MS, held: false }; }
-      return now >= mk.firstReadAt + GAME_BURN_DELAY_MS ? { release: true } : { release: false, why: `the game's market settled void; released at ${new Date(mk.firstReadAt + GAME_BURN_DELAY_MS).toISOString()}`, dueAt: mk.firstReadAt + GAME_BURN_DELAY_MS, held: false };
+      // nothing burns on a void; it is released when read void again GAME_CONFIRM_GAP_MS or more after its first read (the record's
+      // anchor; a void on chain does not change), never anchoring a tie for the score reads
+      const k = `${key.league}:${key.eventId}:void`, mk = store.get(k), why = "the game's market settled void; it is released once that is read again a few minutes later";
+      if (!mk) { store.set(k, { firstReadAt: now, by: "on-chain payout", winner: "tie", home: null, away: null, ops: ["on-chain payout"] }); return { release: false, why, dueAt: now + GAME_CONFIRM_GAP_MS, held: false }; }
+      if (now < mk.firstReadAt + GAME_CONFIRM_GAP_MS) return { release: false, why, dueAt: mk.firstReadAt + GAME_CONFIRM_GAP_MS, held: false };
+      // 2026-10-18 review: the confirming read goes to the RPC again (the client caches a resolved vector for good)
+      const again = d.payout ? await d.payout(m.conditionId, { fresh: true }).catch(() => null) : { resolved: true, outcome: null };
+      if (again && again.resolved && again.outcome === null) return { release: true };
+      store.set(k, { ...mk, firstReadAt: now });
+      return { release: false, why: again ? "the game's market read void once and then read otherwise, so it is read again" : "the game's market read void once, and the second read of it failed; it is read again", dueAt: now + GAME_CONFIRM_GAP_MS, held: false };
     }
     const want: "home" | "away" = ev.result === "yes" ? "away" : "home";   // outcome 0 (YES) is the away side in polyGameOf
+    // 2026-10-18 review: the payout's confirming read goes to the RPC again (a resolved vector is otherwise cached for good)
+    const sideOf = (p: GamePayout | null): "home" | "away" | "tie" | null => (!p || !p.resolved ? null : p.outcome === 0 ? "away" : p.outcome === 1 ? "home" : "tie");
     if (!g) {
-      // a league or team our table does not know: the payout alone, on the same 12 hours
-      const h = gameSchedule(store, key, [{ op: "on-chain payout", winner: want, final: null, detail: ev.method ?? "on-chain payout", url: ev.sourceUrl ?? "" }], now);
+      // a league or team our table does not know: the payout alone, on the same rule (read the same way twice)
+      let read: ScheduleRead | null = { op: "on-chain payout", winner: want, final: null, detail: ev.method ?? "on-chain payout", url: ev.sourceUrl ?? "" };
+      if (d.payout && confirmingRead(store.get(gameKeyOf(key)), "on-chain payout", now)) {
+        const p = await d.payout(m.conditionId, { fresh: true }).catch(() => null), side = sideOf(p);
+        read = side ? { ...read, winner: side, ...(p?.fetchedAt !== undefined ? { fetchedAt: p.fetchedAt } : {}) } : null;
+      }
+      const h = gameSchedule(store, key, read ? [read] : [], now);
       return h.kind === "ready" ? { release: true } : h.kind === "held" ? { release: false, why: h.why, dueAt: null, held: true } : { release: false, why: h.why, dueAt: h.dueAt, held: false };
     }
-    const v = await settleGame(o.client(), g, { ...d, market: async () => ({ conditionId: m.conditionId, question: m.question, outcomes: [m.outcomes[0], m.outcomes[1]], url: ev.sourceUrl ?? "" }), payout: async () => ({ resolved: true, outcome: ev.result === "yes" ? 0 : 1 }) }, { schedule: "game" });
+    const v = await settleGame(o.client(), g, { ...d, market: async () => ({ conditionId: m.conditionId, question: m.question, outcomes: [m.outcomes[0], m.outcomes[1]], url: ev.sourceUrl ?? "" }), payout: async (_id, po) => (po?.fresh && d.payout ? d.payout(m.conditionId, po) : { resolved: true, outcome: ev.result === "yes" ? 0 : 1 }) }, { schedule: "game" });
     if (v.kind === "awaiting") return { release: false, why: v.why, dueAt: v.dueAt ?? null, held: false };
     if (v.kind === "held") return { release: false, why: v.why, dueAt: null, held: true };
     if (v.winner !== want) return { release: false, why: `the game's market says ${want === "away" ? m.outcomes[0] : m.outcomes[1]} won ≠ the game's reads say ${v.winner === "tie" ? "a tie" : v.winner === "away" ? m.outcomes[0] : m.outcomes[1]} — held`, dueAt: null, held: true };

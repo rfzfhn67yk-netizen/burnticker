@@ -33,6 +33,29 @@ export function loadPending(store: SwapStore | null, network: Network, mint: str
     return r as PendingSwap;
   } catch { return null; }
 }
+/**
+ * A WALLET'S LAST SWAP OUTCOME, KEPT FOR WHEN IT IS CONNECTED AGAIN (review of prelaunch audit 2026-10-18 F04). The panel shows an
+ * outcome only for the wallet that is connected; one that lands for wallet A while B is connected (a confirmed swap, a failure, the
+ * 24-hour "check your wallet's history" release) is kept here under network:mint:owner and shown, once, when A is connected again.
+ * The text is stored as shown (the panel's own sentences), with the signature for the explorer link.
+ */
+export interface LastOutcome { v: 1; signature: string; done?: { balance: string; earlier: boolean }; err?: string; at?: number }
+export const outcomeKey = (network: Network, mint: string, owner: string): string => `bt-swap-outcome:${network}:${mint}:${owner}`;
+export function saveOutcome(store: SwapStore | null, network: Network, mint: string, owner: string, o: LastOutcome): void {
+  try { store?.setItem(outcomeKey(network, mint, owner), JSON.stringify({ ...o, at: o.at ?? Date.now() })); } catch { /* a full or blocked storage: the panel's memory keeps it */ }
+}
+/** Reads and removes a wallet's kept outcome (shown once); null when there is none or it is unreadable. */
+export function takeOutcome(store: SwapStore | null, network: Network, mint: string, owner: string | null): LastOutcome | null {
+  if (!store || !owner) return null;
+  try {
+    const k = outcomeKey(network, mint, owner), raw = store.getItem(k);
+    if (!raw) return null;
+    store.removeItem(k);
+    const o = JSON.parse(raw) as LastOutcome;
+    return o && o.v === 1 && typeof o.signature === "string" && (typeof o.err === "string" || (o.done && typeof o.done.balance === "string")) ? o : null;
+  } catch { return null; }
+}
+
 export function savePending(store: SwapStore | null, rec: PendingSwap): void { store?.setItem(pendingKey(rec.network, rec.mint, rec.owner), JSON.stringify(rec)); }
 export function clearPending(store: SwapStore | null, network: Network, mint: string, owner: string): void { try { store?.removeItem(pendingKey(network, mint, owner)); } catch { /* a stale record is settled again by its status read */ } }
 

@@ -33,7 +33,12 @@ describe("search-miss telemetry", () => {
     const st = productStore(w.registry.db);
     const sum = st.missSummary(Date.now() - 3_600_000);
     assert.deepEqual(sum.queries.map((q) => [q.query, q.noCard, q.noClick]).sort(), [["rays world series", 0, 1], ["zzqx nothing matches this", 1, 0]]);
+    // audit 2026-10-18 A-41: misses are daily counts now (search_miss_counts); the first version's table keeps its old rows, append-only
+    assert.equal((w.registry.db.prepare("SELECT COUNT(*) AS n FROM search_misses").get() as { n: number }).n, 0);
+    w.registry.db.prepare("INSERT INTO search_misses (hour, query, cards, reason) VALUES (?,?,?,?)").run("2026-10-01T00:00Z", "old row", 0, "no-card");
     assert.throws(() => w.registry.db.exec("DELETE FROM search_misses"), /append-only/);
+    const countCols = (w.registry.db.prepare("PRAGMA table_info(search_miss_counts)").all() as { name: string }[]).map((c) => c.name);
+    assert.deepEqual(countCols, ["day", "query", "no_card", "no_click", "last_hour"], "no IP, no id, no session, no wallet column");
     const cols = (w.registry.db.prepare("PRAGMA table_info(search_misses)").all() as { name: string }[]).map((c) => c.name);
     assert.deepEqual(cols, ["id", "hour", "query", "cards", "reason"], "no IP, no id, no session, no wallet column");
     // the ops summary: refused off the operator's network, refused without the PIN, answered with both

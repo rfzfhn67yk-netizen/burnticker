@@ -159,7 +159,10 @@ async function main(a: RehearsalArgs): Promise<number> {
   if (!teamByAbbr(a.league, a.team)) { console.error(`no ${a.league} team ${a.team}`); return 2; }
   const s = seriesFor(a);
   // the same readers the keeper builds (server.ts platform()), paced and with long caches so the keeper pass re-reads nothing
-  const client = new EspnClient({ minIntervalMs: Number(env.REHEARSAL_SPORTS_MS ?? 900), ttlMs: 24 * 3600_000 });
+  // the game clock first: a game coin's two reads are measured on fetch times, so each fetch is stamped with the moved clock
+  // (fetchClock), and the confirming read after the clock jump is fetched fresh (gameSettle.ts confirmingRead), never the 24 h cache
+  const clock = { t: a.nowMs };
+  const client = new EspnClient({ minIntervalMs: Number(env.REHEARSAL_SPORTS_MS ?? 900), ttlMs: 24 * 3600_000, fetchClock: () => clock.t });
   const rpcUrls = [...(env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(","), env.BURNTICKER_POLYGON_RPC_URL ?? ""].map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
   const poly = new PolymarketClient({ refuse: refuseTitles, minIntervalMs: Number(env.REHEARSAL_GAMMA_MS ?? 500), ttlMs: 24 * 3600_000, ...(rpcUrls.length ? { rpcUrls } : {}) });
   // the keeper's readers over the real client, each lookup traced: the readers try the league's events by START time, then by END date,
@@ -170,13 +173,13 @@ async function main(a: RehearsalArgs): Promise<number> {
     search: (q: string, o?: { status?: "open" | "closed" | "all"; limit?: number }) => via("text search", () => poly.search(q, o)),
     eventsStarting: (slug: string, min: string, max: string) => via("start window", () => poly.eventsStarting(slug, min, max)),
     eventsInWindow: (slug: string, min: string, max: string) => via("end window", () => poly.eventsInWindow(slug, min, max)),
-    readChain: (id: string) => poly.readChain(id),
+    readChain: (id: string, o?: { fresh?: boolean }) => poly.readChain(id, o),
   };
   const readers = polymarketGameReaders(traced);
   let lastLookup: Lookup | null = null, lastMarket: string | null = null;
   // ONE SOURCE (owner 2026-10-14): a game only TheSportsDB can read settles after its final has stood 12 hours. The rehearsal keeps the
   // hold in memory and re-reads such a game once on a clock moved 12 hours on (the reads are cached), so it shows how the keeper settles it.
-  const holds = memoryHoldStore(), clock = { t: a.nowMs };
+  const holds = memoryHoldStore();
   const deps = {
     ...envGameDeps(env),
     holds, now: () => clock.t,
@@ -226,7 +229,7 @@ async function main(a: RehearsalArgs): Promise<number> {
   }
   record.summary = summarise(record.rows);
   record.gameCoin = gameCoin;
-  console.log(`# as game coins: ${gameCoin.settled} settled 12 h after their first read, ${gameCoin.awaiting} waiting, ${gameCoin.held} held`);
+  console.log(`# as game coins: ${gameCoin.settled} settled (two sources agreeing, or one source read twice), ${gameCoin.awaiting} waiting, ${gameCoin.held} held`);
   if (!record.error) {
     const st = windowStatus(s, season, a.nowMs);
     record.window = { ended: st.ended, reason: st.reason, endsAt: st.endsAt, champion: s.window.kind === "meetings" ? "champion: not applicable (rivalry series)" : championRead(s, season, st.champion) };

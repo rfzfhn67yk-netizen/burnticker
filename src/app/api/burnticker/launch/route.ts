@@ -4,7 +4,7 @@ import { pairCurveRequiredFor } from "@/lib/burnticker/pairVenueRule";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { platform } from "@/lib/burnticker/server";
 import { launchesClosedAt, markLaunched, prepareLaunch } from "@/lib/burnticker/api/handlers";
-import { clientKey, edgeJson, fail, limiter, readTextCapped } from "@/lib/burnticker/api/http";
+import { clientKey, edgeJson, fail, limiter, MAX_JSON_BODY, readTextGated } from "@/lib/burnticker/api/http";
 import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
 import { recordLaunchTimings } from "@/lib/burnticker/api/product";
@@ -14,9 +14,13 @@ import { matchesSuffix } from "@/lib/burnticker/mintSuffix";
 import { MINT_BANK_EMPTY_CODE, MINT_BANK_EMPTY_SENTENCE, webMintBank, type MintBankPort } from "@/lib/burnticker/mintBank";
 import { Keypair } from "@solana/web3.js";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
+import { markLaneBusy } from "@/lib/burnticker/confirmBusy";
 import { bodyFingerprint, IDEMPOTENCY_KEY_RE, IdempotentRuns } from "@/lib/burnticker/api/idempotency";
 
 export const dynamic = "force-dynamic";
+
+/** A `launched` record (mint, signature, action) is far below this; a larger body can only be a bundle request (A-42). */
+const LAUNCHED_RECORD_MAX_BYTES = 64 * 1024;
 
 /**
  * GET → the lookup-table pins the signing card checks (launch-10, 2026-10-12): `{ lookupTables: { devnet, mainnet } }`, each
@@ -40,11 +44,27 @@ export async function POST(req: Request) {
   // check here: creators are third parties using the wizard on this origin.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "cross-site request refused", code: "cross-origin" }, { status: 403 });
   let body: Record<string, unknown>;
+  // audit 2026-10-18 A-42: a body larger than a `launched` record can ever be is a bundle request, so it takes its write token BEFORE
+  // the up to 6.5 MB are read and parsed (a refused flood no longer costs a parse each)
+  // Review: the gate runs once the declared length or the bytes actually streamed pass LAUNCHED_RECORD_MAX_BYTES, so a chunked body
+  // cannot skip it; on a closed host it refuses before any token is spent.
+  let writeTaken = false;
+  const gate = (): Response | null => {
+    const shut = globalRefusal(process.env);
+    if (shut) return NextResponse.json(shut.body, { status: shut.status });
+    const early = limiter.take(clientKey(req), "write");
+    if (!early.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.write.human}; retry in ${early.retryAfterSec}s`, code: "rate-limited", retryAfterSec: early.retryAfterSec }, { status: 429, headers: { "retry-after": String(early.retryAfterSec), "ratelimit-limit": String(early.limit), "ratelimit-remaining": "0" } });
+    writeTaken = true;
+    return null;
+  };
   // prelaunch audit M3 (2026-10-15): the body is capped before it is parsed (two 2 MB images as base64, a pair's, plus the rules fit),
   // here at the one parse, so the `launched` record is capped too
-  const text = await readTextCapped(req);
+  const text = await readTextGated(req, MAX_JSON_BODY, LAUNCHED_RECORD_MAX_BYTES, gate);
+  if (text instanceof Response) return text;
   if (text === null) return NextResponse.json({ error: "The request is too large. An image can be at most 2 MB.", code: "too-large" }, { status: 413 });
   try { body = JSON.parse(text); } catch { return NextResponse.json({ error: "invalid JSON body" }, { status: 400 }); }
+  // audit 2026-10-18 A-42: `null`, a number or an array parsed fine and then threw on the first field read (a bare 500)
+  if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "The request body must be a JSON object.", code: "bad-body" }, { status: 400 });
   // AUDIT A C1 (6, 7; findings M1 and H4): `launched` records a launch that is ALREADY SIGNED AND ON CHAIN. It is taken whether launches
   // are open, closed or in preview (closing launches must not strand a coin that exists), and it is metered on the heavy bucket, not the
   // 10-an-hour write bucket (a creator who built a few bundles must still be able to record the one that landed). The chain decides.
@@ -52,14 +72,17 @@ export async function POST(req: Request) {
   // team-picker or back-test reads can never refuse the record of a launch that is on chain (the sign card also retries a 429).
   if (body.action === "launched") {
     const rlc = limiter.take(clientKey(req), "confirm");
-    if (!rlc.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.confirm.human}; retry in ${rlc.retryAfterSec}s`, code: "rate-limited", retryAfterSec: rlc.retryAfterSec }, { status: 429, headers: { "retry-after": String(rlc.retryAfterSec), "ratelimit-limit": String(rlc.limit), "ratelimit-remaining": "0" } });
+    // second audit 2026-10-18 A-19: its own code, so the card does not read it as the coin's signature ceiling (markLaunched's rate-limited)
+    if (!rlc.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.confirm.human}; retry in ${rlc.retryAfterSec}s`, code: "confirm-busy", retryAfterSec: rlc.retryAfterSec }, { status: 429, headers: { "retry-after": String(rlc.retryAfterSec), "ratelimit-limit": String(rlc.limit), "ratelimit-remaining": "0" } });
     const p = platform();
     const bank: MintBankPort | null = p.mintBank !== undefined ? p.mintBank : webMintBank();
     const mint = String(body.mint ?? "");
     const r = await markLaunched(p, mint, String(body.launchTx ?? ""), Date.now(), clientKey(req));
     // the mint is live: its prepared key (if it came from the bank) is spent, and its sealed secret is wiped
     if (r.status === 200) { try { bank?.markCreated(mint); } catch { /* the bank service also marks it from the registry */ } }
-    return edgeJson(r.body, r.status);
+    // review of A-38: the confirm lane's "try again shortly" 503 carries its own code and Retry-After (the sign card retries it)
+    const m = markLaneBusy(r);
+    return edgeJson(m.body, m.status, m.headers ?? {});
   }
   // BURNTICKER_CREATOR_LAUNCHES_ENABLED off (the default): no creator launch — the operator's coins launch through the CLI. In preview
   // mode (BURNTICKER_CREATOR_LAUNCHES_PREVIEW) the refusal says so (code launches-closed, preview: true): nothing builds or sends.
@@ -68,7 +91,7 @@ export async function POST(req: Request) {
   if (closed) return NextResponse.json(closed.body, { status: closed.status });
   // ChatGPT/Codex review N4 (2026-10-10): the same per-client write bucket as /v1/launch/bundle (confirmations have their own, AUDIT A C1) (one shared
   // bucket: a client cannot double its allowance by alternating routes). An Origin header is not authentication; this is the meter.
-  const rl = limiter.take(clientKey(req), "write");
+  const rl = writeTaken ? { ok: true, retryAfterSec: 0, limit: 0 } : limiter.take(clientKey(req), "write");
   if (!rl.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.write.human}; retry in ${rl.retryAfterSec}s`, code: "rate-limited", retryAfterSec: rl.retryAfterSec }, { status: 429, headers: { "retry-after": String(rl.retryAfterSec), "ratelimit-limit": String(rl.limit), "ratelimit-remaining": "0" } });
   const p = platform();
   // launch audit 5 L02: a launch type this host cannot take (sports without its settlement source, pairs off on mainnet) is refused here

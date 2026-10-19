@@ -8,5 +8,5 @@ cd "$(dirname "$0")/../.."
 . ./scripts/load-env.sh
 load_env_local .
 export BURNTICKER_DB="${BURNTICKER_DB:-data/burnticker.db}"
-if [ ! -f "$BURNTICKER_DB" ]; then echo "[$(date '+%Y-%m-%d %H:%M:%S')] no registry at $BURNTICKER_DB yet — nothing to watch"; exit 0; fi
+if [ ! -f "$BURNTICKER_DB" ]; then echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] no registry at $BURNTICKER_DB yet — nothing to watch"; exit 0; fi
 exec node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-clone-watch.mts "$@"

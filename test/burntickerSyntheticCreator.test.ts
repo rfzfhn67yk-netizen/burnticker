@@ -266,6 +266,9 @@ describe("the synthetic creator's exit: scenario failures are the report's, not 
     assert.ok(EXPECTED_UNITS.some((u) => u.unit === "mct-burnticker-synth.timer"));
     assert.ok(!EXPECTED_UNITS.some((u) => u.unit === "mct-burnticker-synth.service"), "the oneshot service is not expected to be running");
     const list = [
+      "mct-burnticker-web.service        loaded active   running Burnticker web",
+      "mct-burnticker-keeper.service     loaded active   running Burnticker multi-token keeper",
+      "mct-burnkeeper.service            loaded active   running Burn keeper for $DEFICIT",
       "mct-burnticker-mintbank.service   loaded active   running Burnticker mint key bank",
       "mct-burnticker-backup.timer       loaded active   waiting Burnticker backup",
       "mct-burnticker-synth.service      loaded inactive dead    Burnticker synthetic creator",

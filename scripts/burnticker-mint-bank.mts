@@ -31,7 +31,7 @@ const here = new URL(import.meta.url);
 if (isMainThread) {
   const args = process.argv.slice(2);
   const opt = (n: string): string | undefined => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : undefined; };
-  const stamp = () => new Date().toLocaleString("sv-SE", { timeZone: "America/Denver" });
+  const stamp = () => `${new Date().toISOString().replace("T", " ").slice(0, 19)}Z`;   // UTC like every Burnticker log (audit A-32)
   const log = (s: string) => console.log(`[${stamp()}] ${s}`);
   const { MintBank, MintBankRefusal, bankHousekeeping, mintBankSettings, MINT_BANK_NO_KEY } = await import("../src/lib/burnticker/mintBank.ts");
   const { groundMintProblem } = await import("../src/lib/burnticker/vanityMint.ts");

@@ -127,6 +127,13 @@ export const POLY_MARKET_RE = /^0x[0-9a-f]{64}$/;
 export const POLY_TAG_SERIES_RE = /^tag:([A-Za-z0-9][A-Za-z0-9-]{0,63})(?:\/([a-z0-9_]{1,40}))?(?::([a-z0-9*][a-z0-9*-]{0,99}))?$/;
 export const POLY_EVENT_SERIES_RE = /^event:([a-z0-9][a-z0-9-]{0,127})$/;
 export const isPolySeries = (s: string): boolean => POLY_TAG_SERIES_RE.test(s) || POLY_EVENT_SERIES_RE.test(s);
+/** Audit 2026-10-18 A-37: the most `*` wildcards an event slug glob may carry (the matcher is linear; the cap keeps rules readable). */
+export const POLY_GLOB_MAX_WILDCARDS = 8;
+/**
+ * How many wildcards the series' event slug glob carries, a run of `*` counted once as the matcher reads it (0 for an event series or a
+ * tag series without a glob).
+ */
+export const polyGlobWildcards = (s: string): number => { const t = POLY_TAG_SERIES_RE.exec(s); return t?.[3] ? t[3].replace(/\*+/g, "*").split("*").length - 1 : 0; };
 export type Direction = "up" | "down" | "abs";
 /** One outcome's burn: a fraction of the fee pool (buyback) OR a count of tokens (vault). Exactly one key. */
 export interface BurnMapping { fractionOfPool?: number; tokens?: number }
@@ -424,6 +431,7 @@ export function validateRule(raw: unknown, o: { stored?: boolean } = {}): BurnRu
   if (r.oracle === "derby") { /* checked above */ }
   else if (r.oracle === "polymarket") {
     if (series !== null && (typeof series !== "string" || !isPolySeries(series))) p.push('polymarket: series must be "tag:<tag slug>[/<market type>][:<event slug glob>]" or "event:<event slug>"');
+    else if (typeof series === "string" && polyGlobWildcards(series) > POLY_GLOB_MAX_WILDCARDS) p.push(`polymarket: the event slug pattern has too many wildcards. Use ${POLY_GLOB_MAX_WILDCARDS} or fewer.`);
     if (market !== null && (typeof market !== "string" || !POLY_MARKET_RE.test(market))) p.push("polymarket: market must be a condition id (0x + 64 lowercase hex)");
     if (r.kind !== "binary") p.push('polymarket: kind must be "binary" (scalar Polymarket markets are not supported in v1)');
     if (r.filter && typeof r.filter === "object" && (r.filter as SelectorFilter).tickerIncludes !== undefined) p.push("polymarket: filter with titleRegex over the market question (tickerIncludes is for Kalshi tickers)");

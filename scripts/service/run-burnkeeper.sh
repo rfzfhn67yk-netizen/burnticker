@@ -36,5 +36,5 @@ load_env_local .
 if [ -z "${BURNKEEPER_SIGNER_PASSPHRASE:-}" ] && [ -z "${AUTONOMOUS_SIGNER_PASSPHRASE:-}" ]; then if PASS="$(node scripts/keychain.mjs read 2>/dev/null)"; then export AUTONOMOUS_SIGNER_PASSPHRASE="$PASS"; fi; fi
 export BURNKEEPER_RULES="${BURNKEEPER_RULES:-config/burnkeeper/deficit.rules.json}"
 export BURNKEEPER_PUBLISH_DIR="${BURNKEEPER_PUBLISH_DIR:-data/burnkeeper-site}"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] starting the burn keeper (rules $BURNKEEPER_RULES, site $BURNKEEPER_PUBLISH_DIR)"
+echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] starting the burn keeper (rules $BURNKEEPER_RULES, site $BURNKEEPER_PUBLISH_DIR)"
 exec node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burn-keeper.mts "$@"

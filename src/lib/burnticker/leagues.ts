@@ -97,7 +97,7 @@ export interface SettledGame {
 }
 
 // one game's span in a title: the score, then everything up to its ESPN link (the settled part is parsed by settledTitle.ts, so a title
-// with no confirmer, or one ending "· burned 12 hours after the final was first read" or "· burned when two sources had confirmed it", still reads; review of b3249737 item 5)
+// with no confirmer, or one ending "· burned when two sources had confirmed it", "· burned when one source had confirmed the final twice" or the old "· burned 12 hours after the final was first read", still reads; review of b3249737 item 5)
 const GAME_RE = /([A-Z0-9]{2,6})(?: (\d+))? @ ([A-Z0-9]{2,6})(?: (\d+))? final \([^)]*\) · (settled on [^]*?) · see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g;
 
 /** The games one reading's title records (one per game that day). */

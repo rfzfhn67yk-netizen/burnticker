@@ -118,7 +118,7 @@ log and the morning block.
 | Burnticker burn run failing | `bt-crank-failed`: one receipt failed three times in a row | The `bt-crank-failed` row above. |
 | Burnticker source down | `bt-feed-down` (audit 2026-10-16 F-5): a source failed three reads in a row; one push per selector per Denver day | The `bt-feed-down` row above. A schedule source (TheSportsDB) down for hours: `grep -i "thesportsdb\|api-sports" logs/burnticker-keeper.log | tail`; the NFL day listing falls back to API-Sports by itself when its key is set. |
 | Burnticker service failed | `bt-unit-failed` (F-5 / F-9, `src/lib/burnticker/ops/unitHealth.ts`, every five minutes): any `mct-*` user unit in the failed state, or the mint bank, the synthetic creator's timer or the backup timer not running or not installed | `journalctl --user -u <unit> -n 50` and its `logs/*.log`; fix it, or remove a unit that does not belong (below), then `systemctl --user reset-failed <unit>`. A unit not installed: `sh scripts/ops/install-burnticker-units.sh`. |
-| Burnticker backup failed | `bt-backup-failed` (F-5 / F-7): `data/backups/last-backup.json` says the last run failed, or no backup finished for 13 hours | `tail logs/burnticker-backup.log`; run it by hand (`sh scripts/service/run-burnticker-backup.sh`). An off-box copy that fails: check `BURNTICKER_BACKUP_DEST` and the key it uses. |
+| Burnticker backup failed | `bt-backup-failed` (F-5 / F-7): `data/backups/last-backup.json` says the last run failed, or no backup finished for 13 hours, or (audit 2026-10-18) the file is missing or unreadable 8 hours after the keeper started ("No backup status was found") | `tail logs/burnticker-backup.log`; run it by hand (`sh scripts/service/run-burnticker-backup.sh`). An off-box copy that fails: check `BURNTICKER_BACKUP_DEST` and the key it uses. |
 | Burnticker backup not copied off the box (low priority) | `bt-backup-offbox-stale`: `BURNTICKER_BACKUP_DEST` is set but no copy has left the box for 24 hours (`lastOffBoxAt` in `data/backups/last-backup.json`); silent while no destination is set | `tail logs/burnticker-backup.log`; check the destination and the key it uses. |
 | Burnticker all quiet (or daily line) | once per Denver day after 08:00 | Nothing, when it says quiet. **A missing daily line means the keeper is not running its alert check**: treat it like the not-publishing push. |
 
@@ -126,8 +126,15 @@ How it works: the keeper reads the registry's `alerts` table on its five-minute 
 `runPushCheck`) and sends a plain-text POST to `BURNTICKER_PUSH_URL` with `Title` and `Priority` headers and
 `Authorization: Bearer <BURNTICKER_PUSH_TOKEN>`. Rate limit: one push per kind per hour and six per hour in all; what is held back is
 counted in the next push and in the daily line, and every alert stays in the registry. Its state is the registry status row
-`push.state`. A failed send is logged as `[push] … not delivered` and never stops the keeper. Unset `BURNTICKER_PUSH_URL`: nothing is
-sent, nothing else changes.
+`push.state`. A failed send is logged as `[push] … not delivered` and never stops the keeper. Only a push the service acknowledged
+counts as sent. A failed one stays in `push.state` as pending and is tried again at the next check, then 5, 15 and 60 minutes apart,
+for up to 24 hours; several pending alerts go out as one "Burnticker alerts not delivered earlier" push. The daily line counts delivered
+alerts only and says how many could not be delivered. Unset `BURNTICKER_PUSH_URL`: nothing is sent, nothing else changes.
+
+Heartbeat (second audit 2026-10-18 A-7): every push above is sent by this host, so a dead host or network is seen by nobody. Set
+`BURNTICKER_STATUS_HEARTBEAT_URL` to an off-box monitor's ping URL (any https endpoint that takes a GET) and have the monitor alarm
+when pings stop. The keeper GETs it after each completed cycle whose errors, if any, are about single coins or fence holds (those have their own alerts; no body, 10-second limit); when the cycle itself failed or every live coin errored it sends a Healthchecks (hc-ping.com) URL plus `/fail`, and nothing to any other monitor. The URL is never logged or published. ops.json and the
+morning block print `- heartbeat: configured, ...` or `- heartbeat: not configured`.
 
 Owner setup (once): create a push topic or app on a phone push service that accepts a plain-text POST with a bearer token, then put
 `BURNTICKER_PUSH_URL=<its https publish address>` and `BURNTICKER_PUSH_TOKEN=<its token>` in the host's environment file (the keeper and
@@ -165,14 +172,15 @@ Every alert that changed anything gets a line in `docs/burnticker/incidents/LOG.
 
 A single-game coin (one team in one game, both coins of two teams in one game, or a one-market Polymarket coin on a game moneyline)
 burns as soon as two independent sources agree on its final (each of TheSportsDB, the market's settlement on chain, the league's feed
-and API-Sports counts once), or 12 hours after its final is first read when only one source answers (owner decisions 2026-10-16;
-`src/lib/burnticker/sources/gameSettle.ts` `gameSchedule`). A tie read on chain (a split, or a soccer draw leg) never counts toward
+and API-Sports counts once), or once one source has shown the same final on two keeper reads at least 4 minutes apart (owner
+decisions 2026-10-16 and 2026-10-18 evening, which dropped the 12-hour wait; `src/lib/burnticker/sources/gameSettle.ts` `gameSchedule`). A tie read on chain (a split, or a soccer draw leg) never counts toward
 the two, so a draw burns early only when two score sources agree on it. A game that has been held by a disagreement or a contradiction, released by
-hand, or has an ignored source always waits the 12 hours. The reading's title says which rule settled it: "burned when two sources had
-confirmed it" or "burned 12 hours after the final was first read". The keeper keeps one record per game in the status table key `games.firstReads`, keyed `league:eventId`: when the final
+hand, or has an ignored source never takes the two-source path: it burns once one source has shown the agreed final twice after the
+hold ends. The reading's title says which rule settled it: "burned when two sources had confirmed it" or "burned when one source had
+confirmed the final twice" (readings written before 2026-10-18 say "burned 12 hours after the final was first read"). The keeper keeps one record per game in the status table key `games.firstReads`, keyed `league:eventId`: when the final
 was first read, by which source, the agreed result, and each source's latest read. When two sources disagree, the record's `disputed`
 list is set and the game is held (`bt-feed-disagree`). It stays held while any source in that list is quiet, and it is released only when
-every one of them reads again and they all agree; agreement after a dispute starts the 12 hours again.
+every one of them reads again and they all agree; after a dispute a source has to show the agreed final twice again.
 
 What to read:
 - `R scripts/burnticker-game-hold.mts --show` lists every record: `HELD (disagreement)`, the first read, the due time, and each source's
@@ -184,7 +192,7 @@ How to resolve: if the sources will catch up (a provider fixing its final, a mar
 that agrees clears the hold. A record can also be `HELD (contradiction)`: one source contradicted itself or the others before a result
 could be compared (two legs of a soccer three-way settlement paying out, a settlement naming neither team, a TheSportsDB row whose team
 order cannot be told, a 90-minute winner on chain while a score read says extra time). It is cleared only when that source reads the game
-again cleanly, and that also starts the 12 hours again.
+again cleanly, and then a source has to show the agreed final twice again.
 
 If one source will never agree (a feed that keeps a wrong final, or a market settled the wrong way on chain, which can never change),
 release it with the guarded script, never by editing the table, and name that source with `--ignore` (the name exactly as `--show`
@@ -198,7 +206,7 @@ systemctl --user start mct-burnticker-keeper
 ```
 
 The release drops the remembered reads that name another winner and every read of an ignored source, clears the dispute or
-contradiction, and starts the 12 hours again from the release, with the note kept on the record. An ignored source is saved on the record
+contradiction, and the game then burns once one source has shown that result twice after the release, with the note kept on the record. An ignored source is saved on the record
 (`ignored`) and its reads are not counted for that game while the record lasts; the game goes on the remaining sources. A source that
 still reads the other result and was not ignored disputes it again on the next cycle. The keeper drops records more than 60 days old,
 but never one that is held or carries an ignore list. A release you make by hand is an incident (INCIDENTS.md §7).

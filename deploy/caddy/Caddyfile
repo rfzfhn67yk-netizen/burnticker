@@ -38,6 +38,8 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-Server
+		# audit 2026-10-18 A-42: reverse_proxy adds "Via: 1.1 Caddy" to every answer; it names the server for nobody's benefit
+		-Via
 	}
 }
 
@@ -51,6 +53,7 @@
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-X-Frame-Options
 		-Server
+		-Via
 	}
 }
 # What a visitor gets while the app is down or slow: pages → /var/www/burnticker/fallback/index.html (deploy-sites.sh writes it from
@@ -92,6 +95,9 @@
 	request_body {
 		max_size 8MB
 	}
+	# A request line whose percent-escapes do not decode (a trailing "%", "%zz") is refused by Go's HTTP server with a bare 400 and a
+	# closed connection before any Caddy handler runs, so no rule here can answer it; Cloudflare shows that as 520 (audit 2026-10-18
+	# A-42, not reproduced against the box). Escapes that reach the app are answered 404 by src/proxy.ts (malformedPath.ts).
 
 	# Embeds first (handle blocks with named matchers run in order): the same upstream, without X-Frame-Options (see security_embed).
 	@embed path /burnticker/embed/*
@@ -99,6 +105,11 @@
 		import security_embed
 		reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
 			header_up X-Forwarded-Proto {scheme}
+			# audit 2026-10-18 A-42: a wedged app gets the static fallback after 20 s here too (it had no timeout)
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 20s
+			}
 		}
 	}
 
@@ -108,6 +119,10 @@
 		rewrite * /burnticker/sitemap.xml
 		reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
 			header_up X-Forwarded-Proto {scheme}
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 20s
+			}
 		}
 	}
 
@@ -187,6 +202,15 @@
 		handle @api_down {
 			import security
 			import app_fallback_api
+		}
+		# audit 2026-10-18 A-42: an embed's fallback may be framed (the page that embeds it shows the outage notice, not a blank frame)
+		@embed_down {
+			path /burnticker/embed/*
+			expression {err.status_code} >= 500
+		}
+		handle @embed_down {
+			import security_embed
+			import app_fallback_page
 		}
 		@app_down {
 			path /burnticker /burnticker/* /_next/*

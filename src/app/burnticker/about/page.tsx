@@ -14,6 +14,7 @@ import { WHY_CREATE } from "@/lib/burnticker/creatorCopy";
 import { RAISE_PRESETS_SOL } from "@/lib/burnticker/launchPresets";
 import { endExplainer } from "@/lib/burnticker/describe";
 import { shareLimitsText } from "@/lib/burnticker/rules";
+import { MISSION_STATEMENT } from "@/lib/burnticker/mission";
 
 const DESCRIPTION = "How Burnticker works: one locked rule per coin, a public result that settles it, a program that burns what the coin's own fees bought back, and a receipt anyone can check.";
 export const metadata: Metadata = {
@@ -43,6 +44,8 @@ export default function AboutPage() {
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-6 text-sm">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">How Burnticker works</h1>
+        {/* the owner-approved mission statement (2026-10-18), one constant for every surface */}
+        <p className="text-neutral-100" data-mission>{MISSION_STATEMENT}</p>
         <p className="text-neutral-300">Burnticker is a launchpad for Solana memecoins. Each coin has one locked rule. When the rule&apos;s result settles, the coin&apos;s own trading fees buy it back on its own pool, and a program burns what they bought. The transaction is the receipt.</p>
       </header>
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PRESS_COPY, PRESS_FILES, PRESS_CONTACT } from "@/lib/burnticker/historyCopy";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { HERO } from "@/lib/burnticker/siteNav.mjs";
+import { MISSION_STATEMENT } from "@/lib/burnticker/mission";
 import { Page, PageHeader, Panel } from "../_components/Panel";
 import { MailSafe } from "../_components/MailSafe";
 
@@ -17,6 +18,9 @@ export default function PressPage() {
   return (
     <Page>
       <PageHeader title={PRESS_COPY.title} intro={`${HERO.title} ${HERO.sub}`} />
+      <Panel title={PRESS_COPY.missionTitle} id="one-paragraph">
+        <p className="bt-body-text" data-mission>{MISSION_STATEMENT}</p>
+      </Panel>
       <Panel title={PRESS_COPY.boilerplateTitle} id="about">
         <p className="bt-body-text" data-boilerplate>{PRESS_COPY.boilerplate}</p>
       </Panel>

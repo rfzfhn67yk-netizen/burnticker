@@ -217,7 +217,7 @@ describe("H7: an error boundary, safe param decoding, and pages that survive odd
     const { safeParam } = await import("@/lib/burnticker/safeParam");
     assert.throws(() => decodeURIComponent("%E0"), URIError);
     assert.equal(safeParam("%E0"), "%E0");
-    assert.equal(safeParam("A%20B"), "A B");
+    assert.equal(safeParam("A%20B"), "A%20B", "audit 2026-10-18 A-42: Next already decoded the param once; it is never decoded again");
     const { resolveLeagueSeason } = await import("@/lib/burnticker/leagues");
     assert.equal(resolveLeagueSeason("%E0", "%E0"), null);
     const { creatorData } = await import("@/lib/burnticker/creatorServe");

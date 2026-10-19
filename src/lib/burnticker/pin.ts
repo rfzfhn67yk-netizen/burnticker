@@ -66,9 +66,19 @@ export class IrysUploader implements PinUploader {
  * (90 to 100 s), and the page's retry then prepared a second draft. Past it the launch is refused like any failed upload.
  */
 export const UPLOAD_TIMEOUT_MS = 30_000;
+/**
+ * Prelaunch audit 2026-10-18 F08: an upload that ran out of time may still have completed (and been paid for) on the other side, so it
+ * is told apart from a plain refusal: the launch handler counts it against the caps and as an unknown file.
+ */
+export class UploadTimeoutError extends Error {
+  readonly uncertain = true as const;
+  constructor(message: string) { super(message); this.name = "UploadTimeoutError"; }
+}
+/** Whether an upload error leaves it unknown whether the file was saved (a timeout, ours or the client's own). */
+export const uploadMayHaveCompleted = (e: unknown): boolean => e instanceof UploadTimeoutError || /did not finish within|timed? ?out|ETIMEDOUT|ECONNRESET|socket hang up/i.test(e instanceof Error ? e.message : String(e));
 export function withUploadTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, rej) => { t = setTimeout(() => rej(new Error(`the Arweave upload did not finish within ${Math.round(ms / 1000)} seconds`)), ms); });
+  const timeout = new Promise<never>((_, rej) => { t = setTimeout(() => rej(new UploadTimeoutError(`the Arweave upload did not finish within ${Math.round(ms / 1000)} seconds`)), ms); });
   return Promise.race([p, timeout]).finally(() => clearTimeout(t));
 }
 
@@ -111,24 +121,52 @@ export function metadataJson(i: PinInput, imageUri: string, imageType = "image/p
   });
 }
 
+/**
+ * Prelaunch audit 2026-10-18 F09: what pinCoin takes. The mint is REQUIRED: the metadata is immutable once the coin exists, and a link
+ * by ticker (the old fallback) can open another coin with the same ticker, or the chooser. The launch handler picks the mint first.
+ */
+export type PinCoinInput = PinInput & { mint: string };
+
+/**
+ * Prelaunch audit 2026-10-18 F08: what the caller learns about each paid upload as it happens, so a later failure (the image saved, the
+ * metadata not) never leaves a paid file unaccounted for. `recall` answers a file already saved with these exact bytes (it is reused, not
+ * uploaded again); `uploaded` hears of each file the moment it is saved; `failed` hears of each upload that threw.
+ */
+export interface PinHooks {
+  recall?(sha256: string, contentType: string): { id: string; url: string } | null;
+  uploaded?(kind: "image" | "metadata", up: { id: string; url: string }, sha256: string, contentType: string): void;
+  failed?(kind: "image" | "metadata", error: unknown): void;
+}
+
 /** Renders the receipt art (PNG through sharp), uploads it, then uploads the metadata JSON naming it. Throws on any failure. */
-export async function pinCoin(uploader: PinUploader, i: PinInput): Promise<PinnedCoin> {
+export async function pinCoin(uploader: PinUploader, i: PinCoinInput, hooks: PinHooks = {}): Promise<PinnedCoin> {
+  if (!i.mint || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(i.mint)) throw new Error("the coin's mint must be chosen before its details are saved");
   const tags = [{ name: "App-Name", value: "Burnticker" }, { name: "Ticker", value: i.ticker }, { name: "Rules-Sha256", value: i.rulesSha256 }];
+  const put = async (kind: "image" | "metadata", bytes: Uint8Array, contentType: string): Promise<{ id: string; url: string }> => {
+    const sha = sha256Hex(bytes);
+    const known = hooks.recall?.(sha, contentType) ?? null;
+    if (known) return known;
+    let up: { id: string; url: string };
+    try { up = await uploader.upload(bytes, contentType, tags); }
+    catch (e) { hooks.failed?.(kind, e); throw e; }
+    hooks.uploaded?.(kind, up, sha, contentType);
+    return up;
+  };
   let imageUri: string, imageTx: string, imageSha256: string;
   let imageType = "image/png";
   if (i.image) {
-    const up = await uploader.upload(i.image.bytes, i.image.contentType, tags);
+    const up = await put("image", i.image.bytes, i.image.contentType);
     imageUri = up.url; imageTx = up.id; imageSha256 = sha256Hex(i.image.bytes); imageType = i.image.contentType;
   } else if (i.imageUrl) { imageUri = i.imageUrl; imageTx = ""; imageSha256 = ""; }
   else {
     const svg = renderCoinSvg({ ticker: i.ticker, oneLiner: i.oneLiner, rule: i.rule, sha256: i.rulesSha256 });
     const sharp = (await import("sharp")).default;
     const png = new Uint8Array(await sharp(Buffer.from(svg)).png().toBuffer());
-    const up = await uploader.upload(png, "image/png", tags);
+    const up = await put("image", png, "image/png");
     imageUri = up.url; imageTx = up.id; imageSha256 = sha256Hex(png);
   }
   const json = metadataJson(i, imageUri, imageType);
-  const up = await uploader.upload(new TextEncoder().encode(json), "application/json", tags);
+  const up = await put("metadata", new TextEncoder().encode(json), "application/json");
   return { metadataUri: up.url, metadataTx: up.id, metadataSha256: sha256Hex(json), metadataJson: json, imageUri, imageTx, imageSha256, hosted: false };
 }
 

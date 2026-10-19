@@ -59,7 +59,9 @@ failure (the old check passed any answer, because `curl -s` exits 0 on an HTTP e
   systemctl --user restart mct-burnticker-web`.
 - Failed: the host moves the new build to `.next-failed`, puts `.next-old` back, restarts the web unit, checks that the previous build
   answers ("ROLLED BACK", or "ROLLBACK DID NOT ANSWER EITHER" when it does not), and the deploy exits 1 without asking the keepers to
-  restart.
+  restart. A restart command that fails on its own (systemctl exits with an error) counts as a failed smoke and takes the same path.
+- The swap back covers only the web build. The source, node_modules and systemd units the deploy already changed stay the new ones, and
+  the script says so when it swaps back. For a complete rollback, run `scripts/ops/rollback-burnticker.sh` with a previous public commit.
 - The deploy's last line says which case it was, from what the host printed: rolled back (the previous build serves, next to the new
   source), the web not healthy, the swap refused, a failure before the swap, or "DEPLOY INCOMPLETE" when the new build passed and a later
   step (the keeper restart request, the static pages) failed. `publish-and-deploy.sh` stops on any of them, after the public commit and

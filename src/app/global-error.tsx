@@ -18,6 +18,7 @@ export default function GlobalError({ error, retry, reset }: { error: Error & { 
           <p style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <button type="button" onClick={() => (retry ?? reset)?.()} style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #ffb000", background: "#ffb000", color: "#12100e", cursor: "pointer" }}>{ERROR_COPY.retry}</button>
             <a href="/burnticker" style={{ color: "#ededed" }}>{ERROR_COPY.coins}</a>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- the root layout failed: a full page load, not a client navigation inside it */}
             <a href="/" style={{ color: "#ededed" }}>{ERROR_COPY.home}</a>
           </p>
           {error?.digest && <p style={{ fontSize: 12, color: "#a3a3a3", wordBreak: "break-all" }}>{ERROR_COPY.reference}: {error.digest}</p>}

@@ -104,7 +104,7 @@ export default function PairPage() {
           </div>
         );
       })}</section>
-      <p className="text-xs text-neutral-500">Burnticker never takes an order or holds funds: a swap goes straight to the coin's own Raydium curve or pool. Each link opens Raydium, set to that coin.</p>
+      <p className="text-xs text-neutral-500">Burnticker never takes an order or holds funds: a swap goes straight to the coin&apos;s own Raydium curve or pool. Each link opens Raydium, set to that coin.</p>
       {(t.clause || preBurn) && <div className="text-sm" aria-label="Both or neither">{t.clause && <><span className={`rounded px-2 py-0.5 text-xs ${t.clause.state === "live" ? "bg-emerald-900 text-emerald-200" : t.clause.state === "voided" ? "bg-red-900 text-red-200" : "bg-amber-900 text-amber-200"}`}>{t.clause.state === "live" ? "live" : t.clause.state === "voided" ? "voided" : `waiting on ${t.clause.waitingOn.length === 1 ? `side ${t.clause.waitingOn[0]}` : "both sides"}`}</span> <span className="text-neutral-400 text-xs">Both or neither. Burns start once both coins have a registered pool. If {t.clause.voidBy} ends (UTC) without both, the pair voids.{t.clause.state === "voided" ? " The rule has ended, and both pools wind down over four weeks." : ""}{t.clause.detail ? ` ${t.clause.detail}` : ""}</span> </>}{preBurn && <span className="text-neutral-400 text-xs" data-burns-after-graduation>{BURNS_AFTER_GRADUATION}</span>}</div>}
 
       <section className={card + " space-y-3"} aria-label="Scoreboard">

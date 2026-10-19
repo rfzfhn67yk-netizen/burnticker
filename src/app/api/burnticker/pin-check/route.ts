@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { platform } from "@/lib/burnticker/server";
-import { clientKey, limiter } from "@/lib/burnticker/api/http";
+import { heavyRefusal, pinCheckLimiter } from "@/lib/burnticker/api/http";
 import { verifyPinnedMetadata } from "@/lib/burnticker/verify";
 import { badgeFromText } from "@/lib/burnticker/describe";
 
@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
  * the page showed ✗ for a sound pin. The page asks here first; its own fetch is a second opinion. Read-only, no-store, rate-limited.
  */
 export async function GET(req: Request) {
-  const rl = limiter.take(clientKey(req), "read");
-  if (!rl.ok) return NextResponse.json({ ok: null, detail: "too many checks from this address; try again in a moment" }, { status: 429, headers: { "retry-after": String(rl.retryAfterSec) } });
+  const refused = heavyRefusal(req, pinCheckLimiter, Date.now(), "read");   // A-38 review: its own limiter at the read sizes (every coin page asks)
+  if (refused) return refused;
   const mint = new URL(req.url).searchParams.get("mint") ?? "";
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return NextResponse.json({ ok: null, detail: "not a mint address" }, { status: 400 });
   const p = platform();

@@ -1,7 +1,12 @@
 import { Buffer } from "buffer";
 import { AddressLookupTableAccount, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedMessage, VersionedTransaction } from "@solana/web3.js";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
+import { CONFIRM_LANE_BUSY_CODE, CONFIRM_LANE_BUSY_RETRY_SEC } from "@/lib/burnticker/confirmBusy";
 import type { SerializedIx } from "@/lib/burnticker/program";
+import { PLAN_EXPIRED_SENTENCE, PLAN_SIGNABLE_MS, planExpired } from "@/lib/burnticker/planAge";
+
+// Prelaunch audit 2026-10-18 F06: the plan-age guard, from the shared runner's own module (every signing entry point imports this one)
+export { planExpired, PLAN_EXPIRED_SENTENCE, PLAN_SIGNABLE_MS };
 
 /**
  * ONE SIGNING PLAN FOR EVERY LAUNCH (2026-10-11, the public-launch blocker: a single LaunchLab coin ended at an unsigned bundle card).
@@ -41,7 +46,30 @@ export interface SignPlan {
   confirmTogether?: boolean;
   /** re-review 5: the venue, stored with the record so a later reader decides `together` from it */
   venue?: "launchlab" | "pair-curve";
+  /**
+   * Prelaunch audit 2026-10-18 F06: the moment (this browser's clock, ms) after which no NEW step of this plan may be signed or sent:
+   * when the page received the prepared plan, plus the drafts' 24-hour window, less the margin (planAge.ts). A step already sent may
+   * still be looked up on chain and recorded after it. Every launch SignCard requires it (PreparedSignPlan); absent = no deadline.
+   */
+  deadlineAt?: number;
 }
+/** A launch plan as every SignCard takes it: with its deadline (F06). */
+export type PreparedSignPlan = SignPlan & { deadlineAt: number };
+/** F06: the plan with its deadline, from when this page received it (`preparedAt`, this browser's clock). */
+export const withPlanDeadline = (plan: SignPlan, preparedAt: number): PreparedSignPlan => ({ ...plan, deadlineAt: preparedAt + PLAN_SIGNABLE_MS });
+/** F06: whether a plan is past its deadline at `now` (the same test as planAge.planExpired, read from the plan itself). No deadline: false. */
+export const planPastDeadline = (plan: Pick<SignPlan, "deadlineAt">, now: number): boolean => typeof plan.deadlineAt === "number" && planExpired(plan.deadlineAt - PLAN_SIGNABLE_MS, now);
+/**
+ * F06 review fix: whether a coin's create step is confirmed on chain (in `done`) but the coin is not recorded yet (`recorded`). Such a
+ * plan is never closed by the deadline: it can still be recorded, and Start over keeps its stored record for the reload notice.
+ */
+export const planHasUnrecordedCoin = (plan: Pick<SignPlan, "confirms" | "confirmTogether" | "steps">, done: string[], recorded: string[]): boolean => planConfirmations(plan as SignPlan, done).some((l) => !recorded.includes(l.mint));
+/** F06: what the card offers once the plan is past its deadline: Start over, unless a step is sent and unread, every step is in, or a landed coin waits to be recorded. */
+export const deadlineCardStartsOver = (o: { expired: boolean; stoppedState?: StepState | null; done: number; steps: number; unrecorded: boolean }): boolean => o.expired && o.stoppedState !== "sent" && o.done < o.steps && !o.unrecorded;
+/** F06 review fix: the card's button past the deadline when a landed coin is not recorded yet. */
+export const RECORD_LANDED_LABEL = "Record the coin that is already on chain";
+/** F06: why the runner stopped before a new step at or after the deadline (nothing was signed or sent for it). */
+export const planDeadlineSentence = (i: number, n: number): string => `Step ${i + 1} of ${n} was not signed or sent. ${PLAN_EXPIRED_SENTENCE}`;
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 /** base58 → bytes (a mint secret key from the launch response). */
@@ -388,7 +416,7 @@ export interface SendDeps {
   expectedAccounts?(mints: string[]): Promise<"absent" | "present" | "unknown">;
 }
 /** `state` / `signature` describe the step at `failedAt` and are present only when a run stops. */
-export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string }
+export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true }
 
 export type ChainReadDeps = Pick<SendDeps, "getSignatureStatus" | "getBlockHeight" | "getTransaction" | "expectedAccounts">;
 /**
@@ -506,12 +534,16 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
   }
 
   const now = d.now ?? (() => Date.now());
+  // F06 (prelaunch audit 2026-10-18): past the plan's deadline no NEW step is signed or sent, from any card. The stored pending send was
+  // settled above (a status check) whatever the time, and every step already confirmed stays; only building a new one stops here.
+  const pastDeadline = (i: number): SendResult | null => (planPastDeadline(plan, now()) ? { ...stop(i, "not-sent", planDeadlineSentence(i, n)), expired: true } : null);
   for (let i = signatures.length; i < n; i++) {
     let bh!: { blockhash: string; lastValidBlockHeight: number }, raw!: Uint8Array, pending!: PendingSend, sig = "";
     // launch night 2026-10-13: a wallet that takes longer than the blockhash lives (Phantom's warning screens) gets the step built again
     // with a fresh blockhash and is asked to sign once more, up to RESIGN_MAX times, instead of a send that fails "Blockhash not found"
     let resigns = 0;
     for (;;) {
+    { const late = pastDeadline(i); if (late) return late; }
     try {
       bh = await d.latestBlockhash();
       const fetchedAt = now();
@@ -525,6 +557,8 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       catch (e) { return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because its dry run could not be run just now (${String((e as Error)?.message ?? e).slice(0, 160)}). Try again in a moment.`); }
       if (dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry}`);
       const signed = await d.signTransaction(built);
+      // F06: the wallet can be held open for hours; the deadline is read again once it returns, before the transaction is kept or sent
+      { const late = pastDeadline(i); if (late) return late; }
       const changed = walletReturnProblem(handed, signed, plan.steps[i], plan, lut ? [lut] : []);
       if (changed) {
         // 2026-10-14: what the wallet handed back, for the console (public bytes only: no key material is ever in a message)
@@ -691,7 +725,7 @@ export function failureSentence(r0: SendResult, n: number): string {
 export const planConfirmations = (plan: Pick<SignPlan, "confirms" | "confirmTogether">, sigs: string[]): { mint: string; launchTx: string }[] =>
   plan.confirmTogether && !plan.confirms.every((c) => sigs[c.step]) ? [] : plan.confirms.filter((c) => sigs[c.step]).map((c) => ({ mint: c.mint, launchTx: sigs[c.step] }));
 
-export interface LaunchErrorBody { error?: string; code?: string; retryAfterSec?: number }
+export interface LaunchErrorBody { error?: string; code?: string; retryAfterSec?: number; /** second audit 2026-10-18 A-19: an account the server's RPC has not shown yet (not final) */ missing?: boolean }
 type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; headers: { get(name: string): string | null }; json(): Promise<unknown> }>;
 /** `transport` is set when the launch route could not be reached at all (the chain progress is untouched). */
 export interface ConfirmResult { confirmed: string[]; error: string | null; transport?: boolean }
@@ -699,14 +733,15 @@ export interface ConfirmResult { confirmed: string[]; error: string | null; tran
 /**
  * Confirms each draft with the launch route, in plan order. A 404 (not visible to the server yet) is retried `retries` times, `waitMs`
  * apart; any other failure stops with the sentence `message` gives; a transport failure (fetch throws) stops with a plain sentence and
- * `transport: true`, keeping what was recorded. Mints in `already` are skipped.
+ * `transport: true`, keeping what was recorded. Mints in `already` are skipped. A 503 with the confirm lane's busy code (confirmBusy.ts)
+ * is retried on its own, up to `busyRetries` times (6), after its Retry-After: a stranger's burst never needs the creator's press.
  */
-export async function confirmPlan(fetchFn: FetchLike, plan: SignPlan, sigs: string[], message: (status: number, body: LaunchErrorBody | null, retryAfter: string | null) => string, o: { already?: string[]; retries?: number; waitMs?: number; sleep?: (ms: number) => Promise<void>; url?: string } = {}): Promise<ConfirmResult> {
+export async function confirmPlan(fetchFn: FetchLike, plan: SignPlan, sigs: string[], message: (status: number, body: LaunchErrorBody | null, retryAfter: string | null) => string, o: { already?: string[]; retries?: number; waitMs?: number; sleep?: (ms: number) => Promise<void>; url?: string; busyRetries?: number } = {}): Promise<ConfirmResult> {
   const confirmed = [...(o.already ?? [])];
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   for (const l of planConfirmations(plan, sigs)) {
     if (confirmed.includes(l.mint)) continue;
-    for (let attempt = 0; ; attempt++) {
+    for (let attempt = 0, busy = 0; ; attempt++) {
       let r: Awaited<ReturnType<FetchLike>>;
       try {
         r = await fetchFn(o.url ?? "/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "launched", mint: l.mint, launchTx: l.launchTx }) });
@@ -715,7 +750,14 @@ export async function confirmPlan(fetchFn: FetchLike, plan: SignPlan, sigs: stri
       }
       if (r.ok) { confirmed.push(l.mint); break; }
       const j = (await r.json().catch(() => null)) as LaunchErrorBody | null;
-      if (r.status === 404 && attempt < (o.retries ?? 5)) { await sleep(o.waitMs ?? 4000); continue; }
+      // not seen yet (404), or an account the server's RPC has not shown yet (422 `missing`, A-19): asked again, never final at once
+      if ((r.status === 404 || (r.status === 422 && j?.missing === true)) && attempt < (o.retries ?? 5)) { await sleep(o.waitMs ?? 4000); continue; }
+      if (r.status === 503 && j?.code === CONFIRM_LANE_BUSY_CODE && busy < (o.busyRetries ?? 6)) {
+        busy++;
+        const sec = Number(r.headers.get("retry-after"));
+        await sleep(1000 * (Number.isFinite(sec) && sec > 0 && sec <= 60 ? sec : CONFIRM_LANE_BUSY_RETRY_SEC));
+        continue;
+      }
       return { confirmed, error: message(r.status, j, r.headers.get("retry-after")) };
     }
   }

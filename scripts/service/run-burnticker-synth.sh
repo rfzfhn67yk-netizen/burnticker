@@ -30,7 +30,7 @@ cd "$(dirname "$0")/../.."
 PORT=${BURNTICKER_SYNTH_PORT:-3100}
 D=data/devnet-synth
 BANK=$D/bank.db
-stamp() { date '+%F %T'; }
+stamp() { date -u '+%F %TZ'; }
 mkdir -p "$D" logs
 [ -f .next/BUILD_ID ] || { echo "[$(stamp)] no production build in .next"; exit 2; }
 [ -f devnet-synth.env ] || { echo "[$(stamp)] devnet-synth.env is missing (docs/burnticker/SYNTHETIC-CREATOR.md)"; exit 2; }
@@ -91,7 +91,7 @@ start_web() {
     if [ $3 = 1 ]; then BURNTICKER_MINT_BANK_KEY=\"\$BURNTICKER_SYNTH_BANK_KEY\"; fi; export BURNTICKER_MINT_BANK_KEY BURNTICKER_SYNTH_BANK_KEY=; \
     export BURNTICKER_CLUSTER=devnet BURNTICKER_DB=$D/registry.db BURNTICKER_PUBLISH_DIR=$D/site BURNTICKER_MINT_BANK_PATH=$2 \
       BURNTICKER_CREATOR_LAUNCHES_ENABLED=1 BURNTICKER_ALLOW_HOSTED_METADATA=1 BURNTICKER_END_SINKS_LIVE=1 BURNTICKER_DEVNET_WRITE_BURST=60 BURNTICKER_DEVNET_PIN_CREATOR_DAILY_CAP=40 BURNTICKER_PUBLIC_ORIGIN=http://127.0.0.1:$1; \
-    exec ./node_modules/.bin/next start -H 127.0.0.1 -p $1" > "logs/burnticker-synth-web-$1.log" 2>&1 &
+    exec ./node_modules/.bin/next start -H 127.0.0.1 -p $1" >> "logs/burnticker-synth-web-$1.log" 2>&1 &
 }
 wait_web() { i=0; until curl -fsS -o /dev/null "http://127.0.0.1:$1/api/burnticker/build"; do i=$((i+1)); [ $i -lt 60 ] || { echo "[$(stamp)] the devnet instance on $1 did not answer in 60 s"; exit 2; }; sleep 1; done; }
 

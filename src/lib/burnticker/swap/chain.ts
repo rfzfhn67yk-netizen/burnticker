@@ -209,6 +209,14 @@ export function explorerTxUrl(network: Network, signature: string): string {
 
 /** The two networks' genesis hashes: the panel checks its connection is on the coin's network before it sends anything. */
 export const GENESIS_HASH: Record<Network, string> = { mainnet: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d", devnet: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG" };
+/**
+ * True when the connection is on the network; false when the genesis hash it read is another network's. Prelaunch audit 2026-10-18 F03:
+ * a genesis read that FAILED was turned into false, so an ordinary RPC outage read as "not on the coin's network". It now throws
+ * REFUSAL.networkUnreadable, which the panel treats as recoverable (it retries, and offers Try again).
+ */
 export async function connectionOn(conn: { getGenesisHash(): Promise<string> }, network: Network): Promise<boolean> {
-  return (await conn.getGenesisHash().catch(() => "")) === GENESIS_HASH[network];
+  let hash: unknown;
+  try { hash = await conn.getGenesisHash(); } catch (e) { throw new Error(REFUSAL.networkUnreadable, { cause: e }); }
+  if (typeof hash !== "string" || !hash) throw new Error(REFUSAL.networkUnreadable);
+  return hash === GENESIS_HASH[network];
 }

@@ -6,6 +6,7 @@ import path from "node:path";
 import { lockRule, meetingsMirrorId, type BurnMapping, type BurnRule, type LockedRule, type RuleMode } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
 import { derbyReadingInSeason } from "@/lib/burnticker/derby/season";
+import { refuseDefaultDataFileUnderTest } from "@/lib/burnticker/testGuard";
 
 /**
  * THE REGISTRY — data/burnticker.db (node:sqlite, like the keeper's ledger and every other service here; 2026-10-09). One writer:
@@ -146,7 +147,23 @@ CREATE TABLE IF NOT EXISTS token_flags (mint TEXT PRIMARY KEY, test INTEGER NOT 
 -- row leave 'expired' only for 'live' with a revival row naming the same launch transaction. Written once; append-only.
 CREATE TABLE IF NOT EXISTS draft_revivals (mint TEXT PRIMARY KEY, launch_tx TEXT NOT NULL, block_time_ms INTEGER NOT NULL, within_window INTEGER NOT NULL, source TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS token_meta (mint TEXT PRIMARY KEY, creator_note TEXT NOT NULL DEFAULT '', metadata_uri TEXT, metadata_tx TEXT, metadata_sha256 TEXT, image_uri TEXT, image_tx TEXT, image_sha256 TEXT, hosted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL, note TEXT NOT NULL);
 `;
+
+/**
+ * THE REGISTRY'S SCHEMA VERSION (2026-10-18 prelaunch audit A-32: the file carried no version, so a backup, a restore or an auditor's
+ * copy could not say which layout it holds). One row per version in schema_version (append-only, like the facts): written by the
+ * constructor once that version's changes are in the file, with the date it was reached and a note on what it changed.
+ *
+ * HOW TO CHANGE THE SCHEMA: make the change idempotent in the constructor (CREATE ... IF NOT EXISTS, or a PRAGMA table_info check
+ * before ALTER TABLE, as below), then add the next entry here with what it does. Never edit or reuse an earlier entry: a file that
+ * already holds version N keeps the note it was given. A version is recorded only after every change up to it has run, so the highest
+ * row is the layout the file is in.
+ */
+export const REGISTRY_MIGRATIONS: readonly { version: number; note: string }[] = [
+  { version: 1, note: "2026-10-18: schema versions start. Everything before this date is applied in place on open (burns' program-execution columns and readings.proof 2026-10-10, the tokens ticker-uniqueness rebuild, lock_fee_claims paid/pending, token_flags.synthetic 2026-10-15, tokens_expired_final narrowed to the verified revival 2026-10-15), so a file of any earlier age is at version 1 once opened." },
+];
+export const REGISTRY_SCHEMA_VERSION = REGISTRY_MIGRATIONS[REGISTRY_MIGRATIONS.length - 1].version;
 
 /** Columns added to burns for program execution (2026-10-10), added in place to an older registry file. */
 const BURN_PROGRAM_COLUMNS: [string, string][] = [
@@ -198,6 +215,8 @@ CREATE TRIGGER IF NOT EXISTS signatures_identity_immutable BEFORE UPDATE OF sign
 CREATE TRIGGER IF NOT EXISTS alerts_no_update BEFORE UPDATE ON alerts BEGIN SELECT RAISE(ABORT, 'alerts: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS alerts_no_delete BEFORE DELETE ON alerts BEGIN SELECT RAISE(ABORT, 'alerts: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS pairs_no_update BEFORE UPDATE ON pairs BEGIN SELECT RAISE(ABORT, 'pairs: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS schema_version_no_update BEFORE UPDATE ON schema_version BEGIN SELECT RAISE(ABORT, 'schema_version: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS schema_version_no_delete BEFORE DELETE ON schema_version BEGIN SELECT RAISE(ABORT, 'schema_version: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS pairs_no_delete BEFORE DELETE ON pairs BEGIN SELECT RAISE(ABORT, 'pairs: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS pair_outcomes_no_update BEFORE UPDATE ON pair_outcomes BEGIN SELECT RAISE(ABORT, 'pair_outcomes: a pair goes live or voids once'); END;
 CREATE TRIGGER IF NOT EXISTS pair_outcomes_no_delete BEFORE DELETE ON pair_outcomes BEGIN SELECT RAISE(ABORT, 'pair_outcomes: append-only'); END;
@@ -276,6 +295,8 @@ export class Registry {
   readonly db: DatabaseSync;
   readonly file: string;
   constructor(file: string) {
+    // audit A-13 (2026-10-18): under a test, the checkout's own ./data/burnticker.db (the live registry on the host) is refused
+    refuseDefaultDataFileUnderTest(file, REGISTRY_FILE, "registry");
     this.file = file;
     if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
@@ -299,6 +320,15 @@ export class Registry {
     // A program reading, once a receipt is counted into it, is part of the receipt's facts.
     this.db.exec(`CREATE TRIGGER IF NOT EXISTS burns_reading_once BEFORE UPDATE OF reading_date ON burns WHEN OLD.reading_date IS NOT NULL AND NEW.reading_date IS NOT OLD.reading_date
       BEGIN SELECT RAISE(ABORT, 'burns: a receipt is counted into one program reading'); END;`);
+    // every change above has run: record each schema version this file has not recorded yet (REGISTRY_MIGRATIONS)
+    const at = Date.now(), ins = this.db.prepare("INSERT OR IGNORE INTO schema_version (version, applied_at, note) VALUES (?,?,?)");
+    for (const m of REGISTRY_MIGRATIONS) ins.run(m.version, at, m.note);
+  }
+
+  /** The highest schema version recorded in this file (REGISTRY_MIGRATIONS), and when it was reached. */
+  schemaVersion(): { version: number; appliedAt: number; note: string } | null {
+    const r = this.db.prepare("SELECT version, applied_at, note FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number; applied_at: number; note: string } | undefined;
+    return r ? { version: Number(r.version), appliedAt: Number(r.applied_at), note: String(r.note) } : null;
   }
 
   /**

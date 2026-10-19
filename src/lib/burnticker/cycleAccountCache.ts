@@ -169,6 +169,7 @@ export class CycleAccountCache {
 
   /** The Connection the keeper hands to its program client, the lock-fee and pair clients and the pair-curve crank. */
   connection<C extends object>(): C {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- the overriding methods below are object-literal methods, whose own `this` is the proxy object
     const self = this, conn = this.conn as unknown as Record<string, unknown>;
     const pass = (name: string) => (conn[name] as (...a: unknown[]) => unknown).bind(conn);
     const over: Record<string, unknown> = {

@@ -273,7 +273,8 @@ describe("the re-review (round 3)", () => {
     let reads = 0;
     w.p.launchVerifier = { verify: async () => { reads++; return { ok: false as const, status: 404 as const, reason: "no confirmed transaction with this signature on this cluster (yet)" }; } };
     const sig = "5".repeat(88), now = Date.now();
-    for (let i = 0; i < 5; i++) assert.equal((await markLaunched(w.p, mint, sig, now + i * 1_000, "c1")).status, 404);
+    // second audit 2026-10-18 A-20: the client that first sent it may re-read every MISSING_RECHECK_MS; everyone else gets the minute
+    for (let i = 0; i < 5; i++) assert.equal((await markLaunched(w.p, mint, sig, now + i * 1_000, `c${i + 1}`)).status, 404);
     assert.equal(reads, 1);
     await markLaunched(w.p, mint, sig, now + MISSING_MEMORY_MS + 1, "c1");
     assert.equal(reads, 2, "read again after the minute");

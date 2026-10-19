@@ -3,7 +3,8 @@
  * JSON-RPC call the two keepers and the web server make passes `take(source)` first. One table (SOURCES below, documented in
  * docs/burnticker/API-BUDGETS.md) holds each provider's published limit; a process may use at most BUDGET_FRACTION (60%) of it,
  * split between the processes that call the same provider (ROLE_SHARES), so the keeper, the $DEFICIT keeper and the site together
- * stay at or under 60% of every documented limit.
+ * stay at or under 60% of every documented limit. The one exception is API-Sports (SourceSpec.fraction 1): its 100 a day is split
+ * 0.85 keeper and 0.15 site with no 60% on top, so the processes together stay at or under the plan itself.
  *
  *   rate buckets   per second / minute / hour, as the provider states its limit. An empty bucket WAITS (never fails) up to
  *                  `maxWaitMs`; a wait longer than that answers "busy" and the read is skipped this cycle (it is tried next cycle).
@@ -20,10 +21,14 @@
  * LANES (2026-10-15 prelaunch audit C2, tightened after its blind review): the site's Helius slice is split so anonymous traffic cannot
  * stop a launch confirmation or a wallet send, and no lane can spend another's share (LANE_SPLIT; only the web role splits):
  *
- *   confirm   the launch verifier (server.ts), 10% of the day, reachable from no browser
- *   flight    a browser swap or launch carrying a flight token (rpcFlight.ts), 15% of the day, and its own rate bucket (a quarter of the
+ *   confirm   the launch verifier (server.ts), 10% of the day and its own rate bucket (15% of the source's rate). Anyone can reach it
+ *             (POST /v1/launch/confirm and the page's `launched` action, both per-client limited), so a verifier asks laneBusy first
+ *             and answers "try again shortly" instead of queueing behind made-up signatures
+ *   flight    a browser swap or launch carrying a flight token (rpcFlight.ts), 15% of the day, and its own rate bucket (a fifth of the
  *             source's rate), so tokens cannot starve the site
- *   proxy     the browser's proxy without a token: at most 35% of the day and half the source's rate
+ *   (rates)   the confirm and flight buckets are carved out of the source's rate and never touch the shared bucket the other lanes wait
+ *             on (audit 2026-10-18 A-38), so a flood of ordinary reads cannot delay a confirmation or a wallet send
+ *   proxy     the browser's proxy without a token: at most 35% of the day and half of the shared bucket's rate
  *   general   every other site read: the day less the two reserves, counted WITHOUT the reserved lanes' spend, so a busy confirm or flight
  *             lane never holds the pages
  *
@@ -53,6 +58,9 @@ export interface SourceSpec {
   unit: "request" | "credit";
   /** This source's split of the 60% between the processes that call it (default ROLE_SHARES). */
   shares?: Partial<Record<BudgetRole, number>>;
+  /** The part of the documented limit all processes together may use, in place of BUDGET_FRACTION (API-Sports: the whole plan, split
+   *  by `shares` alone; its day is small and the provider counts it itself). */
+  fraction?: number;
 }
 
 /** The default split of the 60% between the three processes (sums to 1, so together they never pass 60%). */
@@ -76,10 +84,12 @@ export const SOURCES: readonly SourceSpec[] = [
   // API-Sports (BURNTICKER_APISPORTS_KEY; the settlement cross-read and, since 2026-10-16 audit F-4, the NFL day listing's second source):
   // the free plan allows 100 requests a day and 10 a minute on EACH sport's API, so each API host is its own source. Before this row
   // the hosts fell under the house default (2,000 a day), which the provider would have refused long before. The keeper holds 0.85 of
-  // the 60% (it settles games on it; the site only reads the NFL day listing while TheSportsDB is down), the web 0.15.
-  { id: "apisports-american-football", label: "API-Sports American football", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 } },
-  { id: "apisports-football", label: "API-Sports football (soccer)", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 } },
-  { id: "apisports-basketball", label: "API-Sports basketball", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 } },
+  // the plan (it settles games on it; the site only reads the NFL day listing while TheSportsDB is down), the web 0.15. 2026-10-18: the
+  // 60% is not applied on top (fraction 1). The two factors stacked left the keeper 51 of the 100, spent each day before the games had
+  // ended. The two shares sum to 1, so together the processes still stay at or under the plan's own 100 a day and 10 a minute.
+  { id: "apisports-american-football", label: "API-Sports American football", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 }, fraction: 1 },
+  { id: "apisports-football", label: "API-Sports football (soccer)", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 }, fraction: 1 },
+  { id: "apisports-basketball", label: "API-Sports basketball", limit: { perMin: 10, perDay: 100 }, established: true, unit: "request", shares: { keeper: 0.85, web: 0.15 }, fraction: 1 },
   { id: "polymarket-gamma", label: "Polymarket Gamma", limit: { perSec: 30 }, established: true, unit: "request", shares: { keeper: 0.6, web: 0.4 } },
   // 2026-10-14: the house limit (0.5/s) refused a launch preflight — one payout read is three eth_calls in a row, and the web lane had
   // one call every 8 s. No public node publishes a limit; 4/s, 60/min, 2,000/day stays polite and lets a preflight run at once.
@@ -151,8 +161,24 @@ const ESSENTIAL = new Set(["sendTransaction", "getSignatureStatuses", "getBlockH
 /** The budget lanes (C2): "general" (the default), "proxy", "flight" and "confirm" (see the header). */
 export type BudgetLane = "general" | "proxy" | "flight" | "confirm";
 /** Per source, the web role's split of its day (fractions of the day budget) and of its rate (fractions of each rate bucket). */
-export interface LaneSplitSpec { confirmReserve: number; flightReserve: number; proxyCap: number; proxyRate: number; flightRate: number }
-export const LANE_SPLIT: Readonly<Record<string, LaneSplitSpec>> = { helius: { confirmReserve: 0.10, flightReserve: 0.15, proxyCap: 0.35, proxyRate: 0.5, flightRate: 0.25 } };
+export interface LaneSplitSpec { confirmReserve: number; flightReserve: number; proxyCap: number; proxyRate: number; flightRate: number; confirmRate: number }
+/**
+ * Rates (audit 2026-10-18 A-38): the confirm and flight lanes each own a slice of the source's per-second rate (confirmRate, flightRate)
+ * and never touch the shared bucket, which holds the rest (1 - confirmRate - flightRate). Before, they reserved tokens from the shared
+ * bucket, so a flood of ordinary reads drove it negative and every confirm and wallet send waited about 19 s and then failed as busy.
+ * The proxy lane stays inside the shared bucket with its own cap on top (proxyRate).
+ */
+export const LANE_SPLIT: Readonly<Record<string, LaneSplitSpec>> = {
+  helius: { confirmReserve: 0.10, flightReserve: 0.15, proxyCap: 0.35, proxyRate: 0.5, flightRate: 0.2, confirmRate: 0.15 },
+  // review of A-38: Helius's separate send rate (5 a second; the web's slice is 0.9) is split too. A wallet send with a flight token
+  // takes half of it on its own; anonymous proxy sends share the rest with the site's own and can only put that part in debt. The
+  // confirm lane sends nothing, so it has no slice of the send rate (a confirm-lane call would wait on the shared half).
+  "helius-send": { confirmReserve: 0.10, flightReserve: 0.15, proxyCap: 0.35, proxyRate: 0.5, flightRate: 0.5, confirmRate: 0 },
+};
+/** The shared bucket's fraction of a split source's rate (what the confirm and flight lanes leave). */
+export const sharedRateOf = (sp: LaneSplitSpec): number => Math.max(0, 1 - sp.confirmRate - sp.flightRate);
+/** A reserved lane's bucket holds this much of its rate, so a confirm's two or three reads run at once after a quiet spell. */
+const RESERVED_BURST_MS = 5_000;
 /** Methods made essential for the duration of one call (withEssential): the keeper's startup genesis read only (re-review N5). */
 const essentialNow = new Set<string>();
 /**
@@ -298,10 +324,10 @@ export interface ApiBudgetOpts {
 const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 const fmt = (n: number): string => Math.round(n).toLocaleString("en-US");
 
-/** A source's numbers for one role: its rate buckets (per ms) and its day budget, after the 60% and the role's share. */
+/** A source's numbers for one role: its rate buckets (per ms) and its day budget, after the 60% (or the source's own `fraction`) and the role's share. */
 export function budgetFor(spec: SourceSpec, role: BudgetRole): { rates: { perMs: number; windowMs: number }[]; perDay: number; share: number } {
   const share = spec.shares ? (spec.shares[role] ?? 0) : ROLE_SHARES[role];
-  const f = BUDGET_FRACTION * share, L = spec.limit;
+  const f = (spec.fraction ?? BUDGET_FRACTION) * share, L = spec.limit;
   const rates: { perMs: number; windowMs: number }[] = [];
   if (L.perSec) rates.push({ perMs: (L.perSec * f) / 1_000, windowMs: 1_000 });
   if (L.perMin) rates.push({ perMs: (L.perMin * f) / 60_000, windowMs: 60_000 });
@@ -357,7 +383,9 @@ export class ApiBudget {
     let s = this.states.get(source);
     if (!s) {
       const b = budgetFor(specOf(source), this.role);
-      const buckets = b.rates.map((r) => { const cap = Math.max(1, r.perMs * Math.min(r.windowMs, BURST_WINDOW_MS)); return { ratePerMs: r.perMs, cap, tokens: cap, last: now }; });
+      const sp = this.role === "web" ? LANE_SPLIT[source] : undefined;
+      const f = sp ? sharedRateOf(sp) : 1;   // A-38: a split source's shared bucket is what the reserved lanes leave
+      const buckets = b.rates.map((r) => { const perMs = r.perMs * f, cap = Math.max(1, perMs * Math.min(r.windowMs, BURST_WINDOW_MS)); return { ratePerMs: perMs, cap, tokens: cap, last: now }; });
       let stored = 0;
       if (this.store) { try { stored = this.store.add(this.dayKey(source), day, 0, now); } catch { stored = 0; } }
       s = { buckets, day, stored, pending: 0, lastFlush: now, alerted80: false, held: false, methodDeltas: {}, methodsLocal: {}, lanes: {}, laneBuckets: {} };
@@ -401,14 +429,32 @@ export class ApiBudget {
     return { confirm, flight, general: budget - confirm - flight, proxyCap: Math.floor(budget * sp.proxyCap), spec: sp };
   }
   private laneBucketsFor(source: string, s: SourceState, lane: BudgetLane, sp: LaneSplitSpec): Bucket[] {
-    const f = lane === "proxy" ? sp.proxyRate : lane === "flight" ? sp.flightRate : 0;
+    // review of A-38: the proxy's cap is a share of the SHARED bucket (proxyRate of what the reserved lanes leave), so page reads keep
+    // their half under a proxy flood
+    const f = lane === "proxy" ? sp.proxyRate * sharedRateOf(sp) : lane === "flight" ? sp.flightRate : lane === "confirm" ? sp.confirmRate : 0;
     if (!f) return [];
+    const reserved = lane === "flight" || lane === "confirm";
     let b = s.laneBuckets[lane];
     if (!b) {
       const now = this.now();
-      b = s.laneBuckets[lane] = budgetFor(specOf(source), this.role).rates.map((r) => { const perMs = r.perMs * f, cap = Math.max(1, perMs * Math.min(r.windowMs, BURST_WINDOW_MS)); return { ratePerMs: perMs, cap, tokens: cap, last: now }; });
+      b = s.laneBuckets[lane] = budgetFor(specOf(source), this.role).rates.map((r) => {
+        const perMs = r.perMs * f, window = Math.min(r.windowMs, BURST_WINDOW_MS), cap = Math.max(1, perMs * (reserved ? Math.max(window, RESERVED_BURST_MS) : window));
+        return { ratePerMs: perMs, cap, tokens: cap, last: now };
+      });
     }
     return b;
+  }
+  /**
+   * True when `lane`'s own rate bucket is empty or in debt (review of A-38): a caller that can say "try again shortly" asks this first and
+   * makes no call, so made-up confirmations cannot queue a real one behind them. Always false when the budget does not enforce or the
+   * source has no lane split.
+   */
+  laneBusy(source: string, lane: BudgetLane): boolean {
+    if (!this.enforce) return false;
+    const split = this.laneSplit(source);
+    if (!split) return false;
+    const s = this.state(source), own = this.laneBucketsFor(source, s, lane, split.spec), now = this.now();
+    return own.some((b) => Math.min(b.cap, b.tokens + (now - b.last) * b.ratePerMs) < 1);
   }
   /** Today's spend in one lane (C2). */
   laneUsed(source: string, lane: BudgetLane): number { const s = this.state(source), l = this.lane(source, s, lane); return l.stored + l.pending; }
@@ -458,7 +504,9 @@ export class ApiBudget {
     let wait = 0;
     if (this.enforce) {
       const now = this.now();
-      const buckets = split ? [...s.buckets, ...this.laneBucketsFor(source, s, lane, split.spec)] : s.buckets;
+      // A-38: the confirm and flight lanes wait only on their own buckets; ordinary reads and the proxy wait on the shared one
+      const own = split ? this.laneBucketsFor(source, s, lane, split.spec) : [];
+      const buckets = !split ? s.buckets : (lane === "confirm" || lane === "flight") && own.length ? own : [...s.buckets, ...own];
       for (const b of buckets) { b.tokens = Math.min(b.cap, b.tokens + (now - b.last) * b.ratePerMs); b.last = now; }
       for (const b of buckets) wait = Math.max(wait, b.tokens >= requests ? 0 : (requests - b.tokens) / b.ratePerMs);
       if (wait > this.maxWait) return { state: "busy", waitMs: Math.ceil(wait) };
@@ -584,7 +632,7 @@ export async function takeRpc(url: string, body: unknown, sourceOverride?: strin
   const lane = o.lane ?? "general";
   const essential = lane === "proxy" ? false : c.essential;
   // Helius states a separate, lower rate for sends (5 a second on the Developer plan): a body with a send also takes from that bucket
-  if (source === "helius" && c.sends) await takeOrThrow("helius-send", { requests: c.sends, essential: lane !== "proxy" });
+  if (source === "helius" && c.sends) await takeOrThrow("helius-send", { requests: c.sends, essential: lane !== "proxy", lane });
   await takeOrThrow(source, { units: source === "helius" ? c.credits : c.calls, requests: c.calls, essential, methods: source === "helius" ? c.methods : c.callsByMethod, lane });
 }
 

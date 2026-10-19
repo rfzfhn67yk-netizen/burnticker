@@ -4,7 +4,7 @@
   "observed": "EndSinkMismatch",
   "match": true,
   "exitCode": 0,
-  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX --target HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx",
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX --target HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx",
   "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6107}]}",
   "errorLogLines": [
     "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:295. Error Code: EndSinkMismatch. Error Number: 6107. Error Message: forward_on_end: the target is not the coin's end sink (or the flagship when the sink is not live).",

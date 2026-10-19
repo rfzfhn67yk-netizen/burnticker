@@ -23,7 +23,7 @@ export { csvHref };
 const DEBT_SOURCE = "https://fiscaldata.treasury.gov/datasets/debt-to-the-penny/";
 
 export async function coinCsv(p: Platform, rawTicker: string, kind: "burns" | "readings", keeper: () => KeeperFiles = () => readKeeperFiles()): Promise<Response> {
-  let raw = rawTicker; try { raw = decodeURIComponent(rawTicker); } catch { /* looked up as written */ }
+  const raw = rawTicker;   // decoded once by Next; never again (audit 2026-10-18 A-42)
   // a mint address works in place of the ticker (tickers are not unique, owner 2026-10-12; coinKey.ts)
   if (isMintKey(raw)) {
     let m;

@@ -4,7 +4,7 @@
   "observed": "PairedAttesterChange",
   "match": true,
   "exitCode": 0,
-  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts apply-attesters --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L",
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts apply-attesters --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L",
   "simulationErr": "{\"InstructionError\":[1,{\"Custom\":6096}]}",
   "errorLogLines": [
     "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/admin.rs:135. Error Code: PairedAttesterChange. Error Number: 6096. Error Message: apply_attester_change: the coin is paired; use apply_paired_attester_change with the partner's quorum co-signing.",

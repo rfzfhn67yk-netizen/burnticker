@@ -11,10 +11,9 @@ export type { CoinCandidate } from "@/lib/burnticker/coinKey";
 export type CoinLookup = { kind: "one"; token: TokenRow } | { kind: "many"; ticker: string; tokens: TokenRow[] } | { kind: "none" };
 type Reader = Pick<Registry, "token" | "tokenByTicker" | "tokensByTicker">;
 
-const decode = (s: string): string => { try { return decodeURIComponent(s); } catch { return s; } };
-
 export function lookupCoin(r: Reader, rawKey: string): CoinLookup {
-  const key = decode(rawKey).trim();
+  // audit 2026-10-18 A-42: the key arrives decoded once by Next (a route param); decoding it again turned %2541 into "A"
+  const key = rawKey.trim();
   if (!key) return { kind: "none" };
   if (key.length >= 32 || isMintKey(key)) { const t = r.token(key); return t ? { kind: "one", token: t } : { kind: "none" }; }
   const held = r.tokensByTicker(key);
@@ -68,7 +67,7 @@ export function sharedTickerText(l: Extract<CoinLookup, { kind: "many" }>): stri
  */
 export const PRELAUNCH_PAGE_TICKERS: readonly string[] = ["DEFICIT"];
 export function coinPageFound(rawKey: string, lookup: (key: string) => CoinLookup, served: { tickers: readonly string[]; mints: readonly string[] } | null = { tickers: [], mints: [] }): boolean {
-  const key = decode(rawKey).trim();
+  const key = rawKey.trim();   // decoded once by Next, never again (A-42)
   if (!key) return false;
   const upper = key.toUpperCase();
   if (PRELAUNCH_PAGE_TICKERS.includes(upper)) return true;
@@ -85,7 +84,7 @@ export function coinPageFound(rawKey: string, lookup: (key: string) => CoinLooku
  * any other key, and for $DEFICIT once the registry knows it (the registry's own lookup answers then).
  */
 export function deficitMintTarget(rawKey: string, deficitMint: string | null | undefined, registryKnows: boolean): string | null {
-  const key = decode(rawKey).trim();
+  const key = rawKey.trim();   // decoded once by Next, never again (A-42)
   if (!deficitMint || registryKnows || key !== deficitMint) return null;
   return "/burnticker/t/DEFICIT";
 }
@@ -94,6 +93,6 @@ export function deficitMintTarget(rawKey: string, deficitMint: string | null | u
 export function coinPageTitle(rawKey: string, l: CoinLookup | null): string {
   if (l?.kind === "one") return `${l.token.name} ($${l.token.ticker}) on Burnticker`;
   if (l?.kind === "many") return `$${l.ticker} on Burnticker`;
-  const key = decode(rawKey).trim();
+  const key = rawKey.trim();   // decoded once by Next, never again (A-42)
   return isMintKey(key) ? "A coin on Burnticker" : `$${key.toUpperCase()} on Burnticker`;
 }

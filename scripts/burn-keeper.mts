@@ -55,6 +55,7 @@ import { burnProgramIdFromEnv, burnPoolFor } from "../src/lib/burnKeeper/burnPoo
 import { deficitDispersalLines, executeDispersal, executeProgramPending, executionModeFromEnv, legacyRefusal, type ProgramCycleReport, type ProgramPort } from "../src/lib/burnKeeper/programChain.ts";
 // BURN DISPERSAL (owner decision 2026-10-13): BURNTICKER_DISPERSAL=1 spends carried amounts in crank_carried pieces (off until deployed).
 import { dispersalEnabled } from "../src/lib/burnticker/dispersal.ts";
+import type { DispersalAlert } from "../src/lib/burnticker/dispersalKeeper.ts";
 import { solanaProgramPort } from "../src/lib/burnKeeper/programAdapter.ts";
 import { fetchTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
 import { launchLabPoolId, WSOL_MINT } from "../src/lib/burnKeeper/launchlab.ts";
@@ -295,11 +296,11 @@ function buildAttester(rt: Runtime) {
 
 const state = { feedRetryAt: 0, feedFailures: 0, lastPoll: null as { at: number; outcome: string } | null, lastError: null as string | null, stopping: false, lastProgram: null as ProgramCycleReport | null, nextDispersalAt: null as number | null };
 const DISPERSAL = dispersalEnabled(process.env);
-/** bt-burn-behind lands in the platform registry (where the phone push reads alerts) when it exists on this host; else only the log. */
+/** bt-burn-behind and bt-dispersal-receipt land in the platform registry (where the phone push reads alerts) when it exists on this host; else only the log. */
 const BT_DB = process.env.BURNTICKER_DB?.trim() || REGISTRY_FILE;
-const dispersalAlert = (a: { kind: "bt-burn-behind"; key: string; text: string; meta: Record<string, unknown> | null }): void => {
+const dispersalAlert = (a: DispersalAlert): void => {
   if (!fs.existsSync(BT_DB)) return;
-  try { const r = openRegistry(BT_DB); try { r.recordAlert(a); } finally { r.close(); } } catch (e) { log(`  [alert] bt-burn-behind not recorded in ${BT_DB}: ${(e as Error).message.slice(0, 120)}`); }
+  try { const r = openRegistry(BT_DB); try { r.recordAlert(a); } finally { r.close(); } } catch (e) { log(`  [alert] ${a.kind} not recorded in ${BT_DB}: ${(e as Error).message.slice(0, 120)}`); }
 };
 
 async function pollFeed(now: number): Promise<void> {

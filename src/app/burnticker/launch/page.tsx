@@ -19,7 +19,7 @@ import { LAUNCH_START_EVENT } from "@/lib/burnticker/launchStart";
 import { SignCard } from "./SignCard";
 import { MintAddressBlock, useMintPool } from "./MintSearch";
 import { secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
-import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
+import { launchlabPlan, pairCurvePlan, withPlanDeadline } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { ReviewCard } from "./ReviewCard";
 import { electionPairIdentity } from "@/lib/burnticker/electionPairLabels";
@@ -2164,7 +2164,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       {/* ------------------------------------- LAUNCH: sign and send (SignCard: the same component for one coin, two coins and the pair curve) ------------------------------------- */}
       {step === "launch" && (bundle || pcOut) && (() => {
         const st = signTickers ?? { a: ticker, b: tickerB };
-        const plan = pcOut ? pairCurvePlan(pcOut.pc, pcOut.keys, st) : pairOut ? launchlabPlan([pairOut.a, pairOut.b]) : launchlabPlan([bundle!]);
+        // F06 (prelaunch audit 2026-10-18): the plan carries its deadline into the card and the shared runner (a plan without a receipt
+        // time is treated as already past it)
+        const plan = withPlanDeadline(pcOut ? pairCurvePlan(pcOut.pc, pcOut.keys, st) : pairOut ? launchlabPlan([pairOut.a, pairOut.b]) : launchlabPlan([bundle!]), planAt ?? 0);
         const two = !!(pcOut || pairOut);
         if (planExpired(planAt, clock)) return (
           <section className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm" data-plan-expired>
@@ -2174,7 +2176,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         );
         return (
           <section className="space-y-3 text-sm">
-            <SignCard plan={plan} creator={creator || null} title={two ? `Launch $${st.a} and $${st.b}` : `Launch $${st.a}`} coinHref={(t) => `/burnticker/t/${t}`} onLive={dropDraft} />
+            <SignCard plan={plan} creator={creator || null} title={two ? `Launch $${st.a} and $${st.b}` : `Launch $${st.a}`} coinHref={(t) => `/burnticker/t/${t}`} onLive={dropDraft} onStartOver={() => startOver(true)} />
             <p className="text-xs text-neutral-500">The drafts are registered; they go live once the launch transaction{two ? "s are" : " is"} confirmed and read back from the chain.</p>
           </section>
         );

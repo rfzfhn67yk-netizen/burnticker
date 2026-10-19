@@ -29,12 +29,26 @@
 /SOLANA_RPC_URL/
 
 # key material and private key paths
-/-----BEGIN /
+/-----BEGIN/
 /\bid_ed25519\b/
 /\.pem\b/
-/\/Users\/[A-Za-z0-9._-]+\//
+# a home directory, in path form and in the dashed form tools make of a path (a temp or project directory named after it); a scrubbed
+# path says <home> instead (2026-10-18 prelaunch audit A-32: the operator's account name sat in 40 devnet evidence files)
+/\/Users\/(?!<home>)[A-Za-z0-9._-]+/
+/(?<![A-Za-z])-Users-[A-Za-z0-9._]+(?=[-/]|$)/
 /\/home\/[A-Za-z0-9._-]+\//
 /\/root\//
+
+# generic credential shapes (2026-10-18 prelaunch audit A-32): cloud and service keys by their fixed prefixes, a bearer token, and a
+# 40-hex value next to a credential word (a bare 40-hex string is usually a git commit, which is public and pinned on purpose)
+/\b(AKIA|ASIA)[0-9A-Z]{16}\b/
+/\bgh[pousr]_[A-Za-z0-9]{36}\b/
+/\bxox[abprs]-[A-Za-z0-9-]{10,}/
+/\bAIza[0-9A-Za-z_-]{35}\b/
+/\b[sr]k_(live|test)_[0-9A-Za-z]{16,}/
+/\bsk-(ant-)?[A-Za-z0-9_-]{32,}/
+/\bBearer\s+[A-Za-z0-9._~+\/-]{16,}=*/
+/(secret|token|api[_-]?key|apikey|passw(or)?d|private[_-]?key|credential|auth)[A-Za-z_]*["'`]?\s*[:=]\s*["'`]?[0-9a-fA-F]{40}\b/i
 # a raw 64-byte secret key as JSON, or as base58 (a transaction signature has the same length: a fixture's obviously padded
 # placeholder — twenty identical characters in a row — is not a key; a real signature in a fixture must be exempted by path)
 /\[\s*(\d{1,3}\s*,\s*){63}\d{1,3}\s*\]/

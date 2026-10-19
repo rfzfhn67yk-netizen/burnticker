@@ -146,7 +146,8 @@ describe("F01: a carried burn obligation drains after the rule ends (round-5 pro
     await cycles(f, mint);
     assert.equal(f.cfg.carriedSpendLamports, Z);
     assert.equal(f.cfg.totalSpentLamports, EVENT);
-    assert.equal(sum(state(mint).receipts.map((r) => r.spentLamports)), CARRIED, "receipts add up to the carried amount, the late piece counted once");
+    assert.ok(state(mint).receipts.every((r) => r.status === "landed" && r.spentLamports !== null), "every piece's memo was read");
+    assert.equal(sum(state(mint).receipts.map((r) => r.spentLamports ?? Z)), CARRIED,"receipts add up to the carried amount, the late piece counted once");
   });
 
   test("a lost confirmation after the end: the expired piece is released and planned again; totals exact", async () => {
