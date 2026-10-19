@@ -219,9 +219,10 @@ describe("no market cap / price for any Burnticker coin (Claims and UI trust bou
     assert.deepEqual(hits, []);
     assert.equal(code("src/lib/burnticker/tokenPage.ts").split("\n").filter((l) => /\bmarketCap\b/.test(l)).length, 2, "the index card's field: declared once, read once");
     const view = read("src/lib/burnticker/cardView.ts"), card = read("src/app/burnticker/_components/CoinCard.tsx");
-    // site polish (audit 6 item 23): a number and its unit; before graduation the one label "(curve-implied)", nothing else
-    assert.match(view, /const mcap: CardCell = t\.marketCap \? \{ text: mcapText\(t\.marketCap, t\.quote, t\.phase\), why: t\.phase === "graduated" \? MCAP_POOL_MEANING : CARD_MEANINGS\.mcap \}/, "a number and its unit, no commentary");
-    assert.match(view, /return `\$\{groupDigits\(value\)\} \$\{quote \?\? "SOL"\}\$\{phase === "graduated" \? "" : ` \(\$\{CURVE_IMPLIED\}\)`\}`;/);
+    // site polish (audit 6 item 23): a number and its unit; before graduation its basis in words ("from the curve", coin card status
+    // 2026-10-18), nothing else; an untraded curve has no figure at all ("No trades yet")
+    assert.match(view, /const mcap: CardCell = mcapCell\(\{ cap: t\.marketCap, quote: t\.quote, phase: t\.phase, raised: t\.raised \}, NOT_READ\.mcapNotRead, t\.poolNote \?\? null\);/, "a number and its unit, no commentary");
+    assert.match(view, /return `\$\{groupDigits\(value\)\} \$\{quote \?\? "SOL"\}\$\{phase === "graduated" \? "" : ` \$\{CURVE_BASIS\}`\}`;/);
     assert.match(card, /<div data-row="mcap"><dt title=\{CARD_MEANINGS\.mcap\}>\{CARD_LABELS\.mcap\}<\/dt><dd><Cell v=\{v\} c=\{v\.mcap\} \/><\/dd><\/div>/);
     assert.doesNotMatch(code("src/lib/burnticker/market.ts"), /price/i, "the curve read computes a number, it names no price");
     assert.match(read("src/lib/burnticker/coinPage.ts"), /value: `\$\{dec2\(i\.curve\.marketCap\)\} \$\{quote\}`/, "the coin page's row: a bare number and its unit");

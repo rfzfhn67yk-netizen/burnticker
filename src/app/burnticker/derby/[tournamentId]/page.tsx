@@ -5,9 +5,15 @@ import { derbyStore } from "@/lib/burnticker/derby/store";
 import { derbyTournamentJson, type DerbyTournamentJson } from "@/lib/burnticker/derby/page";
 import type { Tournament } from "@/lib/burnticker/derby/bracket";
 import { safeParam } from "@/lib/burnticker/safeParam";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Burn Derby bracket", description: "A Burn Derby bracket. In each round, coins meet in one-on-one matches. A fan coin burns on each day its coin wins, and the fan coin of the coin that loses the match retires." };
+const BRACKET_DESCRIPTION = "A Burn Derby bracket. In each round, coins meet in one-on-one matches. A fan coin burns on each day its coin wins, and the fan coin of the coin that loses the match retires.";
+// owner's UX walkthrough 2026-10-18: each bracket has its own canonical address and share card (it shared as /burnticker before)
+export async function generateMetadata({ params }: { params: Promise<{ tournamentId: string }> }): Promise<Metadata> {
+  const { tournamentId } = await params;
+  return withShareCard({ title: "Burn Derby bracket", description: BRACKET_DESCRIPTION, alternates: { canonical: `/burnticker/derby/${encodeURIComponent(safeParam(tournamentId))}` } });
+}
 
 /**
  * THE BRACKET PAGE (Burn Derby, 2026-10-10): every round, every match with its day strip (A / B / tie / withheld / open), who advanced and

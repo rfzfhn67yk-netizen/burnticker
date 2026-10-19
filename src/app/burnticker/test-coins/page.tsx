@@ -6,8 +6,9 @@ import { TEST_COINS_COPY, TEST_COINS_HREF } from "@/lib/burnticker/testCoinsCopy
 import { solscanTokenUrl } from "@/lib/burnticker/tradeLinks";
 import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader, Panel } from "../_components/Panel";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: TEST_COINS_COPY.title, description: TEST_COINS_COPY.description, alternates: { canonical: TEST_COINS_HREF }, robots: { index: false } };
+export const metadata: Metadata = withShareCard({ title: TEST_COINS_COPY.title, description: TEST_COINS_COPY.description, alternates: { canonical: TEST_COINS_HREF }, robots: { index: false } });
 export const dynamic = "force-dynamic";
 
 /**

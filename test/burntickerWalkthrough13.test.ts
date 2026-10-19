@@ -41,11 +41,12 @@ describe("walkthrough 13: $DEFICIT by its mint", () => {
     assert.match(read("src/app/burnticker/t/[ticker]/DeficitPrelaunch.tsx"), /<dd>\{d\.launch\.date \?\? \(d\.keeper \? "created, date not recorded" : "not announced"\)\}<\/dd>/);
     assert.doesNotMatch(read("src/app/burnticker/t/[ticker]/DeficitPrelaunch.tsx"), /date not in the keeper's files/);
     assert.match(read("src/app/burnticker/_components/BurnMath.tsx"), /the rule locked for \$DEFICIT on mainnet is 2%/);
-    assert.match(read("src/app/burnticker/about/page.tsx"), /Its rules were locked on chain before it was created on mainnet on \$\{d\.launch\.date\}/);
+    assert.match(read("src/app/burnticker/about/page.tsx"), /Its rules were locked on chain before it was created on mainnet on \$\{utcDay\(d\.launch\.date\)\}/);
   });
   test("the featured $DEFICIT card reads its market cap from the keeper's curve and its age from the status file", () => {
     const home = read("src/lib/burnticker/home.ts");
-    assert.match(home, /!readable && kc\?\.marketCap \? cell\(mcapText\(kc\.marketCap, kc\.quote, kc\.phase\), CARD_MEANINGS\.mcap\)/);
+    // coin card status 2026-10-18: the keeper's curve goes through the same rule as every card (cardView.ts mcapCell)
+    assert.match(home, /: kc \? mcapCell\(\{ cap: kc\.marketCap, quote: kc\.quote, phase: kc\.phase, raised: kc\.raised \}\)/);
     assert.match(home, /createdAt: readable \? live!\.launchedAt \?\? null : created \? d\.launch\.date \?\? null : null,/);
     assert.equal(JSON.parse(read("config/burnticker/current-status.json")).deficit.launch.date, "2026-10-13");
   });

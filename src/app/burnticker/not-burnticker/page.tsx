@@ -1,11 +1,13 @@
+import { utcDateTime } from "@/lib/burnticker/utcWords";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { platform } from "@/lib/burnticker/server";
 import { clonesFor } from "@/lib/burnticker/ops/cloneServe";
 import { lastScanSentence, type ClonesJson } from "@/lib/burnticker/ops/cloneWatch";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Not Burnticker", description: "Tokens named like a Burnticker coin that are not Burnticker coins, with what the chain and the pool index showed. Check any mint yourself.", alternates: { canonical: "/burnticker/not-burnticker" } };
+export const metadata: Metadata = withShareCard({ title: "Not Burnticker", description: "Tokens named like a Burnticker coin that are not Burnticker coins, with what the chain and the pool index showed. Check any mint yourself.", alternates: { canonical: "/burnticker/not-burnticker" } });
 
 /**
  * NOT BURNTICKER (growth batch 2026-10-10; src/lib/burnticker/ops/cloneWatch.ts): the clone watch's public list. Evidence only — the
@@ -39,11 +41,11 @@ export default function NotBurntickerPage() {
           <li key={c.mint} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 space-y-1">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span><span className="font-mono">${c.symbol || "?"}</span> <span className="text-neutral-400">{c.name}</span></span>
-              <span className="text-xs text-neutral-500">first seen {c.firstSeenAt.slice(0, 16).replace("T", " ")} UTC</span>
+              <span className="text-xs text-neutral-500">first seen on {utcDateTime(c.firstSeenAt)}</span>
             </div>
             <div className="font-mono text-xs text-neutral-400 break-all">Mint {c.mint}{c.pool ? `, pool ${short(c.pool)}${c.dex ? ` (${c.dex})` : ""}` : ""}</div>
             <ul className="list-disc pl-5 text-xs text-neutral-300">{c.evidence.map((e) => <li key={e}>{evidenceText(e)}</li>)}</ul>
-            <div className="text-xs"><Link className="underline" href={`/burnticker/verify?mint=${encodeURIComponent(c.mint)}`}>verify this mint →</Link>{c.url && <> · <a className="underline" href={c.url} rel="noopener nofollow" target="_blank">pool on DexScreener</a></>}</div>
+            <div className="text-xs"><Link className="underline" href={`/burnticker/verify?mint=${encodeURIComponent(c.mint)}`}>Check this mint with the burn program</Link>{c.url && <> · <a className="underline" href={c.url} rel="noopener nofollow" target="_blank">pool on DexScreener</a></>}</div>
           </li>
         ))}</ul>
       )}

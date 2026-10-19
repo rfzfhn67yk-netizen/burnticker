@@ -233,8 +233,8 @@ export async function search(p: Platform, q: { q?: string | null; closingSoon?: 
   // ChatGPT audit 7 item 2: a pasted mint that is on the Not Burnticker list answers "known lookalike", never "no coin matches"
   const lookalike = knownLookalike(p, q.q ?? "");
   const answer = ok({ ...r, ...(lookalike ? { empty: false, lookalike } : {}), cards: withExisting, venues, categories, note: "These are ready-made rules. No prices, odds, volume or liquidity are returned." });
-  // H1 re-review: a team card built without its schedule (still being read, or unreadable) is not kept by caches for the full minute
-  return r.cards.some((c) => (c as { scheduleUnavailable?: boolean }).scheduleUnavailable) ? { ...answer, headers: { ...(answer.headers ?? {}), "cache-control": DEGRADED_CACHE } } : answer;
+  // review of A-22 item 8: search is no-store (spec.ts cacheSec 0), so a team card built without its schedule needs no shorter cache line
+  return answer;
 }
 
 /** GET /v1/elections?type=&state= — the guided Elections & Politics flow (src/lib/burnticker/elections.ts), from Polymarket's open midterm races. */

@@ -1,3 +1,4 @@
+import { utcDay } from "@/lib/burnticker/utcWords";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import type { Registry, ReceiptRow, TokenRow } from "@/lib/burnticker/registry";
 
@@ -56,10 +57,10 @@ export function buildLeaderboard(reg: Reader, now = Date.now(), pageOf: (t: Toke
     const burns = rows.filter((r) => burned(r) > ZERO);
     const total = burns.reduce((a, r) => a + burned(r), ZERO);
     if (total > ZERO) most.push({ ...base, raw: total, value: tokens(total), detail: `${group(tokens(total))} $${t.ticker} burned on ${burns.length} ${burns.length === 1 ? "receipt" : "receipts"}.`, at: burns.map((r) => r.settledAt).sort().pop() ?? null, signature: null });
-    for (const r of burns) big.push({ ...base, raw: burned(r), value: tokens(burned(r)), detail: `${group(tokens(burned(r)))} $${t.ticker} burned on the result of ${r.settledAt.slice(0, 10)}.`, at: r.settledAt, signature: r.signature });
+    for (const r of burns) big.push({ ...base, raw: burned(r), value: tokens(burned(r)), detail: `${group(tokens(burned(r)))} $${t.ticker} burned on the result of ${utcDay(r.settledAt)}.`, at: r.settledAt, signature: r.signature });
     const s = streaksOf(rows);
     if (s.longest > 0) streak.push({ ...base, n: s.longest, value: String(s.longest), detail: `${s.longest} ${s.longest === 1 ? "result" : "results"} in a row that each burned${s.current === s.longest ? ", and the run is still going" : ""}.`, at: s.endedAt, signature: null });
-    for (const r of rows.filter((x) => x.status === "confirmed")) newest.push({ ...base, key: `${r.settledAt}|${r.eventId}`, value: tokens(burned(r)), detail: burned(r) > ZERO ? `${group(tokens(burned(r)))} $${t.ticker} burned on the result of ${r.settledAt.slice(0, 10)}.` : `A receipt for the result of ${r.settledAt.slice(0, 10)}, which burned nothing.`, at: r.settledAt, signature: r.signature });
+    for (const r of rows.filter((x) => x.status === "confirmed")) newest.push({ ...base, key: `${r.settledAt}|${r.eventId}`, value: tokens(burned(r)), detail: burned(r) > ZERO ? `${group(tokens(burned(r)))} $${t.ticker} burned on the result of ${utcDay(r.settledAt)}.` : `A receipt for the result of ${utcDay(r.settledAt)}, which burned nothing.`, at: r.settledAt, signature: r.signature });
   }
   const top = <T extends LeaderRow>(xs: T[], cmp: (a: T, b: T) => number): LeaderRow[] => xs.sort(cmp).slice(0, LEADERBOARD_ROWS).map((x, i) => ({ rank: i + 1, ticker: x.ticker, name: x.name, mint: x.mint, page: x.page, value: x.value, detail: x.detail, at: x.at, signature: x.signature }));
   const big2 = (a: bigint, b: bigint) => (a === b ? 0 : a > b ? -1 : 1);

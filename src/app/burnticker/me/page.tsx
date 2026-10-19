@@ -1,5 +1,6 @@
 "use client";
 
+import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { DRAFT_ROUTE_LINE, LOOKUP_LABEL, walletAddressProblem } from "@/lib/burnticker/guidedLaunch";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -27,7 +28,7 @@ import { readLatest, shownFor } from "@/lib/burnticker/latestRead";
  * views (this site keeps no counts, so it says so) and follows (kept in each visitor's browser, so not countable), and a "This week"
  * block of copyable lint-clean text, from GET /burnticker/creator/<wallet>/summary (the creator page's numbers). Words: creatorBenefits.ts.
  */
-interface Summary { coins: { ticker: string; receipts: number; week: number; rank: string | null; summary: string }[] }
+interface Summary { coins: { ticker: string; mint?: string; receipts: number; week: number; rank: string | null; summary: string }[] }
 interface Coin { ticker: string; name: string; mint: string; page: string; state: string; badge: string | null; queuedUnits: number; nextSettlementAt: string | null; lastReading: { id: string | null; value: string | null; at: string | null } | null; agreement: { reads: number; methods: string | null; held: string | null }; receipts: number; windDown: string | null; pairId: string | null; todayPost: { text: string; lintOk: boolean; hits: string[] } }
 interface Data { wallet: string; coins: Coin[]; pairs: { pairId: string; page: string; sides: string[]; voided: boolean }[] }
 const denver = (iso: string | null) => (iso ? new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso)) : "—");
@@ -67,7 +68,8 @@ export default function CreatorDashboard() {
     return readLatest(mine, (signal) => fetch(`/burnticker/creator/${mine}/summary`, { signal }).then(async (r) => { if (!r.ok) throw new Error(String(r.status)); return (await r.json()) as Summary; }),
       (r) => setSumSlot({ key: r.key, value: r.ok ? r.value : null }));
   }, [mine]);
-  const rankOf = (t: string) => (sum ? sum.coins.find((x) => x.ticker === t)?.rank ?? null : null);
+  // prelaunch audit 2026-10-18: matched on the mint, so two coins on one ticker never swap ranks
+  const rankOf = (mint: string) => (sum ? sum.coins.find((x) => x.mint === mint)?.rank ?? null : null);
   const weekText = sum ? sum.coins.map((x) => x.summary).join("\n") : "";
   const copyWeek = async () => { try { await navigator.clipboard.writeText(weekText); setCopied("week"); setTimeout(() => setCopied(null), 2000); } catch { setCopied(null); } };
   const copy = async (c: Coin) => { try { await navigator.clipboard.writeText(c.todayPost.text); setCopied(c.mint); setTimeout(() => setCopied(null), 2000); } catch { setCopied(null); } };
@@ -109,7 +111,7 @@ export default function CreatorDashboard() {
         {created.length > 0 && <ul className="grid gap-3 md:grid-cols-2" aria-label="your coins">
           {created.map((c) => (
             <li key={c.mint} className={card + " space-y-2"} data-coin-state={c.state}>
-              <div className="flex flex-wrap items-center gap-2"><Link className="font-mono text-base underline" href={c.page}>${c.ticker}</Link><span className="text-neutral-400">{c.name}</span><span className="bt-chip">{stateChip(c.state)}</span>{c.badge && <span className="bt-chip bt-chip-window">{c.badge}</span>}</div>
+              <div className="flex flex-wrap items-center gap-2"><Link className="font-mono text-base underline" href={coinCanonicalHref(c.mint)}>${c.ticker}</Link><span className="text-neutral-400">{c.name}</span><span className="bt-chip">{stateChip(c.state)}</span>{c.badge && <span className="bt-chip bt-chip-window">{c.badge}</span>}</div>
               <div data-me-trade><TradeButtons links={coinLinks({ cluster: host, mint: c.mint, phase: null, status: "live" })} mint={c.mint} ticker={c.ticker} compact /></div>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                 <dt className="text-neutral-500">queued units</dt><dd>{c.queuedUnits}</dd>
@@ -119,14 +121,14 @@ export default function CreatorDashboard() {
                 <dt className="text-neutral-500">receipts</dt><dd>{c.receipts}</dd>
                 <dt className="text-neutral-500">wind-down</dt><dd>{c.windDown ?? "—"}</dd>
                 {mine && <>
-                  <dt className="text-neutral-500">{ANALYTICS_COPY.rank}</dt><dd data-rank>{rankOf(c.ticker) ?? (sumErr ? ANALYTICS_COPY.rankUnavailable : "—")}</dd>
+                  <dt className="text-neutral-500">{ANALYTICS_COPY.rank}</dt><dd data-rank>{rankOf(c.mint) ?? (sumErr ? ANALYTICS_COPY.rankUnavailable : "—")}</dd>
                   <dt className="text-neutral-500">{ANALYTICS_COPY.views}</dt><dd>{ANALYTICS_COPY.viewsNone}</dd>
                   <dt className="text-neutral-500">{ANALYTICS_COPY.follows}</dt><dd>{ANALYTICS_COPY.followsNone}</dd>
                 </>}
               </dl>
               {/* website-26 (WIRING-FEATURES item 10): the six post-launch steps and what comes next, and who does it */}
               <LaunchChecklist mint={c.mint} />
-              <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Today&apos;s post {c.todayPost.lintOk ? "passes the wording check." : <span className="text-red-400">fails the wording check because of {c.todayPost.hits.join(", ")}.</span>}</summary><pre className="mt-1 whitespace-pre-wrap rounded bg-neutral-950 p-2 text-neutral-300">{c.todayPost.text}</pre></details>
+              <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Today&apos;s post {c.todayPost.lintOk ? "passes the wording check." : <span className="text-red-400" data-refused>fails the wording check because of {c.todayPost.hits.join(", ")}.</span>}</summary><pre className="mt-1 whitespace-pre-wrap rounded bg-neutral-950 p-2 text-neutral-300">{c.todayPost.text}</pre></details>
               <button className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400 disabled:opacity-40" disabled={!c.todayPost.lintOk} onClick={() => void copy(c)}>{copied === c.mint ? "copied ✓" : "copy today's post"}</button>
             </li>
           ))}

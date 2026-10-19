@@ -6,7 +6,8 @@ import { loadTransparency } from "@/lib/burnticker/trust";
 import { deficitHref } from "@/lib/burnticker/creatorLaunches";
 import { checkReceiptHref } from "@/lib/burnticker/coinPage";
 import type { SiteLaunchState } from "@/lib/burnticker/launchAvailability";
-import { CARD_MEANINGS, NOT_READ, curveCell, emptyLabels, featuredLine, groupDigits, longDay, mcapText, pctOfSupply, shortDay, type CardCell, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
+import { STATUS_SENTENCES, coinStatusSentence, readingSentence, type CoinStatusFacts } from "@/lib/burnticker/coinStatus";
+import { CARD_MEANINGS, NOT_READ, curveCell, emptyLabels, featuredLine, groupDigits, headlineStat, holdersCell, longDay, mcapCell, pctOfSupply, shortDay, type CardCell, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
 import { sortEvents, eventsFromKeeper, type ActivityEvent } from "@/lib/burnticker/activity";
 import { deficitQueue, type DeficitQueue, type KeeperFiles } from "@/lib/burnticker/deficitQueue";
 import { readinessOf, type Readiness } from "@/lib/burnticker/readiness";
@@ -73,6 +74,10 @@ export interface HomeData {
 export interface HomeCoin extends Pick<IndexCoin, "ticker" | "burns" | "lastBurnAt"> {
   mint?: string; burned?: string; pctOfSupply?: number; launchedAt?: string | null; phase?: IndexCoin["phase"]; progressPct?: number | null;
   raised?: string | null; threshold?: string | null; quote?: string | null; marketCap?: string | null; holders?: number | null;
+  /** coin card status 2026-10-18: every holder counted is the coin's own curve or pool (cardView.ts onlyPoolHolders) */
+  holdersOnlyPools?: boolean;
+  /** coin card status 2026-10-18: the facts behind the card's status sentence (coinStatus.ts) */
+  statusFacts?: CoinStatusFacts | null;
   cluster?: string; latestSignature?: string | null; readOk?: boolean;
   /** website-14: the coin's own activity rows (activity.ts eventsFromStatus) and where it stands (readiness.ts) */
   events?: ActivityEvent[]; readiness?: Readiness | null;
@@ -162,6 +167,9 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
     tags: [{ label: "Featured", tone: "featured" }, ...(created ? [] : [{ label: "Not created yet", tone: "neutral" as const }])],
     note: created ? "The operator's first coin. Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt. Its rules were locked before it was created." : "The operator's first coin. Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt. Its rules are locked, and the coin is not created yet.",
     rule: debtRule(d.dial.percent, d.dial.unitLabel), nextSettle: DEBT_NEXT,
+    status: !created ? STATUS_SENTENCES.notCreated : readable && live!.statusFacts ? coinStatusSentence(live!.statusFacts)
+      // review L1: $DEFICIT burns only on a reading that shows a rise in the debt; on its curve it waits for the curve too
+      : readingSentence("up", (readable ? live!.phase ?? null : kc?.phase ?? null) === "curve"),
     progress: readiness ? progressOf(readiness, { raiseSol: Number.isFinite(raiseNum) && raiseNum > 0 ? raiseNum : null, raisedSol: Number.isFinite(raisedNum) ? raisedNum : null, queuedUnits: queue.state === "queued" ? queue.units : null }) : null,
     progressWhy: readiness ? null : unreadWhy,
     curve: !created ? noCurve("There is no curve until the coin is created. Its raise is read from its pool once it exists.")
@@ -169,9 +177,10 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       : kc ? curveCell({ phase: kc.phase, progressPct: kc.progressPct, raised: kc.raised, threshold: kc.threshold, quote: kc.quote }, null)
       : noCurve(ks ? "The keeper's files do not carry a curve reading yet." : unreadWhy),
     // walkthrough 13: before $DEFICIT is registered here, its keeper's curve reading carries the market cap (the coin page showed it, the card did not)
-    mcap: !created ? cell(null, "The coin is not created yet.") : readable && live!.marketCap ? cell(mcapText(live!.marketCap, live!.quote, live!.phase ?? null), CARD_MEANINGS.mcap)
-      : !readable && kc?.marketCap ? cell(mcapText(kc.marketCap, kc.quote, kc.phase), CARD_MEANINGS.mcap) : cell(null, readable ? (live!.phase === "graduated" ? NOT_READ.mcapPool : NOT_READ.mcapNotRead) : ks ? NOT_READ.mcapNotRead : unreadWhy),
-    holders: !created ? cell(null, "The coin is not created yet.") : readable && typeof live!.holders === "number" ? cell(groupDigits(live!.holders), null) : cell(null, NOT_READ.holders),
+    // coin card status 2026-10-18: an untraded curve says "No trades yet"; a traded one gives the figure with its basis (cardView.ts mcapCell)
+    mcap: !created ? cell(null, "The coin is not created yet.") : readable ? mcapCell({ cap: live!.marketCap, quote: live!.quote, phase: live!.phase ?? null, raised: live!.raised ?? null })
+      : kc ? mcapCell({ cap: kc.marketCap, quote: kc.quote, phase: kc.phase, raised: kc.raised }) : cell(null, ks ? NOT_READ.mcapNotRead : unreadWhy),
+    holders: !created ? cell(null, "The coin is not created yet.") : readable && typeof live!.holders === "number" ? holdersCell(live!.holders, live!.holdersOnlyPools ?? false, null) : cell(null, NOT_READ.holders),
     // walkthrough 13: the create date is in config/burnticker/current-status.json (deficit.launch.date) even before the registry has the coin
     createdAt: readable ? live!.launchedAt ?? null : created ? d.launch.date ?? null : null,
     createdWhy: created ? (readable || d.launch.date ? null : ks ? "The keeper's files do not give a creation time." : unreadWhy) : "The coin is not created yet.",
@@ -193,12 +202,13 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       id: "rehearsal", ticker: "REHEARSAL", name: "Rehearsal", imageUrl: null, group: "test",
       tags: [{ label: "Mainnet rehearsal", tone: "rehearsal" }],
       note: REHEARSAL_SENTENCE,
+      status: STATUS_SENTENCES.practice,
       rule: debtRule(rr.percent, rr.unitLabel), nextSettle: DEBT_NEXT,
       // website-15 item 9: its LaunchLab pool is read like any coin's (home route); unread is a plain dash with a plain reason
       progress: rc ? progressOf(readinessOf({ launched: true, phase: rc.phase, raisedSol: Number(rc.raised), graduationSol: Number(rc.threshold), poolVerified: null, latest: null }), { raiseSol: Number(rc.threshold), raisedSol: Number(rc.raised) }) : null,
       progressWhy: rc ? null : REHEARSAL_UNREAD,
       curve: rc ? curveCell(rc, null) : noCurve(REHEARSAL_UNREAD),
-      mcap: rc?.marketCap ? cell(mcapText(rc.marketCap, rc.quote, rc.phase), CARD_MEANINGS.mcap) : cell(null, rc ? (rc.phase === "graduated" ? NOT_READ.mcapPool : REHEARSAL_UNREAD) : REHEARSAL_UNREAD), holders: cell(null, NOT_READ.holders),
+      mcap: rc ? mcapCell({ cap: rc.marketCap, quote: rc.quote, phase: rc.phase, raised: rc.raised }, REHEARSAL_UNREAD) : cell(null, REHEARSAL_UNREAD), holders: cell(null, NOT_READ.holders),
       // audit 7 item 23: the exact block time of its create transaction when recorded (slot 455825866), else the day
       createdAt: rehearsal.createdAt ?? rehearsal.date ?? null, createdWhy: rehearsal.createdAt || rehearsal.date ? null : "The record does not give a creation date.",
       burned: cell(null, `This site does not read $REHEARSAL's burns. The operator's record says: ${rehearsal.status}.`),
@@ -220,6 +230,7 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       id: "deficit-devnet", ticker: "DEFICIT", name: "Deficit, devnet rehearsal", imageUrl: "/burnticker/brand/deficit.png", group: "test",
       tags: [{ label: "Devnet", tone: "devnet" }],
       note: "The practice run on devnet, a test network where tokens have no money value.",
+      status: STATUS_SENTENCES.devnetDone,
       rule: debtRule(dv.percent, dv.unitLabel), nextSettle: cell(null, "The devnet rehearsal is over, so no result is scheduled."),
       // website-15 item 6 (ChatGPT repair 2): the devnet coin never had a curve, so curve and graduation are "not applicable", not done;
       // its real devnet burn stays
@@ -350,6 +361,7 @@ export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(
     statusLine: [homeStatusLine(rec), historyCountsLine(historyCounts(root)), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,
   }, host);
   // after the devnet filter, so the count and the empty labels describe the cards this host serves
-  const shown = out.featured.map((v) => ({ ...v, empty: emptyLabels(v) }));
+  // coin card status 2026-10-18: the static page also gets the one number the card keeps in view (cardView.ts headlineStat)
+  const shown = out.featured.map((v) => ({ ...v, empty: emptyLabels(v), stat: headlineStat(v) }));
   return { ...out, featured: shown, featuredLine: featuredLine(shown), nextNotice: upcomingNotice(out.upcoming, shown.length) };
 }

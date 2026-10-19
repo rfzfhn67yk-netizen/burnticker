@@ -50,7 +50,7 @@ describe("one card order (review item 5, brief rule 10; website-13: Claude site 
     const v = cardViewFromIndex(base, "85");
     assert.equal(v.rule, "Burns when the Rays lose"); assert.deepEqual(v.nextSettle, { text: NEXT_WHEN_PUBLISHED, why: nextCheckWhy("Oct 20") }); // walkthrough 13: a keeper check is not the result time
     assert.deepEqual(v.curve, { raised: "35.7", of: "85 SOL", pct: 42, done: false, why: null });
-    assert.deepEqual(v.mcap, { text: "61.25 SOL (curve-implied)", why: CARD_MEANINGS.mcap }); // site polish: a curve market cap says so
+    assert.deepEqual(v.mcap, { text: "61.25 SOL from the curve", why: CARD_MEANINGS.mcap }); // a curve market cap says where it comes from
     assert.deepEqual(v.holders, { text: null, why: NOT_READ.holders }, "no indexer, no number");
     assert.equal(v.burned.text, "1,234.5 $RAYS, 0.12% of supply"); assert.equal(v.group, "public");
     assert.deepEqual(v.receipt, { href: "/burnticker/t/RAYS#receipts" });

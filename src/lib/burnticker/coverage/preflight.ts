@@ -1,3 +1,4 @@
+import { utcDay } from "@/lib/burnticker/utcWords";
 import { catalogue, feedById, loadSourceEntries, type Feed } from "@/lib/burnticker/catalogue";
 import { fetchBody, parseBody } from "@/lib/burnticker/sources/attestedHttp";
 import { chainResult, gammaResult, settledAtOf, type GammaMarket, type PolymarketClient } from "@/lib/burnticker/oracle/polymarket";
@@ -115,7 +116,7 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
   // A read that parses but stops short (a plausibility refusal, a frozen endpoint) leaves an old last reading: the schedule says a newer
   // one was due more than STALE_GRACE_MS ago → refused, with the parser's refusal as the reason (FRED's full-history CSV, 10-10).
   // sources-3: a next-event one-shot reads only on its events, so an old last reading is not a stale feed
-  if (last && next.at && !NEXT_EVENT_ONE_SHOT_RE.test(feed.id) && Date.parse(next.at) + STALE_GRACE_MS < now) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "stale-primary", reason: `${feed.id}'s latest complete reading is ${last.id}, but the next one was due on ${next.at.slice(0, 10)}.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
+  if (last && next.at && !NEXT_EVENT_ONE_SHOT_RE.test(feed.id) && Date.parse(next.at) + STALE_GRACE_MS < now) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "stale-primary", reason: `${feed.id}'s latest complete reading is ${last.id}, but the next one was due on ${utcDay(next.at)}.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
   // the owner's single-publisher exception (singleSource.ts, 2026-10-12): the natural-disaster feeds settle on their own publisher
   if (isSingleOfficialSource(feed.config)) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis, agreementBasis: singleSourceMethod(feed.config.id) }, null);
   const crosses = crossReadsOf(desc, all);

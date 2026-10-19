@@ -459,7 +459,7 @@ export function ReviewCard(p: ReviewCardProps) {
         )}
       </>}
       </fieldset>
-      {p.problems.length > 0 && <p className="min-w-0 break-words text-red-400">Can&apos;t launch this rule: {p.problems.join("; ")}</p>}
+      <p className="min-w-0 break-words text-red-400 empty:hidden" aria-live="polite">{p.problems.length > 0 ? <>Can&apos;t launch this rule: {p.problems.join("; ")}</> : null}</p>
       {p.error && <p className="min-w-0 break-words text-red-400" role="alert">{p.error}</p>}
       {p.cost && <p className="min-w-0 break-words text-sm text-neutral-200" data-cost-line>{p.cost}{p.costNote && <span className="block text-xs text-neutral-400" data-cost-note>{p.costNote}</span>}</p>}
       {p.mintSearch}

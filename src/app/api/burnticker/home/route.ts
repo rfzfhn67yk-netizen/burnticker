@@ -55,10 +55,10 @@ async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<Pr
 export async function GET() {
   if (homeMemo) {
     if (Date.now() - homeMemo.at >= homeMemo.memoMs) void refreshHome();
-    return NextResponse.json(homeMemo.body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "hit" } });
+    return NextResponse.json(homeMemo.body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30", "x-home-memo": "hit" } });
   }
   await Promise.race([refreshHome(), new Promise<void>((r) => setTimeout(r, HOME_COLD_WAIT_MS))]);
-  if (homeMemo) return NextResponse.json((homeMemo as { body: unknown }).body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15", "x-home-memo": "cold" } });
+  if (homeMemo) return NextResponse.json((homeMemo as { body: unknown }).body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30", "x-home-memo": "cold" } });
   return NextResponse.json({ loading: true, error: "the coin list is being read; try again in a few seconds", code: "home-loading", retryAfterSec: 5 }, { status: 503, headers: { ...PUBLIC_READ_CORS, "cache-control": "no-store", "retry-after": "5" } });
 }
 

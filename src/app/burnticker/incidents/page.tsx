@@ -8,8 +8,9 @@ import { repoUrl } from "@/lib/burnticker/currentStatusLinks";
 import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader, Panel } from "../_components/Panel";
 import { RepoText } from "../_components/RepoText";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: INCIDENTS_COPY.title, description: INCIDENTS_COPY.description, alternates: { canonical: "/burnticker/incidents" } };
+export const metadata: Metadata = withShareCard({ title: INCIDENTS_COPY.title, description: INCIDENTS_COPY.description, alternates: { canonical: "/burnticker/incidents" } });
 export const dynamic = "force-dynamic";
 
 /**

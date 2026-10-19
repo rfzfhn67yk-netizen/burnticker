@@ -1,3 +1,4 @@
+import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { PublicKey, type Connection } from "@solana/web3.js";
 import { PLAN_STORAGE_PREFIX, type ChainReadDeps, type PlanStorage, type StoredLaunch } from "@/lib/burnticker/signPlan";
 
@@ -46,12 +47,13 @@ export const RECOVERY_BUTTON: Record<RecoveryAction, string> = { check: "Check o
 /** Beside the start-new button: what pressing it keeps and what it does not undo. */
 export const START_NEW_LINE = "This notice moves to the list of earlier launches below, with its signatures and mints. Anything already created on chain stays there.";
 
-export const coinHref = (ticker: string): string => `/burnticker/t/${ticker}`;
+/** A launched coin's page by its mint (prelaunch audit 2026-10-18): tickers are not unique, so a ticker link can open another coin or the chooser. */
+export const coinHref = (mint: string): string => coinCanonicalHref(mint);
 
 /** "Last checked at 7:05 PM." — a time of day in the reader's own clock, nothing more. */
 export const checkedAtSentence = (ms: number): string => `Last checked at ${new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}.`;
 
-export interface FinishedLaunch { key: string; text: string; checked: string; coins: { ticker: string; href: string }[] }
+export interface FinishedLaunch { key: string; text: string; checked: string; coins: { ticker: string; mint: string; href: string }[] }
 export interface RecoveryView { items: StoredLaunch[]; finished: FinishedLaunch[] }
 /**
  * The notice after one check (launch audit 228): a finished launch leaves the list of open items (its record is gone) and joins
@@ -59,7 +61,7 @@ export interface RecoveryView { items: StoredLaunch[]; finished: FinishedLaunch[
  */
 export function afterRecoveryCheck(prev: RecoveryView, s: StoredLaunch, r: { text: string; done: boolean; rec: StoredLaunch["rec"] }, listed: StoredLaunch[], now: number): RecoveryView {
   if (!r.done) return { items: prev.items.map((x) => (x.key === s.key ? { key: s.key, rec: r.rec } : x)), finished: prev.finished };
-  const entry: FinishedLaunch = { key: s.key, text: r.text, checked: checkedAtSentence(now), coins: r.rec.confirms.map((c) => ({ ticker: c.ticker, href: coinHref(c.ticker) })) };
+  const entry: FinishedLaunch = { key: s.key, text: r.text, checked: checkedAtSentence(now), coins: r.rec.confirms.map((c) => ({ ticker: c.ticker, mint: c.mint, href: coinHref(c.mint) })) };
   return { items: listed.filter((x) => x.key !== s.key), finished: [...prev.finished.filter((f) => f.key !== s.key), entry] };
 }
 

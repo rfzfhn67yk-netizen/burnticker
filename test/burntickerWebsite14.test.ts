@@ -177,7 +177,7 @@ describe("item 3: next results (/burnticker/upcoming and the home strip)", () =>
   test("a registered coin: the event, the source in words, the source's schedule, and where the latest result stands", () => {
     const row = upcomingFromStatus({ ticker: "RAYS", name: "Rays", cluster: "mainnet", status: "live", oracle: "kalshi", selectorKey: "kalshi:KXMLBGAME:binary", seriesTitle: "Rays games", next: { nextCheckAt: "2026-10-21T02:00:00Z", nextMarket: "KXMLBGAME-26OCT21TBNYY", nextCloseTime: "2026-10-21T03:00:00Z" } }, [{ status: "confirmed", settledAt: "2026-10-19T03:00:00Z", units: 1, signature: "SigB" }])!;
     assert.equal(row.source, "A prediction market's settled result"); assert.doesNotMatch(JSON.stringify(row), /kalshi/i);
-    assert.equal(row.schedule, "The market is scheduled to close at 2026-10-21 03:00 UTC. The result counts once the source settles it, on the source's own timing.");
+    assert.equal(row.schedule, "The market is scheduled to close on 21 October 2026, 03:00 UTC. The result counts once the source settles it, on the source's own timing.");
     assert.equal(row.status, "burned"); assert.equal(row.receiptHref, "/burnticker/check?sig=SigB&cluster=mainnet#verify");
     assert.equal(upcomingFromStatus({ ticker: "D", name: "D", cluster: "mainnet", status: "draft", oracle: "catalogue", selectorKey: "c", seriesTitle: null, next: { nextCheckAt: null, nextMarket: null, nextCloseTime: null } }, []), null);
     for (const [rs, st] of [[[], "waiting"], [[{ status: "planned", settledAt: "x", units: 1, signature: null, execution: "program", readingDate: null }], "published"], [[{ status: "planned", settledAt: "x", units: 1, signature: null, readingDate: "2026-10-01" }], "attested"], [[{ status: "planned", settledAt: "x", units: 1, signature: null, readingDate: "2026-10-01", waitReason: "pool not tradable" }], "deferred"], [[{ status: "pending-pair", settledAt: "x", units: 1, signature: null }], "deferred"]] as const) {
@@ -257,8 +257,8 @@ describe("item 5: watch how a burn works (the devnet receipt, four steps and the
 describe("item 6: two paths on arrival, and why someone creates a coin", () => {
   test("Explore and Create with one sentence each; Create opens the closed-launches dialog while closed", () => {
     const home = read("site/burnticker/index.html");
-    assert.deepEqual(TWO_PATHS.map((p) => p.label), ["Explore coins", "Create a coin"]);
-    assert.match(home, /<a class="path path-create" href="\/burnticker\/launch" data-launch-button data-create-path>/);
+    assert.deepEqual(TWO_PATHS.map((p) => p.label), ["Explore coins", "Launch a coin"]);
+    assert.match(home, /<a class="path path-create" href="\/burnticker\/launch" data-launch-button data-create-path aria-describedby="create-status">/);
     assert.match(read("src/lib/burnticker/siteNav.mjs"), /btns\.forEach\(function \(btn\) \{ btn\.addEventListener\("click"/, "every launch button opens the dialog");
     for (const p of TWO_PATHS) { clean(p.text, p.label); assert.equal(p.text.split(/(?<=\.)\s/).length, 1, "one sentence each"); }
     clean(WALKTHROUGH_LINK.text, "walkthrough link");

@@ -166,7 +166,8 @@ describe("the embed page", () => {
     assert.equal((html.match(/<style>/g) ?? []).length, 1);
     assert.doesNotMatch(html, / style="/, "no inline style attributes (the CSP would block them)");
     assert.ok(html.includes(`<script>${EMBED_SCRIPT}</script>`) && html.includes(`<style>${EMBED_STYLE}</style>`), "the served bytes are the hashed bytes");
-    assert.match(html, /\$BRONCO/); assert.match(html, /next settlement/);
+    assert.match(html, /\$BRONCO/); assert.match(html, /next reads the source|scheduled to close|resolves once|No result is scheduled|due to read the source/);
+    assert.doesNotMatch(html, /data-at=|next settlement/, "no countdown and no settlement claim (A-26)");
     assert.doesNotMatch(html, /document\.cookie|localStorage|fetch\(/);
     lintAll([embedText(html)], "embed page");
   });
@@ -183,12 +184,18 @@ describe("the embed page", () => {
     }
   });
 
-  test("the next-settlement line: a countdown when a time is known, plain words otherwise", () => {
+  test("the line under the card says what the time is, never counts down, and calls a past read overdue (A-26)", () => {
     const now = Date.parse("2026-10-10T12:00:00Z");
-    assert.deepEqual(nextLine({ nextSettlementAt: "2026-10-10T15:30:00.000Z", nextSettlementNote: "the keeper's next read of the source" }, now).lead, "in 3h 30m");
-    assert.equal(nextLine({ nextSettlementAt: "2026-10-12T12:00:00.000Z", nextSettlementNote: "x" }, now).lead, "in 2d 0h");
-    assert.equal(nextLine({ nextSettlementAt: null, nextSettlementNote: "resolves once" }, now).lead, "resolves once");
-    assert.equal(nextLine({ nextSettlementAt: null, nextSettlementNote: "no result scheduled" }, now).lead, "no result scheduled");
+    const read = nextLine({ nextSettlementAt: "2026-10-10T15:30:00.000Z", nextSettlementNote: "the keeper's next read of the source" }, now);
+    assert.equal(`${read.before}${read.utc}${read.after}`, "This site next reads the source on 10 October 2026, 15:30 UTC.");
+    const late = nextLine({ nextSettlementAt: "2026-10-10T11:00:00.000Z", nextSettlementNote: "the keeper's next read of the source" }, now);
+    assert.equal(`${late.before}${late.utc}${late.after}`, "This site was due to read the source on 10 October 2026, 11:00 UTC, and that read is overdue.");
+    const close = nextLine({ nextSettlementAt: "2026-10-12T12:00:00.000Z", nextSettlementNote: "the next market close the venue lists" }, now);
+    assert.equal(`${close.before}${close.utc}${close.after}`, "The market is scheduled to close on 12 October 2026, 12:00 UTC.");
+    assert.equal(nextLine({ nextSettlementAt: null, nextSettlementNote: "resolves once" }, now).before, "This rule resolves once.");
+    assert.equal(nextLine({ nextSettlementAt: null, nextSettlementNote: "no result scheduled" }, now).before, "No result is scheduled.");
+    assert.doesNotMatch(EMBED_SCRIPT, /setInterval|data-at/, "no countdown in the script");
+    for (const l of [read, late, close]) lintAll([`${l.before}${l.utc}${l.after}`], "embed line");
   });
 
   test("the card on the embed page is the badge's own SVG (one renderer)", async () => {

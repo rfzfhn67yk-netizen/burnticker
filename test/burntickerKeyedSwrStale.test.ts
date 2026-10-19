@@ -138,7 +138,7 @@ describe("the route's freshness fields and the page's dated snapshot (coinFreshn
 
   test("a past source check is labelled overdue, never next; a future one is unchanged", () => {
     const row = nextTimeRow(null, "2026-10-18T01:39:00Z", AT_2208);
-    assert.equal(row.label, "Source check overdue"); assert.equal(row.value, "2026-10-18 01:39 UTC"); assert.equal(row.note, OVERDUE_CHECK_NOTE);
+    assert.equal(row.label, "Source check overdue"); assert.equal(row.value, "18 October 2026, 01:39 UTC"); assert.equal(row.note, OVERDUE_CHECK_NOTE);
     assert.notEqual(row.label, "Next source check");
     assert.equal(nextTimeRow(null, "2026-10-18T23:00:00Z", AT_2208).label, "Next source check");
     assert.equal(nextTimeRow("2026-10-18T01:00:00Z", null, AT_2208).label, "Scheduled market close, passed");

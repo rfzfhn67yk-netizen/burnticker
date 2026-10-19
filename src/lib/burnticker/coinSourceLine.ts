@@ -4,7 +4,8 @@
  * own published data"; "Next result" printed the keeper's next check as if it were the publisher's result time, so that row is now
  * "Next source check" unless a market close is known.
  */
-import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
+import { utcDateTime } from "@/lib/burnticker/utcWords";
+import { espnSeriesTitle, parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { GAME_AGREE_LINE, GAME_BURN_LINE, GAME_SETTLEMENT, leagueProvenance, SINGLE_SOURCE_LINE, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { isSingleSourceSeries, SINGLE_SOURCE_PUBLISHER } from "@/lib/burnticker/singleSource";
 
@@ -56,9 +57,21 @@ export const PASSED_CLOSE_NOTE = "That time has passed and this site has not rea
 
 /** The next-time row: a known market close, else the keeper's next source check (never called the result time). */
 export function nextTimeRow(nextCloseTime: string | null | undefined, nextCheckAt: string | null | undefined, now?: number): { label: string; value: string; note: string } {
-  const utc = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
+  const utc = (iso: string) => utcDateTime(iso);
   const past = (iso: string) => now !== undefined && Number.isFinite(Date.parse(iso)) && Date.parse(iso) < now;
   if (nextCloseTime) return past(nextCloseTime) ? { label: "Scheduled market close, passed", value: utc(nextCloseTime), note: `${PASSED_CLOSE_NOTE} ${PUBLISHER_DECIDES}` } : { label: "Next market close", value: utc(nextCloseTime), note: `Times are in UTC. ${PUBLISHER_DECIDES}` };
   if (nextCheckAt) return past(nextCheckAt) ? { label: "Source check overdue", value: utc(nextCheckAt), note: OVERDUE_CHECK_NOTE } : { label: "Next source check", value: utc(nextCheckAt), note: `Times are in UTC. ${PUBLISHER_DECIDES}` };
   return { label: "Next source check", value: "None scheduled", note: "This rule has no scheduled check this site knows of." };
+}
+
+/**
+ * A selector key in words for a list (prelaunch audit 2026-10-18 A-30): "catalogue:espn.team:nfl-PIT.23-win-m2026.BAL.33" is the
+ * series' own title ("Pittsburgh Steelers against Baltimore Ravens, head to head ..."); null when this module cannot name it, so a
+ * list leaves the line out rather than print the raw key.
+ */
+export function selectorTitle(selectorKey: string): string | null {
+  const s = seriesOfSelector(selectorKey);
+  const e = s ? parseEspnSeries(s) : null;
+  // the series title joins its window with an em dash; a list line reads it with a comma
+  return e ? espnSeriesTitle(e).replace(/\s+—\s+/g, ", ") : null;
 }

@@ -9,9 +9,10 @@ import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 import { SeasonsTabs } from "../_components/SeasonsTabs";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Burn Derby", description: "Coin vs Coin pairs and brackets. In a pair, fees from both coins burn the coin whose rule the day's result fires. The receipts are the scoreboard.", alternates: { canonical: "/burnticker/derby" } }; // audit 7 item 27: a canonical URL
+export const metadata: Metadata = withShareCard({ title: "Burn Derby", description: "Coin vs Coin pairs and brackets. In a pair, fees from both coins burn the coin whose rule the day's result fires. The receipts are the scoreboard.", alternates: { canonical: "/burnticker/derby" } }); // audit 7 item 27: a canonical URL
 
 /**
  * BURN DERBY — THE INDEX (2026-10-10): open coin-vs-coin pairs (score as a receipt tally, the last days as a strip, the season end), active

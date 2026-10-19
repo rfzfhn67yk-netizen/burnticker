@@ -480,7 +480,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   }
   const opp = c.game ? (L0.sport === "soccer" || s.league === "cfb" || s.league === "mcbb" || s.league === "wcbb" ? c.game.opponent : `the ${c.game.opponent}`) : null;
   const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : " in the one game this coin follows";
-  const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " that game"}`;
+  const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " the one game this coin follows"}`;
   return mk(`${nick} ${two ? (o === "windraw" ? "Win or Draw" : o === "drawloss" ? "Draw or Loss" : "Win or Loss") : o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${GAME_RESULT}.${pens} ${GAME_BURN_LINE} Nothing happens otherwise${outcomeResults(o).includes("draw") ? "" : `, and a ${tie} burns nothing`}.`,
     oneShotSentence(r, c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
 }

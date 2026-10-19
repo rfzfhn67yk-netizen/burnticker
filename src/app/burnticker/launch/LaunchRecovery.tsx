@@ -73,7 +73,7 @@ export function LaunchRecovery() {
       {view.finished.map((f) => (
         <div key={f.key} className="space-y-1" data-launch-finished>
           <p className="text-xs text-emerald-400">{f.text} <span className="text-neutral-500">{f.checked}</span></p>
-          <p className="flex flex-wrap gap-2">{f.coins.map((c) => <a key={c.ticker} className="rounded bg-amber-400 px-3 py-1 text-xs font-semibold text-neutral-950" href={c.href}>Open ${c.ticker}</a>)}</p>
+          <p className="flex flex-wrap gap-2">{f.coins.map((c) => <a key={c.mint} className="rounded bg-amber-400 px-3 py-1 text-xs font-semibold text-neutral-950" href={c.href}>Open ${c.ticker}</a>)}</p>
         </div>
       ))}
       {history.length > 0 && (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CARD_LABELS, CARD_MEANINGS, RANK_MEANING, ageText, cardViewFromIndex, curveLine, emptyLabel, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
+import { CARD_LABELS, CARD_MEANINGS, NOT_READ, RAISE_NOT_READ, RANK_MEANING, ageText, cardViewFromIndex, cardEmptyLabel, curveLine, headlineStat, holdersEmptyLabel, initialsOf, rankLayout, type CardCell, type CardView } from "@/lib/burnticker/cardView";
 import { ProgressStrip } from "./ProgressStrip";
 import { FollowButton } from "./FollowButton";
 import { Why } from "./Why";
@@ -104,12 +104,13 @@ export function CurveBar({ c, compact = false }: { c: Pick<CoinCardData, "phase"
 const asSentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUpperCase()); return /[.!?]$/.test(t) ? t : `${t}.`; };
 
 /**
- * One field: its text, or, when it was not read, what that means in words ("Not created yet", "No data yet"; cardView.ts emptyLabel,
+ * One field: its text, or, when it was not read, what that means in words ("Not created yet", "Not read yet"; cardView.ts cardEmptyLabel,
  * ChatGPT audit 6 item 23) with its reason behind a tap or focus (website-15 item 7: Why.tsx; never inline, never on hover only).
  */
 function Cell({ c, v }: { c: CardCell; v: Pick<CardView, "tags"> }) {
   if (c.text !== null) return <span title={c.why ?? undefined}>{c.text}</span>;
-  return <Why label={emptyLabel(v, c.why)} why={c.why ?? "This site has no reading for this field."} />;
+  // follow-up 2026-10-18: "Not read yet" in words, and no "?" after it; the label is the reason's button (dotted underline)
+  return <Why label={cardEmptyLabel(v, c.why)} why={c.why ?? "This site has no reading for this field."} mark={false} />;
 }
 
 /**
@@ -118,12 +119,18 @@ function Cell({ c, v }: { c: CardCell; v: Pick<CardView, "tags"> }) {
  * then "Check receipt". Every row is always printed; a field not read is "—" with its reason. The order is cardView.ts CARD_ROWS; the
  * static home page prints the same rows from the same JSON. The name and the image link the coin's page; "Check receipt" is its own
  * link to that coin's newest receipt, shown disabled with the reason until there is one.
+ *
+ * COIN CARD STATUS (2026-10-18, the owner's UX walkthrough at phone, tablet and desktop widths): the card answers "what happens next"
+ * first. Under the name it prints the coin's status sentence (coinStatus.ts; the rule when the state was not read) and the one most
+ * useful number (cardView.ts headlineStat). Every row, in the same order, sits behind a native "Details" expander, so nothing is hidden
+ * for good and a phone at 375 px shows a short card.
  */
 export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLevel?: 2 | 3; now?: number }) {
   const H = headingLevel === 2 ? "h2" : "h3";
   const pct = v.curve.pct === null ? null : Math.max(0, Math.min(100, v.curve.pct));
   const [t] = useState(() => now ?? Date.now());
   const age = ageText(v.createdAt, t);
+  const stat = headlineStat(v);
   return (
     <article className={`bt-coin-card${v.tags.some((x) => x.tone === "featured") ? " is-featured" : ""}`} data-card={v.id} data-group={v.group}>
       <div className="flex gap-3">
@@ -138,20 +145,25 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
           {v.note && <p className="mt-1 text-xs text-neutral-400">{v.note}</p>}
         </div>
       </div>
+      <p className="bt-card-status" data-status="">{v.status ?? v.rule}</p>
+      {stat && <p className="bt-card-stat" data-card-stat={stat.key}><span className="bt-card-stat-label">{stat.label}</span> <span className="bt-card-stat-value">{stat.text}</span></p>}
+      <details className="bt-card-details" data-card-details>
+      <summary>Details</summary>
       <dl className="bt-card-rows">
         <div data-row="progress"><dt title={CARD_MEANINGS.progress}>{CARD_LABELS.progress}</dt><dd>{v.progress ? <ProgressStrip p={v.progress} compact /> : <Cell v={v} c={{ text: null, why: v.progressWhy }} />}</dd></div>
         <div data-row="rule"><dt>{CARD_LABELS.rule}</dt><dd>{v.rule}{v.stated && <span className="mt-1 block text-xs text-neutral-400" data-stated>{v.stated}</span>}{v.creatorText && <span className="mt-1 block text-xs text-neutral-300" data-creator-text>{v.creatorText}</span>}{v.links && v.links.length > 0 && <span className="mt-1 flex flex-wrap gap-2 text-xs" data-creator-links>{v.links.map((l) => <a key={l.url} className="underline" href={l.url} rel="nofollow noopener ugc" target="_blank">{l.label}</a>)}</span>}</dd></div>
         <div data-row="nextSettle"><dt>{CARD_LABELS.nextSettle}</dt><dd><Cell v={v} c={v.nextSettle} /></dd></div>
         <div data-row="curve"><dt title={CARD_MEANINGS.curve}>{CARD_LABELS.curve}</dt><dd>
           {/* website-15 item 7: a curve not read is "— raised" with the dash as the reason's button; "not applicable" carries its reason the same way */}
-          <span>{v.curve.na ? <Why label="Not applicable" why={v.curve.why} /> : v.curve.raised === null && v.curve.why ? <Why label={emptyLabel(v, v.curve.why)} why={v.curve.why} /> : v.curve.of === null && v.curve.why ? <>{curveLine(v.curve)} <Why why={v.curve.why} label="" name="Why the raise is not shown" /></> : curveLine(v.curve)}</span>
+          <span>{v.curve.na ? <Why label="Not applicable" why={v.curve.why} mark={false} /> : v.curve.raised === null && v.curve.why ? <Why label={cardEmptyLabel(v, v.curve.why)} why={v.curve.why} mark={false} /> : v.curve.of === null && v.curve.why ? <>{curveLine(v.curve)} <Why why={v.curve.why} label={RAISE_NOT_READ} mark={false} /></> : curveLine(v.curve)}</span>
           <span className="bt-curve mt-1 block" role="progressbar" aria-label="Curve progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined} aria-valuetext={pct === null ? "Not read" : `${pct.toFixed(0)}%`}><span className={`bt-curve-fill block${v.curve.done ? " is-done" : ""}`} style={{ width: `${pct ?? 0}%` }} /></span>
         </dd></div>
         <div data-row="mcap"><dt title={CARD_MEANINGS.mcap}>{CARD_LABELS.mcap}</dt><dd><Cell v={v} c={v.mcap} /></dd></div>
-        <div data-row="holders"><dt title={CARD_MEANINGS.holders}>{CARD_LABELS.holders}</dt><dd><Cell v={v} c={v.holders} /></dd></div>
+        <div data-row="holders"><dt title={CARD_MEANINGS.holders}>{CARD_LABELS.holders}</dt><dd>{v.holders.text !== null ? <span title={v.holders.why ?? undefined}>{v.holders.text}</span> : <Why label={holdersEmptyLabel(v)} why={v.holders.why ?? NOT_READ.holders} mark={false} />}</dd></div>
         <div data-row="age"><dt>{CARD_LABELS.age}</dt><dd><Cell v={v} c={{ text: age, why: age ? null : v.createdWhy }} /></dd></div>
         <div data-row="burned"><dt title={CARD_MEANINGS.burned}>{CARD_LABELS.burned}</dt><dd><Cell v={v} c={v.burned} />{v.rank && <span className="mt-0.5 block text-xs text-neutral-400" data-rank title={RANK_MEANING}>{v.rank}</span>}</dd></div>
       </dl>
+      </details>
       {/* owner 2026-10-14: where to trade the coin, on every card (tradeLinks.ts); nothing when there is nowhere to trade */}
       {v.trade && (v.trade.primary || v.trade.info.length > 0) && <div className="mt-2" data-card-trade><TradeButtons links={v.trade} compact ticker={v.ticker} /></div>}
       <div className="bt-card-foot" data-row="receipt">
@@ -160,6 +172,20 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
       </div>
       {v.mint && <p className="mt-2 text-[11px] text-neutral-500">{v.mint.label}: <code className="break-all">{v.mint.address}</code></p>}
     </article>
+  );
+}
+
+/**
+ * A GRID OF CARDS WITH ONE RANK LINE (coin card status 2026-10-18): the no-rank line every card shares is printed once above the grid
+ * (cardView.ts rankLayout), and a card keeps its own rank line only when it differs.
+ */
+export function CardGrid({ cards, now, className = "grid gap-3 sm:grid-cols-2 xl:grid-cols-3" }: { cards: readonly CardView[]; now?: number; className?: string }) {
+  const r = rankLayout(cards.map((v) => v.rank));
+  return (
+    <>
+      {r.shared && <p className="mb-2 text-xs text-neutral-400" data-rank-shared title={RANK_MEANING}>{r.shared}</p>}
+      <div className={className}>{cards.map((v, i) => <ViewCard key={v.id} v={{ ...v, rank: r.perCard[i] }} now={now} />)}</div>
+    </>
   );
 }
 

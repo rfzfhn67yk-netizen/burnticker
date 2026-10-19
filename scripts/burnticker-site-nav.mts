@@ -32,16 +32,13 @@ export function heroHtml(): string {
     `  <p class="sub kicker" data-hero-kicker>${esc(HERO.kicker)}</p>`,
     `  <h1 id="hero-h">${esc(HERO.title)}</h1>`,
     `  <p class="sub">${esc(HERO.sub)}</p>`,
-    // prelaunch audit 2026-10-16 F-14: the kicker's qualifier (a perpetual coin has no end date)
-    `  <p class="sub kicker-note" data-hero-note>${esc(HERO.note)}</p>`,
-    // website-14 (product idea 1): two paths on arrival, one sentence each; "Create a coin" opens the closed-launches dialog while closed
+    // website-14 (product idea 1): two paths on arrival, one sentence each; "Launch a coin" opens the closed-launches dialog while closed
     `  <div class="paths" data-two-paths>`,
-    // audit 10 item 23: while creator launches are closed the create path reads "Preview a coin launch" with the site launch record's own
-    // sentence beside it (siteNav.mjs createPathFor); printed closed here, the shell script fills it from GET /api/burnticker/home
     `    <a class="path path-explore" href="${TWO_PATHS[0].href}"><span class="path-t">${esc(TWO_PATHS[0].label)}</span><span class="path-x">${esc(TWO_PATHS[0].text)}</span></a>`,
-    `    <a class="path path-create" href="${TWO_PATHS[1].href}" data-launch-button data-create-path><span class="path-t" data-create-label>${esc(createLoading.label)}</span><span class="path-x" data-create-text>${esc(createLoading.text)}</span></a>`,
-    // the status line is empty until the record is read (the home's word budget, test/burntickerHome.test.ts), then the record's sentence
-    `    <p class="path-status" data-create-status role="status" hidden></p>`,
+    // prelaunch audit 2026-10-18: the label never changes; the status line under it stays empty until the read lands (the home's word
+    // budget, test/burntickerHome.test.ts), then carries the record's own sentence (createPathFor); the link names it as its description
+    `    <a class="path path-create" href="${TWO_PATHS[1].href}" data-launch-button data-create-path aria-describedby="create-status"><span class="path-t" data-create-label>${esc(createLoading.label)}</span><span class="path-x" data-create-text>${esc(createLoading.text)}</span></a>`,
+    `    <p class="path-status" id="create-status" data-create-status role="status" hidden></p>`,
     `  </div>`,
     `  <p class="walk"><a href="${WALKTHROUGH_LINK.href}">${esc(WALKTHROUGH_LINK.label)}</a>. ${esc(WALKTHROUGH_LINK.text)}</p>`,
     `</section>`,

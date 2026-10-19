@@ -123,8 +123,9 @@ describe("stale copy (b) to (e): records and the checker", () => {
 
 describe("stale copy (f) to (i): the coin page, Following and the no-end line", () => {
   test("(f) the keeper's next check is a source check; a market close says so; the publisher decides", () => {
-    assert.deepEqual(nextTimeRow(null, "2026-10-15T20:30:00.000Z"), { label: "Next source check", value: "2026-10-15 20:30 UTC", note: `Times are in UTC. ${PUBLISHER_DECIDES}` });
-    assert.equal(nextTimeRow("2026-10-15T23:00:00Z", "2026-10-15T20:30:00Z").label, "Next market close");
+    const before = Date.parse("2026-10-15T12:00:00Z");
+    assert.deepEqual(nextTimeRow(null, "2026-10-15T20:30:00.000Z", before), { label: "Next source check", value: "15 October 2026, 20:30 UTC", note: `Times are in UTC. ${PUBLISHER_DECIDES}` });
+    assert.equal(nextTimeRow("2026-10-15T23:00:00Z", "2026-10-15T20:30:00Z", before).label, "Next market close");
     assert.equal(nextTimeRow(null, null).value, "None scheduled");
     assert.equal(PUBLISHER_DECIDES, "The publisher decides when the result is available.");
     const p = read("src/app/burnticker/t/[ticker]/page.tsx");

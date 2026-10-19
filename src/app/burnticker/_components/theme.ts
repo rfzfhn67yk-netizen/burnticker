@@ -15,3 +15,14 @@ export function currentTheme(): Theme {
   const set = document.documentElement.dataset.theme;
   return set === "light" ? "light" : "dark";
 }
+
+/**
+ * THEME_BOOT's work again, after hydration (prelaunch audit 2026-10-18 A-24; ThemeSync.tsx calls it): the stored choice is set on the
+ * root when it is not there already. A missing, unknown or unreadable choice changes nothing (the default is dark).
+ */
+export function reapplyStoredTheme(root: { dataset: DOMStringMap }, storage: Pick<Storage, "getItem"> | null): void {
+  try {
+    const t = storage?.getItem(THEME_KEY);
+    if ((t === "light" || t === "dark") && root.dataset.theme !== t) root.dataset.theme = t;
+  } catch { /* storage blocked: the default (dark) stays */ }
+}

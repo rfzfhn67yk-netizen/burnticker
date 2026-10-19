@@ -4,8 +4,9 @@ import { platform } from "@/lib/burnticker/server";
 import { DEVNET_COPY, DEVNET_HREF, devnetPageData, type DevnetPageData } from "@/lib/burnticker/devnetHide";
 import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader, Panel } from "../_components/Panel";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: DEVNET_COPY.title, description: DEVNET_COPY.description, alternates: { canonical: DEVNET_HREF } };
+export const metadata: Metadata = withShareCard({ title: DEVNET_COPY.title, description: DEVNET_COPY.description, alternates: { canonical: DEVNET_HREF } });
 export const dynamic = "force-dynamic";
 
 /**

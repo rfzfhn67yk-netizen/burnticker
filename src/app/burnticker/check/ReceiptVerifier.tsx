@@ -19,6 +19,9 @@ const MARK: Record<CheckStatus, string> = { passed: "✓", failed: "✗", unavai
 const TONE: Record<CheckStatus, string> = { passed: "text-emerald-400", failed: "text-red-400", unavailable: "text-amber-300", "not checked": "text-neutral-500" };
 const VERDICT_TONE = { verified: "text-emerald-400", "partly verified": "text-emerald-300", "could not check": "text-amber-300", failed: "text-red-400" } as const;
 
+/** How long typing pauses before the signature's format line is shown and announced. */
+const SIG_PAUSE_MS = 700;
+
 export default function ReceiptVerifier({ card }: { card: string }) {
   const [samples, setSamples] = useState<Samples | null>(null);
   const [sig, setSig] = useState("");
@@ -30,6 +33,11 @@ export default function ReceiptVerifier({ card }: { card: string }) {
   const [wantDemo, setWantDemo] = useState(false);
   // audit 4 BT-07: a missing or malformed signature is a field error — no check runs, no verdict, no explorer link
   const [sigError, setSigError] = useState<string | null>(null);
+  // prelaunch audit 2026-10-18 A-29: the signature's format line waits until typing pauses, in a polite live region, so a screen reader
+  // hears it once rather than on every keystroke
+  const [quietSig, setQuietSig] = useState("");
+  useEffect(() => { const t = setTimeout(() => setQuietSig(sig), SIG_PAUSE_MS); return () => clearTimeout(t); }, [sig]);
+  const sigSettled = quietSig === sig;
   // website-11: a coin page's "Check receipt" links here with ?sig=<signature>&cluster=<network>; the check runs on that network
   const [cluster, setCluster] = useState<"devnet" | "mainnet">("devnet");
   // website brief §5: /burnticker/check?demo=1 pre-selects the featured devnet receipt (current-status.json `demo`) and runs the check
@@ -65,6 +73,8 @@ export default function ReceiptVerifier({ card }: { card: string }) {
     <section className={`${card} scroll-mt-24`} id="verify">
       <h2 className="font-medium">{CHECK_COPY.verifierTitle}</h2>
       <p className="text-xs text-neutral-300">{wantDemo ? CHECK_COPY.verifierDemoIntro : CHECK_COPY.verifierIntro}</p>
+      {/* A-29: the verdict lives in one polite live region that is always present, so a new verdict is read once when it lands */}
+      <div aria-live="polite" data-verdict-live>
       {wantDemo && !res && !err && !sigError && (busy || !samples) && <div className="mt-3" data-verdict="checking"><EmptyState compact kind="loading" body="Checking the featured devnet receipt in this browser." /></div>}
       {err && <p className="mt-2 text-xs text-amber-300">The check could not run: {err}. This is not evidence that the receipt is invalid. Try again, or use another RPC.</p>}
       {res && (() => { const v = verdictOf(res.checks); return (
@@ -79,6 +89,7 @@ export default function ReceiptVerifier({ card }: { card: string }) {
             <p className="mt-1 text-neutral-500 break-all">Reading account <code>{res.facts.readingAddress ?? "—"}</code>, token config <code>{res.facts.configAddress ?? "—"}</code>, mint <code>{res.facts.mint ?? "—"}</code>.{res.facts.sourceUrl && <> Open the source data for <a className="underline break-all" href={res.facts.sourceUrl} target="_blank" rel="noreferrer">{res.facts.recordDate}</a> and <a className="underline" href={res.facts.prevSourceUrl ?? "#"} target="_blank" rel="noreferrer">{res.facts.prevDate}</a>.</>}</p>
           </details>
         </div>); })()}
+      </div>
       <p className="mt-2 text-xs text-neutral-500" data-signer-caveat>{CHECK_COPY.verifierCaveat}</p>
       <details className="mt-3" open={!wantDemo} data-check-another>
         <summary className="cursor-pointer text-xs text-neutral-300">{CHECK_COPY.checkAnotherTitle}</summary>
@@ -90,8 +101,8 @@ export default function ReceiptVerifier({ card }: { card: string }) {
             </select>
           </label>
           <label className="grid min-w-0 gap-1"><span className="text-neutral-400">Transaction signature</span>
-            <input className={`w-full min-w-0 rounded border ${sigError ? "border-red-500" : "border-neutral-700"} bg-neutral-950 p-2 font-mono break-all`} value={sig} onChange={(e) => { setSig(e.target.value); setSigError(null); }} spellCheck={false} placeholder="88 base58 characters" aria-invalid={sigError ? true : undefined} aria-describedby={sigError ? "sig-error" : undefined} />
-            {(sigError ?? (sig.trim() && sigCheck.state !== "valid" ? sigCheck.reason : null)) && <span id="sig-error" className="text-red-400" role="alert" data-field-error="signature">{sigError ?? sigCheck.reason} It says nothing about any receipt.</span>}
+            <input className={`w-full min-w-0 rounded border ${sigError ? "border-red-500" : "border-neutral-700"} bg-neutral-950 p-2 font-mono break-all`} value={sig} onChange={(e) => { setSig(e.target.value); setSigError(null); }} spellCheck={false} placeholder="88 base58 characters" aria-invalid={sigError ? true : undefined} aria-describedby="sig-error" />
+            <span id="sig-error" className="text-red-400" aria-live="polite" data-field-error="signature">{(sigError ?? (sig.trim() && sigSettled && sigCheck.state !== "valid" ? sigCheck.reason : null)) ? `${sigError ?? sigCheck.reason} It says nothing about any receipt.` : ""}</span>
           </label>
           <label className="grid min-w-0 gap-1"><span className="text-neutral-400">{cluster === "mainnet" ? "RPC endpoint (use any mainnet RPC you trust)" : "RPC endpoint (use any devnet RPC you trust)"}</span>
             <input className="w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />

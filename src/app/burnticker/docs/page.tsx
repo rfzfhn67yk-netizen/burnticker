@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { API_PREFIX, API_VERSION, ENDPOINTS, RATE_LIMITS } from "@/lib/burnticker/api/spec";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: "Docs and API", description: "The public Burnticker HTTP API, version 1. It serves public data and unsigned transactions only. This page lists the endpoints, the rate limits, the OpenAPI document and the SDK.", alternates: { canonical: "/burnticker/docs" } }; // audit 7 item 27: a canonical URL
+export const metadata: Metadata = withShareCard({ title: "Docs and API", description: "The public Burnticker HTTP API, version 1. It serves public data and unsigned transactions only. This page lists the endpoints, the rate limits, the OpenAPI document and the SDK.", alternates: { canonical: "/burnticker/docs" } }); // audit 7 item 27: a canonical URL
 
 /**
  * DOCS / API (2026-10-10): the public API at a glance, rendered from src/lib/burnticker/api/spec.ts — the same table that generates

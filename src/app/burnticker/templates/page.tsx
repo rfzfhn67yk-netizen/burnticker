@@ -9,10 +9,11 @@ import { GRADUATION_LABEL } from "@/lib/burnticker/guidedLaunch";
 import { CreatorOnboarding } from "../_components/CreatorOnboarding";
 import { CreatorBenefitsList } from "./CreatorBenefitsList";
 import { ExampleTickets } from "./ExampleTickets";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Templates", description: "The twelve rule shapes a Burnticker coin can take, each with an example and a link that opens the create screen ready for it.", alternates: { canonical: "/burnticker/templates" } }; // audit 7 item 27: a canonical URL
+export const metadata: Metadata = withShareCard({ title: "Templates", description: "The twelve rule shapes a Burnticker coin can take, each with an example and a link that opens the create screen ready for it.", alternates: { canonical: "/burnticker/templates" } }); // audit 7 item 27: a canonical URL
 
 /**
  * Walkthrough 13: the example's sentences after the first, for "How it settles", without the ones the card's pair line already says

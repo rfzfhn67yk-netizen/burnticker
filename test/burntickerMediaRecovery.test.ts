@@ -146,7 +146,8 @@ describe("228 [FIX] + 229: a finished recovery keeps its completion message and 
     const next = afterRecoveryCheck({ items: [s], finished: [] }, s, r, listStoredLaunches(store), Date.UTC(2026, 0, 1, 19, 5));
     assert.deepEqual(next.items, []);
     assert.equal(next.finished.length, 1, "the finished launch is still shown");
-    assert.deepEqual(next.finished[0].coins, [{ ticker: "AYE", href: "/burnticker/t/AYE" }]);
+    const aye = next.finished[0].coins[0];
+    assert.equal(aye.ticker, "AYE"); assert.equal(aye.href, `/burnticker/t/${aye.mint}`, "linked by the mint (prelaunch audit 2026-10-18)");
     assert.match(next.finished[0].text, /everything is confirmed on chain and recorded/);
     assert.match(next.finished[0].checked, /^Last checked at \d{1,2}:\d{2}\s?(AM|PM)\.$/);
     const ui = code(read("src/app/burnticker/launch/LaunchRecovery.tsx"));

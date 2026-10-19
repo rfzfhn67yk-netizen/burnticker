@@ -1,7 +1,10 @@
 "use client";
 
+import { tabKeyHandler } from "@/lib/burnticker/tabKeys";
+import { PoolChart } from "../../_components/PoolChart";
 import { coinAddressLine } from "@/lib/burnticker/mintAddressCopy";
 import { settledLine } from "@/lib/burnticker/settledTitle";
+import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
 import { safeCreatorLink } from "@/lib/burnticker/creatorProfile";
 import { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 import { useEffect, useState } from "react";
@@ -20,7 +23,7 @@ import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnRe
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
 import { counted, finiteNumber, fixed, grouped, headOf, joinList, listOf } from "@/lib/burnticker/safeFormat";
-import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersCountSentence, holdersShareLine, initialTab, marketFacts, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
+import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersCountSentence, holdersShareLine, initialTab, marketFacts, READ_FULL_RULE, receiptStatusWords, ruleBrief, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
 import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
@@ -144,8 +147,8 @@ export default function TokenPage() {
   }, [ticker]);
   // website-17 wiring item 1: the rank line from the creator summary; nothing when the read fails (never a guessed rank)
   const [rank, setRank] = useState<string | null>(null);
-  const rankCreator = d?.status.addresses.creator, rankTicker = d?.status.ticker;
-  useEffect(() => { const c = rankCreator, t = rankTicker; if (!c || !t) return; fetch(`/burnticker/creator/${encodeURIComponent(c)}/summary`).then((r) => (r.ok ? r.json() : null)).then((j: { coins?: { ticker: string; rank: string | null }[] } | null) => setRank(j?.coins?.find((x) => x.ticker === t)?.rank ?? null)).catch(() => setRank(null)); }, [rankCreator, rankTicker]);
+  const rankCreator = d?.status.addresses.creator, rankMint = d?.status.mint;
+  useEffect(() => { const c = rankCreator, mint = rankMint; if (!c || !mint) return; fetch(`/burnticker/creator/${encodeURIComponent(c)}/summary`).then((r) => (r.ok ? r.json() : null)).then((j: { coins?: { ticker: string; mint?: string; rank: string | null }[] } | null) => setRank(j?.coins?.find((x) => x.mint === mint)?.rank ?? null)).catch(() => setRank(null)); }, [rankCreator, rankMint]);
   const hasHolders = !!d?.status.market?.holders.top10?.length;
   // the page re-reads its answer (F02 above), so the first tab is chosen once the coin has loaded, not on every re-read
   const loaded = !!d;
@@ -181,13 +184,13 @@ export default function TokenPage() {
     { key: "next", label: nextRow.label, value: nextRow.value, note: nextRow.note, more: SETTLEMENT_LINK },
     { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? `SOL set aside for this coin's burns. ${s.pool.reserveSol} SOL of it is kept back for fees.` : "Tokens set aside for this coin's burns." },
     { key: "burned", label: "Burned so far", value: `${fmt(s.burned?.total)} of ${fmt(s.supply?.initial)} tokens`, note: `${fixed(s.burned?.pctOfSupply)}% of the supply, in ${count(s.burned?.count, "burn")}.` },
-    { key: "last", label: "Last receipt", value: latest ? headOf(latest.settledAt, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? FIRST_BURN_AFTER_GRADUATION : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
+    { key: "last", label: "Last receipt", value: latest ? utcDay(latest.settledAt) : "None yet", note: latest ? "Check it in your browser." : preBurn ? FIRST_BURN_AFTER_GRADUATION : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
     { key: "pending", label: "Waiting", value: s.health.pending === 0 ? "Nothing waiting" : count(s.health.pending, "receipt"), note: s.health.pending ? "A burn can wait for the pool's checks or a spend floor. The unspent funds stay in the burn pool." : null },
   ];
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-5 space-y-5 text-sm">
-      <p className="text-xs"><Link className="underline" href="/burnticker">← Coins</Link> <span className="text-neutral-500">·</span> <Link className="underline text-neutral-400" href="/burnticker/leaderboard" data-leaderboard-link>{LEADERBOARD_TITLE}</Link></p>
+      <p className="text-xs"><Link className="underline" href="/burnticker">Back to the coins</Link> <span className="text-neutral-500">·</span> <Link className="underline text-neutral-400" href="/burnticker/leaderboard" data-leaderboard-link>{LEADERBOARD_TITLE}</Link></p>
 
       {/* ---- header: image, name, ticker, mint + copy, links ---- */}
       <header className="flex gap-4">
@@ -211,7 +214,7 @@ export default function TokenPage() {
           {prof?.description && <p className="text-sm text-neutral-200 max-w-2xl leading-relaxed whitespace-pre-line" data-coin-description>{prof.description}</p>}
           {prof?.note && <div className="max-w-2xl rounded border border-neutral-700 p-2 text-xs text-neutral-300"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note (not part of the rule)</div>{prof.note}</div>}
           <p className="text-xs text-neutral-500">{prof?.affiliation ?? "This coin is not affiliated with any team, league, candidate, agency or market."}</p>
-          {launch.open && <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>}
+          {launch.open && <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>}
           <PinnedCheck pinned={s.pinned ? { ...s.pinned, mint: s.mint } : s.pinned} />
         </div>
       </header>
@@ -225,7 +228,7 @@ export default function TokenPage() {
         <section aria-label="Chart" className="min-w-0">
           {m?.chart.embedUrl ? (
             <>
-              <iframe title={`${s.ticker} chart on GeckoTerminal`} src={m.chart.embedUrl} className="h-[420px] w-full rounded-lg border border-neutral-800 bg-neutral-900" loading="lazy" referrerPolicy="no-referrer" allow="clipboard-write" />
+              <PoolChart title={`${s.ticker} chart on GeckoTerminal`} src={m.chart.embedUrl} className="h-[420px] w-full rounded-lg bg-neutral-900" />
               <p className="mt-1 text-xs text-neutral-500">{m.chart.note}{m.chart.pageUrl && <> <a className="underline" href={m.chart.pageUrl} rel="noopener" target="_blank">Open this chart on GeckoTerminal.</a></>}</p>
             </>
           ) : (
@@ -249,7 +252,7 @@ export default function TokenPage() {
             <p className="mt-2 text-xs text-neutral-400">{m?.phase === "graduated" ? `The bonding curve is complete. At graduation, all of the liquidity was locked forever. $${s.ticker} now trades in a Raydium pool${m.graduatedPool ? ` (${short(m.graduatedPool)})` : ""}.` : m?.curve ? `${fixed(m.curve.remaining)} ${m.curve.quote} to go before graduation. When the curve fills, the coin moves to a Raydium pool and its liquidity is locked forever. The pool's fees fund the burn.` : <span title={m?.curveNote}>{m?.curveNote ?? "The curve has not been read."}</span>}</p>
             {preBurn && <p className="mt-2 text-xs text-neutral-300" data-burns-after-graduation>{afterGraduation}</p>}
             {/* launch night 2026-10-13: a draft has no pool and no supply yet, so the pool line is left out */}
-            {s.status !== "draft" && s.status !== "expired" && <p className="mt-2 text-[11px] text-neutral-500">{snap.stale ? <span data-stale-snapshot>{m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC. ` : ""}{staleSnapshotLine(snap.ageMs)}</span> : m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC.` : "This site has not read the pool."} {fixed(typeof s.burned?.pctOfSupply === "number" ? 100 - s.burned.pctOfSupply : NaN)}% of the supply is left.</p>}
+            {s.status !== "draft" && s.status !== "expired" && <p className="mt-2 text-[11px] text-neutral-500">{snap.stale ? <span data-stale-snapshot>{m?.readAt ? `This site read the pool on ${utcDateTime(m.readAt)}. ` : ""}{staleSnapshotLine(snap.ageMs)}</span> : m?.readAt ? `This site read the pool on ${utcDateTime(m.readAt)}.` : "This site has not read the pool."} {fixed(typeof s.burned?.pctOfSupply === "number" ? 100 - s.burned.pctOfSupply : NaN)}% of the supply is left.</p>}
           </section>
 
           <section className={card} aria-label="Progress"><h2 className="mb-2 text-xs font-mono uppercase tracking-widest text-neutral-500">Where this coin stands</h2><ProgressStrip p={progressOf(ready, { raiseSol: m?.curve ? Number(m.curve.threshold) : null, raisedSol: m?.curve ? Number(m.curve.raised) : null, queuedUnits: s.ticker === "DEFICIT" && home.data?.deficitQueue.state === "queued" ? home.data.deficitQueue.units : null })} /></section>
@@ -265,8 +268,8 @@ export default function TokenPage() {
       </div>
 
       {/* ---- TABS: Burn log first, then Rule, then Holders when holder data was read. No thread. ---- */}
-      <div className="bt-tabs" role="tablist" aria-label="About this coin">
-        {tabs.map((t) => <button key={t} id={`tab-${t}`} type="button" role="tab" aria-selected={tab === t} aria-controls={`panel-${t}`} className={`bt-tab${tab === t ? " is-active" : ""}`} onClick={() => setTab(t)}>{COIN_TAB_LABEL[t]}</button>)}
+      <div className="bt-tabs" role="tablist" aria-label="About this coin" onKeyDown={tabKeyHandler(tabs, tab, setTab, (x) => `tab-${x}`)}>
+        {tabs.map((t) => <button key={t} id={`tab-${t}`} type="button" role="tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1} aria-controls={`panel-${t}`} className={`bt-tab${tab === t ? " is-active" : ""}`} onClick={() => setTab(t)}>{COIN_TAB_LABEL[t]}</button>)}
       </div>
 
       {/* website-10's coin cards link "Check receipt" to #receipts; the anchor sits on the burn log so the link lands here */}
@@ -286,13 +289,13 @@ export default function TokenPage() {
               {rows.map((b) => (
                 <li key={b.eventId} className="bt-tape-row">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                    <span className="font-mono text-xs">{b.settledAt.slice(0, 16).replace("T", " ")}Z</span>
+                    <time className="font-mono text-xs" dateTime={b.settledAt}>{utcDateTime(b.settledAt)}</time>
                     <span className="font-mono text-xs truncate" title={b.title ?? ""}>{b.market}</span>
                     <span className="font-mono text-xs uppercase">{b.result ?? b.value ?? "—"}</span>
                   </div>
-                  {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{settledLine(b.title)}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={m[1]} rel="noopener" target="_blank">see this game on ESPN →</a>)}</div>}
+                  {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{settledLine(b.title)}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={m[1]} rel="noopener" target="_blank">see this game on ESPN</a>)}</div>}
                   <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
-                    <span>{b.status === "confirmed" ? (() => { const rl = receiptRealLine(b.memo, real); return rl ? <><b className="tabular-nums" data-real-receipt>{rl}</b> from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</>; })() : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{realHeldLine(real, b.skippedReason) ?? <>{b.status}{b.skippedReason ? `. ${b.skippedReason}` : ""}</>}</span>}</span>
+                    <span>{b.status === "confirmed" ? (() => { const rl = receiptRealLine(b.memo, real); return rl ? <><b className="tabular-nums" data-real-receipt>{rl}</b> from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</>; })() : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{realHeldLine(real, b.skippedReason) ?? <>{receiptStatusWords(b.status)}{b.skippedReason ? `. ${b.skippedReason}` : ""}</>}</span>}</span>
                     <span className="flex flex-wrap gap-2">{b.txUrl && <a className="underline" href={b.txUrl}>transaction</a>}{b.settlementSourceUrl && <a className="underline" href={b.settlementSourceUrl}>source</a>}{(() => { const v = receiptRowStatus(b); return <span className={v.status === "passed" ? "text-emerald-400" : v.status === "failed" ? "text-red-400" : "text-neutral-500"} title={v.title} data-receipt-status={v.status}>{v.status === "passed" ? "✓ " : v.status === "failed" ? "✗ " : ""}{v.label}</span>; })()}{(() => { const href = checkReceiptHref(b.signature, s.cluster); return href ? <a className="underline font-medium" href={href} data-check-receipt>Check receipt</a> : null; })()}</span>
                   </div>
                 </li>
@@ -303,7 +306,7 @@ export default function TokenPage() {
 
         <section id="verify" className="scroll-mt-20">
           <h2 className="font-medium mb-2">Verify it yourself</h2>
-          {rows.length === 0 ? <p className="text-neutral-500 text-xs">Each receipt shows up here with the command, the formula and the on-chain memo you can use to check it.</p> : rows.slice(0, 40).map((b) => <details key={b.eventId} className={card + " mb-2"}><summary className="cursor-pointer">{b.settledAt.slice(0, 10)}, {b.market}: {b.result ?? b.value}, {count(b.units, "unit")}, {b.status === "confirmed" ? `${fmt(b.burned ?? "0")} burned` : b.status} ({receiptRowStatus(b).label})</summary>
+          {rows.length === 0 ? <p className="text-neutral-500 text-xs">Each receipt shows up here with the command, the formula and the on-chain memo you can use to check it.</p> : rows.slice(0, 40).map((b) => <details key={b.eventId} className={card + " mb-2"}><summary className="cursor-pointer">{utcDay(b.settledAt)}, {b.market}: {b.result ?? b.value}, {count(b.units, "unit")}, {b.status === "confirmed" ? `${fmt(b.burned ?? "0")} burned` : receiptStatusWords(b.status)} ({receiptRowStatus(b).label})</summary>
             <p className="mt-2">1. Read the settled result from the source:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.curl}</pre>{b.method && <p className="text-xs text-neutral-500">The value was read by {b.method}.</p>}
             <p>2. Apply the rule:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.formula}</pre>
             <p>3. Check that you get this: <strong>{b.verify.expected}</strong></p>
@@ -317,7 +320,10 @@ export default function TokenPage() {
       <div id="panel-rule" role="tabpanel" aria-labelledby="tab-rule" hidden={tab !== "rule"} className="space-y-5">
         <section className={card + " bt-rule-card"} aria-label="The rule">
           <div className="flex items-baseline justify-between"><h2 className="font-mono text-xs uppercase tracking-widest">The rule, locked at launch</h2><a className="text-[11px] underline" href={`/api/burnticker/tokens/${encodeURIComponent(key)}?format=rules`}>rules.json</a></div>
-          <p className="mt-2">{s.rules.statement}</p>
+          {/* prelaunch audit 2026-10-18 (optional polish): two short sentences first, the locked statement verbatim under a native
+              disclosure (keyboard accessible, no script, still in the page), at every width; the dial, window and end rows follow */}
+          <p className="mt-2" data-rule-brief>{ruleBrief(d.rulesText)}</p>
+          <details className="bt-rule-full mt-2" data-rule-full><summary className="cursor-pointer text-neutral-300 underline">{READ_FULL_RULE}</summary><p className="mt-2" data-rule-statement>{s.rules.statement}</p></details>
           <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
             <div><dt className="text-neutral-500">The dial</dt><dd>{facts.dial ?? "The rule file does not name a share of the burn pool."}{real ? <span className="block" data-real-dial>{targetActionSentence(real.symbol)}</span> : null}</dd></div>
             <div><dt className="text-neutral-500">The window</dt><dd>{facts.window}{prof?.badge ? ` The rule's window reads ${prof.badge}.` : ""}</dd></div>
@@ -399,7 +405,7 @@ function LpLockCard({ lp, card }: { lp: LpBlock; card: string }) {
 function TickerChooser({ ticker, candidates }: { ticker: string; candidates: CoinCandidate[] }) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-3 text-sm" data-ticker-chooser>
-      <p className="text-xs"><Link className="underline" href="/burnticker">← Coins</Link></p>
+      <p className="text-xs"><Link className="underline" href="/burnticker">Back to the coins</Link></p>
       <h1 className="text-xl font-semibold">${ticker}</h1>
       <p className="text-neutral-300">{CHOOSER_COPY.intro(ticker)}</p>
       <ul className="space-y-2">

@@ -7,8 +7,9 @@ import { CHANGELOG_FILE } from "@/lib/burnticker/trust";
 import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader } from "../_components/Panel";
 import { RepoText } from "../_components/RepoText";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: CHANGELOG_COPY.title, description: CHANGELOG_COPY.description, alternates: { canonical: "/burnticker/changelog" } };
+export const metadata: Metadata = withShareCard({ title: CHANGELOG_COPY.title, description: CHANGELOG_COPY.description, alternates: { canonical: "/burnticker/changelog" } });
 export const dynamic = "force-dynamic";
 
 /**

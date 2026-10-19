@@ -141,7 +141,7 @@ describe("$DEFICIT on the coin list and in search", () => {
     assert.equal(searchKey("  $Deficit "), "deficit");
     const c = read("src/app/burnticker/CoinsIndex.tsx");
     assert.match(c, /const allcards: CardView\[\] = \[\.\.\.lead, \.\.\.cards\];/);
-    assert.match(c, /\{allcards\.map\(\(v\) => <ViewCard/);
+    assert.match(c, /<CardGrid cards=\{allcards\}/); // coin card status: the grid prints the shared rank line once
   });
   test("its card links its own site and carries the trade link", () => {
     const d = featured().find((v) => v.id === "deficit")!;

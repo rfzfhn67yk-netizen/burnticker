@@ -16,7 +16,7 @@ import { LinkedWords } from "./LinkedWords";
 export function FooterLink({ n }: { n: NavItem }) {
   if (n.external) return <a href={n.href} target="_blank" rel={n.href.startsWith("https://x.com/") ? "me noopener" : "noopener"}>{n.label}<span aria-hidden="true"> ↗</span></a>;
   if (n.static) return <a href={n.href}>{n.label}</a>;
-  return <Link href={n.href}>{n.label}</Link>;
+  return <Link href={n.href} prefetch={false}>{n.label}</Link>;
 }
 
 /**
@@ -41,9 +41,9 @@ export function SiteFooter() {
         <p className="bt-slip-text"><LinkedWords text={FOOTER_COPY.legal} links={FOOTER_LEGAL_LINKS} /></p>
         <div className="bt-rule" />
         <dl className="bt-rows">
-          <div><dt>{R.operator.label}</dt><dd><span data-operator-line><MailSafe text={OPERATOR_LINE} /></span> <Link href={R.operator.href}>{R.operator.more}</Link></dd></div>
-          <div><dt>{R.fees.label}</dt><dd><span data-fee-line>{DEV_FEE_LINE}</span> <Link href={R.fees.href}>{R.fees.more}</Link></dd></div>
-          <div><dt>{R.api.label}</dt><dd><a href={API_BASE_PATH}>{API_BASE_PATH}</a> · <Link href={R.api.href}>{R.api.more}</Link></dd></div>
+          <div><dt>{R.operator.label}</dt><dd><span data-operator-line><MailSafe text={OPERATOR_LINE} /></span> <Link href={R.operator.href} prefetch={false}>{R.operator.more}</Link></dd></div>
+          <div><dt>{R.fees.label}</dt><dd><span data-fee-line>{DEV_FEE_LINE}</span> <Link href={R.fees.href} prefetch={false}>{R.fees.more}</Link></dd></div>
+          <div><dt>{R.api.label}</dt><dd><a href={API_BASE_PATH}>{API_BASE_PATH}</a> · <Link href={R.api.href} prefetch={false}>{R.api.more}</Link></dd></div>
         </dl>
         <div className="bt-rule" />
         <nav className="bt-slip-links" aria-label="Footer">
@@ -63,7 +63,7 @@ export function SiteFooter() {
 export function CompactFooter() {
   return (
     <footer className="bt-footer-compact" data-footer="compact">
-      <p><b>Not advice.</b> Memecoins can go to zero. A coin&apos;s rule describes what happens to its supply, never its price. {FOOTER_COPY.never} {FOOTER_COPY.affiliation} <MailSafe text={OPERATOR_LINE} />. <Link href="/burnticker#disclosure">Full disclosure</Link></p>
+      <p><b>Not advice.</b> Memecoins can go to zero. A coin&apos;s rule describes what happens to its supply, never its price. {FOOTER_COPY.never} {FOOTER_COPY.affiliation} <MailSafe text={OPERATOR_LINE} />. <Link prefetch={false} href="/burnticker#disclosure">Full disclosure</Link></p>
       <nav aria-label="Footer">{[...NAV, ...LEARN].map((n) => <FooterLink key={n.href} n={n} />)}</nav>
     </footer>
   );

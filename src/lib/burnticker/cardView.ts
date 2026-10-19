@@ -6,6 +6,7 @@ import { coinPageHref } from "@/lib/burnticker/coinKey";
 import { cardAge } from "@/lib/burnticker/cardAge.mjs";
 import { coinWatchKey } from "@/lib/burnticker/watchlist";
 import { coinLinks, type CoinLinks } from "@/lib/burnticker/tradeLinks";
+import { coinStatusSentence, type CoinStatusFacts } from "@/lib/burnticker/coinStatus";
 /**
  * ONE COIN CARD, ONE FIELD ORDER (website-10, 2026-10-12; rebuilt by website-13 the same day for Claude site audit 2 item 7 and ChatGPT
  * audit 6 A10 / A11, with the owner's decision to show the market cap). Every surface that lists coins prints the same rows in the same
@@ -41,6 +42,11 @@ export interface CardView {
   tags: CardTag[];
   /** one plain sentence under the name, on featured cards only */
   note: string | null;
+  /**
+   * coin card status 2026-10-18 (the owner's UX walkthrough): what happens next, in one status sentence chosen by the coin's state
+   * (coinStatus.ts). Shown on the card above the "Details" expander; null or absent when the state was not read (the card shows the rule).
+   */
+  status?: string | null;
   /** the rule in one line */
   rule: string;
   /** when the next result settles */
@@ -80,6 +86,8 @@ export interface CardView {
   trade?: CoinLinks | null;
   /** what each empty row says instead of a dash (emptyLabels below); set by the home API for the static page, computed by the app */
   empty?: Partial<Record<"progress" | "nextSettle" | "curve" | "mcap" | "holders" | "age" | "burned", string>>;
+  /** coin card status 2026-10-18: the one number in view (headlineStat below); set by the home API for the static page, computed by the app */
+  stat?: { key: "burned" | "curve" | "mcap" | "holders"; label: string; text: string } | null;
 }
 
 /** The fixed row order, by key. test/burntickerHomeShell.test.ts holds the component and the static renderer to it. */
@@ -105,6 +113,32 @@ export const NOT_READ = {
   curveNotRead: "This site has not read the coin's curve.",
   nextNone: "This rule has no scheduled result.",
 } as const;
+/**
+ * HOLDERS (coin card status 2026-10-18, the owner's UX walkthrough): a fresh coin's only token account is its own bonding curve, so the
+ * count read "1" for a coin nobody holds. When every wallet the count found is the coin's own curve or trading pool (holders.ts
+ * poolOwnerLabels), the row says "No holders yet". With no count read it says "Not read yet", never a "?" on its own.
+ */
+export const POOL_HOLDER_LABELS: readonly string[] = ["bonding curve", "trading pool"];
+export const NO_HOLDERS = "No holders yet";
+export const NO_HOLDERS_WHY = "The only wallet holding this coin is its own bonding curve or trading pool.";
+export const HOLDERS_NOT_READ = "Not read yet";
+/**
+ * Whether every holder counted is the coin's own curve or pool: a count of 0, or a count no larger than the labelled pool rows.
+ * Review L7 (accepted): the labels come from holders.ts poolOwnerLabels, which knows only this cluster's LaunchLab and CPMM programs. A
+ * curve held under a program it does not know carries no label, so such a coin shows its count ("1") rather than "No holders yet".
+ */
+export function onlyPoolHolders(count: number | null | undefined, top: readonly { label: string | null }[] | null | undefined): boolean {
+  if (typeof count !== "number") return false;
+  if (count <= 0) return true;
+  const pools = (top ?? []).filter((r) => r.label !== null && POOL_HOLDER_LABELS.includes(r.label)).length;
+  return pools > 0 && count <= pools;
+}
+export function holdersCell(count: number | null | undefined, onlyPools: boolean, note: string | null): CardCell {
+  if (typeof count === "number" && onlyPools) return { text: NO_HOLDERS, why: NO_HOLDERS_WHY };
+  if (typeof count === "number") return { text: groupDigits(count), why: null };
+  return { text: null, why: note || NOT_READ.holders };
+}
+
 /** Walkthrough 13: a card whose next time is only the keeper's next read of the source (not a market close) says so. */
 export const NEXT_WHEN_PUBLISHED = "When published";
 export const nextCheckWhy = (day: string): string => `The publisher decides when the next result is out. This site next reads the source on ${day}.`;
@@ -112,9 +146,30 @@ export const nextCheckWhy = (day: string): string => `The publisher decides when
 /** website-17 item 2: what the rank line under "Burned" means (hover text). A rank is a line on a scoreboard and nothing more. */
 export const RANK_MEANING = "The coin's place on the scoreboard by confirmed receipts, read from the coin registry. A rank pays nothing and unlocks nothing.";
 
+/**
+ * ONE RANK LINE FOR A GRID (coin card status 2026-10-18, the owner's UX walkthrough): "No receipts yet, so it has no rank on this site."
+ * printed under every card said the same thing a dozen times. A grid prints the no-rank line once above the cards, and a card keeps its
+ * own line only when it differs (a ranked coin, or a coin on another season's board). When every card shares it the line above says so
+ * for all of them; when only some do, it says what a coin with no receipt means, and the cards that differ carry their own line.
+ */
+const NO_RANK = /^No receipts yet, so it has no rank (on this site|in .+)\.$/;
+export function rankLayout(lines: readonly (string | null | undefined)[]): { shared: string | null; perCard: (string | null)[] } {
+  const all = lines.map((l) => l ?? null);
+  const counts = new Map<string, number>();
+  for (const l of all) if (l && NO_RANK.test(l)) counts.set(l, (counts.get(l) ?? 0) + 1);
+  const [common, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+  if (!common || n < 2) return { shared: null, perCard: all };
+  const where = NO_RANK.exec(common)![1];
+  // review L5: a card whose rank was not read (null) is not counted as sharing the line, so "No coin here" needs every card to say it
+  const every = all.every((l) => l === common);
+  return { shared: every ? `No coin here has a receipt yet, so none has a rank ${where}.` : `A coin with no receipt yet has no rank ${where}.`, perCard: all.map((l) => (l === common ? null : l)) };
+}
+
 /** A graduated coin's market cap, read from its Raydium pool (indexer-1): the card's hover text and the coin page's note. */
 export const MCAP_POOL_MEANING = "The Raydium pool's SOL reserve divided by its token reserve, times the current supply, read on chain.";
 
+/** Follow-up 2026-10-18: the button after a curve line whose raise was not read ("35.7 raised  Raise not read"), in words, never a "?". */
+export const RAISE_NOT_READ = "Raise not read";
 /** The curve row's words: "35.7 / 85 SOL raised"; "— raised" when the raise was not read (never a typed 85). */
 export const curveLine = (c: CardView["curve"]): string => (c.na ? "Not applicable" : c.of === null ? `${c.raised ?? "—"} raised` : `${c.raised ?? "—"} / ${c.of} raised`);
 
@@ -171,23 +226,49 @@ export function emptyLabel(v: Pick<CardView, "tags">, why: string | null): strin
   if (/no scheduled result|no result is scheduled/i.test(w)) return EMPTY_LABEL.noneScheduled;
   return EMPTY_LABEL.noData;
 }
+/**
+ * WHAT AN EMPTY CARD ROW SAYS (coin card status follow-up, 2026-10-18): a value this site did not read says "Not read yet" on every
+ * card row, and no row prints a "?" after its label (the reason stays behind the label's own button). The other labels ("Not created
+ * yet", "Not applicable", "None scheduled") are as emptyLabel gives them.
+ */
+export const NOT_READ_YET = HOLDERS_NOT_READ;
+export function cardEmptyLabel(v: Pick<CardView, "tags">, why: string | null): string {
+  const l = emptyLabel(v, why);
+  return l === EMPTY_LABEL.noData ? NOT_READ_YET : l;
+}
+/** The holders row with no count: "Not read yet", or the label the coin's state calls for. */
+export function holdersEmptyLabel(v: Pick<CardView, "tags" | "holders">): string { return cardEmptyLabel(v, v.holders.why); }
 /** The rows that can be empty, by key; the API sends these labels with each card so the static page prints the same words. */
 export const EMPTY_ROWS = ["progress", "nextSettle", "curve", "mcap", "holders", "age", "burned"] as const;
 export function emptyLabels(v: CardView): Record<(typeof EMPTY_ROWS)[number], string> {
   return {
-    progress: emptyLabel(v, v.progressWhy), nextSettle: emptyLabel(v, v.nextSettle.why), curve: emptyLabel(v, v.curve.why), mcap: emptyLabel(v, v.mcap.why),
-    holders: emptyLabel(v, v.holders.why), age: emptyLabel(v, v.createdWhy), burned: emptyLabel(v, v.burned.why),
+    progress: cardEmptyLabel(v, v.progressWhy), nextSettle: cardEmptyLabel(v, v.nextSettle.why), curve: cardEmptyLabel(v, v.curve.why), mcap: cardEmptyLabel(v, v.mcap.why),
+    holders: holdersEmptyLabel(v), age: cardEmptyLabel(v, v.createdWhy), burned: cardEmptyLabel(v, v.burned.why),
   };
 }
 
 /**
- * A market cap read from the curve, before graduation, is the curve's price times the whole supply, which can look large beside a small
- * raise (28 SOL beside 0.1 SOL raised). It is labelled so (ChatGPT audit 6 item 23): "28 SOL (curve-implied)". After graduation it is the
- * pool's number and carries no label.
+ * A market cap read from the curve, before graduation, is the curve's current SOL per token times the whole supply, which can look large
+ * beside a small raise (28 SOL beside 0.1 SOL raised). It carries its basis in words (coin card status 2026-10-18, the owner's UX
+ * walkthrough; it said "(curve-implied)" before): "28 SOL from the curve". After graduation it is the pool's number and carries no words.
+ * A curve nobody has traded on (0 raised) has no figure at all: the curve's opening ratio times the supply is not a market, so the row
+ * says "No trades yet" and shows no SOL figure.
  */
-export const CURVE_IMPLIED = "curve-implied";
-export function mcapText(value: string, quote: string | null | undefined, phase: IndexCoin["phase"] | undefined): string {
-  return `${groupDigits(value)} ${quote ?? "SOL"}${phase === "graduated" ? "" : ` (${CURVE_IMPLIED})`}`;
+export const CURVE_BASIS = "from the curve";
+export const NO_TRADES = "No trades yet";
+export const NO_TRADES_WHY = "Nobody has traded on this coin's curve yet, so there is no figure to show.";
+/** Whether the coin is still on its curve and the curve was read at exactly nothing raised. */
+export const noTradesYet = (phase: IndexCoin["phase"] | undefined, raised: string | null | undefined): boolean =>
+  phase !== "graduated" && phase !== "migrating" && raised !== null && raised !== undefined && raised.trim() !== "" && Number(raised) === 0;
+export function mcapText(value: string, quote: string | null | undefined, phase: IndexCoin["phase"] | undefined, raised: string | null = null): string {
+  if (noTradesYet(phase, raised)) return NO_TRADES;
+  return `${groupDigits(value)} ${quote ?? "SOL"}${phase === "graduated" ? "" : ` ${CURVE_BASIS}`}`;
+}
+/** The market cap row: "No trades yet" on an untraded curve, the figure with its basis once there is a trade, or "—" with the reason. */
+export function mcapCell(c: { cap: string | null | undefined; quote?: string | null; phase?: IndexCoin["phase"]; raised?: string | null }, notRead: string = NOT_READ.mcapNotRead, poolNote: string | null = null): CardCell {
+  if (noTradesYet(c.phase, c.raised)) return { text: NO_TRADES, why: NO_TRADES_WHY };
+  if (c.cap) return { text: mcapText(c.cap, c.quote, c.phase, c.raised ?? null), why: c.phase === "graduated" ? MCAP_POOL_MEANING : CARD_MEANINGS.mcap };
+  return { text: null, why: c.phase === "graduated" ? poolNote || NOT_READ.mcapPool : notRead };
 }
 
 const COUNT_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
@@ -219,10 +300,14 @@ export interface IndexCoin {
   raised?: string | null; threshold?: string | null; quote?: string | null; pctOfSupply?: number; marketCap?: string | null; holders?: number | null;
   /** indexer-1: why the holder count or the graduated pool was not read (status.json market.holders.countNote, market.poolNote) */
   holdersNote?: string | null; poolNote?: string | null;
+  /** coin card status 2026-10-18: every wallet the count found is the coin's own bonding curve or trading pool (onlyPoolHolders) */
+  holdersOnlyPools?: boolean;
   /** sources-2: a one-market Polymarket coin's stated source and dispute window */
   stated?: StatedJson | null;
   /** website-17 item 2: the coin's line on the scoreboard (coinRank.ts), when the serving route read it */
   rank?: string | null;
+  /** coin card status 2026-10-18: the facts the status sentence is built from (coinStatus.ts coinStatusFactsOf), when the route read them */
+  statusFacts?: CoinStatusFacts | null;
 }
 
 /** "14.81" from a decimal string, two places at most. */
@@ -254,20 +339,20 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
   if (t.pairId) tags.push({ label: "Pair", tone: "neutral" });
   if (t.badge) tags.push({ label: t.badge, tone: "neutral" });
   const curve = curveCell(t, raiseSol);
-  const mcap: CardCell = t.marketCap ? { text: mcapText(t.marketCap, t.quote, t.phase), why: t.phase === "graduated" ? MCAP_POOL_MEANING : CARD_MEANINGS.mcap }
-    : { text: null, why: t.phase === "graduated" ? t.poolNote || NOT_READ.mcapPool : NOT_READ.mcapNotRead };
+  const mcap: CardCell = mcapCell({ cap: t.marketCap, quote: t.quote, phase: t.phase, raised: t.raised }, NOT_READ.mcapNotRead, t.poolNote ?? null);
   const pct = typeof t.pctOfSupply === "number" ? t.pctOfSupply : null;
   return {
     id: t.mint, watchKey: coinWatchKey(cluster, t.mint), ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
     rule: t.oneLiner.replace(/^./, (c) => c.toUpperCase()), creatorText: t.creatorText ?? null, links: t.links ?? [],
     stated: t.stated ? statedSentences(t.stated, t.stated.finalAfter) : null,
     rank: t.rank ?? null,
+    status: t.statusFacts ? coinStatusSentence(t.statusFacts) : null,
     progress: t.readiness ? progressOf(t.readiness, { raiseSol: t.threshold ? Number(t.threshold) : null, raisedSol: t.raised ? Number(t.raised) : null }) : null,
     progressWhy: t.readiness ? null : "This site did not read where this coin stands.",
     // walkthrough 13 (private review 10's "Next result" item, on the card too): a market close is the result's time; a keeper check is not
     nextSettle: t.nextCloseTime ? { text: `${shortDay(t.nextCloseTime)}`, why: null } : next ? { text: NEXT_WHEN_PUBLISHED, why: nextCheckWhy(shortDay(next) ?? next.slice(0, 10)) } : { text: null, why: NOT_READ.nextNone },
     curve, mcap,
-    holders: typeof t.holders === "number" ? { text: groupDigits(t.holders), why: null } : { text: null, why: t.holdersNote || NOT_READ.holders },
+    holders: holdersCell(t.holders, t.holdersOnlyPools ?? false, t.holdersNote ?? null),
     createdAt: t.launchedAt, createdWhy: t.launchedAt ? null : "This coin is not launched yet.",
     burned: { text: `${groupDigits(t.burned)} $${t.ticker}${pct === null ? "" : `, ${pctOfSupply(pct)}`}`, why: t.burns > 0 ? `${t.burns} burn${t.burns === 1 ? "" : "s"} so far.` : "No burn has confirmed yet." },
     mint: null,
@@ -276,6 +361,19 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
     receipt: t.burns > 0 ? { href: `${page}#receipts` } : null,
     receiptWhy: t.burns > 0 ? null : "This coin has no receipt yet.",
   };
+}
+
+/**
+ * THE ONE NUMBER THE CARD KEEPS IN VIEW (coin card status 2026-10-18): the rest of the rows sit behind the card's "Details" expander.
+ * A coin that has burned shows what it burned; a coin on its curve shows how far the curve has filled; a coin past its curve shows its
+ * market cap, then its holders. Null when none of these was read. The label is the row's own data label.
+ */
+export function headlineStat(v: Pick<CardView, "receipt" | "burned" | "curve" | "mcap" | "holders">): { key: "burned" | "curve" | "mcap" | "holders"; label: string; text: string } | null {
+  if (v.receipt && v.burned.text) return { key: "burned", label: CARD_LABELS.burned, text: v.burned.text };
+  if (!v.curve.na && !v.curve.done && v.curve.raised !== null) return { key: "curve", label: CARD_LABELS.curve, text: curveLine(v.curve) };
+  if (v.mcap.text) return { key: "mcap", label: CARD_LABELS.mcap, text: v.mcap.text };
+  if (v.holders.text) return { key: "holders", label: CARD_LABELS.holders, text: v.holders.text };
+  return null;
 }
 
 /** The initials a coin without an image shows, on a receipt-style tile: "$DEFICIT" → "DE". */

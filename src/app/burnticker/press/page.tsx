@@ -6,8 +6,9 @@ import { HERO } from "@/lib/burnticker/siteNav.mjs";
 import { MISSION_STATEMENT } from "@/lib/burnticker/mission";
 import { Page, PageHeader, Panel } from "../_components/Panel";
 import { MailSafe } from "../_components/MailSafe";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: PRESS_COPY.title, description: PRESS_COPY.description, alternates: { canonical: "/burnticker/press" } };
+export const metadata: Metadata = withShareCard({ title: PRESS_COPY.title, description: PRESS_COPY.description, alternates: { canonical: "/burnticker/press" } });
 
 /**
  * /burnticker/press (legitimacy pass item 6): the mark and wordmark (SVG and PNG, dark and light), the receipt artwork, the $DEFICIT

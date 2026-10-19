@@ -1,3 +1,4 @@
+import { utcDay } from "@/lib/burnticker/utcWords";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { deficitPrelaunch, type DeficitPrelaunch } from "@/lib/burnticker/deficitPrelaunch";
@@ -19,7 +20,7 @@ import { MISSION_STATEMENT } from "@/lib/burnticker/mission";
 const DESCRIPTION = "How Burnticker works: one locked rule per coin, a public result that settles it, a program that burns what the coin's own fees bought back, and a receipt anyone can check.";
 export const metadata: Metadata = {
   title: "How it works", description: DESCRIPTION, alternates: { canonical: "/burnticker/about" },
-  openGraph: { type: "website", siteName: "Burnticker", title: "How Burnticker works", description: DESCRIPTION, url: "/burnticker/about", images: [{ url: "https://burnticker.com/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+  openGraph: { type: "website", siteName: "Burnticker", title: "How Burnticker works", description: DESCRIPTION, url: "/burnticker/about", images: [{ url: "https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
 };
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,7 @@ export default function AboutPage() {
         <p className="text-neutral-200">{d ? d.oneSentence : "$DEFICIT burns when the U.S. national debt rises."} The devnet rehearsal coin ran the same rule text at 1% for each unit.</p>
         <p className="text-neutral-400">We replayed the rule over the real Treasury figures from January 2025 to October 8, 2026. It would have counted 235 burn days and 6,490 units. This is a look back, and it predicts nothing. The second publisher, FRED, reports this debt only once a quarter. It can confirm the quarter ends but not each daily reading.</p>
         {/* walkthrough 13: the create date from the status file once the coin exists (it was created on 2026-10-13), never "is created when" */}
-        <p className="text-neutral-400">{d?.launch.date ? `Its rules were locked on chain before it was created on mainnet on ${d.launch.date}. Its card on the coin list says where it stands now.` : "Its rules are locked and its mint address is fixed. The coin is created when the operator runs the create, and its card on the coin list says which state it is in."}</p>
+        <p className="text-neutral-400">{d?.launch.date ? `Its rules were locked on chain before it was created on mainnet on ${utcDay(d.launch.date)}. Its card on the coin list says where it stands now.` : "Its rules are locked and its mint address is fixed. The coin is created when the operator runs the create, and its card on the coin list says which state it is in."}</p>
         <p><a className="underline" href={DEFICIT_SITE}>The $DEFICIT page</a></p>
       </section>
 

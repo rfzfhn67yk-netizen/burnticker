@@ -10,12 +10,12 @@
 <link rel="canonical" href="https://burnticker.com/whitepaper.html">
 <meta property="og:title" content="Burnticker Whitepaper">
 <meta property="og:description" content="How a settled real-world result becomes a burn on Solana, what powers exist, and how anyone can recompute every receipt.">
-<meta property="og:image" content="https://burnticker.com/brand/og.png">
+<meta property="og:image" content="https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg">
 <meta property="og:url" content="https://burnticker.com/whitepaper.html">
 <meta property="og:type" content="article">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@BurnTicker">
-<meta name="twitter:image" content="https://burnticker.com/brand/og.png">
+<meta name="twitter:image" content="https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg">
 <link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
 <script>(function(){try{var t=localStorage.getItem('bt-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();</script>
 <style>@font-face{font-family:"Courier Prime";font-style:normal;font-weight:400;font-display:swap;src:url("/fonts/courier-prime-400-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
@@ -104,7 +104,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   --mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
 }
-:root[data-theme="light"]{--bg:#dcd6c8;--surface:#cfc8b8;--line:#bdb5a3;--ink:#1b1916;--dim:#3a352f;--muted:#5d564b;--amber:#9a5b00}
+:root[data-theme="light"]{--bg:#dcd6c8;--surface:#cfc8b8;--line:#bdb5a3;--ink:#1b1916;--dim:#3a352f;--muted:#534c42;--amber:#7a4700}
 :root[data-theme="dark"]{--bg:#1f1c19;--surface:#2a2622;--line:#3a352f;--ink:#f2eee4;--dim:#c9c3b6;--muted:#9a9387;--amber:#ffb000}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -185,7 +185,7 @@ footer p{margin:0 0 6px;max-width:none}
     <form class="sh-search" role="search" action="/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
     <div class="sh-actions">
       <a class="sh-launch" href="/burnticker/launch" data-launch-button>Launch a coin</a>
-      <a class="sh-wallet" href="/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet<span class="sh-sr">. Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.</span></a>
+      <a class="sh-wallet" href="/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet</a>
       <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
       <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
         <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
@@ -766,8 +766,11 @@ v2 (buyback): &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt
   var m = document.getElementById("menu"); if (!m) return;
   var sum = m.querySelector("summary");
   function links() { return Array.prototype.slice.call(m.querySelectorAll(".sh-menu-links a[href]")); }
-  m.addEventListener("toggle", function () { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
-  sum.setAttribute("aria-expanded", "false");
+  // prelaunch audit 2026-10-18 A-29: aria-expanded follows the menu's real state, on the toggle event and right after each press
+  function sync() { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); }
+  m.addEventListener("toggle", function () { sync(); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
+  sum.addEventListener("click", function () { setTimeout(sync, 0); });
+  sync();
   document.addEventListener("keydown", function (e) {
     if (!m.open) return;
     if (e.key === "Escape") { e.preventDefault(); m.open = false; sum.focus(); return; }
@@ -790,12 +793,12 @@ v2 (buyback): &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt
   window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open is unknown right now, so no launch controls are shown."; createPath(l || null); });
   // audit 10 item 23: the home's create path, from the same record (siteNav.mjs createPathFor, written here as source)
   function createPath(l) {
-    var TWO_PATHS = [{"id":"explore","label":"Explore coins","href":"/burnticker","text":"See every coin, its rule and its receipts, and follow coins in this browser without a wallet."},{"id":"create","label":"Create a coin","href":"/burnticker/launch","text":"Pick a public result and lock one rule, and the launch page shows every detail before your wallet signs anything."}], CREATE_PREVIEW = {"label":"Preview a coin launch","text":"Walk through a launch and its review, with nothing signed."}, LAUNCH_CLOSED = {"unread":"Whether creator launches are open is unknown right now, so no launch controls are shown."};
+    var TWO_PATHS = [{"id":"explore","label":"Explore coins","href":"/burnticker","text":"See every coin, its rule and its receipts, and follow coins in this browser without a wallet."},{"id":"create","label":"Launch a coin","href":"/burnticker/launch","text":"Pick a public result, lock one rule, then review every detail."}], CREATE_PREVIEW = {"label":"Preview a coin launch","text":"Walk through a launch and its review, with nothing signed."}, LAUNCH_CLOSED = {"unread":"Whether creator launches are open is unknown right now, so no launch controls are shown."};
     var p = (function createPathFor(launch) {
   const open = !!(launch && launch.canSign === true);
   const create = TWO_PATHS[1];
-  if (open) return { label: create.label, text: create.text, status: null, open: true };
-  return { label: CREATE_PREVIEW.label, text: CREATE_PREVIEW.text, status: launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : LAUNCH_CLOSED.unread, open: false };
+  const said = launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : null;
+  return { label: create.label, text: create.text, status: open ? said : (said || LAUNCH_CLOSED.unread) + " " + CREATE_PREVIEW.text, open: open };
 })(l), box = document.querySelector("[data-two-paths]"); if (!box) return;
     var t = box.querySelector("[data-create-label]"), x = box.querySelector("[data-create-text]"), s = box.querySelector("[data-create-status]");
     if (t) t.textContent = p.label; if (x) x.textContent = p.text; if (s) { s.textContent = p.status || ""; s.hidden = !p.status; }

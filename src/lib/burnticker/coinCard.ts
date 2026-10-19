@@ -2,6 +2,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { TEAM_ALIASES, type TeamAlias } from "@/lib/burnticker/oracle/events";
 import { INCINERATOR_WORDS, describeEndSink, describeRule, sinkTickerOf } from "@/lib/burnticker/describe";
 import { highText } from "@/lib/burnticker/derby/high";
+import { parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 
 /**
  * THE COIN CARD'S ONE-LINER (2026-10-10): the few words a launchpad card has room for — "burns when the Eagles lose" — derived from
@@ -33,6 +34,30 @@ export function oneShotAllLiner(rule: BurnRule, event: string, endDate: string |
   if (sink === "incinerator") return `burns everything if ${event}. If not, the SOL left is sent to ${INCINERATOR_WORDS} after ${endDate ?? "it settles"}`;
   if (sink) return `burns everything if ${event}. If not, whatever is left burns ${sink === "pair-winner" ? "the winning coin, or $DEFICIT if there isn't one" : sink === "mint" ? `${sinkTickerOf(rule)}, or $DEFICIT if ${sinkTickerOf(rule)} is not live then,` : "$DEFICIT"} after ${endDate ?? "it settles"}`;
   return `burns everything if ${event}${weeks ? `. If not, the pool burns down over ${weeks} after ${endDate ?? "it settles"}` : ""}`;
+}
+
+/**
+ * THE SIDE A RULE IS ABOUT, BY NAME (coin card status review H2, 2026-10-18): the team's nickname ("Broncos") read from the locked rule's
+ * selector, never the coin's name ("Broncos Win"). An ESPN team or game series, a Kalshi team series leg or one game's leg; null for
+ * anything else (a market, a feed), where the status sentence names the outcome word instead.
+ */
+export function ruleSideName(rule: BurnRule, aliases: readonly TeamAlias[] = TEAM_ALIASES): string | null {
+  if (rule.oracle === "catalogue" && rule.series) {
+    const e = parseEspnSeries(rule.series);
+    return e ? teamByAbbr(e.league, e.abbr)?.nickname ?? null : null;
+  }
+  if (rule.oracle === "kalshi" && rule.kind === "binary") {
+    const leg = /^-([A-Z0-9]{2,5})$/.exec(rule.filter?.tickerIncludes ?? "");
+    if (!rule.market && leg) return teamOf(rule.series, leg[1], aliases)?.nickname ?? null;
+    if (rule.market) { const parts = rule.market.split("-"); return parts.length >= 3 ? teamOf(parts[0], parts[parts.length - 1], aliases)?.nickname ?? null : null; }
+  }
+  return null;
+}
+
+/** Review L1: a reading rule (not a team's) that counts only a rise or only a fall, so the card can say "each new reading that rises". */
+export function ruleReadingDirection(rule: BurnRule): "up" | "down" | null {
+  if (rule.kind !== "scalar" || !rule.scalar || rule.inverse || ruleSideName(rule) !== null) return null;
+  return rule.scalar.direction === "up" || rule.scalar.direction === "down" ? rule.scalar.direction : null;
 }
 
 export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, aliases: readonly TeamAlias[] = TEAM_ALIASES, endDate: string | null = null): string {

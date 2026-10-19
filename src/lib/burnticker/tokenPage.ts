@@ -1,3 +1,5 @@
+import { receiptStatusWords } from "@/lib/burnticker/coinPage";
+import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
@@ -25,9 +27,10 @@ import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { buildMarketJson, type CpmmMarket, type MarketInput } from "@/lib/burnticker/market";
 import { allLinks, coinLinks } from "@/lib/burnticker/tradeLinks";
 import type { HoldersRead } from "@/lib/burnticker/holders";
+import { onlyPoolHolders } from "@/lib/burnticker/cardView";
 import type { LifecycleDates } from "@/lib/burnticker/lifecycleDates";
 import type { FinalAfter, StatedSource } from "@/lib/burnticker/sources/polyStated";
-import { ruleOneLiner } from "@/lib/burnticker/coinCard";
+import { ruleOneLiner, ruleReadingDirection, ruleSideName } from "@/lib/burnticker/coinCard";
 import { PAIR_STATE_NAMES, parseForwardMemo, type PairLinks } from "@/lib/burnticker/pairForward";
 import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
 import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
@@ -413,7 +416,7 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
     lp: i.lp ?? defaultLp(i),
     program,
-    profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
+    profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), sideName: ruleSideName(rule), readingDirection: ruleReadingDirection(rule), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
     pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
     market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market, cpmm: i.cpmm, holders: i.holders, dates: i.dates }),
     lifecycle: i.lifecycle ?? null,
@@ -436,7 +439,7 @@ export function lpLockHtml(lp: LpLockJson | null | undefined): string {
   return `<h2>${esc(LP_POLICY_BADGE)}</h2>
 <p>${esc(lp.line)}. ${lp.lockedPct}% of the liquidity from graduation is locked with Raydium's lock and can never be withdrawn. The burn program owns the Fee Key, which collects the locked liquidity's share of the pool's trading fees, and anyone can claim those fees (claim_lock_fees). ${lp.split.burnBps / 100}% of the SOL goes to this coin's burn pool and ${lp.split.operatorBps / 100}% goes to the operator treasury. The coin's own tokens from the fees are burned.</p>
 <p class="muted">The lock program is ${a(lp.lockProgram, lp.urls.lockProgram)}. The Fee Key is ${a(lp.feeKey, lp.urls.feeKey)}, and its owner is ${a(lp.feeKeyOwner, lp.urls.feeKeyOwner)}.${lp.lockedLiquidity ? ` The locked liquidity is ${a(lp.lockedLiquidity, lp.urls.lockedLiquidity)}.` : ""} The operator treasury is ${lp.operatorTreasury ? a(lp.operatorTreasury, lp.urls.operatorTreasury) : "<em>not set on this network</em>"}.</p>
-<p class="muted">${lp.lastClaim ? `The last claim was at ${esc(lp.lastClaim.at.slice(0, 16).replace("T", " "))}Z: ${lp.lastClaim.txUrl ? `<a href="${esc(lp.lastClaim.txUrl)}">${esc(lp.lastClaim.line)}</a>` : esc(lp.lastClaim.line)} ${lp.totals.claims === 1 ? "There has been one claim" : `There have been ${lp.totals.claims} claims`}, ${esc(lp.totals.sol)} SOL in all: ${esc(lp.totals.toBurnPool)} SOL to the burn pool and ${esc(lp.totals.toOperator)} SOL to the operator.` : "Nobody has claimed the pool's fees yet."}${lp.note ? ` ${esc(lp.note)}` : ""}</p>`;
+<p class="muted">${lp.lastClaim ? `The last claim was on ${esc(utcDateTime(lp.lastClaim.at))}: ${lp.lastClaim.txUrl ? `<a href="${esc(lp.lastClaim.txUrl)}">${esc(lp.lastClaim.line)}</a>` : esc(lp.lastClaim.line)} ${lp.totals.claims === 1 ? "There has been one claim" : `There have been ${lp.totals.claims} claims`}, ${esc(lp.totals.sol)} SOL in all: ${esc(lp.totals.toBurnPool)} SOL to the burn pool and ${esc(lp.totals.toOperator)} SOL to the operator.` : "Nobody has claimed the pool's fees yet."}${lp.note ? ` ${esc(lp.note)}` : ""}</p>`;
 }
 
 const ATTESTER_KIND: Record<number, string> = { 0: "operator", 1: "zkTLS relayer", 2: "oracle" };
@@ -523,7 +526,7 @@ export function renderTokenHtml(s: TokenStatusJson, receipts: readonly ReceiptJs
 <thead><tr><th>Settled</th><th>Market / period</th><th>Result</th><th>Value</th><th>Units</th><th>Spent</th><th>Bought</th><th>Burned</th><th>Tx</th><th>Source</th><th>Check</th></tr></thead><tbody>
 ${rows.map((b) => `<tr><td>${esc(b.settledAt.slice(0, 19).replace("T", " "))}</td><td title="${esc(b.title)}"><code>${esc(b.market)}</code></td><td>${esc(b.result ?? "—")}</td><td class="num">${esc(b.value ?? "—")}</td><td class="num">${b.units}</td><td class="num">${b.status === "confirmed" ? esc(b.spent ?? "—") : "—"}</td><td class="num">${b.got === null ? "—" : fmt(b.got)}</td><td class="num">${b.status === "confirmed" ? fmt(b.burned ?? "0") : `<span class="muted" title="${esc(b.skippedReason ?? b.note)}">${esc(b.status)}</span>`}</td><td>${link(b.txUrl, b.signature, b.status === "planned" || b.status === "sending" ? (b.waitReason ? "waiting" : "pending") : "—")}</td><td>${b.settlementSourceUrl ? `<a href="${esc(b.settlementSourceUrl)}">source</a>` : ""}${b.sourceUrl ? ` <a href="${esc(b.sourceUrl)}">api</a>` : ""}</td><td>${check(b)}</td></tr>`).join("\n")}
 </tbody></table></div>`;
-  const verify = rows.slice(0, 60).map((b) => `<details><summary>${esc(b.settledAt.slice(0, 10))}, ${esc(b.market)}: ${esc(b.result ?? b.value ?? "")}, ${b.units} ${b.units === 1 ? "unit" : "units"}, ${b.status === "confirmed" ? `${fmt(b.burned ?? "0")} ${t} burned` : esc(b.status)}${b.verify.verified ? " ✓" : ""}</summary>
+  const verify = rows.slice(0, 60).map((b) => `<details><summary>${esc(utcDay(b.settledAt))}, ${esc(b.market)}: ${esc(b.result ?? b.value ?? "")}, ${b.units} ${b.units === 1 ? "unit" : "units"}, ${b.status === "confirmed" ? `${fmt(b.burned ?? "0")} ${t} burned` : esc(receiptStatusWords(b.status))}${b.verify.verified ? " ✓" : ""}</summary>
 <p>1. Read the settled result from the source:</p><pre><code>${esc(b.verify.curl)}</code></pre>${b.method ? `<p class="muted">The value was read by ${esc(b.method)}.</p>` : ""}
 <p>2. Apply the rule:</p><pre><code>${esc(b.verify.formula)}</code></pre>
 <p>3. Check that you get this: <strong>${esc(b.verify.expected)}</strong></p>
@@ -540,7 +543,7 @@ ${STATUS_CSS}
 .today{white-space:pre-wrap;word-break:break-word;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font:inherit;line-height:1.5}
 </style></head><body><main>
 <p><a href="../../">← Burnticker</a></p>
-${s.pair ? `<div class="rule"><strong>$${t} <span class="muted">vs</span> <a href="../${esc(s.pair.counterpart.ticker)}/">$${esc(s.pair.counterpart.ticker)}</a></strong>. This coin is side ${esc(s.pair.side)} of the rivalry pair <code>${esc(s.pair.pairId)}</code>. ${esc(settledLineOf(s.rules.statement) ?? "Both coins read the same market with opposite rules, so each result burns exactly one side.")} Burns ${s.pair.tally.burnsThis} : ${s.pair.tally.burnsOther}. Tokens burned ${fmt(s.pair.tally.burnedThis)} : ${fmt(s.pair.tally.burnedOther)}. Supply ${fmt(s.pair.tally.supplyThis)} : ${fmt(s.pair.tally.supplyOther)}.${s.pair.counterpart.lastBurnAt ? ` The other side last burned on ${esc(s.pair.counterpart.lastBurnAt.slice(0, 10))}.` : ""} <a href="../../p/${esc(s.pair.pairId)}/">Open the pair page</a>.</div>` : ""}
+${s.pair ? `<div class="rule"><strong>$${t} <span class="muted">vs</span> <a href="../${esc(s.pair.counterpart.ticker)}/">$${esc(s.pair.counterpart.ticker)}</a></strong>. This coin is side ${esc(s.pair.side)} of the rivalry pair <code>${esc(s.pair.pairId)}</code>. ${esc(settledLineOf(s.rules.statement) ?? "Both coins read the same market with opposite rules, so each result burns exactly one side.")} Burns ${s.pair.tally.burnsThis} : ${s.pair.tally.burnsOther}. Tokens burned ${fmt(s.pair.tally.burnedThis)} : ${fmt(s.pair.tally.burnedOther)}. Supply ${fmt(s.pair.tally.supplyThis)} : ${fmt(s.pair.tally.supplyOther)}.${s.pair.counterpart.lastBurnAt ? ` The other side last burned on ${esc(utcDay(s.pair.counterpart.lastBurnAt))}.` : ""} <a href="../../p/${esc(s.pair.pairId)}/">Open the pair page</a>.</div>` : ""}
 <h1>$${t} <span class="muted" style="font-weight:400">${esc(s.name)}</span></h1>
 ${tradeLinksHtml(s)}
 ${s.profile?.badge ? `<p><code>${esc(s.profile.badge)}</code></p>` : ""}${s.profile?.description ? `<p>${esc(s.profile.description)}</p>` : ""}${s.profile?.note ? `<p class="muted"><em>Creator's note (not part of the rule):</em> ${esc(s.profile.note)}</p>` : ""}
@@ -607,6 +610,8 @@ export interface PlatformIndexToken {
   holders?: number | null;
   /** indexer-1: why the holder count or the graduated pool was not read */
   holdersNote?: string | null; poolNote?: string | null;
+  /** coin card status 2026-10-18: every holder counted is the coin's own curve or pool (cardView.ts onlyPoolHolders) */
+  holdersOnlyPools?: boolean;
   /** sources-2: a one-market Polymarket coin's stated source and dispute window */
   stated?: StatedJson | null;
   /**
@@ -640,6 +645,7 @@ export function indexToken(s: TokenStatusJson): PlatformIndexToken {
     phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null, raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null,
     marketCap: c?.marketCap ?? s.market?.pool?.marketCap ?? null, holders: s.market?.holders.count ?? null,
     holdersNote: s.market && s.market.holders.count === null ? s.market.holders.countNote || null : null, poolNote: s.market?.poolNote ?? null,
+    holdersOnlyPools: onlyPoolHolders(s.market?.holders.count ?? null, s.market?.holders.top10 ?? null),
     stated: s.stated ?? null,
   };
 }
@@ -705,10 +711,10 @@ ${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("
   const tiles = [
     tile("Burns", `$${A} ${tally.burnsA} <span class="muted">:</span> ${tally.burnsB} $${B}`, `${tally.settlements === 1 ? "One result" : `${tally.settlements} results`} so far${tally.voids ? `, ${tally.voids} of them void` : ""}. Tokens burned ${fmt(tally.burnedA)} : ${fmt(tally.burnedB)}.`),
     tile("Supply", `${tally.supplyPctA.toFixed(2)}% <span class="muted">:</span> ${tally.supplyPctB.toFixed(2)}%`, `${fmt(tally.supplyA)} : ${fmt(tally.supplyB)}, out of ${fmt(a.supply.initial)} each`),
-    tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? `It settled ${esc((ls.result ?? ls.value ?? "—").toUpperCase())} at ${esc(ls.settledAt.slice(0, 16).replace("T", " "))}Z, and ${ls.burnedSide ? `${sideTicker(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)} tokens` : ""}` : "neither side burned"}.` : "The first result after launch burns one side."),
+    tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? `It settled ${esc((ls.result ?? ls.value ?? "—").toUpperCase())} on ${esc(utcDateTime(ls.settledAt))}, and ${ls.burnedSide ? `${sideTicker(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)} tokens` : ""}` : "neither side burned"}.` : "The first result after launch burns one side."),
     tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : "The next result after launch."}`),
     ...(tally.attesterLine ? [tile("Reading signers", "1 key", esc(tally.attesterLine))] : []),
-    ...(tally.unpaired ? [tile("Pair", "unpaired", `The pair was unlinked on ${esc(tally.unpaired.at.slice(0, 10))} (${esc(tally.unpaired.reason)}). They are two separate coins now, and nothing moves between them.`)] : []),
+    ...(tally.unpaired ? [tile("Pair", "unpaired", `The pair was unlinked on ${esc(utcDay(tally.unpaired.at))} (${esc(tally.unpaired.reason)}). They are two separate coins now, and nothing moves between them.`)] : []),
     ...(tally.winnerTakesBurn ? [tile("Burned and forwarded", `$${A} burned ${fmt(tally.burnedA)}. $${B} burned ${fmt(tally.burnedB)}.`, `$${A} has forwarded ${esc(tally.forwardedAtoB ?? "0")} SOL to $${B}, and $${B} has forwarded ${esc(tally.forwardedBtoA ?? "0")} SOL to $${A}. ${esc(PAIR_BURN_SENTENCE)}`)] : []),
   ].join("\n");
   const rule = (s: TokenStatusJson, side: "A" | "B") => `<div class="rule"><strong>Side ${side}: <a href="../../t/${dirOf(s)}/">$${esc(s.ticker)}</a></strong> ${esc(s.name)}. ${esc(s.rules.statement)}<br><span class="muted">The rule file is <a href="../../t/${dirOf(s)}/rules.json">rules.json</a>, and its sha256 hash is <code>${esc(s.rules.sha256)}</code>.</span></div>`;

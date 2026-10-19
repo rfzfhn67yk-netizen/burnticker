@@ -33,11 +33,14 @@ test("F-13: the whitepaper names the developer fee wallet as the operator treasu
   }
 });
 
-test("F-14: the hero keeps the owner's kicker and qualifies it in one plain sentence on the static home", () => {
+test("the hero keeps the owner's kicker and title, with no note under them (owner decision 2026-10-18)", () => {
   assert.equal(HERO.kicker, "Memecoins with an expiration date.");
-  assert.match(HERO.note, /never end/); assert.deepEqual(lintCopy(HERO.note).hits, []);
+  assert.equal(HERO.title, "Memecoins that burn on real-world results.");
+  assert.ok(!("note" in HERO), "no hero note");
   const html = read("site/burnticker/index.html");
-  assert.ok(html.includes(`data-hero-note>${HERO.note.replace(/\$/g, "$")}</p>`));
+  assert.ok(html.includes(`data-hero-kicker>${HERO.kicker}</p>`));
+  assert.doesNotMatch(html, /data-hero-note|Some coins never end/);
+  for (const t of [HERO.kicker, HERO.title, HERO.sub]) assert.deepEqual(lintCopy(t).hits, []);
 });
 
 test("M11: a market question is quoted, never 'in 2026?. If not'", () => {

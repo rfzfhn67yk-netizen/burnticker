@@ -1,5 +1,6 @@
 "use client";
 
+import { utcDay } from "@/lib/burnticker/utcWords";
 import { EmptyState } from "../_components/EmptyState";
 import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { RepoText } from "../_components/RepoText";
@@ -29,7 +30,7 @@ export default function OpsSection({ card, repo }: { card: string; repo?: string
       <p className="text-xs text-neutral-500 mt-1">These lines come from the registry. The final word is each coin&apos;s settings on chain (TokenConfig), which you can check with <code>scripts/burnticker-attester.mts status &lt;mint&gt;</code>. A key can vouch for a new attester only after 7 days in the set. To run your own attester, see {link("docs/burnticker/ATTESTERS.md")}.</p>
     </section>
     <section className={card}><h2 className="font-medium">Registry snapshots on Arweave</h2>
-      {t.snapshot ? <p className="text-xs">The latest snapshot is from {t.snapshot.date}. Its sha256 is <code className="break-all">{t.snapshot.sha256}</code>. The Arweave copy is <a className="underline" href={t.snapshot.url}>{t.snapshot.arweaveTxId}</a>. It holds these rows: {Object.entries(t.snapshot.rowCounts).map(([k, v]) => `${k} ${v}`).join(", ")}.</p> : <p className="text-xs text-neutral-500">No snapshot is recorded on this host yet. Once the upload payer is set, the keeper takes one each UTC day. Nothing else is hosted in place of the Arweave copy.</p>}
+      {t.snapshot ? <p className="text-xs">The latest snapshot is from {utcDay(t.snapshot.date)}. Its sha256 is <code className="break-all">{t.snapshot.sha256}</code>. The Arweave copy is <a className="underline" href={t.snapshot.url}>{t.snapshot.arweaveTxId}</a>. It holds these rows: {Object.entries(t.snapshot.rowCounts).map(([k, v]) => `${k} ${v}`).join(", ")}.</p> : <p className="text-xs text-neutral-500">No snapshot is recorded on this host yet. Once the upload payer is set, the keeper takes one each UTC day. Nothing else is hosted in place of the Arweave copy.</p>}
       <p className="text-xs text-neutral-500 mt-1">Every snapshot is listed at <a className="underline" href={t.snapshotsApi}>{t.snapshotsApi}</a>. To recompute one, run <code>scripts/burnticker-verify-snapshot.mts &lt;txid&gt;</code>.</p>
     </section>
     <section className={card}><h2 className="font-medium">Incident policy</h2>

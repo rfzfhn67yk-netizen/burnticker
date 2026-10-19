@@ -45,3 +45,12 @@ export function reviewMatchesDraft<T>(slot: ReviewSlot<T>, currentRev: string): 
 
 /** The line beside a launch button whose summary is not yet the current draft's. */
 export const REVIEW_UPDATING = "The summary is being updated for this draft. The launch button waits until it matches.";
+
+/**
+ * Prelaunch audit 2026-10-18 A-22: one review step called POST /v1/launch/review three times for one draft (the effect ran again when
+ * the launch gate finished loading and on other unrelated changes). A request is due only for a revision (and retry round) not asked
+ * yet; the same draft asked again is answered from the slot it already has. `asked` is the last request actually sent.
+ */
+export function reviewRequestDue(asked: { rev: string; retry: number } | null, rev: string, retry: number): boolean {
+  return !asked || asked.rev !== rev || asked.retry !== retry;
+}

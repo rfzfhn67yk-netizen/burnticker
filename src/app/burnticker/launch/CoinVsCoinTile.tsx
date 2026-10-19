@@ -1,5 +1,6 @@
 "use client";
 
+import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { FieldHelp } from "../_components/FieldHelp";
@@ -122,7 +123,7 @@ function CoinPicker({ label, value, onPick, exclude, initial, locked = false }: 
     <div className="space-y-2">
       <label className="block text-xs text-neutral-400">{label}<FieldHelp id="derby-coin" /><input data-help="derby-coin" data-decision="what" aria-label={`Search for the ${lower1(label)}`} className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" placeholder="a ticker, a name or a mint — WIF, BONK, SHIB…" value={q} onChange={(e) => setQ(e.target.value)} /></label>
       {busy && <p className="text-xs text-neutral-500">Searching…</p>}
-      {err && <p className="text-xs text-red-400">{err}</p>}
+      <p className="text-xs text-red-400 empty:hidden" aria-live="polite">{err ?? ""}</p>
       {note && <p className="text-xs text-neutral-400" data-picker-note>{note}</p>}
       <ul className="max-h-56 overflow-y-auto divide-y divide-neutral-800 rounded border border-neutral-800">
         {shown.map((h) => (
@@ -290,7 +291,7 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
         mintSearch={<MintAddressBlock pool={mintPool} />}
         summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
         blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
-      {out && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${out.ticker}`} coinHref={(t) => `/burnticker/t/${t}`} onStartOver={() => { setOut(null); setErr(null); setNow(Date.now()); }} />}
+      {out && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${out.ticker}`} coinHref={coinCanonicalHref} onStartOver={() => { setOut(null); setErr(null); setNow(Date.now()); }} />}
     </>);
   }
 }
@@ -514,7 +515,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
   const shown = reviewFor(slot, reviewKey), reviewCurrent = reviewMatchesDraft(slot, reviewKey);
 
   const tileButton = (
-    <button onClick={() => setOpen(true)} data-decision="what" disabled={!!unavailable} aria-describedby={unavailable ? "cvc-why" : undefined} className="w-full text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 disabled:cursor-not-allowed hover:border-amber-400 focus:border-amber-400 focus:outline-none disabled:opacity-50" aria-label="Coin vs Coin">
+    <button onClick={() => setOpen(true)} data-decision="what" disabled={!!unavailable} aria-describedby={unavailable ? "cvc-why" : undefined} className="w-full text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 disabled:cursor-not-allowed hover:border-amber-400 focus:border-amber-400 disabled:opacity-50" aria-label="Coin vs Coin">
       <div className="text-lg font-semibold">Coin vs Coin <span className="ml-1 rounded bg-amber-400/15 px-1.5 text-xs text-amber-300 align-middle">Burn Derby</span></div>
       <p className="mt-1 text-sm text-neutral-300">Pick two coins that people already hold. Burnticker only reads their published feeds. You launch two new coins that race on those feeds every day, and the new coin on the winning side burns.</p>
       <p className="mt-3 text-xs text-neutral-500">For example, $WIFWINS burns on every UTC day that WIF gains more than SHIB, read from Pyth at 00:00 UTC.</p>
@@ -661,7 +662,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
           summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
           blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
         {!out && !pcOut && <details className="text-xs text-neutral-300"><summary className="cursor-pointer">What this creates, in full</summary><ul className="mt-1 min-w-0 list-disc space-y-0.5 break-words pl-5" aria-label="What this creates" data-derby-facts><li>{realList.length ? `${model.spec.a.symbol} and ${model.spec.b.symbol} are reference feeds. ${realReadSentence({ a: model.spec.a.symbol, b: model.spec.b.symbol }, realList)}` : x.references}</li><li>{x.created}</li><li>{x.window}</li><li>{x.start}</li><li>{x.end}</li><li>{x.tie}</li><li>{x.missing}</li>{flip && <li>{edgeCase(66)}</li>}{flip && <li>{edgeCase(70)}</li>}<li>{edgeCase(72)}</li><li>{edgeCase(62)}</li>{realList.map((r) => <li key={r.ticker} data-burn-real-fact>${r.ticker}: {targetActionSentence(r.symbol)}</li>)}</ul></details>}
-        {prepared && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${prepared.tickers.a} and $${prepared.tickers.b}`} coinHref={(t) => `/burnticker/t/${t}`} onStartOver={() => { setOut(null); setPcOut(null); setErr(null); setNow(Date.now()); }} />}
+        {prepared && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${prepared.tickers.a} and $${prepared.tickers.b}`} coinHref={coinCanonicalHref} onStartOver={() => { setOut(null); setPcOut(null); setErr(null); setNow(Date.now()); }} />}
         {(pcOut || out) && <p className="text-xs"><a className="underline" href={`/burnticker/p/${(pcOut ?? out)!.pairId}`}>Open the pair page →</a></p>}
       </div>
     );

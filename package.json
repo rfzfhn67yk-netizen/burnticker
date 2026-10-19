@@ -40,6 +40,7 @@
   "devDependencies": {
     "@irys/upload": "^0.0.15",
     "@irys/upload-solana": "^0.1.8",
+    "react-dom": "19.2.8",
     "tweetnacl": "^1.0.3",
     "typescript": "^5",
     "@types/node": "^24.13.3",

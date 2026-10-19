@@ -6,8 +6,9 @@ import { PUBLIC_REPO_URL, PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentSta
 import { Page, PageHeader, Panel } from "../_components/Panel";
 import { MailSafe } from "../_components/MailSafe";
 import { BountyWallet } from "./BountyWallet";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: BOUNTY_COPY.title, description: BOUNTY_COPY.description, alternates: { canonical: "/burnticker/bounty" } };
+export const metadata: Metadata = withShareCard({ title: BOUNTY_COPY.title, description: BOUNTY_COPY.description, alternates: { canonical: "/burnticker/bounty" } });
 export const dynamic = "force-dynamic";
 
 /**
