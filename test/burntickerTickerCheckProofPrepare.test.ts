@@ -46,7 +46,7 @@ test("the review's ticker panel, for a proven creator: their own launched coin i
   const wallet = Keypair.generate().publicKey.toBase58();
   row(w, "MYLIVE", wallet, "live"); row(w, "MYDRAFT", wallet, "draft");
   const deps = { inUse: (t: string) => w.registry.tokensByTicker(t), existing: lookalikeRows(w.registry), reserved: new Set<string>(), creator: wallet };
-  const [live] = tickerChecks([{ side: "A", ticker: "MYLIVE" }], deps);
+  const [live] = tickerChecks([{ side: "A", ticker: "MYLIVE", generated: "MYCOIN" }], deps);
   assert.equal(live.taken, true);
   assert.ok(live.suggestions.length > 0);
   const [draft] = tickerChecks([{ side: "A", ticker: "MYDRAFT" }], deps);

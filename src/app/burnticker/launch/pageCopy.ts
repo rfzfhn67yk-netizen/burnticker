@@ -45,6 +45,8 @@ export function humanDay(iso: string): string {
 
 /** WIRING-SOURCES7 H9: reservedNames.ts RESERVED_TICKER_REFUSAL, word for word (that module reads files, so the client keeps a copy; test/burntickerWebsite25.test.ts pins them). */
 export const RESERVED_TICKER_LINE = "That ticker is reserved for the platform. Pick a ticker of your own.";
+/** Continuous audit HB-7: whether any of these problem lines already says the reserved-ticker refusal (so the ticker box does not repeat it). */
+export const reservedLineSaid = (lines: readonly (string | null | undefined)[]): boolean => lines.some((x) => !!x && x.includes(RESERVED_TICKER_LINE));
 /** QA 11 L3: the ticker field takes a whole paste, so the "was cut" note quotes exactly what was typed (the normaliser keeps 10). */
 export const TICKER_PASTE_MAX = 64;
 /** QA 11 L3: the name stops at 32 characters, and says so. */

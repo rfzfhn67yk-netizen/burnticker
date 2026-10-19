@@ -70,12 +70,12 @@ describe("H9: impersonating tickers and names", () => {
       assert.equal(c.reserved, true);
       for (const s of c.suggestions) { assert.equal(isReserved(s, reserved), false, s); assert.doesNotMatch(s, /^(DEFICIT|BURNTICK|REHEARSA)/, s); }
     }
-    // prelaunch audit 2026-10-18 A-2: a digit ending reads as the same letters (a lookalike the launch refuses), so a word is added instead
-    assert.deepEqual(checks[0].suggestions, ["AVSFANS", "AVSCLUB"], "the rule's ticker is taken, so its free variants");
+    // continuous audit HB-6: the rule's ticker is held by another coin, so it is never extended ($AVSFANS read as that coin's fan club)
+    assert.deepEqual(checks[0].suggestions, [], "the rule's ticker is taken: nothing that starts with it");
     assert.deepEqual(checks[1].suggestions, [], "no rule ticker: nothing is suggested");
-    assert.deepEqual(checks[2].suggestions, ["AVSL", "AVSLFANS"]);
-    // a ticker only in use (not reserved) still gets its own free variants
+    assert.deepEqual(checks[2].suggestions, ["AVSL", "AVSL2"], "not a team coin: the rule's ticker and its digit ending, no team words");
+    // a ticker only in use (not reserved) is never offered with something added; a team coin gets the team words on another stem
     const inUse = tickerChecks([{ side: "A", ticker: "LAD" }], { inUse: (t) => (t === "LAD" ? [{ mint: "m", name: "Dodgers", ticker: "LAD", rulesJson: "{}" }] : []), reserved });
-    assert.deepEqual(inUse[0].suggestions, ["LADFANS", "LADCLUB"]);
+    assert.deepEqual(inUse[0].suggestions, []);
   });
 });

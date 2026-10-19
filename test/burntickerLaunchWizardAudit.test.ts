@@ -31,6 +31,7 @@ import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint"
 import { readFileSync } from "node:fs";
 import { DISPERSAL_FLAG } from "@/lib/burnticker/dispersal";
 import { DEBT_RULE } from "./burntickerHelpers.ts";
+import { REAL_BURN_FAMILY_REFUSAL } from "@/lib/burnticker/burnRealEligibility";
 
 const BONK = { mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", pool: "HVNwzt7Pxfu76KHCMQPTLuTCLTm6WnQ1esLv4eizseSv", symbol: "BONK", feedId: "72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419" };
 const MAINNET = { BURNTICKER_CLUSTER: "mainnet", BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" };
@@ -55,11 +56,14 @@ describe("F1/F2: the round-5 burn target is off unless the owner's flag is on (f
       assert.equal(rv.signable, false);
     }
   });
-  test("FIXED: on an r5 host with BURNTICKER_BURN_REAL_ENABLED on, the burn target is offered and accepted on every single-coin shape", () => {
+  test("FIXED: on an r5 host with BURNTICKER_BURN_REAL_ENABLED on, the burn target is offered and accepted on a published-data coin (HB-12: a natural disaster is refused)", () => {
     const on = { ...R5, BURNTICKER_BURN_REAL_ENABLED: "1" };
     assert.equal(siteLaunchState(on).burnReal.available, true);
     assert.equal(review({ ...debt(), burnTarget: BONK }, on).signable, true);
-    assert.equal(review({ ...quakeNext(1), burnTarget: BONK }, on).signable, true);
+    // HB-12 + PROD-01 (2026-10-19): a natural-disaster coin may not burn another token (burnRealEligibility.ts)
+    const quake = review({ ...quakeNext(1), burnTarget: BONK }, on);
+    assert.equal(quake.signable, false);
+    assert.ok(quake.problems.includes(REAL_BURN_FAMILY_REFUSAL), quake.problems.join(" | "));
   });
 });
 
@@ -248,7 +252,8 @@ describe("F4 (audit): a restored draft's end choice the host no longer offers", 
 
 describe("F16: the 'What is not offered yet' disclosure", () => {
   test("FIXED (audit F16): shown only for a rule that came with a burn target, not on every coin's step 3", () => {
-    assert.match(read("src/app/burnticker/launch/page.tsx"), /: site\.burnReal\.line && rule0\?\.burnTarget \? <details [^>]*data-burn-real-waiting>/);
+    // HB-12: and only on a family that could have the choice (burnRealEligibility.ts)
+    assert.match(read("src/app/burnticker/launch/page.tsx"), /: site\.burnReal\.line && rule0\?\.burnTarget && realBurnAllowed\(rule0\) \? <details [^>]*data-burn-real-waiting>/);
   });
 });
 

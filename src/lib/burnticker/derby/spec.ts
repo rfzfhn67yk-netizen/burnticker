@@ -306,9 +306,26 @@ export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | 
 /** Cheap-features item 14: the run lengths the web launcher offers beside the share presets (the API takes any length up to 366 days). */
 export const DERBY_RUN_PRESETS = [7, 14, 30] as const;
 export const runPresetLabel = (days: number): string => `${days} days`;
-/** Cheap-features item 15: a daily race's end, said as a result. */
-// qa-12 L2: said the same as the end sentences (describe.ts RACE_END_RESULT): the tally burns once more, the other coin's rest moves to it
-export const raceEndSentence = (days: number, unit: "days" | "weeks" = "days"): string => `Runs for ${days} days. At the end, the coin with more winning ${unit} burns once more and takes the rest of the other coin's pool. If both won the same number of ${unit}, each burns down what is left on itself.`;
+/**
+ * THE ONE END OF A TWO-COIN DAILY RACE (continuous audit HB-2, 2026-10-19: the burn step, its "At the end" block, the review's "When it
+ * ends" and the server review's endsLine said the end four different ways). What the keeper does (derby/adapter.ts recordTally, then
+ * endSinkKeeper's PAIR WINNER): once every window of the run is recorded, the coin with more winning windows burns its share once more;
+ * the other coin's rest, and any fees that arrive later, go to the winner's burn while the two are linked, else to $DEFICIT's burn; the
+ * winner burns down what is left on itself. Level on winning windows is a void reading: nothing moves and each coin burns down what is
+ * left on itself over the wind-down. Every surface says the race's end with these sentences and no other.
+ */
+export interface RaceEnd { season: string; result: string; tie: string; line: string }
+export function raceEnd(days: number, unit: "days" | "weeks" = "days", windDownDays = 28): RaceEnd {
+  const over = windDownDays === 28 ? "over four weeks" : `over ${windDownDays} days`;
+  const season = `Runs for ${days} days.`;
+  const result = `When the run ends, the coin with more winning ${unit} burns its share once more. The other coin sends the rest of its pool, and any fees that arrive later, to that coin's burn while the two are linked, or to $DEFICIT's burn if they are not. The coin with more winning ${unit} burns down what is left on itself. Then the coin retires.`;
+  const tie = `If both coins won the same number of ${unit}, nothing moves between them, and each coin burns down what is left on itself ${over}.`;
+  return { season, result, tie, line: `${season} ${result} ${tie}` };
+}
+/** The race's end from its derby block (the run length and the window unit). */
+export const raceEndOf = (d: Pick<CoinVsSpec, "season" | "window">, windDownDays = 28): RaceEnd => raceEnd(d.season.days, d.window === "weekly" ? "weeks" : "days", windDownDays);
+/** Cheap-features item 15: a daily race's end, said as a result (raceEnd's whole line). */
+export const raceEndSentence = (days: number, unit: "days" | "weeks" = "days"): string => raceEnd(days, unit).line;
 /** The reference coins are inputs only (the owner, 2026-10-13). */
 export const derbyReadOnlySentence = (d: Pick<CoinVsSpec, "a" | "b">): string => `${d.a.symbol} and ${d.b.symbol} are only read, never traded or burned.`;
 

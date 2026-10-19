@@ -11,6 +11,8 @@ import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchP
 import { DESCRIPTION_MAX, descriptionRoomProblem, linkProblem } from "@/lib/burnticker/creatorProfile";
 import { controlCharProblem } from "@/lib/burnticker/launchFields";
 import { fitName } from "@/lib/burnticker/launchFields";
+import { matchupTickers } from "@/lib/burnticker/derby/tile";
+import { raceEndOf } from "@/lib/burnticker/derby/spec";
 
 /**
  * THE GUIDED LAUNCH (website-19; the owner, 2026-10-12: "should we have the coin launch be a step by step process with a guide, giving
@@ -126,7 +128,8 @@ export const PATTERN_REASON = {
   oneShotFade: "A rule that resolves once cannot burn on the days it does not happen. Its other outcome already burns nothing.",
   noTitleMarket: "No market for this yet.",
   titleMarketLoading: "Looking for a market on this team's title.",
-  needsTwo: "Winner takes the burn needs two linked coins. Pick a coin against another coin in step 1.",
+  // HB-8 (2026-10-19): step 1 names its two-coin choices "Coin comparison" and "Rivalry" (the follows above)
+  needsTwo: "Winner takes the burn needs two linked coins. Pick Coin comparison or Rivalry in step 1.",
   noMeeting: "These two teams have no listed game right now. Pick This season instead.",
   teamsSeparate: "Two team coins launch as two separate coins, and each one burns from its own pool. Winner takes the burn is offered for every game between them this season.",
   meetingsOnly: "Every game between them this season is a linked pair where the winner takes the burn, so this pattern does not apply to it.",
@@ -329,10 +332,13 @@ export const namesRemadeLine = (n: 1 | 2): string => n === 2
  * daily closes: Pyth gives them only to a site with a Pyth access key, otherwise only closes this site saved itself count. Nothing is
  * guessed: without the key the choice says so and points at the comparisons that work today.
  */
+/** Continuous audit HB-9: why a record close is not offered on this site, in plain words. */
+export const RECORD_CLOSE_OFF_LINE = "A record close needs a long history of daily closes, and this site cannot read that history yet, so a new record close cannot start here today.";
 export function recordCloseAvailability(o: { keyed: boolean }): { available: boolean; line: string; alternative: string | null } {
   return o.keyed
     ? { available: true, line: "Past daily closes can be read on this site, so a record close can start once its reference coin's closes are complete.", alternative: null }
-    : { available: false, line: "A record close needs past daily closes. This site has no Pyth access key set up, so it can only use closes it saved itself, and a new record close usually cannot start yet.", alternative: "Two coins raced on their daily feeds, or the flippening, work today." };
+    // continuous audit HB-9: said to creators without the operator's setup (no Pyth key detail); the option is not offered while this holds
+    : { available: false, line: RECORD_CLOSE_OFF_LINE, alternative: "Two coins raced on their daily feeds, or the flippening, work today." };
 }
 
 /** The burn-pool cap in force by default (capInForce.ts; the test pins it to the program's constant and its 48-hour wait). */
@@ -375,6 +381,21 @@ export interface EndOption { kind: EndKind; label: string; available: boolean; r
  * the rule carries (describe.ts describeEndSink, the same test the keeper uses). A coin with no end sink (a Coin vs Coin pair today) burns
  * the rest down on itself. `options` lists the pinnable ends with the ones the launch page does not build greyed.
  */
+/**
+ * Continuous audit HB-2 (2026-10-19): a pair side as the bundle links it (winner takes the burn), for a page that holds side A before the
+ * bundle adds its pair field. Without it a Coin vs Coin race read as a single coin and its burn step said the $DEFICIT end.
+ */
+export const asLinkedPairSide = (r: BurnRule): BurnRule => (r.pair ? r : ({ ...r, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } as BurnRule));
+/**
+ * Continuous audit HB-2: the review's "When it ends" for a Coin vs Coin pair. A daily race says derby/spec.ts raceEnd's line, the same
+ * the burn step, the coin's sentence and the server review's endsLine say; the flippening says its run and its linked end.
+ */
+export function coinvsEndsLine(rule: BurnRule): string | null {
+  const d = rule.oracle === "derby" && rule.derby?.selector === "coinvs" ? rule.derby : null;
+  if (!d) return null;
+  if (!d.flip) return raceEndOf(d, rule.onEnd?.windDownDays ?? 28).line;
+  return `${raceEndOf(d).season} ${endText(asLinkedPairSide(rule)).line}`;
+}
 /** Item 58: what a coin with no end date really does (the end sink it carries is never reached). */
 export const PERPETUAL_END_LINE = "This coin has no end. It keeps burning on every result that qualifies, for as long as its pool holds SOL, so nothing is ever left over to send anywhere.";
 export function endSentences(rule: BurnRule, o: { team?: string | null; party?: boolean } = {}): { kind: EndKind; sentences: string[]; options: EndOption[] } {
@@ -602,11 +623,9 @@ export function candidatesPairRule(conditionId: string, fraction: number = DEFAU
 
 // ---- generated tickers and names (owner, 2026-10-12: "two teamwifs") ----
 
-const code = (s: string, max = 4): string => s.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, max);
 /** Tickers are upper case on every surface (the registry and the program's memo prefix), so the matchup's "v" is a V. */
 export function pairTickers(a: string, b: string): { a: string; b: string } {
-  const A = code(a), B = code(b);
-  return { a: `${A}V${B}`.slice(0, 10), b: `${B}V${A}`.slice(0, 10) };
+  return matchupTickers(a, b);
 }
 /** The on-chain name carries the matchup: "WIF vs BONK, WIF side" (at most 32 characters). */
 export function pairNames(a: string, b: string, codes: { a?: string | null; b?: string | null } = {}): { a: string; b: string } {

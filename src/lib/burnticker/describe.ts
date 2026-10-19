@@ -18,6 +18,8 @@ import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { CATALOGUE_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
 import { highLastDay, highText } from "@/lib/burnticker/derby/high";
+import { derbyReadOnlySentence, raceEnd, raceEndOf } from "@/lib/burnticker/derby/spec";
+import { coinvsTickers, fightName } from "@/lib/burnticker/derby/tile";
 import { paramName } from "@/lib/burnticker/paramNames";
 import { fitName } from "@/lib/burnticker/launchFields";
 
@@ -250,9 +252,10 @@ export const GAME_CANCELLED_SENTENCE = "If the game is cancelled, nothing moves 
  * rest moves to the winner's burn while the two are linked, else to $DEFICIT's burn; the winner burns down what is left on itself
  * (endSinkKeeper PAIR WINNER). Level on winning days is a void reading: nothing moves and each coin burns down what is left on itself.
  */
-export const raceEndResult = (unit: "days" | "weeks" = "days"): string => `When the run ends, the coin with more winning ${unit} burns its share once more. The other coin sends the rest of its pool, and any fees that arrive later, to the winning coin's burn while the two are linked, or to $DEFICIT's burn if they are not. The winning coin burns down what is left on itself. Then the coin retires.`;
+// continuous audit HB-2: the sentences are derby/spec.ts raceEnd's, the one end every surface says for a race
+export const raceEndResult = (unit: "days" | "weeks" = "days"): string => raceEnd(0, unit).result;
 export const RACE_END_RESULT = raceEndResult("days");
-export const raceLevelSentence = (over = "over four weeks", unit: "days" | "weeks" = "days"): string => `If both coins won the same number of ${unit}, nothing moves between them, and each coin burns down what is left on itself ${over}.`;
+export const raceLevelSentence = (over = "over four weeks", unit: "days" | "weeks" = "days"): string => raceEnd(0, unit).tie.replace("over four weeks", over);
 const isDailyRace = (r: BurnRule): boolean => r.oracle === "derby" && r.derby?.selector === "coinvs" && !r.derby.flip;
 /** The season-end sentence of a rivalry series coin (endText's result line). */
 export const MEETINGS_END_RESULT = "When both teams' seasons are over, the coin of the team that won fewer of the games between them sends the rest of its pool, and any fees that arrive later, to the other coin's burn pool, or to $DEFICIT's burn if that coin is not live. The coin of the team that won more burns down what is left on itself. Then the coin retires.";
@@ -275,7 +278,7 @@ export function endText(r: BurnRule, o: { team?: string | null; party?: boolean 
   if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", o.party ? PARTIES_END_RESULT : CANDIDATES_END_RESULT, VOID);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
   // qa-12 L2: a two-coin daily race ends on its season tally (derby/adapter.ts recordTally; endSinkKeeper's pair winner burns itself down)
-  if (sink === "pair-winner" && isDailyRace(r)) { const unit = r.derby?.selector === "coinvs" && r.derby.window === "weekly" ? "weeks" : "days"; return mk("pair-winner", raceEndResult(unit), raceLevelSentence(over, unit)); }
+  if (sink === "pair-winner" && isDailyRace(r) && r.derby?.selector === "coinvs") { const e = raceEndOf(r.derby, days); return mk("pair-winner", e.result, e.tie); }
   if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
   if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team", sinkTickerOf(r)); return mk("champion", `${won} ${lost}`, VOID); }
   // end-sink picker: the coin the creator named, and end.rs's fall-through when that coin is not live at the end
@@ -586,6 +589,23 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     return build(`${st.city} ${n.metric === "high" ? "Heat" : n.metric === "rain" ? "Rain" : "Snow"}`, tickerFrom(st.code, n.metric === "high" ? "HOT" : n.metric === "rain" ? "RAIN" : "SNOW"), oneLiner,
       (t) => `${what[0].toUpperCase()}${what.slice(1)}, ${spends(r, t)}${n.metric === "snow" ? " once" : ""}, with a receipt on chain. The result comes from the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet. Nothing happens on ${other}.${n.metric === "snow" ? ` ${SNOW_SEASON_SENTENCE}` : ""}`,
       n.metric === "snow" ? oneShotSentence(r, null, `the first snow`) : PERPETUAL_SENTENCE, n.metric === "snow" ? "one-shot" : "recurring");
+  }
+  // continuous audit HB-3 (2026-10-19): a Coin vs Coin side is said in words (the page's own sentence), never its series id, with the
+  // run length as its window sentence (never "no end date"), and suggests the page's ticker (derby/tile.ts coinvsTickers)
+  if (r.oracle === "derby" && r.derby?.selector === "coinvs") {
+    const d = r.derby, sideB = !!(r.binary?.onNo && !r.binary.onYes);
+    const [win, lose] = sideB ? [d.b.symbol, d.a.symbol] : [d.a.symbol, d.b.symbol];
+    const tks = coinvsTickers(d.a.symbol, d.b.symbol, d.flip), unit = d.window === "weekly" ? "week" : "day";
+    const src = d.a.pyth && d.b.pyth ? "Pyth" : "each coin's published feed", at = d.window === "weekly" ? "Monday 00:00 UTC" : "00:00 UTC";
+    const passes = `${d.a.symbol}'s market cap passes ${d.b.symbol}'s`;
+    const oneLiner = d.flip ? (sideB ? `burns once if ${d.a.symbol}'s market cap never passes ${d.b.symbol}'s` : `burns once if ${passes}`) : `burns every ${unit} ${win} out-gains ${lose}`;
+    const name0 = d.flip ? `${win} vs ${lose}, ${win} side` : fightName(win);
+    const block = (t: string): string => d.flip
+      ? `${sideB ? `If the run ends without ${passes}` : `On the first ${unit} ${passes}`}, ${spends(r, t)} once, with a receipt on chain. Each ${unit} is read from ${src} at ${at}. ${derbyReadOnlySentence(d)}`
+      : `For each ${unit} ${win} out-gains ${lose}${d.measure === "mcap" ? " in size" : ""}, ${spends(r, t)}, with a receipt on chain. On a ${unit} ${lose} out-gains ${win}, this coin's share for that ${unit} goes to the other coin's burn. Each ${unit} is read from ${src} at ${at}, and an exact tie burns nothing. ${derbyReadOnlySentence(d)}`;
+    const text = build(name0, sideB ? tks.b : tks.a, oneLiner, block, raceEndOf(d).season, d.flip ? "one-shot" : "recurring");
+    // the lead is the paragraph's own first sentence ("$WIFWINS burns every day WIF out-gains BONK."), the one the page says
+    return { ...text, lead: leadSentence(text.paragraph) };
   }
   // sources-4 (2026-10-12): a reference coin's record daily close (derby/high.ts), recurring or once
   if (r.oracle === "derby" && r.derby?.selector === "high") {

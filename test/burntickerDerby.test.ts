@@ -52,7 +52,7 @@ describe("the selector and its rule", () => {
 
   test("the review sentence (the owner's example), the statement and the coin card are lint-clean", () => {
     const s = derbySentence(SEASON, "TEAMWIF", "TEAMSHIB", 0.01);
-    assert.equal(s, "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC), and $TEAMSHIB's share for that day goes to $TEAMWIF's burn. On a day SHIB out-gains WIF, $TEAMSHIB burns and takes $TEAMWIF's share. WIF and SHIB are only read, never traded or burned. Runs for 7 days. At the end, the coin with more winning days burns once more and takes the rest of the other coin's pool. If both won the same number of days, each burns down what is left on itself.");
+    assert.equal(s, "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC), and $TEAMSHIB's share for that day goes to $TEAMWIF's burn. On a day SHIB out-gains WIF, $TEAMSHIB burns and takes $TEAMWIF's share. WIF and SHIB are only read, never traded or burned. Runs for 7 days. When the run ends, the coin with more winning days burns its share once more. The other coin sends the rest of its pool, and any fees that arrive later, to that coin's burn while the two are linked, or to $DEFICIT's burn if they are not. The coin with more winning days burns down what is left on itself. Then the coin retires. If both coins won the same number of days, nothing moves between them, and each coin burns down what is left on itself over four weeks.");
     assert.deepEqual(lint(s), []);
     const flip = derbySentence({ ...SEASON, a: WIF, b: BONK, measure: "mcap", flip: true }, "TEAMWIF", "TEAMBONK", 0.02);
     assert.deepEqual(lint(flip), [], flip);
@@ -323,7 +323,7 @@ describe("the Coin vs Coin tile's model", () => {
     assert.deepEqual(m.problems, []);
     assert.equal(m.spec.season.start, "2026-10-11");
     assert.equal(lockRule(m.rule).rule.series, coinvsRule({ ...SEASON, season: { start: "2026-10-11", days: 30 } }).series);
-    assert.equal(m.sentence, "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC), and $TEAMSHIB's share for that day goes to $TEAMWIF's burn. On a day SHIB out-gains WIF, $TEAMSHIB burns and takes $TEAMWIF's share. WIF and SHIB are only read, never traded or burned. Runs for 30 days. At the end, the coin with more winning days burns once more and takes the rest of the other coin's pool. If both won the same number of days, each burns down what is left on itself.");
+    assert.equal(m.sentence, "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC), and $TEAMSHIB's share for that day goes to $TEAMWIF's burn. On a day SHIB out-gains WIF, $TEAMSHIB burns and takes $TEAMWIF's share. WIF and SHIB are only read, never traded or burned. Runs for 30 days. When the run ends, the coin with more winning days burns its share once more. The other coin sends the rest of its pool, and any fees that arrive later, to that coin's burn while the two are linked, or to $DEFICIT's burn if they are not. The coin with more winning days burns down what is left on itself. Then the coin retires. If both coins won the same number of days, nothing moves between them, and each coin burns down what is left on itself over four weeks.");
     assert.deepEqual(lint(m.sentence), []);
     const bad = tileRule({ ...choice, flip: true }, "0".repeat(64), { a: "TEAMWIF", b: "TEAMSHIB" });
     assert.match(bad.problems.join(";"), /both coins need a mint/);

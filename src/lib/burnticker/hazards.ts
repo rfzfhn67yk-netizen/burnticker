@@ -44,8 +44,14 @@ export const HAZARD_KINDS: readonly { id: HazardKindId; label: string; publisher
 /** Step 3: the two patterns a natural-disaster coin offers (the fade side stays available on the per-event form, as on any feed). */
 export const HAZARD_PATTERNS = {
   every: { label: "Every time it happens", sentence: "The coin burns a share of its pool for each qualifying event, such as each earthquake at the magnitude or each storm that reaches the category." },
-  once: { label: "Once, on the next one", sentence: "The coin burns its whole pool, or half of it, once, on the first qualifying event after launch." },
+  once: { label: "Once, on the next one", sentence: "The coin burns its whole pool once, on the first qualifying event after launch." },
 } as const;
+/**
+ * HB-5 (2026-10-19): the "Once" card says only the shares the share row offers. Half the pool is offered only where the host runs burn
+ * dispersal (launchPresets.ts SHARE_PRESETS.oneShotDispersal, the catalogue's `burn-dispersal` source); everywhere else 100% is the one choice.
+ */
+export const HAZARD_ONCE_HALF_SENTENCE = "The coin burns its whole pool, or half of it, once, on the first qualifying event after launch.";
+export const hazardOnceSentence = (dispersal: boolean): string => (dispersal ? HAZARD_ONCE_HALF_SENTENCE : HAZARD_PATTERNS.once.sentence);
 
 /** The season-over reason for a hurricane one-shot (the same words as the review's refusal). */
 export const HAZARD_SEASON_OVER = "This hurricane season is over, so a coin on its next storm is not offered.";
@@ -157,7 +163,7 @@ export function hazardSwap(series: string, to: "every" | "once", nowMs: number):
  * next one" are both available whichever form step 2 built (the page swaps the series with hazardSwap); the fade side follows the rule's
  * own dials (the per-event form takes it, the one-shot does not); winner-takes-the-burn needs two linked coins.
  */
-export function hazardPatternOptions(rule: BurnRule, nowMs: number): { options: PatternOption[]; preselected: PatternId } {
+export function hazardPatternOptions(rule: BurnRule, nowMs: number, o: { dispersal?: boolean } = {}): { options: PatternOption[]; preselected: PatternId } {
   const series = rule.series ?? "";
   const once = NEXT_EVENT_ONE_SHOT_RE.test(series);
   const swap = hazardSwap(series, "once", nowMs);
@@ -165,7 +171,7 @@ export function hazardPatternOptions(rule: BurnRule, nowMs: number): { options: 
   const fadeReason = once ? PATTERN_REASON.oneShotFade : dialsFor(rule).inverse ? null : PATTERN_REASON.oneShotFade;
   const mk = (id: PatternId, reason: string | null, label?: string, sentence?: string): PatternOption => ({ id, label: label ?? PATTERNS[id].label, sentence: sentence ?? PATTERNS[id].sentence, available: reason === null, reason });
   return {
-    options: [mk("every", null, HAZARD_PATTERNS.every.label, HAZARD_PATTERNS.every.sentence), mk("fade", fadeReason), mk("once", onceReason, HAZARD_PATTERNS.once.label, HAZARD_PATTERNS.once.sentence), mk("winner", PATTERN_REASON.needsTwo)],
+    options: [mk("every", null, HAZARD_PATTERNS.every.label, HAZARD_PATTERNS.every.sentence), mk("fade", fadeReason), mk("once", onceReason, HAZARD_PATTERNS.once.label, hazardOnceSentence(o.dispersal === true)), mk("winner", PATTERN_REASON.needsTwo)],
     preselected: once ? "once" : rule.inverse ? "fade" : "every",
   };
 }

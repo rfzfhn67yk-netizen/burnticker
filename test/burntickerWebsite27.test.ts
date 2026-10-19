@@ -49,20 +49,22 @@ describe("L2: a daily race's end, said the same in the sentence and under At the
     assert.equal(e.result, RACE_END_RESULT);
     assert.equal(e.void, raceLevelSentence());
     assert.match(e.result, /more winning days burns its share once more/);
-    assert.match(e.result, /to the winning coin's burn while the two are linked, or to \$DEFICIT's burn if they are not/);
-    assert.match(e.result, /The winning coin burns down what is left on itself/);
+    assert.match(e.result, /to that coin's burn while the two are linked, or to \$DEFICIT's burn if they are not/);
+    assert.match(e.result, /The coin with more winning days burns down what is left on itself/);
     for (const t of [RACE_END_RESULT, raceEndResult("weeks"), raceLevelSentence(), raceEndSentence(30), raceEndSentence(7, "weeks")]) clean(t);
   });
   test("the sentence above and the At the end lines agree: neither says the rest simply goes to $DEFICIT", () => {
     const s = derbySentence(raceSpec, "WIFWINS", "BONKWINS", 0.02);
-    assert.match(s, /At the end, the coin with more winning days burns once more and takes the rest of the other coin's pool\. If both won the same number of days, each burns down what is left on itself\.$/);
+    assert.match(s, /When the run ends, the coin with more winning days burns its share once more\. The other coin sends the rest of its pool, and any fees that arrive later, to that coin's burn while the two are linked, or to \$DEFICIT's burn if they are not\. The coin with more winning days burns down what is left on itself\. Then the coin retires\. If both coins won the same number of days, nothing moves between them, and each coin burns down what is left on itself over four weeks\.$/);
     const lines = endSentences(linkedRace()).sentences;
     assert.ok(lines.some((x) => /burns its share once more/.test(x)), lines.join(" | "));
     assert.ok(!lines.some((x) => /if the rival won the last result/.test(x)), "never the generic last-result sentence");
     assert.ok(lines.some((x) => /same number of days, nothing moves between them/.test(x)));
     // the tile renders exactly these two sources
-    assert.match(tile, /const end = model\?\.rule \? endSentences\(model\.rule\) : null;/);
+    assert.match(tile, /const end = model\?\.rule \? endSentences\(asLinkedPairSide\(model\.rule\)\) : null;/);
     assert.match(tile, /<p className="font-medium text-neutral-200">At the end<\/p>\{end\.sentences\.map/);
+    // continuous audit HB-2: the block is left out when the sentence above already says the same end, so the step says it once
+    assert.match(tile, /\{end && !endSaid && <div/);
   });
   test("a weekly race says weeks; the flippening keeps its own end", () => {
     const weekly = { ...linkedRace(), derby: { ...raceSpec, window: "weekly" } } as unknown as BurnRule;
@@ -149,14 +151,15 @@ describe("WIRING-AUDIT12 P1-1: a linked one-shot pair offers 100 % only", () => 
   test("the page: sharePresetsForRule with linked, the dial context, the line beside the row, the notice's row label", () => {
     assert.match(page, /const linkedPair = pairOn && \(!!elPick \|\| pairMode === "game"\);/);
     assert.match(page, /set: cardSet, linked: linkedPair \};/);
-    assert.match(page, /const shareOptions = rule \? sharePresetsForRule\(rule, \{ linked: linkedPair \}\) : SHARE_PRESETS\.recurring;/);
+    assert.match(page, /const shareOptions = rule \? sharePresetsForRule\(rule, \{ linked: linkedPair, dispersal: site\.dispersal\.available \}\) : SHARE_PRESETS\.recurring;/);
     assert.match(page, /shareLine=\{linkedOneShotRow \? LINKED_ONE_SHOT_LINE : null\}/);
-    assert.match(page, /presetRowLabel\(shareShapeOf\(rule, \{ linked: linkedPair \}\)\)/);
-    assert.match(page, /const shape = shareShapeOf\(r, \{ linked: linkedPair \}\);/);
+    assert.match(page, /presetRowLabel\(shareShapeOf\(rule, \{ linked: linkedPair, dispersal: site\.dispersal\.available \}\)\)/);
+    assert.match(page, /const shape = shareShapeOf\(r, \{ linked: linkedPair, dispersal: site\.dispersal\.available \}\);/);
     assert.doesNotMatch(page, /oneShotRule \? SHARE_PRESETS\.oneShot : SHARE_PRESETS\.recurring/);
   });
   test("a saved draft is migrated on resume, with its notice", () => {
-    assert.match(page, /const resumeFrom = \(saved: Record<string, unknown>\) => \{ const \{ draft: d, notice \} = migrateLinkedShare\(saved\); restoreFrom\(d\); if \(notice\) setShareNotice\(notice\); \};/);
+    // HB-12 + PROD-01 (2026-10-19): the same resume also drops a token to burn that the coin's family may not have, said once
+    assert.match(page, /const resumeFrom = \(saved: Record<string, unknown>\) => \{ const \{ draft: d0, notice \} = migrateLinkedShare\(saved\); const \{ draft: d, notice: burnNotice \} = dropIneligibleBurnTarget\(d0\); restoreFrom\(d\);/);
     assert.match(page, /const resumeDraft = \(\) => \{ if \(savedDraft\) resumeFrom\(savedDraft\);/);
     assert.match(page, /else if \(resumeReview && offer\) resumeFrom\(offer\);/);
   });

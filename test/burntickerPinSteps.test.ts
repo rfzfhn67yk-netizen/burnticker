@@ -126,11 +126,11 @@ describe("a pair's side B carries its own pinned token (item 1)", () => {
     const w = await makeWorld();
     const RULE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } }, pair: null };
     const body = { creator: CREATOR, ticker: "MILEHI", name: "Mile High", rule: RULE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, pair: { ticker: "ARROWHD", name: "Arrowhead", description: "", imageUrl: null, links: [], burnTarget: WIF } };
-    const r = await prepareLaunch(w.p, body, { register: false }) as { pair?: { bundles: { a: { rules: { text: string } }; b: { rules: { text: string }; transactions: unknown[] } } }; error?: unknown };
-    assert.ok(r.pair, JSON.stringify(r).slice(0, 400));
-    assert.deepEqual(JSON.parse(r.pair!.bundles.b.rules.text).burnTarget, WIF);
-    assert.equal(JSON.parse(r.pair!.bundles.a.rules.text).burnTarget, undefined);
-    assert.equal(r.pair!.bundles.b.transactions.length, 2);
+    // HB-12 + PROD-01 (2026-10-19): a team pair may not burn another token (burnRealEligibility.ts), so the route refuses side B's after
+    // its shape passes; the bundle itself still puts a pinned token in side B's rule (launchlabPair above, the Coin vs Coin case)
+    const r = await prepareLaunch(w.p, body, { register: false }) as { pair?: unknown; error?: { status: number; body: { error: string; code: string } } };
+    assert.equal(r.pair, undefined);
+    assert.equal(r.error?.status, 400); assert.equal(r.error?.body.code, "burn-real-family"); assert.match(r.error!.body.error, /^Side B: Only a coin on published data/);
     const bad = await prepareLaunch(w.p, { ...body, ticker: "MILEHJ", pair: { ...body.pair, ticker: "ARROWHE", burnTarget: { ...WIF, mint: "nope" } } }, { register: false }) as { error?: { status: number; body: { error: string; code: string } } };
     assert.equal(bad.error?.status, 400); assert.equal(bad.error?.body.code, "burn-target"); assert.match(bad.error!.body.error, /^Side B: burnTarget\.mint/);
   });

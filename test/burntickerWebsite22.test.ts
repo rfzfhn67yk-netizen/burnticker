@@ -46,8 +46,8 @@ describe("QA 9 item 1: a natural disaster's burn-pattern cards are one stable se
     assert.ok(hazardSwap("usgs.quakenext:7", "every", NOW) && "series" in hazardSwap("usgs.quakenext:7", "every", NOW)!);
   });
   test("the page reads the chosen card from hazards.ts, keeps the hazard words, and moves fade to the per-event form first", () => {
-    assert.match(page, /const curPattern: PatternId \| null = guide\.follow === "disaster" \? hazardPatternOptions\(rule, Date\.now\(\)\)\.preselected/);
-    assert.match(page, /return stablePatternOptions\(cur\.options, sib && "series" in sib \? hazardPatternOptions\(hazardRule\(sib\.series\), now\)\.options : null\);/);
+    assert.match(page, /const curPattern: PatternId \| null = guide\.follow === "disaster" \? hazardPatternOptions\(rule, Date\.now\(\), \{ dispersal: site\.dispersal\.available \}\)\.preselected/);
+    assert.match(page, /return stablePatternOptions\(cur\.options, sib && "series" in sib \? hazardPatternOptions\(hazardRule\(sib\.series\), now, \{ dispersal: site\.dispersal\.available \}\)\.options : null\);/);
     assert.match(page, /const options0 = guide\.follow === "disaster" \? po\.options : po\.options\.map/, "the hazard labels are never overwritten by the generic words");
     assert.match(page, /const back = rule\.series \? hazardSwap\(rule\.series, "every", Date\.now\(\)\) : null;[\s\S]{0,260}setWantInverse\("on"\)/);
   });

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { realBurnFamilyProblem } from "@/lib/burnticker/burnRealEligibility";
 import { BURN_REAL_WAITING, burnRealEnabledFromEnv, burnRealFromEnv, burnSolEnabledFromEnv } from "@/lib/burnticker/launchAvailability";
 import path from "node:path";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
@@ -129,6 +130,8 @@ export interface LaunchReview {
    * goes to the sink pinned at creation), `void` when it is voided or the season is cancelled (the wind-down on this coin), or null.
    */
   end: { kind: string; result: string; void: string | null };
+  /** PROD-03 (2026-10-19): a two-coin Matchup's coin B ends on its own pick, stated apart (null for every other launch). */
+  endB?: { kind: string; result: string; void: string | null } | null;
   /**
    * ChatGPT audit 6 item 11: the plain projection from the source's saved sample at 1, 2 and 5% side by side (projection.ts, through the
    * keeper's own unit engine and burnMath's compounding), or the reason there is none.
@@ -275,9 +278,10 @@ export function graduationLines(cluster: string): string[] {
 /** Owner decision 2026-10-19: the lock step and the rent line of a coin whose end is Solana's incinerator (the EndSink account). */
 export const incineratorRentLabel = (ticker: string): string => `Rent for the account that pins $${ticker}'s end to Solana's incinerator, which is ${END_SINK_ACCOUNT_BYTES} bytes. It stays with the coin.`;
 /** ChatGPT audit 6 item 3: the end line is endText's, after the window sentence with its own end clause taken out (it said it twice). */
+// continuous audit HB-2: a rule that ends never says "no end date" beside its end (a Coin vs Coin race said both in one field)
 const endsLine = (windowSentence: string, end: ReturnType<typeof endText>): string => {
   if (end.kind === "perpetual") return end.result;
-  const window = windowSentence.split(/(?<=\.)\s+/).filter((x) => !/burns \$DEFICIT|burns the winning coin|burns down|retires|voided or the season is cancelled|win the championship|If they do not/.test(x)).join(" ");
+  const window = windowSentence.split(/(?<=\.)\s+/).filter((x) => !/burns \$DEFICIT|burns the winning coin|burns down|retires|no end date|voided or the season is cancelled|win the championship|If they do not/.test(x)).join(" ");
   return `${window} ${end.line}`.trim();
 };
 
@@ -367,6 +371,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     if (companionLocked) {
       const self = endSelfOnLossProblem(companionLocked.rule); if (self) problems.push(`Coin B. ${self}`);
       if (o.sinks) { const why = namedSinkProblem(companionLocked.rule, o.sinks); if (why) problems.push(`Coin B. ${why}`); }
+      // PROD-03: coin B is prepared as its own single coin, so its end (the incinerator included) is refused here as its prepare refuses it
+      for (const x of ruleRefusals(companionLocked, { programRound5: burnRealFromEnv(env), burnSol: burnSolEnabledFromEnv(env), dispersal: webDispersalOn(env, o.root), kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: false, sinks: o.sinks ?? null })) if (/^(burn-sol|incinerator)/.test(x.code)) { const m = `Coin B. ${x.message}`; if (!problems.includes(m)) problems.push(m); }
     }
   }
   // Round 5 (WIRING-ROUND5 item 1): side B's own pinned token, checked as the bundle route checks it (handlers.ts prepareLaunch)
@@ -413,7 +419,9 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const meetingsBlock = meetingsPair ? meetingsReview(asBuilt, ticker, String(pair!.ticker ?? "").toUpperCase(), ctx, cluster) : null;
   const settledDescB = settled && settledPair?.b ? describeRule(settledPair.b, { ...sideBDescribeCtx(settledPair.b, (pair as { descCtx?: unknown } | null)?.descCtx, body.descCtx, { seriesTitle: sourceText(settledPair.b, now)?.title ?? null }), ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph : "";
   const paragraphB = meetingsBlock?.descriptionB ?? (settledDescB || null);
-  const tickerB: string | null = (() => { try { const rb = meetingsPair ? { ...asBuilt, series: meetingsMirror(asBuilt.series ?? "") } as BurnRule : settledPair?.b ?? null; return rb ? describeRule(rb, { ...ctx, ticker: "" }).ticker || null : null; } catch { return null; } })();
+  // continuous audit HB-3: a Coin vs Coin pair's side B is side A inverted (the page's own suggestion, derby/tile.ts coinvsTickers)
+  const derbyB: BurnRule | null = pair && asBuilt.oracle === "derby" && asBuilt.derby?.selector === "coinvs" && asBuilt.binary?.onYes ? { ...asBuilt, binary: { onYes: null, onNo: asBuilt.binary.onYes } } : null;
+  const tickerB: string | null = (() => { try { const rb = meetingsPair ? { ...asBuilt, series: meetingsMirror(asBuilt.series ?? "") } as BurnRule : settledPair?.b ?? derbyB; return rb ? describeRule(rb, { ...ctx, ticker: "" }).ticker || null : null; } catch { return null; } })();
   for (const [gen, own, side] of [[text.paragraph, creatorText, "A"], ...(paragraphB ? [[paragraphB, creatorTextB, "B"]] : [])] as [string, string, "A" | "B"][]) {
     const rp = descriptionRoomProblem(gen, own);
     if (rp) onField(side, "description", rp, false);
@@ -424,6 +432,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // walkthrough 13: a race between two parties ends in party words (describe.ts PARTIES_END_RESULT)
   const partyRace = settled?.shape === "candidates" && isPartySubject(settledNames(pair?.names, sides));
   const end = endText(asBuilt, { team: teamName ? `the ${teamName}` : null, party: partyRace });
+  // PROD-03: a Matchup's coin B, its own end in its own team's words
+  const endB = companionLocked ? (() => { const r = companionLocked.rule, e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null, nm = e ? teamByAbbr(e.league, e.abbr)?.nickname ?? null : null; return endText(r, { team: nm ? `the ${nm}` : null }); })() : null;
   const alloc = allocationFor(locked);
   const per = (s: typeof CURVE_FEES) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });
   const perPc = (s: typeof PAIR_CURVE_FEES.curve | typeof PAIR_CURVE_FEES.post) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });
@@ -435,11 +445,18 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const targets: (BurnTargetField | null)[] = [locked.rule.burnTarget ?? null, pair ? pinB : companionLocked?.rule.burnTarget ?? null];
   // owner decision 2026-10-19: a pinned token is refused while BURNTICKER_BURN_REAL_ENABLED is off (handlers.ts answers burn-real-off)
   if (targets.some(Boolean) && !burnRealEnabledFromEnv(env) && !problems.includes(BURN_REAL_WAITING)) problems.push(BURN_REAL_WAITING);
+  // HB-12 + PROD-01: a token to burn only on a family that may have one (burnRealEligibility.ts); side B of a linked pair is judged by side
+  // A's rule (it is built from it), a Matchup's coin B by its own rule
+  for (const [r, t, who] of [[locked.rule, targets[0], ""], [pair ? locked.rule : companionLocked?.rule ?? null, targets[1], "Coin B. "]] as [BurnRule | null, BurnTargetField | null, string][]) {
+    const fp = realBurnFamilyProblem(r, t); if (fp && !problems.includes(`${who}${fp}`)) problems.push(`${who}${fp}`);
+  }
   const pins: LaunchReview["pins"] = [];
   const pinRent = rentLamports(BURN_TARGET_ACCOUNT_BYTES);
   // owner decision 2026-10-19: the incinerator end (a single coin on LaunchLab; a pair rule with it is refused by rules.ts) is pinned in
   // its own EndSink account at initialize_token, whose rent is listed here
-  const incinerator = venue === "launchlab" && !pair && !companionLocked && endSinkOf(locked.rule) === "incinerator";
+  // PROD-03: a Matchup's two coins are independent single coins, each prepared alone, so each one on the incinerator pins its own EndSink
+  const incinerator = venue === "launchlab" && !pair && endSinkOf(locked.rule) === "incinerator";
+  const incineratorB = venue === "launchlab" && !pair && !!companionLocked && endSinkOf(companionLocked.rule) === "incinerator";
   const endSinkRent = rentLamports(END_SINK_ACCOUNT_BYTES);
   if (venue === "pair-curve") {
     const mintRent = rentLamports(SPL_MINT_BYTES), fee = 5 * LAMPORTS_PER_SIGNATURE;   // two signatures on each create, one on the link
@@ -476,14 +493,15 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       const bt = targets[i];
       const t = coins > 1 ? tk(i) : ticker || "TICKER";
       // owner decision 2026-10-19: a single coin on the incinerator end pins its EndSink in the lock step (initialize_token, kind INCINERATOR)
-      if (!bt) { steps.push({ label: i === 0 && incinerator ? incineratorStepText(t) : lockRuleStepText(t, { link: !!pair && i === 1 }), signers }, { label: createAfterPinText(t), signers }); continue; }
+      if (!bt) { steps.push({ label: (i === 0 ? incinerator : incineratorB) ? incineratorStepText(t) : lockRuleStepText(t, { link: !!pair && i === 1 }), signers }, { label: createAfterPinText(t), signers }); continue; }
       steps.push({ label: pinStepText(t, bt.symbol, { link: !!pair && i === 1 }), signers }, { label: createAfterPinText(t), signers });
       pins.push({ side: i === 0 ? "A" : "B", ticker: t, symbol: bt.symbol, step: steps.length - 1, bytes: BURN_TARGET_ACCOUNT_BYTES, rentSol: sol(pinRent), signatures: 0 });
     }
     lines[3] = { label: "Network fees for two signatures per transaction. Priority fees are extra.", sol: sol(fee * steps.length), kind: "fee" };
     costNote = "This is an estimate. Your wallet shows the exact amount before you approve. The reserve stays in the coin's burn pool, and the rent stays with the new accounts.";
   }
-  if (incinerator) { lines.push({ label: incineratorRentLabel(ticker || "TICKER"), sol: sol(endSinkRent), kind: "rent" }); total += endSinkRent; }
+  if (incinerator) { lines.push({ label: incineratorRentLabel(coins > 1 ? tk(0) : ticker || "TICKER"), sol: sol(endSinkRent), kind: "rent" }); total += endSinkRent; }
+  if (incineratorB) { lines.push({ label: incineratorRentLabel(tk(1)), sol: sol(endSinkRent), kind: "rent" }); total += endSinkRent; }
   for (const x of pins) { lines.push({ label: `Rent for the account that pins ${x.symbol}'s pool to $${x.ticker}, which is ${x.bytes} bytes.`, sol: x.rentSol, kind: "rent" }); total += pinRent; }
   const share = shareOf(asBuilt);
   const shareText = share === null ? "a vault amount" : pctLabel(share);
@@ -571,6 +589,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     prepared: { final: preparedSides.every((x) => x.final), label: preparedSides.every((x) => x.final) ? "final" : "draft", sides: preparedSides, pairId: prepared?.pairId ?? null, voidBy: pairVoidBy ?? (prepared ? prepared.ruleA.pair?.voidBy ?? null : null), note: preparedNote },
     dispute: locked.rule.oracle === "polymarket" && locked.rule.market ? (o.stated ? statedSentences(o.stated, o.stated.finalAfter) : DISPUTE_DEFAULT) : null,
     end: { kind: end.kind, result: end.result, void: end.void },
+    endB: endB ? { kind: endB.kind, result: endB.result, void: endB.void } : null,
     projection,
     backtest: o.lastSeason ?? null,
     simulation: simulateResults(locked.rule, { ticker: tk(0), pair: sides.length > 1 ? { tickerA: tk(0), tickerB: tk(1), winnerTakesBurn: !!pair } : null }),

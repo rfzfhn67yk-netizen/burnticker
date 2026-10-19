@@ -171,8 +171,29 @@ export async function searchDerbyCoins(q: string, d: SearchDeps, o: { assets?: "
     out.push({ symbol: sym, name: t.name, source: "jupiter", assetType: "Crypto", feed: null, mint: t.id, liquidityUsd: t.liquidity, verified: t.isVerified, underlying: tw && "underlying" in tw ? tw.underlying : null,
       why: tw && "underlying" in tw ? POOL_READ_WHY : tw && "why" in tw ? `${NO_PYTH} ${tw.why}` : enough ? `${NO_PYTH} Search for it by its name to find its pool.` : `${NO_PYTH} ${thinPoolWhy(t.liquidity)}` });
   });
-  // audit 10 #21: a usable reference (one with a second source) comes before the ones the preflight would refuse; order is kept within each
-  return out.map(withHitLabel).sort((a, b) => Number(!!b.underlying) - Number(!!a.underlying));
+  return rankDerbyHits(out.map(withHitLabel), query);
+}
+
+/**
+ * THE ORDER OF THE RESULTS (continuous audit HB-11, 2026-10-19: "WIF" listed SWORDCAT, SWORDDOG and BAGUETTE beside WIF, because
+ * Jupiter answers on any token whose name has the word in it). A result is kept only when its symbol, its name or its mint (or Pyth
+ * feed) contains the query; the mint or feed itself comes first, then the exact symbol, then a symbol that contains the query, then a
+ * name that does. Within each, a usable reference (one with a second source) comes before the ones the preflight would refuse (audit 10
+ * #21), and the upstream order is kept.
+ */
+export function rankDerbyHits<H extends Pick<DerbyCoinHit, "symbol" | "name" | "mint" | "feed" | "underlying">>(hits: readonly H[], query: string): H[] {
+  const raw = query.trim().replace(/^\$/, ""), fold = (x: string | null | undefined) => (x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const fq = fold(raw);
+  const tier = (h: H): number => {
+    if (raw && (h.mint === raw || (h.feed ?? "").toLowerCase().replace(/^0x/, "") === raw.toLowerCase().replace(/^0x/, ""))) return 4;
+    const sym = fold(h.symbol);
+    if (sym === fq) return 3;
+    if (fq && sym.includes(fq)) return 2;
+    if (fq && fold(h.name).includes(fq)) return 1;
+    return 0;
+  };
+  return hits.map((h, i) => ({ h, i, t: tier(h), u: Number(!!h.underlying) })).filter((x) => x.t > 0)
+    .sort((a, b) => b.t - a.t || b.u - a.u || a.i - b.i).map((x) => x.h);
 }
 
 /** A TWAP underlying for a Jupiter token (its deepest SOL pool), or why not. */

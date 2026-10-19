@@ -20,7 +20,7 @@ import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { fieldLinkText, nameFieldId } from "./fieldChecks";
 import { PROVE_TICKER_LABEL } from "@/lib/burnticker/walletProof";
-import { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX } from "./pageCopy";
+import { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX, reservedLineSaid } from "./pageCopy";
 import type { FundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { REVIEW_IMAGE_GENERATED, REVIEW_IMAGE_UPLOADED } from "@/lib/burnticker/imagePin";
 
@@ -274,12 +274,14 @@ export function ReviewCard(p: ReviewCardProps) {
   useEffect(() => { if (modal.visible) modalWasOpen.current = true; else if (modalWasOpen.current) { modalWasOpen.current = false; if (!p.creator) launchBtn.current?.focus(); } }, [modal.visible]); // eslint-disable-line react-hooks/exhaustive-deps
   const launch = () => { if (!p.ready || p.busy || p.blocked) return; if (!p.creator) { modal.setVisible(true); return; } p.onLaunch(); };
   const chip = (on: boolean) => `rounded-full border px-3 py-1 text-sm ${on ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`;
-  const tickerCheckList = <>{(p.tickerChecks ?? []).filter((t) => t.reserved || (t.taken && (t.suggestions.length > 0 || !!p.onProveTicker))).map((t) => {
+  // continuous audit HB-7: the reserved-ticker refusal is said once; when the field's own problem already says it, the box only offers the free tickers
+  const reservedSaid = (side: "A" | "B"): boolean => { const c = p.coins[side === "A" ? 0 : 1]; return reservedLineSaid([c?.tickerIssue ?? null, ...fieldProblems.map((x) => x.text)]); };
+  const tickerCheckList = <>{(p.tickerChecks ?? []).filter((t) => (t.reserved && (!reservedSaid(t.side) || t.suggestions.length > 0)) || (t.taken && (t.suggestions.length > 0 || !!p.onProveTicker))).map((t) => {
         const coin = p.coins[t.side === "A" ? 0 : 1];
         return (
           <div key={t.side} className="min-w-0 break-words rounded border border-amber-400/40 p-2 text-xs text-amber-200" role="status" data-ticker-check={t.side}>
             {/* A-2: a ticker another creator holds is refused under the field itself (the review's problem); only the free tickers are offered here */}
-            {t.reserved && <p>{many ? `Coin ${t.side}: ` : ""}{RESERVED_TICKER_LINE}</p>}
+            {t.reserved && !reservedSaid(t.side) && <p>{many ? `Coin ${t.side}: ` : ""}{RESERVED_TICKER_LINE}</p>}
             {/* review of block M: the review treats a ticker as yours only with your wallet's signature; one press asks for it */}
             {t.taken && p.onProveTicker && <p className="mt-1"><button type="button" data-decision="name" data-prove-ticker className="underline text-neutral-200" onClick={p.onProveTicker}>{PROVE_TICKER_LABEL}</button></p>}
             {t.suggestions.length > 0 && coin && <p className="mt-1 flex flex-wrap items-center gap-2">Free: {t.suggestions.map((s) => <button key={s} type="button" data-decision="name" className="rounded border border-neutral-600 px-2 py-0.5 font-mono" onClick={() => coin.onTicker(s)}>${s}</button>)}</p>}
@@ -334,7 +336,7 @@ export function ReviewCard(p: ReviewCardProps) {
         <dl className="min-w-0 divide-y divide-neutral-800 rounded-lg border border-neutral-800" data-review-facts>
           {p.facts.map((f) => (
             <div key={f.label} className="flex min-w-0 items-start justify-between gap-3 px-3 py-2" data-fact={f.label}>
-              <div className="min-w-0 flex-1"><dt className="text-xs text-neutral-500">{f.label}</dt><dd className="break-words text-sm text-neutral-100">{f.value}</dd>{f.extra && <div className="mt-2 min-w-0">{f.extra}</div>}</div>
+              <div className="min-w-0 flex-1"><dt className="text-xs text-neutral-500">{f.label}</dt><dd className="whitespace-pre-line break-words text-sm text-neutral-100">{f.value}</dd>{f.extra && <div className="mt-2 min-w-0">{f.extra}</div>}</div>
               {f.edit && <button type="button" data-nav className="shrink-0 text-xs underline text-neutral-300" aria-label={`Edit: ${f.label.toLowerCase()}`} onClick={f.edit}>Edit</button>}
             </div>
           ))}

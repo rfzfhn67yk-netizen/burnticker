@@ -99,8 +99,10 @@ describe("1. burning a real token is off by default", () => {
     const pairBody = { creator: CREATOR, ticker: "MILEHX", name: "Mile High X", rule: { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } }, pair: null }, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, pair: { ticker: "ARROWHX", name: "Arrowhead X", description: "", imageUrl: null, links: [], burnTarget: BONK } };
     const b = await withEnv({ [BURN_REAL_ENABLED_FLAG]: undefined }, () => prepareLaunch(w.p, pairBody, { register: false }) as Promise<Out>);
     assert.equal(b.error?.status, 400); assert.equal(b.error?.body.code, "burn-real-off"); assert.equal(b.error?.body.error, `Side B: ${BURN_REAL_WAITING}`);
+    // HB-12 + PROD-01 (2026-10-19): with the flag on, a team pair still may not burn another token (burnRealEligibility.ts); the
+    // published-data coin that may is covered in test/burntickerBurnRealEligibility.test.ts
     const on = await withEnv({ [BURN_REAL_ENABLED_FLAG]: "1" }, () => prepareLaunch(w.p, { ...pairBody, ticker: "MILEHY", pair: { ...pairBody.pair, ticker: "ARROWHY" } }, { register: false }) as Promise<Out>);
-    assert.ok(on.pair, JSON.stringify(on).slice(0, 300));
+    assert.equal(on.error?.status, 400); assert.equal(on.error?.body.code, "burn-real-family"); assert.match(on.error!.body.error, /^Side B: Only a coin on published data/);
   });
 });
 
@@ -131,7 +133,8 @@ describe("2. the incinerator end sink is on wherever round 5 runs", () => {
     const locked = lockRule(picked);
     assert.equal(locked.rule.onEnd?.endSink, "incinerator");
     assert.deepEqual(endChoiceOf(locked.rule), { kind: "burn-sol" });
-    assert.match(read("src/app/burnticker/launch/page.tsx"), /burnSol: site\.burnSol\.available && !\(pairOn && ruleB\)/, "a pair's side A never offers it");
+    // PROD-03 (2026-10-19): each coin's choices come from its own rule (pairEnds.ts endChoicesFor): a linked pair's coin never offers it
+    assert.match(read("src/app/burnticker/launch/page.tsx"), /const choiceA = endPickable && rule \? endChoiceModel\(rule, \{ \.\.\.endChoicesFor\(rule, endSite\), team: teamRef \}\) : null;/);
   });
   test("the review: the end sentence, the EndSink account's rent line and the pin in the lock step; signable on r5; refused when off or without r5", () => {
     const rv = review(single, R5);

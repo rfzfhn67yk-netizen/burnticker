@@ -47,8 +47,10 @@ describe("WIRING-END-SINKS: the four end choices", () => {
   test("the page: single coins only, other ends filtered by the same flags, the five steps, latch, editedFor, prepareIfCurrent and the gates kept", () => {
     const page = read(PAGE);
     assert.equal(GUIDED_STEPS.length, 5);
-    assert.match(page, /burnSol: site\.burnSol\.available && !\(pairOn && ruleB\)/);
-    assert.match(page, /o\.kind === "named-coin" \? site\.sinkPicker\.available : o\.kind === "incinerator" \? site\.burnSol\.available && !two/);
+    // PROD-03 (2026-10-19): the incinerator follows each coin's own rule (pairEnds.ts endChoicesFor), never the side it sits on
+    assert.match(page, /\.\.\.endChoicesFor\(rule, endSite\), team: teamRef/);
+    assert.match(page, /\.\.\.endChoicesFor\(ruleB, endSite\), team: teamRefB/);
+    assert.match(page, /o\.kind === "named-coin" \? site\.sinkPicker\.available : o\.kind === "incinerator" \? endChoicesFor\(rule, endSite\)\.burnSol/);
     for (const k of ["prepareIfCurrent(sentRev", "setEditedFor(", "reviewMatchesDraft(reviewSlot, curRev.current)", "<ReviewCard mode=\"name\" endChoice={endChoiceBlock}"]) assert.ok(page.includes(k), k);
     assert.ok(!fs.existsSync("WIRING-END-SINKS.md") && !fs.existsSync("WIRING-FEATURES.md"), "both wiring notes are applied and deleted");
   });
