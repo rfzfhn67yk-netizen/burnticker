@@ -4,8 +4,9 @@ import { isOneShot, type BurnRule } from "@/lib/burnticker/rules";
  * THE KEEPER'S READ PLAN (owner 2026-10-19: "the keeper is only checking for results when it needs to"). Every selector used to be read
  * on a fixed cadence (a feed's pollEverySec, five minutes for a market) from launch until the coin was retired. Now each read is planned:
  *
- *   NEVER   a selector no live coin needs any more: every coin on it has had its rule end recorded, or it is a one-shot (one market, one
- *           game, one launch, one milestone; rules.ts isOneShot) whose single result is already recorded. selectorIdle says why.
+ *   NEVER   a selector no live coin needs any more: every coin on it has had its rule end recorded, or is a one-shot (one market, one
+ *           game, one launch, one milestone; rules.ts isOneShot) whose OWN result is recorded: a reading after that coin's baseline
+ *           with a result receipt for that coin, never an older reading on the same selector (HB-29). selectorIdle says why.
  *   DUE     the adapter's `dueAt` (oracle/types.ts ResolvedSelector): the earliest moment a new result CAN exist. A game is read at its
  *           start plus the settle gap and then every few minutes until its final is confirmed (sources/gameSettle.ts gameDueAt); a team
  *           or rivalry coin at its next listed game; a market at its stated close (Kalshi close_time; Polymarket's Gamma end date, with
@@ -93,26 +94,62 @@ export function dueNextAt(dueAt: number | null | undefined, now: number): number
   return Math.min(Math.max(dueAt, now + READ_PLAN_MIN_GAP_MS), now + READ_PLAN_MAX_IDLE_MS);
 }
 
-/** What selectorIdle reads from the registry (a stub without ruleEnd or lastReading is read as "nothing recorded"). */
+/** What selectorIdle reads from the registry (a stub without ruleEnd, readings or receipt is read as "nothing recorded", so it is read). */
 export interface IdleRegistry<T> {
   ruleEnd?(mint: string): unknown;
-  lastReading?(key: string): unknown;
+  /** the selector's readings settled after `sinceIso` (registry.ts readings: settled_at > sinceIso) */
+  readings?(key: string, sinceIso?: string | null): readonly { id: string }[];
+  /** this coin's receipt for one reading (receipts are keyed by mint and event id; readings by selector) */
+  receipt?(mint: string, eventId: string): { kind?: string | null; status?: string | null } | null;
   lockedRule(t: T): { rule: BurnRule };
 }
 
+/** The rule's end receipts follow a result and never are one (multiKeeper.ts END_KINDS). */
+const END_RECEIPT_KINDS = new Set(["winddown", "drain", "sweep"]);
+
 /**
- * Why a selector needs no read at all, or null when it does: every coin on it has had its rule end recorded, or it is a one-shot whose
- * single result is recorded (a decided or voided one-shot never settles again).
+ * HB-29 (continuous audit 2026-10-19): HAS THIS COIN'S OWN ONE-SHOT RESULT BEEN RECORDED? Only a reading settled after the coin's own
+ * baselineAt (registry.readings(key, baselineAt), the window planToken plans from) with a result receipt for THIS coin counts: that
+ * reading settled the coin's rule (multiKeeper.ts detectRuleEnd reads the same receipt; a pair receipt still waiting for its other pool
+ * does not count yet). Readings on the same selector from before the coin launched (an earlier coin's result, a rehearsal, or the
+ * history a first read brings back: the live $NEXTM6's first read stored ten magnitude-6 days from before its launch) never decide it.
+ * A derby one-shot keeps its boundary samples in the readings table and a recurring rule never resolves once, so neither is decided by
+ * its readings, only by its recorded rule end.
  */
-export function selectorIdle<T extends { mint: string }>(reg: IdleRegistry<T>, key: string, tokens: readonly T[]): string | null {
+export function oneShotDecided<T extends { mint: string; baselineAt?: string | null }>(reg: IdleRegistry<T>, key: string, t: T, rule: BurnRule): boolean {
+  if (rule.oracle === "derby" || !isOneShot({ market: rule.market, oracle: rule.oracle, derby: rule.derby, series: rule.series })) return false;
+  if (!reg.readings || !reg.receipt || !t.baselineAt) return false;
+  try {
+    return reg.readings(key, t.baselineAt).some((r) => {
+      const b = reg.receipt!(t.mint, r.id);
+      return !!b && !END_RECEIPT_KINDS.has(b.kind ?? "") && b.status !== "pending-pair";
+    });
+  } catch { return false; }
+}
+
+/**
+ * Why a selector needs no read at all, or null when it does: every coin on it has had its rule end recorded, or every coin on it that
+ * has not is a one-shot whose OWN result is recorded (oneShotDecided). A selector shared by several coins is read while any one of them
+ * is undecided (HB-29).
+ */
+export function selectorIdle<T extends { mint: string; baselineAt?: string | null }>(reg: IdleRegistry<T>, key: string, tokens: readonly T[]): string | null {
   if (!tokens.length) return "no live coin uses it";
   const ended = (m: string): boolean => { try { const e = reg.ruleEnd?.(m); return e !== null && e !== undefined; } catch { return false; } };
   if (tokens.every((t) => ended(t.mint))) return "every coin on it has ended its rule";
-  let rule: BurnRule;
-  try { rule = reg.lockedRule(tokens[0]).rule; } catch { return null; }
-  let recorded = false;
-  try { recorded = !!reg.lastReading?.(key); } catch { recorded = false; }
-  // a derby one-shot keeps its boundary samples in the readings table, so only a market or a first-party one-shot is judged by its reading
-  if (recorded && rule.oracle !== "derby" && isOneShot({ market: rule.market, oracle: rule.oracle, derby: rule.derby, series: rule.series })) return "a one-shot whose result is recorded";
-  return null;
+  for (const t of tokens) {
+    if (ended(t.mint)) continue;
+    let rule: BurnRule;
+    try { rule = reg.lockedRule(t).rule; } catch { return null; }
+    if (!oneShotDecided(reg, key, t, rule)) return null;
+  }
+  return tokens.length > 1 ? "every coin on it is a one-shot whose own result is recorded" : "a one-shot whose own result is recorded";
+}
+
+/**
+ * HB-28 / HB-29: the next read the pages print. The keeper does not read an idle selector on a schedule (multiKeeper.ts fetchDue skips
+ * it), so a nextFetchAt left behind in feed_state is not a next read: null then. Otherwise the stored next read, which the keeper keeps.
+ */
+export function plannedNextCheckAt<T extends { mint: string; baselineAt?: string | null }>(reg: IdleRegistry<T>, key: string, tokens: readonly T[], nextFetchAt: number | null): number | null {
+  if (nextFetchAt === null) return null;
+  try { return selectorIdle(reg, key, tokens) ? null : nextFetchAt; } catch { return nextFetchAt; }
 }

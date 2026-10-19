@@ -2,6 +2,7 @@ import "server-only";
 import { ruleSideName } from "@/lib/burnticker/coinCard";
 import type { MintBankPort } from "@/lib/burnticker/mintBank";
 import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
+import { plannedNextCheckAt } from "@/lib/burnticker/readPlan";
 import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
 import { LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { envGameDeps, polymarketGameReaders } from "@/lib/burnticker/sources/gameSettle";
@@ -217,6 +218,9 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     locked.rule.oracle === "derby" ? Promise.resolve({ title: derbyTitle(locked.rule) }) : locked.rule.oracle === "catalogue" || (isK && !kOk) || (isP && !pOk) ? Promise.resolve(null) : oracle.seriesInfo(locked.rule.oracle === "polymarket" ? (locked.rule.market ?? locked.rule.series!) : locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null),
   ]);
   const feedState = p.registry.feedState(t.selectorKey);
+  // HB-28 / HB-29: the next read the page prints is one the keeper plans for THIS coin: none once its rule ended or its own one-shot
+  // result is recorded (readPlan.ts selectorIdle on the coin alone; a stale next_fetch_at is not a next read), else the stored one
+  const nextCheckAt = plannedNextCheckAt(p.registry, t.selectorKey, [t], feedState.nextFetchAt);
   const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
   const live = !!p.market && opts.live !== false && t.status !== "draft" && t.status !== "expired";
   const network = p.cluster === "localnet" ? null : p.cluster;
@@ -239,7 +243,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
       lifecycle: lifecycleFrom(p.registry, t, locked.rule, null), meta: p.registry.tokenMeta(t.mint),
       token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
       chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw: null, feePdaLamports: null, vaultRaw: null, program: null },
-      now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
+      now, nextCheckAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
       operator: operatorPowersSummary(loadPowersRegister()),
     };
   }
@@ -254,7 +258,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
       lifecycle: lifecycleFrom(p.registry, t, locked.rule, null), meta: p.registry.tokenMeta(t.mint),
       token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
       chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports: null, vaultRaw: null, program: programBlock },
-      now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
+      now, nextCheckAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
       operator: operatorPowersSummary(loadPowersRegister()),
     };
   }
@@ -281,7 +285,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     meta: p.registry.tokenMeta(t.mint),
     token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
     chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports, vaultRaw, program: programBlock },
-    now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
+    now, nextCheckAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
     operator: operatorPowersSummary(loadPowersRegister()),
   };
 }

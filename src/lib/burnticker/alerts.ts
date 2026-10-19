@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { cadenceMsFor, type CycleReport } from "@/lib/burnticker/multiKeeper";
-import { selectorIdle } from "@/lib/burnticker/readPlan";
+import { oneShotDecided, selectorIdle } from "@/lib/burnticker/readPlan";
 import type { FeedState, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
 import { readAudit, type AuditSummary } from "@/lib/burnticker/trust";
 import { PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
@@ -21,6 +21,8 @@ import { takeRpc } from "@/lib/burnticker/apiBudget";
  *
  * The kinds (the brief's list, plus two the keeper's own failure modes need):
  *   bt-feed-stall            a due selector not fetched for > 2× its cadence (feed pollEverySec, Kalshi 5 min)
+ *   bt-feed-overdue          (HB-29) a live coin whose result is still open has a source read more than one cadence past its planned
+ *                            time, whatever the read plan says (an idle verdict included): its rule cannot settle until it is read
  *   bt-reading-implausible   the adapter refused a reading (plausibility bounds, wrong period, unparsable) — from the last cycle's refusals
  *   bt-reading-conflict      the oracle changed a recorded result — the registry refused the write and the key is held
  *   bt-crank-failed          a receipt failed 3× in a row (the in-process streak, or ≥ 3 recorded attempts with an error on the row)
@@ -46,6 +48,8 @@ export interface TokenSnapshot {
   mint: string; ticker: string; status: TokenRow["status"]; mode: string; selectorKey: string; liveSince: number; cadenceMs: number;
   /** readPlan.ts selectorIdle: why the keeper correctly reads this selector no more (null: it is read); an idle selector is never stalled */
   idle?: string | null;
+  /** HB-29: the coin's result is settled for good (its rule end recorded, or its own one-shot result recorded); absent = judged from `idle` */
+  decided?: boolean;
   feed: FeedState;
   pending: { eventId: string; status: string; attempts: number; lastError: string | null }[];
   burns: number; burns24h: number; spent24hLamports: bigint;
@@ -98,12 +102,14 @@ export function collectSnapshot(o: { registry: Registry; siteDir: string; now: n
     try { cadenceMs = cadenceMsFor(reg, { kalshiPollMs: o.kalshiPollMs }, reg.lockedRule(t).rule, t.selectorKey, now); } catch { /* an unreadable rule is the audit's finding, not a cadence */ }
     let idle: string | null = null;
     try { idle = t.status === "live" ? selectorIdle(reg, t.selectorKey, live.filter((x) => x.selectorKey === t.selectorKey)) : null; } catch { idle = null; }
+    let decided = false;
+    try { decided = reg.ruleEnd(t.mint) !== null || oneShotDecided(reg, t.selectorKey, t, reg.lockedRule(t).rule); } catch { decided = false; }
     const rows: ReceiptRow[] = reg.receipts(t.mint);
     const confirmed = rows.filter((r) => r.status === "confirmed");
     const recent = confirmed.filter((r) => (r.confirmedAt ?? 0) >= now - 86_400_000);
     const att = reg.attesters(t.mint).filter((a) => a.active);
     return {
-      mint: t.mint, ticker: t.ticker, status: t.status, mode: t.mode, selectorKey: t.selectorKey, liveSince: Math.max(t.createdAt, Date.parse(t.baselineAt) || 0), cadenceMs, idle,
+      mint: t.mint, ticker: t.ticker, status: t.status, mode: t.mode, selectorKey: t.selectorKey, liveSince: Math.max(t.createdAt, Date.parse(t.baselineAt) || 0), cadenceMs, idle, decided,
       feed: reg.feedState(t.selectorKey),
       pending: rows.filter((r) => r.status === "planned" || r.status === "sending").map((r) => ({ eventId: r.eventId, status: r.status, attempts: r.attempts, lastError: r.lastError })),
       burns: confirmed.length, burns24h: recent.length, spent24hLamports: recent.reduce((a, r) => a + (r.spendLamports ?? BigInt(0)), BigInt(0)),
@@ -136,6 +142,23 @@ export function evaluateAlerts(s: BurntickerSnapshot): BurntickerAlert[] {
     const limit = Math.max(FEED_STALL_FACTOR * t.cadenceMs, planned + (FEED_STALL_FACTOR - 1) * t.cadenceMs);
     if (!s.paused && s.now - last > limit) out.push({ kind: "bt-feed-stall", key: `bt-feed-stall:${t.selectorKey}`, text: `Burnticker feed ${t.selectorKey} ($${t.ticker}) not fetched for ${Math.round((s.now - last) / 60_000)} min (cadence ${Math.round(t.cadenceMs / 60_000)} min, limit ${Math.round(limit / 60_000)} min). ${t.feed.lastError ? `The last error was: ${t.feed.lastError.slice(0, 120)}. ` : ""}${t.feed.failures ? `It has failed ${t.feed.failures} ${t.feed.failures === 1 ? "time" : "times"} in a row.` : ""}`.trim(), meta: { selectorKey: t.selectorKey, lastFetchAt: t.feed.lastFetchAt, failures: t.feed.failures } });
     if (t.feed.lastError && /already recorded as/.test(t.feed.lastError)) out.push({ kind: "bt-reading-conflict", key: `bt-reading-conflict:${t.selectorKey}:${day}`, text: `Burnticker: the oracle for ${t.selectorKey} changed a recorded result — the registry refused the write and the key is HELD until someone looks: ${t.feed.lastError.slice(0, 160)}`, meta: { selectorKey: t.selectorKey } });
+  }
+  // HB-29: a live coin whose result is still open, with its source's planned read more than one cadence in the past. Judged apart from
+  // the read plan's idle verdict (the live $NEXTM6 was skipped as "idle" because of readings from before it launched, and the stall check
+  // trusted that verdict), so a wrong skip is pushed and shown in ops.json instead of passing silently.
+  const overdue = new Set<string>();
+  const open = (x: TokenSnapshot): boolean => !(x.decided ?? !!x.idle);
+  for (const t of live) {
+    if (!open(t) || overdue.has(t.selectorKey) || s.paused) continue;
+    const due = t.feed.nextFetchAt;
+    if (due === null || due === undefined || s.now <= due + t.cadenceMs || (t.feed.lastFetchAt ?? 0) >= due) continue;
+    overdue.add(t.selectorKey);
+    const coins = live.filter((x) => x.selectorKey === t.selectorKey && open(x));
+    const why = t.idle ? `the read plan skipped it as idle (${t.idle}), but the coin's result is still open`
+      : t.feed.failures ? `its last ${t.feed.failures === 1 ? "read" : `${t.feed.failures} reads`} failed${t.feed.lastError ? `: ${t.feed.lastError.slice(0, 120)}` : ""}`
+      : "the keeper did not make the read";
+    const at = new Date(due).toLocaleTimeString("en-US", { timeZone: "America/Denver", hour: "2-digit", minute: "2-digit", hour12: false });
+    out.push({ kind: "bt-feed-overdue", key: `bt-feed-overdue:${t.selectorKey}`, text: `Burnticker source ${t.selectorKey} for ${coins.map((x) => `$${x.ticker}`).join(", ")} was due a read at ${at} Denver, ${Math.round((s.now - due) / 60_000)} min ago, and has not been read. Why: ${why}. The coin's rule cannot settle until its source is read.`, meta: { selectorKey: t.selectorKey, mints: coins.map((x) => x.mint), dueAt: due, lastFetchAt: t.feed.lastFetchAt, idle: t.idle ?? null } });
   }
   // Plausibility refusals from the last cycle (the adapter's bounds / period / parse refusals are logged, not stored, so the keeper hands them over).
   for (const r of s.lastCycle?.refusals ?? []) out.push({ kind: "bt-reading-implausible", key: `bt-reading-implausible:${hashKey(r)}`, text: `Burnticker reading refused: ${r.slice(0, 200)}`, meta: null });
