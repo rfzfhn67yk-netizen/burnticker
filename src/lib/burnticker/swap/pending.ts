@@ -17,6 +17,13 @@ import { REFUSAL } from "@/lib/burnticker/swap/copy";
  * asked (a write test) and again before the send (the real record), with REFUSAL.storageUnavailable, so the first send count is zero.
  * A second copy goes to the server (swap/pendingServer.ts, `remote`), keyed by network, coin and wallet, so a browser whose site data was
  * cleared after an ambiguous send still finds the held swap when the panel mounts, and settles it before anything new is sent.
+ *
+ * CONTINUOUS AUDIT 2026-10-19T1919Z SEC-02 (combined recovery gap): the server's copy is no longer best effort either. The browser's
+ * record alone is not durable (cleared site data, another browser), so a swap is sent only when BOTH the browser's record was read back
+ * AND the server answered that it kept the record under the same signature (REFUSAL.notRecorded otherwise; the browser's record is then
+ * removed and nothing is sent). And "the server could not be read" is no longer "no held swap": with no record in this browser, only a
+ * server answer that says there is none lets a new swap go ahead; a failed, timed out or unreadable answer refuses with
+ * REFUSAL.recoveryUnknown before the wallet is asked, and the panel offers Check again instead of a swap.
  */
 
 export interface PendingSwap { v: 1; network: Network; mint: string; owner: string; signature: string; lastValidBlockHeight: number; side: Side; at: number }
@@ -44,15 +51,17 @@ export function browserSwapStore(): SwapStore | null {
 
 /**
  * SEC-02: the server's copy of a held swap (swap/pendingServer.ts, /api/burnticker/swap-pending). `save` posts the signed transaction
- * (the server checks the wallet signed it); `load` reads the wallet's held swap for this coin; `clear` removes it by its signature.
+ * (the server checks the wallet signed it) and resolves only once the server acknowledged it kept that signature (it throws otherwise);
+ * `load` reads the wallet's held swap for this coin: a record, null only when the server answered that there is none, and a throw when
+ * the answer failed or could not be read; `clear` removes it by its signature.
  */
 export interface PendingRemote {
   save(rec: PendingSwap, raw: Uint8Array): Promise<void>;
   load(network: Network, mint: string, owner: string): Promise<PendingSwap | null>;
   clear(rec: PendingSwap): Promise<void>;
 }
-/** How long the panel waits for the server's copy before it goes on with the browser's record alone. */
-export const REMOTE_WAIT_MS = 4_000;
+/** How long the panel waits for the server's copy to answer; no answer in time counts as a failure (the swap is not sent). */
+export const REMOTE_WAIT_MS = 8_000;
 type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; cache?: "no-store"; signal?: AbortSignal }) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
 const b64 = (u: Uint8Array): string => { let s = ""; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
 /** The panel's client for the server's copy. */
@@ -60,12 +69,22 @@ export function httpPendingRemote(fetchFn: Fetch, base = "/api/burnticker/swap-p
   const timed = async <T,>(f: (signal: AbortSignal) => Promise<T>): Promise<T> => { const c = new AbortController(); const t = setTimeout(() => c.abort(), waitMs); try { return await f(c.signal); } finally { clearTimeout(t); } };
   const send = (method: string, body: unknown) => timed((signal) => fetchFn(base, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal }));
   return {
-    async save(rec, raw) { const r = await send("POST", { network: rec.network, mint: rec.mint, owner: rec.owner, signature: rec.signature, lastValidBlockHeight: rec.lastValidBlockHeight, side: rec.side, tx: b64(raw) }); if (!r.ok) throw new Error("the server did not keep the held swap"); },
+    // 1919Z SEC-02: acknowledged only by a 2xx answer that names this swap's signature
+    async save(rec, raw) {
+      const r = await send("POST", { network: rec.network, mint: rec.mint, owner: rec.owner, signature: rec.signature, lastValidBlockHeight: rec.lastValidBlockHeight, side: rec.side, tx: b64(raw) });
+      const j = r.ok ? ((await r.json().catch(() => null)) as { signature?: unknown } | null) : null;
+      if (!r.ok || !j || j.signature !== rec.signature) throw new Error("the server did not keep the held swap");
+    },
+    // 1919Z SEC-02: null only for a 2xx answer of { pending: null }; anything else that is not a valid record throws (unknown, not absent)
     async load(network, mint, owner) {
       const r = await timed((signal) => fetchFn(`${base}?network=${network}&mint=${mint}&owner=${owner}`, { cache: "no-store", signal }));
       if (!r.ok) throw new Error("the server's held swap could not be read");
-      const p = ((await r.json()) as { pending?: PendingSwap | null }).pending ?? null;
-      return p && p.v === 1 && p.network === network && p.mint === mint && p.owner === owner && typeof p.signature === "string" && Number.isInteger(p.lastValidBlockHeight) ? p : null;
+      const j = (await r.json()) as { pending?: PendingSwap | null } | null;
+      if (!j || typeof j !== "object" || !("pending" in j)) throw new Error("the server's answer could not be read");
+      const p = j.pending;
+      if (p === null) return null;
+      if (p && p.v === 1 && p.network === network && p.mint === mint && p.owner === owner && typeof p.signature === "string" && Number.isInteger(p.lastValidBlockHeight)) return p;
+      throw new Error("the server's held swap could not be read");
     },
     async clear(rec) { await send("DELETE", { network: rec.network, mint: rec.mint, owner: rec.owner, signature: rec.signature }); },
   };
@@ -122,7 +141,20 @@ export type SwapOutcome =
   | { kind: "unconfirmed"; signature: string }
   | { kind: "pending"; signature: string; pending: PendingSwap; error?: string };
 
-export interface SwapContext { conn: SwapSender & SwapReader; store: SwapStore | null; network: Network; mint: PublicKey; owner: PublicKey; /** SEC-02: the server's copy of the hold; absent or null = the browser's record alone */ remote?: PendingRemote | null }
+export interface SwapContext {
+  conn: SwapSender & SwapReader; store: SwapStore | null; network: Network; mint: PublicKey; owner: PublicKey;
+  /** SEC-02: the server's copy of the hold; absent or null = the browser's record alone (the panel always passes one in a browser) */
+  remote?: PendingRemote | null;
+  /** 1919Z SEC-02: how long a save or read of the server's copy may take before it counts as failed (REMOTE_WAIT_MS; shorter in tests) */
+  remoteWaitMs?: number;
+}
+
+/** Rejects when `f` has not settled within `ms` (1919Z SEC-02: a hung server answer is a failure, not a wait forever). */
+async function within<T>(ms: number, f: () => Promise<T>): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([f(), new Promise<never>((_, no) => { t = setTimeout(() => no(new Error("the server did not answer in time")), ms); })]); }
+  finally { clearTimeout(t); }
+}
 
 /** A confirmed swap stays a success: the balance read after it is separate, and its failure is a null balance, not an error. */
 async function confirmedOutcome(c: SwapContext, signature: string): Promise<SwapOutcome> {
@@ -183,8 +215,20 @@ async function submitSwapRun(c: SwapContext, s: Parameters<typeof submitSwap>[1]
     rec = { v: 1, network: c.network, mint, owner, signature: x.signature, lastValidBlockHeight: x.lastValidBlockHeight, side: s.side, at: s.now ?? Date.now() };
     // SEC-02: written and read back BEFORE the send; a throw here means nothing is sent (chain.ts simulateSignSend)
     savePendingVerified(c.store, rec);
-    // and the server's copy, so a browser cleared after an ambiguous send still finds it; its failure does not stop the swap
-    if (c.remote && x.raw) { try { await c.remote.save(rec, x.raw); } catch { /* the browser's verified record still holds the swap */ } }
+    // 1919Z SEC-02: and the server's copy, acknowledged, before the send: a browser cleared after an ambiguous send must still find it.
+    // A failed, refused or timed out save means nothing is sent; the browser's record of a swap that was never sent is removed.
+    if (c.remote) {
+      const remote = c.remote, kept = rec, raw = x.raw;
+      try {
+        if (!raw) throw new Error("no signed transaction to show the server");
+        await within(c.remoteWaitMs ?? REMOTE_WAIT_MS, () => remote.save(kept, raw));
+      } catch {
+        clearPending(c.store, kept.network, kept.mint, kept.owner);
+        clearRemote(c, kept);   // in case the save landed and only its answer was lost; never sent, so it holds nothing
+        rec = null;
+        throw new Error(REFUSAL.notRecorded);
+      }
+    }
   };
   const r = await simulateSignSend(c.conn, c.owner, s.ixs, s.sign, s.onStep, s.pollMs, onSubmit);
   const held: PendingSwap = rec ?? { v: 1, network: c.network, mint, owner, signature: r.signature, lastValidBlockHeight: r.lastValidBlockHeight ?? 0, side: s.side, at: s.now ?? Date.now() };
@@ -208,23 +252,28 @@ export async function runSwap(c: SwapContext, s: { side: Side; prepare: () => Pr
 
 /**
  * This wallet's own held swap (review 3c): the stored record, the panel's memory of one, or (SEC-02) the server's copy, which is written
- * back into the browser's storage so the panel's timer and a later reload see it too. A server that cannot be read is not a hold: the
- * browser's own verified record is the guarantee, the server's copy covers a browser that lost it.
+ * back into the browser's storage so the panel's timer and a later reload see it too. 1919Z SEC-02: with no record here, a server that
+ * cannot be read is "unknown", not "none": REFUSAL.recoveryUnknown is thrown before anything is signed or sent.
  */
 async function heldFor(c: SwapContext, held: PendingSwap | null | undefined): Promise<PendingSwap | null> {
   const mint = c.mint.toBase58(), owner = c.owner.toBase58();
   const local = loadPending(c.store, c.network, mint, owner) ?? (held && held.owner === owner && held.mint === mint && held.network === c.network ? held : null);
   if (local || !c.remote) return local;
-  return loadRemotePending(c.remote, c.store, c.network, mint, owner);
+  const r = await loadRemotePending(c.remote, c.store, c.network, mint, owner, c.remoteWaitMs);
+  if (r.kind === "unknown") throw new Error(REFUSAL.recoveryUnknown);
+  return r.kind === "held" ? r.rec : null;
 }
-/** SEC-02: the server's copy of this wallet's held swap, kept in the browser's storage too when it can be; null when none or unreadable. */
-export async function loadRemotePending(remote: PendingRemote | null | undefined, store: SwapStore | null, network: Network, mint: string, owner: string | null): Promise<PendingSwap | null> {
-  if (!remote || !owner) return null;
+/** 1919Z SEC-02: what a read of the server's copy found. `absent` only from an answer that says there is none; `unknown` when it failed. */
+export type RemoteRead = { kind: "held"; rec: PendingSwap } | { kind: "absent" } | { kind: "unknown" };
+/** SEC-02: the server's copy of this wallet's held swap, kept in the browser's storage too when it can be. */
+export async function loadRemotePending(remote: PendingRemote | null | undefined, store: SwapStore | null, network: Network, mint: string, owner: string | null, waitMs = REMOTE_WAIT_MS): Promise<RemoteRead> {
+  if (!remote || !owner) return { kind: "absent" };
   let r: PendingSwap | null = null;
-  try { r = await remote.load(network, mint, owner); } catch { return null; }
-  if (!r || r.owner !== owner || r.mint !== mint || r.network !== network) return null;
+  try { r = await within(waitMs, () => remote.load(network, mint, owner)); } catch { return { kind: "unknown" }; }
+  if (!r) return { kind: "absent" };
+  if (r.owner !== owner || r.mint !== mint || r.network !== network) return { kind: "unknown" };
   try { savePending(store, r); } catch { /* the panel holds it in memory */ }
-  return r;
+  return { kind: "held", rec: r };
 }
 function clearRemote(c: SwapContext, rec: PendingSwap): void { if (c.remote) void c.remote.clear(rec).catch(() => { /* it lapses on the server after a day */ }); }
 

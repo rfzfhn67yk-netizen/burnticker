@@ -89,11 +89,12 @@ export async function POST(req: Request) {
   }
   // B-2 (third audit 2026-10-19): `sent` records a create the page is about to send (the creator-signed transaction), so the creator's
   // next prepare of the same ticker is refused as launch-pending while it can still land. Like `launched`, taken whether launches are
-  // open or not (a create in flight must never be lost track of), on the confirm bucket.
+  // open or not (a create in flight must never be lost track of), on the confirm bucket. SEC-05: the answer is the acknowledgement the
+  // page needs before it sends the create (200 names the recorded row; 409 another attempt of the launch; 503 not written).
   if (body.action === "sent") {
     const rls = limiter.take(clientKey(req), "confirm");
     if (!rls.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.confirm.human}; retry in ${rls.retryAfterSec}s`, code: "confirm-busy", retryAfterSec: rls.retryAfterSec }, { status: 429, headers: { "retry-after": String(rls.retryAfterSec) } });
-    const r = markCreateSent(platform(), String(body.mint ?? ""), body.sentTx, Date.now());
+    const r = await markCreateSent(platform(), String(body.mint ?? ""), body.sentTx, Date.now());
     return edgeJson(r.body, r.status, { "cache-control": "no-store" });
   }
   // BURNTICKER_CREATOR_LAUNCHES_ENABLED off (the default): no creator launch — the operator's coins launch through the CLI. In preview

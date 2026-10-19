@@ -31,7 +31,8 @@ export async function POST(req: Request) {
   if (!rl.ok) return tooMany(rl.retryAfterSec);
   const v = verifyPendingClaim(await readBody(req));
   if (!v.ok) return NextResponse.json({ error: v.reason }, { status: 400, headers });
-  try { swapPendingStore().put(v.rec); return NextResponse.json({ ok: true }, { headers }); }
+  // continuous audit 2026-10-19T1919Z SEC-02: the answer names the signature it kept; the panel sends the swap only on that acknowledgement
+  try { swapPendingStore().put(v.rec); return NextResponse.json({ ok: true, signature: v.rec.signature }, { headers }); }
   catch { return NextResponse.json({ error: "The held swap could not be saved just now." }, { status: 503, headers }); }
 }
 

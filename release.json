@@ -1,12 +1,12 @@
 {
   "schema": "burnticker.release/v1",
-  "publishedAt": "2026-10-19T19:37:50.626Z",
+  "publishedAt": "2026-10-19T20:00:41.535Z",
   "monorepo": {
-    "commit": "7095ecbe02e4fa7d9d35f6068c99bcd71597f164",
+    "commit": "c141372298ac24ef6688c59a07d24dfbef7bb038",
     "dirty": false
   },
   "publicTree": {
-    "sha256": "5c45bb06c20da4b7c72642824dc525fc9ec6f4e219a4654f6d3dff0d6a868a82",
-    "files": 2431
+    "sha256": "659394b561153177e54ea39dd8dba2ab07d05ac28cb0a3da26d0e9d938332bdf",
+    "files": 2435
   }
 }

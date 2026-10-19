@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, sentReporter, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, sentAckOf, sentReporter, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
 import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
 import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
@@ -134,7 +134,12 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         onNotice: (t) => setNotice(t),
         // B-2 (third audit 2026-10-19): the site records the coin's create just before it is sent, so pressing Launch again after a
         // refresh while it is pending is refused (launch-pending) instead of building and paying for a second coin
-        onSent: sentReporter(plan, (body) => fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store" })),
+        // SEC-05 (continuous audit 2026-10-19): the create is sent only once the site's answer names the recorded send for that mint
+        // (sentAckOf); a network error, a non-2xx, a refusal or an answer about another mint stops the run before anything is sent
+        onSent: sentReporter(plan, async (body) => {
+          const res = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store" });
+          return sentAckOf(res.status, await res.json().catch(() => null), body.mint);
+        }),
         // launch recovery 255: status, height, the transaction history and the accounts a step creates, before anything is called unlanded
         ...chainReadDeps(connection),
         storage,

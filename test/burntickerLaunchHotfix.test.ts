@@ -198,7 +198,7 @@ test("a typed name belongs to its subject: a new team / market / pair regenerate
   // every manual edit records the subject, and the draft keeps it across a reload
   assert.equal((page.match(/setNameAuto\(false\); setEditedFor\(subjectKey\)/g) ?? []).length, 2);
   assert.match(page, /setTickerAuto\(false\); setEditedFor\(subjectKey\)/);
-  assert.match(page, /nameAuto, tickerAuto, editedFor, ownImage, note \}\);/);
+  assert.match(page, /nameAuto, tickerAuto, editedFor, ownImage, note, srcSuggest \}\);/);   // PROD-02: the source suggestion is saved too
   assert.match(page, /set\("editedFor", setEditedFor\);/);
   assert.doesNotMatch(page, /It stays when the rule changes/);
 });

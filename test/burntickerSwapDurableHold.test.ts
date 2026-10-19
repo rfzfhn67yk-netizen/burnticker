@@ -98,12 +98,13 @@ describe("SEC-02: the server's copy covers a browser that lost its record", () =
     assert.equal(remote.db.get("devnet", MINT, OWNER), null);
     assert.equal(loadPending(store, "devnet", MINT, OWNER), null);
   });
-  test("a server that cannot keep the copy does not stop a swap whose browser record is verified (still one send)", async () => {
+  test("1919Z: a server that cannot keep the copy stops the swap even with a verified browser record (zero sends, browser record removed)", async () => {
     const remote = serverRemote(); remote.failSave = true;
     const c = chain(), store = new MemStore();
-    assert.equal((await press(c, store, wallet(), remote)).kind, "pending");
-    assert.equal((await press(c, store, wallet(), remote)).kind, "pending");
-    assert.equal(c.sends, 1);
+    await assert.rejects(press(c, store, wallet(), remote), (e: Error) => e.message === REFUSAL.notRecorded);
+    await assert.rejects(press(c, store, wallet(), remote), (e: Error) => e.message === REFUSAL.notRecorded);
+    assert.equal(c.sends, 0);
+    assert.equal(loadPending(store, "devnet", MINT, OWNER), null, "a swap that was never sent is not held");
   });
   test("the server keeps a record only from the wallet's own signed transaction, and removes it only by its signature", async () => {
     const remote = serverRemote(), store = new MemStore(), c = chain();
@@ -127,7 +128,8 @@ describe("SEC-02: the server's copy covers a browser that lost its record", () =
     assert.deepEqual(lintCopy(REFUSAL.storageUnavailable).hits, []);
     const panel = fs.readFileSync("src/app/burnticker/t/[ticker]/TradePanel.tsx", "utf8");
     assert.match(panel, /const storeNo = who && !store \? REFUSAL\.storageUnavailable : null;/);
-    assert.match(panel, /loadRemotePending\(remote, store, p\.network, p\.mint, ownerKey\)/);
+    assert.match(panel, /loadRemotePending\(remote, store, network, coin, owner\)/);
+    assert.match(panel, /if \(!rec\) void readRemote\(p\.network, p\.mint, ownerKey, key\)/);
     const route = fs.readFileSync("src/app/api/burnticker/swap-pending/route.ts", "utf8");
     assert.equal((route.match(/if \(!isSameOrigin\(req\)\)/g) ?? []).length, 2);
   });

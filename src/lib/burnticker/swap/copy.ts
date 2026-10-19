@@ -139,6 +139,10 @@ export const REFUSAL = {
   cannotSign: "This wallet cannot sign transactions.",
   /** continuous audit 2026-10-19 SEC-02: the browser does not keep the swap's record (blocked site data, a private window, a full quota) */
   storageUnavailable: "This browser is not keeping data for this site, so the panel cannot hold a record of your swap while it settles. Nothing was sent. Allow site data for this site and reload, or use a link below.",
+  /** continuous audit 2026-10-19T1919Z SEC-02: the server did not confirm it kept the swap's record, so the signed swap was not sent */
+  notRecorded: "This swap was not sent because this site could not keep a record of it first. Nothing was sent. Wait a moment, then try again.",
+  /** SEC-02: the browser has no record and the server's copy could not be read, so an earlier swap may still be settling */
+  recoveryUnknown: "This site could not check whether an earlier swap from this wallet is still settling, so no new swap is offered yet. Press Check again in a moment.",
   rejected: "The wallet did not sign, so nothing was sent.",
   notConfirmed: (sig: string) => `The swap was sent but not confirmed in time. Check transaction ${sig} on the explorer before you try again.`,
   failed: (why: string) => `The swap failed on chain, and the wallet keeps what it had except the network fee. ${why}`,

@@ -462,6 +462,25 @@ export class Registry {
   recordCreateSent(mint: string, signature: string, now = Date.now()): boolean {
     return Number(this.db.prepare("INSERT OR IGNORE INTO draft_sends (mint, signature, sent_at) VALUES (?,?,?)").run(mint, signature, now).changes) === 1;
   }
+  /**
+   * SEC-05 (continuous audit 2026-10-19): the launch page's report of a create it is about to send, recorded only when no OTHER attempt of
+   * the same launch is in the way, judged and written in one transaction (two reports racing for two mints of one creator's ticker:
+   * exactly one is recorded). In the way: another unlaunched draft of this creator's ticker with a send recorded in the last `windowMs`,
+   * or any coin live (or paused) on the ticker. Recorded: the row (new, or the same signature again) with its sent_at.
+   */
+  recordCreateSentExclusive(mint: string, signature: string, windowMs: number, now = Date.now()): { ok: true; fresh: boolean; sentAt: number } | { ok: false; otherMint: string; live: boolean; sameCreator: boolean } {
+    return this.tx(() => {
+      const t = this.token(mint); if (!t) throw new Error("no such token");
+      const live = this.liveTickerHolder(t, mint);
+      if (live) return { ok: false as const, otherMint: live.mint, live: true, sameCreator: live.creator === t.creator };
+      const other = this.db.prepare("SELECT t.mint AS mint FROM tokens t JOIN draft_sends s ON s.mint = t.mint WHERE t.creator=? AND UPPER(t.ticker)=? AND t.mint <> ? AND t.launch_tx IS NULL AND t.status IN ('draft','expired') AND s.sent_at > ? ORDER BY s.sent_at DESC LIMIT 1").get(t.creator, normTicker(t.ticker), mint, now - windowMs) as { mint: string } | undefined;
+      if (other) return { ok: false as const, otherMint: String(other.mint), live: false, sameCreator: true };
+      const fresh = this.recordCreateSent(mint, signature, now);
+      const row = this.db.prepare("SELECT sent_at FROM draft_sends WHERE mint=? AND signature=?").get(mint, signature) as Row | undefined;
+      if (!row) throw new Error("registry: the send was not recorded");
+      return { ok: true as const, fresh, sentAt: Number(row.sent_at) };
+    });
+  }
   /** Every send recorded for a draft, oldest first. */
   createSends(mint: string): { signature: string; sentAt: number }[] {
     return (this.db.prepare("SELECT signature, sent_at FROM draft_sends WHERE mint=? ORDER BY sent_at, signature").all(mint) as Row[]).map((r) => ({ signature: String(r.signature), sentAt: Number(r.sent_at) }));

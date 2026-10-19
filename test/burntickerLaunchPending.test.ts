@@ -54,8 +54,9 @@ describe("B-2 at prepare: a sent create blocks a second coin on the same ticker"
     const a = await prepareLaunch(w.p, body, { register: true, mint: m1.publicKey.toBase58() });
     assert.ok("ok" in a, JSON.stringify("error" in a ? a.error.body : a).slice(0, 300));
     // the page reports the create (step 2) just before it sends it
-    const sent = markCreateSent(w.p, m1.publicKey.toBase58(), signedStep(a.ok.bundle, 1, [creator, m1]));
-    assert.equal(sent.status, 200, JSON.stringify(sent.body)); assert.equal((sent.body as { recorded: boolean }).recorded, true);
+    const sent = await markCreateSent(w.p, m1.publicKey.toBase58(), signedStep(a.ok.bundle, 1, [creator, m1]));
+    // SEC-05: the 200 names the recorded row (the page sends only on that acknowledgement)
+    assert.equal(sent.status, 200, JSON.stringify(sent.body)); assert.equal((sent.body as { recorded: { mint: string } }).recorded.mint, m1.publicKey.toBase58()); assert.equal((sent.body as { fresh: boolean }).fresh, true);
     assert.equal(w.registry.createSends(m1.publicKey.toBase58()).length, 1);
     // the refresh: the idempotency key is gone, Launch is pressed again, the bank (or the browser) gives a new mint
     const m2 = Keypair.generate().publicKey.toBase58();
@@ -97,19 +98,20 @@ describe("B-2 at prepare: a sent create blocks a second coin on the same ticker"
     const mint = m1.publicKey.toBase58();
     const stranger = Keypair.generate();
     const forged = signedStep(a.ok.bundle, 1, [stranger, m1]);
-    assert.equal(markCreateSent(w.p, mint, forged).status, 422, "not signed by the draft's creator");
-    for (const bad of [forged, signedStep(a.ok.bundle, 0, [creator, m1]), "x".repeat(200)]) assert.deepEqual(lintCopy(errorOf(markCreateSent(w.p, mint, bad))).hits, []);
+    const mark = (m: string, tx: unknown) => markCreateSent(w.p, m, tx);
+    assert.equal((await mark(mint, forged)).status, 422, "not signed by the draft's creator");
+    for (const bad of [forged, signedStep(a.ok.bundle, 0, [creator, m1]), "x".repeat(200)]) assert.deepEqual(lintCopy(errorOf(await mark(mint, bad))).hits, []);
     // a signature slot filled with someone else's signature over the same message
     const tx = VersionedTransaction.deserialize(Buffer.from(signedStep(a.ok.bundle, 1, [creator, m1]), "base64"));
     tx.signatures[0] = Keypair.generate().secretKey.slice(0, 64);
-    assert.equal(markCreateSent(w.p, mint, Buffer.from(tx.serialize()).toString("base64")).status, 422, "a creator signature that does not verify");
-    assert.equal(markCreateSent(w.p, mint, signedStep(a.ok.bundle, 0, [creator, m1])).status, 422, "the lock step is not the create");
-    assert.equal(markCreateSent(w.p, mint, "not a transaction").status, 400);
-    assert.equal(markCreateSent(w.p, Keypair.generate().publicKey.toBase58(), forged).status, 404);
+    assert.equal((await mark(mint, Buffer.from(tx.serialize()).toString("base64"))).status, 422, "a creator signature that does not verify");
+    assert.equal((await mark(mint, signedStep(a.ok.bundle, 0, [creator, m1]))).status, 422, "the lock step is not the create");
+    assert.equal((await mark(mint, "not a transaction")).status, 400);
+    assert.equal((await mark(Keypair.generate().publicKey.toBase58(), forged)).status, 404);
     assert.equal(w.registry.createSends(mint).length, 0);
-    const ok = markCreateSent(w.p, mint, signedStep(a.ok.bundle, 1, [creator, m1]));
+    const ok = await mark(mint, signedStep(a.ok.bundle, 1, [creator, m1]));
     assert.equal(ok.status, 200);
-    assert.equal((markCreateSent(w.p, mint, signedStep(a.ok.bundle, 1, [creator, m1])).body as { recorded: boolean }).recorded, true, "a rebuilt create (new blockhash) is a new send");
+    assert.equal(((await mark(mint, signedStep(a.ok.bundle, 1, [creator, m1]))).body as { fresh: boolean }).fresh, true, "a rebuilt create (new blockhash) is a new send");
   });
 
   test("the window: a send that can no longer land frees the ticker for the creator, unless the chain shows the coin exists", async () => {
@@ -133,11 +135,13 @@ describe("B-2 at prepare: a sent create blocks a second coin on the same ticker"
   test("the card reports only the create step, once per coin it confirms", async () => {
     const posted: { mint: string; sentTx: string }[] = [];
     const plan = { confirms: [{ mint: "A", ticker: "A", step: 1 }, { mint: "B", ticker: "B", step: 2 }] } as unknown as SignPlan;
-    const onSent = sentReporter(plan, async (b) => { posted.push(b); });
-    await onSent(0, "s0", "tx0"); await onSent(1, "s1", "tx1"); await onSent(2, "s2", "tx2");
+    const onSent = sentReporter(plan, async (b) => { posted.push(b); return { acknowledged: true }; });
+    assert.deepEqual(await onSent(0, "s0", "tx0"), [], "the lock step reports nothing");
+    assert.deepEqual(await onSent(1, "s1", "tx1"), [{ acknowledged: true }]); await onSent(2, "s2", "tx2");
     assert.deepEqual(posted, [{ action: "sent", mint: "A", sentTx: "tx1" }, { action: "sent", mint: "B", sentTx: "tx2" }]);
+    // SEC-05: a failed report is no longer swallowed into silence: it comes back as an unacknowledged report (the runner then does not send)
     const failing = sentReporter(plan, async () => { throw new Error("offline"); });
-    await failing(1, "s", "tx");   // a failed report never throws into the send
+    assert.deepEqual(await failing(1, "s", "tx"), [{ acknowledged: false, reason: "offline" }]);
   });
 });
 

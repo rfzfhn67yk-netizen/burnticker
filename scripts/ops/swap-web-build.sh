@@ -100,7 +100,9 @@ smoke() {
     [ "$left" -gt 0 ] || return 1
     t=$left; [ "$t" -gt 10 ] && t=10
     code=$(get /api/burnticker/build "$t")
-    started=$(sed -n 's/.*"startedAt":\([0-9][0-9]*\).*/\1/p' "$TMP/body" 2>/dev/null | head -1)
+    # the FIRST startedAt is the web process's own; the release record inside the body carries the keeper's (publish 92 stop, 2026-10-19:
+    # a greedy match read the keeper's older time and failed every deploy once that record existed)
+    started=$(grep -o '"startedAt":[0-9][0-9]*' "$TMP/body" 2>/dev/null | head -1 | tr -dc 0-9)
     if [ "$code" != 200 ]; then
       WHY="GET /api/burnticker/build answered HTTP $code"; [ "$code" = 000 ] && WHY="GET /api/burnticker/build did not answer (refused or timed out)"
     elif ! grep -q '"build":' "$TMP/body"; then
