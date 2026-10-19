@@ -6,7 +6,9 @@
 //
 //   R="node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs"
 //   $R scripts/burnticker-sign-statement.mts --date 2026-10-14 --print-text
-//        prints only the exact text to sign (for a hardware wallet: solana sign-offchain-message -k usb://ledger "<that text>")
+//        prints only the exact text to sign (for a hardware wallet: solana sign-offchain-message -k usb://ledger "<that text>"; for a
+//        browser wallet such as Phantom: /burnticker/operator/sign-statement, which shows the same text and signs it with signMessage)
+//        Once signed, the message holds its day in place of {DATE}; the template is that message with the day put back (statement.ts).
 //   $R scripts/burnticker-sign-statement.mts --date 2026-10-14 --signature <base58> [--write]
 //        checks a signature made elsewhere (raw, or a Solana off-chain message as the CLI and a Ledger make it)
 //   $R scripts/burnticker-sign-statement.mts --date 2026-10-14 --keypair <path to a Solana CLI keypair file> [--write]
@@ -21,6 +23,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { loadOperator, statementSignatureFormat, walletOf, OPERATOR_FILE } from "../src/lib/burnticker/trustpack/operator.ts";
 import { b58encode } from "../src/lib/burnticker/trustpack/base58.ts";
+import { isStatementDate, statementTemplate, statementText } from "../src/lib/burnticker/trustpack/statement.ts";
 
 const args = process.argv.slice(2);
 const opt = (n: string): string | null => { const i = args.indexOf(`--${n}`); return i >= 0 && i + 1 < args.length ? args[i + 1] : null; };
@@ -28,13 +31,16 @@ const flag = (n: string) => args.includes(`--${n}`);
 const die = (s: string, code = 2): never => { console.error(s); process.exit(code); };
 
 const date = opt("date") ?? die("--date YYYY-MM-DD is required (the date written into the statement).");
-if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) die(`--date must be YYYY-MM-DD, not ${date}`);
+if (!isStatementDate(date)) die(`--date must be YYYY-MM-DD, not ${date}`);
 const cfg = loadOperator();
 const sm = cfg.signedMessage;
 const role = opt("role") ?? sm.signerRole;
 const signer = walletOf(cfg, sm.cluster, role) ?? die(`operator.json has no ${sm.cluster} wallet with the role ${role}.`);
-if (!sm.message.includes("{DATE}")) die("operator.json's message has no {DATE} left: it was already signed. Put the template back first.");
-const text = sm.message.replace("{PUBKEY}", signer).replace("{DATE}", date);
+// the template and the text come from statement.ts, which the signing page (/burnticker/operator/sign-statement) uses too
+const tpl = statementTemplate(sm);
+if ("problem" in tpl) die(tpl.problem);
+const { template, signedOn } = tpl as { template: string; signedOn: string | null };
+const text = statementText(template, signer, date);
 
 if (flag("print-text")) { process.stdout.write(text); process.exit(0); }
 
@@ -60,6 +66,7 @@ if (keyPath) {
 const format = statementSignatureFormat(text, signature!, signer);
 console.log(`signer     ${signer} (${role}, ${sm.cluster})`);
 console.log(`date       ${date}`);
+if (signedOn) console.log(`note       operator.json is already signed for ${signedOn}; --write replaces that signature`);
 console.log(`signature  ${signature!}`);
 if (!format) die("CHECK FAILED: the signature does not verify for this text and this signer. Nothing was written.", 1);
 console.log(`check      valid (${format === "raw" ? "signed over the raw text" : "signed as a Solana off-chain message"})`);
@@ -81,7 +88,7 @@ const set = (i: number, key: string, value: string | null) => {
 console.log(flag("write") ? `writing ${OPERATOR_FILE}:` : `the edits for ${OPERATOR_FILE} (add --write to apply them):`);
 set(lineOf("status", "signedMessage"), "status", date);
 if (role !== sm.signerRole) set(lineOf("signerRole", "signedMessage"), "signerRole", role);
-set(lineOf("message", "signedMessage"), "message", sm.message.replace("{DATE}", date));
+set(lineOf("message", "signedMessage"), "message", template.replace("{DATE}", date));
 set(lineOf("signature", "signedMessage"), "signature", signature!);
 if (flag("write")) {
   const after = lines.join("\n");

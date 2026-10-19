@@ -250,17 +250,19 @@ describe("V1 and the check page's standing limitations", () => {
     assert.match(html, /footer #trade,footer \.gap,footer \.links a\{overflow-wrap:anywhere\}/);
     assert.match(html, /\$\("trade"\)\.textContent = "\$DEFICIT trades on Raydium\.[^"]*The trade link is " \+ url;/, "the sentence that carries the URL");
   });
-  test("the limitations match the current facts: the operator statement is signed (2026-10-14) and pair launches are on; history is dated", async () => {
+  test("the limitations match the current facts: the operator statement's state (signed, or a template awaiting the owner's signature) and pair launches are on; history is dated", async () => {
     const { buildChecklist } = await import("@/lib/burnticker/trustpack/checklist");
     const c = buildChecklist(process.cwd());
     const text = c.notDone.map((n) => `${n.id}: ${n.text}`).join("\n");
-    assert.ok(!c.notDone.some((n) => n.id === "signed-operator-message"), "a signed statement is not a standing limitation (before: 'not signed yet')");
-    assert.doesNotMatch(text, /statement is not signed yet|pair launches stay off/i);
+    const op = JSON.parse(read("config/burnticker/operator.json")) as { signedMessage: { signature: string | null } };
+    // 2026-10-19: the text changed to name both keeper keys, so the file is a template until the owner re-signs it; the limitation then stands
+    const signedNow = op.signedMessage.signature !== null;
+    assert.equal(c.notDone.some((n) => n.id === "signed-operator-message"), !signedNow, "a signed statement is not a standing limitation; an unsigned one is");
+    if (signedNow) assert.doesNotMatch(text, /statement is not signed yet/i);
+    assert.doesNotMatch(text, /pair launches stay off/i);
     const pair = c.notDone.find((n) => n.id === "paircurve-findings-open");
     assert.match(pair?.text ?? "", /As of 2026-10-11, round 3 had not had an independent re-check of its own\./);
     assert.match(pair?.text ?? "", /Pair launches are on/);
-    const op = JSON.parse(read("config/burnticker/operator.json")) as { signedMessage: { signature: string | null } };
-    assert.ok(op.signedMessage.signature, "the statement carries its signature");
     const { lintCopy } = await import("@/lib/launch/copyLint");
     const t = JSON.parse(read("config/burnticker/transparency.json")) as { limitations: { id: string; text: string }[] };
     for (const id of ["signed-operator-message", "paircurve-findings-open"]) assert.deepEqual(lintCopy(t.limitations.find((l) => l.id === id)!.text).hits, [], id);

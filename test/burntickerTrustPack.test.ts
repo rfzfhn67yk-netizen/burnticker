@@ -110,7 +110,7 @@ describe("operator.json", () => {
     assert.match(p, /devnet\.dev-fee/); assert.match(p, /mainnet: wallet role keeper missing/); assert.match(p, /signature/);
   });
   test("the signed statement: signed 2026-10-14 and verified on the real file; a real ed25519 signature over the exact text verifies, a changed byte does not", () => {
-    assert.deepEqual([signedMessageView(op).status, signedMessageView(op).verified], ["signed", true]);
+    assert.deepEqual([signedMessageView(op).status, signedMessageView(op).verified], op.signedMessage.signature ? ["signed", true] : ["todo", null]);   // a template again since 2026-10-19 until the owner re-signs
     const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
     const pub = b58encode(Buffer.from(publicKey.export({ format: "jwk" }).x!, "base64url"));
     // the template form of the signed text (the file held {PUBKEY} / {DATE} until 2026-10-14)
@@ -293,7 +293,7 @@ describe("the six v1 routes (API 1.5.0)", () => {
     const rec = await callRoute(`${API}/check/receipts`); assert.equal(rec.status, 200); const r = await rec.json(); ok("CheckReceipts", r);
     assert.equal(r.receipts.length, 7); assert.ok(r.rules["config/burnkeeper/deficit.devnet.rules.json"]);
     const op0 = await (await callRoute(`${API}/operator`)).json(); ok("OperatorView", op0);
-    assert.equal(op0.neverBuys.status, "not-run"); assert.equal(op0.signedMessage.status, "signed");
+    assert.equal(op0.neverBuys.status, "not-run"); assert.equal(op0.signedMessage.status, loadOperator().signedMessage.signature ? "signed" : "todo");
     assert.ok(op0.placeholders.some((p: { value: string }) => p.value === "TODO_ENTITY"));
     fs.writeFileSync(path.join(dir, NEVER_BUYS_FILE), JSON.stringify({ schema: "burnticker.never-buys/v1", ranAt: "2026-10-10T00:00:00Z", cluster: "devnet", status: "explained", line: NEVER_BUYS_STATUS.explained, wallets: [], mints: [], holdings: [], acquisitions: [], scanned: { tokenAccounts: 0, transactions: 0 }, errors: [] }));
     const op1 = await (await callRoute(`${API}/operator`)).json(); assert.equal(op1.neverBuys.status, "explained");

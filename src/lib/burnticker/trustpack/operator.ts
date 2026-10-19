@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { b58decode, isPubkey, isSignature } from "@/lib/burnticker/trustpack/base58";
+import { offchainMessageBytes, statementSignedForms } from "@/lib/burnticker/trustpack/statement";
 
 /**
  * THE OPERATOR (trust pack, 2026-10-10): config/burnticker/operator.json — who runs the platform, every operator wallet per cluster
@@ -110,15 +111,13 @@ function verifyBytes(bytes: Buffer, signatureB58: string, pubkeyB58: string): bo
  * so the developer fee wallet (a hardware wallet) signs this way (ops-2, 2026-10-12).
  */
 export function offchainMessageV0(message: string, format: 0 | 1 | 2): Buffer {
-  const text = Buffer.from(message, "utf8"), len = Buffer.alloc(2);
-  len.writeUInt16LE(text.length);
-  return Buffer.concat([Buffer.from([0xff]), Buffer.from("solana offchain", "ascii"), Buffer.from([0, format]), len, text]);
+  return Buffer.from(offchainMessageBytes(message, format));
 }
 
 /** Which way the statement was signed: the raw text, or the text wrapped as a Solana off-chain message; null when neither verifies. */
 export function statementSignatureFormat(message: string, signatureB58: string, pubkeyB58: string): "raw" | "offchain" | null {
-  if (verifySignedMessage(message, signatureB58, pubkeyB58)) return "raw";
-  if (Buffer.byteLength(message, "utf8") <= 0xffff) for (const f of [0, 1, 2] as const) if (verifyBytes(offchainMessageV0(message, f), signatureB58, pubkeyB58)) return "offchain";
+  // the same list, in the same order, as the signing page's browser check (statement.ts#statementSignatureFormatInBrowser)
+  for (const f of statementSignedForms(message)) if (verifyBytes(Buffer.from(f.bytes), signatureB58, pubkeyB58)) return f.format;
   return null;
 }
 

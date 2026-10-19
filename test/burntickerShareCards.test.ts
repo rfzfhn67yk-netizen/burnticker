@@ -45,6 +45,7 @@ describe("every page shares as itself", () => {
     const fresh = [
       /description: "(Connect a wallet to see the coins it created[^"]*)"/.exec(fs.readFileSync("src/app/burnticker/me/layout.tsx", "utf8"))?.[1],
       /description: "(The operator's page for claiming[^"]*)"/.exec(fs.readFileSync("src/app/burnticker/operator/claim-fees/page.tsx", "utf8"))?.[1],
+      /description: "(The operator's page for signing[^"]*)"/.exec(fs.readFileSync("src/app/burnticker/operator/sign-statement/page.tsx", "utf8"))?.[1],
     ];
     for (const d of fresh) {
       assert.ok(d);
