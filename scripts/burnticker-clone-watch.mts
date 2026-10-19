@@ -21,13 +21,15 @@ const registry = openRegistry((env.BURNTICKER_DB ?? "").trim() || REGISTRY_FILE)
 const tokens = registry.tokens();
 const terms = cloneTerms(tokens.filter((t) => t.status !== "draft" && t.status !== "expired").map((t) => t.ticker));
 const ownMints = new Set(tokens.map((t) => t.mint));
+// the review of 2026-10-18: a candidate whose name holds a live coin's full name is listed too
+const names = Object.fromEntries(tokens.filter((t) => t.status !== "draft" && t.status !== "expired").map((t) => [t.ticker.toUpperCase().replace(/[^A-Z0-9]/g, ""), t.name]));
 const rpcUrl = (env.BURNTICKER_RPC_URL ?? "").trim() || "https://api.mainnet-beta.solana.com";
 const conn = new Connection(rpcUrl, { commitment: "confirmed", disableRetryOnRateLimit: true });
 const programId = (env.BURNTICKER_PROGRAM_ID ?? "").trim();
 const program = programId && (env.BURNTICKER_RPC_URL ?? "").trim() ? new ProgramBurnClient({ connection: conn, programId: new PublicKey(programId), cluster: env.BURNTICKER_CLUSTER === "mainnet" ? "mainnet" : "devnet", payer: null, admin: null, solUsd: async () => { throw new Error("not used"); } }) : null;
 
 const deps: CloneWatchDeps = {
-  terms, ownMints, termSince: termSinceFor(tokens), fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), pauseMs: 400,
+  terms, names, ownMints, termSince: termSinceFor(tokens), fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), pauseMs: 400,
   registered: program ? async (mint) => (await program.port(mint).config()) !== null : undefined,
   holders: async (mint) => {
     const pk = new PublicKey(mint);

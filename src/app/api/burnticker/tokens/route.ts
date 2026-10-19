@@ -4,6 +4,7 @@ import { buildPlatformIndex } from "@/lib/burnticker/tokenPage";
 import { readAudit } from "@/lib/burnticker/trust";
 import { readinessFromStatus, type Readiness } from "@/lib/burnticker/readiness";
 import { rankLines } from "@/lib/burnticker/coinRank";
+import { coinStatusFactsOf, type CoinStatusFacts } from "@/lib/burnticker/coinStatus";
 import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
@@ -40,7 +41,7 @@ async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<Pr
  * Since website-14 each token also carries `readiness` (readiness.ts, from its status and receipts), which the cards' progress strip reads.
  */
 export async function GET() {
-  const headers = { "cache-control": "public, max-age=10, s-maxage=15" };
+  const headers = { "cache-control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30" };
   if (indexMemo) {
     if (Date.now() - indexMemo.at >= indexMemo.memoMs) void refreshIndex();
     return NextResponse.json(indexMemo.body, { headers: { ...headers, "x-index-memo": "hit" } });
@@ -56,6 +57,7 @@ async function buildIndex(): Promise<{ body: unknown; memoMs: number }> {
   const now = Date.now();
   const statuses = [];
   const ready = new Map<string, Readiness>();
+  const facts = new Map<string, CoinStatusFacts>();
   // owner decision 2026-10-12: a mainnet host lists no registry row on the devnet cluster (devnetHide.ts)
   // owner 2026-10-14: a coin the operator marked test is not listed (testCoins.ts); /burnticker/test-coins lists it
   // block G re-review Low 3: draft and expired-draft mints are not listed publicly (the same rule as GET /v1/tokens)
@@ -64,10 +66,12 @@ async function buildIndex(): Promise<{ body: unknown; memoMs: number }> {
   const view = await webReadPlatform(p, tokens);
   const reads = await allLimited(tokens.map((t) => () => tokenPageData(view, t, now)), INDEX_CONCURRENCY);
   for (const r of reads) { if (r.status !== "fulfilled") continue; /* a token whose page fails is left out, not invented */ const d = r.value; statuses.push(d.status); ready.set(d.status.mint, readinessFromStatus(d.status, d.receipts)); }
+  // review H2: each coin's status facts, with its pair's other coin's status when it was read (the winning side is named by its team)
+  for (const r of reads) { if (r.status !== "fulfilled") continue; const d = r.value; const other = d.status.pair ? statuses.find((x) => x.mint === d.status.pair!.counterpart.mint) ?? null : null; facts.set(d.status.mint, coinStatusFactsOf(d.status, d.receipts, other)); }
   const audit = readAudit(p.publishDir);
   const index = buildPlatformIndex(statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null);
   // website-17 wiring item 2: each coin's rank line (coinRank.ts), null when the registry could not be ranked (never a guessed rank)
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   console.info(`[burnticker/tokens] built in ${Date.now() - started} ms, ${statuses.length} coins`);
-  return { memoMs: memoWindowMs(chainRows(tokens).length), body: { ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.mint) ?? null, rank: ranks?.get(t.mint)?.line ?? null })), cluster: p.cluster, stubs: p.stubs } };
+  return { memoMs: memoWindowMs(chainRows(tokens).length), body: { ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.mint) ?? null, rank: ranks?.get(t.mint)?.line ?? null, statusFacts: facts.get(t.mint) ?? null })), cluster: p.cluster, stubs: p.stubs } };
 }

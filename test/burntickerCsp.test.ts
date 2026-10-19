@@ -51,7 +51,9 @@ test("the app policy frames the GeckoTerminal chart (and nothing frames the site
   const embed = /embedUrl: `(https:\/\/[^/]+)\//.exec(read("src/lib/burnticker/market.ts"));
   assert.ok(embed, "market.ts still builds a GeckoTerminal embed URL");
   assert.deepEqual(directive(p, "frame-src"), [embed![1]]);
-  for (const page of ["src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/p/[pairId]/page.tsx"]) assert.match(read(page), /<iframe [^>]*src=\{m\??\.chart\.embedUrl\}/, page);
+  // the pages hand the embed URL to PoolChart (2026-10-18), whose one iframe draws it with the theme's light_chart flag
+  for (const page of ["src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/p/[pairId]/page.tsx"]) assert.match(read(page), /<PoolChart [^>]*src=\{m\??\.chart\.embedUrl\}/, page);
+  assert.match(read("src/app/burnticker/_components/PoolChart.tsx"), /<iframe [^>]*src=\{chartUrlForTheme\(src, theme\)\}/);
   assert.ok(directive(p, "connect-src").includes("ws://localhost:*"), "Solana Mobile Wallet Adapter (local association)");
   assert.ok(fs.readFileSync(path.join(ROOT, "node_modules/@solana/wallet-adapter-react/lib/esm/WalletProvider.js"), "utf8").includes("SolanaMobileWalletAdapter"), "the adapter still bundles the mobile wallet");
   assert.ok(directive(p, "img-src").includes("https:"), "creator images are arbitrary https URLs (CoinThumb)");

@@ -306,8 +306,8 @@ export function espnSeriesTitle(s: EspnSeries): string {
   const t = teamByAbbr(s.league, s.abbr)!;
   if (s.kind === "team" && s.window.kind === "meetings") { const o = teamById(s.league, s.window.oppId) ?? teamByAbbr(s.league, s.window.opp); return `${t.name} against ${o?.name ?? s.window.opp}, head to head — ${windowPhrase(s.league, s.window)} (${LEAGUES[s.league].label})`; }
   // the single outcomes keep their 10-10 titles byte for byte ("losses" for a draw coin included); two of three results say both
-  if (isPairOutcome(s.outcome)) { const w = outcomeWords(s.outcome); return s.kind === "team" ? `${t.name} ${w.plural.toLowerCase()}${s.window.kind === "legacy" && s.window.scope === "all" ? "" : ` — ${windowPhrase(s.league, s.window)}`} (${LEAGUES[s.league].label})` : `${t.name} ${w.noun} in ESPN game ${s.eventId}`; }
-  return s.kind === "team" ? `${t.name} ${s.outcome === "win" ? "wins" : "losses"}${s.window.kind === "legacy" && s.window.scope === "all" ? "" : ` — ${windowPhrase(s.league, s.window)}`} (${LEAGUES[s.league].label})` : `${t.name} ${s.outcome === "win" ? "win" : "loss"} in ESPN game ${s.eventId}`;
+  if (isPairOutcome(s.outcome)) { const w = outcomeWords(s.outcome); return s.kind === "team" ? `${t.name} ${w.plural.toLowerCase()}${s.window.kind === "legacy" && s.window.scope === "all" ? "" : ` — ${windowPhrase(s.league, s.window)}`} (${LEAGUES[s.league].label})` : `${t.name} ${w.noun}, one game`; }
+  return s.kind === "team" ? `${t.name} ${s.outcome === "win" ? "wins" : "losses"}${s.window.kind === "legacy" && s.window.scope === "all" ? "" : ` — ${windowPhrase(s.league, s.window)}`} (${LEAGUES[s.league].label})` : `${t.name} ${s.outcome === "win" ? "win" : "loss"}, one game`;
 }
 
 // ---- parsing ESPN ---------------------------------------------------------------------------------------------------------

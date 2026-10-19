@@ -199,7 +199,9 @@ describe("website-21: audit 7 items 15 and 16", () => {
     assert.match(steps, /role="radiogroup" aria-label=\{whichHeading\("rivalry"\)\}/);
     assert.match(steps, /role="radio" aria-checked=\{value === k\}/);
     assert.match(page, /<FollowStep search=\{searchBlock\} value=\{guide\.follow \?\? prevFollow\}/); assert.match(page, /<RivalryKindStep value=\{guide\.pairKind\}/);
-    assert.match(read("src/app/burnticker/launch/layout.tsx"), /<a className="bt-skip" href="#launch-main" data-skip-link>Skip to content<\/a>/);
+    // prelaunch audit 2026-10-18 A-29: one skip link per page, the root layout's; the launch layout adds none
+    assert.doesNotMatch(read("src/app/burnticker/launch/layout.tsx"), /<a className="bt-skip"/);
+    assert.equal((read("config/public-repo/overlay/src/app/layout.tsx").match(/<a className="bt-skip" href="#bt-content">Skip to content<\/a>/g) ?? []).length, 1);
     assert.match(page, /<main id="launch-main" tabIndex=\{-1\}/);
     // the "?" buttons: the shared 44 px hit layer and focus ring (site polish, audit 7 item 21) stay as they are
     assert.match(read("src/app/burnticker/_components/FieldHelp.tsx"), /className="bt-hit inline-flex h-5 w-5 [^"]*focus-visible:border-amber-400/);

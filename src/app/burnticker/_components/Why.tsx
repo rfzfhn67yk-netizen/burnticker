@@ -8,7 +8,8 @@ import { useId, useState } from "react";
  * (aria-describedby), so a screen reader reads it with the dash. It works the same on phones, where nothing hovers. The reason is never
  * printed inline after the value, so no stray "." appears in the row. Unknown is never shown as zero.
  */
-export function Why({ why, label = "—", name = "Not available" }: { why: string | null; label?: string; name?: string }) {
+/** `mark` false (coin card status 2026-10-18): no "?" after a worded label such as "Not read yet"; the dotted underline still marks it. */
+export function Why({ why, label = "—", name = "Not available", mark = true }: { why: string | null; label?: string; name?: string; mark?: boolean }) {
   const id = useId();
   const [open, setOpen] = useState(false);
   if (!why) return <span>{label}</span>;
@@ -16,7 +17,7 @@ export function Why({ why, label = "—", name = "Not available" }: { why: strin
     <span className="bt-why" data-why>
       <button type="button" className="bt-why-btn" aria-describedby={id} aria-expanded={open} aria-label={label === "—" || label === "" ? name : undefined}
         onClick={() => setOpen((o) => !o)} onBlur={() => setOpen(false)} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
-        {label && <span aria-hidden={label === "—" ? true : undefined}>{label}</span>}<span className="bt-why-mark" aria-hidden="true">?</span>
+        {label && <span aria-hidden={label === "—" ? true : undefined}>{label}</span>}{mark && <span className="bt-why-mark" aria-hidden="true">?</span>}
       </button>
       <span id={id} role="tooltip" className={`bt-why-tip${open ? " is-open" : ""}`}>{why}</span>
     </span>

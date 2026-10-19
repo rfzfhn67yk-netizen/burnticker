@@ -99,6 +99,27 @@ smoke() {
   done
 }
 
+# KEEP THE RUNNING BUILD'S STATIC FILES SERVABLE (review of A-22 item 3, 2026-10-18). The edge may keep a page for up to 90 s, and a
+# browser may hold one open longer; that HTML names the running build's /_next/static chunks, which the new build does not have, so
+# for a minute and a half after every deploy those visitors got broken pages. Before the swap, every static file the RUNNING build
+# brought itself (its static-own.txt, or all of .next/static for a build from before this list) that the staged build lacks is copied
+# into the staged build. Only one build back is carried: the staged build records its own files in static-own.txt, so files carried
+# into it are not carried again next time and nothing piles up across deploys. A staged file is never overwritten.
+carry_static() {
+  [ -d .next/static ] && [ -d .next-staging/static ] || { echo "static carry: nothing to carry (no .next/static or no .next-staging/static)"; return 0; }
+  (cd .next-staging && find static -type f) > "$TMP/own"
+  if [ -f .next/static-own.txt ]; then cp .next/static-own.txt "$TMP/prev"; else (cd .next && find static -type f) > "$TMP/prev"; fi
+  n=0
+  while IFS= read -r f; do
+    [ -n "$f" ] && [ -f ".next/$f" ] || continue
+    [ -e ".next-staging/$f" ] && continue
+    mkdir -p ".next-staging/$(dirname "$f")" && cp -p ".next/$f" ".next-staging/$f" && n=$((n + 1))
+  done < "$TMP/prev"
+  cp "$TMP/own" .next-staging/static-own.txt
+  echo "static carry: kept $n static files of the running build${OLD:+ $OLD} servable from the new build"
+}
+carry_static
+
 STARTED=$(date +%s)
 # the deploy reads this line: from here on .next may change, so a failure is never "before the swap" (A-9, audit 2026-10-18)
 echo "SWAP STARTED: moving build $NEW into .next (the running build${OLD:+ $OLD} goes to .next-old)"

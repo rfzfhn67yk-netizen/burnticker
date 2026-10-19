@@ -1,10 +1,11 @@
 "use client";
 
+import { tabKeyHandler } from "@/lib/burnticker/tabKeys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HostDiagnostics } from "./_components/HostDiagnostics";
 import Link from "next/link";
 import { EmptyState } from "./_components/EmptyState";
-import { ViewCard, SkeletonGrid, ago } from "./_components/CoinCard";
+import { CardGrid, ViewCard, SkeletonGrid, ago } from "./_components/CoinCard";
 import { useLaunchAvailability } from "./_components/useLaunchAvailability";
 import { useHome } from "./_components/useHome";
 import { useWatchlist } from "./_components/useWatchlist";
@@ -18,6 +19,7 @@ import { pairCardTitle } from "@/lib/burnticker/coinPage";
 import { FIRST_PARTY_CARD_IDS, GRID_TABS, cardMatches, firstPartyCards, gridState, liveCoinsTotal, searchKey, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
 import { sharedTickers } from "@/lib/burnticker/coinKey";
+import { rereadDue } from "@/lib/burnticker/rereadCache";
 
 /**
  * THE COINS PAGE (/burnticker; list-first since 2026-10-12: Claude site audit 2 item 5, ChatGPT audit 6 A5 and A10, Codex review 5
@@ -58,9 +60,22 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
       }
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
-      setIx(j);
+      setIx(j); setErr(null);
     };
-    once(6).catch((e) => setErr(String(e.message ?? e)));
+    // prelaunch audit 2026-10-18 A-23: the list was read once and, twenty minutes later, called itself out of date although this page had
+    // never asked again. It is read again every REREAD_MS (shorter than the five-minute freshness window) while the tab is visible and
+    // when the visitor comes back to it. A failed repeat keeps the last good list; only then can the stale line show, and it is true.
+    let live = true, busy = false, lastAttempt = 0, haveList = false;
+    const read = (left: number) => {
+      if (busy) return;
+      busy = true; lastAttempt = Date.now();
+      once(left).then(() => { haveList = true; }, (e) => { if (live && !haveList) setErr(String(e.message ?? e)); }).finally(() => { busy = false; });
+    };
+    read(6);
+    const tick = () => { if (live && rereadDue(lastAttempt, Date.now(), document.visibilityState === "visible")) read(1); };
+    const t = setInterval(tick, 15_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { live = false; clearInterval(t); document.removeEventListener("visibilitychange", tick); };
   }, []);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
   useEffect(() => { try { const s = sessionStorage.getItem("bt-coins-tab") as GridTab | null; if (s && GRID_TABS.some((x) => x.id === s)) setTab(s); } catch { /* private window */ } }, []);
@@ -115,8 +130,8 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
       <section className="space-y-3" aria-labelledby="bt-coins-h">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <h1 id="bt-coins-h" className="text-xl font-semibold">Coins</h1>
-          <div ref={tabsHint.ref} onScroll={tabsHint.onScroll} className={`bt-tabs ${tabsHint.className}`} role="tablist" aria-label="Filter coins">
-            {GRID_TABS.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} aria-controls="bt-coins-panel" title={t.rule} className={`bt-tab${tab === t.id ? " is-active" : ""}`} onClick={() => pick(t.id)}>{t.label}{t.id === "pairs" && ix ? <> <span className="bt-tab-count" aria-label={`${ix.pairs.length} pair${ix.pairs.length === 1 ? "" : "s"}`}>{ix.pairs.length}</span></> : null}</button>)}
+          <div ref={tabsHint.ref} onScroll={tabsHint.onScroll} className={`bt-tabs ${tabsHint.className}`} role="tablist" aria-label="Filter coins" onKeyDown={tabKeyHandler(GRID_TABS.map((t) => t.id), tab, pick, (id) => `coins-tab-${id}`)}>
+            {GRID_TABS.map((t) => <button key={t.id} id={`coins-tab-${t.id}`} type="button" role="tab" aria-selected={tab === t.id} tabIndex={tab === t.id ? 0 : -1} aria-controls="bt-coins-panel" className={`bt-tab${tab === t.id ? " is-active" : ""}`} onClick={() => pick(t.id)}>{t.label}{t.id === "pairs" && ix ? <> <span className="bt-tab-count" aria-label={`${ix.pairs.length} pair${ix.pairs.length === 1 ? "" : "s"}`}>{ix.pairs.length}</span></> : null}</button>)}
           </div>
           {/* one search per screen: the header carries it from 640 px up; on phones this box is the search (the tab bar's Search focuses it) */}
           <input id="search" ref={searchBox} type="search" value={q} onChange={(e) => typeQuery(e.target.value)} placeholder={SEARCH.placeholder} aria-label={SEARCH.label} className="bt-grid-search md:ml-auto w-full md:w-72 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm" />
@@ -139,7 +154,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
             {state.note && <p className="mb-2 text-xs text-amber-300" role="status">{state.note}</p>}
             {tab !== "pairs" && <p className="mb-2 text-xs text-neutral-400" data-featured-rules>{FEATURED_RULES_LINE}</p>}
             {tab !== "pairs" ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{allcards.map((v) => <ViewCard key={v.id} v={v} now={now} />)}</div>
+              <CardGrid cards={allcards} now={now} />
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 {pairs.map((p) => (
@@ -174,7 +189,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
         {home.error ? <EmptyState compact kind="unavailable" body="The featured coins could not be read just now." details={home.error} />
           : !home.data ? <SkeletonGrid n={3} label="Loading the featured coins." />
           : featured.length === 0 ? <EmptyState compact kind="no-activity" body={s ? `No featured coin matches "${q.trim()}".` : "No featured coin is listed."} />
-          : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{featured.map((v) => <ViewCard key={v.id} v={v} now={now} />)}</div>}
+          : <CardGrid cards={featured} now={now} />}
       </section>}
 
       <SeasonsStrip seasons={seasons} />
@@ -205,7 +220,7 @@ function SeasonsStrip({ seasons }: { seasons: SeasonsPreview | null }) {
         <dl className="mt-3 space-y-2 text-sm">{seasons.sports.map((sp) => (
           <div key={sp.id} className="sm:flex sm:gap-4">
             <dt className="font-medium text-neutral-200 sm:w-28 sm:shrink-0">{sp.label}</dt>
-            <dd className="mt-1 sm:mt-0 flex flex-wrap gap-1.5">{sp.leagues.map((l) => <Link key={l.id} className="bt-tab" href={l.href}>{l.label}{l.coins > 0 && <span className="bt-tab-count">{l.coins}</span>}</Link>)}</dd>
+            <dd className="mt-1 sm:mt-0 flex flex-wrap gap-1.5">{sp.leagues.map((l) => <Link key={l.id} className="bt-tab" href={l.href} aria-label={l.coins > 0 ? `${l.label}, ${l.coins} team coin${l.coins === 1 ? "" : "s"}` : undefined}>{l.label}{l.coins > 0 && <span className="bt-tab-count" aria-hidden="true">{l.coins}</span>}</Link>)}</dd>
           </div>
         ))}</dl>
       </>}

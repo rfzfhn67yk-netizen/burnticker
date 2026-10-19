@@ -9,6 +9,7 @@ import { platform } from "@/lib/burnticker/server";
 import { coinPageFound, coinPageTitle, deficitMintTarget, lookupCoin, registryCoinKey, type CoinLookup } from "@/lib/burnticker/coinLookup";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { loadTransparency } from "@/lib/burnticker/trust";
+import { metadata as NOT_FOUND_METADATA } from "../../not-found";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,9 @@ export async function generateMetadata({ params }: { params: Promise<{ ticker: s
     if (l.kind === "many") return { title: `$${l.ticker} on Burnticker`, description: `Several coins use the ticker $${l.ticker}. Pick one by its mint address.` };
     if (l.kind === "one") { mint = l.token.mint; key = registryCoinKey(p.registry, l.token); }
   } catch { /* the registry could not be read: the ticker as written */ }
+  // prelaunch audit 2026-10-18 A-24: a page that answers 404 keeps the 404's own title (it used to flip to "$NOPE on Burnticker" after
+  // hydration, from the coin title below)
+  if (l?.kind === "none" && !coinPageFound(ticker, () => l!, servedPages())) return NOT_FOUND_METADATA;
   const p = await coinSharePreview(mint ?? ticker.toUpperCase());
   const canonical = mint ? coinCanonicalHref(mint) : `/burnticker/t/${encodeURIComponent(ticker.toUpperCase())}`;
   return p ? { ...previewMetadata(p, canonical), alternates: { canonical, types: { "application/rss+xml": feedHref({ coin: key }, "rss"), "application/feed+json": feedHref({ coin: key }, "json") } } } : { title: coinPageTitle(ticker, l) };

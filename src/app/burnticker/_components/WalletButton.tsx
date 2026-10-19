@@ -21,12 +21,24 @@ export function useOpenWalletList(): () => void {
   const { connected, connecting, connect, select, wallet } = useWallet();
   const { setVisible, visible } = useWalletModal();
   const [asked, setAsked] = useState(false);
+  // prelaunch audit 2026-10-18 A-29: the adapter's dialog keeps Tab inside itself but does not take focus when it opens; move focus to
+  // its first button once it is drawn, and back to whatever opened it when it closes
+  const opener = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (visible) {
+      const id = window.setTimeout(() => document.querySelector<HTMLElement>(".wallet-adapter-modal button")?.focus(), 50);
+      return () => window.clearTimeout(id);
+    }
+    const back = opener.current;
+    opener.current = null;
+    if (back && document.contains(back)) back.focus();
+  }, [visible]);
   useEffect(() => {
     if (!asked || visible) return;
     setAsked(false);
     if (wallet && !connected && !connecting) void connect().catch(() => undefined);
   }, [asked, wallet, connected, connecting, visible, connect]);
-  return () => { select(null); setAsked(true); setVisible(true); };
+  return () => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; select(null); setAsked(true); setVisible(true); };
 }
 
 export function WalletButton({ variant = "header" }: { variant?: "header" | "menu" }) {
@@ -52,8 +64,8 @@ export function WalletButton({ variant = "header" }: { variant?: "header" | "men
   if (!connected || !addr) {
     return (
       <button type="button" className={cls} onClick={openList} title={WALLET_COPY.note} data-wallet-button data-wallet-state={connecting ? "connecting" : "disconnected"} aria-busy={connecting || undefined}>
+        {/* A-29: the button's name is just its label; the longer note stays its description (title) */}
         {connecting ? WALLET_COPY.connecting : WALLET_COPY.connect}
-        {variant === "header" && <span className="sr-only">. {WALLET_COPY.note}</span>}
       </button>
     );
   }

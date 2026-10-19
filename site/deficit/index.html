@@ -37,14 +37,14 @@
 }
 @media (prefers-color-scheme: light){
   :root:not([data-theme="dark"]){--bg:#e7e5df;--panel:#f2f1ec;--panel2:#e8e6e0;--line:#cac7be;--ink:#15130f;--dim:#3d3a34;--muted:#625e55;
-    --red:#b3261e;--hot:#b3261e;--onred:#ffffff;--amber:#8f5600;--ok:#1f7a4a;--warn:#8f5600;--stamp:rgba(179,38,30,.08);
+    --red:#b3261e;--hot:#b3261e;--onred:#ffffff;--amber:#8f5600;--ok:#1a6a40;--warn:#8f5600;--stamp:rgba(179,38,30,.08);
     --housing:linear-gradient(180deg,#d4d1c9,#c8c5bc 30%,#bfbcb3);--face:#dddbd4;
     --faceshadow:inset 0 0 0 1px #b4b0a7,inset 0 8px 18px rgba(0,0,0,.10);
     --bolt:radial-gradient(circle at 35% 35%,#f6f5f1,#9e9a90 70%);
     --seg-lit:#b3261e;--seg-dot:#c8463a;--seg-off:rgba(21,19,15,.075);--seg-amber:#8f5600;--seg-amberdot:#a86d12;--seg-amberoff:rgba(21,19,15,.075)}
 }
 :root[data-theme="light"]{--bg:#e7e5df;--panel:#f2f1ec;--panel2:#e8e6e0;--line:#cac7be;--ink:#15130f;--dim:#3d3a34;--muted:#625e55;
-  --red:#b3261e;--hot:#b3261e;--onred:#ffffff;--amber:#8f5600;--ok:#1f7a4a;--warn:#8f5600;--stamp:rgba(179,38,30,.08);
+  --red:#b3261e;--hot:#b3261e;--onred:#ffffff;--amber:#8f5600;--ok:#1a6a40;--warn:#8f5600;--stamp:rgba(179,38,30,.08);
   --housing:linear-gradient(180deg,#d4d1c9,#c8c5bc 30%,#bfbcb3);--face:#dddbd4;
   --faceshadow:inset 0 0 0 1px #b4b0a7,inset 0 8px 18px rgba(0,0,0,.10);
   --bolt:radial-gradient(circle at 35% 35%,#f6f5f1,#9e9a90 70%);
@@ -338,7 +338,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     <form class="sh-search" role="search" action="https://burnticker.com/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
     <div class="sh-actions">
       <a class="sh-launch" href="https://burnticker.com/burnticker/launch" data-launch-button>Launch a coin</a>
-      <a class="sh-wallet" href="https://burnticker.com/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet<span class="sh-sr">. Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.</span></a>
+      <a class="sh-wallet" href="https://burnticker.com/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet</a>
       <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
       <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
         <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
@@ -1158,8 +1158,11 @@ window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now) {
   var m = document.getElementById("menu"); if (!m) return;
   var sum = m.querySelector("summary");
   function links() { return Array.prototype.slice.call(m.querySelectorAll(".sh-menu-links a[href]")); }
-  m.addEventListener("toggle", function () { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
-  sum.setAttribute("aria-expanded", "false");
+  // prelaunch audit 2026-10-18 A-29: aria-expanded follows the menu's real state, on the toggle event and right after each press
+  function sync() { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); }
+  m.addEventListener("toggle", function () { sync(); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
+  sum.addEventListener("click", function () { setTimeout(sync, 0); });
+  sync();
   document.addEventListener("keydown", function (e) {
     if (!m.open) return;
     if (e.key === "Escape") { e.preventDefault(); m.open = false; sum.focus(); return; }
@@ -1182,12 +1185,12 @@ window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now) {
   window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open is unknown right now, so no launch controls are shown."; createPath(l || null); });
   // audit 10 item 23: the home's create path, from the same record (siteNav.mjs createPathFor, written here as source)
   function createPath(l) {
-    var TWO_PATHS = [{"id":"explore","label":"Explore coins","href":"/burnticker","text":"See every coin, its rule and its receipts, and follow coins in this browser without a wallet."},{"id":"create","label":"Create a coin","href":"/burnticker/launch","text":"Pick a public result and lock one rule, and the launch page shows every detail before your wallet signs anything."}], CREATE_PREVIEW = {"label":"Preview a coin launch","text":"Walk through a launch and its review, with nothing signed."}, LAUNCH_CLOSED = {"unread":"Whether creator launches are open is unknown right now, so no launch controls are shown."};
+    var TWO_PATHS = [{"id":"explore","label":"Explore coins","href":"/burnticker","text":"See every coin, its rule and its receipts, and follow coins in this browser without a wallet."},{"id":"create","label":"Launch a coin","href":"/burnticker/launch","text":"Pick a public result, lock one rule, then review every detail."}], CREATE_PREVIEW = {"label":"Preview a coin launch","text":"Walk through a launch and its review, with nothing signed."}, LAUNCH_CLOSED = {"unread":"Whether creator launches are open is unknown right now, so no launch controls are shown."};
     var p = (function createPathFor(launch) {
   const open = !!(launch && launch.canSign === true);
   const create = TWO_PATHS[1];
-  if (open) return { label: create.label, text: create.text, status: null, open: true };
-  return { label: CREATE_PREVIEW.label, text: CREATE_PREVIEW.text, status: launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : LAUNCH_CLOSED.unread, open: false };
+  const said = launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : null;
+  return { label: create.label, text: create.text, status: open ? said : (said || LAUNCH_CLOSED.unread) + " " + CREATE_PREVIEW.text, open: open };
 })(l), box = document.querySelector("[data-two-paths]"); if (!box) return;
     var t = box.querySelector("[data-create-label]"), x = box.querySelector("[data-create-text]"), s = box.querySelector("[data-create-status]");
     if (t) t.textContent = p.label; if (x) x.textContent = p.text; if (s) { s.textContent = p.status || ""; s.hidden = !p.status; }

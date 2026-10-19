@@ -6,8 +6,9 @@ import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader, Panel } from "../_components/Panel";
 import { CopyButton } from "../_components/CopyButton";
 import { RepoText } from "../_components/RepoText";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: C.title, description: C.description, alternates: { canonical: "/burnticker/verify-yourself" } };
+export const metadata: Metadata = withShareCard({ title: C.title, description: C.description, alternates: { canonical: "/burnticker/verify-yourself" } });
 export const dynamic = "force-dynamic";
 
 /**

@@ -75,14 +75,32 @@ export function poolsFromDexScreener(body: unknown): PoolHit[] {
   return [...out.values()];
 }
 
-/** Which term a token resembles, and how: its ticker by skeleton (same letters, one edit, a copycat suffix), or its name containing the term. */
-export function matchTerm(h: Pick<PoolHit, "symbol" | "name">, terms: readonly string[]): { term: string; how: string } | null {
-  const sym = skeleton(h.symbol), name = skeleton(h.name);
+/**
+ * Which term a token resembles, and how: its ticker by skeleton (same letters, one edit, a copycat suffix), or its name. A name counts
+ * (the review of 2026-10-18) when:
+ *   - it IS the term (letters, spaces and look-alike characters aside), or it holds a live coin's full name ("Seattle Seahawks Win");
+ *   - it uses the coin's ticker as a whole word AND presents itself as that coin: the name opens with the ticker ("Clarity Official",
+ *     "SEAWIN on Solana") or carries an impersonation word beside it (official, real, original, token, coin, Solana, v2 …);
+ *   - the platform's own marks, Burnticker and $DEFICIT, anywhere in the name.
+ * A ticker that is an ordinary word inside someone else's phrase is never enough alone: "Post Nut Clarity" is not a copy of $CLARITY.
+ */
+export const SUBSTRING_MARKS = ["BURNTICKER", "DEFICIT"].map(skeleton);
+// the words in skeleton form (skeleton reads L as I): Official, Real, Original, Token, Coin, Solana, SOL, V2, Inu, Classic
+const IMPERSONATION = new Set(["OFFICIAI", "REAI", "ORIGINAI", "TOKEN", "COIN", "SOIANA", "SOI", "V", "INU", "CIASSIC"]);
+/** The name's words, each read through the skeleton (so "0fficial" is OFFICIAL, and L reads as I, as skeleton does everywhere). */
+const nameWords = (name: string): string[] => name.split(/[^\p{L}\p{N}$]+/u).map(skeleton).filter(Boolean);
+export function matchTerm(h: Pick<PoolHit, "symbol" | "name">, terms: readonly string[], names: Readonly<Record<string, string>> = {}): { term: string; how: string } | null {
+  const sym = skeleton(h.symbol), name = skeleton(h.name), words = nameWords(h.name);
   for (const t of terms) {
     const st = skeleton(t);
     const how = sym ? compare(sym, st) : null;
     if (how) return { term: t, how: how === "same-letters" ? "ticker reads as the same letters" : how === "one-edit" ? "ticker one letter away" : "ticker is a copycat variant" };
-    if (st.length >= 5 && name.includes(st)) return { term: t, how: "name contains it" };
+    if (st.length >= 3 && name === st) return { term: t, how: "name is the same" };
+    const coinName = names[t] ? skeleton(names[t]) : "";
+    if (coinName.length >= 8 && name.includes(coinName)) return { term: t, how: "name holds the coin's name" };
+    if (st.length >= 5 && SUBSTRING_MARKS.includes(st) && name.includes(st)) return { term: t, how: "name contains it" };
+    // four letters at least: a short ticker is too often an ordinary word ($DOG and "Dog Coin")
+    if (st.length >= 4 && words.includes(st) && (words[0] === st || words.some((w) => w !== st && IMPERSONATION.has(w)))) return { term: t, how: "name uses the ticker as the coin's own" };
   }
   return null;
 }
@@ -138,7 +156,7 @@ export function evidenceLines(r: Omit<CloneRow, "evidence">): string[] {
   // ChatGPT audit 7 item 2: the reason states the similarity rule that matched (lookalike.ts skeleton / compare), never "$DEFICIT reads as
   // the same letters as $DEFICIT"
   const exact = (r.symbol || "").replace(/^\$/, "").toUpperCase() === r.matched.term.toUpperCase();
-  out.push(how === "ticker reads as the same letters" ? (exact ? `It uses the ticker ${target} exactly, on a different mint from the Burnticker coin.` : `The ticker ${sym} spells ${target} once look-alike characters are read as the letters they imitate (for example 0 as O, 1 as I, rn as m) and case, accents and punctuation are ignored.`) : how === "ticker one letter away" ? `The ticker ${sym} differs from ${target} by one letter: one added, removed, changed or swapped.` : how === "ticker is a copycat variant" ? `The ticker ${sym} is ${target} with a common prefix or suffix added (such as INU, AI or 2).` : how === "name contains it" ? `The name of ${sym} contains the word ${r.matched.term === "BURNTICKER" ? "Burnticker" : r.matched.term.charAt(0) + r.matched.term.slice(1).toLowerCase()}.` : `${sym} looks like ${target}. The match is that the ${how}.`);
+  out.push(how === "ticker reads as the same letters" ? (exact ? `It uses the ticker ${target} exactly, on a different mint from the Burnticker coin.` : `The ticker ${sym} spells ${target} once look-alike characters are read as the letters they imitate (for example 0 as O, 1 as I, rn as m) and case, accents and punctuation are ignored.`) : how === "ticker one letter away" ? `The ticker ${sym} differs from ${target} by one letter: one added, removed, changed or swapped.` : how === "ticker is a copycat variant" ? `The ticker ${sym} is ${target} with a common prefix or suffix added (such as INU, AI or 2).` : how === "name is the same" ? `The name of ${sym} reads as ${target}, once spaces, case and look-alike characters are set aside.` : how === "name holds the coin's name" ? `The name of ${sym} holds the full name of ${target}.` : how === "name uses the ticker as the coin's own" ? `The name of ${sym} uses ${target}'s ticker as its own name, at its start or beside a word such as Official, Token or Solana.` : how === "name contains it" ? `The name of ${sym} contains the word ${r.matched.term === "BURNTICKER" ? "Burnticker" : r.matched.term.charAt(0) + r.matched.term.slice(1).toLowerCase()}.` : `${sym} looks like ${target}. The match is that the ${how}.`);
   if (r.bundle) out.push(`${r.bundle.wallets} wallets each hold exactly ${r.bundle.sharePct.toFixed(2)} % of the supply.`);
   if (r.lp.state === "pulled" && r.lp.pulledAt) out.push(`The liquidity was pulled at ${utc(r.lp.pulledAt)}.`);
   else if (r.lp.state === "thin") out.push(`The pool held less than $${LP_PRESENT_USD} of liquidity when it was seen.`);
@@ -219,6 +237,8 @@ export function lastScanSentence(listed: number, last: { at: string; hits: numbe
 
 export interface CloneWatchDeps {
   terms: readonly string[]; ownMints: ReadonlySet<string>; fetchImpl: FetchLike; now: () => number;
+  /** Each live coin's full name by its ticker term (matchTerm reads a name that holds it). */
+  names?: Readonly<Record<string, string>>;
   /** The burn_receipts program's view of a mint: true / false, or null when this host does not read the program. */
   registered?: (mint: string) => Promise<boolean | null>;
   /** Top holders (raw amounts) and the raw supply, from an RPC; null when not readable. */
@@ -240,7 +260,7 @@ export async function scanClones(d: CloneWatchDeps): Promise<{ observations: Clo
       if (!res.ok) { errors.push(`search ${term}: HTTP ${res.status}`); continue; }
       for (const h of poolsFromDexScreener(await res.json())) {
         if (d.ownMints.has(h.mint)) continue;
-        const m = matchTerm(h, d.terms);
+        const m = matchTerm(h, d.terms, d.names ?? {});
         if (!m || predatesTerm(h.poolCreatedAt, m.term, d.termSince ?? PLATFORM_SINCE_MS)) continue;
         const have = best.get(h.mint);
         if (!have || (h.liquidityUsd ?? -1) > (have.liquidityUsd ?? -1)) best.set(h.mint, { ...h, matched: m });

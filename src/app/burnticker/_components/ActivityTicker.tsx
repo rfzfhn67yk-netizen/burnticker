@@ -21,7 +21,7 @@ export function ActivityTicker() {
       {error && <span>The latest activity could not be read just now.</span>}
       {data && data.events.length === 0 && <span>{data.noEvents}</span>}
       {data && data.events.map((ev) => (
-        <Link key={`${ev.kind}-${ev.network}-${ev.at}-${ev.text}`} href={ev.href} className="bt-ticker-item" data-kind={ev.kind}>
+        <Link key={`${ev.kind}-${ev.network}-${ev.at}-${ev.text}`} href={ev.href} prefetch={false} className="bt-ticker-item" data-kind={ev.kind}>
           <span className="bt-ticker-kind">{EVENT_LABEL[ev.kind] ?? ev.kind}</span>{ev.network !== "mainnet" && <span className="bt-ticker-net">{ev.network}</span>}{ev.text}
         </Link>
       ))}

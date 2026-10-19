@@ -5,8 +5,9 @@ import { SETTLEMENT_DESCRIPTION, SETTLEMENT_PATH, SETTLEMENT_TITLE, settlementSe
 import type { SettlementFacts } from "@/lib/burnticker/settlementCopy";
 import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader, Panel } from "../_components/Panel";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: SETTLEMENT_TITLE, description: SETTLEMENT_DESCRIPTION, alternates: { canonical: SETTLEMENT_PATH } };
+export const metadata: Metadata = withShareCard({ title: SETTLEMENT_TITLE, description: SETTLEMENT_DESCRIPTION, alternates: { canonical: SETTLEMENT_PATH } });
 export const dynamic = "force-dynamic";
 
 /**

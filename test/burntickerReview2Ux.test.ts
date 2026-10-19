@@ -43,8 +43,8 @@ describe("review 2 — one launch-availability state", () => {
       ["src/app/burnticker/_components/SiteHeader.tsx", [/\{launchOpen\s*\? <Link className="bt-launch-btn bt-launch-head" href="\/burnticker\/launch"/]],
       ["src/app/burnticker/leagues/[league]/[season]/page.tsx", [/\{\(launch\.open \|\| launchPreview\) && <Link className="text-xs underline" href=\{t\.launchHref\}>\{launch\.open \? "launch a coin for this team" : "preview a coin for this team"\}/, /\{\(launch\.open \|\| launchPreview\) && <Link className="underline" href=\{t\.launchHref\}>/, /No team-coin receipts for this season yet\. This page tracks processed coin receipts, not every game\.\{launch\.open \? " Pick a team below to launch one\." : ""\}/]],
       ["src/app/burnticker/templates/page.tsx", [/\{launch\.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href=\{t\.href\}>\{t\.cta\} →<\/Link>\}/]],
-      ["src/app/burnticker/t/[ticker]/page.tsx", [/\{launch\.open && <p><Link [^>]*href=\{likeHref\(s\.ticker\)\}>Launch one like this →/]],
-      ["src/app/burnticker/p/[pairId]/page.tsx", [/\{launch\.open && <p className="mt-1"><Link [^>]*href=\{likeHref\(A\)\}>Launch a pair like this →/]],
+      ["src/app/burnticker/t/[ticker]/page.tsx", [/\{launch\.open && <p><Link [^>]*href=\{likeHref\(s\.ticker\)\}>Launch one like this</]],
+      ["src/app/burnticker/p/[pairId]/page.tsx", [/\{launch\.open && <p className="mt-1"><Link [^>]*href=\{likeHref\(A\)\}>Launch a pair like this</]],
       ["src/app/burnticker/rivalries/page.tsx", [/\{launch\.open \? <> A team coin is launched from the <Link/]],
     ];
     for (const [file, res] of cases) { const src = read(file); for (const re of res) assert.match(src, re, `${file}: ${re}`); }
@@ -178,7 +178,7 @@ describe("review 2 — the glossary at first use", () => {
     assert.match(about, /Object\.values\(GLOSSARY\)\.map\(\(g\) =>/, "the about page defines every term once");
     // website-13 (Codex review 5 glossary): the coins page's tabs state their rule, and the card rows' meanings open on demand
     const coins = read("src/app/burnticker/CoinsIndex.tsx");
-    assert.match(coins, /Object\.values\(CARD_MEANINGS\)\.map/); assert.match(coins, /title=\{t\.rule\}/);
+    assert.match(coins, /Object\.values\(CARD_MEANINGS\)\.map/); assert.match(coins, /id="bt-tab-rule">\{rule\}/); // A-29 (2026-10-18): the selected tab's rule is printed and describes the panel; the tab is named by its label
     assert.match(read("src/app/burnticker/trust/page.tsx"), /data-trust-evidence[\s\S]*<TermNote ids=\{\["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"\]\} \/>/, "beside the evidence that uses the words");
     const pair = read("src/app/burnticker/p/[pairId]/page.tsx");
     assert.match(pair, /<TermNote ids=\{\["receipt", "burnPool"\]\} \/>/); assert.doesNotMatch(pair, /\{NO_WALLET_LINE\}/, "website-13: no repeated disclaimer on the pair page");

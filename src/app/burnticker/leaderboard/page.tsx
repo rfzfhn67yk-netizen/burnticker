@@ -5,9 +5,10 @@ import { leaderboard, type Leaderboard } from "@/lib/burnticker/leaderboard";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { EmptyState } from "../_components/EmptyState";
 import { DIGEST_TITLE, LEADERBOARD_EMPTY, LEADERBOARD_INTRO, LEADERBOARD_TITLE } from "../_components/featureCopy";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: LEADERBOARD_TITLE, description: "The coins on Burnticker by tokens burned, the biggest single burn, the longest streak and the newest receipt.", alternates: { canonical: "/burnticker/leaderboard" } };
+export const metadata: Metadata = withShareCard({ title: LEADERBOARD_TITLE, description: "The coins on Burnticker by tokens burned, the biggest single burn, the longest streak and the newest receipt.", alternates: { canonical: "/burnticker/leaderboard" } });
 
 /**
  * /burnticker/leaderboard (WEBSITE-26, WIRING-FEATURES item 3): four lists under Coins, read on the server from the registry's receipts

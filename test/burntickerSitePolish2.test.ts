@@ -10,7 +10,7 @@ import path from "node:path";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { API, callRoute } from "./burntickerApiHelpers.ts";
 import { API_VERSION, apiIndex, endpoint } from "@/lib/burnticker/api/spec";
-import { CREATE_PREVIEW, FOOTER_COPY, FOOTER_ROWS, LAUNCH_CLOSED, SHELL_CSS, SHELL_FONTS, SITE_TABS, TWO_PATHS, createPathFor, shellFontCss, shellFooterHtml, shellScript } from "@/lib/burnticker/siteNav.mjs";
+import { CREATE_PREVIEW, FOOTER_COPY, FOOTER_ROWS, LAUNCH_CLOSED, LAUNCH_LABELS, SHELL_CSS, SHELL_FONTS, SITE_TABS, TWO_PATHS, createPathFor, shellFontCss, shellFooterHtml, shellScript } from "@/lib/burnticker/siteNav.mjs";
 import { DEV_FEE_LINE, OPERATOR_LINE, USE_OF_FEES } from "@/lib/burnticker/fees";
 import { SITE_SENTENCE, siteLaunchState, siteLaunchStateFromCatalogue } from "@/lib/burnticker/launchAvailability";
 import { REGIONS, renderRegions } from "../scripts/burnticker-site-nav.mts";
@@ -38,7 +38,7 @@ describe("QA pass 9 item 10: the API address the footer prints answers", () => {
   });
   test("both footers link the address itself and the docs", () => {
     assert.equal(FOOTER_ROWS.api.path, "/api/burnticker/v1"); assert.equal(FOOTER_ROWS.api.href, "/burnticker/docs");
-    assert.match(read("src/app/burnticker/_components/SiteFooter.tsx"), /<a href=\{API_BASE_PATH\}>\{API_BASE_PATH\}<\/a> · <Link href=\{R\.api\.href\}>/);
+    assert.match(read("src/app/burnticker/_components/SiteFooter.tsx"), /<a href=\{API_BASE_PATH\}>\{API_BASE_PATH\}<\/a> · <Link href=\{R\.api\.href\}(?: prefetch=\{false\})?>/);   // A-22 (2026-10-18): footer links do not prefetch
     for (const f of STATIC.slice(0, 1)) assert.match(read(f), /<a href="\/api\/burnticker\/v1">\/api\/burnticker\/v1<\/a> · <a href="\/burnticker\/docs">Docs<\/a>/, f);
   });
 });
@@ -132,37 +132,39 @@ describe("QA pass 9 item 43: names for the tab bar and the coin-card image link"
   });
 });
 
-describe("audit 10 item 23: the hero's create path follows the site launch record", () => {
+describe("audit 10 item 23, prelaunch audit 2026-10-18: the hero's create path keeps one label; a status line carries the record", () => {
   const closed = siteLaunchState({ BURNTICKER_CLUSTER: "devnet" });
-  test("closed: Preview a coin launch, with the record's own sentence beside it", () => {
+  test("closed: the same label, and the record's own sentence with what the launch page still does", () => {
     assert.equal(closed.canSign, false);
     const p = createPathFor(closed);
-    assert.deepEqual(p, { label: "Preview a coin launch", text: CREATE_PREVIEW.text, status: closed.sentence, open: false });
-    assert.ok(Object.values(SITE_SENTENCE).includes(p.status as never), "the sentence is the record's, never typed here");
-    // loading and unreadable records stay on the preview label; unreadable says so in the record's own words
-    assert.equal(createPathFor(null).status, LAUNCH_CLOSED.unread);
-    assert.equal(createPathFor(siteLaunchStateFromCatalogue(null, { failure: "offline" })).status, SITE_SENTENCE.unavailable);
+    assert.deepEqual(p, { label: "Launch a coin", text: TWO_PATHS[1].text, status: `${closed.sentence} ${CREATE_PREVIEW.text}`, open: false });
+    assert.ok(Object.values(SITE_SENTENCE).includes(closed.sentence as never), "the sentence is the record's, never typed here");
+    // loading and unreadable records keep the label; unreadable says so in the record's own words
+    assert.equal(createPathFor(null).status, `${LAUNCH_CLOSED.unread} ${CREATE_PREVIEW.text}`);
+    assert.equal(createPathFor(siteLaunchStateFromCatalogue(null, { failure: "offline" })).status, `${SITE_SENTENCE.unavailable} ${CREATE_PREVIEW.text}`);
     const preview = siteLaunchStateFromCatalogue({ launches: { creators: false, mode: "preview" } });
-    assert.equal(createPathFor(preview).label, "Preview a coin launch");
+    assert.equal(createPathFor(preview).label, "Launch a coin");
   });
-  test("open (a record that can sign): Create a coin again, no status line", () => {
+  test("open (a record that can sign): the same label and text; the status line says launches are open", () => {
     const open = { ...closed, mode: "open" as const, canSign: true, sentence: SITE_SENTENCE.open };
-    assert.deepEqual(createPathFor(open), { label: TWO_PATHS[1].label, text: TWO_PATHS[1].text, status: null, open: true });
-    assert.equal(TWO_PATHS[1].label, "Create a coin");
+    assert.deepEqual(createPathFor(open), { label: TWO_PATHS[1].label, text: TWO_PATHS[1].text, status: SITE_SENTENCE.open, open: true });
+    for (const r of [null, closed, open]) assert.equal(createPathFor(r).label, LAUNCH_LABELS.button, "the label never changes with the record");
+    for (const r of [null, closed, open]) assert.equal(createPathFor(r).text, TWO_PATHS[1].text, "nor the sentence under it");
   });
-  test("the static home prints the closed state and the shell script runs the same function on GET /api/burnticker/home", () => {
+  test("the static home prints the final label at once, and the shell script runs the same function on GET /api/burnticker/home", () => {
     const home = read("site/burnticker/index.html");
-    assert.match(home, /<a class="path path-create" href="\/burnticker\/launch" data-launch-button data-create-path><span class="path-t" data-create-label>Preview a coin launch<\/span>/);
-    assert.match(home, /<p class="path-status" data-create-status role="status" hidden><\/p>/);
+    assert.match(home, /<a class="path path-create" href="\/burnticker\/launch" data-launch-button data-create-path aria-describedby="create-status"><span class="path-t" data-create-label>Launch a coin<\/span>/);
+    assert.ok(home.includes(`<p class="path-status" id="create-status" data-create-status role="status" hidden></p>`), "empty until the record is read (the word budget); the label is already final");
     const s = shellScript();
     assert.ok(s.includes(`(${createPathFor.toString()})(l)`), "the function itself, as source");
     assert.match(s, /createPath\(l \|\| null\);/);
     // run the embedded function on both states, as the browser does
     const fn = new Function("TWO_PATHS", "CREATE_PREVIEW", "LAUNCH_CLOSED", `return (${createPathFor.toString()});`)(TWO_PATHS, CREATE_PREVIEW, { unread: LAUNCH_CLOSED.unread });
-    assert.equal(fn(closed).label, "Preview a coin launch"); assert.equal(fn({ canSign: true }).label, "Create a coin");
+    assert.equal(fn(closed).label, "Launch a coin"); assert.equal(fn({ canSign: true, sentence: SITE_SENTENCE.open }).label, "Launch a coin");
+    assert.equal(fn({ canSign: true, sentence: SITE_SENTENCE.open }).status, SITE_SENTENCE.open);
   });
   test("the new words pass the copy lint", () => {
-    for (const t of [CREATE_PREVIEW.label, CREATE_PREVIEW.text, FOOTER_ROWS.operator.more, FOOTER_ROWS.fees.more, FOOTER_ROWS.api.more, ...SITE_TABS.map((t) => t.name)]) clean(t, "polish-2 copy");
+    for (const t of [LAUNCH_LABELS.button, TWO_PATHS[1].text, CREATE_PREVIEW.text, LAUNCH_CLOSED.body, createPathFor(null).status!, createPathFor(closed).status!, FOOTER_ROWS.operator.more, FOOTER_ROWS.fees.more, FOOTER_ROWS.api.more, ...SITE_TABS.map((t) => t.name)]) clean(t, "polish-2 copy");
     assert.doesNotMatch(CREATE_PREVIEW.text, /launches are (open|closed)/i, "the open/closed words come from the record");
   });
 });

@@ -5,6 +5,7 @@ import type { FeedHealth } from "@/lib/burnticker/ops/feedHealth";
 import type { RoleDecision, KeeperRole, TakeoverNote } from "@/lib/burnticker/ops/leaderLock";
 import type { SnapshotRecord } from "@/lib/burnticker/ops/snapshot";
 import type { VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { sideLaunched } from "@/lib/burnticker/publicPairs";
 
 /**
  * THE PUBLIC STATUS DOCUMENT (owner-approved 2026-10-10 night, trust-ops item 2): `status/status.json` in the keeper's publish dir,
@@ -103,6 +104,8 @@ export function buildOpsStatus(i: OpsStatusInput): OpsStatusJson {
   if (reg.pairs && reg.pairForwards && reg.token) for (const pr of reg.pairs()) {
     const ta = reg.token(pr.mintA), tb = reg.token(pr.mintB);
     if (!ta || !tb) continue;
+    // prelaunch audit 2026-10-18 A-25: a pair with no launched side (an abandoned draft) is not listed (publicPairs.ts, the pages' rule)
+    if (!sideLaunched(ta) && !sideLaunched(tb)) continue;
     let wtb = false;
     try { wtb = !!(reg.lockedRule(ta).rule.pair as { winnerTakesBurn?: boolean } | null | undefined)?.winnerTakesBurn; } catch { wtb = false; }
     const fw = reg.pairForwards(pr.pairId), last = fw[fw.length - 1];

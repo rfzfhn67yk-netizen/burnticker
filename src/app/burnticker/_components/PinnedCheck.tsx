@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PIN_HOST_ONLY_LINE, PIN_REREAD_OK_LINE, pinnedFileHref } from "@/lib/burnticker/pinCheckClient";
 
 /**
- * "Metadata pinned on Arweave · sha256 … · matches the locked description ✓" (pin.ts). The browser re-fetches the pinned JSON from the
- * arweave gateway, hashes the bytes (WebCrypto) against the sha256 the registry recorded at launch, and compares its `description` with
- * the generated text the coin page shows. Nothing is trusted from this server but the expected values, which are public.
+ * "Metadata pinned on Arweave · sha256 … · matches the locked description ✓" (pin.ts). The browser reads the pinned JSON again
+ * through this site (the pin-check route's ?raw=1 copy since A-28, pinCheckClient.ts), hashes the bytes (WebCrypto) against the
+ * sha256 the registry recorded at launch, and compares its `description` with the generated text the coin page shows. The hashing
+ * is the browser's own, but the bytes come through this server, so it is not an independent read of Arweave: the gateway link is
+ * there for anyone who wants one.
  */
 export interface PinnedView { /** the coin's mint, for the host-side check (pin-check route); optional for older callers */ mint?: string; metadataUri: string | null; metadataSha256: string | null; imageUri: string | null; imageSha256: string | null; hosted: boolean; expectedDescription: string }
 
@@ -20,21 +23,25 @@ export function PinnedCheck({ pinned }: { pinned: PinnedView | null | undefined 
     if (!pinned?.metadataUri || !pinned.metadataSha256) return;
     setState(null);
     // 2026-10-14: this host checks the pin first (api/burnticker/pin-check: it follows the gateway's redirect to its CDN and hashes the
-    // bytes); the browser's own fetch below is a second opinion, and a browser that cannot reach the gateway is not a failed pin
+    // bytes); the browser then reads the file again through this site and hashes it itself, and a read that does not answer is not a failed pin
     let hostSaysOk = false;
     try {
       const mint = (pinned as { mint?: string }).mint;
       if (mint) { const h = await (await fetch(`/api/burnticker/pin-check?mint=${encodeURIComponent(mint)}`, { cache: "no-store" })).json() as { ok: boolean | null; detail: string }; if (h.ok === true) hostSaysOk = true; else if (h.ok === false) { setState({ ok: false, detail: `This site checked the pin and found a problem: ${h.detail}` }); return; } }
     } catch { hostSaysOk = false; }
     try {
-      const r = await fetch(pinned.metadataUri, { cache: "no-store" });
+      // prelaunch audit 2026-10-18 A-28: the browser's own fetch to the gateway failed on every page (its TLS handshake), so the second
+      // check never ran. The browser now reads the pinned bytes through this site (pinnedFileHref) and hashes them itself against the
+      // hash recorded at launch; the gateway address stays as a link for anyone who wants to read it there.
+      const r = await fetch(pinnedFileHref(pinned), { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const buf = await r.arrayBuffer();
       const sha = await sha256Hex(buf);
       if (sha !== pinned.metadataSha256) { setState({ ok: false, detail: `The pinned file hashes to ${sha.slice(0, 16)}…, but the recorded hash is ${pinned.metadataSha256.slice(0, 16)}…` }); return; }
       const j = JSON.parse(new TextDecoder().decode(buf)) as { description?: string };
-      setState(j.description === pinned.expectedDescription ? { ok: true, detail: "It matches the locked description." } : { ok: false, detail: "The pinned description differs from the locked text." });
+      setState(j.description === pinned.expectedDescription ? { ok: true, detail: PIN_REREAD_OK_LINE } : { ok: false, detail: "The pinned description differs from the locked text." });
     } catch (e) {
-      if (hostSaysOk) setState({ ok: true, detail: "This site read the pinned file and it matches the locked description. Your browser could not reach the gateway just now, so it did not read it a second time." });
+      if (hostSaysOk) setState({ ok: true, detail: PIN_HOST_ONLY_LINE });
       else setState({ ok: false, detail: `This page could not fetch it again (${String((e as Error).message).slice(0, 80)}). You can check it with the trust page's verifier.` });
     }
   }, [pinned]);

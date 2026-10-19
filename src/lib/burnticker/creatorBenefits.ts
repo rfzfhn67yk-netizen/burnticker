@@ -1,3 +1,4 @@
+import { utcDay } from "@/lib/burnticker/utcWords";
 /**
  * WHAT A CREATOR GETS, AND THE WORDS OF THE CREATOR PAGES (website-17, 2026-10-12; owner: "featured placement, scoreboard rank, a
  * creator page, the share cards"). None of these pays anyone anything or changes the coin's economics: creators receive no fee revenue,
@@ -59,3 +60,25 @@ export const ANALYTICS_COPY = {
   copySummary: "Copy the summary",
   creatorPage: "Open your creator page",
 } as const;
+
+/**
+ * The creator page's "Next result" cell (prelaunch audit 2026-10-18, A-26; the review of 2026-10-18). A one-shot is decided only when
+ * its latest result receipt (the wind-down, drain and sweep receipts at the rule's end aside) settled a result: burned ("Decided and
+ * burned"), or waiting to burn before graduation; a skipped, voided or failed result decides nothing. Otherwise the next time as a UTC
+ * day (utcWords.ts), and a time already past says it is overdue, in words.
+ */
+export const DECIDED_WAITING = "Decided, waiting for graduation";
+export const DECIDED_BURNED = "Decided and burned";
+export const DECIDED = "Decided";
+const END_KINDS = new Set(["winddown", "drain", "sweep"]);
+const SETTLED = new Set(["confirmed", "planned", "sending", "pending-pair", "forwarded"]);
+export function creatorNextLine(c: { oneShot: boolean; receipts: readonly { status: string; kind?: string; settledAt?: string }[]; graduated: boolean; nextAt: string | null }, now: number): string {
+  if (c.oneShot) {
+    const latest = c.receipts.filter((r) => !END_KINDS.has(r.kind ?? "")).sort((a, b) => String(b.settledAt ?? "").localeCompare(String(a.settledAt ?? "")))[0];
+    if (latest && SETTLED.has(latest.status)) return latest.status === "confirmed" ? DECIDED_BURNED : !c.graduated ? DECIDED_WAITING : DECIDED;
+  }
+  if (!c.nextAt) return CREATOR_PAGE.noNext;
+  const t = Date.parse(c.nextAt);
+  if (Number.isNaN(t)) return CREATOR_PAGE.noNext;
+  return t <= now ? `Was due on ${utcDay(t)} and is overdue` : utcDay(t);
+}

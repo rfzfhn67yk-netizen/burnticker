@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { burnWalkthrough, type Walkthrough } from "@/lib/burnticker/burnWalkthrough";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
 const DESCRIPTION = "One real burn from the devnet rehearsal, step by step: the result published, the budget worked out, the tokens bought and burned, and the receipt.";
-export const metadata: Metadata = { title: "Watch how a burn works", description: DESCRIPTION, alternates: { canonical: "/burnticker/how-a-burn-works" } };
+export const metadata: Metadata = withShareCard({ title: "Watch how a burn works", description: DESCRIPTION, alternates: { canonical: "/burnticker/how-a-burn-works" } });
 export const dynamic = "force-dynamic";
 
 /**

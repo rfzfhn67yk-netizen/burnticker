@@ -1,5 +1,6 @@
 "use client";
 
+import { utcDateTime } from "@/lib/burnticker/utcWords";
 import type { CurrentStatus } from "@/lib/burnticker/currentStatus";
 import { upgradeAuthorityText } from "@/lib/burnticker/currentStatusText";
 import { EmptyState } from "./EmptyState";
@@ -43,7 +44,7 @@ export function CurrentStatusSummary({ card, compact = false }: { card: string; 
   );
   return (
     <section className={card} aria-label="Current status" id="current-status" data-current-status>
-      <h2 className="font-medium">Current status <span className="text-xs font-normal text-neutral-500">Checked on {s.checkedAt}. Chain read at {s.readAt.slice(0, 16).replace("T", " ")} UTC.</span></h2>
+      <h2 className="font-medium">Current status <span className="text-xs font-normal text-neutral-500">Checked on {utcDateTime(s.checkedAt)}. Chain read on {utcDateTime(s.readAt)}.</span></h2>
       <ul className="mt-1 list-disc pl-5 text-xs text-neutral-200 space-y-0.5">{s.lines.map((l) => <SummaryLine key={l} l={l} />)}</ul>
       <p className="mt-1 text-xs text-neutral-500">{s.host.line}</p>
       <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-300">The deployed programs and who can upgrade them</summary>

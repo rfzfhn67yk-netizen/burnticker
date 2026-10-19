@@ -33,5 +33,5 @@ export async function GET(req: Request) {
   if (!rl.ok) return NextResponse.json({ error: `Too many requests. Please try again in ${rl.retryAfterSec} seconds.`, code: "rate-limited" }, { status: 429, headers: { "retry-after": String(rl.retryAfterSec), "cache-control": "no-store" } });
   const r = await trustSwr.get("page", "1", buildTrust);
   if (!r) return NextResponse.json({ loading: true, error: "the trust page is being read; try again in a few seconds", code: "trust-loading", retryAfterSec: 5 }, { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } });
-  return NextResponse.json(r.value, { headers: { "cache-control": "public, max-age=30, s-maxage=60", "x-trust-memo": r.state } });
+  return NextResponse.json(r.value, { headers: { "cache-control": "public, max-age=30, s-maxage=60, stale-while-revalidate=120", "x-trust-memo": r.state } });
 }

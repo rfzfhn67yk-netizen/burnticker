@@ -1,5 +1,6 @@
 "use client";
 
+import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
 import { BOUNTY_COPY } from "@/lib/burnticker/historyCopy";
 import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { EmptyState } from "../_components/EmptyState";
@@ -20,8 +21,8 @@ export function BountyWallet() {
     <>
       <dl className="bt-dl" data-bounty-wallet>
         <div><dt>Address</dt><dd>{b.wallet ? <a className="underline" href={`https://explorer.solana.com/address/${b.wallet}`} target="_blank" rel="noreferrer"><code>{b.wallet}</code></a> : "Not set"}</dd></div>
-        <div><dt>{BOUNTY_COPY.balance}</dt><dd>{b.balanceLamports !== null ? <>{sol(b.balanceLamports)}{b.balanceReadAt ? <span className="bt-meta"> at {b.balanceReadAt.slice(11, 16)} UTC</span> : null}</> : <span>{BOUNTY_COPY.balanceUnavailable}</span>}</dd></div>
-        <div><dt>{BOUNTY_COPY.funding}</dt><dd>{b.recordedFunding ? <>{b.recordedFunding.sol} SOL on {b.recordedFunding.date}{b.recordedFunding.transactions?.[0] ? <> in <a className="underline" href={b.recordedFunding.transactions[0].explorerUrl} target="_blank" rel="noreferrer"><code>{b.recordedFunding.transactions[0].signature.slice(0, 12)}…</code></a></> : null}</> : "None recorded"}</dd></div>
+        <div><dt>{BOUNTY_COPY.balance}</dt><dd>{b.balanceLamports !== null ? <>{sol(b.balanceLamports)}{b.balanceReadAt ? <span className="bt-meta"> on {utcDateTime(b.balanceReadAt)}</span> : null}</> : <span>{BOUNTY_COPY.balanceUnavailable}</span>}</dd></div>
+        <div><dt>{BOUNTY_COPY.funding}</dt><dd>{b.recordedFunding ? <>{b.recordedFunding.sol} SOL on {utcDay(b.recordedFunding.date)}{b.recordedFunding.transactions?.[0] ? <> in <a className="underline" href={b.recordedFunding.transactions[0].explorerUrl} target="_blank" rel="noreferrer"><code>{b.recordedFunding.transactions[0].signature.slice(0, 12)}…</code></a></> : null}</> : "None recorded"}</dd></div>
       </dl>
       <h3 className="bt-h3" id="decided">{BOUNTY_COPY.historyTitle}</h3>
       {b.reports.paid.length + b.reports.rejected.length === 0

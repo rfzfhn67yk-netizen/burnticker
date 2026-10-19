@@ -41,7 +41,7 @@
 #   app fonts      next/font self-hosts Courier Prime and Space Grotesk under /_next/static/media ('self'). The wallet modal's own
 #                  stylesheet (@solana/wallet-adapter-react-ui/styles.css) starts with an @import of Google Fonts (DM Sans). It is NOT
 #                  allowed on purpose: the site self-hosts its fonts (site audit #19), and the modal falls back to Roboto, Helvetica or
-#                  Arial. Expect one style-src report for fonts.googleapis.com on /launch and /me; it is not a fault.
+#                  Arial. Since 2026-10-18 (A-27) the app imports _components/walletAdapter.css, the same file without that @import.
 #   app scripts    still 'unsafe-inline': Next's flight payload and the theme boot script in the root layout are inline. The JSON-LD
 #                  blocks on league pages are data, not scripts, and CSP does not apply to them.
 #   static images  the status page (status.burnticker.com) and the $DEFICIT page (deficit.burnticker.com) load the mark from

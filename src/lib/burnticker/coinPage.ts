@@ -1,3 +1,4 @@
+import { utcDateTime } from "@/lib/burnticker/utcWords";
 import { windowKindOf, PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
 import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { GAME_BURN_LINE } from "@/lib/burnticker/sources/provenance";
@@ -115,6 +116,95 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
   };
 }
 
+/**
+ * THE RULE IN BRIEF (prelaunch audit 2026-10-18, optional polish): the Rule tab opens on two short sentences, what fires a burn and what
+ * a voided result does, and the locked statement sits under "Read the full rule" (a native <details>, so it stays in the page and needs
+ * no script). The dial, the window and the end follow in their own rows, so the brief never repeats them. Plain words, lint-clean.
+ */
+export const READ_FULL_RULE = "Read the full rule";
+export const RULE_VOID_SENTENCE = "A voided result burns nothing.";
+/**
+ * What one firing does, in words: this coin's burn pool swaps SOL for this coin and burns it, or, for a coin with a pinned burn target
+ * (rules.ts burnTarget, round 5), swaps SOL for that other token and burns IT (the review of 2026-10-18: "burns some of this coin" was
+ * wrong for those coins).
+ */
+const firingWords = (j: Record<string, unknown>): string => {
+  const t = j.burnTarget as { symbol?: unknown } | null | undefined;
+  return t && typeof t.symbol === "string" && t.symbol ? `swaps SOL for ${t.symbol} and burns it` : "burns some of this coin";
+};
+/**
+ * A Burn Derby rule's trigger in words, by its kind (the review of 2026-10-18; derby/spec.ts derbyStatement says the same at length):
+ *   a flippening settles once: side A on the first window A passes B, side B if the season ends without that;
+ *   a two-coin race burns on each window this coin's reference coin wins;
+ *   a single asset ("price") counts units of rise (or fall) in one feed: nothing is won;
+ *   a record-close coin ("high") burns on each record day, or once on the first one;
+ *   a bracket fan coin burns on each day its coin wins its match.
+ */
+function derbyFires(r: BurnRule, SOME: string): string {
+  const d = r.derby!, side = r.pair?.side ?? null;
+  // "This coin burns some of itself once", never "This coin burns some of this coin"; a burn target keeps its own words
+  const SELF = SOME === "burns some of this coin" ? "burns some of itself" : SOME;
+  if (d.selector === "coinvs") {
+    if (d.flip) return side === "B" ? `This coin ${SELF} once, if the season ends without ${d.a.symbol} passing ${d.b.symbol}.` : `This coin ${SELF} once, on the first window ${d.a.symbol} passes ${d.b.symbol}.`;
+    return `Each window ${side === "B" ? d.b.symbol : d.a.symbol} wins ${SOME}.`;
+  }
+  if (d.selector === "price") return `Each full ${r.scalar?.unit ?? "set number of"} percentage points of ${r.scalar?.direction === "down" ? "fall" : "rise"} in ${d.u.symbol} over a window counts as one unit, and each unit ${SOME}.`;
+  if (d.selector === "high") return d.once ? `The first day ${d.u.symbol} closes at a record ${SOME}, once.` : `Each day ${d.u.symbol} closes at a record ${SOME}.`;
+  return `Each day ${d.underlying.symbol} wins its match ${SOME}.`;
+}
+export function ruleBrief(rulesText: string): string {
+  let raw: unknown = null;
+  try { raw = JSON.parse(rulesText); } catch { raw = null; }
+  const j = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const SOME = firingWords(j);
+  let fires = `A settled result that fires the rule ${SOME}.`;
+  if (j.schema === RULES_SCHEMA) {
+    const r = j as unknown as BurnRule;
+    if (r.oracle === "derby" && r.derby) fires = derbyFires(r, SOME);
+    else if (r.kind === "binary") {
+      const yes = !!r.binary?.onYes, no = !!r.binary?.onNo;
+      fires = yes && no ? `A settled YES or NO result ${SOME}.` : yes ? `A settled YES result ${SOME}, and a NO burns nothing.` : no ? `A settled NO result ${SOME}, and a YES burns nothing.` : fires;
+    } else if (r.kind === "scalar") fires = r.inverse ? `Each settled reading that does not pass its baseline counts as one unit, and each unit ${SOME}.` : `Each settled reading counts units against its baseline, and each unit ${SOME}.`;
+  } else if (j.buyback) fires = `Each unit in a settled result ${SOME}.`;
+  return `${fires} ${voidSentence(j)}`;
+}
+
+/**
+ * What a voided result does (the review of 2026-10-18), in the statement's terms (rules.ts onEndText): with no end clause it burns
+ * nothing; with one, a one-shot's voided result ends the rule and what is left burns down over the wind-down, and a series' voided
+ * result burns nothing while a rule that ends void burns down what is left the same way.
+ */
+export function voidSentence(j: Record<string, unknown>): string {
+  if (j.schema !== RULES_SCHEMA) return RULE_VOID_SENTENCE;
+  const r = j as unknown as BurnRule;
+  if (!r.onEnd) return RULE_VOID_SENTENCE;
+  const n = r.onEnd.windDownDays;
+  const span = n % 7 === 0 ? `${n / 7 === 4 ? "four" : n / 7} weeks` : `${n} days`;
+  const d = r.derby as { selector?: string; flip?: boolean; once?: boolean } | undefined;
+  const oneShot = !!r.market || !!r.pair?.game || (r.oracle === "derby" && (d?.flip === true || d?.once === true));
+  return oneShot ? `A voided result ends the rule, and what is left burns down over ${span}.` : `A voided result burns nothing, and if the rule ends void, what is left burns down over ${span}.`;
+}
+
+/**
+ * The pool chart's frame (prelaunch audit 2026-10-18, A-36): GeckoTerminal draws a light chart with light_chart=1, so the frame follows
+ * the site's theme; and the box says what it is waiting for until the lazy frame scrolls into view and loads.
+ */
+export const CHART_PLACEHOLDER = "The chart loads when it comes into view.";
+export function chartUrlForTheme(url: string, theme: "dark" | "light"): string {
+  const v = theme === "light" ? "1" : "0";
+  return /([?&])light_chart=[01]/.test(url) ? url.replace(/([?&])light_chart=[01]/, `$1light_chart=${v}`) : `${url}${url.includes("?") ? "&" : "?"}light_chart=${v}`;
+}
+
+/** A receipt's status in words for the burn log (prelaunch audit 2026-10-18 A-30: the row printed "pending-pair"). */
+export const RECEIPT_STATUS_WORDS: Record<string, string> = {
+  planned: "Read, and waiting for its burn run",
+  sending: "Being sent",
+  "pending-pair": "Waiting until both coins of the pair have a registered pool",
+  skipped: "Counted nothing to burn",
+  failed: "The burn did not go through, and the funds stayed in the burn pool",
+};
+export const receiptStatusWords = (status: string): string => RECEIPT_STATUS_WORDS[status] ?? status.replace(/-/g, " ");
+
 /** The plain line a coin on its bonding curve shows under the curve: burns wait for graduation and the pool's registration. */
 export const BURNS_AFTER_GRADUATION = "Burns begin only after the bonding curve fills, the coin moves to its Raydium pool, and that pool is registered with the burn program.";
 /** Walkthrough 13: the short form for the fact list's "Last receipt" row (the full line already sits under the curve and in the burn log). */
@@ -152,7 +242,7 @@ function liquidityRow(i: FactInput, live: boolean): { value: string; note: strin
   if (!live) return { value: NOT_LAUNCHED, note: "The coin is not launched yet." };
   const p = i.phase === "graduated" ? i.pool : null;
   if (p?.solReserve && p.tokenReserve) {
-    return { value: `${dec2(p.solReserve)} SOL and ${dec2(p.tokenReserve)} tokens`, note: `The two reserves of the coin's Raydium pool, read on chain${p.readAt ? ` at ${p.readAt.slice(0, 16).replace("T", " ")} UTC` : ""}.` };
+    return { value: `${dec2(p.solReserve)} SOL and ${dec2(p.tokenReserve)} tokens`, note: `The two reserves of the coin's Raydium pool, read on chain${p.readAt ? ` on ${utcDateTime(p.readAt)}` : ""}.` };
   }
   return { value: NOT_READ_HERE, note: i.phase === "graduated" && i.poolNote ? i.poolNote : LIQUIDITY_NOT_READ };
 }
@@ -188,6 +278,6 @@ export function marketFacts(i: FactInput): FactRow[] {
     { key: "launched", label: "Launched", value: i.launchedAt ? denverDay(i.launchedAt) : NOT_LAUNCHED, note: i.launchedAt ? null : notLaunched },
     ...(i.dates ? [dateRow("graduated", "Graduated", i.dates.graduated, i.cluster), dateRow("registered", "Pool registered", i.dates.registered, i.cluster)] : []),
     { key: "fees", label: "Fees per trade", value: `${pctOf(i.feesCurveBps)} on the curve, ${pctOf(i.feesPoolBps)} in the pool`, note: "Raydium shows how far your trade moves the pool, and your slippage setting, before you sign. Burnticker takes no order." },
-    { key: "freshness", label: "Read at", value: i.readAt ? `${i.readAt.slice(0, 16).replace("T", " ")} UTC` : NOT_READ_HERE, note: i.readAt ? null : "This site has not read the pool." },
+    { key: "freshness", label: "Read at", value: i.readAt ? utcDateTime(i.readAt) : NOT_READ_HERE, note: i.readAt ? null : "This site has not read the pool." },
   ];
 }

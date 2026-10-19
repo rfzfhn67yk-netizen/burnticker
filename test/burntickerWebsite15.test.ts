@@ -227,10 +227,10 @@ describe("item 7: missing-value reasons (Claude site audit 3 items 4b, 4c, 15; C
   test("the dash is a button described by its reason, opened by tap or focus; no reason is printed inline with a leading period", () => {
     const why = read("src/app/burnticker/_components/Why.tsx"), card = read("src/app/burnticker/_components/CoinCard.tsx"), home = read("site/burnticker/index.html");
     assert.match(why, /<button type="button" className="bt-why-btn" aria-describedby=\{id\} aria-expanded=\{open\}/); assert.match(why, /role="tooltip"/); assert.match(why, /useId\(\)/);
-    assert.match(card, /return <Why label=\{emptyLabel\(v, c\.why\)\} why=\{c\.why \?\? "This site has no reading for this field\."\} \/>;/);
+    assert.match(card, /return <Why label=\{cardEmptyLabel\(v, c\.why\)\} why=\{c\.why \?\? "This site has no reading for this field\."\} mark=\{false\} \/>;/); // follow-up 2026-10-18: words, no "?"
     for (const src of [card, home]) assert.doesNotMatch(src, /sr-only">\. \{|"sh-sr", "\. " \+|r\.textContent = "\. " \+ why/, "no inline reason with a period prefix");
-    assert.match(home, /window\.btWhy = function \(label, why, name\)/); assert.match(home, /b\.setAttribute\("aria-describedby", id\)/);
-    assert.match(home, /if \(c\.text === null\) return window\.btWhy\(label \|\| "No data yet"/); // site polish: the empty label, not a dash
+    assert.match(home, /window\.btWhy = function \(label, why, name, noMark\)/); assert.match(home, /b\.setAttribute\("aria-describedby", id\)/);
+    assert.match(home, /if \(c\.text === null\) return window\.btWhy\(label \|\| "Not read yet"/); // site polish: the empty label, not a dash
     const css = read("config/public-repo/overlay/src/app/globals.css");
     assert.match(css, /\.bt-why-tip\.is-open, \.bt-why-btn:focus-visible \+ \.bt-why-tip \{ display: block; \}/);
   });
@@ -284,7 +284,7 @@ describe("item 9: $REHEARSAL in one sentence, and its pool read like any coin's 
     const rh = rehearsalCreate()!;
     assert.equal(rh.poolId, "AAT9VJAhAJv7o5mZtm3EYLhSdcsxPZB7eTYbjd9phRgG"); assert.equal(rh.date, "2026-10-11");
     const read1 = featuredCoins(scratchRoot("planned"), null, [], null, NOW, { phase: "curve", raised: "1.25", threshold: "85", quote: "SOL", progressPct: 1.47, marketCap: "30.5" }).find((v) => v.id === "rehearsal")!;
-    assert.deepEqual([read1.curve.raised, read1.curve.of], ["1.25", "85 SOL"]); assert.equal(read1.progress!.now, "Next: graduation"); assert.equal(read1.mcap.text, "30.5 SOL (curve-implied)");
+    assert.deepEqual([read1.curve.raised, read1.curve.of], ["1.25", "85 SOL"]); assert.equal(read1.progress!.now, "Next: graduation"); assert.equal(read1.mcap.text, "30.5 SOL from the curve");
     const unread = featuredCoins(scratchRoot("planned"), null, [], null, NOW, null).find((v) => v.id === "rehearsal")!;
     assert.equal(unread.curve.raised, null); assert.equal(unread.mcap.text, null); assert.equal(unread.progress, null);
     assert.equal(unread.curve.why, "This site could not read $REHEARSAL's pool just now."); clean(unread.curve.why!, "unread");

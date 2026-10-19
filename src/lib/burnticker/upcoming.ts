@@ -1,3 +1,4 @@
+import { utcDateTime } from "@/lib/burnticker/utcWords";
 import { shortDay } from "@/lib/burnticker/cardView";
 import { sourcePublisher } from "@/lib/burnticker/coinSourceLine";
 
@@ -88,15 +89,21 @@ interface StatusLike {
   ticker: string; name: string; cluster: string; status: string; oracle: string; selectorKey: string; seriesTitle: string | null;
   next: { nextCheckAt: string | null; nextMarket: string | null; nextCloseTime: string | null };
   profile?: { oneLiner?: string; badge?: string } | null;
+  /** the source reads so far: a read with no receipt is not "nothing read" (a loss writes no row for a win coin) */
+  feed?: { lastFetchAt?: string | null; readings?: number } | null;
 }
 interface ReceiptLike { status: string; settledAt: string; units: number; signature: string | null; readingDate?: string | null; waitReason?: string | null; skippedReason?: string | null; settlementSourceUrl?: string | null; market?: string; execution?: string | null }
 
-const hhmmUtc = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
+const hhmmUtc = (iso: string) => utcDateTime(iso);
 
 /** Where the latest result stands, from a registered coin's newest receipt. */
-export function settlementOf(receipts: readonly ReceiptLike[], cluster: string): { status: SettlementStatus; text: string; receiptHref: string | null } {
+export const NO_WIN_YET = "The source has been read, and the team has not won a game this coin counts yet. A game the team did not win writes no result.";
+export const READ_NOTHING_COUNTED = "The source has been read, and no result has counted for this coin yet.";
+/** A team-win coin (espn.team:<league>-<TEAM>.<id>-win-…): a game the team lost writes no reading row. */
+export const isWinCoin = (selectorKey: string): boolean => /espn\.team:[^\s]*-win-/.test(selectorKey);
+export function settlementOf(receipts: readonly ReceiptLike[], cluster: string, read: { sourceRead?: boolean; winCoin?: boolean } = {}): { status: SettlementStatus; text: string; receiptHref: string | null } {
   const l = [...receipts].sort((a, b) => (a.settledAt < b.settledAt ? 1 : -1))[0] ?? null;
-  if (!l) return { status: "waiting", text: "No result has been read for this coin yet.", receiptHref: null };
+  if (!l) return { status: "waiting", text: read.sourceRead ? (read.winCoin ? NO_WIN_YET : READ_NOTHING_COUNTED) : "No result has been read for this coin yet.", receiptHref: null };
   const when = shortDay(l.settledAt) ?? l.settledAt.slice(0, 10);
   const net = cluster === "mainnet" ? "mainnet" : "devnet";
   if (l.status === "confirmed") return { status: "burned", text: `The latest result, settled on ${when}, burned.`, receiptHref: l.signature ? `/burnticker/check?sig=${encodeURIComponent(l.signature)}&cluster=${net}#verify` : null };
@@ -113,9 +120,9 @@ export function settlementOf(receipts: readonly ReceiptLike[], cluster: string):
 /** `key`: the coin's URL key (coinKey.ts), its ticker while it alone holds it and its mint once the ticker is shared. */
 export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike[], key: string = s.ticker, mint: string | null = null): UpcomingRow | null {
   if (s.status === "draft" || s.status === "expired" || s.status === "retired") return null;
-  const st = settlementOf(receipts, s.cluster);
+  const st = settlementOf(receipts, s.cluster, { sourceRead: !!s.feed?.lastFetchAt || (s.feed?.readings ?? 0) > 0, winCoin: isWinCoin(s.selectorKey) });
   const close = s.next.nextCloseTime, check = s.next.nextCheckAt;
-  const schedule = close ? `The market is scheduled to close at ${hhmmUtc(close)}. The result counts once the source settles it, on the source's own timing.`
+  const schedule = close ? `The market is scheduled to close on ${hhmmUtc(close)}. The result counts once the source settles it, on the source's own timing.`
     // walkthrough 13: the check time is said once, in Denver time, by the list (NextResults.tsx), not here in UTC as well
     : check ? "The source publishes on its own schedule, and this site reads it again at the next check."
     : "This rule has no scheduled result that this site knows of.";

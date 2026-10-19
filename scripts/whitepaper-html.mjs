@@ -166,12 +166,12 @@ const page = `<!DOCTYPE html>
 <link rel="canonical" href="https://burnticker.com${opts.path}">
 <meta property="og:title" content="${esc(opts.title)}">
 <meta property="og:description" content="How a settled real-world result becomes a burn on Solana, what powers exist, and how anyone can recompute every receipt.">
-<meta property="og:image" content="https://burnticker.com/brand/og.png">
+<meta property="og:image" content="https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg">
 <meta property="og:url" content="https://burnticker.com${opts.path}">
 <meta property="og:type" content="article">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@BurnTicker">
-<meta name="twitter:image" content="https://burnticker.com/brand/og.png">
+<meta name="twitter:image" content="https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg">
 <link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
 <script>${THEME_BOOT_JS}</script>
 <style>${shellFontCss()}
@@ -183,7 +183,7 @@ ${SHELL_CSS}</style>
   --mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
 }
-:root[data-theme="light"]{--bg:#dcd6c8;--surface:#cfc8b8;--line:#bdb5a3;--ink:#1b1916;--dim:#3a352f;--muted:#5d564b;--amber:#9a5b00}
+:root[data-theme="light"]{--bg:#dcd6c8;--surface:#cfc8b8;--line:#bdb5a3;--ink:#1b1916;--dim:#3a352f;--muted:#534c42;--amber:#7a4700}
 :root[data-theme="dark"]{--bg:#1f1c19;--surface:#2a2622;--line:#3a352f;--ink:#f2eee4;--dim:#c9c3b6;--muted:#9a9387;--amber:#ffb000}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}

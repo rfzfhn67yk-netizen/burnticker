@@ -162,7 +162,7 @@ describe("the coin page's market facts (website-13, ChatGPT audit 6 A10): read o
     const pool = { marketCap: "412.5", tokenReserve: "206250000.123456", solReserve: "95.123456789", readAt: "2026-10-15T01:02:03.000Z" };
     const g = Object.fromEntries(marketFacts({ ...base, phase: "graduated", graduatedPool: "P00l", pool }).map((r) => [r.key, r]));
     assert.equal(g.liquidity.value, "95.12 SOL and 206,250,000.12 tokens");
-    assert.equal(g.liquidity.note, "The two reserves of the coin's Raydium pool, read on chain at 2026-10-15 01:02 UTC.");
+    assert.equal(g.liquidity.note, "The two reserves of the coin's Raydium pool, read on chain on 15 October 2026, 01:02 UTC.");
     assert.ok(lintCopy(`${g.liquidity.value} ${g.liquidity.note}`, loadCopyLintConfig()).ok);
     const unread = Object.fromEntries(marketFacts({ ...base, phase: "graduated", graduatedPool: "P00l", pool: null, poolNote: "The pool could not be read just now." }).map((r) => [r.key, r]));
     assert.equal(unread.liquidity.value, "Not read here"); assert.equal(unread.liquidity.note, "The pool could not be read just now.");

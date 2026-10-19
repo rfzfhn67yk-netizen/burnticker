@@ -1,3 +1,4 @@
+import { utcDateTime } from "@/lib/burnticker/utcWords";
 import crypto from "node:crypto";
 import { BADGE_CACHE_SEC, renderBadgeSvg, type BadgeJson } from "@/lib/burnticker/badge";
 
@@ -31,16 +32,16 @@ export const EMBED_STYLE = [
   "@media (prefers-color-scheme:dark){.bt-e .foot{color:#aba395}}",
 ].join("");
 
-/** Updates every [data-at] element's countdown each second; reloads the document every 60 s. No network call of its own. */
+/**
+ * Writes each [data-local] time in the reader's own clock and reloads the document every 60 s. No countdown (prelaunch audit
+ * 2026-10-18, A-26: the time is usually the keeper's next read of the source, not a settlement, so nothing ticks toward it). No
+ * network call of its own.
+ */
 export const EMBED_SCRIPT = [
   "(function(){",
-  "function fmt(ms){if(ms<=0)return 'due now';var m=Math.floor(ms/60000),d=Math.floor(m/1440),h=Math.floor(m%1440/60),mm=m%60,s=Math.floor(ms/1000)%60;",
-  "return 'in '+(d?d+'d '+h+'h':h?h+'h '+mm+'m':mm+'m '+s+'s');}",
-  "function tick(){var n=Date.now(),els=document.querySelectorAll('[data-at]');for(var i=0;i<els.length;i++){var t=Date.parse(els[i].getAttribute('data-at'));",
-  "if(!isNaN(t))els[i].textContent=fmt(t-n);}}",
   "try{var w=document.querySelectorAll('[data-local]');for(var j=0;j<w.length;j++){var x=new Date(w[j].getAttribute('data-local'));",
   "if(!isNaN(x))w[j].textContent=x.toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});}}catch(e){}",
-  `tick();setInterval(tick,1000);setTimeout(function(){location.reload();},${BADGE_CACHE_SEC * 1000});`,
+  `setTimeout(function(){location.reload();},${BADGE_CACHE_SEC * 1000});`,
   "})();",
 ].join("");
 
@@ -57,22 +58,24 @@ export const EMBED_HEADERS: Record<string, string> = {
   "x-robots-tag": "noindex",
 };
 
-/** The next-settlement line's words (server-rendered; the script replaces the countdown and the local time). */
-export function nextLine(b: Pick<BadgeJson, "nextSettlementAt" | "nextSettlementNote">, nowMs: number): { lead: string; at: string | null; utc: string | null; note: string } {
-  if (!b.nextSettlementAt) return { lead: b.nextSettlementNote === "resolves once" ? "resolves once" : "no result scheduled", at: null, utc: null, note: b.nextSettlementNote };
-  const ms = Date.parse(b.nextSettlementAt) - nowMs;
-  const mins = Math.max(0, Math.floor(ms / 60000));
-  const rel = ms <= 0 ? "due now" : mins >= 1440 ? `in ${Math.floor(mins / 1440)}d ${Math.floor((mins % 1440) / 60)}h` : mins >= 60 ? `in ${Math.floor(mins / 60)}h ${mins % 60}m` : `in ${mins}m`;
-  return { lead: rel, at: b.nextSettlementAt, utc: `${b.nextSettlementAt.slice(0, 16).replace("T", " ")} UTC`, note: b.nextSettlementNote };
+/**
+ * The line under the card (server-rendered; the script rewrites the time in the reader's clock). It says what the time is: the
+ * keeper's next read of the source, or a market close the venue lists. Never a countdown, and a time already past says it is overdue
+ * (prelaunch audit 2026-10-18, A-26). `before` and `after` surround the time; with no time, `before` is the whole line.
+ */
+export function nextLine(b: Pick<BadgeJson, "nextSettlementAt" | "nextSettlementNote">, nowMs: number): { before: string; at: string | null; utc: string | null; after: string } {
+  if (!b.nextSettlementAt) return { before: b.nextSettlementNote === "resolves once" ? "This rule resolves once." : "No result is scheduled.", at: null, utc: null, after: "" };
+  const past = Date.parse(b.nextSettlementAt) <= nowMs, close = /market close/.test(b.nextSettlementNote);
+  const before = close ? (past ? "The market was scheduled to close on " : "The market is scheduled to close on ") : (past ? "This site was due to read the source on " : "This site next reads the source on ");
+  const after = close ? (past ? ". The result counts once the source settles it." : ".") : (past ? ", and that read is overdue." : ".");
+  return { before, at: b.nextSettlementAt, utc: utcDateTime(b.nextSettlementAt), after };
 }
 
 /** The whole embed document. Every visible word is the card's lines plus the next-settlement line and the footer (all linted in tests). */
 export function renderEmbedHtml(b: BadgeJson, nowMs: number): string {
   const n = nextLine(b, nowMs);
   const title = b.kind === "coin" ? `$${b.ticker} receipts · Burnticker` : `$${b.a.ticker} vs $${b.b.ticker} receipts · Burnticker`;
-  const next = n.at
-    ? `The next settlement is <b data-at="${esc(n.at)}">${esc(n.lead)}</b>, at <span data-local="${esc(n.at)}">${esc(n.utc!)}</span>. <span class="note">That time is ${esc(n.note)}.</span>`
-    : `<b>${n.lead === "resolves once" ? "This rule resolves once." : "No result is scheduled."}</b> There is no next settlement time to show.`;
+  const next = n.at ? `${esc(n.before)}<span data-local="${esc(n.at)}">${esc(n.utc!)}</span>${esc(n.after)}` : `<b>${esc(n.before)}</b>`;
   return [
     "<!doctype html>",
     `<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">`,

@@ -7,9 +7,10 @@ import { checkReceiptHref } from "@/lib/burnticker/coinPage";
 import { hostCluster } from "@/lib/burnticker/launchAvailability";
 import { EmptyState } from "../_components/EmptyState";
 import { DIGEST_EMPTY, DIGEST_INTRO, DIGEST_SECTIONS, DIGEST_TITLE, LEADERBOARD_TITLE, shiftDay } from "../_components/featureCopy";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: DIGEST_TITLE, description: "One day on Burnticker: the results read, the burns, the new coins and the graduations.", alternates: { canonical: "/burnticker/digest" } };
+export const metadata: Metadata = withShareCard({ title: DIGEST_TITLE, description: "One day on Burnticker: the results read, the burns, the new coins and the graduations.", alternates: { canonical: "/burnticker/digest" } });
 
 /**
  * /burnticker/digest (WEBSITE-26, WIRING-FEATURES item 8): one UTC day from the registry (digest.ts buildDigest; the same answer as

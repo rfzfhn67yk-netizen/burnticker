@@ -64,3 +64,28 @@ describe("review follow-up 3: pair pages link each side by its own coin page and
     assert.doesNotMatch(derby, /p\.registry\.pairs\(\)/);
   });
 });
+
+describe("prelaunch audit 2026-10-18 A-25: a pair with no launched side is not public (404 page and API; left off the status document)", () => {
+  test("pairIsPublic / pairPageFound: the expired draft pair is out, the live pair and a one-side pair stay, an unreadable registry keeps the page", async () => {
+    const { pairIsPublic, pairPageFound } = await import("@/lib/burnticker/publicPairs");
+    assert.equal(pairIsPublic(reg as never, "pitwin-vs-balwin-espn-team-nfl-pit-23-wi-2"), false, "before: its page answered 200 'Neither coin of this pair has launched'");
+    assert.equal(pairIsPublic(reg as never, "pitwin-vs-balwin-espn-team-nfl-pit-23-wi"), true);
+    assert.equal(pairIsPublic(reg as never, "aaa-vs-bbb"), true);
+    assert.equal(pairIsPublic(reg as never, "no-such-pair"), false);
+    assert.equal(pairPageFound(() => reg as never, "pitwin-vs-balwin-espn-team-nfl-pit-23-wi-2"), false);
+    assert.equal(pairPageFound(() => { throw new Error("no database"); }, "anything"), true);
+  });
+  test("the status document leaves the draft pair out (before: /status/ listed both PIT/BAL pairs)", async () => {
+    const { buildOpsStatus } = await import("@/lib/burnticker/ops/status");
+    const toks = [...TOKENS.values()].map((t) => ({ ...t, name: t.ticker, selectorKey: "catalogue:x" }));
+    const r = { ...reg, tokens: () => toks, getStatus: () => null, alertsSince: () => [], ruleEnd: () => null, receipts: () => [], pending: () => [], lockedRule: () => ({ rule: {} }), pairForwards: () => [] };
+    const ops = buildOpsStatus({ now: Date.UTC(2026, 9, 18), registry: r as never, role: { role: "leader", active: true, reason: "x", missed: 0, missedLimit: 5, takeover: null, peer: { url: null, reachable: false, role: null, active: null, lastCycleAt: null, hostIdHash: null, takeoverValid: false, error: null, checkedAt: null } } as never, hostIdHash: "h", cluster: "devnet", paused: false, startedAt: 0, feeds: [], snapshot: null, programs: [] });
+    assert.deepEqual(ops.pairs?.map((p) => p.pairId), ["pitwin-vs-balwin-espn-team-nfl-pit-23-wi", "pitwin-vs-balwin-3", "aaa-vs-bbb"]);
+  });
+  test("the pair page's layout calls notFound() for it and the pair API answers 404", () => {
+    const layout = fs.readFileSync("src/app/burnticker/p/[pairId]/layout.tsx", "utf8");
+    assert.match(layout, /if \(!pairPageFound\(\(\) => platform\(\)\.registry, pairId\)\) notFound\(\);/);
+    const route = fs.readFileSync("src/app/api/burnticker/pairs/[pairId]/route.ts", "utf8");
+    assert.match(route, /if \(!pair \|\| !pairIsPublic\(p\.registry, pairId\)\) return NextResponse\.json\(\{ error: `no pair \$\{pairId\}` \}, \{ status: 404/);
+  });
+});

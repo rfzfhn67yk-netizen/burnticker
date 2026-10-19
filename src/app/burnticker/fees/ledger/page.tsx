@@ -1,5 +1,6 @@
 "use client";
 
+import { utcDateTime } from "@/lib/burnticker/utcWords";
 import { EmptyState } from "../../_components/EmptyState";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -41,7 +42,7 @@ export default function FeeLedgerPage() {
         <section className={card}>
           <p className="text-xs">{LEDGER_COPY.walletLine} {l.wallet ? <><a className="underline break-all" href={explorer(l.wallet, "address")}><code>{l.wallet}</code></a>.</> : <span className="text-amber-400">not set yet.</span>} It is on {l.cluster}. {l.balanceLamports === null ? "Its balance could not be read." : `Its balance now is ${sol(l.balanceLamports)} SOL.`}</p>
           {l.cluster === "devnet" && <p className="text-xs text-amber-300 mt-1">{LEDGER_COPY.devnetNote}</p>}
-          <p className="text-xs text-neutral-500 mt-1">{l.note}{/[.!?]$/.test(l.note) ? "" : "."} This copy was generated at {l.generatedAt}.{l.served ? ` ${l.served}` : ""}</p>
+          <p className="text-xs text-neutral-500 mt-1">{l.note}{/[.!?]$/.test(l.note) ? "" : "."} This copy was generated on {utcDateTime(l.generatedAt)}.{l.served ? ` ${l.served}` : ""}</p>
           {l.source === "unavailable" && <p className="text-xs text-amber-400 mt-1">{LEDGER_COPY.unavailable}</p>}
         </section>
         <section className={card}>

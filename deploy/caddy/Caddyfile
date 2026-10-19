@@ -189,6 +189,18 @@
 						copy_response
 					}
 				}
+				# A 404 page is never kept by a CDN or a browser (review of A-22, item 4, 2026-10-18). The app's pages carry an edge-cache
+				# header from next.config, and Next cannot tell it apart for a page that answers 404 (an unknown coin or pair, a typo), so a
+				# CDN would keep "not found" for a coin that launches a minute later. Here every 404 from the app gets no-store, its other
+				# headers as the app sent them. deploy/cloudflare/CACHE-RULES.md also sets the 404 status-code TTL to no-store.
+				@upstream_404 status 404
+				handle_response @upstream_404 {
+					copy_response_headers {
+						exclude Cache-Control
+					}
+					header Cache-Control "no-store"
+					copy_response
+				}
 			}
 		}
 	}

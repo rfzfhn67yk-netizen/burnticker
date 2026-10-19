@@ -89,6 +89,21 @@ export const TERMS_SECTIONS: LegalSection[] = [
 export const PRIVACY_TITLE = "Privacy";
 export const PRIVACY_INTRO = "Burnticker has no accounts and keeps as little as it can. This page lists everything the site keeps and where it is kept.";
 
+/**
+ * Prelaunch audit 2026-10-18 A-27: the page named GeckoTerminal, the Solana network and the wallet, and said the web server keeps no
+ * log of visitors' addresses, which is true of this site's own server but not of the Cloudflare proxy in front of it. Every other
+ * service a visitor's browser talks to is named here: Cloudflare (the proxy, and the Web Analytics script it adds to each page),
+ * the Arweave gateways coin images are shown from, and Google Fonts, which only the $DEFICIT page still loads (the app's wallet list
+ * no longer pulls a Google font: _components/walletAdapter.css).
+ */
+export const PRIVACY_ORIGIN_LOG_SENTENCE = "This site's own web server keeps no log of visitors' addresses. Cloudflare, which sits in front of it, keeps its own records, as the section \"Other services your browser talks to\" says.";
+export const PRIVACY_THIRD_PARTY_PARAGRAPHS: readonly string[] = [
+  "Every request to burnticker.com passes through Cloudflare, a network company that carries traffic to the site and shields it from attacks. Cloudflare sees your address and the pages you ask for, as any network in that place does, and keeps its own records under its own privacy policy.",
+  "Each page also runs Cloudflare Web Analytics, a small script from static.cloudflareinsights.com that tells Cloudflare a page was viewed and how fast it loaded. The site reads those totals to see which pages people use.",
+  "Coin images are stored on Arweave and shown straight from the Arweave gateway that holds them, such as gateway.irys.xyz or arweave.net, so your browser asks that gateway for each image. It does not tell the gateway which page you were on.",
+  "The $DEFICIT page loads its lettering from Google Fonts (fonts.googleapis.com and fonts.gstatic.com). The rest of the site serves its own fonts and asks Google for nothing.",
+];
+
 export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     id: "browser", heading: "In your browser",
@@ -103,7 +118,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     id: "server", heading: "On the server",
     paragraphs: [
       "The site sets no cookies and asks for no name and no email address. The site holds no accounts and no tokens for anyone.",
-      "The web server keeps no log of visitors' addresses. To limit how often one visitor can call the API, the app counts requests per address in memory. That count is never written down and is gone when the app restarts.",
+      PRIVACY_ORIGIN_LOG_SENTENCE,
+      "To limit how often one visitor can call the API, the app counts requests per address in memory. That count is never written down and is gone when the app restarts.",
       "When a search on the launch page finds nothing, or finds cards and none is used, the site keeps the search words and the hour, without an address, an id or a cookie. This shows which results people look for and cannot find.",
     ],
   },
@@ -118,6 +134,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     id: "others", heading: "Other services your browser talks to",
     paragraphs: [
+      ...PRIVACY_THIRD_PARTY_PARAGRAPHS,
       "The receipt checker reads the Solana network and each source's own published data straight from your browser. A graduated coin's page shows a chart from GeckoTerminal, loaded from its site. Your wallet talks to the Solana network through the wallet itself. Each of these services has its own privacy rules.",
     ],
   },

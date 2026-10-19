@@ -74,26 +74,26 @@ export const SEARCH = { label: "Search coins", placeholder: "Search coins", href
 
 /** The hero, one line and one subline (review item 7). */
 /** Owner, 2026-10-14: a kicker above the title. Most coins end on a date or a result; $DEFICIT is the one with no end, and its card says so. */
-/**
- * Prelaunch audit 2026-10-16 F-14: the owner's kicker stays, and `note` qualifies it under the subline, since a perpetual coin's page says
- * "This coin has no end date and does not retire." (describe.ts PERPETUAL_SENTENCE). The smaller honest change: one short plain sentence
- * here (four words: the home stays inside its 880-word first screen, test/burntickerHome.test.ts).
- */
-export const HERO = { kicker: "Memecoins with an expiration date.", title: "Memecoins that burn on real-world results.", sub: "Every burn leaves a receipt.", note: "Some coins never end." };
+/** Owner decision 2026-10-18: the kicker and the title stay as they are, with no qualifying note under the subline. */
+export const HERO = { kicker: "Memecoins with an expiration date.", title: "Memecoins that burn on real-world results.", sub: "Every burn leaves a receipt." };
 
 /**
- * TWO PATHS ON ARRIVAL (website-14, ChatGPT product idea 1): explore or create, one sentence each on what happens next. "Create a coin"
+ * TWO PATHS ON ARRIVAL (website-14, ChatGPT product idea 1): explore or create, one sentence each on what happens next. "Launch a coin"
  * opens the closed-launches dialog while launches are closed (the shell script's data-launch-button). Plain words, lint-clean.
  */
 export const TWO_PATHS = [
   { id: "explore", label: "Explore coins", href: "/burnticker", text: "See every coin, its rule and its receipts, and follow coins in this browser without a wallet." },
-  { id: "create", label: "Create a coin", href: "/burnticker/launch", text: "Pick a public result and lock one rule, and the launch page shows every detail before your wallet signs anything." },
+  // prelaunch audit 2026-10-18 (optional polish): the same label as the header's launch button, and it never changes once the site
+  // launch record is read; the status line under it says whether launches are open
+  { id: "create", label: LAUNCH_LABELS.button, href: "/burnticker/launch", text: "Pick a public result, lock one rule, then review every detail." },
 ];
 /**
- * The create path while creator launches are closed (audit 10 item 23, 2026-10-13): the hero says "Preview a coin launch" and prints the
- * site launch record's own sentence beside it (launchAvailability.ts SiteLaunchState.sentence), never typed here. Only a record that can
- * sign (`canSign`: open, freshly read, hosted signing complete) turns it back into "Create a coin". The static home runs createPathFor in
- * the browser on GET /api/burnticker/home → launch; before that read lands it shows the closed label with the record's loading sentence.
+ * The create path and its status line (audit 10 item 23, 2026-10-13; prelaunch audit 2026-10-18 optional polish). The label and the
+ * sentence under it stay the same whatever the site launch record says, so nothing on the button changes when the read lands. The
+ * status line under the button carries the record's own sentence (launchAvailability.ts SiteLaunchState.sentence, never typed here):
+ * while it loads, the record's loading sentence; while launches are closed or the record is unreadable, that sentence and that the
+ * launch page still walks through a launch with nothing signed; once a record can sign (`canSign`), its open sentence. The static home
+ * runs createPathFor in the browser on GET /api/burnticker/home, so the status line is the one part of the path that changes.
  */
 export const CREATE_PREVIEW = { label: "Preview a coin launch", text: "Walk through a launch and its review, with nothing signed." };
 /**
@@ -103,8 +103,8 @@ export const CREATE_PREVIEW = { label: "Preview a coin launch", text: "Walk thro
 export function createPathFor(launch) {
   const open = !!(launch && launch.canSign === true);
   const create = TWO_PATHS[1];
-  if (open) return { label: create.label, text: create.text, status: null, open: true };
-  return { label: CREATE_PREVIEW.label, text: CREATE_PREVIEW.text, status: launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : LAUNCH_CLOSED.unread, open: false };
+  const said = launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : null;
+  return { label: create.label, text: create.text, status: open ? said : (said || LAUNCH_CLOSED.unread) + " " + CREATE_PREVIEW.text, open: open };
 }
 /** The plain way in to the evidence, under the two paths: the devnet receipt walked through step by step. */
 export const WALKTHROUGH_LINK = { label: "Watch how a burn works", href: "/burnticker/how-a-burn-works", text: "A real devnet burn, taken apart step by step." };
@@ -249,7 +249,7 @@ export function shellHeaderHtml(o = {}) {
     `    <form class="sh-search" role="search" action="${origin}${SEARCH.href}" method="get"><label class="sh-sr" for="sh-q">${SEARCH.label}</label><input id="sh-q" name="q" type="search" placeholder="${SEARCH.placeholder}" autocomplete="off"></form>`,
     `    <div class="sh-actions">`,
     `      <a class="sh-launch" href="${origin}/burnticker/launch" data-launch-button>${LAUNCH_LABELS.button}</a>`,
-    `      <a class="sh-wallet" href="${origin}${WALLET.href}" title="${esc(WALLET.note)}" data-wallet-button>${WALLET.label}<span class="sh-sr">. ${esc(WALLET.note)}</span></a>`,
+    `      <a class="sh-wallet" href="${origin}${WALLET.href}" title="${esc(WALLET.note)}" data-wallet-button>${WALLET.label}</a>`,
     `      <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>`,
     `      <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>`,
     `        <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">`,
@@ -428,8 +428,11 @@ export function shellScript(o = {}) {
   var m = document.getElementById("menu"); if (!m) return;
   var sum = m.querySelector("summary");
   function links() { return Array.prototype.slice.call(m.querySelectorAll(".sh-menu-links a[href]")); }
-  m.addEventListener("toggle", function () { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
-  sum.setAttribute("aria-expanded", "false");
+  // prelaunch audit 2026-10-18 A-29: aria-expanded follows the menu's real state, on the toggle event and right after each press
+  function sync() { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); }
+  m.addEventListener("toggle", function () { sync(); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
+  sum.addEventListener("click", function () { setTimeout(sync, 0); });
+  sync();
   document.addEventListener("keydown", function (e) {
     if (!m.open) return;
     if (e.key === "Escape") { e.preventDefault(); m.open = false; sum.focus(); return; }

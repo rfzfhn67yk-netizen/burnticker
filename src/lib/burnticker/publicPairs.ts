@@ -28,6 +28,21 @@ export function publicPairs(registry: PairSource): PublicPair[] {
 export const pairLifecycleLine = (p: PublicPair): string | null => (p.lifecycle === "launched" ? null : `Only $${p.launchedTicker} launched. The other coin of this pair has not launched on Burnticker.`);
 /** Review follow-up 3: the pair page's line for a pair with no launched side (the page stays reachable by its address). */
 export const PAIR_NOT_LAUNCHED_LINE = "Neither coin of this pair has launched on Burnticker.";
+/**
+ * Prelaunch audit 2026-10-18 A-25: is this pair's page public? True when at least one side launched (the rule every public pair list
+ * uses). A pair with no launched side (an abandoned draft whose tickers a live pair now holds) answers 404 on its page and its API, and
+ * the status document leaves it out. False for an id the registry does not have.
+ */
+export function pairIsPublic(registry: PairSource & { pair?(pairId: string): PairRow | null }, pairId: string): boolean {
+  const pr = registry.pair ? registry.pair(pairId) : registry.pairs().find((x) => x.pairId === pairId);
+  return !!pr && (sideLaunched(registry.token(pr.mintA)) || sideLaunched(registry.token(pr.mintB)));
+}
+/** The pair page's own answer (A-25): found when the pair is public; an unreadable registry keeps the page (the client says so). */
+export function pairPageFound(open: () => PairSource, pairId: string): boolean {
+  let r: PairSource;
+  try { r = open(); } catch { return true; }
+  try { return pairIsPublic(r, pairId); } catch { return true; }
+}
 /** The lifecycle line for one pair id: null when both coins launched. */
 export function pairLifecycle(registry: PairSource, pairId: string): string | null {
   const pp = publicPairs(registry).find((x) => x.pairId === pairId);

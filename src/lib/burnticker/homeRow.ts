@@ -1,6 +1,8 @@
 import type { HomeCoin } from "@/lib/burnticker/home";
 import type { TokenStatusJson, ReceiptJson } from "@/lib/burnticker/tokenPage";
 import { eventsFromStatus } from "@/lib/burnticker/activity";
+import { onlyPoolHolders } from "@/lib/burnticker/cardView";
+import { coinStatusFactsOf } from "@/lib/burnticker/coinStatus";
 import { readinessFromStatus } from "@/lib/burnticker/readiness";
 import { upcomingFromStatus, type UpcomingRow } from "@/lib/burnticker/upcoming";
 import type { FeaturedInput } from "@/lib/burnticker/featuredSlots";
@@ -18,6 +20,7 @@ export function homeCoinOf(s: TokenStatusJson): HomeCoin {
     ticker: s.ticker, mint: s.mint, burns: s.burned.count, burned: s.burned.total, pctOfSupply: s.burned.pctOfSupply, lastBurnAt: s.burned.lastAt ?? null,
     launchedAt: s.launchedAt ?? null, phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null,
     raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null, marketCap: c?.marketCap ?? null, holders: s.market?.holders.count ?? null,
+    holdersOnlyPools: onlyPoolHolders(s.market?.holders.count ?? null, s.market?.holders.top10 ?? null),
   };
 }
 
@@ -26,7 +29,7 @@ export function homeRowOf(status: TokenStatusJson, receipts: ReceiptJson[], key:
   const latest = receipts.filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
   const readiness = readinessFromStatus(status, receipts);
   return {
-    coin: { ...homeCoinOf(status), cluster: status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(status, receipts, key) },
+    coin: { ...homeCoinOf(status), cluster: status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(status, receipts, key), statusFacts: coinStatusFactsOf(status, receipts) },
     slot: { ticker: status.ticker, group: status.cluster === "mainnet" && status.status !== "draft" ? "public" : "test", burns: receipts.filter((r) => r.status === "confirmed").map((r) => ({ settledAt: r.settledAt })), createdAt: status.launchedAt ?? null, poolRegistered: ["awaiting-event", "below-floor", "deferred", "burned"].includes(readiness.state) },
     upcoming: upcomingFromStatus(status, receipts, key, mint),
   };

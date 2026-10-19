@@ -8,6 +8,7 @@ import { FooterSwitch } from "@/app/burnticker/_components/FooterSwitch";
 import { TabBar } from "@/app/burnticker/_components/TabBar";
 // Runs before paint: a theme the visitor picked (header switch, shared with the static pages) wins; otherwise the OS preference decides.
 import { THEME_BOOT } from "@/app/burnticker/_components/theme";
+import { ThemeSync } from "@/app/burnticker/_components/ThemeSync";
 import { hostCluster } from "@/lib/burnticker/launchAvailability";
 import { META_TITLE as TITLE, metaDescription } from "@/lib/burnticker/siteMeta";
 import { FEED_COPY, feedHref } from "@/lib/burnticker/feeds";
@@ -31,8 +32,8 @@ export async function generateMetadata(): Promise<Metadata> {
     description,
     applicationName: "Burnticker",
     icons: { icon: [{ url: "/burnticker/brand/favicon.png", type: "image/png", sizes: "32x32" }], apple: "/burnticker/brand/apple-touch-icon.png" },
-    openGraph: { type: "website", siteName: "Burnticker", title: TITLE, description, url: "/burnticker", images: [{ url: "/burnticker/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
-    twitter: { card: "summary_large_image", site: "@BurnTicker", title: TITLE, description, images: ["/burnticker/brand/og.png"] },
+    openGraph: { type: "website", siteName: "Burnticker", title: TITLE, description, url: "/burnticker", images: [{ url: "https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+    twitter: { card: "summary_large_image", site: "@BurnTicker", title: TITLE, description, images: ["https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg"] },
     alternates: { types: {
       "application/rss+xml": [{ url: feedHref("receipts", "rss"), title: FEED_COPY.receiptsTitle }, { url: feedHref("next-results", "rss"), title: FEED_COPY.nextTitle }],
       "application/feed+json": [{ url: feedHref("receipts", "json"), title: FEED_COPY.receiptsTitle }, { url: feedHref("next-results", "json"), title: FEED_COPY.nextTitle }],
@@ -63,6 +64,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
       <body className="bt-body">
+        {/* A-24 (2026-10-18): a 404 is built in the browser from Next's bare error document, where THEME_BOOT never ran */}
+        <ThemeSync />
         <a className="bt-skip" href="#bt-content">Skip to content</a>
         {/* the update strip (deploy-burnticker-host.sh writes /deploying.json for the length of a deploy) */}
         <DeployNotice />

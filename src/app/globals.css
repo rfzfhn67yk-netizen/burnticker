@@ -65,6 +65,9 @@
   /* audit 7 item 19: amber 300 is the launch preview banner's text; left at Tailwind's own shade it read 1.25:1 on paper */
   --color-amber-300: #7a4a00;
   --color-red-400: #b42318; --color-amber-400: #8f5400; --color-amber-200: #6f4200; --color-amber-900: #f3e2b8; --color-emerald-400: #1d7346;
+  /* prelaunch audit 2026-10-18 (accessibility pass): the other accent shades the pages print as text, re-inked for paper; left at
+     Tailwind's own pale shades they read 1.2:1 to 1.4:1 here (test/burntickerPolish1018.test.ts measures every text-<accent> class) */
+  --color-emerald-300: #1d7346; --color-emerald-200: #1a6a40; --color-sky-300: #1f5f8b; --color-red-200: #a0201a; --color-indigo-300: #3b4fc4;
 }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -250,10 +253,22 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-card-link:hover .bt-card-name { text-decoration: underline; }
 .bt-card-ticker { font-family: var(--font-mono); font-size: .9rem; color: var(--bt-dim); }
 .bt-card-rows { margin: 12px 0 0; display: grid; gap: 7px; font-size: .84rem; }
-.bt-card-rows > div { display: grid; grid-template-columns: 6.2rem 1fr; gap: 8px; }
+.bt-card-rows > div { display: grid; grid-template-columns: 6.2rem minmax(0, 1fr); gap: 8px; }
 .bt-card-rows dt { font: 700 .68rem/1.6 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-muted); }
 .bt-card-rows dd { margin: 0; min-width: 0; color: var(--bt-ink); }
 .bt-card-foot { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* coin card status (2026-10-18): the status sentence and the one number stay in view; the rows sit behind "Details". Nothing on the
+   card may widen it past a 375 px phone: long names, tickers and numbers wrap. */
+.bt-coin-card { min-width: 0; overflow-wrap: anywhere; }
+.bt-card-status { margin: 10px 0 0; font-size: var(--bt-fs-sm); line-height: 1.4; color: var(--bt-ink); }
+.bt-card-stat { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: .84rem; }
+.bt-card-stat-label { font: 700 .68rem/1.6 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-muted); }
+.bt-card-stat-value { min-width: 0; color: var(--bt-ink); font-variant-numeric: tabular-nums; }
+.bt-card-details { margin-top: 10px; border-top: 1px dashed var(--bt-line); padding-top: 8px; }
+.bt-card-details > summary { cursor: pointer; font: 700 .68rem/1.6 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-dim); min-height: 24px; }
+.bt-card-details > summary:hover { color: var(--bt-ink); }
+.bt-card-details > summary:focus-visible { outline: 2px solid var(--bt-focus); outline-offset: 2px; }
+@media (max-width: 400px) { .bt-card-rows > div { grid-template-columns: 5.4rem minmax(0, 1fr); } }
 .bt-ghost-btn.is-disabled { opacity: .5; cursor: not-allowed; }
 .bt-tag-featured { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
 .bt-tag-rehearsal { color: var(--bt-scorch); border-color: color-mix(in srgb, var(--bt-scorch) 60%, transparent); }

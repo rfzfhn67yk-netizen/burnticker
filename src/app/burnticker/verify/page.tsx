@@ -41,7 +41,7 @@ export default function VerifyMintPage() {
         <input id="mint" value={mint} onChange={(e) => setMint(e.target.value)} placeholder="mint address (base58)" className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs" autoComplete="off" spellCheck={false} />
         <button type="submit" className="bt-launch-btn" disabled={busy}>{busy ? "checking…" : "Check"}</button>
       </form>
-      {err && <p className="text-red-400 text-xs">{err}</p>}
+      <p className="text-red-400 text-xs empty:hidden" aria-live="polite">{err ?? ""}</p>
       {v && (
         <section className={`rounded-lg border p-4 space-y-2 ${good ? "border-emerald-700" : unknown ? "border-amber-700" : "border-neutral-700"} bg-neutral-900`} aria-live="polite" data-verdict={v.verdict}>
           <h2 className={`text-lg font-semibold ${good ? "text-emerald-400" : unknown ? "text-amber-300" : ""}`}>{v.headline}</h2>
@@ -65,7 +65,7 @@ export default function VerifyMintPage() {
           </dl>}
           <ul className="space-y-1 text-xs">{v.checks.map((c) => <li key={c.id}><span className={c.ok === true ? "text-emerald-400" : c.ok === false ? "text-red-400" : "text-neutral-500"}>{c.ok === true ? "✓" : c.ok === false ? "✗" : "–"}</span> {c.detail}</li>)}</ul>
           <p className="text-xs text-neutral-500 break-all">Mint {v.mint}.{v.verdict === "invalid" ? "" : ` The catalogue was read on ${v.cluster}.`}</p>
-          <p className="text-xs">{v.links.page && <>{v.links.page.startsWith("/burnticker") ? <Link className="underline" href={v.links.page}>coin page →</Link> : <a className="underline" href={v.links.page}>coin page →</a>} · </>}<Link className="underline" href={v.links.verifier}>verify a receipt transaction →</Link></p>
+          <p className="text-xs">{v.links.page && <>{v.links.page.startsWith("/burnticker") ? <Link className="underline" href={v.links.page}>Open the coin page</Link> : <a className="underline" href={v.links.page}>Open the coin page</a>} · </>}<Link className="underline" href={v.links.verifier}>Check a receipt transaction</Link></p>
         </section>
       )}
       <p className="text-xs text-neutral-500">The same answer is available as JSON at <code>/api/burnticker/v1/verify-mint/&lt;mint&gt;</code>.</p>

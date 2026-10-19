@@ -271,3 +271,29 @@ describe("F02: swap-web-build.sh smokes the staged build and swaps back on failu
     assert.match(await outcome("npm ERR! code E401\n"), /before the swap .*Nothing was swapped/);
   });
 });
+
+describe("review of A-22 item 3: the running build's static chunks stay servable from the new build", () => {
+  const put = (d: string, f: string, body: string) => { fs.mkdirSync(path.dirname(path.join(d, f)), { recursive: true }); fs.writeFileSync(path.join(d, f), body); };
+  test("files only the old build has are carried, the new build's files are never overwritten, and only one build back is carried", async () => {
+    const d = host({ newMode: "ok" });
+    put(d, ".next/static/chunks/old-abc.js", "old chunk"); put(d, ".next/static/old-build-1/_buildManifest.js", "old manifest");
+    put(d, ".next/static/chunks/shared.js", "old copy"); put(d, ".next-staging/static/chunks/shared.js", "new copy");
+    put(d, ".next-staging/static/chunks/new-def.js", "new chunk");
+    const r = await run(10);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /static carry: kept 2 static files of the running build old-build-1/);
+    assert.equal(fs.readFileSync(path.join(d, ".next/static/chunks/old-abc.js"), "utf8"), "old chunk", "before: a cached page naming it got a 404 chunk");
+    assert.equal(fs.readFileSync(path.join(d, ".next/static/old-build-1/_buildManifest.js"), "utf8"), "old manifest");
+    assert.equal(fs.readFileSync(path.join(d, ".next/static/chunks/shared.js"), "utf8"), "new copy");
+    assert.deepEqual(fs.readFileSync(path.join(d, ".next/static-own.txt"), "utf8").trim().split("\n").sort(), ["static/chunks/new-def.js", "static/chunks/shared.js"]);
+    // the next deploy carries the new build's own files only, not the ones carried into it
+    fs.rmSync(path.join(d, ".next-old"), { recursive: true, force: true });
+    fs.mkdirSync(path.join(d, ".next-staging"));
+    fs.writeFileSync(path.join(d, ".next-staging", "BUILD_ID"), "third-build-3"); fs.writeFileSync(path.join(d, ".next-staging", "MODE"), "ok");
+    put(d, ".next-staging/static/chunks/third.js", "third");
+    const r2 = await run(10);
+    assert.equal(r2.code, 0, r2.out);
+    assert.ok(fs.existsSync(path.join(d, ".next/static/chunks/new-def.js")));
+    assert.ok(!fs.existsSync(path.join(d, ".next/static/chunks/old-abc.js")), "two builds back is not carried: nothing piles up");
+  });
+});

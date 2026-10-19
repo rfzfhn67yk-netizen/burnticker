@@ -1,5 +1,6 @@
 "use client";
 
+import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { StatedJson } from "@/lib/burnticker/pageTypes";
@@ -70,6 +71,8 @@ import { EndChoicePicker } from "./EndChoicePicker";
 import { SimulatorDisclosure } from "./SimulatorDisclosure";
 import { END_CHOICE_DEFAULT, endChoiceModel, withEndChoice, type EndChoice } from "@/lib/burnticker/guidedLaunch";
 import type { SinkCoin } from "@/lib/burnticker/endSinks";
+import { RereadCache } from "@/lib/burnticker/rereadCache";
+import { reviewRequestDue } from "@/lib/burnticker/launchReviewSync";
 import { EndSection, FollowStep, GuidedTop, PatternStep, RivalryKindStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import { creatorLinks } from "@/lib/burnticker/creatorProfile";
@@ -184,6 +187,13 @@ const getJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
   // sources-6 (QA 9 #31): a refusal the API states (a 4xx with its own sentence) is shown as is
   if (!r.ok) throw new ReadError(r.status === 429 ? "too many requests for a moment — try again shortly" : r.status >= 400 && r.status < 500 && j?.error ? j.error : "the source did not answer just now", `HTTP ${r.status}${j?.error ? `: ${j.error}` : ""}`);
   return j as T;
+};
+/** A-22 (2026-10-18): the end-sink list per network, read at most once a minute (rereadCache.ts); a failed read is asked again next time. */
+const sinksReads = new Map<string, RereadCache<{ sinks: SinkCoin[] }>>();
+const sinksFor = (net: string, read: () => Promise<{ sinks: SinkCoin[] }>): Promise<{ sinks: SinkCoin[] }> => {
+  let c = sinksReads.get(net);
+  if (!c) { c = new RereadCache<{ sinks: SinkCoin[] }>(); sinksReads.set(net, c); }
+  return c.get(read);
 };
 /**
  * sources-6 (QA 9 #40): the values the threshold selects show for the series on screen: the creator's own choice, else the one value set
@@ -746,7 +756,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   useEffect(() => {
     if ((step !== "review" && guide.phase !== "name" && guide.phase !== "review") || !endPickable) return;
     let live = true;
-    getJson<{ sinks: SinkCoin[] }>(`${V1}/sinks?network=${realNet}`).then((j) => { if (live) setSinks(j.sinks ?? []); }).catch(() => { if (live) setSinks([]); });
+    // A-22 (2026-10-18): one read per network a minute, shared by every step that shows the picker (it was read five times per review)
+    sinksFor(realNet, () => getJson<{ sinks: SinkCoin[] }>(`${V1}/sinks?network=${realNet}`)).then((j) => { if (live) setSinks(j.sinks ?? []); }).catch(() => { if (live) setSinks([]); });
     return () => { live = false; };
   }, [step, guide.phase, endPickable, realNet]);
   // website-21: a rivalry series pair is described and ended as the bundle builds it (winner takes the burn, the pair-winner end sink)
@@ -931,6 +942,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // L06: the read-only review payload (POST /v1/launch/review) for the pre-wallet summary — the server's numbers, debounced. A6: every
   // request carries the draft's revision; an answer for an older revision or an older request is dropped (launchReviewSync.ts)
   const reviewSeq = useRef(0);
+  const reviewAsked = useRef<{ rev: string; retry: number } | null>(null);
   // item 253 (launch integrity): the whole profile, image included, is part of the draft's revision, so a prepare answer for an older
   // profile is set aside
   const reviewKey = draftRevision([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB, pairVenue] : null, srcWarnings, textCtx, raiseSol, profileRevision(profile), pairOn ? profileRevision(profileB) : ""]);
@@ -947,9 +959,13 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const launchFetch = keyRotatingFetch((u, init) => fetch(u, init), rotatePrepareKey);
   useEffect(() => {
     if (step !== "review" || !rule || gate.kind === "loading") return;
+    // A-22 (2026-10-18): a draft already asked about (same revision, same retry round) is not asked again
+    const retryN = reviewRetry.rev === reviewKey ? reviewRetry.n : 0;
+    if (!reviewRequestDue(reviewAsked.current, reviewKey, retryN)) return;
     const seq = ++reviewSeq.current, rev = reviewKey;
     setReviewSlot((x) => reviewRequested(x, rev, seq));
     const t = setTimeout(() => {
+      reviewAsked.current = { rev, retry: retryN };
       getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: renderWarnings(srcWarnings, ticker.toUpperCase(), tickerB.toUpperCase()), raiseSol, creatorDescription: profile.description, links: creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links, ...(pairOn && ruleB ? (settledPick
             // website-23: a settled-event pair is reviewed as the one linked pair it launches as: side B in `pair` with the other market and
             // the race, or the other team; never a `companion`
@@ -961,6 +977,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             : { companion: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, rule: ruleB } }) : {}) }) })
         .then((j) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
         .catch((e) => {
+          reviewAsked.current = null;   // a failed read may be asked again (a later visit to this step, or the retry below)
           // website-22 (QA 9 item 41): a busy or briefly unreachable server is asked again after a pause (2, 4, 8 s) for this draft only
           const n = reviewRetry.rev === rev ? reviewRetry.n : 0, again = transientRead(e) && n < RETRY_MAX;
           setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: again ? RETRYING_LINE : `${(e as Error).message} (${detailOf(e)})` }));
@@ -1420,10 +1437,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                   {c.note && <p className="mt-2 text-xs text-amber-300">{c.note}</p>}
                   {c.existing && c.existing.length > 0 && <DuplicateNotice existing={c.existing} />}
                   {cardBlocked(c) && <p className="mt-2 text-xs text-amber-300" data-type-blocked>{cardBlocked(c)}</p>}
-                  {c.refused.length > 0 ? <p className="mt-2 text-xs text-red-400">{refusedLine(c.refused)}</p>
-                    : c.venue === "tile" ? (pairsBlocked ? null : c.href ? <Link className="mt-2 inline-block underline text-amber-300 text-xs" href={c.href}>{c.id.startsWith("tile:record-close") ? "Open a coin's record close" : "Open Coin vs Coin"} →</Link> : <p className="mt-2 text-xs text-neutral-500">Coin vs Coin — not built yet</p>)
+                  {c.refused.length > 0 ? <p className="mt-2 text-xs text-red-400" data-refused>{refusedLine(c.refused)}</p>
+                    : c.venue === "tile" ? (pairsBlocked ? null : c.href ? <Link className="mt-2 inline-block underline text-amber-300 text-xs" href={c.href}>{c.id.startsWith("tile:record-close") ? "Open a coin's record close" : "Open Coin vs Coin"}</Link> : <p className="mt-2 text-xs text-neutral-500">Coin vs Coin — not built yet</p>)
                     : c.picker ? <div className="mt-2 space-y-1">
-                      <button data-decision="what" data-first-result={ci === firstActionable ? "" : undefined} className="rounded bg-amber-400 px-3 py-1 text-xs font-medium text-neutral-950" aria-expanded={outPick?.id === c.id} onClick={() => setOutPick(outPick?.id === c.id ? null : { id: c.id, q: "" })}>{outPick?.id === c.id ? "Close the list" : `Pick a ${c.picker.noun === "outcome" ? "name" : c.picker.noun} →`}</button>
+                      <button data-decision="what" data-first-result={ci === firstActionable ? "" : undefined} className="rounded bg-amber-400 px-3 py-1 text-xs font-medium text-neutral-950" aria-expanded={outPick?.id === c.id} onClick={() => setOutPick(outPick?.id === c.id ? null : { id: c.id, q: "" })}>{outPick?.id === c.id ? "Close the list" : `Pick a ${c.picker.noun === "outcome" ? "name" : c.picker.noun}`}</button>
                       {outPick?.id === c.id && <div className="rounded border border-neutral-700 p-2" aria-label="outcome picker">
                         <label className="block text-xs text-neutral-400">Find a {c.picker.noun === "outcome" ? "name" : c.picker.noun}<FieldHelp id="outcome-search" /><input data-decision="what" data-help="outcome-search" autoFocus className={input + " mt-1"} value={outPick.q} onChange={(e) => setOutPick({ id: c.id, q: e.target.value, shown: PICKER_PAGE })} placeholder={`type part of the ${c.picker.noun === "outcome" ? "name" : c.picker.noun}'s name`} /></label>
                         {/* sources-6 (audit 10 #21): long outcome lists filter and page (polySearch.ts pickerPage) */}{(() => { const pg = pickerPage(c.picker.outcomes, outPick.q, outPick.shown); return (<><ul className="mt-1 max-h-56 overflow-y-auto divide-y divide-neutral-800">{pg.outcomes.map((o) => (
@@ -1432,7 +1449,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                         <p className="mt-1 text-[11px] text-neutral-500">Each name is its own yes/no market; your coin burns once if the one you pick wins.</p>
                       </div>}
                     </div>
-                    : (c.rule || c.matchup) ? <button data-decision="what" data-first-result={ci === firstActionable ? "" : undefined} disabled={!!cardBlocked(c)} title={cardBlocked(c) ?? undefined} className="mt-2 rounded bg-amber-400 px-3 py-1 text-xs font-medium text-neutral-950 disabled:opacity-40" onClick={() => applySuggestion(c, wi)}>Use this →</button>
+                    : (c.rule || c.matchup) ? <button data-decision="what" data-first-result={ci === firstActionable ? "" : undefined} disabled={!!cardBlocked(c)} title={cardBlocked(c) ?? undefined} className="mt-2 rounded bg-amber-400 px-3 py-1 text-xs font-medium text-neutral-950 disabled:opacity-40" onClick={() => applySuggestion(c, wi)}>Use this</button>
                     : <button data-decision="what" className="mt-2 rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-500" disabled>Use this</button>}
                 </li>
               </Fragment>); })}
@@ -1632,9 +1649,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                 <div key="events" className="space-y-2">{found.events.length > 0 && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Games and events{chip("kalshi")}</h3>}{found.events.map((e) => (
                   <div key={e.eventTicker} className="rounded border border-neutral-800 p-2">
                     <div className="text-sm font-medium">{e.title} <span className="text-xs text-neutral-500">{e.subTitle ?? ""} · result ~{denver(e.expectedAt)}</span></div>
-                    {e.refused.length > 0 ? <p className="text-xs text-red-400">{refusedLine(e.refused)}</p> : <>
-                      {e.pair && (pairsBlocked ? <p className="mt-1 text-xs text-amber-300" data-pairs-blocked>{pairsBlocked}</p> : <button data-decision="what" className="mt-1 text-xs underline text-amber-300" onClick={() => { markOrigin("exact"); chooseGame(e); }}>Make a matchup pair from this game →</button>)}
-                      <ul className="mt-1 text-xs text-neutral-400 space-y-0.5">{e.markets.slice(0, 12).map((m) => <li key={m.ticker} className="flex items-center justify-between gap-2"><span><code>{m.suffix}</code> {m.label}</span><button data-decision="what" className="underline" onClick={() => { markOrigin("exact"); setPick({ oracle: "kalshi", series: null, market: m.ticker, title: `${e.title} — ${m.label} (resolves once)` }); setKind("binary"); setOnYes(DEFAULT_SHARE.oneShot); next(); }}>burn on this market →</button></li>)}</ul>
+                    {e.refused.length > 0 ? <p className="text-xs text-red-400" data-refused>{refusedLine(e.refused)}</p> : <>
+                      {e.pair && (pairsBlocked ? <p className="mt-1 text-xs text-amber-300" data-pairs-blocked>{pairsBlocked}</p> : <button data-decision="what" className="mt-1 text-xs underline text-amber-300" onClick={() => { markOrigin("exact"); chooseGame(e); }}>Make a matchup pair from this game</button>)}
+                      <ul className="mt-1 text-xs text-neutral-400 space-y-0.5">{e.markets.slice(0, 12).map((m) => <li key={m.ticker} className="flex items-center justify-between gap-2"><span><code>{m.suffix}</code> {m.label}</span><button data-decision="what" className="underline" onClick={() => { markOrigin("exact"); setPick({ oracle: "kalshi", series: null, market: m.ticker, title: `${e.title} — ${m.label} (resolves once)` }); setKind("binary"); setOnYes(DEFAULT_SHARE.oneShot); next(); }}>burn on this market</button></li>)}</ul>
                     </>}
                   </div>
                 ))}</div>
@@ -1642,7 +1659,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               const ser = (
                 <div key="series" className="space-y-1">{found.results.length > 0 && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Recurring series (every future market){chip("kalshi")}</h3>}{found.results.map((h) => (
                   <div key={h.ticker} className="flex items-start justify-between gap-2 py-1"><div><div className="text-sm"><code>{h.ticker}</code> {h.title}</div><div className="text-xs text-neutral-500">{h.category} · {h.frequency ?? "—"}{h.refused.length ? ` · ${refusedLine(h.refused)}` : ""}</div></div>
-                    {h.refused.length === 0 && <button data-decision="what" className="text-xs underline" onClick={() => { markOrigin("exact"); setPick({ oracle: "kalshi", series: h.ticker, market: null, title: h.title }); next(); }}>every market →</button>}</div>
+                    {h.refused.length === 0 && <button data-decision="what" className="text-xs underline" onClick={() => { markOrigin("exact"); setPick({ oracle: "kalshi", series: h.ticker, market: null, title: h.title }); next(); }}>every market</button>}</div>
                 ))}</div>
               );
               const pm = polyFound;
@@ -1651,15 +1668,15 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                   {(pm.events.length > 0 || pm.markets.length > 0) && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Events and markets{chip("polymarket")}</h3>}
                   {!polyClosingSoon && (pm.hiddenClosingSoon ?? 0) > 0 && <p className="text-xs text-neutral-400" data-closing-soon>{pm.hiddenClosingSoon} one-time markets closing within 48 hours are hidden. <button type="button" data-nav className="underline" onClick={() => setPolyClosingSoon(true)}>Show closing soon</button></p>}
                   {pm.closePassedNote && (pm.markets.some((m) => m.closePassed) || pm.events.some((e) => e.closePassed || e.markets.some((m) => m.closePassed))) && <p className="text-xs text-neutral-400" data-close-passed-note>{pm.closePassedNote}</p>}
-                  {pm.markets.map((m) => <div key={m.conditionId} className="flex items-center justify-between gap-2 rounded border border-neutral-800 p-2 text-sm"><span>{m.question} <span className="text-xs text-neutral-500">YES = {m.yes}, NO = {m.no}</span>{m.closePassed && <> {closePassedChip}</>}</span><button data-decision="what" className="text-xs underline disabled:no-underline disabled:opacity-50" disabled={m.closed} onClick={() => pickPoly(m)}>{m.closed ? "closed" : "burn on this market →"}</button></div>)}
+                  {pm.markets.map((m) => <div key={m.conditionId} className="flex items-center justify-between gap-2 rounded border border-neutral-800 p-2 text-sm"><span>{m.question} <span className="text-xs text-neutral-500">YES = {m.yes}, NO = {m.no}</span>{m.closePassed && <> {closePassedChip}</>}</span><button data-decision="what" className="text-xs underline disabled:no-underline disabled:opacity-50" disabled={m.closed} onClick={() => pickPoly(m)}>{m.closed ? "closed" : "burn on this market"}</button></div>)}
                   {pm.events.map((e) => (
                     <div key={e.slug} className="rounded border border-neutral-800 p-2">
                       <div className="text-sm font-medium">{e.title}{chip("polymarket")} <span className="text-xs text-neutral-500">market closes around {denver(e.endDate)}</span>{e.closePassed && <> {closePassedChip}</>}</div>
-                      {e.refused.length > 0 ? <p className="text-xs text-red-400">{refusedLine(e.refused)}</p> : <>
+                      {e.refused.length > 0 ? <p className="text-xs text-red-400" data-refused>{refusedLine(e.refused)}</p> : <>
                         {/* one outcome = one yes/no market (the owner's Best Picture case): pick a name; "every market" is Advanced only */}
                         {/* owner, 2026-10-12 ("difficult to tell which 'burn if this one wins' matched the 76ers, too much dead space in between"): the
                             whole row is the button, lit on hover and focus, so the name and its action read as one line */}
-                        <ul className="mt-1 text-xs text-neutral-400">{(allOut?.slug === e.slug && allOut.markets ? filterOutcomes(allOut.markets, allOut.text, { limit: allOut.limit }).shown : e.markets).map((m) => <li key={m.conditionId}><button type="button" data-decision="what" disabled={m.closed} onClick={() => pickPoly(m)} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800 focus-visible:text-neutral-100 disabled:opacity-50 disabled:hover:bg-transparent"><span className="min-w-0 truncate">{m.outcome ?? m.question}{m.outcome ? null : <span className="text-neutral-500"> (YES = {m.yes}, NO = {m.no})</span>}{m.closePassed && !e.closePassed && <> {closePassedChip}</>}</span><span className="shrink-0 underline group-disabled:no-underline">{m.closed ? "closed" : m.outcome ? "burn if this one wins →" : "burn on this market →"}</span></button></li>)}</ul>
+                        <ul className="mt-1 text-xs text-neutral-400">{(allOut?.slug === e.slug && allOut.markets ? filterOutcomes(allOut.markets, allOut.text, { limit: allOut.limit }).shown : e.markets).map((m) => <li key={m.conditionId}><button type="button" data-decision="what" disabled={m.closed} onClick={() => pickPoly(m)} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800 focus-visible:text-neutral-100 disabled:opacity-50 disabled:hover:bg-transparent"><span className="min-w-0 truncate">{m.outcome ?? m.question}{m.outcome ? null : <span className="text-neutral-500"> (YES = {m.yes}, NO = {m.no})</span>}{m.closePassed && !e.closePassed && <> {closePassedChip}</>}</span><span className="shrink-0 underline group-disabled:no-underline">{m.closed ? "closed" : m.outcome ? "burn if this one wins" : "burn on this market"}</span></button></li>)}</ul>
                         {/* WIRING-AUDIT12 item 13: "Show all N" reads every outcome of the event, then a filter and paging here */}
                         {e.marketCount > e.markets.length && allOut?.slug !== e.slug && <p className="mt-1 text-[11px] text-neutral-500" data-show-all>Showing {e.markets.length} of {e.marketCount}. <button type="button" data-nav className="underline" onClick={() => showAllOutcomes(e)}>Show all {e.marketCount}</button></p>}
                         {allOut?.slug === e.slug && (() => {
@@ -1705,7 +1722,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               {curCat?.guided === "elections" && venues.polymarket && (
                 <div className={card + " space-y-3"} aria-label="Elections">
                   <h3 className="font-medium">Pick a race</h3>
-                  <div className="flex flex-wrap items-center gap-2"><FieldHelp id="race-type" />{etypes.map((t) => <button data-decision="what" key={t.id} aria-pressed={etype === t.id} className={`bt-tab${etype === t.id ? " is-active" : ""}`} onClick={() => { setEtype(t.id); setEstate(null); }}>{t.label} <span className="bt-tab-count">{t.races}</span></button>)}{!etypes.length && (etypesErr ? <span className="text-xs text-red-400">{etypesErr}</span> : <span className="text-xs text-neutral-500">Loading races…</span>)}</div>
+                  <div className="flex flex-wrap items-center gap-2"><FieldHelp id="race-type" />{etypes.map((t) => <button data-decision="what" key={t.id} aria-pressed={etype === t.id} className={`bt-tab${etype === t.id ? " is-active" : ""}`} onClick={() => { setEtype(t.id); setEstate(null); }}>{t.label} <span className="bt-tab-count">{t.races}</span></button>)}<span className="text-xs text-red-400 empty:hidden" aria-live="polite">{!etypes.length && etypesErr ? etypesErr : ""}</span>{!etypes.length && !etypesErr && <span className="text-xs text-neutral-500">Loading races…</span>}</div>
                   {etype && etype !== "control" && <label className="block text-sm">State <FieldHelp id="race-state" /><select data-decision="what" data-help="race-state" aria-label="State" className={input + " inline w-56 ml-1"} value={estate ?? ""} onChange={(e) => setEstate(e.target.value || null)}><option value="">choose a state…</option>{[...estates].sort((x, y) => x.name.localeCompare(y.name)).map((x) => <option key={x.abbr} value={x.abbr}>{x.name} ({x.races})</option>)}</select></label>}
                   {ebusy && <p className="text-xs text-neutral-500">Loading…</p>}
                   {eraces?.length === 0 && <p className="text-xs text-neutral-500">No open race listed here.</p>}
@@ -1713,7 +1730,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     <div key={r.slug} className="rounded border border-neutral-800 p-2 text-sm">
                       <div className="font-medium">{r.title}{r.settlesOn ? <span className="text-xs text-neutral-500"> · settles {humanDay(r.settlesOn)}</span> : null}</div>
                       <div className="text-xs text-neutral-500">Settled by: {r.settlement} — <a className="underline" href={r.sos.url} rel="noopener" target="_blank">{r.sos.name}</a>.</div>
-                      {r.refused.length ? <p className="text-xs text-red-400">{refusedLine(r.refused)}</p> : <ul className="mt-1 space-y-1">{r.outcomes.map((o) => (
+                      {r.refused.length ? <p className="text-xs text-red-400" data-refused>{refusedLine(r.refused)}</p> : <ul className="mt-1 space-y-1">{r.outcomes.map((o) => (
                         <li key={o.conditionId} className="flex flex-wrap items-center justify-between gap-2">
                           <span className="min-w-0"><span className="font-medium">{o.label}</span>{o.mapping && <span className="block text-[11px] text-neutral-400" data-mapping>{o.mapping}</span>}</span>
                           {guide.pairKind === "candidates"
@@ -1724,7 +1741,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                             const tk = sur.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
                             markOrigin("browse"); setSrcWarnings(o.mapping ? [mappingWarning(o.mapping, "A")] : fold(o.question).includes(fold(sur)) ? [] : [partyMarketWarning(o.question, sur)]);
                             setEventInfo({ question: o.question, url: r.url, outcome: `“${o.yes}”`, resolves: r.settlesOn, criteria: r.description, certified: r.settlement.replace(/^.*checked against /, "") });
-                            applyRule(o.rule, { oracle: "polymarket", series: null, market: o.conditionId, title: `${phrase} (resolves once)`, yes: o.yes, no: o.no }, { name: `${sur} Wins`, ticker: tk, how: `${o.settles}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, settlement: `${r.settlement}, ${r.sos.name}` }); }}>Use: {o.label} wins →</button>}
+                            applyRule(o.rule, { oracle: "polymarket", series: null, market: o.conditionId, title: `${phrase} (resolves once)`, yes: o.yes, no: o.no }, { name: `${sur} Wins`, ticker: tk, how: `${o.settles}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, settlement: `${r.settlement}, ${r.sos.name}` }); }}>Use: {o.label} wins</button>}
                         </li>
                       ))}</ul>}
                       {guide.pairKind === "candidates" && !r.refused.length && (r.outcomes.length < 2
@@ -1751,20 +1768,20 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                   <div className="mt-1 text-xs text-neutral-300">{c.example}</div>
                   {c.settlement && <div className="text-xs text-neutral-400" data-source-settlement>{c.settlement}</div>}
                   {c.paramNote && <div className="text-xs text-neutral-500" data-param-note>{c.paramNote}</div>}
-                  {c.outcomes && c.outcomes.length > 0 && <ul className="mt-1 space-y-0.5 text-xs" data-card-outcomes>{c.outcomes.map((o) => <li key={o.market} className="flex justify-between gap-2"><span>{o.question}</span><button type="button" data-decision="what" className="underline text-amber-300" onClick={() => { markOrigin("browse"); setSrcWarnings([]); setShareNotice(null); setPick({ oracle: "polymarket", series: null, market: o.market, title: o.question }); setKind("binary"); setOnYes(DEFAULT_SHARE.oneShot); setFilter(""); next(); }}>burn on this one →</button></li>)}</ul>}
+                  {c.outcomes && c.outcomes.length > 0 && <ul className="mt-1 space-y-0.5 text-xs" data-card-outcomes>{c.outcomes.map((o) => <li key={o.market} className="flex justify-between gap-2"><span>{o.question}</span><button type="button" data-decision="what" className="underline text-amber-300" onClick={() => { markOrigin("browse"); setSrcWarnings([]); setShareNotice(null); setPick({ oracle: "polymarket", series: null, market: o.market, title: o.question }); setKind("binary"); setOnYes(DEFAULT_SHARE.oneShot); setFilter(""); next(); }}>burn on this one</button></li>)}</ul>}
                   {c.next && <div className="text-xs text-neutral-500">{c.next.at ? `${c.next.label} · ${denver(c.next.at)}` : c.next.label}</div>}
-                  {c.refused.length > 0 && <div className="text-xs text-red-400">{refusedLine(c.refused)}</div>}
+                  {c.refused.length > 0 && <div className="text-xs text-red-400" data-refused>{refusedLine(c.refused)}</div>}
                   <div className="mt-2 flex flex-wrap gap-3 text-xs">
-                    {c.configure?.kind === "team" ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => { const lg = c.configure!.kind === "team" ? c.configure!.league : null; begin("team"); setTimeout(() => setLeagueSeries(lg), 0); }}>pick a team →</button>
-                    : c.configure?.kind === "weather" ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => setWx({ metric: c.configure!.kind === "weather" ? c.configure!.metric : "high", station: "DEN", threshold: c.configure!.kind === "weather" && c.configure!.metric === "rain" ? "0.50" : "90" })}>choose a station →</button>
-                    : c.launchable.ok && c.pick.oracle === "polymarket" && !c.pick.market ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" data-pick-outcome onClick={() => { setGuide((g) => ({ follow: g.follow ? "market" : null, phase: g.follow ? "which" : g.phase, pairKind: null })); begin("single"); setQ2(c.title.replace(/\s*\(\d+ markets?\)\s*$/i, "")); }}>pick one outcome →</button>
+                    {c.configure?.kind === "team" ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => { const lg = c.configure!.kind === "team" ? c.configure!.league : null; begin("team"); setTimeout(() => setLeagueSeries(lg), 0); }}>pick a team</button>
+                    : c.configure?.kind === "weather" ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => setWx({ metric: c.configure!.kind === "weather" ? c.configure!.metric : "high", station: "DEN", threshold: c.configure!.kind === "weather" && c.configure!.metric === "rain" ? "0.50" : "90" })}>choose a station</button>
+                    : c.launchable.ok && c.pick.oracle === "polymarket" && !c.pick.market ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" data-pick-outcome onClick={() => { setGuide((g) => ({ follow: g.follow ? "market" : null, phase: g.follow ? "which" : g.phase, pairKind: null })); begin("single"); setQ2(c.title.replace(/\s*\(\d+ markets?\)\s*$/i, "")); }}>pick one outcome</button>
                     : c.launchable.ok ? <button data-decision="what" disabled={cardsBusy} className="underline text-amber-300 disabled:opacity-50" onClick={() => {
                       const src = c.pick.oracle === "catalogue" ? sources.find((x) => x.id === c.pick.series) : undefined;
                       markOrigin("browse"); setSrcWarnings([]); setShareNotice(null);
                       setPick({ ...c.pick, source: src }); setFilter(""); setKind(c.kind);
                       if (c.kind === "scalar" && c.pick.oracle === "kalshi") { setUnit(1); setDirection("up"); setBaseline("previousSettlement"); }
                       next();
-                    }}>use this source →</button> : <span className="text-neutral-500" data-source-unavailable>{/^This one-time event already has its result/.test(c.launchable.why ?? "") ? c.launchable.why : sourceUnavailableLine(c.launchable.why)}{(c.launchable.why || c.diagnostics?.length) && <details className="mt-1"><summary className="cursor-pointer">Details</summary><span className="block">{edgeCase(117)}</span><span className="break-words font-mono">{[c.launchable.why, ...(c.diagnostics ?? [])].filter(Boolean).join(" ")}</span></details>}</span>}
+                    }}>use this source</button> : <span className="text-neutral-500" data-source-unavailable>{/^This one-time event already has its result/.test(c.launchable.why ?? "") ? c.launchable.why : sourceUnavailableLine(c.launchable.why)}{(c.launchable.why || c.diagnostics?.length) && <details className="mt-1"><summary className="cursor-pointer">Details</summary><span className="block">{edgeCase(117)}</span><span className="break-words font-mono">{[c.launchable.why, ...(c.diagnostics ?? [])].filter(Boolean).join(" ")}</span></details>}</span>}
                     {c.venue === "kalshi" && !kalshiOff && <button data-decision="what" className="underline" onClick={() => setDrill(drill === c.pick.series ? null : c.pick.series)}>{drill === c.pick.series ? "hide events" : "next events"}</button>}
                     {c.sourceUrl && <a className="underline text-neutral-400" href={c.sourceUrl} rel="noopener" target="_blank">source ↗</a>}
                   </div>
@@ -1776,7 +1793,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     <div className="mt-2 border-t border-neutral-800 pt-2 text-xs space-y-2">
                       <div><label htmlFor={sid}>Station</label> <FieldHelp id="nws-station" /><select id={sid} data-decision="what" data-help="nws-station" className={input + " inline w-full sm:w-56 sm:ml-1"} value={wx.station} onChange={(e) => setWx({ ...wx, station: e.target.value })}>{STATIONS.map((x) => <option key={x.code} value={x.code}>{stationOptionLabel(x)}</option>)}</select></div>
                       {wx.metric !== "snow" && <div><label htmlFor={tid}>{wx.metric === "high" ? "Burn on days whose high reaches this many °F" : "Burn on days with at least this many inches of rain"}</label> <FieldHelp id="nws-threshold" /><input id={tid} data-decision="what" data-help="nws-threshold" inputMode="decimal" aria-invalid={!!thrErr} aria-describedby={thrErr ? `${tid}-err` : undefined} className={input + " inline w-24 ml-1"} value={wx.threshold} onChange={(e) => setWx({ ...wx, threshold: e.target.value })} />{thrErr && <span id={`${tid}-err`} className="block text-red-400">{thrErr}</span>}</div>}
-                      <button data-decision="what" className="underline text-amber-300 disabled:text-neutral-500 disabled:no-underline" disabled={!!thrErr} aria-describedby={thrErr ? `${tid}-err` : undefined} onClick={() => { if (thrErr) return; const thr = wx.metric === "snow" ? null : Number(wx.threshold); const series = nwsSeries(wx.metric, wx.station, thr); const st = STATIONS.find((x) => x.code === wx.station)!; markOrigin("browse"); applyRule(firstPartyRule(series, DEFAULT_SHARE.recurring), { oracle: "catalogue", series, market: null, title: `${st.city} ${wx.metric === "high" ? `daily high ≥ ${thr} °F` : wx.metric === "rain" ? `rain day ≥ ${Number(thr).toFixed(2)} in` : "first snow of the season"} (NWS)` }, { name: `${st.city} ${wx.metric === "high" ? "Heat" : wx.metric === "rain" ? "Rain" : "Snow"}`, ticker: `${st.code}${wx.metric === "high" ? "HOT" : wx.metric === "rain" ? "RAIN" : "SNOW"}`, settlement: "the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet", source: weatherSource(wx.metric) }); }}>Use this rule →</button>
+                      <button data-decision="what" className="underline text-amber-300 disabled:text-neutral-500 disabled:no-underline" disabled={!!thrErr} aria-describedby={thrErr ? `${tid}-err` : undefined} onClick={() => { if (thrErr) return; const thr = wx.metric === "snow" ? null : Number(wx.threshold); const series = nwsSeries(wx.metric, wx.station, thr); const st = STATIONS.find((x) => x.code === wx.station)!; markOrigin("browse"); applyRule(firstPartyRule(series, DEFAULT_SHARE.recurring), { oracle: "catalogue", series, market: null, title: `${st.city} ${wx.metric === "high" ? `daily high ≥ ${thr} °F` : wx.metric === "rain" ? `rain day ≥ ${Number(thr).toFixed(2)} in` : "first snow of the season"} (NWS)` }, { name: `${st.city} ${wx.metric === "high" ? "Heat" : wx.metric === "rain" ? "Rain" : "Snow"}`, ticker: `${st.code}${wx.metric === "high" ? "HOT" : wx.metric === "rain" ? "RAIN" : "SNOW"}`, settlement: "the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet", source: weatherSource(wx.metric) }); }}>Use this rule</button>
                       {thrErr && <span className="ml-2 text-neutral-500">Fix the threshold to continue.</span>}
                     </div>
                     );
@@ -1784,10 +1801,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                   {/* L11: a feed card's series is null, and so is "no drill open": only a real series opens the events panel */}
                   {drill !== null && drill === c.pick.series && (
                     <div className="mt-2 border-t border-neutral-800 pt-2 text-xs">
-                      {drillEvents === null ? <span className="text-neutral-500">Loading events…</span> : drillErr ? <span className="text-red-400">{drillErr}</span> : drillEvents.length === 0 ? <span className="text-neutral-500">No events are open in this series right now.</span> : drillEvents.map((e) => (
+                      <span className="text-red-400 empty:hidden" aria-live="polite">{drillErr ?? ""}</span>{drillEvents === null ? <span className="text-neutral-500">Loading events…</span> : drillErr ? null : drillEvents.length === 0 ? <span className="text-neutral-500">No events are open in this series right now.</span> : drillEvents.map((e) => (
                         <div key={e.eventTicker} className="py-1">
                           <div className="text-neutral-300">{e.title} <span className="text-neutral-500">· ~{denver(e.expectedAt ?? e.closeTime)}</span></div>
-                          {e.refused.length ? <div className="text-red-400">{refusedLine(e.refused)}</div> : <ul className="mt-0.5 space-y-0.5 text-neutral-400">{e.markets.slice(0, 8).map((mk) => <li key={mk.ticker} className="flex justify-between gap-2"><span>{mk.label || mk.suffix}</span><button data-decision="what" className="underline" onClick={() => { markOrigin("browse"); setPick({ oracle: "kalshi", series: null, market: mk.ticker, title: `${e.title} — ${mk.label || mk.suffix} (resolves once)` }); setKind("binary"); next(); }}>this market only →</button></li>)}</ul>}
+                          {e.refused.length ? <div className="text-red-400" data-refused>{refusedLine(e.refused)}</div> : <ul className="mt-0.5 space-y-0.5 text-neutral-400">{e.markets.slice(0, 8).map((mk) => <li key={mk.ticker} className="flex justify-between gap-2"><span>{mk.label || mk.suffix}</span><button data-decision="what" className="underline" onClick={() => { markOrigin("browse"); setPick({ oracle: "kalshi", series: null, market: mk.ticker, title: `${e.title} — ${mk.label || mk.suffix} (resolves once)` }); setKind("binary"); next(); }}>this market only</button></li>)}</ul>}
                         </div>
                       ))}
                     </div>
@@ -2176,7 +2193,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         );
         return (
           <section className="space-y-3 text-sm">
-            <SignCard plan={plan} creator={creator || null} title={two ? `Launch $${st.a} and $${st.b}` : `Launch $${st.a}`} coinHref={(t) => `/burnticker/t/${t}`} onLive={dropDraft} onStartOver={() => startOver(true)} />
+            <SignCard plan={plan} creator={creator || null} title={two ? `Launch $${st.a} and $${st.b}` : `Launch $${st.a}`} coinHref={coinCanonicalHref} onLive={dropDraft} onStartOver={() => startOver(true)} />
             <p className="text-xs text-neutral-500">The drafts are registered; they go live once the launch transaction{two ? "s are" : " is"} confirmed and read back from the chain.</p>
           </section>
         );

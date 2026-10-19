@@ -38,7 +38,7 @@ const confirmFetch = retry429((u: string, init: { method: string; headers: Recor
  * so pinning a table needs no code release; until that answer arrives, or if it fails, nothing can be signed. The plan never carries an
  * opening purchase (hostedLaunch.ts): the creator trades on the curve after the create like anyone else.
  */
-export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true, onLive, onStartOver }: { /** F06: every launch plan carries its deadline (withPlanDeadline) */ plan: PreparedSignPlan; creator: string | null; title: string; notes?: string[]; coinHref: (ticker: string) => string; /** launch night 2026-10-13: every coin is live and recorded (the page drops its saved draft) */ onLive?: () => void; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean; /** F06: Start over once the plan is past its deadline (default: back to the review for a new plan) */ onStartOver?: () => void }) {
+export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true, onLive, onStartOver }: { /** F06: every launch plan carries its deadline (withPlanDeadline) */ plan: PreparedSignPlan; creator: string | null; title: string; notes?: string[]; /** the coin page by its mint (coinKey.ts coinCanonicalHref): a ticker can be shared */ coinHref: (mint: string) => string; /** launch night 2026-10-13: every coin is live and recorded (the page drops its saved draft) */ onLive?: () => void; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean; /** F06: Start over once the plan is past its deadline (default: back to the review for a new plan) */ onStartOver?: () => void }) {
   const wallet = useWallet();
   const { connection } = useConnection();
   // recovery: what an earlier run (this tab, before a reload) left in storage for these drafts. Read in the initial state — the card
@@ -180,7 +180,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
       {allLive ? (
         <div className="space-y-2" data-launch-complete>
           <p className="text-emerald-400">{plan.confirms.length > 1 ? "Both coins are live and recorded." : "Your coin is live and recorded."}</p>
-          <p className="flex flex-wrap gap-2">{plan.confirms.map((c) => <a key={c.mint} className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={coinHref(c.ticker)}>Open ${c.ticker}</a>)}</p>
+          <p className="flex flex-wrap gap-2">{plan.confirms.map((c) => <a key={c.mint} className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={coinHref(c.mint)}>Open ${c.ticker}</a>)}</p>
           {/* the trade links on the success screen (find-and-trade, 2026-10-14) */}
           <LaunchedTrade coins={plan.confirms} />
         </div>

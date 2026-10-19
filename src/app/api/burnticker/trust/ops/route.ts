@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 /** The trust page's trust-ops section: active keeper (this host + the peer), attesters per coin, latest registry snapshot, incident policy. */
 export async function GET() {
   const p = platform();
-  return NextResponse.json(await buildTrustOps({ registry: p.registry, publishDir: p.publishDir }), { headers: { "cache-control": "public, max-age=30" } });
+  return NextResponse.json(await buildTrustOps({ registry: p.registry, publishDir: p.publishDir }), { headers: { "cache-control": "public, max-age=30, s-maxage=30, stale-while-revalidate=60" } });
 }

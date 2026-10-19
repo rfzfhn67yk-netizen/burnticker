@@ -97,7 +97,7 @@ describe("the site-wide wallet (owner decision, Claude site audit 2 item 6; 'mak
     assert.match(h, /<WalletButton \/>/); assert.match(h, /<WalletButton variant="menu" \/>/);
     assert.ok(h.indexOf("data-launch-button") < h.indexOf("<WalletButton />"), "to the right of Launch a coin");
     assert.doesNotMatch(code(b), /\bdisabled\b|launchOpen|useLaunchAvailability|closed/i);
-    assert.match(b, /return \(\) => \{ select\(null\); setAsked\(true\); setVisible\(true\); \};/); assert.match(b, /onClick=\{openList\}/, "disconnected: it clears an old pick and opens the adapter's wallet list");
+    assert.match(b, /return \(\) => \{ opener\.current = [^;]*; select\(null\); setAsked\(true\); setVisible\(true\); \};/); assert.match(b, /onClick=\{openList\}/, "disconnected: it clears an old pick and opens the adapter's wallet list");
     assert.match(b, /if \(!asked \|\| visible\) return;\s*setAsked\(false\);\s*if \(wallet && !connected && !connecting\) void connect\(\)/, "a wallet picked from the list connects once (the provider does not auto-connect)");
     assert.match(b, /\{shortAddress\(addr\)\}/); assert.match(b, /data-wallet-disconnect>\{WALLET_COPY\.disconnect\}/);
     assert.match(b, /e\.key === "Escape"[\s\S]*btn\.current\?\.focus\(\)/, "keyboard: Escape closes the menu and returns focus");

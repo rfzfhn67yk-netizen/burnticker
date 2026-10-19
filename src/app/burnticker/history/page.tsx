@@ -5,8 +5,9 @@ import { HISTORY_COPY } from "@/lib/burnticker/historyCopy";
 import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader, Panel } from "../_components/Panel";
 import { RepoText } from "../_components/RepoText";
+import { withShareCard } from "@/lib/burnticker/pageMeta";
 
-export const metadata: Metadata = { title: HISTORY_COPY.title, description: HISTORY_COPY.description, alternates: { canonical: "/burnticker/history" } };
+export const metadata: Metadata = withShareCard({ title: HISTORY_COPY.title, description: HISTORY_COPY.description, alternates: { canonical: "/burnticker/history" } });
 export const dynamic = "force-dynamic";
 
 /**

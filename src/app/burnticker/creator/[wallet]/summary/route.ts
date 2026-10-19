@@ -15,6 +15,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ wallet: string
   if (d.kind === "unavailable") return NextResponse.json({ error: "The coin registry could not be read just now." }, { status: 503 });
   return NextResponse.json({
     wallet: d.wallet, readAt: d.readAt,
-    coins: d.coins.map((c) => ({ ticker: c.ticker, receipts: c.receipts, week: c.week, rank: c.rank?.line ?? null, summary: c.summary })),
+    coins: d.coins.map((c) => ({ ticker: c.ticker, mint: c.mint, receipts: c.receipts, week: c.week, rank: c.rank?.line ?? null, summary: c.summary })),
   }, { headers: { "cache-control": "public, max-age=30" } });
 }

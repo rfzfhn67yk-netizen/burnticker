@@ -161,11 +161,22 @@ describe("clone watch", () => {
     assert.deepEqual(hits.map((h) => h.mint), ["M1"]);
     assert.ok(!JSON.stringify(hits).match(/price|marketCap|fdv|volume/i));
   });
-  test("matching: lookalike tickers and names containing a term; unrelated tokens ignored", () => {
+  test("matching: lookalike tickers, a name that is the term, the platform's own marks inside a name; unrelated tokens ignored", () => {
     assert.deepEqual(matchTerm({ symbol: "DEF1CIT", name: "x" }, TERMS), { term: "DEFICIT", how: "ticker reads as the same letters" });
     assert.deepEqual(matchTerm({ symbol: "BRONCOINU", name: "x" }, TERMS), { term: "BRONCO", how: "ticker is a copycat variant" });
-    assert.deepEqual(matchTerm({ symbol: "ZZZ", name: "The Deficit Coin" }, TERMS), { term: "DEFICIT", how: "name contains it" });
-    assert.deepEqual(matchTerm({ symbol: "BTKR", name: "Burn Ticker" }, TERMS), { term: "BURNTICKER", how: "name contains it" });
+    assert.equal(matchTerm({ symbol: "ZZZ", name: "The Deficit Coin" }, TERMS)?.term, "DEFICIT");
+    assert.deepEqual(matchTerm({ symbol: "BTKR", name: "Burn Ticker" }, TERMS), { term: "BURNTICKER", how: "name is the same" });
+    assert.deepEqual(matchTerm({ symbol: "BTKR", name: "The Burnticker Coin" }, TERMS), { term: "BURNTICKER", how: "name contains it" });
+    // prelaunch audit 2026-10-18 A-30 and its review: an ordinary word inside someone else's phrase is not a copy ("$PostNut Post Nut
+    // Clarity" and $CLARITY); a name that opens with the ticker or sets it beside an impersonation word is; so is a coin's full name
+    assert.equal(matchTerm({ symbol: "POSTNUT", name: "Post Nut Clarity" }, ["CLARITY"]), null);
+    assert.deepEqual(matchTerm({ symbol: "CLRT", name: "Clarity Official" }, ["CLARITY"]), { term: "CLARITY", how: "name uses the ticker as the coin's own" });
+    assert.deepEqual(matchTerm({ symbol: "SW", name: "SEAWIN on Solana" }, ["SEAWIN"]), { term: "SEAWIN", how: "name uses the ticker as the coin's own" });
+    assert.deepEqual(matchTerm({ symbol: "XYZ", name: "Real Clarity Token" }, ["CLARITY"]), { term: "CLARITY", how: "name uses the ticker as the coin's own" });
+    assert.deepEqual(matchTerm({ symbol: "XYZ", name: "Go Seattle Seahawks Win" }, ["SEAWIN"], { SEAWIN: "Seattle Seahawks Win" }), { term: "SEAWIN", how: "name holds the coin's name" });
+    assert.equal(matchTerm({ symbol: "XYZ", name: "A clarity of mind" }, ["CLARITY"]), null);
+    assert.equal(matchTerm({ symbol: "XYZ", name: "Dog Coin" }, ["DOG"]), null, "a three-letter ticker is too often an ordinary word");
+    assert.deepEqual(matchTerm({ symbol: "ZZZ", name: "Clarity" }, ["CLARITY"]), { term: "CLARITY", how: "name is the same" });
     assert.equal(matchTerm({ symbol: "WIF", name: "dogwifhat" }, TERMS), null);
   });
   test("holder stack: five or more of the top holders with the identical share; the pool account excluded", () => {

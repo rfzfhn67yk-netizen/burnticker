@@ -22,7 +22,7 @@ describe("audit 7 item 4: a report-only Content-Security-Policy on the app's HTM
   test("the header is sent on / and /burnticker/launch, never on the embeds, with the required directives", async () => {
     // the public tree's next.config.ts returns exactly these rules (the config file itself is loaded by Next, not by this test runner)
     const conf = read("config/public-repo/overlay/next.config.ts");
-    assert.ok(conf.includes("cspHeaderRules } from \"@/lib/burnticker/csp\";")); assert.match(conf, /async headers\(\) \{\n    return cspHeaderRules\(/);
+    assert.ok(conf.includes("cspHeaderRules } from \"@/lib/burnticker/csp\";")); assert.match(conf, /async headers\(\) \{\n    return (?:\[\.\.\.)?cspHeaderRules\(/);   // A-22 (2026-10-18): the page cache rules follow the CSP rules
     const rules = cspHeaderRules(null);
     const toRe = (s: string) => new RegExp(`^${s.replace(/:path\((.*)\)$/, "($1)")}$`);
     const sent = (p: string) => rules.filter((r) => toRe(r.source).test(p)).flatMap((r) => r.headers);
@@ -132,17 +132,17 @@ describe("item 23: card fields", () => {
     const v = cardViewFromIndex({ ticker: "RAYS", name: "Rays", mint: "M1", oneLiner: "burns when the Rays lose", status: "live", imageUrl: null, burned: "0", burns: 0, nextCheckAt: null, nextCloseTime: null, lastBurnAt: null, launchedAt: null, pairId: null, phase: null, progressPct: null }, null);
     assert.deepEqual(Object.values(emptyLabels(v)).filter((x) => x === "—"), []);
     const card = read("src/app/burnticker/_components/CoinCard.tsx");
-    assert.match(card, /<Why label=\{emptyLabel\(v, c\.why\)\}/); assert.doesNotMatch(card, /<Why why=\{v\.curve\.why\} name="Not read" \/>/);
+    assert.match(card, /<Why label=\{cardEmptyLabel\(v, c\.why\)\}/); assert.doesNotMatch(card, /<Why why=\{v\.curve\.why\} name="Not read" \/>/);
     const h = read("site/burnticker/index.html");
-    assert.match(h, /window\.btWhy\(label \|\| "No data yet"/); assert.doesNotMatch(h, /btWhy\("\\u2014", v\.curve\.why/);
+    assert.match(h, /window\.btWhy\(label \|\| "Not read yet"/); assert.doesNotMatch(h, /btWhy\("\\u2014", v\.curve\.why/);
     for (const t of Object.values(EMPTY_LABEL)) clean(t, "empty label");
   });
-  test("a curve market cap is labelled curve-implied; a pool market cap is not", () => {
-    assert.equal(mcapText("28", "SOL", "curve"), "28 SOL (curve-implied)");
-    assert.equal(mcapText("28", null, null), "28 SOL (curve-implied)");
+  test("a curve market cap carries its basis in words; a pool market cap does not (coin card status 2026-10-18: no \"(curve-implied)\")", () => {
+    assert.equal(mcapText("28", "SOL", "curve"), "28 SOL from the curve");
+    assert.equal(mcapText("28", null, null), "28 SOL from the curve");
     assert.equal(mcapText("1234.5", "SOL", "graduated"), "1,234.5 SOL");
     const v = cardViewFromIndex({ ticker: "RAYS", name: "Rays", mint: "M1", oneLiner: "x y z", status: "live", imageUrl: null, burned: "0", burns: 0, nextCheckAt: null, nextCloseTime: null, lastBurnAt: null, launchedAt: "2026-10-11T00:00:00Z", pairId: null, phase: "curve", progressPct: 1, raised: "0.1", threshold: "85", quote: "SOL", marketCap: "28" }, null);
-    assert.equal(v.mcap.text, "28 SOL (curve-implied)");
+    assert.equal(v.mcap.text, "28 SOL from the curve");
   });
   test("audit 7 item 23: $REHEARSAL's age counts from its create transaction's block time; the next step is an outline, not a lit dot", () => {
     // the card is still built (featuredCoins); since 2026-10-14 the home leaves it out as a test coin (testCoins.ts)

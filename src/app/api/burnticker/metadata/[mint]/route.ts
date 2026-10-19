@@ -22,5 +22,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ mint: s
   const meta = p.registry.tokenMeta(mint);
   const image = meta?.imageUri ?? t.imageUrl ?? coinArtUrl(t.ticker, origin);
   const body = metadataJson({ ticker: t.ticker, mint: t.mint, name: t.name, description: metadataDescription(locked, t.description), oneLiner: "", rule: locked.rule, rulesSha256: t.rulesSha, origin, links: t.links }, image);
-  return new NextResponse(body, { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" } });
+  return new NextResponse(body, { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300, s-maxage=300" } });
 }

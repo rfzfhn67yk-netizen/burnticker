@@ -144,7 +144,9 @@ describe("the pinned-metadata check runs on this host first (2026-10-14: the gat
     assert.match(String(csp), /https:\/\/\*\.datasprite-cdn\.com/);
     const comp = fs.readFileSync(new URL("../src/app/burnticker/_components/PinnedCheck.tsx", import.meta.url), "utf8");
     assert.match(comp, /\/api\/burnticker\/pin-check\?mint=/);
-    assert.match(comp, /Your browser could not reach the gateway just now/);
+    // prelaunch audit 2026-10-18 A-28: the second check reads through this site now; the "could not reach the gateway" line is gone
+    assert.doesNotMatch(comp, /Your browser could not reach the gateway just now/);
+    assert.match(comp, /fetch\(pinnedFileHref\(pinned\), \{ cache: "no-store" \}\)/);
     const page = fs.readFileSync(new URL("../src/app/burnticker/t/[ticker]/page.tsx", import.meta.url), "utf8");
     assert.match(page, /<PinnedCheck pinned=\{s\.pinned \? \{ \.\.\.s\.pinned, mint: s\.mint \} : s\.pinned\} \/>/);
     const { GET } = await import("../src/app/api/burnticker/pin-check/route.ts");

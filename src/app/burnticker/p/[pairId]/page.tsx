@@ -1,5 +1,8 @@
 "use client";
 
+import { tabKeyHandler } from "@/lib/burnticker/tabKeys";
+import { PoolChart } from "../../_components/PoolChart";
+import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
 import { useEffect, useState } from "react";
 import { HostDiagnostics } from "../../_components/HostDiagnostics";
 import Link from "next/link";
@@ -15,9 +18,10 @@ import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE } from
 import { isMeetingsSelector, MEETINGS_PAIR_PAGE_LINE } from "@/lib/burnticker/guidedLaunch";
 import { TermNote } from "../../_components/Term";
 import { CurveBar } from "../../_components/CoinCard";
-import { BURNS_AFTER_GRADUATION, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts, type CoinTab } from "@/lib/burnticker/coinPage";
+import { BURNS_AFTER_GRADUATION, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, READ_FULL_RULE, ruleBrief, ruleFacts, type CoinTab } from "@/lib/burnticker/coinPage";
 import { fixed, grouped } from "@/lib/burnticker/safeFormat";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
+import { PairSeedHeading, usePairSeed } from "./PairSeed";
 
 /**
  * A rivalry pair's shared page, in the coin page's order (website-11, 2026-10-12; src/lib/burnticker/coinPage.ts). ON TOP, for each
@@ -64,11 +68,25 @@ export default function PairPage() {
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<CoinTab>("burns");
-  useEffect(() => { fetch(`/api/burnticker/pairs/${encodeURIComponent(pairId)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [pairId]);
+  const seed = usePairSeed();
+  // A-22 (2026-10-18): the pair API keeps each pair's answer; a cold read answers 503 "pair-loading" with retry-after, asked again (up to 6 times)
+  useEffect(() => {
+    let live = true;
+    const once = async (left: number): Promise<void> => {
+      const r = await fetch(`/api/burnticker/pairs/${encodeURIComponent(pairId)}`);
+      const j = await r.json();
+      if (r.status === 503 && j?.code === "pair-loading" && left > 0) { await new Promise((res) => setTimeout(res, Math.min(15, Math.max(2, Number(j.retryAfterSec ?? 3))) * 1000)); return live ? once(left - 1) : undefined; }
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      if (live) setD(j);
+    };
+    once(6).catch((e) => { if (live) setErr(String(e.message ?? e)); });
+    return () => { live = false; };
+  }, [pairId]);
   const hasHolders = !!(d?.a.status.market?.holders.top?.length || d?.b.status.market?.holders.top?.length);
   useEffect(() => { if (d) setTab(initialTab(window.location.hash, coinTabs(hasHolders))); }, [d, hasHolders]);
   if (err) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind={/no pair|not found|unknown pair/i.test(err) ? "not-launched" : "unavailable"} body={/no pair|not found|unknown pair/i.test(err) ? "No rivalry pair with this id is registered on this site." : "This pair could not be read just now."} details={err} /></main>;
-  if (!d) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="loading" /></main>;
+  // owner's UX walkthrough 2026-10-18: the matchup heading (from the registry, server-rendered) shows while the slow reads load
+  if (!d) return <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">{seed && <PairSeedHeading seed={seed} />}<EmptyState kind="loading" /></main>;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const A = d.a.status.ticker, B = d.b.status.ticker, t = d.tally, ls = t.lastSettlement;
   // review follow-up 3: a side links to its own coin page (by mint when its ticker is shared), never to whichever coin holds the ticker
@@ -89,7 +107,7 @@ export default function PairPage() {
   );
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
-      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={sideHref(d.a)}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={sideHref(d.b)}>${B}</Link></h1>{launch.open && <p className="mt-1"><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(A)}>Launch a pair like this →</Link></p>}{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}{d.lifecycle && <p className="mt-1 text-xs text-amber-300" data-pair-lifecycle>{d.lifecycle}</p>}<p className="text-neutral-400 text-xs">This is the rivalry pair <code>{d.pair.pairId}</code>. {isMeetingsSelector(d.pair.selectorKey) ? <>{MEETINGS_PAIR_PAGE_LINE} A draw, a postponed or a cancelled game moves nothing.</> : settledLineOf(d.a.status.rules.statement) ? <span data-settled-pair-line>{settledLineOf(d.a.status.rules.statement)}</span> : <>Both coins read the same market (<code>{d.pair.selectorKey}</code>) with opposite rules, so each result burns exactly one side. A voided market burns neither.</>} The receipts are the scoreboard.</p></header>
+      <header><p className="text-xs"><Link className="underline" href="/burnticker">Back to the coins</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={sideHref(d.a)}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={sideHref(d.b)}>${B}</Link></h1>{launch.open && <p className="mt-1"><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(A)}>Launch a pair like this</Link></p>}{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}{d.lifecycle && <p className="mt-1 text-xs text-amber-300" data-pair-lifecycle>{d.lifecycle}</p>}<p className="text-neutral-400 text-xs">This is the rivalry pair <code>{d.pair.pairId}</code>. {isMeetingsSelector(d.pair.selectorKey) ? <>{MEETINGS_PAIR_PAGE_LINE} A draw, a postponed or a cancelled game moves nothing.</> : settledLineOf(d.a.status.rules.statement) ? <span data-settled-pair-line>{settledLineOf(d.a.status.rules.statement)}</span> : <>Both coins read the same market (<code>{d.pair.selectorKey}</code>) with opposite rules, so each result burns exactly one side. A voided market burns neither.</>} The receipts are the scoreboard.</p></header>
 
       {/* ---- TOP, for each side: the chart, one outbound link to Raydium, and a static read of the curve. No order panel. ---- */}
       <section className="grid gap-3 md:grid-cols-2" aria-label="Both coins">{sides.map(([s, side, tc]) => {
@@ -98,8 +116,8 @@ export default function PairPage() {
         return (
           <div key={side} className={card + " min-w-0 space-y-2"} data-pair-side={side}>
             <div className="flex items-baseline justify-between gap-2"><h2 className="font-medium"><Link className="underline" href={sideHref(s)}>${s.status.ticker}</Link> <span className="text-neutral-400 font-normal">{s.status.name}</span></h2><span className="text-xs text-neutral-500">side {side}</span></div>
-            {m?.chart.embedUrl ? <iframe title={`${s.status.ticker} chart on GeckoTerminal`} src={m.chart.embedUrl} className="h-64 w-full rounded border border-neutral-800 bg-neutral-950" loading="lazy" referrerPolicy="no-referrer" /> : <p className="text-xs text-neutral-500">{m?.chart.note ?? "This site has not read a pool for this coin, so there is no chart."}</p>}
-            {trade ? <a href={trade.url} rel="noopener" target="_blank" className="bt-launch-btn block text-center" data-trade-link>{trade.label} ↗</a> : <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">{m?.trade.note ?? "The trade link appears once the coin is launched."}</p>}
+            {m?.chart.embedUrl ? <PoolChart title={`${s.status.ticker} chart on GeckoTerminal`} src={m.chart.embedUrl} className="h-64 w-full rounded-lg bg-neutral-950" /> : <p className="text-xs text-neutral-500">{m?.chart.note ?? "This site has not read a pool for this coin, so there is no chart."}</p>}
+            {trade ? <a href={trade.url} rel="noopener" target="_blank" className="bt-launch-btn block text-center" data-trade-link>{trade.label}<span className="sr-only"> (opens in a new tab)</span></a> : <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">{m?.trade.note ?? "The trade link appears once the coin is launched."}</p>}
             <CurveBar c={{ phase: (m?.phase ?? (tc?.phase as "curve" | "migrating" | "graduated" | undefined) ?? null), progressPct: curve?.progressPct ?? (m?.phase === "graduated" ? 100 : null), raised: curve?.raised ?? null, threshold: curve?.threshold ?? null, quote: curve?.quote ?? null, curveNote: m?.curveNote }} />
           </div>
         );
@@ -110,20 +128,20 @@ export default function PairPage() {
       <section className={card + " space-y-3"} aria-label="Scoreboard">
         <div className="text-center"><div className="text-xs text-neutral-400">burns</div><div className="text-4xl font-semibold tabular-nums">${A} {t.burnsA} <span className="text-neutral-500 text-2xl">:</span> {t.burnsB} ${B}</div><div className="text-xs text-neutral-500">{count(t.settlements, "result")} so far{t.voids ? `, ${t.voids} of them void` : ""}. Tokens burned {fmt(t.burnedA)} : {fmt(t.burnedB)}.</div></div>
         {t.attesterLine && <div className="text-center text-xs text-neutral-400" aria-label="Attesters">{t.attesterLine}</div>}
-        {t.unpaired && <div className="text-center text-xs text-neutral-300" aria-label="Unpaired">This pair was unlinked on {t.unpaired.at.slice(0, 10)} ({t.unpaired.reason}). They are two separate coins now, and nothing moves between them.</div>}
+        {t.unpaired && <div className="text-center text-xs text-neutral-300" aria-label="Unpaired">This pair was unlinked on {utcDay(t.unpaired.at)} ({t.unpaired.reason}). They are two separate coins now, and nothing moves between them.</div>}
         {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="Burned and forwarded">${A} has burned {fmt(t.burnedA)} and ${B} has burned {fmt(t.burnedB)}. ${A} has forwarded {t.forwardedAtoB ?? "0"} SOL to ${B}, and ${B} has forwarded {t.forwardedBtoA ?? "0"} SOL to ${A}.</div>}
         {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="pair rule">{PAIR_BURN_SENTENCE}</div>}
         <TermNote ids={["receipt", "burnPool"]} />
         <div className="grid md:grid-cols-3 gap-2">
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">supply left</div><div className="text-lg tabular-nums">{fixed(t.supplyPctA)}% <span className="text-neutral-500">:</span> {fixed(t.supplyPctB)}%</div><div className="text-xs text-neutral-500 tabular-nums">{fmt(t.supplyA)} : {fmt(t.supplyB)}, out of {fmt(d.a.status.supply?.initial)} each</div></div>
-          <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">last settlement</div>{ls ? <><div><code>{ls.eventId}</code></div><div className="text-xs text-neutral-500">It settled {(ls.result ?? ls.value ?? "—").toUpperCase()} at {ls.settledAt.slice(0, 16).replace("T", " ")}Z, and {ls.burnedSide ? `${sideName(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)} tokens` : ""}` : "neither side burned"}.</div></> : <div className="text-xs text-neutral-500">None yet. The first result after launch burns one side.</div>}</div>
+          <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">last settlement</div>{ls ? <><div><code>{ls.eventId}</code></div><div className="text-xs text-neutral-500">It settled {(ls.result ?? ls.value ?? "—").toUpperCase()} on {utcDateTime(ls.settledAt)}, and {ls.burnedSide ? `${sideName(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)} tokens` : ""}` : "neither side burned"}.</div></> : <div className="text-xs text-neutral-500">None yet. The first result after launch burns one side.</div>}</div>
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">next scheduled market</div>{t.next.market ? <div><code>{t.next.market}</code></div> : <div>—</div>}</div>
         </div>
       </section>
 
       {/* ---- TABS: Burn log first, then Rule, then Holders when either side's holders were read. No thread. ---- */}
-      <div className="bt-tabs" role="tablist" aria-label="About this pair">
-        {tabs.map((x) => <button key={x} id={`tab-${x}`} type="button" role="tab" aria-selected={tab === x} aria-controls={`panel-${x}`} className={`bt-tab${tab === x ? " is-active" : ""}`} onClick={() => setTab(x)}>{COIN_TAB_LABEL[x]}</button>)}
+      <div className="bt-tabs" role="tablist" aria-label="About this pair" onKeyDown={tabKeyHandler(tabs, tab, setTab, (x) => `tab-${x}`)}>
+        {tabs.map((x) => <button key={x} id={`tab-${x}`} type="button" role="tab" aria-selected={tab === x} tabIndex={tab === x ? 0 : -1} aria-controls={`panel-${x}`} className={`bt-tab${tab === x ? " is-active" : ""}`} onClick={() => setTab(x)}>{COIN_TAB_LABEL[x]}</button>)}
       </div>
 
       <div id="panel-burns" role="tabpanel" aria-labelledby="tab-burns" hidden={tab !== "burns"} className="space-y-6">
@@ -149,7 +167,7 @@ export default function PairPage() {
         {/* website brief §2: where the money goes, labelled by the pair's rule version */}
         {!t.unpaired && <PairFundsFlow version={pairRuleVersion(!!t.winnerTakesBurn)} tickers={{ a: A, b: B }} />}
         <section className="grid md:grid-cols-2 gap-3">{([[d.a, "A"], [d.b, "B"]] as const).map(([s, side]) => { const f = ruleFacts(s.rulesText ?? "", !!s.status.rules.oneShot); return (
-          <div className={card + " bt-rule-card"} key={side}><div className="text-xs text-neutral-400">side {side}, locked at launch</div><h2 className="font-medium"><Link className="underline" href={sideHref(s)}>${s.status.ticker}</Link> <span className="text-neutral-400 font-normal">{s.status.name}</span></h2><p className="text-xs text-neutral-300 mt-1">{s.status.rules.statement}</p>
+          <div className={card + " bt-rule-card"} key={side}><div className="text-xs text-neutral-400">side {side}, locked at launch</div><h2 className="font-medium"><Link className="underline" href={sideHref(s)}>${s.status.ticker}</Link> <span className="text-neutral-400 font-normal">{s.status.name}</span></h2><p className="text-xs text-neutral-300 mt-1" data-rule-brief>{ruleBrief(s.rulesText ?? "")}</p><details className="bt-rule-full mt-1 text-xs" data-rule-full><summary className="cursor-pointer text-neutral-300 underline">{READ_FULL_RULE}</summary><p className="mt-1 text-neutral-300" data-rule-statement>{s.status.rules.statement}</p></details>
             <dl className="mt-2 space-y-1 text-xs"><div><dt className="inline text-neutral-500">The dial. </dt><dd className="inline">{f.dial ?? "The rule file does not name a share of the burn pool."}</dd></div><div><dt className="inline text-neutral-500">The window. </dt><dd className="inline">{f.window}</dd></div><div><dt className="inline text-neutral-500">The end. </dt><dd className="inline">{f.end}</dd></div></dl>
             <p className="text-xs text-neutral-500 mt-1 break-all">Rule hash (sha256): {s.status.rules.sha256}</p>{s.status.lp && <LpLine lp={s.status.lp} />}</div>
         ); })}</section>

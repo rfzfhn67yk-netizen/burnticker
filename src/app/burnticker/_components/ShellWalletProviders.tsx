@@ -4,7 +4,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter, SolflareWalletAdapter } from "@solana/wallet-adapter-wallets";
-import "@solana/wallet-adapter-react-ui/styles.css";
+import "./walletAdapter.css";
 import { sameOriginProxy, walletEndpoint, walletWsEndpoint } from "@/lib/burnticker/walletShell";
 import { flightFetch } from "@/lib/burnticker/rpcProxy";
 
