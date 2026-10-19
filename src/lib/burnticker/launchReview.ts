@@ -1,8 +1,8 @@
 import fs from "node:fs";
-import { burnRealFromEnv } from "@/lib/burnticker/launchAvailability";
+import { BURN_REAL_WAITING, burnRealEnabledFromEnv, burnRealFromEnv, burnSolEnabledFromEnv } from "@/lib/burnticker/launchAvailability";
 import path from "node:path";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
-import { canonicalJson, endSelfOnLossProblem, lockRule, ruleStatement, isMeetingsRule, gameMirrorId, withFullFraction, defaultOnEndFor, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { canonicalJson, endSelfOnLossProblem, endSinkOf, lockRule, ruleStatement, isMeetingsRule, gameMirrorId, withFullFraction, defaultOnEndFor, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { allocationFor, raiseLamportsOf, raiseProblem, preparePairRules, pairVoidByOffline, type PreparedSide } from "@/lib/burnticker/launchBundle";
 import { pairCurveEnabled } from "@/lib/burnKeeper/pairCurveCrank";
 import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS as PAIR_DEV_FEE_BPS, FEE_BPS as PAIR_FEE_BPS } from "@/lib/pairCurve/pricing";
@@ -33,12 +33,12 @@ import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { EVENT_LEVEL_REFUSAL, afterGraduationEnd, eventLevelRule, graduationExplainer } from "@/lib/burnticker/guidedLaunch";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
-import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, burnTargetShapeProblems, createAfterPinText, lockRuleStepText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, burnTargetShapeProblems, createAfterPinText, incineratorStepText, lockRuleStepText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import type { SeasonOverRefusal } from "@/lib/burnticker/seasonOver";
 import type { LastSeasonBacktest } from "@/lib/burnticker/lastSeason";
 import { simulateResults, type Simulation } from "@/lib/burnticker/simulator";
 import { wrapperPairProblem } from "@/lib/burnticker/derby/spec";
-import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, decimalSolToLamports, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
+import { END_SINK_ACCOUNT_BYTES, LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, decimalSolToLamports, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
 
 /**
  * THE READ-ONLY REVIEW PAYLOAD (ChatGPT launch audit 5, L02 / L06, 2026-10-11): everything a creator should see before connecting a
@@ -200,7 +200,8 @@ export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, 
 export const WIND_DOWN_LINE = `When the rule ends, the coin's own burn pool burns down what is left over ${DEFAULT_WIND_DOWN_DAYS} days. Then the coin retires. A retired coin's pool keeps burning any fees it still receives. The wind-down only burns this coin and sends nothing to another coin.`;
 
 /** A4: the burn dial, said exactly (the share is of the burn budget, never of the supply). */
-export const budgetLine = (share: string): string => `Each result spends ${share} of the coin's available burn budget, which is the SOL in its burn pool. The tokens bought with it are burned, so the number of tokens burned varies.`;
+// launch wizard audit 2026-10-19 F15: a coin that resolves once has one result, never "each result"
+export const budgetLine = (share: string, once = false): string => `${once ? "Its one result spends" : "Each result spends"} ${share} of the coin's available burn budget, which is the SOL in its burn pool. The tokens bought with it are burned, so the number of tokens burned varies.`;
 /**
  * REVIEW 10 F1 (2026-10-14): the review's promise for a coin that burns once with a share under 100 % (offered only on a host with burn
  * dispersal): the keeper spends the whole share on the coin before the end is recorded and the rest moves (multiKeeper.owedBeforeEnd).
@@ -270,6 +271,8 @@ export function graduationLines(cluster: string): string[] {
   return graduationExplainer({ raises: RAISE_PRESETS_SOL, curveFeePct: bpsPct(CURVE_FEES.totalBps), curveBurnPoolPct: bpsPct(burn), poolFeePct: bpsPct(postGraduationFeesFor(cluster).totalBps) });
 }
 
+/** Owner decision 2026-10-19: the lock step and the rent line of a coin whose end is Solana's incinerator (the EndSink account). */
+export const incineratorRentLabel = (ticker: string): string => `Rent for the account that pins $${ticker}'s end to Solana's incinerator, which is ${END_SINK_ACCOUNT_BYTES} bytes. It stays with the coin.`;
 /** ChatGPT audit 6 item 3: the end line is endText's, after the window sentence with its own end clause taken out (it said it twice). */
 const endsLine = (windowSentence: string, end: ReturnType<typeof endText>): string => {
   if (end.kind === "perpetual") return end.result;
@@ -303,7 +306,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const now = o.now ?? Date.now();
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): every rule refusal the bundle route makes, as problems
   const settled = settledPairInput(body.pair);
-  for (const x of ruleRefusals(locked, { programRound5: burnRealFromEnv(env), dispersal: webDispersalOn(env, o.root), kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks: o.sinks ?? null })) problems.push(x.message);
+  for (const x of ruleRefusals(locked, { programRound5: burnRealFromEnv(env), burnSol: burnSolEnabledFromEnv(env), dispersal: webDispersalOn(env, o.root), kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks: o.sinks ?? null })) problems.push(x.message);
   // sources-7 H7: a coin against its own staked or wrapped form (derby/spec.ts wrapperPairProblem), as the tile and admission refuse it
   { const d = locked.rule.derby; if (d?.selector === "coinvs") { const w = wrapperPairProblem(d.a, d.b); if (w) problems.push(w); } }
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
@@ -429,8 +432,14 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   let lines: ReviewCost[], total: number, steps: { label: string; signers: string[] }[], costNote: string;
   // round 5: the token each coin pins (side A's rule; side B's own field, or a Matchup companion's rule), and the BurnTarget rent
   const targets: (BurnTargetField | null)[] = [locked.rule.burnTarget ?? null, pair ? pinB : companionLocked?.rule.burnTarget ?? null];
+  // owner decision 2026-10-19: a pinned token is refused while BURNTICKER_BURN_REAL_ENABLED is off (handlers.ts answers burn-real-off)
+  if (targets.some(Boolean) && !burnRealEnabledFromEnv(env) && !problems.includes(BURN_REAL_WAITING)) problems.push(BURN_REAL_WAITING);
   const pins: LaunchReview["pins"] = [];
   const pinRent = rentLamports(BURN_TARGET_ACCOUNT_BYTES);
+  // owner decision 2026-10-19: the incinerator end (a single coin on LaunchLab; a pair rule with it is refused by rules.ts) is pinned in
+  // its own EndSink account at initialize_token, whose rent is listed here
+  const incinerator = venue === "launchlab" && !pair && !companionLocked && endSinkOf(locked.rule) === "incinerator";
+  const endSinkRent = rentLamports(END_SINK_ACCOUNT_BYTES);
   if (venue === "pair-curve") {
     const mintRent = rentLamports(SPL_MINT_BYTES), fee = 5 * LAMPORTS_PER_SIGNATURE;   // two signatures on each create, one on the link
     const pairRent = rentLamports(PAIR_ACCOUNT_BYTES) + rentLamports(0) + 2 * rentLamports(PAIR_TOKEN_VAULT_BYTES);
@@ -465,13 +474,15 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     for (let i = 0; i < coins; i++) {
       const bt = targets[i];
       const t = coins > 1 ? tk(i) : ticker || "TICKER";
-      if (!bt) { steps.push({ label: lockRuleStepText(t, { link: !!pair && i === 1 }), signers }, { label: createAfterPinText(t), signers }); continue; }
+      // owner decision 2026-10-19: a single coin on the incinerator end pins its EndSink in the lock step (initialize_token, kind INCINERATOR)
+      if (!bt) { steps.push({ label: i === 0 && incinerator ? incineratorStepText(t) : lockRuleStepText(t, { link: !!pair && i === 1 }), signers }, { label: createAfterPinText(t), signers }); continue; }
       steps.push({ label: pinStepText(t, bt.symbol, { link: !!pair && i === 1 }), signers }, { label: createAfterPinText(t), signers });
       pins.push({ side: i === 0 ? "A" : "B", ticker: t, symbol: bt.symbol, step: steps.length - 1, bytes: BURN_TARGET_ACCOUNT_BYTES, rentSol: sol(pinRent), signatures: 0 });
     }
     lines[3] = { label: "Network fees for two signatures per transaction. Priority fees are extra.", sol: sol(fee * steps.length), kind: "fee" };
     costNote = "This is an estimate. Your wallet shows the exact amount before you approve. The reserve stays in the coin's burn pool, and the rent stays with the new accounts.";
   }
+  if (incinerator) { lines.push({ label: incineratorRentLabel(ticker || "TICKER"), sol: sol(endSinkRent), kind: "rent" }); total += endSinkRent; }
   for (const x of pins) { lines.push({ label: `Rent for the account that pins ${x.symbol}'s pool to $${x.ticker}, which is ${x.bytes} bytes.`, sol: x.rentSol, kind: "rent" }); total += pinRent; }
   const share = shareOf(asBuilt);
   const shareText = share === null ? "a vault amount" : pctLabel(share);
@@ -541,7 +552,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       line: `The curve is complete once buyers have put in ${raiseSol} SOL, and the coin moves to its Raydium pool, which starts with roughly ${raiseSol} SOL.${isRaisePreset(raiseSol) ? "" : " This raise is not one of the three choices, so it is only accepted off mainnet."}`,
     } : null,
     prerequisiteStates: PREREQUISITE_STATES,
-    budget: share === null ? "This rule moves a fixed vault amount instead of a share of the burn budget." : `${budgetLine(shareText)}${share < 1 && shareShapeOf(asBuilt) === "oneShot" ? ` ${ONE_SHOT_SHARE_FIRST_LINE}` : ""}`,
+    budget: share === null ? "This rule moves a fixed vault amount instead of a share of the burn budget." : `${budgetLine(shareText, shareShapeOf(asBuilt) === "oneShot")}${share < 1 && shareShapeOf(asBuilt) === "oneShot" ? ` ${ONE_SHOT_SHARE_FIRST_LINE}` : ""}`,
     recovery,
     governance: reviewGovernance(o.root ?? process.cwd(), cluster, o.timeLockSecs ?? null),
     signing: !typeAvailable ? typeReason : !launchState.canSign ? launchState.signingSentence : problems.length ? "This draft has problems to fix before it can be signed." : null,

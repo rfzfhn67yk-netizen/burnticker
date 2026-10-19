@@ -7,12 +7,15 @@ import { WIND_DOWN_DAYS as DEFAULT_WIND_DOWN_DAYS } from "@/lib/burnticker/coinP
  *   · the pool and its locked liquidity stay (the LP is locked forever; nothing removes it), so trading and selling continue;
  *   · trading fees keep arriving (the curve or pool fees, and 80% of the SOL side of the locked liquidity's fees) into the burn pool;
  *   · the rule's event burns stop when the rule ends (multiKeeper.ts detectRuleEnd);
- *   · what is left winds down over 28 days of scheduled burns, then the coin retires; a retired coin's pool is swept (spent and burned)
- *     whenever fee income lifts it past the sweep threshold, 0.05 SOL by default (multiKeeper.ts planRuleEnd, rules.ts onEnd).
+ *   · what is left goes where the rule's end says (rules.ts endSinkOf, onEnd): a rule with an end sink sends it, and later fees, to that
+ *     sink's burn ($DEFICIT, the pair winner, a coin the creator named, or Solana's incinerator) when it ends on a result, and only a void
+ *     end, or a rule with no sink, winds down over 28 days of scheduled burns on the coin itself (multiKeeper.ts planRuleEnd).
  *
- * ONE MODULE ON PURPOSE: the end-of-rule sink round (branch burnticker/endsink2, LAUNCHPAD-PATH §74) is not merged, and nothing here says
- * it exists. When it lands, the merge reviewer changes the "leftover" answer below (and only this file) to the sink wording; every page
- * that shows these facts reads them from here. Plain sentences, lint-clean (test/burntickerWebsite14.test.ts).
+ * LAUNCH WIZARD AUDIT 2026-10-19 F9: the end-sink round merged long ago, and the leftover answer still said a 28-day burn-down on the
+ * coin and "Nothing is sent to another coin" on every coin, the live NEXTM6 included. The answer is no longer one fixed sentence: a page
+ * that knows the coin's rule shows the rule's own end right above these facts (coinPage.ts ruleEndLine, the review's end line, both from
+ * describe.ts endText) and passes LEFTOVER_SEE_END; a page without a rule gets the general answer, which is true of every shape. Plain
+ * sentences, lint-clean (test/burntickerWebsite14.test.ts).
  */
 export interface RetirementFact { q: string; a: string }
 
@@ -21,9 +24,16 @@ export const RETIREMENT_FACTS: readonly RetirementFact[] = [
   { q: "Does trading continue?", a: "Yes. Nothing stops trading when a rule ends. The end only changes what the burn pool is used for." },
   { q: "Do fees still come in?", a: "Yes. Trading fees keep flowing into the coin's burn pool as a small trickle, as long as people trade it." },
   { q: "Which burns stop?", a: "The rule's own burns stop. No new result is read for the coin, so no result can start a burn." },
-  // END-SINK SWITCH: when burnticker/endsink2 merges, this answer becomes the sink wording (where the leftover goes and who can send it).
-  { q: "What happens to what is left?", a: `The burn pool spends down what is left in scheduled burns over ${DEFAULT_WIND_DOWN_DAYS} days, and then the coin retires. After that, fee income that builds up past a small threshold is spent and burned from time to time. Nothing is sent to another coin.` },
+  { q: "What happens to what is left?", a: `That depends on the coin's rule. When the rule ends on a result, what is left, and any fees that arrive later, goes where the rule's end says: most often to $DEFICIT's burn, or to the winning coin's burn in a pair. A voided result, or a rule that names nowhere else, burns down what is left on the coin itself over ${DEFAULT_WIND_DOWN_DAYS} days.` },
 ];
+
+/** The leftover answer on a page that shows the coin's own end right above the facts (the coin page's end row, the review's end line). */
+export const LEFTOVER_SEE_END = "It goes where the end of the rule above says. That end is read from the coin's own rule, so every page says the same.";
+
+/** The facts with the leftover answer for this page (the general answer when none is given). */
+export function retirementFacts(leftover: string | null = null): readonly RetirementFact[] {
+  return leftover ? RETIREMENT_FACTS.map((f) => (f.q === "What happens to what is left?" ? { q: f.q, a: leftover } : f)) : RETIREMENT_FACTS;
+}
 
 /** One heading for the block. */
 export const RETIREMENT_HEADING = "What the end of the rule means";

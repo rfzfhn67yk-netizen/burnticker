@@ -210,7 +210,18 @@ reaches a template. The other fields:
 - `note`: optional, ≤ 140 characters. It is stored apart and shown as "creator's note — not part of the rule".
 - `name`, `ticker` and `note` pass the copy lint with the creator scope. A hit returns 403 `code: "copy-lint"` with `categories`
   (for example `no-affiliation`).
-- `imageUrl` is refused with 400 `custom-image-off` unless `BURNTICKER_CUSTOM_IMAGES_ENABLED`; the image is the generated receipt art.
+- The coin's image is one of two things: the creator's own picture, sent as bytes in `image` (`{ contentType, base64 }`, with
+  `imageRights: true`; only where `BURNTICKER_CUSTOM_IMAGES_ENABLED` is set, otherwise 400 `custom-image-off`), which is decoded,
+  size-checked, marked and pinned on Arweave with its sha256; or, with no `image`, the generated receipt art, pinned the same way.
+- `imageUrl` must be `null` or left out (API 1.20.0, since 2026-10-19, on `/v1/launch/bundle`, the launch page's route and its dry run, and on a
+  pair's side B). Any address is refused with 400 `code: "image-url-refused"` and the sentence "A coin's image cannot be given as a
+  web address. Send the picture itself in the image field, and it is checked and pinned with the coin's details. Leave the image out
+  and the coin uses its generated receipt art." (prefixed "Side B: " for a pair's second coin). That covers plain https links and
+  Arweave references alike (`ar://<txid>`, `https://arweave.net/<txid>`, any gateway): an Arweave transaction id is not a hash of
+  the image bytes, so confirming what it holds would mean fetching it, and the launch path fetches nothing from outside hosts. A
+  linked image could be swapped or vanish after launch, every visitor's browser would contact that host, and the upload checks never
+  see its bytes. Coins registered earlier with a linked image keep it (the registry is append-only); their pinned check says
+  "The image is a link to another website, not a pinned copy."
 - At launch (`register: true`), the metadata JSON and the PNG are pinned on Arweave (Irys). The bundle's `metadataUri` is the arweave
   URL. A failed upload returns 502 `pin-failed`.
 - A preview bundle carries `ar://pending-upload-at-launch`.

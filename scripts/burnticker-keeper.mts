@@ -39,6 +39,7 @@ import { ProgramBurnClient } from "../src/lib/burnticker/programClient.ts";
 import { clusterOfGenesis } from "../src/lib/burnKeeper/solana.ts";
 import { SOL_MINT, usdPrice } from "../src/lib/burnKeeper/jupiterSwap.ts";
 import type { KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
+import { expectedHostOf } from "../src/lib/burnticker/admission.ts";
 import { cosignerFromEnv } from "../src/lib/burnticker/attesters/cosign.ts";
 import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
 import { testCoinKeys } from "../src/lib/burnticker/testCoins.ts";
@@ -207,7 +208,10 @@ log(`claim_lock_fees crank: ${program.lockFees ? `on (fee-keys PDA ${program.loc
 const derbyPools = connectionPoolPort(new Connection(process.env.BURNTICKER_DERBY_RPC_URL?.trim() || "https://api.mainnet-beta.solana.com", budgetedRpcConfig({ commitment: "confirmed", disableRetryOnRateLimit: true })));
 const derby = new DerbyAdapter({ registry, hermes: process.env.BURNTICKER_PYTH_API_KEY?.trim() ? HermesClient.fromEnv(process.env) : null, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), log,
   alert: (key, text) => { registry.recordAlert({ kind: "derby-withheld", key, text, meta: null }); } });
-const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, derby: { sample: (t) => derby.sample(t), plan: () => derby.plan(), ended: (t) => derby.ended(t) }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE), kalshiEnabled: kalshiEnabled(process.env) };
+// second audit 2026-10-19 I-15: what this host encodes into every launch (the keeper key as sole attester, the config authority, the
+// LaunchLab platform), compared for a draft or coin with no stored expectation; the signing key when there is one, else the named key
+const expectedHost = expectedHostOf({ keeperPubkey: built.chain?.payer.publicKey.toBase58() ?? (isPubkey(attester) ? attester : null), program, platformId: process.env.BURNTICKER_PLATFORM_ID?.trim() || null });
+const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, derby: { sample: (t) => derby.sample(t), plan: () => derby.plan(), ended: (t) => derby.ended(t) }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE), kalshiEnabled: kalshiEnabled(process.env), expectedHost };
 // A-1: the round comes from config/burnticker/verified-build.json for this cluster and program id (the fake program has none)
 const dispersalStart = keeperDispersalStart(process.env, built.real ? hostProgramRound(process.env) : null);
 if (!dispersalStart.ok) {
@@ -440,7 +444,7 @@ while (!stopping) {
   if (draftConn && draftVerifier && PROGRAM_ID && !heliusHeld) {
     budget.setPhase("drafts");
     try {
-      const dr = await reconcileDrafts({ registry, reader: draftConn as unknown as DraftChainReader, verifier: draftVerifier, burnProgramId: PROGRAM_ID, now: () => Date.now(), log, dryRun: DRY, env: process.env });
+      const dr = await reconcileDrafts({ registry, reader: draftConn as unknown as DraftChainReader, verifier: draftVerifier, burnProgramId: PROGRAM_ID, now: () => Date.now(), log, dryRun: DRY, env: process.env, host: expectedHost });
       if (dr.takenLive.length) readCache.invalidateAll();
       if (dr.errors.length) log(`  [drafts] ${dr.errors.slice(0, 3).join(" | ")}`);
     } catch (e) { log(`  [drafts] reconcile failed: ${(e as Error).message.slice(0, 160)}`); }

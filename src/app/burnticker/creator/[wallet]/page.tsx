@@ -41,12 +41,14 @@ export default async function CreatorPage({ params }: Params) {
       </header>
       {d.kind === "unavailable" && <p className={card} role="alert">{CREATOR_PAGE.unavailable}</p>}
       {d.kind === "ok" && d.coins.length === 0 && <p className={card + " text-neutral-400"}>{CREATOR_PAGE.empty}</p>}
+      {/* audit 7: a coin whose page could not be read is listed as unavailable; the account never looks empty because of it */}
+      {d.kind === "ok" && d.unavailable > 0 && <p className={card + " text-amber-300"} role="status" data-creator-partial>{CREATOR_PAGE.partial(d.unavailable)}</p>}
       {/* coin card status 2026-10-18: the no-rank line every coin shares is said once above the list (cardView.ts rankLayout) */}
       {d.kind === "ok" && ranks.shared && <p className="text-xs text-neutral-400" data-rank-shared title={RANK_MEANING}>{ranks.shared}</p>}
       {d.kind === "ok" && d.coins.length > 0 && (
         <ul className="grid gap-3 md:grid-cols-2" aria-label="coins">
           {d.coins.map((c, i) => (
-            <li key={c.ticker} className={card + " min-w-0 space-y-2"} data-creator-coin={c.ticker}>
+            <li key={c.mint} className={card + " min-w-0 space-y-2"} data-creator-coin={c.ticker} data-available={c.available ? "yes" : "no"}>
               <div className="flex gap-3">
                 <Link href={c.page} tabIndex={-1} aria-label={`${c.name} $${c.ticker}, coin page`}><CoinThumb src={c.imageUrl} ticker={c.ticker} size={56} generated /></Link>
                 <div className="min-w-0 flex-1">
@@ -65,6 +67,8 @@ export default async function CreatorPage({ params }: Params) {
                 <dt className="text-neutral-500">{CREATOR_PAGE.labels.receipts}</dt><dd>{c.receipts}</dd>
                 <dt className="text-neutral-500">{CREATOR_PAGE.labels.lastBurn}</dt><dd>{longDay(c.lastBurnAt) ?? CREATOR_PAGE.noBurn}</dd>
                 <dt className="text-neutral-500">{CREATOR_PAGE.labels.next}</dt><dd data-next-line>{c.nextLine}</dd>
+                {/* audit 7 F08: the keeper's next read of the source is not a result; it has its own row, and none once a one-shot is decided */}
+                {c.nextCheckLine && <><dt className="text-neutral-500">{CREATOR_PAGE.labels.check}</dt><dd data-next-check>{c.nextCheckLine}</dd></>}
                 {(ranks.perCard[i] !== null || !c.rank) && <><dt className="text-neutral-500" title={RANK_MEANING}>{CREATOR_PAGE.labels.rank}</dt><dd data-rank>{ranks.perCard[i] ?? CREATOR_PAGE.unavailable}</dd></>}
               </dl>
               <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Share ${c.ticker}</summary><div className="mt-2"><ShareBlock ticker={c.ticker} id={c.key} /></div></details>

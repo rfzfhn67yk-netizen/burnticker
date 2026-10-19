@@ -7,6 +7,12 @@
 export const rentLamports = (bytes: number): number => (bytes + 128) * 3480 * 2;
 /** Byte sizes the launch creates per coin (programs/burn-receipts TokenConfig, measured 2026-10-10; REHEARSAL-RUNSHEET §0.1). */
 export const TOKEN_CONFIG_BYTES = 863;
+/**
+ * The EndSink account initialize_token makes when a rule names an end sink (programs/burn-receipts state.rs EndSink, created with
+ * 8 + EndSink::INIT_SPACE in instructions/end.rs): discriminator 8, version 1, bump 1, mint 32, sink_kind 1, sink_mint 32,
+ * min_forward_lamports 8, created_at 8, reserved 32.
+ */
+export const END_SINK_ACCOUNT_BYTES = 8 + 1 + 1 + 32 + 1 + 32 + 8 + 8 + 32;
 /** LaunchLab create's account rent (pool state, two vaults, metadata), measured on the 2026-10-10 rehearsal (REHEARSAL-RUNSHEET §0.1). */
 export const LAUNCHLAB_CREATE_RENT_SOL = 0.03;
 export const LAMPORTS_PER_SIGNATURE = 5000;

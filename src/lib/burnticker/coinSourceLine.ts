@@ -5,6 +5,8 @@
  * "Next source check" unless a market close is known.
  */
 import { utcDateTime } from "@/lib/burnticker/utcWords";
+import { DECIDED, DECIDED_VOID } from "@/lib/burnticker/creatorBenefits";
+import type { ResultState } from "@/lib/burnticker/nextResult";
 import { espnSeriesTitle, parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { GAME_AGREE_LINE, GAME_BURN_LINE, GAME_SETTLEMENT, leagueProvenance, SINGLE_SOURCE_LINE, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { isSingleSourceSeries, SINGLE_SOURCE_PUBLISHER } from "@/lib/burnticker/singleSource";
@@ -55,8 +57,17 @@ export function coinSourceNote(oracle: string, rawSelectorKey: string | null | u
 export const OVERDUE_CHECK_NOTE = "This check was scheduled for that time and this site has not seen it run since. Times are in UTC.";
 export const PASSED_CLOSE_NOTE = "That time has passed and this site has not read a later one. Times are in UTC.";
 
-/** The next-time row: a known market close, else the keeper's next source check (never called the result time). */
-export function nextTimeRow(nextCloseTime: string | null | undefined, nextCheckAt: string | null | undefined, now?: number): { label: string; value: string; note: string } {
+/**
+ * The next-time row: a known market close, else the keeper's next source check (never called the result time). Launch wizard audit
+ * 2026-10-19 F13: with the status producer's result state (nextResult.ts nextTimes), a decided or voided one-shot says so in the creator
+ * page's words (creatorBenefits.ts) and shows no next check: the source is not read for a new result once the one result is in.
+ */
+export const RESULT_ROW_LABEL = "Result";
+export const DECIDED_ROW_NOTE = "This coin resolves once, and its one result is in. No new result is read for it.";
+export const VOIDED_ROW_NOTE = "This coin resolves once, and its one result was voided. No new result is read for it.";
+export function nextTimeRow(nextCloseTime: string | null | undefined, nextCheckAt: string | null | undefined, now?: number, result: ResultState | null = null): { label: string; value: string; note: string } {
+  if (result === "decided") return { label: RESULT_ROW_LABEL, value: DECIDED, note: DECIDED_ROW_NOTE };
+  if (result === "void") return { label: RESULT_ROW_LABEL, value: DECIDED_VOID, note: VOIDED_ROW_NOTE };
   const utc = (iso: string) => utcDateTime(iso);
   const past = (iso: string) => now !== undefined && Number.isFinite(Date.parse(iso)) && Date.parse(iso) < now;
   if (nextCloseTime) return past(nextCloseTime) ? { label: "Scheduled market close, passed", value: utc(nextCloseTime), note: `${PASSED_CLOSE_NOTE} ${PUBLISHER_DECIDES}` } : { label: "Next market close", value: utc(nextCloseTime), note: `Times are in UTC. ${PUBLISHER_DECIDES}` };

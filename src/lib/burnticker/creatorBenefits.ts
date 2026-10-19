@@ -1,4 +1,5 @@
 import { utcDay } from "@/lib/burnticker/utcWords";
+import { latestResult, oneShotState, type ResultReceipt, type ResultState } from "@/lib/burnticker/nextResult";
 /**
  * WHAT A CREATOR GETS, AND THE WORDS OF THE CREATOR PAGES (website-17, 2026-10-12; owner: "featured placement, scoreboard rank, a
  * creator page, the share cards"). None of these pays anyone anything or changes the coin's economics: creators receive no fee revenue,
@@ -24,9 +25,13 @@ export const CREATOR_PAGE = {
   unavailable: "The coin registry could not be read just now, so this list is unavailable.",
   badWallet: "That is not a Solana wallet address.",
   creatorText: "From the creator, not part of the rule",
-  labels: { receipts: "Receipts", lastBurn: "Last burn", next: "Next result", rank: "Rank" },
+  labels: { receipts: "Receipts", lastBurn: "Last burn", next: "Next result", check: "Next source check", rank: "Rank" },
   noBurn: "No burn yet",
   noNext: "None scheduled",
+  /** audit 7 F08: the coin's line in a partial list, when its own page could not be read */
+  coinUnavailable: "This coin's details could not be read just now.",
+  /** audit 7 creator aggregation: some coins could not be read; the list shows the rest */
+  partial: (n: number) => `${n === 1 ? "One coin" : `${n} coins`} could not be read just now, so ${n === 1 ? "its details are" : "their details are"} missing below.`,
 } as const;
 
 /** The coin page's link to its creator's page (WIRING-17.md): "Created by Ab12…cd34". */
@@ -62,23 +67,32 @@ export const ANALYTICS_COPY = {
 } as const;
 
 /**
- * The creator page's "Next result" cell (prelaunch audit 2026-10-18, A-26; the review of 2026-10-18). A one-shot is decided only when
- * its latest result receipt (the wind-down, drain and sweep receipts at the rule's end aside) settled a result: burned ("Decided and
- * burned"), or waiting to burn before graduation; a skipped, voided or failed result decides nothing. Otherwise the next time as a UTC
- * day (utcWords.ts), and a time already past says it is overdue, in words.
+ * The creator page's "Next result" cell (prelaunch audit 2026-10-18, A-26; the review of 2026-10-18; audit 7 F08). A one-shot is decided
+ * only when its latest result receipt (the wind-down, drain and sweep receipts at the rule's end aside) settled a result: burned
+ * ("Decided and burned"), or waiting to burn before graduation; a voided one-shot says so; a skipped or failed result decides nothing.
+ * Otherwise the next RESULT time as a UTC day (utcWords.ts), and a time already past says it is overdue, in words. `nextAt` is the next
+ * result (nextResult.ts nextTimes), never the keeper's next poll of the source: a decided game coin never shows a new result date.
  */
 export const DECIDED_WAITING = "Decided, waiting for graduation";
 export const DECIDED_BURNED = "Decided and burned";
 export const DECIDED = "Decided";
-const END_KINDS = new Set(["winddown", "drain", "sweep"]);
-const SETTLED = new Set(["confirmed", "planned", "sending", "pending-pair", "forwarded"]);
-export function creatorNextLine(c: { oneShot: boolean; receipts: readonly { status: string; kind?: string; settledAt?: string }[]; graduated: boolean; nextAt: string | null }, now: number): string {
+export const DECIDED_VOID = "Voided, so the rule has ended";
+export function creatorNextLine(c: { oneShot: boolean; receipts: readonly ResultReceipt[]; graduated: boolean; nextAt: string | null; /** the status producer's state when known (the first snow counts only a day that burned) */ result?: ResultState | null }, now: number): string {
   if (c.oneShot) {
-    const latest = c.receipts.filter((r) => !END_KINDS.has(r.kind ?? "")).sort((a, b) => String(b.settledAt ?? "").localeCompare(String(a.settledAt ?? "")))[0];
-    if (latest && SETTLED.has(latest.status)) return latest.status === "confirmed" ? DECIDED_BURNED : !c.graduated ? DECIDED_WAITING : DECIDED;
+    const state = c.result && c.result !== "recurring" ? c.result : oneShotState(c.receipts);
+    if (state === "decided") {
+      const latest = latestResult(c.receipts);
+      return latest?.status === "confirmed" ? DECIDED_BURNED : !c.graduated ? DECIDED_WAITING : DECIDED;
+    }
+    if (state === "void") return DECIDED_VOID;
   }
-  if (!c.nextAt) return CREATOR_PAGE.noNext;
-  const t = Date.parse(c.nextAt);
+  return dayLine(c.nextAt, now);
+}
+
+/** A time as a UTC day, "overdue" in words once past; "None scheduled" for none. */
+export function dayLine(at: string | null, now: number): string {
+  if (!at) return CREATOR_PAGE.noNext;
+  const t = Date.parse(at);
   if (Number.isNaN(t)) return CREATOR_PAGE.noNext;
   return t <= now ? `Was due on ${utcDay(t)} and is overdue` : utcDay(t);
 }

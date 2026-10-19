@@ -48,9 +48,122 @@ export const REVIEW_UPDATING = "The summary is being updated for this draft. The
 
 /**
  * Prelaunch audit 2026-10-18 A-22: one review step called POST /v1/launch/review three times for one draft (the effect ran again when
- * the launch gate finished loading and on other unrelated changes). A request is due only for a revision (and retry round) not asked
- * yet; the same draft asked again is answered from the slot it already has. `asked` is the last request actually sent.
+ * the launch gate finished loading and on other unrelated changes).
+ *
+ * Audit 7 F02 (2026-10-19): the old check compared against the last revision ASKED, and the slot moved to a revision when its debounce
+ * timer was set, not when the request went out. Typing B and going back to A inside the debounce cancelled B's timer, left the slot on
+ * B, and A counted as "already asked", so the summary said it was being updated forever and Launch stayed off. Now the slot is the only
+ * owner: it moves to a revision only when a request is actually sent (createReviewRequester), and a request is due whenever the slot
+ * does not already hold a review, or a request in flight, for the CURRENT revision. A cancelled timer owns nothing; a review already
+ * held for the same revision is used as it is. An answered error is due again (the next visit asks again); the retry ladder's pause is
+ * guarded by the requester, so unrelated re-renders inside the pause send nothing.
  */
-export function reviewRequestDue(asked: { rev: string; retry: number } | null, rev: string, retry: number): boolean {
-  return !asked || asked.rev !== rev || asked.retry !== retry;
+export function reviewRequestDue<T>(slot: ReviewSlot<T>, rev: string): boolean {
+  return slot.rev !== rev || (!slot.busy && !slot.review);
+}
+
+/**
+ * Audit 7 F03: who asks is part of the review. The body carries the creator wallet and, after "Confirm it with your wallet", a signed
+ * proof, so both belong in the revision: a wallet connect, disconnect or switch, a new proof and an expired one each make a new revision
+ * (a new request; an answer for the old one is dropped by reviewAnswered). A proof signed by another wallet or over other tickers is not
+ * sent at all; the page drops a proof when it reaches its age limit (reviewProofExpiresAt).
+ */
+export interface ReviewProofLike { message: string; signature: string }
+type ProofParse = (message: string) => { creator: string; tickers: readonly string[]; issuedAt: string } | null;
+export function usableReviewProof<P extends ReviewProofLike>(proof: P | null, creator: string, tickers: readonly string[], parse: ProofParse): P | null {
+  if (!proof || !creator) return null;
+  const f = parse(proof.message);
+  if (!f || f.creator !== creator) return null;
+  const norm = (xs: readonly string[]) => xs.map((t) => t.toUpperCase()).filter(Boolean).sort().join(" ");
+  return norm(tickers) === norm(f.tickers) ? proof : null;
+}
+/** When a proof reaches its age limit (ms since epoch), so the page can drop it then and ask again; null when it cannot be read. */
+export function reviewProofExpiresAt(proof: ReviewProofLike | null, maxAgeMs: number, parse: ProofParse): number | null {
+  const f = proof ? parse(proof.message) : null, at = f ? Date.parse(f.issuedAt) : NaN;
+  return Number.isFinite(at) ? at + maxAgeMs : null;
+}
+/** The part of the revision that says who asks: the wallet (or none) and the signature of the proof sent with it (or none). */
+export function reviewIdentity(creator: string, proof: ReviewProofLike | null): [string, string] {
+  return [creator || "", creator && proof ? proof.signature : ""];
+}
+
+/**
+ * Second audit 2026-10-19 I-12: the two revisions of one draft on the launch page. `draft` is what the coin is (rule, tickers, names,
+ * text, profile, raise) and nothing about who asks: it is the prepare's idempotency key and the stale-press check, so a proof reaching its
+ * age limit or a wallet change while a Launch press is in flight never makes a completed, paid prepare look stale (the next press would
+ * upload and reserve again). `review` is the draft plus the wallet and its proof (reviewIdentity): the review requester's key, so a new
+ * wallet or proof asks the review again.
+ */
+export function launchRevisions(parts: readonly unknown[], identity: readonly [string, string]): { draft: string; review: string } {
+  return { draft: draftRevision([...parts]), review: draftRevision([...parts, [...identity]]) };
+}
+
+type Timer = unknown;
+export interface ReviewRequesterOptions<T, B> {
+  send: (body: B) => Promise<T>;
+  onSlot: (slot: ReviewSlot<T>) => void;
+  debounceMs?: number;
+  retryMax?: number;
+  /** the pause before retry round n + 1 (default 2, 4, 8 s) */
+  backoffMs?: (n: number) => number;
+  /** a busy or briefly unreachable server (asked again after a pause, for that revision only) */
+  transient?: (e: unknown) => boolean;
+  /** the error line for a failure that is not asked again */
+  describe?: (e: unknown) => string;
+  /** the line shown while a pause before the next round runs */
+  retryingLine?: string;
+  setTimer?: (f: () => void, ms: number) => Timer;
+  clearTimer?: (t: Timer) => void;
+}
+export interface ReviewRequester<B> {
+  /** Called on every run of the page's effect with the current revision and the body to send for it (null while no request may go
+   *  out: another step, the launch gate still loading, no rule). True when this call scheduled a request. */
+  want: (rev: string, body: B | null) => boolean;
+  /** unmount: cancel the debounce and any retry pause (a request in flight still answers into the slot as usual) */
+  cancel: () => void;
+}
+
+/**
+ * The review effect's whole state machine, framework-free so it is driven with fake timers (test/burntickerReviewRequester.test.ts):
+ * debounce; a timer that has not fired is cancelled and owns nothing; send; late and out-of-order answers dropped; the retry ladder for
+ * a busy server (that revision only; a new revision starts the count again); a plain failure asked again on the next visit.
+ */
+export function createReviewRequester<T, B>(o: ReviewRequesterOptions<T, B>): ReviewRequester<B> {
+  const debounce = o.debounceMs ?? 600, retryMax = o.retryMax ?? 3, backoff = o.backoffMs ?? ((n: number) => 2000 * 2 ** n);
+  const setT = o.setTimer ?? ((f: () => void, ms: number): Timer => setTimeout(f, ms));
+  const clearT = o.clearTimer ?? ((t: Timer) => clearTimeout(t as ReturnType<typeof setTimeout>));
+  let slot: ReviewSlot<T> = EMPTY_REVIEW_SLOT, seq = 0, cur = "", body: B | null = null, round = 0;
+  let pending: { rev: string; t: Timer } | null = null, retry: { rev: string; t: Timer } | null = null;
+  const put = (s: ReviewSlot<T>) => { if (s !== slot) { slot = s; o.onSlot(s); } };
+  const fire = (rev: string, b: B) => {
+    pending = null;
+    const n = ++seq, r = round;
+    put(reviewRequested(slot, rev, n));
+    let p: Promise<T>;
+    try { p = Promise.resolve(o.send(b)); } catch (e) { p = Promise.reject(e); }
+    p.then((review) => put(reviewAnswered(slot, cur, { rev, seq: n, review })), (e: unknown) => {
+      const again = !!o.transient?.(e) && r < retryMax && rev === cur && n === slot.seq;
+      put(reviewAnswered(slot, cur, { rev, seq: n, error: again ? o.retryingLine ?? "Asking again in a few seconds." : o.describe?.(e) ?? String((e as Error)?.message ?? e) }));
+      if (!again) return;
+      if (retry) clearT(retry.t);
+      retry = { rev, t: setT(() => { retry = null; if (cur !== rev) return; round = r + 1; sync(); }, backoff(r)) };
+    });
+  };
+  const sync = (): boolean => {
+    if (pending && (pending.rev !== cur || body === null)) { clearT(pending.t); pending = null; }   // a cancelled timer owns nothing
+    if (body === null || pending) return false;   // nothing may go out, or the timer already set sends the latest body when it fires
+    if (retry && retry.rev === cur) return false;  // a pause before the next round is running for this revision
+    if (!reviewRequestDue(slot, cur)) return false;
+    const rev = cur;
+    pending = { rev, t: setT(() => { if (body !== null && cur === rev) fire(rev, body); else pending = null; }, debounce) };
+    return true;
+  };
+  return {
+    want(rev, b) {
+      if (rev !== cur) { round = 0; if (retry) { clearT(retry.t); retry = null; } }   // a new revision starts the retry count again
+      cur = rev; body = b;
+      return sync();
+    },
+    cancel() { if (pending) clearT(pending.t); if (retry) clearT(retry.t); pending = null; retry = null; },
+  };
 }

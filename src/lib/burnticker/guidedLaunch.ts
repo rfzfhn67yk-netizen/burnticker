@@ -2,8 +2,9 @@ import { withoutDenials } from "@/lib/burnticker/denials";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { CANDIDATES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
+import { oneShotFull } from "@/lib/burnticker/nextResult";
 import { LIVE_NOW, gameSeries, isPairOutcome, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
@@ -402,7 +403,7 @@ export function endSentences(rule: BurnRule, o: { team?: string | null; party?: 
  *   coin      the rest goes to another live coin's burn (the picker over GET /sinks); end.rs falls to $DEFICIT when that coin is not live
  *   deficit   the rest goes to $DEFICIT's burn (the default)
  *   burn-sol  the rest is sent to Solana's incinerator; shown only when the launch state says the round-5 program has that sink
- *             (launchAvailability.ts burnSol, absent today, so hidden)
+ *             (launchAvailability.ts burnSol: on with the round-5 program unless BURNTICKER_BURN_SOL_ENABLED is off)
  *
  * "The rest burns this coin" is never a choice for that path. It stays only on the winning path, and only where the rule has one: a
  * champion-path team coin whose team wins the title (`winning`). A settled or linked pair keeps the pair winner and shows no choice.
@@ -416,7 +417,9 @@ export const END_CHOICE_LABEL = "Where the rest goes if this coin does not win";
  * choice is headed by when it applies: the rule's end. The champion path keeps END_CHOICE_LABEL.
  */
 export const END_CHOICE_LABEL_ENDS = "Where the rest goes when the rule ends";
-export const endChoiceLabel = (model: Pick<EndChoiceModel, "winning">): string => (model.winning ? END_CHOICE_LABEL : END_CHOICE_LABEL_ENDS);
+/** Owner decision 2026-10-19: a coin that spends its whole pool in one burn (nextResult.ts oneShotFull) is headed by what comes after it. */
+export const END_CHOICE_LABEL_ONE_SHOT = "Where anything left after its one burn goes";
+export const endChoiceLabel = (model: Pick<EndChoiceModel, "winning"> & { oneShot?: boolean }): string => (model.winning ? END_CHOICE_LABEL : model.oneShot ? END_CHOICE_LABEL_ONE_SHOT : END_CHOICE_LABEL_ENDS);
 export const END_CHOICE_LINES = {
   self: "The rest burns this coin.",
   coin: "The rest goes to another coin's burn.",
@@ -431,7 +434,7 @@ export const SINK_NONE_LINE = "No other live coin on this network can take the r
 export const SINK_NO_MATCH_LINE = "No live coin matches that search.";
 /** The picked coin, in a sentence, with end.rs's fall-through. */
 export const pickedSinkLine = (ticker: string): string => `The rest goes to $${ticker}'s burn; if $${ticker} is not live then, to $DEFICIT's burn.`;
-export interface EndChoiceModel { offered: boolean; winning: string | null; options: { kind: EndChoiceKind; line: string }[] }
+export interface EndChoiceModel { offered: boolean; winning: string | null; options: { kind: EndChoiceKind; line: string }[]; /** one burn of the whole pool (nextResult.ts oneShotFull): the lines say what reaches the pool later */ oneShot?: boolean }
 /**
  * What the end choice shows for `rule` (with its onEnd, or the default end): offered for a coin whose sink is $DEFICIT or a named coin and
  * that can end; never for a winner-takes-the-burn pair (the pair winner), a league-mode coin, a fixed-token rule or a coin with no end.
@@ -444,13 +447,15 @@ export function endChoiceModel(rule0: BurnRule, o: { burnSol?: boolean; sinkPick
   const offered = (sink === "flagship" || sink === "mint" || sink === "incinerator") && !rule.set && windowKindOf(rule) !== "perpetual";
   if (!offered) return { offered: false, winning: null, options: [] };
   const winning = championPathRule(rule) ? `If ${o.team ?? "the team"} win the championship, the rest burns this coin.` : null;
+  // owner decision 2026-10-19: a coin that spends its whole pool in one burn says what reaches the pool later (describe.ts ONE_SHOT_REST_*)
+  const oneShot = !winning && !rule.pair && oneShotFull(rule);
   return {
-    offered, winning,
+    offered, winning, oneShot,
     options: [
       // owner decision 2026-10-13 evening: the "another coin" choice is hidden unless the host exposes it (BURNTICKER_END_SINK_PICKER=1)
       ...(o.sinkPicker ? [{ kind: "coin" as const, line: END_CHOICE_LINES.coin }] : []),
-      { kind: "deficit", line: END_CHOICE_LINES.deficit },
-      ...(o.burnSol ? [{ kind: "burn-sol" as const, line: END_CHOICE_LINES.burnSol }] : []),
+      { kind: "deficit", line: oneShot ? ONE_SHOT_REST_DEFICIT : END_CHOICE_LINES.deficit },
+      ...(o.burnSol ? [{ kind: "burn-sol" as const, line: oneShot ? ONE_SHOT_REST_INCINERATOR : END_CHOICE_LINES.burnSol }] : []),
     ],
   };
 }

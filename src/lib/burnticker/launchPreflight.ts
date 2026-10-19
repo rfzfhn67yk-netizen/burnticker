@@ -1,5 +1,5 @@
-import { LINKED_ONE_SHOT_REFUSAL, ONE_SHOT_SHARE_REFUSAL } from "@/lib/burnticker/linkedShare";
-import { sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
+import { LINKED_ONE_SHOT_REFUSAL, ONE_SHOT_SHARE_REFUSAL, ONE_SHOT_TARGET_SHARE_REFUSAL } from "@/lib/burnticker/linkedShare";
+import { BURN_REAL_WAITING, BURN_SOL_OFF, burnRealEnabledFromEnv, sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { endSelfOnLossProblem, endSinkOf, isOneShot, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { feedById, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
@@ -14,6 +14,7 @@ import { controlCharProblem } from "@/lib/burnticker/launchFields";
 import { regexProblem } from "@/lib/burnticker/safeRegex";
 import { lookalikeRefusal, type LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { parseEspnSeries, teamByAbbr, teamCodeOf, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { windowKindOf } from "@/lib/burnticker/describe";
 
 /**
  * THE ONE LAUNCH PREFLIGHT (ChatGPT audit 6 item 8, 2026-10-12: POST /launch/review answered 200 with no problems for setups the bundle
@@ -49,12 +50,23 @@ export const reserveProblem = (reserveSol: string): string | null => {
 
 /** Round 5: why the incinerator end cannot be picked on a host whose burn program is older. */
 export const INCINERATOR_WAITING = "Sending the SOL left at the end to Solana's incinerator needs the next version of the burn program, which this site does not run yet. Pick another end.";
+/**
+ * OWNER DECISION 2026-10-19: burning a real token is off unless BURNTICKER_BURN_REAL_ENABLED is on (launchAvailability.ts). The bundle
+ * route refuses a rule or a side B that pins a token with this code, right after the rule is locked; the review lists BURN_REAL_WAITING.
+ */
+export const BURN_REAL_OFF_CODE = "burn-real-off";
+export function burnRealRefusal(pinned: unknown, env: Readonly<Record<string, string | undefined>> = process.env): PreflightRefusal | null {
+  return pinned && !burnRealEnabledFromEnv(env) ? { status: 400, code: BURN_REAL_OFF_CODE, message: BURN_REAL_WAITING } : null;
+}
+/** The incinerator end on a round-5 host whose BURNTICKER_BURN_SOL_ENABLED is off (the page hides the choice; the API refuses it). */
+export const BURN_SOL_OFF_CODE = "burn-sol-off";
 export interface RuleCtx { kalshiEnabled?: boolean; now?: number; /** the launch is a registered pair (the body's `pair` side) */ pair?: boolean;
   /** two candidates in one race: the body's pair names candidate B's market (`pair.market`) and the race (`pair.race`) */ candidates?: { marketB: string | null; race: string | null } | null;
   /** two teams in one game: the body's pair names the other team (`pair.opp`) */ game?: { opp: string | null } | null;
   /** end-sink picker (endSinks.ts): the live coins on this network a rule may name in onEnd.mint; absent = not checked here */ sinks?: readonly SinkCoin[] | null;
   /** this launch's own mints, and the other side of this coin's pair: neither may take the rest */ own?: readonly string[]; partners?: readonly string[];
   /** round 5: the host's burn program is round 5 (BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5); false refuses the incinerator end */ programRound5?: boolean;
+  /** owner 2026-10-19: false (BURNTICKER_BURN_SOL_ENABLED off) refuses the incinerator end on a round-5 host */ burnSol?: boolean;
   /** review 10 F1: the host runs burn dispersal (programHash.ts hostDispersal, the keeper's decision); anything but true refuses a single one-shot under 100 % with an end sink */ dispersal?: boolean }
 
 /**
@@ -144,6 +156,14 @@ export function settledPairInput(pair: unknown): SettledPairInput | null {
 /** The candidates name for settledPairSinkProblems. */
 export const candidatesSinkProblems = settledPairSinkProblems;
 
+/**
+ * LAUNCH WIZARD AUDIT 2026-10-19 F8: the picker-off refusal said "the rest of a losing coin" on rules with no losing path (a Public number
+ * with no end date, a one-shot at 100%). Said by the rule's shape: a coin with no end date has no end to send anything at; any other coin
+ * sends what is left at the end of its rule.
+ */
+export const SINK_PICKER_OFF_LINE = "This site sends what is left at the end of the rule to $DEFICIT's burn. Pick that choice.";
+export const SINK_PICKER_OFF_NO_END = "This coin's rule has no end date, so nothing is sent anywhere at an end. Leave the end on $DEFICIT's burn.";
+export const sinkPickerOffRefusal = (r: BurnRule): string => (r.oracle !== "derby" && !r.market && !isOneShot(r) && windowKindOf(r) === "perpetual" ? SINK_PICKER_OFF_NO_END : SINK_PICKER_OFF_LINE);
 /** The rule refusals, in the order the bundle route meets them. The first one is the bundle's answer; the review lists them all. */
 /** Every mapping of the rule spends the whole pool (a vault amount is not a share and is refused elsewhere). */
 const linkedFull = (r: BurnRule): boolean => (r.kind === "binary" ? [r.binary?.onYes, r.binary?.onNo] : [r.scalar?.perUnit]).every((m) => !m || m.fractionOfPool === undefined || m.fractionOfPool === 1);
@@ -176,14 +196,16 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
   if (ctx.pair && isOneShot(r) && !linkedFull(r)) out.push({ status: 400, code: "linked-pair-full-pool", message: LINKED_ONE_SHOT_REFUSAL });
   // review 10 F1 (2026-10-14): a single one-shot under 100 % with an end sink cannot finish its share on the coin before the end is recorded
   // and the rest forwarded, unless the keeper can spend the carried amount without a reading (crank_carried, burn dispersal). Fail closed.
-  else if (!ctx.pair && isOneShot(r) && !linkedFull(r) && endSinkOf(r) !== null && (ctx.dispersal !== true || !!r.burnTarget)) out.push({ status: 400, code: "one-shot-share-needs-dispersal", message: ONE_SHOT_SHARE_REFUSAL });
+  // launch wizard audit 2026-10-19 F5: with dispersal on, a burn target is the reason, and it gets its own sentence
+  else if (!ctx.pair && isOneShot(r) && !linkedFull(r) && endSinkOf(r) !== null && (ctx.dispersal !== true || !!r.burnTarget)) out.push({ status: 400, code: "one-shot-share-needs-dispersal", message: ctx.dispersal === true ? ONE_SHOT_TARGET_SHARE_REFUSAL : ONE_SHOT_SHARE_REFUSAL });
   // round 5: the incinerator end sink exists only on the round-5 program (initialize_token pins EndSink kind INCINERATOR)
   if (endSinkOf(r) === "incinerator" && ctx.programRound5 === false) out.push({ status: 503, code: "incinerator-not-live", message: INCINERATOR_WAITING });
+  else if (endSinkOf(r) === "incinerator" && ctx.burnSol === false) out.push({ status: 400, code: BURN_SOL_OFF_CODE, message: BURN_SOL_OFF });
   // the owner rule of 2026-10-13: the losing path never burns this coin (rules.ts endSelfOnLossProblem); said once beside a pair's own refusal
   { const why = endSelfOnLossProblem(r); if (why && !out.some((x) => /end-sink$/.test(x.code))) out.push({ status: 400, code: "end-self-on-loss", message: why }); }
   // the end-sink picker: a named coin must be a live coin from the list, never this coin or its pair partner (endSinks.ts)
   // owner decision 2026-10-13 evening: a named sink coin is refused unless the host offers the picker (BURNTICKER_END_SINK_PICKER=1)
-  if (r.onEnd?.mint && !sinkPickerFromEnv(process.env)) out.push({ status: 400, code: "end-sink-picker-off", message: "This site sends the rest of a losing coin to $DEFICIT's burn. Pick that choice." });
+  if (r.onEnd?.mint && !sinkPickerFromEnv(process.env)) out.push({ status: 400, code: "end-sink-picker-off", message: sinkPickerOffRefusal(r) });
   else if (ctx.sinks) { const why = namedSinkProblem(r, ctx.sinks, { own: ctx.own, partners: ctx.partners }); if (why) out.push({ status: 400, code: "end-sink-coin", message: why }); }
   { const rp = reserveProblem(r.reserveSol); if (rp) out.push({ status: 400, code: "reserve", message: rp }); }
   if (r.filter.titleRegex !== undefined) { const why = regexProblem(r.filter.titleRegex); if (why) out.push({ status: 400, code: "unsafe-regex", message: why }); }

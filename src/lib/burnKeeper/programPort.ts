@@ -81,8 +81,12 @@ export interface ProgramPort {
   blockHeight(): Promise<number>;
   /** The memo the program wrote in a confirmed transaction (its own Memo CPI, not log text) — for `recordDate` when given — or null. */
   memoOf(signature: string, recordDate?: number): Promise<string | null>;
-  /** A confirmed crank_* transaction that processed this reading (anyone's — cranking is permissionless), or null. */
-  findCrankTx(recordDate: number): Promise<{ signature: string; slot: number | null; memo: string | null } | null>;
+  /**
+   * The confirmed transaction that processed this reading (anyone's — cranking is permissionless), or null: one of the program's
+   * processing instructions (src/lib/burnReceipts/processing.ts PROCESSING_INSTRUCTIONS, crank_target_burn and forward_to_winner
+   * included) for THIS program and THIS reading date. `forwards` says whether it was the forward_to_winner (when the port knows).
+   */
+  findCrankTx(recordDate: number): Promise<{ signature: string; slot: number | null; memo: string | null; instruction?: string; forwards?: boolean } | null>;
   /** Best-effort creator-fee claims into the fee PDA (curve vault, CPMM counters). Never throws for "nothing to claim". */
   claimCreatorFees(): Promise<{ sent: string[]; notes: string[] }>;
   /** check_pool_health (permissionless). */

@@ -46,6 +46,14 @@ type Payload =
   | { kind: "forward"; recordDate: number }
   | { kind: "carried"; maxSpend: bigint }
   | { kind: "other" };
+export type FakePayload = Payload;
+
+/** The program instruction a fake crank / forward payload stands for (processing.ts PROCESSING_INSTRUCTIONS names), or null. */
+export function fakeInstructionName(p: Payload): string | null {
+  if (p.kind === "forward") return "forward_to_winner";
+  if (p.kind !== "crank") return null;
+  return p.crank === "target" ? "crank_target_burn" : `crank_${p.crank}`;
+}
 
 const Z = BigInt(0);
 const big = (n: number | bigint) => BigInt(n);
@@ -460,9 +468,12 @@ export class FakeProgram implements ProgramPort {
   async signatureStatuses(sigs: string[]) { return sigs.map((s) => { const l = this.landed.get(s); return l ? { slot: l.slot, err: l.err, confirmed: true } : null; }); }
   async blockHeight() { return this.height; }
   async memoOf(sig: string) { return this.landed.get(sig)?.memo ?? null; }
-  async findCrankTx(D: number) {
+  async findCrankTx(D: number): ReturnType<ProgramPort["findCrankTx"]> {
     // a crank, or (winner takes the burn) a forward_to_winner that processed this reading — review RL-1
-    for (const [signature, l] of this.landed) if (!l.err && (l.payload.kind === "crank" || l.payload.kind === "forward") && l.payload.recordDate === D) return { signature, slot: l.slot, memo: l.memo };
+    for (const [signature, l] of this.landed) {
+      if (l.err || (l.payload.kind !== "crank" && l.payload.kind !== "forward") || l.payload.recordDate !== D) continue;
+      return { signature, slot: l.slot, memo: l.memo, instruction: fakeInstructionName(l.payload) ?? undefined, forwards: l.payload.kind === "forward" };
+    }
     return null;
   }
   /** Someone else cranks the next reading (permissionless). Returns the signature. */

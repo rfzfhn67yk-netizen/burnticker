@@ -30,7 +30,7 @@ export const CREATOR_LAUNCHES_CLOSED_AT_FLAG = "BURNTICKER_CREATOR_LAUNCHES_CLOS
 export type LaunchMode = "closed" | "preview" | "open";
 export type LaunchType = "team" | "matchup" | "markets" | "elections" | "feeds" | "weather" | "derby" | "pairs";
 export interface TypeAvailability { type: LaunchType; label: string; available: boolean; reason: string | null }
-export interface SourceAvailability { id: "sports-settlement" | "sports-schedule" | "polymarket" | "nws" | "feeds" | "pair-curve" | "burn-real" | /** round 5: the incinerator end sink; no host lists it yet */ "burn-sol" | /** the "another coin" end choice; off until the list is curated */ "end-sink-picker"; label: string; available: boolean; reason: string | null }
+export interface SourceAvailability { id: "sports-settlement" | "sports-schedule" | "polymarket" | "nws" | "feeds" | "pair-curve" | "burn-real" | /** round 5: the incinerator end sink; on with the round-5 program unless BURNTICKER_BURN_SOL_ENABLED is off */ "burn-sol" | /** the "another coin" end choice; off until the list is curated */ "end-sink-picker"; label: string; available: boolean; reason: string | null }
 export interface LaunchAvailabilityModel {
   mode: LaunchMode;
   /** True only in `open` mode: the one flag that lets a bundle be built. */
@@ -63,6 +63,26 @@ export const BURN_REAL_LAYOUT_ENV = "BURNTICKER_INITIALIZE_TOKEN_LAYOUT";
 // audit 12 item 15: said plainly, with no release name; the page shows it only where a burn target could be set (WIRING-AUDIT12)
 export const BURN_REAL_WAITING = "Burning a real token, such as WIF or BONK, instead of the coin's own is not offered on this site yet. Every coin made here burns its own token.";
 export const burnRealFromEnv = (env: Env = process.env): boolean => (env[BURN_REAL_LAYOUT_ENV] ?? "").trim() === "r5";
+/**
+ * OWNER DECISION 2026-10-19: burning a real token is OFF by default, even on a round-5 host. BURNTICKER_BURN_REAL_ENABLED (1, true, on or
+ * yes) turns it on; the `burn-real` source is available only with the round-5 program AND this flag. burnRealFromEnv above keeps meaning
+ * "the host runs the round-5 program" (the preflight's programRound5 reads it). The review and the bundle route refuse a rule that pins a
+ * token while this is off (launchPreflight.ts BURN_REAL_OFF_CODE), so the API cannot do what the page hides.
+ */
+export const BURN_REAL_ENABLED_FLAG = "BURNTICKER_BURN_REAL_ENABLED";
+export const burnRealEnabledFromEnv = (env: Env = process.env): boolean => on(env[BURN_REAL_ENABLED_FLAG]);
+/** The `burn-real` source: the round-5 program and the owner's flag. */
+export const burnRealOfferedFromEnv = (env: Env = process.env): boolean => burnRealFromEnv(env) && burnRealEnabledFromEnv(env);
+/**
+ * OWNER DECISION 2026-10-19: the incinerator end sink ("the SOL left at the end is sent to Solana's incinerator") is ON wherever the
+ * round-5 program runs. BURNTICKER_BURN_SOL_ENABLED set to 0, false, off or no hides it; anything else (unset included) leaves it on.
+ */
+export const BURN_SOL_ENABLED_FLAG = "BURNTICKER_BURN_SOL_ENABLED";
+export const burnSolEnabledFromEnv = (env: Env = process.env): boolean => !/^(0|false|off|no)$/i.test((env[BURN_SOL_ENABLED_FLAG] ?? "").trim());
+/** The `burn-sol` source: the round-5 program, unless the flag turns it off. */
+export const burnSolOfferedFromEnv = (env: Env = process.env): boolean => burnRealFromEnv(env) && burnSolEnabledFromEnv(env);
+export const BURN_SOL_NOT_R5 = "Sending the SOL left at the end to Solana's incinerator needs a newer version of the burn program than this site runs.";
+export const BURN_SOL_OFF = "Sending the SOL left at the end to Solana's incinerator is turned off on this site. The rest goes to $DEFICIT's burn.";
 /** BURNTICKER_END_SINK_PICKER=1 offers "the rest goes to another coin's burn"; anything else keeps $DEFICIT as the only sink choice. */
 export const sinkPickerFromEnv = (env: Env = process.env): boolean => /^(1|true|on|yes)$/i.test((env.BURNTICKER_END_SINK_PICKER ?? "").trim());
 
@@ -99,9 +119,10 @@ export function availabilityFromEnv(env: Env = process.env, cluster: string | nu
     { id: "nws", label: "National Weather Service daily climate reports", available: true, reason: null },
     { id: "feeds", label: "Public data publishers (Treasury, BLS, FRED, …)", available: true, reason: null },
     { id: "pair-curve", label: "Pair curve (registered pairs on mainnet)", available: pairCurve, reason: pairCurve ? null : "the pair curve is turned off on this site" },
-    { id: "burn-real", label: "Coins that burn a real token instead of themselves", available: burnRealFromEnv(env), reason: burnRealFromEnv(env) ? null : BURN_REAL_WAITING },
+    { id: "burn-real", label: "Coins that burn a real token instead of themselves", available: burnRealOfferedFromEnv(env), reason: burnRealOfferedFromEnv(env) ? null : BURN_REAL_WAITING },
+    { id: "burn-sol", label: "Sending the SOL left at the end to Solana's incinerator", available: burnSolOfferedFromEnv(env), reason: burnSolOfferedFromEnv(env) ? null : burnRealFromEnv(env) ? BURN_SOL_OFF : BURN_SOL_NOT_R5 },
     // owner decision 2026-10-13 evening: a sink coin has a beneficiary, $DEFICIT has none; the picker stays off until the list is curated
-    { id: "end-sink-picker", label: "Sending the rest to another coin's burn", available: sinkPickerFromEnv(env), reason: sinkPickerFromEnv(env) ? null : "The rest of a losing coin goes to $DEFICIT's burn on this site." },
+    { id: "end-sink-picker", label: "Sending the rest to another coin's burn", available: sinkPickerFromEnv(env), reason: sinkPickerFromEnv(env) ? null : "What is left at the end of a rule goes to $DEFICIT's burn on this site." },
   ];
   return { mode, transactions: mode === "open", cluster, banner: mode === "preview" ? PREVIEW_BANNER : mode === "closed" ? CREATOR_LAUNCHES_CLOSED : null, types, sources };
 }
@@ -199,11 +220,12 @@ export interface SiteLaunchState {
   /** Coin vs Coin, registered pairs and the two-coin Matchup: one line and its blocker (null when available). */
   pairs: { available: boolean; line: string | null; detail: string | null };
   hostedSigning: HostedSigning;
-  /** Round 5: whether a coin may burn a real token on this site (the round-5 program is deployed), and the waiting line when not. */
+  /** Round 5: whether a coin may burn a real token on this site (the round-5 program and BURNTICKER_BURN_REAL_ENABLED), and the waiting line when not. */
   burnReal: { available: boolean; line: string | null };
   /**
    * End-sink picker (2026-10-13): whether a coin may send its rest to Solana's incinerator (a round-5 program sink another change builds).
-   * Read from a `burn-sol` source; no host exposes one today, so it is false and the step-4 slot stays hidden (fail closed).
+   * Read from the `burn-sol` source (owner 2026-10-19: on wherever the round-5 program runs, unless BURNTICKER_BURN_SOL_ENABLED is off);
+   * a catalogue without it reads false and the end step's slot stays hidden (fail closed).
    */
   burnSol: { available: boolean };
   /** The "another coin's burn" end choice. Owner decision 2026-10-13 evening: held back until the list is curated (a sink coin has a

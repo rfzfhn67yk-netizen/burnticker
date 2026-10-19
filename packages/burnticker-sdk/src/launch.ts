@@ -36,7 +36,12 @@ export interface LaunchOptions {
   selector?: Selector;
   /** The mapping (with `selector`), or a full rule. */
   rule: Mapping | Record<string, unknown>;
-  metadata: { ticker: string; name: string; description?: string; imageUrl?: string | null; links?: { label: string; url: string }[] };
+  /**
+   * `imageUrl` must be null or left out (since 2026-10-19 the API refuses an image given as a web address, `ar://` and gateway links
+   * included, with 400 image-url-refused): a coin launched through this helper gets the generated receipt art, pinned on Arweave with
+   * its details. A creator's own picture goes up as bytes in the request's `image` field, which the launch page sends.
+   */
+  metadata: { ticker: string; name: string; description?: string; imageUrl?: null; links?: { label: string; url: string }[] };
   /** Optional first buy by the creator, decimal SOL ≤ 50. Default "0". */
   firstBuySol?: string;
   /** Both must be true: the rule cannot be changed by anyone; you are not promising anyone anything. */
@@ -84,6 +89,9 @@ export async function buildLaunchBundle(api: ApiTransport, o: LaunchOptions, ctx
   // without one, so the SDK adds the same default here and re-checks the exact bytes that come back.
   const ruleObj = (composed as { onEnd?: unknown }).onEnd === undefined ? { ...(composed as object), onEnd: { ...DEFAULT_ON_END } } : composed;
   const locked = lockRule(ruleObj);   // fails here, locally, with every problem listed — before any request
+  // the server refuses any image address (image-url-refused); a JavaScript caller that passes one anyway hears it here, before a request
+  const imageUrl: unknown = (o.metadata as { imageUrl?: unknown }).imageUrl;
+  if (imageUrl !== undefined && imageUrl !== null && imageUrl !== "") throw new Error("burnticker: metadata.imageUrl is refused. A coin's image cannot be given as a web address; leave it out and the coin uses its generated receipt art.");
   const kp = o.mintKeypair ?? Keypair.generate();
   const wallet = new PublicKey(o.wallet).toBase58();
   const blockhash = ctx.connection ? (await ctx.connection.getLatestBlockhash("confirmed")).blockhash : null;
@@ -91,7 +99,7 @@ export async function buildLaunchBundle(api: ApiTransport, o: LaunchOptions, ctx
   const walletProof = o.signMessage ? await signLaunchRequest(o.signMessage, { origin: api.origin, creator: wallet, tickers: [o.metadata.ticker.toUpperCase()], mints: [kp.publicKey.toBase58()] }, base58) : null;
   const res = await api.post<LaunchBundleResponse>("/launch/bundle", {
     ...(walletProof ? { walletProof } : {}),
-    creator: wallet, mint: kp.publicKey.toBase58(), ticker: o.metadata.ticker.toUpperCase(), name: o.metadata.name, description: o.metadata.description ?? "", imageUrl: o.metadata.imageUrl ?? null, links: o.metadata.links ?? [],
+    creator: wallet, mint: kp.publicKey.toBase58(), ticker: o.metadata.ticker.toUpperCase(), name: o.metadata.name, description: o.metadata.description ?? "", imageUrl: null, links: o.metadata.links ?? [],
     rule: locked.rule, firstBuySol: o.firstBuySol ?? "0", acknowledgements: o.acknowledgements, register: o.register ?? true, ...(blockhash ? { recentBlockhash: blockhash } : {}),
   });
   if (res.cluster === "mainnet" && !o.allowMainnet) throw new Error("burnticker: the API built a MAINNET bundle and allowMainnet is not set — refusing to sign");

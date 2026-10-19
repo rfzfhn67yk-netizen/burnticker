@@ -119,7 +119,10 @@ describe("a pair's side B carries its own pinned token (item 1)", () => {
     assert.deepEqual(onlyB.pair.a.transactions.map((t) => t.label), ["Lock in $PAIRA's rule", "Create $PAIRA (LaunchLab create)"]);
     assert.equal(onlyB.pair.b.transactions.length, 2);
   });
-  test("the bundle route takes pair.burnTarget, checks its shape and puts it in side B's rule", async () => {
+  test("the bundle route takes pair.burnTarget, checks its shape and puts it in side B's rule", async (t) => {
+    // owner decision 2026-10-19: a pinned token needs BURNTICKER_BURN_REAL_ENABLED (test/burntickerOwner1019.test.ts covers it off)
+    const was = process.env.BURNTICKER_BURN_REAL_ENABLED; process.env.BURNTICKER_BURN_REAL_ENABLED = "1";
+    t.after(() => { if (was === undefined) delete process.env.BURNTICKER_BURN_REAL_ENABLED; else process.env.BURNTICKER_BURN_REAL_ENABLED = was; });
     const w = await makeWorld();
     const RULE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } }, pair: null };
     const body = { creator: CREATOR, ticker: "MILEHI", name: "Mile High", rule: RULE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, pair: { ticker: "ARROWHD", name: "Arrowhead", description: "", imageUrl: null, links: [], burnTarget: WIF } };

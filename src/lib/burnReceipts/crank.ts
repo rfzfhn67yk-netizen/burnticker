@@ -70,7 +70,7 @@ export function memoFromLogs(logs: readonly string[] | null | undefined): string
 }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-function bs58decode(s: string): Buffer {
+export function bs58decode(s: string): Buffer {
   let x = BigInt(0);
   for (const ch of s) {
     const v = B58.indexOf(ch);

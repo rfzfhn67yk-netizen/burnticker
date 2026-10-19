@@ -35,7 +35,7 @@ describe("F09: every pinned metadata file links to its own mint", () => {
   test("pinCoin refuses to pin without a mint (no ticker fallback)", async () => {
     const locked = lockRule(RULE);
     const up = new FakePinUploader();
-    await assert.rejects(pinCoin(up, { ticker: "NOMINT", name: "No Mint", description: "d", oneLiner: "o", rule: locked.rule, rulesSha256: locked.sha256, origin: ORIGIN, links: [], imageUrl: "https://example.com/x.png" } as never));
+    await assert.rejects(pinCoin(up, { ticker: "NOMINT", name: "No Mint", description: "d", oneLiner: "o", rule: locked.rule, rulesSha256: locked.sha256, origin: ORIGIN, links: [] } as never));
     assert.equal(up.uploads.length, 0);
   });
 

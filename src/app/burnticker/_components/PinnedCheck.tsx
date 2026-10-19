@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PIN_HOST_ONLY_LINE, PIN_REREAD_OK_LINE, pinnedFileHref } from "@/lib/burnticker/pinCheckClient";
+import { IMAGE_OUTSIDE_LINK_LINE, imagePinState } from "@/lib/burnticker/imagePin";
 
 /**
  * "Metadata pinned on Arweave · sha256 … · matches the locked description ✓" (pin.ts). The browser reads the pinned JSON again
@@ -52,7 +53,9 @@ export function PinnedCheck({ pinned }: { pinned: PinnedView | null | undefined 
     <p className="text-xs text-neutral-400" aria-label="pinned metadata">
       The metadata is pinned on Arweave: {(pinned as { mint?: string }).mint ? <><a className="underline" href={`/api/burnticker/pin-check?mint=${encodeURIComponent((pinned as { mint?: string }).mint!)}&raw=1`} rel="noopener" target="_blank">open the pinned file through this site</a> (<a className="underline" href={pinned.metadataUri} rel="noopener" target="_blank">or at {pinned.metadataUri.replace(/^https:\/\//, "").slice(0, 28)}…</a>)</> : <a className="underline" href={pinned.metadataUri} rel="noopener" target="_blank">{pinned.metadataUri.replace(/^https:\/\//, "")}</a>} (sha256 <span className="font-mono">{pinned.metadataSha256?.slice(0, 16)}…</span>).
       {" "}{state === null ? "Checking it now…" : state.ok ? <span className="text-emerald-300">{state.detail} ✓</span> : <span className="text-red-400">{state.detail} ✗</span>}
-      {pinned.imageUri && <> The image is <a className="underline" href={pinned.imageUri} rel="noopener" target="_blank">pinned too</a>{pinned.imageSha256 ? <> (sha256 <span className="font-mono">{pinned.imageSha256.slice(0, 12)}…</span>)</> : null}.</>}
+      {/* audit 7 F07: "pinned" only with the recorded hash of uploaded bytes; an outside image address is said to be one */}
+      {imagePinState(pinned) === "pinned" && <> The image is <a className="underline" href={pinned.imageUri!} rel="noopener" target="_blank">pinned too</a> (sha256 <span className="font-mono">{pinned.imageSha256!.slice(0, 12)}…</span>).</>}
+      {imagePinState(pinned) === "outside" && <> <span className="text-amber-300" data-image-outside>{IMAGE_OUTSIDE_LINK_LINE}</span> <a className="underline" href={pinned.imageUri!} rel="noopener noreferrer nofollow ugc" target="_blank">Open the image link</a>.</>}
     </p>
   );
 }

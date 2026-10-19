@@ -51,7 +51,9 @@ describe("the schema", () => {
     assert.equal(oneShotAllLiner(pair, "X happens", null), "burns everything if X happens. If not, whatever is left burns the winning coin, or $DEFICIT if there isn't one after it settles");
     const texts = [oneShotAllLiner(r, "X happens", "2027-02-14")!, plainSentence(r, "EAGLES", "the Eagles win the Super Bowl"), onEndText(r), onEndText(pair)];
     for (const t of texts) assert.deepEqual(lint(t), [], t);
-    assert.match(onEndText(r), /ends with a result.*moves to \$DEFICIT's burn pool.*ends void.*burns down on this coin on a daily clock over four weeks/);
+    // owner decision 2026-10-19: a one-shot at 100 % names what reaches the pool after its one burn (rules.ts onEndText, nextResult.ts oneShotFull)
+    assert.match(onEndText(r), /resolves once and spends the whole burn pool in that one burn.*moves to \$DEFICIT's burn pool.*the result that burns nothing.*ends void.*burns down on this coin on a daily clock over four weeks/);
+    assert.match(onEndText(lockRule({ ...KALSHI_ONE_SHOT, binary: { onYes: { fractionOfPool: 0.5 }, onNo: null }, onEnd: DEFAULT_ON_END }).rule), /ends with a result.*moves to \$DEFICIT's burn pool.*ends void.*burns down on this coin on a daily clock over four weeks/);
     assert.match(onEndText(pair), /the winning coin's burn pool when the partner coin won the last result and is still live, and \$DEFICIT's burn pool otherwise/);
   });
 });

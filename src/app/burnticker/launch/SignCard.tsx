@@ -12,7 +12,7 @@ import { launchGateFromCatalogue, signGateOf } from "@/lib/burnticker/launchGate
 import { beforeUnloadGuard, holdPlan, planHoldsKeys } from "@/lib/burnticker/planHold";
 import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
 import { matchesSuffix } from "@/lib/burnticker/vanityMint";
-import { MINT_ADDRESS_NOTE } from "@/lib/burnticker/mintAddressCopy";
+import { MINT_ADDRESS_NOTE, waitLineFor, type LaunchWaitPhase } from "@/lib/burnticker/mintAddressCopy";
 import { LaunchedTrade } from "../_components/TradeLinks";
 import { withFlight } from "@/lib/burnticker/rpcProxy";
 import { retry429 } from "@/lib/burnticker/retry429";
@@ -48,6 +48,8 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   const [storage] = useState(() => browserPlanStorage());
   const [stored] = useState(() => loadPlanRecord(storage, plan));
   const [notice, setNotice] = useState<string | null>(null);
+  // owner decision 2026-10-19: the wait the run is in, so the card says it (mintAddressCopy.ts waitLineFor)
+  const [phase, setPhase] = useState<LaunchWaitPhase>(null);
   const [busy, setBusy] = useState(false), [done, setDone] = useState<string[]>(() => stored?.confirmed ?? []), [confirmed, setConfirmed] = useState<string[]>(() => stored?.recorded ?? []);
   const abandonedAtMount = planAbandoned(plan, stored) && (stored?.confirmed.length ?? 0) < plan.steps.length;
   const [err, setErr] = useState<string | null>(() => (stored?.pending ? sentRecoverySentence(stored.pending, plan.steps.length, stored.confirmed) : stored && abandonedAtMount ? abandonedSentence({ ...stored, confirms: plan.confirms, steps: plan.steps.length }) : null));
@@ -120,13 +122,13 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         // prelaunch audit 2026-10-18 A-11: launches closed while signing stop the plan before its next step (a fresh catalogue read)
         launchGate: () => fetch("/api/burnticker/catalogue", { cache: "no-store" }).then((x) => (x.ok ? x.json() : Promise.reject(new Error(`HTTP ${x.status}`)))).then((j) => signGateOf(launchGateFromCatalogue(j)), () => "unknown" as const),
         latestBlockhash: () => connection.getLatestBlockhash("confirmed"),
-        signTransaction: (tx) => wallet.signTransaction!(tx),
+        signTransaction: async (tx) => { setPhase("wallet"); const signed = await wallet.signTransaction!(tx); setPhase("chain"); return signed; },
         // Phantom ticket 438485: dry-run each step before the wallet sees it (a transaction that fails on chain trips the wallet's warning)
         simulate: async (tx) => { const r = (await connection.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" })).value; return r.err ? simulationFailureText(r.err, r.logs) : null; },
         lookupTable: () => verifiedLookupTable(connection, network, pin),
         onRefused: (info) => { console.warn("[burnticker launch] the wallet's transaction was refused", info.why, "\nhanded:", info.handed, "\nreturned:", info.returned); },
         sendRaw: (raw) => connection.sendRawTransaction(raw, { preflightCommitment: "confirmed" }),
-        confirm: async (sig, bh) => (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value,
+        confirm: async (sig, bh) => { setPhase("chain"); try { return (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value; } finally { setPhase(null); } },
         // launch night 2026-10-13: a wallet slower than the blockhash's life gets the step rebuilt and is asked again (signPlan.ts)
         isBlockhashValid: async (b) => (await connection.isBlockhashValid(b, { commitment: "confirmed" })).value,
         onNotice: (t) => setNotice(t),
@@ -140,6 +142,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n)); setClosedStop(!!r.closed);
         // AUDIT A C1 (5): a coin whose own create landed before the stop is recorded now (a LaunchLab pair whose B create failed: A exists)
         if (planConfirmations(plan, r.signatures).some((l) => !confirmed.includes(l.mint))) {
+          setPhase("record");
           const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
           setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
           // review (9): a failed record of the coin that landed is said too, beside why the run stopped
@@ -147,13 +150,14 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         }
         return; }
       setStopped(null);
+      setPhase("record");
       const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed });
       setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
       if (c.error) setErr(`All ${n} transaction${n === 1 ? " is" : "s are"} confirmed on chain. ${c.error}`);
     } catch (e) {
       setErr(`Something went wrong before the result could be read (${String((e as Error)?.message ?? e).slice(0, 120)}). The progress above is kept; pressing the button again checks the chain first.`);
     } finally {
-      setBusy(false);
+      setBusy(false); setPhase(null);
     }
   };
   // Launch on the review card was the decision; the wallet's own prompt is the signature — no second button on the happy path
@@ -216,6 +220,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         </button>
       )}
       {!allLive && <p className="text-xs text-neutral-500" data-session-scope>{SESSION_SCOPE_LINE}</p>}
+      {waitLineFor(busy, phase) && <p className="text-xs text-amber-300" role="status" aria-live="polite" data-launch-wait={phase ?? ""}>{waitLineFor(busy, phase)}</p>}
       {notice && busy && <p className="text-xs text-amber-300" role="status" data-resign-notice>{notice}</p>}
       {err && <p className="text-xs text-red-400">{err}</p>}
     </div>

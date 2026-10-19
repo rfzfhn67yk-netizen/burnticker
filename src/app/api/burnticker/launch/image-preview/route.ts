@@ -21,9 +21,11 @@ export async function POST(req: Request) {
   if (!rl.ok) return NextResponse.json({ error: `Too many requests. Please try again in ${rl.retryAfterSec} seconds.`, code: "rate-limited" }, { status: 429, headers: { "retry-after": String(rl.retryAfterSec) } });
   const text = await readTextCapped(req, IMAGE_PREVIEW_MAX_BODY);
   if (text === null) return NextResponse.json({ error: "The image has to be 2 MB or smaller.", code: "too-large" }, { status: 413 });
-  let body: { image?: unknown };
-  try { body = JSON.parse(text); } catch { return NextResponse.json({ error: "invalid JSON body" }, { status: 400 }); }
-  const d = decodeCreatorImage(body.image);
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { return NextResponse.json({ error: "The request body is not valid JSON.", code: "invalid-json" }, { status: 400 }); }
+  // audit 7 F09: a JSON null, an array or a bare value has no `image` to read (null.image threw outside any handler)
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return NextResponse.json({ error: "The request body has to be an object with an image in it.", code: "invalid-body" }, { status: 400 });
+  const d = decodeCreatorImage((parsed as { image?: unknown }).image);
   if ("error" in d) return NextResponse.json({ error: d.error, code: "image-refused" }, { status: 400 });
   try {
     const b = await badgeCreatorImage(d.ok.bytes, d.ok.contentType);

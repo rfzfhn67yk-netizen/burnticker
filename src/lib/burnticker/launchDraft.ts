@@ -82,3 +82,11 @@ export function migrateLinkedShare<T extends Record<string, unknown>>(saved: T):
   if (typeof saved.fraction === "number" && saved.fraction !== 1) { from = from ?? saved.fraction; out.fraction = 1; }
   return from === null ? { draft: saved, notice: null } : { draft: out as T, notice: linkedShareMigratedNotice(from) };
 }
+
+/**
+ * LAUNCH WIZARD AUDIT 2026-10-19 F4: a restored draft keeps each coin's end choice (endA / endB). A choice the host no longer offers ("another
+ * coin's burn" with the picker off, the incinerator without the burn-sol source) showed no checked radio while the rule silently kept it.
+ * On restore such a choice falls back to the default ($DEFICIT's burn), and the page says so in one line.
+ */
+export const END_CHOICE_RESET_NOTICE = "Your saved end choice is not offered on this site now, so the rest goes to $DEFICIT's burn instead.";
+export const endChoiceOffered = (c: { kind: string } | null | undefined, o: { sinkPicker: boolean; burnSol: boolean }): boolean => !c || c.kind === "deficit" || (c.kind === "coin" && o.sinkPicker) || (c.kind === "burn-sol" && o.burnSol);

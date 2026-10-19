@@ -1,6 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { TEAM_ALIASES, type TeamAlias } from "@/lib/burnticker/oracle/events";
 import { INCINERATOR_WORDS, describeEndSink, describeRule, sinkTickerOf } from "@/lib/burnticker/describe";
+import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
 import { highText } from "@/lib/burnticker/derby/high";
 import { parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 
@@ -123,7 +124,11 @@ export function plainSentence(rule: BurnRule, ticker: string, title: string | nu
   const what = (title ?? "").trim() || rule.market || rule.series || "the source";
   const all = oneShotAllLiner(rule, what.replace(/\s*\(resolves once\)$/, ""), endDate ?? rule.pair?.voidBy ?? null);
   const sink = describeEndSink(rule), weeks = rule.onEnd ? (rule.onEnd.windDownDays === 28 ? "four weeks" : `${rule.onEnd.windDownDays} days`) : "";
-  const tail = !rule.onEnd ? "" : sink
+  // owner decision 2026-10-19 (nextResult.ts oneShotFull): one burn of the whole pool ends on what reaches the pool later
+  const once = !!rule.onEnd && !rule.pair && (sink === "flagship" || sink === "incinerator") && oneShotFull(rule);
+  const tail = !rule.onEnd ? "" : once
+    ? ` After its one burn, anything that reaches $${t}'s pool later, trading fees and the kept reserve, ${sink === "incinerator" ? "is sent to Solana's incinerator and burned" : "goes to $DEFICIT's burn"}.${hasNoBurnOutcome(rule) ? " If the rule ends without its burn, the whole pool goes the same way." : ""} If it ends void, it burns down on $${t} over ${weeks}.`
+    : sink
     ? ` When the rule ends with a result, ${sink === "incinerator" ? `the SOL left in $${t}'s burn pool is sent to ${INCINERATOR_WORDS}` : `whatever is left in $${t}'s burn pool burns ${sink === "pair-winner" ? "the winning coin, or $DEFICIT if there isn't one" : sink === "mint" ? `${sinkTickerOf(rule)}, or $DEFICIT if ${sinkTickerOf(rule)} is not live then` : "$DEFICIT"}`}. If it ends void, it burns down on $${t} over ${weeks}.`
     : ` When the rule ends, whatever is left in $${t}'s burn pool burns down over ${weeks}.`;
   if (all) return `$${t} ${all}.`;

@@ -245,7 +245,7 @@ GET /api/burnticker/v1/ops/search-misses → `timeToLaunch.flow`) for the before
 | Election pairs (two candidates, two coins) | GET /api/burnticker/v1/elections/pair, then POST /api/burnticker/launch with `pair` |
 | Polymarket "every market of an event", recurring tag selectors, the question filter; Kalshi series filters and pasted tickers | `rule.series` (`event:<slug>`, `tag:<slug>`) and `rule.filter` in POST /v1/launch/bundle |
 | Read-as (yes/no vs number), unit, baseline, direction, "also burn on the other side", burn from a vesting vault | `rule.kind`, `rule.scalar`, `rule.binary`, `rule.vault` in POST /v1/launch/bundle |
-| Social links, a first buy, a custom image link (where enabled) | `links`, `firstBuySol`, `imageUrl` in POST /v1/launch/bundle |
+| Social links, a first buy, the creator's own image (uploaded bytes, where enabled) | `links`, `firstBuySol`, `image` + `imageRights` in POST /v1/launch/bundle (`imageUrl` is refused, 400 `image-url-refused`, since 2026-10-19) |
 | Pasting a wallet address to build now and sign later | POST /v1/launch/bundle with `creator`; /burnticker/me reads any pasted wallet |
 | The rule dials panel, the create form (image, description, socials), the back-test step, the acknowledgement checkboxes, the pair-venue line | gone: the review card shows the outcome; the back-test still runs and blocks Launch on a refusal |
 | The advanced first-party feed / custom selector screen | the feeds are in Any result; custom selectors via POST /v1/launch/bundle |

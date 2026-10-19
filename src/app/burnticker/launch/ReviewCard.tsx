@@ -11,6 +11,7 @@ import { CoinCard } from "../_components/CoinCard";
 import { FieldHelp } from "../_components/FieldHelp";
 import { MAIN_RECURRING, pctLabel, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, type RaisePreset } from "@/lib/burnticker/launchPresets";
 import { RetirementFacts } from "../_components/RetirementFacts";
+import { LEFTOVER_SEE_END } from "@/lib/burnticker/retirementCopy";
 import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
 import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
@@ -21,6 +22,7 @@ import { fieldLinkText, nameFieldId } from "./fieldChecks";
 import { PROVE_TICKER_LABEL } from "@/lib/burnticker/walletProof";
 import { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX } from "./pageCopy";
 import type { FundsFlow } from "@/lib/burnticker/pairFundsFlow";
+import { REVIEW_IMAGE_GENERATED, REVIEW_IMAGE_UPLOADED } from "@/lib/burnticker/imagePin";
 
 /**
  * THE REVIEW CARD (2026-10-10, the owner: "it feels overly complicated to get a coin set up … the UI needs to be simpler, even if it
@@ -356,7 +358,7 @@ export function ReviewCard(p: ReviewCardProps) {
                   <div className="min-w-0 flex-1"><dt className="text-xs text-neutral-500">Name and ticker</dt><dd className="break-words text-base font-semibold text-neutral-100" data-profile-name>{c.name || "No name yet"} <span className="font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></dd></div>
                   {edit("name", "name and ticker")}
                 </div>
-                {row("Image", c.image.startsWith("data:") ? "Your image" : "The generated receipt art", "image", "image")}
+                {row("Image", c.image.startsWith("data:") ? REVIEW_IMAGE_UPLOADED : REVIEW_IMAGE_GENERATED, "image", "image")}
                 {row("Description", c.description.trim() || "None. The coin's page shows the rule sentence only.", "description", "description")}
                 {row("Links", c.links.length ? <span className="flex flex-wrap gap-x-3">{c.links.map((l) => <span key={l.label} className="break-all">{l.label}: {l.url}</span>)}</span> : "None", "x", "links")}
                 {c.note !== null && row("Note", c.note.trim() || "None", "note", "note")}
@@ -487,7 +489,7 @@ export function ReviewCard(p: ReviewCardProps) {
           <details className="min-w-0" data-ends>
             <summary className="cursor-pointer text-neutral-300">What the end of the rule means</summary>
             <p className="mt-1 break-words text-neutral-300">{p.ends}</p>
-            {!/no end date/.test(p.ends) && <RetirementFacts className="mt-1" open />}
+            {!/no end date/.test(p.ends) && <RetirementFacts className="mt-1" open leftover={LEFTOVER_SEE_END} />}
           </details>
         )}
         {p.summary}

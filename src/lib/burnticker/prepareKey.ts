@@ -29,3 +29,16 @@ export function keyRotatingFetch(fetchFn: FetchLike, rotate: () => string): Fetc
     return fetchFn(url, { ...init, body: JSON.stringify({ ...body, idempotencyKey: withNewBase(body.idempotencyKey, rotate()) }) });
   };
 }
+
+/**
+ * One prepare key per draft revision (the launch page's draftPrepareKey / rotatePrepareKey, pure so it is tested): the same revision
+ * keeps its key; a new revision starts a new one; `rotate` gives the current revision a fresh key after idempotency-key-reused.
+ * Second audit 2026-10-19 I-12: the revision passed here is launchRevisions().draft, which carries no wallet or proof.
+ */
+export function draftKeys(make: () => string = () => newPrepareKey()): { keyFor(rev: string): string; rotate(rev: string): string } {
+  let cur: { rev: string; key: string } | null = null;
+  return {
+    keyFor(rev) { if (!cur || cur.rev !== rev) cur = { rev, key: make() }; return cur.key; },
+    rotate(rev) { cur = { rev, key: make() }; return cur.key; },
+  };
+}

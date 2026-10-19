@@ -72,8 +72,19 @@ export interface BurnProgramClient {
   cluster: string;
   /** False for a read-only client (no payer key): ports can read, never sign. */
   readonly canSign: boolean;
+  /**
+   * Second audit 2026-10-19 I-15: what this host encodes into every initialize_token, read-only, so a draft prepared before expectations
+   * were stored is still compared on these (admission.ts fallbackExpectedConfig). The config authority (BURNTICKER_ADMIN) and the
+   * LaunchLab platform the client names. Absent or null: not known here (a fake, or a client built without them).
+   */
+  readonly adminKey?: string | null;
+  readonly launchLabPlatformKey?: string | null;
   /** The create-time instruction(s): TokenConfig + fee PDA. Unsigned; the creator and the mint keypair sign in the launch bundle. */
-  initializeToken(i: InitializeTokenInput): Promise<{ instructions: SerializedIx[]; tokenConfig: string }>;
+  /**
+   * `expected` (audit F01, 2026-10-19): the TokenConfig the instructions encode, field by field (admission.ts). The confirm step and the
+   * keeper compare the chain against it, so an edited unsigned transaction (another fraction, reserve, attester, admin…) is refused.
+   */
+  initializeToken(i: InitializeTokenInput): Promise<{ instructions: SerializedIx[]; tokenConfig: string; expected?: ExpectedTokenConfig }>;
   feePdaFor(mint: string): string;
   vaultFor(mint: string): string;
   feePdaBalanceLamports(mint: string): Promise<bigint>;
@@ -117,6 +128,56 @@ export function endSinkPin(rule: BurnRule | undefined, pairMint: string | null |
   // the named-coin sink (end.rs END_SINK_MINT): the coin the creator picked; the program refuses the coin itself
   if (k === "mint") return { kind: k, sinkMint: rule.onEnd.mint!, minForwardLamports: BigInt(rule.onEnd.sweepThresholdLamports) };
   return { kind: k, minForwardLamports: BigInt(rule.onEnd.sweepThresholdLamports) };
+}
+
+/**
+ * WHAT initialize_token LOCKS, FIELD BY FIELD (audit F01, 2026-10-19; checked in admission.ts). JSON-safe: amounts as decimal strings,
+ * keys in base58. A `null` field is not known to the host (a draft prepared before expectations were stored: admission.ts
+ * fallbackExpectedConfig) and is not compared. Declared here, not in admission.ts, so the public SDK's import closure (this file) stays
+ * clear of the registry.
+ */
+export interface ExpectedTokenConfig {
+  version: 1;
+  /** Rebuilt from the locked rule (no stored expectation): null fields are skipped. */
+  fallback?: true;
+  feedId: string; memoPrefix: string; memoSource: string | null; rulesSha256: string;
+  rule: {
+    mode: number; carryRule: number; poolPolicy: number; valueDecimals: number; unitValue: string; maxAbsDelta: string;
+    fractionPerUnitBps: number; slippageBps: number; maxTwapDeviationBps: number; twapWindowSecs: number;
+    floorLamports: string | null; reserveLamports: string; tokensPerUnit: string; vaultAllocation: string;
+  };
+  /** Floors an earlier prepare of the same draft locked (a retry prices the floor again): any of them, or rule.floorLamports, passes. */
+  acceptedFloorLamports?: string[];
+  /** The attester keys in order, and the quorum. */
+  attesters: string[] | null; quorum: number | null;
+  /** The config authority (the Squads vault). */
+  admin: string | null;
+  /** The LaunchLab platform the program pins (buyback coins under policy 0 or 2); null = not compared. */
+  llPlatform: string | null;
+  /** The end sink initialize_token pins (held in the EndSink account, not the TokenConfig). */
+  endSink: { kind: number; mint: string | null; minLamports: string } | null;
+  pairVoidBy: number | null;
+  /** 0 the coin burns itself; 1 a pinned target (the program may move it to 2 once the target's pool is verified). */
+  burnTargetKind: number;
+}
+
+/** An ExpectedTokenConfig from the counter rule and the rest of initialize_token's arguments (programClient.ts, the fake). */
+export function expectedFromCounter(c: CounterRule, o: { rulesSha256: string; attesters: string[] | null; quorum: number | null; admin: string | null; llPlatform: string | null; endSink: ExpectedTokenConfig["endSink"]; pairVoidBy: number | null; burnTargetKind: number; floorKnown?: boolean }): ExpectedTokenConfig {
+  const r = c.rule;
+  return {
+    version: 1, feedId: c.feedId, memoPrefix: c.memoPrefix, memoSource: c.memoSource, rulesSha256: o.rulesSha256.toLowerCase(),
+    rule: { mode: r.mode, carryRule: r.carry_rule, poolPolicy: r.pool_policy, valueDecimals: r.value_decimals, unitValue: r.unit_value.toString(), maxAbsDelta: r.max_abs_delta.toString(),
+      fractionPerUnitBps: r.fraction_per_unit_bps, slippageBps: r.slippage_bps, maxTwapDeviationBps: r.max_twap_deviation_bps, twapWindowSecs: r.twap_window_secs,
+      floorLamports: o.floorKnown === false ? null : r.floor_lamports.toString(), reserveLamports: r.reserve_lamports.toString(), tokensPerUnit: r.tokens_per_unit.toString(), vaultAllocation: r.vault_allocation.toString() },
+    attesters: o.attesters ? [...o.attesters] : null, quorum: o.quorum, admin: o.admin, llPlatform: o.llPlatform, endSink: o.endSink, pairVoidBy: o.pairVoidBy, burnTargetKind: o.burnTargetKind,
+  };
+}
+
+/** The selector key the launch bundle names in the counter's memo source (it differs from registry.selectorKeyOf for a Kalshi series). */
+export function bundleSelectorKey(rule: BurnRule): string {
+  return rule.oracle === "derby" ? `derby:${rule.series}` : rule.oracle === "catalogue" ? `catalogue:${rule.series}`
+    : rule.oracle === "polymarket" ? (rule.market ? `polymarket:market:${rule.market}` : `polymarket:${rule.series}:${rule.kind}`)
+    : rule.market ? `kalshi:market:${rule.market}` : `kalshi:${rule.series}`;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -247,9 +308,12 @@ export class FakeBurnProgram implements BurnProgramClient {
     if (i.pairMint && !(i.pairVoidBy && i.pairVoidBy > 20000101)) throw new Error("InvalidPairVoidBy: a paired initialize_token needs the pair's voidBy (YYYYMMDD)");
     this.initialised.push(i);
     const tokenConfig = burnPoolFor(PLACEHOLDER_PROGRAM_ID, new PublicKey(i.mint)).config.toBase58();
+    let expected: ExpectedTokenConfig | undefined;
     if (i.rule) {
       try {
         const c = counterRule(i.rule, i.ticker, i.selectorKey, { floorLamports: this.floorLamports });
+        // F01: what the fake "encodes" (no admin or platform in memory: not compared)
+        expected = expectedFromCounter(c, { rulesSha256: i.rulesSha256, attesters: i.attesters, quorum: i.quorum, admin: null, llPlatform: null, endSink: null, pairVoidBy: i.pairMint ? i.pairVoidBy ?? null : 0, burnTargetKind: (i.rule as { burnTarget?: unknown }).burnTarget ? 1 : 0 });
         this.tokens.set(i.mint, new FakeProgram({ programId: this.programId, mint: i.mint, feePda: this.feePdaFor(i.mint), configAddress: tokenConfig, mode: i.mode, rulesSha256: i.rulesSha256, feedId: c.feedId, memoPrefix: c.memoPrefix, memoSource: c.memoSource,
           valueDecimals: 0, unitValue: BigInt(1), carryRule: CARRY_NONE, maxAbsDelta: c.rule.max_abs_delta, fractionPerUnitBps: c.rule.fraction_per_unit_bps, floorLamports: c.rule.floor_lamports,
           reserveLamports: c.rule.reserve_lamports, tokensPerUnit: c.rule.tokens_per_unit, vaultAllocation: c.rule.vault_allocation, attesters: i.attesters, quorum: i.quorum, heldKeys: this.heldKeys ?? i.attesters, decimals: DECIMALS, now: () => this.now() }));
@@ -262,7 +326,7 @@ export class FakeBurnProgram implements BurnProgramClient {
         this.lockFees.port(i.mint).onRegisterPool = () => { const f = this.tokens.get(i.mint); if (f && !f.cfg.poolRegistered) f.registerPool(); };
       } catch { /* not expressible: no on-chain config (the keeper reports why) */ }
     }
-    return { tokenConfig, instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (placeholder program id — nothing is sent)", keys: [{ pubkey: i.creator, isSigner: true, isWritable: true }, { pubkey: i.mint, isSigner: true, isWritable: false }, { pubkey: tokenConfig, isSigner: false, isWritable: true }, { pubkey: this.feePdaFor(i.mint), isSigner: false, isWritable: true }], dataBase64: Buffer.from(JSON.stringify({ ix: "initialize_token", rulesSha256: i.rulesSha256, selectorKey: i.selectorKey, mode: i.mode, quorum: i.quorum, attesters: i.attesters }), "utf8").toString("base64") }, ...fakePin(this.programId, i)] };
+    return { tokenConfig, ...(expected ? { expected } : {}), instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (placeholder program id — nothing is sent)", keys: [{ pubkey: i.creator, isSigner: true, isWritable: true }, { pubkey: i.mint, isSigner: true, isWritable: false }, { pubkey: tokenConfig, isSigner: false, isWritable: true }, { pubkey: this.feePdaFor(i.mint), isSigner: false, isWritable: true }], dataBase64: Buffer.from(JSON.stringify({ ix: "initialize_token", rulesSha256: i.rulesSha256, selectorKey: i.selectorKey, mode: i.mode, quorum: i.quorum, attesters: i.attesters }), "utf8").toString("base64") }, ...fakePin(this.programId, i)] };
   }
   /** The real program's seeds (src/lib/burnReceipts/pda.ts via burnPoolFor) under the placeholder id. */
   feePdaFor(mint: string) { return burnPoolFor(PLACEHOLDER_PROGRAM_ID, new PublicKey(mint)).feePda.toBase58(); }

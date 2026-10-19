@@ -89,7 +89,7 @@ describe("the coin memo has a maximum age (keyedSwr.ts maxStaleMs)", () => {
     assert.equal(snapshotView(f, t, t + 60_000).stale, false);
   });
 
-  test("the build bound is opt-in: the trust memo (no buildTimeoutMs) keeps waiting on its one build in flight, as before", async () => {
+  test("the build bound is opt-in: a memo without buildTimeoutMs keeps waiting on its one build in flight, as before", async () => {
     let t = 0, builds = 0;
     const m = new KeyedSwr<string>({ freshMs: 15_000, coldWaitMs: 20 }, () => t);
     await m.get("A", "1", async () => "v1");
@@ -99,11 +99,12 @@ describe("the coin memo has a maximum age (keyedSwr.ts maxStaleMs)", () => {
     t += 10 * SWR_BUILD_TIMEOUT_MS;
     await m.get("A", "1", async () => { builds++; return "never"; });
     assert.equal(builds, 1, "no second build while the first is in flight");
+    // audit 7 F06 (2026-10-19): the trust memo now opts in, with the coin page's bounds (test/burntickerTrustBounded.test.ts)
     const trust = fs.readFileSync("src/lib/burnticker/trustServe.ts", "utf8");
-    assert.doesNotMatch(trust, /buildTimeoutMs/, "the trust memo does not opt in");
+    assert.match(trust, /maxStaleMs: TRUST_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS/, "the trust memo opts in");
   });
 
-  test("without maxStaleMs (the trust memo) an old answer stays a hit, as before", async () => {
+  test("without maxStaleMs an old answer stays a hit, as before (the trust memo has one since audit 7 F06)", async () => {
     let t = 0;
     const m = new KeyedSwr<string>({ freshMs: 15_000, coldWaitMs: 20 }, () => t);
     await m.get("A", "1", async () => "v");

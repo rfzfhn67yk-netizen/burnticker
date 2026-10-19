@@ -32,7 +32,7 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.19.0";
+export const API_VERSION = "1.20.0";
 export const API_PREFIX = "/api/burnticker/v1";
 /** The human-readable docs page (src/app/burnticker/docs). */
 export const API_DOCS_PATH = "/burnticker/docs";
@@ -205,10 +205,10 @@ export const SCHEMAS: Record<string, Schema> = {
   LaunchRequest: obj({
     creator: { ...PUBKEY, description: "the wallet that pays and signs" },
     mint: { ...PUBKEY, description: "the PUBLIC key of a fresh mint keypair you generated; the secret never leaves your machine" },
-    ticker: { type: "string", pattern: "^[A-Z0-9]{2,10}$" }, name: str, description: str, imageUrl: nstr,
+    ticker: { type: "string", pattern: "^[A-Z0-9]{2,10}$" }, name: str, description: str, imageUrl: { type: "null", description: "must be null or absent: an image given as a web address (https, ar:// or an Arweave gateway link) is refused with 400 image-url-refused. Send the picture itself in `image`, or leave both out for the generated receipt art." },
     creatorDescription: { type: "string", maxLength: 280, description: "website-15: the creator's own text, up to 280 characters. It follows the generated paragraph, whose first sentence is the rule, and passes the creator copy lint (no affiliation)." },
     image: nullable(obj({ contentType: { enum: ["image/png", "image/jpeg", "image/gif", "image/webp"] }, base64: str }, ["contentType", "base64"])),
-    imageRights: { type: "boolean", description: "required true with image or imageUrl: the creator confirms \"I have the right to use this image. A team, league or company mark is used at my own risk.\"" },
+    imageRights: { type: "boolean", description: "required true with image: the creator confirms \"I have the right to use this image. A team, league or company mark is used at my own risk.\"" },
     links: arr(obj({ label: str, url: str }, ["label", "url"])), rule: ref("Rule"), firstBuySol: { type: "string", description: "must be \"0\" (or absent): bundles built by this API carry no opening purchase, because a create with one leaves too little room for the checks a wallet adds before it signs; anything else is refused with code opening-purchase-off. The offline SDK builder and the operator's CLI keep the option." },
     acknowledgements: obj({ ruleLocked: { const: true }, noReturns: { const: true } }, ["ruleLocked", "noReturns"]),
     recentBlockhash: { type: "string", description: "optional: a recent blockhash from your RPC; otherwise a placeholder you must replace before signing" },
@@ -280,7 +280,7 @@ export const SCHEMAS: Record<string, Schema> = {
     schema: { const: "burnticker.status/v1" }, generatedAt: str, ticker: str, name: str, mint: str, cluster: str, status: str, oracle: str, selectorKey: str, seriesTitle: nstr, mode: str,
     rules: obj({ sha256: str, sha12: str, statement: str, file: str, oneShot: bool }, ["sha256", "statement"]), addresses: { type: "object" },
     supply: obj({ initial: str, current: str, source: str }), burned: obj({ total: str, pctOfSupply: num, count: int, last30d: str }), pool: { type: "object" },
-    next: obj({ nextCheckAt: nstr, impliedChance: { type: ["number", "null"], description: "always null: no odds or prices are shown for any coin (owner decision 2026-10-10); kept for schema compatibility" }, impliedBasis: nstr, nextMarket: nstr, nextCloseTime: nstr, awaitingFinal: int }, ["impliedChance"]),
+    next: obj({ nextCheckAt: nstr, impliedChance: { type: ["number", "null"], description: "always null: no odds or prices are shown for any coin (owner decision 2026-10-10); kept for schema compatibility" }, impliedBasis: nstr, nextMarket: nstr, nextCloseTime: nstr, awaitingFinal: int, result: { enum: ["recurring", "pending", "decided", "void"], description: "audit 7 F08: a repeating rule, or a one-shot whose result is pending, decided or voided" }, nextResultAt: { ...nstr, description: "audit 7 F08: when a new result can arrive; null for a decided or voided one-shot (never the next source check)" }, nextSourceCheckAt: { ...nstr, description: "audit 7 F08: the keeper's next read of the source; a poll, not a result" } }, ["impliedChance"]),
     feed: { type: "object" }, attesters: arr({ type: "object" }), quorum: int, fees: { type: "object" }, health: { type: "object" }, disclosure: { type: "object" }, trust: { type: "object", description: "lpBurnedPct is 0 since 1.8.0 (LP locked forever): lpLockedPct and lpPolicy say what happens to the LP" },
     lp: { ...ref("LpLock"), description: "since 1.8.0: the coin's LP lock (policy, lock program, Fee Key and its owner, the last claim_lock_fees receipt, totals)" },
     pair: { ...nullable(ref("PairInfo")), description: "a rivalry pair's side, counterpart and tally; since 1.10.0 also winnerTakesBurn and forwards[]" },

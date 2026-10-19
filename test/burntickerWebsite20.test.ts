@@ -149,11 +149,11 @@ describe("item 253 on the launch page: a prepare answer for an older draft sets 
     const page = read("src/app/burnticker/launch/page.tsx");
     const body = page.slice(page.indexOf("const launch = useCallback"), page.indexOf("// ---- navigation"));
     // 2026-10-14 night: the prepare runs inside withMintSource (the server's mint key first, the browser search on mint-bank-empty)
-    assert.match(body, /const out = await prepareIfCurrent\(sentRev, \(\) => curRev\.current, \(\) => withMintSource\(\{[^}]*\}, async \(keys: GroundMint\[\] \| null\): Promise<\(\) => void> => \{/);
+    assert.match(body, /const out = await prepareIfCurrent\(sentRev, \(\) => curDraft\.current, \(\) => withMintSource\(\{[^}]*\}, async \(keys: GroundMint\[\] \| null\): Promise<\(\) => void> => \{/);
     assert.match(body, /if \("stale" in out\) \{ setLaunchErr\(STALE_PREPARE_SENTENCE\); return; \}\s*out\.ok\(\); setSignTickers\(sent\);\s*setStep\("launch"\);/);
     assert.doesNotMatch(body.slice(body.indexOf("prepareIfCurrent")), /^\s*setBundle\(\(await post/m, "no state is set inside the request itself");
     assert.match(page, /title=\{two \? `Launch \$\$\{st\.a\} and \$\$\{st\.b\}` : `Launch \$\$\{st\.a\}`\}/);
-    assert.match(page, /profileRevision\(profile\), pairOn \? profileRevision\(profileB\) : ""\]\);/);
+    assert.match(page, /profileRevision\(profile\), pairOn \? profileRevision\(profileB\) : ""\], reviewIdentity\(creator, sentProof\)\);/);   // audit 7 F03: and who asks
   });
 });
 

@@ -44,3 +44,18 @@ export async function launchGuardRefusal(p: { registry: Pick<Platform["registry"
   }
   return null;
 }
+
+/**
+ * Third prelaunch audit 2026-10-19 F04: the refusal for a ticker the registry would not reserve or register (another creator's prepare
+ * holds it, or another creator's draft appeared while this prepare ran). The same 409 the guard above gives, with free tickers that pass.
+ */
+export function tickerTakenRefusal(p: { registry: Pick<Platform["registry"], "tokens" | "lockedRule" | "tokensByTicker" | "tickerReservation"> }, ticker: string, creator: string | null): GuardRefusal {
+  let suggestions: string[] = [];
+  try {
+    const now = Date.now();
+    const inUse = (t: string): unknown[] => { const r = p.registry.tickerReservation(t); return [...p.registry.tokensByTicker(t), ...(r && r.expiresAt > now && r.creator !== creator ? [r] : [])]; };
+    suggestions = freeTickers(ticker, { inUse, existing: lookalikeRows(p.registry), reserved: loadReserved(), creator }).filter((t) => t !== ticker.toUpperCase());
+  } catch { suggestions = []; }
+  const free = suggestions.length ? ` These tickers are free: ${suggestions.map((x) => `$${x}`).join(" and ")}.` : "";
+  return { status: 409, error: `This launch is refused. ${sameTickerSentence(ticker)} Please pick another ticker.${free}`, extra: { code: "ticker-taken", ...(suggestions.length ? { suggestions } : {}) } };
+}
