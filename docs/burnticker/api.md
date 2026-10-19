@@ -74,6 +74,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/ops/post-queue?state=` | — | read | (1.18.0, item 9; `postApproval.ts`) operator only (the operator's network and `x-action-pin`): the owner's post queue with each post `waiting` or `used`. Never posts |
 | POST | `/ops/post-queue/used` `{ id, note? }` | — | read | (1.18.0) operator only: appends a "used" mark to `data/launch/post-queue-used.jsonl`; the queue file is never changed and nothing posts |
 | GET | `/ops/platform-fees` | — | read | (`platformFeeClaim.ts`) operator only (the post queue's gate): the LaunchLab platform config read from chain, the wrapped-SOL fee vault's balance and the three unsigned instructions of the claim for `/burnticker/operator/claim-fees`. Never signs or sends |
+| GET | `/ops/statement-text?date=YYYY-MM-DD` | — | read | (`trustpack/statementOps.ts`) operator only (the claim page's gate): the operator statement's exact text for that day (default today in UTC, the same text `scripts/burnticker-sign-statement.mts --print-text` prints; both build it with `trustpack/statement.ts`) and the signer wallet, for `/burnticker/operator/sign-statement`. Reads `operator.json` only; nothing is signed or kept |
 
 ## Cheap-features pass (API 1.18.0, 2026-10-13)
 

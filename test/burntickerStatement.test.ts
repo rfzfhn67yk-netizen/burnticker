@@ -44,25 +44,27 @@ function tempRoot(pub: string): string {
 describe("the statement text", () => {
   const op = loadOperator();
   const m = op.signedMessage.message;
-  test("plain ASCII under the off-chain message limit, signed 2026-10-14 (the template form keeps both blanks), naming the facts on the operator page", () => {
+  const signedNow = op.signedMessage.signature !== null;   // 2026-10-19: the text changed (both keeper keys named), so the file is a template again until the owner re-signs it on /burnticker/operator/sign-statement
+  test("plain ASCII under the off-chain message limit, signed or a template (the template form keeps both blanks), naming the facts on the operator page", () => {
     assert.ok(/^[\x20-\x7e]+$/.test(m), "printable ASCII: a Ledger signs it as a restricted-ASCII off-chain message");
     assert.ok(Buffer.byteLength(m) <= 1212);
-    assert.ok(m.includes("{PUBKEY}") && m.endsWith(`Date: ${SIGNED_AT}.`), "the file keeps {PUBKEY} (the page fills the signer) and holds the signing date");
+    assert.ok(m.includes("{PUBKEY}") && m.endsWith(signedNow ? `Date: ${op.signedMessage.status}.` : "Date: {DATE}."), "the file keeps {PUBKEY} (the page fills the signer) and holds the signing date or the {DATE} blank");
     const t = JSON.parse(unsigned(read("config/burnticker/operator.json"))).signedMessage.message as string;
     assert.ok(t.includes("{PUBKEY}") && t.includes("{DATE}"), "the template form has both blanks");
     const main = op.clusters.mainnet;
-    for (const v of [main.programs.burn_receipts, main.programs.pair_curve, main.squads.vault, walletOf(op, "mainnet", "keeper")!, op.operator.contact, "https://burnticker.com/burnticker/operator"]) assert.ok(m.includes(v), v);
+    for (const v of [main.programs.burn_receipts, main.programs.pair_curve, main.squads.vault, walletOf(op, "mainnet", "keeper")!, "FQYod3oyUJNedCw3xbp6AHifyZmG4uNrD1X99o8iNo1x", op.operator.contact, "https://burnticker.com/burnticker/operator"]) assert.ok(m.includes(v), v);
     assert.match(m, /Two of its three members must approve any change\. I hold two of those member keys, and one other person holds the third\./);
     assert.match(m, /except Squads member C/, "the third signer's key is not claimed as the operator's");
     assert.doesNotMatch(m, /TODO_|Shane|Cassidy/i, "no name");
     assert.deepEqual(lintCopy(m).hits, []);
   });
-  test("signed 2026-10-14: the status, text and signature sit on the lines the owner's todo names, and the signature verifies", () => {
+  test("the status, text and signature sit on the lines the owner's todo names; signed, the signature verifies; a template, the page says so", () => {
     const lines = read("config/burnticker/operator.json").split("\n");
-    assert.match(lines[84], /"status": "2026-10-14"/);
+    assert.match(lines[84], signedNow ? /"status": "\d{4}-\d{2}-\d{2}"/ : /"status": "TODO_SIGNED_MESSAGE"/);
     assert.match(lines[87], /"message": "Burnticker operator statement\./);
-    assert.match(lines[88], /"signature": "65w3gbP5ZBEFy9FHiWvzh5ctAGv9EbigVH6o9BF69GpsDiZxxDeasytF9s3z1uBYSwRVNNzbjqCaAQnq64FPkZwx"/);
-    assert.match(read("docs/burnticker/TODO-OWNER.md"), /Signed operator statement — DONE 2026-10-14/);
+    assert.match(lines[88], signedNow ? /"signature": "[1-9A-HJ-NP-Za-km-z]{80,96}"/ : /"signature": null/);
+    assert.deepEqual([signedMessageView(op).status, signedMessageView(op).verified], signedNow ? ["signed", true] : ["todo", null]);
+    assert.match(read("docs/burnticker/TODO-OWNER.md"), signedNow ? /Signed operator statement — DONE \d{4}-\d{2}-\d{2}/ : /Signed operator statement — RE-SIGN PENDING/);
     assert.match(read("config/burnticker/operator.json"), /with one exception: \$REHEARSAL, a test coin/);
   });
 });

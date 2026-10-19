@@ -561,6 +561,15 @@ $R scripts/burnticker-sign-statement.mts --date 2026-10-14 --keypair <path to ke
 $R scripts/burnticker-trustpack.mts well-known --write && npm test
 ```
 
+With a browser wallet such as Phantom (2026-10-18; the fee wallet is a plain Phantom wallet, so `solana sign-offchain-message` does not
+apply): open `/burnticker/operator/sign-statement` on the operator's own network, enter the ops PIN (the claim page's gate, `GET
+/api/burnticker/v1/ops/statement-text`), pick the day, connect the fee wallet and press "Sign with this wallet". The page shows the same
+text `--print-text` prints (both build it with `src/lib/burnticker/trustpack/statement.ts`), refuses any wallet but the signer, signs the
+raw text with Phantom's signMessage, checks the signature in the browser and shows it with the two commands to run from the repository
+(`--signature <it> --write`, then the well-known regeneration). The page sends nothing anywhere and keeps nothing. Once the statement is
+signed, its day stands where `{DATE}` was; the page and the script rebuild the template by putting that day back, so signing again for
+a new day needs no hand edit.
+
 `solana-keygen pubkey 'usb://ledger?key=0'` shows which index is the fee wallet. A wrong key or a signature over other text is refused
 and nothing is written. After the ship, GET /api/burnticker/v1/operator verifies it with ed25519 and the operator page shows ✓ (or ✗ with
 the reason). Anyone can check it without trusting this site's code: `node scripts/burnticker-verify-statement.mjs https://burnticker.com`

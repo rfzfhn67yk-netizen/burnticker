@@ -300,8 +300,8 @@
     },
     {
       "id": "signed-operator-message",
-      "status": "done 2026-10-14",
-      "text": "The operator's statement was signed on 2026-10-14 by the mainnet developer fee wallet (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5). The statement and its signature are on /burnticker/operator, which checks the signature with ed25519 each time and shows the result and the time of the check."
+      "status": "not done",
+      "text": "The operator's statement was first signed on 2026-10-14 by the mainnet developer fee wallet (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5). On 2026-10-19 its text changed to name both keeper keys, so it is waiting to be signed again by the same wallet, and /burnticker/operator shows it as not signed yet until then. Once signed, that page checks the signature with ed25519 each time and shows the result and the time of the check."
     },
     {
       "id": "paircurve-findings-open",

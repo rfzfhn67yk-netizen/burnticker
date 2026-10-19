@@ -103,7 +103,7 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
     assert.doesNotMatch(`${op.note} ${op.clusters.mainnet.status}`, /launch week|created by the owner on|does not exist|until the owner creates/i);
     assert.match(op.clusters.mainnet.status, /^Both programs were deployed on mainnet on 2026-10-11, .*Every wallet address below is set\.$/);   // audit 4 BT-02; website-9: the keeper and deployer keys are set too
     assert.ok(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(op.clusters.mainnet.wallets.find((w) => w.role === "dev-fee")!.pubkey), "the signer address is configured");
-    assert.equal(op.signedMessage.status, "2026-10-14", "the statement was signed on 2026-10-14");
+    assert.match(op.signedMessage.status, /^(\d{4}-\d{2}-\d{2}|TODO_SIGNED_MESSAGE)$/, "the statement is signed on a day, or a template waiting for the owner's signature");
     const { OPERATOR_COPY, OPERATOR_LINE } = await import("@/lib/burnticker/trustpack/copy");
     assert.match(OPERATOR_COPY.signedPending, /^The developer fee wallet listed above is the one that signs it\./); assert.doesNotMatch(`${OPERATOR_COPY.signedPending} ${OPERATOR_COPY.walletsIntro}`, /does not exist|until they exist/);
     assert.equal(OPERATOR_LINE, "Operated by one independent operator (United States) — contact: contact@burnticker.com");
