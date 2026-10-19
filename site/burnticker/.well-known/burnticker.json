@@ -8,14 +8,15 @@
     "country": "United States",
     "contact": "contact@burnticker.com",
     "security": "security@burnticker.com",
-    "entity": "TODO_ENTITY"
+    "entity": null,
+    "entityPending": "Whether to form an LLC is not decided yet. Until an entity exists, one independent person runs the platform and keeps their identity private. contact@burnticker.com reaches the operator."
   },
   "links": {
     "site": "https://burnticker.com",
     "app": "https://burnticker.com/burnticker",
     "deficitSite": "https://deficit.burnticker.com",
     "github": "https://github.com/rfzfhn67yk-netizen/burnticker",
-    "githubOrg": "TODO_GITHUB_ORG",
+    "githubOrg": null,
     "x": [
       "https://x.com/burnticker",
       "https://x.com/USA_DEFICIT"

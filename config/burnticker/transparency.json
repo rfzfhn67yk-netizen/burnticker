@@ -169,7 +169,7 @@
       "label": "Squads 2-of-3 vault",
       "pubkey": null,
       "envVar": "BURNTICKER_UPGRADE_AUTHORITY",
-      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 during launch week, by owner decision on 2026-10-11, and 48 h is planned from a week or more after the soft launch. This page reads the live value from the chain. The second is the platform authority, which can only raise the pre-audit burn-pool cap, behind a 48 h time lock. The third is each token's config authority, which can only change the attester set, behind a 48 h time lock."
+      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 during launch week, by owner decision on 2026-10-11, and 48 h is planned from a week or more after the soft launch. This page reads the live value from the chain. The second is the platform authority, which can only raise the pre-audit burn-pool cap, behind a 48 h time lock. The third is each token's config authority. Behind a 48 h time lock, it can change the attester set, propose a new pool for a coin's pinned token (the token and its feed never change), and switch a coin's registration policy, which is allowed only while the pre-audit cap is in force and no pool of the coin works. It can also give up the config authority for good (renounce), which takes effect at once."
     },
     {
       "role": "squads-member-1",
@@ -236,12 +236,12 @@
     {
       "id": "one-shot",
       "status": "live design",
-      "text": "One-shot markets are allowed. A coin tied to a single market resolves once, when that market closes. What happens after that follows the onEnd schedule in its rule. A YES at 100% drains the burn pool one unit a day, under the spend cap. Any other ending winds the pool down over 28 days, with enough daily units to spend at least 99%. Then the coin retires. When new fees for a retired coin pass the sweep threshold, its pool is swept again, at most once a week. The token page shows the schedule."
+      "text": "One-shot markets are allowed. A coin tied to a single market resolves once, when that market closes. What happens after that follows the onEnd schedule in its rule. A YES at 100% drains the burn pool one unit a day, under the spend cap. For any other ending, it depends on how the market resolved. A resolved ending on a coin with an end sink sends what is left in the pool to that end sink (the flagship, a named coin, the pair winner, or Solana's incinerator, as the rule says). A void ending, or a coin without an end sink, winds the pool down on the coin itself over 28 days, with enough daily units to spend at least 99%. Then the coin retires. When new fees for a retired coin pass the sweep threshold, its pool is swept again, at most once a week. The token page shows the schedule."
     },
     {
       "id": "cap-25",
       "status": "live design",
-      "text": "Before the audit, each burn pool spends from at most 25 SOL per burn day. SOL above the cap stays in the fee account until the next day. In the program, the cap is part of the platform settings (PlatformConfig) and ends after at most 365 days. It can only be raised through a public 48 h time lock. The keeper applies the same cap. On a network where the program's platform settings account does not exist yet, only the keeper enforces it."
+      "text": "Before the audit, each burn pool spends from at most 25 SOL per burn day. SOL above the cap stays in the fee account until the next day. In the program, the cap is part of the platform settings (PlatformConfig) and ends after at most 365 days. It can only be raised through a public 48 h time lock. The keeper applies the same cap. On a network where the program's platform settings account does not exist yet, the program still enforces its built-in default of 25 SOL until 2027-10-01 (state.rs default_active_cap)."
     },
     {
       "id": "devnet-rehearsal",
@@ -333,7 +333,7 @@
     },
     {
       "id": "platform-never-buys",
-      "text": "The platform never buys any coin, including its own. A burn pool buys only through the program's buyback step (crank_buyback), as the rule says, and burns what it receives. The operator's trading bots refuse platform coins."
+      "text": "The platform buys no coin, including its own, with one disclosed exception: the operator bought 0.1 SOL of $REHEARSAL, a test coin, when it was created on 2026-10-11. A burn pool buys only through the program's buyback step (crank_buyback), as the rule says, and burns what it receives. The operator's trading bots refuse platform coins."
     },
     {
       "id": "nothing-coming-soon",

@@ -219,7 +219,7 @@ export function explainerDraft(topic: ExplainerTopic, site: string): Draft {
       `Why LP is locked: when a Burnticker coin graduates, its liquidity moves to a Raydium CPMM pool and ${LP_LOCKED_PCT}% of the LP is locked forever. Nobody can pull it. The Fee Key is held by the burn program: ${LOCK_FEE_BURN_BPS / 100}% of the LP fees go to the burn pool, ${LOCK_FEE_OPERATOR_BPS / 100}% to the operator, fixed in code.`,
     ],
     "why-creators-earn-nothing": [
-      `Why creators earn nothing: the creator-fee slot (${BURN_POOL_CURVE_BPS} bps of curve volume) pays the coin's burn pool, 100%. Zero team allocation. The platform's ${BURNTICKER_DEV_FEE_BPS} bps goes to one public developer wallet; the platform never buys any coin, including its own.\n${S}/burnticker/trust`,
+      `Why creators earn nothing: the creator-fee slot (${BURN_POOL_CURVE_BPS} bps of curve volume) pays the coin's burn pool, 100%. Zero team allocation. The platform's ${BURNTICKER_DEV_FEE_BPS} bps goes to one public developer wallet; the platform buys no coin except one test coin.\n${S}/burnticker/trust`,
     ],
   };
   return { format: "explainer", account: "@BurnTicker", subject: topic, posts: posts[topic] };
@@ -252,7 +252,7 @@ export function deficitLaunchThread(f: DeficitRuleFacts, site: string, launchTxU
       `The rule: each business day, every full ${dollarsB(f.unitUsd)} added to Treasury's Debt to the Penny since the previous reading is one unit. Spend = pool × (1 − ${keepOf(f.fractionPerUnit)}^units).\n\nLocked at launch. Rule hash sha256:${f.sha256.slice(0, 12)}`,
       `The source: ${f.feedName}, posted each business-day afternoon ET, cross-read against FRED's quarterly copy of the same figure. Nothing happens until the debt rises: the first reading after launch is the baseline.`,
       `${NOTHING_BURNS_LINE}: ${T} trades on its bonding curve first; burns start only after it graduates at ${GRADUATION_SOL} SOL raised and its pool is registered. Earlier readings wait in line.${launchTxUrl ? `\nLaunch: ${launchTxUrl}` : ""}`,
-      `Creators earn nothing: the creator fee goes to the burn pool, 100%. LP locked forever; its fees fund the burn (80% burned, 20% operator). The platform never buys any coin.\n\nReceipts: ${S}\n${DISCLAIMER}`,
+      `Creators earn nothing: the creator fee goes to the burn pool, 100%. LP locked forever; its fees fund the burn (80% burned, 20% operator). The platform bought only one test coin.\n\nReceipts: ${S}\n${DISCLAIMER}`,
     ],
   };
 }
@@ -289,7 +289,7 @@ export function platformLaunchThread(rf: ReviewFacts, site: string): Draft {
       `Launch: pick a result ("${ex[0]} lose", "Denver high above 90", "US debt rises $1B"), set the share of the coin's fee pool each burn spends, lock the rule. The rule is hashed at launch and enforced by a program, not a promise.`,
       `When the result settles on its primary source and an independent publisher agrees, the reading is signed on chain and the program spends the coin's own fees buying it on its own pool and burning all of it. The memo is the receipt.`,
       `Follow the season: team coins across ${lg.map((x) => x.label).join(", ")} (${lg.map((x) => x.team).join(", ")}), scored in receipts. Nothing is won here. Things are only burned.`,
-      `Guardrails: creators earn nothing · zero team allocation · the platform never buys any coin · LP locked forever, its fees fund the burn · rules locked at launch · every receipt recomputable from its public source.`,
+      `Guardrails: creators earn nothing · zero team allocation · the platform buys no coin except one test coin · LP locked forever, its fees fund the burn · rules locked at launch · every receipt recomputable from its public source.`,
       `Open source: ${PUBLIC_REPO}\nReviewed: ${reviewLine(rf)}. Not audited by a security firm.`,
       `First coin: $DEFICIT (@USA_DEFICIT): each $1B the U.S. debt rises, its fees buy it back and burn it. ${NOTHING_BURNS_LINE}.\n\nRun by one independent operator.\nMemecoins: the rule says what supply does, not what price does. ${S}`,
     ],

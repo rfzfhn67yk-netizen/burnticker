@@ -84,8 +84,8 @@ site() {   # site <label> <brand dir> <publish dir> <www> <keeper index name>
     [ "$PUBLISH_ONLY" = 1 ] || add "  $label publish: $pub does not exist yet (the keeper writes it on its first cycle)"
   fi
 }
-pages() {   # the status page and the app-down fallback: small, and Caddy needs both in place whatever else ships
-  for p in status fallback; do
+pages() {   # the status page, the app-down fallback and the static 404 / error pages: small, and Caddy needs them in place whatever else ships
+  for p in status fallback notfound error; do
     if [ -d "site/burnticker/$p" ]; then
       [ "$CHECK" = 1 ] || [ -d "$BURNTICKER_WWW/$p" ] || install -d -m 755 "$BURNTICKER_WWW/$p"
       copy_dir "burnticker $p page" "site/burnticker/$p/" "$BURNTICKER_WWW/$p/"

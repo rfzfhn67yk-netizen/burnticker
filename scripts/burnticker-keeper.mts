@@ -30,6 +30,7 @@ import path from "node:path";
 import { openRegistry, REGISTRY_FILE, readingMatches } from "../src/lib/burnticker/registry.ts";
 import { KalshiClient } from "../src/lib/burnticker/oracle/kalshi.ts";
 import { PolymarketClient } from "../src/lib/burnticker/oracle/polymarket.ts";
+import { statusPayoutStore } from "../src/lib/burnticker/oracle/payoutStore.ts";
 import { loadRefuseList, refusalsFor } from "../src/lib/burnticker/oracle/refuse.ts";
 import { CatalogueAdapter, feedById } from "../src/lib/burnticker/catalogue/index.ts";
 import os from "node:os";
@@ -87,6 +88,7 @@ import { publishSite, toJson } from "../src/lib/burnKeeper/statusPage.ts";
 import { DEFICIT_DISPERSAL_NAME, dispersalHostLine, keeperDispersalStart, type DispersalDecision } from "../src/lib/burnticker/dispersal.ts";
 import { cachedMarketReader, cachedPublishProgram, coinChainReads, connectionBatchReader, KeeperReadCache, signatureFingerprints, withLockFees, type BatchReader, type MultipleAccountsReader } from "../src/lib/burnticker/keeperReadCache.ts";
 import { clearStaleRestartRequest, takeRestartRequest } from "../src/lib/burnticker/restartRequest.ts";
+import { writeKeeperRelease } from "../src/lib/burnticker/releaseManifest.ts";
 import { budgetStatusLines, budgetTopMethodLines, budgetedRpcConfig, configureApiBudget, publicRpcFor, retryThroughBudgetHold, setDescribeFallback, statusTableStore, verifyRpcFallback, withEssential } from "../src/lib/burnticker/apiBudget.ts";
 
 const args = process.argv.slice(2);
@@ -128,6 +130,8 @@ for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => { stopping =
 // DEPLOY-REQUESTED RESTART (restartRequest.ts): a request already on disk was written before this process started, i.e. after the deploy
 // swapped the code in, so this process already runs it: removed, never honoured. A dry run never takes or removes a request.
 if (!DRY) { const stale = clearStaleRestartRequest("keeper"); if (stale) log(`  stale restart request (build ${stale.build}) removed: this process started after it and already runs the deployed code`); }
+// I-13 (audit 2026-10-19): the release this process runs (its tree's release.json), for GET /api/burnticker/build; never blocks a start
+if (!DRY) { try { const r = writeKeeperRelease(SITE, process.cwd(), KEEPER_STARTED_AT); log(`  release: public tree ${r.publicTreeSha256 ? `${r.publicTreeSha256.slice(0, 16)}…` : "not recorded"}${r.publicCommit ? `, public commit ${r.publicCommit.slice(0, 12)}` : ""}`); } catch (e) { log(`  release record not written: ${(e as Error).message.slice(0, 120)}`); } }
 /** A new request during the startup wait ends the wait (exit 0, systemd starts the newer code). */
 const restartAskedDuringStartup = (): boolean => {
   if (DRY) return false;
@@ -148,6 +152,9 @@ const kalshi = new KalshiClient();
 // Polymarket (2026-10-10): Gamma for discovery, the Polygon CTF payout vector for results; the refuse list over every market question.
 const polygonRpcs = (process.env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
 const polymarket = new PolymarketClient({ refuse: (titles) => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))], ...(polygonRpcs.length ? { rpcUrls: polygonRpcs } : {}) });
+// 2026-10-19: a reported payout vector is stored in the registry the first time any role reads it (oracle/payoutStore.ts), so neither the
+// keeper nor the site reads a final vector from Polygon twice, across restarts
+polymarket.payoutStore = statusPayoutStore(registry, "keeper");
 // team coins: each game settles on its on-chain payout where a moneyline market exists, else TheSportsDB (commercial); never ESPN
 // ONE SOURCE (owner 2026-10-14): a final game with no Polymarket market and no league feed settles on TheSportsDB alone after its score
 // has stood 12 hours. The first-seen score and time persist in the registry's status table (statusHoldStore), so a restart keeps the

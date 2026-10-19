@@ -20,6 +20,7 @@ import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForwar
 import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, raceVerdict, recordForward, sidePayout, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 import { fenceToken, type FenceReport } from "@/lib/burnticker/ops/readingFence";
 import { championVerdict, endOutcomeOf, endSinkStep } from "@/lib/burnticker/endSinkKeeper";
+import { burnTargetHold } from "@/lib/burnticker/admissionAccounts";
 import { championPathRule } from "@/lib/burnticker/describe";
 import { askCosigner, type Cosigner } from "@/lib/burnticker/attesters/cosign";
 import type { Cosignature, ReadingInput } from "@/lib/burnKeeper/programPort";
@@ -27,6 +28,7 @@ import { parseTargetMemo } from "@/lib/burnReceipts/memo";
 import { DISPERSAL_STATE_KEY, runDispersal, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
 import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
 import { FilterUnsupportedError, storedFilterProblem } from "@/lib/burnticker/safeRegex";
+import { dueNextAt, selectorIdle, windowNextAt, type ReadWindow } from "@/lib/burnticker/readPlan";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -173,6 +175,41 @@ export async function nextPollMs(d: Pick<KeeperDeps, "registry" | "oracles" | "k
   const base = pollMsFor(d, rule);
   return isEventCoin(rule) ? polymarketPollMs(await marketEndAt(d, rule, key, now), now, base) : base;
 }
+/**
+ * The moment an idle selector still needs one read (readPlan.ts NEVER): the earliest end of a UTC day, plus READING_GRACE_MS, that holds a
+ * result receipt with no program reading yet while the selector's last good read is before that day's end; null when none waits.
+ */
+export function attestReadAt(d: Pick<KeeperDeps, "registry" | "readingGraceMs">, tokens: readonly TokenRow[], lastOkAt: number | null): number | null {
+  let need: number | null = null;
+  for (const t of tokens) {
+    const pending = (d.registry as Partial<Pick<Registry, "pending">>).pending?.(t.mint) ?? [];
+    for (const b of pending) {
+      if (b.readingDate !== null || END_KINDS.has(b.kind)) continue;
+      const endMs = dayStartMs(receiptDay(b.settledAt)) + DAY_MS;
+      if ((lastOkAt ?? 0) >= endMs) continue;
+      const at = endMs + (d.readingGraceMs ?? READING_GRACE_MS);
+      if (need === null || at < need) need = at;
+    }
+  }
+  return need;
+}
+
+/** A catalogue feed's publish window (sources.json readWindow; readPlan.ts), or null. */
+export const readWindowFor = (rule: BurnRule): ReadWindow | null => (rule.oracle === "catalogue" && rule.series ? feedById(rule.series)?.readWindow ?? null : null);
+
+/**
+ * THE NEXT READ after a good read (readPlan.ts, owner 2026-10-19): the adapter's dueAt when it gives one (the earliest moment a new result
+ * can exist, sooner or later than the poll, bounded); else a windowed feed's window; else the poll (an event coin's hourly cadence far
+ * from its close included).
+ */
+export async function nextReadAt(d: Pick<KeeperDeps, "registry" | "oracles" | "kalshiPollMs">, rule: BurnRule, key: string, r: Pick<ResolvedSelector, "dueAt">, now: number, written: number): Promise<number> {
+  const due = dueNextAt(r.dueAt, now);
+  if (due !== null) return due;
+  const w = readWindowFor(rule);
+  if (w) return windowNextAt(w, now, written > 0, pollMsFor(d, rule));
+  return now + await nextPollMs(d, rule, key, now);
+}
+
 /** The cadence the ops alerts expect (no network: the cached end date only), so an hourly event coin is not called stalled. */
 export function cadenceMsFor(reg: Pick<Registry, "getStatus">, d: Pick<KeeperDeps, "kalshiPollMs">, rule: BurnRule, key: string, now: number): number {
   const base = pollMsFor(d, rule);
@@ -228,7 +265,21 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
   const out: FetchReport[] = [];
   for (const [key, t] of byKey) {
     const st = d.registry.feedState(key);
-    if (st.nextFetchAt !== null && now < st.nextFetchAt) { out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue; }
+    // THE READ PLAN (readPlan.ts). NEVER: a selector no live coin needs any more is not read at all (every rule on it ended, or a
+    // one-shot's result is in). THE PROGRAM'S READ: the program reads a UTC day only once the selector was read after that day ended
+    // (executePending), so a result still waiting for its program reading brings the next read forward to that day's end plus the grace
+    // (attestReadAt), for an idle selector too: one read, then nothing. A failing read keeps its backoff.
+    const onKey = tokens.filter((x) => x.selectorKey === key);
+    const idle = selectorIdle(d.registry, key, onKey);
+    const need = attestReadAt(d, onKey, st.lastOkAt);
+    if (idle && need === null) { out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue; }
+    const dueAt = st.failures > 0 && st.nextFetchAt !== null ? st.nextFetchAt
+      : idle ? need
+      : st.nextFetchAt === null ? null : need !== null && need < st.nextFetchAt ? need : st.nextFetchAt;
+    if (dueAt !== null && now < dueAt) {
+      if (dueAt !== st.nextFetchAt) d.registry.setFeedState({ ...st, nextFetchAt: dueAt });
+      out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue;
+    }
     const locked = d.registry.lockedRule(t);
     const rule = wideRule(locked.rule);
     const last = d.registry.lastReading(key);
@@ -259,10 +310,10 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       recordWindowEnd(d, tokens.filter((x) => x.selectorKey === key), r);
       if (r.awaitingFinal > 0 && anchor === undefined) d.registry.setStatus(anchorKey, { since: sinceKey }, now);
       else if (r.awaitingFinal === 0 && anchor !== undefined) d.registry.setStatus(anchorKey, "", now);
-      // a game coin waiting for its scheduled burn (gameSettle.ts gameSchedule, owner 2026-10-16) is read again when the burn falls due,
-      // never up to a poll later
-      const pollAt = now + await nextPollMs(d, locked.rule, key, now);
-      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: r.dueAt && r.dueAt > now && r.dueAt < pollAt ? r.dueAt : pollAt });
+      // THE NEXT READ (readPlan.ts, owner 2026-10-19): the earliest moment a new result can exist, as the adapter says (a game's start plus
+      // the settle gap, then minutes until its final is confirmed; a market's close; a team's next game), else the feed's publish window,
+      // else the poll
+      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: await nextReadAt(d, locked.rule, key, r, now, written) });
       if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new ${written === 1 ? "reading" : "readings"}${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);
       out.push({ key, written, refusals: r.refusals, awaitingFinal: r.awaitingFinal, error: null, skipped: false });
     } catch (e) {
@@ -543,7 +594,8 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
     if (fwd && pairCtx) await adoptForward(d, pairCtx, D, rd, tx);
   }
 
-  // 4. CRANK in order.
+  // 4. CRANK in order. I-14: a coin that burns a target cranks only while its BurnTarget is the one built at prepare.
+  if (cfg.burnsTarget) { const off = await burnTargetHold(d, t); if (off) return hold(off, pending, "error"); }
   for (let i = 0; i < 30; i++) {
     const plan = await port.planCrank();
     if ("status" in plan) {

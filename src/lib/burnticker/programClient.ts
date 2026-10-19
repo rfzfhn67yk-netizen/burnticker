@@ -9,6 +9,7 @@ import { assertSolUsd } from "@/lib/burnKeeper/rules";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { programClusterOf, solanaProgramPort } from "@/lib/burnKeeper/programAdapter";
 import type { Cluster } from "@/lib/burnKeeper/solana";
+import { readAdmissionAccounts } from "@/lib/burnticker/admissionAccounts";
 import { counterRule, endSinkPin, expectedFromCounter, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
 import { ChainEndSink } from "@/lib/burnticker/endSinkChain";
 import { endSinkKindCode } from "@/lib/burnReceipts/endSink";
@@ -115,8 +116,10 @@ export class ProgramBurnClient implements BurnProgramClient {
     // stores a vault-mode coin's platform as the default key, so it is compared only for a buyback coin)
     const expected = expectedFromCounter(c, { rulesSha256: i.rulesSha256, attesters: attesters.map((a) => a.key.toBase58()), quorum: i.quorum, admin: this.o.admin.toBase58(),
       llPlatform: launchlabPlatform && c.rule.mode === MODE_BUYBACK ? launchlabPlatform.toBase58() : null,
-      endSink: endSink ? { kind: endSink.kind, mint: endSink.sinkMint ? endSink.sinkMint.toBase58() : null, minLamports: BigInt(endSink.minForwardLamports).toString() } : null,
-      pairVoidBy, burnTargetKind: bt ? 1 : 0 });
+      // I-14: a pair-winner sink is the partner the create names (pair_mint, or end_sink_mint in the pair-curve re-encoding), so the
+      // EndSink check compares that mint too
+      endSink: endSink ? { kind: endSink.kind, mint: endSink.sinkMint ? endSink.sinkMint.toBase58() : endPin?.kind === "pair-winner" && i.pairMint ? i.pairMint : null, minLamports: BigInt(endSink.minForwardLamports).toString() } : null,
+      pairVoidBy, burnTargetKind: bt ? 1 : 0, ...(bt ? { burnTarget: { mint: bt.mint, pool: bt.pool, feedId: bt.feedId } } : {}) });
     return { tokenConfig: configPda(this.o.programId, mint).toBase58(), expected, instructions: [...[serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`}${i.pairMint ? `; pair_mint ${i.pairMint}${i.partnerFirst ? " (completes the pairing)" : " (provisional for 7 days)"}` : ""})`)], ...pins] };
   }
   /** I-15: the config authority this client encodes (BURNTICKER_ADMIN), or null when it has none. A public key, never a secret. */
@@ -162,6 +165,12 @@ export class ProgramBurnClient implements BurnProgramClient {
     const t = await this.o.connection.getParsedTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
     if (!t) return null;
     return { memo: memoFromTransaction(t, this.o.programId), slot: t.slot ?? null, failed: t.meta?.err != null };
+  }
+  /** I-14: the coin's BurnTarget, decoded (null = none). */
+  async burnTargetOf(mint: string) {
+    const r = await readAdmissionAccounts(this.o.connection, this.programId, mint);
+    if (!r.ok) throw new Error(r.reason);
+    return r.burnTarget;
   }
   /** True when this mint has a TokenConfig under the program (the keeper and the pages check before using a port). */
   async initialised(mint: string): Promise<boolean> { return !!(await fetchTokenConfig(this.o.connection, this.o.programId, new PublicKey(mint))); }

@@ -87,6 +87,9 @@ export const REGIONS: Region[] = [
   { file: "site/burnticker/index.html", name: "age-core", render: cardAgeScript },
   ...shell("site/burnticker/status/index.html", SITE_ORIGIN),
   ...shell("site/burnticker/fallback/index.html", ""),
+  // audit 2026-10-19 P-2: the static 404 and error pages Caddy serves for paths outside the app
+  ...shell("site/burnticker/notfound/index.html", ""),
+  ...shell("site/burnticker/error/index.html", ""),
   ...shell("site/deficit/index.html", SITE_ORIGIN),
   { file: "site/deficit/index.html", name: "queue-core", render: deficitQueueScript },
 ];

@@ -11,6 +11,18 @@ export interface AuditBadgeView { text: string; tone: "ok" | "bad" | "muted"; su
 export const NO_RECEIPTS_TO_CHECK = "No receipts available to check on this host";
 export const NO_BURNS_TO_CHECK = "No completed burns to check yet";
 
+/**
+ * I-1 (audit 2026-10-19, second pass): the trust page's audit headline. "Every receipt recomputes" was shown as proof while no burn had
+ * executed: the audit recomputes RECORDED receipts from their readings and rules, so with nothing executed on chain it says exactly that.
+ */
+export function auditHeadline(a: Pick<AuditSummary, "ok" | "receipts" | "executed"> & { mismatches: number }, cluster: string | null | undefined): string {
+  if (!a.ok) return `The audit found ${a.mismatches} ${a.mismatches === 1 ? "mismatch" : "mismatches"}.`;
+  const net = cluster === "mainnet" || cluster === "devnet" ? `${cluster} ` : "";
+  if (a.receipts === 0) return `${NO_RECEIPTS_TO_CHECK}. No ${net}burn has executed yet.`;
+  const recomputes = "Every recorded receipt recomputes from its reading and its rule. This is a recomputation of recorded receipts.";
+  return (a.executed ?? a.receipts) === 0 ? `${recomputes} It is not proof of a burn: no ${net}burn has executed yet.` : recomputes;
+}
+
 export function auditBadgeView(a: AuditSummary | null | undefined): AuditBadgeView {
   if (!a) return { text: "not run yet", tone: "muted", sub: null };
   const scope = a.chainChecked ? "checked against the source and the chain" : "checked against the source only";

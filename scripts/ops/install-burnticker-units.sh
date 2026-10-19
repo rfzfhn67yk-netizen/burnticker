@@ -47,9 +47,11 @@ done
 # the log rotation config: the repo's template with this directory (logrotate wants absolute paths), the service user and its group
 # filled in as plain text by render-logrotate.mjs (never sed: a `&`, `|` or `\` in the path would be rewritten), checked with
 # `logrotate -d` (reads and reports only; a scratch state file) before it replaces anything, and the state file's directory
+# BT_UNITS_ROOT (L-5, 2026-10-19): the deploy installs from the new release directory but names the release LINK here, so the config
+# never points into a release that a later prune removes
 LR_DEST="$HOME/.config/burnticker/logrotate.conf"
 LR_NEW=$(mktemp); LR_STATE=$(mktemp)
-node scripts/ops/render-logrotate.mjs deploy/logrotate/burnticker "$(pwd)" "$(id -un)" "$(id -gn)" > "$LR_NEW" || { rm -f "$LR_NEW" "$LR_STATE"; say "STOP: the log rotation config could not be written for this directory (above)"; exit 1; }
+node scripts/ops/render-logrotate.mjs deploy/logrotate/burnticker "${BT_UNITS_ROOT:-$(pwd)}" "$(id -un)" "$(id -gn)" > "$LR_NEW" || { rm -f "$LR_NEW" "$LR_STATE"; say "STOP: the log rotation config could not be written for this directory (above)"; exit 1; }
 if ! /usr/sbin/logrotate -d --state "$LR_STATE" "$LR_NEW" > "$LR_NEW.check" 2>&1 || grep -qi '^error' "$LR_NEW.check"; then
   sed 's/^/    /' "$LR_NEW.check" | tail -15; rm -f "$LR_NEW" "$LR_NEW.check" "$LR_STATE"
   say "STOP: logrotate -d rejected the rendered config (above); nothing was replaced"; exit 1

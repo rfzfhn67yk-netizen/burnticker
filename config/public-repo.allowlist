@@ -86,6 +86,8 @@ deploy/systemd/mct-burnticker-*.timer
 deploy/logrotate/burnticker
 scripts/load-env.sh
 scripts/service/run-burnticker-web.sh
+# L-5 (2026-10-19): the web's bounded SIGTERM drain, preloaded by run-burnticker-web.sh
+scripts/service/web-graceful.cjs
 scripts/service/run-burnkeeper.sh
 scripts/service/run-burnticker-keeper.sh
 scripts/service/run-burnticker-audit.sh
@@ -107,6 +109,8 @@ scripts/ops/request-keeper-restart.sh
 scripts/ops/swap-web-build.sh
 scripts/ops/loadtest.sh
 scripts/ops/loadtest.mjs
+# I-6 (2026-10-19): prints the ufw rules that admit only Cloudflare (applies nothing); docs/burnticker/runbook.md
+scripts/ops/cloudflare-ufw-rules.sh
 
 # --- tests and the fixtures they read ---
 test/burnKeeper*.ts

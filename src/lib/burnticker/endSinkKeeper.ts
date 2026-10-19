@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
-import type { EndOutcome, EndSinkPort } from "@/lib/burnticker/endSinkClient";
+import type { EndOutcome, EndSinkPort, EndSinkView } from "@/lib/burnticker/endSinkClient";
+import { loadExpectedConfig } from "@/lib/burnticker/admission";
+import { endSinkKindOf, endSinkMismatch } from "@/lib/burnticker/admissionAccounts";
 import { endBurnLine, endForwardLine } from "@/lib/burnticker/endSinkClient";
 import type { Registry, TokenRow } from "@/lib/burnticker/registry";
 import { endSinkOf, INCINERATOR_ADDRESS, isOneShot, SWEEP_EVERY_DAYS, type LockedRule } from "@/lib/burnticker/rules";
@@ -130,11 +132,32 @@ async function sendOnce(d: EndSinkStepDeps, port: Pick<EndSinkPort, "simulate" |
   return `not confirmed yet (${tx.signature.slice(0, 12)}…)`;
 }
 
+/**
+ * I-14 (audit 2026-10-19): the stored prepare expectation against the EndSink the chain holds, before anything at the end moves. Null
+ * when it matches or there is no stored expectation (a coin from before expectations were recorded); else a hold.
+ */
+export function endSinkHold(d: Pick<EndSinkStepDeps, "registry" | "log" | "now">, t: Pick<TokenRow, "mint" | "ticker">, sink: EndSinkView | null, flagship: string | null | undefined): EndSinkStepResult | null {
+  const exp = loadExpectedConfig(d.registry, t.mint);
+  if (!exp) return null;
+  const pair = d.registry.pairOf(t.mint);
+  const facts = sink ? { kind: endSinkKindOf(sink.kind) ?? -1, sinkMint: sink.sinkMint, minForwardLamports: sink.minForwardLamports } : null;
+  const off = endSinkMismatch(facts, exp, { mint: t.mint, flagship: flagship ?? null, pairPartner: pair ? (pair.mintA === t.mint ? pair.mintB : pair.mintA) : null });
+  if (!off) return null;
+  const text = `$${t.ticker}: the coin's end sink on chain differs from the one this site built for it (${off}). Nothing is forwarded or wound down at its end.`;
+  d.log(`  [end] $${t.ticker}: HELD — ${off}`);
+  try { if (d.registry.recordAlert({ kind: "config-mismatch", key: `end-sink-mismatch:${t.mint}`, text, meta: { mint: t.mint, account: "end_sink" } }, d.now())) d.log(`  [alert] config-mismatch: ${text}`); } catch { /* the alert never changes the hold */ }
+  return { handled: true, selfBurn: false, note: text };
+}
+
 export async function endSinkStep(d: EndSinkStepDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null, end: { mode: "drain" | "winddown"; reason: string; at: number }): Promise<EndSinkStepResult> {
   const client = d.program.endSink;
   if (!client || !endSinkOf(locked.rule)) return NOT_MINE;
   const reg = d.registry, port = client.port(t.mint);
   const sink = await port.endSink();
+  // I-14: the EndSink on chain must be the one this site built at prepare (an edited create could name the creator's own coin);
+  // a difference holds the coin's end: nothing is recorded, forwarded or wound down, and the owner is alerted
+  const held = endSinkHold(d, t, sink, client.flagship);
+  if (held) return held;
   if (!sink) return NOT_MINE;   // launched without an EndSink (a coin from before §45): its hashed wind-down applies
   const outcome = endOutcomeOf(reg, t, locked, gate, end);
   const label = endLabel(outcome, end.reason);

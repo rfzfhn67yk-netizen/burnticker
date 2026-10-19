@@ -55,14 +55,38 @@ export function redstoneIdFor(row: Pick<PythFeedRow, "symbol" | "asset_type">): 
   return base;
 }
 
-interface SearchDeps { fetchImpl: FetchLike; redstoneIds?: Set<string> | null; catalogue?: readonly PythFeedRow[] }
+/**
+ * I-7 (audit 2026-10-19): the search took 3.5 to 18 s for any query, with no bound on the input, and varied queries bypassed the edge
+ * cache. The work is now capped: a normalised query (normalizeDerbyQuery), one deadline for every upstream read of a request
+ * (`deadlineAt`), at most DERBY_JUP_CANDIDATES Jupiter tokens looked at and at most three pool look-ups, run side by side. The API layer
+ * (api/derby.ts) caches normalised queries briefly and rate-limits cache misses per client.
+ */
+export const DERBY_QUERY_MAX = 64;
+export const DERBY_SEARCH_DEADLINE_MS = 6_000;
+export const DERBY_JUP_CANDIDATES = 40;
+const DERBY_QUERY_RE = /^[A-Za-z0-9 ._$-]+$/;
+/** The query as searched (NFKC, trimmed, single spaces), or the plain reason it is refused. */
+export function normalizeDerbyQuery(raw: string | null | undefined): { query: string } | { error: string } {
+  const r = String(raw ?? "");
+  if (r.length > DERBY_QUERY_MAX * 4) return { error: `A search can be at most ${DERBY_QUERY_MAX} characters long.` };
+  const q = r.normalize("NFKC").trim().replace(/\s+/g, " ");
+  if (q.length < 2) return { error: "Type at least two characters. You can search for a ticker, a name or a mint." };
+  if (q.length > DERBY_QUERY_MAX) return { error: `A search can be at most ${DERBY_QUERY_MAX} characters long.` };
+  if (!DERBY_QUERY_RE.test(q)) return { error: "A search can use letters, digits, spaces and the characters . _ - $ only." };
+  return { query: q };
+}
+
+interface SearchDeps { fetchImpl: FetchLike; redstoneIds?: Set<string> | null; catalogue?: readonly PythFeedRow[]; /** I-7: no upstream read of this search runs past this time (epoch ms) */ deadlineAt?: number }
+/** An upstream read's timeout: its own cap, never past the search's deadline (at least 1 ms, so an expired deadline aborts at once). */
+const timeoutFor = (d: Pick<SearchDeps, "deadlineAt">, capMs: number): AbortSignal => AbortSignal.timeout(Math.max(1, Math.min(capMs, d.deadlineAt !== undefined ? d.deadlineAt - Date.now() : capMs)));
+const pastDeadline = (d: Pick<SearchDeps, "deadlineAt">, marginMs = 0): boolean => d.deadlineAt !== undefined && Date.now() + marginMs >= d.deadlineAt;
 let rsCache: { at: number; ids: Set<string> } | null = null;
 async function redstoneIds(d: SearchDeps): Promise<Set<string>> {
   if (d.redstoneIds) return d.redstoneIds;
   if (rsCache && Date.now() - rsCache.at < 10 * 60_000) return rsCache.ids;
   try {
     await takeOrThrow(sourceForUrl(REDSTONE_LATEST_URL));   // the request budget (apiBudget.ts)
-    const res = await d.fetchImpl(REDSTONE_LATEST_URL, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
+    const res = await d.fetchImpl(REDSTONE_LATEST_URL, { headers: { accept: "application/json" }, signal: timeoutFor(d, 20_000) });
     const ids = res.ok ? new Set(Object.keys((await res.json()) as Record<string, unknown>)) : new Set<string>();
     rsCache = { at: Date.now(), ids };
     return ids;
@@ -72,8 +96,8 @@ async function redstoneIds(d: SearchDeps): Promise<Set<string>> {
 async function jupiterSearch(d: SearchDeps, q: string): Promise<JupToken[]> {
   try {
     await takeOrThrow(sourceForUrl(JUP_SEARCH_URL));
-    const res = await d.fetchImpl(`${JUP_SEARCH_URL}?query=${encodeURIComponent(q)}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
-    return res.ok ? tokensFromJupiter(await res.json()) : [];
+    const res = await d.fetchImpl(`${JUP_SEARCH_URL}?query=${encodeURIComponent(q)}`, { headers: { accept: "application/json" }, signal: timeoutFor(d, 10_000) });
+    return res.ok ? tokensFromJupiter(await res.json()).slice(0, DERBY_JUP_CANDIDATES) : [];
   } catch { return []; }
 }
 
@@ -81,10 +105,10 @@ const SOL = "So11111111111111111111111111111111111111112";
 /** Curated home-chain contracts for coins without a Solana mint (config/burnticker/derby-home-chains.json). */
 export const HOME_CHAINS: Record<string, { chain: string; address: string }> = (() => { try { return (JSON.parse(fs.readFileSync(path.join("config", "burnticker", "derby-home-chains.json"), "utf8")) as { coins: Record<string, { chain: string; address: string }> }).coins; } catch { return {}; } })();
 /** The deepest SOL pool of a mint on Raydium or PumpSwap (DexScreener's pairs), or null. */
-export async function deepestSolPool(fetchImpl: FetchLike, mint: string): Promise<{ pool: string; dexId: string; liquidityUsd: number } | null> {
+export async function deepestSolPool(fetchImpl: FetchLike, mint: string, o: { deadlineAt?: number } = {}): Promise<{ pool: string; dexId: string; liquidityUsd: number } | null> {
   try {
     await takeOrThrow(sourceForUrl(dexscreenerUrl(mint)));
-    const res = await fetchImpl(dexscreenerUrl(mint), { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
+    const res = await fetchImpl(dexscreenerUrl(mint), { headers: { accept: "application/json" }, signal: timeoutFor(o, 10_000) });
     if (!res.ok) return null;
     const pairs = ((await res.json()) as { pairs?: { chainId?: string; dexId?: string; pairAddress?: string; baseToken?: { address?: string }; quoteToken?: { address?: string }; liquidity?: { usd?: number }; labels?: string[] }[] }).pairs ?? [];
     const ok = pairs.filter((p) => p.chainId === "solana" && p.baseToken?.address === mint && p.quoteToken?.address === SOL && (p.dexId === "pumpswap" || (p.dexId === "raydium" && (p.labels ?? []).includes("CPMM"))));
@@ -127,25 +151,34 @@ export async function searchDerbyCoins(q: string, d: SearchDeps, o: { assets?: "
       why: cross ? (rsPrimary ? HOME_CHAIN_WHY : null) : noSecondSourceWhy(sym) });
   }
   const seen = new Set(out.map((x) => x.mint).filter(Boolean));
-  let resolved = 0;
+  // which Jupiter tokens are listed (in order, up to twice the limit) and which of them get the TWAP fallback (the first three liquid ones)
+  const picked: { t: JupToken; sym: string; enough: boolean; twap: boolean }[] = [];
+  let resolved = 0, count = out.length;
   for (const t of jup) {
     const sym = derbySymbol(t.symbol);
     if (!sym || seen.has(t.id) || out.some((x) => x.symbol === sym && x.source === "pyth")) continue;
     const enough = (t.liquidity ?? 0) >= DERBY_MIN_LIQUIDITY_USD;
-    // The TWAP fallback: resolve the deepest SOL pool for the first few liquid coins (one DexScreener read each).
-    const tw = enough && resolved < 3 ? (resolved++, await twapUnderlying(d.fetchImpl, { symbol: sym, mint: t.id, liquidityUsd: t.liquidity })) : null;
+    const twap = enough && resolved < 3;
+    if (twap) resolved++;
+    picked.push({ t, sym, enough, twap });
+    if (++count >= (o.limit ?? 12) * 2) break;
+  }
+  // The TWAP fallback: the deepest SOL pool of each (one DexScreener read each), side by side and inside the deadline; past it, skipped
+  const skipPools = pastDeadline(d, 500);
+  const pools = await Promise.all(picked.map((x) => (x.twap && !skipPools ? twapUnderlying(d.fetchImpl, { symbol: x.sym, mint: x.t.id, liquidityUsd: x.t.liquidity }, { deadlineAt: d.deadlineAt }) : Promise.resolve(null))));
+  picked.forEach(({ t, sym, enough }, i) => {
+    const tw = pools[i];
     out.push({ symbol: sym, name: t.name, source: "jupiter", assetType: "Crypto", feed: null, mint: t.id, liquidityUsd: t.liquidity, verified: t.isVerified, underlying: tw && "underlying" in tw ? tw.underlying : null,
       why: tw && "underlying" in tw ? POOL_READ_WHY : tw && "why" in tw ? `${NO_PYTH} ${tw.why}` : enough ? `${NO_PYTH} Search for it by its name to find its pool.` : `${NO_PYTH} ${thinPoolWhy(t.liquidity)}` });
-    if (out.length >= (o.limit ?? 12) * 2) break;
-  }
+  });
   // audit 10 #21: a usable reference (one with a second source) comes before the ones the preflight would refuse; order is kept within each
   return out.map(withHitLabel).sort((a, b) => Number(!!b.underlying) - Number(!!a.underlying));
 }
 
 /** A TWAP underlying for a Jupiter token (its deepest SOL pool), or why not. */
-export async function twapUnderlying(fetchImpl: FetchLike, t: { symbol: string; mint: string; liquidityUsd: number | null }): Promise<{ underlying: DerbyUnderlying } | { why: string }> {
+export async function twapUnderlying(fetchImpl: FetchLike, t: { symbol: string; mint: string; liquidityUsd: number | null }, o: { deadlineAt?: number } = {}): Promise<{ underlying: DerbyUnderlying } | { why: string }> {
   if ((t.liquidityUsd ?? 0) < DERBY_MIN_LIQUIDITY_USD) return { why: thinPoolWhy(t.liquidityUsd) };
-  const p = await deepestSolPool(fetchImpl, t.mint);
+  const p = await deepestSolPool(fetchImpl, t.mint, o);
   if (!p) return { why: NO_POOL_WHY };
   return { underlying: { symbol: t.symbol, pyth: null, mint: t.mint, pool: p.pool, cross: `jup:${t.mint}` } };
 }

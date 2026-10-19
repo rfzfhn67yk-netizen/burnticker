@@ -105,7 +105,7 @@ Project: $DEFICIT (Burnticker). Mint: {DEFICIT_MINT}. Website: https://deficit.b
 - **Ask:** a listing. **Status field:** "in development" until $DEFICIT is live on mainnet; then "live".
 
 ```text draft
-Burnticker — coins that burn on real-world results, with receipts. A Raydium LaunchLab platform on Solana: each coin carries one locked rule (a settled result, a unit, a share of its fee pool), and the open-source burn_receipts program buys the coin on its own pool and burns everything bought, with a memo anyone can recompute. Creators earn nothing from fees; the LP is locked forever and its fees fund the burn (80% burned, 20% operator, fixed in code); the platform never buys any coin. Keyless API and open source: https://github.com/rfzfhn67yk-netizen/burnticker
+Burnticker — coins that burn on real-world results, with receipts. A Raydium LaunchLab platform on Solana: each coin carries one locked rule (a settled result, a unit, a share of its fee pool), and the open-source burn_receipts program buys the coin on its own pool and burns everything bought, with a memo anyone can recompute. Creators earn nothing from fees; the LP is locked forever and its fees fund the burn (80% burned, 20% operator, fixed in code); the platform buys no coin except one test coin. Keyless API and open source: https://github.com/rfzfhn67yk-netizen/burnticker
 ```
 
 ## 6. Helius — guest blog

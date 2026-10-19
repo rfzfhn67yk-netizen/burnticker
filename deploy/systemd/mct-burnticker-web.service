@@ -24,7 +24,9 @@ Environment=BURNTICKER_PUBLISH_DIR=%h/meme-coin-trader/data/burnticker-site
 Restart=always
 RestartSec=5
 KillSignal=SIGTERM
-TimeoutStopSec=90
+# L-5 (audit 2026-10-19): the web drains for 8 s on SIGTERM and exits by 11 s (scripts/service/web-graceful.cjs); 90 s kept the site on
+# the static fallback for a minute and a half on every deploy.
+TimeoutStopSec=15
 StandardOutput=append:%h/meme-coin-trader/logs/burnticker-web.log
 StandardError=append:%h/meme-coin-trader/logs/burnticker-web.log
 

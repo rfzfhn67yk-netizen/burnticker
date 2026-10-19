@@ -230,7 +230,8 @@ describe("F02: swap-web-build.sh smokes the staged build and swaps back on failu
     }
     if (fs.existsSync(pdFile)) {
     const pd = fs.readFileSync(pdFile, "utf8");
-    assert.match(pd, /--webpack 2>&1 && echo 0 > \/tmp\/publish-deploy\.rc \|\| echo \$\? > \/tmp\/publish-deploy\.rc; \} \| hide \| tee \/tmp\/publish-deploy\.log \| tail -4/);
+    // 2026-10-19 (audit L-5): BURNTICKER_DEPLOY_ARGS carries the one-time --migrate-releases to the host deploy
+    assert.match(pd, /--webpack \$\{BURNTICKER_DEPLOY_ARGS:-\} 2>&1 && echo 0 > \/tmp\/publish-deploy\.rc \|\| echo \$\? > \/tmp\/publish-deploy\.rc; \} \| hide \| tee \/tmp\/publish-deploy\.log \| tail -4/);
     assert.match(pd, /if \[ "\$DEPLOY_RC" != 0 \]; then[\s\S]*STOP: the host deploy failed[\s\S]*exit 1\nfi/);
     assert.ok(pd.indexOf("STOP: the host deploy failed") < pd.indexOf("--- deploy sites"), "the publish stops before anything after the deploy");
     }

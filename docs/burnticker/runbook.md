@@ -574,3 +574,92 @@ a new day needs no hand edit.
 and nothing is written. After the ship, GET /api/burnticker/v1/operator verifies it with ed25519 and the operator page shows ✓ (or ✗ with
 the reason). Anyone can check it without trusting this site's code: `node scripts/burnticker-verify-statement.mjs https://burnticker.com`
 (the trust page lists the command). Then item 5 in `docs/burnticker/TODO-OWNER.md` moves to "Already resolved".
+
+## Release directories
+
+Since 2026-10-19 (audit L-5) every deploy is a release directory of its own, and the path every unit names is a link:
+
+```
+~mct/burnticker/releases/<utc stamp>-<build id>/   one complete tree per deploy: source, node_modules, .next
+~mct/burnticker/releases/legacy-<stamp>/           the in-place tree from before the migration, kept as a rollback target
+~mct/burnticker/shared/                            data/, logs/ and the .env files; every release links to them
+~mct/meme-coin-trader  ->  releases/<current>      the link (units, logs and the database path are unchanged)
+```
+
+`scripts/ops/deploy-burnticker-host.sh` copies the source and the build into a new release, hard-links node_modules from the serving
+release (npm ci runs there only when package-lock.json changed), and then `swap-web-build.sh` switches the link in one rename, restarts
+the web unit and smokes it. A failed smoke switches the link back, so the previous source, node_modules and build serve again together.
+The running keepers keep the tree they started in until their requested restart between cycles. The five newest releases are kept,
+plus the previous one; older ones are pruned at the end of each deploy. The web stops within about 11 s on SIGTERM
+(`scripts/service/web-graceful.cjs`; the unit's stop timeout is 15 s), so the fallback page shows for seconds, not 95.
+
+**The one-time migration (the owner, once).** A host that still has one in-place tree refuses the release deploy. Pick a quiet minute
+(no keeper crank in flight; `tail logs/burnticker-keeper.log`) and run the normal ship with the flag:
+
+```sh
+BURNTICKER_SRC=../burnticker-public sh scripts/ops/deploy-burnticker-host.sh --webpack --migrate-releases
+```
+
+It moves data/, logs/ and the env files to shared/ (each move is followed at once by a link in the old place), renames the old directory
+to releases/legacy-<stamp> (running processes keep it; a rename keeps the inode) and points the link at it, then ships the first release.
+Check afterwards: `readlink ~mct/meme-coin-trader`, `ls -l ~mct/burnticker/shared`, and that the keeper log keeps growing.
+`sh release-host.sh list` (the deploy sends the script to /tmp; a copy is in scripts/ops/) shows every release and its build.
+
+**Rollback by link.** `sh scripts/ops/rollback-burnticker.sh --previous-release` switches the link back to the release that served
+before the last deploy, with the same smoke and automatic switch back; nothing is built or copied, so it takes about as long as one web
+restart. Run it again to roll forward. A rollback to an older public commit (`rollback-burnticker.sh <commit>`) ships that commit as a
+new release the normal way. Neither touches the chain, the database or the keepers' running code.
+
+## Admit only Cloudflare at the origin
+
+The audit of 2026-10-19 (I-6) reached the app on the box's public IPv4 directly (`curl --resolve burnticker.com:443:<public IPv4>
+https://burnticker.com/burnticker` answered 200 with the app's headers). Every rate limit lives in the Node process, and Caddy has none, so
+a direct caller skips Cloudflare's protection. Two ways to close it; the first is enough, the second is stronger. Nothing here was applied
+by the code; the owner applies it on the box as root.
+
+**1. ufw: admit only Cloudflare's ranges to 80 and 443.**
+
+1. Print the rules (on the box, from the release link, or on the Mac; it only prints):
+   `sh scripts/ops/cloudflare-ufw-rules.sh > ~/cf-ufw.txt && cat ~/cf-ufw.txt`.
+   It fetches https://www.cloudflare.com/ips-v4 and https://www.cloudflare.com/ips-v6, refuses a list with any line that is not a range,
+   and warns when the list differs from `CLOUDFLARE_RANGES` in `src/lib/burnticker/api/clientIp.ts` (update that list and
+   `deploy/caddy/cloudflare.proposed.caddy` together if it does).
+2. Check that SSH and the tailnet stay as they are before changing anything: `ufw status numbered` must show `22/tcp` allowed from
+   the tailnet's address range and the rule for the tailnet's network interface (provision step 5 added both). The printed rules never
+   touch either, and never touch the defaults. Keep an SSH session over the tailnet open while you apply, and the provider's web
+   console at hand as break-glass.
+3. Apply the printed lines in order: every Cloudflare `allow` first, then `ufw delete allow 80/tcp` and `ufw delete allow 443/tcp`.
+   `sh ~/cf-ufw.txt` runs them as printed. If the provider's cloud firewall is attached, restrict 80 and 443 there the same way.
+4. Caddy check: `caddy validate --config /etc/caddy/Caddyfile` and `systemctl status caddy` stay clean (nothing in Caddy changes).
+   Certificates: with the records proxied, Let's Encrypt's HTTP-01 check reaches the box through Cloudflare, so renewal keeps working;
+   the TLS-ALPN check cannot (it needs a direct connection). If `journalctl -u caddy` ever shows a failed renewal, switch Caddy to a
+   Cloudflare Origin CA certificate or the DNS challenge rather than reopening the port.
+5. Verify from outside the tailnet (a phone hotspot or another host):
+   `curl -m 10 -sS -o /dev/null -w '%{http_code}\n' --resolve burnticker.com:443:<public IPv4> https://burnticker.com/burnticker`
+   must time out or be refused, and `curl -sI https://burnticker.com/burnticker | grep -i cf-ray` must still show a cf-ray header.
+   Do the same for IPv6 if the box has a public IPv6 address.
+6. Refresh: Cloudflare changes its ranges rarely and announces it. Re-run the script monthly with the drills; a WARNING or a new range
+   means adding the new `allow` lines (and removing a withdrawn one with `ufw delete allow proto tcp from <range> to any port 80,443`).
+   Undo everything: `sh scripts/ops/cloudflare-ufw-rules.sh --remove-only` prints the deletions; add `ufw allow 80/tcp` and
+   `ufw allow 443/tcp` first if the origin should be open again.
+
+**2. The alternative: authenticated origin pulls (mutual TLS).** Cloudflare presents a client certificate on every connection to the
+origin, and Caddy refuses any TLS connection without it, so a direct caller fails even when the port is open. In Cloudflare: SSL/TLS,
+Origin Server, turn on Authenticated Origin Pulls (zone level uses Cloudflare's shared certificate; a per-hostname certificate of your own
+is stronger, because the shared one is presented for every Cloudflare customer). On the box, save Cloudflare's origin-pull CA certificate
+(published in Cloudflare's documentation for Authenticated Origin Pulls) as `/etc/caddy/cloudflare-origin-pull-ca.crt` and add to each
+site block that Cloudflare proxies:
+
+```
+tls {
+	client_auth {
+		mode require_and_verify
+		trust_pool file /etc/caddy/cloudflare-origin-pull-ca.crt
+	}
+}
+```
+
+Then `caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy`, and check with step 5 above (the direct request must now
+fail the TLS handshake). Turn the Cloudflare setting on before reloading Caddy, or every visitor is refused. Certificate renewal over
+HTTP-01 on port 80 is unaffected (client_auth applies to TLS only). The two layers combine well: ufw keeps strangers off the port, and
+origin pulls keep a Cloudflare customer who points their own zone at this address from reaching the app.

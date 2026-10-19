@@ -995,6 +995,29 @@ const noteSingle = (d: GameDeps, seriesId: string | null, g: Game, v: Extract<Ga
 };
 
 /** Settled readings for a team or game series since `sinceIso` (the keeper and the back-test). */
+/** While a game's final is being read, the keeper reads again this often (THE NEXT READ). */
+export const GAME_LIVE_POLL_MS = 5 * 60_000;
+/** A team coin with no game listed ahead looks at the schedule again after this long. */
+export const SCHEDULE_RECHECK_MS = 6 * 3_600_000;
+/** A game the schedule still shows unfinished this long after its start is read hourly, not every few minutes (a stale listing). */
+export const STALE_GAME_MS = 24 * 3_600_000;
+/** The earliest moment a game's result can be read: its start plus the settle gap, and never sooner than one live poll from now. */
+export function gameDueAt(g: Pick<Game, "startsAt">, now: number): number | null {
+  const start = Date.parse(g.startsAt);
+  if (!Number.isFinite(start)) return null;
+  return now - start > STALE_GAME_MS ? now + 3_600_000 : Math.max(start + SETTLE_AFTER_START_MS, now + GAME_LIVE_POLL_MS);
+}
+/** The soonest due time among the listed games not over yet (postponed ones aside), or null. */
+export function nextListedDue(games: readonly Game[], now: number): number | null {
+  const ts = games.filter((g) => !g.completed && g.state !== "post" && !POSTPONED_RE.test(g.detail)).map((g) => gameDueAt(g, now)).filter((t): t is number => t !== null);
+  return ts.length ? Math.min(...ts) : null;
+}
+/** The latest due time among the listed games not over yet (a series that ends with the later season), or null. */
+export function lastListedDue(games: readonly Game[], now: number): number | null {
+  const ts = games.filter((g) => !g.completed && g.state !== "post" && !POSTPONED_RE.test(g.detail)).map((g) => gameDueAt(g, now)).filter((t): t is number => t !== null);
+  return ts.length ? Math.max(...ts) : null;
+}
+
 export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number; seriesId?: string | null } = {}): Promise<ResolvedSelector> {
   // the deps' clock when the host gives one (the keeper's wall clock; a test's or rehearsal's moved clock), so the 6-hour read gate and a
   // game coin's two reads are measured on the same clock
@@ -1005,7 +1028,8 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
   const games = all.filter((g) => !sinceIso || g.date > sinceIso.slice(0, 10));
   const tid = s.kind === "team" ? s.teamId : null;
   const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string }>();
-  let awaiting = 0, dueAt: number | null = null; const refusals: string[] = [];
+  let awaiting = 0, dueAt: number | null = null, undated = 0; const refusals: string[] = [];
+  const due = (t: number | null) => { if (t !== null && Number.isFinite(t) && (dueAt === null || t < dueAt)) dueAt = t; };
   // a single-game coin (owner, 2026-10-16) burns once two sources agree or one source shows the same final twice (gameSchedule, 2026-10-18); team coins keep their rules
   const sched = s.kind === "game" ? { schedule: "game" as const } : {};
   // semantics-verify items 79 and 80: a day's reading is one id (its UTC date) and the registry refuses a changed value for an id it
@@ -1014,11 +1038,12 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
   // for neither side and does not hold its day; a made-up game is read on the date it is played.
   const waitingDays = new Set<string>();
   for (const g of games) {
-    if (!g.completed && g.state !== "post") continue;
+    // a game not over yet (scheduled or in progress): its result cannot exist before its start plus the settle gap (THE NEXT READ below)
+    if (!g.completed && g.state !== "post") { if (!POSTPONED_RE.test(g.detail)) due(gameDueAt(g, now)); continue; }
     if (!g.completed && POSTPONED_RE.test(g.detail)) continue;
-    if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; waitingDays.add(g.date); continue; }
+    if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; waitingDays.add(g.date); due(gameDueAt(g, now)); continue; }
     const v = await settleGame(client, g, d, sched);
-    if (v.kind === "awaiting") { awaiting++; waitingDays.add(g.date); if (v.dueAt && (dueAt === null || v.dueAt < dueAt)) dueAt = v.dueAt; continue; }
+    if (v.kind === "awaiting") { awaiting++; waitingDays.add(g.date); if (v.dueAt) due(v.dueAt); else undated++; continue; }
     if (v.kind === "held") { const r = /^no primary|^cross-read missing/.test(v.why) ? v.why : `${g.eventId} ${g.name}: ${v.why}`; if (!refusals.includes(r)) refusals.push(r); continue; }
     const out = outcomeFor(v.winner, g, s.abbr, tid);
     if (out === null) continue;
@@ -1034,7 +1059,11 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
   for (const day of waitingDays) byDay.delete(day);
   const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, x]) => ({ id: date, at: date, result: null, value: String(x.value), title: x.titles.join(" · "), sourceUrl: x.url, method: x.method } as SettledEvent));
   const window = windowStatus(s, s.kind === "team" && s.window.kind === "post" ? await client.season(s.league, s.teamId ?? s.abbr, s.window.year).catch(() => all) : all, now);
-  return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: null, window, ...(dueAt !== null ? { dueAt } : {}) };
+  // THE NEXT READ (owner 2026-10-19): the earliest moment a new result can exist. A game waiting on a source with no time of its own keeps
+  // the poll (null); otherwise the soonest of: a waiting game's due time, the next listed game's start plus the settle gap; with no game
+  // listed at all, the schedule is looked at again in SCHEDULE_RECHECK_MS.
+  const next: number | null = undated > 0 || refusals.length > 0 ? null : dueAt ?? nextListedDue(all, now) ?? now + SCHEDULE_RECHECK_MS;
+  return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: null, window, ...(next !== null ? { dueAt: next } : {}) };
 }
 
 /**
@@ -1087,7 +1116,7 @@ export function threeWayOf(markets: readonly GameHitMarket[], g: Game): { draw: 
   return { draw: draws[0], home: home.m, away: away.m, homeName: home.name, awayName: away.name };
 }
 type GameHits = { events: { url: string; markets: GameHitMarket[] }[] };
-export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "open" | "closed" | "all"; limit?: number }): Promise<GameHits>; eventsInWindow?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; eventsStarting?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; readChain(conditionId: string, o?: { fresh?: boolean }): Promise<{ resolved: boolean; outcome: number | null }>; chainFetchedAt?(conditionId: string): number | null }): Pick<GameDeps, "market" | "payout"> {
+export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "open" | "closed" | "all"; limit?: number }): Promise<GameHits>; eventsInWindow?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; eventsStarting?(slug: string, minIso: string, maxIso: string): Promise<GameHits>; readChain(conditionId: string, o?: { fresh?: boolean }): Promise<{ resolved: boolean; outcome: number | null }>; chainFetchedAt?(conditionId: string): number | null; peekOrSchedule?(conditionId: string): { resolved: boolean; outcome: number | null } | null }, o: { /** THE SITE (owner 2026-10-19: no Polygon read on a page build): the payout is what is stored or held now, never awaited; when nothing is held one read is started in the background (PolymarketClient.peekOrSchedule) and the game shows as not read yet */ nonBlocking?: boolean } = {}): Pick<GameDeps, "market" | "payout"> {
   type Hit = { url: string; markets: GameHitMarket[] };
   const pick = (events: readonly Hit[], g: Game): GameMarket | null => {
     // walkthrough 2026-10-13: the CLOSEST moneyline of the two teams within 2 days (a playoff series lists the same two teams on
@@ -1135,7 +1164,10 @@ export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "
       const r = await poly.search(`${g.away.nickname || g.away.name} vs ${g.home.nickname || g.home.name}`, { status: "all", limit: 10 });
       return pick(r.events, g);
     },
-    payout: async (id, o) => { const c = await poly.readChain(id, o?.fresh ? { fresh: true } : {}); const at = poly.chainFetchedAt?.(id) ?? null; return { resolved: c.resolved, outcome: c.outcome, ...(at !== null ? { fetchedAt: at } : {}) }; },
+    payout: async (id, q) => {
+      if (o.nonBlocking && poly.peekOrSchedule) { const held = poly.peekOrSchedule(id); if (!held) return null; const at = poly.chainFetchedAt?.(id) ?? null; return { resolved: held.resolved, outcome: held.outcome, ...(at !== null ? { fetchedAt: at } : {}) }; }
+      const c = await poly.readChain(id, q?.fresh ? { fresh: true } : {}); const at = poly.chainFetchedAt?.(id) ?? null; return { resolved: c.resolved, outcome: c.outcome, ...(at !== null ? { fetchedAt: at } : {}) };
+    },
   };
 }
 
@@ -1156,13 +1188,14 @@ export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: 
   const meetings = await gamesFor(client, s, null);
   const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string }>();
   const waitingDays = new Set<string>(), refusals: string[] = [], outcomes: MeetingOutcome[] = [];
-  let awaiting = 0, unsettled = 0;
+  let awaiting = 0, unsettled = 0, undated = 0, dueAt: number | null = null;
+  const due = (t: number | null) => { if (t !== null && Number.isFinite(t) && (dueAt === null || t < dueAt)) dueAt = t; };
   for (const g of meetings) {
     if (!g.completed && (g.state === "post" || POSTPONED_RE.test(g.detail))) { if (g.state === "post" || /cancel/i.test(g.detail)) outcomes.push("void"); continue; }
-    if (!g.completed) { unsettled++; continue; }
-    if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; unsettled++; waitingDays.add(g.date); continue; }
+    if (!g.completed) { unsettled++; due(gameDueAt(g, now)); continue; }
+    if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; unsettled++; waitingDays.add(g.date); due(gameDueAt(g, now)); continue; }
     const v = await settleGame(client, g, d);
-    if (v.kind === "awaiting") { awaiting++; unsettled++; waitingDays.add(g.date); continue; }
+    if (v.kind === "awaiting") { awaiting++; unsettled++; waitingDays.add(g.date); if (v.dueAt) due(v.dueAt); else undated++; continue; }
     if (v.kind === "held") { unsettled++; const r = /^no primary|^cross-read missing/.test(v.why) ? v.why : `${g.eventId} ${g.name}: ${v.why}`; if (!refusals.includes(r)) refusals.push(r); waitingDays.add(g.date); continue; }
     const out = outcomeFor(v.winner, g, s.abbr, s.teamId);
     if (out === null) continue;
@@ -1188,5 +1221,8 @@ export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: 
     if (endDay) events.push({ id: endDay, at: endDay, result: null, value: t.leader === "team" ? "1" : "-1", title: `The season series is over: ${team} won ${t.wins}, ${opp} won ${t.losses}${t.draws ? `, ${t.draws} drawn` : ""}. This is the season-end result of the head-to-head series.`, sourceUrl: [...byDay.values()].pop()?.url ?? "", method: "head-to-head-tally" } as SettledEvent);
     window = { ...window, reason: meetingsEndReason(t, team, opp), series: { ...t, endDay } };
   }
-  return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: null, window };
+  // THE NEXT READ: the next meeting's due time; after the last meeting, the later of the two seasons' last listed games (the series ends
+  // with both seasons, and its season-end reading is read then)
+  const next: number | null = undated > 0 || refusals.length > 0 ? null : dueAt ?? lastListedDue([...mine, ...theirs], now) ?? now + SCHEDULE_RECHECK_MS;
+  return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: null, window, ...(next !== null ? { dueAt: next } : {}) };
 }

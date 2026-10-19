@@ -37,8 +37,12 @@ export interface ResolvedSelector {
   settlementSourceUrl: string | null;
   /** A first-party series with a window (ESPN team coins): where the window stands — open, ended, its end. The rules-core wind-down
    *  (onEnd) reads `ended`; a perpetual window never ends. */
-  /** A game coin waiting for its scheduled burn (gameSettle.ts gameSchedule): the earliest time a waiting reading falls due, so the keeper
-   *  reads again then rather than up to a poll later. */
+  /**
+   * THE NEXT READ (owner 2026-10-19: "the keeper is only checking for results when it needs to"). The earliest moment a new result CAN
+   * exist for this selector, as the adapter knows it: a game's start plus the settle gap (or the next few minutes while a final is being
+   * confirmed), a market's stated close, the next scheduled game of a team coin. The keeper's next read is this time, whether it is
+   * earlier or later than the selector's poll (multiKeeper.ts nextReadAt, bounded by READ_PLAN_MAX_IDLE_MS). Absent or null: the poll.
+   */
   dueAt?: number | null;
   window?: { perpetual: boolean; ended: boolean; endsAt: string | null; reason: string; lastGame?: unknown; /** website-18: an ended season window's champion verdict (espn.ts championOf) and the day it was read from */ champion?: boolean | null; championDate?: string | null; /** a rivalry series (espn.ts window `meetings`) that ended: its season-end reading's day (null when level) */ series?: { endDay: string | null } | null };
 }

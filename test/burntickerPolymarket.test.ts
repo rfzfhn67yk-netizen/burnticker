@@ -251,11 +251,15 @@ describe("the keeper, the API and the SDK (on the fakes)", () => {
     const receipt = w.registry.receipt(bucs.mint, BUCS_CID)!;
     assert.equal(receipt.status, "confirmed", JSON.stringify(rep.executed.filter((x) => x.mint === bucs.mint), (_k, v) => (typeof v === "bigint" ? v.toString() : v)) + JSON.stringify(rep.errors));
     assert.ok((receipt.burnRaw ?? BigInt(0)) > BigInt(0));
+    // THE READ PLAN (2026-10-19): a one-market coin whose result is recorded is never read again (no Gamma, no Polygon read)
+    const reads = w.p.polymarket.chainReads.length, gets = w.p.polymarket.requests.length;
     const again = await runCycle({ ...deps, now: () => NOW + 10 * 60_000 });
-    assert.equal(again.fetched.find((x) => x.key === `polymarket:market:${BUCS_CID}`)!.written, 0);
-    // A keeper without a Polymarket adapter holds the key with an error (it never misreads it as Kalshi).
+    const f2 = again.fetched.find((x) => x.key === `polymarket:market:${BUCS_CID}`)!;
+    assert.deepEqual([f2.written, f2.skipped, f2.error], [0, true, null]);
+    assert.deepEqual([w.p.polymarket.chainReads.length, w.p.polymarket.requests.length], [reads, gets], "nothing read for a decided one-shot");
+    // ... so even a keeper without a Polymarket adapter has nothing to read for it (no error, no misread as Kalshi)
     const blind = await runCycle({ ...deps, oracles: { kalshi: w.p.oracles.kalshi, catalogue: w.p.oracles.catalogue }, now: () => NOW + 3_600_000 });
-    assert.match(blind.fetched.find((x) => x.key === `polymarket:market:${BUCS_CID}`)!.error ?? "", /no Polymarket adapter/);
+    assert.equal(blind.fetched.find((x) => x.key === `polymarket:market:${BUCS_CID}`)!.error, null);
   });
   test("v1: /polymarket/search and /polymarket/backtest answer schema-valid; the token API shows the proof; verify passes the source check from the chain", async () => {
     const DOC = buildOpenApi() as unknown as Record<string, unknown> & { paths: Record<string, Record<string, { responses: Record<string, { content: { "application/json": { schema: Record<string, unknown> } } }> }>> };

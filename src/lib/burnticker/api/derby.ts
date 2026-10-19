@@ -2,12 +2,12 @@ import { safeParam } from "@/lib/burnticker/safeParam";
 import { publicPairs } from "@/lib/burnticker/publicPairs";
 import type { Platform } from "@/lib/burnticker/server";
 import { tokenPageData } from "@/lib/burnticker/server";
-import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
-import { API_PREFIX } from "@/lib/burnticker/api/spec";
+import { fail, ok, RateLimiter, type ApiResult } from "@/lib/burnticker/api/http";
+import { API_PREFIX, RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { derbyStore } from "@/lib/burnticker/derby/store";
 import { derbyPairJson, derbyTournamentJson, tournamentSummaries, type DerbyPairJson } from "@/lib/burnticker/derby/page";
 import { derbyDayText, registryHandle } from "@/lib/burnticker/derby/post";
-import { searchDerbyCoins } from "@/lib/burnticker/derby/search";
+import { DERBY_SEARCH_DEADLINE_MS, normalizeDerbyQuery, searchDerbyCoins } from "@/lib/burnticker/derby/search";
 import type { Tournament } from "@/lib/burnticker/derby/bracket";
 import { ruleMappings } from "@/lib/burnticker/rules";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
@@ -82,14 +82,45 @@ export async function v1DerbyHighBaseline(p: Platform, body: Record<string, unkn
   } catch (e) { return fail(502, `The daily closes could not be read just now. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
 }
 
-export async function v1DerbySearch(p: Platform, q: URLSearchParams): Promise<ApiResult> {
-  const query = (q.get("q") ?? "").trim();
-  if (query.length < 2) return fail(400, "Type at least two characters. You can search for a ticker, a name or a mint.");
+/**
+ * I-7 (audit 2026-10-19): the search's answers, cached by normalised query (case folded) for DERBY_SEARCH_CACHE_MS, at most
+ * DERBY_SEARCH_CACHE_MAX entries (oldest first out), with one search in flight per query; and a per-client budget for cache MISSES on
+ * top of the route's heavy bucket, because each miss reads Jupiter, RedStone and DexScreener.
+ */
+export const DERBY_SEARCH_CACHE_MS = 120_000;
+export const DERBY_SEARCH_CACHE_MAX = 500;
+// one cache per platform object (the host has one; each test world its own, so worlds never see each other's answers)
+const searchCaches = new WeakMap<object, { cache: Map<string, { at: number; body: unknown }>; inFlight: Map<string, Promise<ApiResult>> }>();
+const cachesFor = (p: object) => { let c = searchCaches.get(p); if (!c) { c = { cache: new Map(), inFlight: new Map() }; searchCaches.set(p, c); } return c; };
+export const derbySearchMissLimiter = new RateLimiter({ ...RATE_LIMITS, heavy: { burst: 10, refillPerSec: 10 / 60, human: "10 new searches a minute" } });
+
+export async function v1DerbySearch(p: Platform, q: URLSearchParams, o: { client?: string; now?: number; deadlineMs?: number } = {}): Promise<ApiResult> {
+  const n = normalizeDerbyQuery(q.get("q"));
+  if ("error" in n) return fail(400, n.error);
+  const query = n.query;
   const assets = q.get("assets") === "all" ? "all" : "crypto";
-  try {
-    const hits = await searchDerbyCoins(query, { fetchImpl: p.derbyFetch ?? (globalThis.fetch as unknown as FetchLike) }, { assets });
-    return ok({ query, assets, hits, note: `Each result shows the asset a rule locks, with its Pyth feed, its mint and its second source. The brackets and pairs are at ${API_PREFIX}/derby.` });
-  } catch (e) { return fail(502, `Search is not working just now. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
+  const now = o.now ?? Date.now(), key = `${assets}|${query.toLowerCase()}`;
+  const { cache: searchCache, inFlight: searchInFlight } = cachesFor(p);
+  const hit = searchCache.get(key);
+  if (hit && now - hit.at < DERBY_SEARCH_CACHE_MS) return { ...ok(hit.body), headers: { "x-derby-search": "cache" } };
+  const running = searchInFlight.get(key);
+  if (running) return running;
+  if (o.client) {
+    const rl = derbySearchMissLimiter.take(o.client, "heavy", now);
+    if (!rl.ok) return fail(429, `Too many new searches from this address. Please try again in ${rl.retryAfterSec} seconds.`, { code: "rate-limited", retryAfterSec: rl.retryAfterSec });
+  }
+  const run = (async (): Promise<ApiResult> => {
+    try {
+      const hits = await searchDerbyCoins(query, { fetchImpl: p.derbyFetch ?? (globalThis.fetch as unknown as FetchLike), deadlineAt: Date.now() + (o.deadlineMs ?? DERBY_SEARCH_DEADLINE_MS) }, { assets });
+      const body = { query, assets, hits, note: `Each result shows the asset a rule locks, with its Pyth feed, its mint and its second source. The brackets and pairs are at ${API_PREFIX}/derby.` };
+      if (searchCache.size >= DERBY_SEARCH_CACHE_MAX) { const oldest = searchCache.keys().next().value; if (oldest !== undefined) searchCache.delete(oldest); }
+      searchCache.set(key, { at: now, body });
+      return { ...ok(body), headers: { "x-derby-search": "fresh" } };
+    } catch (e) { return fail(502, `Search is not working just now. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
+    finally { searchInFlight.delete(key); }
+  })();
+  searchInFlight.set(key, run);
+  return run;
 }
 
 /**

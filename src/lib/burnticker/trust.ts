@@ -353,7 +353,8 @@ function chainFacts(root: string): ProgramChainFact[] {
   try {
     return loadVerifiedBuild(root).programs.map((p) => ({ library: p.library, programId: p.programId,
       devnet: p.deployed.devnet ? `deployed (read ${p.deployed.devnet.readAt}${p.deployed.devnet.matchesBuild ? ", and the bytes match the recorded build" : ", and the bytes DO NOT match the recorded build"})` : "not deployed",
-      mainnet: p.deployed.mainnet ? `deployed (read ${p.deployed.mainnet.readAt})` : "not deployed" }));
+      // I-1 (audit 2026-10-19): the mainnet read-back says whether the bytes match, like devnet's, and names mainnet's own authority
+      mainnet: p.deployed.mainnet ? `deployed (read ${p.deployed.mainnet.readAt}${p.deployed.mainnet.matchesBuild ? ", and the bytes match the recorded build" : ", and the bytes DO NOT match the recorded build"}; upgrade authority ${p.deployed.mainnet.upgradeAuthority})` : "not deployed" }));
   } catch { return []; }
 }
 
@@ -371,6 +372,8 @@ export function readAudit(siteDir: string): AuditSummary | null {
 
 export interface TrustPage {
   generatedAt: string;
+  /** I-1 (audit 2026-10-19): the host's network, so the audit headline names it ("no mainnet burn has executed yet"). */
+  cluster: string;
   powers: PowersRegister; operator: ReturnType<typeof operatorPowersSummary>;
   livePlatform: LivePlatform; designedFees: { curve: typeof CURVE_FEES; postGraduation: typeof POST_GRADUATION_FEES; devFeeBps: number; lpBurnedPct: number; lpLockedPct: number; lpFeeSplit: { burnPoolBps: number; operatorBps: number; ofLpBps: { burnPool: number; operator: number } }; creatorCashBps: 0; teamAllocationPct: 0 };
   /** LP locked forever (2026-10-10): the policy, the lock program, the fee-keys PDA (the Fee Key owner), the operator treasury, the split. */
@@ -402,7 +405,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
   const cluster = i.cluster ?? ((env.BURNTICKER_CLUSTER ?? "").trim() || "devnet");
   const effective = await readEffectiveCap(i.reader, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null, now);
   return {
-    generatedAt: new Date(now).toISOString(),
+    generatedAt: new Date(now).toISOString(), cluster,
     operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
     powers, operator: operatorPowersSummary(powers),
     livePlatform: await readLivePlatform(i.reader, platformId, env, now, cluster),

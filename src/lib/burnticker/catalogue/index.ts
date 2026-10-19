@@ -1,3 +1,4 @@
+import type { ReadWindow } from "@/lib/burnticker/readPlan";
 import fs from "node:fs";
 import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
@@ -27,7 +28,7 @@ import { applyYoutubeMilestone } from "@/lib/burnticker/sources/youtube";
 
 export const SOURCES_FILE = path.join("config", "burnticker", "sources.json");
 
-export interface Feed extends ResolutionSource { config: HttpSourceConfig; parse(body: unknown, nowMs: number): { readings: SettledEvent[]; refusals: string[] }; pollEverySec: number; fixturePath: string | null; memoSource: string; param: string | null }
+export interface Feed extends ResolutionSource { config: HttpSourceConfig; parse(body: unknown, nowMs: number): { readings: SettledEvent[]; refusals: string[] }; pollEverySec: number; /** when the publisher's new period can appear (readPlan.ts); null: the poll alone */ readWindow: ReadWindow | null; fixturePath: string | null; memoSource: string; param: string | null }
 
 let cachedConfig: { entries: SourceEntry[] } | null = null;
 /**
@@ -103,7 +104,7 @@ function withParam(cfg: HttpSourceConfig, param: string | null): HttpSourceConfi
 function toFeed(cfg: HttpSourceConfig, param: string | null, o: { fetchImpl?: FetchLike; now?: () => number } = {}): Feed {
   const c = withParam(cfg, param);
   const s = httpSource(c, o);
-  return { ...s, pollEverySec: c.pollEverySec, fixturePath: c.fixture, memoSource: c.memoSource, param };
+  return { ...s, pollEverySec: c.pollEverySec, readWindow: c.readWindow ?? null, fixturePath: c.fixture, memoSource: c.memoSource, param };
 }
 
 /** Every configured source (parameterised ones with their fixture's parameter for the card). */

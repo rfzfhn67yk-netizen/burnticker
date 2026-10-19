@@ -162,7 +162,7 @@ export const VERIFY_YOURSELF_COPY = {
   description: "Recompute one real Burnticker receipt in a terminal: fetch the transaction, read its memo, fetch the two Treasury rows, do the arithmetic and compare.",
   intro: "You do not need this site to check a burn. These commands fetch the transaction from a public Solana node and the source rows from the U.S. Treasury, then redo the arithmetic. Each one shows the output to expect.",
   needs: "You need a terminal with curl, jq, bc and awk. Nothing here signs anything or needs a wallet.",
-  devnet: "This is the featured receipt from the practice run on devnet, where tokens have no money value. This page switches to the first mainnet receipt once one exists in the evidence files.",
+  devnet: "This is the featured receipt from the practice run on devnet, where tokens have no money value. No mainnet burn has executed yet. This page switches to the first mainnet receipt once one exists in the evidence files.",
   mainnet: "This is the first receipt on mainnet, read from the evidence files.",
   steps: {
     tx: { title: "Fetch the transaction and check that it succeeded", text: "An empty error means the transaction succeeded." },

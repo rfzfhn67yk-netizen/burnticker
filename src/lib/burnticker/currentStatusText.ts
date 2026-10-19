@@ -11,11 +11,13 @@
  */
 export type AuthoritySource = "chain" | "verified-build" | "unavailable";
 /** The one sentence every renderer uses for a program's upgrade authority (F1). Whole sentences, so a renderer never splices it. */
-export function upgradeAuthorityText(d: { upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt?: string | null; recordedUpgradeAuthority?: string | null }): string {
+export function upgradeAuthorityText(d: { upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt?: string | null; recordedUpgradeAuthority?: string | null }, network?: "devnet" | "mainnet"): string {
+  // I-1 (audit 2026-10-19): a renderer that shows both networks names which one the authority belongs to
+  const The = network ? `The ${network} upgrade authority` : "The upgrade authority";
   const rec = d.recordedUpgradeAuthority ? ` The last value recorded in verified-build.json${d.recordedAt ? ` (${d.recordedAt})` : ""} is ${d.recordedUpgradeAuthority}.` : "";
-  if (d.authoritySource === "unavailable") return `The upgrade authority is unavailable because the chain read failed.${rec}`;
-  if (d.authoritySource === "chain") return d.upgradeAuthority ? `The upgrade authority is ${d.upgradeAuthority}, read from chain.` : "There is no upgrade authority, so the program is immutable. This was read from chain.";
-  return d.upgradeAuthority ? `The upgrade authority is ${d.upgradeAuthority}, as recorded in verified-build.json${d.recordedAt ? ` on ${d.recordedAt}` : ""}.` : "The upgrade authority is not recorded.";
+  if (d.authoritySource === "unavailable") return `${The} is unavailable because the chain read failed.${rec}`;
+  if (d.authoritySource === "chain") return d.upgradeAuthority ? `${The} is ${d.upgradeAuthority}, read from chain.` : `There is no ${network ? `${network} ` : ""}upgrade authority, so the program is immutable. This was read from chain.`;
+  return d.upgradeAuthority ? `${The} is ${d.upgradeAuthority}, as recorded in verified-build.json${d.recordedAt ? ` on ${d.recordedAt}` : ""}.` : `${The} is not recorded.`;
 }
 
 /** A time lock in words: "0 (none)", "48 h", "60 s". */

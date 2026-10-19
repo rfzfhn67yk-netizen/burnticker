@@ -459,7 +459,7 @@ value. The rule's `series` is derived from the block, and the whole block is ins
 - **Brackets.** A bracket has eight or sixteen coins, with one derby per match per round. A round lasts seven days by default. The coin
   with more winning days advances. The tiebreak is the compounded change over the round, then the lower seed. The losing fan coin
   retires and reads nothing more. A winning day in the final counts as two units. The program compounds them as
-  pool × (1 − (1 − f)²), while two times f stays within the rules' 10% maximum.
+  pool × (1 − (1 − f)²), while two times f stays within the bracket's 10% limit for a final.
 - **Refused.** A derby refuses a Burnticker coin as an input, anything on the refuse list, the same coin twice, and a coin with no Pyth
   feed and under $250,000 of liquidity. It also refuses US index proxy feeds unless the host enables them. A coin's own trading is never
   an input.
@@ -473,13 +473,14 @@ Every rule created since 2026-10-10 carries `onEnd: { windDownDays: 28, sweepThr
   sha256("clock|<date>|<rules sha256>"). Each day counts the smallest number of units n of the rule's own fraction f for which
   (1 − f)^(28n) ≤ 1 %. At 1 % that is 17 units a day. So at least 99 % of the pool is spent within 28 days. The 2 % per-crank cap
   carries the rest forward, and the $1 floor ends the tail. Then the coin retires.
-- **A one-shot at 100 %.** A one-shot mapping may spend the whole pool. Recurring rules stay at 10 % or less. The program already
+- **A one-shot at 100 %.** A one-shot mapping may spend the whole pool. Recurring rules stay at 25 % or less per unit (`rules.ts` RULE_BOUNDS). The program already
   accepts 10,000 basis points. A crank spends at most 2 % of the pool's reserve and needs a reading with units. So after the YES, the
   keeper attests one drain unit a day until the program carries nothing more. Each drain unit's rule spend is exactly the whole pool.
 - **The sweep.** A retired coin's burn pool keeps receiving the post-graduation creator fee. When its spendable balance passes the
   threshold, the keeper attests one full-spend reading, at most once a week. A permissionless instruction that lets anyone do this
-  without the keeper is queued for the next program review (`PROGRAM-UPGRADE-QUEUE.md`). So is forwarding a losing coin's leftover to
-  the winning coin of an outcome set.
+  without the keeper is queued for the next program review (`PROGRAM-UPGRADE-QUEUE.md`). Forwarding a losing coin's leftover to an end
+  sink (the flagship, a named coin or the pair winner) is built: the program's `forward_on_end` does it after a resolved end
+  (`END-SINK.md`).
 
 One idea was to let communities add to a score by burning their own tokens into the program. It was considered and not built. It would
 turn the score into a function of spending, and it would add a deposit path to a program designed without one.
@@ -698,7 +699,9 @@ counter's `src` hash commits to the event ids counted.
 
 **The public audit.** The audit script (`scripts/burnticker-audit.mts`) recomputes every receipt of every token from the recorded
 readings and the published rule. It writes `audit.json` and exits non-zero on any mismatch. It reads no key and sends nothing. Its chain
-leg, which would compare each memo on chain, is not wired. The script runs with no program client and reports "chain not checked".
+leg reads each executed receipt's own transaction and compares the program's memo with the recomputed one. This is a recomputation of
+recorded receipts. It is not proof that a burn happened: no mainnet burn has executed yet, so on mainnet the audit has nothing on chain to
+match, and the trust page says so.
 
 ## 9. Governance and custody
 
@@ -771,8 +774,9 @@ terms are drafted in `SECURITY.md` but not published.
 - **Per-outcome fractions are not supported.** The current program cannot express a rule that pays a different fraction for each
   outcome.
 - **Burns wait on the curve.** No buyback runs before graduation and pool registration.
-- **Not built.** Mainnet program deployment, the second attester, the audit's chain leg, and the systemd units for the multi-token
-  keeper and the audit timer are not built.
+- **Not built.** The second, independent attester is not built. Mainnet program deployment, the audit's chain leg and the systemd units
+  for the multi-token keeper and the audit timer now exist (`config/burnticker/verified-build.json`, `scripts/burnticker-audit.mts`,
+  `deploy/systemd/`).
 
 ## 12. Open source and transparency
 
@@ -788,7 +792,8 @@ terms are drafted in `SECURITY.md` but not published.
   developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading
   wallets. In this draft every public key is a placeholder until it is set.
 - **Policies.** Posts on X are not deleted, and corrections go in the same thread with the receipt. There is no paid promotion and no
-  talk of what any coin trades at. Nothing is described as forthcoming. The platform never buys any coin.
+  talk of what any coin trades at. Nothing is described as forthcoming. The platform buys no coin; the one disclosed exception is the
+  0.1 SOL test purchase of $REHEARSAL when it was created.
 - **The operator also runs trading bots.** Each bot refuses any platform coin by mint and by ticker. The check is in code and fails
   closed (`src/lib/ownTokens.ts`, which reads `config/own-tokens.json`). Both files are published.
 - **The operator.** Burnticker is run by one independent operator in the United States. The contact address is contact@burnticker.com,

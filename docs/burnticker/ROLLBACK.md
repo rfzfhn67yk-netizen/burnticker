@@ -4,6 +4,12 @@ The host runs the public tree (deploy.md, "The host runs the public tree"). Ever
 mirrored to the host. A rollback ships an older public commit the same way: check it out in the public checkout, run the two deploy
 scripts, probe, and read what is live. `scripts/ops/rollback-burnticker.sh` does exactly that and nothing else.
 
+**The fast rollback (since 2026-10-19, audit L-5).** Every deploy is now a release directory behind the link
+`~mct/meme-coin-trader` (runbook, "Release directories"). To go back to the release that served before the last deploy, nothing
+needs building: `sh scripts/ops/rollback-burnticker.sh --previous-release` (add `--dry-run` to see the plan) switches the link back, restarts
+the web unit and smokes it, with the same automatic switch back if the old release does not answer. Running it again rolls forward. Use
+the commit rollback below when the release you want is older than the previous one or was pruned.
+
 ## What a rollback changes and what it does not
 
 - It changes the web app, the static pages (landing, whitepaper, status and fallback pages, the $DEFICIT site) and the code the host's

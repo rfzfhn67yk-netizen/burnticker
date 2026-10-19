@@ -153,7 +153,7 @@ describe("one current-status source (website brief §4)", () => {
   test("design, deployed and historical are separate; mainnet programs read 'deployed on mainnet' (2026-10-11 record); host wiring is its own line; every summary line is lint-clean", async () => {
     const { buildCurrentStatus } = await import("@/lib/burnticker/currentStatus");
     const s = buildCurrentStatus({ env: { BURNTICKER_CLUSTER: "devnet" }, chain: {}, now: 0 });
-    for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.equal(p.mainnet.line, "It is deployed on mainnet."); assert.equal(p.devnet.deployed, true); }
+    for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.match(p.mainnet.line, /^It is deployed on mainnet\. Its bytes there match this repository's recorded build\. Its mainnet upgrade authority is /); assert.equal(p.devnet.deployed, true); }
     assert.equal(s.networks.find((n) => n.cluster === "mainnet")!.deployment, "deployed");
     assert.equal(s.host.line, `This site is showing devnet. No program is connected on this site. ${(await import("@/lib/burnticker/launchAvailability")).siteLaunchState({ BURNTICKER_CLUSTER: "devnet" }).sentence}`);   // website-12: the one record's sentence
     assert.ok(s.design.length && s.historical.length && s.historical.every((h) => fs.existsSync(h.path.replace(/\/$/, ""))), "history links point at files that exist");
@@ -398,7 +398,7 @@ describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'no
   });
   test("renderers use the one wording function, never a bare `?? \"none\"`", () => {
     const r = fs.readFileSync("src/app/burnticker/_components/CurrentStatusSummary.tsx", "utf8");
-    assert.match(r, /upgradeAuthorityText\(p\.devnet\)/); assert.doesNotMatch(r, /upgradeAuthority \?\? "none"/);
+    assert.match(r, /upgradeAuthorityText\(p\.devnet, "devnet"\)/); assert.doesNotMatch(r, /upgradeAuthority \?\? "none"/);
     const serverModule = ["@", "lib", "burnticker", "currentStatus"].join("/"); // spelled out so the publish import scan does not read a regex as an import
     assert.ok(!r.split("\n").some((l) => l.startsWith("import {") && l.includes(`"${serverModule}"`)), "the client renderer imports only types from the server module (it reads files)");
   });

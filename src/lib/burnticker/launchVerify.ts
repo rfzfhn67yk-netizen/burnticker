@@ -7,6 +7,7 @@ import { decodePair, pairPda } from "@/lib/pairCurve/accounts";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { CONFIRM_LANE_BUSY_REASON } from "@/lib/burnticker/confirmBusy";
 import { configMismatch, type ExpectedTokenConfig } from "@/lib/burnticker/admission";
+import { admissionAccountsMismatch, pairPartnerOf } from "@/lib/burnticker/admissionAccounts";
 
 /**
  * LAUNCH CONFIRMATION IS VERIFIED ON CHAIN (2026-10-10; ChatGPT/Codex PR review N1 — tightened 2026-10-11 by the second review's F3).
@@ -187,6 +188,8 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       // audit F01: the sha is a label the program never recomputes; the parameters it stores are what it runs, so each is compared with
       // what the host encoded (an edited unsigned transaction with fraction 10,000 bps under the advertised rule is refused here)
       if (expect.config) { const m = configMismatch(cfg, expect.config); if (m) return { ok: false, status: 422, reason: `${m}: ${NOT_THIS}` }; }
+      // I-14: the EndSink and BurnTarget initialize_token writes beside the config (where the leftover pool goes, which token burns)
+      if (expect.config) { const a = await admissionAccountsMismatch(reader, { programId: program, mint: expect.mint, exp: expect.config, pairPartner: pairPartnerOf(expect.venue, expect.mint) }); if (a) return a.retry ? { ok: false, status: 502, reason: a.reason } : { ok: false, status: 422, reason: `${a.reason}: ${NOT_THIS}`, ...(a.missing ? { missing: true as const } : {}) }; }
 
       // 3. the venue the draft expects, completed
       const v = expect.venue;

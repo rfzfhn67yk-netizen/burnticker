@@ -20,7 +20,7 @@ const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
 const SENTENCE = "Coins that burn on real-world results — with receipts.";
 const SUBLINE = "Launch one. Follow the season.";
-const GUARDRAILS = ["settled on primary sources", "signed readings (one operator attester; no independent second attester is live)", "program-run burns", "receipts anyone can recompute", "open source", "three blind AI reviews, not a firm audit", "creators earn nothing", "no team buy", "the platform never buys any coin", "LP locked forever, its fees fund the burn", "rules locked at launch"];
+const GUARDRAILS = ["settled on primary sources", "signed readings (one operator attester; no independent second attester is live)", "program-run burns", "receipts anyone can recompute", "open source", "three blind AI reviews, not a firm audit", "creators earn nothing", "no team buy", "the platform buys no coin except one test coin", "LP locked forever, its fees fund the burn", "rules locked at launch"];
 const LEAGUE = "(?:NFL|MLB|NBA|NHL|WNBA|MLS)";
 
 /** The words a visitor reads: meta descriptions + the body without style, script and the inline SVG, tags stripped. */
