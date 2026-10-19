@@ -206,7 +206,7 @@ describe("no market cap / price for any Burnticker coin (Claims and UI trust bou
   /** Code without comments (a block comment, or // after whitespace — a URL's "://" survives). */
   const code = (f: string) => read(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[\s;{}])\/\/.*$/gm, "$1");
   // The only places "market cap" may be rendered: Burn Derby's flippening, where it names OTHER coins' caps as the rule's input.
-  const RULE_INPUT_SITES = new Set(["src/app/burnticker/launch/CoinVsCoinTile.tsx", "src/lib/burnticker/coinCard.ts"]);
+  const RULE_INPUT_SITES = new Set(["src/app/burnticker/launch/CoinVsCoinTile.tsx", "src/lib/burnticker/coinCard.ts", "src/lib/burnticker/describe.ts"]);
 
   // Erratum 2026-10-12 (owner decision): a coin card's market cap, a bare number read from the coin's own curve. The index card carries the
   // field (declared once, read once from the curve), the card prints it in its row; nothing else reads a market-data field.
@@ -236,7 +236,7 @@ describe("no market cap / price for any Burnticker coin (Claims and UI trust bou
       if ((f.endsWith("tokenPage.ts") && CARD_MCAP.test(l.trim())) || PAGE_MCAP(f, l)) return; // the card's own field (Erratum 2026-10-12)
       if (!RULE_INPUT_SITES.has(f)) { outside.push(`${f}:${i + 1}: ${l.trim().slice(0, 140)}`); return; }
       // coinCard: the derby flippening one-liner names the two UNDERLYINGS (d.a / d.b), never the coin's own ticker
-      if (f.endsWith("coinCard.ts")) assert.ok(/d\.a\.symbol/.test(l) && /d\.b\.symbol/.test(l) && !/ticker/i.test(l), `${f}:${i + 1}: a market-cap line must name the derby underlyings only`);
+      if (f.endsWith("coinCard.ts") || f.endsWith("describe.ts")) assert.ok(/d\.a\.symbol/.test(l) && /d\.b\.symbol/.test(l) && !/ticker/i.test(l), `${f}:${i + 1}: a market-cap line must name the derby underlyings only`);
       // CoinVsCoinTile: the flippening toggle's label (the measure of the two input coins)
       if (f.endsWith("CoinVsCoinTile.tsx")) assert.match(l, /flippening/, `${f}:${i + 1}: only the flippening toggle may say market cap`);
     });

@@ -10,6 +10,7 @@ import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_L
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
 import { liveSinks } from "@/lib/burnticker/endSinks";
+import { REAL_BURN_FAMILY_CODE, realBurnFamilyProblem } from "@/lib/burnticker/burnRealEligibility";
 import { burnRealRefusal, identityRefusals, ruleRefusals, sampleEligibility, settledPairInput, settledPairSinkProblems } from "@/lib/burnticker/launchPreflight";
 import { teamTicker } from "@/lib/burnticker/tickers";
 import { knownLookalike } from "@/lib/burnticker/ops/cloneServe";
@@ -679,6 +680,9 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, safeErrorText(e, 600)) }; }
   // owner decision 2026-10-19: a rule that pins a real token is refused while BURNTICKER_BURN_REAL_ENABLED is off (the page hides it)
   { const br = burnRealRefusal(locked.rule.burnTarget); if (br) return { error: fail(br.status, br.message, { code: br.code, problems: [br.message] }) }; }
+  // HB-12 + PROD-01 (2026-10-19): only the families burnRealEligibility.ts allows may name a token to burn (never a natural disaster,
+  // a team, a market or a pair other than Coin vs Coin), so the API cannot do what the page never offers
+  { const fp = realBurnFamilyProblem(locked.rule, locked.rule.burnTarget); if (fp) return { error: fail(400, fp, { code: REAL_BURN_FAMILY_CODE, problems: [fp] }) }; }
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): the same rule refusals the read-only review lists, in order:
   // vault mode, a venue this host has off, an oracle no coin launches on yet, a source's fixed unit / launchability / decided result, the
   // reserve bounds and an unsafe title regex. The first one answers; every one is in `problems`.
@@ -1099,6 +1103,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     if (btRaw !== undefined && btRaw !== null) { const bp = burnTargetShapeProblems(btRaw); if (bp.length) return { error: fail(400, `Side B: ${bp.join("; ")}`, { code: "burn-target", problems: bp }) }; }
     const btB = btRaw === undefined || btRaw === null ? null : (btRaw as BurnTargetField);
     { const br = burnRealRefusal(btB); if (br) return { error: fail(br.status, `Side B: ${br.message}`, { code: br.code, problems: [br.message] }) }; }
+    { const fp = realBurnFamilyProblem(locked.rule, btB); if (fp) return { error: fail(400, `Side B: ${fp}`, { code: REAL_BURN_FAMILY_CODE, problems: [fp] }) }; }
     // audit 2026-10-15 F3: a retry of the creator's own unfinished pair (same side-A address) keeps the pair id and the void date its
     // side-A draft recorded; a fresh pair id or a new 30-day date would make the same request a different rule
     const ownA = o.mint ? p.registry.ownDraft(o.mint, input.creator) : null;

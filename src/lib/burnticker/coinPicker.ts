@@ -1,6 +1,6 @@
 import type { Latest } from "@/lib/burnticker/latestOnly";
-import { defaultName, defaultTicker, fightName, fightTickers } from "@/lib/burnticker/derby/tile";
-import { pairNames, pairTickers } from "@/lib/burnticker/guidedLaunch";
+import { coinvsTickers, defaultName, defaultTicker, fightName } from "@/lib/burnticker/derby/tile";
+import { pairNames } from "@/lib/burnticker/guidedLaunch";
 
 /**
  * THE COIN VS COIN PICKER'S RULES (launch audit 241–248, 2026-10-12). CoinVsCoinTile.tsx's CoinPicker searches
@@ -103,8 +103,9 @@ export function editedFrom(v: unknown): EditedFields {
 export function generatedNames(a: { symbol: string } | null, b: { symbol: string } | null, cur: PairNameFields, edited: EditedFields, o: { flip?: boolean } = {}): PairNameFields {
   const gen: Partial<PairNameFields> = {};
   // cheap-features item 15: a daily race's sides carry the fight ($WIFWINS / $BONKWINS); the flippening keeps $SOLVETH / $ETHVSOL
-  if (a && b && !o.flip) { const t = fightTickers(a.symbol, b.symbol); Object.assign(gen, { a: fightName(a.symbol), b: fightName(b.symbol), ta: t.a, tb: t.b }); }
-  else if (a && b) { const t = pairTickers(a.symbol, b.symbol), n = pairNames(a.symbol, b.symbol); Object.assign(gen, { a: n.a, b: n.b, ta: t.a, tb: t.b }); }
+  // continuous audit HB-3: the tickers are derby/tile.ts coinvsTickers', the same the server review suggests
+  if (a && b && !o.flip) { const t = coinvsTickers(a.symbol, b.symbol, false); Object.assign(gen, { a: fightName(a.symbol), b: fightName(b.symbol), ta: t.a, tb: t.b }); }
+  else if (a && b) { const t = coinvsTickers(a.symbol, b.symbol, true), n = pairNames(a.symbol, b.symbol); Object.assign(gen, { a: n.a, b: n.b, ta: t.a, tb: t.b }); }
   else { if (a) Object.assign(gen, { a: defaultName(a.symbol), ta: defaultTicker(a.symbol) }); if (b) Object.assign(gen, { b: defaultName(b.symbol), tb: defaultTicker(b.symbol) }); }
   const out = { ...cur };
   for (const k of ["a", "b", "ta", "tb"] as const) if (!edited[k] && gen[k] !== undefined) out[k] = gen[k]!;

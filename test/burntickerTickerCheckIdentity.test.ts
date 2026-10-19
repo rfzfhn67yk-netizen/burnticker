@@ -11,7 +11,7 @@ import { BRONCOS } from "./burntickerHelpers.ts";
 import { prepareLaunch } from "@/lib/burnticker/api/handlers";
 import { lookalikeHits, lookalikeRefusal, sameTickerSentence } from "@/lib/burnticker/lookalike";
 import { lookalikeRows } from "@/lib/burnticker/launchGuards";
-import { freeTickers, inUseWarning, tickerChecks } from "@/lib/burnticker/tickerCheck";
+import { freeTickers, inUseWarning, isTeamRule, tickerChecks } from "@/lib/burnticker/tickerCheck";
 import { lookupCoin } from "@/lib/burnticker/coinLookup";
 import { siteKeysOf } from "@/lib/burnticker/coinKey";
 import { featuredSlots, type FeaturedInput } from "@/lib/burnticker/featuredSlots";
@@ -43,7 +43,7 @@ describe("A-2: the same ticker is refused for another creator", () => {
     const shown = launchErrorMessage(409, { code: "ticker-taken", error: err.error });
     assert.doesNotMatch(shown, /\.\./); assert.match(shown, /Please pick another ticker\. These tickers are free: \$/); clean(shown);
     // the review offers the same kind of tickers (every one passes the lookalike check against every coin)
-    const [chk] = tickerChecks([{ side: "A", ticker: "BRONCO" }], { inUse: (t) => w.registry.tokensByTicker(t), existing: lookalikeRows(w.registry), reserved: new Set(), creator: stranger });
+    const [chk] = tickerChecks([{ side: "A", ticker: "BRONCO", team: isTeamRule(RULE) }], { inUse: (t) => w.registry.tokensByTicker(t), existing: lookalikeRows(w.registry), reserved: new Set(), creator: stranger });
     assert.equal(chk.taken, true);
     assert.ok(chk.suggestions.length > 0);
     for (const s of chk.suggestions) assert.deepEqual(lookalikeHits({ ticker: s, name: "", creator: stranger }, lookalikeRows(w.registry)), [], s);
@@ -81,7 +81,7 @@ describe("A-2: the same ticker is refused for another creator", () => {
 
   test("free tickers pass the lookalike check: no digit endings that read as the same letters", () => {
     const existing = [{ ticker: "LAD", name: "Dodgers", status: "live", creator: "W" }];
-    const s = freeTickers("LAD", { inUse: () => [], existing, reserved: new Set() });
+    const s = freeTickers("LAD", { inUse: () => [], existing, reserved: new Set() }, 2, { team: true });
     assert.equal(s.length, 2);
     for (const t of s) { assert.doesNotMatch(t, /^LAD\d$/); assert.deepEqual(lookalikeHits({ ticker: t, name: "" }, existing), []); }
   });

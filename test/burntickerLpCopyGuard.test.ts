@@ -26,7 +26,8 @@ function walk(dir: string, acc: string[] = []): string[] {
 }
 
 const SCOPE = [...walk("src"), ...walk("site"), ...walk("docs/burnticker"), ...walk("config/burnticker"), ...walk("config/public-repo")]
-  .filter((f) => !f.startsWith("docs/burnticker/reviews/"));
+  // the auditors' continuous folder is their own scratch (untracked reports, page sweeps, walk notes); it is not a public surface
+  .filter((f) => !f.startsWith("docs/burnticker/reviews/") && !f.startsWith("docs/burnticker/audits/continuous/"));
 
 // ---- 1. LP burned → LP locked forever ----
 const LP_BURNED_CLAIMS: RegExp[] = [

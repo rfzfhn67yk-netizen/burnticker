@@ -30,7 +30,7 @@ export const CREATOR_LAUNCHES_CLOSED_AT_FLAG = "BURNTICKER_CREATOR_LAUNCHES_CLOS
 export type LaunchMode = "closed" | "preview" | "open";
 export type LaunchType = "team" | "matchup" | "markets" | "elections" | "feeds" | "weather" | "derby" | "pairs";
 export interface TypeAvailability { type: LaunchType; label: string; available: boolean; reason: string | null }
-export interface SourceAvailability { id: "sports-settlement" | "sports-schedule" | "polymarket" | "nws" | "feeds" | "pair-curve" | "burn-real" | /** round 5: the incinerator end sink; on with the round-5 program unless BURNTICKER_BURN_SOL_ENABLED is off */ "burn-sol" | /** the "another coin" end choice; off until the list is curated */ "end-sink-picker"; label: string; available: boolean; reason: string | null }
+export interface SourceAvailability { id: "sports-settlement" | "sports-schedule" | "polymarket" | "nws" | "feeds" | "pair-curve" | "burn-real" | /** round 5: the incinerator end sink; on with the round-5 program unless BURNTICKER_BURN_SOL_ENABLED is off */ "burn-sol" | /** the "another coin" end choice; off until the list is curated */ "end-sink-picker" | /** HB-5: the host runs burn dispersal (catalogueLaunches only) */ "burn-dispersal"; label: string; available: boolean; reason: string | null }
 export interface LaunchAvailabilityModel {
   mode: LaunchMode;
   /** True only in `open` mode: the one flag that lets a bundle be built. */
@@ -181,9 +181,14 @@ export const hostCluster = (env: Env = process.env): "mainnet" | "devnet" | "loc
  * The catalogue's `launches` block (the app's /api/burnticker/catalogue and /v1/catalogue): `creators` (true only when open — older
  * readers keep working), `note`, and since API 1.14.0 `mode`, `banner`, `types` and `sources`.
  */
-export function catalogueLaunches(env: Env = process.env, now: number = Date.now()): { creators: boolean; note: string; mode: LaunchMode; banner: string | null; types: Record<LaunchType, TypeAvailability>; sources: SourceAvailability[]; hostedSigning: HostedSigning; readAt: string } {
+/** HB-5: the catalogue source that says the host runs burn dispersal. */
+export const BURN_DISPERSAL_SOURCE = "burn-dispersal" as const;
+export function catalogueLaunches(env: Env = process.env, now: number = Date.now(), o: { dispersal?: boolean } = {}): { creators: boolean; note: string; mode: LaunchMode; banner: string | null; types: Record<LaunchType, TypeAvailability>; sources: SourceAvailability[]; hostedSigning: HostedSigning; readAt: string } {
   const m = availabilityFromEnv(env, hostCluster(env));
-  return { creators: m.mode === "open", note: m.mode === "open" ? "creator launches are open on this site" : m.mode === "preview" ? PREVIEW_BANNER : CREATOR_LAUNCHES_CLOSED, mode: m.mode, banner: m.banner, types: m.types, sources: m.sources, ...catalogueLaunchState(env, now) };
+  // HB-5 (2026-10-19): burn dispersal is the host's own decision (programHash.ts webDispersalOn, a server read the caller passes in), so a
+  // single one-time coin is offered 50% on the page exactly where the review and the bundle route accept it
+  const sources = [...m.sources, { id: BURN_DISPERSAL_SOURCE, label: "Burning half the pool on a one-time coin", available: o.dispersal === true, reason: o.dispersal === true ? null : "A one-time coin burns its whole pool on this site." }];
+  return { creators: m.mode === "open", note: m.mode === "open" ? "creator launches are open on this site" : m.mode === "preview" ? PREVIEW_BANNER : CREATOR_LAUNCHES_CLOSED, mode: m.mode, banner: m.banner, types: m.types, sources, ...catalogueLaunchState(env, now) };
 }
 
 
@@ -228,6 +233,8 @@ export interface SiteLaunchState {
    * a catalogue without it reads false and the end step's slot stays hidden (fail closed).
    */
   burnSol: { available: boolean };
+  /** HB-5: the host runs burn dispersal, so a single one-time coin may burn half its pool (the `burn-dispersal` source; absent reads false). */
+  dispersal: { available: boolean };
   /** The "another coin's burn" end choice. Owner decision 2026-10-13 evening: held back until the list is curated (a sink coin has a
    *  beneficiary; $DEFICIT has none). Read from an `end-sink-picker` source that only BURNTICKER_END_SINK_PICKER=1 exposes. */
   sinkPicker: { available: boolean };
@@ -306,6 +313,7 @@ function stateFrom(read: SiteLaunchRead, m: LaunchAvailabilityModel, hostedSigni
     pairs: { available: pairsA.available, line: pairsA.available ? null : PAIRS_UNAVAILABLE_LINE, detail: pairsA.available ? null : pairsA.reason },
     burnReal: burnRealOf(m, fresh),
     burnSol: { available: fresh && m.sources.some((x) => x.id === "burn-sol" && x.available === true) },
+    dispersal: { available: fresh && m.sources.some((x) => x.id === BURN_DISPERSAL_SOURCE && x.available === true) },
     sinkPicker: { available: fresh && m.sources.some((x) => x.id === "end-sink-picker" && x.available === true) },
     hostedSigning, canSign, wizard: fresh && (mode === "open" || mode === "preview"), sentence, signingSentence, walletNote: WALLET_NOTE,
     meta: { description: SITE_META_DESCRIPTION },

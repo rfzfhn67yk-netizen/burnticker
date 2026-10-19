@@ -19,6 +19,7 @@ import { matchPolymarket, plainQuestion, outcomeLabel, outcomeTicker, searchQuer
 import { teamTicker } from "@/lib/burnticker/tickers";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { parseUsgsSeries, USGS_MAGNITUDES } from "@/lib/burnticker/sources/usgs";
+import { isHazardSeries } from "@/lib/burnticker/hazards";
 import { championshipCode, describeRule, tickerFrom, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { DEFAULT_SHARE, pctLabel, shareOf } from "@/lib/burnticker/launchPresets";
@@ -123,6 +124,11 @@ const FEED_WORDS: Record<string, string[]> = {
   "usgs.quakes": ["earthquake", "earthquakes", "quake", "quakes"], "nhc.storms": ["named storm", "named storms", "tropical storm"], "nhc.hurricanes": ["hurricane", "hurricanes"],
   "spc.tornadoes": ["tornado", "tornadoes"], "nifc.acres": ["wildfire", "wildfires", "acres burned"], "usgs.volcanoraise": ["volcano", "volcanoes", "volcanic"],
 };
+/**
+ * Continuous audit HB-10: a unit of one is a noun ("for each earthquake of magnitude 6 or more", never "per 1 earthquake"); a larger unit
+ * keeps "per" ("per 100k players").
+ */
+export const perUnitPhrase = (unitLabel: string): string => { const m = /^1\s+(.+)$/.exec(unitLabel.trim()); return m ? `for each ${m[1]}` : `per ${unitLabel}`; };
 const norm = (s: string) => ` ${s.toLowerCase().replace(/[^a-z0-9$.]+/g, " ").replace(/\s+/g, " ").trim()} `;
 const overlap = (q: string, words: string): number => { const qt = tokens(q); if (!qt.length) return 0; const h = new Set(tokens(words)); return qt.filter((w) => h.has(w)).length / qt.length; };
 const base = { venueLabel: "", subtitle: "", crossRead: null, nextAt: null, endAt: null, endText: null, settleAt: null, howSettles: null, rule: null, pick: null, source: null, text: null, descCtx: null, badge: null, windows: null, leagueSet: null, seasonYear: null, matchup: null, note: null, href: null, suggestedName: null, suggestedTicker: null, refused: [] as string[] };
@@ -470,7 +476,7 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
     const descCtx = { feed: { title: f.title, sourceName: f.sourceName, unitLabel: f.unit.label }, suggest: FEED_SUGGEST[f.id.split(":")[0]] ?? null };
     const text = describeRule(rule, { ticker: "", ...descCtx });
     out.push({
-      ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName}, a first-party source`, shape: "recurring", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.recurring)} per ${f.unit.label} — ${f.title}`, subtitle: f.cadence,
+      ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName}, a first-party source`, shape: "recurring", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.recurring)} ${perUnitPhrase(f.unit.label)} — ${f.title}`, subtitle: f.cadence,
       settlement: f.sourceName, crossRead: isSingleSourceSeries(f.id) ? null : "an independent publisher of the same figure", endText: "no end date", howSettles: f.unit.definition, rule,
       pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, source: { unit: f.unit, baseline: typeof f.baseline === "number" ? f.baseline : 0, direction: "up" }, text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score,
       // audit 10 #15: what the query asked for that this source does not offer is named, and the card is a related rule
@@ -509,8 +515,10 @@ export function raceCards(races: readonly Race[], q: string): Suggestion[] {
 const withBadges = (cards: Suggestion[]): Suggestion[] => cards.map((c) => ({ ...c, badge: c.badge ?? c.text?.badge ?? (c.shape === "pair" ? `ONE-SHOT${c.matchup ? ` · ${new Date(c.matchup.startsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" })}` : ""}` : null) }));
 
 /** The card's group on the page (cards are grouped by category, best group first). */
-export type SuggestionGroup = "teams" | "elections" | "weather" | "feeds" | "markets" | "tiles";
-const groupOf = (c: Suggestion): SuggestionGroup => (c.venue === "espn" ? "teams" : c.venue === "nws" ? "weather" : c.venue === "feed" ? "feeds" : c.venue === "tile" ? "tiles" : c.id.startsWith("polymarket:") && c.howSettles?.includes("Resolution rules") && /wins the .* race/.test(c.title) ? "elections" : c.id.startsWith("champ:") ? "teams" : "markets");
+export type SuggestionGroup = "teams" | "elections" | "weather" | "disasters" | "feeds" | "markets" | "tiles";
+/** Each result group's heading (continuous audit HB-10: an earthquake card sat under "Public data"; step 1 calls these a natural disaster). */
+export const SUGGESTION_GROUP_LABELS: Readonly<Record<SuggestionGroup, string>> = { teams: "Teams", elections: "Elections", weather: "Weather", disasters: "Natural disaster", feeds: "Public data", markets: "Markets", tiles: "Coin vs Coin" };
+const groupOf = (c: Suggestion): SuggestionGroup => (c.venue === "espn" ? "teams" : c.venue === "nws" ? "weather" : c.venue === "feed" ? (isHazardSeries(c.pick?.series ?? null) ? "disasters" : "feeds") : c.venue === "tile" ? "tiles" : c.id.startsWith("polymarket:") && c.howSettles?.includes("Resolution rules") && /wins the .* race/.test(c.title) ? "elections" : c.id.startsWith("champ:") ? "teams" : "markets");
 /** At most this many cards, each above MIN_SCORE; nothing above it → "no close match — try Browse". */
 export const MAX_CARDS = 6, MIN_SCORE = 1;
 

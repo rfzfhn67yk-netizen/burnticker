@@ -21,6 +21,18 @@ export const defaultName = (symbol: string): string => `Team ${symbol}`;
 export const fightTicker = (symbol: string): string => { const s = symbol.toUpperCase().replace(/[^A-Z0-9]/g, ""); return s.length + 4 <= 10 ? `${s}WINS` : s.length + 3 <= 10 ? `${s}WIN` : `${s.slice(0, 6)}WINS`; };
 export const fightName = (symbol: string): string => `${symbol} Wins`;
 export const fightTickers = (a: string, b: string): { a: string; b: string } => ({ a: fightTicker(a), b: fightTicker(b) });
+/** The matchup tickers ("WIFVBONK" / "BONKVWIF"): each side's first four letters, a V, the other's first four (guidedLaunch.ts pairTickers). */
+export function matchupTickers(a: string, b: string): { a: string; b: string } {
+  const code = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+  const A = code(a), B = code(b);
+  return { a: `${A}V${B}`.slice(0, 10), b: `${B}V${A}`.slice(0, 10) };
+}
+/**
+ * THE SUGGESTED TICKERS OF A COIN VS COIN PAIR (continuous audit HB-3, 2026-10-19: the server review suggested COINVSWIFB while the page
+ * suggested WIFWINS). One function for the page (coinPicker.ts generatedNames) and the server (describe.ts describeRule): a daily race
+ * carries the fight, the flippening the matchup.
+ */
+export const coinvsTickers = (a: string, b: string, flip: boolean): { a: string; b: string } => (flip ? matchupTickers(a, b) : fightTickers(a, b));
 
 /** The derby block for a choice (season starts at the first full window after `now`). */
 export function tileSpec(c: TileChoice): CoinVsSpec {

@@ -308,7 +308,7 @@ describe("audit 12 P2 items 5, 6, 8, 10, 11 and usability 13, 15, 16 (library pa
   test("item 11: the record close says whether it can start, before setup", async () => {
     const { recordCloseAvailability } = await import("@/lib/burnticker/guidedLaunch");
     const off = recordCloseAvailability({ keyed: false });
-    assert.equal(off.available, false); assert.match(off.line, /no Pyth access key/); assert.match(off.alternative ?? "", /flippening/);
+    assert.equal(off.available, false); assert.match(off.line, /cannot start here today/); assert.doesNotMatch(off.line, /Pyth|access key/, "HB-9: no operator setup detail for creators"); assert.match(off.alternative ?? "", /flippening/);
     assert.equal(recordCloseAvailability({ keyed: true }).available, true);
   });
   test("item 13: a within-event filter and pages over every outcome", async () => {

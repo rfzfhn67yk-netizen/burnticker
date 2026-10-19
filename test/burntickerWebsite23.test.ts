@@ -145,6 +145,6 @@ describe("website-23: the sentences", () => {
     const g = walk(GAME).rules.a;
     assert.equal(g.binary?.onYes?.fractionOfPool ?? (g.scalar?.perUnit as { fractionOfPool?: number } | undefined)?.fractionOfPool, 1);
     // WIRING-AUDIT12 P1-1: the row comes from sharePresetsForRule; one game is a linked pair, so its row is 100 % only
-    assert.match(page, /const shareOptions = rule \? sharePresetsForRule\(rule, \{ linked: linkedPair \}\) : SHARE_PRESETS\.recurring;/);
+    assert.match(page, /const shareOptions = rule \? sharePresetsForRule\(rule, \{ linked: linkedPair, dispersal: site\.dispersal\.available \}\) : SHARE_PRESETS\.recurring;/);
   });
 });

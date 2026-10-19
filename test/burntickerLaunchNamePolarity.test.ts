@@ -5,7 +5,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { ruleSide, suggestionFor, suggestionFromDraft, type SourceSuggestion } from "@/lib/burnticker/namePolarity";
+import { noName, ruleSide, suggestionFor, suggestionFromDraft, type SourceSuggestion } from "@/lib/burnticker/namePolarity";
 import { NAME_MAX_BYTES, utf8Bytes } from "@/lib/burnticker/launchFields";
 import type { BurnRule } from "@/lib/burnticker/rules";
 
@@ -57,6 +57,42 @@ describe("PROD-02: the default name follows the side", () => {
     assert.equal(suggestionFor(back, "no").name, "Dems sweep No");
     assert.deepEqual(suggestionFromDraft(undefined), { name: null, ticker: null, side: null });
     assert.deepEqual(suggestionFromDraft({ name: 3, ticker: "X", side: "maybe" }), { name: null, ticker: "X", side: null });
+  });
+});
+
+// PROD-02 v2 (continuous audit 2026-10-19T1949Z): " No" was appended and then cut away by the 32-byte fit on long names
+describe("PROD-02 v2: the NO marker survives the name length fit", () => {
+  const keepsNo = (src: string) => {
+    const s: SourceSuggestion = { name: src, ticker: "DEMOCRAT", side: "yes" };
+    const yes = suggestionFor(s, "yes"), no = suggestionFor(s, "no");
+    assert.equal(yes.name, src);
+    assert.notEqual(no.name, yes.name, "a NO coin never gets the unchanged affirmative name");
+    assert.match(no.name!, / No$/, "the marker survives the fit");
+    assert.ok(utf8Bytes(no.name!) <= NAME_MAX_BYTES, `${no.name} fits in ${NAME_MAX_BYTES} bytes`);
+    assert.equal(no.ticker, "NODEMOCRAT");
+    assert.deepEqual(suggestionFor(s, "yes"), yes, "YES again gives the original back");
+    assert.equal(suggestionFor(suggestionFromDraft(JSON.parse(JSON.stringify(s))), "no").name, no.name, "a resumed draft keeps it");
+    return no.name!;
+  };
+  test("the auditor's three cases", () => {
+    assert.equal(keepsNo("Dems sweep"), "Dems sweep No");
+    assert.equal(keepsNo("Ohio Senate and Governor Combo"), "Ohio Senate and Governor No");
+    assert.equal(keepsNo("Democrats win the Ohio election"), "Democrats win the Ohio No");
+  });
+  test("29-, 30-, 31- and 32-byte source names each keep a clear NO within the limit", () => {
+    for (const src of ["Lakers win the West Final 26", "Lakers win the Western Final!", "Lakers win the Western Finals!", "Lakers win the Western Finals!!"].map((x, i) => x.padEnd(29 + i, "x").slice(0, 29 + i))) {
+      assert.equal(utf8Bytes(src), src.length);
+      keepsNo(src);
+    }
+    for (const n of [29, 30, 31, 32]) { const src = "A".repeat(n); assert.equal(keepsNo(src), `${"A".repeat(NAME_MAX_BYTES - 3)} No`); }
+  });
+  test("multibyte names (emoji, accents) keep the marker too and never split a character", () => {
+    for (const src of ["Équipe gagne la coupe 🏆🏆", "Señor Peña Gana Élection ñ", "🚀🚀🚀🚀🚀🚀🚀🚀", "Zoë"]) {
+      const out = keepsNo(src);
+      assert.ok(!out.includes("\uFFFD"));
+      assert.ok(src.startsWith(out.slice(0, -3)), "the base is a whole-character prefix of the source");
+    }
+    assert.equal(noName("Zoë"), "Zoë No");
   });
 });
 

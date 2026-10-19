@@ -197,10 +197,13 @@ describe("the page wiring and the words", () => {
   test("the choice is hidden until round 5; the waiting line from the launch state stands in its place", () => {
     assert.match(page, /<CoinVsCoinTile recordKeyed=\{recordKeyed\} burnReal=\{site\.burnReal\} network=\{site\.cluster \?\? cluster\}/);
     // WIRING-AUDIT12 item 15: only where a target could be set, inside "What is not offered yet"
-    assert.match(tile, /const realChoices = !a \|\| !b \? null : !realOn \? \(burnReal\?\.line && \(pickA \|\| pickB\) \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{burnReal\.line\}<\/p><\/details> : null\)/);
-    assert.match(page, /const realOneOffered = site\.burnReal\.available && !pairOn && !!rule0 && !rule0\.vault;/);
+    // HB-12 (2026-10-19, the audit's F16 rule): with the feature off the tile says nothing about it
+    assert.match(tile, /const realChoices = !a \|\| !b \|\| !realOn \? null : \(/);
+    assert.doesNotMatch(tile, /data-burn-real-waiting/);
+    // HB-12 + PROD-01: and on a single coin only for a rule family that may burn a real token (burnRealEligibility.ts)
+    assert.match(page, /const realOneOffered = site\.burnReal\.available && !pairOn && !!rule0 && !rule0\.vault && realBurnAllowed\(rule0\);/);
     // launch wizard audit 2026-10-19 F16: on a single coin only for a rule that came with a burn target
-    assert.match(page, /: site\.burnReal\.line && rule0\?\.burnTarget \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{site\.burnReal\.line\}<\/p><\/details> : null;/);
+    assert.match(page, /: site\.burnReal\.line && rule0\?\.burnTarget && realBurnAllowed\(rule0\) \? <details [^>]*data-burn-real-waiting><summary [^>]*>What is not offered yet<\/summary><p [^>]*>\{site\.burnReal\.line\}<\/p><\/details> : null;/);
     // default off; one switch per Coin vs Coin side, the suggested tokens for a single coin
     assert.match(tile, /useState<SideReal>\(SIDE_REAL_OFF\), \[realB, setRealB\] = useState<SideReal>\(SIDE_REAL_OFF\)/);
     assert.match(tile, /<BurnRealChoice side="a" who=\{`\$\$\{TA\}`\} picks=\{\[pickA\]\}/);

@@ -45,6 +45,10 @@ import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
 import { BACKTEST_SLOW } from "@/lib/burnticker/api/backtestWait";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileFieldId, type ProfileUpdate, type ProfileValue } from "./ProfileFields";
 import { NAME_STEP_BLOCKED, fieldRuleSentence, isLintLine, noteIssue, profileIssues, serverFieldProblems } from "./fieldChecks";
+import { realBurnAllowed, dropIneligibleBurnTarget } from "@/lib/burnticker/burnRealEligibility";
+import { changeRuleEdgeIds } from "@/lib/burnticker/changeRule";
+import { endChoicesFor, perCoinEndLines } from "@/lib/burnticker/pairEnds";
+import { RESERVED_TICKER_LINE } from "./pageCopy";
 import { CLOSE_PASSED_CHIP, JUMP_CONFIRM_LINE, JUMP_CONFIRM_NO, JUMP_CONFIRM_YES, NO_SECOND_CHECK, pairBudgetLine, TEAMS_NONE_LINE, TEAMS_UNREAD_LINE, humanDay, leagueButtonName, leagueButtonTitle, winPairNames } from "./pageCopy";
 import { teamAdvancedDefaults } from "@/lib/burnticker/creatorCopy";
 import { nameProblem, tickerProblem, wxThresholdProblem } from "@/lib/burnticker/launchFields";
@@ -494,7 +498,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (badA || badB) setEndNotice(END_CHOICE_RESET_NOTICE);
   }, [site, endA, endB]);
   // WIRING-AUDIT12 P1-1: a saved linked pair on one result with a share other than 100 % is set to 100 % on resume, and said
-  const resumeFrom = (saved: Record<string, unknown>) => { const { draft: d, notice } = migrateLinkedShare(saved); restoreFrom(d); if (notice) setShareNotice(notice); };
+  // HB-12 + PROD-01: a saved rule that names a token to burn on a family that may not have one (a natural disaster, a team, a market) is
+  // resumed without it, and the notice says so once (burnRealEligibility.ts); it is never revived
+  const resumeFrom = (saved: Record<string, unknown>) => { const { draft: d0, notice } = migrateLinkedShare(saved); const { draft: d, notice: burnNotice } = dropIneligibleBurnTarget(d0); restoreFrom(d); const said = [notice, burnNotice].filter(Boolean).join(" "); if (said) setShareNotice(said); };
   useEffect(() => {
     // launch night 2026-10-13 (launchDraftStore.ts): the draft offered is the named one in progress, else the kept one that reached the review
     const offer = readOffer();
@@ -762,7 +768,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // round-5 program is deployed; default off. The pinned field joins the hashed rule only after its pool passed the admission read.
   const [realOne, setRealOne] = useState<SideReal>(SIDE_REAL_OFF);
   const realNet = (site.cluster ?? cluster) === "mainnet" ? "mainnet" : "devnet";
-  const realOneOffered = site.burnReal.available && !pairOn && !!rule0 && !rule0.vault;
+  // HB-12 + PROD-01 (2026-10-19): and only on a rule family that may burn a real token (burnRealEligibility.ts: published data; never a
+  // natural disaster, a team, a market or a pair), the same contract the review and the bundle route enforce
+  const realOneOffered = site.burnReal.available && !pairOn && !!rule0 && !rule0.vault && realBurnAllowed(rule0);
   const fieldOne = realOneOffered ? realField(realOne, realNet) : null;
   const fieldOneKey = fieldOne ? JSON.stringify(fieldOne) : "";
   // a linked pair (a rivalry series, a settled-event pair, a registered pair) keeps the pair-winner end; every other coin takes its choice
@@ -795,7 +803,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       // intent audit items 1 and 2 (WIRING-INTENT.md): a card's fade side ("Detroit high below 32") survives the rebuild into the review
       if (pendingDials.inverse && dialsFor(r, dialCtx).inverse) r = applyDial(r, "inverse", "on", dialCtx);
       // the copied share moves to the nearest preset (the web UI offers presets; league mode is API-only) — and the page SAYS so (L01)
-      const shape = shareShapeOf(r, { linked: linkedPair });
+      const shape = shareShapeOf(r, { linked: linkedPair, dispersal: site.dispersal.available });
       const sn = snapToPreset(pendingDials.fraction, shape);
       if (sn.changed && withSide) setShareNotice(`$${pendingDials.from} burns ${presetPct(pendingDials.fraction)} each time. The web launcher offers ${presetRowLabel(shape)}, so ${presetPct(sn.value)} is selected. Use the API to launch with ${presetPct(pendingDials.fraction)}.`);
       r = applyDial(r, "fraction", sn.value, dialCtx);
@@ -815,7 +823,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // that is not a preset (a copied coin, an older default) snaps to the nearest one once per rule. Any other share is API-only.
   const curDials = rule ? dialsFor(rule, dialCtx) : null;
   const oneShotRule = !!curDials && curDials.bounds.max >= 1;
-  const shareOptions = rule ? sharePresetsForRule(rule, { linked: linkedPair }) : SHARE_PRESETS.recurring;
+  // HB-5 (2026-10-19): a single one-time coin is offered 50% where the host runs burn dispersal (the catalogue's burn-dispersal source)
+  const shareOptions = rule ? sharePresetsForRule(rule, { linked: linkedPair, dispersal: site.dispersal.available }) : SHARE_PRESETS.recurring;
   const linkedOneShotRow = !!curDials?.linkedOneShot;
   const shareValue = curDials ? curDials.fraction : shareOptions[0];
   const snapped = useRef("");
@@ -825,7 +834,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     snapped.current = baseKey;
     // L01: never a silent swap — the notice names the share the rule came with and the preset now selected
     const sn = oneShotRule ? { value: DEFAULT_SHARE.oneShot, changed: true } : snapToPreset(curDials.fraction, "recurring");
-    setShareNotice(`This rule came with ${presetPct(curDials.fraction)} per burn. The web launcher offers ${presetRowLabel(shareShapeOf(rule, { linked: linkedPair }))}, so ${presetPct(sn.value)} is selected. Pick another preset below, or use the API to launch with ${presetPct(curDials.fraction)}.`);
+    setShareNotice(`This rule came with ${presetPct(curDials.fraction)} per burn. The web launcher offers ${presetRowLabel(shareShapeOf(rule, { linked: linkedPair, dispersal: site.dispersal.available }))}, so ${presetPct(sn.value)} is selected. Pick another preset below, or use the API to launch with ${presetPct(curDials.fraction)}.`);
     setDial("fraction", sn.value);
   }, [step, baseKey, curDials?.fraction, pendingDials]);   // eslint-disable-line react-hooks/exhaustive-deps
   // audit 7 item 5: after a mode switch (2 % every win, then Once, then back), the share chosen for that shape comes back, said inline
@@ -1446,7 +1455,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           {ures && ures.cards.length > 0 && (
             <ul className="grid gap-2 md:grid-cols-2 lg:grid-cols-3" aria-label="Ready-made rules" aria-live="polite">
               {ures.cards.map((c, ci) => {
-                const head = ci === 0 || ures.cards[ci - 1].group !== c.group ? ({ teams: "Teams", elections: "Elections", weather: "Weather", feeds: "Public data", markets: "Markets", tiles: "Coin vs Coin" } as Record<string, string>)[c.group ?? ""] ?? null : null;
+                const head = ci === 0 || ures.cards[ci - 1].group !== c.group ? ({ teams: "Teams", elections: "Elections", weather: "Weather", feeds: "Public data", disasters: "Natural disaster", markets: "Markets", tiles: "Coin vs Coin" } as Record<string, string>)[c.group ?? ""] ?? null : null;
                 // the card's default window only (this season for a team): other windows are API-only
                 const wi = 0, title = c.title, tx = c.text, badgeText = c.badge;
                 return (<Fragment key={c.id}>
@@ -1907,7 +1916,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         // guided step 3: the four patterns for the thing picked; guided step 4: the end, from the rule
         // website-22 (QA 9 item 1): a natural-disaster coin's chosen card is the one hazards.ts reads from its series (a next-event series is
         // "once"), and a team coin opened from the search box is read from its rule (no team picked in step 2)
-        const curPattern: PatternId | null = guide.follow === "disaster" ? hazardPatternOptions(rule, Date.now()).preselected
+        const curPattern: PatternId | null = guide.follow === "disaster" ? hazardPatternOptions(rule, Date.now(), { dispersal: site.dispersal.available }).preselected
           : guide.follow === "team" ? (rule.oracle === "polymarket" ? "once" : rule.inverse ? "fade" : "every") : guide.follow === "rivalry" ? (meetingsOn || settledPick ? "winner" : elPick || pairMode === "game" ? "once" : rule.inverse ? "fade" : "every") : guide.follow === "market" ? (rule.kind === "binary" && rule.binary?.onNo && !rule.binary.onYes ? "fade" : "once") : windowKindOf(rule) === "one-shot" ? "once" : rule.inverse ? "fade" : "every";
         const pickPattern = (pt: PatternId) => {
           flowStats.current.decisions++; setPatternNotice(null);
@@ -1965,9 +1974,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         if (guide.follow && guide.phase === "burn") {
           // website-22 (QA 9 item 1): a natural disaster's cards are the same set in both its forms (per event, next event), with its own words
           const hazardOpts = (): ReturnType<typeof hazardPatternOptions>["options"] => {
-            const now = Date.now(), cur = hazardPatternOptions(rule, now), once = cur.preselected === "once";
+            const now = Date.now(), cur = hazardPatternOptions(rule, now, { dispersal: site.dispersal.available }), once = cur.preselected === "once";
             const sib = rule.series ? hazardSwap(rule.series, once ? "every" : "once", now) : null;
-            return stablePatternOptions(cur.options, sib && "series" in sib ? hazardPatternOptions(hazardRule(sib.series), now).options : null);
+            return stablePatternOptions(cur.options, sib && "series" in sib ? hazardPatternOptions(hazardRule(sib.series), now, { dispersal: site.dispersal.available }).options : null);
           };
           const po = guide.follow === "disaster" ? { options: hazardOpts() } : patternOptions({ follow: guide.follow, rule, titleMarket: guide.follow === "team" && !team ? "none" : titleCard?.state ?? "loading", pairKind: pairKindNow, meeting: rivalSeason ? !!rivalGame : null, rivalryScope });
           // pass B item 12, audit 6 item 16: the patterns name the thing picked ("After each Dodgers win")
@@ -2035,7 +2044,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             // WIRING-AUDIT12 item 15: only where a target could be set (this condition), one tap away
             // launch wizard audit 2026-10-19 F16: and only where the creator expects the choice, a rule that came with a burn target (a
             // "launch one like this" link or a template of such a coin); every other coin says nothing about a feature this site does not offer
-            : site.burnReal.line && rule0?.burnTarget ? <details className="text-xs text-neutral-400" data-burn-real-waiting><summary className="cursor-pointer">What is not offered yet</summary><p className="mt-1">{site.burnReal.line}</p></details> : null;
+            : site.burnReal.line && rule0?.burnTarget && realBurnAllowed(rule0) ? <details className="text-xs text-neutral-400" data-burn-real-waiting><summary className="cursor-pointer">What is not offered yet</summary><p className="mt-1">{site.burnReal.line}</p></details> : null;
           return <PatternStep drain={drain} preview={preview} options={options} value={curPattern} onPick={pickPattern} shares={shareOptions} share={shareValue} onShare={setShare} shareLine={linkedOneShotRow ? LINKED_ONE_SHOT_LINE : null} pairLabel={pairOn && !!ruleB} math={budget.math} notice={patternNotice ?? shareNotice} extra={hazardExtra || realExtra || seasonExtra || drainWarn || resultsExtra ? <>{seasonExtra}{resultsExtra}{drainWarn && <p className="text-xs text-amber-300" role="status" data-drain-warning>{drainWarn}</p>}{hazardExtra}{realExtra}</> : null} next={seasonBlocked ? <StickyAction><button type="button" data-nav disabled className={primary + " w-full sm:w-auto"}>Next</button></StickyAction> : nextBtn("Next", "name")} />;
         }
         // the end, stated on the review (the server adds the default end, with the $DEFICIT sink, to a rule sent without one)
@@ -2049,8 +2058,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const teamRef = team?.nickname ? `the ${team.nickname}` : null;
         // website-26 (WIRING-END-SINKS): the incinerator is a single coin's choice (a pair rule with it is refused), shown only while the
         // launch state says the host has it (burnSol, off until round 5 is deployed); "another coin's burn" only while sinkPicker is on
-        const choiceA = endPickable && rule ? endChoiceModel(rule, { burnSol: site.burnSol.available && !(pairOn && ruleB), sinkPicker: site.sinkPicker.available, team: teamRef }) : null;
-        const choiceB = endPickable && pairOn && ruleB ? endChoiceModel(ruleB, { burnSol: site.burnSol.available, sinkPicker: site.sinkPicker.available }) : null;
+        const endSite = { burnSol: site.burnSol.available, sinkPicker: site.sinkPicker.available };
+        // PROD-03 (2026-10-19): two independent coins get the same choices, each from its own rule (pairEnds.ts endChoicesFor)
+        const choiceA = endPickable && rule ? endChoiceModel(rule, { ...endChoicesFor(rule, endSite), team: teamRef }) : null;
+        const teamRefB = pairOn && ruleB && sideB?.nickname ? `the ${sideB.nickname}` : null;
+        const choiceB = endPickable && pairOn && ruleB ? endChoiceModel(ruleB, { ...endChoicesFor(ruleB, endSite), team: teamRefB }) : null;
         // walkthrough 13 (2026-10-14): on the review the end sentences above the picker already say the champion path, so the picker there
         // (withWinning false) states only where the rest goes when the team does not win; the name step's picker stands alone and keeps it
         const endChoiceFor = (withWinning: boolean) => choiceA?.offered || choiceB?.offered ? (
@@ -2063,9 +2075,13 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const endChoiceBlock = endChoiceFor(true), endChoiceReview = endChoiceFor(false);
         // website-23: a settled-event pair's one end (the race's or the game's pair-winner end) and its 30-day both-or-neither deadline
         const settledEndFact = `${SETTLED_END_LABEL}. ${end.sentences.join(" ")} ${SETTLED_DEADLINE_LINE}`;
-        const endLines0 = pairOn && ruleB ?end.sentences.map((x) => x.replace(/^(When the rule ends|When the result is in|After the last game or reading the rule covers), the rest of the pool/, "$1, the rest of each coin's pool")) : end.sentences;
+        // PROD-03: two independent coins each say their own end on their own line, led by the coin's ticker (pairEnds.ts perCoinEndLines);
+        // a linked pair (endPickable false) keeps its one pair end
+        const endRuleB = ruleShownB ?? ruleB;
+        const endTextB = endPickable && pairOn && endRuleB ? endSentences(endRuleB.onEnd ? endRuleB : ({ ...endRuleB, onEnd: { ...ON_END_DEFAULT } } as BurnRule), { team: teamRefB }) : null;
+        const losingPathOff = (xs: string[], c: typeof choiceA) => (c?.offered && c.winning ? xs.filter((x) => !/^If they do not\b/.test(x)) : xs);
         // walkthrough 13: with a champion-path picker below, the losing path ("If they do not, the rest goes to …") is the picker's to say
-        const endLines = choiceA?.offered && choiceA.winning ? endLines0.filter((x) => !/^If they do not\b/.test(x)) : endLines0;
+        const endLines = perCoinEndLines({ ticker: ticker.toUpperCase(), sentences: losingPathOff(end.sentences, choiceA) }, endTextB ? { ticker: tickerB.toUpperCase(), sentences: losingPathOff(endTextB.sentences, choiceB) } : null);
         // item 53: an election coin says who decides the result (the race's certified count is the cross-check)
         const certified = elPick ? elPick.race.settlement.replace(/^.*checked against /, "") : eventInfo?.certified ?? null;
         const authority = certified ? electionAuthorityLines(certified) : null;
@@ -2075,7 +2091,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const espnCases = espnParsed ? [...(leagues.find((l) => l.id === espnParsed.league)?.draws ? [78] : []), 79, ...(espnParsed.league === "mlb" ? [80] : [])] : [];
         const edgeIds: number[] = [
           ...espnCases, ...(pairOn && (!elPick || settledPick) ? [76] : []), ...(elPick ? [82] : []),
-          ...(rule.kind === "scalar" ? [85, 111, 87] : []), ...(rule.oracle === "catalogue" && /^nws\./.test(rule.series ?? "") ? [86, 87] : []),
+          ...changeRuleEdgeIds(rule), ...(rule.oracle === "catalogue" && /^nws\./.test(rule.series ?? "") ? [86, 87] : []),
           // WIRING-SEMANTICS-2: the floor, the end's destination, the fingerprint, and Polymarket's split and unresolved payouts
           164, 168, 174, ...(rule.oracle === "polymarket" ? [178, 179, 180] : []), ...(rule.oracle === "catalogue" ? [218] : []),
         ];
@@ -2086,7 +2102,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           { label: FACT_LABELS.trigger, value: trigger, edit: editTo("which") },
           { label: FACT_LABELS.coin, value: settledPick ? settledWhichCoinLine(settledPick, { a: ticker || "A", b: tickerB || "B" }) : meetingsOn ? meetingsWhichCoinLine({ a: ticker || "A", b: tickerB || "B", teamA: A, teamB: B }) : whichCoinLine(ticker || "A", coinsN === 2 ? tickerB || "B" : null), edit: editTo("name") },
           { label: FACT_LABELS.amount, value: `${budget.line} ${shareOfBudgetLine(shareValue)} ${shareExample(shareValue)}`, edit: editTo("burn") },
-          { label: FACT_LABELS.ends, value: meetingsOn ? meetingsEndFact : settledPick ? settledEndFact : endLines.join(" ") || PERPETUAL_END_LINE, edit: null, extra: endChoiceReview },
+          { label: FACT_LABELS.ends, value: meetingsOn ? meetingsEndFact : settledPick ? settledEndFact : endLines.join(endTextB ? "\n" : " ") || PERPETUAL_END_LINE, edit: null, extra: endChoiceReview },
           { label: FACT_LABELS.cost, value: costLine(shownReview.review && reviewCurrent ? shownReview.review.costs.totalSol : null, coinsN), edit: null },
         ] : null;
         const two = pairOn && !!ruleB;
@@ -2124,7 +2140,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             image={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`, true, "a")}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false, "b")}</div> : imageField(profile, setProfile, null)}
             profile={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" who={`$${ticker || "A"}`} side="a" /><ProfileFields value={profileB} onChange={setProfileB} generated={genB} part="text" who={`$${tickerB || "B"}`} side="b" /></div> : <ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" side="a" />}
             note={pairOn ? null : { value: note, onChange: setNote, problem: noteProblem }}
-            tickerChecks={reviewCurrent ? rv?.tickers ?? null : null} onProveTicker={proveTicker}
+            tickerChecks={reviewCurrent && rv?.tickers ? rv.tickers.map((t) => (t.reserved && coinsForName[t.side === "A" ? 0 : 1]?.tickerIssue === RESERVED_TICKER_LINE ? { ...t, reserved: false } : t)) : null} onProveTicker={proveTicker}
             profileProblems={nameBlockers}
             next={<StickyAction>{nameStepBlocked && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>{rightsMissing ? IMAGE_RIGHTS_REQUIRED : NAME_STEP_BLOCKED}</p>}<button type="button" data-nav className={primary + " w-full sm:w-auto"} disabled={nameStepBlocked} onClick={() => setGuide((g) => ({ ...g, phase: "review" }))}>Review</button></StickyAction>} />
           </>;
@@ -2150,7 +2166,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             <ReviewCard
               mode={guide.follow ? "review" : "full"}
               facts={reviewFacts}
-              endSection={meetingsOn ? <EndSection title={MEETINGS_END_LABEL} sentences={[MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE]} options={[]} /> : settledPick ? <EndSection title={SETTLED_END_LABEL} sentences={[...end.sentences, SETTLED_DEADLINE_LINE]} options={[]} /> : <EndSection sentences={endLines} options={end.options.filter((o) => o.available || (o.kind === "named-coin" ? site.sinkPicker.available : o.kind === "incinerator" ? site.burnSol.available && !two : true))} choice={endChoiceReview} />}
+              endSection={meetingsOn ? <EndSection title={MEETINGS_END_LABEL} sentences={[MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE]} options={[]} /> : settledPick ? <EndSection title={SETTLED_END_LABEL} sentences={[...end.sentences, SETTLED_DEADLINE_LINE]} options={[]} /> : <EndSection sentences={endLines} options={end.options.filter((o) => o.available || (o.kind === "named-coin" ? site.sinkPicker.available : o.kind === "incinerator" ? endChoicesFor(rule, endSite).burnSol : true))} choice={endChoiceReview} />}
               authority={authority}
               edgeNotes={edgeNotes}
               upfront={upfrontLines(RAISE_PRESETS_SOL)}
@@ -2192,7 +2208,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               budget={budget}
               dispute={reviewCurrent ? rv?.dispute ?? null : null}
               graduation={rv?.graduation ?? null}
-              tickerChecks={reviewCurrent ? rv?.tickers ?? null : null} onProveTicker={proveTicker}
+              tickerChecks={reviewCurrent && rv?.tickers ? rv.tickers.map((t) => (t.reserved && coinsForName[t.side === "A" ? 0 : 1]?.tickerIssue === RESERVED_TICKER_LINE ? { ...t, reserved: false } : t)) : null} onProveTicker={proveTicker}
               notes={notes}
               simulator={reviewCurrent && rv?.simulation ? <SimulatorDisclosure simulation={rv.simulation} rule={rule} /> : null}
               namePrompt={!pairOn && text?.name === "Event Coin" ? "This question does not give a clear coin name: please name the coin (and check the ticker) before you launch." : null}

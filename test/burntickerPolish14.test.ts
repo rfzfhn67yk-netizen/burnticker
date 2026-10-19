@@ -91,7 +91,9 @@ describe("3. the team review: the champion path once, under When it ends", () =>
     assert.match(picker, /\{model\.winning && !hideWinning && <p className="text-xs text-neutral-200" data-end-winning>/);
   });
   test("with the picker below, When it ends drops the losing sentence, which the picker says", () => {
-    assert.match(page, /const endLines = choiceA\?\.offered && choiceA\.winning \? endLines0\.filter\(\(x\) => !\/\^If they do not\\b\/\.test\(x\)\) : endLines0;/);
+    // PROD-03 (2026-10-19): per coin, each coin's own picker deciding for its own sentences
+    assert.match(page, /const losingPathOff = \(xs: string\[\], c: typeof choiceA\) => \(c\?\.offered && c\.winning \? xs\.filter\(\(x\) => !\/\^If they do not\\b\/\.test\(x\)\) : xs\);/);
+    assert.match(page, /const endLines = perCoinEndLines\(\{ ticker: ticker\.toUpperCase\(\), sentences: losingPathOff\(end\.sentences, choiceA\) \}/);
   });
 });
 

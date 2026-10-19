@@ -1,7 +1,7 @@
 import type { Platform } from "@/lib/burnticker/server";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { lookalikeRefusal, mintAdoptionRefusal, sameTickerSentence, type LookalikeExisting, type LookalikeHit } from "@/lib/burnticker/lookalike";
-import { freeTickers } from "@/lib/burnticker/tickerCheck";
+import { freeTickers, isTeamRule } from "@/lib/burnticker/tickerCheck";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 
 /**
@@ -28,7 +28,7 @@ export async function launchGuardRefusal(p: { registry: Pick<Platform["registry"
   if (look) {
     const taken = look.hits.some((h) => h.how === "same-letters" && h.existing.toUpperCase() === `$${c.ticker.toUpperCase()}`);
     let suggestions: string[] = [];
-    try { suggestions = freeTickers(c.ticker, { inUse: (t) => p.registry.tokensByTicker(t), existing, reserved: loadReserved(), creator: owner }); } catch { suggestions = []; }
+    try { suggestions = freeTickers(c.ticker, { inUse: (t) => p.registry.tokensByTicker(t), existing, reserved: loadReserved(), creator: owner }, 2, { team: isTeamRule(c.rule), avoid: [c.ticker] }); } catch { suggestions = []; }
     const free = suggestions.length ? ` These tickers are free: ${suggestions.map((x) => `$${x}`).join(" and ")}.` : "";
     const others = [...new Set(look.hits.filter((h) => h.how !== "same-letters" || h.existing.toUpperCase() !== `$${c.ticker.toUpperCase()}`).map((h) => h.reason))];
     const error = taken ? `This launch is refused. ${sameTickerSentence(c.ticker)}${others.length ? ` ${others.join(" ")}` : ""} Please pick another ticker.${free}` : look.reason;
@@ -54,7 +54,7 @@ export function tickerTakenRefusal(p: { registry: Pick<Platform["registry"], "to
   try {
     const now = Date.now();
     const inUse = (t: string): unknown[] => { const r = p.registry.tickerReservation(t); return [...p.registry.tokensByTicker(t), ...(r && r.expiresAt > now && r.creator !== creator ? [r] : [])]; };
-    suggestions = freeTickers(ticker, { inUse, existing: lookalikeRows(p.registry), reserved: loadReserved(), creator }).filter((t) => t !== ticker.toUpperCase());
+    suggestions = freeTickers(ticker, { inUse, existing: lookalikeRows(p.registry), reserved: loadReserved(), creator }, 2, { avoid: [ticker] }).filter((t) => t !== ticker.toUpperCase());
   } catch { suggestions = []; }
   const free = suggestions.length ? ` These tickers are free: ${suggestions.map((x) => `$${x}`).join(" and ")}.` : "";
   return { status: 409, error: `This launch is refused. ${sameTickerSentence(ticker)} Please pick another ticker.${free}`, extra: { code: "ticker-taken", ...(suggestions.length ? { suggestions } : {}) } };

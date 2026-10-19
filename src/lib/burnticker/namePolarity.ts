@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { fitName, SYMBOL_MAX_BYTES } from "@/lib/burnticker/launchFields";
+import { fitName, NAME_MAX_BYTES, SYMBOL_MAX_BYTES, utf8Bytes } from "@/lib/burnticker/launchFields";
 
 /**
  * A SOURCE'S SUGGESTED NAME FOLLOWS THE SIDE THE COIN BURNS ON (continuous audit 2026-10-19T1919Z PROD-02). An event outcome picked from
@@ -20,13 +20,23 @@ export function ruleSide(r: Pick<BurnRule, "kind" | "binary"> | null | undefined
 
 /**
  * The suggestion for the side the coin burns on now. The same side (or no side known): the suggestion as made. A YES suggestion on a NO
- * coin: "<name> No" and "NO<ticker>" (describe.ts's NO form, so the name and the ticker say the same thing). A NO suggestion on a YES
+ * coin: "<name> No" and "NO<ticker>" (describe.ts's NO form, so the name and the ticker say the same thing; the marker is reserved before the fit, noName). A NO suggestion on a YES
  * coin: nothing, so the page falls back to the rule's own generated name and ticker, which follow the side already.
  */
 export function suggestionFor(s: SourceSuggestion, side: BurnSide | null): { name: string | null; ticker: string | null } {
   if (!s.side || !side || s.side === side) return { name: s.name, ticker: s.ticker };
-  if (s.side === "yes") return { name: s.name ? fitName(`${s.name} No`) : null, ticker: s.ticker ? `NO${s.ticker}`.slice(0, SYMBOL_MAX_BYTES) : null };
+  if (s.side === "yes") return { name: s.name ? noName(s.name) : null, ticker: s.ticker ? `NO${s.ticker}`.slice(0, SYMBOL_MAX_BYTES) : null };
   return { name: null, ticker: null };
+}
+
+/** The NO side's marker, appended after the fitted base name. */
+export const NO_MARKER = " No";
+/**
+ * PROD-02 v2 (continuous audit 2026-10-19T1949Z): the base name is fitted to the limit LESS the marker's bytes, then the marker is added,
+ * so a long name ("Democrats win the Ohio election", 31 bytes) is shortened at a word boundary and never loses its "No" to the fit.
+ */
+export function noName(base: string, max = NAME_MAX_BYTES): string {
+  return `${fitName(base, max - utf8Bytes(NO_MARKER))}${NO_MARKER}`;
 }
 
 /** A saved draft's suggestion, read back defensively (an older draft has none). */

@@ -8,7 +8,7 @@ import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { ReviewCard } from "./ReviewCard";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
-import { fightLead, sha256HexWeb, tileHashInput, tileRule, tileSpec, type TileChoice } from "@/lib/burnticker/derby/tile";
+import { fightLead, sha256HexWeb, tileHashInput, tileRule, type TileChoice } from "@/lib/burnticker/derby/tile";
 import { DERBY_RUN_PRESETS, runPresetLabel } from "@/lib/burnticker/derby/spec";
 import { rivalryById, type RivalryTemplate } from "@/lib/burnticker/templates";
 import { SimulatorDisclosure } from "./SimulatorDisclosure";
@@ -26,7 +26,7 @@ import { derbyExplainer } from "@/lib/burnticker/launchDerby";
 import { PreWalletSummary } from "./PreWalletSummary";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { DEFAULT_RAISE_SOL, DEFAULT_SHARE, LINKED_ONE_SHOT_LINE, linkedShareMigratedNotice, RAISE_PRESETS_SOL, SHARE_PRESETS, type RaisePreset } from "@/lib/burnticker/launchPresets";
-import { derbyShareLine, endSentences, pairIdentityProblems, patternOptions, PATTERNS, IMAGE_NOT_KEPT, FACT_LABELS, GUIDED_STEPS, IMAGE_RIGHTS_REQUIRED, PAIR_COST_EXCLUSIONS, budgetCopy, costLine, shareExample, shareOfBudgetLine, triggerText, whichCoinLine, whichHeading, pairDiagramLabel, recordCloseAvailability } from "@/lib/burnticker/guidedLaunch";
+import { asLinkedPairSide, coinvsEndsLine, derbyShareLine, endSentences, pairIdentityProblems, patternOptions, PATTERNS, IMAGE_NOT_KEPT, FACT_LABELS, GUIDED_STEPS, IMAGE_RIGHTS_REQUIRED, PAIR_COST_EXCLUSIONS, budgetCopy, costLine, shareExample, shareOfBudgetLine, triggerText, whichCoinLine, whichHeading, pairDiagramLabel, recordCloseAvailability } from "@/lib/burnticker/guidedLaunch";
 import { PatternStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import { createLatest } from "@/lib/burnticker/latestOnly";
@@ -448,7 +448,8 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
   const sentence = model ? (realList.length ? model.sentence.replace(derbyReadOnlySentence(model.spec), realReadSentence({ a: model.spec.a.symbol, b: model.spec.b.symbol }, realList)) : model.sentence) : null;
   const ruleB: BurnRule | null = model?.rule ? withRealBurn({ ...model.rule, binary: { onYes: null, onNo: model.rule.binary!.onYes } }, fieldB) : null;
   // L13: the start boundary too, in UTC (the windows' clock) — the facts list above adds Denver time
-  const ends = choice ? (() => { const s = tileSpec(choice).season; const start = new Date(`${s.start}T00:00:00Z`), end = new Date(Date.parse(`${s.start}T00:00:00Z`) + s.days * 86_400_000); const d = (x: Date) => x.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); return `The windows run from ${d(start)} 00:00 UTC to ${d(end)} 00:00 UTC, which is ${s.days} daily windows. Then each coin's own burn pool burns down over 28 days and the coins retire.`; })() : null;
+  // continuous audit HB-2: the review's "When it ends" is the same end the burn step and the server review say (guidedLaunch.ts coinvsEndsLine)
+  const ends = model?.rule ? coinvsEndsLine(model.rule) : null;
 
   // review N6: the venue this host uses for a pair (catalogue venues.pairCurve, passed down by the page). The venue is not shown before
   // launch (the owner's cut list); a 409 naming the other venue switches it and the build is retried once.
@@ -543,13 +544,14 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
   const recordAvail = recordKeyed === null ? null : recordCloseAvailability({ keyed: recordKeyed });
   const kindChoice = (
     <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="What the coins follow" data-derby-kind>
-      {(["pair", "high"] as const).map((k) => (
-        <button key={k} type="button" role="radio" aria-checked={kind === k} data-decision="what" data-derby-kind-choice={k} disabled={busy || !!prepared} onClick={() => setKind(k)} className={`rounded-lg border p-3 text-left text-sm ${kind === k ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"}`}>
+      {/* continuous audit HB-9: each radio is named, and a record close is marked unavailable (with the reason beside it) while it cannot start */}
+      {(["pair", "high"] as const).map((k) => { const off = k === "high" && !!recordAvail && !recordAvail.available; return (
+        <button key={k} type="button" role="radio" aria-checked={kind === k} aria-label={k === "pair" ? PAIR_CHOICE_LABEL : HIGH_CHOICE_LABEL} aria-disabled={off || undefined} aria-describedby={off ? "bt-record-availability" : undefined} data-decision="what" data-derby-kind-choice={k} disabled={busy || !!prepared || off} onClick={() => setKind(k)} className={`rounded-lg border p-3 text-left text-sm disabled:opacity-50 ${kind === k ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"}`}>
           <span className="block font-medium">{k === "pair" ? PAIR_CHOICE_LABEL : HIGH_CHOICE_LABEL}</span><span className="mt-0.5 block text-xs text-neutral-300">{k === "pair" ? PAIR_CHOICE_LINE : HIGH_CHOICE_LINE}</span>
         </button>
-      ))}
+      ); })}
       {/* WIRING-AUDIT12 item 11: whether a record close can start on this site, said beside the choice before any setup */}
-      {recordAvail && <div className="text-xs text-neutral-300 sm:col-start-2" data-record-availability={recordAvail.available ? "yes" : "no"}>
+      {recordAvail && <div id="bt-record-availability" className="text-xs text-neutral-300 sm:col-start-2" data-record-availability={recordAvail.available ? "yes" : "no"}>
         <p>{recordAvail.line}</p>
         {recordAvail.alternative && <p className="mt-0.5 text-neutral-400">{recordAvail.alternative} <button type="button" data-nav className="underline" disabled={busy || !!prepared} onClick={() => { setKind("pair"); setFlip(false); }}>Two coins</button> <button type="button" data-nav className="ml-1 underline" disabled={busy || !!prepared} onClick={() => { setKind("pair"); setFlip(true); }}>The flippening</button></p>}
       </div>}
@@ -570,7 +572,10 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
   const ready = !!model?.rule && !model.problems.length && /^[A-Z0-9]{2,10}$/.test(names.ta) && /^[A-Z0-9]{2,10}$/.test(names.tb) && identity.length === 0 && !!names.a.trim() && !!names.b.trim();
   // website-19: the burn pattern (each day's winner, or once: the flippening) and the end, read from the rule
   const po = patternOptions({ follow: "coins", rule: model?.rule ?? null });
-  const end = model?.rule ? endSentences(model.rule) : null;
+  // continuous audit HB-2: the end of the pair as the bundle links it (winner takes the rest), never the single coin's $DEFICIT end; the
+  // burn step says it once, so the "At the end" block is left out when the coin's sentence already carries it
+  const end = model?.rule ? endSentences(asLinkedPairSide(model.rule)) : null;
+  const endSaid = !!end && !!sentence && sentence.includes(end.sentences.join(" "));
   {
     // website-22 (QA 9 item 38, audit 10 item 13): Coin comparison and the flippening walk Which, Burns, Name and Review like every coin
     const next = (label: string, to: GuidedPhase, disabled = false, why: string | null = null) => <StickyAction>{why && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>{why}</p>}<button type="button" data-nav disabled={disabled} className="w-full rounded bg-amber-400 px-4 py-2 text-sm font-medium text-neutral-950 disabled:opacity-40 sm:w-auto" onClick={() => onPhase?.(to)}>{label}</button></StickyAction>;
@@ -591,10 +596,11 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
     const rightsMissing = (!!profA.image && !profA.rights) || (!!profB.image && !profB.rights);
     const nameBlockedP = rightsMissing || !ready || blockers.length > 0 || coinsNow.some((c) => !!c.nameIssue || !!c.tickerIssue);
     // website-24 (WIRING-ROUND5): each side may burn its real reference coin instead of itself, once the round-5 program is deployed;
-    // until then the launch state's waiting line stands in for the choice
+    // until then the tile shows nothing in its place
     const pickA = realPickFor(a?.underlying ? { ...a.underlying, symbol: a.symbol } : null), pickB = realPickFor(b?.underlying ? { ...b.underlying, symbol: b.symbol } : null);
-    // WIRING-AUDIT12 item 15: the waiting line only where a side could name a real coin, one tap away
-    const realChoices = !a || !b ? null : !realOn ? (burnReal?.line && (pickA || pickB) ? <details className="text-xs text-neutral-400" data-burn-real-waiting><summary className="cursor-pointer">What is not offered yet</summary><p className="mt-1">{burnReal.line}</p></details> : null) : (
+    // HB-12 (2026-10-19), the launch wizard audit's F16 rule: with the feature off the tile says nothing about it. A Coin comparison pair
+    // never arrives with a token already named (no template or saved draft carries one), so there is no choice it would otherwise have.
+    const realChoices = !a || !b || !realOn ? null : (
       <div className="grid min-w-0 gap-2 md:grid-cols-2" data-burn-real-choices>
         {pickA ? <BurnRealChoice side="a" who={`$${TA}`} picks={[pickA]} value={realA} onChange={setRealA} network={net} locked={busy || !!prepared} /> : <p className="text-xs text-neutral-400" data-burn-real-none="a">{realNotOffered(a.symbol)}</p>}
         {pickB ? <BurnRealChoice side="b" who={`$${TB}`} picks={[pickB]} value={realB} onChange={setRealB} network={net} locked={busy || !!prepared} /> : <p className="text-xs text-neutral-400" data-burn-real-none="b">{realNotOffered(b.symbol)}</p>}
@@ -627,7 +633,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
       return (
         <div data-derby-guided="pair">
           <PatternStep preview={<>{lead && <p className="font-medium text-amber-200" data-fight-lead>{lead}</p>}<p>{sentence ?? "Reading the two coins."}</p></>} options={options} value={flip ? "once" : "winner"} onPick={(id) => setFlip(id === "once")} shares={shareRow} share={fraction} onShare={setFraction} shareLine={flip ? LINKED_ONE_SHOT_LINE : null} notice={flip ? shareMigrated : null} pairLabel
-            extra={<>{runRow}<p className="text-xs text-neutral-300" data-share-memory>{derbyShareLine(shares.daily, shares.flip)}</p>{pairCheckLine}{realChoices}{end && <div className="space-y-0.5 text-xs text-neutral-300" data-end-sentences><p className="font-medium text-neutral-200">At the end</p>{end.sentences.map((x) => <p key={x}>{x}</p>)}</div>}</>}
+            extra={<>{runRow}<p className="text-xs text-neutral-300" data-share-memory>{derbyShareLine(shares.daily, shares.flip)}</p>{pairCheckLine}{realChoices}{end && !endSaid && <div className="space-y-0.5 text-xs text-neutral-300" data-end-sentences><p className="font-medium text-neutral-200">At the end</p>{end.sentences.map((x) => <p key={x}>{x}</p>)}</div>}</>}
             next={next("Next", "name", !model?.rule || pairRefused)} />
         </div>
       );
