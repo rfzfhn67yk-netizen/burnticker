@@ -1,4 +1,5 @@
 import type { CardView, IndexCoin } from "@/lib/burnticker/cardView";
+import type { CoinListing } from "@/lib/burnticker/coinsList";
 import { curveProgressSentence, dataStateSentence } from "@/lib/burnticker/readiness";
 
 /**
@@ -12,7 +13,7 @@ import { curveProgressSentence, dataStateSentence } from "@/lib/burnticker/readi
 export type GridTab = "new" | "next" | "graduating" | "graduated" | "pairs" | "following";
 export const GRID_TABS: { id: GridTab; label: string; rule: string }[] = [
   { id: "new", label: "New", rule: "Every coin anyone can trade, newest launch first." },
-  { id: "next", label: "Next to settle", rule: "Coins with a scheduled result, soonest first." },
+  { id: "next", label: "Next to settle", rule: "Coins with a scheduled result, soonest first, then the coins with no date yet." },
   { id: "graduating", label: "About to graduate", rule: "Coins whose curve this site read at half its raise or more, fullest first." },
   { id: "graduated", label: "Moved to trading pool", rule: "Coins that left their curve for their own Raydium pool." },
   { id: "pairs", label: "Pairs", rule: "Two coins that share one matchup." },
@@ -39,15 +40,29 @@ export type GridState =
   | { kind: "empty"; body: string; notLaunched: boolean }
   | { kind: "results"; note: string | null };
 
-type Coin = Pick<IndexCoin, "ticker" | "phase" | "progressPct" | "nextCheckAt" | "nextCloseTime" | "launchedAt" | "status">;
+type Coin = Pick<IndexCoin, "ticker" | "phase" | "progressPct" | "nextCheckAt" | "nextCloseTime" | "launchedAt" | "status"> & { listing?: Pick<CoinListing, "next"> | null };
+
+/**
+ * HB-133 (hourly run 11): the date a coin settles by as its card shows it (coinsList.ts ListNext.at: a game's or season's next planned
+ * read, a market's stated close), never the keeper's next poll of a market with no stated date ($CLARITY sorted first on its 6-minute
+ * poll while its card said no date). An older answer with no listing keeps the close time, then the next check.
+ */
+export function settleDateOf(t: Coin): string | null {
+  const at = t.listing !== undefined ? t.listing?.next?.at ?? null : t.nextCloseTime ?? t.nextCheckAt;
+  return at && Number.isFinite(Date.parse(at)) ? at : null;
+}
+/** HB-133: the word an undated coin carries on the Next to settle tab. */
+export const NO_DATE_YET = "No date yet.";
+/** A coin the Next to settle tab lists: a dated one, or one still waiting on a result with no date yet. */
+const settlesLater = (t: Coin): boolean => !!(settleDateOf(t) || t.nextCloseTime || t.nextCheckAt || t.listing?.next);
 
 /** The coins a tab lists, in its order. "graduating" uses only curves that were read; nothing is ranked on an invented zero. */
 /** `isFollowed`: whether this browser follows the coin, by its network and mint (watchlist.ts; never by ticker, private review 8 F1). */
 export function tabCoins<T extends Coin>(tab: GridTab, list: readonly T[], isFollowed: (t: T) => boolean = () => false): T[] {
-  const next = (t: T) => t.nextCloseTime ?? t.nextCheckAt;
   const launched = (t: T) => (t.launchedAt ? Date.parse(t.launchedAt) : -1);
   if (tab === "new") return [...list].sort((a, b) => launched(b) - launched(a) || a.ticker.localeCompare(b.ticker));
-  if (tab === "next") return list.filter((t) => next(t)).sort((a, b) => Date.parse(next(a)!) - Date.parse(next(b)!));
+  // HB-133: every dated coin, soonest first, before every coin with no date yet (those by ticker)
+  if (tab === "next") return list.filter(settlesLater).sort((a, b) => { const x = settleDateOf(a), y = settleDateOf(b); return x && y ? Date.parse(x) - Date.parse(y) || a.ticker.localeCompare(b.ticker) : x ? -1 : y ? 1 : a.ticker.localeCompare(b.ticker); });
   if (tab === "graduating") return list.filter((t) => t.phase !== "graduated" && t.progressPct !== null && t.progressPct >= 50).sort((a, b) => b.progressPct! - a.progressPct!);
   if (tab === "graduated") return list.filter((t) => t.phase === "graduated");
   if (tab === "following") return list.filter(isFollowed);

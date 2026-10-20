@@ -11,6 +11,18 @@ export function filterOutcomes<T extends { question: string; outcome?: string | 
   const shown = hit.slice(offset, offset + limit);
   return { shown, matched: hit.length, total: markets.length, nextOffset: offset + limit < hit.length ? offset + limit : null };
 }
+/**
+ * HB-160 (hourly run 15): Gamma names a ladder's outcomes "↑ 150,000" and "↓ 5,000" (groupItemTitle). A row never opens with an arrow:
+ * "Reaches $150,000", "Dips to $5,000" (the dollar sign when the market's question is about a dollar amount or a price). Any other
+ * outcome name is shown as it is; with no outcome name, the market's question.
+ */
+export function outcomeText(m: { outcome?: string | null; question?: string | null }): string {
+  const o = (m.outcome ?? "").trim();
+  const arrow = /^([↑↓])\s*(.+)$/.exec(o);
+  if (!arrow) return o || (m.question ?? "").trim();
+  const money = /\$|\bprice\b/i.test(m.question ?? "") && !/^\$/.test(arrow[2]);
+  return `${arrow[1] === "↑" ? "Reaches" : "Dips to"} ${money ? "$" : ""}${arrow[2].trim()}`;
+}
 /** "12 of 30 shown", or with a filter typed "4 of 9 that match shown (30 in all)": the line under an event's outcomes. */
 export const outcomesShownLine = (r: { shown: readonly unknown[]; matched: number; total: number }, filtered = false): string =>
   filtered ? `${r.shown.length} of ${r.matched} that match shown (${r.total} in all).` : `${r.shown.length} of ${r.total} shown.`;

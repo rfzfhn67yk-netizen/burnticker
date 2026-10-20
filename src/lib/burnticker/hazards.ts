@@ -1,4 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
+import { rareFadeLine } from "@/lib/burnticker/hazardSeason";
 import { dialsFor } from "@/lib/burnticker/dials";
 import { PATTERN_REASON, PATTERNS, type PatternId, type PatternOption } from "@/lib/burnticker/guidedLaunch";
 import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
@@ -196,7 +197,7 @@ export function hazardPatternOptions(rule: BurnRule, nowMs: number, o: { dispers
   const fadeReason = once ? PATTERN_REASON.oneShotFade : dialsFor(rule).inverse ? null : PATTERN_REASON.oneShotFade;
   const mk = (id: PatternId, reason: string | null, label?: string, sentence?: string): PatternOption => ({ id, label: label ?? PATTERNS[id].label, sentence: sentence ?? PATTERNS[id].sentence, available: reason === null, reason });
   return {
-    options: [mk("every", null, HAZARD_PATTERNS.every.label, hazardEverySentence(series)), mk("fade", fadeReason), mk("once", onceReason, HAZARD_PATTERNS.once.label, hazardOnceSentence(o.dispersal === true)), mk("winner", PATTERN_REASON.needsTwo)],
+    options: [mk("every", null, HAZARD_PATTERNS.every.label, hazardEverySentence(series)), mk("fade", fadeReason, undefined, rareFadeLine({ ...rule, inverse: true }) ?? undefined),   /* HB-137: the rare-area warning on the card itself */ mk("once", onceReason, HAZARD_PATTERNS.once.label, hazardOnceSentence(o.dispersal === true)), mk("winner", PATTERN_REASON.needsTwo)],
     preselected: hazardPreselected({ series, inverse: !!rule.inverse }),
   };
 }
@@ -246,17 +247,23 @@ function withWord(name: string, word: string): string {
   while (words.length && new TextEncoder().encode(`${words.join(" ")} ${word}`).length > NAME_MAX_BYTES) words.pop();
   return words.length ? `${words.join(" ")} ${word}` : word;
 }
+const NUMBER_FORMS: readonly (readonly [string, string])[] = [["TWO", "Two"], ["THREE", "Three"], ["FOUR", "Four"], ["FIVE", "Five"]];
 export function hazardAlternates(series: string | null | undefined, gen: { ticker: string; name: string }): { ticker: string; name: string }[] {
   const kind = hazardKindOf(series);
   const t = (gen.ticker ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!kind || !t) return [];
   // the threshold at the end of the ticker ("M6" of $QUAKEM6, "100K" of $FIRE100K), so a long ticker can still take the word
   const short = t.replace(/^NEXT/, "NXT"), tail = t.match(/[A-Z]?[0-9][A-Z0-9]*$/)?.[0] ?? "", out: { ticker: string; name: string }[] = [];
+  const add = (c: string, name: string) => { if (/^[A-Z0-9]{2,10}$/.test(c) && c !== t && !out.some((o) => o.ticker === c)) out.push({ ticker: c, name }); };
   for (const w of HAZARD_ALT_WORDS[kind]) {
     const name = withWord(gen.name, w.n);
-    for (const c of [`${w.t}${t}`, `${w.t}${short}`, `${t}${w.t}`, `${short}${w.t}`, `${w.t.slice(0, 4)}${short}`, ...(tail ? [`${w.t}${tail}`, `${w.t}${short.slice(0, 3)}${tail}`] : []), `${short.slice(0, 10 - w.t.length)}${w.t}`]) {
-      if (/^[A-Z0-9]{2,10}$/.test(c) && c !== t && !out.some((o) => o.ticker === c)) out.push({ ticker: c, name });
-    }
+    for (const c of [`${w.t}${t}`, `${w.t}${short}`, `${t}${w.t}`, `${short}${w.t}`, `${w.t.slice(0, 4)}${short}`, ...(tail ? [`${w.t}${tail}`, `${w.t}${short.slice(0, 3)}${tail}`] : []), `${short.slice(0, 10 - w.t.length)}${w.t}`]) add(c, name);
+  }
+  // HB-130 (hourly run 11): once every hazard word's name is held, a numbered form. The number is a WORD ("Quake Two", $QUAKETWOM6):
+  // the lookalike skeleton drops a 2, 6 or 9, so "Next Magnitude 6 Quake 2" reads as the held "Next Magnitude 6 Quake"
+  for (const [num, Num] of NUMBER_FORMS) for (const w of HAZARD_ALT_WORDS[kind]) {
+    const name = withWord(gen.name, `${w.n} ${Num}`);
+    for (const c of [...(tail ? [`${w.t}${num}${tail}`, `${w.t.slice(0, 4)}${num}${tail}`] : []), `${w.t}${num}`, `${w.t.slice(0, 4)}${num}${short.slice(0, 3)}`]) add(c, name);
   }
   return out;
 }

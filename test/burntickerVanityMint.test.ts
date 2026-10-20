@@ -265,7 +265,7 @@ describe("the search panel's words (owner: people must see it is working, not fr
     assert.match(src, /animate-spin/); assert.doesNotMatch(src, /\.gif/i);
     assert.match(src, /data-mint-ticker/); assert.match(src, /data-mint-tries=\{s\.tries\}/); assert.match(src, /data-mint-workers=\{s\.workers\}/);
     assert.doesNotMatch(src, /data-mint-skip|pool\.skip|MINT_SKIP|checkbox|localStorage|useBurnChoice|MintChoice/);
-    assert.match(src, /export function MintAddressBlock\(\{ pool \}[^)]*\) \{[\s\S]*<MintSearch pool=\{pool\} \/>[\s\S]*data-mint-note>\{MINT_ADDRESS_NOTE\}/);
+    assert.match(src, /export function MintAddressBlock\(\{ pool \}[^)]*\) \{[\s\S]*<MintSearch pool=\{pool\} \/>[\s\S]*data-mint-note>\{MINT_REVIEW_NOTE\}/);   // HS-58 (hourly run 14): the long form, said once
     assert.match(src, /new Worker\(new URL\("\.\/vanity\.worker\.ts", import\.meta\.url\), \{ type: "module" \}\)/);
     assert.match(src, /if \(s\.users === 0\) \{ s\.pool\.dispose\(\);/, "the workers stop when the last user goes away");
   });

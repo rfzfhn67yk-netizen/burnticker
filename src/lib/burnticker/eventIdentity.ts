@@ -1,4 +1,5 @@
 import { fitName } from "@/lib/burnticker/launchFields";
+import { TEAM_ALIASES } from "@/lib/burnticker/oracle/events";
 
 /**
  * A COIN'S NAME AND TICKER FROM THE EVENT, NOT THE LAST WORD (ChatGPT launch audit 5, L12, 2026-10-11: "Will LeBron James retire before
@@ -46,6 +47,38 @@ const tickerOf = (s: string, suffix: string) => { const base = s.toUpperCase().r
 export const PLURAL_NICKNAMES: ReadonlySet<string> = new Set(["red sox", "white sox", "heat", "thunder", "magic", "jazz", "avalanche", "wild", "kraken", "lightning", "mammoth", "dream", "sky", "sun", "fever", "lynx", "liberty", "mercury", "fire", "storm", "tempo"]);
 
 /**
+ * HB-149 (hourly run 13): whether a question's subject takes a plural verb. The HB-128 fix counted a subject plural only when it opened
+ * with "the", so "Will Democrats control the House?" read "Democrats controls the House". A subject is plural when its head noun ends in
+ * "s" and is not a known singular (Congress, Texas, Kansas, the United States, a surname such as Sanders), or when it names a party's
+ * members or a team ("Democrats", "the Republicans", "Mavericks", "Dallas Mavericks"). A name of more than one word ending in "s" with
+ * no team in it ("Bernie Sanders", "LeBron James") stays singular. `group` says the market's own group type is parties or teams: a head
+ * ending in "s" then counts as plural whatever its length ("Kansas City Chiefs"); a name with "Party" in it is still one party.
+ */
+const SINGULAR_S: ReadonlySet<string> = new Set(["congress", "texas", "kansas", "arkansas", "illinois", "paris", "athens", "wales", "news", "united states", "netherlands", "philippines", "bahamas", "states", "sanders", "williams", "adams", "jones", "james", "roberts", "edwards", "evans", "collins", "rogers", "reeves", "peters", "stevens", "phillips", "hughes", "simmons", "rivers", "wells", "mills", "myers", "powers", "burns", "banks", "hayes", "brooks", "fields", "lucas", "thomas", "nicholas", "marcus", "charles", "brussels", "los angeles", "las vegas", "dallas", "memphis", "minneapolis", "indianapolis"]);
+const SINGLE_AND: ReadonlySet<string> = new Set(["trinidad and tobago", "bosnia and herzegovina", "antigua and barbuda", "saint kitts and nevis", "st. kitts and nevis", "sao tome and principe", "saint vincent and the grenadines", "papua new guinea", "procter & gamble", "procter and gamble", "at&t", "ben & jerry's", "turks and caicos"]);
+const PLURAL_GROUPS: ReadonlySet<string> =new Set(["democrats", "republicans", "dems", "liberals", "conservatives", "progressives", "independents", "libertarians", "tories", "socialists", "greens", "voters"]);
+const TEAM_NICKNAMES_S: ReadonlySet<string> = new Set(TEAM_ALIASES.map((t) => t.nickname.toLowerCase().split(/\s+/).pop() ?? "").filter((n) => /s$/.test(n)));
+export function subjectIsPlural(subject: string, o: { group?: "party" | "team" } = {}): boolean {
+  const the = /^the\s+/i.test(subject);
+  const bare = subject.replace(/^the\s+/i, "").replace(/\s*\([A-Z]\)$/, "").trim();
+  const words = bare.split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  const lower = bare.toLowerCase(), lastRaw = words[words.length - 1].replace(/[^A-Za-z.]/g, ""), head = lastRaw.toLowerCase();
+  const lastTwo = words.slice(-2).join(" ").toLowerCase();
+  if (PLURAL_NICKNAMES.has(lower) || PLURAL_NICKNAMES.has(lastTwo)) return true;
+  // HB-166 L4 (hourly run 15): "Russia and Ukraine", "Trump and Putin": two subjects joined by "and" take the plural verb (a country
+  // named with "and" is one subject)
+  if (/\s(and|&)\s/i.test(bare) && !SINGLE_AND.has(lower)) return true;
+  if (/\bpart(y|ies)\b/i.test(bare)) return /\bparties\b/i.test(bare);
+  if (SINGULAR_S.has(lower) || (SINGULAR_S.has(head) && !TEAM_NICKNAMES_S.has(head))) return false;
+  if (/^[A-Z.]{2,5}$/.test(lastRaw)) return false;   // an acronym: the US, NATO, the GOP
+  if (!/s$/.test(head) || /(ss|us|is)$/.test(head)) return false;
+  if (the || o.group) return true;
+  if (TEAM_NICKNAMES_S.has(head) || PLURAL_GROUPS.has(head)) return true;
+  return words.length === 1;   // "Democrats", "Lakers"; a longer name ending in s is a person ("Bernie Sanders")
+}
+
+/**
  * HS-12 (continuous audit run 4): a work's title ("Dune: Part Three", "Toy Story 5") gives its FIRST word plus the sequel number as a digit
  * ($DUNE3, $TOY5), never the last word ($THREE). A title with a colon and no number gives its first word. Null otherwise.
  */
@@ -65,7 +98,7 @@ const NOUN_AFTER: ReadonlySet<string> = new Set(["by", "of", "the", "a", "an", "
 
 export interface EventIdentity { subject: string; verb: string | null; rest: string; phrase: string; name: string; ticker: string; confident: boolean }
 
-export function eventIdentity(question: string): EventIdentity {
+export function eventIdentity(question: string, { group }: { group?: "party" | "team" } = {}): EventIdentity {
   const raw = question.trim().replace(/\s*\(resolves once\)$/i, "").replace(/\?+$/, "").replace(/^will\s+/i, "").trim();
   const words = raw.split(/\s+/).filter(Boolean);
   let vi = -1;
@@ -78,8 +111,7 @@ export function eventIdentity(question: string): EventIdentity {
   }
   const subject = words.slice(0, vi).join(" "), verb = baseOf(words[vi])!, restWords = words.slice(vi + 1), rest = restWords.length ? ` ${restWords.join(" ")}` : "";
   const bare = subject.replace(/^the\s+/i, "").replace(/\s*\([A-Z]\)$/, "").trim();
-  const plural = /^the\s+/i.test(subject) && ((/s$/i.test(bare) && !/ss$/i.test(bare)) || PLURAL_NICKNAMES.has(bare.toLowerCase()));
-  const conj = plural ? verb : conjugate(verb);
+  const conj = subjectIsPlural(subject, { group }) ? verb : conjugate(verb);
   const phrase = `${subject} ${conj}${rest}`;
   const parts = bare.split(/\s+/);
   const alias = ALIAS[bare.toLowerCase()];
@@ -92,4 +124,32 @@ export function eventIdentity(question: string): EventIdentity {
   const suffix = SUFFIX[verb] ?? verb.toUpperCase().slice(0, 4);
   const confident = parts.length >= 1 && parts.length <= 6 && bare.length >= 2 && !/^(it|this|that|there|they)$/i.test(bare);
   return { subject, verb, rest, phrase, name, ticker: tickerOf(entityWord, suffix), confident };
+}
+
+/** Lowercase words that follow a name but are never the outcome verb ("Netanyahu out by…", "Bitcoin above…"). */
+const NOT_VERB: ReadonlySet<string> = new Set([...NOUN_AFTER, "out", "off", "over", "under", "into", "onto", "and", "or", "nor", "not", "than", "with", "without", "vs", "via", "per", "to", "up", "down", "still", "ever", "again", "also", "all", "both", "each", "any", "no", "yes", "as", "if", "when", "then", "there", "here", "more", "less", "most", "least", "above", "below", "near", "within", "during", "between", "against", "through", "among", "next", "this", "that", "these", "those", "who", "whose", "which"]);
+
+/**
+ * HB-128 (hourly run 11): a market QUESTION said as a statement ("Will the Democratic Party control the Senate…?" becomes "the Democratic
+ * Party controls the Senate…"). A known outcome verb goes through eventIdentity; a question whose verb eventIdentity does not know still
+ * conjugates (third person singular) when its subject is a run of capitalised words and the next word is a plain lowercase verb, unless
+ * the subject is plural ("the Democrats control"). The fallback runs only on a question that opened with "Will", so a title with no verb
+ * ("US recession in 2026") is never bent into one. Text that is not a question comes back without its "?" and "(resolves once)".
+ */
+export function statementOf(question: string, o: { group?: "party" | "team" } = {}): string {
+  const trimmed = question.trim().replace(/\s*\(resolves once\)$/i, "").replace(/\?+$/, "").trim();
+  const asked = /^will\s+/i.test(trimmed);
+  const raw = trimmed.replace(/^will\s+/i, "").trim();
+  const id = eventIdentity(raw, o);
+  if (id.verb) return id.phrase;
+  if (!asked) return raw;
+  const words = raw.split(/\s+/).filter(Boolean);
+  const start = /^the$/i.test(words[0] ?? "") ? 1 : 0;
+  let i = start;
+  while (i < words.length && /^\(?[A-Z0-9][\w'.&()-]*$/.test(words[i])) i++;
+  if (i === start || i >= words.length || i > 8) return raw;
+  const w = words[i];
+  if (!/^[a-z]{2,}$/.test(w) || NOT_VERB.has(w) || /(ed|ing|ly)$/.test(w) || (/s$/.test(w) && !/ss$/.test(w))) return raw;
+  const subject = words.slice(0, i).join(" ");
+  return [subject, subjectIsPlural(subject, o) ? w : conjugate(w), ...words.slice(i + 1)].join(" ");
 }

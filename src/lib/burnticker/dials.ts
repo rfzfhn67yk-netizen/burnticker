@@ -2,7 +2,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { LEAGUES, NEXT_MAX, PAIR_OUTCOMES, gameSeries, isPairOutcome, outcomeAllowed, parseEspnSeries, seasonYearAt, teamSeries, windowChoices, type EspnSeries, type Window, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
 import { WX_HIGH_MAX_F, WX_HIGH_MIN_F } from "@/lib/burnticker/wxBounds";
-import { INVERSE_CHOICE, KEEPER_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
+import { INVERSE_CHOICE, inverseRefusal, isOneShotSeries } from "@/lib/burnticker/inverse";
 
 /**
  * THE RULE DIALS (2026-10-10, the owner: "after we select a rule can we edit it? like the percentage burned?"). Every entry path — a
@@ -57,9 +57,10 @@ const fractionOf = (r: BurnRule): number => {
 const yearOf = (e: Extract<EspnSeries, { kind: "team" }>, c: DialCtx) => (e.window.kind === "season" || e.window.kind === "post" ? e.window.year : c.seasonYear ?? seasonYearAt(e.league, c.nowMs ?? Date.now()));
 
 // website-19: the one-shot presets (100 or 50 %) wherever the keeper drains a 100 % one-shot (rules.ts isOneShot: a market, a named launch,
-// a milestone, the flippening, and since QA pass 9 #3 a single game, which the keeper now drains after its result). The first snow keeps the 1–25 % bounds: the keeper does not drain it, so a 100 % share
-// would leave most of the pool to the end sink after one capped burn run.
-export const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e ? e.kind === "game" : (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? "")) || (r.oracle === "derby" && (r as { derby?: { flip?: boolean } }).derby?.flip === true) || (r.oracle === "derby" && (r as { derby?: { selector?: string; once?: boolean } }).derby?.selector === "high" && (r as { derby?: { once?: boolean } }).derby?.once === true) || (r.kind === "binary" && !!r.market); };
+// a milestone, the flippening, and since QA pass 9 #3 a single game, which the keeper now drains after its result). HB-147 (hourly run 13):
+// the first snow too (inverse.ts isOneShotSeries, the one list): the keeper drains it at 100% after its first snow (multiKeeper.ts
+// detectRuleEnd), so it is offered the one-shot shares like every other one-shot.
+export const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e ? e.kind === "game" : (r.oracle === "catalogue" && isOneShotSeries(r.series)) || (r.oracle === "derby" && (r as { derby?: { flip?: boolean } }).derby?.flip === true) || (r.oracle === "derby" && (r as { derby?: { selector?: string; once?: boolean } }).derby?.selector === "high" && (r as { derby?: { once?: boolean } }).derby?.once === true) || (r.kind === "binary" && !!r.market); };
 /** The set a rule can join: a team coin's league season (id <league>-<year>-<win|loss>, outcome <ABBR>.<ESPN id>), or the market's set. */
 export function leagueSetFor(r: BurnRule, c: DialCtx = {}): { id: string; outcome: string } | null {
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;

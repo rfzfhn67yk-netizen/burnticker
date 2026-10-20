@@ -7,7 +7,8 @@ import { deficitRuleSchedule, readKeeperFiles, type KeeperFiles } from "@/lib/bu
 import { hidesDevnet, publicEvents, publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
 import { upcomingFromKeeper, upcomingFromStatus, type UpcomingRow } from "@/lib/burnticker/upcoming";
-import { webReadPlatform } from "@/lib/burnticker/webReadCache";
+import { webReadCachedView, webReadPlatform } from "@/lib/burnticker/webReadCache";
+import { LIST_BUILD_BUDGETS, readCoinsBounded } from "@/lib/burnticker/boundedReads";
 
 /**
  * WHAT THE FEEDS READ (polish-1, 2026-10-12). The same rows as the home API (src/app/api/burnticker/home/route.ts): each registered
@@ -32,11 +33,14 @@ export async function collectFeedData(p: Platform, now = Date.now(), root = proc
     for (const t of rows) { listed.push({ ticker: t.ticker, mint: t.mint }); tickers.add(t.ticker); }
     // audit 2026-10-16 F-11: through the site's read cache (one batched read per 20 coins, webReadCache.ts) with the home's `lite` reads
     // (every field the activity and next-result rows use), a few coins at a time instead of one after another
-    const view = await webReadPlatform(p, rows).catch(() => p);
-    const reads = await settleLimited(rows.map((t) => () => tokenPageData(view, t, now, { lite: true })), FEED_READ_CONCURRENCY);
+    // HB-145 second half (2026-10-20): the batch and the coin reads are bounded like the home's (boundedReads.ts, the same `lite:` keys, so
+    // the feeds and the home share one read per coin and its last good copy); a coin whose read is late uses its last good read
+    const B = LIST_BUILD_BUDGETS;
+    const view = await Promise.race([webReadPlatform(p, rows).catch(() => webReadCachedView(p)), new Promise<Platform>((ok) => { const t = setTimeout(() => ok(webReadCachedView(p)), B.batchMs); (t as { unref?: () => void }).unref?.(); })]);
+    const reads = await readCoinsBounded(rows.map((t) => ({ key: `lite:${t.mint}`, read: () => tokenPageData(view, t, now, { lite: true }) })), { concurrency: FEED_READ_CONCURRENCY, deadlineMs: B.chainMs, coldDeadlineMs: B.chainColdMs, scope: p.registry });
     rows.forEach((t, i) => {
       const r = reads[i];
-      if (r.status === "rejected") { coins.push({ ticker: t.ticker, mint: t.mint, burns: 0, lastBurnAt: null, readOk: false, events: [] }); return; }
+      if (r.state === "failed") { coins.push({ ticker: t.ticker, mint: t.mint, burns: 0, lastBurnAt: null, readOk: false, events: [] }); return; }
       const d = r.value;
       coins.push({ ticker: t.ticker, mint: t.mint, burns: d.status.burned.count, lastBurnAt: d.status.burned.lastAt ?? null, cluster: d.status.cluster, readOk: true, events: eventsFromStatus(d.status, d.receipts, coinKey(t, shared)) });
       const row = upcomingFromStatus(d.status, d.receipts, coinKey(t, shared), t.mint);
@@ -55,14 +59,6 @@ export async function collectFeedData(p: Platform, now = Date.now(), root = proc
 
 /** How many coins a feed rebuild reads at once. */
 export const FEED_READ_CONCURRENCY = 6;
-/** Runs the tasks at most `n` at a time, settling each. */
-async function settleLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<PromiseSettledResult<T>[]> {
-  const out: PromiseSettledResult<T>[] = new Array(tasks.length);
-  let next = 0;
-  const worker = async () => { while (next < tasks.length) { const i = next++; try { out[i] = { status: "fulfilled", value: await tasks[i]() }; } catch (reason) { out[i] = { status: "rejected", reason }; } } };
-  await Promise.all(Array.from({ length: Math.min(n, tasks.length) }, worker));
-  return out;
-}
 
 /**
  * THE FEEDS' MEMO (2026-10-16 prelaunch audit F-11: /api/burnticker/feeds/receipts.rss took 7 to 12 s, every request reading every coin

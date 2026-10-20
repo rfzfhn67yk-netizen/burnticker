@@ -72,6 +72,18 @@ export const OPERATOR_COPY = {
 } as const;
 
 /**
+ * HB-154 (hourly run 14): the operator page's legal-entity sentence. The API sends `entity: null` with an `entityPending` sentence until
+ * an entity exists (trustpack/wellKnown.ts), and an older config may still send a TODO_ token: either way the pending sentence is shown,
+ * never the word "null" or the token.
+ */
+export function operatorEntitySentence(o: { entity?: string | null; entityPending?: string | null }): string {
+  const e = typeof o.entity === "string" ? o.entity.trim() : "";
+  const pending = (o.entityPending ?? "").trim() || PLACEHOLDER_SENTENCES.TODO_ENTITY;
+  if (!e || /^TODO_/.test(e) || e === "null" || e === "undefined") return pending;
+  return /[.!?]$/.test(e) ? e : `${e}.`;
+}
+
+/**
  * Each TODO_ placeholder the operator page lists, as a sentence (website-9: a reader never sees a token). The placeholders stay
  * TODO_ values in the config files so docs/burnticker/TODO-OWNER.md and its test can track them.
  */

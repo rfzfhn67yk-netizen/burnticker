@@ -19,7 +19,7 @@ import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HEL
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { freeRowLead } from "@/lib/burnticker/tickerSwap";
-import { fieldLinkText, nameFieldId } from "./fieldChecks";
+import { fieldLinkText, nameFieldId, tickerCheckingLine } from "./fieldChecks";
 import { PROVE_TICKER_LABEL } from "@/lib/burnticker/walletProof";
 import { launchButtonOff, type DraftHeldNotice } from "@/lib/burnticker/launchReviewSync";
 import { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX, reservedLineSaid } from "./pageCopy";
@@ -41,7 +41,7 @@ import { REVIEW_IMAGE_GENERATED, REVIEW_IMAGE_UPLOADED } from "@/lib/burnticker/
  * (docs/burnticker/ui-conventions.md § Presets, not dials). Pressing Launch is the acknowledgement: the line under the button says so.
  */
 
-export interface ReviewCoin { key: string; name: string; ticker: string; onName: (v: string) => void; onTicker: (v: string) => void; image: string; oneLiner: string; oracle: string; badge: string | null; /** website-25 (QA 11 H5): the wording rules on the name and the ticker, one sentence each (fieldChecks.ts), said under the field */ nameIssue?: string | null; tickerIssue?: string | null }
+export interface ReviewCoin { key: string; name: string; ticker: string; onName: (v: string) => void; onTicker: (v: string) => void; image: string; oneLiner: string; oracle: string; badge: string | null; /** HB-162 (b): a season team coin, whose ticker help gives the season-year example */ seasonTicker?: boolean; /** website-25 (QA 11 H5): the wording rules on the name and the ticker, one sentence each (fieldChecks.ts), said under the field */ nameIssue?: string | null; tickerIssue?: string | null }
 export interface Chip<T extends string | number> { value: T; label: string }
 export interface ReviewCardProps {
   coins: ReviewCoin[];
@@ -105,6 +105,8 @@ export interface ReviewCardProps {
   graduation?: string[] | null;
   /** website-19 (owner, 2026-10-12): the coins already holding a side's ticker, with free suggestions; a warning, never a refusal. */
   tickerChecks?: TickerCheck[] | null;
+  /** HS-55 (hourly run 13): the server's ticker check is in flight (the Name step says so under each ticker field) */
+  tickerChecking?: boolean;
   /** review of block M: asks the wallet to sign the review's tickers, so the creator's own unfinished launch counts as theirs */
   onProveTicker?: (() => void) | null;
   /** LA-4: tickers an unlaunched draft holds while the review cannot tell who asks (review.notices); said beside Launch, which stays on */
@@ -287,6 +289,19 @@ export function ReviewCard(p: ReviewCardProps) {
   // HB-86 and LA-4: the same notice on the Name step (beside the field) and on the Review step (beside Launch), one list for both
   const heldSide = (side: "A" | "B") => (p.draftHeld ?? []).some((n) => n.side === side);
   const draftHeldList = (p.draftHeld ?? []).length > 0 ?<div className="min-w-0 break-words rounded border border-amber-400/40 p-2 text-xs text-amber-200" role="status" data-draft-held>{(p.draftHeld ?? []).map((n) => <p key={n.side} data-draft-held-side={n.side} data-draft-held-expired={n.expired ? "" : undefined}>{many ? `Coin ${n.side}: ` : ""}{n.text}</p>)}{p.creator && proveButton}</div> : null;
+  // HS-52 widened (hourly run 11): on a two-coin Name step each coin's free-ticker row sits in that coin's own card, under its fields
+  // ("Free tickers for Coin A" printed below Coin B's fields); the review keeps the one list
+  const tickerCheckFor = (side: "A" | "B") => <>{(p.tickerChecks ?? []).filter((t) => t.side === side && ((t.reserved && (!reservedSaid(t.side) || t.suggestions.length > 0)) || (t.taken && (t.suggestions.length > 0 || !!p.onProveTicker)) || (!!t.lookalike && t.suggestions.length > 0))).map((t) => tickerCheckBox(t))}</>;
+  const tickerCheckBox = (t: NonNullable<typeof p.tickerChecks>[number]) => {
+        const coin = p.coins[t.side === "A" ? 0 : 1];
+        return (
+          <div key={t.side} className="min-w-0 break-words rounded border border-amber-400/40 p-2 text-xs text-amber-200" role="status" data-ticker-check={t.side}>
+            {t.reserved && !reservedSaid(t.side) && <p>{many ? `Coin ${t.side}: ` : ""}{RESERVED_TICKER_LINE}</p>}
+            {t.taken && !heldSide(t.side) && proveButton}
+            {t.suggestions.length > 0 && coin && <p className="mt-1 flex flex-wrap items-center gap-2" data-free-for={t.side}>{freeRowLead(t.side, t.ticker, many)} {t.suggestions.map((s) => <button key={s} type="button" data-decision="name" aria-label={`Use $${s} for Coin ${t.side}`} className="rounded border border-neutral-600 px-2 py-0.5 font-mono" onClick={() => coin.onTicker(s)}>${s}</button>)}</p>}
+          </div>
+        );
+  };
   const tickerCheckList = <>{(p.tickerChecks ?? []).filter((t) => (t.reserved && (!reservedSaid(t.side) || t.suggestions.length > 0)) || (t.taken && (t.suggestions.length > 0 || !!p.onProveTicker)) || (!!t.lookalike && t.suggestions.length > 0)).map((t) => {
         const coin = p.coins[t.side === "A" ? 0 : 1];
         return (
@@ -300,7 +315,8 @@ export function ReviewCard(p: ReviewCardProps) {
           </div>
         );
       })}</>;
-  const label = p.busy ? "Building…" : p.creator || p.blocked ? (many ? "Launch both" : "Launch") : "Connect wallet";
+  // HB-139 (hourly run 12): with no wallet the button says Connect wallet in every state, a summary being re-read included (it read "Launch")
+  const label = p.busy ? "Building…" : p.creator ? (many ? "Launch both" : "Launch") : "Connect wallet";
   const mode = p.mode ?? "full";
   const noteId = "bt-profile-a-note";
   const noteField = p.note && (noteOpen || mode === "name" ? (
@@ -323,13 +339,14 @@ export function ReviewCard(p: ReviewCardProps) {
               <div className="bt-preview-frame min-w-0 max-w-full overflow-hidden break-words"><CoinCard href={null} prelaunch c={{ ticker: c.ticker, name: c.name, imageUrl: c.image || null, oneLiner: c.oneLiner, oracle: c.oracle, status: "draft", phase: null, progressPct: null, raised: null, threshold: null, quote: "SOL", burns: 0, lastBurnAt: null, nextAt: null, launchedAt: null, badge: c.badge }} /></div>
               <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
                 <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={nId}>{who}Name</label><FieldHelp id="name" /><input id={nId} data-help="name" data-decision="name" aria-invalid={!!nErr} aria-describedby={nErr ? `${nId}-err` : undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" maxLength={NAME_INPUT_MAX} value={c.name} onChange={(e) => c.onName(e.target.value)} />{nErr && <span id={`${nId}-err`} className="mt-0.5 block text-red-400">{nErr}</span>}{!nErr && c.name.length >= NAME_INPUT_MAX && <span className="mt-0.5 block text-amber-300" role="status" data-name-max>{NAME_MAX_LINE}</span>}</div>
-                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={tId}>{who}Ticker</label><FieldHelp id="ticker" /><input id={tId} data-help="ticker" data-decision="name" aria-invalid={!!tErr} aria-describedby={[`${tId}-rule`, tErr ? `${tId}-err` : "", tNote ? `${tId}-note` : ""].filter(Boolean).join(" ")} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-sm uppercase" maxLength={TICKER_PASTE_MAX} value={c.ticker} onChange={(e) => { const n = tickerNormalised(e.target.value); setTickerNotes((x) => ({ ...x, [c.key]: n.note })); c.onTicker(n.value); }} /><span id={`${tId}-rule`} className="mt-0.5 block text-neutral-500">2 to 10 letters or digits.</span>{tErr && <span id={`${tId}-err`} className="mt-0.5 block text-red-400">{tErr}</span>}{tNote && <span id={`${tId}-note`} className="mt-0.5 block text-amber-300" role="status">{tNote}</span>}</div>
+                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={tId}>{who}Ticker</label><FieldHelp id={c.seasonTicker ? "ticker-season" : "ticker"} /><input id={tId} data-help="ticker" data-decision="name" aria-invalid={!!tErr} aria-describedby={[`${tId}-rule`, tErr ? `${tId}-err` : "", tNote ? `${tId}-note` : ""].filter(Boolean).join(" ")} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-sm uppercase" maxLength={TICKER_PASTE_MAX} value={c.ticker} onChange={(e) => { const n = tickerNormalised(e.target.value); setTickerNotes((x) => ({ ...x, [c.key]: n.note })); c.onTicker(n.value); }} /><span id={`${tId}-rule`} className="mt-0.5 block text-neutral-500">2 to 10 letters or digits.</span>{tErr && <span id={`${tId}-err`} className="mt-0.5 block text-red-400">{tErr}</span>}{tNote && <span id={`${tId}-note`} className="mt-0.5 block text-amber-300" role="status">{tNote}</span>}</div>
               </div>
+              {p.tickerChecking && !tErr && c.ticker.trim() && <p className="text-xs text-neutral-400" role="status" data-ticker-checking={c.key}>{tickerCheckingLine(c.ticker.trim())}</p>}
+              {tickerCheckFor(i === 0 ? "A" : "B")}
             </div>
           );
         })}
       </div>
-      {tickerCheckList}
       {draftHeldList}
       {p.image}
       {/* HS-49 (hourly run 9): the end choice decides where the pool's rest goes, so it sits above the collapsed optional group under its
@@ -395,7 +412,7 @@ export function ReviewCard(p: ReviewCardProps) {
             {mode === "full" && editing ? (
               <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
                 <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={nId}>{who}Name</label><FieldHelp id="name" /><input id={nId} data-help="name" data-decision="name" aria-invalid={!!nErr} aria-describedby={nErr ? `${nId}-err` : undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" maxLength={NAME_INPUT_MAX} value={c.name} onChange={(e) => c.onName(e.target.value)} />{nErr && <span id={`${nId}-err`} className="mt-0.5 block text-red-400">{nErr}</span>}{!nErr && c.name.length >= NAME_INPUT_MAX && <span className="mt-0.5 block text-amber-300" role="status" data-name-max>{NAME_MAX_LINE}</span>}</div>
-                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={tId}>{who}Ticker</label><FieldHelp id="ticker" /><input id={tId} data-help="ticker" data-decision="name" aria-invalid={!!tErr} aria-describedby={[tErr ? `${tId}-err` : "", tNote ? `${tId}-note` : ""].filter(Boolean).join(" ") || undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-sm uppercase" maxLength={TICKER_PASTE_MAX} value={c.ticker} onChange={(e) => { const n = tickerNormalised(e.target.value); setTickerNotes((x) => ({ ...x, [c.key]: n.note })); c.onTicker(n.value); }} />{tErr && <span id={`${tId}-err`} className="mt-0.5 block text-red-400">{tErr}</span>}{tNote && <span id={`${tId}-note`} className="mt-0.5 block text-amber-300" role="status">{tNote}</span>}</div>
+                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={tId}>{who}Ticker</label><FieldHelp id={c.seasonTicker ? "ticker-season" : "ticker"} /><input id={tId} data-help="ticker" data-decision="name" aria-invalid={!!tErr} aria-describedby={[tErr ? `${tId}-err` : "", tNote ? `${tId}-note` : ""].filter(Boolean).join(" ") || undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-sm uppercase" maxLength={TICKER_PASTE_MAX} value={c.ticker} onChange={(e) => { const n = tickerNormalised(e.target.value); setTickerNotes((x) => ({ ...x, [c.key]: n.note })); c.onTicker(n.value); }} />{tErr && <span id={`${tId}-err`} className="mt-0.5 block text-red-400">{tErr}</span>}{tNote && <span id={`${tId}-note`} className="mt-0.5 block text-amber-300" role="status">{tNote}</span>}</div>
               </div>
             ) : null}
           </div>
@@ -517,8 +534,9 @@ export function ReviewCard(p: ReviewCardProps) {
           <summary className="cursor-pointer text-neutral-300">What you confirm by launching</summary>
           <p className="mt-1 break-words text-neutral-400" data-lp-line>{RECEIPTS_LINE} {lpDisclosure(p.venue ?? (many ? "independent" : "single"))}</p>
           <p className="mt-1 break-words text-neutral-400" data-ack-line>{many ? ACK_LINE_PAIR : ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
-          {/* owner, 2026-10-14 night: the prepared mint keys, said wherever the launch says what the site controls */}
-          <p className="mt-1 break-words text-neutral-400" data-mint-disclosure>{MINT_KEY_DISCLOSURE}</p>
+          {/* owner, 2026-10-14 night: the prepared mint keys, said wherever the launch says what the site controls; HS-58 (hourly run 14):
+              left out here when the card carries the mint block above the button, which says it in its long form (said once) */}
+          {!p.mintSearch && <p className="mt-1 break-words text-neutral-400" data-mint-disclosure>{MINT_KEY_DISCLOSURE}</p>}
         </details>
       </div>
     </section>

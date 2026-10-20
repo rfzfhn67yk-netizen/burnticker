@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createLatest } from "@/lib/burnticker/latestOnly";
 import { DESCRIPTION_ONE_PARAGRAPH, IMAGE_CANCEL_LABEL, IMAGE_KEEP_GENERATED_LABEL, IMAGE_RIGHTS_REQUIRED, notSquareLine, oneParagraph, squareCrop } from "@/lib/burnticker/guidedLaunch";
 import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, descriptionRoom, descriptionRoomProblem, imageFromTransfer } from "@/lib/burnticker/creatorProfile";
-import { controlCharProblem } from "@/lib/burnticker/launchFields";
+import { controlCharProblem, markupProblem } from "@/lib/burnticker/launchFields";
 import { BADGE_UNAVAILABLE_LINE, IMAGE_READ_FAILED, IMAGE_SIZE_HELP, pickImage } from "@/lib/burnticker/profileImagePick";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
 import { IMAGE_RIGHTS_LINE } from "@/lib/burnticker/legalCopy";
@@ -164,13 +164,15 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
       {(() => {
         // website-22 (audit 10 item 8): one paragraph, said where it happened; invisible and text-direction characters said beside the field
         const descId = profileFieldId(side, "description"), descErr = controlCharProblem(value.description, "description") || (value.description.length > DESCRIPTION_MAX ? `The description can be at most ${DESCRIPTION_MAX} characters.` : "") || (generated ? descriptionRoomProblem(generated, value.description) : null) || fieldRuleSentence("description", value.description) || "";
+        // HS-52 widened (hourly run 11): an HTML tag is refused under the field too, beside a link sentence, never only in the summary below
+        const descErrAll = [descErr, markupProblem(value.description, "description")].filter((x, i, a) => x && a.indexOf(x) === i).join(" ");
         const max = generated ? Math.min(DESCRIPTION_MAX, descriptionRoom(generated)) : DESCRIPTION_MAX;
         return (<>
           <label className="block" htmlFor={descId}>Description. It follows the rule sentence on the coin&apos;s page, as one paragraph. Links go in the fields below it.</label>
-          <textarea id={descId} data-optional="profile" data-profile-field="description" className={input} rows={3} maxLength={DESCRIPTION_MAX} value={value.description} aria-invalid={!!descErr} onChange={(e) => { const p = oneParagraph(e.target.value); setParaNote(p.changed); set({ description: p.value }); }} aria-describedby={`${uid}-count${paraNote ? ` ${uid}-para` : ""}${descErr ? ` ${uid}-descerr` : ""}`} />
+          <textarea id={descId} data-optional="profile" data-profile-field="description" className={input} rows={3} maxLength={DESCRIPTION_MAX} value={value.description} aria-invalid={!!descErrAll} onChange={(e) => { const p = oneParagraph(e.target.value); setParaNote(p.changed); set({ description: p.value }); }} aria-describedby={`${uid}-count${paraNote ? ` ${uid}-para` : ""}${descErrAll ? ` ${uid}-descerr` : ""}`} />
           <p id={`${uid}-count`}>{value.description.length} of {max} characters.</p>
           {paraNote && <p id={`${uid}-para`} className="text-amber-300" role="status" data-one-paragraph>{DESCRIPTION_ONE_PARAGRAPH}</p>}
-          {descErr && <p id={`${uid}-descerr`} className="text-red-400" data-field-error="description">{descErr}</p>}
+          {descErrAll && <p id={`${uid}-descerr`} className="text-red-400" data-field-error="description">{descErrAll}</p>}
         </>);
       })()}
       <div className="grid min-w-0 gap-2 sm:grid-cols-3">

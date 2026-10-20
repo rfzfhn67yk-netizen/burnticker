@@ -76,7 +76,7 @@ const sentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUp
  * The creator views' next fields from a coin's status JSON (the producer's `rules.oneShot` and `next`) and its receipts: the next result
  * and its words, and the next source check under its own label (dropped for a decided or voided one-shot). Pure.
  */
-export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & { market?: { phase?: string | null } | null; ticker?: string } & DecidedPairStatus, receipts: readonly (ResultReceipt & { pairRole?: string | null })[], now: number, live: { lastFetchAt: number | null; nextFetchAt: number | null } | null = null): Pick<CreatorCoinView, "nextAt" | "nextLine" | "nextLabel" | "nextCheckAt" | "nextCheckLine" | "result"> {
+export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & { market?: { phase?: string | null } | null; ticker?: string } & DecidedPairStatus, receipts: readonly (ResultReceipt & { pairRole?: string | null })[], now: number, live: { lastFetchAt: number | null; nextFetchAt: number | null; /** HB-132: the last successful read and the failures since it (registry feed_state) */ lastOkAt?: number | null; failures?: number } | null = null): Pick<CreatorCoinView, "nextAt" | "nextLine" | "nextLabel" | "nextCheckAt" | "nextCheckLine" | "result"> {
   const oneShot = !!s.rules.oneShot;
   // the producer's fields when present (tokenPage.ts); recomputed the same way for an older status JSON
   const t = s.next.result !== undefined ? { result: s.next.result, nextResultAt: s.next.nextResultAt ?? null, nextSourceCheckAt: s.next.nextSourceCheckAt ?? s.next.nextCheckAt ?? null } : nextTimes({ oneShot, receipts, nextCloseTime: s.next.nextCloseTime, nextCheckAt: s.next.nextCheckAt });
@@ -86,12 +86,16 @@ export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & {
   const liveNext = live?.nextFetchAt && Number.isFinite(live.nextFetchAt) ? new Date(live.nextFetchAt).toISOString() : null;
   const bodyNext = t.nextSourceCheckAt;
   const nextCheckAt = settled ? null : liveNext && (!bodyNext || Date.parse(liveNext) > Date.parse(bodyNext)) ? liveNext : bodyNext;
-  const lastCheckAt = live?.lastFetchAt ?? null;
+  // HB-132 (hourly run 11): "checked" is the last GOOD read; an attempt after it that failed is said on its own. A caller with only the
+  // attempt time (no lastOkAt) keeps HB-98's wording
+  const okKnown = !!live && live.lastOkAt !== undefined;
+  const lastCheckAt = okKnown ? live!.lastOkAt ?? null : live?.lastFetchAt ?? null;
+  const failedAt = okKnown && live!.lastFetchAt !== null && (live!.failures ?? 1) > 0 && (live!.lastOkAt === null || live!.lastOkAt === undefined || live!.lastFetchAt > live!.lastOkAt) ? live!.lastFetchAt : null;
   return {
     nextAt: t.nextResultAt, result: t.result, nextLabel: settled ? CREATOR_PAGE.labels.result : CREATOR_PAGE.labels.next,
     // HB-80 / HS-27 (hourly run 5): a decided pair coin says won or lost in the one shared line, never "waiting" on the losing side
     nextLine: (() => { const dp = oneShot && t.result === "decided" && s.ticker ? decidedPairOf(s, receipts.map((r) => ({ status: r.status, settledAt: String(r.settledAt ?? ""), kind: r.kind ?? null, pairRole: r.pairRole ?? null }))) : null; return dp ? decidedPairLine(s.ticker!, dp) : creatorNextLine({ oneShot, receipts, graduated: s.market?.phase === "graduated", nextAt: t.nextResultAt, result: t.result }, now); })(),
-    nextCheckAt, nextCheckLine: nextCheckAt && nextCheckAt !== t.nextResultAt ? checkLine(nextCheckAt, now, lastCheckAt) : null,   // HB-98: an instant, with a grace
+    nextCheckAt, nextCheckLine: nextCheckAt && nextCheckAt !== t.nextResultAt ? checkLine(nextCheckAt, now, lastCheckAt, failedAt) : null,   // HB-98: an instant, with a grace
   };
 }
 
@@ -136,8 +140,8 @@ function ruleLine(c: Ctx, t: TokenRow, title: string | null): string {
 export type CoinDetail = (p: Platform, t: TokenRow, now: number) => Promise<{ status: TokenStatusJson; receipts: readonly (ResultReceipt & { burned?: string | null })[] }>;
 
 /** HB-98 reopened: the keeper's last and next read of this coin's source, read from the registry at request time (null when unreadable). */
-function liveFeed(c: Ctx, t: TokenRow): { lastFetchAt: number | null; nextFetchAt: number | null } | null {
-  try { const f = c.plat.registry.feedState(t.selectorKey); return { lastFetchAt: f.lastFetchAt, nextFetchAt: f.nextFetchAt }; } catch { return null; }
+function liveFeed(c: Ctx, t: TokenRow): { lastFetchAt: number | null; nextFetchAt: number | null; lastOkAt: number | null; failures: number } | null {
+  try { const f = c.plat.registry.feedState(t.selectorKey); return { lastFetchAt: f.lastFetchAt, nextFetchAt: f.nextFetchAt, lastOkAt: f.lastOkAt, failures: f.failures }; } catch { return null; }
 }
 function viewOf(c: Ctx, t: TokenRow, d: Awaited<ReturnType<CoinDetail>>): CreatorCoinView {
   const s = d.status, base = baseOf(c, t);

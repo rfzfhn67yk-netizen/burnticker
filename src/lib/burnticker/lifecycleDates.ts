@@ -143,6 +143,9 @@ async function readGraduationAndRegistration(rpc: Rpc, i: LifecycleInput, launch
     for (;;) {
       const page = await rpc.call<unknown>("getSignaturesForAddress", [i.curvePool, { limit: LIFECYCLE_LIMITS.signaturesPerPage, commitment: "confirmed", ...(before ? { before } : {}) }]);
       if (!Array.isArray(page)) return { graduated: un("The RPC's signature list for the curve pool was not a list."), registered: registered ?? un("The RPC's signature list for the curve pool was not a list.") };
+      // HB-145 second half: the walk stays one transaction at a time on purpose. It stops at the migration (most walks fetch one or two
+      // transactions), so reading ahead would spend reads past that point on every walk, and each read waits on the same rate budget
+      // whether it runs alone or beside others. The builds no longer wait for a walk (boundedReads.ts); it fills the cache behind them.
       for (const s of page as unknown[]) {
         if (!isObj(s) || typeof s.signature !== "string") return { graduated: un("The RPC's signature list held an entry without a signature."), registered: registered ?? un("The RPC's signature list held an entry without a signature.") };
         scanned++; before = s.signature;
@@ -177,7 +180,7 @@ function limitHit(registered: DateRead | null): { graduated: DateRead; registere
 
 const cache = new Map<string, { at: number; v: LifecycleDates }>();
 /** For tests. */
-export function clearLifecycleCache(): void { cache.clear(); }
+export function clearLifecycleCache(): void { cache.clear(); inflight.clear(); }
 const ttlOf = (v: LifecycleDates) => {
   const s = [v.created, v.graduated, v.registered].map((d) => d.state);
   return s.every((x) => x === "read") ? LIFECYCLE_CACHE_MS.complete : s.includes("unavailable") ? LIFECYCLE_CACHE_MS.failed : LIFECYCLE_CACHE_MS.partial;
@@ -188,11 +191,18 @@ export async function readLifecycleDates(rpc: Rpc, i: LifecycleInput, now = Date
   const ck = [i.network, i.mint, i.launchTx ?? "", i.curvePool ?? "", i.phase ?? "", String(i.poolRegistered ?? "")].join(":");
   const hit = cache.get(ck);
   if (hit && now - hit.at < ttlOf(hit.v)) return hit.v;
+  // HB-145 second half: one walk per coin at a time; a second caller (the next build, the coin page) joins the walk in flight
+  const running = inflight.get(ck);
+  if (running) return running;
   const launchLab = launchLabProgramFor(i.network)?.toBase58() ?? "";
   const burnProgram = i.burnProgram ?? PROGRAM_IDS[i.network].burn_receipts;
-  const created = await readCreated(rpc, i, launchLab, burnProgram);
-  const later = await readGraduationAndRegistration(rpc, i, launchLab, burnProgram);
-  const v: LifecycleDates = { created, ...later, readAt: new Date(now).toISOString() };
-  cache.set(ck, { at: now, v });
-  return v;
+  // the create read and the walk do not depend on each other: they run together
+  const p = Promise.all([readCreated(rpc, i, launchLab, burnProgram), readGraduationAndRegistration(rpc, i, launchLab, burnProgram)]).then(([created, later]) => {
+    const v: LifecycleDates = { created, ...later, readAt: new Date(now).toISOString() };
+    cache.set(ck, { at: now, v });
+    return v;
+  }).finally(() => { if (inflight.get(ck) === p) inflight.delete(ck); });
+  inflight.set(ck, p);
+  return p;
 }
+const inflight = new Map<string, Promise<LifecycleDates>>();

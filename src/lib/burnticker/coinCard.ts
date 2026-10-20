@@ -3,6 +3,7 @@ import { TEAM_ALIASES, type TeamAlias } from "@/lib/burnticker/oracle/events";
 import { INCINERATOR_WORDS, describeEndSink, describeRule, sinkTickerOf } from "@/lib/burnticker/describe";
 import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
 import { highText } from "@/lib/burnticker/derby/high";
+import { FLIP_REST_LINE } from "@/lib/burnticker/derby/spec";
 import { parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 
 /**
@@ -32,6 +33,9 @@ export function oneShotAllLiner(rule: BurnRule, event: string, endDate: string |
   // prelaunch audit 2026-10-16 (M11): a market title is a question ("Will … in 2026?"); "burns everything if Will … 2026?. If not" read
   // as broken. A question is quoted and settled: `burns everything if "Will … 2026?" settles YES. If not, …`
   if (/\?\s*$/.test(event)) event = `"${event.trim()}" settles ${rule.binary?.onYes ? "YES" : "NO"}`;
+  // HB-78 reopened (hourly run 15): a flippening side is a linked pair whatever the rule in hand carries (the Name step's cards and the
+  // review's trigger row read the side's rule before the bundle adds its pair), so its end is the pair's one end, FLIP_REST_LINE
+  if (rule.oracle === "derby" && rule.derby?.selector === "coinvs" && rule.derby.flip) return `burns everything if ${event}. ${FLIP_REST_LINE}`;
   if (sink === "incinerator") return `burns everything if ${event}. If not, the SOL left is sent to ${INCINERATOR_WORDS} after ${endDate ?? "it settles"}`;
   if (sink) return `burns everything if ${event}. If not, whatever is left burns ${sink === "pair-winner" ? "the winning coin, or $DEFICIT if there isn't one" : sink === "mint" ? `${sinkTickerOf(rule)}, or $DEFICIT if ${sinkTickerOf(rule)} is not live then,` : "$DEFICIT"} after ${endDate ?? "it settles"}`;
   return `burns everything if ${event}${weeks ? `. If not, the pool burns down over ${weeks} after ${endDate ?? "it settles"}` : ""}`;
@@ -103,7 +107,10 @@ export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, 
   // HB-67 (hourly run 6): the next-earthquake title has no noun ("magnitude 6 or more … feed"); say the earthquake, as the rule sentence does
   const quake = rule.oracle === "catalogue" ? /^the next reviewed magnitude (\d+(?:\.\d+)?) or more (.+)$/i.exec(title) : null;
   if (quake) return `burns once, on the next reviewed earthquake of magnitude ${quake[1]} or more ${quake[2]}`;
-  if (rule.oracle === "catalogue") return `burns on the ${(title || rule.series || "source").replace(/^the\s+/i, "")} feed`;
+  // HB-136 (hourly run 12): with no venue title (the sinks API, the end-sink picker) a catalogue rule says its rule sentence, never its
+  // series id ("burns on the usgs.quakenext:6 feed")
+  if (rule.oracle === "catalogue" && !title && rule.series) { try { const l = describeRule(rule, { ticker: "COIN" }).oneLiner; if (l && !/this coin's source/.test(l) && !l.includes(rule.series) && !/[a-z0-9]\.[a-z0-9_.-]+:/i.test(l)) return l; } catch { /* the generic line */ } }
+  if (rule.oracle === "catalogue") return `burns on the ${(title || (rule.series && !/:/.test(rule.series) ? rule.series : "") || "source").replace(/^the\s+/i, "")} feed`;
   // Burn Derby (2026-10-10): the input is another coin's (or asset's) move — named as the rule's input, never this coin's.
   if (rule.oracle === "derby" && rule.derby) {
     const d = rule.derby, every = (w: string) => (w === "weekly" ? "week" : "day");

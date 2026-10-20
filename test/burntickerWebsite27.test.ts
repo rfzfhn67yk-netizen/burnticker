@@ -240,7 +240,7 @@ describe("WIRING-AUDIT12 P1-2: the prepared rules, checked in the browser before
 
 describe("WIRING-AUDIT12 items 4, 5, 8, 10, 11, 13, 15, 16 and the two other pages", () => {
   test("4: the before-graduation note and the pair diagram follow the pair's shape", () => {
-    assert.match(page, /beforeGraduationLine\(dueIso \? shortDate\(dueIso\) : eventInfo\?\.resolves \?\? null, rule, endLink\)/);
+    assert.match(page, /beforeGraduationLine\(dueIso \? shortDate\(dueIso\) : eventInfo\?\.resolves \?\? null, rule, endLink, partyRace\)/);   // HB-128: party words
     assert.match(page, /const endLink = !pairOn \? null : elPick \? "candidates" as const : settledPick\?\.shape === "game" \? "game" as const : meetingsOn \|\| !ruleB \? "pair" as const : null;/);
     assert.match(page, /pairDiagramText=\{two \|\| \(pairOn && !ruleB\) \? pairDiagramLabel\(rule, venue !== "independent"\) : null\}/);
     assert.match(tile, /pairDiagramText=\{pairDiagramLabel\(model\.rule, true\)\}/);

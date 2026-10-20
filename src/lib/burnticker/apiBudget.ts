@@ -263,9 +263,18 @@ export interface SqlLike { prepare(sql: string): { run(...a: never[]): unknown; 
  * The store over a `status (key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER)` table — the registry's and the ledger's. The add
  * is one atomic UPSERT, so two processes adding to the same key never lose a count.
  */
+/**
+ * HB-145 (2026-10-20): the time this process has spent in the status-table store's synchronous statements, in ms. The web's builds print
+ * the share spent during each build (buildStages.ts "budget store"): the store writes on the event loop, and a registry write lock held by
+ * another process makes each write wait up to the connection's busy_timeout.
+ */
+let storeSyncMs = 0;
+export const budgetStoreSyncMs = (): number => storeSyncMs;
+const timed = <T>(f: () => T): T => { const t0 = performance.now(); try { return f(); } finally { storeSyncMs += performance.now() - t0; } };
+
 export function statusTableStore(db: SqlLike): BudgetStore {
-  const run = (sql: string, ...a: unknown[]) => (db.prepare(sql).run as (...x: unknown[]) => unknown)(...a);
-  const get = (sql: string, ...a: unknown[]) => (db.prepare(sql).get as (...x: unknown[]) => unknown)(...a) as { value?: string } | undefined;
+  const run = (sql: string, ...a: unknown[]) => timed(() => (db.prepare(sql).run as (...x: unknown[]) => unknown)(...a));
+  const get = (sql: string, ...a: unknown[]) => timed(() => (db.prepare(sql).get as (...x: unknown[]) => unknown)(...a)) as { value?: string } | undefined;
   return {
     add(key, day, delta, now) {
       run(`INSERT INTO status (key, value, updated_at) VALUES (?, json_object('day', ?, 'used', ?), ?)
@@ -753,9 +762,15 @@ export function budgetedFetch<F extends AnyFetch>(inner: F, source?: string | "r
  * publicRpcFor(cluster)): while the keyed plan's day budget is spent, reads go there instead of failing. `lane` (C2): the site's
  * launch verifier passes "confirm".
  */
-export function budgetedRpcConfig<const C extends object>(base: C, o: { fallbackUrl?: FallbackUrl; lane?: BudgetLane } = {}): C & { fetch: typeof fetch } {
-  return { ...base, fetch: budgetedFetch(((i: Parameters<typeof fetch>[0], n?: Parameters<typeof fetch>[1]) => fetch(i, n)) as typeof fetch, "rpc", o) };
+export function budgetedRpcConfig<const C extends object>(base: C, o: { fallbackUrl?: FallbackUrl; lane?: BudgetLane; timeoutMs?: number } = {}): C & { fetch: typeof fetch } {
+  // HB-145 second half (2026-10-20): `timeoutMs` (the web's read-only connections) ends a request the RPC never answers; @solana/web3.js
+  // sets no timeout of its own, so one hung read held its build until the two-minute build timeout. A caller's own signal is kept.
+  const t = o.timeoutMs;
+  const inner = ((i: Parameters<typeof fetch>[0], n?: Parameters<typeof fetch>[1]) => fetch(i, t && !n?.signal ? { ...n, signal: AbortSignal.timeout(t) } : n)) as typeof fetch;
+  return { ...base, fetch: budgetedFetch(inner, "rpc", { fallbackUrl: o.fallbackUrl, lane: o.lane }) };
 }
+/** HB-145 second half: the web's read-only RPC connections give up on a request after this long (budgetedRpcConfig `timeoutMs`). */
+export const WEB_RPC_READ_TIMEOUT_MS = 10_000;
 
 /**
  * The hold fallback is used only when its genesis is the KEYED RPC's genesis (2026-10-15 review item 1: a fallback named for the env's

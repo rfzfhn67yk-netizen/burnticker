@@ -165,7 +165,7 @@ describe("the route's freshness fields and the page's dated snapshot (coinFreshn
     assert.match(page, /document\.removeEventListener\("visibilitychange", onVisible\)/);
     assert.match(page, /if \(have && \(r\.status === 404 \|\| r\.status === 300\)\) return;/);
     const route = fs.readFileSync("src/app/api/burnticker/tokens/[ticker]/route.ts", "utf8");
-    assert.match(route, /maxStaleMs: COIN_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS/, "the coin route opts in to the build bound");
+    assert.match(fs.readFileSync("src/lib/burnticker/coinAnswerMemo.ts", "utf8"), /maxStaleMs: COIN_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS/, "the coin memo (shared with the pair route, HB-35) opts in to the build bound");
     assert.match(route, /\{ \.\.\.got\.value, \.\.\.fresh \}/);
   });
 

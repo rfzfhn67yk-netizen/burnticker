@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { platform, tokenPageData } from "@/lib/burnticker/server";
-import { buildPlatformIndex } from "@/lib/burnticker/tokenPage";
+import { buildPlatformIndex, type TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { auditForIndex, homeData, type HomeCoin } from "@/lib/burnticker/home";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import { readAudit } from "@/lib/burnticker/trust";
@@ -16,15 +16,18 @@ import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { coinKey, sharedTickers } from "@/lib/burnticker/coinKey";
 import { isTestCoin, testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
-import { chainRows, homeMemoState, memoWindowMs, webReadPlatform } from "@/lib/burnticker/webReadCache";
+import { chainRows, homeMemoState, memoWindowMs, webReadCachedView, webReadPlatform } from "@/lib/burnticker/webReadCache";
+import { stageClock, type StageClock } from "@/lib/burnticker/buildStages";
+import { LIST_BUILD_BUDGETS, earlierReadsNote, readAgoText, readCoinsBounded } from "@/lib/burnticker/boundedReads";
 import { PUBLIC_READ_CORS } from "@/lib/burnticker/api/http";
 import { SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
+import { isVisitorRequest, memoRefresher } from "@/lib/burnticker/memoRefresher";
 
 export const dynamic = "force-dynamic";
 
 /**
  * The last answer is served at once and refreshed in the background once it is older than its memo window (webReadCache.ts memoWindowMs; stale while revalidate,
- * one refresh in flight at a time). A cold process waits up to HOME_COLD_WAIT_MS for the first build, then answers 503 with
+ * one refresh in flight at a time; HB-145: a timer rebuilds it too, and no request waits while a copy exists). A cold process waits up to HOME_COLD_WAIT_MS for the first build, then answers 503 with
  * retry-after so the page tries again instead of sitting behind the proxy's 20 s limit. The deploy warms it with a probe.
  */
 const HOME_COLD_WAIT_MS = 15_000;
@@ -48,14 +51,13 @@ function refreshHome(): Promise<void> {
   return homeInFlight;
 }
 
-/** Runs the tasks at most `n` at a time, in order, settling each (a slow coin never blocks the others beyond its own slot). */
-async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<PromiseSettledResult<T>[]> {
-  const out: PromiseSettledResult<T>[] = new Array(tasks.length);
-  let next = 0;
-  const worker = async () => { while (next < tasks.length) { const i = next++; try { out[i] = { status: "fulfilled", value: await tasks[i]() }; } catch (reason) { out[i] = { status: "rejected", reason }; } } };
-  await Promise.all(Array.from({ length: Math.min(n, tasks.length) }, worker));
-  return out;
-}
+// HB-145 (2026-10-20): the memo is rebuilt by a timer behind the requests (memoRefresher.ts); a request never waits for a rebuild while
+// there is a copy to serve, only for the very first build after a start
+const homeRefresher = memoRefresher({ refresh: refreshHome, ageMs: () => (homeMemo ? Date.now() - homeMemo.at : null), freshMs: () => homeMemo?.memoMs ?? 15_000 });
+
+// HB-145 second half (2026-10-20): the last good one-line status and rehearsal curve, used when their read runs past its stage budget
+let lastStatus: unknown = null;
+let lastRehearsal: RehearsalCurve = null;
 
 /**
  * The home page's featured cards, activity line, platform strip and one-line status (src/lib/burnticker/home.ts), for the app's home and
@@ -65,11 +67,14 @@ async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<Pr
  * and the $DEFICIT queued-units counter from its keeper's published files (data/burnkeeper-site, or BURNKEEPER_PUBLISH_DIR).
  * Every answer carries the public-read CORS header (audit 2026-10-15 F5): the $DEFICIT shell on its own host reads `launch` from here.
  */
-export async function GET() {
+export async function GET(req: Request) {
+  // HB-163: the start-up warm call (x-burnticker-warm: 1) is not a visitor, so it starts no timer
+  homeRefresher.touch(isVisitorRequest(req));
   if (homeMemo) {
+    // HB-145: past the window, a rebuild starts behind this answer; the answer never waits for it (the last copy is served, and a copy past
+    // its maximum age says so below: no-store and its age)
     const state = homeMemoState(Date.now() - homeMemo.at, homeMemo.memoMs);
-    if (state === "stale") await Promise.race([refreshHome(), new Promise<void>((r) => setTimeout(r, HOME_COLD_WAIT_MS))]);
-    else if (state === "refresh") void refreshHome();
+    if (state !== "hit") void refreshHome();
     const m = homeMemo as { at: number; body: unknown; memoMs: number };
     const age = Date.now() - m.at;
     // HB-99 residue: an answer still too old after the wait says its real age and is never cached under the 10 s header
@@ -82,17 +87,25 @@ export async function GET() {
   return NextResponse.json({ loading: true, error: "the coin list is being read; try again in a few seconds", code: "home-loading", retryAfterSec: 5 }, { status: 503, headers: { ...PUBLIC_READ_CORS, "cache-control": "no-store", "retry-after": "5" } });
 }
 
+/**
+ * HB-145 second half (2026-10-20): the build is timed stage by stage (buildStages.ts) and the line names the stage a slow build waited on:
+ * "[burnticker/home] built in 17208 ms, 26 coins: registry 12, batch 410, chain 6000 (over its 6000 ms budget), …; cpu 140 ms, loop max
+ * 22 ms, budget store 3 ms; 2 coins from an earlier read (…)". The chain stage reads every coin under one deadline (boundedReads.ts): a
+ * coin whose read is late is served from its last good read, marked with that read's time.
+ */
 async function buildHome(): Promise<{ body: unknown; memoMs: number }> {
-  const started = Date.now();
-  const { body, n, chainCoins } = await buildHomeBody();
-  console.info(`[burnticker/home] built in ${Date.now() - started} ms, ${n} coins`);
+  const clock = stageClock();
+  const { body, n, chainCoins } = await buildHomeBody(clock);
+  console.info(clock.line("[burnticker/home]", `${n} coins`));
   return { body, memoMs: memoWindowMs(chainCoins) };
 }
 
-async function buildHomeBody(): Promise<{ body: unknown; n: number; chainCoins: number }> {
+async function buildHomeBody(clock: StageClock): Promise<{ body: unknown; n: number; chainCoins: number }> {
+  const B = LIST_BUILD_BUDGETS;
+  for (const [k, v] of [["registry", B.registryMs], ["shape", B.shapeMs], ["chain", B.chainMs]] as const) clock.budget(k, v);
   const p = platform();
   const now = Date.now();
-  const statuses = [];
+  const statuses: TokenStatusJson[] = [];
   const upcoming: UpcomingRow[] = [];
   // website-15 (code review 6, P2 2): a coin whose page fails is named in `omitted`, and an unread registry is `registered: null`
   const omitted: UpcomingOmitted[] = [];
@@ -102,10 +115,10 @@ async function buildHomeBody(): Promise<{ body: unknown; n: number; chainCoins: 
   // website-17 wiring item 3: the earned featured slots, from each coin's own receipts, creation time and readiness (featuredSlots.ts)
   const slotInputs: FeaturedInput[] = [];
   // owner 2026-10-14: test coins (testCoins.ts) are left off the home: no card, no activity row, no next-result row
-  const tests = testCoinKeys(process.cwd(), p.registry);
+  const tests = clock.run("registry", () => testCoinKeys(process.cwd(), p.registry));
   try {
     // owner decision 2026-10-12: a mainnet host lists no registry row on the devnet cluster (devnetHide.ts)
-    const tokens = withoutTestCoins(publicRegistryRows(p.registry.tokens(), p.cluster), tests);
+    const tokens = clock.run("registry", () => withoutTestCoins(publicRegistryRows(p.registry.tokens(), p.cluster), tests));
     registered = tokens.length;
     // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
     const shared = sharedTickers(tokens);
@@ -116,34 +129,39 @@ async function buildHomeBody(): Promise<{ body: unknown; n: number; chainCoins: 
     // coins read in one wave (an estimated 4 s on Helius) instead of two
     // M7: drafts and expired drafts are built from the registry alone (server.ts); the rest read through the batch and the read cache
     chainCoins = chainRows(tokens).length;
-    const view = await webReadPlatform(p, tokens);
-    const reads = await allLimited(tokens.map((t) => () => tokenPageData(view, t, now, { lite: true })), 6);
-    for (const [i, t] of tokens.entries()) {
-      const key = coinKey(t, shared);
-      try {
-        const r = reads[i];
-        if (r.status === "rejected") throw r.reason;
-        const d = r.value;
-        statuses.push(d.status);
-        const row = homeRowOf(d.status, d.receipts, key, t.mint);
-        coins.push(row.coin);
-        slotInputs.push(row.slot);
-        if (row.upcoming) upcoming.push(row.upcoming);
-      } catch (e) {
-        console.error(`[burnticker/home] ${t.ticker}: the coin's page could not be read:`, e);
-        coins.push({ ticker: t.ticker, mint: t.mint, burns: 0, lastBurnAt: null, readOk: false });
-        omitted.push({ ticker: t.ticker, reason: "This site could not read the coin's page." });
+    // HB-145 second half: the batch has a budget; past it the coin reads go on through the cache while the batch lands behind them
+    const view = await clock.bounded("batch", B.batchMs, () => webReadPlatform(p, tokens), () => webReadCachedView(p), { onError: () => webReadCachedView(p) });
+    // six at a time, under one deadline (boundedReads.ts): a coin whose read is late is served from its last good read, marked with its age
+    const reads = await clock.run("chain", () => readCoinsBounded(tokens.map((t) => ({ key: `lite:${t.mint}`, read: () => tokenPageData(view, t, now, { lite: true }) })), { concurrency: 6, deadlineMs: B.chainMs, coldDeadlineMs: B.chainColdMs, scope: p.registry }));    clock.note(earlierReadsNote(tokens.map((t, i) => ({ ticker: t.ticker, r: reads[i] })), Date.now()));
+    clock.run("shape", () => {
+      for (const [i, t] of tokens.entries()) {
+        const key = coinKey(t, shared);
+        try {
+          const r = reads[i];
+          if (r.state === "failed") throw r.error;
+          const d = r.value;
+          statuses.push(d.status);
+          const row = homeRowOf(d.status, d.receipts, key, t.mint);
+          // a coin served from an earlier read says when it was read ("read 3 minutes ago"); a fresh one carries no mark
+          coins!.push(r.state === "earlier" ? { ...row.coin, readAt: new Date(r.at).toISOString(), readNote: readAgoText(r.at, now) } : row.coin);
+          slotInputs.push(row.slot);
+          if (row.upcoming) upcoming.push(row.upcoming);
+        } catch (e) {
+          console.error(`[burnticker/home] ${t.ticker}: the coin's page could not be read:`, e);
+          coins!.push({ ticker: t.ticker, mint: t.mint, burns: 0, lastBurnAt: null, readOk: false });
+          omitted.push({ ticker: t.ticker, reason: "This site could not read the coin's page." });
+        }
       }
-    }
+    });
   } catch (e) { console.error("[burnticker/home] the coin registry could not be read:", e); coins = null; registered = null; }
   let audit = null;
-  try { const a = readAudit(p.publishDir); audit = auditForIndex(a); } catch { audit = null; }
-  const index = coins === null ? null : buildPlatformIndex(statuses, now, audit);
-  let status: unknown = null;
-  try { status = await currentStatusLive(); } catch { status = null; }
-  const keeper = readKeeperFiles();
+  try { const a = clock.run("files", () => readAudit(p.publishDir)); audit = auditForIndex(a); } catch { audit = null; }
+  const index = coins === null ? null : clock.run("shape", () => buildPlatformIndex(statuses, now, audit));
+  // the one-line status reads two clusters' program accounts (five-minute cache); past its budget the last good status is used
+  const status: unknown = await clock.bounded("status", B.statusMs, async () => { const s = await currentStatusLive(); lastStatus = s; return s; }, () => lastStatus, { onError: () => null });
+  const keeper = clock.run("files", () => readKeeperFiles());
   // $DEFICIT's own row comes from its keeper until the coin is registered here (then its registry row above is the one)
-  const sched = deficitRuleSchedule();
+  const sched = clock.run("files", () => deficitRuleSchedule());
   if (sched && !upcoming.some((u) => u.ticker === "DEFICIT") && !omitted.some((o) => o.ticker === "DEFICIT")) {
     const k = upcomingFromKeeper(keeper.status, keeper.burns, sched);
     if (k) upcoming.unshift(k);
@@ -154,11 +172,16 @@ async function buildHomeBody(): Promise<{ body: unknown; n: number; chainCoins: 
   // website-15 item 9: $REHEARSAL's LaunchLab pool, read like any coin's curve (one account read on a mainnet host with an RPC)
   let rehearsalCurve: RehearsalCurve = null;
   const rh = rehearsalCreate();
-  if (rh && !isTestCoin(tests, { mint: rh.mint }) && p.market && p.cluster === "mainnet") rehearsalCurve = await readKeeperCurve(p.market, { cluster: "mainnet", mint: rh.mint, poolId: rh.poolId }, now);
+  if (rh && !isTestCoin(tests, { mint: rh.mint }) && p.market && p.cluster === "mainnet") {
+    const curve = readKeeperCurve(p.market, { cluster: "mainnet", mint: rh.mint, poolId: rh.poolId }, now).then((c) => { lastRehearsal = c; return c; });
+    rehearsalCurve = await clock.bounded("rehearsal", B.rehearsalMs, () => curve, () => lastRehearsal);
+  }
   // website-17 wiring items 2 and 3: each coin's rank line (never a guessed rank) and the earned featured slots
-  const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
+  const ranks = clock.run("ranks", () => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } });
   if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: (c.mint ? ranks.get(c.mint)?.line : null) ?? null }));
-  const slots = coins === null ? null : featuredSlots(slotInputs, now);
-  return { n: coins?.length ?? 0, chainCoins, body: { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster } };
+  return clock.run("shape", () => {
+    const slots = coins === null ? null : featuredSlots(slotInputs, now);
+    return { n: coins?.length ?? 0, chainCoins, body: { ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster, tests), featuredSlots: slots, cluster: p.cluster } };
+  });
 }
 

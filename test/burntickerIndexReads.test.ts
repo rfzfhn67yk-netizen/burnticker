@@ -93,7 +93,7 @@ describe("the coin list's chain reads (prelaunch audit M7)", () => {
   test("one cold index rebuild: no chain read for a draft or an expired draft, the live coins' accounts in one batch", async () => {
     reset();
     const { GET } = await import("@/app/api/burnticker/tokens/route");
-    const r = await GET();
+    const r = await GET(new Request("http://localhost/"));
     assert.equal(r.status, 200);
     const body = await r.json() as { tokens: { ticker: string; status: string }[] };
     assert.equal(body.tokens.filter((t) => t.status === "live").length, LIVE, "every live coin is listed");
@@ -109,7 +109,7 @@ describe("the coin list's chain reads (prelaunch audit M7)", () => {
   test("one cold home rebuild: the same, and a draft costs no chain read", async () => {
     reset();
     const { GET } = await import("@/app/api/burnticker/home/route");
-    const r = await GET();
+    const r = await GET(new Request("http://localhost/"));
     assert.equal(r.status, 200);
     const n = total(counts);
     console.log(`  [M7] home cold rebuild, ${LIVE} live + ${DRAFTS} drafts + ${EXPIRED} expired: ${n} chain reads ${JSON.stringify(counts)}`);

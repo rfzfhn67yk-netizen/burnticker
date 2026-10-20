@@ -68,3 +68,22 @@ export const savedDraftLine = (s: Draft): string => `You have a draft: ${draftLa
 export function nextKept(snapshot: Draft, kept: Draft | null): Draft | null {
   return isReviewedDraft(snapshot) ? snapshot : kept;
 }
+
+/**
+ * HS-53 (hourly run 11): a templates link opens the launch page on that template and drops the draft in progress, so the gallery asks
+ * first. The question names the draft by its name and its tickers (both sides of a pair); a draft not named yet says what it follows.
+ */
+export function replaceDraftLine(s: Draft): string {
+  const own = ownNameOf(s), b = own.name || own.ticker ? str(s.tickerB).toUpperCase() : "";
+  const tickers = [own.ticker.toUpperCase(), b].filter(Boolean).map((t) => `$${t}`).join(" and ");
+  const label = own.name && tickers ? `${own.name} (${tickers})` : own.name || tickers || draftLabel(s);
+  return `Open this template? It replaces your draft ${label}.`;
+}
+export const REPLACE_DRAFT = "Replace the draft";
+export const KEEP_DRAFT = "Keep my draft";
+/** HS-53: the draft in progress from this tab's storage text, or null when there is none worth asking about. */
+export function draftToReplace(stored: string | null): Draft | null {
+  let d: unknown = null;
+  try { d = JSON.parse(stored ?? "null"); } catch { d = null; }
+  return d && typeof d === "object" && isMeaningfulDraft(d as Draft) ? d as Draft : null;
+}

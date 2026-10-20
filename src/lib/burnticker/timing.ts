@@ -31,6 +31,11 @@ export function gameDueLabel(g: ScheduledGame): string {
 }
 export const UNPLAYED_GAME_LINE = "If the game is not played, the result is void: neither coin burns on it, and each coin's pool burns down on its own coin over four weeks.";
 export const dueSoonLine = (days: number): string => `This result is due within ${days} ${days === 1 ? "day" : "days"}. A coin burns only after it graduates: if the result comes first, it is recorded and the burn waits until the coin graduates and its pool is registered.`;
+/**
+ * HB-141 (hourly run 12): on a one-time coin the review's note already says that a coin burns only after it graduates (beforeGraduationLine),
+ * so the due-soon warning keeps only its first sentence there; "a coin burns only after it graduates" was said three times in six lines.
+ */
+export const dueSoonShort = (w: string): string => (/^This result is due within \d+ days?\. /.test(w) ? w.slice(0, w.indexOf(". ") + 1) : w);
 
 /** Days until a due date (rounded up, never negative), and the warning when it is within the window. */
 /**

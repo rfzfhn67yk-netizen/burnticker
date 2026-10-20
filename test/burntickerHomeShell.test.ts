@@ -74,8 +74,9 @@ describe("one card order (review item 5, brief rule 10; website-13: Claude site 
 
 describe("the featured cards (review items 12 and 13; Codex review 5 F4)", () => {
   const f = featuredCoins();
-  test("fixed order: $DEFICIT featured, $REHEARSAL tagged as the mainnet rehearsal, the devnet coin tagged devnet; all in the test group", () => {
-    assert.deepEqual(f.map((c) => [c.id, c.ticker, c.tags[0].tone, c.group]), [["deficit", "DEFICIT", "featured", "test"], ["rehearsal", "REHEARSAL", "rehearsal", "test"], ["deficit-devnet", "DEFICIT", "devnet", "test"]]);
+  test("fixed order: $DEFICIT featured (the public group once created, hourly run 11), $REHEARSAL tagged as the mainnet rehearsal, the devnet coin tagged devnet in the test group", () => {
+    const created = !f[0].tags.some((t) => t.label === "Not created yet");
+    assert.deepEqual(f.map((c) => [c.id, c.ticker, c.tags[0].tone, c.group]), [["deficit", "DEFICIT", "featured", created ? "public" : "test"], ["rehearsal", "REHEARSAL", "rehearsal", "test"], ["deficit-devnet", "DEFICIT", "devnet", "test"]]);
   });
   test("$DEFICIT after the create (2026-10-13): own-tokens says launched, the card drops the not-created tag, the mint is a plain address, no typed curve", () => {
     const own = JSON.parse(read("config/own-tokens.json")) as { tokens: { symbol: string; address: string; status: string }[] };

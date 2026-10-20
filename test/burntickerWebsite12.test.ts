@@ -293,7 +293,9 @@ describe("A1 / A4 on About, Templates and the launch meta: every open / closed s
   test("Templates: the record decides the Start links and the pair templates grey out with the one line", () => {
     const t = read("src/app/burnticker/templates/page.tsx");
     assert.match(t, /const site = siteLaunchState\(process[.]env\);/); assert.doesNotMatch(t, /closedLine|launchAvailability\(/);
-    assert.match(t, /isPair\(t\) && !site\.pairs\.available \? site\.pairs\.line/);
+    // HB-151 (hourly run 13): the card state moved to templateCard.ts (one place decides the reason and the link)
+    assert.match(t, /templateCardState\(t, site, /);
+    assert.match(read("src/lib/burnticker/templateCard.ts"), /isPairTemplate\(t\) && !site\.pairs\.available \? site\.pairs\.line/);
   });
   test("the launch page's description and preview follow the record (closed, review only, open)", () => {
     // prelaunch audit 2026-10-16 F-12: the description names no launch state (statically built pages bake it in); the page says it live

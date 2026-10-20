@@ -13,7 +13,7 @@ import { compileUnsigned } from "@/lib/burnticker/transactions";
 import { feedSourceReading, kalshiSourceReading, polymarketSourceReading, verifyReceiptCore, type ChainReading, type SourceReading } from "@/lib/burnticker/verify";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { attesterRows, buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
-import { trustSwr } from "@/lib/burnticker/trustServe";
+import { v1TrustHeaders, v1TrustSwr } from "@/lib/burnticker/trustServe";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import type { TokenRow, TokenStatus } from "@/lib/burnticker/registry";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
@@ -283,18 +283,21 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
     const upgradeTimeLockSecs = await currentStatusLive().then((s) => s.upgradeAuthority.find((u) => u.cluster === "mainnet")?.timeLockSecs ?? null).catch(() => null);
     return buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster, upgradeTimeLockSecs, skipFeeLedger: true });
   };
-  const memo = rpc ? await trustSwr.get("v1", "1", build) : null;
+  // HB-155: the API answer's own memo, bounded by its 60 s header (trustServe.ts v1TrustSwr); its headers count the body's age
+  const memo = rpc ? await v1TrustSwr.get("v1", "1", build) : null;
   const page = (memo?.value as Awaited<ReturnType<typeof build>> | undefined) ?? await build();
+  const headers = memo ? v1TrustHeaders(memo) : undefined;
   const liveBps = page.livePlatform.found ? Object.fromEntries(page.livePlatform.comparison.map((r) => [r.field, { designed: r.designed, live: r.live, matches: r.matches }])) : null;
-  return ok({
+  return withHeaders(ok({
     generatedAt: page.generatedAt, cluster: p.cluster, powers: page.powers, operator: page.operator,
     fees: { designed: page.designedFees, live: { platformId: page.livePlatform.platformId, found: page.livePlatform.found, readAt: page.livePlatform.readAt, error: page.livePlatform.error, fields: liveBps } },
     lpLock: page.lpLock,
     program: page.program, attesters: page.attesters, secondSigner: page.secondSigner, audit: page.audit, statements: page.statements, operatorLine: page.operatorLine, useOfFees: page.useOfFees, preAuditCapSol: page.preAuditCapSol,
     cannot: ["Change any token's rule. A different rule makes a different token.", "Claim, redirect or discount any fee through this API.", "Adopt an existing token. The program needs the new mint's signature when the token is set up.", "Sign, send or hold a key for you."],
     rpcConfigured: !!rpc, stubs: p.stubs,
-  });
+  }), headers);
 }
+const withHeaders = (r: ApiResult, headers: Record<string, string> | undefined): ApiResult => (headers ? { ...r, headers: { ...(r.headers ?? {}), ...headers } } : r);
 
 export const v1OpenApi = (): ApiResult => ok(buildOpenApi());
 

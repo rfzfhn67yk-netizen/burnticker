@@ -16,6 +16,7 @@ import { describeRule, endText, gamePairCannotTie, GAME_PAIR_SENTENCE_NO_TIE, se
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
 import { drainWarning, reviewProjection, type Projection } from "@/lib/burnticker/projection";
+import { rareFadeLine } from "@/lib/burnticker/hazardSeason";
 import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
 import { lookalikeRefusalsByField, type LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
@@ -73,7 +74,7 @@ export interface LaunchReview {
   signable: boolean;
   rule: { text: string; sha256: string; sha12: string; statement: string; sentence: string; share: string; presets: string; endsLine: string };
   /** website-18: `profile` is the creator's own description for that side (a pair carries one per side) */
-  coins: { side: "A" | "B"; name: string; ticker: string; description: string | null; profile: { description: string }; /** sources-7 H2: the characters of the creator's own text that fit after this coin's generated paragraph (creatorProfile.ts descriptionRoom) */ descriptionRoom: number; /** sources-7 H9: the rule's own generated ticker for this side (the ticker check suggests from it), or null */ suggestedTicker: string | null }[];
+  coins: { side: "A" | "B"; name: string; ticker: string; description: string | null; profile: { description: string }; /** sources-7 H2: the characters of the creator's own text that fit after this coin's generated paragraph (creatorProfile.ts descriptionRoom) */ descriptionRoom: number; /** sources-7 H9: the rule's own generated ticker for this side (the ticker check suggests from it), or null */ suggestedTicker: string | null; /** HB-130: the rule's own generated name for side A (the hazard alternatives pair a name with each ticker), else null */ suggestedName: string | null }[];
   allocation: { supply: string; curve: string; locked: string; reserve: string; teamAllocationPct: 0; lpLockedPct: number };
   feesPerSol: { phase: "curve" | "post-graduation"; legs: { label: string; sol: string }[]; totalSol: string }[];
   transactions: { count: number; steps: { label: string; signers: string[] }[]; note: string };
@@ -294,7 +295,7 @@ const endsLine = (windowSentence: string, end: ReturnType<typeof endText>): stri
   return `${window} ${end.line}`.trim();
 };
 
-export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** HS-48: has Burnticker stored a daily reading of this Pyth feed (derby/store.ts hasPoints)? */ derbyHistory?: (feed: string) => boolean; /** 2026-10-14: the registry's free pair id, so the review shows the id the launch uses */ pairIdPick?: (base: string) => string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"];
+export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** HS-48: has Burnticker stored a daily reading of this Pyth feed (derby/store.ts hasPoints)? */ derbyHistory?: (feed: string) => boolean; /** HB-41 (hourly run 14): the newest reading the keeper stored for a selector key */ storedReading?: (selectorKey: string) => { at: string; fetchedAt: number } | null; /** 2026-10-14: the registry's free pair id, so the review shows the id the launch uses */ pairIdPick?: (base: string) => string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"];
   /** audit 6 item 8: whether this host serves Kalshi (the platform's flag; default from the env) */ kalshiEnabled?: boolean;
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
@@ -551,7 +552,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // QA pass 9 #17: an event outcome's due date is the market's own end date from the server's read when the page sent none
   const dueIso = game ? game.startsAt : oneTime ? (ctx as { endsAt?: string | null }).endsAt ?? o.stated?.endsAt ?? null : null;
   const due = dueTiming(dueIso, now, dueWarningDays(env));
-  const timing = oneTime ? { dueAt: due.dueAt, dueLabel: game ? gameDueLabel(game) : null, dueWithinDays: due.dueWithinDays, warning: due.warning, unplayed: espn?.kind === "game" ? UNPLAYED_GAME_LINE : null, afterGraduation: afterGraduationEnd(asBuilt) } : null;
+  const timing = oneTime ? { dueAt: due.dueAt, dueLabel: game ? gameDueLabel(game) : null, dueWithinDays: due.dueWithinDays, warning: due.warning, unplayed: espn?.kind === "game" ? UNPLAYED_GAME_LINE : null, afterGraduation: afterGraduationEnd(asBuilt, null, partyRace) } : null;
   if (timing?.warning) warnings.push(timing.warning);
   // HS-44 (hourly run 8): a one-game pair whose game is under 7 days away says first what has to happen for the result to burn anything
   { const soon = settled?.shape === "game" ? gameSoonLine({ startsAt: dueIso ?? (ctx as { game?: { startsAt?: string } }).game?.startsAt ?? null, now, raiseSol, voidBy: pairVoidBy }) : null; if (soon && !warnings.includes(soon)) warnings.unshift(soon); }
@@ -559,8 +560,13 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const wxFreq = locked.rule.oracle === "catalogue" && locked.rule.series ? weatherFrequency(locked.rule.series, !!locked.rule.inverse) : null;
   if (wxFreq?.warning) warnings.push(wxFreq.warning);
   // sources-7 (QA walkthrough 11 M4): a share that drains the pool in days is said among the warnings, not only in the collapsed backtest
-  const projection = reviewProjection(locked.rule, now, undefined, { derbyHistory: o.derbyHistory });
+  const projection = reviewProjection(locked.rule, now, undefined, { derbyHistory: o.derbyHistory, storedReading: o.storedReading });
   { const dw = drainWarning(locked.rule, projection); if (dw) warnings.push(dw); }
+  // HB-137 (hourly run 12): the fade side of tornado reports on an area that almost never has one burns nearly every day
+  { const f = (locked.rule.kind === "scalar" ? (locked.rule.scalar?.perUnit as { fractionOfPool?: number } | undefined)?.fractionOfPool : undefined) ?? null;
+    const row = f === null ? null : projection.rows.find((r) => Math.abs(r.share - f) < 1e-9) ?? null;
+    const rare = rareFadeLine(locked.rule, projection.available && row ? { from: projection.from, to: projection.to, triggers: row.triggers } : null);
+    if (rare && !warnings.includes(rare)) warnings.push(rare); }
   if (o.seasonOver) problems.push(o.seasonOver.message);
   else if (o.seasonWarning) warnings.unshift(o.seasonWarning);
   if (o.sourceNote && !warnings.includes(o.sourceNote)) warnings.push(o.sourceNote);
@@ -596,7 +602,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     schema: "burnticker.launch-review/v1", network: cluster, mode: model.mode, type, typeAvailable, typeReason,
     signable,
     rule: { text: lockedA.text, sha256: lockedA.sha256, sha12: lockedA.sha12, statement: ruleStatement(lockedA.rule, { seriesTitle: o.seriesTitle ?? null, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), sentence: text.lead, share: shareText, presets: linkedOneShot ? LINKED_ONE_SHOT_LINE : `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule, { dispersal: webDispersalOn(env, o.root) }))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, end) },
-    coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : paragraphB, profile: { description: i === 0 ? creatorText : creatorTextB }, descriptionRoom: i === 0 ? descriptionRoom(text.paragraph) : paragraphB ? descriptionRoom(paragraphB) : DESCRIPTION_MAX, suggestedTicker: i === 0 ? text.ticker || null : tickerB })),
+    coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : paragraphB, profile: { description: i === 0 ? creatorText : creatorTextB }, descriptionRoom: i === 0 ? descriptionRoom(text.paragraph) : paragraphB ? descriptionRoom(paragraphB) : DESCRIPTION_MAX, suggestedTicker: i === 0 ? text.ticker || null : tickerB, suggestedName: i === 0 ? text.name || null : null })),
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), teamAllocationPct: 0, lpLockedPct: LP_LOCKED_PCT },
     feesPerSol: venue === "pair-curve" ? [perPc(PAIR_CURVE_FEES.curve), perPc(PAIR_CURVE_FEES.post)] : [per(CURVE_FEES), per(postGraduationFeesFor(cluster))],
     transactions: { count: n, steps, note: `${n === 1 ? "You sign the transaction in your wallet. The wallet shows the exact accounts and amount first, and nothing is sent until you approve." : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it."}${pins.length ? ` ${PIN_STEP_NOTE}` : ""}` },

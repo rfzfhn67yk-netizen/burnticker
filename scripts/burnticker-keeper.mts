@@ -76,7 +76,7 @@ import { topUpOpsLines, topUpRunnerFromEnv } from "../src/lib/burnticker/ops/top
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
 import { Heartbeat, heartbeatUrlFromEnv, heartbeatVerdict } from "../src/lib/burnticker/ops/heartbeat.ts";
-import { offboxPullFact, readBackupStatus, readOffboxPull, readWebProbeStatus, runUnitCheck, webProbeFact } from "../src/lib/burnticker/ops/unitHealth.ts";
+import { offboxPullFact, readBackupStatus, readOffboxPull, readSlowRequests, readWebProbeStatus, runUnitCheck, webProbeFact } from "../src/lib/burnticker/ops/unitHealth.ts";
 import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 // PROGRAM HASH CHECK (prelaunch audit 2026-10-18 A-4): once a Denver day, the burn program's bytes on chain against verified-build.json
 import { compareProgramToRecord, hostProgramRound, programHashFact, programHashSourceLine, readProgramDataHash, webDispersal, writeKeeperDispersal } from "../src/lib/burnticker/programHash.ts";
@@ -417,6 +417,8 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
     backupDestConfigured: !!process.env.BURNTICKER_BACKUP_DEST?.trim() || readBackupStatus(process.cwd())?.destConfigured === true, programHashSource: programHashSourceLine(programHashFact(process.env, process.cwd(), { log })),
     // I-11 / B-4 (2026-10-19): the external web check's last outcome (data/web-probe-last.json; never the URL)
     webProbe: webProbeFact(readWebProbeStatus(process.cwd()), process.env),
+    // HB-145 (2026-10-20): the web's requests over 2 s and event-loop holds in the last hour (logs/burnticker-web-slow.log)
+    slowRequests: readSlowRequests(process.cwd(), now),
     // B-3 / OPS-1 (2026-10-19): the off-box pull receipt (data/offbox-pull.json): pulled / stale / none, its time and method only
     ...offboxPullFact(readOffboxPull(process.cwd(), now), now) };
   publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state, hostFacts, tradeClicks: (() => { try { return tradeClickCounts(registry.db, now); } catch { return null; } })(), topUps: (() => { try { return topUpOpsLines(registry, now); } catch { return null; } })() }));

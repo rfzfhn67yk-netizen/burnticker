@@ -128,8 +128,9 @@ async function readProgramAccounts(rpc: Rpc, mint: string, tokenProgram: string)
 type Balances = { source: "das" | "program-accounts"; rows: { owner: string; amountRaw: bigint }[]; supplyRaw: bigint; decimals: number; readAt: string };
 type Unavailable = Extract<HoldersRead, { state: "unavailable" }>;
 const cache = new Map<string, { at: number; v: Balances | Unavailable }>();
+const inflight = new Map<string, Promise<Balances | Unavailable>>();
 /** For tests. */
-export function clearHoldersCache(): void { cache.clear(); }
+export function clearHoldersCache(): void { cache.clear(); inflight.clear(); }
 
 /**
  * Reads one mint's holders. `labels` maps owner wallets to a label for the top-10 list (poolOwnerLabels(cluster) plus the burn pool
@@ -142,7 +143,16 @@ export async function readHolders(rpc: Rpc, i: { cluster: string; mint: string; 
   const ttl = (v: Balances | Unavailable) => ("rows" in v || v.reason === UNAVAILABLE_NO_INDEX ? HOLDERS_CACHE_MS : HOLDERS_FAIL_CACHE_MS);
   let v: Balances | Unavailable;
   if (hit && now - hit.at < ttl(hit.v)) v = hit.v;
-  else { v = await readBalances(rpc, i.mint, now); cache.set(ck, { at: now, v }); }
+  else {
+    // HB-145 second half (2026-10-20): one balance read per mint at a time; a second caller joins the read in flight
+    let p = inflight.get(ck);
+    if (!p) {
+      const mine: Promise<Balances | Unavailable> = readBalances(rpc, i.mint, now).then((x) => { cache.set(ck, { at: now, v: x }); return x; }).finally(() => { if (inflight.get(ck) === mine) inflight.delete(ck); });
+      inflight.set(ck, mine);
+      p = mine;
+    }
+    v = await p;
+  }
   if (!("rows" in v)) return v;
   const s = summarizeHolders(v.rows, v.supplyRaw, v.decimals, i.labels ?? {});
   return { state: "read", source: v.source, holders: s.holders, wallets: s.wallets, tokenAccounts: v.rows.length, top10: s.top10, top10Pct: s.top10Pct, top10PctUnlabelled: s.top10PctUnlabelled, supply: rawToTokens(v.supplyRaw, v.decimals), readAt: v.readAt };

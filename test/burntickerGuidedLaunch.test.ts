@@ -271,7 +271,7 @@ describe("walkthrough snags and the launch-intent audits", () => {
   test("snags 7 and 8, audit 2 items 4 and 5: two candidates become two coins on their own markets; the sentence comes from the market's question", () => {
     // website-23 (WIRING-SETTLED-PAIRS): two candidates in one race are one linked pair; side A on candidate A's market, side B in `pair`
     assert.match(page, /if \(pairOn && elPick\) return \{ a: candidatesPairRule\(elPick\.a\.conditionId, DEFAULT_SHARE\.oneShot\)/);
-    assert.match(page, /if \(pairOn && elPick\) return \{ eventPhrase: elPick\.a\.question\.replace/);
+    assert.match(page, /if \(pairOn && elPick\) return \{ eventPhrase: statementOf\(elPick\.a\.question\) \}/);   // HB-128: the question said as a statement
     // website-22 (audit 10 item 6): the sentence lives in guidedLaunch.ts partyMarketWarning, with the ticker as a placeholder
     assert.match(page, /partyMarketWarning\(o\.question, sur\(o\), side\)/);
     assert.match(page, /This race has one market only, so it cannot make a pair\./);

@@ -3,6 +3,7 @@ import type { BurnRule, LockedRule } from "@/lib/burnticker/rules";
 import { descriptionFooter } from "@/lib/burnticker/rules";
 import { badgeFromText, describeRule, type DescribeCtx } from "@/lib/burnticker/describe";
 import { creatorFieldSentence } from "@/lib/burnticker/creatorWording";
+import { statementOf } from "@/lib/burnticker/eventIdentity";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { findTeams, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 
@@ -48,7 +49,8 @@ export function serverDescribeCtx(rule: BurnRule, raw: unknown, o: { seriesTitle
   const out: Omit<DescribeCtx, "ticker"> = {};
   const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null);
   const phrase = str(c.eventPhrase, 120);
-  const fromTitle = o.seriesTitle ? o.seriesTitle.replace(/\s*\(resolves once\)$/, "").replace(/\?$/, "").replace(/^will\s+/i, "").trim() : null;
+  // HB-128 (hourly run 11): the question said as a statement, its verb conjugated ("the Democratic Party controls the Senate…")
+  const fromTitle = o.seriesTitle ? statementOf(o.seriesTitle) : null;
   const clean = (p: string | null) => (p && lintCopy(p, undefined, { scope: "creator" }).ok ? p : null);
   if (rule.oracle === "polymarket") out.eventPhrase = clean(phrase) ?? clean(fromTitle) ?? null;
   const cross = str(c.crossRead, 60);

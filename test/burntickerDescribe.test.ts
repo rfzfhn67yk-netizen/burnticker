@@ -81,7 +81,7 @@ describe("the generated description", () => {
     const pair = { ...r, pair: { pairId: "p1", side: "A", counterpartMint: null, winnerTakesBurn: true } } as BurnRule;
     assert.match(describeRule(pair, { ticker: "" }).paragraph, /whatever is left burns the winning coin, or \$DEFICIT if there isn't one, and the coin retires\./);
     const one = describeRule({ ...polyRule(WS, 0.1), onEnd: { ...DEFAULT_ON_END } } as BurnRule, { ticker: "", eventPhrase: "the Rays win the 2026 World Series", endsAt: "2026-10-31T23:55:00Z" });
-    assert.match(one.windowSentence, /^This coin resolves once, on Oct 31, 2026\. Then whatever is left burns \$DEFICIT, and the coin retires\.$/);
+    assert.match(one.windowSentence, /^This coin resolves once, when the market settles \(it closes by Oct 31, 2026\)\. Then whatever is left burns \$DEFICIT, and the coin retires\.$/);
     // a perpetual coin never ends with a result, so it gets no void sentence; a vault rule has no burn pool and no sink
     assert.doesNotMatch(describeRule({ ...team("mlb", "TB", "win", { kind: "perpetual" }), onEnd: { ...DEFAULT_ON_END } } as BurnRule, { ticker: "" }).paragraph, /voided or the season is cancelled/);
     for (const x of [r, pair, { ...r, onEnd: { ...WIND_DOWN_ON_END } } as BurnRule, { ...r, scalar: { ...r.scalar!, perUnit: { tokens: 1000 } } } as BurnRule]) assert.equal(describeEndSink(x), endSinkOf(x), "describe.ts mirrors rules.ts endSinkOf");
@@ -124,7 +124,7 @@ describe("the generated description", () => {
   test("badges: season, postseason, next N, perpetual, one-shot with its date", () => {
     assert.equal(windowBadge(team("mlb", "TB", "win", { kind: "post", year: 2026 })), "POSTSEASON 2026");
     assert.equal(windowBadge(team("mlb", "TB", "win", { kind: "next", n: 5, from: "20261010" })), "NEXT 5 GAMES");
-    assert.equal(windowBadge(polyRule(WS), { endsAt: "2026-10-31T23:55:00Z" }), "ONE-SHOT · Oct 31, 2026");
+    assert.equal(windowBadge(polyRule(WS), { endsAt: "2026-10-31T23:55:00Z" }), "ONE-SHOT · BY Oct 31, 2026");   // HB-142 widened (hourly run 14): a market coin is dated by its close
     assert.equal(windowBadge(feed("treasury.debt", 1e9)), "PERPETUAL");
     assert.equal(windowBadge(team("mlb", "TB", "win", S(2025)), { endsAt: "2025-09-28T19:07:00Z", ended: true }), "2025 SEASON · ENDED Sep 28, 2025");
   });

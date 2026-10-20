@@ -107,6 +107,14 @@ export function unitExample(unit: { label: string } | null, measured?: { baselin
 }
 
 /**
+ * HB-140 L2 (hourly run 12): a reading's day on the Published data cards is its Denver calendar day, as every other date on the site; the
+ * UTC slice put an evening Denver read on the next day.
+ */
+export function denverDayOf(iso: string): string {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) && !/^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t)) : iso.slice(0, 10);
+}
+/**
  * A SAVED SAMPLE IS NOT A LIVE READ (audit item 202): a catalogue card's reading comes from the source's saved fixture, so it is labelled
  * "Sample reading" with the day the sample was observed. "Latest reading" is kept for a live read the keeper verified, and nothing about
  * a source's health is inferred from a sample.
@@ -118,7 +126,7 @@ export function sampleReadingLabel(r: { id: string; value: string | null }, obse
 }
 /** HB-41 (hourly run 9): a reading the keeper verified and stored (registry readings), said as the latest reading with the day it was read. */
 export function storedReadingLabel(r: { id: string; value: string | null }, readAt: string, valueLabel: string | null = null): string {
-  return `Latest reading ${r.id}${r.value !== null ? `: ${formatReading(r.value, valueLabel)}` : ""}, read ${readAt.slice(0, 10)}`;
+  return `Latest reading ${r.id}${r.value !== null ? `: ${formatReading(r.value, valueLabel)}` : ""}, read ${denverDayOf(readAt)}`;
 }
 /**
  * HB-41 (hourly run 9): why the Browse samples were nine days old. A card's sample is the source's frozen fixture (sources.json

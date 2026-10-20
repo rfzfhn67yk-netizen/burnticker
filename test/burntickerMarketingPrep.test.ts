@@ -301,7 +301,7 @@ describe("7. campaign parameters never change a page", () => {
     const p = read("src/app/burnticker/launch/page.tsx");
     const linked = /const linked = ([^;]+);/.exec(p)![1];
     assert.doesNotMatch(linked, /utm|ref"/);
-    assert.match(read("src/proxy.ts"), /matcher: \["\/:path\(\.\*%\.\*\)"\]/);
+    assert.match(read("src/proxy.ts"), /matcher: \["\/:path\(\.\*%\.\*\)", "\/burnticker\/t\/:ticker"\]/);   // HB-100 (hourly run 11): plus the coin pages, read by path only
   });
 });
 

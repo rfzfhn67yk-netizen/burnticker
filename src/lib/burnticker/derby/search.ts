@@ -31,7 +31,9 @@ export const liquidityLabel = (usd: number | null | undefined): string | null =>
  * Jupiter marks it verified ("WIF · EKpQ…zcjm · $12.3M liquidity · verified"). A feed with no Solana mint says so.
  */
 export function withHitLabel(h: DerbyCoinHit): DerbyCoinHit {
-  const sm = shortMint(h.mint), liq = liquidityLabel(h.liquidityUsd);
+  // HB-161 (hourly run 15): a refused coin (no input this site can read) prints no liquidity figure: Jupiter's figure across every quote
+  // token read as a contradiction beside "it found none for this coin"
+  const sm = shortMint(h.mint), liq = h.why && !h.underlying ? null : liquidityLabel(h.liquidityUsd);
   const mark = h.source === "pyth" && !h.mint ? "a Pyth feed with no Solana coin" : h.verified ? "verified" : "not verified";
   return { ...h, shortMint: sm, mark, label: [h.symbol, sm, liq ? `${liq} liquidity` : null, mark].filter(Boolean).join(" · "), crossLine: h.underlying ? crossReadSentence(h.underlying.cross, h.symbol) : null };
 }

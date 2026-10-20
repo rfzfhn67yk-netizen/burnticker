@@ -14,16 +14,16 @@ describe("F5: the home endpoint answers the $DEFICIT shell's cross-origin read, 
     const { GET } = await import("../src/app/api/burnticker/home/route.ts");
     // a platform whose registry cannot even be reached: the first build rejects at once, so the cold path answers 503
     setPlatformForTests({ get registry(): never { throw new Error("registry down"); }, cluster: "devnet" } as never);
-    const cold = await GET();
+    const cold = await GET(new Request("http://localhost/"));
     assert.equal(cold.status, 503);
     assert.equal(cold.headers.get("access-control-allow-origin"), "*", "the 503 is readable from the sibling host");
     await makeWorld();
-    const r = await GET();
+    const r = await GET(new Request("http://localhost/"));
     assert.equal(r.status, 200);
     assert.equal(r.headers.get("access-control-allow-origin"), "*");
     const j = await r.json() as { launch?: unknown };
     assert.ok("launch" in j, "the shell's field is there");
-    const again = await GET();   // the memo hit
+    const again = await GET(new Request("http://localhost/"));   // the memo hit
     assert.equal(again.headers.get("access-control-allow-origin"), "*");
   });
   test("the $DEFICIT shell reads the home from the apex, and no write route carries the public-read header", async () => {

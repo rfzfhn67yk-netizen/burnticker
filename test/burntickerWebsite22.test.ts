@@ -144,7 +144,7 @@ describe("QA 9 items 7, 13 and 14, audit 10 item 19: the image and the public pr
     assert.deepEqual(squareCrop(1200, 600), { left: 25, top: 0, width: 50, height: 100 });
     assert.deepEqual(squareCrop(600, 1200), { left: 0, top: 25, width: 100, height: 50 });
     assert.deepEqual(squareCrop(512, 512), { left: 0, top: 0, width: 100, height: 100 });
-    assert.match(page, /disabled=\{nameStepBlocked\} onClick=\{\(\) => setGuide\(\(g\) => \(\{ \.\.\.g, phase: "review" \}\)\)\}>Review<\/button>/);
+    assert.match(page, /disabled=\{nameStepBlocked\} onClick=\{\(\) => setGuide\(\(g\) => \(\{ \.\.\.g, phase: "review" \}\)\)\}>\{nameChecking \? NAME_STEP_CHECKING_BUTTON : "Review"\}<\/button>/);   // HS-55 (hourly run 13): "Checking…" while the ticker check runs
     // website-25 (QA 11 H5): the same line, now also for every other field problem (NAME_STEP_BLOCKED)
     assert.match(page, /\{nameStepBlocked && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>\{rightsMissing \? IMAGE_RIGHTS_REQUIRED : nameChecking && nameBlockers\.length === 0 && !coinsForName\.some\(\(c\) => !!c\.nameIssue \|\| !!c\.tickerIssue\) \? NAME_STEP_CHECKING : NAME_STEP_BLOCKED\}<\/p>\}/);
     // website-25 (QA 11 H5): held for every field problem, the image line among them

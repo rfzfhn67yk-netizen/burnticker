@@ -30,7 +30,7 @@ export const SEASON_OVER_SENTENCE = "This hurricane season is over, so a coin on
 export const isOneTimeSeries = (series: string | null | undefined): boolean => !!series && KEEPER_ONE_SHOT_RE.test(series);
 
 const utcText = (iso: string): string => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
-const denverText = (iso: string): string => new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+// HS-11 widened (hourly run 15): these sentences are rendered on the server, so they name UTC only (visitorTime.ts), never Denver for everyone
 
 /** A Launch Library 2 launch as the publisher lists it: mission name, provider, launch time, status, the page and the immutable id. */
 export interface Ll2LaunchInfo { id: string; name: string; provider: string | null; net: string | null; status: string | null; statusAbbrev: string | null; url: string; final: boolean }
@@ -43,7 +43,7 @@ export function ll2LaunchInfo(body: unknown): Ll2LaunchInfo | null {
 }
 /** The launch in words for the listing and the review: never a bare id. */
 export function ll2LaunchLine(i: Ll2LaunchInfo): string {
-  const when = i.net ? ` Launch time ${utcText(i.net)} UTC (${denverText(i.net)} Denver time).` : "";
+  const when = i.net ? ` Launch time ${utcText(i.net)} UTC.` : "";
   return `${i.name}${i.provider ? `, by ${i.provider}` : ""}. Status: ${i.status ?? "not given"}.${when} Launch Library 2 id ${i.id}.`;
 }
 
@@ -89,13 +89,13 @@ export function oneShotEligibility(series: string, cfg: HttpSourceConfig, body: 
 
 /**
  * ONE GAME (espn.game: a one-game coin and each side of a one-game Matchup): already decided once the schedule marks the game final.
- * Before that, the line says its status and its start time in UTC and Denver time. Same sentence as every other one-time event.
+ * Before that, the line says its status and its start time in UTC. Same sentence as every other one-time event.
  */
 export interface GameLike { eventId: string; name: string; startsAt: string; completed: boolean; detail?: string | null; state?: string | null }
 export function gameLine(g: GameLike): string {
   // "pre" is scheduled; "in" is under way; anything else not final carries its own word from the schedule ("Postponed", "Suspended")
   const status = g.completed ? "Final" : g.state === "in" ? "In progress" : g.state === "pre" ? "Scheduled" : gameStatusWords(g.detail) ?? "Scheduled";
-  return `${g.name}. Status: ${status}. Start time ${utcText(g.startsAt)} UTC (${denverText(g.startsAt)} Denver time). Game id ${g.eventId}.`;
+  return `${g.name}. Status: ${status}. Start time ${utcText(g.startsAt)} UTC. Game id ${g.eventId}.`;
 }
 export function gameEligibility(g: GameLike): { decided: boolean; reason: string | null; line: string } {
   const line = gameLine(g);

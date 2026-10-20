@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { platform, tokenPageData } from "@/lib/burnticker/server";
-import { pairTally } from "@/lib/burnticker/tokenPage";
+import { pairTally, type ReceiptJson, type TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { pairDailyText } from "@/lib/launch/dailyPost";
 import { derbyPairBlock } from "@/lib/burnticker/api/derby";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
@@ -8,6 +8,8 @@ import { pairIsPublic, pairLifecycle, pairSideHrefs } from "@/lib/burnticker/pub
 import { heavyRefusal, pageLimiter } from "@/lib/burnticker/api/http";
 import { KeyedSwr, SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
 import { EDGE_JSON_CACHE, NO_STORE } from "@/lib/burnticker/edgeCache";
+import { coinBodyOf, coinAnswerMemo, pairReadView } from "@/lib/burnticker/coinAnswerMemo";
+import type { TokenRow } from "@/lib/burnticker/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -43,22 +45,38 @@ export async function GET(req: Request, { params }: { params: Promise<{ pairId: 
   // A-25: a pair with no launched side (an abandoned draft whose tickers a live pair now holds) is not a public pair: 404, as an unknown id
   if (!pair || !pairIsPublic(p.registry, pairId)) return NextResponse.json({ error: `no pair ${pairId}` }, { status: 404, headers: NO_STORE });
   const a = p.registry.token(pair.mintA)!, b = p.registry.token(pair.mintB)!;
+  const va = p.registry.pageVersion(a.mint), vb = p.registry.pageVersion(b.mint);
+  const version = `${va}|${vb}`;
   const build = async (): Promise<unknown> => {
-    const now = Date.now();
+    const started = Date.now(), now = started;
     // The configured public origin (as the feeds and the calendar use), never the request's (audit 2026-10-15 F8).
     const site = `${publicOrigin()}/burnticker`;
+    // HB-35 (2026-10-20): a side whose coin answer the coin route (or another pair) kept within COIN_MEMO_MS is served from that memo; the
+    // sides still to read share one batch and one per-build read cache (coinAnswerMemo.ts pairReadView), and each side read is kept for the
+    // coin page. The answers are the coin route's own: the same full tokenPageData read, never older than the coin memo's fresh window.
+    const coins = coinAnswerMemo(p.registry);
+    const ka = coins.peek(a.mint, va), kb = coins.peek(b.mint, vb);
+    const toRead = [ka ? null : a, kb ? null : b].filter((t): t is TokenRow => t !== null);
+    const view = toRead.length ? await pairReadView(p, toRead) : p;
+    type Side = { status: TokenStatusJson; receipts: ReceiptJson[]; rulesText: string };
+    const side = async (t: TokenRow, v: string, kept: unknown): Promise<Side> => {
+      if (kept) return kept as Side;
+      const body = coinBodyOf(await tokenPageData(view, t, now));
+      coins.put(t.mint, v, body);
+      return body as Side;
+    };
     // A-22: both sides and the Burn Derby block (2026-10-10) are read together, not one after another
     const [da, db, derby] = await Promise.all([
-      tokenPageData(p, a, now), tokenPageData(p, b, now),
-      pair.selectorKey.startsWith("derby:") ? derbyPairBlock(p, pairId, site, now).catch(() => null) : Promise.resolve(null),
+      side(a, va, ka), side(b, vb, kb),
+      pair.selectorKey.startsWith("derby:") ? derbyPairBlock(view, pairId, site, now).catch(() => null) : Promise.resolve(null),
     ]);
     const tally = pairTally(da.status, db.status, da.receipts, db.receipts);
     // The share line / pair post (dailyPost.ts pairDailyText), linking to this app's pair page.
     const share = pairDailyText(tally, site, da.status.profile?.badge ?? null);
+    console.info(`[burnticker/pairs] ${pairId} built in ${Date.now() - started} ms (${2 - toRead.length} of 2 sides from the coin memo)`);
     // review follow-up 3: each side links to its own coin page (by mint when its ticker is shared), and the pair says its lifecycle
     return { pair, hrefs: pairSideHrefs(p.registry, pair), lifecycle: pairLifecycle(p.registry, pairId), a: { status: da.status, receipts: da.receipts, rulesText: da.rulesText }, b: { status: db.status, receipts: db.receipts, rulesText: db.rulesText }, tally, share, derby, stubs: p.stubs };
   };
-  const version = `${p.registry.pageVersion(a.mint)}|${p.registry.pageVersion(b.mint)}`;
   const got = await memoFor(p.registry).get(pairId, version, build);
   if (!got) return NextResponse.json({ loading: true, error: "this pair is being read; try again in a few seconds", code: "pair-loading", retryAfterSec: PAIR_RETRY_SEC }, { status: 503, headers: { ...NO_STORE, "retry-after": String(PAIR_RETRY_SEC) } });
   // HB-99: a stale answer (no refresh landed) says its real age and is never cached under the 60 s header

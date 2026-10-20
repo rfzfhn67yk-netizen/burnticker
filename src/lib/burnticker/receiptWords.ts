@@ -21,6 +21,16 @@ export const RECEIPT_STATUS_WORDS: Record<ReceiptStatusJson, string> = {
 };
 export const receiptStatusWords = (s: string): string => (RECEIPT_STATUS_WORDS as Record<string, string>)[s] ?? "not yet decided";
 
+/**
+ * HB-135 (hourly run 11): the pair page's lead names the pair by its two tickers, never by its id ("This is the rivalry pair
+ * seawin-vs-denwin-espn-game-nfl-2475453-s."); the id belongs in the URL and the share line only.
+ */
+export const pairLeadSentence = (a: string, b: string): string => `This is the rivalry pair of $${a.replace(/^\$/, "")} and $${b.replace(/^\$/, "")}.`;
+/** HB-135: the "next scheduled market" cell of a one-result pair whose result is in (a bare "—" read as missing data). */
+export const NEXT_MARKET_NONE_DECIDED = "None. The one result is in.";
+/** HB-135: that cell's words when no market is scheduled: none for a decided one-result pair, else the dash the other cells use. */
+export const nextMarketNone = (o: { oneShot: boolean; settlements: number }): string => (o.oneShot && o.settlements > 0 ? NEXT_MARKET_NONE_DECIDED : "—");
+
 /** What the pair page needs to say about its latest result (tokenPage.ts pairTally fills it). */
 export interface PairLastFacts {
   /** the side whose coin won the result (its receipt's pairRole), else the side that burned */

@@ -3,7 +3,9 @@
  * describe text, the Polymarket adapter and gameSettle.ts all read these. The schedule itself is gameSettle.ts gameSchedule.
  */
 export const GAME_BURN_LINE = "A game coin burns once two sources agree on the final, or once one source has shown the same final twice a few minutes apart.";
-export const GAME_AGREE_LINE = "Every source that reads the game must agree, and a disagreement holds the burn until they do.";
+/** HB-157 (hourly run 15): the same settlement rule as GAME_BURN_LINE, said for a pair's "When the game is final" row. */
+export const GAME_RESULT_COUNTS_LINE = "The result counts once two sources agree on the final, or once one source has shown the same final twice a few minutes apart.";
+export const GAME_AGREE_LINE ="Every source that reads the game must agree, and a disagreement holds the burn until they do.";
 /**
  * Whether a Polymarket market is ONE GAME and so runs on the game-coin schedule (owner, 2026-10-16: one schedule for every game coin):
  *   - a two-team moneyline: Gamma sportsMarketType "moneyline", or no type at all, with a game start and two team outcomes (not Yes/No,

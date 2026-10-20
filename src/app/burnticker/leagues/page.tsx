@@ -4,7 +4,7 @@ import { EmptyState } from "../_components/EmptyState";
 import { SeasonsTabs } from "../_components/SeasonsTabs";
 import { platform } from "@/lib/burnticker/server";
 import { leagueIndex, type LeagueIndex } from "@/lib/burnticker/leagues";
-import { leagueData } from "@/lib/burnticker/leaguesServe";
+import { leagueDataForPages } from "@/lib/burnticker/leaguesServe";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
  */
 export default function LeaguesPage() {
   let ix: LeagueIndex | null = null, err: string | null = null;
-  try { ix = leagueIndex(leagueData(platform()).coins, Date.now()); } catch (e) { err = e instanceof Error ? e.message : String(e); ix = leagueIndex([], Date.now()); }
+  try { ix = leagueIndex(leagueDataForPages(platform()).coins, Date.now()); } catch (e) { err = e instanceof Error ? e.message : String(e); ix = leagueIndex([], Date.now()); }
   // site audit #9 / BT-10 (2026-10-11): before any league has a coin, one plain banner and a compact list (each sport, its leagues inline)
   // instead of 25 empty cards; once a league has a coin, the cards come back with their counts
   const empty = !err && ix.sports.every((sp) => sp.leagues.every((l) => l.coinsThisSeason === 0));

@@ -170,11 +170,11 @@ describe("QA pass 9 #2 and #4: the one-game pair, from every listed meeting, hom
     plain(b.oneGame.searched); plain(oneGameSearchLine("2026–27", 1, false)); plain(oneGameSearchLine("2026", 0, true));
     setNativeClients({ espn: null, games: null });
   });
-  test("the rule text of a one-game coin says 'against' at home and 'at' away, from the side the API marks", () => {
+  test("the rule text of a one-game coin says 'against' at home and 'away against' away, from the side the API marks", () => {
     const r = nativeRule("espn.game:nba-0022500002-PHI-loss", { fractionOfPool: 0.02 });
     const home = describeRule(r, { ticker: "PHIVBOS", game: { opponent: "Celtics", home: true, startsAt: "2026-03-03T00:00:00Z" } });
     const away = describeRule(r, { ticker: "PHIVBOS", game: { opponent: "Celtics", home: false, startsAt: "2026-03-03T00:00:00Z" } });
-    assert.match(home.oneLiner, /lose against the Celtics$/); assert.match(away.oneLiner, /lose at the Celtics$/);
+    assert.match(home.oneLiner, /lose against the Celtics$/); assert.match(away.oneLiner, /lose away against the Celtics$/);   // HB-162 (c) (hourly run 15)
   });
 });
 

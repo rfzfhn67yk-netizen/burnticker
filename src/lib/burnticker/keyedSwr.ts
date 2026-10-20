@@ -34,6 +34,27 @@ export class KeyedSwr<T> {
   /** For tests and for a caller that knows a key changed. */
   clear(key?: string): void { if (key === undefined) { this.memo.clear(); this.written.clear(); } else { this.memo.delete(key); this.written.delete(key); } }
   size(): number { return this.memo.size; }
+  /**
+   * HB-35 (2026-10-20): another reader's look at a kept answer, without starting a build: the value when its version matches and it is
+   * younger than `maxAgeMs` (default `freshMs`), else undefined. The pair route reads each side's coin answer this way.
+   */
+  peek(key: string, version: string, maxAgeMs: number = this.o.freshMs): T | undefined {
+    const m = this.memo.get(key);
+    return m && m.version === version && this.clock() - m.at < maxAgeMs ? m.value : undefined;
+  }
+  /**
+   * HB-35: an answer another reader built just now (the pair route's side read, the same read the coin route makes) is kept as if this
+   * memo had built it. It never replaces an answer a build in flight wrote later (the sequence numbers), and it respects `maxKeys`.
+   */
+  put(key: string, version: string, value: T): void {
+    const mine = ++this.seq;
+    if ((this.written.get(key) ?? 0) > mine) return;
+    this.written.set(key, mine);
+    this.memo.delete(key);
+    this.memo.set(key, { at: this.clock(), version, value });
+    const max = this.o.maxKeys ?? 256;
+    while (this.memo.size > max) { const old = this.memo.keys().next().value as string; this.memo.delete(old); this.written.delete(old); }
+  }
 
   private refresh(key: string, version: string, build: () => Promise<T>): Promise<Settled> {
     let f = this.inflight.get(key);

@@ -156,7 +156,8 @@ describe("A-22: the client asks less", () => {
   });
   test("the pair answer reads both sides and the derby block together, kept per pair", () => {
     const route = read("src/app/api/burnticker/pairs/[pairId]/route.ts");
-    assert.match(route, /await Promise\.all\(\[\s*tokenPageData\(p, a, now\), tokenPageData\(p, b, now\),\s*pair\.selectorKey\.startsWith\("derby:"\)/);
+    // HB-35 (2026-10-20): each side comes from the coin memo or one shared per-build read (coinAnswerMemo.ts), still all at once
+    assert.match(route, /await Promise\.all\(\[\s*side\(a, va, ka\), side\(b, vb, kb\),\s*pair\.selectorKey\.startsWith\("derby:"\)/);
     assert.doesNotMatch(route, /const derby = .*await derbyPairBlock/, "before: the derby block waited for both sides, then read them again");
     assert.match(route, /memoFor\(p\.registry\)\.get\(pairId, version, build\)/);
     assert.match(read("src/app/burnticker/p/[pairId]/page.tsx"), /r\.status === 503 && j\?\.code === "pair-loading" && left > 0/);

@@ -4,7 +4,7 @@ import { MINT_KEY_DISCLOSURE } from "@/lib/burnticker/mintAddressCopy";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
-import { OPERATOR_COPY, OPERATOR_LINE, placeholderSentence } from "@/lib/burnticker/trustpack/copy";
+import { OPERATOR_COPY, OPERATOR_LINE, operatorEntitySentence, placeholderSentence } from "@/lib/burnticker/trustpack/copy";
 import { MailSafe } from "../_components/MailSafe";
 import { TAKEDOWN_LINE } from "@/lib/burnticker/creatorProfile";
 import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
@@ -21,7 +21,7 @@ interface Wallet { role: string; label: string; pubkey: string; source: string |
 interface ClusterCfg { status: string; programs: Record<string, string>; launchlabPlatform: string; squads: { vault: string; multisig: string; threshold: string; timeLock: string }; wallets: Wallet[]; platformMints: { symbol: string; mint: string }[] }
 interface View {
   cluster: "devnet" | "mainnet";
-  operator: { name: string; state?: string | null; country: string; contact: string; security: string; entity: string; entityPending: string };
+  operator: { name: string; state?: string | null; country: string; contact: string; security: string; entity: string | null; entityPending?: string | null };
   links: { site: string; app: string; deficitSite: string; github: string; githubOrg: string; x: string[] };
   clusters: Record<"devnet" | "mainnet", ClusterCfg>;
   signedMessage: { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string; clarification?: { date: string; text: string } | null };
@@ -58,7 +58,7 @@ export default function OperatorPage() {
           <p className="text-xs">Send security reports to <a className="underline" href={`mailto:${v.operator.security}`}>{v.operator.security}</a>.</p>
           {/* website-15 item 13: the takedown route for a creator's image (config/burnticker/image-takedowns.json is what the site honors) */}
           <p className="text-xs" data-takedown><MailSafe text={TAKEDOWN_LINE} /></p>
-          <p className="text-xs mt-1"><b>{OPERATOR_COPY.entityTitle}.</b> {isTodo(v.operator.entity) ? v.operator.entityPending : `${v.operator.entity}.`}</p>
+          <p className="text-xs mt-1"><b>{OPERATOR_COPY.entityTitle}.</b> {operatorEntitySentence(v.operator)}</p>
         </section>
 
         <section className={card}>

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { platform, tokenPageData } from "@/lib/burnticker/server";
 import { lookupCoin, sharedTickerBody } from "@/lib/burnticker/coinLookup";
-import { KeyedSwr, SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
-import { COIN_MAX_STALE_MS, coinFreshness } from "@/lib/burnticker/coinFreshness";
+import { coinFreshness } from "@/lib/burnticker/coinFreshness";
+import { coinBodyOf, coinAnswerMemo, type CoinBody } from "@/lib/burnticker/coinAnswerMemo";
 
 export const dynamic = "force-dynamic";
 
@@ -20,15 +20,8 @@ export const dynamic = "force-dynamic";
  * 2026-10-18 prelaunch audit F02: the memo now has a maximum age (COIN_MAX_STALE_MS, coinFreshness.ts) and a bounded build time
  * (keyedSwr.ts SWR_BUILD_TIMEOUT_MS); every answer carries `ageMs`, `marketAgeMs` and `stale`, so the page can date an old snapshot.
  */
-const COIN_MEMO_MS = 15_000, COIN_COLD_WAIT_MS = 12_000, COIN_RETRY_SEC = 3;
-type CoinBody = { status: unknown; receipts: unknown; readings: unknown; rulesText: string; stubs: string[] };
-// one memo per registry (a platform swapped in tests, or reopened, never serves another registry's answers)
-const memos = new WeakMap<object, KeyedSwr<CoinBody>>();
-const memoFor = (registry: object): KeyedSwr<CoinBody> => {
-  let m = memos.get(registry);
-  if (!m) { m = new KeyedSwr<CoinBody>({ freshMs: COIN_MEMO_MS, coldWaitMs: COIN_COLD_WAIT_MS, maxStaleMs: COIN_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, maxKeys: 256, log: (k, e) => console.error(`[burnticker/tokens] ${k}: the coin's page could not be read:`, e) }); memos.set(registry, m); }
-  return m;
-};
+// HB-35 (2026-10-20): the memo (COIN_MEMO_MS, COIN_COLD_WAIT_MS, one per registry) lives in coinAnswerMemo.ts, shared with the pair route
+const COIN_RETRY_SEC = 3;
 
 export async function GET(req: Request, { params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = await params;
@@ -42,11 +35,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ ticker: 
   const t = l.token;
   // the locked rule text is the registry row's own (tokenPageData's rulesText is t.rulesJson): no chain read for the file
   if (new URL(req.url).searchParams.get("format") === "rules") return new Response(t.rulesJson, { headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `inline; filename="rules.json"` } });
-  const build = async (): Promise<CoinBody> => {
-    const data = await tokenPageData(p, t);
-    return { status: data.status, receipts: data.receipts, readings: data.readings.map((r) => ({ id: r.id, at: r.at, result: r.result, value: r.value, title: r.title, sourceUrl: r.sourceUrl, settlementSourceUrl: r.settlementSourceUrl, method: r.method, attestedBy: r.attestedBy })), rulesText: data.rulesText, stubs: data.stubs };
-  };
-  const got = await memoFor(p.registry).get(t.mint, p.registry.pageVersion(t.mint), build);
+  const build = async (): Promise<CoinBody> => coinBodyOf(await tokenPageData(p, t));
+  const got = await coinAnswerMemo(p.registry).get(t.mint, p.registry.pageVersion(t.mint), build);
   if (!got) return NextResponse.json({ loading: true, error: "this coin's page is being read; try again in a few seconds", code: "coin-loading", retryAfterSec: COIN_RETRY_SEC }, { status: 503, headers: { ...NO_STORE, "retry-after": String(COIN_RETRY_SEC) } });
   const fresh = coinFreshness(got, got.value.status);
   return NextResponse.json({ ...got.value, ...fresh }, { headers: { ...NO_STORE, "x-coin-memo": fresh.stale ? "stale" : got.state } });

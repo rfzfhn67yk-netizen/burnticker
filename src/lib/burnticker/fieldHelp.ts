@@ -58,7 +58,9 @@ export const FIELD_HELP = {
   "per-unit": { what: "The share of the pool, or of the vault tokens, for each unit.", does: "It is spent once for each unit, compounding across the units of one settlement." },
   // ---- the coin
   name: { what: "Up to 32 characters.", does: "It is shown on the card and the coin page. The copy check refuses claims of affiliation, links and promises, and the name is fixed at launch." },
-  ticker: { what: "2 to 10 letters or digits. Season coins carry the year, as in RAYS26.", does: "This is the symbol on chain, and it must be free. If a ticker is taken, a number is added, as in RAYS262." },
+  // HB-162 (b) (hourly run 15): the season-year example only on a season team coin's ticker (ticker-season), never on every rule
+  ticker: { what: "2 to 10 letters or digits.", does: "This is the symbol on chain, and it must be free. If a ticker is taken, a number is added to it." },
+  "ticker-season": { what: "2 to 10 letters or digits. Season coins carry the year, as in RAYS26.", does: "This is the symbol on chain, and it must be free. If a ticker is taken, a number is added, as in RAYS262." },
   note: { what: "Up to 140 characters, and optional. No links and no claims of affiliation.", does: "It is shown in its own box, marked as not part of the rule. It can't be edited after launch." },
   socials: { what: "Links (https) to your website, X or Telegram. This is optional.", does: "They are written into the coin's metadata and shown on the coin page." },
   image: { what: "You can upload your own image, or keep the art made from the rule.", does: "Without an upload, it is receipt art with the ticker, the one-line rule and the team colors. Either one is pinned at launch and can't be swapped." },

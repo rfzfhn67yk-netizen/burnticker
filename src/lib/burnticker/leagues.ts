@@ -67,6 +67,16 @@ export function denverDay(iso: string): string {
 }
 /** HB-124: the outcome word a one-game pair coin shows under its team on the league page. */
 export const ONE_GAME_OUTCOME = "one-game pair";
+/** HB-131 (hourly run 11): the same for a one-game coin that is not a pair side. */
+export const ONE_GAME_SOLO_OUTCOME = "one game";
+/**
+ * HB-131: the league season a one-game coin's game belongs to, from when the coin launched (it launches before its game); null when the
+ * launch time is not known, and the caller then counts it on the current season only (HB-124's rule).
+ */
+export function oneGameSeason(league: LeagueId, launchedAt: string | null | undefined): number | null {
+  const t = launchedAt ? Date.parse(launchedAt) : NaN;
+  return Number.isFinite(t) ? seasonYearAt(league, t) : null;
+}
 const coinLeague = (c: Pick<SeasonCoinInput, "rule">): LeagueId | null => {
   const e = c.rule.oracle === "catalogue" && c.rule.series ? parseEspnSeries(c.rule.series) : null;
   return e ? e.league : null;
@@ -174,10 +184,14 @@ export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
   }
   // HB-124 (hourly run 10): a one-game coin (a one-game pair side, $DENWIN and $SEAWIN) is a coin of its team on the current season's
   // page, so that team is never listed under "no coin this season"
-  if (current) for (const c of i.coins) {
+  // HB-131 (hourly run 11): only a game of the season shown (a 2025 one-game coin is not a coin of the 2026 page), and a one-game coin
+  // that is not a pair side is called a one-game coin
+  for (const c of i.coins) {
     const e = c.rule.oracle === "catalogue" && c.rule.series && /^espn\.game:/.test(c.rule.series) ? parseEspnSeries(c.rule.series) : null;
     if (!e || e.kind !== "game" || e.league !== i.league) continue;
-    coinsByTeam.set(e.abbr, [...(coinsByTeam.get(e.abbr) ?? []), { ticker: c.ticker, outcome: ONE_GAME_OUTCOME }]);
+    const season = oneGameSeason(i.league, c.launchedAt);
+    if (season === null ? !current : season !== i.year) continue;
+    coinsByTeam.set(e.abbr, [...(coinsByTeam.get(e.abbr) ?? []), { ticker: c.ticker, outcome: c.rule.pair ? ONE_GAME_OUTCOME : ONE_GAME_SOLO_OUTCOME }]);
   }
   const teams = teamsOf(i.league).map((t) => { const over = !!i.seasonOver?.has(t.abbr); return { abbr: t.abbr, name: t.name, coins: coinsByTeam.get(t.abbr) ?? [], launchHref: launchHref(t.name, i.league, t.abbr, { seasonOver: over }), seasonOver: over, warning: over ? SEASON_OVER_LINK_LINE : null }; })
     .sort((a, b) => (a.seasonOver ? 1 : 0) - (b.seasonOver ? 1 : 0) || (b.coins.length > 0 ? 1 : 0) - (a.coins.length > 0 ? 1 : 0) || a.name.localeCompare(b.name));

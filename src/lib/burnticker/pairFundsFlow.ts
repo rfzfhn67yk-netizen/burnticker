@@ -1,5 +1,8 @@
-import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine, type PostGraduationShares } from "@/lib/burnticker/feeShareLine";
-import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, PAIR_BURN_SENTENCE, teamRefByName } from "@/lib/burnticker/describe";
+import { GAME_RESULT_COUNTS_LINE } from "@/lib/burnticker/gameCoin";
+import { OPERATOR_SHARE_LINE,PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine, type PostGraduationShares } from "@/lib/burnticker/feeShareLine";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PARTIES_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, PAIR_BURN_SENTENCE, teamRefByName } from "@/lib/burnticker/describe";
+/** The party race sentence lives in describe.ts (HB-128: the pinned description says it too); re-exported for the older imports. */
+export { PARTIES_PAIR_SENTENCE };
 
 
 /**
@@ -49,7 +52,7 @@ export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b:
     ],
     outcomes: [
       { when: "A draw (posted only when it truly was one) or a voided result", then: "Nothing moves between the two burn pools. Each coin's own rule decides its own burn for that result." },
-      { when: "No result 72 hours after a reading", then: "That coin burns the period as an unpaired coin, from its own pool, and the period can no longer forward." },
+      { when: "No result 72 hours after a reading", then: "That coin burns the period as an unpaired coin, from its own pool, and nothing from that period moves to the other coin." },
       { when: "A loss is recorded but the forward does not land within 72 hours", then: "The losing coin burns that period as a plain one, and a public event (PairForwardMissing) records the missed forward." },
       { when: "The winner has no live trading pool", then: "Nothing moves. The fuel stays in the loser's pool, and its own later burns spend it." },
     ],
@@ -81,7 +84,7 @@ export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a:
       { when: "The winning coin of a game has no live trading pool", then: "Nothing moves for that game. The share stays in the other coin's pool." },
       { when: "The two teams won the same number of games against each other", then: "Nothing moves at the end. Each coin burns down what is left on itself over four weeks." },
       { when: "The coin of the team that won more has no live trading pool at the end", then: "The other coin's rest goes to $DEFICIT's burn instead." },
-      { when: "No result 72 hours after a game's reading", then: "That coin burns the game as an unpaired coin, from its own pool, and that game can no longer forward." },
+      { when: "No result 72 hours after a game's reading", then: "That coin burns the game as an unpaired coin, from its own pool, and nothing from that game moves to the other coin." },
     ],
     never: "Nothing is paid to holders on any outcome. SOL only moves between two program accounts that nobody can withdraw from, and holders' balances are never touched.",
   };
@@ -99,8 +102,6 @@ export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a:
  * settles on the party's result, whoever the nominee is, so every sentence names the parties, never the candidates. True when both
  * names are parties.
  */
-/** The candidates sentence said for two party outcomes (the settlement subject is the party, whoever its nominee is). */
-export const PARTIES_PAIR_SENTENCE = "Two markets, one race, one party each: the coin of the party that wins burns its own pool on the result and takes the other coin's pool at the end. The result is the party's, whoever its nominee is. If neither party wins, both pools go to $DEFICIT's burn.";
 export const isPartySubject = (names: { a: string; b: string }): boolean => /\bpart(y|ies)\b/i.test(names.a) && /\bpart(y|ies)\b/i.test(names.b);
 export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a: string; b: string }, names: { a: string; b: string }, o: { fees?: SplitLike | null; /** HS-42: a league whose games cannot end tied (no draw row) */ noTies?: boolean } = {}): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
@@ -113,7 +114,7 @@ export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a:
     steps: [
       { title: "Where fees come from", text: pairFeesText(o.fees) },
       { title: game ? "When the game is final" : "When both markets are final", text: game
-        ? `The result counts once, when a second source agrees on it. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.`
+        ? `${GAME_RESULT_COUNTS_LINE} If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.`
         : `The race counts once, when both ${party ? "parties'" : "candidates'"} markets are final. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.` },
       { title: "At the end", text: `The losing coin sends whatever is left in its burn pool, and any fees that arrive later, to the winning coin's burn pool. The winning coin burns down what is left on itself. If there was no single winner, each coin sends what is left to $DEFICIT's burn.` },
     ],

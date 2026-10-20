@@ -108,7 +108,7 @@ describe("A-42: params are decoded once (by Next), never twice", () => {
     const re = new RegExp(`^${config.matcher[0].replace("/:path(.*%.*)", "/(.*%.*)")}$`);
     for (const p of ["/burnticker/t/%", "/api/burnticker/v1/tokens/%", "/api/burnticker/v1/tokens/A%2"]) {
       assert.ok(re.test(p), p);
-      assert.equal(proxy(new NextRequest(`https://burnticker.test${p}`)).status, 404, p);
+      assert.equal((await proxy(new NextRequest(`https://burnticker.test${p}`))).status, 404, p);
     }
   });
 });

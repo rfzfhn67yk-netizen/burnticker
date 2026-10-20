@@ -1,6 +1,7 @@
 import { LINKED_ONE_SHOT_REFUSAL, ONE_SHOT_SHARE_REFUSAL, ONE_SHOT_TARGET_SHARE_REFUSAL } from "@/lib/burnticker/linkedShare";
 import { BURN_REAL_WAITING, BURN_SOL_OFF, burnRealEnabledFromEnv, sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
+import { isFirstSnowRule } from "@/lib/burnticker/nextResult";
 import { endSelfOnLossProblem, endSinkOf, isOneShot, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { feedById, feedCrossReadName, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
 import { catalogueSettleRefusal } from "@/lib/burnticker/coverage/settleable";
@@ -197,7 +198,8 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
   // review 10 F1 (2026-10-14): a single one-shot under 100 % with an end sink cannot finish its share on the coin before the end is recorded
   // and the rest forwarded, unless the keeper can spend the carried amount without a reading (crank_carried, burn dispersal). Fail closed.
   // launch wizard audit 2026-10-19 F5: with dispersal on, a burn target is the reason, and it gets its own sentence
-  else if (!ctx.pair && isOneShot(r) && !linkedFull(r) && endSinkOf(r) !== null && (ctx.dispersal !== true || !!r.burnTarget)) out.push({ status: 400, code: "one-shot-share-needs-dispersal", message: ctx.dispersal === true ? ONE_SHOT_TARGET_SHARE_REFUSAL : ONE_SHOT_SHARE_REFUSAL });
+  // HB-147 (hourly run 13): the first snow is a one-shot here too (its 50% share is held on the coin like any other one-shot's)
+  else if (!ctx.pair && (isOneShot(r) || isFirstSnowRule(r)) && !linkedFull(r) && endSinkOf(r) !== null && (ctx.dispersal !== true || !!r.burnTarget)) out.push({ status: 400, code: "one-shot-share-needs-dispersal", message: ctx.dispersal === true ? ONE_SHOT_TARGET_SHARE_REFUSAL : ONE_SHOT_SHARE_REFUSAL });
   // round 5: the incinerator end sink exists only on the round-5 program (initialize_token pins EndSink kind INCINERATOR)
   if (endSinkOf(r) === "incinerator" && ctx.programRound5 === false) out.push({ status: 503, code: "incinerator-not-live", message: INCINERATOR_WAITING });
   else if (endSinkOf(r) === "incinerator" && ctx.burnSol === false) out.push({ status: 400, code: BURN_SOL_OFF_CODE, message: BURN_SOL_OFF });

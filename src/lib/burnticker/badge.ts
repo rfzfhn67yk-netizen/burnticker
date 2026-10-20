@@ -190,7 +190,7 @@ export function lostDayOf(s: Pick<TokenStatusJson, "next" | "profile">, receipts
   if (s.next?.result !== "decided") return null;
   const r = [...receipts].filter((x) => !["winddown", "drain", "sweep"].includes(x.kind ?? "")).sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
   if (r?.pairRole !== "lost") return null;
-  const b = /ONE-SHOT\s*·\s*([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(s.profile?.badge ?? "");
+  const b = /ONE-SHOT\s*·\s*(?:BY )?([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(s.profile?.badge ?? "");
   return b ? `${b[3]}-${String(MON.indexOf(b[1]) + 1).padStart(2, "0")}-${b[2].padStart(2, "0")}` : r.settledAt.slice(0, 10);
 }
 /**

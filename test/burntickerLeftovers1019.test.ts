@@ -157,11 +157,14 @@ describe("HB-26: a rule text is named in public words, bound by its sha256", () 
 });
 
 describe("ownerAction: cross-origin code and the csp-report exemption are in the tree", () => {
+  // HB-140 L1 (hourly run 12): the public RPC route is published, so its check runs in every tree; only the owner's files are skipped
+  test("the public RPC route refuses another origin with code cross-origin", () => {
+    assert.match(read("src/app/api/burnticker/rpc/route.ts"), /code: "cross-origin"/);
+  });
   test("both refusals carry code cross-origin; the CSRF table leaves out csp-report only", (t) => {
     // ownerAction.ts and its test are monorepo-private (the owner's action routes); the public tree has neither, so this check runs only where they exist
     if (!fs.existsSync("src/lib/ownerAction.ts") || !fs.existsSync("test/ownerAction.test.ts")) { t.skip("monorepo-only files"); return; }
     assert.match(read("src/lib/ownerAction.ts"), /code: "cross-origin"/);
-    assert.match(read("src/app/api/burnticker/rpc/route.ts"), /code: "cross-origin"/);
     assert.match(read("test/ownerAction.test.ts"), /csp-report\$\{path\.sep\}/);
   });
 });
