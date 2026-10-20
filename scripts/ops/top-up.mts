@@ -11,8 +11,11 @@
  *             BURNTICKER_UPLOAD_PAYER.
  *   --apply   one pass of the executor: loads the keeper key (BURNTICKER_SIGNER_PATH and its passphrase, as the keeper does), sends the
  *             planned transfers (each simulated first) and records each one in the registry's top_ups table, exactly as the keeper
- *             does. Do not run it while the keeper is in the middle of a cycle on the same host; between cycles is fine (each pass
- *             reads the balances fresh, so a pass right after the keeper's sends nothing more).
+ *             does. HB-108: it REFUSES while a keeper leads on this host (the leading keeper holds data/burnticker-top-up.lock and
+ *             refreshes it every cycle; stop the keeper, or wait KEEPER_LOCK_TTL_MS after a stop, first) and while data/PAUSE-burnticker
+ *             exists; for its one pass it holds the same lock, so a keeper that starts leading meanwhile skips its own step.
+ *   --clear-drain <target>  clears the drain stop for one target (upload-payer-wallet, irys-balance or deficit-keeper) after the
+ *             operator has found why it drained: the top-ups so far stop counting toward the stop. Writes one registry status row.
  *
  * The env file is parsed here, not sourced. No key material or env value is printed: public keys, balances and signatures only.
  */
@@ -21,7 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { connectionTransfer, deficitKeeperAddress, describeStep, irysPayerAccount, loadTopUpConfig, planTopUps, readTopUpInput, runTopUps, solText, topUpModeFromEnv, uploadPayerAddress, TARGET_LABEL, type TopUpDeps } from "@/lib/burnticker/ops/topUp";
+import { CLI_LOCK_TTL_MS, clearDrainStop, connectionTransfer, deficitKeeperAddress, describeStep, irysPayerAccount, KEEPER_PAUSE_FILE, loadTopUpConfig, planTopUps, readTopUpInput, releaseTopUpLock, runTopUps, solText, takeTopUpLock, topUpModeFromEnv, uploadPayerAddress, TARGET_LABEL, TOP_UP_LOCK_FILE, TOP_UP_TARGETS, type TopUpDeps, type TopUpTarget } from "@/lib/burnticker/ops/topUp";
 
 const args = process.argv.slice(2);
 const has = (f: string) => args.includes(f);
@@ -37,7 +40,17 @@ if (envFile) {
   }
 }
 const apply = has("--apply");
-if (!apply && !has("--plan")) { console.error("pass --plan (reads only) or --apply (one pass of the executor)"); process.exit(2); }
+const clearTarget = flag("--clear-drain");
+if (has("--clear-drain")) {
+  if (!clearTarget || !TOP_UP_TARGETS.includes(clearTarget as TopUpTarget)) { console.error(`--clear-drain takes one of ${TOP_UP_TARGETS.join(", ")}`); process.exit(2); }
+  const { openRegistry } = await import("@/lib/burnticker/registry");
+  const reg = openRegistry(process.env.BURNTICKER_DB?.trim() || path.join("data", "burnticker.db"));
+  try { clearDrainStop(reg, clearTarget as TopUpTarget, Date.now()); console.log(`the drain stop for ${TARGET_LABEL[clearTarget as TopUpTarget]} is cleared; the next keeper cycle refills it if it is below its floor`); }
+  finally { reg.close(); }
+  process.exit(0);
+}
+if (!apply && !has("--plan")) { console.error("pass --plan (reads only), --apply (one pass of the executor) or --clear-drain <target>"); process.exit(2); }
+if (apply && fs.existsSync(KEEPER_PAUSE_FILE)) { console.error(`${KEEPER_PAUSE_FILE} is present: PAUSE holds every SOL move, so --apply is refused. Remove the file first if the pause is over.`); process.exit(2); }
 const env = process.env;
 const rpc = env.BURNTICKER_RPC_URL?.trim();
 if (!rpc) { console.error("BURNTICKER_RPC_URL is not set (pass --env <file> or export it)"); process.exit(2); }
@@ -81,9 +94,19 @@ if (!apply) {
 const { loadKeypair } = await import("@/lib/burnKeeper/keyfile");
 const kp = loadKeypair({ keyPath, passphrase: env.BURNTICKER_SIGNER_PASSPHRASE?.trim() || undefined });
 if (kp.publicKey.toBase58() !== signerAddress) { console.error(`the key at ${keyPath} (${kp.publicKey.toBase58()}) is not BURNTICKER_KEEPER_PUBKEY ${signerAddress}: refused`); process.exit(2); }
+// HB-108: one sender at a time. The leading keeper holds this lock (refreshed every cycle); while it does, --apply is refused.
+const lock = takeTopUpLock(TOP_UP_LOCK_FILE, "cli", Date.now(), CLI_LOCK_TTL_MS);
+if (!lock.ok) {
+  console.error(lock.held.holder === "keeper"
+    ? `a keeper leads on this host and holds ${TOP_UP_LOCK_FILE} (until ${new Date(lock.held.expiresAt).toISOString()} unless it runs another cycle): refused. The keeper refills the wallets itself; to run a pass by hand, stop the keeper first.`
+    : `another --apply pass (pid ${lock.held.pid}) holds ${TOP_UP_LOCK_FILE}: refused`);
+  process.exit(2);
+}
+process.on("exit", () => { try { releaseTopUpLock(TOP_UP_LOCK_FILE, "cli", Date.now()); } catch { /* lapses on its own */ } });
 const { openRegistry } = await import("@/lib/burnticker/registry");
 const reg = openRegistry(dbFile);
 try {
+
   const r = await runTopUps({ registry: reg, config, mode: topUpModeFromEnv(env), now, log, alert: (kind, key, text, meta) => reg.recordAlert({ kind, key, text, meta }, now),
     deps: { signerAddress, readLamports: async (a) => BigInt(await conn.getBalance(new PublicKey(a), "confirmed")), transfer: connectionTransfer(conn, kp), irys, deficitKeeper: deficit } });
   if (!r) process.exit(1);

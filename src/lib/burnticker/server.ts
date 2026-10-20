@@ -1,5 +1,6 @@
 import "server-only";
 import { ruleSideName } from "@/lib/burnticker/coinCard";
+import { coinLifecycleState } from "@/lib/burnticker/decidedWarning";
 import type { MintBankPort } from "@/lib/burnticker/mintBank";
 import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import { plannedNextCheckAt } from "@/lib/burnticker/readPlan";
@@ -322,6 +323,8 @@ export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), 
   const input = await tokenPageInput(p, t, now, opts);
   const receipts = buildReceiptsJson(input);
   const status = buildTokenStatus(input, receipts);
+  // HB-25 residue (hourly run 8): beside the registry row state, what the coin is doing now (the decided line the cards use)
+  status.lifecycleState = coinLifecycleState(status, receipts);
   // cheap-features item 12: a Coin vs Coin coin carries its pair's live scoreboard (registry only, no chain read)
   if (t.selectorKey.startsWith("derby:")) status.derbyScoreboard = coinDerbyScoreboard(p.registry, t.mint, now);
   // website-15 item 13: an image taken down on request (config/burnticker/image-takedowns.json) is no longer shown; the receipt art is

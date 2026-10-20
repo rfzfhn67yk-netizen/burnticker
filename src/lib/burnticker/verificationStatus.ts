@@ -28,7 +28,7 @@ export const LAYER_LABEL: Record<Layer, { title: string; what: string }> = {
 export function checkStatus(c: Pick<ReceiptCheck, "ok" | "detail">): CheckStatus {
   if (c.ok === true) return "passed";
   if (c.ok === false) return "failed";
-  return /did not answer|could not be fetched|did not return|rate-limited|HTTP \d/i.test(c.detail) ? "unavailable" : "not checked";
+  return /did not answer|could not be fetched|did not return|rate-limited|budget is full|budget is spent|HTTP \d/i.test(c.detail) ? "unavailable" : "not checked";
 }
 
 export type Verdict = "verified" | "partly verified" | "could not check" | "failed";

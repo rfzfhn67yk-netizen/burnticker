@@ -186,8 +186,8 @@ describe("HB-70: the smaller sixth-pass items", () => {
     const covered = (f: string) => globs.some((g) => toRe(g).test(`test/${f}`));
     const files = fs.readdirSync("test").filter((f) => f.endsWith(".test.ts"));
     for (const f of files.filter((x) => x.startsWith("burnticker"))) assert.ok(covered(f), `${f} is outside the gate`);
-    // the eight files the sixth pass found outside the gate: seven run now; copyLint waits on its three pre-existing failures
-    const EXCLUDED: Record<string, string> = { "copyLint.test.ts": "three pre-existing failures (\"moon\" ordering and the narrowed will-moon rule); add it once they are fixed" };
+    // the eight files the sixth pass found outside the gate all run now (copyLint joined 2026-10-19 after its three "moon" failures were fixed)
+    const EXCLUDED: Record<string, string> = {};
     for (const f of ["ownerAction", "copyLint", "dailyPost", "launchConfirmMessages", "launchPairKinds", "launchPlanAge", "btOpsPrivate", "postQueue"].map((x) => `${x}.test.ts`)) {
       if (!files.includes(f)) continue;
       assert.equal(covered(f), !EXCLUDED[f], `${f}: ${EXCLUDED[f] ?? "should be in the gate"}`);

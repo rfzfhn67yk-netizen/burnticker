@@ -188,7 +188,7 @@ describe("HB-92: one wallet prompt count on the review", () => {
       const n = walletPromptCount({ transactions: tx, proof });
       const line = walletPromptsLine(tx, proof);
       assert.match(line, new RegExp(`asks ${n} `), line);
-      assert.match(signsLine(n, { proof }), new RegExp(`asks ${n} times`));
+      assert.match(signsLine(n, { proof }), new RegExp(`asks ${n} `)); // HB-92 residue (hourly run 8): the same sentence as the disclosure
       plain(line);
     }
     assert.match(walletPromptsLine(2, true), /asks 3 times in all/);
@@ -390,8 +390,9 @@ describe("HB-68 residue: What to know before you start on the coin comparison re
     assert.deepEqual(pairUpfrontLines("linked", RAISE_PRESETS_SOL), upfrontLines(RAISE_PRESETS_SOL, { pair: true }));
     plain(PAIR_CURVE_UPFRONT_FALLBACK);
     const t = read("src/app/burnticker/launch/CoinVsCoinTile.tsx");
-    assert.match(t, /upfront=\{pairUpfrontLines\(reviewVenue, RAISE_PRESETS_SOL, shown\.review\?\.prerequisiteLine \?\? null\)\}/);
-    assert.match(t, /upfront=\{upfrontLines\(RAISE_PRESETS_SOL\)\}/);
+    // HB-112a / HB-107a (hourly run 9): the pair says its own "When it ends" line; the record close says its own end (perpetual or not)
+    assert.match(t, /upfront=\{pairUpfrontLines\(reviewVenue, RAISE_PRESETS_SOL, shown\.review\?\.prerequisiteLine \?\? null, ends\)\}/);
+    assert.match(t, /upfront=\{upfrontLines\(RAISE_PRESETS_SOL, \{ team: false, end: null, pair: false, perpetual: windowKindOf\(rule\) === "perpetual" \}\)\}/);
   });
 });
 

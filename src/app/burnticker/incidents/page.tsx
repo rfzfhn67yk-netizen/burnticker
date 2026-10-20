@@ -7,7 +7,6 @@ import { INCIDENTS_FILE } from "@/lib/burnticker/trust";
 import { repoUrl } from "@/lib/burnticker/currentStatusLinks";
 import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader, Panel } from "../_components/Panel";
-import { RepoText } from "../_components/RepoText";
 import { markdownLinkParts } from "@/lib/burnticker/publicPaths";
 import { withShareCard } from "@/lib/burnticker/pageMeta";
 
@@ -29,7 +28,7 @@ export default function IncidentsPage() {
       <Panel title={INCIDENTS_COPY.recordedTitle} id="recorded">
         {!log.present ? <EmptyState kind="unavailable" body={INCIDENTS_COPY.unavailable} compact />
           : log.entries.length === 0 ? <EmptyState kind="no-activity" body={<>{INCIDENTS_COPY.none} {INCIDENTS_COPY.noneMore}</>} compact />
-          : <ol className="bt-list">{log.entries.map((e) => <li key={e.heading}><h3 className="bt-h3">{e.heading}</h3><div className="bt-body-text" data-incident-body>{e.body.split("\n").filter((l) => l.trim()).map((l, i) => <p key={i}>{markdownLinkParts(l.replace(/^\s*[-*]\s+/, "")).map((p, j) => (p.href ? <a key={j} className="underline" href={p.href} target="_blank" rel="noreferrer">{p.text}</a> : <span key={j}>{p.text}</span>))}</p>)}</div></li>)}</ol>}
+          : <ol className="bt-list">{log.entries.map((e) => <li key={e.heading}><h3 className="bt-h3">{e.heading}</h3><div className="bt-body-text" data-incident-body>{e.body.split("\n").filter((l) => l.trim()).map((l, i) => <p key={i}>{markdownLinkParts(l.replace(/^\s*[-*]\s+/, ""), { base: "docs/burnticker/incidents" }).map((p, j) => (p.href ? <a key={j} className="underline" href={p.href} target="_blank" rel="noreferrer">{p.text}</a> : <span key={j}>{p.text}</span>))}</p>)}</div></li>)}</ol>}
         {/* HB-46 (run 4): the log is linked in the public repository, never printed as a repository path */}
         <p className="bt-meta"><a className="underline" href={repoUrl(INCIDENTS_FILE)} target="_blank" rel="noreferrer">{INCIDENTS_COPY.logLink}</a></p>
       </Panel>
@@ -44,7 +43,7 @@ export default function IncidentsPage() {
                 <div><dt>{INCIDENTS_COPY.whatHappened}</dt><dd>{c.happened}</dd></div>
                 <div><dt>{INCIDENTS_COPY.whatWasDone}</dt><dd>{c.done}</dd></div>
               </dl>
-              <p className="bt-meta"><RepoText text={c.source} /></p>
+              <p className="bt-meta"><a className="underline" href={repoUrl(c.source)} target="_blank" rel="noreferrer">{INCIDENTS_COPY.sourceLink}</a></p>
             </li>
           ))}
         </ol>

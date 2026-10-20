@@ -67,7 +67,7 @@ describe("2. the party-control review: the race line once, and the end in party 
   });
   test("the page and the review API pass the party flag; the name step's sentence says the party line", () => {
     assert.match(page, /const partyRace = settledPick\?\.shape === "candidates" && isPartySubject\(settledPick\.names\);/);
-    assert.match(page, /const settledLine = settledPick \? \(partyRace \? PARTIES_PAIR_SENTENCE : settledPairSentence\(settledPick\.shape\)\) : null;/);
+    assert.match(page, /const settledLine = settledPick \? \(partyRace \? PARTIES_PAIR_SENTENCE : settledPick\.shape === "game" && leagueCannotTie\(leagueSeries\) \? GAME_PAIR_SENTENCE_NO_TIE : settledPairSentence\(settledPick\.shape\)\) : null;/);
     assert.match(page, /textB\.oneLiner\}\. \$\{settledLine\}`/);
     assert.match(page, /endSentences\([^\n]*\{ team: [^\n]*, party: partyRace \}\);/);
     assert.match(page, /candidateFacts\(\{ a: ticker, b: tickerB, candA: elPick\.a\.label, candB: elPick\.b\.label, party: partyRace \}\)/);

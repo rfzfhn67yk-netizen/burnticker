@@ -35,9 +35,18 @@ export function isReviewedDraft(s: Draft | null | undefined): s is Draft {
   return at && (!!str(s.name) || !!str(s.ticker));
 }
 
+/**
+ * HB-106 (hourly run 8): changing the Which choice clears the rule but leaves the earlier choice's name and ticker in the snapshot, so the
+ * banner said "You have a draft: Weiser vs Marx ($WEISVMARX)" while Resume opened an unnamed Avalanche vs Devils pair. A draft back on
+ * the follow or Which step has no name of its own yet: its stored name and ticker are not used to label or offer it.
+ */
+const ownNameOf = (s: Draft): { name: string; ticker: string } => {
+  const phase = (s.guide as { phase?: string } | undefined)?.phase;
+  return phase === "follow" || phase === "which" ? { name: "", ticker: "" } : { name: str(s.name), ticker: str(s.ticker) };
+};
 /** The draft the page offers on load: the one in progress when it is named, else the kept one, else the one in progress, else none. */
 export function pickOffer(current: Draft | null, kept: Draft | null): Draft | null {
-  if (isMeaningfulDraft(current) && (str(current.name) || str(current.ticker))) return current;
+  if (isMeaningfulDraft(current) && (ownNameOf(current).name || ownNameOf(current).ticker)) return current;
   if (isReviewedDraft(kept)) return kept;
   return isMeaningfulDraft(current) ? current : null;
 }
@@ -45,7 +54,8 @@ export function pickOffer(current: Draft | null, kept: Draft | null): Draft | nu
 const FOLLOW_WORDS: Record<string, string> = { team: "a team coin", rivalry: "a rivalry pair", market: "an event outcome coin", number: "a published data coin", coins: "a coin comparison pair", disaster: "a natural disaster coin" };
 /** "Eagles 2026 Wins ($PHINFLWIN)"; a draft without a name says what it follows ("a team coin, not named yet"). */
 export function draftLabel(s: Draft): string {
-  const name = str(s.name), ticker = str(s.ticker).toUpperCase();
+  const own = ownNameOf(s), name = own.name, ticker = own.ticker.toUpperCase();
+
   if (name && ticker) return `${name} ($${ticker})`;
   if (name || ticker) return name || `$${ticker}`;
   const follow = (s.guide as { follow?: string | null } | undefined)?.follow ?? "";

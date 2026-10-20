@@ -152,8 +152,10 @@ describe("H8: both coins of a two-team pair regenerate together, and the names s
 
 describe("H6 (page part): a team whose season is over", () => {
   test("the Burns step says the review's sentence, offers the next season and holds Next; patterns greyed for a finished team", () => {
-    assert.match(page, /setSeasonSwap\(\{ abbr: team\.abbr, series: so\.next\.series, label: so\.next\.label \}\)/);
-    assert.match(page, />Use the \{so\.next\.label\} season<\/button>/);
+    // HB-119 (hourly run 10): the offer is there before Next (seasonOverRefusal on the page), as the primary button
+    assert.match(page, /const soNext = so\?\.next \?\? \(teamOver \? seasonOverRefusal\(rule\)\?\.next \?\? null : null\);/);
+    assert.match(page, /setSeasonSwap\(\{ abbr: team\.abbr, series: soNext\.series, label: soNext\.label \}\)/);
+    assert.match(page, />\{nextSeasonButtonLabel\(team\.nickname \?\? team\.name, soNext\.label\)\}<\/button>/);
     assert.match(page, /firstPartyRule\(seasonSwap && seasonSwap\.abbr === team\.abbr \? seasonSwap\.series :/);
     assert.match(page, /o\.id === "every" \|\| o\.id === "fade" \? \{ \.\.\.o, available: false, reason: SEASON_OVER_LINE \}/);
     assert.match(page, /next=\{seasonBlocked \? <StickyAction><button type="button" data-nav disabled/);
@@ -192,7 +194,7 @@ describe("WIRING-SOURCES7 page items", () => {
     // 2026-10-13: the outcome passes through whole (two of the three results included: drain.ts teamDrainUnit)
     assert.match(page, /teamDrainUnit\(teamOutcome \?\? "win", !!rule\.inverse\)/);
     assert.match(page, /\.find\(\(w\) => \/half the pool would be gone\/\.test\(w\)\)/);
-    assert.match(page, /patternWords\(o\.id, \{ [^}]*gameLabel \}\)/);
+    assert.match(page, /patternWords\(o\.id, \{ [^}]*gameLabel, league: leagueSeries \}\)/);
   });
   test("helpers: the verifier waits for a well-formed signature; the verify page drops the catalogue line for an invalid address", () => {
     const rv = read("src/app/burnticker/check/ReceiptVerifier.tsx"), vp = read("src/app/burnticker/verify/page.tsx");

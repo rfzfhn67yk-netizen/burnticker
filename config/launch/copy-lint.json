@@ -50,8 +50,8 @@
     {
       "id": "moon",
       "category": "price-returns",
-      "pattern": "\\b(moon(ed|ing|shot|shots|bags?)|(to|for) the moon|wen moon|moon (soon|mission|incoming))\\b",
-      "note": "QA pass 9 #9 (2026-10-13): price talk only (mooning, moonshot, moonbag, to the moon, wen moon); the noun in ordinary language (a moon landing, Harvest Moon, moon-club) is fine"
+      "pattern": "\\b(moon(ed|ing|shot|shots|bags?)|(to|for) the moon|wen moon)\\b|(?<=\\b(?:will|gonna|going to|about to|set to|could|might|should)\\s+)moon\\b|\\bmoon(?=\\s+(?:soon|mission|incoming)\\b)",
+      "note": "QA pass 9 #9 (2026-10-13): price talk only (mooning, moonshot, moonbag, to the moon, wen moon); the noun in ordinary language (a moon landing, Harvest Moon, moon-club) is fine. 2026-10-19: the verb after a modal (it will moon, gonna moon) is price talk too, and 'moon soon' reports the word moon so the promise word is its own hit"
     },
     {
       "id": "multiplier",
@@ -119,7 +119,7 @@
     {
       "id": "next-big",
       "category": "price-returns",
-      "pattern": "\\bnext (big|100x|pepe|doge|bonk)\\b"
+      "pattern": "\\bnext (big (thing|coin|token|one|play|gem|winner|runner|moonshot|memecoin|meme)s?|100x|pepe|doge|bonk)\\b"
     },
     {
       "id": "profit",

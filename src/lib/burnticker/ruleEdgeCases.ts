@@ -65,8 +65,17 @@ export const edgeCase =(item: number): string | null => RULE_EDGE_CASES.find((e)
  */
 /** HB-81 D5 (hourly run 5): item 218 on a one-time coin, which does end on its own (its one burn, or its deadline). */
 export const ITEM_218_ONE_SHOT_TAIL = "The coin's burn pool keeps what it holds until the rule ends on its own terms.";
-export function edgeCaseFor(item: number, o: { oneGame?: boolean; oneShot?: boolean } = {}): string | null {
+/**
+ * HB-103 (hourly run 8): in a linked candidates pair a 50-50 market is not a void. The keeper reads it as no single winner
+ * (pairForwardKeeper.ts raceVerdict "none"): nothing moves between the coins, and at the end each pool goes where the pair-winner end sends
+ * a pool with no winner, $DEFICIT's burn (rules.ts onEndText). The same words as the review's "When it ends" and RULE VERSION block.
+ */
+export const RACE_SPLIT_LINE = "In this pair, a market that settles 50-50 means there is no single winner: nothing moves between the two coins, and at the end each pool goes to $DEFICIT's burn.";
+export function edgeCaseFor(item: number, o: { oneGame?: boolean; oneShot?: boolean; racePair?: boolean } = {}): string | null {
   const s = edgeCase(item);
+  if (s && item === 82 && o.racePair) return s.replace(/A market that settles 50-50 is void, and nothing burns\.$/, RACE_SPLIT_LINE);
+  if (s && item === 178 && o.racePair) return s.replace(/A split result, such as 50-50 or 75-25, is void, and nothing burns on either side\.$/, "In this pair, a split result, such as 50-50 or 75-25, means there is no single winner: nothing moves between the two coins, and at the end each pool goes to $DEFICIT's burn.");
+
   if (s && item === 79 && !o.oneGame) return s.replace(/\s*A one-game coin whose game is cancelled[\s\S]*$/, "");
   if (s && item === 218 && o.oneShot) return s.replace(/The coin's burn pool keeps what it holds, and nothing ends the rule on its own today\.$/, ITEM_218_ONE_SHOT_TAIL);
   return s;
@@ -81,3 +90,10 @@ export function edgeCaseFor(item: number, o: { oneGame?: boolean; oneShot?: bool
 export function reviewEdgeIds(o: { oneShotFull: boolean; otherCoin: boolean }): number[] {
   return [...(o.oneShotFull ? [] : [164]), ...(o.otherCoin ? [168] : []), 174];
 }
+
+/**
+ * The Coin comparison reviews' "Unusual cases for this rule", by mode. HB-112b (hourly run 9): item 70 (a flippening's unreadable last
+ * day) is said only on a flippening, never on a daily race or a record close.
+ */
+export const COINVS_EDGE_IDS = { race: [69, 72, 74, 76, 174], flip: [66, 70, 74, 76, 174], single: [72, 174] } as const;
+export const coinvsEdgeNotes = (mode: keyof typeof COINVS_EDGE_IDS): string[] => COINVS_EDGE_IDS[mode].map((i) => edgeCase(i)).filter((x): x is string => !!x);

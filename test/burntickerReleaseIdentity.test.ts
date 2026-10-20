@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { KEEPER_RELEASE_FILE, parseRelease, readRelease, releaseView, TREE_RECIPE, writeKeeperRelease } from "@/lib/burnticker/releaseManifest";
+import { KEEPER_RELEASE_FILE, parseRelease, PUBLIC_COMMIT_NOTE, readRelease, releaseView, TREE_RECIPE, writeKeeperRelease } from "@/lib/burnticker/releaseManifest";
+import { PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
 import { REGISTRY_SCHEMA_VERSION } from "@/lib/burnticker/registry";
 import { lintCopy } from "@/lib/launch/copyLint";
 
@@ -31,7 +32,8 @@ describe("I-13: the release record", () => {
     const root = tree({ build: "build-42" });
     const v = releaseView({ servedBuildId: "build-42", root, env: { BURNTICKER_PUBLISH_DIR: path.join(root, "site") } });
     assert.equal(v.recorded, true);
-    assert.deepEqual(v.publicTree, { commit: PUB, dirty: false, sha256: TREE, files: 2402, recompute: TREE_RECIPE });
+    // HB-110 (hourly run 8): beside the served commit, the release commit the changelog links and a note on the two
+    assert.deepEqual(v.publicTree, { commit: PUB, releaseCommit: PUBLIC_REPO_COMMIT, commitNote: PUBLIC_COMMIT_NOTE, dirty: false, sha256: TREE, files: 2402, recompute: TREE_RECIPE });
     assert.deepEqual(v.monorepo, { commit: MONO, dirty: true }, "a dirty publish says so");
     assert.deepEqual(v.build, { id: "build-42", builtAt: "2026-10-19T15:05:00.000Z", matchesServed: true });
     assert.equal(v.registrySchemaVersion, REGISTRY_SCHEMA_VERSION);

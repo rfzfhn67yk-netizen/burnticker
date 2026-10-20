@@ -1,6 +1,7 @@
 import { buybackSpend, reserveSpendCap } from "@/lib/burnReceipts/math";
 import { DEFAULT_CAP_LAMPORTS, LAMPORTS, MAX_SPEND_RESERVE_BPS } from "@/lib/burnticker/burnMath";
-import { outcomeResults, outcomeWords, parseEspnSeries } from "@/lib/burnticker/sources/espn";
+import { outcomeResults, outcomeWords, parseEspnSeries, seriesCannotTie } from "@/lib/burnticker/sources/espn";
+
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { windowKindOf } from "@/lib/burnticker/describe";
 
@@ -136,6 +137,8 @@ export function simulateResults(rule: BurnRule, o: SimOptions = {}): Simulation 
   const family = simFamilyOf(rule);
   for (const c of SIM_CASES) {
     if (c === "tie" && family === "published" && !o.pair) continue;
+    // HS-42 (hourly run 8): no tie row for a league whose games cannot end tied (NHL, NBA, MLB), on a team coin or a one-game pair
+    if (c === "tie" && (seriesCannotTie(rule.oracle === "catalogue" ? rule.series ?? null : null) || seriesCannotTie(rule.pair?.game?.series?.[0] ?? null))) continue;
     let coins: SimCoin[];
     let line: string;
     if (c === "result") {

@@ -93,6 +93,17 @@ export const LEAGUES: Record<LeagueId, League> = {
   cfb: { id: "cfb", label: "College football", path: "football/college-football", sport: "football", alias: null, ...tsdb, draws: false, span: "single" },
 };
 export const isLeague = (x: string): x is LeagueId => Object.prototype.hasOwnProperty.call(LEAGUES, x);
+/**
+ * HS-42 (hourly run 8): leagues whose games always end with a winner (overtime, extra innings, a shootout): NHL, NBA, MLB and the other
+ * basketball leagues. Their coins say nothing about ties or draws. Football keeps the tie line (an NFL game can end tied).
+ */
+export const leagueCannotTie = (id: string | null | undefined): boolean => {
+  const l = id && isLeague(id) ? LEAGUES[id] : null;
+  return !!l && !l.draws && (l.sport === "basketball" || l.sport === "baseball" || l.sport === "hockey");
+};
+/** The same for a rule: a team series, or a one-game pair's game series. */
+export const seriesCannotTie = (series: string | null | undefined): boolean => { const e = series ? parseEspnSeries(series) : null; return !!e && leagueCannotTie(e.league); };
+
 /** The sports in the order the pickers list them (no sport first by habit: alphabetical). */
 export const SPORTS: { id: Sport; label: string }[] = [{ id: "baseball", label: "Baseball" }, { id: "basketball", label: "Basketball" }, { id: "football", label: "Football" }, { id: "hockey", label: "Hockey" }, { id: "soccer", label: "Soccer" }];
 const LEAGUE_ALT = Object.keys(LEAGUES).sort((a, b) => b.length - a.length).map((k) => k.replace(/\./g, "\\.")).join("|");

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { Registry } from "@/lib/burnticker/registry";
 import type { PinUploader, UploadBalance } from "@/lib/burnticker/pin";
+import { freshIrysRead, IRYS_READ_TTL_MS, publishIrysRead } from "@/lib/burnticker/ops/irysReadMemo";
 
 /**
  * THE DAILY REGISTRY SNAPSHOT, PINNED TO ARWEAVE (owner-approved 2026-10-10 night, trust-ops item 1).
@@ -206,7 +207,18 @@ export async function checkUploadBalance(o: { registry: Pick<Registry, "getStatu
   if (tried && o.now - tried < SNAPSHOT_RETRY_MS) return null;
   o.registry.setStatus(BALANCE_TRIED_KEY, String(o.now), o.now);
   let v: ReturnType<typeof uploadBalanceVerdict>;
-  try { v = uploadBalanceVerdict(await o.uploader.balance(SNAPSHOT_PRICE_BYTES)); } catch (e) { o.log(`  [snapshot] upload balance not read: ${(e as Error).message.slice(0, 160)}`); return null; }
+  try {
+    // HB-114: the top-up step's read of this hour (balance and a snapshot-size price) stands in, so the two never read twice; otherwise
+    // this check reads (two requests, once a UTC day) and shares its balance read with the top-up step that runs right after it
+    const shared = freshIrysRead({ now: o.now, notBy: "balance-alert" });
+    let b: UploadBalance;
+    if (shared?.snapshotPrice && o.now - shared.snapshotPrice.at < IRYS_READ_TTL_MS) b = { address: shared.address, balanceLamports: shared.balanceLamports, priceLamports: shared.snapshotPrice.lamports };
+    else {
+      b = await o.uploader.balance(SNAPSHOT_PRICE_BYTES);
+      publishIrysRead({ address: b.address, balanceLamports: b.balanceLamports, at: o.now, by: "balance-alert", snapshotPrice: { lamports: b.priceLamports, bytes: SNAPSHOT_PRICE_BYTES, at: o.now } });
+    }
+    v = uploadBalanceVerdict(b);
+  } catch (e) { o.log(`  [snapshot] upload balance not read: ${(e as Error).message.slice(0, 160)}`); return null; }
   o.registry.setStatus(BALANCE_DAY_KEY, day, o.now);
   o.log(`  [snapshot] upload balance covers ${v.covers} daily snapshots${v.low ? " (LOW)" : ""}`);
   if (v.low) { try { await o.alert?.(UPLOAD_BALANCE_KIND, `${UPLOAD_BALANCE_KIND}:${day}`, v.text); } catch { /* the alert channel failing never stops the keeper */ } }

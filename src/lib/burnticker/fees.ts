@@ -2,7 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 import { feeSplit as liveFeeSplit, PPM, ppmToBps, type AmmConfigView, type GlobalConfigView, type PlatformView } from "@/lib/burnKeeper/launch";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCKED_PCT, LP_POLICY_LINE, feeKeysPda, operatorTreasuryRecord } from "@/lib/burnticker/lockFees";
-import { CPMM_CONFIG_ID, CPMM_PLATFORM_TIERS, CPMM_TIER, cpmmTierLabel, cpmmTierOf, postGraduationBps, tierForPin, type CpmmCluster } from "@/lib/burnticker/cpmmTier";
+import { CPMM_CONFIG_ID, CPMM_PLATFORM_TIERS, CPMM_TIER, cpmmTierLabel, newCoinTierAccepted, cpmmTierOf, postGraduationBps, tierForPin, type CpmmCluster } from "@/lib/burnticker/cpmmTier";
 import { EARLIER_COINS_LINE, PAIR_OPERATOR_SHARE_LINE, footerFeeLine, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 
 /**
@@ -231,14 +231,14 @@ export function compareLivePlatform(p: PlatformView, devWallet: string | null, b
 
 /**
  * The trust row for the tier new coins get (owner decision 2026-10-19). The LIVE platform's cpConfigId is the truth for new coins; it
- * matches when it is a tier the code accepts on this cluster (CPMM_PLATFORM_TIERS: the target, then tier 9 while the owner's platform
- * update is pending), so the code can ship before the on-chain change without a false alarm. A coin keeps the tier it pinned at
+ * matches only when it is a tier new coins may be created on (CPMM_PLATFORM_TIERS: tier 14 on mainnet since 2026-10-19; tier 9 is
+ * flagged now that the platform update is done). A coin keeps the tier it pinned at
  * initialize_token, and its page reads that pin, so this row speaks only for coins created from now on.
  */
 export function platformTierRow(liveCpConfigId: string, cluster = "mainnet"): LiveVsDesigned {
   const accepted = CPMM_PLATFORM_TIERS[clusterOf(cluster)], target = accepted[0];
   const designed = accepted.length > 1 ? `${cpmmTierLabel(target.id)}; ${accepted.slice(1).map((t) => cpmmTierLabel(t.id)).join(", ")} until the platform is updated` : cpmmTierLabel(target.id);
-  return { field: "Raydium pool fee tier for new coins (cpConfigId)", designed, live: cpmmTierLabel(liveCpConfigId), matches: accepted.some((t) => t.id === liveCpConfigId) };
+  return { field: "Raydium pool fee tier for new coins (cpConfigId)", designed, live: cpmmTierLabel(liveCpConfigId), matches: newCoinTierAccepted(clusterOf(cluster), liveCpConfigId) };
 }
 
 /** The tier the live platform gives new coins, when it is a listed tier (null: unlisted or not read). */

@@ -17,6 +17,7 @@ import { BOTH_TIERS_LINE, earlierCoinsLineFor, feeTiersLine, postGraduationShare
 import { lpLockPolicyJson, operatorTreasuryRecord, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
 import { compareLivePlatform, liveNewCoinTier, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, SECOND_SIGNER_LINE, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
 import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
+import { counterpartyOf } from "@/lib/burnticker/trustpack/ledger";
 
 /**
  * THE TRUST PAGE'S DATA (the owner, 2026-10-09: the platform must leave no room for suspicion that the operator is corrupt). Facts, no
@@ -404,7 +405,7 @@ export interface TrustPage {
   /** LP locked forever (2026-10-10): the policy, the lock program, the fee-keys PDA (the Fee Key owner), the operator treasury, the split. */
   lpLock: LpLockPolicyJson;
   feeLedger: FeeLedger; team: TeamWallets;
-  attesters: { ticker: string; attesters: number; independent: number; quorum: number }[];
+  attesters: AttesterRow[];
   program: ProgramFacts; incidents: { markdown: string; entries: number }; audit: AuditSummary | null;
   transparency: TransparencySection;
   statements: string[];
@@ -420,6 +421,23 @@ export async function readEffectiveCap(reader: ChainReader | null, programId: st
     const data = await reader.accountData(platformPda(new PublicKey(programId)).toBase58());
     return effectiveCap(data ? decodePlatformConfig(data) : null, Math.floor(nowMs / 1000));
   } catch { return null; }
+}
+
+/**
+ * THE ATTESTER LIST (HB-123, hourly run 10): one row per launched coin, each with its mint (tickers are not unique), its status, and a
+ * label on a coin the coins list hides (a test or rehearsal coin). Drafts that never launched and expired drafts are left out: they have
+ * no reading signer on chain. /api/burnticker/trust and /v1/trust both build their rows here.
+ */
+export interface AttesterRow { ticker: string; mint: string; status: string; attesters: number; independent: number; quorum: number; label: string | null }
+export const ATTESTER_REHEARSAL_LABEL = "A test or rehearsal coin, not listed on the coins page.";
+export function attesterRows(reg: { tokens(): { mint: string; ticker: string; status: string }[]; attesters(mint: string): { active: boolean; role: string }[]; testTokens?(): { mint: string }[]; syntheticTokens?(): { mint: string }[] }): AttesterRow[] {
+  const hidden = new Set<string>();
+  try { for (const t of reg.testTokens?.() ?? []) hidden.add(t.mint); } catch { /* none */ }
+  try { for (const t of reg.syntheticTokens?.() ?? []) hidden.add(t.mint); } catch { /* none */ }
+  return reg.tokens().filter((t) => t.status !== "draft" && t.status !== "expired").map((t) => {
+    const a = reg.attesters(t.mint).filter((x) => x.active);
+    return { ticker: t.ticker, mint: t.mint, status: t.status, attesters: a.length, independent: a.filter((x) => x.role === "independent").length, quorum: Math.max(1, Math.min(1, a.length)), label: hidden.has(t.mint) ? ATTESTER_REHEARSAL_LABEL : null };
+  });
 }
 
 export async function buildTrustPage(i: { reader: ChainReader | null; env?: Readonly<Record<string, string | undefined>>; root?: string; siteDir: string; attesters: TrustPage["attesters"]; firstLaunchAt?: number | null; /** HS-26: a live mainnet coin on tier 14 exists (null: not read) */ tier14Live?: boolean | null; now?: number; cluster?: string; upgradeTimeLockSecs?: number | null; deltaCache?: Map<string, LamportsDelta>; skipFeeLedger?: boolean }): Promise<TrustPage> {
@@ -475,12 +493,14 @@ export async function web3ChainReader(rpcUrl: string): Promise<ChainReader> {
     lamportsDelta: async (sig, addr) => {
       const tx = await c.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
       if (!tx?.meta) return null;
-      const keys = tx.transaction.message.getAccountKeys({ accountKeysFromLookups: tx.meta.loadedAddresses }).staticAccountKeys.map((k) => k.toBase58());
+      // HB-122 (hourly run 10): every key in the ledger's order (static, then loaded writable, then readonly) and the ledger's one
+      // counterparty rule (trustpack/ledger.ts counterpartyOf), so /v1/trust and the fee-ledger API name the same counterparty
+      const keys = tx.transaction.message.getAccountKeys({ accountKeysFromLookups: tx.meta.loadedAddresses }).keySegments().flat().map((k) => k.toBase58());
       const ix = keys.indexOf(addr);
       if (ix < 0) return null;
       const delta = BigInt(tx.meta.postBalances[ix]) - BigInt(tx.meta.preBalances[ix]);
       const memo = tx.meta.logMessages?.find((l) => l.startsWith('Program log: Memo'))?.replace(/^Program log: Memo \(len \d+\): /, "").replace(/^"|"$/g, "") ?? null;
-      return { delta, counterparty: keys.find((k) => k !== addr) ?? null, memo };
+      return { delta, counterparty: counterpartyOf(keys, tx.meta.preBalances, tx.meta.postBalances, ix), memo };
     },
   };
 }

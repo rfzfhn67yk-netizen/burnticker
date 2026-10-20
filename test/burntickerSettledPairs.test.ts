@@ -15,7 +15,7 @@ import { raceVerdict, sidePayout } from "@/lib/burnticker/pairForwardKeeper";
 import { DEFAULT_ON_END, gameMirrorId, lockRule, validateRule, WIND_DOWN_ON_END, type BurnRule } from "@/lib/burnticker/rules";
 import { candidatesRefusals, gamePairRefusals, ruleRefusals, settledPairInput, settledPairSinkProblems, CANDIDATES_SINK_REFUSAL } from "@/lib/burnticker/launchPreflight";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
-import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, describeRule, endText } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, describeRule, endText } from "@/lib/burnticker/describe";
 import { candidateFacts, candidatesPairRule, gamePairFacts, gamePairRule, patternOptions, patternWords, PATTERN_REASON, RIVALRY_GAME_LINE } from "@/lib/burnticker/guidedLaunch";
 import { settledPairFundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { TEMPLATES } from "@/lib/burnticker/templates";
@@ -288,7 +288,7 @@ describe("the review, the copy and the templates", () => {
     const rv = buildLaunchReview(body as never, { env: { ...ENV, BURNTICKER_PAIR_CURVE_ENABLED: "1" }, reserved: new Set() });
     assert.ok("review" in rv);
     if (!("review" in rv)) return;
-    assert.equal(rv.review.venue, "launchlab"); assert.equal(rv.review.settled?.shape, "game"); assert.equal(rv.review.settled?.sentence, GAME_PAIR_SENTENCE);
+    assert.equal(rv.review.venue, "launchlab"); assert.equal(rv.review.settled?.shape, "game"); assert.equal(rv.review.settled?.sentence, GAME_PAIR_SENTENCE_NO_TIE); // HS-42 (hourly run 8): an NBA game cannot end tied
   });
   test("every new sentence is plain and lint-clean: no buy, price, will, dates or coming soon", () => {
     const cfg = loadCopyLintConfig();

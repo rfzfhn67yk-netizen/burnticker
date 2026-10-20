@@ -16,8 +16,9 @@ import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { coinKey, sharedTickers } from "@/lib/burnticker/coinKey";
 import { isTestCoin, testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
-import { chainRows, memoWindowMs, webReadPlatform } from "@/lib/burnticker/webReadCache";
+import { chainRows, homeMemoState, memoWindowMs, webReadPlatform } from "@/lib/burnticker/webReadCache";
 import { PUBLIC_READ_CORS } from "@/lib/burnticker/api/http";
+import { SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +31,20 @@ const HOME_COLD_WAIT_MS = 15_000;
 // 2026-10-15 prelaunch audit M7: the memo window scales with the coins read from the chain (webReadCache.ts memoWindowMs): 15 s under 50
 let homeMemo: { at: number; body: unknown; memoMs: number } | null = null;
 let homeInFlight: Promise<void> | null = null;
+// HB-99 residue (hourly run 8): a refresh in flight past SWR_BUILD_TIMEOUT_MS is dropped and another starts; a dropped build that lands
+// late never overwrites a newer answer (the sequence numbers)
+let homeInFlightAt = 0, homeSeq = 0, homeWritten = 0;
 function refreshHome(): Promise<void> {
-  if (!homeInFlight) homeInFlight = buildHome().then(({ body, memoMs }) => { homeMemo = { at: Date.now(), body, memoMs }; }).catch((e) => { console.error("[burnticker/home] build failed:", e); }).finally(() => { homeInFlight = null; });
+  if (homeInFlight && Date.now() - homeInFlightAt >= SWR_BUILD_TIMEOUT_MS) {
+    console.error(`[burnticker/home] a refresh has been in flight for more than ${Math.round(SWR_BUILD_TIMEOUT_MS / 1000)} s; starting another`);
+    homeInFlight = null;
+  }
+  if (!homeInFlight) {
+    const mine = ++homeSeq;
+    homeInFlightAt = Date.now();
+    const p: Promise<void> = buildHome().then(({ body, memoMs }) => { if (mine > homeWritten) { homeWritten = mine; homeMemo = { at: Date.now(), body, memoMs }; } }).catch((e) => { console.error("[burnticker/home] build failed:", e); }).finally(() => { if (homeInFlight === p) homeInFlight = null; });
+    homeInFlight = p;
+  }
   return homeInFlight;
 }
 
@@ -54,9 +67,16 @@ async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<Pr
  */
 export async function GET() {
   if (homeMemo) {
-    if (Date.now() - homeMemo.at >= homeMemo.memoMs) void refreshHome();
-    return NextResponse.json(homeMemo.body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30", "x-home-memo": "hit" } });
+    const state = homeMemoState(Date.now() - homeMemo.at, homeMemo.memoMs);
+    if (state === "stale") await Promise.race([refreshHome(), new Promise<void>((r) => setTimeout(r, HOME_COLD_WAIT_MS))]);
+    else if (state === "refresh") void refreshHome();
+    const m = homeMemo as { at: number; body: unknown; memoMs: number };
+    const age = Date.now() - m.at;
+    // HB-99 residue: an answer still too old after the wait says its real age and is never cached under the 10 s header
+    if (homeMemoState(age, m.memoMs) === "stale") return NextResponse.json(m.body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "no-store", "x-home-memo": "stale", "x-home-age-sec": String(Math.round(age / 1000)) } });
+    return NextResponse.json(m.body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30", "x-home-memo": "hit" } });
   }
+
   await Promise.race([refreshHome(), new Promise<void>((r) => setTimeout(r, HOME_COLD_WAIT_MS))]);
   if (homeMemo) return NextResponse.json((homeMemo as { body: unknown }).body, { headers: { ...PUBLIC_READ_CORS, "cache-control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30", "x-home-memo": "cold" } });
   return NextResponse.json({ loading: true, error: "the coin list is being read; try again in a few seconds", code: "home-loading", retryAfterSec: 5 }, { status: 503, headers: { ...PUBLIC_READ_CORS, "cache-control": "no-store", "retry-after": "5" } });

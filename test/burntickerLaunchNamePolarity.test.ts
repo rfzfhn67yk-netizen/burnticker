@@ -101,7 +101,7 @@ describe("PROD-02: the launch page wiring", () => {
   test("the review's effect words the suggestion for the side on screen, and only while the name is automatic (a typed name is kept)", () => {
     assert.match(page, /const sideNow = ruleSide\(ruleShown\);/);
     assert.match(page, /const sug = suggestionFor\(srcSuggest, sideNow\);/);
-    assert.match(page, /const want0 = genTicker \?\? sug\.ticker \?\? text\.ticker, want = want0 \? fixGen\(want0\) : want0, wantName = sug\.name \?\? text\.name;/);   // HB-30: a refused generated ticker maps to its free one
+    assert.match(page, /const want0 = genTicker \?\? sug\.ticker \?\? text\.ticker, want = want0 \? fixGen\(want0\) : want0, wantName = sug\.name \?\? hazardNameFor\(text\);/);   // HB-30: a refused generated ticker maps to its free one; HB-117: a hazard name follows its swapped ticker
     assert.match(page, /if \(nameAuto && wantName && wantName !== name && flow !== "pair"\) setName\(wantName\);/);
     assert.match(page, /if \(tickerAuto && want && want !== ticker\) setTicker\(want\);/);
     assert.match(page, /\}, \[text, step, tickerAuto, nameAuto, ticker, name, flow, genTicker, srcSuggest, sideNow, genFix\]\);/);

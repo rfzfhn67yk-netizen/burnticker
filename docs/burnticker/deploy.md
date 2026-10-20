@@ -103,6 +103,13 @@ How it works:
 - **Every attempt is recorded** in the registry's append-only `top_ups` table (amount, wallet, transaction, reason, time). Each one
   that lands writes a short `bt-top-up` row (information, not an alarm; not pushed to the phone). Two failures in a row for the same
   wallet raise `bt-top-up-failed`, which is pushed.
+- **Guards against a runaway (HB-108), not a cap.** A wallet that needed a top-up 3 times inside 6 hours (`drainStop` in
+  `config/burnticker/top-up.json`) is treated as draining: the keeper stops refilling that one wallet and pushes `bt-top-up-draining`
+  with the amounts. It resumes on its own 6 hours after the last of those top-ups, or at once after
+  `scripts/ops/top-up.mts --clear-drain <target>`. The step is skipped while `data/PAUSE-burnticker` exists. The leading keeper holds
+  `data/burnticker-top-up.lock` (refreshed every cycle), so `top-up.mts --apply` refuses while a keeper leads on the host and under
+  PAUSE; a pass by hand needs the keeper stopped, and the keeper skips its step while such a pass holds the lock.
+
 - **ops.json shows it**: "Top-ups: N today, X SOL; signer covers about D days.", then the last top-up with its time in Denver and its
   transaction, then anything waiting. The daily summary lists the day's top-ups. The first automatic top-up after a deploy appears in
   the keeper log as `[top-up] moved … SOL from the keeper key to …` and in ops.json within five minutes.

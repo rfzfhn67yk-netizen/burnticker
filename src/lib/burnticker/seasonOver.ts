@@ -13,6 +13,10 @@ import { teamRef } from "@/lib/burnticker/describe";
  * schedule never read the network; a schedule that cannot be read, or answers late, refuses nothing.
  */
 export const SEASON_OVER_LINE = "Season over for this team: this coin would end right away and its pool would go to $DEFICIT.";
+/** HB-119 (hourly run 10): the burn step's primary button for a season-over team, shown before Next (the team list promised it). */
+export const nextSeasonButtonLabel = (team: string, nextLabel: string): string => `Follow the ${team} in the ${nextLabel} season instead`;
+/** HB-119: said in place of the title-market button when Polymarket lists no title market for next season. */
+export const NO_TITLE_MARKET_LINE = "There is no title market for next season on Polymarket yet.";
 /** The league page's line beside a team whose season is over (its link opens the launch page with `season=over`). */
 export const SEASON_OVER_LINK_LINE = "This team's season is over. A coin on it can follow next season, or next season's title market.";
 

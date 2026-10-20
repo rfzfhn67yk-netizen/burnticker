@@ -1,11 +1,12 @@
 import { withoutDenials } from "@/lib/burnticker/denials";
 import type { BurnRule } from "@/lib/burnticker/rules";
+import { MAX_SPEND_RESERVE_BPS } from "@/lib/burnticker/burnMath";
 import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { CANDIDATES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
-import { LEAGUES, LIVE_NOW, gameSeries, isPairOutcome, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, seasonLabel, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, LIVE_NOW, gameSeries, isPairOutcome, leagueCannotTie, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, seasonLabel, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 import { DESCRIPTION_MAX, descriptionRoomProblem, linkProblem } from "@/lib/burnticker/creatorProfile";
@@ -299,7 +300,18 @@ export function unitPhrase(unit: { label: string } | null | undefined, valueLabe
  * what the one before left, so 3 units at 2 % spend about 5.9 %; one burn run buys with at most 2 % of the trading pool's SOL, and the
  * rest waits for the next run. A fade-side reading counts one unit at most. A one-shot spends its share once.
  */
-export function budgetCopy(rule: BurnRule, share: number, unit: string | null): { label: string; line: string; math: string | null } {
+/**
+ * HS-43 (hourly run 8): a whole-pool one-time burn said with its per-run slice, so "100%" and "at most 2%" do not read as a contradiction.
+ * The slice is the program's spend cap (burnMath.ts MAX_SPEND_RESERVE_BPS, 2% of the trading pool's SOL per run); the pool starts with
+ * about the raise.
+ */
+export function wholePoolSliceLine(raiseSol: string | null | undefined): string {
+  const pct = MAX_SPEND_RESERVE_BPS / 100;
+  const raise = Number(raiseSol);
+  const about = Number.isFinite(raise) && raise > 0 ? ` (about ${Math.round(raise * MAX_SPEND_RESERVE_BPS / 100) / 100} SOL on a ${raise} SOL raise)` : "";
+  return `The whole pool is spent, but not in one go: each daily run spends at most ${pct}% of the trading pool's SOL${about}, so a large burn lands over several days.`;
+}
+export function budgetCopy(rule: BurnRule, share: number, unit: string | null, o: { raiseSol?: string | null } = {}): { label: string; line: string; math: string | null } {
   const p = pctLabel(share);
   // Round 5 (WIRING-ROUND5 item 6): a coin with a pinned token (rules.ts burnTarget) swaps SOL for that token and burns it; the words
   // follow the token, and its cap is 2% of the SOL in that token's pinned pool (crank_target_burn), not the coin's own pool
@@ -307,7 +319,7 @@ export function budgetCopy(rule: BurnRule, share: number, unit: string | null): 
   const act = sym ? `swapping SOL for ${sym} and burning it` : "buying and burning this coin";
   if (isOneShotRule(rule)) {
     if (sym) return { label: "Share of the burn pool, once", line: `${share >= 1 ? "This coin spends its whole pool once" : `This coin spends ${p} of its pool once`}, when the result is in, ${act}. The burn lands in slices sized to the SOL in ${sym}'s pinned Raydium pool.`, math: null };
-    return { label: "Share of the burn pool, once", line: share >= 1 ? "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity." : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity. The rest of the pool moves on only after this share has been spent on this coin.`, math: null };
+    return { label: "Share of the burn pool, once", line: share >= 1 ? `This coin burns its whole pool once, when the result is in. ${wholePoolSliceLine(o.raiseSol)}` : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity. The rest of the pool moves on only after this share has been spent on this coin.`, math: null };
   }
   // QA pass 9 #18 and #20 (2026-10-13): the fade side is said for what the rule reads (a game day, a day with none of the events, or a
   // number that did not move), and a unit of one is a noun ("each earthquake", never "each 1 earthquake")
@@ -355,10 +367,12 @@ export function coinVsCardWords(dailyShare: number = DEFAULT_SHARE.recurring, da
  * THE PATTERN WORDS FOR THE THING PICKED (pass B item 12, audit 6 item 16): "After each Dodgers win", never "each day or reading" on a team
  * coin. Generic words stay for the paths with no subject to name.
  */
-export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: Outcome | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null; /** sources-7 M2: the picked game's date ("Sat, May 1, 2027") when it is not their next listed game */ gameLabel?: string | null }): { label: string; sentence: string } {
+export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: Outcome | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null; /** sources-7 M2: the picked game's date ("Sat, May 1, 2027") when it is not their next listed game */ gameLabel?: string | null; /** HS-42: the league, so a league without ties says nothing about them */ league?: string | null }): { label: string; sentence: string } {
   const s = o.subject;
+  // HS-42 (hourly run 8): no tie or draw words in a league whose games cannot end tied (NHL, NBA, MLB)
+  const noTie = leagueCannotTie(o.league ?? null);
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "meetings" && id === "winner") return { label: PATTERNS.winner.label, sentence: MEETINGS_WINNER_LINE };
-  if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "game" && id === "winner") return { label: PATTERNS.winner.label, sentence: GAME_PAIR_SENTENCE };
+  if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "game" && id === "winner") return { label: PATTERNS.winner.label, sentence: noTie ? GAME_PAIR_SENTENCE_NO_TIE : GAME_PAIR_SENTENCE };
   if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "winner") return { label: PATTERNS.winner.label, sentence: CANDIDATES_PAIR_SENTENCE };
   if (o.follow === "team" && s && isPairOutcome(o.outcome) && id === "every") {
     // two of a soccer game's three results (espn.ts PairOutcome): "After each Arsenal win or draw"; the fade side is not offered for it
@@ -370,12 +384,12 @@ export function patternWords(id: PatternId, o: { follow: FollowId; subject?: str
     if (id === "every") return { label: `After each ${s} ${won}`, sentence: `The coin spends a share of its burn pool after each game the ${s} ${won === "win" ? "win" : won === "loss" ? "lose" : "draw"}.` };
     // audit 12 item 6: the fade side counts GAME DAYS (describe.ts: "A day with two games counts once"), so the option says so, with the
     // doubleheader cases, before it is picked
-    if (id === "fade") return { label: `After each ${s} game day without a ${won}`, sentence: fadeDaySentence(`the ${s}`, won) };
+    if (id === "fade") return { label: `After each ${s} game day without a ${won}`, sentence: fadeDaySentence(`the ${s}`, won, "The coin", noTie) };
     if (id === "once") return { label: `If the ${s} win the title`, sentence: `The coin spends its burn pool once, if the market on the ${s} winning the title pays out YES.` };
   }
   if (o.follow === "rivalry" && o.pairKind === "teams") {
     if (id === "every") return { label: "Each time its own team loses", sentence: "Each coin spends a share of its own burn pool after each game its team loses, this season." };
-    if (id === "fade") return { label: "Each game day its own team does not lose", sentence: `${fadeDaySentence("its own team", "loss", "Each coin")} This counts every game day this season.` };
+    if (id === "fade") return { label: "Each game day its own team does not lose", sentence: `${fadeDaySentence("its own team", "loss", "Each coin", noTie)} This counts every game day this season.` };
     // audit 12 item 3: picking one game builds the LINKED pair (the page's game mode, gamePairRule), so the option says so (pairForms.ts)
     if (id === "once") { const c = pairFormCopy("game-linked", { gameLabel: o.gameLabel ?? null }); return { label: c.label, sentence: c.sentence }; }
   }
@@ -390,9 +404,9 @@ export function patternWords(id: PatternId, o: { follow: FollowId; subject?: str
  * if none of that day's games was the outcome, so a doubleheader with one win and one loss burns nothing on a win-fade coin, two losses
  * burn once, a tie is not a win (or a loss), and a day with no game played (a cancellation, an off day) burns nothing.
  */
-export function fadeDaySentence(team: string, outcome: "win" | "loss" | "draw", subject = "The coin"): string {
+export function fadeDaySentence(team: string, outcome: "win" | "loss" | "draw", subject = "The coin", noTie = false): string {
   const w = outcome === "win" ? "win" : outcome === "loss" ? "loss" : "draw", v = outcome === "win" ? "win" : outcome === "loss" ? "lose" : "draw";
-  return `${subject} spends a share of its burn pool once for each day ${team} ${team.startsWith("its ") ? `plays and does not ${v}` : `play and do not ${v}`}. A day with two games counts once: it burns only if neither game is a ${w}.${outcome === "draw" ? "" : ` A tie is not a ${w}.`} A day with no game played, or only a cancelled one, burns nothing.`;
+  return `${subject} spends a share of its burn pool once for each day ${team} ${team.startsWith("its ") ? `plays and does not ${v}` : `play and do not ${v}`}. A day with two games counts once: it burns only if neither game is a ${w}.${outcome === "draw" || noTie ? "" : ` A tie is not a ${w}.`} A day with no game played, or only a cancelled one, burns nothing.`;
 }
 
 /** The five things the review always shows (the owner's mobile rule, 2026-10-12), in this order. */
@@ -465,7 +479,11 @@ export const PRE_AUDIT_CAP_SOL_TEXT = "25";
  * never reads "goes to $DEFICIT's burn", and the champion exception is said only on a team coin. Step 1, before anything is picked, keeps
  * the general form (`o` left out).
  */
-export function upfrontEndLine(o: { team?: boolean; end?: EndChoice | null; pair?: boolean } = {}): string {
+/** HB-107a (hourly run 8): a rule with no end (every eruption, every quake) never ends on a result, so the end line says that instead. */
+export const PERPETUAL_UPFRONT_LINE = "This coin has no end date and does not retire, so nothing is left over to send to another burn.";
+export function upfrontEndLine(o: { team?: boolean; end?: EndChoice | null; pair?: boolean; perpetual?: boolean; /** HB-112a (hourly run 9): the review's own "When it ends" sentence, said here word for word */ endLine?: string | null } = {}): string {
+  if (o.endLine) return o.endLine;
+  if (o.perpetual) return PERPETUAL_UPFRONT_LINE;
   const general = o.team === undefined && !o.end && o.pair === undefined;
   const champion = general || o.team ? ` ${CHAMPION_EXPLAINER_LINE}` : "";
   if (o.pair) return "When the rule ends on a result, whatever is left goes to the rival coin's burn.";
@@ -473,7 +491,8 @@ export function upfrontEndLine(o: { team?: boolean; end?: EndChoice | null; pair
   if (o.end?.kind === "coin" && o.end.ticker) return `When the rule ends on a result, whatever is left goes to $${o.end.ticker}'s burn, or to $DEFICIT's burn if $${o.end.ticker} is not live then.${champion}`;
   return general ? `When the rule ends on a result, whatever is left goes to $DEFICIT's burn, or to the rival coin for a linked pair.${champion}` : `When the rule ends on a result, whatever is left goes to $DEFICIT's burn.${champion}`;
 }
-export function upfrontLines(raises: readonly string[], o?: { team?: boolean; end?: EndChoice | null; pair?: boolean }): string[] {
+export function upfrontLines(raises: readonly string[], o?: { team?: boolean; end?: EndChoice | null; pair?: boolean; perpetual?: boolean; endLine?: string | null }): string[] {
+
   const list = `${raises.slice(0, -1).join(", ")} or ${raises[raises.length - 1]} SOL`;
   return [
     "Creators earn no fee revenue. The creator's share of the fees goes to the coin's own burn pool.",
@@ -490,8 +509,8 @@ export const UPFRONT_LABEL = "What to know before you start";
  * has answered) in place of the raise choice.
  */
 export const PAIR_CURVE_UPFRONT_FALLBACK = "Nothing burns until both coins graduate: the pair's shared curve has to reach its raise, and then both coins' pools are registered. A result that comes first is recorded and waits.";
-export function pairUpfrontLines(venue: "pair-curve" | "linked", raises: readonly string[], prerequisite?: string | null): string[] {
-  const base = upfrontLines(raises, { pair: true });
+export function pairUpfrontLines(venue: "pair-curve" | "linked", raises: readonly string[], prerequisite?: string | null, endLine?: string | null): string[] {
+  const base = upfrontLines(raises, { pair: true, endLine });
   return venue === "pair-curve" ? [base[0], prerequisite || PAIR_CURVE_UPFRONT_FALLBACK, ...base.slice(2)] : base;
 }
 
@@ -501,6 +520,8 @@ export function pairUpfrontLines(venue: "pair-curve" | "linked", raises: readonl
  * burn, the certified result is the published cross-check, and the dispute window is when the payout becomes final.
  */
 export const ELECTION_AUTHORITY_LABEL = "Who decides the result";
+/** HS-45 (hourly run 8): under the candidate list until both are picked (the "Use these two" button appears then). */
+export const PICK_BOTH_LINE = "Pick both candidates to continue.";
 export function electionAuthorityLines(certified: string): string[] {
   return [
     "Polymarket's own rules name who calls the race, and its on-chain payout follows those rules. The burn fires when that on-chain payout is final.",
@@ -574,6 +595,12 @@ export function endSentences(rule: BurnRule, o: { team?: string | null; party?: 
 export type EndChoiceKind = "deficit" | "coin" | "burn-sol";
 export interface EndChoice { kind: EndChoiceKind; mint?: string; ticker?: string }
 export const END_CHOICE_DEFAULT: EndChoice = { kind: "deficit" };
+/** HS-49 (hourly run 9): the review's line for an end that is not the default, so a stray click on the Name step cannot pass unseen. */
+export function endChoiceChangedLine(c: EndChoice | null | undefined): string | null {
+  if (!c || c.kind === "deficit") return null;
+  if (c.kind === "burn-sol") return "You chose the incinerator instead of $DEFICIT's burn.";
+  return c.ticker ? `You chose $${c.ticker}'s burn instead of $DEFICIT's burn.` : null;
+}
 export const END_CHOICE_LABEL = "Where the rest goes if this coin does not win";
 /**
  * launch night 2026-10-13 (hunt): a coin with no winning path (a losses coin, a coin on a number, one outcome) has nothing to "win", so its
@@ -665,17 +692,48 @@ export function oneMarketDate(e: { endDate: string | null; markets: readonly { e
 /** HS-32 (hourly run 6): the line under the empty search box of the Event outcome "Which one?" step. */
 export const EVENT_SEARCH_HINT = "Type a team, a candidate, a film or a city. Markets come from Polymarket, and only open ones are listed.";
 export const OPEN_NOW_LABEL = "Open now";
-/** The categories whose Browse answers fill the "Open now" cards (the same server-cached reads the Browse step makes). */
-export const OPEN_NOW_CATEGORIES = ["politics", "sports", "culture"] as const;
 /**
- * HS-32: up to `n` "Open now" cards before any query: Polymarket event cards from the Browse answers of each category in turn (one from
- * each, then the next), never a refused or unlaunchable one, each title once.
+ * The categories whose Browse answers fill the "Open now" cards (the same server-cached reads the Browse step makes). HS-46 (hourly run
+ * 9): sports and elections first, taken in turn; the last category (culture) only fills what they leave.
  */
-export function openNowCards<C extends { venue: string; title: string; refused: readonly string[]; launchable: { ok: boolean } }>(perCategory: readonly (readonly C[])[], n = 6): C[] {
-  const lists = perCategory.map((cs) => cs.filter((c) => c.venue === "polymarket" && !c.refused.length && c.launchable.ok));
-  const out: C[] = [], seen = new Set<string>();
-  for (let i = 0; out.length < n && lists.some((l) => i < l.length); i++) for (const l of lists) { const c = l[i]; if (c && !seen.has(c.title) && out.length < n) { seen.add(c.title); out.push(c); } }
+export const OPEN_NOW_CATEGORIES = ["sports", "politics", "culture"] as const;
+/** HS-46: words that name the kind of question, not its subject, so two events of one group share a subject word, not one of these. */
+const OPEN_NOW_GENERIC = new Set(["will", "with", "before", "after", "winner", "winners", "champion", "champions", "championship", "nominee", "nominees", "election", "elections", "confirm", "exist", "exists", "return", "next", "which", "what", "when", "where", "world", "best", "most", "first", "over", "under", "than", "more", "less", "season", "game", "games", "match", "control", "party", "united", "states", "winning", "wins"]);
+/** HS-46: an event's subject words (four letters or more, no year, no generic word); two events sharing one are one group. */
+export const openNowGroupWords = (title: string): string[] => [...new Set(title.toLowerCase().normalize("NFKD").replace(/[^a-z\s]/g, " ").split(/\s+/).filter((w) => w.length >= 4 && !OPEN_NOW_GENERIC.has(w)))];
+/**
+ * HS-32, HS-46 (hourly run 9): up to `n` "Open now" cards before any query: Polymarket event cards that can launch, never a refused one
+ * and never one without a close date. The first categories (sports, elections) are taken in turn, one from each; the last category fills
+ * only what they leave. One card per event group: a card that shares a subject word with a card already chosen ("Presidential Election
+ * Winner 2028" after "Democratic Presidential Nominee 2028") is left out.
+ */
+export function openNowCards<C extends { venue: string; title: string; refused: readonly string[]; launchable: { ok: boolean }; next?: { at: string | null } | null }>(perCategory: readonly (readonly C[])[], n = 6): C[] {
+  const dated = (c: C) => !!c.next?.at && Number.isFinite(Date.parse(c.next.at));
+  const lists = perCategory.map((cs) => cs.filter((c) => c.venue === "polymarket" && !c.refused.length && c.launchable.ok && dated(c)));
+  const primary = lists.length > 1 ? lists.slice(0, -1) : lists, fill = lists.length > 1 ? lists[lists.length - 1] : [];
+  const out: C[] = [], seen = new Set<string>(), words = new Set<string>();
+  const take = (c: C | undefined) => {
+    if (!c || out.length >= n || seen.has(c.title)) return;
+    const w = openNowGroupWords(c.title);
+    if (w.some((x) => words.has(x))) return;
+    seen.add(c.title); w.forEach((x) => words.add(x)); out.push(c);
+  };
+  for (let i = 0; out.length < n && primary.some((l) => i < l.length); i++) for (const l of primary) take(l[i]);
+  for (const c of fill) take(c);
   return out;
+}
+/**
+ * HB-111 (hourly run 9): an Open-now card's second line, the market's close date in the visitor's own time zone ("ends Dec 5"; the year
+ * only when it is not this year). Null when the card has no readable date, so the card shows no "ends" line at all.
+ */
+export function openNowEndsLine(at: string | null | undefined, o: { now?: number; timeZone?: string } = {}): string | null {
+  if (!at) return null;
+  const d = new Date(at);
+  if (!Number.isFinite(d.getTime())) return null;
+  const tz = o.timeZone ? { timeZone: o.timeZone } : {};
+  const year = (x: Date) => x.toLocaleDateString("en-US", { year: "numeric", ...tz });
+  const other = year(d) !== year(new Date(o.now ?? Date.now()));
+  return `ends ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(other ? { year: "numeric" } : {}), ...tz })}`;
 }
 /** HB-38: the one way a market's own close date is said (the search row, the review): "The market closes by …". */
 export const marketClosesLine = (when: string): string => `The market closes by ${when}.`;
@@ -1237,4 +1295,38 @@ export function pastBurnsLines(o: { loading: boolean; error: string | null; proj
   if (o.loading) return [PAST_BURNS_WORKING];
   if (o.error || !o.projection) return [PAST_BURNS_UNAVAILABLE];
   return [o.projection.reason ?? PAST_BURNS_UNAVAILABLE];
+}
+
+/**
+ * HB-104 (hourly run 9): the review's Description row says what is pinned: the paragraph the server generates from the coin's own rule,
+ * then the creator's own text, or why there is none. Each coin of a pair gets its own paragraph (launchReview.ts coins[1].description).
+ */
+export const PROFILE_NO_DESCRIPTION = "None. The coin's page shows the rule sentence only.";
+export function profileDescriptionParts(c: { description: string; generated?: string | null }): { generated: string | null; own: string | null; none: string | null } {
+  const generated = c.generated?.trim() || null, own = c.description.trim() || null;
+  return { generated, own, none: generated || own ? null : PROFILE_NO_DESCRIPTION };
+}
+
+/**
+ * HS-47 (hourly run 9): a bare ticker typed into "Or describe it" ("WIF", "$BONK") is most likely a coin comparison. When the coin
+ * search (GET /v1/derby/search, the picker's own lookup) finds that symbol on a Pyth feed, the page offers one card that opens Coin
+ * comparison with the coin as the first coin. The category names of the no-match hint are separated by NO_MATCH_SEPARATOR.
+ */
+export const bareTickerOf = (q: string): string | null => { const m = /^\s*\$?([A-Za-z][A-Za-z0-9]{1,9})\s*$/.exec(q); return m ? m[1].toUpperCase() : null; };
+export function pythCoinOf(hits: readonly { symbol: string; source: string; feed: string | null }[], symbol: string): string | null {
+  const h = hits.find((x) => x.source === "pyth" && !!x.feed && x.symbol.toUpperCase() === symbol.toUpperCase());
+  return h ? h.symbol.toUpperCase() : null;
+}
+export const bareCoinLine = (symbol: string): string => `${symbol} is a coin. Compare it with another coin, read once a day from Pyth.`;
+export const BARE_COIN_ACTION = "Pick the second coin";
+export const NO_MATCH_LEAD = "There is no close match. Try one of these categories:";
+export const NO_MATCH_SEPARATOR = " · ";
+
+/**
+ * HB-112c (hourly run 9) with continuous audit HB-2: the Coin comparison burn step shows its "At the end" block in both modes, the daily
+ * race and the flippening, each from its rule, so the sentence above it leaves that end out and the step says the end once.
+ */
+export function sentenceWithoutEnd(sentence: string, endSentences: readonly string[]): string {
+  const e = endSentences.join(" ").trim();
+  return e && sentence.includes(e) ? sentence.replace(e, "").replace(/\s{2,}/g, " ").trim() : sentence;
 }

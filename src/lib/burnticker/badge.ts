@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { receiptsCountShort } from "@/lib/burnticker/coinStatus";
-import { decidedPairLine, decidedPairOf } from "@/lib/burnticker/decidedWarning";
+import { coinLifecycleState, decidedPairLine, decidedPairOf } from "@/lib/burnticker/decidedWarning";
 import type { ReceiptJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
 import { parseEspnSeries, seasonLabel } from "@/lib/burnticker/sources/espn";
 
@@ -37,6 +37,8 @@ export interface BadgeSide {
   lost?: string | null;
   /** HB-80 / HS-27 (hourly run 5): a decided pair coin's one shared won-or-lost line (decidedWarning.ts decidedPairLine); null otherwise */
   decided?: string | null;
+  /** HB-25 residue (hourly run 8): what the coin is doing now; `status` is the registry row state (decidedWarning.ts coinLifecycleState) */
+  lifecycleState?: string;
 }
 export interface Snippets { iframe: string; markdown: string; html: string }
 export interface CoinBadgeJson extends BadgeSide {
@@ -86,7 +88,9 @@ export function badgeSide(i: SideInput): BadgeSide {
     lastBurn: last ? { at: last.settledAt, units: last.units, burned: last.burned ?? "0" } : null,
     receipts: { count: inScope.length, label: scope.label, recorded: i.receipts.filter((r) => !["winddown", "drain", "sweep"].includes(r.kind ?? "") && (!scope.from || r.settledAt.slice(0, 10) >= scope.from)).length }, rulesSha12: s.rules.sha12, pageUrl: page, verifyUrl: `${page}#verify`,
     lost: lostDayOf(s, i.receipts),
-    decided: (() => { const d = decidedPairOf(s, i.receipts); return d ? decidedPairLine(s.ticker, d) : null; })(),
+    // HB-25 residue (hourly run 8): what the coin is doing now beside the row state `status`; the decided line reads it
+    lifecycleState: coinLifecycleState(s, i.receipts),
+    decided: (() => { if (coinLifecycleState(s, i.receipts) !== "decided") return null; const d = decidedPairOf(s, i.receipts); return d ? decidedPairLine(s.ticker, d) : null; })(),
   };
 }
 

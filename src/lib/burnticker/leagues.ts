@@ -59,6 +59,14 @@ function otherSeasonYear(c: Pick<SeasonCoinInput, "rule">, nowMs: number): numbe
   if (e.window.kind === "next") { const f = e.window.from; return seasonYearAt(e.league, Date.parse(`${f.slice(0, 4)}-${f.slice(4, 6)}-${f.slice(6)}T12:00:00Z`)); }
   return seasonYearAt(e.league, nowMs);
 }
+/** HB-124 (hourly run 10): an instant's calendar day in Denver, YYYY-MM-DD (a bare date stays as it is). */
+export function denverDay(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t)) : iso.slice(0, 10);
+}
+/** HB-124: the outcome word a one-game pair coin shows under its team on the league page. */
+export const ONE_GAME_OUTCOME = "one-game pair";
 const coinLeague = (c: Pick<SeasonCoinInput, "rule">): LeagueId | null => {
   const e = c.rule.oracle === "catalogue" && c.rule.series ? parseEspnSeries(c.rule.series) : null;
   return e ? e.league : null;
@@ -119,7 +127,7 @@ export function gamesFromTitle(league: LeagueId, date: string, title: string): S
 export function settledGames(league: LeagueId, readings: readonly GameReading[], from: string, to: string): SettledGame[] {
   const seen = new Map<string, SettledGame>();
   for (const r of readings) {
-    const date = r.at.slice(0, 10);
+    const date = denverDay(r.at);   // HB-124: the game's Denver calendar day, as the token pages say it (an evening game is not the next UTC day)
     if (!r.title || date < from || date > to) continue;
     const key = r.selectorKey.replace(/^catalogue:/, "");
     const e = /^espn\.(team|game):/.test(key) ? parseEspnSeries(key) : null;
@@ -164,9 +172,16 @@ export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
     if (!e || e.kind !== "team") continue;
     coinsByTeam.set(e.abbr, [...(coinsByTeam.get(e.abbr) ?? []), { ticker: c.ticker, outcome: e.outcome }]);
   }
+  // HB-124 (hourly run 10): a one-game coin (a one-game pair side, $DENWIN and $SEAWIN) is a coin of its team on the current season's
+  // page, so that team is never listed under "no coin this season"
+  if (current) for (const c of i.coins) {
+    const e = c.rule.oracle === "catalogue" && c.rule.series && /^espn\.game:/.test(c.rule.series) ? parseEspnSeries(c.rule.series) : null;
+    if (!e || e.kind !== "game" || e.league !== i.league) continue;
+    coinsByTeam.set(e.abbr, [...(coinsByTeam.get(e.abbr) ?? []), { ticker: c.ticker, outcome: ONE_GAME_OUTCOME }]);
+  }
   const teams = teamsOf(i.league).map((t) => { const over = !!i.seasonOver?.has(t.abbr); return { abbr: t.abbr, name: t.name, coins: coinsByTeam.get(t.abbr) ?? [], launchHref: launchHref(t.name, i.league, t.abbr, { seasonOver: over }), seasonOver: over, warning: over ? SEASON_OVER_LINK_LINE : null }; })
     .sort((a, b) => (a.seasonOver ? 1 : 0) - (b.seasonOver ? 1 : 0) || (b.coins.length > 0 ? 1 : 0) - (a.coins.length > 0 ? 1 : 0) || a.name.localeCompare(b.name));
-  const to = new Date(i.nowMs).toISOString().slice(0, 10), from = new Date(i.nowMs - 6 * 86_400_000).toISOString().slice(0, 10);
+  const to = denverDay(new Date(i.nowMs).toISOString()), from = denverDay(new Date(i.nowMs - 6 * 86_400_000).toISOString());   // HB-124: never a day after today in Denver
   const rows = settledGames(i.league, i.readings, from, to);
   const n = inSeason.length;
   const title = `${L.label} ${label} — team coins and receipts`;

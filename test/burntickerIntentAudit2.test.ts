@@ -179,10 +179,10 @@ describe("intent audit 4 items 19 and 20: parameterized sources keep their subje
     const w = text("wiki.views:Bitcoin");
     assert.equal(w.name, "Bitcoin Wiki Views");
     // sources-4: audit 207 (the views' scope), 206 (the app's name as Steam gives it), 204 (a snapshot, not the day's peak), 201 (an increase)
-    assert.match(w.paragraph, /For every 1M views on the English Wikipedia article “Bitcoin”, .* Each reading is the total views of one UTC day, read once the day is over, counting every platform and every kind of visitor, automated ones included, as Wikimedia's all-access, all-agents figure does\./);
+    assert.match(w.ruleBlock, /For every 1M views on the English Wikipedia article “Bitcoin”, .* Each reading is the total views of one UTC day, read once the day is over, counting every platform and every kind of visitor, automated ones included, as Wikimedia's all-access, all-agents figure does\./);
     const s = text("steam.players:730");
     assert.equal(s.name, "Counter-Strike 2 Players");
-    assert.match(s.paragraph, /For each full increase of 100k players in the concurrent player count of Counter-Strike 2 \(Steam app 730\) over the previous snapshot, .*Each reading is a snapshot of the concurrent player count at the moment the keeper reads it, not the day's peak, measured against the previous reading\./);
+    assert.match(s.ruleBlock, /For each full increase of 100k players in the concurrent player count of Counter-Strike 2 \(Steam app 730\) over the previous snapshot, .*Each reading is a snapshot of the concurrent player count at the moment the keeper reads it, not the day's peak, measured against the previous reading\./);
     for (const t of [w, s]) { assert.doesNotMatch(t.paragraph, /an article|an app/); assert.ok(t.paragraph.length <= DESCRIPTION_MAX); lint(t.paragraph); }
     assert.equal(capName("Wikipedia daily views of an article"), "Wikipedia daily views", "35 characters: cut at a word, small words dropped");
     assert.equal(capName("Wikipedia daily views of an article about it"), "Wikipedia daily views", "never \"…of an arti\"");

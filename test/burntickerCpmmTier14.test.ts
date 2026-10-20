@@ -72,10 +72,10 @@ describe("a coin's numbers come from the tier it pinned", () => {
 });
 
 describe("the trust row and page (live platform vs the code)", () => {
-  test("the platform on tier 9 (update pending) or tier 14 matches; tier 0 or an unlisted id is flagged; each side names its tier", () => {
+  test("the platform on tier 14 matches; tier 9 (dropped 2026-10-19), tier 0 or an unlisted id is flagged; each side names its tier", () => {
     const r9 = platformTierRow(CPMM_MAINNET_TIER_9.id), r14 = platformTierRow(CPMM_MAINNET_TIER_14.id), r0 = platformTierRow(CPMM_MAINNET_TIER_0.id), rx = platformTierRow(Keypair.generate().publicKey.toBase58());
-    assert.deepEqual([r9.matches, r14.matches, r0.matches, rx.matches], [true, true, false, false]);
-    assert.equal(r9.designed, `${cpmmTierLabel(CPMM_MAINNET_TIER_14.id)}; ${cpmmTierLabel(CPMM_MAINNET_TIER_9.id)} until the platform is updated`);
+    assert.deepEqual([r9.matches, r14.matches, r0.matches, rx.matches], [false, true, false, false]);
+    assert.equal(r9.designed, cpmmTierLabel(CPMM_MAINNET_TIER_14.id));
     assert.equal(r9.live, "tier 9 (LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC)");
     assert.match(rx.live, /^an unlisted tier \(/);
     assert.equal(platformTierRow("5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy", "devnet").matches, true);
@@ -86,7 +86,8 @@ describe("the trust row and page (live platform vs the code)", () => {
     const on9 = await trustFor(CPMM_MAINNET_TIER_9.id), on14 = await trustFor(CPMM_MAINNET_TIER_14.id);
     assert.equal(on9.designedFees.postGraduation.totalBps, 100); assert.equal(on14.designedFees.postGraduation.totalBps, 125);
     assert.deepEqual([on9.designedFees.lpFeeSplit.operatorBps, on14.designedFees.lpFeeSplit.operatorBps], [4.2, 12.6]);
-    assert.ok(on9.livePlatform.comparison.every((r) => !r.field.startsWith("Raydium pool fee tier") || r.matches));
+    // 2026-10-19: tier 9 is no longer a tier new coins may be created on, so a platform naming it is flagged (its numbers still read)
+    assert.equal(on9.livePlatform.comparison.find((r) => r.field.startsWith("Raydium pool fee tier"))!.matches, false);
     // sixth pass B-16 (2026-10-19): the trust statement names both tiers, the one every live coin pays first
     assert.ok(on14.statements.some((s) => s.startsWith(BOTH_TIERS_LINE)));
     // an unlisted live id: the page falls back to the code's new-coin tier and the row says so

@@ -101,6 +101,27 @@ export function creatorNextLine(c: { oneShot: boolean; receipts: readonly Result
  * cached coin page can be a few minutes behind the keeper's read).
  */
 export const OVERDUE_GRACE_MS = 15 * 60_000;
+/** HB-98 reopened: "less than a minute ago", "1 minute ago", "20 minutes ago", "2 hours ago". */
+export function agoWords(ms: number): string {
+  const m = Math.floor(Math.max(0, ms) / 60_000);
+  if (m < 1) return "less than a minute ago";
+  if (m < 120) return `${m} minute${m === 1 ? "" : "s"} ago`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h} hours ago` : `${Math.floor(h / 24)} days ago`;
+}
+/**
+ * HB-98 reopened: the next-check cell from the actual check time: "Checked 20 minutes ago, next due at Oct 19, 2026, 10:53 PM MDT".
+ * A next time already past is "due now" inside the grace or when no later time is known; "overdue" only once the grace has passed
+ * since the due time AND the last check is older than it.
+ */
+export function checkedLine(lastAt: number, nextAt: string | null, now: number): string {
+  const head = `Checked ${agoWords(now - lastAt)}`;
+  const t = nextAt ? Date.parse(nextAt) : NaN;
+  if (!Number.isFinite(t)) return `${head}.`;
+  if (t > now) return `${head}, next due at ${denverTime(nextAt)}`;
+  if (lastAt >= t || now - t < OVERDUE_GRACE_MS) return `${head}, next check due now`;
+  return `${head}; the check due at ${denverTime(nextAt)} is overdue`;
+}
 export const DUE_NOW = "Due now";
 /** A time as a UTC day, "overdue" in words once past the grace; "None scheduled" for none. */
 export function dayLine(at: string | null, now: number): string {
@@ -111,7 +132,10 @@ export function dayLine(at: string | null, now: number): string {
   return now - t < OVERDUE_GRACE_MS ? DUE_NOW : `Was due on ${utcDay(t)} and is overdue`;
 }
 /** HB-98: the next source check, a time of day in Denver time with its zone, "due now" inside the grace, "overdue" after it. */
-export function checkLine(at: string | null, now: number): string {
+export function checkLine(at: string | null, now: number, lastAt: number | null = null): string {
+  // HB-98 reopened (hourly run 10): with the keeper's own record of its last read (registry feed_state, read live), the cell says when
+  // the check actually ran and when the next is due, so a page built from an older body can never call a check that just ran overdue
+  if (lastAt !== null && Number.isFinite(lastAt) && lastAt <= now) return checkedLine(lastAt, at, now);
   if (!at) return CREATOR_PAGE.noNext;
   const t = Date.parse(at);
   if (Number.isNaN(t)) return CREATOR_PAGE.noNext;

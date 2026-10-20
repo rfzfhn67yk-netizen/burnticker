@@ -1,5 +1,6 @@
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine, type PostGraduationShares } from "@/lib/burnticker/feeShareLine";
-import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE, teamRefByName } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, PAIR_BURN_SENTENCE, teamRefByName } from "@/lib/burnticker/describe";
+
 
 /**
  * WHERE A PAIR'S MONEY GOES, IN PLAIN WORDS (website brief 2026-10-11 §2), by rule version:
@@ -101,14 +102,14 @@ export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a:
 /** The candidates sentence said for two party outcomes (the settlement subject is the party, whoever its nominee is). */
 export const PARTIES_PAIR_SENTENCE = "Two markets, one race, one party each: the coin of the party that wins burns its own pool on the result and takes the other coin's pool at the end. The result is the party's, whoever its nominee is. If neither party wins, both pools go to $DEFICIT's burn.";
 export const isPartySubject = (names: { a: string; b: string }): boolean => /\bpart(y|ies)\b/i.test(names.a) && /\bpart(y|ies)\b/i.test(names.b);
-export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a: string; b: string }, names: { a: string; b: string }, o: { fees?: SplitLike | null } = {}): FundsFlow {
+export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a: string; b: string }, names: { a: string; b: string }, o: { fees?: SplitLike | null; /** HS-42: a league whose games cannot end tied (no draw row) */ noTies?: boolean } = {}): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
   const game = shape === "game";
   const party = !game && isPartySubject(names);
   const nameA = game ? teamRefByName(names.a) : names.a, nameB = game ? teamRefByName(names.b) : names.b;
   return {
     version: "winner-takes-the-burn", versionLabel: game ? "Rule version: winner takes the burn, two teams in one game" : party ? "Rule version: winner takes the burn, two parties in one race" : "Rule version: winner takes the burn, two candidates in one race",
-    oneLiner: game ? GAME_PAIR_SENTENCE : party ? PARTIES_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE,
+    oneLiner: game ? (o.noTies ? GAME_PAIR_SENTENCE_NO_TIE : GAME_PAIR_SENTENCE) : party ? PARTIES_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE,
     steps: [
       { title: "Where fees come from", text: pairFeesText(o.fees) },
       { title: game ? "When the game is final" : "When both markets are final", text: game
@@ -117,7 +118,7 @@ export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a:
       { title: "At the end", text: `The losing coin sends whatever is left in its burn pool, and any fees that arrive later, to the winning coin's burn pool. The winning coin burns down what is left on itself. If there was no single winner, each coin sends what is left to $DEFICIT's burn.` },
     ],
     outcomes: game ? [
-      { when: "The game ends in a draw", then: "Nothing moves between the two coins. At the end each pool goes to $DEFICIT's burn." },
+      ...(o.noTies ? [] : [{ when: "The game ends in a draw", then: "Nothing moves between the two coins. At the end each pool goes to $DEFICIT's burn." }]),
       { when: "The game is postponed", then: "Both coins wait until it is played." },
       { when: "The game is cancelled", then: "Nothing moves between the two coins. Each coin burns down what is left on itself over four weeks." },
       { when: "The winning coin has no live trading pool", then: "The losing coin's pool goes to $DEFICIT's burn instead." },

@@ -3,6 +3,7 @@ import { nhcSeasonOpen, parseNhcSeries } from "@/lib/burnticker/sources/nhc";
 import { jsonOne, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
 import { milestoneProblem, parseGithubSeries } from "@/lib/burnticker/sources/github";
 import { parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
+import { gameStatusWords } from "@/lib/burnticker/gameStatus";
 
 /**
  * ALREADY DECIDED (intent audit 2, item 2, 2026-10-12: the catalogue offered "Launch 7d1afb26… succeeds", a Starship flight that had
@@ -93,7 +94,7 @@ export function oneShotEligibility(series: string, cfg: HttpSourceConfig, body: 
 export interface GameLike { eventId: string; name: string; startsAt: string; completed: boolean; detail?: string | null; state?: string | null }
 export function gameLine(g: GameLike): string {
   // "pre" is scheduled; "in" is under way; anything else not final carries its own word from the schedule ("Postponed", "Suspended")
-  const status = g.completed ? "Final" : g.state === "in" ? "In progress" : g.state === "pre" || !g.detail?.trim() ? "Scheduled" : g.detail.trim();
+  const status = g.completed ? "Final" : g.state === "in" ? "In progress" : g.state === "pre" ? "Scheduled" : gameStatusWords(g.detail) ?? "Scheduled";
   return `${g.name}. Status: ${status}. Start time ${utcText(g.startsAt)} UTC (${denverText(g.startsAt)} Denver time). Game id ${g.eventId}.`;
 }
 export function gameEligibility(g: GameLike): { decided: boolean; reason: string | null; line: string } {

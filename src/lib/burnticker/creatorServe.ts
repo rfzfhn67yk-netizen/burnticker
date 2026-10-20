@@ -76,17 +76,22 @@ const sentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUp
  * The creator views' next fields from a coin's status JSON (the producer's `rules.oneShot` and `next`) and its receipts: the next result
  * and its words, and the next source check under its own label (dropped for a decided or voided one-shot). Pure.
  */
-export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & { market?: { phase?: string | null } | null; ticker?: string } & DecidedPairStatus, receipts: readonly (ResultReceipt & { pairRole?: string | null })[], now: number): Pick<CreatorCoinView, "nextAt" | "nextLine" | "nextLabel" | "nextCheckAt" | "nextCheckLine" | "result"> {
+export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & { market?: { phase?: string | null } | null; ticker?: string } & DecidedPairStatus, receipts: readonly (ResultReceipt & { pairRole?: string | null })[], now: number, live: { lastFetchAt: number | null; nextFetchAt: number | null } | null = null): Pick<CreatorCoinView, "nextAt" | "nextLine" | "nextLabel" | "nextCheckAt" | "nextCheckLine" | "result"> {
   const oneShot = !!s.rules.oneShot;
   // the producer's fields when present (tokenPage.ts); recomputed the same way for an older status JSON
   const t = s.next.result !== undefined ? { result: s.next.result, nextResultAt: s.next.nextResultAt ?? null, nextSourceCheckAt: s.next.nextSourceCheckAt ?? s.next.nextCheckAt ?? null } : nextTimes({ oneShot, receipts, nextCloseTime: s.next.nextCloseTime, nextCheckAt: s.next.nextCheckAt });
   const settled = t.result === "decided" || t.result === "void";
-  const nextCheckAt = settled ? null : t.nextSourceCheckAt;
+  // HB-98 reopened (hourly run 10): the keeper's live record of its last read and next read (registry feed_state) wins over a status
+  // body that may predate that read; a later next read replaces the body's one
+  const liveNext = live?.nextFetchAt && Number.isFinite(live.nextFetchAt) ? new Date(live.nextFetchAt).toISOString() : null;
+  const bodyNext = t.nextSourceCheckAt;
+  const nextCheckAt = settled ? null : liveNext && (!bodyNext || Date.parse(liveNext) > Date.parse(bodyNext)) ? liveNext : bodyNext;
+  const lastCheckAt = live?.lastFetchAt ?? null;
   return {
     nextAt: t.nextResultAt, result: t.result, nextLabel: settled ? CREATOR_PAGE.labels.result : CREATOR_PAGE.labels.next,
     // HB-80 / HS-27 (hourly run 5): a decided pair coin says won or lost in the one shared line, never "waiting" on the losing side
     nextLine: (() => { const dp = oneShot && t.result === "decided" && s.ticker ? decidedPairOf(s, receipts.map((r) => ({ status: r.status, settledAt: String(r.settledAt ?? ""), kind: r.kind ?? null, pairRole: r.pairRole ?? null }))) : null; return dp ? decidedPairLine(s.ticker!, dp) : creatorNextLine({ oneShot, receipts, graduated: s.market?.phase === "graduated", nextAt: t.nextResultAt, result: t.result }, now); })(),
-    nextCheckAt, nextCheckLine: nextCheckAt && nextCheckAt !== t.nextResultAt ? checkLine(nextCheckAt, now) : null,   // HB-98: an instant, with a grace
+    nextCheckAt, nextCheckLine: nextCheckAt && nextCheckAt !== t.nextResultAt ? checkLine(nextCheckAt, now, lastCheckAt) : null,   // HB-98: an instant, with a grace
   };
 }
 
@@ -130,13 +135,17 @@ function ruleLine(c: Ctx, t: TokenRow, title: string | null): string {
 
 export type CoinDetail = (p: Platform, t: TokenRow, now: number) => Promise<{ status: TokenStatusJson; receipts: readonly (ResultReceipt & { burned?: string | null })[] }>;
 
+/** HB-98 reopened: the keeper's last and next read of this coin's source, read from the registry at request time (null when unreadable). */
+function liveFeed(c: Ctx, t: TokenRow): { lastFetchAt: number | null; nextFetchAt: number | null } | null {
+  try { const f = c.plat.registry.feedState(t.selectorKey); return { lastFetchAt: f.lastFetchAt, nextFetchAt: f.nextFetchAt }; } catch { return null; }
+}
 function viewOf(c: Ctx, t: TokenRow, d: Awaited<ReturnType<CoinDetail>>): CreatorCoinView {
   const s = d.status, base = baseOf(c, t);
   const receipts = c.burnsBy.get(s.mint)?.length ?? d.receipts.filter((r) => r.status === "confirmed" && Number(r.burned ?? 0) > 0).length;
   return {
     ...base, receipts, available: true, loading: false,
     imageUrl: s.profile?.imageUrl ?? null, rule: sentence(s.profile?.oneLiner ?? ruleLine(c, t, s.seriesTitle)), creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [],
-    lastBurnAt: s.burned.lastAt ?? null, ...creatorNextFields(s, d.receipts, c.now),
+    lastBurnAt: s.burned.lastAt ?? null, ...creatorNextFields(s, d.receipts, c.now, liveFeed(c, t)),
   };
 }
 

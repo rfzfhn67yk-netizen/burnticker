@@ -39,7 +39,7 @@ export interface CoinStatusFacts {
   /** the side the rule is about, by name ("Broncos"; coinCard.ts ruleSideName), never the coin's name; null for a market or a feed */
   sideName: string | null;
   /** a rivalry pair: the other coin's name, the other side's name when its status was read, and whether the pair waits on both pools */
-  pair: { otherName: string; otherSideName: string | null; waiting: boolean } | null;
+  pair: { otherName: string; otherSideName: string | null; waiting: boolean; /** HB-109: the pair's void date, when the status carries it */ voidBy?: string | null } | null;
   /** a one-shot whose result is in: who won, whether this coin burns on it, and what the burn waits for */
   decision: {
     outcome: "this" | "other" | "draw" | "in" | "void";
@@ -59,8 +59,11 @@ export interface CoinStatusFacts {
   waiting?: string | null;
 }
 
+import { utcDay } from "@/lib/burnticker/utcWords";
+
 /** The few status.json fields the facts read (pageTypes.ts TokenStatusJson), so a test can pass a small object. */
 export interface StatusInput {
+
   status: string; ticker: string; name: string;
   /** the rule's oracle and selector (status.json oracle, selectorKey): which source an undecided one-shot waits for (HB-16) */
   oracle?: string | null; selectorKey?: string | null;
@@ -68,7 +71,7 @@ export interface StatusInput {
   profile?: { badge?: string | null; oneLiner?: string | null; sideName?: string | null; readingDirection?: "up" | "down" | null } | null;
   market?: { phase: "curve" | "migrating" | "graduated" | null } | null;
   program?: { initialized: boolean; pool: { registered: boolean } } | null;
-  pair?: { counterpart: { name: string }; clause?: { state: "live" | "waiting" | "voided" } | null; unpaired?: unknown } | null;
+  pair?: { counterpart: { name: string }; clause?: { state: "live" | "waiting" | "voided"; voidBy?: string | null } | null; unpaired?: unknown } | null;
   lifecycle?: { ended: { mode: "drain" | "winddown" } | null } | null;
 }
 /** The receipt fields the facts read (pageTypes.ts ReceiptJson). */
@@ -143,7 +146,7 @@ export function coinStatusFactsOf(s: StatusInput, receipts: readonly ReceiptInpu
   const { window, games } = windowOf(s.profile?.badge, s.rules.oneShot);
   const phase = s.market?.phase ?? null;
   const poolReady = s.program ? s.program.initialized && s.program.pool.registered : null;
-  const pair = s.pair && !s.pair.unpaired ? { otherName: s.pair.counterpart.name, otherSideName: other?.profile?.sideName ?? null, waiting: s.pair.clause?.state === "waiting" } : null;
+  const pair = s.pair && !s.pair.unpaired ? { otherName: s.pair.counterpart.name, otherSideName: other?.profile?.sideName ?? null, waiting: s.pair.clause?.state === "waiting", voidBy: s.pair.clause?.voidBy ?? null } : null;
   const byTime = [...receipts].sort((a, b) => (a.settledAt < b.settledAt ? 1 : a.settledAt > b.settledAt ? -1 : 0));
   const confirmed = byTime.find((r) => r.status === "confirmed" && Number(r.burned ?? 0) > 0) ?? null;
   // review H1: the newest RESULT receipt; a drain or wind-down receipt after it is not the decision (nor the burn the result waits for)
@@ -284,7 +287,12 @@ export function readingSentence(direction: "up" | "down" | null, onCurve: boolea
   return `Burns on each new reading${which}${onCurve ? ` ${ON_CURVE}` : ""}.`;
 }
 
+/** HB-109: the losing side of a decided pair. */
+export const lostPairTail = (ticker: string): string => `$${ticker} lost, so this result cannot make it burn.`;
+/** HB-109: the winning side of a decided pair, waiting on both pools, with the pair's void date. */
+export const pendingPairTail = (voidBy: string): string => `Burns if both coins graduate by ${utcDay(voidBy)}; otherwise the pair is voided.`;
 /** The card's one status sentence (sometimes two short ones: the decision, then what the burn waits for). */
+
 export function coinStatusSentence(f: CoinStatusFacts): string {
   if (f.status === "draft") return STATUS_SENTENCES.draft;
   if (f.status === "expired") return STATUS_SENTENCES.expired;
@@ -296,8 +304,11 @@ export function coinStatusSentence(f: CoinStatusFacts): string {
     const head = decidedHead(f, d);
     // PROD-05: a voided one-shot whose rule has ended still burns down its pool; "Nothing burns on it" only while nothing does
     const onCurve = f.phase === "curve" || f.phase === "migrating";
+    // HB-109 (hourly run 8): the losing side of a pair never reads "Burns once…", whatever its receipt's units say (the home card for the
+    // losing $SEAWIN did), and a winner waiting on both pools names the pair's void date when the status carries it
     const tail = d.outcome === "void" ? (f.ended === "winddown" ? (onCurve ? DECIDED_TAILS.winddownOnCurve : DECIDED_TAILS.notThisWinddown) : f.ended === "drain" ? DECIDED_TAILS.notThisDrain : DECIDED_TAILS.void)
-      : !d.burnsThis && d.outcome === "other" && f.pair ? (f.ended || d.forwarded ? DECIDED_TAILS.toWinner : DECIDED_TAILS.notThis)
+      : d.outcome === "other" && f.pair ? (f.ended || d.forwarded ? DECIDED_TAILS.toWinner : f.pair.otherSideName ? lostPairTail(f.ticker) : DECIDED_TAILS.notThis)
+      : d.burnsThis && d.hold === "pending-pair" && f.pair?.voidBy ? pendingPairTail(f.pair.voidBy)
       : !d.burnsThis ? (f.ended === "winddown" ? (onCurve ? DECIDED_TAILS.winddownOnCurve : DECIDED_TAILS.notThisWinddown) : f.ended === "drain" ? DECIDED_TAILS.notThisDrain : DECIDED_TAILS.notThis)
       : d.hold === null ? lastBurnSentence(f) ?? DECIDED_TAILS.other
       : DECIDED_TAILS[d.hold];

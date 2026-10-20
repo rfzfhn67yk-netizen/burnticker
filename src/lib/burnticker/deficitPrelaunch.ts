@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { repoUrl } from "@/lib/burnticker/currentStatusLinks";
 
 /**
  * THE $DEFICIT PRE-LAUNCH PAGE'S DATA (website brief 2026-10-11 §1: "/burnticker/t/DEFICIT displays 'no token $DEFICIT'"). Until the
@@ -14,7 +15,9 @@ export const CURRENT_STATUS_FILE = path.join("config", "burnticker", "current-st
 export interface DeficitPrelaunch {
   ticker: "DEFICIT"; servedAt: string; canonical: string;
   oneSentence: string; dial: { fractionPerUnit: string; percent: string; unitUsd: string; unitLabel: string };
-  statement: string; rulesSha256: string; rulesFile: string;
+  /** HB-26 (2026-10-19): the rule text is named in public words with a pinned public-repository link (repoUrl, as trust.ts uses), never
+   *  by its repository path; the binding is rulesSha256, the sha256 of the exact bytes, which TokenConfig.rules_sha256 holds on chain. */
+  statement: string; rulesSha256: string; rulesWords: string; rulesUrl: string;
   launch: { date: string | null; note: string; seedSol?: number | string | null };
   whitepaper: string;
   rehearsal: { cluster: string; date: string; note: string; demo: { signature: string; recordDate: string; checkHref: string; explorerUrl: string; summary: string } };
@@ -34,6 +37,9 @@ export function demoSignature(st: StatusFile, root = process.cwd()): string {
   return r.signature;
 }
 
+/** HB-26: how a public answer names the $DEFICIT rule text (the repository path stays on the server and inside the link only). */
+export const DEFICIT_RULES_WORDS = "the published $DEFICIT rules file";
+
 export function deficitPrelaunch(root = process.cwd()): DeficitPrelaunch {
   const st = readStatusFile(root);
   const sig = demoSignature(st, root);
@@ -48,7 +54,7 @@ export function deficitPrelaunch(root = process.cwd()): DeficitPrelaunch {
     oneSentence: `Each full ${unitLabel} that the U.S. national debt rises from one business day to the next is one unit. Each unit spends ${pct} of $DEFICIT's burn pool buying $DEFICIT at market, and everything bought is burned.`,
     dial: { fractionPerUnit: rules.buyback.fractionPerUnit, percent: pct, unitUsd: rules.rule.unitUsd, unitLabel },
     statement: rules.statement,
-    rulesSha256: crypto.createHash("sha256").update(text).digest("hex"), rulesFile: st.deficit.rulesFile,
+    rulesSha256: crypto.createHash("sha256").update(text).digest("hex"), rulesWords: DEFICIT_RULES_WORDS, rulesUrl: repoUrl(st.deficit.rulesFile),
     launch: st.deficit.launch, whitepaper: st.deficit.whitepaper,
     rehearsal: { ...st.deficit.rehearsal, demo: { signature: sig, recordDate: st.demo.recordDate, checkHref: "/burnticker/check?demo=1#verify", explorerUrl: `https://explorer.solana.com/tx/${sig}?cluster=devnet`, summary: st.demo.summary } },
   };

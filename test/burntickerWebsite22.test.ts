@@ -76,7 +76,7 @@ describe("audit 10 items 1 and 2: the source's words follow the active rule", ()
     // the budget row: the stale unit never reaches a team coin's label
     assert.equal(budgetCopy(team, 0.02, unitPhrase(activeUnit(team, debtPick))).label, "Share of the burn pool per result");
     assert.match(budgetCopy(debt, 0.02, unitPhrase(activeUnit(debt, debtPick))).label, /per \$1B change/);
-    assert.match(page, /const budget0 = budgetCopy\(rule, shareValue, unitPhrase\(activeUnit\(rule, pick\)\)\);/);
+    assert.match(page, /const budget0 = budgetCopy\(rule, shareValue, unitPhrase\(activeUnit\(rule, pick\)\), \{ raiseSol \}\);/);
     assert.match(page, /const own = pickDescribesRule\(rule, pick\);\n    if \(own && pick\?\.oracle === "polymarket"\)/);
     assert.doesNotMatch(page, /unitPhrase\(pick\?\.source\?\.unit/);
   });
@@ -281,7 +281,7 @@ describe("QA 9 items 24, 36, 37, 41 and 43, audit 10 items 16, 20, 22 and 24", (
   });
   test("43 and audit 10 item 20: accessible names on the comparison, the candidate picks and the state selector", () => {
     assert.match(tile, /aria-label=\{`Search for the \$\{lower1\(label\)\}`\}/); assert.match(tile, /aria-label=\{`Change the \$\{lower1\(label\)\}`\}/);
-    assert.match(page, /aria-label=\{`Pick \$\{o\.label\.replace\(/); assert.match(page, /data-help="race-state" aria-label="State"/);
+    assert.match(page, /aria-label=\{`\$\{esel\.includes\(o\.conditionId\) \? "Picked: " : "Pick "\}\$\{o\.label\.replace\(/); // HS-45 (hourly run 8) assert.match(page, /data-help="race-state" aria-label="State"/);
     assert.match(steps, /role="radio" aria-checked=\{value === o\.id\} aria-label=\{o\.label\}/);
   });
   test("audit 10 item 16: the race filters belong to the picker that set them", () => {

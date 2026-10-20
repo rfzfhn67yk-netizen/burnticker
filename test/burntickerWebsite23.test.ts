@@ -7,7 +7,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
-import { CANDIDATES_END_RESULT, CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, describeRule, endText } from "@/lib/burnticker/describe";
+import { CANDIDATES_END_RESULT, CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, describeRule, endText } from "@/lib/burnticker/describe";
 import { candidateFacts, candidatesPairRule, gamePairFacts, gamePairRule, patternOptions, patternWords, PATTERN_REASON } from "@/lib/burnticker/guidedLaunch";
 import { DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 import { gameSeries, parseEspnSeries } from "@/lib/burnticker/sources/espn";
@@ -48,7 +48,7 @@ describe("website-23: both shapes walk to Review as one linked LaunchLab pair", 
     assert.equal(rv.review.venue, "launchlab");
     assert.equal(rv.review.end.kind, "pair-winner");
     assert.equal(rv.review.settled?.shape, p.shape);
-    assert.equal(rv.review.settled?.sentence, p.shape === "candidates" ? CANDIDATES_PAIR_SENTENCE : GAME_PAIR_SENTENCE);
+    assert.equal(rv.review.settled?.sentence, p.shape === "candidates" ? CANDIDATES_PAIR_SENTENCE : GAME_PAIR_SENTENCE_NO_TIE); // HS-42 (hourly run 8): an NBA game cannot end tied
     assert.equal(rv.review.settled?.flow.version, "winner-takes-the-burn");
     assert.ok((rv.review.settled?.descriptionB ?? "").length > 0, "coin B's description");
     assert.match(rv.review.settled?.descriptionB ?? "", new RegExp(`\\$${tickers.b}`));
@@ -123,7 +123,8 @@ describe("website-23: the sentences", () => {
     assert.match(page, /settledPick\?\.shape === "game" \? gamePairFacts\(\{ a: ticker, b: tickerB, teamA: A, teamB: B, tie: tieWord \}\) : matchupFacts\(/);
     assert.match(page, /\{reviewSettled\?\.flow && <FundsFlowView flow=\{reviewSettled\.flow\} open saidAbove=\{reviewSettled\.sentence \?\? settledLine\} \/>\}/);
     // website-24: coin B's description is the review's own (review.settled.descriptionB, written from pair.descCtx = the page's ctxB)
-    assert.match(page, /\{settledPick && reviewSettled\?\.descriptionB && <section [^\n]*\{reviewSettled\.descriptionB\}<\/p><\/section>\}/);
+    // HB-104 widened (hourly run 9): when the public profile shows both coins, coin B's paragraph sits in its own Description row instead
+    assert.match(page, /\{settledPick && reviewSettled\?\.descriptionB && !\(two && publicProfile\) && <section[^\n]*\{reviewSettled\.descriptionB\}<\/p><\/section>\}/);
     assert.match(page, /const descB = meetingsOn \? \(reviewMeetings\?\.descriptionB \?\? finalDescriptionB\) : settledPick \? \(reviewSettled\?\.descriptionB \|\| finalDescriptionB\) : finalDescriptionB;/);
     assert.match(page, /value: settledPick \? settledWhichCoinLine\(settledPick, \{ a: ticker \|\| "A", b: tickerB \|\| "B" \}\) :/);
     const wc = settledWhichCoinLine(RACE, { a: "ELSAYED", b: "ROGERS" }), wg = settledWhichCoinLine(GAME, { a: "PHIVBOS", b: "BOSVPHI" });

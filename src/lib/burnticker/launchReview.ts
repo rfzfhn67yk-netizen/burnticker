@@ -12,7 +12,7 @@ import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERA
 import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT } from "@/lib/burnticker/fees";
 import { capSentenceAway } from "@/lib/burnticker/capInForce";
-import { describeRule, endText, settledPairSentence, type DescribeCtx } from "@/lib/burnticker/describe";
+import { describeRule, endText, gamePairCannotTie, GAME_PAIR_SENTENCE_NO_TIE, settledPairSentence, type DescribeCtx } from "@/lib/burnticker/describe";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
 import { drainWarning, reviewProjection, type Projection } from "@/lib/burnticker/projection";
@@ -25,6 +25,8 @@ import { PARTIES_PAIR_SENTENCE, isPartySubject, meetingsFundsFlow, settledPairFu
 import { settledPairInput, type SettledPairInput } from "@/lib/burnticker/launchPreflight";
 import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule, type ScheduledGame } from "@/lib/burnticker/timing";
+import { gameSoonLine } from "@/lib/burnticker/gameSoon";
+
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx, sideBDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX, descriptionRoom, descriptionRoomProblem } from "@/lib/burnticker/creatorProfile";
 import { nameProblem } from "@/lib/burnticker/launchFields";
@@ -292,7 +294,7 @@ const endsLine = (windowSentence: string, end: ReturnType<typeof endText>): stri
   return `${window} ${end.line}`.trim();
 };
 
-export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** 2026-10-14: the registry's free pair id, so the review shows the id the launch uses */ pairIdPick?: (base: string) => string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"];
+export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** HS-48: has Burnticker stored a daily reading of this Pyth feed (derby/store.ts hasPoints)? */ derbyHistory?: (feed: string) => boolean; /** 2026-10-14: the registry's free pair id, so the review shows the id the launch uses */ pairIdPick?: (base: string) => string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"];
   /** audit 6 item 8: whether this host serves Kalshi (the platform's flag; default from the env) */ kalshiEnabled?: boolean;
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
@@ -439,11 +441,19 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // the description the bundle pins: the generated paragraph, then the creator's own text, within the bundle's ceiling
   // sources-7 H2: said as the room the rule's paragraph leaves (the Name step's own sentence), never "shorten your text" when there is none
   const meetingsBlock = meetingsPair ? meetingsReview(asBuilt, ticker, String(pair!.ticker ?? "").toUpperCase(), ctx, cluster) : null;
-  const settledDescB = settled && settledPair?.b ? describeRule(settledPair.b, { ...sideBDescribeCtx(settledPair.b, (pair as { descCtx?: unknown } | null)?.descCtx, body.descCtx, { seriesTitle: sourceText(settledPair.b, now)?.title ?? null }), ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph : "";
-  const paragraphB = meetingsBlock?.descriptionB ?? (settledDescB || null);
+  // HB-104 (hourly run 8): side B's own context (its market, its party or team), and for two candidates in one race the race's stated
+  // source too (both markets of one race settle on the same publisher and dispute window), so both pinned descriptions say the same
+  // settlement sentence; the suggested ticker for side B comes from this context, never side A's
+  const ctxB = settled && settledPair?.b ? sideBDescribeCtx(settledPair.b, (pair as { descCtx?: unknown } | null)?.descCtx, body.descCtx, { seriesTitle: sourceText(settledPair.b, now)?.title ?? null, ...(settled.shape === "candidates" && o.stated ? { stated: o.stated } : {}) }) : null;
+  const settledDescB = ctxB && settledPair?.b ? describeRule(settledPair.b, { ...ctxB, ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph : "";
   // continuous audit HB-3: a Coin vs Coin pair's side B is side A inverted (the page's own suggestion, derby/tile.ts coinvsTickers)
   const derbyB: BurnRule | null = pair && asBuilt.oracle === "derby" && asBuilt.derby?.selector === "coinvs" && asBuilt.binary?.onYes ? { ...asBuilt, binary: { onYes: null, onNo: asBuilt.binary.onYes } } : null;
-  const tickerB: string | null = (() => { try { const rb = meetingsPair ? { ...asBuilt, series: meetingsMirror(asBuilt.series ?? "") } as BurnRule : settledPair?.b ?? derbyB; return rb ? describeRule(rb, { ...ctx, ticker: "" }).ticker || null : null; } catch { return null; } })();
+  // HB-104 widened (hourly run 9): a coin comparison pair's side B gets its own paragraph too, generated from its own (inverted) rule with
+  // its own ticker, as the bundle route pins it (handlers.ts: side.description from the locked side B rule), never null beside side A's
+  const ruleBOwn = !meetingsBlock && !settledDescB ? preparedB ?? derbyB : null;
+  const pairDescB = ruleBOwn ? (() => { try { return describeRule(ruleBOwn, { ...ctx, ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph; } catch { return ""; } })() : "";
+  const paragraphB = meetingsBlock?.descriptionB ?? (settledDescB || pairDescB || null);
+  const tickerB: string | null = (() => { try { const rb = meetingsPair ? { ...asBuilt, series: meetingsMirror(asBuilt.series ?? "") } as BurnRule : settledPair?.b ?? derbyB; return rb ? describeRule(rb, { ...(ctxB && rb === settledPair?.b ? ctxB : ctx), ticker: "" }).ticker || null : null; } catch { return null; } })();
   for (const [gen, own, side] of [[text.paragraph, creatorText, "A"], ...(paragraphB ? [[paragraphB, creatorTextB, "B"]] : [])] as [string, string, "A" | "B"][]) {
     const rp = descriptionRoomProblem(gen, own);
     if (rp) onField(side, "description", rp, false);
@@ -543,11 +553,13 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const due = dueTiming(dueIso, now, dueWarningDays(env));
   const timing = oneTime ? { dueAt: due.dueAt, dueLabel: game ? gameDueLabel(game) : null, dueWithinDays: due.dueWithinDays, warning: due.warning, unplayed: espn?.kind === "game" ? UNPLAYED_GAME_LINE : null, afterGraduation: afterGraduationEnd(asBuilt) } : null;
   if (timing?.warning) warnings.push(timing.warning);
+  // HS-44 (hourly run 8): a one-game pair whose game is under 7 days away says first what has to happen for the result to burn anything
+  { const soon = settled?.shape === "game" ? gameSoonLine({ startsAt: dueIso ?? (ctx as { game?: { startsAt?: string } }).game?.startsAt ?? null, now, raiseSol, voidBy: pairVoidBy }) : null; if (soon && !warnings.includes(soon)) warnings.unshift(soon); }
   // QA pass 9 #16: a weather threshold that fires on almost every day, or almost never, at its station says so (the station's history)
   const wxFreq = locked.rule.oracle === "catalogue" && locked.rule.series ? weatherFrequency(locked.rule.series, !!locked.rule.inverse) : null;
   if (wxFreq?.warning) warnings.push(wxFreq.warning);
   // sources-7 (QA walkthrough 11 M4): a share that drains the pool in days is said among the warnings, not only in the collapsed backtest
-  const projection = reviewProjection(locked.rule, now);
+  const projection = reviewProjection(locked.rule, now, undefined, { derbyHistory: o.derbyHistory });
   { const dw = drainWarning(locked.rule, projection); if (dw) warnings.push(dw); }
   if (o.seasonOver) problems.push(o.seasonOver.message);
   else if (o.seasonWarning) warnings.unshift(o.seasonWarning);
@@ -584,7 +596,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     schema: "burnticker.launch-review/v1", network: cluster, mode: model.mode, type, typeAvailable, typeReason,
     signable,
     rule: { text: lockedA.text, sha256: lockedA.sha256, sha12: lockedA.sha12, statement: ruleStatement(lockedA.rule, { seriesTitle: o.seriesTitle ?? null, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), sentence: text.lead, share: shareText, presets: linkedOneShot ? LINKED_ONE_SHOT_LINE : `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule, { dispersal: webDispersalOn(env, o.root) }))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, end) },
-    coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null, profile: { description: i === 0 ? creatorText : creatorTextB }, descriptionRoom: i === 0 ? descriptionRoom(text.paragraph) : paragraphB ? descriptionRoom(paragraphB) : DESCRIPTION_MAX, suggestedTicker: i === 0 ? text.ticker || null : tickerB })),
+    coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : paragraphB, profile: { description: i === 0 ? creatorText : creatorTextB }, descriptionRoom: i === 0 ? descriptionRoom(text.paragraph) : paragraphB ? descriptionRoom(paragraphB) : DESCRIPTION_MAX, suggestedTicker: i === 0 ? text.ticker || null : tickerB })),
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), teamAllocationPct: 0, lpLockedPct: LP_LOCKED_PCT },
     feesPerSol: venue === "pair-curve" ? [perPc(PAIR_CURVE_FEES.curve), perPc(PAIR_CURVE_FEES.post)] : [per(CURVE_FEES), per(postGraduationFeesFor(cluster))],
     transactions: { count: n, steps, note: `${n === 1 ? "You sign the transaction in your wallet. The wallet shows the exact accounts and amount first, and nothing is sent until you approve." : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it."}${pins.length ? ` ${PIN_STEP_NOTE}` : ""}` },
@@ -629,7 +641,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     timing,
     ...(o.seasonOver ? { seasonOver: { message: o.seasonOver.message, next: o.seasonOver.next } } : {}),
     ...(meetingsPair ? { meetings: meetingsBlock } : {}),
-    ...(settled && settledPair ? { settled: { shape: settled.shape, sentence: settled.shape === "candidates" && isPartySubject(settledNames(pair?.names, sides)) ? PARTIES_PAIR_SENTENCE : settledPairSentence(settled.shape), flow: settledPairFundsFlow(settled.shape, { a: ticker || "A", b: String(pair?.ticker ?? "").toUpperCase() || "B" }, settledNames(pair?.names, sides), { fees: postGraduationFeesFor(cluster) }), descriptionB: settledDescB } } : {}),
+    ...(settled && settledPair ? { settled: { shape: settled.shape, sentence: settled.shape === "candidates" && isPartySubject(settledNames(pair?.names, sides)) ? PARTIES_PAIR_SENTENCE : settled.shape === "game" && gamePairCannotTie(settledPair.a) ? GAME_PAIR_SENTENCE_NO_TIE : settledPairSentence(settled.shape), flow: settledPairFundsFlow(settled.shape, { a: ticker || "A", b: String(pair?.ticker ?? "").toUpperCase() || "B" }, settledNames(pair?.names, sides), { fees: postGraduationFeesFor(cluster), noTies: settled.shape === "game" && gamePairCannotTie(settledPair.a) }), descriptionB: settledDescB } } : {}),
+
   };
   return { review };
 }

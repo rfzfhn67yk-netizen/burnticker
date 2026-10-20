@@ -43,7 +43,7 @@ const CROSS_OK = /^(MLB's official results|the NBA's official results|the NHL's 
  * only from the platform's own phrases; an end date only as an ISO date; a game opponent only a known team nickname. Anything else is
  * dropped and the template's neutral words are used. A feed's title and unit always come from the server's catalogue.
  */
-export function serverDescribeCtx(rule: BurnRule, raw: unknown, o: { seriesTitle: string | null; feed?: { title: string; sourceName: string; unitLabel: string } | null; /** the server's own read of the market (statedCtx); the request's `stated` is never used */ stated?: DescribeCtx["stated"] }): Omit<DescribeCtx, "ticker"> {
+export function serverDescribeCtx(rule: BurnRule, raw: unknown, o: { seriesTitle: string | null; feed?: { title: string; sourceName: string; unitLabel: string; crossRead?: string | null } | null; /** the server's own read of the market (statedCtx); the request's `stated` is never used */ stated?: DescribeCtx["stated"] }): Omit<DescribeCtx, "ticker"> {
   const c = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const out: Omit<DescribeCtx, "ticker"> = {};
   const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null);

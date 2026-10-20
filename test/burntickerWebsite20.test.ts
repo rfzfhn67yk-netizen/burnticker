@@ -148,8 +148,9 @@ describe("item 253 on the launch page: a prepare answer for an older draft sets 
     assert.ok("stale" in out); assert.equal(applied, false);
     const page = read("src/app/burnticker/launch/page.tsx");
     const body = page.slice(page.indexOf("const launch = useCallback"), page.indexOf("// ---- navigation"));
-    // 2026-10-14 night: the prepare runs inside withMintSource (the server's mint key first, the browser search on mint-bank-empty)
-    assert.match(body, /const out = await prepareIfCurrent\(sentRev, \(\) => curDraft\.current, \(\) => withMintSource\(\{[^}]*\}, async \(keys: GroundMint\[\] \| null\): Promise<\(\) => void> => \{/);
+    // 2026-10-14 night: the prepare runs inside withMintSource (the server's mint key first, the browser search on mint-bank-empty);
+    // LA6-4 (2026-10-19): through withKeptMint, which uses a key kept in this tab first and otherwise is withMintSource
+    assert.match(body, /const out = await prepareIfCurrent\(sentRev, \(\) => curDraft\.current, \(\) => withKeptMint\(keptMint, \{[^}]*\}, async \(keys: GroundMint\[\] \| null\): Promise<\(\) => void> => \{/);
     assert.match(body, /if \("stale" in out\) \{ setLaunchErr\(STALE_PREPARE_SENTENCE\); return; \}\s*out\.ok\(\); setSignTickers\(sent\);\s*setStep\("launch"\);/);
     assert.doesNotMatch(body.slice(body.indexOf("prepareIfCurrent")), /^\s*setBundle\(\(await post/m, "no state is set inside the request itself");
     assert.match(page, /title=\{two \? `Launch \$\$\{st\.a\} and \$\$\{st\.b\}` : `Launch \$\$\{st\.a\}`\}/);

@@ -7,6 +7,8 @@ import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesS
 import { backtest, type Backtest } from "@/lib/burnticker/oracle/backtest";
 import { expandUrl, fetchBody, httpSource, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
 import { corroborate } from "@/lib/burnticker/catalogue/corroborate";
+import { crossReadsOf, describeEntry } from "@/lib/burnticker/coverage/sources";
+import { isSingleOfficialSource } from "@/lib/burnticker/singleSource";
 import type { PriceFeedSourceConfig, ResolutionSource } from "@/lib/burnticker/sources/types";
 import { copycatSource, type CopycatSourceConfig, type CopycatSourceOptions } from "@/lib/burnticker/sources/copycats";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -149,6 +151,28 @@ export function verifyUrl(feed: Feed, nowMs: number): string {
 }
 
 export const isCatalogueId = (id: string): boolean => feedById(id) !== null;
+
+/**
+ * HB-113 (hourly run 9): the second publisher a feed's readings are checked against at run time (corroborate.ts: the independent source
+ * of the same fact, coverage/sources.ts crossReadsOf), named for the coin's own text: "the Federal Reserve Bank of St. Louis (FRED), at
+ * each quarter end" for the daily debt against FRED's quarterly figure. Null for a single official source, a feed with no fact, or no
+ * second source set up, so a pinned description never claims a cross-check that the keeper does not run.
+ */
+export function feedCrossReadName(feed: Pick<Feed, "config">, root = process.cwd()): string | null {
+  if (isSingleOfficialSource(feed.config) || !feed.config.fact) return null;
+  try {
+    const descs = loadSourceEntries(root).map(describeEntry);
+    const baseId = feed.config.id.split(":")[0];
+    const desc = descs.find((s) => s.id === baseId) ?? describeEntry({ ...feed.config, id: baseId });
+    const c = crossReadsOf(desc, descs)[0];
+    if (!c) return null;
+    const who = c.operator ?? c.title;
+    const quarterly = feed.config.fact.align === "quarter-end" || c.fact?.align === "quarter-end";
+    // an institution takes "the" ("the U.S. Bureau of Labor Statistics", "the Federal Reserve Bank of St. Louis"); a company or a site does not
+    const institution = /^U\.S\.\s/.test(who) || /\bof\b/.test(who);
+    return `${institution ? "the " : ""}${who}${quarterly ? ", at each quarter end" : ""}`;
+  } catch { return null; }
+}
 
 /** The frozen real fixture a source ships with: { fetchedAt, url, body } (the older six keep their original shape, handled here). */
 export function loadFixture(feed: Feed, root = process.cwd()): { fetchedAt: string | null; url: string | null; body: unknown } {

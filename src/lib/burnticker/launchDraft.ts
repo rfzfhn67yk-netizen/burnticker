@@ -79,8 +79,14 @@ export function migrateLinkedShare<T extends Record<string, unknown>>(saved: T):
   const out: Record<string, unknown> = { ...saved };
   const d = saved.draft as { key?: string; a?: unknown; b?: unknown } | null | undefined;
   if (d && typeof d === "object") out.draft = { ...d, a: fix(d.a), b: d.b ? fix(d.b) : d.b ?? null };
-  if (typeof saved.fraction === "number" && saved.fraction !== 1) { from = from ?? saved.fraction; out.fraction = 1; }
-  return from === null ? { draft: saved, notice: null } : { draft: out as T, notice: linkedShareMigratedNotice(from) };
+  // HB-105 (hourly run 8): the page's share dial (`fraction`) is not the draft's share. A Team draft's 2% stays in the dial when the
+  // creator starts over or changes Follows, and a fresh one-game pair resumed from that snapshot said "This saved draft had 2% on a linked
+  // pair". The dial is set to 100% silently; the notice speaks only of a share a saved RULE carried.
+  const dialMoved = typeof saved.fraction === "number" && saved.fraction !== 1;
+  if (dialMoved) out.fraction = 1;
+  if (from === null) return { draft: dialMoved ? out as T : saved, notice: null };
+  return { draft: out as T, notice: linkedShareMigratedNotice(from) };
+
 }
 
 /**

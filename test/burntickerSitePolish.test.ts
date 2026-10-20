@@ -166,7 +166,7 @@ describe("item 23: card fields", () => {
 
 describe("item 24: sideways rows say there is more", () => {
   test("the Coins filters and the activity line use the scroll hint; the static ticker toggles both edges", () => {
-    assert.match(read("src/app/burnticker/CoinsIndex.tsx"), /className=\{`bt-tabs \$\{tabsHint\.className\}`\}/);
+    assert.match(read("src/app/burnticker/CoinsIndex.tsx"), /className=\{`bt-tabs bt-tabs-wrap \$\{tabsHint\.className\}`\}/);
     assert.match(read("src/app/burnticker/_components/ActivityTicker.tsx"), /useScrollEdges/);
     const css = read("config/public-repo/overlay/src/app/globals.css");
     for (const c of ["more-end", "more-start", "more-start.more-end"]) assert.match(css, new RegExp(`\\.bt-scroll-hint\\.${c.replace(".", "\\.")} \\{ -webkit-mask-image`));

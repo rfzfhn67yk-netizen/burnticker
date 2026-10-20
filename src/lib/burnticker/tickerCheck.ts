@@ -2,6 +2,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { isReserved, normaliseName } from "@/lib/burnticker/reservedNames";
 import { lookalikeHits, sameTickerSentence, type LookalikeExisting } from "@/lib/burnticker/lookalike";
+import { hazardAlternates } from "@/lib/burnticker/hazards";
 
 /**
  * THE TICKER CHECK AT REVIEW (walkthrough snag 9; prelaunch audit 2026-10-18 A-2 and A-40). For every side of a draft: whether another
@@ -44,19 +45,19 @@ export function isTeamRule(rule: unknown): boolean {
  * the ticker itself is held by no coin, and for a team coin the team words on the ticker and on its first three letters. `avoid` is a
  * ticker that is held or reserved: no suggestion starts with it (HB-6), so a refusal never offers that ticker with something added.
  */
-export function freeTickers(ticker: string, deps: { inUse: (ticker: string) => readonly unknown[]; existing: readonly LookalikeExisting[]; reserved: ReadonlySet<string>; creator?: string | null; own?: ReadonlySet<string> }, n = 2, o: { team?: boolean; avoid?: readonly (string | null | undefined)[] } = {}): string[] {
+export function freeTickers(ticker: string, deps: { inUse: (ticker: string) => readonly unknown[]; existing: readonly LookalikeExisting[]; reserved: ReadonlySet<string>; creator?: string | null; own?: ReadonlySet<string> }, n = 2, o: { team?: boolean; avoid?: readonly (string | null | undefined)[]; /** HB-117: the rule's own alternatives (hazards.ts hazardAlternates), tried first */ extra?: readonly string[] } = {}): string[] {
   const base = normaliseName(ticker) || "COIN", out: string[] = [], avoid = (o.avoid ?? []).map((x) => normaliseName(x ?? "")).filter(Boolean);
   const ok = (t: string) => /^[A-Z0-9]{2,10}$/.test(t) && !out.includes(t) && !avoid.some((a) => t.startsWith(a)) && !(deps.own?.has(t)) && !isReserved(t, deps.reserved) && deps.inUse(t).length === 0
     && lookalikeHits({ ticker: t, name: "", creator: deps.creator ?? null }, deps.existing).length === 0;
   const words = (stem: string) => WORDS.map((w) => `${stem.slice(0, 10 - w.length)}${w}`);
   const digits = Array.from({ length: 8 }, (_, k) => `${base.slice(0, 9)}${k + 2}`);
   // a team coin takes the team words first ($LADCLUB reads better than $LAD2); any other coin only its own digit endings
-  const cands = o.team ? [...words(base), ...words(base.slice(0, 3)), ...digits] : digits;
+  const cands = [...(o.extra ?? []).map((x) => normaliseName(x)), ...(o.team ? [...words(base), ...words(base.slice(0, 3)), ...digits] : digits)];
   for (const t of cands) { if (out.length >= n) break; if (ok(t)) out.push(t); }
   return out;
 }
 
-export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; generated?: string | null; /** HB-6: a team coin (isTeamRule); only then are team words offered */ team?: boolean; /** HB-30: the side's rule, so another window of the same team is not a lookalike (lookalike.ts) */ rule?: Pick<BurnRule, "oracle" | "series"> | null }[], deps: { inUse: (ticker: string) => readonly TickerRow[]; reserved: ReadonlySet<string>; /** the registry's rows (launchGuards.ts lookalikeRows); with none, the holders found by `inUse` */ existing?: readonly LookalikeExisting[] | null; /** the connected wallet, when the review knows it: its own coins never count */ creator?: string | null }): TickerCheck[] {
+export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; generated?: string | null; /** HB-6: a team coin (isTeamRule); only then are team words offered */ team?: boolean; /** HB-30: the side's rule, so another window of the same team is not a lookalike (lookalike.ts) */ rule?: Pick<BurnRule, "oracle" | "series"> | null; /** HB-117: the rule's own alternative tickers (a natural-disaster coin's hazard word), offered before digit endings */ alternates?: readonly string[] }[], deps: { inUse: (ticker: string) => readonly TickerRow[]; reserved: ReadonlySet<string>; /** the registry's rows (launchGuards.ts lookalikeRows); with none, the holders found by `inUse` */ existing?: readonly LookalikeExisting[] | null; /** the connected wallet, when the review knows it: its own coins never count */ creator?: string | null }): TickerCheck[] {
   const own = new Set(sides.map((s) => s.ticker.toUpperCase()));
   // review of block M: only the (proven) creator's own unfinished draft is exempt; their own launched coin holds the ticker like any other
   const holders = (t: string): TickerRow[] => deps.inUse(t).filter((x) => !(deps.creator && x.creator === deps.creator && (x.status ?? "live") === "draft"));
@@ -65,12 +66,12 @@ export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; 
   const fdeps = { inUse: holders, existing, reserved: deps.reserved, creator: deps.creator ?? null, own };
   // HB-6: the suggestions come from the coin's own rule (its generated ticker and that ticker's endings), never from the typed ticker
   // another coin holds or the platform reserves; with no usable generated ticker, only what can be built without extending the typed one
-  const fromRule = (g: string | null | undefined, typed: string, team: boolean): string[] => {
+  const fromRule = (g: string | null | undefined, typed: string, team: boolean, extra: readonly string[] = []): string[] => {
     const t = (g ?? "").toUpperCase();
-    if (!/^[A-Z0-9]{2,10}$/.test(t) || isReserved(t, deps.reserved) || t.startsWith(typed)) return freeTickers(typed, fdeps, 2, { team, avoid: [typed] });
+    if (!/^[A-Z0-9]{2,10}$/.test(t) || isReserved(t, deps.reserved) || t.startsWith(typed)) return freeTickers(typed, fdeps, 2, { team, avoid: [typed], extra });
     const held = holders(t).length > 0;
     // a generated ticker another coin holds is never extended either
-    const o = { team, avoid: [typed, held ? t : null] };
+    const o = { team, avoid: [typed, held ? t : null], extra };
     const free = !own.has(t) && !held && lookalikeHits({ ticker: t, name: "", creator: deps.creator ?? null }, existing).length === 0;
     return free ? [t, ...freeTickers(t, fdeps, 1, o)] : freeTickers(t, fdeps, 2, o);
   };
@@ -82,6 +83,29 @@ export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; 
     const reserved = isReserved(ticker, deps.reserved), taken = held.length > 0;
     // HB-30: a ticker one letter from (or reading as) another coin's is refused by the launch too, so it gets its own free tickers
     const lookalike = !taken && lookalikeHits({ ticker, name: "", rule: s.rule ?? null, creator: deps.creator ?? null }, existing).some((h) => h.field === "ticker");
-    return { side: s.side, ticker, inUse, taken, reserved, lookalike, suggestions: reserved || taken || lookalike ? fromRule(s.generated, ticker, !!s.team) : [], warning: taken ? inUseWarning(ticker, held) : null };
+    return { side: s.side, ticker, inUse, taken, reserved, lookalike, suggestions: reserved || taken || lookalike ? fromRule(s.generated, ticker, !!s.team, s.alternates ?? []) : [], warning: taken ? inUseWarning(ticker, held) : null };
   });
+}
+
+/**
+ * Continuous audit HB-117 (run 10): the review's `suggestedTicker` for each side is the rule's own generated ticker only while no coin
+ * holds it or one like it; otherwise the first free ticker the check offers for it (the hazard word for a natural-disaster coin), or null
+ * when there is none. It answered "NEXTM6" while the live $NEXTM6 held it. `sides` are the same inputs tickerChecks takes.
+ */
+export function freeSuggestedTickers<C extends { side: "A" | "B"; suggestedTicker: string | null }>(coins: readonly C[], sides: Parameters<typeof tickerChecks>[0], deps: Parameters<typeof tickerChecks>[1]): C[] {
+  const gens = tickerChecks(sides.flatMap((s) => { const g = coins.find((c) => c.side === s.side)?.suggestedTicker; return g ? [{ ...s, ticker: g, generated: g }] : []; }), deps);
+  return coins.map((c) => {
+    const g = gens.find((x) => x.side === c.side);
+    return g && (g.taken || g.reserved || g.lookalike) ? { ...c, suggestedTicker: g.suggestions[0] ?? null } : c;
+  });
+}
+
+/**
+ * The review route's ticker block (A-2, HB-30, HB-117): every side's check, and the coins with a free `suggestedTicker`. Side A of a
+ * natural-disaster coin is offered the hazard's own word (hazards.ts hazardAlternates) before digit endings, which read as the held ticker.
+ */
+export function reviewTickerChecks<C extends { side: "A" | "B"; ticker: string; suggestedTicker: string | null }>(coins: readonly C[], ruleA: Pick<BurnRule, "oracle" | "series"> | null | undefined, deps: Parameters<typeof tickerChecks>[1]): { tickers: TickerCheck[]; coins: C[] } {
+  const team = isTeamRule(ruleA);   // HB-6: team words only for a team coin
+  const sides = coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker, team, rule: c.side === "A" ? ruleA ?? null : null, alternates: c.side === "A" ? hazardAlternates(ruleA?.series, { ticker: c.suggestedTicker ?? "", name: "" }).map((a) => a.ticker) : [] }));
+  return { tickers: tickerChecks(sides, deps), coins: freeSuggestedTickers(coins, sides, deps) };
 }

@@ -165,7 +165,7 @@ describe("NBA settlement does not depend on the dead feed", () => {
     assert.equal(r.ok, true, JSON.stringify(r.refusal)); assert.equal(r.refusal, null);
     const p = await nativeSourceById(id)!.preflight(NOW);
     assert.equal(p.problem, null); assert.equal(p.note, NEXT_GAME_NOTES.hold);
-    assert.equal(p.note, "Polymarket has not listed the next game yet; it usually appears a few days before tip-off. Until it does, that game would settle on TheSportsDB alone after a 12-hour confirmation hold.");
+    assert.equal(p.note, "Polymarket has not listed the next game yet; it usually appears a few days before the game. Until it does, that game would settle on TheSportsDB alone after a 12-hour confirmation hold.");
     const cfg = loadCopyLintConfig();
     for (const l of [NEXT_GAME_NOTES.hold, NEXT_GAME_NOTES.noTag, NEXT_GAME_NOTES.official("MLB's official feed")]) assert.ok(lintCopy(l, cfg).ok, `${lintCopy(l, cfg).hits.map((h) => h.phrase).join(", ")}: ${l}`);
   });
