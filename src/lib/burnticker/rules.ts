@@ -1,6 +1,6 @@
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { derbySeriesId, derbySpecProblems, derbyStatement, isDerbySeries, type DerbySpec } from "@/lib/burnticker/derby/spec";
-import { inverseRefusal, KEEPER_ONE_SHOT_RE, PAIR_OUTCOME_SERIES_RE } from "@/lib/burnticker/inverse";
+import { inverseRefusal, isOneShotSeries, PAIR_OUTCOME_SERIES_RE } from "@/lib/burnticker/inverse";
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { regexProblem } from "@/lib/burnticker/safeRegex";
 import { hasNoBurnOutcome, isFirstSnowRule, oneShotFull, resolvesOnce } from "@/lib/burnticker/nextResult";
@@ -469,7 +469,7 @@ export function validateRule(raw: unknown, o: { stored?: boolean } = {}): BurnRu
     if (r.oracle === "derby" && Object.keys(filter).length) p.push("derby: filter must be {} (the derby block is the whole selector)");
   }
   if (r.kind !== "binary" && r.kind !== "scalar") p.push('kind must be "binary" or "scalar"');
-  const oneShot = market !== null || (r.oracle === "derby" && (derby as { selector?: string; flip?: boolean } | undefined)?.selector === "coinvs" && (derby as { flip?: boolean }).flip === true) || (r.oracle === "derby" && (derby as { selector?: string; once?: boolean } | undefined)?.selector === "high" && (derby as { once?: boolean }).once === true) || (r.oracle === "catalogue" && typeof series === "string" && KEEPER_ONE_SHOT_RE.test(series));
+  const oneShot = market !== null || (r.oracle === "derby" && (derby as { selector?: string; flip?: boolean } | undefined)?.selector === "coinvs" && (derby as { flip?: boolean }).flip === true) || (r.oracle === "derby" && (derby as { selector?: string; once?: boolean } | undefined)?.selector === "high" && (derby as { once?: boolean }).once === true) || (r.oracle === "catalogue" && typeof series === "string" && isOneShotSeries(series));   // HB-147: the first snow may go to 100% too
   const checkMapping = (label: string, m: unknown): void => {
     if (!isMapping(m)) { p.push(`${label} must be { fractionOfPool } or { tokens }`); return; }
     const mode = mappingMode(m);

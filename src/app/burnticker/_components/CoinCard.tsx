@@ -149,6 +149,8 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
       {/* owner 2026-10-19 (coinsList.ts): the Coins page's result line for a decided coin, or the next-result line for an open one */}
       {v.resultLine && <p className="mt-1 text-xs text-neutral-300" data-result-line>{v.resultLine}</p>}
       {v.nextLine && <p className="mt-1 text-xs text-neutral-400" data-next-line>{v.nextLine}</p>}
+      {/* HB-145 second half: a card built from the coin's last good read (its fresh read was late) says when that read was made */}
+      {v.readNote && <p className="mt-1 text-xs text-neutral-500" data-read-note>The figures on this card were {v.readNote}.</p>}
       {stat && <p className="bt-card-stat" data-card-stat={stat.key}><span className="bt-card-stat-label">{stat.label}</span> <span className="bt-card-stat-value">{stat.text}</span></p>}
       <details className="bt-card-details" data-card-details>
       <summary>Details</summary>

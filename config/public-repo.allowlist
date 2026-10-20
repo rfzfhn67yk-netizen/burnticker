@@ -88,6 +88,10 @@ scripts/load-env.sh
 scripts/service/run-burnticker-web.sh
 # L-5 (2026-10-19): the web's bounded SIGTERM drain, preloaded by run-burnticker-web.sh
 scripts/service/web-graceful.cjs
+# HB-138 (2026-10-20): the web's memo warm-up at start, preloaded by run-burnticker-web.sh
+scripts/service/web-warm.cjs
+# HB-145 (2026-10-20): the web's slow-request and event-loop log, preloaded by run-burnticker-web.sh
+scripts/service/web-slowlog.cjs
 scripts/service/run-burnkeeper.sh
 scripts/service/run-burnticker-keeper.sh
 scripts/service/run-burnticker-audit.sh
@@ -153,6 +157,9 @@ test/fixtures/burnticker-trustpack/**
 test/fixtures/burnticker/v1-ledger-devnet.json
 test/fixtures/burnticker/v1-receipt-check-devnet.json
 test/fixtures/burnticker/v1-never-buys-devnet.json
+# hourly audit run 14 (2026-10-20): the public /v1/sports/teams?league=wnba and /v1/operator bodies the auditor saved (HB-153, HB-154)
+test/fixtures/burnticker/hourly-run14-wnba-teams.json
+test/fixtures/burnticker/hourly-run14-operator.json
 test/fixtures/burnticker-season/**
 test/fixtures/burnticker-ops/**
 scripts/ops/codex-setup.sh

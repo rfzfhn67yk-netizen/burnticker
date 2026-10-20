@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { isFallbackGame, meetingsSeries, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamSeries, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { CANCELLED_RE, isFallbackGame, meetingsSeries, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamSeries, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { teamRef } from "@/lib/burnticker/describe";
 
 /**
@@ -42,7 +42,10 @@ export function seasonStatus(abbr: string, games: readonly Game[], readable: boo
   // audit 2026-10-16 F-4 review: a listing from the fallback source covers today and three days only, so it can show a team playing,
   // never that its season is over or that it has no game in the next days
   if (games.some(isFallbackGame)) return { status: "unknown", warning: "Only part of this league's schedule could be read just now, so whether this team has games left is not known." };
-  if (open.length && open.every((g) => g.seasonType === 3)) return { status: "over", warning: SEASON_OVER_LINE };
+  // HB-153 (hourly run 14): the team has no game left and every game still to be played is a postseason game between other teams (a
+  // cancelled or postponed leftover row is not a game still to be played, so it never keeps an eliminated team "in season")
+  const toPlay = open.filter((g) => !CANCELLED_RE.test(g.detail) && !/postpon/i.test(g.detail));
+  if (toPlay.length && toPlay.every((g) => g.seasonType === 3)) return { status: "over", warning: SEASON_OVER_LINE };
   return { status: "none-listed", warning: NONE_LISTED_LINE };
 }
 

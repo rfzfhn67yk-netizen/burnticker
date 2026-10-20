@@ -20,7 +20,7 @@ export function leagueData(p: Platform, nowMs = Date.now()): { coins: SeasonCoin
   const rows = [...p.registry.tokens("live"), ...p.registry.tokens("paused"), ...p.registry.tokens("retired")];
   const coins: SeasonCoinInput[] = rows.map((t) => {
     const burns = p.registry.receipts(t.mint).filter((b) => b.status === "confirmed" && (b.burnRaw ?? BigInt(0)) > BigInt(0)).map((b) => ({ settledAt: b.settledAt }));
-    return { ticker: t.ticker, mint: t.mint, rule: p.registry.lockedRule(t).rule, burns, burnedPct: Number((p.registry.totalBurnedRaw(t.mint) * BigInt(1_000_000)) / supplyRaw) / 10_000, ended: p.registry.ruleEnd(t.mint) !== null };
+    return { ticker: t.ticker, mint: t.mint, rule: p.registry.lockedRule(t).rule, burns, burnedPct: Number((p.registry.totalBurnedRaw(t.mint) * BigInt(1_000_000)) / supplyRaw) / 10_000, launchedAt: t.baselineAt, ended: p.registry.ruleEnd(t.mint) !== null };
   });
   const since = new Date(nowMs - 8 * 86_400_000).toISOString();
   const keys = [...new Set(rows.filter((t) => /^catalogue:espn\.(team|game):/.test(t.selectorKey)).map((t) => t.selectorKey))];
@@ -33,5 +33,23 @@ export function leagueData(p: Platform, nowMs = Date.now()): { coins: SeasonCoin
   return v;
 }
 
+/**
+ * HB-35 (2026-10-20): the league pages and the sitemap read the table from a ten-minute memo (cfb/2026 took 7 to 8 s cold and
+ * sitemap.xml 6.9 s, each rebuilding this table and its receipts per coin when the 60 s memo above had lapsed). The home and the coins
+ * index keep the 60 s table: their rank lines move with each burn. A table built for either is reused by the other while young enough.
+ */
+export const LEAGUE_PAGE_TTL_MS = 10 * 60_000, HOME_TABLE_REUSE_MS = 3 * 60_000;
+let pageMemo: { at: number; registry: unknown; v: ReturnType<typeof leagueData> } | null = null;
+export function leagueDataForPages(p: Platform, nowMs = Date.now()): ReturnType<typeof leagueData> {
+  if (pageMemo && pageMemo.registry === p.registry && nowMs - pageMemo.at < LEAGUE_PAGE_TTL_MS) return pageMemo.v;
+  // HB-145: a home build refreshes the 60 s table (its rank lines read it), so a page whose ten minutes ran out takes that table (up to
+  // HOME_TABLE_REUSE_MS old) instead of building one. HB-163: the table has no timer of its own; it follows the home memo's cadence (the
+  // home timer builds only while visitors come), so on a quiet host a league page past its ten minutes builds it once
+  if (memo && memo.registry === p.registry && nowMs - memo.at < HOME_TABLE_REUSE_MS) { pageMemo = { at: memo.at, registry: p.registry, v: memo.v }; return memo.v; }
+  const v = leagueData(p, nowMs);
+  pageMemo = { at: nowMs, registry: p.registry, v };
+  return v;
+}
+
 /** For tests. */
-export function clearLeagueMemo(): void { memo = null; }
+export function clearLeagueMemo(): void { memo = null; pageMemo = null; }

@@ -42,7 +42,8 @@ describe("review 2 — one launch-availability state", () => {
       ["src/app/burnticker/CoinsIndex.tsx", [/\{state\.notLaunched && launch\.open && <div className="mt-2"><Link href=\{tab === "pairs" \? "\/burnticker\/launch\?pair=1" : "\/burnticker\/launch"\} className="underline">\{tab === "pairs" \? "Launch a pair" : "Launch the first one"\}<\/Link><\/div>\}/]],
       ["src/app/burnticker/_components/SiteHeader.tsx", [/\{launchOpen\s*\? <Link className="bt-launch-btn bt-launch-head" href="\/burnticker\/launch"/]],
       ["src/app/burnticker/leagues/[league]/[season]/page.tsx", [/\{\(launch\.open \|\| launchPreview\) && <Link className="text-xs underline" href=\{t\.launchHref\}>\{launch\.open \? "launch a coin for this team" : "preview a coin for this team"\}/, /\{\(launch\.open \|\| launchPreview\) && <Link className="underline" href=\{t\.launchHref\}>/, /No team-coin receipts for this season yet\. This page tracks processed coin receipts, not every game\.\{launch\.open \? " Pick a team below to launch one\." : ""\}/]],
-      ["src/app/burnticker/templates/page.tsx", [/\{launch\.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href=\{t\.href\}>\{t\.cta\} →<\/Link>\}/]],
+      // HB-151 (hourly run 13): c.href is null unless the wizard is open and the card can launch (templateCard.ts)
+      ["src/app/burnticker/templates/page.tsx", [/\{c\.href && <div className="mt-auto pt-3"><TemplateLink className="text-sm font-medium text-amber-300 underline" href=\{c\.href\}>\{t\.cta\} →<\/TemplateLink><\/div>\}/]],
       ["src/app/burnticker/t/[ticker]/page.tsx", [/\{launch\.open && <p><Link [^>]*href=\{likeHref\(s\.ticker\)\}>Launch one like this</]],
       ["src/app/burnticker/p/[pairId]/page.tsx", [/\{launch\.open && <p className="mt-1"><Link [^>]*href=\{likeHref\(A\)\}>Launch a pair like this</]],
       ["src/app/burnticker/rivalries/page.tsx", [/\{launch\.open \? <> A team coin is launched from the <Link/]],

@@ -1,5 +1,5 @@
 import { fold, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
-import { eventIdentity, titleEntity } from "@/lib/burnticker/eventIdentity";
+import { statementOf, titleEntity } from "@/lib/burnticker/eventIdentity";
 import type { GammaEvent, GammaMarket } from "@/lib/burnticker/oracle/polymarket";
 import { ladderOrder } from "@/lib/burnticker/oracle/outcomeFilter";
 
@@ -65,11 +65,7 @@ const live = (m: GammaMarket) => m.outcomes.length === 2 && !m.closed && !m.inac
 export const outcomeLabel = (m: GammaMarket): string => m.groupItemTitle?.trim() || m.question.replace(/\?$/, "").replace(/^will\s+/i, "");
 /** "Will X win Best Picture at …?" → "X wins Best Picture at …" (the card sentence). */
 /** The market question as a plain third-person sentence (eventIdentity.ts: subject + conjugated verb + the rest; L12). */
-export const plainQuestion = (q: string): string => {
-  const t = q.replace(/\?$/, "");
-  const id = eventIdentity(t);
-  return id.verb ? id.phrase : t.replace(/^will\s+/i, "");
-};
+export const plainQuestion = (q: string): string => statementOf(q);
 
 const TICKER_SKIP = new Set(["the", "a", "an", "of", "la", "le", "el", "los", "las", "part", "and", "mr", "mrs", "dr", "st"]);
 /** A ticker from an outcome: its first distinctive word, uppercased, at most 8 characters ("Spider-Man: Brand New Day" → SPIDER). */

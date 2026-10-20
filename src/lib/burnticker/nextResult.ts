@@ -25,7 +25,8 @@ export const isOneShot = (r: Pick<BurnRule, "market" | "oracle" | "derby"> & { s
  * the losing-path words. A vault amount (no fractionOfPool) is not a share, so it is not this.
  */
 export const oneShotFull = (r: Pick<BurnRule, "market" | "oracle" | "derby" | "kind" | "binary" | "scalar"> & { series?: string | null }): boolean => {
-  if (!isOneShot(r)) return false;
+  // HB-147 (hourly run 13): the first snow at 100% is one burn of the whole pool too (multiKeeper.ts drains it after its first snow)
+  if (!isOneShot(r) && !isFirstSnowRule(r)) return false;
   const maps = (r.kind === "binary" ? [r.binary?.onYes, r.binary?.onNo] : [r.scalar?.perUnit]).filter((m) => !!m);
   return maps.length > 0 && maps.every((m) => m!.fractionOfPool === 1);
 };

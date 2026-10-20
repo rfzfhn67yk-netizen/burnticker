@@ -137,6 +137,12 @@ export function simulateResults(rule: BurnRule, o: SimOptions = {}): Simulation 
   const family = simFamilyOf(rule);
   for (const c of SIM_CASES) {
     if (c === "tie" && family === "published" && !o.pair) continue;
+    // HB-146 (hourly run 13): a published number's voided row is already "No reading is published"; a second "No result is published"
+    // row said the same situation in other words
+    if (c === "no-result" && family === "published" && !o.pair) continue;
+    // HB-39 residue (hourly run 14): one yes/no market has no tie, so its table has no tie row (a row that only said it does not apply);
+    // a recurring series of games keeps it
+    if (c === "tie" && rule.kind === "binary" && (rule.oracle === "polymarket" || (rule.oracle === "kalshi" && !!rule.market)) && !o.pair && !f.drawFires) continue;
     // HS-42 (hourly run 8): no tie row for a league whose games cannot end tied (NHL, NBA, MLB), on a team coin or a one-game pair
     if (c === "tie" && (seriesCannotTie(rule.oracle === "catalogue" ? rule.series ?? null : null) || seriesCannotTie(rule.pair?.game?.series?.[0] ?? null))) continue;
     let coins: SimCoin[];

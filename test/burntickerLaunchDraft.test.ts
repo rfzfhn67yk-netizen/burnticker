@@ -237,7 +237,7 @@ describe("L04 — the interpreted event", () => {
     const r = await universalSearch("Lakers win tonight", deps({ espn, nowMs: now, polyGet: null }));
     assert.equal(r.cards[0].shape, "one-shot"); assert.equal(r.cards[0].rule?.series, "espn.game:nba-401800001-LAL-win");
     assert.ok(!r.cards[0].alternative); assert.ok(r.cards.slice(1).every((c) => c.alternative), "every other card is an alternative");
-    assert.match(r.cards[0].interpreted ?? "", /Denver time/); assertCardChain(r.cards[0]);
+    assert.match(r.cards[0].interpreted ?? "", / UTC\./); assert.doesNotMatch(r.cards[0].interpreted ?? "", /Denver/); assertCardChain(r.cards[0]);
     const none = await universalSearch("Lakers win tonight", deps({ espn: { season: async () => [] } as unknown as EspnClient, nowMs: now, polyGet: null }));
     assert.ok(none.cards.every((c) => c.alternative)); assert.match(none.cards[0].note ?? "", /No Lakers game is listed for today/);
     assert.equal(queryDay("Oilers lose tomorrow"), "tomorrow"); assert.equal(queryDay("Rays win"), null);

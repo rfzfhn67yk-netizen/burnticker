@@ -81,6 +81,11 @@ export interface HomeCoin extends Pick<IndexCoin, "ticker" | "burns" | "lastBurn
   /** coin card status 2026-10-18: the facts behind the card's status sentence (coinStatus.ts) */
   statusFacts?: CoinStatusFacts | null;
   cluster?: string; latestSignature?: string | null; readOk?: boolean;
+  /**
+   * HB-145 second half (2026-10-20): set only when the build served this coin from its last good read because the fresh read was late or
+   * failed (boundedReads.ts): when that read was made (ISO) and the words for it ("read 3 minutes ago"). A fresh read carries neither.
+   */
+  readAt?: string; readNote?: string;
   /** website-14: the coin's own activity rows (activity.ts eventsFromStatus) and where it stands (readiness.ts) */
   events?: ActivityEvent[]; readiness?: Readiness | null;
   /** website-17 item 2: the coin's rank line (coinRank.ts rankLines); null when not read */
@@ -182,7 +187,9 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
   const raiseNum = readable ? Number(live!.threshold) : kc ? Number(kc.threshold) : NaN;
   const raisedNum = readable ? Number(live!.raised) : kc ? Number(kc.raised) : NaN;
   out.push({
-    id: "deficit", watchKey: coinWatchKey("mainnet", deficit?.address ?? null), ticker: "DEFICIT", name: "Deficit", imageUrl: "/burnticker/brand/deficit.png", group: "test",
+    id: "deficit", watchKey: coinWatchKey("mainnet", deficit?.address ?? null), ticker: "DEFICIT", name: "Deficit", imageUrl: "/burnticker/brand/deficit.png",
+    // the live flagship coin (hourly run 11 lead): "public" once created, so Live coins counts it and it follows the public rules; "test" only before then
+    group: created ? "public" : "test",
     tags: [{ label: "Featured", tone: "featured" }, ...(created ? [] : [{ label: "Not created yet", tone: "neutral" as const }])],
     note: created ? "The operator's first coin. Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt. Its rules were locked before it was created." : "The operator's first coin. Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt. Its rules are locked, and the coin is not created yet.",
     rule: debtRule(d.dial.percent, d.dial.unitLabel), nextSettle: DEBT_NEXT,
@@ -204,6 +211,8 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
     createdAt: readable ? live!.launchedAt ?? null : created ? d.launch.date ?? null : null,
     createdWhy: created ? (readable || d.launch.date ? null : ks ? "The keeper's files do not give a creation time." : unreadWhy) : "The coin is not created yet.",
     burned,
+    // HB-145 second half: a coin served from its last good read says when that read was made
+    ...(readable && live!.readNote ? { readNote: live!.readNote } : {}),
     mint: deficit?.address ? { address: deficit.address, label: created ? "Mint address" : "Reserved mint address (coin not created yet)" } : null,
     // review 2 §2: one served $DEFICIT destination — its own site until the coin is created and registered here
     href: deficitHref(created && !!live),

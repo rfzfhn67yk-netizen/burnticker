@@ -9,8 +9,11 @@ import { GRADUATION_LABEL } from "@/lib/burnticker/guidedLaunch";
 import { CreatorOnboarding } from "../_components/CreatorOnboarding";
 import { CreatorBenefitsList } from "./CreatorBenefitsList";
 import { ExampleTickets } from "./ExampleTickets";
+import { TemplateLink } from "./TemplateLink";
 import { withShareCard } from "@/lib/burnticker/pageMeta";
 import { webDispersalOn } from "@/lib/burnticker/programHash";
+import { feedOfferRefusal } from "@/lib/burnticker/coverage/settleable";
+import { isPairTemplate, templateCardState } from "@/lib/burnticker/templateCard";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +38,9 @@ export default function TemplatesPage() {
   const launch = { open: site.wizard };
   // WZ6-3: the one-shot settings line names 50% only where this host runs burn dispersal (the review row and presetProblem agree)
   const dispersal = webDispersalOn();
-  const isPair = (t: (typeof TEMPLATES)[number]) => t.shape === "pair" || t.type === "derby" || t.type === "pairs";
-  const unavailable = (t: (typeof TEMPLATES)[number]): string | null => (isPair(t) && !site.pairs.available ? site.pairs.line : t.type && !site.types[t.type].available ? `${site.types[t.type].label} launches are not available on this site.` : null);
+  // HB-134 (hourly run 11): a template whose one source cannot launch says "Not offered yet." (the Browse and search cards' own check);
+  // HB-151 (hourly run 13): such a card has no link at all (templateCard.ts), so it never asks to replace a draft
+  const card = (t: (typeof TEMPLATES)[number]) => templateCardState(t, site, (src) => feedOfferRefusal(src));
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-5">
       <header className="space-y-1">
@@ -61,8 +65,8 @@ export default function TemplatesPage() {
         {endExplainer().map((x) => <p key={x} className="mt-1">{x}</p>)}
       </details>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="templates">
-        {TEMPLATES.map((t) => { const launch = { open: site.wizard && !unavailable(t) }; return (
-          <li key={t.id} className={`flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 p-4${unavailable(t) ? " border-dashed" : ""}`} data-unavailable={unavailable(t) ? "" : undefined}>
+        {TEMPLATES.map((t) => { const c = card(t); return (
+          <li key={t.id} className={`flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 p-4${c.unavailable ? " border-dashed" : ""}`} data-unavailable={c.unavailable ? "" : undefined}>
             <div className="flex items-center gap-2"><h2 className="font-medium">{t.title}</h2><span className="bt-chip">{shapeLabel[t.shape]}</span></div>
             {/* website-18 (the owner: "be more brief"): the example's first sentence on the card; the settlement source one tap away */}
             <p className="mt-2 text-sm text-neutral-200" data-template-example>{leadSentence(t.example)}</p>
@@ -70,9 +74,9 @@ export default function TemplatesPage() {
             <details className="mt-2 text-xs text-neutral-500" data-template-settles><summary className="cursor-pointer">How it settles</summary><p className="mt-1">{settlesRest(t)}{settlesRest(t) ? " " : ""}It settles on {t.settles}.</p></details>
             {/* launch audit 5 L10: what "Start from this" opens, said before the click */}
             <p className="mt-1 text-xs text-neutral-400" data-template-lands={t.lands}>{t.operatorOnly ? `${t.operatorOnly} ` : ""}{t.lands === "review" ? "This opens step 3, how it burns, with exactly this example filled in." : `This opens the launch page so you can ${t.choices}.`} <span data-template-settings>{settingsLine(t, { dispersal })}</span></p>
-            {unavailable(t) ? <details className="mt-auto pt-3 text-xs text-amber-300" data-pairs-blocked={isPair(t) ? "" : undefined}><summary className="cursor-pointer">{unavailable(t)}</summary><p className="mt-1 text-neutral-300">{isPair(t) ? site.pairs.detail : site.types[t.type].reason}</p></details>
+            {c.unavailable ? <details className="mt-auto pt-3 text-xs text-amber-300" data-pairs-blocked={isPairTemplate(t) ? "" : undefined}><summary className="cursor-pointer">{c.unavailable}</summary><p className="mt-1 text-neutral-300">{isPairTemplate(t) && !site.pairs.available ? site.pairs.detail : !site.types[t.type].available ? site.types[t.type].reason : c.offerWhy}</p></details>
  : null}
-            {launch.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href={t.href}>{t.cta} →</Link>}
+            {/* HS-53: asks before it replaces a draft in progress; HB-151: no link (and so no prompt) on a card that cannot launch */}{c.href && <div className="mt-auto pt-3"><TemplateLink className="text-sm font-medium text-amber-300 underline" href={c.href}>{t.cta} →</TemplateLink></div>}
           </li>
         ); })}
       </ul>
@@ -86,7 +90,7 @@ export default function TemplatesPage() {
               <h3 className="font-medium">{r.title}</h3>
               <p className="mt-2 text-sm text-neutral-200">{leadSentence(r.example)}</p>
               <details className="mt-2 text-xs text-neutral-500"><summary className="cursor-pointer">How it runs</summary><p className="mt-1">{r.example.slice(leadSentence(r.example).length).trim()}</p></details>
-              {blocked ? <p className="mt-auto pt-3 text-xs text-amber-300">{blocked}</p> : site.wizard && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href={r.href} data-rivalry-link>{r.cta} →</Link>}
+              {blocked ? <p className="mt-auto pt-3 text-xs text-amber-300">{blocked}</p> : site.wizard && <div className="mt-auto pt-3"><TemplateLink className="text-sm font-medium text-amber-300 underline" href={r.href} data-rivalry-link="">{r.cta} →</TemplateLink></div>}
             </li>
           ); })}
         </ul>

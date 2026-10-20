@@ -3,7 +3,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { MAX_SPEND_RESERVE_BPS } from "@/lib/burnticker/burnMath";
 import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { CANDIDATES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, PARTIES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
 import { LEAGUES, LIVE_NOW, gameSeries, isPairOutcome, leagueCannotTie, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, seasonLabel, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
@@ -196,6 +196,8 @@ export const PATTERN_REASON = {
   noMeeting: "These two teams have no listed game right now. Pick This season instead.",
   teamsSeparate: "Two team coins launch as two separate coins, and each one burns from its own pool. Winner takes the burn is offered for every game between them this season.",
   meetingsOnly: "Every game between them this season is a linked pair where the winner takes the burn, so this pattern does not apply to it.",
+  // HB-162 (e) (hourly run 15): the one-game pattern is its own choice on the Which step, said as such instead of restating the pattern
+  meetingsOnce: "A single game between them is its own choice. Go back a step and pick One game between them.",
   // owner 2026-10-13: two candidates in one race and two teams in one game are linked pairs, winner takes the burn and nothing else
   candidatesLinked: "Two candidates in one race are a linked pair where the winner takes the burn, so this pattern does not apply to them.",
   gameLinked: "Two teams in one game are a linked pair where the winner takes the burn, so this pattern does not apply to them.",
@@ -255,7 +257,7 @@ export function patternOptions(i: PatternInput): { options: PatternOption[]; pre
   // two teams in one game: the same linked pair (coordinator 2026-10-13)
   if (i.follow === "rivalry" && i.rivalryScope === "game") return { options: [mk("every", PATTERN_REASON.gameLinked), mk("fade", PATTERN_REASON.gameLinked), mk("once", PATTERN_REASON.gameLinked), mk("winner", i.meeting === false ? PATTERN_REASON.noMeeting : null)], preselected: "winner" };
   // two teams, every game between them this season: a linked pair, winner takes the burn and nothing else
-  if (i.follow === "rivalry" && i.rivalryScope === "meetings") return { options: [mk("every", PATTERN_REASON.meetingsOnly), mk("fade", PATTERN_REASON.meetingsOnly), mk("once", PATTERN_REASON.meetingsOnly), mk("winner", null)], preselected: "winner" };
+  if (i.follow === "rivalry" && i.rivalryScope === "meetings") return { options: [mk("every", PATTERN_REASON.meetingsOnly), mk("fade", PATTERN_REASON.meetingsOnly), mk("once", PATTERN_REASON.meetingsOnce), mk("winner", null)], preselected: "winner" };
   if (i.follow === "rivalry") {
     // two teams: this season (each coin burns when its own team loses), its fade side, or this game only
     const fade = r && dialsFor(r).inverse ? null : r && !isOneShotRule(r) ? plainInverseReason(r) || null : null;
@@ -305,10 +307,12 @@ export function unitPhrase(unit: { label: string } | null | undefined, valueLabe
  * The slice is the program's spend cap (burnMath.ts MAX_SPEND_RESERVE_BPS, 2% of the trading pool's SOL per run); the pool starts with
  * about the raise.
  */
+/** HB-162 (a) (hourly run 15): "an 85 SOL raise", "an 18 SOL raise", "a 75 SOL raise": the article a number takes when read aloud. */
+export const articleFor = (n: number): "a" | "an" => (/^(8|1[18](?!\d)|1[18]\d\d(?!\d))/.test(String(n)) ? "an" : "a");
 export function wholePoolSliceLine(raiseSol: string | null | undefined): string {
   const pct = MAX_SPEND_RESERVE_BPS / 100;
   const raise = Number(raiseSol);
-  const about = Number.isFinite(raise) && raise > 0 ? ` (about ${Math.round(raise * MAX_SPEND_RESERVE_BPS / 100) / 100} SOL on a ${raise} SOL raise)` : "";
+  const about = Number.isFinite(raise) && raise > 0 ? ` (about ${Math.round(raise * MAX_SPEND_RESERVE_BPS / 100) / 100} SOL on ${articleFor(raise)} ${raise} SOL raise)` : "";
   return `The whole pool is spent, but not in one go: each daily run spends at most ${pct}% of the trading pool's SOL${about}, so a large burn lands over several days.`;
 }
 export function budgetCopy(rule: BurnRule, share: number, unit: string | null, o: { raiseSol?: string | null } = {}): { label: string; line: string; math: string | null } {
@@ -327,7 +331,9 @@ export function budgetCopy(rule: BurnRule, share: number, unit: string | null, o
     const e = rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null;
     if (e) return { label: "Share of the burn pool per game day", line: `Each game day without the result the rule names spends ${p} of the burn pool ${act}. A day with two games counts once.`, math: null };
     if (rule.scalar?.baseline === 0) return { label: "Share of the burn pool per day", line: `Each day with none of the events the rule counts spends ${p} of the burn pool ${act}. A day counts once at most.`, math: null };
-    return { label: "Share of the burn pool per reading", line: `Each reading where the number does not move the rule's way spends ${p} of the burn pool ${act}. A reading counts once at most, however flat it was.`, math: null };
+    // HB-159 (hourly run 15): an up-or-down rule has no "way"; its fade burns on a reading equal to the previous one
+    const dirOf = rule.scalar?.direction;
+    return { label: "Share of the burn pool per reading", line: `Each reading where the number ${dirOf === "up" ? "does not rise" : dirOf === "down" ? "does not fall" : "is the same as the previous reading"} spends ${p} of the burn pool ${act}. A reading counts once at most, however flat it was.`, math: null };
   }
   const cap = sym ? `One burn run spends at most 2% of the SOL in ${sym}'s pinned Raydium pool, and the rest waits for the next run.` : "One burn run buys with at most 2% of the SOL in the coin's Raydium pool, and the rest waits for the next run.";
   if (rule.kind === "scalar" && unit) {
@@ -367,13 +373,13 @@ export function coinVsCardWords(dailyShare: number = DEFAULT_SHARE.recurring, da
  * THE PATTERN WORDS FOR THE THING PICKED (pass B item 12, audit 6 item 16): "After each Dodgers win", never "each day or reading" on a team
  * coin. Generic words stay for the paths with no subject to name.
  */
-export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: Outcome | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null; /** sources-7 M2: the picked game's date ("Sat, May 1, 2027") when it is not their next listed game */ gameLabel?: string | null; /** HS-42: the league, so a league without ties says nothing about them */ league?: string | null }): { label: string; sentence: string } {
+export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: Outcome | null; pairKind?: "teams" | "candidates" | null; /** HB-128: two candidates whose markets are party outcomes */ party?: boolean; rivalryScope?: "game" | "season" | "meetings" | null; /** sources-7 M2: the picked game's date ("Sat, May 1, 2027") when it is not their next listed game */ gameLabel?: string | null; /** HS-42: the league, so a league without ties says nothing about them */ league?: string | null }): { label: string; sentence: string } {
   const s = o.subject;
   // HS-42 (hourly run 8): no tie or draw words in a league whose games cannot end tied (NHL, NBA, MLB)
   const noTie = leagueCannotTie(o.league ?? null);
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "meetings" && id === "winner") return { label: PATTERNS.winner.label, sentence: MEETINGS_WINNER_LINE };
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "game" && id === "winner") return { label: PATTERNS.winner.label, sentence: noTie ? GAME_PAIR_SENTENCE_NO_TIE : GAME_PAIR_SENTENCE };
-  if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "winner") return { label: PATTERNS.winner.label, sentence: CANDIDATES_PAIR_SENTENCE };
+  if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "winner") return { label: PATTERNS.winner.label, sentence: o.party ? PARTIES_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE };
   if (o.follow === "team" && s && isPairOutcome(o.outcome) && id === "every") {
     // two of a soccer game's three results (espn.ts PairOutcome): "After each Arsenal win or draw"; the fade side is not offered for it
     const w = outcomeWords(o.outcome);
@@ -445,12 +451,26 @@ export const namesRemadeLine = (n: 1 | 2, what: NamesChange = "follows"): string
 };
 /**
  * HB-40: what changed between the subject a typed name belonged to and the subject now, from the page's subject keys
- * (flow | follow | oracle | market or series | team | side A | side B). The flow alone is not a change of what the coin follows (a team
- * coin moves to the single flow for its title market).
+ * (flow | follow | oracle | market or series | team | side A | side B | pair kind | picked candidates). The flow alone is not a change
+ * of what the coin follows (a team coin moves to the single flow for its title market). HB-144 (hourly run 13): a new pair kind (two
+ * teams to two candidates) or a new pair of candidates is a change of which, never of how the coins burn.
  */
+/**
+ * HB-166 L3 (hourly run 15): whether a typed name still belongs to the subject. HB-144 grew the Name step's subject key from 7 fields to
+ * 9 (the pair kind and the picked candidates), so a draft saved with the 7-field key compares on those 7 fields: the same subject keeps
+ * its typed name and ticker, with no notice.
+ */
+export const SUBJECT_KEY_FIELDS_BEFORE_HB144 = 7;
+export function subjectKeysMatch(before: string | null, after: string): boolean {
+  if (before === null) return false;
+  if (before === after) return true;
+  const a = before.split("|"), b = after.split("|");
+  return a.length === SUBJECT_KEY_FIELDS_BEFORE_HB144 && b.length > a.length && a.join("|") === b.slice(0, a.length).join("|");
+}
 export function namesChangeOf(before: string, after: string): NamesChange {
   const a = before.split("|"), b = after.split("|");
   if ((a[1] ?? "") !== (b[1] ?? "")) return "follows";
+  if ((a[7] ?? "") !== (b[7] ?? "") || (a[8] ?? "") !== (b[8] ?? "")) return "which";
   if ((a[4] ?? "") !== (b[4] ?? "") || (a[5] ?? "") !== (b[5] ?? "") || (a[6] ?? "") !== (b[6] ?? "")) return "which";
   if (b[4] || b[5]) return "burns";
   return "which";
@@ -742,22 +762,23 @@ export const marketClosesLine = (when: string): string => `The market closes by 
  * burn runs once the coin's pool exists and is registered, and only then is the end recorded (endSinkKeeper.ts waits while results are
  * still queued), so the rest goes to $DEFICIT after that burn.
  */
-export function beforeGraduationLine(when: string | null, rule?: BurnRule | null, linked?: "game" | "candidates" | "pair" | null): string {
+export function beforeGraduationLine(when: string | null, rule?: BurnRule | null, linked?: "game" | "candidates" | "pair" | null, /** HB-128: two party markets */ party = false): string {
   // continuous audit run 4, HB-38: a market's date is Polymarket's close deadline, not when the event happens, so it is said as that
   const due = !when ? "" : rule?.oracle === "polymarket" ? `${marketClosesLine(when)} ` : `This result is due around ${when}. `;
-  return `${due}A coin burns only after it graduates. If the result comes first, it is recorded, and the burn waits until the coin graduates and its pool is registered. ${afterGraduationEnd(rule ?? null, linked ?? null)}`;
+  return `${due}A coin burns only after it graduates. If the result comes first, it is recorded, and the burn waits until the coin graduates and its pool is registered. ${afterGraduationEnd(rule ?? null, linked ?? null, party)}`;
 }
 /**
  * PRIVATE REVIEW 9 F2 / AUDIT 12 item 4 (2026-10-13): where the rest goes once that waiting burn has run, from the rule's own pinned end
  * sink (the same model as the review's "When it ends"), never "$DEFICIT" for every one-shot. A linked pair says each case: one side wins,
  * a draw or neither, a void. A coin with no rule passed keeps the plain $DEFICIT sentence.
  */
-export function afterGraduationEnd(rule: BurnRule | null, linked: "game" | "candidates" | "pair" | null = null): string {
+export function afterGraduationEnd(rule: BurnRule | null, linked: "game" | "candidates" | "pair" | null = null, /** HB-128: a race between two parties says "party" */ party = false): string {
   // `linked` names the pair shape when the page holds side A before the bundle adds its pair field (the review's prepared rule has it)
   const sink = linked && rule?.onEnd?.endSink === true ? "pair-winner" : rule ? describeEndSink(rule) : "flagship";
   const shape = linked ?? (rule?.pair ? ((rule.pair as { game?: unknown }).game ? "game" : (rule.pair as { race?: unknown }).race ? "candidates" : "pair") : null);
   if (sink === "pair-winner") {
     if (shape === "game") return "Then the losing team's coin's pool goes to the winning team's coin's burn. After a draw, both pools go to $DEFICIT's burn. A cancelled game moves nothing between the two coins, and each burns down what is left on itself.";
+    if (shape === "candidates" && party) return "Then the losing party's coin's pool goes to the winning party's coin's burn. If neither party wins, both pools go to $DEFICIT's burn. A voided market moves nothing between the two coins, and each burns down what is left on itself.";
     if (shape === "candidates") return "Then the losing candidate's coin's pool goes to the winning candidate's coin's burn. If neither candidate wins, both pools go to $DEFICIT's burn. A voided market moves nothing between the two coins, and each burns down what is left on itself.";
     return "Then the other coin's pool goes to the burn of the coin whose rule fired. A void moves nothing between the two coins, and each burns down what is left on itself.";
   }
@@ -957,6 +978,8 @@ export const scheduleCoverageLine = (n: number): string => (n > 1 ? `The league'
  * moves is the program's (pair.rs forward_to_winner per game; end.rs forward_on_end to the pair winner of the season-end result).
  */
 export const RIVALRY_SERIES_LABEL = "Every game between them this season";
+/** HB-162 (d) (hourly run 15): the third card names its season once ("in the 2026 season"), never "this season 2026". */
+export const rivalrySeriesLabel = (season?: string | null): string => (season ? `Every game between them in the ${season} season` : RIVALRY_SERIES_LABEL);
 export const RIVALRY_SERIES_LINE = "A linked pair. Each game between them burns the coin of the team that won it, and at the end of the season the rest goes to the team that won more of them.";
 export const MEETINGS_WINNER_LINE = "After each game between the two teams, the coin of the team that won spends its own share and the other coin's share for that game, both burning the winning coin. A draw moves nothing.";
 export const MEETINGS_END_LABEL = "The rest goes to the series winner";
@@ -1047,6 +1070,35 @@ export function meetingsListRows(ms: readonly MeetingRow[], a: string, b: string
   }));
 }
 
+/**
+ * HB-156 / HS-60 (hourly run 15): the standing of a season series that has already started. The keeper's season-end tally counts every
+ * meeting of the season (gameSettle.ts meetingsSettled), the games played before the coins exist included, while a game played before
+ * launch burns nothing. So when a game has been played the Which step and the review say the standing and what the games left can still
+ * do: "Played 1, Chiefs lead 1 to 0. One game left, Jan 9. If the Raiders win it the series is level and nothing moves at the end."
+ * Null when no game between them has a result yet. `day` formats a game's start (the page's own date words). Rows' `result` is from
+ * team a's side (MeetingRow).
+ */
+const COUNT_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+const countWord = (n: number): string => COUNT_WORDS[n] ?? String(n);
+export function meetingsStandingLine(ms: readonly Pick<MeetingRow, "startsAt" | "result" | "status">[], a: string, b: string, day: (iso: string) => string): string | null {
+  const wins = ms.filter((m) => m.result === "win").length, losses = ms.filter((m) => m.result === "loss").length, draws = ms.filter((m) => m.result === "draw").length;
+  const played = wins + losses + draws;
+  if (played === 0) return null;
+  const left = [...ms].filter((m) => m.result === "pending").sort((x, y) => x.startsAt.localeCompare(y.startsAt));
+  const [lead, trail, hi, lo] = wins >= losses ? [a, b, wins, losses] : [b, a, losses, wins];
+  const standing = hi === lo ? `Played ${played}, the series is level at ${hi} to ${lo}${draws ? ` with ${draws} drawn` : ""}.` : `Played ${played}, ${teamRefByName(lead).replace(/^the /, "").replace(/^./, (c) => c.toUpperCase())} lead ${hi} to ${lo}.`;
+  if (!left.length) return `${standing} No game between them is left to play.`;
+  const days = left.map((m) => day(m.startsAt));
+  const leftLine = ` ${countWord(left.length)} game${left.length === 1 ? "" : "s"} left, ${days.length <= 2 ? days.join(" and ") : `${days.slice(0, -1).join(", ")} and ${days[days.length - 1]}`}.`;
+  const margin = hi - lo;
+  const it = left.length === 1 ? "it" : left.length === 2 ? "both" : "all of them";
+  const what = margin === 0 ? ` The coin of the team that wins more of the games left takes the series at the end.`
+    : left.length === margin ? ` If ${teamRefByName(trail)} win ${it} the series is level and nothing moves at the end.`
+    : left.length < margin ? ` ${teamRefByName(lead).replace(/^./, (c) => c.toUpperCase())} have won the series whatever happens in the ${left.length === 1 ? "last game" : "games left"}.`
+    : "";
+  return `${standing}${leftLine}${what}`;
+}
+
 /** Item 155: a cleared second team is said once. */
 export const RIVAL_SAME_TEAM = "The second team was cleared, because it is now the first team. Pick another second team.";
 /** Audit 7 item 9: season coins are named for what they count ("Guardians 2026 Losses", $CLEL). */
@@ -1115,8 +1167,11 @@ export const partyMarketWarning = (question: string, surname: string, side: "A" 
  * Audit 10 item 7: the review's "What triggers the burn" fact, built from its parts, never cut at the first full stop (which broke on
  * "U.S."). `lead` is the sentence the rule is described with; the rest of the paragraph never enters the trigger.
  */
-export function triggerText(o: { pair?: { a: string; b: string; oneA: string; oneB: string } | null; oneShot?: string | null; lead?: string | null; fallback: string }): string {
-  if (o.pair) return `$${o.pair.a || "A"} ${o.pair.oneA.replace(/\.$/, "")}, and $${o.pair.b || "B"} ${o.pair.oneB.replace(/\.$/, "")}.`;
+export function triggerText(o: { pair?: { a: string; b: string; oneA: string; oneB: string; /** HB-78 (hourly run 15): the pair's one end, said once after both sides (each side's one-liner carries it) */ end?: string | null } | null; oneShot?: string | null; lead?: string | null; fallback: string }): string {
+  if (o.pair) {
+    const end = o.pair.end ?? null, cut = (s: string) => (end ? s.replace(` ${end}`, "").replace(end, "").trim() : s).replace(/\.$/, "");
+    return `$${o.pair.a || "A"} ${cut(o.pair.oneA)}, and $${o.pair.b || "B"} ${cut(o.pair.oneB)}.${end ? ` ${end}` : ""}`;
+  }
   if (o.oneShot) return o.oneShot;
   return (o.lead ?? "").trim() || o.fallback;
 }
@@ -1288,6 +1343,10 @@ export function followForRule(r: Pick<BurnRule, "oracle" | "series" | "market"> 
 export const PAST_BURNS_HEADING = "How much it would have spent before";
 export const PAST_BURNS_WORKING = "Working out past burns…";
 export const PAST_BURNS_UNAVAILABLE = "Past burns are not available right now.";
+/** HS-48 widened (hourly run 11): a one-shot market pair's review printed the heading over nothing; a market that resolves once has no past. */
+export const ONE_SHOT_NO_PAST = "A one-shot market has no past to count.";
+/** HS-48: the line under the heading when the review has no projection lines and no last-season back-test. */
+export const noProjectionLine = (reason: string | null | undefined, oneShotMarket: boolean): string => (oneShotMarket ? ONE_SHOT_NO_PAST : reason?.trim() || PAST_BURNS_UNAVAILABLE);
 /** How long the page waits for the pair check (POST /v1/derby/pair) before it stops waiting, like the creator page's bounded reads. */
 export const PAIR_CHECK_TIMEOUT_MS = 8_000;
 export function pastBurnsLines(o: { loading: boolean; error: string | null; projection: { available: boolean; lines: readonly string[]; reason: string | null } | null | undefined }): string[] {

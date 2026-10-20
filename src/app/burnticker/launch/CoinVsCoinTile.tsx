@@ -10,7 +10,7 @@ import { ReviewCard } from "./ReviewCard";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { fightLead, sha256HexWeb, tileHashInput, tileRule, type TileChoice } from "@/lib/burnticker/derby/tile";
-import { DERBY_RUN_PRESETS, runPresetLabel } from "@/lib/burnticker/derby/spec";
+import { DERBY_RUN_PRESETS, FLIP_REST_LINE, runPresetLabel } from "@/lib/burnticker/derby/spec";
 import { rivalryById, type RivalryTemplate } from "@/lib/burnticker/templates";
 import { SimulatorDisclosure } from "./SimulatorDisclosure";
 import { postPairLaunch, venueFrom409, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
@@ -668,7 +668,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
           edgeNotes={coinvsEdgeNotes((model.rule.derby as { flip?: boolean } | undefined)?.flip ? "flip" : "race")}
           upfront={pairUpfrontLines(reviewVenue, RAISE_PRESETS_SOL, shown.review?.prerequisiteLine ?? null, ends)}
           facts={[
-            { label: FACT_LABELS.trigger, value: triggerText({ pair: { a: TA, b: TB, oneA: ruleOneLiner(model.rule), oneB: ruleB ? ruleOneLiner(ruleB) : "" }, fallback: sentence! }), edit: () => onPhase?.("which") },
+            { label: FACT_LABELS.trigger, value: triggerText({ pair: { a: TA, b: TB, oneA: ruleOneLiner(model.rule), oneB: ruleB ? ruleOneLiner(ruleB) : "", end: flip ? FLIP_REST_LINE : null }, fallback: sentence! }), edit: () => onPhase?.("which") },
             { label: FACT_LABELS.coin, value: whichCoinLine(TA, TB, true), edit: () => onPhase?.("name") },
             { label: FACT_LABELS.amount, value: `${bud.line} ${shareOfBudgetLine(fraction)} ${shareExample(fraction)}`, edit: () => onPhase?.("burn") },
             { label: FACT_LABELS.ends, value: ends ?? "", edit: null },

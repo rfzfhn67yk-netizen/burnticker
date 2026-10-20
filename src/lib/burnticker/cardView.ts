@@ -77,6 +77,11 @@ export interface CardView {
   /** when the coin was created (ISO); the components print its age */
   createdAt: string | null;
   createdWhy: string | null;
+  /**
+   * HB-145 second half (2026-10-20): set only when this card's coin was served from its last good read because the fresh read was late or
+   * failed ("read 3 minutes ago", boundedReads.ts); absent on a fresh read.
+   */
+  readNote?: string | null;
   /** total burned, with the share of supply */
   burned: CardCell;
   /** a mint address shown on the card (pre-launch $DEFICIT: the address is reserved, the coin does not exist) */
@@ -333,6 +338,8 @@ export interface IndexCoin {
   statusFacts?: CoinStatusFacts | null;
   /** owner 2026-10-19: the coin's group on the Coins page, its result and its next-result facts (coinsList.ts), when the route built them */
   listing?: CoinListing | null;
+  /** HB-145 second half: set only when the index served this coin from its last good read ("read 3 minutes ago", boundedReads.ts) */
+  readNote?: string | null;
 }
 
 /** "14.81" from a decimal string, two places at most. */
@@ -379,6 +386,7 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
     curve, mcap,
     holders: holdersCell(t.holders, t.holdersOnlyPools ?? false, t.holdersNote ?? null),
     createdAt: t.launchedAt, createdWhy: t.launchedAt ? null : "This coin is not launched yet.",
+    ...(t.readNote ? { readNote: t.readNote } : {}),
     burned: { text: `${groupDigits(t.burned)} $${t.ticker}${pct === null ? "" : `, ${pctOfSupply(pct)}`}`, why: t.burns > 0 ? `${t.burns} burn${t.burns === 1 ? "" : "s"} so far.` : "No burn has confirmed yet." },
     mint: null,
     href: page,

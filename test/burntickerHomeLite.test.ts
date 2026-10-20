@@ -104,7 +104,8 @@ describe("the home's lite coin read (2026-10-15)", () => {
   test("the home route reads every coin lite and logs its build time", () => {
     const src = fs.readFileSync("src/app/api/burnticker/home/route.ts", "utf8");
     assert.match(src, /tokenPageData\(view, t, now, \{ lite: true \}\)/, "read through the site's read cache (webReadCache.ts, prelaunch audit M7)");
-    assert.match(src, /console\.info\(`\[burnticker\/home\] built in \$\{Date\.now\(\) - started\} ms, \$\{n\} coins`\)/);
+    // HB-145 second half: the build line carries its stages (buildStages.ts); it still starts "built in N ms, N coins"
+    assert.match(src, /console\.info\(clock\.line\("\[burnticker\/home\]", `\$\{n\} coins`\)\)/);
     assert.match(src, /homeMemo\.memoMs/, "the stale-while-revalidate memo stays; its window scales with the coins (memoWindowMs, M7)");
     assert.match(src, /homeRowOf\(d\.status, d\.receipts, key, t\.mint\)/, "the route and this test share one per-coin derivation");
     assert.doesNotMatch(fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8"), /lite/, "the coin page reads in full");
@@ -112,7 +113,8 @@ describe("the home's lite coin read (2026-10-15)", () => {
 
   test("the tokens index (the coins grid) reads six at a time, keeps its last answer, and the page retries a cold 503 (owner 2026-10-15: 'the coins tab is still slow')", () => {
     const src = fs.readFileSync("src/app/api/burnticker/tokens/route.ts", "utf8");
-    assert.match(src, /allLimited\(tokens\.map\(\(t\) => \(\) => tokenPageData\(view, t, now\)\), INDEX_CONCURRENCY\)/, "parallel full reads (the pairs tab needs the pair side), through the read cache (M7)");
+    // HB-145 second half: bounded parallel reads under one deadline (boundedReads.ts), each coin's last good read kept for a late one
+    assert.match(src, /readCoinsBounded\(tokens\.map\(\(t\) => \(\{ key: `full:\$\{t\.mint\}`, read: \(\) => tokenPageData\(view, t, now\) \}\)\), \{ concurrency: INDEX_CONCURRENCY, deadlineMs: B\.indexChainMs/, "parallel full reads (the pairs tab needs the pair side), through the read cache (M7)");
     assert.match(src, /const INDEX_COLD_WAIT_MS = 15_000, INDEX_CONCURRENCY = 6/);
     assert.match(src, /indexMemo\.memoMs/, "the memo window scales with the coins (memoWindowMs, M7)");
     assert.match(src, /code: "index-loading", retryAfterSec: 5/);
@@ -167,8 +169,9 @@ describe("the coin route's memo (keyedSwr.ts, 2026-10-15)", () => {
 
   test("the coin route keeps its answer per mint, keyed by the registry's page version, and the rule file needs no chain read", () => {
     const src = fs.readFileSync("src/app/api/burnticker/tokens/[ticker]/route.ts", "utf8");
-    assert.match(src, /const COIN_MEMO_MS = 15_000/);
-    assert.match(src, /memoFor\(p\.registry\)\.get\(t\.mint, p\.registry\.pageVersion\(t\.mint\), build\)/);
+    // HB-35 (2026-10-20): the memo moved to coinAnswerMemo.ts, shared with the pair route
+    assert.match(fs.readFileSync("src/lib/burnticker/coinAnswerMemo.ts", "utf8"), /export const COIN_MEMO_MS = 15_000/);
+    assert.match(src, /coinAnswerMemo\(p\.registry\)\.get\(t\.mint, p\.registry\.pageVersion\(t\.mint\), build\)/);
     assert.match(src, /new Response\(t\.rulesJson,/);
     assert.match(src, /"cache-control": "no-store"/, "the browser never caches the coin's answer");
     assert.match(fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8"), /j\?\.code === "coin-loading"/, "the coin page asks again after a 503");

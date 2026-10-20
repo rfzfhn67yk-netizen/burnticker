@@ -158,7 +158,7 @@ describe("HS-26: the footer and trust fee line", () => {
 describe("HB-76: a one-shot back-test", () => {
   test("counts qualifying days and at most one burn, never 1/2/5% rows", () => {
     const l = oneShotBacktestLines("2026-10-05", "2026-10-11", ["2026-10-10", "2026-10-11"]);
-    assert.deepEqual(l, ["In the saved readings from 5 October 2026 to 11 October 2026, 2 days qualified. This rule burns once, so it would have burned one time, on 10 October 2026, and then ended."]);
+    assert.deepEqual(l, ["In the catalogue's saved sample, with readings from 5 October 2026 to 11 October 2026, 2 days qualified. This rule burns once, so it would have burned one time, on 10 October 2026, and then ended."]);
     const none = oneShotBacktestLines("2026-10-05", "2026-10-11", []);
     for (const s of [...l, ...none]) { plain(s); assert.doesNotMatch(s, /At 1%|At 2%|At 5%/); }
     assert.match(read("src/lib/burnticker/projection.ts"), /if \(f >= 1 \|\| NEXT_EVENT_ONE_SHOT_RE\.test\(rule\.series\)\)/);

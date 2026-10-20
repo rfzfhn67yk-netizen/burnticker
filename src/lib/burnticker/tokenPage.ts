@@ -20,7 +20,7 @@ export const AFFILIATION_LINE = "This coin is not affiliated with any team, leag
 import { parseReceiptMemo } from "@/lib/burnticker/receipt";
 import { fullSpendUnits, unitStep, windDownUnits, type SettledEvent } from "@/lib/burnticker/units";
 import { pairWords, unitsFormula, verifyCommand } from "@/lib/burnticker/receiptFormula";
-import { pairLastSentence, receiptStatusWords, type PairLastFacts } from "@/lib/burnticker/receiptWords";
+import { nextMarketNone, pairLastSentence, pairLeadSentence, receiptStatusWords, type PairLastFacts } from "@/lib/burnticker/receiptWords";
 import { healthLine, isWaitingReading } from "@/lib/burnticker/queuedReading";
 import { feedById } from "@/lib/burnticker/catalogue";
 import type { ImpliedChance } from "@/lib/burnticker/oracle/types";
@@ -763,7 +763,8 @@ ${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("
     tile("Supply", `${tally.supplyPctA.toFixed(2)}% <span class="muted">:</span> ${tally.supplyPctB.toFixed(2)}%`, `${fmt(tally.supplyA)} : ${fmt(tally.supplyB)}, out of ${fmt(a.supply.initial)} each`),
     // A-5: the sentence by pair role and pending state (receiptWords.ts), never "settled 0, neither side burned" for a waiting burn
     tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? esc(pairLastSentence(ls.facts ?? { wonSide: null, burnedSide: ls.burnedSide, burned: ls.burned, winnerStatus: null, loserStatus: null, void: ls.result === "void" }, sideTicker("A"), sideTicker("B"), fmt) ?? "") : "The first result after launch burns one side."),
-    tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : "The next result after launch."}`),
+    // HB-135 (hourly run 11): a one-result pair whose result is in has no next market, said in words
+    tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : esc(nextMarketNone({ oneShot: !!a.rules.oneShot, settlements: tally.settlements })), `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : a.rules.oneShot && tally.settlements > 0 ? "Nothing more is scheduled." : "The next result after launch."}`),
     ...(tally.attesterLine ? [tile("Reading signers", "1 key", esc(tally.attesterLine))] : []),
     ...(tally.unpaired ? [tile("Pair", "unpaired", `The pair was unlinked on ${esc(utcDay(tally.unpaired.at))} (${esc(tally.unpaired.reason)}). They are two separate coins now, and nothing moves between them.`)] : []),
     ...(tally.winnerTakesBurn ? [tile("Burned and forwarded", `$${A} burned ${fmt(tally.burnedA)}. $${B} burned ${fmt(tally.burnedB)}.`, `$${A} has forwarded ${esc(tally.forwardedAtoB ?? "0")} SOL to $${B}, and $${B} has forwarded ${esc(tally.forwardedBtoA ?? "0")} SOL to $${A}. ${esc(PAIR_BURN_SENTENCE)}`)] : []),
@@ -780,7 +781,7 @@ ${STATUS_CSS}
 </style></head><body><main>
 <p><a href="../../">← Burnticker</a></p>
 <h1><a href="../../t/${dirOf(a)}/">$${A}</a> <span class="muted" style="font-weight:400">vs</span> <a href="../../t/${dirOf(b)}/">$${B}</a></h1>
-<p class="muted">This is the rivalry pair <code>${esc(tally.pairId)}</code>. ${pairKindOf(a) === "meetings" ? `${esc(MEETINGS_PAIR_PAGE_LINE)} A draw, a postponed or a cancelled game moves nothing.` : settledLineOf(a.rules.statement) ? esc(settledLineOf(a.rules.statement)!) : `Both coins read the same market (<code>${esc(a.selectorKey)}</code>${a.seriesTitle ? `, ${esc(a.seriesTitle)}` : ""}) with opposite rules, so each result burns exactly one side. A voided market burns neither.`} Updated ${esc(a.generatedAt)}.</p>
+<p class="muted">${esc(pairLeadSentence(a.ticker, b.ticker))} ${pairKindOf(a) === "meetings" ? `${esc(MEETINGS_PAIR_PAGE_LINE)} A draw, a postponed or a cancelled game moves nothing.` : settledLineOf(a.rules.statement) ? esc(settledLineOf(a.rules.statement)!) : `Both coins read the same market${a.seriesTitle ? ` (${esc(a.seriesTitle)})` : ""} with opposite rules, so each result burns exactly one side. A voided market burns neither.`} Updated ${esc(a.generatedAt)}.</p>
 <div class="score">$${A} ${tally.burnsA} <span class="muted">:</span> ${tally.burnsB} $${B}</div>
 <div class="tiles">
 ${tiles}

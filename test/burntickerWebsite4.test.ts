@@ -43,7 +43,7 @@ describe("item 3: zero data → one explanation and one evidence link; populated
     // separate group below, never mixed into a tab's results
     // website-17 wiring item 3 (applied by website-16): the registered cards, then the earned slots moved to the front with their labels
     // owner 2026-10-19 (coinsList.ts): each group's cards are built the same way, the open group first
-    assert.match(p, /const toCards = \(list: typeof coins\): CardView\[\] => list\.map\(\(t\) => \{ const v = withListLines\(cardViewFromIndex\(t, null, ix\?\.cluster \?\? "mainnet", sharedSet\), t\.listing, \{ now \}\);/);   // A-2: slots matched by mint
+    assert.match(p, /const toCards = \(list: typeof coins\): CardView\[\] => list\.map\(\(t\) => \{ const v0 = withListLines\(cardViewFromIndex\(t, null, ix\?\.cluster \?\? "mainnet", sharedSet\), t\.listing, \{ now \}\), v = /);   // HB-133: undated coins say so on Next to settle   // A-2: slots matched by mint
     assert.match(p, /const cards: CardView\[\] = toCards\(groups\.open\);/);
     assert.ok(p.indexOf('className="bt-tabs" role="tablist"') < p.indexOf("<CardGrid cards={allcards}"), "tabs above the grid");
     assert.ok(p.indexOf("<CardGrid cards={allcards}") < p.indexOf("<CardGrid cards={featured}"), "the test group after the tab's results");

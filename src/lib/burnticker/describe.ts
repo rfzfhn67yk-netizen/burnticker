@@ -15,7 +15,7 @@ import { GAME_BURN_LINE } from "@/lib/burnticker/sources/provenance";
 import { githubText, parseGithubSeries } from "@/lib/burnticker/sources/github";
 import { parseYoutubeSeries, youtubeText } from "@/lib/burnticker/sources/youtube";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
-import { CATALOGUE_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { isOneShotSeries } from "@/lib/burnticker/inverse";
 import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
 import { highLastDay, highText } from "@/lib/burnticker/derby/high";
 import { FLIP_REST_LINE, derbyReadOnlySentence, raceEnd, raceEndOf } from "@/lib/burnticker/derby/spec";
@@ -153,12 +153,19 @@ export function pairResultSentence(a: { ticker: string; rule: Pick<BurnRule, "ki
 export const CANDIDATES_PAIR_SENTENCE = "Two markets, one race: the winner's coin burns its own pool on the result and takes the loser's pool at the end. If neither candidate wins, both pools go to $DEFICIT's burn.";
 export const GAME_PAIR_SENTENCE = "One game, two teams: the winning team's coin burns its own pool on the result and takes the losing team's coin's pool at the end. After a draw, both pools go to $DEFICIT's burn.";
 export const CANDIDATES_PAIR_DETAIL = "The race counts once, when both candidates' markets are final. If exactly one of them settles YES, that candidate's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. If both settle NO, because a third candidate won, or a market settles 50-50, nothing moves between the two coins.";
-export const GAME_PAIR_DETAIL = "The game counts once, when its result is final and a second source agrees. The winning team's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. A postponed game keeps both coins waiting. A cancelled game moves nothing between them, and each coin burns down what is left on itself.";
+export const GAME_PAIR_DETAIL = "The game counts once two sources agree on the final, or once one source has shown the same final twice a few minutes apart. The winning team's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. A postponed game keeps both coins waiting. A cancelled game moves nothing between them, and each coin burns down what is left on itself.";
 export const settledPairShapeOf = (r: Pick<BurnRule, "pair">): "candidates" | "game" | null => (r.pair?.race ? "candidates" : r.pair?.game ? "game" : null);
-export const settledPairSentence = (shape: "candidates" | "game"): string => (shape === "game" ? GAME_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE);
+/** The candidates sentence said for two party outcomes (the settlement subject is the party, whoever its nominee is). */
+export const PARTIES_PAIR_SENTENCE = "Two markets, one race, one party each: the coin of the party that wins burns its own pool on the result and takes the other coin's pool at the end. The result is the party's, whoever its nominee is. If neither party wins, both pools go to $DEFICIT's burn.";
+/**
+ * HB-128 (hourly run 11): a market phrase whose subject is a party ("the Democratic Party controls the Senate…"), the party market's own
+ * words (Polymarket's party outcomes are asked of the party), so a coin of a party race says "party", never "candidate".
+ */
+export const partyPhrase = (phrase: string | null | undefined): boolean => !!phrase && /^\s*(the\s+)?([A-Z][\w'.-]*\s+)+Part(y|ies)\b/.test(phrase);
+export const settledPairSentence = (shape: "candidates" | "game", o: { party?: boolean } = {}): string => (shape === "game" ? GAME_PAIR_SENTENCE : o.party ? PARTIES_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE);
 // sources-7 (QA walkthrough 11 H2): a rivalry series coin says where a lost game's share goes in its own sentence (meetingsText), so the
 // generic pair sentence is left out of its description, which must leave the creator's 280 characters inside the 1,500
-const pairSentence = (r: BurnRule): string => { const sh = settledPairShapeOf(r); return sh ? ` ${settledPairSentence(sh)}` : r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn && !isMeetingsSeries(r) ? ` ${PAIR_DESCRIPTION_SENTENCE}` : ""; };
+const pairSentence = (r: BurnRule, phrase: string | null = null): string => { const sh = settledPairShapeOf(r); return sh ? ` ${settledPairSentence(sh, { party: sh === "candidates" && partyPhrase(phrase) })}` : r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn && !isMeetingsSeries(r) ? ` ${PAIR_DESCRIPTION_SENTENCE}` : ""; };
 const BURN_DOWN = "it burns down whatever is left over four weeks and then retires";
 /**
  * END SINKS (LAUNCHPAD-PATH §45; rules.ts endSinkOf, copied here because rules.ts is not client-safe): a rule with `onEnd.endSink` sends
@@ -395,7 +402,7 @@ export const WINDOW_SENTENCE: Record<WindowKind, RegExp> = {
   post: /This coin covers [^.]*? postseason only\. After [^.]*? last playoff game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?/g,
   next: /This coin covers [^.]*? next \d+ games? only, from [^.]*?\d{4}\. After game \d+, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\./g,
   perpetual: /This coin has no end date and does not retire\./g,
-  "one-shot": /This coin resolves once(?:, on [A-Z][a-z]{2} \d{1,2}, \d{4}|, on [^.]+?)?\. Then (?:it burns down over four weeks and retires|whatever is left burns [^.]*?, and the coin retires)\./g,
+  "one-shot": /This coin resolves once(?:, on [A-Z][a-z]{2} \d{1,2}, \d{4}|, when the market settles(?: \(it closes by [A-Z][a-z]{2} \d{1,2}, \d{4}\))?|, on [^.]+?)?\. Then (?:it burns down over four weeks and retires|whatever is left burns [^.]*?, and the coin retires)\./g,
 };
 const fractionText = (r: BurnRule): string => {
   const m = (r.kind === "binary" ? (r.binary?.onYes ?? r.binary?.onNo) : r.scalar?.perUnit) as { fractionOfPool?: number; tokens?: number } | null | undefined;
@@ -458,9 +465,15 @@ const yy = (league: LeagueId, year: number) => String(seasonStartYear(league, ye
 const nextSeason = (league: LeagueId, year: number) => seasonLabel(league, year + 1);
 /** League mode (rules.ts `set`): the conditional forward, in the description whenever the rule carries it. */
 export const leagueSentence = (r: BurnRule): string => (r.set && r.set.forwardBps > 0 ? ` In league mode, ${Math.round(r.set.forwardBps) / 100}% of the rest goes to the winning coin of set ${r.set.id} if the forwarding instruction is live by season end. Otherwise it burns down on this coin.` : "");
+/** HB-142: a coin on one prediction-market market (Polymarket, or one Kalshi market): its end date is the market's close deadline. */
+export const isMarketCoin = (r: Pick<BurnRule, "oracle" | "market">): boolean => r.oracle === "polymarket" || (r.oracle === "kalshi" && !!r.market);
 const oneShotSentence = (r: BurnRule, iso: string | null | undefined, onWhat: string | null = null) => {
   const k = describeEndSink(r), then = k ? `${sinkPhrase(k, r)} and the coin retires` : "it burns down over four weeks and retires";
-  return onWhat ? `This coin resolves once, on ${onWhat}. Then ${then}.` : `This coin resolves once${iso ? `, on ${day(iso)}` : ""}. Then ${then}.`;
+  if (onWhat) return `This coin resolves once, on ${onWhat}. Then ${then}.`;
+  // HB-142 (hourly run 12): a market's end date is its close deadline, not the day it settles (a World Series market settles when the
+  // series ends), so a market coin resolves "when the market settles", with the close date as the latest day; the description is pinned
+  if (isMarketCoin(r)) return `This coin resolves once, when the market settles${iso ? ` (it closes by ${day(iso)})` : ""}. Then ${then}.`;
+  return `This coin resolves once${iso ? `, on ${day(iso)}` : ""}. Then ${then}.`;
 };
 
 /** The coin's window kind from its rule alone. */
@@ -468,7 +481,7 @@ export function windowKindOf(r: BurnRule): WindowKind {
   const series = r.oracle === "catalogue" ? r.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;
   if (e) return e.kind === "game" ? "one-shot" : e.window.kind === "legacy" ? (e.window.scope === "post" ? "post" : "season") : e.window.kind === "meetings" ? "season" : e.window.kind;
-  if (CATALOGUE_ONE_SHOT_RE.test(series)) return "one-shot";
+  if (isOneShotSeries(series)) return "one-shot";   // HB-147: the one list (inverse.ts)
   if (r.oracle === "derby" && r.derby?.selector === "high") return r.derby.once ? "one-shot" : "perpetual";
   if (r.oracle === "polymarket" || r.market) return "one-shot";
   return "perpetual";
@@ -489,7 +502,9 @@ export function windowBadge(r: BurnRule, ctx: Pick<DescribeCtx, "endsAt" | "ende
     if (w.kind === "meetings") return `${seasonLabel(e.league, w.year)} SEASON SERIES${ended}`;
     return `${w.scope === "post" ? "POSTSEASON" : "THIS SEASON"}${ended}`;
   }
-  if (windowKindOf(r) === "one-shot") return `ONE-SHOT${end ? ` · ${end}` : ""}`;
+  // HB-142 widened (hourly run 14): a market coin's date is the market's close deadline, not the day it settles (an F1 title market
+  // settles on the season's last race), so its badge says "by" that day, as its pinned sentence does ("when the market settles")
+  if (windowKindOf(r) === "one-shot") return `ONE-SHOT${end ? ` · ${isMarketCoin(r) && !ctx.ended ? "BY " : ""}${end}` : ""}`;
   return "PERPETUAL";
 }
 
@@ -558,8 +573,8 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
       w.scope === "post" ? `This coin covers ${poss} current postseason only. After ${poss} last playoff game, ${burnDown(r)}.` : `This coin covers the current ${nick} season only, including the playoffs. After ${poss} last game, ${burnDown(r)}.`, w.scope === "post" ? "post" : "season", "recurring");
   }
   const opp = c.game ? (L0.sport === "soccer" || s.league === "cfb" || s.league === "mcbb" || s.league === "wcbb" ? c.game.opponent : `the ${c.game.opponent}`) : null;
-  const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : " in the one game this coin follows";
-  const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " the one game this coin follows"}`;
+  const vs = c.game ? ` ${c.game.home ? "against" : "away against"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : " in the one game this coin follows";
+  const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "away against"} ${opp}` : " the one game this coin follows"}`;
   return mk(`${nick} ${two ? (o === "windraw" ? "Win or Draw" : o === "drawloss" ? "Draw or Loss" : "Win or Loss") : o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${GAME_RESULT}.${pens} ${GAME_BURN_LINE} Nothing happens otherwise${outcomeResults(o).includes("draw") ? "" : `, and a ${tie} burns nothing`}.`,
     oneShotSentence(r, c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
 }
@@ -629,7 +644,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
   const badge = windowBadge(r, ctx);
   const build = (name0: string, tk0: string, oneLiner: string, block: (t: string) => string, windowSentence: string, shape: CoinText["shape"]): CoinText => {
     const name = ctx.suggest?.name ?? name0, tk = ctx.suggest?.ticker ?? tk0;
-    const t = ctx.ticker || tk, ruleBlock = `${block(t)} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
+    const t = ctx.ticker || tk, ruleBlock = `${block(t)} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r, ctx.eventPhrase ?? null)} ${CLOSER}`;
     return { name: capName(name), ticker: tk, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, lead: leadSentence(ruleBlock), windowSentence, windowKind: windowKindOf(r), badge, paragraph: `$${t} ${oneLiner}. ${triggerOnce(oneLiner, ruleBlock)}`, shape };
   };
   if (n && r.inverse && n.metric !== "snow") {
@@ -662,7 +677,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const oneLiner = d.flip ? (sideB ? `burns once if ${d.a.symbol}'s market cap never passes ${d.b.symbol}'s` : `burns once if ${passes}`) : `burns every ${unit} ${win} out-gains ${lose}`;
     const name0 = d.flip ? `${win} vs ${lose}, ${win} side` : fightName(win);
     const block = (t: string): string => d.flip
-      ? `${sideB ? `If the run ends without ${passes}` : `On the first ${unit} ${passes}`}, ${spends(r, t)} once, with a receipt on chain. Each ${unit} is read from ${src} at ${at}. ${derbyReadOnlySentence(d)}`
+      ? `${sideB ? `If the run ends without ${d.a.symbol}'s market cap passing ${d.b.symbol}'s` : `On the first ${unit} ${passes}`}, ${spends(r, t)} once, with a receipt on chain. Each ${unit} is read from ${src} at ${at}. ${derbyReadOnlySentence(d)}`
       : `For each ${unit} ${win} out-gains ${lose}${d.measure === "mcap" ? " in size" : ""}, ${spends(r, t)}, with a receipt on chain. On a ${unit} ${lose} out-gains ${win}, this coin's share for that ${unit} goes to the other coin's burn. Each ${unit} is read from ${src} at ${at}, and an exact tie burns nothing. ${derbyReadOnlySentence(d)}`;
     const text = build(name0, sideB ? tks.b : tks.a, oneLiner, block, raceEndOf(d).season, d.flip ? "one-shot" : "recurring");
     // the lead is the paragraph's own first sentence ("$WIFWINS burns every day WIF out-gains BONK."), the one the page says
@@ -681,11 +696,16 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const f = ctx.feed, title = f.title.split(/[(—,]/)[0].trim(), dir = r.scalar?.direction ?? "up";
     if (series === "treasury.debt") return build("Flat Debt Days", "FLATDEBT", "burns on every business day the national debt stays flat or falls",
       (t) => `This coin burns on the days the debt stays flat or falls. For every business day the national debt stays flat or falls, ${spends(r, t)}, with a receipt on chain. ${feedResultSentence(f)} A day the debt rises, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
-    const not = r.scalar?.baseline === 0 ? "reads zero" : dir === "up" ? "does not rise" : dir === "down" ? "does not fall" : "does not move";
+    // HB-159 (hourly run 15): an up-or-down rule's fade burns only on a reading equal to the previous one (units.ts: one unit when the
+    // move is 0); a move smaller than the rule's unit burns neither this coin nor the coin that counts each full unit, and the text says so
+    const both = r.scalar?.baseline !== 0 && dir !== "up" && dir !== "down";
+    const not = r.scalar?.baseline === 0 ? "reads zero" : dir === "up" ? "does not rise" : dir === "down" ? "does not fall" : "is the same as the previous reading";
     const did = r.scalar?.baseline === 0 ? "is above zero" : dir === "up" ? "rises" : dir === "down" ? "falls" : "moves";
+    const unitWords = f.unitLabel.replace(/\s*\([^)]*\)\s*$/, "").replace(/\s+(added|moved|move)$/, "").replace(/-point\b/, " point");
+    const gap = both ? ` A move smaller than ${unitWords} burns neither this coin nor the coin that burns for each full ${unitWords.replace(/^1\s+(?=\D)/, "")}.` : "";
     const sub = paramSubject(series), what = sub ? sub.name : title;
     return build(fadeName(series, sub ? sub.name : title, r.scalar?.baseline === 0), (sub ? tickerFrom(`NO${sub.ticker}`) : `NO${feedTickerBase(series, f.title, 8)}`), `burns on every reading of ${what} that ${not}`,
-      (t) => `For every reading of ${what} that ${not}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}.${sub ? ` Each reading is ${sub.window}.` : ""} A reading that ${did}, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
+      (t) => `For every reading of ${what} that ${not}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}.${sub ? ` Each reading is ${sub.window}.` : ""} A reading that ${did}, by any amount, burns nothing.${gap}`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "catalogue" && ctx.feed) {
     const f = ctx.feed, sub = paramSubject(series);
@@ -772,7 +792,8 @@ function sourceText(r: BurnRule, series: string, ctx: DescribeCtx): { name: stri
  */
 export function badgeFromText(r: BurnRule, description: string, retired = false): string {
   // both wordings: "Resolves once on Oct 31, 2026" (coins registered before 2026-10-11) and "This coin resolves once, on Oct 31, 2026"
-  const m = /[Rr]esolves once,? on ([A-Z][a-z]{2} \d{1,2}, \d{4})/.exec(description);
+  // HB-142: and a market coin's "when the market settles (it closes by Oct 31, 2026)"
+  const m = /[Rr]esolves once,? on ([A-Z][a-z]{2} \d{1,2}, \d{4})/.exec(description) ?? /[Rr]esolves once, when the market settles \(it closes by ([A-Z][a-z]{2} \d{1,2}, \d{4})\)/.exec(description);
   const endsAt = m && !Number.isNaN(Date.parse(`${m[1]} 12:00 UTC`)) ? new Date(Date.parse(`${m[1]} 12:00 UTC`)).toISOString() : null;
   const b = windowBadge(r, { endsAt });
   return retired && !/ENDED/.test(b) ? `${b} · ENDED` : b;

@@ -501,6 +501,40 @@ export function tsdbFieldScores(league: LeagueId, e: Record<string, unknown>): {
   const order = tsdbScoreOrder(league, e), h = num(e.intHomeScore), a = num(e.intAwayScore);
   return order === "event" ? { home: a, away: h, order } : { home: h, away: a, order };
 }
+/** HB-153: a TheSportsDB round named as a playoff stage (strRound, or a text intRound). */
+export const TSDB_POST_ROUND_RE = /playoff|play-in|play in|final|semi|quarter|knockout|round of|championship|postseason|conference final/i;
+/**
+ * HB-153 (hourly run 14): leagues TheSportsDB numbers round 0 from the first regular-season game to the last Finals game (the WNBA,
+ * read 2026-10-20 on the public key: the 2026 Finals row "Atlanta Dream vs Golden State Valkyries" carries intRound "0" and no
+ * strRound). A closed pro league with a balanced schedule: every team plays the same number of regular-season games, so the most
+ * common per-team count in the season listing is the regular season's length, and a game that is past that count for BOTH teams is
+ * a playoff game. College and soccer leagues are never read this way (open membership, unbalanced schedules, cups).
+ */
+export const TSDB_POST_BY_COUNT: ReadonlySet<LeagueId> = new Set<LeagueId>(["wnba"]);
+/** The least regular-season length the count rule trusts: a shorter listing is partial (the public key's 15 rows) and flags nothing. */
+export const TSDB_POST_MIN_SEASON = 10;
+export function tsdbPostByCount(league: LeagueId, rows: readonly Record<string, unknown>[]): Set<string> {
+  const at = (e: Record<string, unknown>) => String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`);
+  const counted = rows.filter((e) => String(e.strPostponed ?? "").toLowerCase() !== "yes" && !CANCELLED_RE.test(String(e.strStatus ?? "")))
+    .filter((e) => ourTeam(league, String(e.strHomeTeam ?? "")) && ourTeam(league, String(e.strAwayTeam ?? "")))
+    .sort((a, b) => at(a).localeCompare(at(b)) || String(a.idEvent).localeCompare(String(b.idEvent)));
+  const seen = new Set<string>(), totals = new Map<string, number>();
+  const uniq = counted.filter((e) => { const id = String(e.idEvent); if (seen.has(id)) return false; seen.add(id); return true; });
+  for (const e of uniq) for (const side of [e.strHomeTeam, e.strAwayTeam]) { const k = ourTeam(league, String(side))!.abbr; totals.set(k, (totals.get(k) ?? 0) + 1); }
+  const freq = new Map<number, number>();
+  for (const n of totals.values()) freq.set(n, (freq.get(n) ?? 0) + 1);
+  const season = [...freq.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 0;
+  const out = new Set<string>();
+  if (season < TSDB_POST_MIN_SEASON || totals.size < 4) return out;
+  const played = new Map<string, number>();
+  for (const e of uniq) {
+    const h = ourTeam(league, String(e.strHomeTeam))!.abbr, a = ourTeam(league, String(e.strAwayTeam))!.abbr;
+    const nh = played.get(h) ?? 0, na = played.get(a) ?? 0;
+    if (nh >= season && na >= season) out.add(String(e.idEvent));
+    played.set(h, nh + 1); played.set(a, na + 1);
+  }
+  return out;
+}
 export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[] {
   const lists = body && typeof body === "object" ? (Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][]) : [];
   const nbaRound = (e: Record<string, unknown>) => { const r = Number(e.intRound ?? 0); return Number.isFinite(r) ? r : 0; };
@@ -509,8 +543,14 @@ export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[]
   const keep = (e: Record<string, unknown>) => nbaRound(e) !== TSDB_PRESEASON_ROUND && (league !== "nba" || !(nbaRound(e) >= 100 && String(e.dateEvent ?? e.strTimestamp ?? "").slice(5, 7) === "12"));
   // NFL (owner 2026-10-13, the Super Bowl end): TheSportsDB numbers the NFL's regular season 1–18 and the playoffs 100–499 (the 2025 season read
   // from the box: 125 / 150 / 160 for the three playoff rounds, 200 for the Super Bowl), the same scheme as the NBA's playoffs
-  const post = (e: Record<string, unknown>) => (league === "nba" || league === "nfl" ? nbaRound(e) >= 100 && nbaRound(e) < 500 : /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer");
-  return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent) && keep(e)).map((e) => {
+  // HB-153 (hourly run 14): every other non-soccer league reads BOTH strRound and intRound: a round named as a playoff stage, or a
+  // number in the 100–499 playoff band, is the postseason; and a league that numbers every game round 0 (the WNBA, its 2026 Finals
+  // included) is read by game count (tsdbPostByCount)
+  const rows = lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent) && keep(e));
+  const byCount = TSDB_POST_BY_COUNT.has(league) ? tsdbPostByCount(league, rows) : new Set<string>();
+  const post = (e: Record<string, unknown>) => (league === "nba" || league === "nfl" ? nbaRound(e) >= 100 && nbaRound(e) < 500
+    : LEAGUES[league].sport !== "soccer" && (TSDB_POST_ROUND_RE.test(String(e.strRound ?? "")) || TSDB_POST_ROUND_RE.test(String(e.intRound ?? "")) || (nbaRound(e) >= 100 && nbaRound(e) < TSDB_PRESEASON_ROUND) || byCount.has(String(e.idEvent))));
+  return rows.map((e) => {
     const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? "")), startsAt = String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`).replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
     const sc = tsdbFieldScores(league, e);   // bug 4: a college row's scores can follow the event's name, not the team fields
     return mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : TSDB_LIVE_RE.test(String(e.strStatus ?? "")) ? "in" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, sc.home), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, sc.away));

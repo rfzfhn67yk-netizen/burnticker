@@ -44,7 +44,7 @@ import type { SeasonSchedule } from "@/lib/burnticker/seasonOver";
 import type { TeamSeasonReader } from "@/lib/burnticker/lastSeason";
 import { coinDerbyScoreboard } from "@/lib/burnticker/derby/page";
 import { derbyTitle, pinCreatorDailyCapFromEnv } from "@/lib/burnticker/api/handlers";
-import { apiBudget, budgetedRpcConfig, configureApiBudget, rpcSourceFor, statusTableStore } from "@/lib/burnticker/apiBudget";
+import { apiBudget, budgetedRpcConfig, configureApiBudget, rpcSourceFor, statusTableStore, WEB_RPC_READ_TIMEOUT_MS } from "@/lib/burnticker/apiBudget";
 import { connectionBatchReader, type BatchReader, type MultipleAccountsReader } from "@/lib/burnticker/keeperReadCache";
 
 /**
@@ -124,7 +124,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const rpc = (env.BURNTICKER_RPC_URL ?? "").trim();
   let program: BurnProgramClient;
   if (programId && rpc) {
-    program = new ProgramBurnClient({ connection: new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" })), programId: new PublicKey(programId), cluster, payer: null, launchLabPlatform: (env.BURNTICKER_PLATFORM_ID ?? "").trim() ? new PublicKey((env.BURNTICKER_PLATFORM_ID ?? "").trim()) : null, admin: (env.BURNTICKER_ADMIN ?? "").trim() ? new PublicKey((env.BURNTICKER_ADMIN ?? "").trim()) : null, solUsd: async () => { const px = await usdPrice(SOL_MINT); if (px === null) throw new Error("SOL price unavailable (Jupiter price API)"); return px; } });
+    program = new ProgramBurnClient({ connection: new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" }, { timeoutMs: WEB_RPC_READ_TIMEOUT_MS })), programId: new PublicKey(programId), cluster, payer: null, launchLabPlatform: (env.BURNTICKER_PLATFORM_ID ?? "").trim() ? new PublicKey((env.BURNTICKER_PLATFORM_ID ?? "").trim()) : null, admin: (env.BURNTICKER_ADMIN ?? "").trim() ? new PublicKey((env.BURNTICKER_ADMIN ?? "").trim()) : null, solUsd: async () => { const px = await usdPrice(SOL_MINT); if (px === null) throw new Error("SOL price unavailable (Jupiter price API)"); return px; } });
     stubs.push(`burn_receipts program ${programId}: read-only client (this host holds no key; the keeper signs readings and cranks)`);
   } else {
     program = new FakeBurnProgram(cluster);
@@ -143,7 +143,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const polymarket = polymarketClient(env);
   // Bonding curve + top holders for the coin cards: read-only account reads over the same RPC (no key). Without one: "—" and the reason.
   // disableRetryOnRateLimit: a rate-limited RPC fails the read fast ("could not be read") instead of stalling every page on backoff.
-  const market: MarketReader | null = rpc ? (new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })) as unknown as MarketReader) : null;
+  const market: MarketReader | null = rpc ? (new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }, { timeoutMs: WEB_RPC_READ_TIMEOUT_MS })) as unknown as MarketReader) : null;
   if (!rpc) stubs.push("LaunchLab curve progress and top holders: no BURNTICKER_RPC_URL on this host (cards show —)");
   if (!polymarketDiscoveryEnabled(env)) stubs.push("Polymarket discovery: off on this host (BURNTICKER_POLYMARKET_DISCOVERY_ENABLED=0); settlement reads the on-chain payout regardless");
   const registry = openRegistry((env.BURNTICKER_DB ?? "").trim() || REGISTRY_FILE);
@@ -173,7 +173,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     // Review-2 F3: the verifier decodes initialize_token and reads the TokenConfig (and the Pair) — it needs the program ids it checks
     // against; without BURNTICKER_PROGRAM_ID it refuses every confirmation (fail closed).
     // C2 (2026-10-15 prelaunch audit): the verifier reads in the "confirm" lane, so anonymous traffic cannot spend what a confirmation needs
-    batchReader: rpc && programId && program instanceof ProgramBurnClient ? connectionBatchReader(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true })) as unknown as MultipleAccountsReader, new PublicKey(programId), (m) => program.vaultFor(m)) : null,
+    batchReader: rpc && programId && program instanceof ProgramBurnClient ? connectionBatchReader(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }, { timeoutMs: WEB_RPC_READ_TIMEOUT_MS })) as unknown as MultipleAccountsReader, new PublicKey(programId), (m) => program.vaultFor(m)) : null,
     launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, budgetedRpcConfig({ commitment: "confirmed" }, { lane: "confirm" })) as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58(), busy: () => apiBudget().laneBusy(rpcSourceFor(rpc), "confirm") }) : null,
   };
   if (!rpc) stubs.push("launch confirmation: no BURNTICKER_RPC_URL on this host, so a launch transaction cannot be read and drafts are not taken live");

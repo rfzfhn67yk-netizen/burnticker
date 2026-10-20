@@ -333,7 +333,7 @@ describe("side B is described from its own event, never side A's (website-23: \"
       const rv = buildLaunchReview(body as never, { env: ENV, reserved: new Set() });
       assert.ok("review" in rv); if (!("review" in rv)) return;
       assert.match(rv.review.coins[0].description ?? "", /^\$ANAGM burns if the Ducks win against the Bruins\./);
-      assert.match(rv.review.settled!.descriptionB, /^\$BOSGM burns if the Bruins win at the Ducks\./, String(pairCtx));
+      assert.match(rv.review.settled!.descriptionB, /^\$BOSGM burns if the Bruins win away against the Ducks\./, String(pairCtx));
     }
   });
   test("the bundle route launches coin B with that description (an NHL game, side B's own context)", async () => {
@@ -342,7 +342,7 @@ describe("side B is described from its own event, never side A's (website-23: \"
     const w = await makeWorld();
     const r = await prepareLaunch(w.p, { creator: CREATOR, ticker: "ANAGM", name: "Ducks Game", description: "", firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, rule: gamePairRule("nhl", "2025020001", "ANA"), descCtx: { game: { opponent: "Bruins", home: true, startsAt: "2026-11-05T00:00:00Z" } }, pair: { ticker: "BOSGM", name: "Bruins Game", opp: "BOS", descCtx: { game: { opponent: "Ducks", home: false, startsAt: "2026-11-05T00:00:00Z" } } } }, { register: false });
     assert.ok("pair" in r, JSON.stringify("error" in r ? r.error.body : r).slice(0, 300)); if (!("pair" in r)) return;
-    assert.match(r.pair.bundles.b.description, /^\$BOSGM burns if the Bruins win at the Ducks\./);
+    assert.match(r.pair.bundles.b.description, /^\$BOSGM burns if the Bruins win away against the Ducks\./);
     assert.match(r.pair.bundles.a.description, /^\$ANAGM burns if the Ducks win against the Bruins\./);
   });
 });

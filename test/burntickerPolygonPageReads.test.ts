@@ -121,7 +121,7 @@ describe("page builds on the site: zero Polygon reads once the vector is stored,
 
   const buildAll = async () => {
     const { GET } = await import("@/app/api/burnticker/tokens/route");
-    assert.equal((await GET()).status, 200);
+    assert.equal((await GET(new Request("http://localhost/"))).status, 200);
     const c = await creatorData(CREATOR, clock.now, w.p, { memo: null });
     assert.notEqual(c.kind, "bad-wallet");
     for (const t of [bucs, den]) await tokenPageData(w.p, t, clock.now);

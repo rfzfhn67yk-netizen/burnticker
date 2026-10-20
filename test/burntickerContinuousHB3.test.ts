@@ -169,7 +169,7 @@ describe("HB-34: every clickable card, row, link and radio has a name", () => {
     const page = read("src/app/burnticker/launch/page.tsx"), tile = read("src/app/burnticker/launch/CoinVsCoinTile.tsx");
     const end = read("src/app/burnticker/launch/EndChoicePicker.tsx"), coin = read("src/app/burnticker/t/[ticker]/page.tsx");
     assert.match(page, /aria-label=\{RIVALRY_SEASON_LABEL\} onClick=\{\(\) => chooseRivals\(rivalA, rivalB, "season"\)\}/);
-    assert.match(page, /aria-label=\{`\$\{RIVALRY_SERIES_LABEL\}/);
+    assert.match(page, /aria-label=\{rivalrySeriesLabel\(rv\?\.season\)\}/);   // HB-162 (d) (hourly run 15): the season named once
     assert.match(page, /data-hazard=\{k\.id\} aria-label=\{`\$\{k\.label\}, from \$\{k\.publisher\}`\}/);
     assert.match(tile, /data-decision="what" aria-label=\{`\$\{h\.label \|\| `\$\{h\.symbol\}, \$\{h\.name\}`\}, from/);
     assert.match(end, /<input type="radio" name=\{name\} value=\{o\.kind\} aria-label=\{o\.line\}/);

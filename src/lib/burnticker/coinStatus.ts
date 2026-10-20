@@ -132,7 +132,7 @@ export function waitingSentenceOf(oracle: string | null | undefined, selectorKey
 const BADGE_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** The day a one-shot badge states ("ONE-SHOT · Oct 15, 2026" gives "2026-10-15"); null when it states none. Client-safe. */
 export function badgeDay(badge: string | null | undefined): string | null {
-  const m = /ONE-SHOT\s*·\s*([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(badge ?? "");
+  const m = /ONE-SHOT\s*·\s*(?:BY )?([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(badge ?? "");   // HB-142: "ONE-SHOT · BY Dec 5, 2026" on a market coin
   if (!m) return null;
   const mo = BADGE_MONTHS.indexOf(m[1]);
   return mo < 0 ? null : `${m[3]}-${String(mo + 1).padStart(2, "0")}-${m[2].padStart(2, "0")}`;

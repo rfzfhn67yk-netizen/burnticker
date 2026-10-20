@@ -46,8 +46,9 @@ export function compoundOf(q: string, teams: readonly EspnTeam[], names: (clause
   return { kept: parts[k], dropped: parts.filter((_p, i) => i !== k) };
 }
 const quoteList = (xs: readonly string[]): string => { const q = xs.map((x) => `“${x}”`); return q.length <= 2 ? q.join(" and ") : `${q.slice(0, -1).join(", ")} and ${q[q.length - 1]}`; };
+/** HS-59 (hourly run 15): said once above the cards (search.ts `note`), the clauses whole. */
 export const compoundSentence = (c: Compound): string =>
-  `A coin follows one condition, so ${quoteList(c.dropped)} ${c.dropped.length === 1 ? "is" : "are"} left out. These cards follow only “${c.kept}”, so each is a partial alternative.`;
+  `A coin follows one condition. These cards follow “${c.kept}”, and ${quoteList(c.dropped)} ${c.dropped.length === 1 ? "is" : "are"} left out. Launch another coin for ${c.dropped.length === 1 ? "that one" : "each of those"}.`;
 
 /** Item 7: the count a query asks a team to reach ("win 10 games", "50 wins"), or null. "The next 5 games" is a window, not a count. */
 export function milestoneOf(q: string): number | null {

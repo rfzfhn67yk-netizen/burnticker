@@ -63,5 +63,11 @@ export async function webReadPlatform(p: Platform, tokens: readonly TokenRow[], 
   await v.cache.prefetch(p.batchReader ?? null, items, o.log ?? ((s) => console.warn(s)));
   return v.platform;
 }
+/**
+ * HB-145 (2026-10-20): the cached platform for `p` without waiting for a batch: the builds give the batch a budget, and past it the coin
+ * reads go on through the cache (each fills its own fields, as on a failed batch) while the batch lands in the background. `p` itself
+ * when no view was made yet.
+ */
+export const webReadCachedView = (p: Platform): Platform => views.get(p)?.platform ?? p;
 /** For tests: the cache's counters for `p`'s view. */
 export const webReadStats = (p: Platform): KeeperReadCache["stats"] | null => views.get(p)?.cache.stats ?? null;

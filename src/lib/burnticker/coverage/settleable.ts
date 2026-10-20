@@ -37,3 +37,14 @@ export function catalogueSettleRefusal(feedOrId: Feed | string, o: { root?: stri
   if (!crossReadsOf(desc, all).length) return { code: "no-cross-read", message: `Coins cannot launch on "${feed.title}" yet, because no second publisher reports the same number, and every result needs two sources that agree.` };
   return null;
 }
+
+/**
+ * HB-134 (hourly run 11): ONE availability read for a catalogue source, used by every surface that offers it: the Browse card (HB-37),
+ * the search card and the templates gallery. The Browse card said "Unavailable" for Launch Library 2 while the search offered "Use this"
+ * and the "Rocket launches" template linked to it, and the creator learned at the Review step. Null when the source can launch (or is
+ * not a catalogue source this check knows); otherwise the review's own refusal sentence. A catalogue that cannot be read refuses nothing.
+ */
+export function feedOfferRefusal(series: string | null | undefined, o: { root?: string } = {}): string | null {
+  if (!series) return null;
+  try { return catalogueSettleRefusal(series, o)?.message ?? null; } catch { return null; }
+}

@@ -17,5 +17,13 @@ fi
 # stop timeout. Absolute path: Node resolves --require against the working directory of every process it starts.
 GRACEFUL="$(pwd -P)/scripts/service/web-graceful.cjs"
 if [ -f "$GRACEFUL" ]; then export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $GRACEFUL"; fi
+# HB-138 (2026-10-20): the home and coins memos start building the moment the port opens (scripts/service/web-warm.cjs; a 10 s bounded
+# wait and one "warm:" log line), so the first visitors and the deploy smoke join those builds instead of finding the loop busy
+WARM="$(pwd -P)/scripts/service/web-warm.cjs"
+if [ -f "$WARM" ]; then export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $WARM"; fi
+# HB-145 (2026-10-20): every request over 2 s and every event-loop hold over 1 s is written to the web log and to
+# logs/burnticker-web-slow.log (scripts/service/web-slowlog.cjs); the keeper counts the last hour into ops.json
+SLOWLOG="$(pwd -P)/scripts/service/web-slowlog.cjs"
+if [ -f "$SLOWLOG" ]; then export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $SLOWLOG"; fi
 echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] starting burnticker web on $BIND:$PORT (build $(cat .next/BUILD_ID)) from $(pwd -P)"
 exec ./node_modules/.bin/next start -H "$BIND" -p "$PORT"

@@ -101,6 +101,9 @@ export const NAME_STEP_BLOCKED = "Fix the fields marked in red first. Each one s
  * field on this step. An answer that failed does not hold it (the Review step says why and Launch waits there).
  */
 export const NAME_STEP_CHECKING = "Checking the ticker and name against every Burnticker coin. The Review button waits until that check is back.";
+/** HS-55 (hourly run 13): under a ticker field while the server's held and lookalike check runs; the Review button reads "Checking…". */
+export const tickerCheckingLine = (ticker: string): string => `Checking $${ticker.toUpperCase()} against the live coins…`;
+export const NAME_STEP_CHECKING_BUTTON = "Checking…";
 export function nameStepWaitsForReview(o: { reviewCurrent: boolean; reviewError: string | null }): boolean {
   return !o.reviewCurrent && !o.reviewError;
 }

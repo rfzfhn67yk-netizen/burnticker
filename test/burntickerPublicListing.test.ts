@@ -110,7 +110,7 @@ test("re-review Low 3: the index route lists no draft or expired draft, and the 
   const w = await makeWorld();
   const d = reg(w.registry, "HIDDEN", false);
   const { GET } = await import("../src/app/api/burnticker/tokens/route.ts");
-  const res = await GET();
+  const res = await GET(new Request("http://localhost/"));
   const text = await res.text();
   assert.equal(res.status, 200, text.slice(0, 200));
   assert.ok(!text.includes(d.mint), "the draft's mint is not in the index");

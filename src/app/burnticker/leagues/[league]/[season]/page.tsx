@@ -6,7 +6,7 @@ import { platform } from "@/lib/burnticker/server";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { dateRange } from "@/lib/burnticker/seasons";
 import { LEAGUES_PATH, leagueSeasonPage, resolveLeagueSeason, type LeagueSeasonPage } from "@/lib/burnticker/leagues";
-import { leagueData } from "@/lib/burnticker/leaguesServe";
+import { leagueDataForPages } from "@/lib/burnticker/leaguesServe";
 import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
@@ -48,7 +48,8 @@ function load(league: string, season: string, seasonOver: ReadonlySet<string> | 
   const origin = publicOrigin();
   const og = `${origin}${LEAGUES_PATH}/${encodeURIComponent(r.league)}/${encodeURIComponent(season)}/og`;
   try {
-    const d = leagueData(platform());
+    // HB-35: the ten-minute table (leaguesServe.ts leagueDataForPages)
+    const d = leagueDataForPages(platform());
     return { page: leagueSeasonPage({ league: r.league, year: r.year, coins: d.coins, readings: d.readings, nowMs: Date.now(), origin, ogImage: og, seasonOver }), err: null, shared: sharedTickers(d.tickers) };
   } catch (e) {
     return { page: leagueSeasonPage({ league: r.league, year: r.year, coins: [], readings: [], nowMs: Date.now(), origin, ogImage: og }), err: e instanceof Error ? e.message : String(e) };

@@ -123,14 +123,14 @@ describe("the result line, by shape", () => {
 describe("the next-result line, by shape, with a fixed clock and zone", () => {
   const n = (s: ListingStatus, rule: BurnRule) => nextResultLine(listNextOf(s, rule), ZONE);
   test("game: the keeper's planned read after the game, in the viewer's zone with the zone named", () => {
-    assert.equal(n(base({ oneShot: true, check: "2026-10-25T23:25:00Z" }), GAME), "Result after the game, read from Sun 5:25 pm MDT.");
-    assert.equal(n(base({ oneShot: true, check: "2026-11-09T23:25:00Z" }), GAME), "Result after the game, read from Nov 9, 4:25 pm MST.");
-    assert.equal(n(base({ oneShot: true, check: "2026-10-19T17:00:00Z" }), GAME), "Result after the game, read since Mon 11:00 am MDT.");
+    assert.equal(n(base({ oneShot: true, check: "2026-10-25T23:25:00Z" }), GAME), "Result after the game, read from Sun Oct 25, 5:25 pm MDT.");   // HS-54: a day not today or tomorrow carries its date
+    assert.equal(n(base({ oneShot: true, check: "2026-11-09T23:25:00Z" }), GAME), "Result after the game, read from Mon Nov 9, 4:25 pm MST.");
+    assert.equal(n(base({ oneShot: true, check: "2026-10-19T17:00:00Z" }), GAME), "Result after the game, read since today 11:00 am MDT.");
     assert.equal(n(base({ oneShot: true }), GAME), "Result after the game.");
-    assert.equal(n(base({ oneShot: true, check: "2026-10-25T23:25:00Z" }), PAIR_A), "Result after the game, read from Sun 5:25 pm MDT.", "a pair game is a game");
+    assert.equal(n(base({ oneShot: true, check: "2026-10-25T23:25:00Z" }), PAIR_A), "Result after the game, read from Sun Oct 25, 5:25 pm MDT.", "a pair game is a game");
   });
   test("season: the next game's read", () => {
-    assert.equal(n(base({ check: "2026-10-22T02:15:00Z" }), SEASON), "Result after each game, next read from Wed 8:15 pm MDT.");
+    assert.equal(n(base({ check: "2026-10-22T02:15:00Z" }), SEASON), "Result after each game, next read from Wed Oct 21, 8:15 pm MDT.");
     assert.equal(n(base(), SEASON), "Result after each game.");
   });
   test("feed: the catalogue's own cadence words", () => {
@@ -139,7 +139,7 @@ describe("the next-result line, by shape, with a fixed clock and zone", () => {
     assert.equal(fallback, "Result read when the source publishes.");
   });
   test("market: its stated close; a one-shot with only a window says so", () => {
-    assert.equal(n(base({ oneShot: true, close: "2026-10-31T19:00:00Z" }), MARKET), "Market close stated as Oct 31, 1:00 pm MDT.");
+    assert.equal(n(base({ oneShot: true, close: "2026-10-31T19:00:00Z" }), MARKET), "Market close stated as Sat Oct 31, 1:00 pm MDT.");
     assert.equal(n(base({ oneShot: true, profile: { badge: "ONE-SHOT · Oct 31, 2026" } }), MARKET), "Resolves once, window ends Oct 31.");
     assert.equal(n(base({ oneShot: true }), MARKET), "Result once the market settles.");
   });
@@ -150,7 +150,7 @@ describe("the next-result line, by shape, with a fixed clock and zone", () => {
     assert.equal(badgeWindowEnd("2026 SEASON"), null);
   });
   test("UTC viewers get UTC; no line says will, expected settlement, or puts a burn on a date", () => {
-    assert.equal(timeText("2026-10-25T23:25:00Z", { now: ZONE.now, timeZone: "UTC" }), "Sun 11:25 pm UTC");
+    assert.equal(timeText("2026-10-25T23:25:00Z", { now: ZONE.now, timeZone: "UTC" }), "Sun Oct 25, 11:25 pm UTC");
     for (const s of allSentences()) assert.doesNotMatch(s, /\bwill\b|expected settlement|burns? on (Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i, s);
   });
   test("a card gets the result line when decided and the next line when open", () => {

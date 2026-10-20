@@ -102,11 +102,13 @@ describe("items 6 to 9: what a team query asks beyond every win", () => {
   const quiet = async <T>(f: () => Promise<T>): Promise<T> => { const w = console.warn; console.warn = () => {}; try { return await f(); } finally { console.warn = w; } };
   test("6: 'Lakers win and Celtics lose' follows the Lakers' wins, names the part left out, and every card is a partial alternative", async () => {
     const r = await quiet(() => universalSearch("Lakers win and Celtics lose", deps));
-    const s = "A coin follows one condition, so “Celtics lose” is left out. These cards follow only “Lakers win”, so each is a partial alternative.";
+    // HS-59 (hourly run 15): the sentence is said once, above the cards (the search's partialNote), never under each card
+    const s = "A coin follows one condition. These cards follow “Lakers win”, and “Celtics lose” is left out. Launch another coin for that one.";
     assert.match(r.cards[0].title, /^Burns 2% every time the Lakers win a game/);
-    for (const c of r.cards) { assert.equal(c.alternative, true); assert.equal(c.partial, true); assert.ok(c.note?.startsWith(s), c.note ?? ""); assert.doesNotMatch(c.title, /Celtics/); }
+    assert.equal((r as { partialNote?: string }).partialNote, s);
+    for (const c of r.cards) { assert.equal(c.alternative, true); assert.equal(c.partial, true); assert.doesNotMatch(c.note ?? "", /A coin follows one condition/); assert.doesNotMatch(c.title, /Celtics/); }
     plain(s);
-    assert.equal(compoundSentence({ kept: "Lakers win", dropped: ["Celtics lose", "Knicks win"] }), "A coin follows one condition, so “Celtics lose” and “Knicks win” are left out. These cards follow only “Lakers win”, so each is a partial alternative.");
+    assert.equal(compoundSentence({ kept: "Lakers win", dropped: ["Celtics lose", "Knicks win"] }), "A coin follows one condition. These cards follow “Lakers win”, and “Celtics lose” and “Knicks win” are left out. Launch another coin for each of those.");
   });
   test("6: one condition stays exact, and a team name that holds '&' is not split", async () => {
     const r = await quiet(() => universalSearch("Lakers win", deps));

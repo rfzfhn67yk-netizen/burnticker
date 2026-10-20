@@ -26,6 +26,12 @@ export const MINT_ADDRESS_NOTE = "Every coin made here gets an address that ends
  * by launching", the trust page, the operator page and the whitepaper's custody section carry it (each pinned in a test).
  */
 export const MINT_KEY_DISCLOSURE = "Every coin made here gets an address that ends in burn. This site prepares those mint keys ahead of time, keeps them encrypted, hands each one to its creator once at launch and deletes it 24 hours later if that launch does not happen. Until the coin is created the key only decides the address; it cannot move anything. The creator's wallet still signs the launch, and the key is never used for anything but creating that one mint. When no prepared key is ready, the creator's browser finds one instead, and that key never leaves the browser. Other launchpads prepare addresses the same way.";
+/**
+ * HS-58 (hourly run 14): the launch review said the address paragraph twice, short above Connect wallet and long under "What you confirm
+ * by launching". It is said once now, above the button, in the long form a creator needs to answer the safety question (the review's
+ * mint block, MintSearch.tsx MintAddressBlock); the confirm block leaves it out whenever that block is on the card.
+ */
+export const MINT_REVIEW_NOTE = "Every coin made here gets an address that ends in burn. This site prepares those mint keys ahead of time, keeps them encrypted, hands each one to its creator once at launch and deletes it 24 hours later if that launch does not happen. Until the coin is created the key only decides the address; it cannot move anything. Your wallet still signs the launch. If no prepared key is ready, your browser finds one, and that key never leaves it.";
 /** The trust page's "How this was built" sentence: the disclosure itself. */
 export const MINT_ADDRESS_TRUST = MINT_KEY_DISCLOSURE;
 

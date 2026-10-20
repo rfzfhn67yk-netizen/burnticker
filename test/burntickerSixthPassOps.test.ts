@@ -176,7 +176,9 @@ describe("HB-70: the smaller sixth-pass items", () => {
   test("LD6-4: the stale window follows the read cadence; the server rebuilds an old index first; plain Yes/No labels are dropped", () => {
     assert.ok(STALE_AFTER_MS >= REREAD_MS + INDEX_SERVE_MAX_AGE_MS + 45_000, "the window covers a reread, the server's keep and the CDN");
     assert.equal(indexMemoTooOld(8 * 60_000), true); assert.equal(indexMemoTooOld(30_000), false);
-    assert.match(read("src/app/api/burnticker/tokens/route.ts"), /if \(indexMemoTooOld\(age\)\) await Promise\.race/);
+    // HB-145 (2026-10-20): the timer rebuilds the index behind the requests; a copy still too old is served at once, marked, never waited on
+    assert.match(read("src/app/api/burnticker/tokens/route.ts"), /if \(indexMemoTooOld\(age\)\) return NextResponse\.json\(indexMemo\.body, \{ headers: \{ "cache-control": "no-store", "x-index-memo": "stale"/);
+    assert.doesNotMatch(read("src/app/api/burnticker/tokens/route.ts"), /if \(indexMemoTooOld\(age\)\) await/);
     assert.equal(outcomeLabelsNote("Yes", "No"), ""); assert.equal(outcomeLabelsNote("Broncos", "Seahawks"), "(YES = Broncos, NO = Seahawks)");
   });
   test("TS6-4: the publish gate runs every burnticker test file, and the launch and ownerAction tests outside the name globs", (t) => {

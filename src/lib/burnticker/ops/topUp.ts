@@ -8,6 +8,7 @@ import { apiBudget, takeOrThrow } from "@/lib/burnticker/apiBudget";
 import { latestSnapshot } from "@/lib/burnticker/ops/snapshot";
 import { confirmByPolling } from "@/lib/burnReceipts/crank";
 import { dropIrysRead, freshIrysRead, IRYS_READ_TTL_MS, publishIrysRead } from "@/lib/burnticker/ops/irysReadMemo";
+import { denverTime } from "@/lib/burnticker/denverTime";   // HB-140 L4: the back-off time in Denver time, as the other ops lines
 
 /**
  * AUTOMATIC SOL TOP-UPS FOR THE OPERATIONS WALLETS (owner, 2026-10-19 night: "make sure any wallet that requires SOL will be
@@ -255,10 +256,25 @@ function drainStopWindow(target: TopUpTarget, ledger: readonly TopUpRow[], now: 
   // HB-129 (hourly run 11): only passes that moved SOL count. A failed attempt moved nothing, and counting it meant one real top-up
   // plus two failed tries (an RPC blip and its back-off retry) refused the next genuine refill for hours with a false draining alarm.
   // A run of failures is the failure back-off's job (failureBackoffFor), not the drain stop's.
-  const passes = new Map<number, bigint>();
+  // HB-140 L5 (hourly run 12): the Irys two-step's retry is the same refill. A pass whose transfer moved SOL but whose funding failed is
+  // followed by a funding-only pass from the wallet's spare SOL (that same SOL); it counts once, not as a second slot.
+  const all = new Map<number, { moved: bigint; transfer: boolean; fund: boolean; fundFailed: boolean }>();
   for (const r of ledger) {
-    if (r.target !== target || r.at <= clearedAt || r.at > now || r.status === "failed") continue;
-    passes.set(r.at, maxB(passes.get(r.at) ?? BigInt(0), r.lamports));
+    if (r.target !== target || r.at <= clearedAt || r.at > now) continue;
+    const p = all.get(r.at) ?? { moved: BigInt(0), transfer: false, fund: false, fundFailed: false };
+    if (r.kind === "irys-fund") { p.fund = true; if (r.status === "failed") p.fundFailed = true; }
+    if (r.status !== "failed") { p.moved = maxB(p.moved, r.lamports); if (r.kind === "transfer") p.transfer = true; }
+    all.set(r.at, p);
+  }
+  const passes = new Map<number, bigint>();
+  let awaitingFund = false;   // a transfer moved SOL to the wallet and its funding has not yet succeeded
+  for (const at of [...all.keys()].sort((a, b) => a - b)) {
+    const p = all.get(at)!;
+    const anyMoved = p.transfer || (p.fund && !p.fundFailed);
+    const retry = awaitingFund && p.fund && !p.transfer;
+    if (anyMoved && !retry) passes.set(at, p.moved);
+    if (p.transfer) awaitingFund = p.fund && p.fundFailed;
+    else if (p.fund && !p.fundFailed) awaitingFund = false;
   }
   const ats = [...passes.keys()].sort((a, b) => a - b).slice(-ds.count);
   if (ats.length < ds.count) return null;
@@ -315,7 +331,7 @@ export function planTopUps(i: TopUpInput): TopUpPlan {
   const backedOff = (t: TopUpTarget): boolean => {
     const b = failureBackoffFor(t, i.ledger, i.now);
     if (!b) return false;
-    refused.push({ target: t, reason: `the last ${b.failures === 1 ? "attempt" : `${b.failures} attempts`} failed; the next try is at ${new Date(b.until).toISOString()} (back-off)` });
+    refused.push({ target: t, reason: `the last ${b.failures === 1 ? "attempt" : `${b.failures} attempts`} failed; the next try is at ${denverTime(new Date(b.until).toISOString())} (back-off)` });
     return true;
   };
   // HB-108: the drain stop, checked only for a target that needs SOL now (a stopped target at or above its floor raises nothing)

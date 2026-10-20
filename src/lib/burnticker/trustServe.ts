@@ -26,6 +26,29 @@ export const makeTrustSwr = (o: { clock?: () => number; coldWaitMs?: number } = 
   new KeyedSwr<unknown>({ freshMs: TRUST_FRESH_MS, coldWaitMs: o.coldWaitMs ?? TRUST_COLD_WAIT_MS, maxStaleMs: TRUST_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, maxKeys: 4, log: (k, e) => console.error(`[burnticker/trust] ${k} build failed:`, e) }, o.clock ?? Date.now);
 export const trustSwr = makeTrustSwr();
 
+/**
+ * HB-155 (hourly run 14): /v1/trust shared the page's memo (refreshed after TRUST_FRESH_MS, 2 minutes, with a 15-minute bound) but went
+ * out under the API's own 60 s header (`max-age=60, s-maxage=60, stale-while-revalidate=60`), so a body 238 s old was served where the
+ * header promised at most 120 s. The API answer now has its own memo with the pair route's bounds (HB-99): refreshed after
+ * V1_TRUST_FRESH_MS, no longer a hit past V1_TRUST_MAX_STALE_MS (the header's max-age plus its stale-while-revalidate window), a hung
+ * refresh dropped after SWR_BUILD_TIMEOUT_MS. The header counts the body's age (v1TrustHeaders): the edge keeps it only for what is left
+ * of the 60 s, and a body past that goes out with no-store and its real age.
+ */
+export const V1_TRUST_CACHE_SEC = 60, V1_TRUST_FRESH_MS = 30_000, V1_TRUST_MAX_STALE_MS = 2 * V1_TRUST_CACHE_SEC * 1000;
+export const makeV1TrustSwr = (o: { clock?: () => number; coldWaitMs?: number } = {}): KeyedSwr<unknown> =>
+  new KeyedSwr<unknown>({ freshMs: V1_TRUST_FRESH_MS, coldWaitMs: o.coldWaitMs ?? TRUST_COLD_WAIT_MS, maxStaleMs: V1_TRUST_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, maxKeys: 2, log: (k, e) => console.error(`[burnticker/v1-trust] ${k} build failed:`, e) }, o.clock ?? Date.now);
+export const v1TrustSwr = makeV1TrustSwr();
+/** HB-155: the /v1/trust headers for a body `ageMs` old in memo state `state` (they replace the API's fixed 60 s header). */
+export function v1TrustHeaders(r: { state: SwrState; ageMs: number }): Record<string, string> {
+  const ageSec = Math.max(0, Math.floor(r.ageMs / 1000)), left = V1_TRUST_CACHE_SEC - ageSec;
+  const stale = r.state === "stale" || r.state === "stale-version" || left <= 0;
+  return {
+    "cache-control": stale ? "no-store" : `public, max-age=${left}, s-maxage=${left}, stale-while-revalidate=${V1_TRUST_CACHE_SEC}`,
+    // the standard Age header only beside no-store: next to a shortened max-age a cache would count the age twice
+    ...(stale ? { age: String(ageSec) } : {}), "x-trust-age-sec": String(ageSec), "x-trust-memo": stale ? "stale" : r.state,
+  };
+}
+
 /** How old the served trust copy is, and whether it is past the bound (degraded: the last verified copy, a fresh read has not landed). */
 export interface TrustFreshness { state: SwrState | "stale"; ageMs: number; stale: boolean; lastVerifiedAt: string; note: string | null }
 export function trustFreshness(r: { state: SwrState; ageMs: number }, now: number = Date.now()): TrustFreshness {

@@ -34,3 +34,25 @@ export function teamDrainUnit(outcome: "win" | "loss" | "draw" | "windraw" | "dr
   if (outcome === "windraw" || outcome === "drawloss" || outcome === "winloss") { const one = outcome === "windraw" ? "win or draw" : outcome === "drawloss" ? "draw or loss" : "win or loss"; return { one, many: outcome === "windraw" ? "wins or draws" : outcome === "drawloss" ? "draws or losses" : "wins or losses" }; }
   return fade ? { one: `game without a ${outcome}`, many: `games without a ${outcome}` } : { one: outcome, many: outcome === "loss" ? "losses" : `${outcome}s` };
 }
+
+/**
+ * HS-2 (widened, hourly run 13; launch-critical): when the back-test spends more than half the pool at the chosen share, the burn step
+ * says so in one amber line above the share chips, and the review opens the back-test block. Null when the share spends half or less,
+ * the projection is not a per-share one, or the chosen share was not projected. Numbers come from the projection's own rows
+ * (projection.ts reviewProjection). Client-safe, here beside the drain arithmetic, so the burn step and the review say the same line.
+ */
+export const HEAVY_SPEND_ABOVE = 0.5;
+const SMALL_NUMBER_WORDS = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+export function heavySpendLine(p: { available: boolean; weeks: number | null; rows: readonly { share: number; units: number; spentPct: number }[] } | null | undefined, share: number | null): string | null {
+  if (!p?.available || share === null || !(share > 0 && share < 1)) return null;
+  const row = p.rows.find((r) => Math.abs(r.share - share) < 1e-9);
+  if (!row || !(row.spentPct / 100 > HEAVY_SPEND_ABOVE)) return null;
+  const w = p.weeks;
+  const span = !w ? "over the saved readings" : w === 1 ? "over the last week" : `over the last ${SMALL_NUMBER_WORDS[w] ?? String(w)} weeks`;
+  const smaller = p.rows.filter((r) => r.share < share - 1e-9).sort((a, b) => a.share - b.share)[0] ?? null;
+  const also = smaller ? ` ${pctLabel(smaller.share)} spends ${drainPct(smaller.spentPct / 100)}.` : "";
+  // HB-166 L5 (hourly run 15): the line fires on first-party feeds, whose unit is fixed by the source, so it names no unit; when the
+  // smallest share also spends more than half, it says so instead of suggesting it
+  const advice = !smaller ? "" : smaller.spentPct / 100 > HEAVY_SPEND_ABOVE ? " Even the smallest share spends more than half of the pool on these readings." : " A smaller share keeps more of the pool.";
+  return `At ${pctLabel(share)} each, this rule would have spent ${drainPct(row.spentPct / 100)} of the pool ${span} (${row.units} ${row.units === 1 ? "burn" : "burns"}).${also}${advice}`;
+}

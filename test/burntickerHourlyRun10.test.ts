@@ -125,7 +125,7 @@ describe("HB-123: the attester list, one row per launched coin with its mint", (
 
 describe("HB-124: the league page counts one-game pair coins and dates games in Denver", () => {
   test("$DENWIN and $SEAWIN put their teams under the teams with coins; the game is on its Denver day", () => {
-    const rule = (series: string) => ({ schema: "burnticker.rules/v1", oracle: "catalogue", series, market: null, filter: {}, kind: "scalar" }) as unknown as BurnRule;
+    const rule = (series: string) => ({ schema: "burnticker.rules/v1", oracle: "catalogue", series, market: null, filter: {}, kind: "scalar", pair: { pairId: "seawin-vs-denwin", side: "A", winnerTakesBurn: true } }) as unknown as BurnRule;   // HB-131: pair sides
     const coin = (ticker: string, abbr: string) => ({ ticker, mint: ticker, rule: rule(gameSeries("nfl", "401772", abbr, "win")), burns: [], burnedPct: 0, ended: false });
     const now = Date.parse("2026-10-20T03:00:00Z");   // 19 October, 9 PM Denver
     const p = leagueSeasonPage({ league: "nfl", year: 2026, coins: [coin("DENWIN", "DEN"), coin("SEAWIN", "SEA")], readings: [], nowMs: now, origin: "https://x", ogImage: "https://x/og" });

@@ -111,7 +111,9 @@ export async function POST(req: Request) {
     // HS-48 (hourly run 9): whether a coin comparison's coins have any stored daily reading (unreadable = not said either way)
     let derbyHistory: ((feed: string) => boolean) | undefined;
     try { const ds = derbyStore(platform().registry.db); derbyHistory = (feed) => ds.hasPoints(feed); } catch { derbyHistory = undefined; }
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, derbyHistory, sourceNote, meetingsNote, meetingsRefusal });
+    // HB-41 widened (hourly run 14): the keeper's newest stored reading of the rule's feed, so the back-test says when the catalogue sample is behind
+    const storedReading = (k: string) => { const x = platform().registry.lastReading(k); return x ? { at: x.at, fetchedAt: x.fetchedAt } : null; };
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, derbyHistory, storedReading, sourceNote, meetingsNote, meetingsRefusal });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];

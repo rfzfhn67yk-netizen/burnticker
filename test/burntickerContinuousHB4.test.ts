@@ -70,8 +70,8 @@ describe("HB-37 (P2): feeds are never offered as markets; the family follows the
     assert.match(page, /: c\.launchable\.ok \? <button data-decision="what" data-use-source/);
     assert.match(page, /data-source-unavailable>/);
     const h = read("src/lib/burnticker/api/handlers.ts");
-    assert.match(h, /refusal = catalogueSettleRefusal\(card\.pick\.series\)/);
-    assert.match(h, /return refusal \? \{ \.\.\.card, launchable: \{ ok: false, why: refusal\.message \} \} : card;/);
+    assert.match(h, /const why = feedOfferRefusal\(card\.pick\.series\);/);   // HB-134: the one availability read (coverage/settleable.ts)
+    assert.match(h, /return why \? \{ \.\.\.card, launchable: \{ ok: false, why \} \} : card;/);
   });
   test("the projection helper returns null under 14 days of readings", () => {
     assert.equal(MIN_PROJECTION_DAYS, 14);

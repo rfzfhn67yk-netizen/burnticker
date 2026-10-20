@@ -434,7 +434,7 @@ describe("HB-107 · copy residues", () => {
   });
   test("(e) a space before the season badge; (f) the meetings list says the visitor's time zone", () => {
     const page = src("src/app/burnticker/launch/page.tsx");
-    assert.match(page, /\{RIVALRY_SERIES_LABEL\}\{rv\?\.season \? <>\{" "\}<span/);
+    assert.match(page, /<span className="block font-medium">\{rivalrySeriesLabel\(rv\?\.season\)\}<\/span>/);   // HB-162 (d) (hourly run 15)
     assert.doesNotMatch(page, /Dates are in Denver time/);
     assert.match(page, /data-schedule-source>\{rv\.source\} \{VISITOR_TIME_LINE\}/);
   });
@@ -466,7 +466,7 @@ describe("HS-42 · leagues whose games cannot end tied say nothing about ties", 
 
 describe("HS-43 · the whole-pool burn says its per-run slice in numbers", () => {
   test("85 SOL raise: about 1.7 SOL a run", () => {
-    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent, but not in one go: each daily run spends at most 2% of the trading pool's SOL (about 1.7 SOL on a 85 SOL raise), so a large burn lands over several days.");
+    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent, but not in one go: each daily run spends at most 2% of the trading pool's SOL (about 1.7 SOL on an 85 SOL raise), so a large burn lands over several days.");
     assert.match(wholePoolSliceLine("40"), /about 0\.8 SOL on a 40 SOL raise/);
     plain(wholePoolSliceLine("85"));
     assert.match(budgetCopy(candidatesPairRule(CID_A) as BurnRule, 1, null, { raiseSol: "60" }).line, /^This coin burns its whole pool once, when the result is in\. The whole pool is spent, but not in one go: .*about 1\.2 SOL on a 60 SOL raise/);

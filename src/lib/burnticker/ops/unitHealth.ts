@@ -428,3 +428,45 @@ export function webProbeLine(f: WebProbeFact | null | undefined, now: number): s
   if (f.outcome === "fail") return `- external web check: configured, FAILING (code ${f.code ?? "?"}${f.reason ? `, ${f.reason}` : ""}) ${ago(f.at)}; last ok ${ago(f.lastOkAt)}${stale}`;
   return `- external web check: configured, last ok ${ago(f.lastOkAt ?? f.at)}${stale}`;
 }
+
+/**
+ * HB-145 (2026-10-20): the web's slow moments in the last hour, from logs/burnticker-web-slow.log (scripts/service/web-slowlog.cjs writes
+ * one JSON line per request over 2 s and per event-loop hold over 1 s). Only the file's last SLOW_TAIL_BYTES are read. Null when the file
+ * is absent (the web has not run with the log, or nothing was ever slow), so ops.json says "none recorded" only when it can.
+ */
+export const WEB_SLOW_FILE = path.join("logs", "burnticker-web-slow.log");
+export const SLOW_TAIL_BYTES = 256 * 1024;
+export interface SlowRequestsFact { requests: number; loopHolds: number; worstMs: number | null; worstRoute: string | null; longestHoldMs: number | null; lastAt: string | null }
+export function readSlowRequests(root: string, now: number, file: string = WEB_SLOW_FILE): SlowRequestsFact | null {
+  let text: string;
+  try {
+    const fd = fs.openSync(path.join(root, file), "r");
+    try {
+      const size = fs.fstatSync(fd).size, len = Math.min(size, SLOW_TAIL_BYTES), buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, size - len);
+      text = buf.toString("utf8");
+    } finally { fs.closeSync(fd); }
+  } catch { return null; }
+  const f: SlowRequestsFact = { requests: 0, loopHolds: 0, worstMs: null, worstRoute: null, longestHoldMs: null, lastAt: null };
+  for (const line of text.split("\n")) {
+    let r: { kind?: unknown; at?: unknown; ms?: unknown; route?: unknown; method?: unknown };
+    try { r = JSON.parse(line); } catch { continue; }   // the first line of a tail read may be cut
+    if (typeof r.at !== "number" || typeof r.ms !== "number" || r.at > now || now - r.at > 3_600_000) continue;
+    if (r.kind === "request") {
+      f.requests++;
+      if (f.worstMs === null || r.ms > f.worstMs) { f.worstMs = r.ms; f.worstRoute = `${typeof r.method === "string" ? r.method : "?"} ${typeof r.route === "string" ? r.route.slice(0, 120) : "?"}`; }
+    } else if (r.kind === "loop") { f.loopHolds++; if (f.longestHoldMs === null || r.ms > f.longestHoldMs) f.longestHoldMs = r.ms; } else continue;
+    const at = new Date(r.at).toISOString();
+    if (!f.lastAt || at > f.lastAt) f.lastAt = at;
+  }
+  return f;
+}
+/** The ops line: "slow requests (last hour)". */
+export function slowRequestsLine(f: SlowRequestsFact | null | undefined): string | null {
+  if (f === undefined) return null;
+  if (f === null) return "- slow requests (last hour): none recorded (no logs/burnticker-web-slow.log yet)";
+  if (!f.requests && !f.loopHolds) return "- slow requests (last hour): 0";
+  const worst = f.worstMs !== null ? `; the slowest ${f.worstRoute} in ${(f.worstMs / 1000).toFixed(1)} s` : "";
+  const holds = f.loopHolds ? `; the event loop was held ${f.loopHolds} time${f.loopHolds === 1 ? "" : "s"}, the longest ${((f.longestHoldMs ?? 0) / 1000).toFixed(1)} s` : "";
+  return `- slow requests (last hour): ${f.requests} over 2 s${worst}${holds}; the last at ${f.lastAt} (logs/burnticker-web-slow.log)`;
+}

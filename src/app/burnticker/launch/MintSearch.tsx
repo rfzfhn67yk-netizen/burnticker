@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MintGrindPool, mintWorkerCount, type WorkerLike } from "@/lib/burnticker/vanityMint";
-import { MINT_ADDRESS_NOTE, MINT_SEARCH_PRIVATE_LINE, mintSearchView } from "@/lib/burnticker/mintAddressCopy";
+import { MINT_REVIEW_NOTE, MINT_SEARCH_PRIVATE_LINE, mintSearchView } from "@/lib/burnticker/mintAddressCopy";
 
 /**
  * The review step's block above Launch (owner, 2026-10-14 night: the burn ending is mandatory and the wait is gone). No switch and no
@@ -13,7 +13,8 @@ export function MintAddressBlock({ pool }: { pool: MintGrindPool | null }) {
   return (
     <div className="min-w-0 space-y-2" data-mint-block>
       <MintSearch pool={pool} />
-      <p className="min-w-0 break-words text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p>
+      {/* HS-58 (hourly run 14): the one address paragraph on the review, in its long form, above the button */}
+      <p className="min-w-0 break-words text-xs text-neutral-400" data-mint-note>{MINT_REVIEW_NOTE}</p>
     </div>
   );
 }

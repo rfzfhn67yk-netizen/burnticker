@@ -250,7 +250,7 @@ describe("the disclosure: every page that says what the site controls", () => {
   });
   test("the launch review's 'What you confirm by launching'", () => {
     const rc = read("src/app/burnticker/launch/ReviewCard.tsx");
-    assert.match(rc, /<summary className="cursor-pointer text-neutral-300">What you confirm by launching<\/summary>[\s\S]{0,700}data-mint-disclosure>\{MINT_KEY_DISCLOSURE\}<\/p>\s*<\/details>/);
+    assert.match(rc, /<summary className="cursor-pointer text-neutral-300">What you confirm by launching<\/summary>[\s\S]{0,900}\{!p\.mintSearch && <p[^>]*data-mint-disclosure>\{MINT_KEY_DISCLOSURE\}<\/p>\}\s*<\/details>/);   // HS-58: left out when the mint block above the button says it
   });
   test("the trust page's 'How this was built'", () => {
     assert.match(read("src/app/burnticker/trust/page.tsx"), /<h2 className="font-medium">How this was built<\/h2>[\s\S]{0,300}data-mint-suffix>\{MINT_ADDRESS_TRUST\}/);

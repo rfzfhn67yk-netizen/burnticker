@@ -193,7 +193,8 @@ test("review editor: once open it stays open until the creator presses done (no 
 test("a typed name belongs to its subject: a new team / market / pair regenerates name and ticker", () => {
   const page = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
   assert.match(page, /const \[editedFor, setEditedFor\] = useState<string \| null>\(null\);/);
-  assert.match(page, /const subjectKey = \[flow, guide\.follow \?\? "", rule\?\.oracle \?\? "", rule\?\.market \?\? rule\?\.series \?\? "", team\?\.abbr \?\? "", sideA\?\.abbr \?\? "", sideB\?\.abbr \?\? ""\]\.join\("\|"\);/);
+  // HB-144 (hourly run 13): plus the pair kind and the two picked candidates
+  assert.match(page, /const subjectKey = \[flow, guide\.follow \?\? "", rule\?\.oracle \?\? "", rule\?\.market \?\? rule\?\.series \?\? "", team\?\.abbr \?\? "", sideA\?\.abbr \?\? "", sideB\?\.abbr \?\? "", guide\.pairKind \?\? "", elPick \? /);
   assert.match(page, /if \(editedFor !== subjectKey\) \{ setNameAuto\(true\); setTickerAuto\(true\); setEditedFor\(null\);/);
   // every manual edit records the subject, and the draft keeps it across a reload
   assert.equal((page.match(/setNameAuto\(false\); setEditedFor\(subjectKey\)/g) ?? []).length, 2);
@@ -207,6 +208,6 @@ test("a typed name belongs to its subject: a new team / market / pair regenerate
 // right with dead space between. Each row is now one full-width button that lights on hover and focus, so name and action read together.
 test("outcome rows: the whole row is one button, lit on hover and focus", () => {
   const page = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
-  assert.match(page, /<li key=\{m\.conditionId\}><button type="button" data-decision="what" disabled=\{m\.closed\} onClick=\{\(\) => pickPoly\(m\)\} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800/);
+  assert.match(page, /<li key=\{m\.conditionId\}><button type="button" data-decision="what" data-outcome-button aria-label=\{outcomeButtonLabel\(m\)\} disabled=\{m\.closed\} onClick=\{\(\) => pickPoly\(m\)\} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800/);
   assert.doesNotMatch(page, /<li key=\{m\.conditionId\} className="flex items-center justify-between gap-2"><span>/);
 });

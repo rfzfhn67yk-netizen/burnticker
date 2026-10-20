@@ -45,19 +45,19 @@ export function isTeamRule(rule: unknown): boolean {
  * the ticker itself is held by no coin, and for a team coin the team words on the ticker and on its first three letters. `avoid` is a
  * ticker that is held or reserved: no suggestion starts with it (HB-6), so a refusal never offers that ticker with something added.
  */
-export function freeTickers(ticker: string, deps: { inUse: (ticker: string) => readonly unknown[]; existing: readonly LookalikeExisting[]; reserved: ReadonlySet<string>; creator?: string | null; own?: ReadonlySet<string> }, n = 2, o: { team?: boolean; avoid?: readonly (string | null | undefined)[]; /** HB-117: the rule's own alternatives (hazards.ts hazardAlternates), tried first */ extra?: readonly string[] } = {}): string[] {
+export function freeTickers(ticker: string, deps: { inUse: (ticker: string) => readonly unknown[]; existing: readonly LookalikeExisting[]; reserved: ReadonlySet<string>; creator?: string | null; own?: ReadonlySet<string> }, n = 2, o: { team?: boolean; avoid?: readonly (string | null | undefined)[]; /** HB-117: the rule's own alternatives (hazards.ts hazardAlternates), tried first; HB-130: one given with its name passes only while that name is free too */ extra?: readonly (string | { ticker: string; name: string })[] } = {}): string[] {
   const base = normaliseName(ticker) || "COIN", out: string[] = [], avoid = (o.avoid ?? []).map((x) => normaliseName(x ?? "")).filter(Boolean);
-  const ok = (t: string) => /^[A-Z0-9]{2,10}$/.test(t) && !out.includes(t) && !avoid.some((a) => t.startsWith(a)) && !(deps.own?.has(t)) && !isReserved(t, deps.reserved) && deps.inUse(t).length === 0
-    && lookalikeHits({ ticker: t, name: "", creator: deps.creator ?? null }, deps.existing).length === 0;
+  const ok = (t: string, name = "") => /^[A-Z0-9]{2,10}$/.test(t) && !out.includes(t) && !avoid.some((a) => t.startsWith(a)) && !(deps.own?.has(t)) && !isReserved(t, deps.reserved) && deps.inUse(t).length === 0
+    && (!name || !isReserved(name, deps.reserved)) && lookalikeHits({ ticker: t, name, creator: deps.creator ?? null }, deps.existing).length === 0;
   const words = (stem: string) => WORDS.map((w) => `${stem.slice(0, 10 - w.length)}${w}`);
   const digits = Array.from({ length: 8 }, (_, k) => `${base.slice(0, 9)}${k + 2}`);
   // a team coin takes the team words first ($LADCLUB reads better than $LAD2); any other coin only its own digit endings
-  const cands = [...(o.extra ?? []).map((x) => normaliseName(x)), ...(o.team ? [...words(base), ...words(base.slice(0, 3)), ...digits] : digits)];
-  for (const t of cands) { if (out.length >= n) break; if (ok(t)) out.push(t); }
+  const cands: { t: string; name: string }[] = [...(o.extra ?? []).map((x) => (typeof x === "string" ? { t: normaliseName(x), name: "" } : { t: normaliseName(x.ticker), name: x.name })), ...(o.team ? [...words(base), ...words(base.slice(0, 3)), ...digits] : digits).map((t) => ({ t, name: "" }))];
+  for (const c of cands) { if (out.length >= n) break; if (ok(c.t, c.name)) out.push(c.t); }
   return out;
 }
 
-export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; generated?: string | null; /** HB-6: a team coin (isTeamRule); only then are team words offered */ team?: boolean; /** HB-30: the side's rule, so another window of the same team is not a lookalike (lookalike.ts) */ rule?: Pick<BurnRule, "oracle" | "series"> | null; /** HB-117: the rule's own alternative tickers (a natural-disaster coin's hazard word), offered before digit endings */ alternates?: readonly string[] }[], deps: { inUse: (ticker: string) => readonly TickerRow[]; reserved: ReadonlySet<string>; /** the registry's rows (launchGuards.ts lookalikeRows); with none, the holders found by `inUse` */ existing?: readonly LookalikeExisting[] | null; /** the connected wallet, when the review knows it: its own coins never count */ creator?: string | null }): TickerCheck[] {
+export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; generated?: string | null; /** HB-6: a team coin (isTeamRule); only then are team words offered */ team?: boolean; /** HB-30: the side's rule, so another window of the same team is not a lookalike (lookalike.ts) */ rule?: Pick<BurnRule, "oracle" | "series"> | null; /** HB-117: the rule's own alternative tickers (a natural-disaster coin's hazard word), offered before digit endings; HB-130: with its name when the review knows it */ alternates?: readonly (string | { ticker: string; name: string })[] }[], deps: { inUse: (ticker: string) => readonly TickerRow[]; reserved: ReadonlySet<string>; /** the registry's rows (launchGuards.ts lookalikeRows); with none, the holders found by `inUse` */ existing?: readonly LookalikeExisting[] | null; /** the connected wallet, when the review knows it: its own coins never count */ creator?: string | null }): TickerCheck[] {
   const own = new Set(sides.map((s) => s.ticker.toUpperCase()));
   // review of block M: only the (proven) creator's own unfinished draft is exempt; their own launched coin holds the ticker like any other
   const holders = (t: string): TickerRow[] => deps.inUse(t).filter((x) => !(deps.creator && x.creator === deps.creator && (x.status ?? "live") === "draft"));
@@ -66,7 +66,7 @@ export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; 
   const fdeps = { inUse: holders, existing, reserved: deps.reserved, creator: deps.creator ?? null, own };
   // HB-6: the suggestions come from the coin's own rule (its generated ticker and that ticker's endings), never from the typed ticker
   // another coin holds or the platform reserves; with no usable generated ticker, only what can be built without extending the typed one
-  const fromRule = (g: string | null | undefined, typed: string, team: boolean, extra: readonly string[] = []): string[] => {
+  const fromRule = (g: string | null | undefined, typed: string, team: boolean, extra: readonly (string | { ticker: string; name: string })[] = []): string[] => {
     const t = (g ?? "").toUpperCase();
     if (!/^[A-Z0-9]{2,10}$/.test(t) || isReserved(t, deps.reserved) || t.startsWith(typed)) return freeTickers(typed, fdeps, 2, { team, avoid: [typed], extra });
     const held = holders(t).length > 0;
@@ -104,8 +104,11 @@ export function freeSuggestedTickers<C extends { side: "A" | "B"; suggestedTicke
  * The review route's ticker block (A-2, HB-30, HB-117): every side's check, and the coins with a free `suggestedTicker`. Side A of a
  * natural-disaster coin is offered the hazard's own word (hazards.ts hazardAlternates) before digit endings, which read as the held ticker.
  */
-export function reviewTickerChecks<C extends { side: "A" | "B"; ticker: string; suggestedTicker: string | null }>(coins: readonly C[], ruleA: Pick<BurnRule, "oracle" | "series"> | null | undefined, deps: Parameters<typeof tickerChecks>[1]): { tickers: TickerCheck[]; coins: C[] } {
+export function reviewTickerChecks<C extends { side: "A" | "B"; ticker: string; suggestedTicker: string | null; /** HB-130: the rule's own generated name for this side */ suggestedName?: string | null }>(coins: readonly C[], ruleA: Pick<BurnRule, "oracle" | "series"> | null | undefined, deps: Parameters<typeof tickerChecks>[1]): { tickers: TickerCheck[]; coins: C[] } {
   const team = isTeamRule(ruleA);   // HB-6: team words only for a team coin
-  const sides = coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker, team, rule: c.side === "A" ? ruleA ?? null : null, alternates: c.side === "A" ? hazardAlternates(ruleA?.series, { ticker: c.suggestedTicker ?? "", name: "" }).map((a) => a.ticker) : [] }));
+  // HB-130 (hourly run 11): each hazard alternative carries the name the page pairs with it (hazardAlternateName), and it is offered only
+  // while that name is free too, so the second copier of the showcase coin moves on to the next hazard word, then a numbered form
+  const alts = (c: C) => { const gen = { ticker: c.suggestedTicker ?? "", name: c.suggestedName ?? "" }; return hazardAlternates(ruleA?.series, gen).map((a) => (gen.name ? a : a.ticker)); };
+  const sides = coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker, team, rule: c.side === "A" ? ruleA ?? null : null, alternates: c.side === "A" ? alts(c) : [] }));
   return { tickers: tickerChecks(sides, deps), coins: freeSuggestedTickers(coins, sides, deps) };
 }

@@ -969,7 +969,10 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
     // none. Daily readings of 0 are not the result; only a day that burned (units > 0) is.
     const seasonEnd = snowSeasonEnd(t.baselineAt);
     const ev = d.registry.receipts(t.mint).find((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair" && b.units > 0);
-    if (ev) end = { mode: "winddown", reason: `the first snow of the season fell (${ev.eventId})`, at: Date.parse(ev.settledAt) || d.now() };
+    // HB-147 (hourly run 13): at 100% the first snow is one burn of the whole pool, so it ends in a DRAIN like every other one-shot YES at
+    // 100% (the share spent on the coin, one unit a day, while the last crank carried spend); under 100% it winds down as before
+    const all = !!ev && ev.status !== "voided" && (ev.mapping?.fractionOfPool ?? 0) >= 1;
+    if (ev) end = { mode: all ? "drain" : "winddown", reason: `the first snow of the season fell (${ev.eventId})${all ? " at 100 % of the pool" : ""}`, at: Date.parse(ev.settledAt) || d.now() };
     else if (d.now() >= snowSeasonVoidFromMs(seasonEnd)) end = { mode: "winddown", reason: `void: the snow season ended on ${seasonEnd} with no first snow after launch`, at: Date.parse(`${seasonEnd}T23:59:59Z`) };
   } else if (d.derby?.ended && t.selectorKey.startsWith("derby:")) {
     const x = d.derby.ended(t);
@@ -1007,6 +1010,9 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
  */
 export async function owedBeforeEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null, end: { mode: "drain" | "winddown"; reason: string; at: number }): Promise<{ owedLamports: bigint; canSpend: boolean; readingDate: number | null } | null> {
   const rule = locked.rule;
+  // HB-164 (hourly run 15): a first snow under 100% is NOT held here. Its end is the publish-102 one exactly (detectRuleEnd's own
+  // branch: a wind-down after the first snow, or the end sink takes the rest on a resolved end, whether burn dispersal runs or not);
+  // coins launched at 2% before HB-147 keep that end. Only a 100% first snow changed: it drains after its first snow (detectRuleEnd).
   if (end.mode !== "winddown" || t.status === "retired" || locked.mode !== "buyback" || !isOneShot(rule) || !endSinkOf(rule) || !d.program.endSink) return null;
   const ev = d.registry.receipts(t.mint).filter((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair")[0];
   const f = ev?.mapping?.fractionOfPool ?? 0;

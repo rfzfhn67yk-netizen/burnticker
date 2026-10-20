@@ -145,7 +145,8 @@ describe("intent audit item 7: the lead sentence renders whole", () => {
     const plain = describeRule(rule, ctx), inv = describeRule({ ...rule, inverse: true } as BurnRule, ctx);
     // sources-4 (audit 201): a rule measured against the previous reading names a change, never a total
     assert.equal(plain.lead, "For each full change of 0.1 percentage point in the U.S. unemployment rate, up or down, since the previous reading, the burn pool spends 2% buying $JOBLESS on Raydium and burns it, with a receipt on chain.");
-    assert.equal(inv.lead, "For every reading of U.S. unemployment rate that does not move, the burn pool spends 2% buying $JOBLESS on Raydium and burns it, with a receipt on chain.");
+    assert.equal(inv.lead, "For every reading of U.S. unemployment rate that is the same as the previous reading, the burn pool spends 2% buying $JOBLESS on Raydium and burns it, with a receipt on chain.");
+    assert.match(inv.ruleBlock, /A move smaller than 0\.1 percentage point burns neither this coin nor the coin that burns for each full 0\.1 percentage point\./);   // HB-159 (hourly run 15)
     assert.ok(inv.ruleBlock.startsWith(inv.lead));
     assert.equal(leadSentence("The U.S. Treasury publishes it. Then it is read."), "The U.S. Treasury publishes it.");
     assert.equal(leadSentence("Washington, D.C. Reagan National reads 0.25 in. Then nothing."), "Washington, D.C. Reagan National reads 0.25 in.");

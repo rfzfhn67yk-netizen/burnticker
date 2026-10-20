@@ -25,7 +25,8 @@ test("site audit #8: each fact once — the attester and time-lock lines are not
   // homeStatusLine, fed by currentStatusLive), never retyped here; a failed read says so in plain words and still links the Trust page
   assert.match(home, /line\.appendChild\(document\.createTextNode\(j && j\.statusLine \? j\.statusLine \+ " " : "The current status did not load just now\. "\)\)/);
   assert.match(home, /a\.href = "\/burnticker\/trust"; a\.textContent = "The Trust page has the full record\.";/);
-  assert.match(fs.readFileSync("src/app/api/burnticker/home/route.ts", "utf8"), /status = await currentStatusLive\(\)/);
+  // HB-145 second half: the status read is a bounded stage (past its budget the last good status is used)
+  assert.match(fs.readFileSync("src/app/api/burnticker/home/route.ts", "utf8"), /clock\.bounded\("status", B\.statusMs, async \(\) => \{ const s = await currentStatusLive\(\); lastStatus = s; return s; \}/);
 });
 
 test("site audit #15: headings in the page's main run H1 → H2 → H3 with no skipped level (the closed-launches dialog's H2 sits outside it)", () => {

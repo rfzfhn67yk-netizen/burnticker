@@ -27,7 +27,7 @@ describe("M4: drain warnings where pools drain fastest", () => {
     const v = review(debt(0.02));
     const w = v.warnings.find((x) => /half the pool/.test(x));
     assert.ok(w, v.warnings.join("\n"));
-    assert.match(w!, /^At 2% each, about half the pool would be gone in about \d+ days?, going by the saved readings/);
+    assert.match(w!, /^At 2% each, about half the pool would be gone in about \d+ days?, going by the catalogue's saved sample/);
     lint(w!);
   });
   test("the backtest counts burns, not readings: 'burned N times, on M readings' beside the share's percentage", () => {

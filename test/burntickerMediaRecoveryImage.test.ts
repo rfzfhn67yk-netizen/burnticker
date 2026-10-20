@@ -138,7 +138,7 @@ describe("224 [VERIFY] two 2 MB images in one pair body fit every host limit", (
     for (const f of ["src/middleware.ts", "proxy.ts", "middleware.ts"]) assert.ok(!fs.existsSync(path.join(ROOT, f)), f);
     if (fs.existsSync(path.join(ROOT, "src/proxy.ts"))) {
       const proxySrc = read("src/proxy.ts");
-      assert.match(proxySrc, /matcher: \["\/:path\(\.\*%\.\*\)"\]/, "the proxy's matcher admits only paths with a %");
+      assert.match(proxySrc, /matcher: \["\/:path\(\.\*%\.\*\)", "\/burnticker\/t\/:ticker"\]/, "the proxy's matcher admits only paths with a % and the coin pages (GET pages, never an upload route)");
       assert.doesNotMatch(proxySrc, /request\.(json|text|formData|arrayBuffer|body)\b/, "the proxy never reads a body");
     }
     assert.doesNotMatch(read("next.config.ts"), /bodySizeLimit|proxyClientMaxBodySize|middlewareClientMaxBodySize/);

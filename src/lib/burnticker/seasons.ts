@@ -17,6 +17,11 @@ export interface SeasonCoinInput {
   burnedPct: number;
   /** The rule end the keeper recorded (registry.ruleEnd), or null while the window reads. */
   ended: boolean;
+  /**
+   * HB-131 (hourly run 11): when the coin launched (registry baselineAt). A one-game coin launches before its game, on a listed game of
+   * the schedule, so this places its game in a league season; absent, the game counts on the current season.
+   */
+  launchedAt?: string | null;
 }
 export interface SeasonRow { rank: number; ticker: string; mint: string; outcome: string; receipts: number; burnedPct: number; lastBurnAt: string | null }
 export interface SeasonBoard {

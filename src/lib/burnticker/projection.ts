@@ -27,7 +27,7 @@ export const projectionShares = (chosen: number | null): number[] => [...new Set
 export interface ProjectionRow { share: number; triggers: number; units: number; spentPct: number }
 export interface Projection { available: boolean; weeks: number | null; from: string | null; to: string | null; rows: ProjectionRow[]; lines: string[]; reason: string | null; drain: string | null }
 
-export { spentFraction, drainLine } from "@/lib/burnticker/drain";
+export { spentFraction, drainLine, heavySpendLine, HEAVY_SPEND_ABOVE } from "@/lib/burnticker/drain";
 
 function withShare(rule: BurnRule, share: number): BurnRule {
   if (rule.kind === "scalar" && rule.scalar) return { ...rule, scalar: { ...rule.scalar, perUnit: { fractionOfPool: share } } };
@@ -84,7 +84,7 @@ export function drainWarning(rule: BurnRule, p: Projection): string | null {
     // continuous audit run 4, HB-37: a rate from fewer than MIN_PROJECTION_DAYS of readings (one day of Federal Register rules) is not a
     // rate, so no half-life is said from it
     if (!(sampleDays >= MIN_PROJECTION_DAYS)) return null;
-    perDay = row.units / sampleDays; basis = `the saved readings from ${p.from} to ${p.to}`;
+    perDay = row.units / sampleDays; basis = `the catalogue's saved sample from ${p.from} to ${p.to}`;
   } else {
     const q = rule.oracle === "catalogue" && rule.series ? parseUsgsSeries(rule.series) : null;
     if (q && !q.region && !rule.inverse) { perDay = quakesPerDay(Number(q.magnitude)); basis = "the U.S. Geological Survey's long-term count of earthquakes worldwide"; }
@@ -96,9 +96,25 @@ export function drainWarning(rule: BurnRule, p: Projection): string | null {
   return `At ${pctLabel(f)} each, about half the pool would be gone ${when}, going by ${basis}, if no new fees come in. A smaller share lasts longer.`;
 }
 
+/**
+ * HB-41 widened (hourly run 14): the review's back-test ran on the feed's frozen catalogue sample and called it "the saved readings", so a
+ * wildfire sample ending 24 August read on 20 October as the site's own record stopping in August. The back-test now names the sample
+ * as the catalogue's, says how far behind today it ends once that is more than SAMPLE_BEHIND_DAYS, and (the Browse fix of febde836)
+ * names the newest reading Burnticker's keeper stored for the same feed when it is newer than the sample.
+ */
+export const SAMPLE_BEHIND_DAYS = 7;
+export function sampleAgeLine(to: string | null, now: number, stored: { at: string; fetchedAt: number } | null = null): string | null {
+  const end = to ? Date.parse(`${to.slice(0, 10)}T00:00:00Z`) : NaN;
+  if (!Number.isFinite(end)) return null;
+  const behind = Math.floor((now - end) / 86_400_000);
+  const newer = stored && Number.isFinite(stored.fetchedAt) && stored.fetchedAt > end + 86_400_000 ? stored : null;
+  if (behind <= SAMPLE_BEHIND_DAYS && !newer) return null;
+  const lead = `The catalogue's sample ends ${behind} ${behind === 1 ? "day" : "days"} before today and is not refreshed, so later readings are not counted here.`;
+  return newer ? `${lead} The newest reading Burnticker has stored from this source is from ${utcDay(newer.at.slice(0, 10))}.` : lead;
+}
 /** HB-76: the one-time rule's back-test lines: the window by its real dates, the qualifying days in it, and at most one burn. */
 export function oneShotBacktestLines(from: string, to: string, qualifyingDays: readonly string[]): string[] {
-  const span = `In the saved readings from ${utcDay(from)} to ${utcDay(to)}`;
+  const span = `In the catalogue's saved sample, with readings from ${utcDay(from)} to ${utcDay(to)}`;
   const n = qualifyingDays.length;
   if (n === 0) return [`${span}, no day qualified, so this one-time rule would not have burned.`];
   return [`${span}, ${n === 1 ? "one day qualified" : `${n} days qualified`}. This rule burns once, so it would have burned one time, on ${utcDay(qualifyingDays[0])}, and then ended.`];
@@ -113,7 +129,7 @@ export function coinvsNoHistoryLine(missing: readonly string[]): string {
   return `Burnticker keeps no daily history of ${names} yet, so there is no back-test for this pair. The first reading is at the first 00:00 UTC after launch.`;
 }
 
-export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?: string, o: { /** HS-48: has Burnticker stored any daily reading of this Pyth feed? (unknown when left out) */ derbyHistory?: (feed: string) => boolean } = {}): Projection {
+export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?: string, o: { /** HS-48: has Burnticker stored any daily reading of this Pyth feed? (unknown when left out) */ derbyHistory?: (feed: string) => boolean; /** HB-41 (hourly run 14): the newest reading the keeper stored for a selector key (registry lastReading) */ storedReading?: (selectorKey: string) => { at: string; fetchedAt: number } | null } = {}): Projection {
   const share = (rule.kind === "scalar" ? rule.scalar?.perUnit : (rule.binary?.onYes ?? rule.binary?.onNo)) as { fractionOfPool?: number } | undefined;
   const f = typeof share?.fractionOfPool === "number" ? share.fractionOfPool : null;
   const unitWord = drainUnitFor(rule);
@@ -128,6 +144,14 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
   if (rule.oracle !== "catalogue" || !rule.series) return none(rule.market ? "This rule settles once, so there is no history to project from." : "There is no saved sample of this source to project from.");
   const feed = feedById(rule.series);
   if (!feed) return none(nativeSourceById(rule.series) ? "Team, game and weather sources are read live, so there is no saved sample to project from." : "There is no saved sample of this source to project from.");
+  // HB-41 widened (hourly run 14): how far behind today the catalogue's sample ends, and the keeper's newer stored reading (sampleAgeLine)
+  const series = rule.series;
+  const ageLines = (to: string | null): string[] => {
+    let stored: { at: string; fetchedAt: number } | null = null;
+    try { stored = o.storedReading?.(`catalogue:${series}`) ?? null; } catch { stored = null; }
+    const l = sampleAgeLine(to, now, stored);
+    return l ? [l] : [];
+  };
   { const q = parseUsgsSeries(rule.series); if (q && (Number(q.magnitude) !== USGS_SAMPLE.magnitude || q.region !== USGS_SAMPLE.region)) return none(`The saved sample counts earthquakes of magnitude ${USGS_SAMPLE.magnitude} or more worldwide, not this rule's, so it is not projected here.`); }
   // HB-76 (hourly run 5): a one-time rule burns at most once, so its back-test counts the qualifying days in the window and says one burn
   // at most, never repeated burns at the per-event shares 1, 2 and 5%
@@ -137,7 +161,7 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
     if (!pv.rows.length) return none("The saved sample of this source has no readings yet.");
     const days = [...new Set(pv.rows.filter((r) => r.mapping && r.units > 0).map((r) => r.at.slice(0, 10)))].sort();
     const from1 = pv.window.from.slice(0, 10), to1 = pv.window.to.slice(0, 10);
-    return { available: true, weeks: null, from: from1, to: to1, rows: [], lines: oneShotBacktestLines(from1, to1, days), reason: null, drain };
+    return { available: true, weeks: null, from: from1, to: to1, rows: [], lines: [...oneShotBacktestLines(from1, to1, days), ...ageLines(to1)], reason: null, drain };
   }
   const rows: ProjectionRow[] = [];
   let from: string | null = null, to: string | null = null;
@@ -153,7 +177,7 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
     rows.push({ share: s, triggers: fired.length, units: fired.reduce((a, r) => a + r.units, 0), spentPct: Math.round(spentFraction(fired.map((r) => r.units), s) * 10_000) / 100 });
   }
   const weeks = from && to ? Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / (7 * 86_400_000))) : null;
-  const span = weeks ? `Over the ${weeks === 1 ? "last week" : `last ${weeks} weeks`} of saved readings (${from} to ${to})` : "Over the saved readings";
+  const span = weeks ? `Over the ${weeks === 1 ? "last week" : `last ${weeks} weeks`} of the catalogue's saved sample (${from} to ${to})` : "Over the catalogue's saved sample";
   const t = rows[0]?.triggers ?? 0, u = rows[0]?.units ?? 0;
   // sources-7 M4: the count is of burns (units), with the readings they came on; "triggered 15 times" beside "99% spent at 1%" read wrong
   const lines = [
@@ -162,6 +186,8 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
     ...(() => { const l = offSeasonBacktestLine(rule, burnDays); return l ? [l] : []; })(),
     ...rows.map((r) => `At ${pctLabel(r.share)}${f !== null && Math.abs(r.share - f) < 1e-9 ? ", the share you chose" : ""}: ${pct(r.spentPct / 100)} of the pool spent.`),
     "This holds the pool fixed apart from the rule's own spending, with no new fees and no per-run cap, so it shows how fast the rule drains a pool, not what a coin ends up holding.",
+    ...ageLines(to),
   ];
   return { available: true, weeks, from, to, rows, lines, reason: null, drain };
 }
+

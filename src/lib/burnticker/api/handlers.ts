@@ -92,7 +92,7 @@ import { launchGuardRefusal, tickerTakenRefusal } from "@/lib/burnticker/launchG
 import { CREATE_SEND_PENDING_MS, LAUNCH_PENDING_CODE, createdOnChainBy, launchPendingRefusal, launchPendingSentence, ownLiveTickerSentence, verifySentCreate } from "@/lib/burnticker/launchPending";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 import { isSingleOfficialSource, singleSourceSentence } from "@/lib/burnticker/singleSource";
-import { catalogueSettleRefusal } from "@/lib/burnticker/coverage/settleable";
+import { feedOfferRefusal } from "@/lib/burnticker/coverage/settleable";
 
 /**
  * THE BURNTICKER ROUTES' SHARED LOGIC (2026-10-09). The wizard's routes (/api/burnticker/{catalogue,oracle/*,launch}) and the public
@@ -245,7 +245,9 @@ export async function search(p: Platform, q: { q?: string | null; closingSoon?: 
   // website-14 (product idea 6): a card whose rule's canonical selector is already registered names those coins (duplicateRule.ts)
   let tokens: Parameters<typeof existingCoinsFor>[1] = [];
   try { tokens = p.registry.tokens(); } catch { tokens = []; }
-  const withExisting = cards.map((c) => { const rule = (c as { rule?: unknown }).rule; const existing = rule ? existingCoinsFor(rule, tokens) : []; return existing.length ? { ...c, existing } : c; });
+  // HB-134 (hourly run 11): a source card whose source cannot launch says so here, as its Browse card does, before "Use this"
+  const offered = cards.map((c) => { const why = c.venue === "feed" && c.pick?.oracle === "catalogue" ? feedOfferRefusal(c.pick.series) : null; return why ? { ...c, unavailable: why } : c; });
+  const withExisting = offered.map((c) => { const rule = (c as { rule?: unknown }).rule; const existing = rule ? existingCoinsFor(rule, tokens) : []; return existing.length ? { ...c, existing } : c; });
   // ChatGPT audit 7 item 2: a pasted mint that is on the Not Burnticker list answers "known lookalike", never "no coin matches"
   const lookalike = knownLookalike(p, q.q ?? "");
   const answer = ok({ ...r, ...(lookalike ? { empty: false, lookalike } : {}), cards: withExisting, venues, categories, note: "These are ready-made rules. No prices, odds, volume or liquidity are returned." });
@@ -473,9 +475,9 @@ export async function browse(p: Platform, q: { category?: string | null; q?: str
   // at the review)
   const cards = categoryCards(c, { feeds, polymarket, kalshi }, { q: q.q ?? null, feedsOnly }).map((card) => {
     if (card.venue !== "feed" || !card.launchable.ok || card.pick.oracle !== "catalogue" || !card.pick.series) return card;
-    let refusal: ReturnType<typeof catalogueSettleRefusal> = null;
-    try { refusal = catalogueSettleRefusal(card.pick.series); } catch { refusal = null; }
-    return refusal ? { ...card, launchable: { ok: false, why: refusal.message } } : card;
+    // HB-134: the one availability read the search card and the templates gallery use too
+    const why = feedOfferRefusal(card.pick.series);
+    return why ? { ...card, launchable: { ok: false, why } } : card;
   });
   return ok({ category: { id: c.id, label: c.label, blurb: c.blurb }, venues, cards, counts: { feeds: cards.filter((x) => x.venue === "feed").length, polymarket: cards.filter((x) => x.venue === "polymarket").length, kalshi: cards.filter((x) => x.venue === "kalshi").length }, errors, note: venues.kalshi ? "Our own feeds come first. Prediction markets come after them." : "Our own feeds come first. Kalshi is not turned on for this site." });
 }

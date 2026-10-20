@@ -2,7 +2,7 @@ import { isSingleSourceSeries } from "@/lib/burnticker/singleSource";
 import { sosLinkLabel } from "@/lib/burnticker/sosLabel";
 
 import { gameCardCopy } from "@/lib/burnticker/pairForms";
-import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { NEXT_EVENT_ONE_SHOT_RE, isOneShotSeries } from "@/lib/burnticker/inverse";
 import fs from "node:fs";
 import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
@@ -26,6 +26,7 @@ import { describeRule, tickerFrom, titleSuggest, type CoinText, type DescribeCtx
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { DEFAULT_SHARE, pctLabel, shareOf } from "@/lib/burnticker/launchPresets";
 import { scheduleProblem, SPORTS_CHIP } from "@/lib/burnticker/sources/provenance";
+import { visitorTime } from "@/lib/burnticker/visitorTime";
 import { asksWomen, compoundOf, compoundSentence, isWomenLeague, milestoneOf, milestoneSentence, regularSeasonOnly, REGULAR_SEASON_SENTENCE, womenSentence, type Compound } from "@/lib/burnticker/teamQuery";
 import { fitName } from "@/lib/burnticker/launchFields";
 import { recordCloseCardText, recordCloseHref, recordCloseIntent } from "@/lib/burnticker/recordCloseSearch";
@@ -103,6 +104,8 @@ export interface Suggestion {
   partial?: boolean;
   /** An event card (polySearch.ts): pick one of the event's named outcomes, then the normal dials. No numbers. */
   picker?: { slug: string; title: string; noun: string; outcomes: PickerOutcome[] } | null;
+  /** HB-134 (hourly run 11): the source cannot launch yet (coverage/settleable.ts feedOfferRefusal, the Browse card's own check): the reason; the card says "Not offered yet." and offers no "Use this" */
+  unavailable?: string | null;
   href: string | null; suggestedName: string | null; suggestedTicker: string | null; refused: string[]; score: number;
 }
 export interface WindowOption { kind: WindowKind; label: string; title: string; rule: BurnRule; text: CoinText; endText: string }
@@ -204,7 +207,7 @@ function recurringCard(t: EspnTeam, games: readonly Game[], outcome: "win" | "lo
     settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league], nextAt: w.next?.startsAt ?? null, settleAt: w.next?.startsAt ?? null, endAt: w.endsAt, endText: def.endText,
     howSettles: src.unit.definition, rule: def.rule, pick: { oracle: "catalogue", series, market: null, title: src.title }, source: { unit: src.unit, baseline: 0, direction: "up" },
     text: def.text, descCtx, badge: def.text.badge, windows, seasonYear: w.year, suggestedName: def.text.name, suggestedTicker: def.text.ticker, score: 3,
-    interpreted: `This reads every ${LEAGUES[t.league].sport === "soccer" ? "match" : "game"} ${teamRef(t)} ${outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose"} in ${phrase0}. Game times are shown in Denver time. ${def.kind === "perpetual" ? "The coin has no end date and does not retire." : `The coin ${def.endText.replace(/, then the rest/, ". Then the rest").replace(/, then /, ". Then it ")}.`}`,
+    interpreted: `This reads every ${LEAGUES[t.league].sport === "soccer" ? "match" : "game"} ${teamRef(t)} ${outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose"} in ${phrase0}. ${def.kind === "perpetual" ? "The coin has no end date and does not retire." : `The coin ${def.endText.replace(/, then the rest/, ". Then the rest").replace(/, then /, ". Then it ")}.`}`,
   };
 }
 
@@ -280,7 +283,6 @@ function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Sugges
 
 /** Denver calendar day of an instant (the page shows times in Denver). */
 const denverDay = (ms: number): string => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
-const denverTime = (iso: string): string => new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 /** L04: a query that names one game day ("tonight", "today", "tomorrow"), or null. */
 export function queryDay(q: string): "today" | "tomorrow" | null {
   return /\b(tonight|today|this evening|this afternoon)\b/i.test(q) ? "today" : /\b(tomorrow|tmrw)\b/i.test(q) ? "tomorrow" : null;
@@ -298,7 +300,7 @@ function oneGameCard(t: EspnTeam, g: Game, outcome: "win" | "loss" | "draw"): Su
   const oppName = opp.nickname || opp.name, oppRef = LEAGUES[t.league].sport === "soccer" || t.league === "cfb" || t.league === "mcbb" || t.league === "wcbb" ? oppName : `the ${oppName}`;
   return {
     ...base, id: `game:${series}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "one-shot",
-    title: `Burns ${pctLabel(share)} once if ${teamRef(t)} ${outcome === "win" ? "beat" : outcome === "draw" ? "draw with" : "lose to"} ${oppRef} on ${denverTime(g.startsAt)} Denver time`,
+    title: `Burns ${pctLabel(share)} once if ${teamRef(t)} ${outcome === "win" ? "beat" : outcome === "draw" ? "draw with" : "lose to"} ${oppRef} on ${visitorTime(g.startsAt, "server")}`,
     subtitle: `${g.name}, this game only`, settlement: GAME_SETTLEMENT_WORDS, crossRead: GAME_CROSS_WORDS, nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game",
     howSettles: outcome === "draw" ? `This coin covers one game, ${g.name}. It burns only on a draw.` : `This coin covers one game, ${g.name}. A ${LEAGUES[t.league].draws ? "draw" : "tie"} burns nothing.`, rule, pick: { oracle: "catalogue", series, market: null, title: `${t.name} ${verb} — ${g.name} (resolves once)` },
     source: { unit: { size: 1, label: "the game", definition: "one burn if the result is the one the rule names" }, baseline: 0, direction: "up" },
@@ -317,12 +319,12 @@ export const outcomeOf = (q: string, league: LeagueId): "win" | "loss" | "draw" 
  */
 function labelTeamIntent(cards: Suggestion[], q: string, t: EspnTeam, o: { compound: Compound | null; women: boolean }): void {
   const all: string[] = [], perResult: string[] = [];
-  if (o.compound) all.push(compoundSentence(o.compound));
+  // HS-59 (hourly run 15): the compound sentence is the search's own `partialNote`, said once above the cards; each card is still marked partial
   if (o.women && !isWomenLeague(t.league)) all.push(womenSentence(t.name));
   const n = milestoneOf(q);
   if (n !== null) perResult.push(milestoneSentence(n, outcomeOf(q, t.league)));
   if (regularSeasonOnly(q) && !noPlayoffs(t.league)) perResult.push(REGULAR_SEASON_SENTENCE);
-  if (!all.length && !perResult.length) return;
+  if (!all.length && !perResult.length && !o.compound) return;
   for (const c of cards) {
     c.alternative = true;
     if (o.compound) c.partial = true;
@@ -399,7 +401,8 @@ function refusedNouns(i: WeatherIntent): string[] {
 function weatherPlanCard(p: Extract<WeatherPlan, { ok: true }>, alternative: boolean): Suggestion | null {
   const s = p.intent.station, series = p.series, src = nativeSourceById(series);
   if (!src) return null;
-  const share = DEFAULT_SHARE.recurring;
+  // HB-147 (hourly run 13): the first snow is a one-shot (inverse.ts isOneShotSeries), so its card opens at the one-shot share
+  const share = isOneShotSeries(series) ? DEFAULT_SHARE.oneShot : DEFAULT_SHARE.recurring;
   const rule = (p.inverse ? { ...nativeRule(series, { fractionOfPool: share }), inverse: true } : nativeRule(series, { fractionOfPool: share })) as BurnRule;
   const text = describeRule(rule, { ticker: "" });
   const freq = weatherFrequency(series, !!p.inverse);   // QA pass 9 #16
@@ -534,13 +537,14 @@ export const closingSoonCard = (c: Pick<Suggestion, "venue" | "shape" | "endAt" 
   const at = c.endAt ?? c.settleAt;
   return c.venue === "polymarket" && c.shape === "one-shot" && !!at && Number.isFinite(Date.parse(at)) && Date.parse(at) - nowMs < CLOSING_SOON_HOURS * 3_600_000;
 };
-export async function universalSearch(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[]; hiddenClosingSoon: number }> {
+export async function universalSearch(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[]; hiddenClosingSoon: number; partialNote?: string }> {
   const r = await searchAll(q, d);
   if (d.closingSoon) return { ...r, hiddenClosingSoon: 0 };
   const cards = r.cards.filter((c) => !closingSoonCard(c, d.nowMs));
   return { ...r, cards, empty: r.empty || cards.length === 0, hiddenClosingSoon: r.cards.length - cards.length };
 }
-async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[] }> {
+const COMPOUND_QUERY_MAX = 400;
+async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[]; partialNote?: string }> {
   const query = q.trim().slice(0, 160);
   // no meaningful token (every token one or two letters: "e", "el", "el s") → nothing, never a partial match
   if (query.length < 3 || !meaningful(queryTokens(query)).length) return { query, cards: [], empty: true, errors: [] };
@@ -564,7 +568,10 @@ async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; car
   }
   // intent audit items 6 and 9: the cards follow the first clause that names a team, and a women's query prefers a women's league team
   const namedIn = (s: string) => findTeams(s).filter((t) => namesTeam(s, t) && nameMatch(s, [t.name, t.nickname, ...t.alt]).nameHits > 0);
-  const compound = compoundOf(query, findTeams(query), (s) => namedIn(s).length > 0);
+  // HS-59 (hourly run 15): the clauses come from the whole sentence (bounded), so a left-out clause is quoted whole, never cut at the
+  // search's 160 characters ("finish above five hundred", not "finish above five")
+  const whole = q.trim().replace(/\s+/g, " ").slice(0, COMPOUND_QUERY_MAX);
+  const compound = compoundOf(whole, findTeams(whole), (s) => namedIn(s).length > 0);
   const focus = compound ? compound.kept : query;
   const women = asksWomen(focus);
   const named = namedIn(focus);
@@ -576,7 +583,8 @@ async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; car
     // a team is named: exactly the team's shapes (recurring, one-shot championship, the next game when both sides are known)
     const tc = await teamIntentCards(focus, team, d);
     labelTeamIntent(tc, focus, team, { compound, women });
-    return scrubMarketData({ query, cards: withBadges(tc.sort((a, b) => b.score - a.score)).map((c) => ({ ...c, group: groupOf(c) })), empty: false, errors });
+    // HS-59: the partial-condition note is said once, above the cards (the page shows `partialNote`), never under each card
+    return scrubMarketData({ query, cards: withBadges(tc.sort((a, b) => b.score - a.score)).map((c) => ({ ...c, group: groupOf(c) })), empty: false, errors, ...(compound ? { partialNote: compoundSentence(compound) } : {}) });
   }
   cards.push(...feedCards(query, d.feeds));   // a weather query returned above (weatherCards)
   if (d.venues.polymarket && d.polyGet) {

@@ -101,9 +101,16 @@ export function dayText(iso: string, z: ClockZone): string | null {
 export function timeText(iso: string, z: ClockZone): string | null {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
-  const near = Math.abs(t - z.now) < 7 * 86_400_000;
-  const s = parts(iso, z, near ? { weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short" } : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
-  return s ? s.replace(/^([A-Z][a-z]{2}),/, "$1").replace(/[\u202f\u00a0]/g, " ").replace(/\b(AM|PM)\b/, (m) => m.toLowerCase()) : null;
+  // HS-54 (hourly run 12): "Mon 11:01 am MDT" six days out read as yesterday morning. Today, tomorrow and yesterday say so; any other day
+  // carries its date ("Mon Oct 26, 11:01 am MDT")
+  const key = (ms: number) => parts(new Date(ms).toISOString(), z, { year: "numeric", month: "2-digit", day: "2-digit" });
+  const dayNo = (k: string | null) => { const m = k ? /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(k) : null; return m ? Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2])) / 86_400_000 : null; };
+  const a = dayNo(key(t)), b = dayNo(key(z.now)), diff = a !== null && b !== null ? a - b : null;
+  const clean = (s: string | null) => (s ? s.replace(/^([A-Z][a-z]{2}),/, "$1").replace(/[\u202f\u00a0]/g, " ").replace(/\b(AM|PM)\b/, (m) => m.toLowerCase()) : null);
+  const clock = clean(parts(iso, z, { hour: "numeric", minute: "2-digit", timeZoneName: "short" }));
+  if (clock && (diff === 0 || diff === 1 || diff === -1)) return `${diff === 0 ? "today" : diff === 1 ? "tomorrow" : "yesterday"} ${clock}`;
+  const date = clean(parts(iso, z, { weekday: "short", month: "short", day: "numeric" }));
+  return date && clock ? `${date}, ${clock}` : null;
 }
 
 // ---- the result line of a decided coin ----
@@ -175,6 +182,16 @@ export function browserStorage(): StorageLike {
 
 /** HS-41: the Pairs tab says "no burn yet" where a side has never burned, instead of a dash. */
 export const PAIR_NO_BURN_YET = "no burn yet";
+/**
+ * HS-41 widened (hourly run 14): "$SEAWIN 0 : 0 $DENWIN" read as a game score on a decided game. The burn count shows only once a side has
+ * burned, labelled as burns ("2 : 0 burns"); until then the row says "vs" between the tickers.
+ */
+export const PAIR_VS = "vs";
+export function pairBurnScore(aBurns: number | null | undefined, bBurns: number | null | undefined): { text: string; label: string } | null {
+  const a = Number.isFinite(aBurns) ? Math.max(0, Math.floor(aBurns as number)) : 0, b = Number.isFinite(bBurns) ? Math.max(0, Math.floor(bBurns as number)) : 0;
+  if (a + b === 0) return null;
+  return { text: `${a} : ${b}`, label: `Burns so far: ${a} to ${b}` };
+}
 /**
  * HS-41: a decided pair's one line under its row, from the two sides' own result lines (the same words the New tab's cards say):
  * "$DENWIN won on Oct 16; $SEAWIN lost. Burn after graduation." Null while neither side is decided.

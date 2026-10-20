@@ -34,7 +34,7 @@ describe("intent audit 2 item 2 (list item 13): a one-time event that already ha
     const s = catalogueSources(NOW).sources.find((x) => x.id === STARSHIP) as Record<string, unknown> & { launchable: { ok: boolean; why: string }; subject: { name: string } };
     assert.equal(s.launchable.ok, false);
     assert.ok(s.launchable.why.startsWith(ALREADY_DECIDED_SENTENCE), s.launchable.why);
-    assert.match(s.launchable.why, /Starship \| Starlink Group 31-1 \(Starship Flight 14\), by SpaceX\. Status: Launch Successful\. Launch time Sep 28, 2026, 12:48 PM UTC \(Sep 28, 6:48 AM Denver time\)\. Launch Library 2 id 7d1afb26-6f9c-429b-9ccf-29012fd1e519\./);
+    assert.match(s.launchable.why, /Starship \| Starlink Group 31-1 \(Starship Flight 14\), by SpaceX\. Status: Launch Successful\. Launch time Sep 28, 2026, 12:48 PM UTC\. Launch Library 2 id 7d1afb26-6f9c-429b-9ccf-29012fd1e519\./);
     assert.equal(s.title, "Starship | Starlink Group 31-1 (Starship Flight 14) succeeds (Launch Library 2)");
     assert.equal(s.sourceUrl, "https://ll.thespacedevs.com/2.3.0/launches/7d1afb26-6f9c-429b-9ccf-29012fd1e519/");
     lint(s.launchable.why);
@@ -203,11 +203,11 @@ describe("intent audit 4 items 19 and 20: parameterized sources keep their subje
 
 describe("one game already played is decided (espn.game: a one-game coin and each Matchup side)", () => {
   const FINAL = { eventId: "849838", name: "Tampa Bay Rays at New York Yankees", startsAt: "2026-10-08T00:00:00Z", completed: true, state: "post", detail: "Final" };
-  test("the shared sentence and the game's line; an upcoming or postponed game shows its status and start time in UTC and Denver", () => {
+  test("the shared sentence and the game's line; an upcoming or postponed game shows its status and start time in UTC (HS-11 widened, hourly run 15)", () => {
     const e = gameEligibility(FINAL);
     assert.equal(e.decided, true);
-    assert.equal(e.reason, `${ALREADY_DECIDED_SENTENCE} Tampa Bay Rays at New York Yankees. Status: Final. Start time Oct 8, 2026, 12:00 AM UTC (Oct 7, 6:00 PM Denver time). Game id 849838.`);
-    assert.equal(gameEligibility({ ...FINAL, completed: false, state: "pre", detail: "Thu, Oct 8th at 8:00 PM EDT" }).line, "Tampa Bay Rays at New York Yankees. Status: Scheduled. Start time Oct 8, 2026, 12:00 AM UTC (Oct 7, 6:00 PM Denver time). Game id 849838.");
+    assert.equal(e.reason, `${ALREADY_DECIDED_SENTENCE} Tampa Bay Rays at New York Yankees. Status: Final. Start time Oct 8, 2026, 12:00 AM UTC. Game id 849838.`);
+    assert.equal(gameEligibility({ ...FINAL, completed: false, state: "pre", detail: "Thu, Oct 8th at 8:00 PM EDT" }).line, "Tampa Bay Rays at New York Yankees. Status: Scheduled. Start time Oct 8, 2026, 12:00 AM UTC. Game id 849838.");
     assert.match(gameEligibility({ ...FINAL, completed: false, state: "post", detail: "Postponed" }).line, /Status: Postponed\./);
     assert.equal(gameEligibility({ ...FINAL, completed: false, state: "post", detail: "Postponed" }).decided, false);
     lint(e.reason!);

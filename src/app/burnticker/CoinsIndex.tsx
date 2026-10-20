@@ -16,11 +16,11 @@ import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
 import { CARD_MEANINGS, cardViewFromIndex, featuredHeading, featuredLine, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
 import { pairCardTitle } from "@/lib/burnticker/coinPage";
-import { FIRST_PARTY_CARD_IDS, GRID_TABS, cardMatches, firstPartyCards, gridState, liveCoinsTotal, searchKey, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
+import { FIRST_PARTY_CARD_IDS, GRID_TABS, NO_DATE_YET, cardMatches, firstPartyCards, gridState, liveCoinsTotal, searchKey, settleDateOf, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
 import { sharedTickers } from "@/lib/burnticker/coinKey";
 import { rereadDue } from "@/lib/burnticker/rereadCache";
-import { LIST_COPY, PAIR_NO_BURN_YET, browserStorage, collapsedLine, groupCoins, pairDecidedRowLine, readOpenOnly, withListLines, writeOpenOnly } from "@/lib/burnticker/coinsList";
+import { LIST_COPY, PAIR_NO_BURN_YET, PAIR_VS, browserStorage, collapsedLine, groupCoins, pairBurnScore, pairDecidedRowLine, readOpenOnly, withListLines, writeOpenOnly } from "@/lib/burnticker/coinsList";
 
 /**
  * THE COINS PAGE (/burnticker; list-first since 2026-10-12: Claude site audit 2 item 5, ChatGPT audit 6 A5 and A10, Codex review 5
@@ -131,7 +131,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   // owner 2026-10-19 (coinsList.ts): open coins first (the tab's own order, earned slots leading), then the decided coins under their
   // dividers, then one collapsed line for the retired and void coins. Settled coins are never hidden unless the visitor picks "Open only".
   const groups = groupCoins(coins, openOnly);
-  const toCards = (list: typeof coins): CardView[] => list.map((t) => { const v = withListLines(cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet), t.listing, { now }); const k = v.group === "public" ? slotIndex(t) : -1; return { v: k >= 0 ? { ...v, tags: [{ label: slots[k].label, tone: "featured" as const }, ...v.tags] } : v, k: k < 0 ? slots.length : k }; })
+  const toCards = (list: typeof coins): CardView[] => list.map((t) => { const v0 = withListLines(cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet), t.listing, { now }), v = tab === "next" && v0.nextLine && !settleDateOf(t) ? { ...v0, nextLine: `${NO_DATE_YET} ${v0.nextLine}` } : v0; /* HB-133: an undated coin says so on Next to settle */ const k = v.group === "public" ? slotIndex(t) : -1; return { v: k >= 0 ? { ...v, tags: [{ label: slots[k].label, tone: "featured" as const }, ...v.tags] } : v, k: k < 0 || tab === "next" ? slots.length : k }; })
     .sort((a, b) => a.k - b.k).map((x) => x.v);
   const cards: CardView[] = toCards(groups.open);
   const waitingCards = toCards(groups.decidedWaiting), endedCards = toCards(groups.decidedEnded), closedCards = toCards(groups.closed);
@@ -187,11 +187,12 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
                     <div className="text-xs text-neutral-500 truncate">{pairCardTitle(p.seriesTitle, p.a.ticker, p.b.ticker)}</div>
                     <div className="mt-1 flex items-center justify-between gap-2 font-mono">
                       <span className="text-lg font-semibold">${p.a.ticker}</span>
-                      <span className="text-2xl tabular-nums">{p.a.burns} <span className="text-neutral-500">:</span> {p.b.burns}</span>
+                      {/* HS-41 widened (hourly run 14): the burn count only once a side has burned, labelled as burns; "vs" until then */}
+                      {(() => { const sc = pairBurnScore(p.a.burns, p.b.burns); return sc ? <span className="text-2xl tabular-nums" aria-label={sc.label} data-pair-score>{sc.text}</span> : <span className="text-sm text-neutral-500" data-pair-vs>{PAIR_VS}</span>; })()}
                       <span className="text-lg font-semibold">${p.b.ticker}</span>
                     </div>
                     {/* HS-41 (hourly run 7): words, not dashes, and the decided line under a decided pair (coinsList.ts) */}
-                    <div className="mt-1 flex justify-between text-[11px] text-neutral-500"><span>{p.a.lastBurnAt ? `last burn ${ago(p.a.lastBurnAt, now)}` : PAIR_NO_BURN_YET}</span><span>burns</span><span>{p.b.lastBurnAt ? `last burn ${ago(p.b.lastBurnAt, now)}` : PAIR_NO_BURN_YET}</span></div>
+                    <div className="mt-1 flex justify-between text-[11px] text-neutral-500"><span>{p.a.lastBurnAt ? `last burn ${ago(p.a.lastBurnAt, now)}` : PAIR_NO_BURN_YET}</span>{pairBurnScore(p.a.burns, p.b.burns) && <span>burns</span>}<span>{p.b.lastBurnAt ? `last burn ${ago(p.b.lastBurnAt, now)}` : PAIR_NO_BURN_YET}</span></div>
                     {(() => { const d = pairDecidedRowLine({ ticker: p.a.ticker, listing: sideListing(p.a) }, { ticker: p.b.ticker, listing: sideListing(p.b) }, { now }); return d ? <p className="mt-1 text-xs text-neutral-300" data-pair-decided>{d}</p> : null; })()}
                   </Link>
                 ))}

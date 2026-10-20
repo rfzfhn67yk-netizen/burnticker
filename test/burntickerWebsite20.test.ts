@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
+import { FLIP_REST_LINE } from "@/lib/burnticker/derby/spec";
 import { tileHashInput, tileRule } from "@/lib/burnticker/derby/tile";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import type { BurnRule } from "@/lib/burnticker/rules";
@@ -25,7 +26,7 @@ describe("item 54: the flippening's cards name the event in words, both sides at
       const la = ruleOneLiner(a), lb = ruleOneLiner(b);
       for (const l of [la, lb]) { assert.doesNotMatch(l, /coinvs:|mcap-flip|[0-9a-f]{10}/, l); clean(l); }
       assert.match(la, /SOL's market cap passes ETH's/); assert.match(lb, /SOL's market cap never passes ETH's/);
-      if (fraction === 1) { assert.match(la, /^burns everything if /); assert.match(la, /after the run ends/); }
+      if (fraction === 1) { assert.match(la, /^burns everything if /); assert.ok(la.endsWith(FLIP_REST_LINE), la); }   // HB-78 reopened (hourly run 15): the pair's one end
     });
   }
 });
