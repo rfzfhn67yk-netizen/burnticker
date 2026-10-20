@@ -1,6 +1,6 @@
 "use client";
 
-import { PAIR_CHECK_TIMEOUT_MS, PAST_BURNS_HEADING, pastBurnsLines } from "@/lib/burnticker/guidedLaunch";
+import { PAIR_CHECK_TIMEOUT_MS, PAST_BURNS_HEADING, coinVsCardWords, pairUpfrontLines, pastBurnsLines, upfrontLines } from "@/lib/burnticker/guidedLaunch";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -27,7 +27,7 @@ import { derbyExplainer } from "@/lib/burnticker/launchDerby";
 import { PreWalletSummary } from "./PreWalletSummary";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { DEFAULT_RAISE_SOL, DEFAULT_SHARE, LINKED_ONE_SHOT_LINE, linkedShareMigratedNotice, RAISE_PRESETS_SOL, SHARE_PRESETS, type RaisePreset } from "@/lib/burnticker/launchPresets";
-import { asLinkedPairSide, coinvsEndsLine, derbyShareLine, endSentences, pairIdentityProblems, patternOptions, PATTERNS, IMAGE_NOT_KEPT, FACT_LABELS, GUIDED_STEPS, IMAGE_RIGHTS_REQUIRED, PAIR_COST_EXCLUSIONS, budgetCopy, costLine, shareExample, shareOfBudgetLine, triggerText, whichCoinLine, whichHeading, pairDiagramLabel, recordCloseAvailability } from "@/lib/burnticker/guidedLaunch";
+import { asLinkedPairSide, coinvsEndsLine, derbyShareLine, endSentences, pairIdentityProblems, patternOptions, IMAGE_NOT_KEPT, FACT_LABELS, GUIDED_STEPS, IMAGE_RIGHTS_REQUIRED, PAIR_COST_EXCLUSIONS, budgetCopy, costLine, shareExample, shareOfBudgetLine, triggerText, whichCoinLine, whichHeading, pairDiagramLabel, recordCloseAvailability } from "@/lib/burnticker/guidedLaunch";
 import { PatternStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import { createLatest } from "@/lib/burnticker/latestOnly";
@@ -287,6 +287,7 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
       {!out && <ReviewCard mode="review"
         signs={shown.review?.transactions.count ? walletPromptCount({ transactions: shown.review.transactions.count, proof: !wallet.connected || !!wallet.signMessage }) : null} signsProof={!wallet.connected || !!wallet.signMessage}
         edgeNotes={COINVS_EDGE_IDS.single.map((i) => edgeCase(i)).filter((x): x is string => !!x)}
+        upfront={upfrontLines(RAISE_PRESETS_SOL)}
         facts={[
           { label: FACT_LABELS.trigger, value: triggerText({ lead: text.lead, fallback: text.oneLiner }), edit: () => onPhase?.("which") },
           { label: FACT_LABELS.coin, value: whichCoinLine(names.ticker.toUpperCase() || "TICKER", null), edit: () => onPhase?.("name") },
@@ -302,7 +303,7 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
         problems={reviewCurrent ? (shown.review?.problems ?? []).filter((x) => !isLintLine(x) && !serverH.some((f) => f.text === x)) : []} error={err} busy={busy} ready={ready} creator={creator || null} onLaunch={() => { void launch(); }}
         cost={shown.review && reviewCurrent ? `The estimated cost is about ${shown.review.costs.totalSol} SOL.` : null} venue="single"
         mintSearch={<MintAddressBlock pool={mintPool} />}
-        summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
+        summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} proof={!wallet.connected || !!wallet.signMessage} />}
         blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
       {out && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${out.ticker}`} coinHref={coinCanonicalHref} onStartOver={() => { setOut(null); setErr(null); setNow(Date.now()); }} />}
     </>);
@@ -548,7 +549,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
     </div>
   ) : tileButton;
   // website-22 (QA 9 item 38, audit 10 item 13): the progress strip's answers for the steps the tile walks
-  useEffect(() => { if (kind === "pair") onAnswers?.({ which: a && b ? `${a.symbol} vs ${b.symbol}` : null, burn: flip ? "once, the flippening" : PATTERNS.winner.label.toLowerCase(), name: names.ta ? `$${names.ta.toUpperCase()} and $${names.tb.toUpperCase()}` : null }); }, [kind, a?.symbol, b?.symbol, flip, names.ta, names.tb]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (kind === "pair") onAnswers?.({ which: a && b ? `${a.symbol} vs ${b.symbol}` : null, burn: flip ? "once, the flippening" : "every day, the daily race", name: names.ta ? `$${names.ta.toUpperCase()} and $${names.tb.toUpperCase()}` : null }); }, [kind, a?.symbol, b?.symbol, flip, names.ta, names.tb]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!open || unavailable) return tile;
   const recordAvail = recordKeyed === null ? null : recordCloseAvailability({ keyed: recordKeyed });
   const kindChoice = (
@@ -631,7 +632,9 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
       </section>
     );
     if (phase === "burn") {
-      const options = po.options.map((o) => (o.id === "once" ? { ...o, label: "Once: the flippening", sentence: `Read once a day at 00:00 UTC for ${seasonDays} days. The first day A's market cap passes B's, coin A's rule fires once. If that day never comes, coin B's rule fires once at the end of the run.` } : o.id === "winner" ? { ...o, label: PATTERNS.winner.label, sentence: `Read once a day at 00:00 UTC for ${seasonDays} days. Each day, the coin whose reference gained more fires its rule, and the other coin's share for that day moves to its burn pool.` } : o));
+      // HS-40 (hourly run 7): the two cards named by cadence, in the pair sentence's words, with the race's own daily share
+      const cards = coinVsCardWords(shares.daily, seasonDays);
+      const options = po.options.map((o) => (o.id === "once" ? { ...o, ...cards.once } : o.id === "winner" ? { ...o, ...cards.race } : o));
       // website-26 (WIRING-FEATURES item 14): the run length beside the share presets
       const runRow = (
         <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="How long it runs" data-run-presets>
@@ -665,6 +668,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
         {!out && !pcOut && <ReviewCard mode="review"
           signs={shown.review?.transactions.count ? walletPromptCount({ transactions: shown.review.transactions.count, proof: !wallet.connected || !!wallet.signMessage }) : null} signsProof={!wallet.connected || !!wallet.signMessage}
           edgeNotes={((model.rule.derby as { flip?: boolean } | undefined)?.flip ? COINVS_EDGE_IDS.flip : COINVS_EDGE_IDS.race).map((i) => edgeCase(i)).filter((x): x is string => !!x)}
+          upfront={pairUpfrontLines(reviewVenue, RAISE_PRESETS_SOL, shown.review?.prerequisiteLine ?? null)}
           facts={[
             { label: FACT_LABELS.trigger, value: triggerText({ pair: { a: TA, b: TB, oneA: ruleOneLiner(model.rule), oneB: ruleB ? ruleOneLiner(ruleB) : "" }, fallback: sentence! }), edit: () => onPhase?.("which") },
             { label: FACT_LABELS.coin, value: whichCoinLine(TA, TB, true), edit: () => onPhase?.("name") },
@@ -686,7 +690,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
           /* website-25 (QA 11 H4): the server's two-coin estimate for the venue it reviewed, said with that venue and the server's own note */
           mintSearch={<MintAddressBlock pool={mintPool} />}
           cost={shown.review && reviewCurrent ? pairCostSentence(shown.review.costs.totalSol, shown.review.venue) : null} costNote={shown.review?.venue === "pair-curve" ? shown.review.costs.note : PAIR_COST_EXCLUSIONS}
-          summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
+          summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} proof={!wallet.connected || !!wallet.signMessage} />}
           blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
         {!out && !pcOut && <details className="text-xs text-neutral-300" data-projection data-past-burns><summary className="cursor-pointer">{PAST_BURNS_HEADING}</summary>{pastBurnsLines({ loading: shown.loading || !!(pairCheck?.busy && pairCheck.key === pairCheckKey), error: shown.error, projection: reviewCurrent ? (shown.review as (LaunchReview & { projection?: { available: boolean; lines: string[]; reason: string | null } | null }) | null)?.projection : null }).map((x) => <p key={x} className="mt-1" role="status">{x}</p>)}</details>}
         {!out && !pcOut && <details className="text-xs text-neutral-300"><summary className="cursor-pointer">What this creates, in full</summary><ul className="mt-1 min-w-0 list-disc space-y-0.5 break-words pl-5" aria-label="What this creates" data-derby-facts><li>{realList.length ? `${model.spec.a.symbol} and ${model.spec.b.symbol} are reference feeds. ${realReadSentence({ a: model.spec.a.symbol, b: model.spec.b.symbol }, realList)}` : x.references}</li><li>{x.created}</li><li>{x.window}</li><li>{x.start}</li><li>{x.end}</li><li>{x.tie}</li><li>{x.missing}</li>{flip && <li>{edgeCase(66)}</li>}{flip && <li>{edgeCase(70)}</li>}<li>{edgeCase(72)}</li><li>{edgeCase(62)}</li>{realList.map((r) => <li key={r.ticker} data-burn-real-fact>${r.ticker}: {targetActionSentence(r.symbol)}</li>)}</ul></details>}

@@ -115,7 +115,8 @@ describe("audit 10 items 6 and 7: warnings name the coins on screen; the trigger
     assert.equal(triggerText({ pair: { a: "PHIVBOS", b: "BOSVPHI", oneA: "burns when the 76ers beat the Celtics.", oneB: "burns when the Celtics beat the 76ers" }, fallback: "x" }), "$PHIVBOS burns when the 76ers beat the Celtics, and $BOSVPHI burns when the Celtics beat the 76ers.");
     assert.equal(triggerText({ oneShot: "This coin burns its whole pool once.", lead: "ignored", fallback: "x" }), "This coin burns its whole pool once.");
     assert.doesNotMatch(page, /sentence0\.split\(/);
-    assert.match(page, /\{ label: FACT_LABELS\.trigger, value: trigger, edit: editTo\("which"\) \}/);
+    // hourly run 7, HS-39: a hazard trigger edits on the burn step (stepHistory.ts triggerEditPhase), every other trigger on Which
+    assert.match(page, /\{ label: FACT_LABELS\.trigger, value: trigger, edit: editTo\(triggerEditPhase\(guide\.follow\)\) \}/);
   });
 });
 

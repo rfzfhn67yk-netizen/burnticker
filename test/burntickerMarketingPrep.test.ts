@@ -135,7 +135,8 @@ describe("3. queued readings are not receipts", () => {
     assert.doesNotMatch(p, /receiptStatusWords\(b\.status\)/);
     assert.equal((p.match(/burnLogWords\(b\.status\)/g) ?? []).length, 3);
     assert.match(p, /value: s\.health\.pending === 0 \? "Nothing waiting" : queuedReadingsCount\(s\.health\.pending\)/);
-    assert.match(p, /`\$\{s\.health\.pending\} readings are`\} queued with no burn yet/);
+    // hourly run 7, HB-96: the health line is one shared sentence (queuedReading.ts healthLine), the same on the static page
+    assert.match(p, /\{healthLine\(s\.health\.pending, s\.health\.unverified\)\}/);
     // "Check receipt" stays on rows with a signature only
     assert.match(p, /const href = checkReceiptHref\(b\.signature, s\.cluster\); return href \?/);
   });

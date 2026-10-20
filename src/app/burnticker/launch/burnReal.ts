@@ -2,6 +2,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import type { LaunchReview, ReviewCost } from "@/lib/burnticker/launchReview";
 import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, SUGGESTED_TARGETS, admissionLine, burnTargetShapeProblems, targetHeldLine, targetReceiptLine, targetReviewSentence, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { LAMPORTS_PER_SIGNATURE, rentLamports, solText } from "@/lib/burnticker/launchCost";
+import { walletPromptsLine } from "@/lib/burnticker/walletProof";
 // the library's own memo v3 reader, browser-safe (memoV3.ts: no web3, no Buffer); it replaced this page's duplicate reader
 import { parseTargetMemo } from "@/lib/burnReceipts/memoV3";
 
@@ -167,8 +168,9 @@ export function withPinSteps(review: LaunchReview, list: { ticker: string; symbo
     ...review,
     transactions: { ...review.transactions, count: n, steps, note: `${n === 1 ? review.transactions.note : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it."} ${extra ? PIN_NOTE : PIN_STEP_NOTE}` },
     costs: { ...review.costs, lines, totalSol: solText(total) },
-    ...(review.recovery && n > 1 && review.transactions.count > 1 ? { recovery: review.recovery.map((x) => x.replace(/^Your wallet asks \d+ separate times/, `Your wallet asks ${n} separate times`)) } : {}),
-    ...(review.recovery && n > 1 && review.transactions.count === 1 ? { recovery: [`Your wallet asks ${n} separate times, once for each transaction, in the order above.`, "If you reject the first request, nothing is sent and nothing is charged.", "If you reject a later request, the transactions already confirmed stay on chain and are not undone. Pressing the button again continues from the next step.", ...review.recovery.slice(1)] } : {}),
+    // HB-92 (hourly run 7): the prompt line counts the proof the same way as the button (walletProof.ts walletPromptsLine)
+    ...(review.recovery && n > 1 && review.transactions.count > 1 ? { recovery: review.recovery.map((x) => (/^Your wallet asks \d+ (separate times|times in all)/.test(x) ? walletPromptsLine(n, /times in all/.test(x)) : x)) } : {}),
+    ...(review.recovery && n > 1 && review.transactions.count === 1 ? { recovery: [walletPromptsLine(n, true), "If you reject the first request, nothing is sent and nothing is charged.", "If you reject a later request, the transactions already confirmed stay on chain and are not undone. Pressing the button again continues from the next step.", ...review.recovery.slice(1)] } : {}),
   };
 }
 

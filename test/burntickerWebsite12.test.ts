@@ -180,7 +180,7 @@ describe("Codex F1: the pre-wallet review comes from the venue the bundle route 
     assert.ok("review" in main); assert.equal(main.review.typeAvailable, false, "a two-coin Matchup is a pair path"); assert.match(main.review.typeReason!, /^Paired launches are not available yet\./);
     assert.equal(main.review.signable, false); assert.equal(main.review.signing, main.review.typeReason);
     const one = buildLaunchReview({ rule: RULE, ticker: "BRONCOS", name: "Broncos" }, { env: { BURNTICKER_CLUSTER: "mainnet", BURNTICKER_THESPORTSDB_KEY: "k", [CREATOR_LAUNCHES_FLAG]: "1" } });
-    assert.ok("review" in one); assert.equal(one.review.transactions.count, 2); assert.equal(one.review.recovery.length, 4); assert.match(one.review.recovery[0], /asks 2 separate times/);
+    assert.ok("review" in one); assert.equal(one.review.transactions.count, 2); assert.equal(one.review.recovery.length, 4); assert.match(one.review.recovery[0], /asks 3 times in all/);   /* hourly run 7, HB-92: the proof counted */
     // website-14 (§75): no raise named = the default preset, LaunchLab's standard 85 SOL; the line names the coin's own raise
     assert.equal(one.review.prerequisiteLine, prerequisiteLineFor("launchlab", "85")); assert.match(one.review.prerequisiteLine, new RegExp(`raise ${Number(LAUNCHLAB_RAISE_LAMPORTS) / 1e9} SOL`));
     assert.equal(one.review.signing, SIGNING_UNAVAILABLE, "today no launch can be signed here, and the review says so");

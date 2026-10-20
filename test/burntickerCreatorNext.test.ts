@@ -56,7 +56,8 @@ describe("F08 · producer to creator view, every one-shot kind in every state", 
       const pending = creatorNextFields(statusOf(rule as BurnRule, []), [], now);
       assert.equal(pending.result, "pending"); assert.equal(pending.nextAt, null);
       assert.equal(pending.nextLine, CREATOR_PAGE.noNext, "the next poll of the source is not a result");
-      assert.equal(pending.nextCheckLine, "20 October 2026", "the poll has its own row");
+      // hourly run 7, HB-98: the check is a time in Denver time with its zone (00:00 UTC on Oct 20 is 6 PM MDT on Oct 19), never the UTC day
+      assert.equal(pending.nextCheckLine, "About Oct 19, 2026, 6:00 PM MDT", "the poll has its own row");
       const closing = creatorNextFields(statusOf(rule as BurnRule, [], { close: "2026-10-25T00:00:00Z" }), [], now);
       assert.equal(closing.nextLine, "25 October 2026", "a scheduled close is the next result");
 

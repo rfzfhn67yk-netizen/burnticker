@@ -1,3 +1,4 @@
+import { WX_HIGH_MAX_F, WX_HIGH_MIN_F, WX_HIGH_RANGE_LINE } from "@/lib/burnticker/wxBounds";
 /**
  * THE LAUNCH FIELDS' CHECKS, IN WORDS (ChatGPT launch audit 5, L07, 2026-10-11: "abc" as a weather threshold made "Use this rule" do
  * nothing; a blank name let "done" hide the field without a word; "A B!?" became "AB" silently). Each check returns the sentence shown
@@ -80,6 +81,6 @@ export function wxThresholdProblem(metric: "high" | "rain", raw: string): string
   if (!v) return metric === "high" ? "Enter a temperature in whole degrees Fahrenheit, for example 90." : "Enter an amount of rain in inches, for example 0.50.";
   if (!/^-?\d+(\.\d+)?$/.test(v)) return metric === "high" ? `“${v}” is not a temperature. Enter whole degrees Fahrenheit, for example 90.` : `“${v}” is not an amount of rain. Enter inches, for example 0.50.`;
   const n = Number(v);
-  if (metric === "high") return !Number.isInteger(n) ? "The climate report gives whole degrees, so enter a whole number." : n < -60 || n > 135 ? "Enter a temperature between -60 and 135 °F." : null;
+  if (metric === "high") return !Number.isInteger(n) ? "The climate report gives whole degrees, so enter a whole number." : n < WX_HIGH_MIN_F || n > WX_HIGH_MAX_F ? WX_HIGH_RANGE_LINE : null;
   return n <= 0 || n >= 10 ? "Enter an amount above 0 and below 10 inches." : !/^\d+(\.\d{1,2})?$/.test(v) ? "The climate report gives hundredths of an inch, so use at most two decimals." : null;
 }

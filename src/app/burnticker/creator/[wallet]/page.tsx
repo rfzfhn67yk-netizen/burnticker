@@ -68,7 +68,7 @@ export default async function CreatorPage({ params }: Params) {
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                 <dt className="text-neutral-500">{CREATOR_PAGE.labels.receipts}</dt><dd>{c.receipts}</dd>
                 <dt className="text-neutral-500">{CREATOR_PAGE.labels.lastBurn}</dt><dd>{longDay(c.lastBurnAt) ?? CREATOR_PAGE.noBurn}</dd>
-                <dt className="text-neutral-500">{CREATOR_PAGE.labels.next}</dt><dd data-next-line>{c.nextLine}</dd>
+                <dt className="text-neutral-500">{c.nextLabel ?? CREATOR_PAGE.labels.next}</dt><dd data-next-line>{c.nextLine}</dd>
                 {/* audit 7 F08: the keeper's next read of the source is not a result; it has its own row, and none once a one-shot is decided */}
                 {c.nextCheckLine && <><dt className="text-neutral-500">{CREATOR_PAGE.labels.check}</dt><dd data-next-check>{c.nextCheckLine}</dd></>}
                 {(ranks.perCard[i] !== null || !c.rank) && <><dt className="text-neutral-500" title={RANK_MEANING}>{CREATOR_PAGE.labels.rank}</dt><dd data-rank>{ranks.perCard[i] ?? CREATOR_PAGE.unavailable}</dd></>}

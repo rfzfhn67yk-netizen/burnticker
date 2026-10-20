@@ -39,6 +39,8 @@ import { DEFAULT_SHARE, SLICED_ABOVE, isRaisePreset, shareOf, SHARE_PRESETS, pre
 import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { PreWalletSummary } from "./PreWalletSummary";
+import { offSeasonLine } from "@/lib/burnticker/hazardSeason";
+import { popstateFollows, stepAddress, stepHistoryAction, triggerEditPhase } from "@/lib/burnticker/stepHistory";
 import { BurnRealChoice } from "./BurnRealChoice";
 import { ownRealPicks, SIDE_REAL_OFF, realBlockers, realField, realReviewNotes, withRealBurn, type SideReal } from "./burnReal";
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
@@ -147,7 +149,7 @@ interface SportsSide { abbr: string; code?: string; name: string; nickname: stri
 interface SportsGame { eventId: string; league: string; title: string; startsAt: string; detail: string; live?: boolean; when?: string | null; a: SportsSide; b: SportsSide; series: { aLoss: string; bLoss: string } }
 const recordOf = (r: string | null | undefined): { w: number; l: number; d: number; since: string } => { const m = /^(\d+)-(\d+)(?:-(\d+))?$/.exec(r ?? ""); return { w: m ? Number(m[1]) : 0, l: m ? Number(m[2]) : 0, d: m && m[3] ? Number(m[3]) : 0, since: "" }; };
 /** website-21: GET /v1/sports/rivalry as the step-2 option reads it (`failed`: the read itself failed, never "no game"). */
-interface RivalryRead { key: string; busy: boolean; failed: string | null; offered: boolean; offeredLine: string | null; scheduleNote: string | null; season: string | null; year: number | null; source: string | null; meetings: MeetingRow[]; /** sources-6 (QA 9 #4): what the one-game option searched */ oneGameSearched: string | null }
+interface RivalryRead { key: string; busy: boolean; failed: string | null; offered: boolean; offeredLine: string | null; /** HB-72 consistency: the playoff warning (meetingsLeft.ts) */ warning: string | null; scheduleNote: string | null; season: string | null; year: number | null; source: string | null; meetings: MeetingRow[]; /** sources-6 (QA 9 #4): what the one-game option searched */ oneGameSearched: string | null }
 interface Side { abbr: string; marketTicker: string; label: string; nickname: string | null; name: string; ticker: string; /** sources-6: the shown code (tickers); `abbr` stays the series pin */ code?: string; /** sources-6 (QA 9 #2): this side plays at home, from the schedule */ home?: boolean }
 interface PolyMarket { /** audit 12 item 8: past its scheduled close and waiting for its result */ closePassed?: boolean; conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; /** the outcome's name inside its event (Gamma groupItemTitle), when named */ outcome?: string | null; /** sources-2 (oracle/polymarket.ts polyStated) */ resolutionSource?: StatedSource; finalAfter?: FinalAfter }
 interface PolyEvent { closePassed?: boolean; slug: string; title: string; url: string; endDate: string | null; closed: boolean; markets: PolyMarket[]; marketCount: number; refused: string[] }
@@ -592,8 +594,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   useEffect(() => {
     if (!ready || step === "launch") return;
     const cur = new URLSearchParams(window.location.search).get("step") ?? "follow";
-    if (cur === urlStep) return;
-    try { window.history.pushState({ btStep: urlStep }, "", urlStep === "follow" ? window.location.pathname : `${window.location.pathname}?step=${urlStep}`); } catch { /* ignore */ }
+    // HB-94 (hourly run 7): a jump back (an Edit, a crumb) replaces the entry, so Back never lands on a step the draft has left
+    const act = stepHistoryAction(cur, urlStep);
+    if (act === "none") return;
+    try { window.history[act === "replace" ? "replaceState" : "pushState"]({ btStep: urlStep }, "", stepAddress(window.location.pathname, urlStep)); } catch { /* ignore */ }
   }, [urlStep, ready]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // owner, 2026-10-12: Start over at every step clears the draft and the stored choices and lands on question 1; it asks once only when a
@@ -724,11 +728,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // both teams are picked; only the answer for the current two teams is kept
   useEffect(() => {
     if (flow !== "pair" || guide.follow !== "rivalry" || !leagueSeries || !rivalA || !rivalB) return;
-    const key = `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}`, empty = { failed: null, offered: false, offeredLine: null, scheduleNote: null, season: null, year: null, source: null, meetings: [] as MeetingRow[], oneGameSearched: null };
+    const key = `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}`, empty = { failed: null, offered: false, offeredLine: null, warning: null, scheduleNote: null, season: null, year: null, source: null, meetings: [] as MeetingRow[], oneGameSearched: null };
     let live = true;
     setRivalry({ key, busy: true, ...empty });
-    getJson<{ offered?: boolean; offeredLine?: string | null; scheduleNote?: string | null; season?: string | null; year?: number | null; source?: string | null; meetings?: MeetingRow[]; oneGame?: { searched?: string | null } }>(`${V1}/sports/rivalry?league=${encodeURIComponent(leagueSeries)}&a=${encodeURIComponent(rivalA.abbr)}&b=${encodeURIComponent(rivalB.abbr)}`)
-      .then((j) => { if (live) setRivalry({ key, busy: false, failed: null, offered: j.offered === true, offeredLine: j.offeredLine ?? null, scheduleNote: j.scheduleNote ?? null, season: j.season ?? null, year: j.year ?? null, source: j.source ?? null, meetings: j.meetings ?? [], oneGameSearched: j.oneGame?.searched ?? null }); })
+    getJson<{ offered?: boolean; offeredLine?: string | null; warning?: string | null; scheduleNote?: string | null; season?: string | null; year?: number | null; source?: string | null; meetings?: MeetingRow[]; oneGame?: { searched?: string | null } }>(`${V1}/sports/rivalry?league=${encodeURIComponent(leagueSeries)}&a=${encodeURIComponent(rivalA.abbr)}&b=${encodeURIComponent(rivalB.abbr)}`)
+      .then((j) => { if (live) setRivalry({ key, busy: false, failed: null, offered: j.offered === true, offeredLine: j.offeredLine ?? null, warning: j.warning ?? null, scheduleNote: j.scheduleNote ?? null, season: j.season ?? null, year: j.year ?? null, source: j.source ?? null, meetings: j.meetings ?? [], oneGameSearched: j.oneGame?.searched ?? null }); })
       .catch((e) => { if (live) setRivalry({ key, busy: false, ...empty, failed: detailOf(e) }); });
     return () => { live = false; };
   }, [flow, guide.follow, leagueSeries, rivalA?.abbr, rivalB?.abbr, rivalryRetry]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -1247,6 +1251,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   useEffect(() => {
     const h = () => {
       const p = (new URLSearchParams(window.location.search).get("step") ?? "follow") as GuidedPhase;
+      // HB-94 (hourly run 7): a step the page cannot reopen leaves the address on the step that is shown
+      if (!popstateFollows({ asked: p, follow: guide.follow, step })) { try { window.history.replaceState({ btStep: urlStep }, "", stepAddress(window.location.pathname, urlStep)); } catch { /* ignore */ } return; }
       // website-25 (QA 11 M1): like Start over, the chip asks first, then clears the draft, and step 1 shows the choice that was made
     if (p === "follow") { if (needsConfirm) { setConfirmJump(true); return; } setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); return; }
       if (!guide.follow) return;
@@ -1256,7 +1262,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     };
     window.addEventListener("popstate", h);
     return () => window.removeEventListener("popstate", h);
-  }, [guide.follow, step]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [guide.follow, step, urlStep]);   // eslint-disable-line react-hooks/exhaustive-deps
   const back = () => {
     if (guide.follow) {
       // the guided steps: review, the end, the burn, back to the picker of question 2, then question 1
@@ -1718,7 +1724,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     const rv = rivalry?.key === `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}` ? rivalry : null;
                     const busy = !rv || rv.busy, failed = !!rv && !rv.busy && (!!rv.failed || !!rv.scheduleNote);
                     // HB-72 (hourly run 5): greyed with a notice when no meeting is left to play (guidedLaunch.ts seriesOptionState)
-                    const why = busy ? null : failed ? (rv!.scheduleNote ?? SCHEDULE_UNAVAILABLE_LINE) : seriesOptionState(rv!).why;
+                    // HB-72 consistency (hourly run 7): offered with the playoff warning while a playoff meeting is still possible (meetingsLeft.ts)
+                    const optionState = busy || failed ? null : seriesOptionState(rv!);
+                    const why = busy ? null : failed ? (rv!.scheduleNote ?? SCHEDULE_UNAVAILABLE_LINE) : optionState!.why;
+                    const playoffWarning = optionState?.warning ?? null;
                     const rows = rv && !busy && !failed ? meetingsListRows(rv.meetings, rivalA.abbr, rivalB.abbr) : [];
                     const off = busy || !!why;
                     return (
@@ -1732,6 +1741,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                             : failed ? <span className="mt-1 block text-xs text-amber-300" role="status" data-schedule-unavailable>{why} <button type="button" data-nav className="underline" onClick={() => setRivalryRetry((n) => n + 1)}>Retry</button></span>
                             : why ? <span className="mt-1 block text-xs text-neutral-400" data-no-meeting>{why}{rows.length > 0 && <span className="block" data-meetings-played>{rows.map((m) => `${dayLabel(m.startsAt)} ${m.where}${m.state ? ` (${m.state})` : ""}`).join(", ")}</span>}</span>
                             : <div className="mt-2" data-meetings-list>
+                                {playoffWarning && <p className="mb-1 text-xs text-amber-300" role="note" data-playoffs-only>{playoffWarning}</p>}
                                 <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">{MEETINGS_LIST_LABEL}</p>
                                 <ul className="mt-1 flex flex-wrap gap-1.5">{rows.map((m) => (
                                   <li key={m.key} className="rounded-full border border-neutral-700 px-2.5 py-0.5 text-xs text-neutral-200" data-meeting-row={m.key}>{dayLabel(m.startsAt)} {m.where}{m.playoff && <span className="ml-1 text-amber-300" data-playoff>playoffs</span>}{m.state && <>{" "}<span className="text-neutral-400">({m.state})</span></>}</li>
@@ -2199,10 +2209,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         ];
         // HB-81 D5: item 218 on a one-time coin does not say that nothing ends the rule (its one burn or its deadline does)
         const edgeNotes = [...new Set(edgeIds)].map((i) => edgeCaseFor(i, { oneGame: espnParsed?.kind === "game", oneShot: windowKindOf(rule) === "one-shot" })).filter((x): x is string => !!x);
+        // HB-93 (hourly run 7): an inverse hurricane coin burns on every off-season day (hazardSeason.ts, the source's season dates)
+        { const off = offSeasonLine(rule); if (off) edgeNotes.unshift(off); }
         const coinsN: 1 | 2 = pairOn && ruleB ? 2 : 1;
         const editTo = (p: GuidedPhase) => () => { if (p === "which") toWhich(); else setGuide((g) => ({ ...g, phase: p })); };
         const reviewFacts = guide.follow ? [
-          { label: FACT_LABELS.trigger, value: trigger, edit: editTo("which") },
+          // HS-39 (hourly run 7): a hazard coin's trigger is built on the burn step (pattern, strength, area), so Edit opens it with those
+          // choices kept; "Change which" in the crumbs still changes the hazard
+          { label: FACT_LABELS.trigger, value: trigger, edit: editTo(triggerEditPhase(guide.follow)) },
           { label: FACT_LABELS.coin, value: settledPick ? settledWhichCoinLine(settledPick, { a: ticker || "A", b: tickerB || "B" }) : meetingsOn ? meetingsWhichCoinLine({ a: ticker || "A", b: tickerB || "B", teamA: A, teamB: B }) : whichCoinLine(ticker || "A", coinsN === 2 ? tickerB || "B" : null), edit: editTo("name") },
           { label: FACT_LABELS.amount, value: `${budget.line} ${shareOfBudgetLine(shareValue)} ${shareExample(shareValue)}`, edit: editTo("burn") },
           { label: FACT_LABELS.ends, value: meetingsOn ? meetingsEndFact : settledPick ? settledEndFact : endLines.join(endTextB ? "\n" : " ") || PERPETUAL_END_LINE, edit: null, extra: endChoiceReview },
@@ -2297,7 +2311,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               onLaunch={() => { void launch(); }}
               mintSearch={<MintAddressBlock pool={mintPool} />}
               duplicate={<DuplicateNotice existing={(shownReview.review as (LaunchReview & { existing?: ExistingCoin[] }) | null)?.existing ?? []} />}
-              summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} />}
+              summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} proof={proofAsked} />}
               cost={shownReview.review && reviewCurrent ? `The estimated cost is about ${shownReview.review.costs.totalSol} SOL.` : null}
               costNote={venue === "linked" || venue === "pair-curve" ? PAIR_COST_EXCLUSIONS : null}
               venue={venue}

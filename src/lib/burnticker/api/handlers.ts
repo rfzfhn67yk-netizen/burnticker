@@ -34,6 +34,7 @@ import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBa
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { IMAGE_URL_REFUSED, imageUrlSent } from "@/lib/burnticker/imagePin";
 import { seasonOverFor, seasonStatus } from "@/lib/burnticker/seasonOver";
+import { meetingsRefusal, meetingsVerdict, meetingsVerdictFor } from "@/lib/burnticker/meetingsLeft";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, sha256Hex, uploadMayHaveCompleted, type PinHooks, type PinnedCoin } from "@/lib/burnticker/pin";
 import { checkWalletProof, provenReviewCreator, spendProof } from "@/lib/burnticker/walletProofCheck";
@@ -412,7 +413,18 @@ export async function sportsRivalry(_p: Platform, q: { league?: string | null; a
     return { eventId: g.eventId, startsAt: g.startsAt, date: g.date, playoff: g.seasonType === 3, home: g.home.abbr, away: g.away.abbr, title: g.name, live, when: live ? LIVE_NOW : null, oneGame: open ? { aHome: g.home.abbr === ta.abbr, series: { aLoss: gameSeries(league, g.eventId, ta.abbr, "loss"), bLoss: gameSeries(league, g.eventId, tb.abbr, "loss") } } : null, status: result === "pending" ? (live || g.state === "in" ? "in progress" : "scheduled") : result === "void" ? "postponed or cancelled" : "final", result, score: g.completed && g.home.score !== null && g.away.score !== null ? { home: g.home.score, away: g.away.score } : null };
   });
   const tally = tallyMeetings(rows.map((r) => r.result));
-  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered: rows.some((r) => r.result === "pending"), offeredLine: !rows.length ? MEETINGS_NONE_LINE : rows.some((r) => r.result === "pending") ? null : MEETINGS_NONE_LEFT_LINE, meetings: rows, count: rows.length, oneGame: { label: RIVALRY_GAME_LABEL, searched: oneGameSearchLine(seasonLabel(league, year), rows.filter((r) => r.oneGame).length, !noPlayoffs(league)), count: rows.filter((r) => r.oneGame).length }, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
+  // HB-72 consistency (hourly run 7): the one rule the review and the prepare use (meetingsLeft.ts); the league's next days are read only
+  // when no meeting is left (at most 3 seconds), to see whether either team's season is over
+  const pendingLeft = rows.some((r) => r.result === "pending");
+  let upcoming: Game[] | null = null;
+  if (rows.length && !pendingLeft && _p?.seasonSchedule) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    upcoming = await Promise.race([_p.seasonSchedule(league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 3_000); })]);
+    clearTimeout(timer);
+  }
+  const verdict = meetingsVerdict({ league, abbr: ta.abbr, opp: tb.abbr, year, season: games, upcoming, now: nowMs });
+  const offered = verdict.state === "open" || verdict.state === "playoffs" || (verdict.state === "unknown" && pendingLeft);
+  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered, offeredLine: offered ? null : verdict.state === "none" ? verdict.line : !rows.length ? MEETINGS_NONE_LINE : MEETINGS_NONE_LEFT_LINE, warning: verdict.state === "playoffs" ? verdict.warning : null, meetings: rows, count: rows.length, oneGame: { label: RIVALRY_GAME_LABEL, searched: oneGameSearchLine(seasonLabel(league, year), rows.filter((r) => r.oneGame).length, !noPlayoffs(league)), count: rows.filter((r) => r.oneGame).length }, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
 }
 
 /** Which venues this host serves (venues.ts): Kalshi behind BURNTICKER_KALSHI_ENABLED; Polymarket and the first-party feeds always. */
@@ -747,6 +759,9 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), burnSol: burnSolEnabledFromEnv(process.env), dispersal: webDispersalOn(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: [o.mint, o.mintB, bankA, bankB].filter((x): x is string => !!x), partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   // sources-7 (QA walkthrough 11 H6): a season rule on a team whose season is over, from the platform's schedule port (one bounded read)
   { const so = await seasonOverFor(locked.rule, p.seasonSchedule); if (so) return { error: fail(so.status, so.message, { code: so.code, next: so.next, problems: [so.message] }) }; }
+  // HB-72 consistency (hourly run 7): a rivalry series with no meeting left and no playoff meeting possible is refused with the line the
+  // page greys the option with (meetingsLeft.ts, the same rule as the page and the review; an unread schedule refuses nothing)
+  { const mr = meetingsRefusal(await meetingsVerdictFor(locked.rule, { season: p.teamSeason, schedule: p.seasonSchedule })); if (mr) return { error: fail(mr.status, mr.message, { code: mr.code, problems: [mr.message] }) }; }
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   // website-19 (owner, 2026-10-12): the platform's reserved names (config/burnticker/reserved-tickers.json), for the ticker and the name;

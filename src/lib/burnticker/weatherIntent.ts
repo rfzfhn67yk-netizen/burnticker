@@ -1,4 +1,5 @@
 import { findStations, nwsSeries, parseNwsSeries, type NwsMetric, type Station } from "@/lib/burnticker/sources/nws";
+import { WX_HIGH_MAX_F, WX_HIGH_MIN_F } from "@/lib/burnticker/wxBounds";
 
 /**
  * THE WEATHER INTENT (intent audit 2026-10-12, items 1, 2 and 9: "Detroit high below 32" became "32 °F or hotter"; "above 30 C
@@ -142,7 +143,8 @@ export function leastReportable(x: number, per: number, strict: boolean): number
 const OP_WORD: Record<"lt" | "le" | "gt" | "ge", string> = { lt: "below", le: "at most", gt: "above", ge: "at least" };
 const fmtNum = (x: number) => String(Math.round(x * 1000) / 1000);
 const DEFAULT_HIGH = 90, DEFAULT_RAIN = 0.5;
-export const HIGH_RANGE = { min: -40, max: 130 } as const;
+// HB-95 (hourly run 7): the one bound set (wxBounds.ts)
+export const HIGH_RANGE = { min: WX_HIGH_MIN_F, max: WX_HIGH_MAX_F } as const;
 export const RAIN_RANGE = { min: 0.01, max: 10 } as const;
 
 /** One intent → the rule it can be, or the refusal in plain words (and, for a date scope alone, the recurring rule as an alternative). */

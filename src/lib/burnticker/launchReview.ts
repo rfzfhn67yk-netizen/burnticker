@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { walletPromptsLine } from "@/lib/burnticker/walletProof";
 import { realBurnFamilyProblem } from "@/lib/burnticker/burnRealEligibility";
 import { BURN_REAL_WAITING, burnRealEnabledFromEnv, burnRealFromEnv, burnSolEnabledFromEnv } from "@/lib/burnticker/launchAvailability";
 import path from "node:path";
@@ -296,7 +297,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
   /** owner 2026-10-14: the launch check's informational note on the next game (native.ts NativePreflight.note: Polymarket has not listed it yet); never a refusal */ sourceNote?: string | null;
-  /** HB-72 (hourly run 5): a rivalry series with no meeting left on the season schedule (the route reads it) */ meetingsNote?: string | null;
+  /** HB-72 (hourly run 5): a rivalry series with no meeting left on the season schedule while a playoff meeting is possible (the route reads it) */ meetingsNote?: string | null;
+  /** HB-72 consistency (hourly run 7): no meeting left and none possible (meetingsLeft.ts): refused as a problem, the line the page greys with */ meetingsRefusal?: string | null;
   /** audit 12 item 2: a one-market pair's void date as the bundle route reads it (handlers.ts oneShotVoidBy); absent, side A's text is a draft */ pairVoidBy?: string | null;
   /** sources-7 H6: the season-over refusal (seasonOver.ts seasonOverFor, read by the route); refused as a problem, never only a warning */ seasonOver?: SeasonOverRefusal | null;
   /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null;
@@ -551,14 +553,16 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   else if (o.seasonWarning) warnings.unshift(o.seasonWarning);
   if (o.sourceNote && !warnings.includes(o.sourceNote)) warnings.push(o.sourceNote);
   // HB-72 (hourly run 5): a rivalry series with no meeting left on the schedule says so (the route's season read)
-  if (o.meetingsNote && !warnings.includes(o.meetingsNote)) warnings.unshift(o.meetingsNote);
+  if (o.meetingsRefusal && !o.seasonOver) problems.push(o.meetingsRefusal);
+  else if (o.meetingsNote && !warnings.includes(o.meetingsNote)) warnings.unshift(o.meetingsNote);
   const n = steps.length;
   // the first step of side B (1-based): after side A's two transactions (LaunchLab) or its one (pair curve)
   const stepB = venue === "pair-curve" ? 2 : 3;
   const recovery = n === 1
     ? ["If you reject the request in your wallet, nothing is sent and nothing is charged. The draft is kept for 24 hours, so you can press the button again."]
     : [
-      `Your wallet asks ${n} separate times, once for each transaction, in the order above.`,
+      // HB-92 (hourly run 7): the same count as the button (walletProof.ts walletPromptCount); the web launcher asks for the proof first
+      walletPromptsLine(n, true),
       "If you reject the first request, nothing is sent and nothing is charged.",
       "If you reject a later request, the transactions already confirmed stay on chain and are not undone. This page shows which steps are confirmed, with their signatures, and pressing the button again continues from the next step.",
       ...(venue === "pair-curve" ? ["Until the last step links the two coins, the pair is not set up, so finish every step."] : []),

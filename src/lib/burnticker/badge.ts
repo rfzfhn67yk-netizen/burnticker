@@ -189,8 +189,20 @@ export function lostDayOf(s: Pick<TokenStatusJson, "next" | "profile">, receipts
   const b = /ONE-SHOT\s*·\s*([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(s.profile?.badge ?? "");
   return b ? `${b[3]}-${String(MON.indexOf(b[1]) + 1).padStart(2, "0")}-${b[2].padStart(2, "0")}` : r.settledAt.slice(0, 10);
 }
-export function lastBurnLine(s: Pick<BadgeSide, "lastBurn" | "status"> & { lost?: string | null }): string {
+/**
+ * HB-80 / HS-27 residue (hourly run 7): the SVG coin badge printed "no burn yet" on a decided pair winner. A decided side's card line is
+ * the shared decided line's own words (decidedWarning.ts decidedPairLine), short enough for the card: "won on 15 October 2026; burns
+ * once both coins graduate" or "lost on 15 October 2026; cannot burn on this result".
+ */
+export function decidedCardLine(decided: string | null | undefined): string | null {
+  const m = /^(Won|Lost)( on [^.]+)?\.\s*(.*)$/.exec(decided ?? "");
+  if (!m) return null;
+  if (m[1] === "Lost") return `lost${m[2] ?? ""}; cannot burn on this result`;
+  return `won${m[2] ?? ""}; ${/trading pool/.test(m[3]) ? "burns on its trading pool" : "burns once both coins graduate"}`;
+}
+export function lastBurnLine(s: Pick<BadgeSide, "lastBurn" | "status"> & { lost?: string | null; decided?: string | null }): string {
   if (s.lost) return `lost on ${monDay(s.lost)}; cannot burn on this result`;
+  if (!s.lastBurn) { const d = decidedCardLine(s.decided); if (d) return d; }
   if (!s.lastBurn) return s.status === "draft" ? "not launched yet · no receipts" : "no burn yet";
   return `last burn ${day(s.lastBurn.at)} · ${s.lastBurn.units} unit${s.lastBurn.units === 1 ? "" : "s"} · ${fmtInt(s.lastBurn.burned)} burned`;
 }

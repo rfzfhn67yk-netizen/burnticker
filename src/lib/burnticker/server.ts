@@ -177,6 +177,9 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   };
   if (!rpc) stubs.push("launch confirmation: no BURNTICKER_RPC_URL on this host, so a launch transaction cannot be read and drafts are not taken live");
   else if (!programId) stubs.push("launch confirmation: no BURNTICKER_PROGRAM_ID on this host, so initialize_token and the TokenConfig cannot be checked and drafts are not taken live");
+  // HB-97 (hourly run 7): the sample receipts' verdicts are checked once when the web server builds its platform (its first request after
+  // start), in the background, so the apex page's "Inspect the devnet receipt" answers from the kept verdict
+  if (env.NODE_ENV === "production" && env.BURNTICKER_WARM_RECEIPTS !== "0") setTimeout(() => { void import("@/lib/burnticker/trustpack/api").then((m) => m.warmSampleReceipts()).catch(() => null); }, 0).unref?.();
   return cached;
 }
 

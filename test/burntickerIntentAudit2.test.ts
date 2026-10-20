@@ -125,7 +125,8 @@ describe("intent audit 3 items 1 and 2 (list item 2): a temperature is parsed, n
     for (const q of ["Detroit high above boiling", "Detroit high above normal", "Detroit high above average", "Denver rain above lots"]) {
       const p = plan(q); assert.ok(!p.ok, q); assert.match(p.refusal, /^I need a number\. “\w+” is not a/, q); assert.equal(p.alternative, null, q);
     }
-    assert.match((plan("Detroit high above 200") as { refusal: string }).refusal, /from -40 °F to 130 °F/);
+    // hourly run 7, HB-95: one bound set (wxBounds.ts)
+    assert.match((plan("Detroit high above 200") as { refusal: string }).refusal, /from -60 °F to 135 °F/);
   });
   test("the keep cases: above 0 → 1 °F; above 32.5 and at least 32.5 → 33 °F", () => {
     const b = (q: string) => { const p = plan(q); assert.ok(p.ok, q); return p.boundary; };

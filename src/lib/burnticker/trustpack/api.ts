@@ -33,17 +33,89 @@ export const serverRpcUrl = (cluster: Cluster, env: Readonly<Record<string, stri
 export const v1Check = (root = process.cwd()): ApiResult => ok(buildChecklist(root));
 export const v1CheckReceipts = (root = process.cwd()): ApiResult => ok(publicSampleReceipts(sampleReceipts(root)));
 
-export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSource?: SourceFetch | null; root?: string } = {}): Promise<ApiResult> {
+/**
+ * HB-97 (hourly run 7): a cold check of a listed devnet receipt took 19.6 to 19.9 s (the public devnet RPC's 429 back-off, then two
+ * Treasury reads), at Caddy's 20 s cut-off. A confirmed transaction never changes, so a finished verdict (every read answered) is kept
+ * per signature: in memory (at most RECEIPT_CACHE_MAX, oldest first out) and, on a production host, in one JSON file, so a restart
+ * starts warm. A check still running after RECEIPT_CHECK_DEADLINE_MS answers "still checking" (202, retry after a few seconds) and keeps
+ * running into the cache. The sample receipts are checked once at web start (warmSampleReceipts, from platform()).
+ */
+export const RECEIPT_CACHE_MAX = 256;
+export const RECEIPT_CHECK_DEADLINE_MS = 8_000;
+export const RECEIPT_SOURCE_TIMEOUT_MS = 5_000;
+export const RECEIPT_STILL_CHECKING = "Still checking this receipt. Try again in a few seconds.";
+type ReceiptBody = Record<string, unknown> & { checks?: { ok: boolean | null; detail: string }[] };
+const receiptCache = new Map<string, { at: string; body: ReceiptBody }>();
+const receiptRunning = new Map<string, Promise<ReceiptBody>>();
+let receiptDiskLoaded = false;
+/** The cache file: BURNTICKER_RECEIPT_CACHE_FILE, else data/burnticker-receipt-checks.json on a production host, else none. */
+export function receiptCacheFile(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd()): string | null {
+  const set = (env.BURNTICKER_RECEIPT_CACHE_FILE ?? "").trim();
+  if (set) return set;
+  return env.NODE_ENV === "production" ? path.join(root, "data", "burnticker-receipt-checks.json") : null;
+}
+export function resetReceiptCache(): void { receiptCache.clear(); receiptRunning.clear(); receiptDiskLoaded = false; }
+/** A verdict is kept only when every read answered: a check whose RPC or source read failed is asked again next time. */
+export const receiptVerdictFinal = (b: ReceiptBody): boolean =>
+  !(b.checks ?? []).some((c) => c.ok === null && /did not answer|did not return|could not be fetched|did not return both/.test(c.detail));
+function keepReceipt(sig: string, body: ReceiptBody, file: string | null, now: number): void {
+  if (!receiptVerdictFinal(body)) return;
+  receiptCache.delete(sig);
+  receiptCache.set(sig, { at: new Date(now).toISOString(), body });
+  while (receiptCache.size > RECEIPT_CACHE_MAX) receiptCache.delete(receiptCache.keys().next().value as string);
+  if (!file) return;
+  try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(`${file}.tmp`, JSON.stringify(Object.fromEntries(receiptCache))); fs.renameSync(`${file}.tmp`, file); } catch { /* best effort */ }
+}
+function loadReceiptDisk(file: string | null): void {
+  if (receiptDiskLoaded) return;
+  receiptDiskLoaded = true;
+  if (!file) return;
+  try {
+    const j = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, { at: string; body: ReceiptBody }>;
+    for (const [k, v] of Object.entries(j).slice(-RECEIPT_CACHE_MAX)) if (isSignature(k) && v && typeof v.at === "string" && v.body && typeof v.body === "object") receiptCache.set(k, v);
+  } catch { /* none yet */ }
+}
+
+export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSource?: SourceFetch | null; root?: string; deadlineMs?: number; cacheFile?: string | null; now?: () => number } = {}): Promise<ApiResult> {
   // QA 11 L8: a plain refusal, before any RPC call
   if (!isSignature(signature)) return fail(400, classifySignatureInput(signature).reason ?? "That is not a Solana transaction signature.", { code: "bad-signature" });
-  const samples = sampleReceipts(o.root);
-  const s = samples.receipts.find((r) => r.signature === signature);
-  const result = await checkReceiptTx({
-    signature, cluster: "devnet", programId: DEVNET_PROGRAM_ID, rpc: o.rpc ?? jsonRpc(PUBLIC_RPC.devnet),
-    rulesText: s ? samples.rules[s.rulesPath] ?? null : null,
-    fetchSource: o.fetchSource === undefined ? budgetedFetch((u: string) => fetch(u, { headers: { accept: "application/json", "user-agent": "burnticker-check/1 (receipt verification)" } })) : o.fetchSource,
-  });
-  return ok({ ...result, ranOn: "server (the same code the /burnticker/check page runs in your browser)", sample: s ? publicSample(s) : null });
+  const now = o.now ?? Date.now;
+  const file = o.cacheFile === undefined ? receiptCacheFile(process.env, o.root) : o.cacheFile;
+  loadReceiptDisk(file);
+  const hit = receiptCache.get(signature);
+  if (hit) return ok({ ...hit.body, checkedAt: hit.at, served: "kept verdict" });
+  let run = receiptRunning.get(signature);
+  if (!run) {
+    const samples = sampleReceipts(o.root);
+    const s = samples.receipts.find((r) => r.signature === signature);
+    // the Treasury reads get their own bound, so one slow source cannot hold the whole check
+    run = checkReceiptTx({
+      signature, cluster: "devnet", programId: DEVNET_PROGRAM_ID, rpc: o.rpc ?? jsonRpc(PUBLIC_RPC.devnet, fetch, { attempts: 4, baseMs: 500 }),
+      rulesText: s ? samples.rules[s.rulesPath] ?? null : null,
+      fetchSource: o.fetchSource === undefined ? budgetedFetch((u: string) => fetch(u, { headers: { accept: "application/json", "user-agent": "burnticker-check/1 (receipt verification)" }, signal: AbortSignal.timeout(RECEIPT_SOURCE_TIMEOUT_MS) })) : o.fetchSource,
+    }).then((result) => {
+      const body: ReceiptBody = { ...result, ranOn: "server (the same code the /burnticker/check page runs in your browser)", sample: s ? publicSample(s) : null };
+      keepReceipt(signature, body, file, now());
+      return body;
+    }).finally(() => receiptRunning.delete(signature));
+    receiptRunning.set(signature, run);
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const body = await Promise.race([run.catch(() => null), new Promise<"slow">((res) => { timer = setTimeout(() => res("slow"), o.deadlineMs ?? RECEIPT_CHECK_DEADLINE_MS); })]);
+  clearTimeout(timer);
+  if (body === "slow") return { ...fail(202, RECEIPT_STILL_CHECKING, { code: "still-checking", retryAfterSec: 5 }), headers: { "retry-after": "5" } };
+  if (body === null) return fail(502, "The receipt could not be checked just now. Try again in a minute.", { code: "check-failed" });
+  return ok({ ...body, checkedAt: new Date(now()).toISOString(), served: "checked now" });
+}
+
+/** HB-97: check the listed sample receipts once (web start), so the first visitor's check is answered from the kept verdict. */
+export async function warmSampleReceipts(root = process.cwd()): Promise<number> {
+  let n = 0;
+  for (const r of sampleReceipts(root).receipts) {
+    const a = await v1CheckReceipt(r.signature, { root, deadlineMs: 60_000 }).catch(() => null);
+    if (a?.status === 200) n++;
+  }
+  return n;
 }
 
 let ledgerCache: { at: number; key: string; doc: FeeLedgerDoc } | null = null;

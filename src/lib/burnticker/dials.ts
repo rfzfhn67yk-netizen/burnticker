@@ -1,6 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { LEAGUES, NEXT_MAX, PAIR_OUTCOMES, gameSeries, isPairOutcome, outcomeAllowed, parseEspnSeries, seasonYearAt, teamSeries, windowChoices, type EspnSeries, type Window, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
+import { WX_HIGH_MAX_F, WX_HIGH_MIN_F } from "@/lib/burnticker/wxBounds";
 import { INVERSE_CHOICE, KEEPER_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 
 /**
@@ -96,7 +97,7 @@ export function dialsFor(r: BurnRule, c: DialCtx = {}): DialSet {
   }
   const n = series ? parseNwsSeries(series) : null;
   if (n) {
-    if (n.metric !== "snow") { out.ids.push("threshold"); out.threshold = n.metric === "high" ? { value: n.threshold, label: r.inverse ? "burns when the high is below (°F)" : "high at or above (°F)", step: 1, min: -40, max: 130 } : { value: n.threshold, label: r.inverse ? "burns when the rain is below (inches)" : "rain at or above (inches)", step: 0.05, min: 0.01, max: 10 }; }
+    if (n.metric !== "snow") { out.ids.push("threshold"); out.threshold = n.metric === "high" ? { value: n.threshold, label: r.inverse ? "burns when the high is below (°F)" : "high at or above (°F)", step: 1, min: WX_HIGH_MIN_F, max: WX_HIGH_MAX_F } : { value: n.threshold, label: r.inverse ? "burns when the rain is below (inches)" : "rain at or above (inches)", step: 0.05, min: 0.01, max: 10 }; }
     return out;
   }
   if (r.oracle === "catalogue") { out.fixedUnit = r.scalar ? `fixed by the source: unit ${r.scalar.unit}, direction ${r.scalar.direction}, baseline ${String(r.scalar.baseline)}` : null; return out; }

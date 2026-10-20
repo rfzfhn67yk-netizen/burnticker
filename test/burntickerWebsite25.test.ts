@@ -174,8 +174,9 @@ describe("WIRING-SOURCES7 page items", () => {
     assert.match(tile, />Swap the two coins<\/button>/);
     assert.match(tile, /next\("Next", "burn", !a\?\.underlying \|\| !b\?\.underlying \|\| pairRefused\)/);
     assert.match(tile, /next\("Next", "name", !model\?\.rule \|\| pairRefused\)/);
-    assert.match(tile, /The first day A's market cap passes B's, coin A's rule fires once\./);
-    plain("The first day A's market cap passes B's, coin A's rule fires once.");
+    // hourly run 7, HS-40: the cards are named by cadence (guidedLaunch.ts coinVsCardWords)
+    assert.match(tile, /coinVsCardWords\(shares\.daily, seasonDays\)/);
+    plain("The first day A passes B, A's coin burns once and takes B's pool; if it never happens, B's coin burns once at the end.");
   });
   test("H1: a record-close link opens one coin's record close with the coin searched; the card says so", () => {
     assert.match(tile, /if \(\(u\.get\("kind"\) \?\? entry\?\.kind\) === "record-close"\) \{ setOpen\(true\); setKind\("high"\);/);

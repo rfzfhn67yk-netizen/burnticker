@@ -334,6 +334,22 @@ export function shareExample(share: number): string {
 export const AMOUNT_MATH_LABEL = "How the amount is calculated";
 /** Item 55: Coin vs Coin keeps a share for each mode, and says both. */
 export const derbyShareLine = (daily: number, flip: number): string => `Each mode keeps its own share: the daily race at ${pctLabel(daily)}, the flippening at ${pctLabel(flip)}.`;
+/**
+ * HS-40 (hourly run 7): the coin comparison cards are named by cadence, since both modes move SOL between the coins. The words follow the
+ * pair sentence (derby/spec.ts derbySentence and FLIP_REST_LINE): in the flippening the coin that burns takes the other coin's pool at
+ * the end; in the daily race the day's winner burns its share and takes the other coin's share for that day. The daily share is the
+ * race's own (DEFAULT_SHARE.recurring until the creator picks another).
+ */
+export const FLIP_CARD_LABEL = "Once: the flippening";
+export const RACE_CARD_LABEL = "Every day: the daily race";
+export function coinVsCardWords(dailyShare: number = DEFAULT_SHARE.recurring, days?: number | null): { once: { label: string; sentence: string }; race: { label: string; sentence: string } } {
+  const read = days ? ` Read once a day at 00:00 UTC for ${days} days.` : "";
+  const p = pctLabel(dailyShare);
+  return {
+    once: { label: FLIP_CARD_LABEL, sentence: `The first day A passes B, A's coin burns once and takes B's pool; if it never happens, B's coin burns once at the end.${read}` },
+    race: { label: RACE_CARD_LABEL, sentence: `Each day the coin whose reference gained more burns ${p}, and takes the other coin's ${p} for that day.${read}` },
+  };
+}
 
 /**
  * THE PATTERN WORDS FOR THE THING PICKED (pass B item 12, audit 6 item 16): "After each Dodgers win", never "each day or reading" on a team
@@ -468,6 +484,16 @@ export function upfrontLines(raises: readonly string[], o?: { team?: boolean; en
   ];
 }
 export const UPFRONT_LABEL = "What to know before you start";
+/**
+ * HB-68 residue (hourly run 7): the coin comparison reviews had no "What to know before you start" block. A linked LaunchLab pair says
+ * the same lines as any pair; a pair on the shared pair curve says its own graduation condition (the server's prerequisite line when it
+ * has answered) in place of the raise choice.
+ */
+export const PAIR_CURVE_UPFRONT_FALLBACK = "Nothing burns until both coins graduate: the pair's shared curve has to reach its raise, and then both coins' pools are registered. A result that comes first is recorded and waits.";
+export function pairUpfrontLines(venue: "pair-curve" | "linked", raises: readonly string[], prerequisite?: string | null): string[] {
+  const base = upfrontLines(raises, { pair: true });
+  return venue === "pair-curve" ? [base[0], prerequisite || PAIR_CURVE_UPFRONT_FALLBACK, ...base.slice(2)] : base;
+}
 
 /**
  * WHO DECIDES AN ELECTION COIN (item 53): the race card names the state's certified result, and the review names the sources Polymarket's
@@ -900,13 +926,18 @@ export const MEETINGS_NONE_LINE = "The league's schedule lists no game between t
  * offered and the review answered signable with no warning. A series with no meeting left to play is greyed with this notice (the same
  * schedule search the one-game option says), and the server review warns (meetingsNoneLeftWarning).
  */
-export const MEETINGS_NONE_LEFT_LINE = "The schedule lists no game between them still to be played this season, so this option is not offered for them.";
+export const MEETINGS_NONE_LEFT_LINE = "The schedule lists no game between them still to be played this season, and they can no longer meet in the playoffs, so this option is not offered for them.";
 /** The meetings still to be played (a row whose result is "pending": scheduled or in progress). */
 export const meetingsLeft = (rows: readonly { result?: string | null }[]): number => rows.filter((r) => r.result === "pending").length;
-/** The third rivalry option's state from the rivalry read: offered only while a meeting is left; otherwise the reason it is greyed. */
-export function seriesOptionState(rv: { offered: boolean; offeredLine: string | null; meetings: readonly { result?: string | null }[] }): { offered: boolean; why: string | null } {
-  if (!rv.offered) return { offered: false, why: rv.offeredLine ?? NO_LISTED_MEETING_LINE };
-  return meetingsLeft(rv.meetings) > 0 ? { offered: true, why: null } : { offered: false, why: MEETINGS_NONE_LEFT_LINE };
+/**
+ * The third rivalry option's state from the rivalry read (HB-72 consistency, hourly run 7: meetingsLeft.ts meetingsVerdict is the one
+ * rule for the page, the review and the prepare): greyed with the server's line when it is not offered; offered with the playoff warning
+ * when no meeting is left but a playoff meeting is still possible; offered with nothing to say while a meeting is left.
+ */
+export function seriesOptionState(rv: { offered: boolean; offeredLine: string | null; meetings: readonly { result?: string | null }[]; warning?: string | null; season?: string | null }): { offered: boolean; why: string | null; warning: string | null } {
+  if (!rv.offered) return { offered: false, why: rv.offeredLine ?? NO_LISTED_MEETING_LINE, warning: null };
+  if (meetingsLeft(rv.meetings) > 0) return { offered: true, why: null, warning: null };
+  return { offered: true, why: null, warning: rv.warning ?? meetingsNoneLeftWarning(rv.season ?? "current", true) };
 }
 /** The server review's warning for a rivalry series rule whose season lists no meeting still to be played. */
 export const meetingsNoneLeftWarning = (season: string, playoffs: boolean): string =>

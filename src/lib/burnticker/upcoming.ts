@@ -1,5 +1,5 @@
 import { utcDateTime } from "@/lib/burnticker/utcWords";
-import { decidedPairLine, decidedPairOf } from "@/lib/burnticker/decidedWarning";
+import { NO_FURTHER_RESULT, decidedPairLine, decidedPairOf } from "@/lib/burnticker/decidedWarning";
 import { shortDay } from "@/lib/burnticker/cardView";
 import { sourcePublisher } from "@/lib/burnticker/coinSourceLine";
 
@@ -19,8 +19,8 @@ import { sourcePublisher } from "@/lib/burnticker/coinSourceLine";
  * locked rule file (src/lib/burnKeeper/schedule.ts polls). Copy note: the page's heading says "Next results", because the copy lint
  * refuses the word "upcoming" in visible text; only the address keeps it. Pure and client-safe.
  */
-export type SettlementStatus = "waiting" | "published" | "attested" | "burned" | "deferred" | "unavailable";
-export const SETTLEMENT_LABEL: Record<SettlementStatus, string> = { waiting: "Waiting for the source", published: "Published, not signed yet", attested: "Signed, waiting for its burn run", burned: "Burned", deferred: "On hold", unavailable: "Unavailable" };
+export type SettlementStatus = "waiting" | "published" | "attested" | "burned" | "deferred" | "decided" | "unavailable";
+export const SETTLEMENT_LABEL: Record<SettlementStatus, string> = { waiting: "Waiting for the source", published: "Published, not signed yet", attested: "Signed, waiting for its burn run", burned: "Burned", deferred: "On hold", decided: "Decided", unavailable: "Unavailable" };
 
 export interface UpcomingRow {
   ticker: string; name: string; href: string; network: "mainnet" | "devnet";
@@ -126,9 +126,10 @@ export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike
   const st0 = settlementOf(receipts, s.cluster, { sourceRead: !!s.feed?.lastFetchAt || (s.feed?.readings ?? 0) > 0, winCoin: isWinCoin(s.selectorKey) });
   // HB-80 / HS-27 (hourly run 5): a decided pair coin's row says won or lost in the one shared line (decidedWarning.ts decidedPairLine)
   const dp = decidedPairOf(s, receipts);
-  const st = dp ? { ...st0, text: decidedPairLine(s.ticker, dp) } : st0;
-  const close = s.next.nextCloseTime, check = s.next.nextCheckAt;
-  const schedule = close ? `The market is scheduled to close on ${hhmmUtc(close)}. The result counts once the source settles it, on the source's own timing.`
+  // HB-80 / HS-27 residue (hourly run 7): the chip says "Decided" (never "On hold"), and a decided coin has no next time
+  const st = dp ? { ...st0, status: "decided" as const, text: decidedPairLine(s.ticker, dp) } : st0;
+  const close = dp ? null : s.next.nextCloseTime, check = dp ? null : s.next.nextCheckAt;
+  const schedule = dp ? NO_FURTHER_RESULT : close ? `The market is scheduled to close on ${hhmmUtc(close)}. The result counts once the source settles it, on the source's own timing.`
     // walkthrough 13: the check time is said once, in Denver time, by the list (NextResults.tsx), not here in UTC as well
     : check ? "The source publishes on its own schedule, and this site reads it again at the next check."
     : "This rule has no scheduled result that this site knows of.";

@@ -24,6 +24,7 @@ after this one is the status on 2026-10-10, kept for the record.
 | Operator treasury | The developer fee wallet `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5`, which the owner holds. It is compiled into the mainnet builds and is also the LaunchLab platform fee wallet. It is not the Squads vault, and the vault receives no fees. | `config/burnticker/transparency.json`, `config/burnticker/operator.json` |
 | Mainnet rehearsal coin | done: $REHEARSAL (mint `FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp`) was created on LaunchLab mainnet on 2026-10-11 under the real platform settings, and its first reading was signed. It has not burned, because its curve has not filled. Creator coins have launched on LaunchLab mainnet since 2026-10-13. | `config/burnticker/transparency.json` (`rehearsals`), `docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json` |
 | $DEFICIT | created on mainnet on 2026-10-13 (mint `AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj`); creator launches opened the same evening | `config/burnticker/current-status.json` (`deficit.launch`) |
+| Bug bounty | live: the bounty wallet `HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u` was funded with 5 SOL on 2026-10-11 and the [bounty page](https://burnticker.com/burnticker/bounty) shows its funding, what it has sent and its live balance. Nothing has been sent from it yet. The terms in `SECURITY.md` are still a draft, and the bounty page says so. | `config/burnticker/transparency.json` (`howBuilt.bounty`), `docs/burnkeeper/evidence/bounty-2026-10-11/funding.json` |
 
 **Status on 2026-10-10, kept for the record.** The program is deployed on devnet for the rehearsal of 2026-10-10 (`docs/burnkeeper/devnet-run.md`).
 Nothing is deployed on mainnet, and no mainnet key exists.
@@ -756,8 +757,9 @@ public. The Jito-bundle gap in pool-health observations remains. So does the mul
 Informational items I-3 to I-6 are also open (`docs/burn-receipts/README.md` section 8).
 
 **Not done.** The ChatGPT review named in the decision log is not done. Neither are cargo-audit, Trident fuzzing and Sec3 X-ray. Review 3
-ran clippy with `-D warnings`, and the result was clean. The bounty is not done either. It is 5 to 10 SOL from the developer fee, and its
-terms are drafted in `SECURITY.md` but not published.
+ran clippy with `-D warnings`, and the result was clean. The bounty was not done on 2026-10-10. Since 2026-10-11 it is live: its wallet
+holds 5 SOL from the developer fee (a pool of 5 to 10 SOL), the bounty page shows its funding and balance, and its terms in `SECURITY.md`
+are still a draft (see the status on 2026-10-19 above).
 
 ## 11. Limitations and risks
 

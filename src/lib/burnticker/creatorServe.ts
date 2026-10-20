@@ -1,4 +1,4 @@
-import { CREATOR_PAGE, creatorNextLine, dayLine } from "@/lib/burnticker/creatorBenefits";
+import { CREATOR_PAGE, checkLine, creatorNextLine } from "@/lib/burnticker/creatorBenefits";
 import { decidedPairLine, decidedPairOf, type DecidedPairStatus } from "@/lib/burnticker/decidedWarning";
 import "server-only";
 import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server";
@@ -61,6 +61,8 @@ export interface CreatorCoinView extends CreatorCoinBase {
   nextAt: string | null;
   /** the "Next result" cell in words (creatorBenefits.ts creatorNextLine): a decided one-shot is decided, a past time is overdue */
   nextLine: string;
+  /** HB-80 residue (hourly run 7): the cell's label, "Result" for a decided or voided coin, "Next result" otherwise */
+  nextLabel: string;
   /** the keeper's next read of the source, shown under its own label; null once a one-shot is decided or voided */
   nextCheckAt: string | null; nextCheckLine: string | null;
   result: ResultState | null;
@@ -74,17 +76,17 @@ const sentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUp
  * The creator views' next fields from a coin's status JSON (the producer's `rules.oneShot` and `next`) and its receipts: the next result
  * and its words, and the next source check under its own label (dropped for a decided or voided one-shot). Pure.
  */
-export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & { market?: { phase?: string | null } | null; ticker?: string } & DecidedPairStatus, receipts: readonly (ResultReceipt & { pairRole?: string | null })[], now: number): Pick<CreatorCoinView, "nextAt" | "nextLine" | "nextCheckAt" | "nextCheckLine" | "result"> {
+export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & { market?: { phase?: string | null } | null; ticker?: string } & DecidedPairStatus, receipts: readonly (ResultReceipt & { pairRole?: string | null })[], now: number): Pick<CreatorCoinView, "nextAt" | "nextLine" | "nextLabel" | "nextCheckAt" | "nextCheckLine" | "result"> {
   const oneShot = !!s.rules.oneShot;
   // the producer's fields when present (tokenPage.ts); recomputed the same way for an older status JSON
   const t = s.next.result !== undefined ? { result: s.next.result, nextResultAt: s.next.nextResultAt ?? null, nextSourceCheckAt: s.next.nextSourceCheckAt ?? s.next.nextCheckAt ?? null } : nextTimes({ oneShot, receipts, nextCloseTime: s.next.nextCloseTime, nextCheckAt: s.next.nextCheckAt });
   const settled = t.result === "decided" || t.result === "void";
   const nextCheckAt = settled ? null : t.nextSourceCheckAt;
   return {
-    nextAt: t.nextResultAt, result: t.result,
+    nextAt: t.nextResultAt, result: t.result, nextLabel: settled ? CREATOR_PAGE.labels.result : CREATOR_PAGE.labels.next,
     // HB-80 / HS-27 (hourly run 5): a decided pair coin says won or lost in the one shared line, never "waiting" on the losing side
     nextLine: (() => { const dp = oneShot && t.result === "decided" && s.ticker ? decidedPairOf(s, receipts.map((r) => ({ status: r.status, settledAt: String(r.settledAt ?? ""), kind: r.kind ?? null, pairRole: r.pairRole ?? null }))) : null; return dp ? decidedPairLine(s.ticker!, dp) : creatorNextLine({ oneShot, receipts, graduated: s.market?.phase === "graduated", nextAt: t.nextResultAt, result: t.result }, now); })(),
-    nextCheckAt, nextCheckLine: nextCheckAt && nextCheckAt !== t.nextResultAt ? dayLine(nextCheckAt, now) : null,
+    nextCheckAt, nextCheckLine: nextCheckAt && nextCheckAt !== t.nextResultAt ? checkLine(nextCheckAt, now) : null,   // HB-98: an instant, with a grace
   };
 }
 
@@ -118,7 +120,7 @@ function unavailableOf(c: Ctx, t: TokenRow, loading = false): CreatorCoinView {
   try { rule = ruleOneLinerFor(c.plat.registry.lockedRule(t).rule, null, t.description, t.ticker); } catch { /* the name stands in */ }
   let lastBurnAt: string | null = null;
   try { lastBurnAt = c.plat.registry.receipts(t.mint).filter((r) => r.status === "confirmed" && (r.burnRaw ?? BigInt(0)) > BigInt(0)).map((r) => r.settledAt).sort().at(-1) ?? null; } catch { lastBurnAt = null; }
-  return { ...baseOf(c, t), available: false, loading, imageUrl: t.imageUrl, rule: sentence(rule), creatorText: null, links: [], lastBurnAt, nextAt: null, nextLine: loading ? CREATOR_PAGE.coinLoading : CREATOR_PAGE.coinUnavailable, nextCheckAt: null, nextCheckLine: null, result: null };
+  return { ...baseOf(c, t), available: false, loading, imageUrl: t.imageUrl, rule: sentence(rule), creatorText: null, links: [], lastBurnAt, nextAt: null, nextLine: loading ? CREATOR_PAGE.coinLoading : CREATOR_PAGE.coinUnavailable, nextLabel: CREATOR_PAGE.labels.next, nextCheckAt: null, nextCheckLine: null, result: null };
 }
 
 /** The coin's rule in one line from the registry and an optional venue title (never a raw selector or id). */

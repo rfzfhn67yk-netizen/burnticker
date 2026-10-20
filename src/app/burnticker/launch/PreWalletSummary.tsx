@@ -3,6 +3,7 @@
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { REVIEW_UPDATING } from "@/lib/burnticker/launchReviewSync";
 import { pendingWords } from "@/lib/burnticker/preparedRules";
+import { walletPromptsLine } from "@/lib/burnticker/walletProof";
 
 /**
  * THE PRE-WALLET SUMMARY (ChatGPT launch audit 5, L06 / site audit #4, 2026-10-11): what the creator sees on the review card BEFORE the
@@ -13,7 +14,7 @@ import { pendingWords } from "@/lib/burnticker/preparedRules";
  */
 const n = (s: string) => Number(s).toLocaleString("en-US");
 
-export function PreWalletSummary({ review, loading, error, updating = false }: { review: LaunchReview | null; loading: boolean; error: string | null; /** A6: the summary on file was built for another draft */ updating?: boolean }) {
+export function PreWalletSummary({ review, loading, error, updating = false, proof }: { review: LaunchReview | null; loading: boolean; error: string | null; /** A6: the summary on file was built for another draft */ updating?: boolean; /** HB-92: whether the wallet is asked for the proof, the same flag the button's count uses */ proof?: boolean }) {
   if (!review) return (
     <div className="rounded-lg border border-neutral-800 p-3 text-xs text-neutral-400" data-prewallet data-prewallet-state={updating ? "updating" : loading ? "loading" : error ? "error" : "empty"} aria-live="polite">
       {updating ? REVIEW_UPDATING : loading ? "Reading the launch summary. It lists the network, the transactions and the estimated cost." : error ? <>The launch summary could not be read just now. {error}</> : null}
@@ -23,6 +24,8 @@ export function PreWalletSummary({ review, loading, error, updating = false }: {
   const count = review.transactions.count;
   // older servers (before website-12) send no venue fields: fall back to the lists they do send
   const prereqLine = review.prerequisiteLine ?? review.prerequisites[0];
+  // HB-92 (hourly run 7): the prompt count here is the button's (walletProof.ts walletPromptCount, the same proof flag)
+  const recoveryLines = review.recovery && count > 1 && proof !== undefined ? [walletPromptsLine(count, proof), ...review.recovery.slice(1)] : review.recovery;
   return (
     <>
     {/* website-15 item 12: collapsed below the launch button; "Who controls what today" is its own block, and the end of the rule is said once, above */}
@@ -43,7 +46,7 @@ export function PreWalletSummary({ review, loading, error, updating = false }: {
       </div>
       <p className="break-words">Connecting a wallet only shares its public address with this page. Nothing is signed or sent when you connect.</p>
       <p className="break-words">{review.transactions.note}</p>
-      <ul className="list-disc space-y-0.5 pl-5" data-recovery>{(review.recovery ?? ["If you reject the request in your wallet, nothing is sent and nothing is charged. The draft is kept for 24 hours, so you can press the button again."]).map((x) => <li key={x} className="break-words">{x}</li>)}</ul>
+      <ul className="list-disc space-y-0.5 pl-5" data-recovery>{(recoveryLines ?? ["If you reject the request in your wallet, nothing is sent and nothing is charged. The draft is kept for 24 hours, so you can press the button again."]).map((x) => <li key={x} className="break-words">{x}</li>)}</ul>
       <p className="break-words">{review.rule.presets}</p>
       <p className="break-words" data-authority>{review.authority}</p>
       <p className="break-words text-neutral-400">{review.operator}</p>
