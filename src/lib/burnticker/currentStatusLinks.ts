@@ -22,7 +22,7 @@ export const FIRST_BURN_PATH_URL = "https://github.com/rfzfhn67yk-netizen/burnti
  * after the push): a file added since the pinned commit 404s until then. test/burntickerTrustLinks.test.ts checks the shape.
  */
 export const PUBLIC_REPO_URL = "https://github.com/rfzfhn67yk-netizen/burnticker";
-export const PUBLIC_REPO_COMMIT = "2aa4d6b00313e2e13588d4e15b2bfdb1c1491018";
+export const PUBLIC_REPO_COMMIT = "747ec1fdf202f2e994430b11b627bbfacafd6918";
 /** Repository paths a page may cite (top-level folders of the public tree). */
 export const REPO_PATH_RE = /\b(?:docs|config|src|programs|scripts|site|test|deploy)\/[A-Za-z0-9_./\[\]-]*[A-Za-z0-9_\]/-]/g;
 /** The pinned GitHub URL of a repository path: a trailing "/" (a folder) opens the tree view, anything else the file. */
@@ -31,7 +31,9 @@ export function repoUrl(p: string, commit: string = PUBLIC_REPO_COMMIT): string 
   return `${PUBLIC_REPO_URL}/${clean.endsWith("/") ? "tree" : "blob"}/${commit}/${clean.replace(/\/$/, "")}`;
 }
 /** Split a sentence into text and repository-path pieces (for rendering the paths as pinned links). */
-export function splitRepoPaths(text: string): { text: string; path: string | null }[] {
+export function splitRepoPaths(input: string | null | undefined): { text: string; path: string | null }[] {
+  // HB-143 (hourly run 12): the public current-status answer drops whole-path fields (withoutRepoPaths), so a caller may pass nothing
+  const text = input ?? "";
   const out: { text: string; path: string | null }[] = [];
   let last = 0;
   for (const m of text.matchAll(REPO_PATH_RE)) {
