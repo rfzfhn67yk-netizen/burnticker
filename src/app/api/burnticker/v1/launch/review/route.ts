@@ -1,5 +1,6 @@
 // Public API v1 (1.14.0): the read-only pre-wallet review (src/lib/burnticker/launchReview.ts; launch audit 5 L02 / L06).
-import { fail, ok, readJson, runV1 } from "@/lib/burnticker/api/http";
+import { fail, ok, readJson, runV1, type ApiResult } from "@/lib/burnticker/api/http";
+import { reviewSlowLine, stageClock, type StageClock } from "@/lib/burnticker/buildStages";
 import { withLaunchFailureAlert } from "@/lib/burnticker/api/launchFailAlert";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { oneShotVoidBy } from "@/lib/burnticker/api/handlers";
@@ -65,12 +66,22 @@ async function sportsNoteFor(rule: unknown): Promise<string | null> {
 /** Builds nothing, pins nothing, registers nothing, reads no chain (one Gamma read for a one-market Polymarket rule): works in preview and open modes; a closed host refuses. */
 export async function POST(req: Request) {
   return runV1("reviewLaunch", req, withLaunchFailureAlert(platform().registry, "reviewLaunch", req, async () => {
+    // HB-145: every stage is timed; a review slower than REVIEW_SLOW_MS writes one line naming its stages (buildStages.ts reviewSlowLine)
+    const clock = stageClock(), t0 = Date.now(), seen: { rule?: unknown } = {};
+    try { return await review(req, clock, seen); }
+    finally { const line = reviewSlowLine(clock, Date.now() - t0, seen.rule); if (line) console.info(line); }
+  }));
+}
+
+async function review(req: Request, clock: StageClock, seen: { rule?: unknown }): Promise<ApiResult> {
+  {
     if (launchModeFromEnv(process.env) === "closed") { const r = globalRefusal(process.env)!; return fail(r.status, r.body.error, { code: r.body.code, preview: false }); }
-    const body = await readJson(req);
+    const body = await clock.run("body", () => readJson(req));
     if (!body) return fail(400, "invalid JSON body");
+    seen.rule = (body as { rule?: unknown }).rule;
     // review of block M: the creator's own drafts count as theirs only when the request carries that wallet's signed request over these
     // tickers; a claimed wallet alone is dropped, so asking with someone else's wallet never reveals who owns a draft
-    { const proven = provenReviewCreator(body, [publicOrigin()]); if (proven) (body as Record<string, unknown>).creator = proven; else delete (body as Record<string, unknown>).creator; }
+    clock.run("proof", () => { const proven = provenReviewCreator(body, [publicOrigin()]); if (proven) (body as Record<string, unknown>).creator = proven; else delete (body as Record<string, unknown>).creator; });
     // A9: the time lock beside the review is the one last read from chain (the trust page's cache); a production host refreshes it in
     // the background so the next review has it. Never awaited here: the review reads no chain.
     const cluster = hostCluster(process.env) === "mainnet" ? "mainnet" : "devnet";
@@ -82,42 +93,43 @@ export async function POST(req: Request) {
     if (rule && rule.oracle === "polymarket" && typeof rule.market === "string" && rule.market) {
       const read = platform().polymarket.seriesInfo(rule.market).catch(() => null);
       let timer: ReturnType<typeof setTimeout> | undefined;
-      stated = statedCtx(await Promise.race([read, new Promise<null>((res) => { timer = setTimeout(() => res(null), 4_000); })]));
+      stated = statedCtx(await clock.run("market", () => Promise.race([read, new Promise<null>((res) => { timer = setTimeout(() => res(null), 4_000); })])));
       clearTimeout(timer);
     }
     // audit 6 items 8 and 2: the platform's Kalshi flag and its registered coins (the lookalike refusal the bundle makes); a season rule
     // for a team with no games left carries the season-over warning (one schedule read, at most 3 seconds, never required)
     let existingRows: ReturnType<typeof lookalikeRows> | null = null;
-    try { existingRows = lookalikeRows(platform().registry); } catch { existingRows = null; }
+    try { existingRows = clock.run("registry", () => lookalikeRows(platform().registry)); } catch { existingRows = null; }
     // sources-7 H6: a season rule on a team whose season is over is refused (seasonOver.ts), from the platform's schedule port
-    const seasonOver = await seasonOverFor((body as { rule?: unknown }).rule, platform().seasonSchedule);
-    const game = await gameFor((body as { rule?: unknown }).rule);
-    const sourceNote = await sportsNoteFor((body as { rule?: unknown }).rule);
-    const { note: meetingsNote, refusal: meetingsRefusal } = await meetingsVerdictOf((body as { rule?: unknown }).rule);
+    const seasonOver = await clock.run("season", () => seasonOverFor((body as { rule?: unknown }).rule, platform().seasonSchedule));
+    const game = await clock.run("game", () => gameFor((body as { rule?: unknown }).rule));
+    const sourceNote = await clock.run("note", () => sportsNoteFor((body as { rule?: unknown }).rule));
+    const { note: meetingsNote, refusal: meetingsRefusal } = await clock.run("meetings", () => meetingsVerdictOf((body as { rule?: unknown }).rule));
     // audit 12 item 2: a one-market pair's void date is the market's own end date, read as the bundle route reads it (handlers.ts
     // oneShotVoidBy, at most 4 seconds), so the review's side A rule is the exact one; no read leaves it labelled a draft
     let pairVoidBy: string | null = null;
     const pairSide = (body as { pair?: unknown }).pair;
     if (pairSide && typeof pairSide === "object" && !settledPairInput(pairSide) && rule && (rule.oracle === "polymarket" || rule.oracle === "kalshi") && typeof rule.market === "string" && rule.market) {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      pairVoidBy = await Promise.race([oneShotVoidBy(platform(), { rule } as unknown as LockedRule), new Promise<null>((res) => { timer = setTimeout(() => res(null), 4_000); })]);
+      pairVoidBy = await clock.run("voidBy", () => Promise.race([oneShotVoidBy(platform(), { rule } as unknown as LockedRule), new Promise<null>((res) => { timer = setTimeout(() => res(null), 4_000); })]));
       clearTimeout(timer);
     }
     // cheap-features item 5: a team rule counted over the team's previous season (one schedule read, at most 3 seconds, never required)
-    const lastSeason = await lastSeasonBacktest((body as { rule?: unknown }).rule, platform().teamSeason);
+    const lastSeason = await clock.run("lastSeason", () => lastSeasonBacktest((body as { rule?: unknown }).rule, platform().teamSeason));
     // the end-sink picker: the live coins on this network a rule may name to take the rest (endSinks.ts); unreadable = none
     let sinks: SinkCoin[] = [];
-    try { const p = platform(); sinks = liveSinks(p.registry, p.cluster); } catch { sinks = []; }
+    try { const p = platform(); sinks = clock.run("sinks", () => liveSinks(p.registry, p.cluster)); } catch { sinks = []; }
     // HS-48 (hourly run 9): whether a coin comparison's coins have any stored daily reading (unreadable = not said either way)
     let derbyHistory: ((feed: string) => boolean) | undefined;
     try { const ds = derbyStore(platform().registry.db); derbyHistory = (feed) => ds.hasPoints(feed); } catch { derbyHistory = undefined; }
     // HB-41 widened (hourly run 14): the keeper's newest stored reading of the rule's feed, so the back-test says when the catalogue sample is behind
     const storedReading = (k: string) => { const x = platform().registry.lastReading(k); return x ? { at: x.at, fetchedAt: x.fetchedAt } : null; };
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, derbyHistory, storedReading, sourceNote, meetingsNote, meetingsRefusal });
+    const build = () => buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, derbyHistory, storedReading, sourceNote, meetingsNote, meetingsRefusal });
+    const r = clock.run("build", build);
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];
-    try { existing = existingCoinsFor((body as { rule?: unknown }).rule, platform().registry.tokens()); } catch { existing = []; }
+    try { existing = clock.run("existing", () => existingCoinsFor((body as { rule?: unknown }).rule, platform().registry.tokens())); } catch { existing = []; }
     // prelaunch audit 2026-10-18 A-2 / A-40: a ticker another creator's coin holds is refused (the ticker field carries the sentence, from
     // identityRefusals above) with two free tickers that pass the launch's own check; only launched coins are described, never a draft.
     // A registry that cannot be read leaves the list empty.
@@ -127,8 +139,8 @@ export async function POST(req: Request) {
       const creator = typeof (body as { creator?: unknown }).creator === "string" ? String((body as { creator: string }).creator) : null;
       const ruleA = (body as { rule?: unknown }).rule as Pick<BurnRule, "oracle" | "series"> | null | undefined;
       // HB-117: the suggested ticker is never one another coin holds (or one like it); a hazard coin is offered its own word first
-      ({ tickers, coins } = reviewTickerChecks(r.review.coins, ruleA, { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status: x.status, creator: x.creator })), reserved, existing: existingRows, creator }));
+      clock.run("tickers", () => { ({ tickers, coins } = reviewTickerChecks(r.review.coins, ruleA, { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status: x.status, creator: x.creator })), reserved, existing: existingRows, creator })); });
     } catch { tickers = []; coins = r.review.coins; }
     return ok({ ...r.review, coins, existing, tickers });
-  }));
+  }
 }
