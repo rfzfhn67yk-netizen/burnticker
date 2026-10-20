@@ -30,7 +30,7 @@ test("well-formed addresses pass through untouched, escapes included", async () 
   }
 });
 
-test("HB-100 (hourly run 11): a well-formed coin page for a coin this site does not have is rewritten to the unmatched 404, never refused as malformed", async () => {
+test("HB-100 (hourly run 11): a well-formed coin page for a coin this site does not have is never refused as malformed; it goes on to the page (the rewrite is off since publish 103)", async () => {
   assert.equal(malformedPath("/burnticker/t/%24RAYS"), false);
   // HB-152: the gate reads the registry read-only and never creates it, so the test's own (empty) registry is made first
   openRegistry(process.env.BURNTICKER_DB!).db.close();
@@ -38,7 +38,9 @@ test("HB-100 (hourly run 11): a well-formed coin page for a coin this site does 
   // then-missing registry is forgotten
   (await import("@/lib/burnticker/coinPageGate")).clearCoinPageGate();
   const r = await proxy(new NextRequest("https://burnticker.test/burnticker/t/%24RAYS"));
-  assert.match(r.headers.get("x-middleware-rewrite") ?? "", /\/burnticker\/_no-such-coin$/);
+  // publish 103: the rewrite answered 500 behind Caddy, so it is off (src/proxy.ts UNKNOWN_COIN_REWRITE); the page's layout answers 404
+  assert.equal(r.headers.get("x-middleware-rewrite"), null);
+  assert.notEqual(r.status, 500);
 });
 
 test("the proxy only sees paths with a %: its matcher, and it reads no body", () => {

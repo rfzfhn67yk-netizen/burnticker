@@ -322,7 +322,9 @@ describe("HB-100 reopened: an unknown coin's 404 is decided before rendering, so
   });
   test("the proxy runs the gate on coin pages and rewrites to the unmatched address; the layout keeps its own check", () => {
     const proxy = read("src/proxy.ts");
-    assert.match(proxy, /if \(seg !== null && !\(await coinPageServedSafely\(seg\)\)\) return NextResponse\.rewrite\(new URL\(NO_SUCH_COIN_PATH, request\.url\)\);/);
+    // publish 103: the rewrite answered 500 behind Caddy (forwarded https on the plain-http port), so it is switched off and the layout answers 404
+    assert.match(proxy, /const UNKNOWN_COIN_REWRITE = false;/);
+    assert.match(proxy, /if \(seg !== null && UNKNOWN_COIN_REWRITE && !\(await coinPageServedSafely\(seg\)\)\) return NextResponse\.rewrite\(new URL\(NO_SUCH_COIN_PATH, request\.url\)\);/);
     assert.match(proxy, /matcher: \["\/:path\(\.\*%\.\*\)", "\/burnticker\/t\/:ticker"\]/);
     assert.ok(proxy.indexOf("malformedPath(raw)") < proxy.indexOf("coinSegmentOf(raw)"), "the malformed path is answered first");
     assert.match(read("src/app/burnticker/t/[ticker]/layout.tsx"), /if \(!found\) notFound\(\);/);
