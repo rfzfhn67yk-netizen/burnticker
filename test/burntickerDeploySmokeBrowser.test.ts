@@ -221,7 +221,7 @@ describe("HB-138: a route that fails is asked again after a pause before the smo
 });
 
 describe("HB-100: the smoke's route list checks the proxy's coin gate", { skip }, () => {
-  test("/burnticker/t/NOPE must be 404 with 'could not find' in the server HTML; /burnticker/t/DEFICIT must be 200", async () => {
+  test("/burnticker/t/NOPE must be 404 (never 500); /burnticker/t/DEFICIT must be 200", async () => {
     const s = await smoke();
     const nope = s.SMOKE_ROUTES.find((r) => r.path === "/burnticker/t/NOPE")!;
     assert.deepEqual(nope.ok, [404]);
@@ -229,7 +229,9 @@ describe("HB-100: the smoke's route list checks the proxy's coin gate", { skip }
     const base = { timedOut: false, error: null };
     assert.equal(s.routeProblem(nope, { ...base, status: 404, text: "<main><h1>We could not find that page.</h1></main>" }), null);
     // the HB-100 bug: the words only in the client payload (a script), Next's bare error document in the HTML
-    assert.match(s.routeProblem(nope, { ...base, status: 404, text: "<html><body>404</body><script>self.__next_f.push([1,\"We could not find that page.\"])</script></html>" }) ?? "", /without \/could not find\/i in the server-rendered HTML/);
+    // publish 103: the server-rendered copy is off until the rewrite works behind Caddy; any 404 passes, a 500 never does
+    assert.equal(s.routeProblem(nope, { ...base, status: 404, text: "<html><body>404</body></html>" }), null);
+    assert.match(s.routeProblem(nope, { ...base, status: 500, text: "error" }) ?? "", /HTTP 500 \(wanted 404\)/);
     assert.match(s.routeProblem(nope, { ...base, status: 200, text: "could not find" }) ?? "", /HTTP 200 \(wanted 404\)/);
     assert.equal(s.serverHtml("a<script type=\"x\">b</script>c<SCRIPT>d</SCRIPT>e"), "ace");
     const src = fs.readFileSync(SMOKE, "utf8");
