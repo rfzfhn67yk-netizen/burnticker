@@ -31,7 +31,9 @@ export function repoUrl(p: string, commit: string = PUBLIC_REPO_COMMIT): string 
   return `${PUBLIC_REPO_URL}/${clean.endsWith("/") ? "tree" : "blob"}/${commit}/${clean.replace(/\/$/, "")}`;
 }
 /** Split a sentence into text and repository-path pieces (for rendering the paths as pinned links). */
-export function splitRepoPaths(text: string): { text: string; path: string | null }[] {
+export function splitRepoPaths(input: string | null | undefined): { text: string; path: string | null }[] {
+  // HB-143 (hourly run 12): the public current-status answer drops whole-path fields (withoutRepoPaths), so a caller may pass nothing
+  const text = input ?? "";
   const out: { text: string; path: string | null }[] = [];
   let last = 0;
   for (const m of text.matchAll(REPO_PATH_RE)) {

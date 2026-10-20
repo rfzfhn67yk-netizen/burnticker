@@ -62,7 +62,7 @@ export function CurrentStatusSummary({ card, compact = false }: { card: string; 
         <ul className="mt-1 space-y-0.5">{s.releaseRequirements.map((r) => <li key={r.id}><span className={`mr-1 rounded px-1 ${r.status === "open" ? "bg-amber-900 text-amber-200" : "bg-neutral-800 text-neutral-300"}`}>{r.status}</span>{r.text}</li>)}</ul>
       </details>
       <details className="mt-1 text-xs"><summary className="cursor-pointer text-neutral-300">How it is meant to work (not all of it is deployed)</summary><ul className="mt-1 list-disc pl-5">{s.design.map((d) => <li key={d}>{d}</li>)}</ul></details>
-      <p className="mt-2 text-[11px] text-neutral-500">The history is kept in append-only files: {s.historical.map((h, k) => <span key={h.path}>{k ? (k === s.historical.length - 1 ? " and " : ", ") : ""}the {h.label.charAt(0).toLowerCase() + h.label.slice(1)} in <RepoText text={h.path} /></span>)}. This summary comes from <RepoText text={s.source} />. The links open the public repository at commit <code>{PUBLIC_REPO_COMMIT.slice(0, 8)}</code>.</p>
+      <p className="mt-2 text-[11px] text-neutral-500">The history is kept in append-only files: {s.historical.map((h, k) => <span key={h.path ?? h.label}>{k ? (k === s.historical.length - 1 ? " and " : ", ") : ""}the {h.label.charAt(0).toLowerCase() + h.label.slice(1)}{h.path ? <> in <RepoText text={h.path} /></> : null}</span>)}.{s.source ? <> This summary comes from <RepoText text={s.source} />.</> : null} The links open the public repository at commit <code>{PUBLIC_REPO_COMMIT.slice(0, 8)}</code>.</p>
     </section>
   );
 }
