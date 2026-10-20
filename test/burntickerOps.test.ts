@@ -141,14 +141,14 @@ describe("evaluateAlerts on a fake registry", () => {
     assert.deepEqual(kinds(a), ["bt-audit-mismatch"]);
     assert.match(a[0].text, /AUDIT MISMATCH .*1 receipt does not recompute — \$BRONCO KXNFLGAME-26OCT04DENSF-DEN: units: row 2 ≠ recomputed 1/);
   });
-  test("the keeper key under 0.05 SOL, the pre-audit cap binding (from the published status.json), a stale keeper", () => {
+  test("the keeper key under 0.1 SOL, the pre-audit cap binding (from the published status.json), a stale keeper", () => {
     launch(BRONCOS, "BRONCO", MINT_A, NIGHT - DAY);
     writeAudit(true, NIGHT - HOUR);
     reg.setFeedState({ selectorKey: "kalshi:KXNFLGAME:binary", lastFetchAt: NIGHT - 60_000, lastOkAt: NIGHT - 60_000, failures: 0, lastError: null, nextFetchAt: NIGHT + 60_000 });
     assert.deepEqual(evaluateAlerts(snap(NIGHT, { balances: { at: NIGHT, keeperLamports: null, devFeeLamports: null } })), [], "unknown balance is not an alarm");
-    assert.deepEqual(evaluateAlerts(snap(NIGHT, { balances: { at: NIGHT, keeperLamports: KEEPER_MIN_LAMPORTS, devFeeLamports: null } })), [], "exactly 0.05 is fine");
+    assert.deepEqual(evaluateAlerts(snap(NIGHT, { balances: { at: NIGHT, keeperLamports: KEEPER_MIN_LAMPORTS, devFeeLamports: null } })), [], "exactly 0.1 is fine");
     let a = evaluateAlerts(snap(NIGHT, { balances: { at: NIGHT, keeperLamports: KEEPER_MIN_LAMPORTS - BigInt(1), devFeeLamports: null } }));
-    assert.deepEqual(kinds(a), ["bt-keeper-balance-low"]); assert.match(a[0].text, /holds 0\.050 SOL \(< 0\.05\)/);
+    assert.deepEqual(kinds(a), ["bt-keeper-balance-low"]); assert.match(a[0].text, /holds 0\.100 SOL \(< 0\.1\)\. Send about 0\.41 SOL/);
     writeStatus("BRONCO", { feePdaSol: "27.5", queuedSol: "2.48" });
     a = evaluateAlerts(snap(NIGHT));
     assert.deepEqual(kinds(a), ["bt-cap-binding"]); assert.match(a[0].text, /2\.48 SOL above the 25 SOL pre-audit cap is queued \(pool 27\.5 SOL\)/);

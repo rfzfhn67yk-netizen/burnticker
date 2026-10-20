@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { Registry } from "@/lib/burnticker/registry";
-import type { PinUploader } from "@/lib/burnticker/pin";
+import type { PinUploader, UploadBalance } from "@/lib/burnticker/pin";
 
 /**
  * THE DAILY REGISTRY SNAPSHOT, PINNED TO ARWEAVE (owner-approved 2026-10-10 night, trust-ops item 1).
@@ -169,10 +169,75 @@ export async function snapshotIfDue(o: { registry: Registry; uploader: PinUpload
   } catch (e) {
     const msg = (e as Error).message.slice(0, 240);
     o.registry.setStatus("ops.snapshot.lastFailureAt", String(o.now), o.now);
+    o.registry.setStatus("ops.snapshot.lastError", msg, o.now);   // HB-82: ops.json's missing-snapshot condition says why
     o.log(`  [snapshot] ${utcDay(o.now)} not pinned: ${msg}`);
     try { await o.alert?.("bt-snapshot-failed", `bt-snapshot-failed:${utcDay(o.now)}`, `Burnticker registry snapshot for ${utcDay(o.now)} not pinned: ${msg}`); } catch { /* the alert channel failing never stops the keeper */ }
     return null;
   }
+}
+
+// ---- HB-82 (hourly run 6): the upload balance and the missing-snapshot line ----
+
+/** The keeper raises the low-balance alert when the Irys balance covers fewer than this many daily snapshots. */
+export const UPLOAD_LOW_SNAPSHOTS = 7;
+/** The size the balance is priced at: one daily snapshot (about 95 KB on 2026-10-19, growing with every coin). */
+export const SNAPSHOT_PRICE_BYTES = 100_000;
+export const UPLOAD_BALANCE_KIND = "bt-upload-balance-low";
+export const IRYS_FUND_SCRIPT = "scripts/ops/irys-fund.mts";
+const BALANCE_DAY_KEY = "ops.snapshot.balanceCheckedDay", BALANCE_TRIED_KEY = "ops.snapshot.balanceTriedAt";
+
+/** PURE: how many daily snapshots the balance covers, whether that is low, and the alert text (the payer address and the ops script named). */
+export function uploadBalanceVerdict(b: UploadBalance): { covers: number; low: boolean; text: string } {
+  const covers = b.priceLamports > BigInt(0) ? Number(b.balanceLamports / b.priceLamports) : 0;
+  const text = `The Irys upload balance of ${b.address || "BURNTICKER_UPLOAD_PAYER"} covers ${covers} daily registry ${covers === 1 ? "snapshot" : "snapshots"} (${b.balanceLamports} lamports; one ${SNAPSHOT_PRICE_BYTES / 1000} KB upload costs about ${b.priceLamports} lamports). Below ${UPLOAD_LOW_SNAPSHOTS}, fund it from the payer wallet with ${IRYS_FUND_SCRIPT} --send <sol>.`;
+  return { covers, low: covers < UPLOAD_LOW_SNAPSHOTS, text };
+}
+
+/**
+ * Once per UTC day (the active keeper, after its snapshot step): reads the uploader's balance and the price of one snapshot (two Irys
+ * requests in the "irys" budget lane) and raises UPLOAD_BALANCE_KIND when it covers fewer than UPLOAD_LOW_SNAPSHOTS snapshots. A failed
+ * read is logged and tried again after SNAPSHOT_RETRY_MS. Never throws.
+ */
+export async function checkUploadBalance(o: { registry: Pick<Registry, "getStatus" | "setStatus">; uploader: PinUploader | null; now: number; log: (s: string) => void; alert?: (kind: string, key: string, text: string) => Promise<unknown> | unknown }): Promise<{ covers: number; low: boolean; text: string } | null> {
+  if (!o.uploader?.balance) return null;
+  const day = utcDay(o.now);
+  if (o.registry.getStatus(BALANCE_DAY_KEY) === day) return null;
+  const tried = Number(o.registry.getStatus(BALANCE_TRIED_KEY) ?? 0);
+  if (tried && o.now - tried < SNAPSHOT_RETRY_MS) return null;
+  o.registry.setStatus(BALANCE_TRIED_KEY, String(o.now), o.now);
+  let v: ReturnType<typeof uploadBalanceVerdict>;
+  try { v = uploadBalanceVerdict(await o.uploader.balance(SNAPSHOT_PRICE_BYTES)); } catch (e) { o.log(`  [snapshot] upload balance not read: ${(e as Error).message.slice(0, 160)}`); return null; }
+  o.registry.setStatus(BALANCE_DAY_KEY, day, o.now);
+  o.log(`  [snapshot] upload balance covers ${v.covers} daily snapshots${v.low ? " (LOW)" : ""}`);
+  if (v.low) { try { await o.alert?.(UPLOAD_BALANCE_KIND, `${UPLOAD_BALANCE_KIND}:${day}`, v.text); } catch { /* the alert channel failing never stops the keeper */ } }
+  return v;
+}
+
+export const SNAPSHOT_MISSING_KIND = "bt-snapshot-missing";
+/** The plain line for a missing day's snapshot (no date in the prose; the date is its own field). */
+export const snapshotMissingLine = (failed: boolean): string => `Today's registry snapshot is not pinned yet.${failed ? " The last upload failed, and the keeper tries again every 30 minutes." : " The keeper takes it on its next cycle."}`;
+export interface SnapshotMissing { date: string; lastFailureAt: number | null; lastError: string | null; line: string }
+/**
+ * Read-only (never creates the table, so the web can call it): today's snapshot is missing once the UTC day is past
+ * SNAPSHOT_AFTER_UTC_MINUTE and the snapshots table has no row for it. null when it is pinned, not due yet or not readable.
+ */
+export function snapshotMissingFact(registry: Pick<Registry, "db" | "getStatus">, now: number): SnapshotMissing | null {
+  const d = new Date(now);
+  if (d.getUTCHours() * 60 + d.getUTCMinutes() < SNAPSHOT_AFTER_UTC_MINUTE) return null;
+  const date = utcDay(now);
+  try { if (tableExists(registry.db, "snapshots") && registry.db.prepare("SELECT 1 FROM snapshots WHERE date=?").get(date)) return null; } catch { return null; }
+  const lastFailureAt = Number(registry.getStatus("ops.snapshot.lastFailureAt") ?? 0) || null;
+  const failedToday = lastFailureAt !== null && utcDay(lastFailureAt) === date;
+  return { date, lastFailureAt: failedToday ? lastFailureAt : null, lastError: failedToday ? registry.getStatus("ops.snapshot.lastError") : null, line: snapshotMissingLine(failedToday) };
+}
+
+/** HB-82: current-status's view of today's snapshot (read-only; null when the registry cannot be read). The line is set only once the day's snapshot is due and missing. */
+export function registrySnapshotView(registry: Pick<Registry, "db" | "getStatus">, now: number): { date: string; pinned: boolean; line: string | null } | null {
+  try {
+    const date = utcDay(now);
+    const pinned = tableExists(registry.db, "snapshots") && !!registry.db.prepare("SELECT 1 FROM snapshots WHERE date=?").get(date);
+    return { date, pinned, line: pinned ? null : snapshotMissingFact(registry, now)?.line ?? null };
+  } catch { return null; }
 }
 
 // ---- the verifier's checks (pure; scripts/burnticker-verify-snapshot.mts does the download) ----

@@ -10,7 +10,7 @@ import { KALSHI_UNAVAILABLE } from "@/lib/burnticker/venues";
 import { VAULT_HIDDEN_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { loadRefuseList, nameRefusals } from "@/lib/burnticker/oracle/refuse";
 import { isReserved, loadMajors, loadReserved, majorProblem, reservedProblem, RESERVED_TICKER_REFUSAL } from "@/lib/burnticker/reservedNames";
-import { controlCharProblem } from "@/lib/burnticker/launchFields";
+import { controlCharProblem, markupProblem } from "@/lib/burnticker/launchFields";
 import { regexProblem } from "@/lib/burnticker/safeRegex";
 import { lookalikeHits, lookalikeRefusalOf, type LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { parseEspnSeries, teamByAbbr, teamCodeOf, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
@@ -244,7 +244,7 @@ export function otherTeamTickerProblem(ticker: string, rule: Pick<BurnRule, "ora
 export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): (PreflightRefusal & { /** sources-7 round 2: the field it belongs to */ field: "name" | "ticker" | "description" | "note" })[] {
   const out: (PreflightRefusal & { field: "name" | "ticker" | "description" | "note" })[] = [];
   // the name's control characters are nameProblem's (launchFields.ts), which both the review and the bundle already run
-  for (const [field, text] of [["description", s.description ?? ""], ["note", s.note ?? ""]] as const) { const c = controlCharProblem(text, field); if (c) out.push({ status: 400, code: "control-characters", message: c, field }); }
+  for (const [field, text] of [["description", s.description ?? ""], ["note", s.note ?? ""]] as const) { const c = controlCharProblem(text, field); if (c) out.push({ status: 400, code: "control-characters", message: c, field }); const m = markupProblem(text, field); if (m) out.push({ status: 400, code: "markup", message: m, field }); }
   let reserved: ReadonlySet<string> = new Set(), majors: ReadonlySet<string> = new Set();
   try { reserved = ctx.reserved ?? loadReserved(); } catch { /* an unreadable list refuses nothing */ }
   try { majors = ctx.majors ?? loadMajors(); } catch { /* the same */ }

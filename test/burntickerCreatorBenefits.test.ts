@@ -15,7 +15,7 @@ import { LIVE_ORACLES, type BurnRule } from "@/lib/burnticker/rules";
 import { TEMPLATE_START } from "@/lib/burnticker/templates";
 import type { SeasonCoinInput } from "@/lib/burnticker/seasons";
 import { nativeRule } from "@/lib/burnticker/sources/native";
-import { teamSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
+import { teamByAbbr, teamSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 
 const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
@@ -127,6 +127,7 @@ describe("items 1, 4, 5, 6: the creator page, share block, analytics and benefit
 describe("item 7: the example tickets", () => {
   const ids = new Set(loadSourceEntries().map((e) => (e as { id: string }).id));
   const tile = fs.readFileSync("src/app/burnticker/launch/CoinVsCoinTile.tsx", "utf8");
+  const launchPage = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
   test("every sentence is lint-clean", () => {
     for (const e of EXAMPLE_TICKETS) for (const s of exampleStrings(e)) clean(s, `${e.ticker}: ${s}`);
     for (const s of [EXAMPLE_TAG, EXAMPLES_INTRO, EXAMPLES_AFFILIATION, EXAMPLES_AND_BENEFITS_LABEL]) clean(s, s);
@@ -152,6 +153,8 @@ describe("item 7: the example tickets", () => {
         const u = new URL(href, "https://x");
         assert.equal(u.pathname, "/burnticker/launch");
         if (u.searchParams.get("derby") === "1") { assert.match(tile, /u\.get\("derby"\) === "1"/); assert.ok(u.searchParams.get("a") && u.searchParams.get("b")); }
+        // a league link (the league page's team row): the launch page reads league and team, and the team is on that league's list
+        else if (u.searchParams.get("league")) { assert.match(launchPage, /q0\.get\("league"\)/); assert.ok(teamByAbbr(u.searchParams.get("league") as LeagueId, u.searchParams.get("team") ?? ""), `${e.ticker}: ${href}`); }
         else assert.ok(u.searchParams.get("template")! in TEMPLATE_START, `${e.ticker}: ${href}`);
       }
       // the Coin vs Coin screen builds daily windows only, so a weekly ticket that opens it says the weekly version is not offered
@@ -171,5 +174,39 @@ describe("item 7: the example tickets", () => {
     const card = fs.readFileSync("src/app/burnticker/templates/ExampleTickets.tsx", "utf8");
     assert.doesNotMatch(card, /ViewCard|e\.notOffered|e\.affiliation|PREREQUISITE|next/, "no next-result line, no prerequisite, no per-card reason or affiliation");
     assert.match(card, /\{EXAMPLE_TAG\}/); assert.match(card, /\{SOURCE_LABEL\}: \{e\.sourceLine\}/); assert.match(card, /\{EXAMPLES_INTRO\} \{EXAMPLES_AFFILIATION\}/);
+  });
+});
+
+describe("item 7, owner 2026-10-19: the two sports tickets", () => {
+  const ids = new Set(loadSourceEntries().map((e) => (e as { id: string }).id));
+  const launchPage = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
+  const bruins = EXAMPLE_TICKETS.find((e) => e.ticker === "SIXERS")!, rivals = EXAMPLE_TICKETS.find((e) => e.ticker === "PHIvBOS")!;
+  test("both exist, cite the NBA official feed in the catalogue, and pass the copy lint", () => {
+    for (const e of [bruins, rivals]) {
+      assert.ok(e, "ticket present");
+      assert.deepEqual(e.source, { kind: "catalogue", id: "nba.cdn" }); assert.ok(ids.has("nba.cdn"));
+      assert.equal(e.sourceLine, "NBA official feed");
+      for (const t of exampleStrings(e)) clean(t, `${e.ticker}: ${t}`);
+      assert.ok(e.rule.split(/\s+/).length <= 12, e.rule);
+      assert.doesNotMatch(exampleStrings(e).join(" "), /\d{4}-\d{2}-\d{2}|→|\w\/\w+\//);
+    }
+    assert.equal(bruins.rule, "Each 76ers win burns a share; retires when the season ends.");
+    assert.equal(rivals.rule, "Each game between them, the loser's pool burns the winner.");
+  });
+  test("the season ticket opens the team path on the NBA with the 76ers picked; the team is on the wizard's NBA list", () => {
+    const u = new URL(bruins.opens!.href, "https://x");
+    assert.equal(u.pathname, "/burnticker/launch");
+    assert.deepEqual([u.searchParams.get("league"), u.searchParams.get("team")], ["nba", "PHI"]);
+    assert.equal(teamByAbbr("nba" as LeagueId, "PHI")?.name, "Philadelphia 76ers");
+    assert.equal(TEMPLATE_START["team-season"].flow, "team");
+    assert.match(fs.readFileSync("src/lib/burnticker/api/handlers.ts", "utf8"), /if \(!league\) return ok\(\{ leagues: Object\.values\(LEAGUES\)/, "the team picker lists every league, the NBA included");
+    assert.match(launchPage, /setFlow\("team"\); setStep\("team"\); setLeagueSeries\(q0\.get\("league"\)\); setPendingTeam\(q0\.get\("team"\)\)/);
+  });
+  test("the rivalry ticket opens the pair path (the rivalry series lives there) and says the link cannot pick the teams", () => {
+    const u = new URL(rivals.opens!.href, "https://x");
+    assert.equal(u.searchParams.get("template"), "matchup"); assert.equal(TEMPLATE_START.matchup.flow, "pair");
+    assert.match(launchPage, /data-rivalry-series/);
+    assert.match(rivals.opens!.line, /A link cannot fill in the two teams yet\./);
+    assert.equal(teamByAbbr("nba" as LeagueId, "BOS")?.name, "Boston Celtics");
   });
 });

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { API_PREFIX, API_VERSION, ENDPOINTS, RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { withShareCard } from "@/lib/burnticker/pageMeta";
+import { SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 
 export const metadata: Metadata = withShareCard({ title: "Docs and API", description: "The public Burnticker HTTP API, version 1. It serves public data and unsigned transactions only. This page lists the endpoints, the rate limits, the OpenAPI document and the SDK.", alternates: { canonical: "/burnticker/docs" } }); // audit 7 item 27: a canonical URL
 
@@ -22,6 +23,8 @@ export default function DocsPage() {
 curl -s "$API/catalogue"            # every source and its tier
 curl -s "$API/tokens"               # every coin on the platform
 curl -s "$API/tokens/<TICKER>/receipts"`}</pre>
+        {/* HS-38 (hourly run 6): the note about the older "espn" label sits beside the source list, not in the launch wizard */}
+        <p className="text-sm text-neutral-400" data-rule-names-note>The catalogue lists each source by its rule name. {SPORTS_PROVENANCE.noEspn}</p>
         <p className="text-sm text-neutral-400">The machine-readable contract is <a className="underline" href={`${API_PREFIX}/openapi.json`}>{API_PREFIX}/openapi.json</a>, in OpenAPI 3.1. For TypeScript bots, <code className="font-mono">@burnticker/sdk</code> wraps every endpoint and adds local receipt verification.</p>
       </section>
 

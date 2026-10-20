@@ -8,6 +8,7 @@ import { conditionLines, conditionsView, readConditionMemory, type ActiveConditi
 import { heartbeatLine, type HeartbeatState } from "@/lib/burnticker/ops/heartbeat";
 import { offboxPullLine, webProbeLine, type OffboxPullFact, type WebProbeFact } from "@/lib/burnticker/ops/unitHealth";
 import type { TradeClickRow } from "@/lib/burnticker/tradeClicks";
+import { topUpOpsLines } from "@/lib/burnticker/ops/topUp";
 import { collectSnapshot, devFeeDelta, lamportsToSol, registryAlertRows, solStr, type BurntickerSnapshot, type WebhookState } from "@/lib/burnticker/alerts";
 
 /**
@@ -40,6 +41,8 @@ export interface CheckinInput {
   hostFacts?: HostFacts | null;
   /** Campaign readiness 2026-10-19: counted trade-link clicks per coin, venue and UTC day (tradeClicks.ts); absent = not read */
   tradeClicks?: TradeClickRow[] | null;
+  /** 2026-10-19: the automatic SOL top-up lines (ops/topUp.ts topUpOpsLines); absent = not read on this host */
+  topUps?: string[] | null;
 }
 /** The host configuration the code depends on (names and yes/no only; never a value). */
 export interface HostFacts {
@@ -101,6 +104,7 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
   const d = i.delta;
   out.push(`- dev fee wallet: ${d?.latest ? `${solStr(d.latest.devFeeLamports)} SOL (sampled ${ago(now, d.latest.at)})` : "no sample (BURNTICKER_RPC_URL + BURNTICKER_FEE_WALLET unset, or the keeper has not sampled yet)"}${d?.deltaLamports !== null && d?.deltaLamports !== undefined ? ` · Δ ${d.deltaLamports >= BigInt(0) ? "+" : "−"}${lamportsToSol(d.deltaLamports < BigInt(0) ? -d.deltaLamports : d.deltaLamports)} SOL since ${new Date(d.anchor!.at).toISOString().slice(0, 16)}Z` : ""}`);
   out.push(`- keeper: last cycle ${s.lastCycle ? ago(now, s.lastCycle.at) : "never recorded"}${s.lastCycle?.errors.length ? ` · errors: ${s.lastCycle.errors.slice(0, 2).join(" | ").slice(0, 160)}` : ""} · key balance ${d?.latest ? `${solStr(d.latest.keeperLamports)} SOL` : "unknown"}`);
+  if (i.topUps?.length) out.push(...i.topUps);
   const feeds = [...new Map(live.map((t) => [t.selectorKey, t])).values()];
   if (feeds.length) out.push(`- feeds: ${feeds.map((t) => `${t.selectorKey} ok ${ago(now, t.feed.lastOkAt)}${t.feed.failures ? ` (${t.feed.failures} failing)` : ""}`).join(" · ")}`);
   // F06: the one aggregator (keeper-level conditions + every source's health), the same list ops.json carries
@@ -162,7 +166,9 @@ export async function burntickerCheckin(o: { now?: number; registryFile?: string
     } catch { alerts = null; }
     let health: FeedHealth[] | null = null;
     try { health = computeFeedHealth(reg, now); } catch { health = null; }
-    return burntickerCheckinLines({ snapshot, delta: devFeeDelta(reg, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, health, conditionMemory: readConditionMemory(reg) });
+    let topUps: string[] | null = null;
+    try { topUps = topUpOpsLines(reg, now); } catch { topUps = null; }
+    return burntickerCheckinLines({ snapshot, delta: devFeeDelta(reg, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, health, conditionMemory: readConditionMemory(reg), topUps });
   } catch (e) {
     return burntickerCheckinLines({ snapshot: null, delta: null, alerts: null, firstLaunchAt: null, why: `registry not readable: ${(e as Error).message.slice(0, 120)}` });
   } finally { try { reg?.close(); } catch { /* closed */ } }

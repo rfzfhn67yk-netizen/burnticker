@@ -16,6 +16,19 @@ export const SEASON_OVER_LINE = "Season over for this team: this coin would end 
 /** The league page's line beside a team whose season is over (its link opens the launch page with `season=over`). */
 export const SEASON_OVER_LINK_LINE = "This team's season is over. A coin on it can follow next season, or next season's title market.";
 
+/**
+ * HS-37 (hourly run 6): a league in its off-season lists most teams as season over. The team list says it once at the top, greys those
+ * rows and puts the teams still playing first, instead of the same sentence on every row.
+ */
+export const seasonOverSummaryLine = (n: number, label: string, nextLabel: string): string =>
+  `${n} ${n === 1 ? "team has" : "teams have"} finished the ${label} season. Pick one of them to follow the ${nextLabel} season instead.`;
+/** HS-37: the small tag on a greyed season-over row. */
+export const seasonOverRowTag = (nextLabel: string): string => `Season over. A coin can follow the ${nextLabel} season.`;
+/** HS-37: the team list's order: teams still playing first, then the rest, each group in the API's order. */
+export function seasonOverOrder<T extends { seasonOver?: boolean }>(teams: readonly T[]): T[] {
+  return [...teams.filter((t) => !t.seasonOver), ...teams.filter((t) => !!t.seasonOver)];
+}
+
 /** HS-15: the team list's line for a team with no game in the next days (the burn step and the review carry it as byeLine). */
 export const NONE_LISTED_LINE = "No game is listed for this team in the next 8 days. A season coin only burns on games still to come.";
 export function seasonStatus(abbr: string, games: readonly Game[], readable: boolean): { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null } {

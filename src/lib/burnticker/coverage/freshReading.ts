@@ -50,7 +50,12 @@ export function busyWaitOf(e: unknown): number | null {
 /** The sentence added to a refusal the budget caused: how long until the bucket has room again. */
 export const busyRetryText = (waitMs: number): string => ` Try again in about ${Math.max(1, Math.ceil(waitMs / 1000))} seconds.`;
 
-export interface FreshReadDeps { sleep?: (ms: number) => Promise<void> }
+/**
+ * HB-89 (hourly run 6): `reuse: false` skips the memo (a one-shot rule: its event may be decided inside the five minutes, and a reused
+ * reading would judge a just-decided event as still open). `reuseIfReadAfter` keeps the memo only when its reading was fetched after
+ * that time (for example the event's scheduled close). The fresh read is still remembered for the next caller.
+ */
+export interface FreshReadDeps { sleep?: (ms: number) => Promise<void>; reuse?: boolean; reuseIfReadAfter?: number | null }
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
@@ -58,8 +63,8 @@ const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * the time it was fetched. Throws what fetchBody throws; a busy refusal past HOLD_WAIT_MAX_MS is rethrown as is (its outcome carries the wait).
  */
 export async function readFresh(cfg: HttpSourceConfig, now: number, fetchImpl: FetchLike, deps: FreshReadDeps = {}): Promise<Entry & { cached: boolean }> {
-  const hit = freshReading(fetchImpl, cfg.id, now);
-  if (hit) return { ...hit, cached: true };
+  const hit = deps.reuse === false ? null : freshReading(fetchImpl, cfg.id, now);
+  if (hit && (deps.reuseIfReadAfter == null || hit.fetchedAt > deps.reuseIfReadAfter)) return { ...hit, cached: true };
   const sleep = deps.sleep ?? realSleep;
   let body: unknown;
   try { body = await fetchBody(cfg, now, fetchImpl); }

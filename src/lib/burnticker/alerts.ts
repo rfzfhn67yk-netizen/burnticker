@@ -6,6 +6,7 @@ import type { FeedState, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker
 import { readAudit, type AuditSummary } from "@/lib/burnticker/trust";
 import { PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
 import { takeRpc } from "@/lib/burnticker/apiBudget";
+import { noticeMarkLamports, REFERENCE_IRYS_PRICES, SIGNER_FLOOR_LAMPORTS, signerSendLamports, TARGET_LABEL, topUpDaySummary } from "@/lib/burnticker/ops/topUp";
 
 /**
  * BURNTICKER OPS ALERTS (2026-10-09, the operations layer). On the Burnticker host the keeper records each alert in the registry's
@@ -27,13 +28,15 @@ import { takeRpc } from "@/lib/burnticker/apiBudget";
  *   bt-reading-conflict      the oracle changed a recorded result — the registry refused the write and the key is held
  *   bt-crank-failed          a receipt failed 3× in a row (the in-process streak, or ≥ 3 recorded attempts with an error on the row)
  *   bt-audit-mismatch        audit.json says a receipt does not recompute; bt-audit-stale: the hourly audit has not run for > 3 h
- *   bt-keeper-balance-low    the keeper's data key holds < 0.05 SOL (it pays the crank fees)
+ *   bt-keeper-balance-low    the keeper's data key holds < 0.1 SOL (it pays the crank fees and refills the other operations wallets,
+ *                            ops/topUp.ts); the text says how much to send
  *   bt-cap-binding           a burn pool holds more than the 25 SOL pre-audit cap: the excess is queued, not spent
  *   bt-keeper-stale          no cycle recorded for > 10 min while not paused (the keeper is down or wedged)
  *   bt-daily-summary         one line a day after 07:00 Denver: "N tokens, M burns, pools X SOL, dev fees Y SOL"
  */
 
-export const KEEPER_MIN_LAMPORTS = BigInt(50_000_000);          // 0.05 SOL
+/** 0.1 SOL since 2026-10-19 (was 0.05): the keeper key also refills the other operations wallets (ops/topUp.ts SIGNER_FLOOR_LAMPORTS). */
+export const KEEPER_MIN_LAMPORTS = SIGNER_FLOOR_LAMPORTS;
 export const FEED_STALL_FACTOR = 2;
 export const CRANK_FAIL_STREAK = 3;
 export const AUDIT_STALE_MS = 3 * 3_600_000;
@@ -66,6 +69,8 @@ export interface BurntickerSnapshot {
   balances: BalanceSample | null;
   /** Consecutive crank failures per `${mint}:${eventId}` from the running keeper (empty when a timer or the check-in asks). */
   crankStreaks: Record<string, number>;
+  /** Today's automatic SOL top-ups (ops/topUp.ts; Denver day) for the daily summary; absent or null = none read. */
+  topUps?: { count: number; lamports: bigint; list: string[]; noticeMarkLamports: bigint } | null;
 }
 
 /** Denver calendar date (YYYY-MM-DD) and hour — the owner's clock (memory: Denver time). */
@@ -120,7 +125,12 @@ export function collectSnapshot(o: { registry: Registry; siteDir: string; now: n
   });
   let lastCycle: BurntickerSnapshot["lastCycle"] = null;
   try { const s = reg.getStatus("lastCycle"); if (s) { const j = JSON.parse(s) as { at?: number; errors?: string[]; refusals?: string[] }; lastCycle = { at: Number(j.at ?? 0), errors: j.errors ?? [], refusals: j.refusals ?? [] }; } } catch { lastCycle = null; }
-  return { now, paused: o.paused ?? false, registryFile: reg.file, tokens, lastCycle, audit: readAudit(o.siteDir), balances: o.balances ?? null, crankStreaks: o.crankStreaks ?? {} };
+  let topUps: BurntickerSnapshot["topUps"] = null;
+  try {
+    const t = topUpDaySummary(reg.db, now);
+    topUps = { count: t.count, lamports: t.signerLamports, list: t.rows.map((r) => `${lamportsToSol(r.lamports)} SOL ${r.kind === "irys-fund" ? "into the Irys balance" : `to ${TARGET_LABEL[r.target]}`}`), noticeMarkLamports: noticeMarkLamports({ ...REFERENCE_IRYS_PRICES }) };
+  } catch { topUps = null; }
+  return { now, paused: o.paused ?? false, registryFile: reg.file, tokens, lastCycle, audit: readAudit(o.siteDir), balances: o.balances ?? null, crankStreaks: o.crankStreaks ?? {}, topUps };
 }
 
 const solOf = (s: string | null): number => (s === null ? 0 : Number(s) || 0);
@@ -176,7 +186,7 @@ export function evaluateAlerts(s: BurntickerSnapshot): BurntickerAlert[] {
   if (s.audit && !s.audit.ok) out.push({ kind: "bt-audit-mismatch", key: `bt-audit-mismatch:${s.audit.ranAt}`, text: `Burnticker AUDIT MISMATCH (${s.audit.ranAt}): ${s.audit.mismatches.length} ${s.audit.mismatches.length === 1 ? "receipt does" : "receipts do"} not recompute — ${s.audit.mismatches.slice(0, 3).map((m) => `$${m.ticker} ${m.eventId}: ${m.checks[0]}`).join(" | ")}`, meta: { mismatches: s.audit.mismatches.length } });
   if (live.length && (!s.audit || s.now - Date.parse(s.audit.ranAt) > AUDIT_STALE_MS)) out.push({ kind: "bt-audit-stale", key: `bt-audit-stale:${day}`, text: `Burnticker audit ${s.audit ? `last ran ${Math.round((s.now - Date.parse(s.audit.ranAt)) / 3_600_000)} h ago` : "has never run"} — the hourly mct-burnticker-audit.timer is not running`, meta: null });
   // The keeper's key and the pre-audit cap.
-  if (s.balances?.keeperLamports !== null && s.balances?.keeperLamports !== undefined && s.balances.keeperLamports < KEEPER_MIN_LAMPORTS) out.push({ kind: "bt-keeper-balance-low", key: `bt-keeper-balance-low:${day}`, text: `Burnticker keeper key holds ${solStr(s.balances.keeperLamports)} SOL (< 0.05) — top it up or cranks stop landing`, meta: { lamports: s.balances.keeperLamports.toString() } });
+  if (s.balances?.keeperLamports !== null && s.balances?.keeperLamports !== undefined && s.balances.keeperLamports < KEEPER_MIN_LAMPORTS) out.push({ kind: "bt-keeper-balance-low", key: `bt-keeper-balance-low:${day}`, text: `Burnticker keeper key holds ${solStr(s.balances.keeperLamports)} SOL (< 0.1). Send about ${lamportsToSol(signerSendLamports(s.balances.keeperLamports)).replace(/0+$/, "").replace(/\.$/, "")} SOL to it. It pays the burn fees and refills the other operations wallets, and refills none of them until it is above its floor.`, meta: { lamports: s.balances.keeperLamports.toString(), sendLamports: signerSendLamports(s.balances.keeperLamports).toString() } });
   for (const t of live) if (t.mode === "buyback" && solOf(t.queuedSol) > 0) out.push({ kind: "bt-cap-binding", key: `bt-cap-binding:${t.mint}:${day}`, text: `Burnticker $${t.ticker}: ${t.queuedSol} SOL above the ${PRE_AUDIT_POOL_CAP_SOL} SOL pre-audit cap is queued (pool ${t.feePdaSol ?? "?"} SOL), spent once the cap rises or ends`, meta: { mint: t.mint, queuedSol: t.queuedSol } });
   // The keeper itself.
   if (live.length && !s.paused && s.lastCycle && s.now - s.lastCycle.at > KEEPER_STALE_MS) out.push({ kind: "bt-keeper-stale", key: `bt-keeper-stale:${day}T${String(denverHour(s.now)).padStart(2, "0")}`, text: `Burnticker keeper: no cycle for ${Math.round((s.now - s.lastCycle.at) / 60_000)} min — mct-burnticker-keeper is down or wedged`, meta: null });
@@ -184,9 +194,15 @@ export function evaluateAlerts(s: BurntickerSnapshot): BurntickerAlert[] {
   if (denverHour(s.now) >= DAILY_SUMMARY_HOUR_DENVER) {
     const pools = live.reduce((a, t) => a + solOf(t.feePdaSol), 0);
     const burns = live.reduce((a, t) => a + t.burns24h, 0);
-    out.push({ kind: "bt-daily-summary", key: `bt-daily-summary:${day}`, text: `Burnticker ${day}: ${live.length} token${live.length === 1 ? "" : "s"}, ${burns} burn${burns === 1 ? "" : "s"} (24 h), pools ${pools.toFixed(3)} SOL, dev fees ${solStr(s.balances?.devFeeLamports ?? null)} SOL`, meta: { tokens: live.length, burns, pools } });
+    out.push({ kind: "bt-daily-summary", key: `bt-daily-summary:${day}`, text: `Burnticker ${day}: ${live.length} token${live.length === 1 ? "" : "s"}, ${burns} burn${burns === 1 ? "" : "s"} (24 h), pools ${pools.toFixed(3)} SOL, dev fees ${solStr(s.balances?.devFeeLamports ?? null)} SOL${topUpSummary(s.topUps)}`, meta: { tokens: live.length, burns, pools, topUps: s.topUps?.count ?? 0 } });
   }
   return out;
+}
+
+/** The daily line's top-up clause: every top-up so far today, and the notice when the day is above the 50-launch mark (never a block). */
+function topUpSummary(t: BurntickerSnapshot["topUps"]): string {
+  if (!t || !t.count) return "";
+  return `, top-ups ${t.count} (${lamportsToSol(t.lamports)} SOL from the keeper key: ${t.list.slice(0, 8).join("; ")}${t.list.length > 8 ? `; and ${t.list.length - 8} more` : ""})${t.lamports > t.noticeMarkLamports ? `, above what 50 launches would cost (${lamportsToSol(t.noticeMarkLamports)} SOL); nothing was stopped` : ""}`;
 }
 
 function hashKey(s: string): string { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(16); }

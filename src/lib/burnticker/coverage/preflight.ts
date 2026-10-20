@@ -24,6 +24,7 @@ import { isSingleOfficialSource, singleSourceMethod } from "@/lib/burnticker/sin
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { busyRetryText, busyWaitOf, readFresh } from "@/lib/burnticker/coverage/freshReading";
+import { resolvesOnce } from "@/lib/burnticker/nextResult";
 
 /**
  * THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit). Before a coin is created on a selector, the selector is run live
@@ -80,9 +81,9 @@ function result(rule: BurnRule, now: number, part: Partial<PreflightResult> & { 
 }
 
 /** A catalogue read for the launch check: a reading made for the same selector in the last five minutes is reused (freshReading.ts). */
-async function readLive(feed: Feed, now: number, fetchImpl: FetchLike, deps: PreflightDeps = {}): Promise<{ readings: SettledEvent[]; refusals: string[] }> {
-  const r = await readFresh(feed.config, now, fetchImpl, { sleep: deps.sleep });
-  return parseBody(feed.config, r.body, r.fetchedAt);
+async function readLive(feed: Feed, now: number, fetchImpl: FetchLike, deps: PreflightDeps = {}, reuse = true): Promise<{ readings: SettledEvent[]; refusals: string[]; fetchedAt: number }> {
+  const r = await readFresh(feed.config, now, fetchImpl, { sleep: deps.sleep, reuse });
+  return { ...parseBody(feed.config, r.body, r.fetchedAt), fetchedAt: r.fetchedAt };
 }
 /** A read error as the refusal shows it; a busy rate bucket adds how long to wait. */
 const readErrorText = (e: unknown, n: number): string => {
@@ -113,8 +114,11 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
   const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
   let pr: { readings: SettledEvent[]; refusals: string[] };
   let body: unknown;
-  // the owner's devnet check 2026-10-19: a reading of this selector made in the last five minutes is reused, and a short busy bucket is waited out
-  try { const r = await readFresh(feed.config, now, fetchImpl, { sleep: deps.sleep }); body = r.body; pr = parseBody(feed.config, body, r.fetchedAt); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${readErrorText(e, 160)}`, status: 502 }); }
+  let primaryReadAt = now;
+  // the owner's devnet check 2026-10-19: a reading of this selector made in the last five minutes is reused, and a short busy bucket is waited out.
+  // HB-89 (hourly run 6): never for a rule that resolves once: its event may be decided inside those minutes, so it is read fresh.
+  const reuse = !resolvesOnce({ ...rule, market: rule.market ?? null }) && !isOneTimeSeries(feed.id);
+  try { const r = await readFresh(feed.config, now, fetchImpl, { sleep: deps.sleep, reuse }); body = r.body; primaryReadAt = r.fetchedAt; pr = parseBody(feed.config, body, r.fetchedAt); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${readErrorText(e, 160)}`, status: 502 }); }
   const last = pr.readings[pr.readings.length - 1] ?? null;
   const next = nextExpected(feed.config, last?.id ?? null, now);
   const primary = { ...primaryBase, lastReading: reading(last), error: pr.refusals.length ? pr.refusals.slice(0, 2).join("; ") : null };
@@ -137,10 +141,12 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
   for (const c of crosses) {
     const cf = feeds.find((f) => f.config.id === c.id);
     if (!cf) continue;
-    let cr: { readings: SettledEvent[]; refusals: string[] };
+    let cr: { readings: SettledEvent[]; refusals: string[]; fetchedAt: number };
     const t0 = Date.now();
-    try { cr = await readLive(cf, now, fetchImpl, deps); } catch (e) { lastErr = `${c.id}: ${readErrorText(e, 160)}`; continue; }
-    const cmp = compareFact(feed.config.fact!, pr.readings, cf.config.fact!, cr.readings, { primaryReadAt: now, crossReadAt: now + (Date.now() - t0) });
+    try { cr = await readLive(cf, now, fetchImpl, deps, reuse); } catch (e) { lastErr = `${c.id}: ${readErrorText(e, 160)}`; continue; }
+    // HB-89: the comparison basis says when each reading was actually fetched (a reused one is up to five minutes old)
+    const crossReadAt = cr.fetchedAt === now ? now + (Date.now() - t0) : cr.fetchedAt;
+    const cmp = compareFact(feed.config.fact!, pr.readings, cf.config.fact!, cr.readings, { primaryReadAt, crossReadAt });
     const latest = cmp.comparisons[cmp.comparisons.length - 1] ?? null;
     const crossRead = { id: c.id, operator: c.operator, lastReading: reading(cr.readings[cr.readings.length - 1]), error: null };
     const agreementBasis = latest ? `${latest.period}: ${feed.id} ${latest.primary} vs ${c.id} ${latest.crossRead} (${cmp.basis})` : `no period both reads cover yet (${cmp.basis}); compared at the next shared period`;

@@ -6,7 +6,8 @@ import { loadVerifiedBuild, type VerifiedBuild } from "@/lib/burnticker/trustpac
 import { computeFeedHealth, noteFeedRecoveries, observeCycle, raiseFeedAlerts, type FeedHealth } from "@/lib/burnticker/ops/feedHealth";
 import { hostIdHash, LeaderLock, roleConfigFromEnv, type FetchJson, type RoleDecision } from "@/lib/burnticker/ops/leaderLock";
 import type { FenceReport } from "@/lib/burnticker/ops/readingFence";
-import { latestSnapshot, snapshotIfDue } from "@/lib/burnticker/ops/snapshot";
+import { checkUploadBalance, latestSnapshot, snapshotIfDue } from "@/lib/burnticker/ops/snapshot";
+import type { TopUpRunResult } from "@/lib/burnticker/ops/topUp";
 import { buildOpsStatus, programStatuses, writeOpsStatus, type OpsStatusJson } from "@/lib/burnticker/ops/status";
 
 /**
@@ -20,21 +21,23 @@ import { buildOpsStatus, programStatuses, writeOpsStatus, type OpsStatusJson } f
  *
  * Nothing here holds a key except the optional takeover signer the keeper passes in (its own data key, for the signed takeover note).
  */
+/** The keeper's top-up step (ops/topUp.ts topUpRunnerFromEnv); null when skipped. */
+export type TopUpHook = (registry: Registry, now: number, alert: (kind: string, key: string, text: string, meta: Record<string, unknown> | null) => unknown) => Promise<TopUpRunResult | null>;
 export class KeeperOps {
   readonly lock: LeaderLock;
   readonly hostId: string;
-  private o: { registry: Registry; siteDir: string; cluster: string; log: (s: string) => void; uploader: PinUploader | null; now: () => number; startedAt: number; verifiedBuild: VerifiedBuild | null; snapshots: boolean };
+  private o: { registry: Registry; siteDir: string; cluster: string; log: (s: string) => void; uploader: PinUploader | null; now: () => number; startedAt: number; verifiedBuild: VerifiedBuild | null; snapshots: boolean; topUp: TopUpHook | null };
   private role: RoleDecision | null = null;
   private fence: FenceReport | null = null;
   private health: FeedHealth[] = [];
   private pendingSink: AlertSink | null = null;
   /** `snapshots: false` (the keeper's --dry-run) never uploads: a dry run spends nothing. */
-  constructor(o: { registry: Registry; siteDir: string; cluster: string; env: Readonly<Record<string, string | undefined>>; log: (s: string) => void; uploader: PinUploader | null; signer?: { publicKey: string; secretKey: Uint8Array } | null; now?: () => number; fetchImpl?: FetchJson; root?: string; hostId?: string; snapshots?: boolean }) {
+  constructor(o: { registry: Registry; siteDir: string; cluster: string; env: Readonly<Record<string, string | undefined>>; log: (s: string) => void; uploader: PinUploader | null; signer?: { publicKey: string; secretKey: Uint8Array } | null; now?: () => number; fetchImpl?: FetchJson; root?: string; hostId?: string; snapshots?: boolean; topUp?: TopUpHook | null }) {
     const now = o.now ?? (() => Date.now());
     this.hostId = o.hostId ?? hostIdHash();
     let vb: VerifiedBuild | null = null;
     try { vb = loadVerifiedBuild(o.root); } catch { vb = null; }
-    this.o = { registry: o.registry, siteDir: o.siteDir, cluster: o.cluster, log: o.log, uploader: o.uploader, now, startedAt: now(), verifiedBuild: vb, snapshots: o.snapshots !== false };
+    this.o = { registry: o.registry, siteDir: o.siteDir, cluster: o.cluster, log: o.log, uploader: o.uploader, now, startedAt: now(), verifiedBuild: vb, snapshots: o.snapshots !== false, topUp: o.topUp ?? null };
     this.lock = new LeaderLock(roleConfigFromEnv(o.env, o.root), { now, fetchImpl: o.fetchImpl, hostId: this.hostId, signer: o.signer ?? null, log: o.log });
   }
   /** The banner fragment for the keeper's start line. */
@@ -82,7 +85,15 @@ export class KeeperOps {
       }
     } catch (e) { this.o.log(`  [ops] feed recoveries not checked: ${(e as Error).message.slice(0, 160)}`); }
     if (this.role?.active && this.o.snapshots) {
-      await snapshotIfDue({ registry: reg, uploader: this.o.uploader, now, cluster: this.o.cluster, log: this.o.log, alert: (kind, key, text) => this.pendingSink?.(kind, key, text, null, now) ?? reg.recordAlert({ kind, key, text, meta: null }, now) });
+      const alert = (kind: string, key: string, text: string) => this.pendingSink?.(kind, key, text, null, now) ?? reg.recordAlert({ kind, key, text, meta: null }, now);
+      await snapshotIfDue({ registry: reg, uploader: this.o.uploader, now, cluster: this.o.cluster, log: this.o.log, alert });
+      // HB-82 (hourly run 6): once a UTC day, whether the Irys balance still covers a week of daily snapshots
+      await checkUploadBalance({ registry: reg, uploader: this.o.uploader, now, log: this.o.log, alert });
+      // AUTOMATIC SOL TOP-UPS (ops/topUp.ts, owner 2026-10-19): once per cycle, after the snapshot step, active keeper only, never in a dry run
+      if (this.o.topUp) {
+        try { await this.o.topUp(reg, now, (kind, key, text, meta) => this.pendingSink?.(kind, key, text, meta, now) ?? reg.recordAlert({ kind, key, text, meta }, now)); }
+        catch (e) { this.o.log(`  [top-up] failed: ${(e as Error).message.slice(0, 160)}`); }
+      }
     }
     try {
       const s = buildOpsStatus({ now, registry: reg, role: this.role ?? (await this.lock.tick()), hostIdHash: this.hostId, cluster: this.o.cluster, paused, startedAt: this.o.startedAt, feeds: this.health, snapshot: latestSnapshot(reg), programs: programStatuses(this.o.verifiedBuild, this.o.cluster), fence: this.fence ? { held: this.fence.held.map((h) => ({ ticker: h.ticker, why: h.why })), adopted: this.fence.adopted.length } : null });

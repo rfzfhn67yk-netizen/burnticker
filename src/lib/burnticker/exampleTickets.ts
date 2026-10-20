@@ -2,7 +2,7 @@ import type { LaunchType } from "@/lib/burnticker/launchAvailability";
 
 /**
  * EXAMPLE COIN TICKETS (website-17, creator benefits item 7; owner, 2026-10-12: "just show them as examples for now", "no weather").
- * Six coins nobody has created, each tagged "Example, not a real coin". They are not launchable templates: a ticket whose shape the
+ * Coins nobody has created (six at first, eight since the two sports tickets of 2026-10-19), each tagged "Example, not a real coin". They are not launchable templates: a ticket whose shape the
  * wizard can build today opens that wizard path with what it can fill in, and says plainly what it cannot; every other ticket says
  * "Not offered yet." Each names its source by what it does and by its id: a catalogue id from config/burnticker/sources.json, or the
  * Polymarket adapter (oracle id "polymarket"), which reads a market's on-chain payout and has no catalogue entry of its own. The jobs
@@ -99,6 +99,26 @@ export const EXAMPLE_TICKETS: readonly ExampleTicket[] = [
     sourceLine: "Polymarket on-chain payout", source: { kind: "oracle", id: "polymarket" },
     opens: null, notOffered: `${NOT_OFFERED} Without a Polymarket market for that weekend's films it would refuse to launch, because no other box-office publisher is in the catalogue as a source.`,
     affiliation: "This example is not affiliated with any film, studio or Polymarket.",
+  },
+  // owner 2026-10-19: two sports tickets, on the NBA ("more fans"). A team for one season (the team path opens on the league with the team
+  // picked, the same link a league page's team row uses: leagues.ts launchHref; /v1/sports/teams lists the NBA), and a rivalry pair over
+  // every game between two teams this season (the pair path's rivalry series, guidedLaunch.ts isMeetingsSelector; a link cannot pick the
+  // two teams yet, so its line says so). Owner: the 76ers and the Celtics.
+  {
+    ticker: "SIXERS", name: "Philadelphia 76ers, one season", type: "team",
+    rule: "Each 76ers win burns a share; retires when the season ends.",
+    sourceLine: "NBA official feed", source: { kind: "catalogue", id: "nba.cdn" },
+    opens: { href: "/burnticker/launch?league=nba&team=PHI", line: "Opens the team path on the NBA with the 76ers picked. Choose this season there." },
+    notOffered: null,
+    affiliation: "This example is not affiliated with the Philadelphia 76ers or the NBA.",
+  },
+  {
+    ticker: "PHIvBOS", name: "76ers vs Celtics, one season", type: "matchup",
+    rule: "Each game between them, the loser's pool burns the winner.",
+    sourceLine: "NBA official feed", source: { kind: "catalogue", id: "nba.cdn" },
+    opens: { href: "/burnticker/launch?template=matchup", line: "Opens the pair path. Pick the NBA, the 76ers and the Celtics, then every game between them. A link cannot fill in the two teams yet." },
+    notOffered: null,
+    affiliation: "This example is not affiliated with the Philadelphia 76ers, the Boston Celtics or the NBA.",
   },
 ];
 

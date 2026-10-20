@@ -46,6 +46,14 @@ const STRAY_ZWJ_RE = /(?<!\p{Extended_Pictographic}\uFE0F?)\u200D|\u200D(?!\p{Ex
 export function controlCharProblem(text: string, field: "name" | "description" | "note" = "name"): string {
   return CONTROL_RE.test(text) || STRAY_ZWJ_RE.test(text) ? `The ${field} has a line break, tab, invisible or text-direction character. Use plain letters, digits, spaces and punctuation.` : "";
 }
+/**
+ * HS-36 (hourly run 6): HTML tags ("<b>", "<script>") and entities ("&amp;") in the creator's own text are refused the way links are:
+ * the text is pinned with the coin as typed, so the tags would show as literal characters on every copy.
+ */
+const MARKUP_TAG_RE = /<\/?[a-z!][^<>]*>/i, MARKUP_ENTITY_RE = /&(?:#\d{1,7}|#x[0-9a-f]{1,6}|[a-z][a-z0-9]{1,31});/i;
+export function markupProblem(text: string, field: "description" | "note" = "description"): string {
+  return MARKUP_TAG_RE.test(text) || MARKUP_ENTITY_RE.test(text) ? `The ${field} cannot have HTML tags or entities. Write it as plain text.` : "";
+}
 export function nameProblem(name: string): string {
   const n = name.trim(), seen = Array.from(visibleText(n)).length, bytes = utf8Bytes(n);
   return !n ? "Enter a name for the coin."

@@ -191,7 +191,8 @@ describe("QA pass 9 #15: generated names never stop inside a word or a team name
     assert.equal(m.a.ticker, "LEEVMCI", "the display code makes the ticker");
     assert.equal(shortTeamName("Manchester City"), "Man City");
     const s = seasonPairNames({ abbr: "WOL", nickname: "Wolverhampton Wanderers", name: "Wolverhampton Wanderers" }, { abbr: "BHA", nickname: "Brighton & Hove Albion", name: "Brighton & Hove Albion" }, 2026, "eng.1");
-    assert.deepEqual([s.a.name, s.b.name], ["Wolves 2026 Losses", "Brighton 2026 Losses"]);
+    // HB-85 (hourly run 6): the season in the name is the badge's own label (the Premier League season spans two years)
+    assert.deepEqual([s.a.name, s.b.name], ["Wolves 2026–27 Losses", "Brighton 2026–27 Losses"]);
   });
   test("fitName and capName count bytes and cut only between words", () => {
     assert.equal(fitName(["A name far too long to fit in thirty-two bytes", "Short"]), "Short");

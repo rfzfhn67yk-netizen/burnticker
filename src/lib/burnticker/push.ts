@@ -74,12 +74,16 @@ export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "cr
   // HB-1 2026-10-19: a service that stopped on its own and was started again by systemd (the web's out-of-memory stops)
   | "unit-restarted"
   // HB-29 2026-10-19: a live coin's source read is overdue while its result is still open
-  | "feed-overdue";
+  | "feed-overdue"
+  // 2026-10-19: an automatic SOL top-up of an operations wallet failed twice in a row (ops/topUp.ts)
+  | "top-up-failed";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
   "bt-pin-failed": "pin-failed",
   "bt-snapshot-failed": "pin-failed",
+  // HB-82 (hourly run 6): the Irys balance covers fewer than a week of daily snapshots (ops/snapshot.ts checkUploadBalance, once a UTC day)
+  "bt-upload-balance-low": "pin-budget",
   "bt-crank-failed": "crank-refused",
   "bt-launch-failed": "launch-failed",
   "bt-burn-behind": "burn-behind",
@@ -120,6 +124,8 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-feed-disagree": "feed-disagree",
   // HB-29 (continuous audit 2026-10-19): the live $NEXTM6's source went unread for hours while ops showed no condition
   "bt-feed-overdue": "feed-overdue",
+  // 2026-10-19 (ops/topUp.ts): a top-up that failed twice in a row; a top-up that landed is an informational row (bt-top-up), not pushed
+  "bt-top-up-failed": "top-up-failed",
   "derby-withheld": "derby-withheld",
   "bt-cap-binding": "cap-binding",
   "bt-pin-orphan": "pin-orphan",
@@ -178,6 +184,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "keeper-takeover": "Burnticker standby keeper took over",
   "feed-stale": "Burnticker source stale",
   "feed-overdue": "Burnticker source read overdue",
+  "top-up-failed": "Burnticker wallet top-up failing",
   "feed-disagree": "Burnticker sources disagree",
   "derby-withheld": "Burnticker Derby result withheld",
   "cap-binding": "Burnticker burn pool above its cap",
@@ -219,13 +226,14 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "launch-late": "A coin was created on chain more than 24 hours after its draft was made, so the site did not take it live. It exists and can trade, but no burn runs for it until the operator decides. The line below has the command that takes it live as late.",
   "audit-mismatch": "The public audit found something that does not match. Either a receipt does not recompute from its reading and rule, or the burn program on chain is not the build the trust pages name. The line below says which.",
   "audit-stale": "The hourly public audit has not run for more than three hours, so nothing is checking the receipts. Check the audit timer and its log.",
-  "keeper-balance-low": "The keeper's key holds less than 0.05 SOL. It pays the fees for every burn, so burns stop landing when it runs out. Top it up.",
+  "keeper-balance-low": "The keeper's key holds less than 0.1 SOL, or too little to refill the other operations wallets. It pays the fees for every burn and refills the upload wallet, so burns and uploads stop when it runs out. The line below says how much to send.",
   "reading-conflict": "A source changed a result the registry had already recorded. The registry refused the new value and the coin is held until someone looks.",
   "reading-implausible": "The keeper refused a reading from a source because it did not make sense (out of bounds, the wrong period, or unreadable). Nothing burns on it. The line below says why.",
   "foreign-reading": "The keeper holds its sends for a coin because another record of the same coin disagrees about what happened. Nothing is sent for it until someone reconciles the two.",
   "keeper-takeover": "The standby keeper took over from the leader. Check why the leader stopped, and make sure only one keeper sends.",
   "feed-stale": "A source has not given a new reading for longer than it should. No new reading means no burn. Check the source by hand.",
   "feed-overdue": "A live coin's source was due a read and has not been read, while the coin's result is still open. Its rule cannot settle until the source is read. The line below names the source, the coin, the due time and why the read did not happen.",
+  "top-up-failed": "The keeper tried twice in a row to move SOL from its own key to an operations wallet and both tries failed. The line below names the wallet and the error. Until it lands, that wallet keeps running down.",
   "feed-disagree": "The second source for a feed disagrees with the first. The reading is held back, and nothing burns until the two agree.",
   "derby-withheld": "A Burn Derby or record-close result was withheld because it could not be settled cleanly. The line below says why.",
   "cap-binding": "A burn pool holds more than the pre-audit cap allows. The excess is queued, not spent. This is a notice; nothing is lost.",

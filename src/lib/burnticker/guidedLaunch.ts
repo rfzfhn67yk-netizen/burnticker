@@ -4,12 +4,12 @@ import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
 import { CANDIDATES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
-import { oneShotFull } from "@/lib/burnticker/nextResult";
-import { LIVE_NOW, gameSeries, isPairOutcome, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, seasonLabel, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
+import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
+import { LEAGUES, LIVE_NOW, gameSeries, isPairOutcome, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, seasonLabel, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 import { DESCRIPTION_MAX, descriptionRoomProblem, linkProblem } from "@/lib/burnticker/creatorProfile";
-import { controlCharProblem } from "@/lib/burnticker/launchFields";
+import { controlCharProblem, markupProblem } from "@/lib/burnticker/launchFields";
 import { fitName } from "@/lib/burnticker/launchFields";
 import { matchupTickers } from "@/lib/burnticker/derby/tile";
 import { raceEndOf } from "@/lib/burnticker/derby/spec";
@@ -126,8 +126,13 @@ export const BACKTEST_WAITING_LINE = "Working out past burns… This takes a few
  * HS-14 (run 4): the team list's next game says "at" for an away game and "vs" for a home game ("next: at Broncos"). HS-11: the time is the
  * visitor's own (the list is drawn in the browser), and the footnote says so.
  */
-export function nextGameWords(n: { opponent: string | null; home?: boolean | null; title: string }): string {
-  return n.opponent ? `${n.home === false ? "at" : "vs"} ${n.opponent}` : n.title;
+export function nextGameWords(n: { opponent: string | null; home?: boolean | null; title: string; undecided?: boolean | null; gamesThatDay?: number | null }): string {
+  // HB-87 (hourly run 6): an opponent the schedule has not named yet is said in words, never as the feed's "TB/CLE"; a doubleheader says
+  // two games; "vs" only for the home side and "at" only for the away side ("against" when the schedule does not say which)
+  if (n.undecided) return "opponent to be decided";
+  if (!n.opponent) return n.title;
+  const where = n.home === true ? "vs" : n.home === false ? "at" : "against";
+  return `${where} ${n.opponent}${(n.gamesThatDay ?? 1) > 1 ? `, ${n.gamesThatDay === 2 ? "two" : n.gamesThatDay} games that day` : ""}`;
 }
 export const VISITOR_TIME_LINE = "Times are shown in your time zone.";
 export const visitorTime = (iso: string | null): string => {
@@ -585,16 +590,27 @@ export function endChoiceModel(rule0: BurnRule, o: { burnSol?: boolean; sinkPick
   const winning = championPathRule(rule) ? `If ${o.team ?? "the team"} win the championship, the rest burns this coin.` : null;
   // owner decision 2026-10-19: a coin that spends its whole pool in one burn says what reaches the pool later (describe.ts ONE_SHOT_REST_*)
   const oneShot = !winning && !rule.pair && oneShotFull(rule);
+  // HS-34 (hourly run 6): a market coin whose other answer burns nothing says the lose case on the radio too: that answer ends the rule
+  // and the whole pool takes the chosen way (endText's ONE_SHOT_NO_BURN_LINE). A voided market is not this case (it burns down on the coin).
+  const lose = oneShot ? oneShotLoseAnswer(rule) : null;
   return {
     offered, winning, oneShot, selfLine: selfEndLineFor(rule),
     options: [
       // owner decision 2026-10-13 evening: the "another coin" choice is hidden unless the host exposes it (BURNTICKER_END_SINK_PICKER=1)
       ...(o.sinkPicker ? [{ kind: "coin" as const, line: END_CHOICE_LINES.coin }] : []),
-      { kind: "deficit", line: oneShot ? ONE_SHOT_REST_DEFICIT : END_CHOICE_LINES.deficit },
-      ...(o.burnSol ? [{ kind: "burn-sol" as const, line: oneShot ? ONE_SHOT_REST_INCINERATOR : END_CHOICE_LINES.burnSol }] : []),
+      { kind: "deficit", line: lose ? oneShotLoseLine(lose, "deficit") : oneShot ? ONE_SHOT_REST_DEFICIT : END_CHOICE_LINES.deficit },
+      ...(o.burnSol ? [{ kind: "burn-sol" as const, line: lose ? oneShotLoseLine(lose, "burn-sol") : oneShot ? ONE_SHOT_REST_INCINERATOR : END_CHOICE_LINES.burnSol }] : []),
     ],
   };
 }
+/** HS-34: the market answer that burns nothing on a one-shot market coin ("No" when only YES burns), or null when both answers burn. */
+export function oneShotLoseAnswer(rule: Pick<BurnRule, "oracle" | "market" | "kind" | "binary">): "Yes" | "No" | null {
+  if (!rule.market || !hasNoBurnOutcome(rule)) return null;
+  return !rule.binary!.onNo ? "No" : "Yes";
+}
+/** HS-34: the one-shot radio line that also says the lose case. */
+export const oneShotLoseLine = (lose: "Yes" | "No", kind: "deficit" | "burn-sol"): string =>
+  `If the market resolves ${lose}, or after its one burn, the rest ${kind === "deficit" ? "goes to $DEFICIT's burn" : "is sent to Solana's incinerator and burned"}.`;
 /** The choice a rule already carries (a draft read back). */
 export const endChoiceOf = (rule: BurnRule | null): EndChoice => (rule?.onEnd?.mint && rule.onEnd.ticker ? { kind: "coin", mint: rule.onEnd.mint, ticker: rule.onEnd.ticker } : rule?.onEnd?.endSink === "incinerator" ? { kind: "burn-sol" } : END_CHOICE_DEFAULT);
 /**
@@ -619,6 +635,21 @@ export function oneMarketDate(e: { endDate: string | null; markets: readonly { e
   const ds = [...new Set(e.markets.map((m) => m.endDate).filter((d): d is string => !!d))];
   if (ds.length === 1) return ds[0];
   return ds.length === 0 ? e.endDate : null;
+}
+/** HS-32 (hourly run 6): the line under the empty search box of the Event outcome "Which one?" step. */
+export const EVENT_SEARCH_HINT = "Type a team, a candidate, a film or a city. Markets come from Polymarket, and only open ones are listed.";
+export const OPEN_NOW_LABEL = "Open now";
+/** The categories whose Browse answers fill the "Open now" cards (the same server-cached reads the Browse step makes). */
+export const OPEN_NOW_CATEGORIES = ["politics", "sports", "culture"] as const;
+/**
+ * HS-32: up to `n` "Open now" cards before any query: Polymarket event cards from the Browse answers of each category in turn (one from
+ * each, then the next), never a refused or unlaunchable one, each title once.
+ */
+export function openNowCards<C extends { venue: string; title: string; refused: readonly string[]; launchable: { ok: boolean } }>(perCategory: readonly (readonly C[])[], n = 6): C[] {
+  const lists = perCategory.map((cs) => cs.filter((c) => c.venue === "polymarket" && !c.refused.length && c.launchable.ok));
+  const out: C[] = [], seen = new Set<string>();
+  for (let i = 0; out.length < n && lists.some((l) => i < l.length); i++) for (const l of lists) { const c = l[i]; if (c && !seen.has(c.title) && out.length < n) { seen.add(c.title); out.push(c); } }
+  return out;
 }
 /** HB-38: the one way a market's own close date is said (the search row, the review): "The market closes by …". */
 export const marketClosesLine = (when: string): string => `The market closes by ${when}.`;
@@ -778,7 +809,7 @@ export function shortTeamName(n: string): string {
  * fade side), $LADWS (the title, once); a code several leagues use carries the league's tag ($ATLMLB, $ATLNBA).
  */
 export { teamTicker } from "@/lib/burnticker/tickers";
-import { teamTicker } from "@/lib/burnticker/tickers";
+import { teamCodeShared, teamTicker } from "@/lib/burnticker/tickers";
 /** The team ticker for a rule built from an ESPN team or game series (null for any other rule). */
 export function teamTickerForRule(r: BurnRule, abbr?: string | null): string | null {
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
@@ -931,7 +962,11 @@ export function meetingsListRows(ms: readonly MeetingRow[], a: string, b: string
 export const RIVAL_SAME_TEAM = "The second team was cleared, because it is now the first team. Pick another second team.";
 /** Audit 7 item 9: season coins are named for what they count ("Guardians 2026 Losses", $CLEL). */
 export function seasonPairNames(a: { abbr: string; nickname: string | null; name: string }, b: { abbr: string; nickname: string | null; name: string }, year: number, league: string | null): { a: { name: string; ticker: string }; b: { name: string; ticker: string } } {
-  const one = (t: typeof a & { code?: string | null }) => ({ name: fitName([`${t.nickname ?? t.name} ${year} Losses`, `${shortTeamName(t.nickname ?? t.name)} ${year} Losses`, `${t.code ?? t.abbr} ${year} Losses`]), ticker: teamTicker(t.abbr, { league, window: "season", outcome: "loss" }) });
+  // HB-85 (hourly run 6): the season in the name is the badge's own label ("2026–27" for a league whose season spans two years), and the
+  // two tickers follow one pattern: when either team's code needs the league tag, both carry it ($DENNBALOSS / $LALNBALOSS)
+  const label = league && league in LEAGUES ? seasonLabel(league as LeagueId, year) : String(year);
+  const withTag = teamCodeShared(a.abbr, league) || teamCodeShared(b.abbr, league);
+  const one = (t: typeof a & { code?: string | null }) => ({ name: fitName([`${t.nickname ?? t.name} ${label} Losses`, `${shortTeamName(t.nickname ?? t.name)} ${label} Losses`, `${t.code ?? t.abbr} ${label} Losses`]), ticker: teamTicker(t.abbr, { league, window: "season", outcome: "loss", withTag }) });
   return { a: one(a), b: one(b) };
 }
 
@@ -1092,6 +1127,8 @@ export function profileFieldProblems(v: ProfileChecked): { field: ProfileField; 
   if (v.description.length > DESCRIPTION_MAX) out.push({ field: "description", text: `The description can be at most ${DESCRIPTION_MAX} characters.` });
   { const rp = v.generated ? descriptionRoomProblem(v.generated, v.description) : null; if (rp) out.push({ field: "description", text: rp }); }
   const cc = controlCharProblem(v.description, "description"); if (cc) out.push({ field: "description", text: cc });
+  // HS-36 (hourly run 6): HTML tags and entities are refused beside the links line, the same sentence the server says
+  const mk = markupProblem(v.description, "description"); if (mk) out.push({ field: "description", text: mk });
   for (const [k, label] of LINK_FIELDS) { const lp = linkFieldProblem(label, v[k]); if (lp) out.push({ field: k, text: lp }); }
   return out;
 }

@@ -32,7 +32,9 @@ export async function POST(req: Request) {
     if (!w.done) return NextResponse.json({ error: BACKTEST_SLOW, code: BACKTEST_SLOW_CODE, retryAfterSec: BACKTEST_SLOW_RETRY_SEC }, { status: 503, headers: { "retry-after": String(BACKTEST_SLOW_RETRY_SEC), "cache-control": "no-store" } });
     if ("error" in w) throw w.error;
     const r = w.value;
-    return NextResponse.json(r.body, { status: r.status });
+    // HB-83 (hourly run 6): through edgeJson, so a refusal is never swapped for Cloudflare's 502 page; a budget refusal carries Retry-After
+    const retry = (r.body as { retryAfterSec?: unknown } | null)?.retryAfterSec;
+    return edgeJson(r.body, r.status, typeof retry === "number" ? { "retry-after": String(retry), "cache-control": "no-store" } : {});
   } catch (e) {
     console.error("[burnticker/backtest] the back-test route failed:", e);
     return edgeJson({ error: "The back-test could not run just now.", code: "backtest-unavailable" }, 502);

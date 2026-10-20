@@ -44,7 +44,8 @@ export const SPORTS_SOURCE_NAME = "On-chain payout or licensed final score · fi
 
 /** One sentence for the exact-market and team-picker footers. */
 export function sportsProvenanceLine(): string {
-  return `Team coins and matchups settle each game on ${SPORTS_PROVENANCE.settlement}. ${sportsConfirmationLine()} Schedules come from ${SPORTS_PROVENANCE.schedule}. ${SPORTS_PROVENANCE.noEspn}`;
+  // HS-38 (hourly run 6): the "espn" label note moved to the docs page, beside the source list (SPORTS_PROVENANCE.noEspn)
+  return `Team coins and matchups settle each game on ${SPORTS_PROVENANCE.settlement}. ${sportsConfirmationLine()} Schedules come from ${SPORTS_PROVENANCE.schedule}.`;
 }
 /** Owner 2026-10-14 ("TheSportsDB should be enough to validate"): what happens to a game no second source can read. */
 export const SINGLE_SOURCE_LINE = "A game with no Polymarket market and no league feed settles on TheSportsDB alone, once its final score has stood unchanged for 12 hours.";

@@ -5,7 +5,7 @@ import { buildChecklist } from "@/lib/burnticker/trustpack/checklist";
 import { publicSample, publicSampleReceipts, sampleReceipts, DEVNET_PROGRAM_ID } from "@/lib/burnticker/trustpack/samples";
 import { checkReceiptTx, classifySignatureInput, jsonRpc, PUBLIC_RPC, type Rpc, type SourceFetch } from "@/lib/burnticker/trustpack/receiptCheck";
 import { isPubkey, isSignature } from "@/lib/burnticker/trustpack/base58";
-import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
+import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, publicExpenses, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
 import { loadOperator, pinnedDevFeeWallet, publicPlaceholders, signedMessageView, withoutPlaceholders, type Cluster } from "@/lib/burnticker/trustpack/operator";
 import { neverBuysScopeLine, readNeverBuys, type NeverBuysReport } from "@/lib/burnticker/trustpack/neverBuys";
 import { NEVER_BUYS_STATUS, placeholderSentence } from "@/lib/burnticker/trustpack/copy";
@@ -49,6 +49,8 @@ export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSou
 let ledgerCache: { at: number; key: string; doc: FeeLedgerDoc } | null = null;
 export const LEDGER_TTL_MS = 3_600_000;
 export function resetLedgerCache(): void { ledgerCache = null; }
+/** HB-88: the note a ledger answer carries when the chain was not read (the same words trust.ts uses). */
+export const LEDGER_NOT_READ_NOTE = "Not read for this answer.";
 
 export async function v1FeeLedger(p: Pick<Platform, "cluster" | "publishDir"> & Partial<Pick<Platform, "registry">>, o: { rpc?: Rpc; root?: string; now?: number; env?: Readonly<Record<string, string | undefined>> } = {}): Promise<ApiResult> {
   const r = await feeLedgerInner(p, o);
@@ -64,7 +66,7 @@ async function feeLedgerInner(p: Pick<Platform, "cluster" | "publishDir">, o: { 
   const op = loadOperator(o.root), expenses = loadExpenses(o.root);
   const wallet = pinnedDevFeeWallet(op, cluster);
   const published = readPublishedLedger(p.publishDir);
-  if (published && published.wallet === wallet && now - Date.parse(published.generatedAt) < LEDGER_TTL_MS) return ok({ ...published, expenses, served: "published copy" });
+  if (published && published.wallet === wallet && now - Date.parse(published.generatedAt) < LEDGER_TTL_MS) return ok({ ...published, expenses: publicExpenses(expenses), served: "published copy" });
   const key = `${cluster}:${wallet}`;
   if (ledgerCache && ledgerCache.key === key && now - ledgerCache.at < LEDGER_TTL_MS) return ok({ ...ledgerCache.doc, served: "cache" });
   if (!wallet) return ok({ ...buildFeeLedgerDoc({ cluster, wallet: null, history: null, expenses, now }), served: "none" });
@@ -73,8 +75,12 @@ async function feeLedgerInner(p: Pick<Platform, "cluster" | "publishDir">, o: { 
     const doc = buildFeeLedgerDoc({ cluster, wallet, history, expenses, now });
     ledgerCache = { at: now, key, doc };
     return ok({ ...doc, served: "chain" });
-  } catch (e) {
-    return ok({ ...(published ?? buildFeeLedgerDoc({ cluster, wallet, history: null, error: (e as Error).message.slice(0, 160), expenses, now })), expenses, served: published ? "published copy (stale: the chain read failed)" : "none" });
+  } catch {
+    // HB-88 (hourly run 6): a failed chain read answers with the stale published copy or an empty ledger and a plain "not read" note
+    // (trust.ts's shape). The expenses are always the cleaned public rows, never the internal TODO_ tokens, and the raw RPC error
+    // (which can carry the endpoint) stays out of the public answer.
+    if (published) return ok({ ...published, expenses: publicExpenses(expenses), served: "published copy (stale: the chain read failed)" });
+    return ok({ ...buildFeeLedgerDoc({ cluster, wallet, history: null, expenses, now }), note: LEDGER_NOT_READ_NOTE, served: "none" });
   }
 }
 

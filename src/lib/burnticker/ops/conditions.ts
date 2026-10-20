@@ -50,6 +50,8 @@ export interface OpsSignals {
   /** the alert rows of the last day and the keeper's last cycle: a bt-keeper-refused newer than the last cycle is a condition */
   alerts?: readonly { ts: number; kind: string; text: string }[] | null;
   lastCycleAt?: number | null;
+  /** HB-82 (hourly run 6): today's registry snapshot is not pinned yet (ops/snapshot.ts snapshotMissingFact) */
+  snapshot?: { date: string; line: string; lastError: string | null } | null;
 }
 
 /** PURE: the conditions from the host signals (A-7). */
@@ -65,6 +67,9 @@ export function opsConditions(sig: OpsSignals | null | undefined): ActiveConditi
   }
   const refused = (sig?.alerts ?? []).filter((a) => a.kind === "bt-keeper-refused" && a.ts > (sig?.lastCycleAt ?? 0)).sort((a, b) => b.ts - a.ts)[0];
   if (refused) out.push({ id: "bt-keeper-refused", kind: "bt-keeper-refused", label: "bt-keeper-refused", source: "ops", text: refused.text });
+  // HB-82: a missing day's snapshot is a condition until it is pinned (the keeper retries every 30 minutes), with the upload's last error
+  const snap = sig?.snapshot;
+  if (snap) out.push({ id: `bt-snapshot-missing:${snap.date}`, kind: "bt-snapshot-missing", label: `bt-snapshot-missing(${snap.date})`, source: "ops", text: `${snap.line}${snap.lastError ? ` The upload said: ${snap.lastError.slice(0, 160)}` : ""}` });
   return out;
 }
 

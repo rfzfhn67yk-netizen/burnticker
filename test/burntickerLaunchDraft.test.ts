@@ -247,7 +247,8 @@ describe("L04 — the interpreted event", () => {
 describe("L05 — provenance from the resolver; schedule problems are display problems", () => {
   test("no ESPN in the provenance lines, the Browse sports card, or the launch page's rendered text", () => {
     for (const t of [sportsProvenanceLine(), SPORTS_PROVENANCE.settlement, SPORTS_PROVENANCE.confirmation, SPORTS_PROVENANCE.schedule]) { assert.doesNotMatch(t, /ESPN scoreboard|from ESPN/); }
-    assert.match(sportsProvenanceLine(), /ESPN is not a source for any result/); assert.match(sportsProvenanceLine(), /on-chain payout/); assert.match(sportsProvenanceLine(), /TheSportsDB/);
+    // HS-38 (hourly run 6): the "older label" note left the wizard line for the docs page
+    assert.doesNotMatch(sportsProvenanceLine(), /espn/i); assert.match(SPORTS_PROVENANCE.noEspn, /ESPN is not a source for any result/); assert.match(sportsProvenanceLine(), /on-chain payout/); assert.match(sportsProvenanceLine(), /TheSportsDB/);
     const sports = categoryCards(loadCategories().find((c) => c.id === "sports")!, { feeds: [], polymarket: [], kalshi: [] });
     for (const c of sports) { assert.doesNotMatch(`${c.venueLabel} ${c.sourceName} ${c.sourceUrl ?? ""} ${c.flags.join(" ")}`, /espn/i, c.id); }
     const page = read("src/app/burnticker/launch/page.tsx").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
