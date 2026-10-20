@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { tier14CoinExists } from "@/lib/burnticker/feeShareLine";
 import { platform } from "@/lib/burnticker/server";
-import { buildTrustPage, jsonSafe, web3ChainReader } from "@/lib/burnticker/trust";
+import { attesterRows, buildTrustPage, jsonSafe, web3ChainReader } from "@/lib/burnticker/trust";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import { publicRelease, readReleases } from "@/lib/burnticker/history";
 import { clientKey, limiter } from "@/lib/burnticker/api/http";
@@ -13,7 +13,7 @@ async function buildTrust(): Promise<unknown> {
   const p = platform();
   const rpc = (process.env.BURNTICKER_RPC_URL ?? "").trim();
   const reader = rpc ? await web3ChainReader(rpc).catch(() => null) : null;
-  const attesters = p.registry.tokens().map((t) => { const a = p.registry.attesters(t.mint).filter((x) => x.active); return { ticker: t.ticker, attesters: a.length, independent: a.filter((x) => x.role === "independent").length, quorum: Math.max(1, Math.min(1, a.length)) }; });
+  const attesters = attesterRows(p.registry);   // HB-123: one row per launched coin, with its mint
   const live = p.registry.tokens("live");
   // audit R04: the upgrade row says what today's mainnet time lock allows — the same cached chain read as /v1/current-status
   const upgradeTimeLockSecs = await currentStatusLive().then((s) => s.upgradeAuthority.find((u) => u.cluster === "mainnet")?.timeLockSecs ?? null).catch(() => null);

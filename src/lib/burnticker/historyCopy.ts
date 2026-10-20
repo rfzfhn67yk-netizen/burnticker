@@ -12,7 +12,8 @@ export const RELEASE_LINES = {
   /** walkthrough 13 (2026-10-14): a run of republishes of one source, said once on one entry (history.ts collapseRepublishes) */
   sameSourceTimes: (n: number): string => (n <= 1 ? "The same source as the release before it was published again." : `The same source as the release before it was published again, ${n} times in a row.`),
   program: "The burn program's build changed.",
-  programNotRecorded: "The program build was not recorded for this release.",
+  // HB-110 (hourly run 8): an entry with no program hash is a release that did not rebuild the programs (the build JSON lists both builds)
+  programNotRecorded: "This release did not rebuild the programs.",
   idl: "The program's interface file changed.",
   allowlist: "The list of files allowed into the public repository changed.",
   files: (n: number, prev: number | null): string => {
@@ -48,6 +49,8 @@ export const INCIDENTS_COPY = {
   whatWasDone: "What was done",
   policyLink: "Read the incident policy",
   logLink: "Read the log file",
+  /** HB-46 residue: a caught-early entry links its source notes in the public repository; the path is never shown */
+  sourceLink: "Read the notes this comes from",
   statusLink: "See the status page",
   unavailable: "The incident log could not be read on this site just now.",
 };

@@ -12,7 +12,7 @@ import { receiptFormatTemplate, receiptKey } from "@/lib/burnticker/receipt";
 import { compileUnsigned } from "@/lib/burnticker/transactions";
 import { feedSourceReading, kalshiSourceReading, polymarketSourceReading, verifyReceiptCore, type ChainReading, type SourceReading } from "@/lib/burnticker/verify";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
-import { buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
+import { attesterRows, buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
 import { trustSwr } from "@/lib/burnticker/trustServe";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import type { TokenRow, TokenStatus } from "@/lib/burnticker/registry";
@@ -277,7 +277,7 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
   // Without an RPC (tests, an RPC-less host) nothing is read from the chain, so the answer is built fresh each time.
   const build = async () => {
     const reader = rpc ? await web3ChainReader(rpc).catch(() => null) : null;
-    const attesters = p.registry.tokens().map((t) => { const a = p.registry.attesters(t.mint).filter((x) => x.active); return { ticker: t.ticker, attesters: a.length, independent: a.filter((x) => x.role === "independent").length, quorum: Math.max(1, Math.min(1, a.length)) }; });
+    const attesters = attesterRows(p.registry);   // HB-123: one row per launched coin, with its mint
     const live = p.registry.tokens("live");
     // HB-69 / CH6-6: the same cached mainnet time-lock read as /api/burnticker/trust, so this answer does not say it "could not be read"
     const upgradeTimeLockSecs = await currentStatusLive().then((s) => s.upgradeAuthority.find((u) => u.cluster === "mainnet")?.timeLockSecs ?? null).catch(() => null);

@@ -79,3 +79,12 @@ export function freePairTickers(x: TeamCode, y: TeamCode, guard?: TickerGuard | 
 /** B-12: said on the name step when a generated ticker was replaced before it was shown; the creator can still type their own. */
 export const pairTickerSwapLine = (from: string, to: string): string =>
   `$${from.toUpperCase()} is taken or too close to another coin's ticker, so this coin starts as $${to.toUpperCase()}. You can change it.`;
+
+/**
+ * HB-117 (run 10): said on the name step when a single coin's generated ticker was refused by the review and swapped for a free one (a
+ * natural-disaster coin's hazard word: $NEXTM6 to $QUAKENXTM6). When the generated name moved with it, the line names the new name too.
+ */
+export const hazardSwapLine = (from: string, to: string, name: string | null): string =>
+  name
+    ? `$${from.toUpperCase()} is taken or too close to another coin's ticker, so this coin starts as $${to.toUpperCase()}, named "${name}". You can change both.`
+    : pairTickerSwapLine(from, to);

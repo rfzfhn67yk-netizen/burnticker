@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { prepareLaunch, sportsTeams, sportsRivalry, search, catalogueSources } from "@/lib/burnticker/api/handlers";
 import { meetingsPairNames, meetingsPairRules, reviewBlockers, candidatesPairRule, gamePairRule } from "@/lib/burnticker/guidedLaunch";
-import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE } from "@/lib/burnticker/describe";
 import { buildLaunchReview, type LaunchReview } from "@/lib/burnticker/launchReview";
 import { preparedRulesCheck } from "@/lib/burnticker/launchBundle";
 import { LINKED_ONE_SHOT_REFUSAL } from "@/lib/burnticker/linkedShare";
@@ -288,7 +288,8 @@ test("TEST A: review ↔ bundle parity over ≥ 5,000 setups", { timeout: 600_00
     if (!("review" in lv)) { fail("linked game: review refused", `${g.eventId}: ${lv.problems.join(" | ")}`); continue; }
     if (lv.review.problems.length) fail("linked game: problems", `${g.eventId} ${me.abbr}: ${lv.review.problems.join(" | ")}`);
     if (lv.review.venue !== "launchlab") fail("linked game: not LaunchLab", `${g.eventId}: ${lv.review.venue}`);
-    if (lv.review.settled?.sentence !== GAME_PAIR_SENTENCE || lv.review.end.kind !== "pair-winner") fail("linked game: sentence or end", `${g.eventId}: ${lv.review.settled?.sentence} / ${lv.review.end.kind}`);
+    // HS-42 (hourly run 8): an MLB game cannot end tied, so its pair sentence has no draw clause
+    if (lv.review.settled?.sentence !== GAME_PAIR_SENTENCE_NO_TIE || lv.review.end.kind !== "pair-winner") fail("linked game: sentence or end", `${g.eventId}: ${lv.review.settled?.sentence} / ${lv.review.end.kind}`);
     // AUDIT 12 item 2: review == build. The rules the review shows (with the pairing metadata: clause, void date, winner takes the burn,
     // the game, the full share) are byte for byte the bundle's, side B's counterpart mint aside (filled from the bundle's side A mint)
     await reviewEqualsBuild(p, `linked game ${g.eventId} ${me.abbr}`, { rule: linkedRule, ticker: `${me.abbr}GM`.slice(0, 10), name: `${me.nickname || me.abbr} Game`.slice(0, 32), raiseSol: "85", pair: { ticker: `${them.abbr}GM`.slice(0, 10), name: `${them.nickname || them.abbr} Game`.slice(0, 32), opp: them.abbr, description: "", imageUrl: null, links: [] } });

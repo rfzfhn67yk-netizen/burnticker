@@ -85,9 +85,12 @@ describe("1. the $DEFICIT site's first paint says what the keeper says", () => {
     assert.match(v, /The receipt history did not load just now/);
     assert.doesNotMatch(v, /No burns yet/);
   });
-  test("the script writes the page once and is quiet when nothing changed; deploy-sites.sh runs it on every publish", (t) => {
-    // scripts/ops/ is monorepo-private (deploy tooling); the public tree has neither file, so this check runs only where they exist
-    if (!fs.existsSync(path.join(ROOT, "scripts/ops/deficit-first-paint.mts")) || !fs.existsSync(path.join(ROOT, "scripts/ops/deploy-sites.sh"))) { t.skip("monorepo-only deploy tooling"); return; }
+  test("the script writes the page once and is quiet when nothing changed; deploy-sites.sh runs it on every publish", () => {
+    // HB-101 (hourly run 8): both files ship in the public tree (config/public-repo.allowlist), and the host runs that tree, so a release
+    // without either one fails here instead of skipping (publish 99 skipped this check and then failed on the host every minute)
+    assert.ok(fs.existsSync(path.join(ROOT, "scripts/ops/deficit-first-paint.mts")), "scripts/ops/deficit-first-paint.mts is missing from this tree; the every-minute publish runs it");
+    assert.ok(fs.existsSync(path.join(ROOT, "scripts/ops/deploy-sites.sh")), "scripts/ops/deploy-sites.sh is missing from this tree");
+
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "deficit-fp-"));
     fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify(onCurveStatus()));
     fs.writeFileSync(path.join(dir, "burns.json"), JSON.stringify([planned]));

@@ -198,7 +198,8 @@ describe("HB-41 and HB-42: browse card sentences, pasted links, the category hin
   test("the hint lists only the categories the Published data step has a tab for", () => {
     const cats = [{ id: "economics", feeds: ["treasury.debt"], guided: null }, { id: "politics", feeds: ["fedreg.eo"], guided: "elections" }, { id: "world", feeds: [], guided: null }, { id: "sports", feeds: ["thesportsdb.v2"], guided: null }, { id: "disasters", feeds: ["usgs.quakes"], guided: null }] as Pick<CategoryDef, "id" | "feeds" | "guided">[];
     assert.deepEqual(publishedDataCategories(cats).map((c) => c.id), ["economics"]);
-    assert.match(read("src/lib/burnticker/api/handlers.ts"), /categories = publishedDataCategories\(loadCategories\(\)\)/);
+    // HB-42 (hourly run 9): the hint now comes from the tabs' own list (browse.ts noMatchCategories, categoryList feedsOnly)
+    assert.match(read("src/lib/burnticker/api/handlers.ts"), /categories = noMatchCategories\(loadCategories\(\), catalogueFeeds\(now\)/);
   });
   test("HB-21 leftover: the Published data list has no Sports or Natural disasters tab, and the list is cached per mode", () => {
     const sci: CategoryDef = { id: "science", label: "Science", blurb: "", feeds: ["treasury.debt"], polymarket: [], kalshi: [], guided: null };
@@ -282,7 +283,7 @@ describe("HB-53 (sixth pass): the prompt count and a refused proof", () => {
     assert.equal(walletPromptCount({ transactions: 4, proof: true }), 5);
     assert.equal(walletPromptCount({ transactions: 1, proof: true }), 2);
     assert.equal(walletPromptCount({ transactions: 2, proof: false }), 2);
-    assert.match(signsLine(3, { proof: true }), /^Your wallet asks 3 times: first to sign a request/); clean(signsLine(3, { proof: true }));
+    assert.match(signsLine(3, { proof: true }), /^Your wallet asks 3 times in all: first to sign the request/); clean(signsLine(3, { proof: true }));
     assert.match(page, /signsProof=\{proofAsked\}/);
     const tile = read("src/app/burnticker/launch/CoinVsCoinTile.tsx");
     assert.equal((tile.match(/signs=\{shown\.review\?\.transactions\.count \? walletPromptCount\(/g) ?? []).length, 2, "both Coin comparison reviews, the pair curve included");

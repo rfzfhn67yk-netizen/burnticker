@@ -11,7 +11,7 @@ import { endText, raceEndResult, raceLevelSentence, RACE_END_RESULT } from "@/li
 import { derbySentence, raceEndSentence } from "@/lib/burnticker/derby/spec";
 import { HOME_CHAIN_WHY, NO_POOL_WHY, NO_PYTH, POOL_READ_WHY, noSecondSourceWhy, thinPoolWhy, twapUnderlying } from "@/lib/burnticker/derby/search";
 import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
-import { endSentences, shareOfBudgetLine } from "@/lib/burnticker/guidedLaunch";
+import { endSentences, sentenceWithoutEnd, shareOfBudgetLine } from "@/lib/burnticker/guidedLaunch";
 import { denverTime } from "@/lib/burnticker/denverTime";
 import { canonicalRuleJson, pendingWords, preparedRulesCheckWeb, PREPARED_MISSING_LINE, ruleChangedLine } from "@/lib/burnticker/preparedRules";
 import { buildLaunchBundle, buildPairBundles, defaultVoidBy, FakeLaunchLab, preparedRulesCheck, preparePairRules } from "@/lib/burnticker/launchBundle";
@@ -63,8 +63,11 @@ describe("L2: a daily race's end, said the same in the sentence and under At the
     // the tile renders exactly these two sources
     assert.match(tile, /const end = model\?\.rule \? endSentences\(asLinkedPairSide\(model\.rule\)\) : null;/);
     assert.match(tile, /<p className="font-medium text-neutral-200">At the end<\/p>\{end\.sentences\.map/);
-    // continuous audit HB-2: the block is left out when the sentence above already says the same end, so the step says it once
-    assert.match(tile, /\{end && !endSaid && <div/);
+    // continuous audit HB-2 with HB-112c (hourly run 9): the block is shown in both modes, and the sentence above leaves the end out, so
+    // the step still says it once
+    assert.match(tile, /\{end && <div className="space-y-0\.5 text-xs text-neutral-300" data-end-sentences>/);
+    assert.match(tile, /sentence && end \? sentenceWithoutEnd\(sentence, end\.sentences\) : sentence/);
+    assert.ok(!sentenceWithoutEnd(s, lines).includes(lines.join(" ")) && sentenceWithoutEnd(s, lines).length > 0);
   });
   test("a weekly race says weeks; the flippening keeps its own end", () => {
     const weekly = { ...linkedRace(), derby: { ...raceSpec, window: "weekly" } } as unknown as BurnRule;

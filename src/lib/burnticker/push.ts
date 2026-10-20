@@ -76,7 +76,9 @@ export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "cr
   // HB-29 2026-10-19: a live coin's source read is overdue while its result is still open
   | "feed-overdue"
   // 2026-10-19: an automatic SOL top-up of an operations wallet failed twice in a row (ops/topUp.ts)
-  | "top-up-failed";
+  | "top-up-failed"
+  // HB-108 (hourly run 8): the drain stop refused a target that needed SOL too often (ops/topUp.ts)
+  | "top-up-draining";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -126,6 +128,7 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-feed-overdue": "feed-overdue",
   // 2026-10-19 (ops/topUp.ts): a top-up that failed twice in a row; a top-up that landed is an informational row (bt-top-up), not pushed
   "bt-top-up-failed": "top-up-failed",
+  "bt-top-up-draining": "top-up-draining",
   "derby-withheld": "derby-withheld",
   "bt-cap-binding": "cap-binding",
   "bt-pin-orphan": "pin-orphan",
@@ -185,6 +188,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "feed-stale": "Burnticker source stale",
   "feed-overdue": "Burnticker source read overdue",
   "top-up-failed": "Burnticker wallet top-up failing",
+  "top-up-draining": "Burnticker wallet top-up stopped: draining",
   "feed-disagree": "Burnticker sources disagree",
   "derby-withheld": "Burnticker Derby result withheld",
   "cap-binding": "Burnticker burn pool above its cap",
@@ -234,6 +238,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "feed-stale": "A source has not given a new reading for longer than it should. No new reading means no burn. Check the source by hand.",
   "feed-overdue": "A live coin's source was due a read and has not been read, while the coin's result is still open. Its rule cannot settle until the source is read. The line below names the source, the coin, the due time and why the read did not happen.",
   "top-up-failed": "The keeper tried twice in a row to move SOL from its own key to an operations wallet and both tries failed. The line below names the wallet and the error. Until it lands, that wallet keeps running down.",
+  "top-up-draining": "One operations wallet needed SOL from the keeper key too many times in a short window, so the keeper stopped refilling it. A wallet that spends normally needs a top-up every few days; this one is losing SOL faster, which points to a leaked key or a bug. The line below names the wallet and the amounts. It resumes on its own once the window has passed, or when the operator clears it with scripts/ops/top-up.mts --clear-drain.",
   "feed-disagree": "The second source for a feed disagrees with the first. The reading is held back, and nothing burns until the two agree.",
   "derby-withheld": "A Burn Derby or record-close result was withheld because it could not be settled cleanly. The line below says why.",
   "cap-binding": "A burn pool holds more than the pre-audit cap allows. The excess is queued, not spent. This is a notice; nothing is lost.",

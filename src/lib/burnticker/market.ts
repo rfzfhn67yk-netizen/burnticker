@@ -122,6 +122,10 @@ export function chartFor(cluster: string, curvePool: string | null, graduatedPoo
 }
 
 /** Why the graduated pool's figure is missing: the card's sentence, then the read's own error as a sentence. */
+/** HB-116a: why a coin with no graduated pool shows no pool figure: it has not graduated (or is not launched), so the pool does not exist yet. */
+export const NO_POOL_YET = "This coin has not graduated, so it has no Raydium pool yet.";
+export const NO_POOL_NOT_LAUNCHED = "This coin is not launched, so it has no Raydium pool yet.";
+export const noPoolYet = (status: string): string => (status === "draft" || status === "expired" ? NO_POOL_NOT_LAUNCHED : NO_POOL_YET);
 const poolNotRead = (error: string | null) => (error ? `${NOT_READ.mcapPool} ${error.charAt(0).toUpperCase()}${error.slice(1)}.` : NOT_READ.mcapPool);
 
 /** The market block of status.json from what the reader brought back (or nothing). */
@@ -140,7 +144,8 @@ export function buildMarketJson(i: { cluster: string; mint: string; status: stri
     trade: tradeLinks(i.cluster, i.mint, phase, i.status), chart: chartFor(i.cluster, curve ? i.poolId : null, i.graduatedPool, phase),
     readAt: i.read?.readAt ? new Date(i.read.readAt).toISOString() : null, error: i.read?.error ?? null,
     pool: i.cpmm?.market ?? null,
-    poolNote: i.cpmm?.market ? MCAP_POOL_MEANING : poolNotRead(i.cpmm?.error ?? null),
+    // HB-116a (hourly run 9): a coin with no registered pool has none to read, so it never says "could not read that pool"
+    poolNote: i.cpmm?.market ? MCAP_POOL_MEANING : !i.graduatedPool && phase !== "graduated" ? noPoolYet(i.status) : poolNotRead(i.cpmm?.error ?? null),
     dates: i.dates ?? null,
   };
 }

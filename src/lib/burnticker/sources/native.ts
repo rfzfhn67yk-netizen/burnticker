@@ -72,18 +72,25 @@ export const GAME_LINES = {
  * enough to launch; a next game Polymarket has not listed yet is said here, never refused. With a counted league feed (MLB, the NHL, the
  * NBA's when it answers) that feed must agree instead of the hold.
  */
+// HB-118 (hourly run 10): sport-neutral ("a few days before the game", never basketball's "tip-off"); a next game more than 14 days away
+// (a season that has not started) gets the general form, never "has not listed the next game yet"
 export const NEXT_GAME_NOTES = {
-  hold: "Polymarket has not listed the next game yet; it usually appears a few days before tip-off. Until it does, that game would settle on TheSportsDB alone after a 12-hour confirmation hold.",
-  official: (feed: string): string => `Polymarket has not listed the next game yet; it usually appears a few days before tip-off. Until it does, that game would settle on TheSportsDB and ${feed}, which must agree.`,
+  hold: "Polymarket has not listed the next game yet; it usually appears a few days before the game. Until it does, that game would settle on TheSportsDB alone after a 12-hour confirmation hold.",
+  official: (feed: string): string => `Polymarket has not listed the next game yet; it usually appears a few days before the game. Until it does, that game would settle on TheSportsDB and ${feed}, which must agree.`,
   noTag: "Polymarket does not list games in this league, so each game would settle on TheSportsDB alone after a 12-hour confirmation hold.",
+  laterHold: "Polymarket lists each game a few days before it is played. Until then a game settles on TheSportsDB alone after a 12-hour confirmation hold.",
+  laterOfficial: (feed: string): string => `Polymarket lists each game a few days before it is played. Until then a game settles on TheSportsDB and ${feed}, which must agree.`,
 };
+/** HB-118: the "not listed yet" note is said only for a next game this close (Polymarket lists games a few days ahead). */
+export const NEXT_GAME_SOON_MS = 14 * 86_400_000;
 /** The launch review's note on a single-game coin (owner, 2026-10-16: one burn schedule for every game coin, gameSettle.ts gameSchedule). */
 export const GAME_COIN_NOTE = `${GAME_BURN_LINE} ${GAME_AGREE_LINE}`;
-export function nextGameNote(league: EspnSeries["league"], d: GameDeps): string {
+export function nextGameNote(league: EspnSeries["league"], d: GameDeps, o: { soon?: boolean } = {}): string {
+  const soon = o.soon !== false;
   const off = countedOfficialOf(league);
-  if (off) return NEXT_GAME_NOTES.official(CROSS_LABEL[off]);
-  if (d.apiSportsKey) return NEXT_GAME_NOTES.official("API-Sports");
-  return listsGamesAhead(league) ? NEXT_GAME_NOTES.hold : NEXT_GAME_NOTES.noTag;
+  const feed = off ? CROSS_LABEL[off] : d.apiSportsKey ? "API-Sports" : null;
+  if (feed) return soon ? NEXT_GAME_NOTES.official(feed) : NEXT_GAME_NOTES.laterOfficial(feed);
+  return listsGamesAhead(league) ? (soon ? NEXT_GAME_NOTES.hold : NEXT_GAME_NOTES.laterHold) : NEXT_GAME_NOTES.noTag;
 }
 
 function espnSource(id: string, s: EspnSeries): NativeSource {
@@ -125,7 +132,7 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
         const m = next && d.market ? await d.market(next).catch(() => null) : null;
         if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: GAME_LINES.noSourceNext(t.name, next, s.league) } };
         const ops = operatorsFor(s.league, d, !!m);
-        const note = s.kind === "game" ? GAME_COIN_NOTE : next && !m ? nextGameNote(s.league, d) : null;
+        const note = s.kind === "game" ? GAME_COIN_NOTE : next && !m ? nextGameNote(s.league, d, { soon: Date.parse(next.startsAt) - nowMs <= NEXT_GAME_SOON_MS }) : null;
         return { ...none, basis: next ? `readers for the next game (${next.name}): ${ops.join(" and ")}; games before launch never count${s.kind === "game" ? "; a game coin burns once two of them agree on the final, or once one of them has shown the same final twice a few minutes apart, and every read must agree" : ops.length < 2 ? "; one operator, so the game settles on TheSportsDB alone after a 12-hour hold unless Polymarket lists it" : ", and every read is compared at the first game after launch"}` : "no game listed yet; the reads are compared at the first game after launch", nextAt, nextBasis, note, problem: null };
       }
     },

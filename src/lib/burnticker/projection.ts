@@ -104,13 +104,27 @@ export function oneShotBacktestLines(from: string, to: string, qualifyingDays: r
   return [`${span}, ${n === 1 ? "one day qualified" : `${n} days qualified`}. This rule burns once, so it would have burned one time, on ${utcDay(qualifyingDays[0])}, and then ended.`];
 }
 
-export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?: string): Projection {
+/**
+ * HS-48 (hourly run 9): why a coin comparison has no back-test, when Burnticker has stored no daily reading of a coin (derby/store.ts
+ * derby_points, by Pyth feed). Said only when that is so; with history the reason stays the general one.
+ */
+export function coinvsNoHistoryLine(missing: readonly string[]): string {
+  const names = missing.length > 1 ? `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}` : missing[0];
+  return `Burnticker keeps no daily history of ${names} yet, so there is no back-test for this pair. The first reading is at the first 00:00 UTC after launch.`;
+}
+
+export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?: string, o: { /** HS-48: has Burnticker stored any daily reading of this Pyth feed? (unknown when left out) */ derbyHistory?: (feed: string) => boolean } = {}): Projection {
   const share = (rule.kind === "scalar" ? rule.scalar?.perUnit : (rule.binary?.onYes ?? rule.binary?.onNo)) as { fractionOfPool?: number } | undefined;
   const f = typeof share?.fractionOfPool === "number" ? share.fractionOfPool : null;
   const unitWord = drainUnitFor(rule);
   const drain = f !== null && f < 1 ? drainLine(f, unitWord) : null;
   const none = (reason: string): Projection => ({ available: false, weeks: null, from: null, to: null, rows: [], lines: [], reason, drain });
   if (f === null) return none("This rule moves a fixed amount of tokens, so there is no share to project.");
+  if (rule.oracle === "derby" && rule.derby?.selector === "coinvs" && o.derbyHistory) {
+    const d = rule.derby, has = o.derbyHistory;
+    const missing = [d.a, d.b].filter((u) => { try { return !!u.pyth && !has(u.pyth); } catch { return false; } }).map((u) => u.symbol);
+    if (missing.length) return none(coinvsNoHistoryLine(missing));
+  }
   if (rule.oracle !== "catalogue" || !rule.series) return none(rule.market ? "This rule settles once, so there is no history to project from." : "There is no saved sample of this source to project from.");
   const feed = feedById(rule.series);
   if (!feed) return none(nativeSourceById(rule.series) ? "Team, game and weather sources are read live, so there is no saved sample to project from." : "There is no saved sample of this source to project from.");

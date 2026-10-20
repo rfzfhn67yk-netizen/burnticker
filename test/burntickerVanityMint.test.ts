@@ -362,7 +362,7 @@ describe("the wiring, by each file's source", () => {
     assert.match(src, /const mintPool = useMintPool\(\)/);
     assert.match(src, /const mintsNeeded = pairOn \? 2 : 1/);
     assert.doesNotMatch(src, /useBurnChoice|launchMints|MintChoice|plainMint|mintPool\.ensure\(/, "no switch, no plain keys, no search started by the page itself");
-    assert.match(src, /prepareIfCurrent\(sentRev, \(\) => curDraft\.current, \(\) => withMintSource\(\{ pool: mintPool, n: mintsNeeded, stale: \(\) => curDraft\.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE \}, async \(keys: GroundMint\[\] \| null\)/, "the server's keys first; an edit while searching sends nothing");
+    assert.match(src, /prepareIfCurrent\(sentRev, \(\) => curDraft\.current, \(\) => withKeptMint\(keptMint, \{ pool: mintPool, n: mintsNeeded, stale: \(\) => curDraft\.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE \}, async \(keys: GroundMint\[\] \| null\)/, "LA6-4: a key kept in this tab first (keptMintKey.ts withKeptMint, which falls through to withMintSource), then the server's keys; an edit while searching sends nothing");
     assert.match(src, /const keyed = \(bundle: Bundle, k: GroundMint \| undefined\) => \(k \? withLocalKey\(bundle, k\) : withServerKey\(bundle\)\)/);
     assert.match(src, /const sentMint = \(k: GroundMint \| undefined\) => \(k \? \{ mint: k\.publicKey \} : \{\}\)/);
     assert.equal((src.match(/\.\.\.sentMint\(kA\)/g) ?? []).length, 2, "the one coin and side A (and the matchup's first coin)");
@@ -426,7 +426,7 @@ describe("the wiring, by each file's source", () => {
 describe("mandatory again (owner, 2026-10-14 night): the server's key first, the browser search only on mint-bank-empty", () => {
   const bankEmpty = () => new LaunchRequestError(503, MINT_BANK_EMPTY, "none ready");
   test("the server answered with its key: run(null) once, no search", async () => {
-    let ensures = 0, calls: unknown[] = [];
+    let ensures = 0; const calls: unknown[] = [];
     const pool = { ensure: async () => { ensures++; return []; } };
     const out = await withMintSource({ pool, n: 2 }, async (keys) => { calls.push(keys); return "ok"; });
     assert.equal(out, "ok"); assert.deepEqual(calls, [null]); assert.equal(ensures, 0);

@@ -127,7 +127,7 @@ describe("HB-80 / HS-27: one decided line for a pair coin", () => {
     assert.equal(decidedPairOf(status("won"), [{ status: "planned", settledAt: "2026-10-16T13:38:00Z", kind: "event", pairRole: null }]), null);
   });
   test("the embed and the badge carry it", () => {
-    assert.match(read("src/lib/burnticker/badge.ts"), /decided: \(\(\) => \{ const d = decidedPairOf\(s, i\.receipts\)/);
+    assert.match(read("src/lib/burnticker/badge.ts"), /decided: \(\(\) => \{ if \(coinLifecycleState\(s, i\.receipts\) !== \"decided\"\) return null; const d = decidedPairOf\(s, i\.receipts\)/);
     assert.match(read("src/lib/burnticker/embed.ts"), /const n = decided \? \{ before: decided/);
   });
 });
@@ -213,7 +213,7 @@ describe("HB-81: cross-rule copy batch", () => {
   });
   test("D2 and D3 are already fixed in this tree", () => {
     for (const f of ["src/lib/burnticker/guidedLaunch.ts", "src/app/burnticker/launch/page.tsx"]) assert.doesNotMatch(read(f), /Only two linked coins can name each other/);
-    assert.match(page, /upfrontLines\(RAISE_PRESETS_SOL, \{ team: guide\.follow === "team", end: pairOn \? null : endA, pair: pairOn \}\)/);
+    assert.match(page, /upfrontLines\(RAISE_PRESETS_SOL, \{ team: guide\.follow === "team", end: pairOn \? null : endA, pair: pairOn, perpetual: !pairOn && windowKindOf\(rule\) === "perpetual", endLine: pairOn \? endFact\.replace\(\/\\n\/g, " "\) : null \}\)/);
   });
 });
 

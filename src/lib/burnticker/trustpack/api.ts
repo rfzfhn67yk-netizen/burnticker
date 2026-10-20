@@ -3,7 +3,8 @@ import type { Platform } from "@/lib/burnticker/server";
 import { loadTransparency } from "@/lib/burnticker/trust";
 import { buildChecklist } from "@/lib/burnticker/trustpack/checklist";
 import { publicSample, publicSampleReceipts, sampleReceipts, DEVNET_PROGRAM_ID } from "@/lib/burnticker/trustpack/samples";
-import { checkReceiptTx, classifySignatureInput, jsonRpc, PUBLIC_RPC, type Rpc, type SourceFetch } from "@/lib/burnticker/trustpack/receiptCheck";
+import { checkReceiptTx, classifySignatureInput, jsonRpc, PUBLIC_RPC, type ReceiptCheck, type Rpc, type SourceFetch } from "@/lib/burnticker/trustpack/receiptCheck";
+import { verdictOf, type Verdict } from "@/lib/burnticker/verificationStatus";
 import { isPubkey, isSignature } from "@/lib/burnticker/trustpack/base58";
 import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, publicExpenses, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
 import { loadOperator, pinnedDevFeeWallet, publicPlaceholders, signedMessageView, withoutPlaceholders, type Cluster } from "@/lib/burnticker/trustpack/operator";
@@ -57,7 +58,18 @@ export function receiptCacheFile(env: Readonly<Record<string, string | undefined
 export function resetReceiptCache(): void { receiptCache.clear(); receiptRunning.clear(); receiptDiskLoaded = false; }
 /** A verdict is kept only when every read answered: a check whose RPC or source read failed is asked again next time. */
 export const receiptVerdictFinal = (b: ReceiptBody): boolean =>
-  !(b.checks ?? []).some((c) => c.ok === null && /did not answer|did not return|could not be fetched|did not return both/.test(c.detail));
+  // HB-116b (hourly run 9): a source read refused by this host's request budget is asked again too, never kept as the verdict
+  !(b.checks ?? []).some((c) => c.ok === null && /did not answer|did not return|could not be fetched|did not return both|budget is full|budget is spent/.test(c.detail));
+/**
+ * HB-116b (hourly run 9): `verified` keeps its meaning (the on-chain core passed: transaction, program, memo, Reading, units, and no
+ * check failed), and the answer says beside it, in the check page's own words (verificationStatus.ts verdictOf), whether every check
+ * passed: "verified", or "partly verified" naming what was not checked (a source read that did not run is never implied to have passed).
+ */
+export function withVerdict<B extends ReceiptBody>(b: B): B & { verdict: Verdict; verdictLine: string; notChecked: { id: string; label: string; detail: string }[] } {
+  const checks = (b.checks ?? []) as ReceiptCheck[];
+  const v = verdictOf(checks);
+  return { ...b, verdict: v.verdict, verdictLine: v.line, notChecked: checks.filter((c) => c.ok === null).map((c) => ({ id: c.id, label: c.label, detail: c.detail })) };
+}
 function keepReceipt(sig: string, body: ReceiptBody, file: string | null, now: number): void {
   if (!receiptVerdictFinal(body)) return;
   receiptCache.delete(sig);
@@ -83,7 +95,7 @@ export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSou
   const file = o.cacheFile === undefined ? receiptCacheFile(process.env, o.root) : o.cacheFile;
   loadReceiptDisk(file);
   const hit = receiptCache.get(signature);
-  if (hit) return ok({ ...hit.body, checkedAt: hit.at, served: "kept verdict" });
+  if (hit) return ok({ ...withVerdict(hit.body), checkedAt: hit.at, served: "kept verdict" });
   let run = receiptRunning.get(signature);
   if (!run) {
     const samples = sampleReceipts(o.root);
@@ -105,7 +117,7 @@ export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSou
   clearTimeout(timer);
   if (body === "slow") return { ...fail(202, RECEIPT_STILL_CHECKING, { code: "still-checking", retryAfterSec: 5 }), headers: { "retry-after": "5" } };
   if (body === null) return fail(502, "The receipt could not be checked just now. Try again in a minute.", { code: "check-failed" });
-  return ok({ ...body, checkedAt: new Date(now()).toISOString(), served: "checked now" });
+  return ok({ ...withVerdict(body), checkedAt: new Date(now()).toISOString(), served: "checked now" });
 }
 
 /** HB-97: check the listed sample receipts once (web start), so the first visitor's check is answered from the kept verdict. */
@@ -130,7 +142,19 @@ export async function v1FeeLedger(p: Pick<Platform, "cluster" | "publishDir"> & 
   // LP locked forever (2026-10-10): the operator's LP-fee line is always fresh (the keeper's claim records), whichever copy served the rest.
   let claims = null;
   try { claims = p.registry ? p.registry.lockFeeClaims() : null; } catch { claims = null; }
-  return ok({ ...(r.body as Record<string, unknown>), lpFees: lpFeeLine(pageCluster(p), claims) });
+  const body = { ...(r.body as Record<string, unknown>), lpFees: lpFeeLine(pageCluster(p), claims) };
+  return { ...ok(body), headers: { "cache-control": ledgerCacheControl((body as { generatedAt?: unknown }).generatedAt, o.now ?? Date.now()) } };
+}
+/** The fee-ledger endpoint's declared freshness (trustpack/spec.ts getFeeLedger cacheSec). */
+export const LEDGER_CACHE_SEC = 600;
+/**
+ * HB-122 (hourly run 10): the ledger body is reused for up to LEDGER_TTL_MS (the published copy, the chain read is costly), so the
+ * headers count down from the body's own generatedAt: a body 57 minutes old is never sent under "fresh for 10 minutes more".
+ */
+export function ledgerCacheControl(generatedAt: unknown, now: number): string {
+  const t = typeof generatedAt === "string" ? Date.parse(generatedAt) : NaN;
+  const left = Number.isFinite(t) ? Math.floor(LEDGER_CACHE_SEC - Math.max(0, now - t) / 1000) : 0;
+  return left > 0 ? `public, max-age=${left}, s-maxage=${left}` : "no-store";
 }
 
 async function feeLedgerInner(p: Pick<Platform, "cluster" | "publishDir">, o: { rpc?: Rpc; root?: string; now?: number; env?: Readonly<Record<string, string | undefined>> } = {}): Promise<ApiResult> {

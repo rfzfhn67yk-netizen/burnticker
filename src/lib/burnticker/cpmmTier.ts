@@ -13,8 +13,9 @@
  * (trade fee 75 bps, creator fee 50 bps; read from mainnet that day). Per swap: burn pool 97.90 bps, operator 12.6 bps (its 20% of the
  * locked LP's share), Raydium 14.50 bps; traders pay 125 bps. Coins created before keep the tier they pinned (tier 9 for most, tier 0
  * for the earliest), so a COIN'S numbers come from its own pin (`tierForPin`, TokenConfig.ll_cp_config) and only "the tier new coins get"
- * comes from CPMM_TIER. The trust table accepts the platform on CPMM_PLATFORM_TIERS (the target first, then tier 9 while the owner's
- * UpdatePlatformConfig is pending) and says which tier the LIVE platform gives new coins.
+ * comes from CPMM_TIER. The trust table accepts the platform only on CPMM_PLATFORM_TIERS (tier 14 on mainnet; tier 9 was dropped on
+ * 2026-10-19 once the live platform named tier 14) and says which tier the LIVE platform gives new coins. Tier 9 stays in KNOWN_TIERS,
+ * so a coin that pinned it is still described by its own numbers.
  *
  * Units are Raydium's own: tradeFeeRate and creatorFeeRate in parts per million of volume; protocolFeeRate, fundFeeRate and
  * creatorFeeShareRate in parts per million OF that fee. The derivation below works in ppm of volume (integers), so 16.8 or 71.25 bps
@@ -55,11 +56,14 @@ export const CPMM_DEVNET_TIER_0: CpmmTier = { cluster: "devnet", index: 0, id: "
  */
 export const CPMM_TIER: Record<CpmmCluster, CpmmTier> = { mainnet: CPMM_MAINNET_TIER_14, devnet: CPMM_DEVNET_TIER_0, localnet: CPMM_MAINNET_TIER_14 };
 /**
- * The platform cpConfigIds the trust table accepts, per cluster: CPMM_TIER first, then the tier the platform may still name while the
- * owner's UpdatePlatformConfig (scripts/launchlab-platform-cp-config.mts) is pending. Drop the second entry once the platform names the
- * target, so a later drift back is flagged.
+ * The platform cpConfigIds new coins may be created on, per cluster (the trust table accepts only these). Tier 9 was the second mainnet
+ * entry while the owner's UpdatePlatformConfig (scripts/launchlab-platform-cp-config.mts) was pending; the live platform names tier 14
+ * since CPMM_TIER_14_SINCE, so tier 9 is no longer accepted for a new coin and a drift back to it is flagged. Coins already created on
+ * tier 9 still read it through KNOWN_TIERS / tierForPin.
  */
-export const CPMM_PLATFORM_TIERS: Record<CpmmCluster, readonly CpmmTier[]> = { mainnet: [CPMM_MAINNET_TIER_14, CPMM_MAINNET_TIER_9], devnet: [CPMM_DEVNET_TIER_0], localnet: [CPMM_MAINNET_TIER_14] };
+export const CPMM_PLATFORM_TIERS: Record<CpmmCluster, readonly CpmmTier[]> = { mainnet: [CPMM_MAINNET_TIER_14], devnet: [CPMM_DEVNET_TIER_0], localnet: [CPMM_MAINNET_TIER_14] };
+/** Whether an AmmConfig id is a tier a NEW coin may be created on (CPMM_PLATFORM_TIERS). An existing coin's pin is read with tierForPin. */
+export const newCoinTierAccepted = (cluster: CpmmCluster, id: string): boolean => CPMM_PLATFORM_TIERS[cluster].some((t) => t.id === id);
 /** The AmmConfig id per cluster (strings, for the client-side lookup table and the launch builders). */
 export const CPMM_CONFIG_ID: Record<CpmmCluster, string> = { mainnet: CPMM_TIER.mainnet.id, devnet: CPMM_TIER.devnet.id, localnet: CPMM_TIER.localnet.id };
 

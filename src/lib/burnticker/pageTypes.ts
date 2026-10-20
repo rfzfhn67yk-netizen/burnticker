@@ -158,6 +158,8 @@ export interface TokenStatusJson {
    * retired-coin sweep, and the one line the coin page shows ("retired · swept <date> · pool ≈ 0"). Absent on older status files.
    */
   lifecycle?: LifecycleJson | null;
+  /** HB-25 residue (hourly run 8): what the coin is doing now ("decided", "voided", "ended", "live", or the row state); `status` stays the registry row state (decidedWarning.ts coinLifecycleState) */
+  lifecycleState?: "draft" | "expired" | "paused" | "retired" | "voided" | "ended" | "decided" | "live";
   /** sources-2: a one-market Polymarket coin's stated source and dispute window (sources/polyStated.ts). Absent on older files; null when not read. */
   stated?: StatedJson | null;
   /** cheap-features item 12: a Coin vs Coin coin's live scoreboard (derby/page.ts coinDerbyScoreboard); absent or null outside a derby pair. */

@@ -71,7 +71,7 @@ export function DeficitPrelaunch({ fallbackSite }: { fallbackSite: string }) {
             <div><dt className="text-neutral-500">network</dt><dd>{d.keeper ? "mainnet" : "not launched on mainnet"}</dd></div>
           </dl>
           <p className="mt-2 text-xs text-neutral-400">{d.keeper ? "" : `${d.launch.note} `}Holders&apos; balances are never touched: burns destroy only tokens the program bought with the burn pool.</p>
-          <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-300">The locked rule text</summary><p className="mt-1 text-neutral-300">{d.statement}</p><p className="mt-1 break-all text-neutral-500">Rule file {d.rulesFile}, sha256 {d.rulesSha256}</p></details>
+          <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-300">The locked rule text</summary><p className="mt-1 text-neutral-300">{d.statement}</p><p className="mt-1 break-all text-neutral-500">The text comes from <a className="underline decoration-dotted" href={d.rulesUrl} target="_blank" rel="noreferrer">{d.rulesWords}</a>. Its sha256 is {d.rulesSha256}. That hash, not the file name, is what ties the coin to this exact text.</p></details>
         </section>
         <section className={card} aria-label="The devnet rehearsal">
           <h2 className="font-medium">A real burn from the devnet rehearsal</h2>

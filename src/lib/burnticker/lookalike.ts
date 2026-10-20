@@ -110,6 +110,21 @@ export const sameTickerSentence = (ticker: string): string => `$${ticker.toUpper
 
 const HOW_TEXT: Record<LookalikeHow, string> = { "same-letters": "reads as the same letters as", "one-edit": "is one letter away from", suffix: "is a copycat variant of", "platform-name": "uses the platform's name" };
 
+/**
+ * Continuous audit HB-117 b (run 10): a name clash read "The name "Next Magnitude 6" reads as the same letters as "Next Magnitude 6"",
+ * the same string on both sides. A name that IS the other coin's name now says so once, and says when that coin follows the same rule
+ * (someone copying the rule kept its name); a name that differs from it still quotes both.
+ */
+export const SAME_RULE_NAME_ASK = "Pick a name that cannot be mistaken for it.";
+function nameCloneSentence(cand: { name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null }, e: LookalikeExisting, how: LookalikeHow): string {
+  const coin = e.status === "live" ? `the live $${e.ticker}` : `$${e.ticker}, an existing Burnticker coin`;
+  const sameRule = !!(cand.rule && e.rule && cand.rule.oracle === e.rule.oracle && (cand.rule.series ?? null) === (e.rule.series ?? null));
+  const tail = sameRule ? ", which follows the same rule" : "";
+  const sameText = cand.name.trim().toLowerCase().replace(/\s+/g, " ") === e.name.trim().toLowerCase().replace(/\s+/g, " ");
+  if (sameText) return `This is the name of ${coin}${tail}.`;
+  return `The name "${cand.name}" ${HOW_TEXT[how]} "${e.name}", the name of ${coin}${tail}.`;
+}
+
 /** Every way a new coin's ticker or name passes for an existing coin's (or for Burnticker). Empty = no lookalike. */
 export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null; creator?: string | null }, existing: readonly LookalikeExisting[], o: { /** LA-4: the review's form (launchReview.ts): with no proven creator, an exact ticker held by a draft is a "draft-held" notice, not a refusal. The prepare never passes it. */ draftNotice?: boolean } = {}): LookalikeHit[] {
   const hits: LookalikeHit[] = [];
@@ -119,7 +134,8 @@ export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<
     if (e.status === "expired") continue;
     // A-2: the very same ticker, held by another creator's coin (launched or an open draft), is refused whatever the rule; the creator's
     // own coin is not (a retry of their own draft)
-    if (cand.ticker.trim().toUpperCase().replace(/^\$/, "") === e.ticker.toUpperCase()) {
+    const exact = cand.ticker.trim().toUpperCase().replace(/^\$/, "") === e.ticker.toUpperCase();
+    if (exact) {
       // review of block M: every ticker is one coin, so the creator's own LAUNCHED coin refuses it too (a second coin would turn
       // /t/<TICKER> into a chooser); only their own unfinished draft is exempt, so they can prepare it again
       const ownDraft = !!(cand.creator && e.creator && cand.creator === e.creator && e.status === "draft");
@@ -127,17 +143,19 @@ export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<
       // on. The press signs; the prepare (and the review asked again with that proof) decide with the signed wallet, as above.
       if (!ownDraft && o.draftNotice && !cand.creator && e.status === "draft") hits.push({ field: "ticker", existing: "a coin not launched yet", how: "draft-held", reason: draftHeldSentence(e.ticker) });
       else if (!ownDraft) hits.push({ field: "ticker", existing: `$${e.ticker}`, how: "same-letters", reason: sameTickerSentence(e.ticker) });
-      continue;
+      // HB-117 (run 10): the name is still compared, so a copied ticker AND name are both said at once (the name's refusal used to
+      // appear only after the ticker was changed)
+      if (ownDraft || e.status === "draft") continue;
     }
-    if (team && teamOf(e.rule) === team) continue;   // another window of the same team: RAYS26 / RAYS27
+    if (!exact && team && teamOf(e.rule) === team) continue;   // another window of the same team: RAYS26 / RAYS27
     const et = skeleton(e.ticker), en = skeleton(e.name);
-    const t = compare(ct, et);
+    const t = exact ? null : compare(ct, et);
     // review of block M: a draft's ticker is never named (it is not public until the coin exists)
     if (t) hits.push(e.status === "draft" ? { field: "ticker", existing: "a coin not launched yet", how: t, reason: nearDraftSentence(cand.ticker) } : { field: "ticker", existing: `$${e.ticker}`, how: t, reason: `$${cand.ticker.toUpperCase()} ${HOW_TEXT[t]} $${e.ticker}, which is an existing Burnticker coin.` });
     if (e.status === "draft") continue;   // a draft reserves its TICKER (checked above); names are compared with launched coins only
     const n = cn.length >= 5 ? compare(cn, en) : null;
     const nt = !n && cn.length >= 4 && et.length >= 4 && cn === et ? "same-letters" : null;   // a name that spells an existing ticker
-    if (n) hits.push({ field: "name", existing: e.name, how: n, reason: `The name "${cand.name}" ${HOW_TEXT[n]} "${e.name}", the name of $${e.ticker}, which is an existing Burnticker coin.` });
+    if (n) hits.push({ field: "name", existing: e.name, how: n, reason: nameCloneSentence(cand, e, n) });
     else if (nt) hits.push({ field: "name", existing: `$${e.ticker}`, how: nt, reason: `The name "${cand.name}" reads as $${e.ticker}, which is an existing Burnticker coin.` });
   }
   return hits;

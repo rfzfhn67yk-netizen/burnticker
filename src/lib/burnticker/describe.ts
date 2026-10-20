@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { eventIdentity } from "@/lib/burnticker/eventIdentity";
 import { teamTicker, type TeamWindow } from "@/lib/burnticker/tickers";
-import { NBA_OFFICIAL_ANSWERS, championSeries, displayAbbr, findTeams, isPairOutcome, LEAGUES, noPlayoffs, outcomeResults, outcomeWords, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
+import { NBA_OFFICIAL_ANSWERS, championSeries, displayAbbr, findTeams, isPairOutcome, LEAGUES, noPlayoffs, outcomeResults, outcomeWords, parseEspnSeries, seriesCannotTie, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 import { fedregEoText, isFedregEo } from "@/lib/burnticker/sources/fedreg";
 import { ll2Text, parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
@@ -38,7 +38,8 @@ import { fitName } from "@/lib/burnticker/launchFields";
  *             not retire.", a one-shot's "This coin resolves once, on <date>. Then it burns down over four weeks and retires."
  *   badge     "2026 SEASON" / "POSTSEASON 2026" / "NEXT 5 GAMES" / "PERPETUAL" / "ONE-SHOT · Oct 31, 2026" — the coin card, the coin
  *             page header, the pair page, the token metadata's first description line and the footer of every post
- *   paragraph flavour + " " + ruleBlock                     the registry draft's description, the token metadata `description`,
+ *   paragraph flavour + " " + ruleBlock (the trigger said   the registry draft's description, the token metadata `description`,
+ *             once: triggerOnce, HB-113)
  *                                                           the coin page header, the first daily post
  *
  * Client-safe (the wizard re-renders it as the ticker changes): no node imports.
@@ -196,6 +197,9 @@ const burnDown = (r: BurnRule): string => { const k = describeEndSink(r); return
 export const END_SINK_VOID_SENTENCE = "If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead.";
 /** QA pass 9 #19 (2026-10-13): "the season is cancelled" only where a season exists (a team or rivalry coin); every other rule says the result. */
 export const END_SINK_VOID_SENTENCE_PLAIN = "If the result is voided, whatever is left burns down on this coin over four weeks instead.";
+/** HB-103: the void of a candidates pair is the pair's own (a coin missed its trading pool by the void date); a split market is not a void. */
+export const RACE_PAIR_VOID_SENTENCE = "If the pair is voided, because a coin did not reach its trading pool in time, whatever is left burns down on this coin over four weeks instead.";
+
 export const isSportsRule = (r: Pick<BurnRule, "oracle" | "series">): boolean => r.oracle === "catalogue" && !!r.series && parseEspnSeries(r.series) !== null;
 export const voidSentenceFor = (r: Pick<BurnRule, "oracle" | "series">): string => (isSportsRule(r) ? END_SINK_VOID_SENTENCE : END_SINK_VOID_SENTENCE_PLAIN);
 const voidSentence = (r: BurnRule): string => (describeEndSink(r) && windowKindOf(r) !== "perpetual" && !isMeetingsSeries(r) ? ` ${voidSentenceFor(r)}` : "");
@@ -246,6 +250,11 @@ export const CANDIDATES_END_RESULT = "When both markets are final and one candid
 export const PARTIES_END_RESULT = "When both markets are final and one party won, the other party's coin sends the rest of its pool, and any fees that arrive later, to the winning coin's burn, and the winning coin burns down what is left on itself. If neither party won, or a market settled 50-50, the rest goes to $DEFICIT's burn. Then the coin retires.";
 export const GAME_END_RESULT = "When the game is final, the losing team's coin sends the rest of its pool, and any fees that arrive later, to the winning team's coin's burn, and the winning coin burns down what is left on itself. After a draw, the rest goes to $DEFICIT's burn. Then the coin retires.";
 export const GAME_CANCELLED_SENTENCE = "If the game is cancelled, nothing moves between the two coins.";
+/** HS-42 (hourly run 8): the same end and pair sentence for a league whose games cannot end tied (espn.ts leagueCannotTie): no draw clause. */
+export const GAME_END_RESULT_NO_TIE = GAME_END_RESULT.replace(" After a draw, the rest goes to $DEFICIT's burn.", "");
+export const GAME_PAIR_SENTENCE_NO_TIE = GAME_PAIR_SENTENCE.replace(" After a draw, both pools go to $DEFICIT's burn.", "");
+/** A one-game pair rule whose league cannot tie (its own game series). */
+export const gamePairCannotTie = (r: Pick<BurnRule, "pair">): boolean => seriesCannotTie(r.pair?.game?.series?.[0] ?? null);
 /**
  * THE END OF A TWO-COIN DAILY RACE (qa-12 L2, what the keeper does): one more reading once every day of the run is recorded, the season
  * tally (derby/adapter.ts recordTally). The coin with more winning days wins it and burns its share for it once more; the other coin's
@@ -285,8 +294,11 @@ export function endText(r: BurnRule, o: { team?: string | null; party?: boolean 
   const noBurn = full && hasNoBurnOutcome(r) ? ` ${ONE_SHOT_NO_BURN_LINE}` : "";
   if (sink === "incinerator") return mk("incinerator", full ? `${ONE_SHOT_REST_INCINERATOR}${noBurn} No coin is swapped for it. Then the coin retires.` : INCINERATOR_END_RESULT, VOID);
   if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", meetingsEndResult(r), `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
-  if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", o.party ? PARTIES_END_RESULT : CANDIDATES_END_RESULT, VOID);
-  if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
+  // HB-103 (hourly run 8): a 50-50 market or a voided market is "no single winner" here ($DEFICIT's burn, the sentence above); only a
+  // voided pair burns down on the coin
+  if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", o.party ? PARTIES_END_RESULT : CANDIDATES_END_RESULT, days === 28 ? RACE_PAIR_VOID_SENTENCE : RACE_PAIR_VOID_SENTENCE.replace("over four weeks", over));
+  if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", gamePairCannotTie(r) ? GAME_END_RESULT_NO_TIE : GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
+
   // qa-12 L2: a two-coin daily race ends on its season tally (derby/adapter.ts recordTally; endSinkKeeper's pair winner burns itself down)
   if (sink === "pair-winner" && isDailyRace(r) && r.derby?.selector === "coinvs") { const e = raceEndOf(r.derby, days); return mk("pair-winner", e.result, e.tie); }
   if (sink === "pair-winner" && r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip) return mk("pair-winner", FLIP_REST_LINE, VOID);
@@ -394,6 +406,22 @@ const sliced = (r: BurnRule): boolean => { const m = (r.kind === "binary" ? (r.b
 const spends = (r: BurnRule, t: string) => { const p = fractionText(r); return p.endsWith("vault") ? `the coin burns ${p}` : `the burn pool spends ${p} buying $${t} on Raydium${sliced(r) ? " in slices sized to the pool's liquidity" : ""} and burns it`; };
 /** "The result comes from X, cross-checked against Y." / "MLB's official feed confirms it." — the settlement sentences. */
 const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
+/**
+ * HB-113 (hourly run 9): a published-data coin's settlement sentence. The cross-check is named only when the source has one; a
+ * single-source series (search.ts isSingleSourceSeries, crossRead null) never claims a second publisher in its pinned description.
+ */
+export const feedResultSentence = (f: { sourceName: string; crossRead?: string | null }): string => `The result comes from ${f.sourceName}${f.crossRead ? `, cross-checked against ${f.crossRead}` : ""}.`;
+/**
+ * HB-113: the paragraph says the trigger once. When the rule block opens with the one-liner's own clause ("$DEBTUP burns for each full
+ * increase of $1B …. For each full increase of $1B …, the burn pool spends 2% …"), the block's opening clause becomes "Each time, …".
+ * The rule block itself (the lead, the token page) is unchanged.
+ */
+export function triggerOnce(oneLiner: string, ruleBlock: string): string {
+  const m = /^burns (for|on) (.+)$/.exec(oneLiner);
+  if (!m) return ruleBlock;
+  const head = `${cap(m[1])} ${m[2]}, `;
+  return ruleBlock.startsWith(head) ? `Each time, ${ruleBlock.slice(head.length)}` : ruleBlock;
+}
 const SPORTS_RESULT = "its market's on-chain payout if it has one, or else from a licensed final score";
 /** A single game's result (owner 2026-10-16: the first score read, the on-chain settlement last; one source is enough). */
 const GAME_RESULT = "a licensed final score, the league's own feed, or the game's on-chain settlement, whichever reads it";
@@ -482,7 +510,8 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   // owner 2026-10-14: a game no second source can read settles on TheSportsDB alone after a 12-hour hold, so a second source is named
   // only where the league's own counted feed reads every game; otherwise the description promises none
   const cross = CROSS[s.league] ?? null;
-  const confirms = cross ? ` ${cap(cross)} confirms it.` : "";
+  // HB-107b (hourly run 8): "NHL's official scores confirm it" (a plural source takes "confirm")
+  const confirms = cross ? ` ${cap(cross)} ${/s$/.test(cross) ? "confirm" : "confirms"} it.` : "";
   const badge = windowBadge(r, c);
   const mk = (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]): CoinText => {
     const ruleBlock = `${rules} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
@@ -601,7 +630,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
   const build = (name0: string, tk0: string, oneLiner: string, block: (t: string) => string, windowSentence: string, shape: CoinText["shape"]): CoinText => {
     const name = ctx.suggest?.name ?? name0, tk = ctx.suggest?.ticker ?? tk0;
     const t = ctx.ticker || tk, ruleBlock = `${block(t)} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
-    return { name: capName(name), ticker: tk, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, lead: leadSentence(ruleBlock), windowSentence, windowKind: windowKindOf(r), badge, paragraph: `$${t} ${oneLiner}. ${ruleBlock}`, shape };
+    return { name: capName(name), ticker: tk, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, lead: leadSentence(ruleBlock), windowSentence, windowKind: windowKindOf(r), badge, paragraph: `$${t} ${oneLiner}. ${triggerOnce(oneLiner, ruleBlock)}`, shape };
   };
   if (n && r.inverse && n.metric !== "snow") {
     // THE FADE SIDE: the days the threshold is NOT reached
@@ -651,7 +680,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     // THE FADE SIDE for any other first-party feed: the readings that do not move the rule's way
     const f = ctx.feed, title = f.title.split(/[(—,]/)[0].trim(), dir = r.scalar?.direction ?? "up";
     if (series === "treasury.debt") return build("Flat Debt Days", "FLATDEBT", "burns on every business day the national debt stays flat or falls",
-      (t) => `This coin burns on the days the debt stays flat or falls. For every business day the national debt stays flat or falls, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. A day the debt rises, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
+      (t) => `This coin burns on the days the debt stays flat or falls. For every business day the national debt stays flat or falls, ${spends(r, t)}, with a receipt on chain. ${feedResultSentence(f)} A day the debt rises, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
     const not = r.scalar?.baseline === 0 ? "reads zero" : dir === "up" ? "does not rise" : dir === "down" ? "does not fall" : "does not move";
     const did = r.scalar?.baseline === 0 ? "is above zero" : dir === "up" ? "rises" : dir === "down" ? "falls" : "moves";
     const sub = paramSubject(series), what = sub ? sub.name : title;
@@ -665,11 +694,11 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     if (sub) {
       const ch = changePhrase(r, f.unitLabel, sub.noun, /snapshot/.test(sub.window));
       return build(sub.name, tickerFrom(sub.ticker), ch ? `burns for ${ch}` : `burns for every ${f.unitLabel} ${sub.what}`,
-        (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel} ${sub.what}`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Each reading is ${sub.window}. Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
+        (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel} ${sub.what}`}, ${spends(r, t)}, with a receipt on chain. ${feedResultSentence(f)} Each reading is ${sub.window}. Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
     }
     const title0 = f.title.split(/[(—,]/)[0].trim(), ch = changePhrase(r, f.unitLabel, title0, false);
     return build(title0, feedTickerBase(series, f.title), ch ? `burns for ${ch}` : `burns for every ${f.unitLabel} (${title0})`,
-      (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel}`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
+      (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel}`}, ${spends(r, t)}, with a receipt on chain. ${feedResultSentence(f)} Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "polymarket" && r.market && r.binary && !r.binary.onYes && r.binary.onNo) {
     // intent audit 3 item 4: the NO side ("the Lakers do not win the 2027 NBA championship") burns on a NO payout only. The keeper reads

@@ -210,10 +210,11 @@ describe("HS-32: the Event outcome step shows a hint and Open now cards before a
   test("the hint passes the copy lint; the cards take Polymarket events from each category in turn, never refused, at most six", () => {
     assert.equal(EVENT_SEARCH_HINT, "Type a team, a candidate, a film or a city. Markets come from Polymarket, and only open ones are listed.");
     plain(EVENT_SEARCH_HINT);
-    const c = (title: string, venue = "polymarket", refused: string[] = []) => ({ id: title, venue, title, refused, launchable: { ok: true } });
-    const picked = openNowCards([[c("P1"), c("P2"), c("F1", "feed"), c("P3")], [c("S1"), c("S2", "polymarket", ["refused"]), c("S3")], [c("C1"), c("P1")]]);
-    assert.deepEqual(picked.map((x) => x.title), ["P1", "S1", "C1", "P2", "S3", "P3"]);
-    assert.deepEqual([...OPEN_NOW_CATEGORIES], ["politics", "sports", "culture"]);
+    // HS-46 (hourly run 9): every card carries a close date; sports and elections first in turn, culture only fills what they leave
+    const c = (title: string, venue = "polymarket", refused: string[] = []) => ({ id: title, venue, title, refused, launchable: { ok: true }, next: { at: "2026-12-05T17:00:00Z" } });
+    const picked = openNowCards([[c("Alpha"), c("Bravo"), c("Feedy", "feed"), c("Charlie")], [c("Sierra"), c("Tango", "polymarket", ["refused"]), c("Uniform")], [c("Culture"), c("Alpha")]]);
+    assert.deepEqual(picked.map((x) => x.title), ["Alpha", "Sierra", "Bravo", "Uniform", "Charlie", "Culture"]);
+    assert.deepEqual([...OPEN_NOW_CATEGORIES], ["sports", "politics", "culture"]);
   });
   test("the page renders the hint and the cards under the empty box, from the Browse answers", () => {
     const p = read("src/app/burnticker/launch/page.tsx");

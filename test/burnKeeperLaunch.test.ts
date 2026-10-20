@@ -216,7 +216,7 @@ describe("the Burnticker platform config (the owner's dials)", () => {
     assert.deepEqual(CPMM_MAINNET_TIER_14, { cluster: "mainnet", index: 14, id: "52MZUkNsRYzP4gn2mCaLTVtJQy2tpoF79hp5K1HhAxxX", tradeFeeRate: 7_500, protocolFeeRate: 120_000, fundFeeRate: 40_000, creatorFeeRate: 5_000, creatorFeeShareRate: 50_000 });
     assert.equal(CPMM_TIER.mainnet.id, "52MZUkNsRYzP4gn2mCaLTVtJQy2tpoF79hp5K1HhAxxX", "new coins: tier 14");
     assert.equal(CPMM_TIER.localnet, CPMM_TIER.mainnet, "localnet mirrors mainnet");
-    assert.deepEqual(CPMM_PLATFORM_TIERS.mainnet.map((t) => t.index), [14, 9], "the trust row accepts tier 9 only while the platform update is pending");
+    assert.deepEqual(CPMM_PLATFORM_TIERS.mainnet.map((t) => t.index), [14], "tier 9 was dropped once the platform named tier 14 (2026-10-19)");
     // a coin's numbers come from the tier IT pinned: tier 9 and tier 0 coins keep theirs; no pin (or an unlisted id) = the new-coin tier
     assert.equal(tierForPin("mainnet", CPMM_MAINNET_TIER_9.id), CPMM_MAINNET_TIER_9);
     assert.equal(tierForPin("mainnet", CPMM_MAINNET_TIER_0.id), CPMM_MAINNET_TIER_0);

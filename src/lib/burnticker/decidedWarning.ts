@@ -172,3 +172,21 @@ export function decidedSwapWarning(s: DecidedWarningInput, receipts: readonly Re
   if (s.market?.phase === "curve" || s.market?.phase === "migrating") return `${head} ${NO_FURTHER_RESULT} Its burn happens only after the curve reaches ${raiseWords(s.market).replace(/^their/, "its")} and the coin graduates.`;
   return `${head} ${NO_FURTHER_RESULT} Its burn waits for its trading pool.`;
 }
+
+/**
+ * HB-25 residue (hourly run 8): `status.status` is the registry row's state, a storage fact ("live" for a coin whose one result is in
+ * and waits for its pools, like $SEAWIN and $DENWIN). `status.lifecycleState` is what the coin is doing now, from the same decided reading
+ * the cards use (decidedPairOf, b141d156): a draft, expired, paused or retired row says so; a voided pair or result is "voided"; a rule
+ * that ended (wind-down or drain) is "ended"; a decided one-time result is "decided"; anything else is "live". (`status.lifecycle` was
+ * already the end-of-rule block, so the new field has its own name.)
+ */
+export type CoinLifecycleState = "draft" | "expired" | "paused" | "retired" | "voided" | "ended" | "decided" | "live";
+export interface LifecycleStateInput extends DecidedPairStatus { status: string; lifecycle?: { ended?: unknown } | null }
+export function coinLifecycleState(s: LifecycleStateInput, receipts: Parameters<typeof decidedPairOf>[1]): CoinLifecycleState {
+  if (s.status === "draft" || s.status === "expired" || s.status === "paused" || s.status === "retired") return s.status;
+  if (s.pair?.clause?.state === "voided" || s.next?.result === "void") return "voided";
+  if (s.lifecycle?.ended) return "ended";
+  if (decidedPairOf(s, receipts)) return "decided";
+  if (s.rules?.oneShot !== false && s.next?.result === "decided") return "decided";
+  return "live";
+}

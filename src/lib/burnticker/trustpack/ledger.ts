@@ -87,6 +87,18 @@ export function lpFeeLine(cluster: string, claims: readonly Pick<LockFeeClaimFac
 }
 
 interface SigInfo { signature: string; slot: number; blockTime: number | null; err: unknown }
+/**
+ * THE ONE COUNTERPARTY RULE (HB-122, hourly run 10): the account whose balance moved most the other way (the payer for income, the
+ * recipient for spending). The fee-ledger API and /v1/trust (trust.ts) both use it, so they name the same counterparty for a transaction.
+ */
+export const COUNTERPARTY_RULE = "the account whose SOL balance moved most the other way in the same transaction";
+export function counterpartyOf(keys: readonly string[], pre: readonly (number | bigint)[], post: readonly (number | bigint)[], i: number): string | null {
+  if (i < 0 || i >= post.length) return null;
+  const delta = BigInt(post[i]) - BigInt(pre[i]);
+  let cp: string | null = null, best = BigInt(0);
+  keys.forEach((k, j) => { if (j === i || j >= post.length || j >= pre.length) return; const d = BigInt(post[j]) - BigInt(pre[j]); const opp = delta > BigInt(0) ? -d : d; if (opp > best) { best = opp; cp = k; } });
+  return cp;
+}
 interface TxJson { slot: number; blockTime: number | null; meta: { err: unknown; preBalances: number[]; postBalances: number[]; loadedAddresses?: { writable: string[]; readonly: string[] } } | null; transaction: { message: { accountKeys: string[] } } }
 
 /** The wallet's whole history from chain (paged getSignaturesForAddress), each transaction's lamport change for the wallet. */
@@ -109,9 +121,7 @@ export async function readWalletHistory(rpc: Rpc, wallet: string, o: { maxSignat
     if (i < 0) continue;
     const delta = BigInt(tx.meta.postBalances[i]) - BigInt(tx.meta.preBalances[i]);
     if (delta === BigInt(0)) continue;
-    // counterparty: the account whose balance moved most the other way (the payer for income, the recipient for spending)
-    let cp: string | null = null, best = BigInt(0);
-    keys.forEach((k, j) => { if (j === i || j >= tx.meta!.postBalances.length) return; const d = BigInt(tx.meta!.postBalances[j]) - BigInt(tx.meta!.preBalances[j]); const opp = delta > BigInt(0) ? -d : d; if (opp > best) { best = opp; cp = k; } });
+    const cp = counterpartyOf(keys, tx.meta.preBalances, tx.meta.postBalances, i);
     const bt = tx.blockTime ?? s.blockTime;
     entries.push({ signature: s.signature, slot: tx.slot, blockTime: bt ? new Date(bt * 1000).toISOString() : null, month: bt ? new Date(bt * 1000).toISOString().slice(0, 7) : null, deltaLamports: delta.toString(), direction: delta > BigInt(0) ? "in" : "out", counterparty: cp, err: !!tx.meta.err });
   }

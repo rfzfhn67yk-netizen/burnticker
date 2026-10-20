@@ -224,3 +224,42 @@ export function hazardPatternSwitch(cur: HazardPatternState, pt: PatternId, nowM
   if ("refused" in sw) return sw;
   return { next: { series: sw.series, inverse: false }, notice: sw.notice ?? null };
 }
+
+/**
+ * Continuous audit HB-117 (run 10): the site's own showcase, the one-shot magnitude-6 earthquake coin, could not be copied. Its generated
+ * ticker $NEXTM6 and name "Next Magnitude 6" both belong to the live coin, and the digit endings every other coin falls back on are no
+ * way out here: the lookalike skeleton drops the digits that do not read as letters, and the rest are one letter away ($NEXTM62 and
+ * $NEXTM63 both read as $NEXTM6). So a natural-disaster coin's free alternatives add the hazard's own word to the ticker and the name
+ * ("Next Magnitude 6 Quake", $QUAKENXTM6). Best first; every ticker is 2 to 10 letters or digits; each name pairs with its ticker.
+ */
+const HAZARD_ALT_WORDS: Readonly<Record<HazardKindId, readonly { t: string; n: string }[]>> = {
+  quake: [{ t: "QUAKE", n: "Quake" }, { t: "TREMOR", n: "Tremor" }],
+  hurricane: [{ t: "STORM", n: "Storm" }, { t: "GALE", n: "Gale" }],
+  tornado: [{ t: "TWISTER", n: "Twister" }, { t: "FUNNEL", n: "Funnel" }],
+  wildfire: [{ t: "BLAZE", n: "Blaze" }, { t: "EMBER", n: "Ember" }],
+  volcano: [{ t: "LAVA", n: "Lava" }, { t: "ASH", n: "Ash" }],
+};
+const NAME_MAX_BYTES = 32;   // the program's name limit (launchFields.ts fitName)
+/** The name with the hazard word added; when it would not fit, words come off the end of the generated name, never off the hazard word. */
+function withWord(name: string, word: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  while (words.length && new TextEncoder().encode(`${words.join(" ")} ${word}`).length > NAME_MAX_BYTES) words.pop();
+  return words.length ? `${words.join(" ")} ${word}` : word;
+}
+export function hazardAlternates(series: string | null | undefined, gen: { ticker: string; name: string }): { ticker: string; name: string }[] {
+  const kind = hazardKindOf(series);
+  const t = (gen.ticker ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!kind || !t) return [];
+  // the threshold at the end of the ticker ("M6" of $QUAKEM6, "100K" of $FIRE100K), so a long ticker can still take the word
+  const short = t.replace(/^NEXT/, "NXT"), tail = t.match(/[A-Z]?[0-9][A-Z0-9]*$/)?.[0] ?? "", out: { ticker: string; name: string }[] = [];
+  for (const w of HAZARD_ALT_WORDS[kind]) {
+    const name = withWord(gen.name, w.n);
+    for (const c of [`${w.t}${t}`, `${w.t}${short}`, `${t}${w.t}`, `${short}${w.t}`, `${w.t.slice(0, 4)}${short}`, ...(tail ? [`${w.t}${tail}`, `${w.t}${short.slice(0, 3)}${tail}`] : []), `${short.slice(0, 10 - w.t.length)}${w.t}`]) {
+      if (/^[A-Z0-9]{2,10}$/.test(c) && c !== t && !out.some((o) => o.ticker === c)) out.push({ ticker: c, name });
+    }
+  }
+  return out;
+}
+/** HB-117: the name that goes with a free alternative ticker the review offered, or null when that ticker is not one of the hazard's own. */
+export const hazardAlternateName = (series: string | null | undefined, gen: { ticker: string; name: string }, ticker: string): string | null =>
+  hazardAlternates(series, gen).find((a) => a.ticker === ticker.toUpperCase())?.name ?? null;

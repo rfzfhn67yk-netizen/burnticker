@@ -2,6 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { REGISTRY_SCHEMA_VERSION } from "@/lib/burnticker/registry";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
+
+/** HB-110: the two public commits a release names, in words (the build JSON's publicTree.commitNote). */
+export const PUBLIC_COMMIT_NOTE = "commit is the public commit this host was built from, the last one the publish pushes, which only writes the release commit into two pins. releaseCommit is that release commit, the one the changelog and /v1/trust link.";
+
 
 /**
  * RELEASE IDENTITY (audit 2026-10-19 I-13). /api/burnticker/build reported only a Next build id, there was no manifest on the host, and
@@ -73,7 +78,12 @@ export interface ReleaseView {
   schema: typeof RELEASE_SCHEMA;
   /** false when this host has no release file (a development server, or a build shipped before 2026-10-19) */
   recorded: boolean;
-  publicTree: { commit: string | null; dirty: boolean | null; sha256: string | null; files: number | null; recompute: string };
+  /**
+   * HB-110 (hourly run 8): `commit` is the public commit this host's tree was built from: the "Pins" commit the publish pushes last, which
+   * only writes the release commit into two pins. `releaseCommit` is that release commit, the one the changelog and /v1/trust link (a
+   * commit cannot name itself, so the two always differ by the pins commit). `commitNote` says so in words.
+   */
+  publicTree: { commit: string | null; releaseCommit: string; commitNote: string; dirty: boolean | null; sha256: string | null; files: number | null; recompute: string };
   monorepo: { commit: string | null; dirty: boolean | null };
   build: { id: string | null; builtAt: string | null; matchesServed: boolean | null };
   publishedAt: string | null;
@@ -97,7 +107,7 @@ export function releaseView(o: { servedBuildId: string | null; root?: string; en
   const k = readKeeperRelease((env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join(root, "data", "burnticker-site"));
   return {
     schema: RELEASE_SCHEMA, recorded: !!r,
-    publicTree: { commit: r?.publicTree.commit ?? null, dirty: r?.publicTree.dirty ?? null, sha256: r?.publicTree.sha256 ?? null, files: r?.publicTree.files ?? null, recompute: TREE_RECIPE },
+    publicTree: { commit: r?.publicTree.commit ?? null, releaseCommit: PUBLIC_REPO_COMMIT, commitNote: PUBLIC_COMMIT_NOTE, dirty: r?.publicTree.dirty ?? null, sha256: r?.publicTree.sha256 ?? null, files: r?.publicTree.files ?? null, recompute: TREE_RECIPE },
     monorepo: { commit: r?.monorepo.commit ?? null, dirty: r?.monorepo.dirty ?? null },
     build: { id: r?.build?.id ?? null, builtAt: r?.build?.builtAt ?? null, matchesServed: r?.build && o.servedBuildId ? r.build.id === o.servedBuildId : null },
     publishedAt: r?.publishedAt ?? null,

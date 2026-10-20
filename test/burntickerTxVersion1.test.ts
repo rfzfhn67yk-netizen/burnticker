@@ -144,7 +144,8 @@ describe("Connection readers (web3.js 1.99.0 parses the v1 answer into MessageV1
     try {
       const reader = await web3ChainReader("http://127.0.0.1:9/v1-fixture");
       const d = await reader.lamportsDelta(LEDGER.signature, LEDGER.wallet);
-      assert.deepEqual(d, { delta: BigInt(-5000), counterparty: LEDGER.getTransaction.transaction.message.accountKeys[1], memo: null });
+      // HB-122 (hourly run 10): the ledger's one counterparty rule (the largest opposite mover); a fee-only transaction has none
+      assert.deepEqual(d, { delta: BigInt(-5000), counterparty: null, memo: null });
     } finally { globalThis.fetch = realFetch; }
   });
   test("programClient / programAdapter: getParsedTransaction (jsonParsed) of a v1 transaction parses, with its slot and no error", async () => {

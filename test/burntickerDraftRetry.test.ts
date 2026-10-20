@@ -160,7 +160,7 @@ describe("a multi-transaction launch says how many times the wallet asks, above 
   test("the line lints, names the count, and the page passes the review's count", async () => {
     const { signsLine } = await import("@/lib/burnticker/mintAddressCopy");
     const { lintCopy } = await import("@/lib/launch/copyLint");
-    assert.match(signsLine(4), /^Your wallet asks 4 times, once for each transaction, in order\./);
+    assert.match(signsLine(4), /^Your wallet asks 4 separate times, once for each transaction, in order\./);
     assert.deepEqual(lintCopy(signsLine(4)).hits, []);
     const fs = await import("node:fs");
     const card = fs.readFileSync(new URL("../src/app/burnticker/launch/ReviewCard.tsx", import.meta.url), "utf8");

@@ -15,7 +15,7 @@ import { LEFTOVER_SEE_END } from "@/lib/burnticker/retirementCopy";
 import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
 import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
-import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, PAIR_DIAGRAM_LABEL, UPFRONT_LABEL, lpDisclosureFor, profileMoreLabel, shareExample, type LaunchVenue, marketClosesLine } from "@/lib/burnticker/guidedLaunch";
+import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, PAIR_DIAGRAM_LABEL, UPFRONT_LABEL, lpDisclosureFor, profileDescriptionParts, profileMoreLabel, shareExample, type LaunchVenue, marketClosesLine } from "@/lib/burnticker/guidedLaunch";
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { freeRowLead } from "@/lib/burnticker/tickerSwap";
@@ -157,8 +157,7 @@ export interface ReviewCardProps {
 }
 export type { LaunchVenue } from "@/lib/burnticker/guidedLaunch";
 export type ProfileFieldKey = "name" | "ticker" | "image" | "description" | "x" | "telegram" | "website" | "note";
-export interface PublicProfileCoin { side: "a" | "b"; image: string; name: string; ticker: string; description: string; links: { label: string; url: string }[]; note: string | null }
-/** A blocker beside the launch button: its sentence and, when a field can fix it, the link back to that field. */
+export interface PublicProfileCoin { side: "a" | "b"; image: string; name: string; ticker: string; description: string; links: { label: string; url: string }[]; note: string | null; /** HB-104 (hourly run 9): the paragraph the server generates from this coin's own rule and pins ahead of the creator's text */ generated?: string | null }/** A blocker beside the launch button: its sentence and, when a field can fix it, the link back to that field. */
 export type Blocker = string | { text: string; edit?: (() => void) | null };
 const blockerText = (b: Blocker): string => (typeof b === "string" ? b : b.text);
 
@@ -333,12 +332,14 @@ export function ReviewCard(p: ReviewCardProps) {
       {tickerCheckList}
       {draftHeldList}
       {p.image}
+      {/* HS-49 (hourly run 9): the end choice decides where the pool's rest goes, so it sits above the collapsed optional group under its
+          own heading, away from the description field a click was meant for */}
+      {p.endChoice && <section className="min-w-0 space-y-1 rounded-lg border border-neutral-800 p-3" aria-label="When it ends" data-name-end-choice><h3 className="text-xs font-medium text-neutral-400">When it ends</h3>{p.endChoice}</section>}
       <details className="min-w-0 rounded-lg border border-neutral-800 p-3" data-profile-more open={!!p.note?.value}>
         <summary className="cursor-pointer text-sm text-neutral-200">{profileMoreLabel(!!p.note)}</summary>
         {p.note && <p className="mt-2 text-xs text-neutral-400" data-note-vs-description>{NOTE_VS_DESCRIPTION}</p>}
         <div className="mt-2 min-w-0 space-y-3">{p.profile}{noteField}</div>
       </details>
-      {p.endChoice && <section className="min-w-0 space-y-1 rounded-lg border border-neutral-800 p-3" aria-label="When it ends" data-name-end-choice><h3 className="text-xs font-medium text-neutral-400">When it ends</h3>{p.endChoice}</section>}
       {fieldProblems.length > 0 && problemList("Not ready yet")}
       {p.next}
     </section>
@@ -375,7 +376,7 @@ export function ReviewCard(p: ReviewCardProps) {
                   {edit("name", "name and ticker")}
                 </div>
                 {row("Image", c.image.startsWith("data:") ? REVIEW_IMAGE_UPLOADED : REVIEW_IMAGE_GENERATED, "image", "image")}
-                {row("Description", c.description.trim() || "None. The coin's page shows the rule sentence only.", "description", "description")}
+                {(() => { const d = profileDescriptionParts(c); return row("Description", d.none ?? <>{d.generated && <span className="block" data-profile-generated>{d.generated}</span>}{d.own && <span className={`block${d.generated ? " mt-1" : ""}`} data-profile-own>{d.own}</span>}</>, "description", "description"); })()}
                 {row("Links", c.links.length ? <span className="flex flex-wrap gap-x-3">{c.links.map((l) => <span key={l.label} className="break-all">{l.label}: {l.url}</span>)}</span> : "None", "x", "links")}
                 {c.note !== null && row("Note", c.note.trim() || "None", "note", "note")}
               </dl>

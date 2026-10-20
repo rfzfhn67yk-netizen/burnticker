@@ -317,6 +317,8 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-scroll-hint.more-end { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
 .bt-scroll-hint.more-start { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px); mask-image: linear-gradient(90deg, transparent, #000 40px); }
 .bt-scroll-hint.more-start.more-end { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
+/* HS-50 (hourly run 9): under 480 px the home Coins tabs wrap to a second row, so no tab is cut mid-word or hidden off screen */
+@media (max-width: 479px) { .bt-tabs.bt-tabs-wrap { flex-wrap: wrap; overflow-x: visible; -webkit-mask-image: none; mask-image: none; } }
 
 /* website-15 item 7: a value not read is a dash button; its reason opens under it on tap, click or keyboard focus (phones included) */
 .bt-why { position: relative; display: inline-block; }

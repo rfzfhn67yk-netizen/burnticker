@@ -3,6 +3,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { lookalikeRefusal, mintAdoptionRefusal, sameTickerSentence, type LookalikeExisting, type LookalikeHit } from "@/lib/burnticker/lookalike";
 import { freeTickers, isTeamRule } from "@/lib/burnticker/tickerCheck";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
+import { DRAFT_TTL_MS, type TokenRow } from "@/lib/burnticker/registry";
 
 /**
  * The launch handler's two growth-batch guards (2026-10-10), in one call so the handler change is one line per side:
@@ -13,9 +14,18 @@ import { loadReserved } from "@/lib/burnticker/reservedNames";
  */
 export interface GuardRefusal { status: 409; error: string; extra: { code: "lookalike" | "ticker-taken" | "mint-exists"; hits?: LookalikeHit[]; /** A-2: free tickers that pass this same check */ suggestions?: string[] } }
 
+/**
+ * LA-3 (fifth pass, 2026-10-19): the status a row holds a ticker with. A draft whose create never landed (no launch transaction) holds
+ * its ticker for DRAFT_TTL_MS from when the prepare wrote it, the same bound registry.expireDrafts applies. The registry expires drafts
+ * lazily, and the review route reads the rows without a sweep, so a draft past the bound is read here as "expired" whether or not a
+ * sweep has run yet: its ticker is free, and the review's draft-held notice never names it. Inside the bound nothing changes, so the
+ * draft's own creator can still finish it.
+ */
+export const tickerHoldStatus = (t: Pick<TokenRow, "status" | "launchTx" | "createdAt">, now: number = Date.now()): TokenRow["status"] =>
+  t.status === "draft" && !t.launchTx && now - t.createdAt >= DRAFT_TTL_MS ? "expired" : t.status;
 /** The registered coins as the lookalike check reads them (the bundle route below and the review route, launchPreflight identityRefusals). */
-export function lookalikeRows(registry: Pick<Platform["registry"], "tokens" | "lockedRule">): (LookalikeExisting & { rule: Pick<BurnRule, "oracle" | "series"> | null })[] {
-  return registry.tokens().map((t) => { let rule: Pick<BurnRule, "oracle" | "series"> | null = null; try { rule = registry.lockedRule(t).rule; } catch { rule = null; } return { ticker: t.ticker, name: t.name, status: t.status, rule, creator: t.creator }; });
+export function lookalikeRows(registry: Pick<Platform["registry"], "tokens" | "lockedRule">, now: number = Date.now()): (LookalikeExisting & { rule: Pick<BurnRule, "oracle" | "series"> | null })[] {
+  return registry.tokens().map((t) => { let rule: Pick<BurnRule, "oracle" | "series"> | null = null; try { rule = registry.lockedRule(t).rule; } catch { rule = null; } return { ticker: t.ticker, name: t.name, status: tickerHoldStatus(t, now), rule, creator: t.creator }; });
 }
 export async function launchGuardRefusal(p: { registry: Pick<Platform["registry"], "tokens" | "lockedRule" | "tickerTaken" | "tokensByTicker" | "token" | "ownDraft">; market?: Platform["market"] }, c: { ticker: string; name: string; rule: Pick<BurnRule, "oracle" | "series"> | null; mint?: string | null; /** 2026-10-14: the creator's own unfinished draft of this mint is not an adoption */ creator?: string | null; /** review of block M: the wallet whose own draft's ticker is exempt; null = nobody (an unproven claim) */ tickerOwner?: string | null }): Promise<GuardRefusal | null> {
   // prelaunch audit 2026-10-18 A-2: the registry's own ticker check, which also expires stale drafts first (their tickers are free again)

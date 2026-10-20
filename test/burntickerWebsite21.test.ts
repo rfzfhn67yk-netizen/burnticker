@@ -116,7 +116,7 @@ describe("website-21: step 3, Winner takes the burn only", () => {
   test("the page passes the scope, selects the winner, ignores other taps and keeps the recurring shares", () => {
     assert.match(page, /const rivalryScope = pairKindNow === "teams" \? \(meetingsOn \? "meetings" as const : pairMode === "game" \? "game" as const : "season" as const\) : null;/);
     assert.match(page, /meeting: rivalSeason \? !!rivalGame : null, rivalryScope \}\)/);
-    assert.match(page, /pairKind: pairKindNow, rivalryScope, gameLabel \}\) \}\)\);/);
+    assert.match(page, /pairKind: pairKindNow, rivalryScope, gameLabel, league: leagueSeries \}\) \}\)\);/);
     assert.match(page, /guide\.follow === "rivalry" \? \(meetingsOn \|\| settledPick \? "winner" :/);
     assert.match(page, /if \(meetingsOn \|\| settledPick\) return;/);
     assert.match(page, /meetingsOn \? PATTERNS\.winner\.label\.toLowerCase\(\)/, "the progress strip says the pattern");
@@ -212,7 +212,9 @@ describe("website-21: audit 7 items 15 and 16", () => {
 describe("website-21: the guided review's Ends fact", () => {
   test("a rivalry series pair's Ends fact names the one end, its sentence and the 30-day deadline; the step-2 scope line covers the third option", async () => {
     assert.match(page, /const meetingsEndFact = `\$\{MEETINGS_END_LABEL\}\. \$\{meetingsEndLine\(rule\)\} \$\{MEETINGS_DEADLINE_LINE\}`;/);
-    assert.match(page, /\{ label: FACT_LABELS\.ends, value: meetingsOn \? meetingsEndFact :/);
+    // HS-49 (hourly run 9): the Ends fact is one value (endFact), with a line and an Edit link when the end is not the default
+    assert.match(page, /const endFact = meetingsOn \? meetingsEndFact :/);
+    assert.match(page, /\{ label: FACT_LABELS\.ends, value: endChanged \? `\$\{endFact\}\\n\$\{endChanged\}` : endFact, edit: endChanged \? editTo\("name"\) : null,/);
     plain(`${MEETINGS_END_LABEL}. ${MEETINGS_END_LINE} ${MEETINGS_DEADLINE_LINE}`);
     const { RIVALRY_SCOPE_LINE } = await import("@/lib/burnticker/guidedLaunch");
     const { meetingsWhichCoinLine } = await import("@/lib/burnticker/guidedLaunch");

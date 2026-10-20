@@ -30,6 +30,11 @@
     "floorLamports": 30000000,
     "fillLamports": 60000000
   },
+  "drainStop": {
+    "_comment": "Not a limit on a healthy wallet (HB-108, hourly audit run 8). A wallet that needed a top-up this many times inside windowHours is treated as draining (a leaked key or a bug): the keeper stops refilling that one wallet, pushes bt-top-up-draining with the amounts, and resumes once windowHours have passed since the last top-up, or when the operator runs scripts/ops/top-up.mts --clear-drain <target>. A wallet that spends normally needs one top-up every few days.",
+    "count": 3,
+    "windowHours": 6
+  },
   "_noticeComment": "Not a limit. When a Denver day's top-ups from the keeper key are above what this many launches would cost, ops.json and the daily summary say so, and nothing is stopped. One launch is the metadata pin (2,210 lamports for 4 KB) plus the image pin (56,561 lamports for 2 MB) at the Irys rate of 2026-10-19, plus the keeper key's first reading for the coin (2,947,120 lamports): 3,005,891 lamports. 50 launches plus 30 days of 100 KB snapshots (2,698 lamports each) is about 0.150 SOL. The keeper computes the mark again from the live Irys rate each cycle.",
   "noticeLaunchesPerDay": 50
 }

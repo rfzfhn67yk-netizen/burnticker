@@ -146,7 +146,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
       <section className="space-y-3" aria-labelledby="bt-coins-h">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <h1 id="bt-coins-h" className="text-xl font-semibold">Coins</h1>
-          <div ref={tabsHint.ref} onScroll={tabsHint.onScroll} className={`bt-tabs ${tabsHint.className}`} role="tablist" aria-label="Filter coins" onKeyDown={tabKeyHandler(GRID_TABS.map((t) => t.id), tab, pick, (id) => `coins-tab-${id}`)}>
+          <div ref={tabsHint.ref} onScroll={tabsHint.onScroll} className={`bt-tabs bt-tabs-wrap ${tabsHint.className}`} role="tablist" aria-label="Filter coins" onKeyDown={tabKeyHandler(GRID_TABS.map((t) => t.id), tab, pick, (id) => `coins-tab-${id}`)}>
             {GRID_TABS.map((t) => <button key={t.id} id={`coins-tab-${t.id}`} type="button" role="tab" aria-selected={tab === t.id} tabIndex={tab === t.id ? 0 : -1} aria-controls="bt-coins-panel" className={`bt-tab${tab === t.id ? " is-active" : ""}`} onClick={() => pick(t.id)}>{t.label}{t.id === "pairs" && ix ? <> <span className="bt-tab-count" aria-label={`${ix.pairs.length} pair${ix.pairs.length === 1 ? "" : "s"}`}>{ix.pairs.length}</span></> : null}</button>)}
           </div>
           {/* one search per screen: the header carries it from 640 px up; on phones this box is the search (the tab bar's Search focuses it) */}

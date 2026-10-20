@@ -42,7 +42,7 @@ describe("the status sentence, one per state", () => {
   });
   test("decided one-shot, the losing side: the other coin won and this one does not burn", () => {
     assert.equal(say(oneShotPair, [r({ pairRole: "lost", status: "forwarded", units: 1 })]), "Decided: Chiefs won. Its pool goes to the winning coin.");
-    assert.equal(say(oneShotPair, [r({ pairRole: "lost", status: "nothing", units: 0 })]), "Decided: Chiefs won. This coin does not burn on it.");
+    assert.equal(say(oneShotPair, [r({ pairRole: "lost", status: "nothing", units: 0 })]), "Decided: Chiefs won. $BRONCOS lost, so this result cannot make it burn."); // HB-109 (hourly run 8)
     // review M1: nothing of the losing coin burns; its pool goes to the winner (never "burns down a little each day")
     assert.equal(say({ ...oneShotPair, lifecycle: { ended: { mode: "winddown" } } }, [r({ pairRole: "lost", status: "nothing", units: 0 })]), "Decided: Chiefs won. Its pool goes to the winning coin.");
     assert.equal(say({ ...oneShotPair, lifecycle: { ended: { mode: "drain" } } }, [r({ pairRole: "lost", status: "nothing", units: 0 })]), "Decided: Chiefs won. Its pool goes to the winning coin.");

@@ -80,7 +80,7 @@ export function nativeCards(c: CategoryDef): SourceCard[] {
 }
 
 /** The catalogue card fields Browse reads (handlers.ts catalogueSources builds them). */
-export interface FeedCardInput { /** QA pass 9 #33: a one-time source whose result is already in (hidden from Browse) */ resolved?: boolean; /** QA pass 9 #25: the reading's unit ("USD", "USD millions"), for formatReading */ valueLabel?: string | null; id: string; tier: number; tierLabel: string; title: string; sourceName: string; sourceUrl: string; cadence: string; unit: { label: string } | null; launchable: { ok: boolean; why: string | null }; flags: string[]; lastReading: { id: string; value: string | null } | null; refusals?: string[]; /** sources-4: when the saved sample was observed (audit 202) and how the rule measures (audit 201) */ fixtureFetchedAt?: string | null; baseline?: "previousSettlement" | number | null; direction?: "up" | "down" | "abs" | null; param?: string | null }
+export interface FeedCardInput { /** QA pass 9 #33: a one-time source whose result is already in (hidden from Browse) */ resolved?: boolean; /** QA pass 9 #25: the reading's unit ("USD", "USD millions"), for formatReading */ valueLabel?: string | null; id: string; tier: number; tierLabel: string; title: string; sourceName: string; sourceUrl: string; cadence: string; unit: { label: string } | null; launchable: { ok: boolean; why: string | null }; flags: string[]; lastReading: { id: string; value: string | null } | null; refusals?: string[]; /** sources-4: when the saved sample was observed (audit 202) and how the rule measures (audit 201) */ fixtureFetchedAt?: string | null; baseline?: "previousSettlement" | number | null; direction?: "up" | "down" | "abs" | null; param?: string | null; /** HB-41: "stored" when lastReading is the keeper's newest stored reading, not the saved fixture */ sampleFrom?: "catalogue" | "stored" }
 
 const baseId = (id: string) => id.split(":")[0];
 
@@ -115,6 +115,27 @@ export function sampleReadingLabel(r: { id: string; value: string | null }, obse
   // continuous audit run 4, HB-41: the catalogue's saved sample can be days old beside a coin's live strip, so it is named as the
   // catalogue's sample, never as a current reading
   return `Sample from the catalogue: reading ${r.id}${r.value !== null ? `, ${formatReading(r.value, valueLabel)}` : ""}${observedAt ? `, saved ${observedAt.slice(0, 10)}` : ""}`;
+}
+/** HB-41 (hourly run 9): a reading the keeper verified and stored (registry readings), said as the latest reading with the day it was read. */
+export function storedReadingLabel(r: { id: string; value: string | null }, readAt: string, valueLabel: string | null = null): string {
+  return `Latest reading ${r.id}${r.value !== null ? `: ${formatReading(r.value, valueLabel)}` : ""}, read ${readAt.slice(0, 10)}`;
+}
+/**
+ * HB-41 (hourly run 9): why the Browse samples were nine days old. A card's sample is the source's frozen fixture (sources.json
+ * `fixture`, committed with the code and saved once), and nothing refreshes it; the keeper's daily reads of the same feed go to the
+ * registry's readings table, which Browse never consulted. Now a feed the keeper reads (a live coin follows it) shows the newest stored
+ * reading when it is newer than the fixture, labelled as the latest reading; any other feed keeps the fixture, labelled as the
+ * catalogue's sample with the day it was saved.
+ */
+export function withStoredReadings<F extends FeedCardInput>(feeds: readonly F[], last: (selectorKey: string) => { id: string; value: string | null; at: string; fetchedAt: number } | null): F[] {
+  return feeds.map((f) => {
+    let r: ReturnType<typeof last> = null;
+    try { r = last(`catalogue:${f.id}`); } catch { r = null; }
+    if (!r || !Number.isFinite(r.fetchedAt)) return f;
+    const saved = f.fixtureFetchedAt ? Date.parse(f.fixtureFetchedAt) : 0;
+    if (Number.isFinite(saved) && r.fetchedAt <= saved) return f;
+    return { ...f, lastReading: { id: r.id, value: r.value }, fixtureFetchedAt: new Date(r.fetchedAt).toISOString(), sampleFrom: "stored" as const };
+  });
 }
 /**
  * A READING AS A PERSON READS IT (QA pass 9 #25, 2026-10-13: the national debt showed as 40310000000000 and FRED's GFDEBTN, which is in
@@ -168,7 +189,7 @@ export function sourceRoleLabel(id: string): string {
 export function feedCard(f: FeedCardInput): SourceCard {
   return {
     id: `feed:${f.id}`, venue: "feed", venueLabel: f.sourceName, tier: f.tier, tierLabel: f.tier === 4 ? sourceRoleLabel(f.id) : f.tierLabel, title: f.title, cadence: f.cadence, kind: "scalar",
-    next: f.lastReading ? { label: sampleReadingLabel(f.lastReading, f.fixtureFetchedAt, f.valueLabel ?? null), at: null } : null,
+    next: f.lastReading ? { label: f.sampleFrom === "stored" && f.fixtureFetchedAt ? storedReadingLabel(f.lastReading, f.fixtureFetchedAt, f.valueLabel ?? null) : sampleReadingLabel(f.lastReading, f.fixtureFetchedAt, f.valueLabel ?? null), at: null } : null,
     example: unitExample(f.unit, { baseline: f.baseline, direction: f.direction, snapshot: /snapshot/i.test(f.cadence) }), launchable: f.launchable, refused: [], diagnostics: f.refusals ?? [], flags: f.flags,
     sourceName: f.sourceName, sourceUrl: f.sourceUrl, pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, configure: null,
     settlement: isSingleSourceSeries(f.id) ? singleSourceSentence(f.id) : null,
@@ -233,6 +254,14 @@ export function eventFitsCategory(id: string, title: string): boolean {
 export const OTHER_FAMILY_CATEGORIES: readonly string[] = ["sports", "disasters"];
 /** HB-42: the categories the Published data step shows a tab for (a feed of its own, not guided, not another family's). */
 export const publishedDataCategories = <C extends Pick<CategoryDef, "id" | "feeds" | "guided">>(cats: readonly C[]): C[] => cats.filter((c) => c.feeds.length > 0 && !c.guided && !OTHER_FAMILY_CATEGORIES.includes(c.id));
+/**
+ * HB-42 (hourly run 9): the search's no-match hint lists exactly the Published data step's tabs. publishedDataCategories counts the
+ * feeds a category names in its config, so "Financial markets" (Pyth and RedStone, which are not catalogue cards) was offered without a
+ * tab; the tabs come from categoryList's feeds-only count of the catalogue's real feeds, and so does this list now.
+ */
+export function noMatchCategories(cats: readonly CategoryDef[], feeds: readonly FeedCardInput[], venues: VenueFlags): { id: string; label: string; blurb: string }[] {
+  return categoryList(cats, feeds, venues, { feedsOnly: true }).map((c) => ({ id: c.id, label: c.label, blurb: c.blurb }));
+}
 /** One category's cards: feeds first (in the config's order), then Polymarket events, then Kalshi series; an optional text filter over title and source. */
 export function categoryCards(c: CategoryDef, parts: { feeds: readonly FeedCardInput[]; polymarket: readonly PolyEventHit[]; kalshi: readonly (BrowseSeries & { refused: string[] })[] }, o: { q?: string | null; feedsOnly?: boolean } = {}): SourceCard[] {
   if (o.feedsOnly) return OTHER_FAMILY_CATEGORIES.includes(c.id) ? [] : categoryCards(c, { feeds: parts.feeds, polymarket: [], kalshi: [] }, { q: o.q });

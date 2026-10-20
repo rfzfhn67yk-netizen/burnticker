@@ -2,7 +2,7 @@ import { LINKED_ONE_SHOT_REFUSAL, ONE_SHOT_SHARE_REFUSAL, ONE_SHOT_TARGET_SHARE_
 import { BURN_REAL_WAITING, BURN_SOL_OFF, burnRealEnabledFromEnv, sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { endSelfOnLossProblem, endSinkOf, isOneShot, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
-import { feedById, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
+import { feedById, feedCrossReadName, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
 import { catalogueSettleRefusal } from "@/lib/burnticker/coverage/settleable";
 import { oneShotEligibility, type Eligibility } from "@/lib/burnticker/oneShotEligibility";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -12,7 +12,7 @@ import { loadRefuseList, nameRefusals } from "@/lib/burnticker/oracle/refuse";
 import { isReserved, loadMajors, loadReserved, majorProblem, reservedProblem, RESERVED_TICKER_REFUSAL } from "@/lib/burnticker/reservedNames";
 import { controlCharProblem, markupProblem } from "@/lib/burnticker/launchFields";
 import { regexProblem } from "@/lib/burnticker/safeRegex";
-import { lookalikeHits, lookalikeRefusalOf, type LookalikeExisting } from "@/lib/burnticker/lookalike";
+import { SAME_RULE_NAME_ASK, lookalikeHits, lookalikeRefusalOf, type LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { parseEspnSeries, teamByAbbr, teamCodeOf, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { windowKindOf } from "@/lib/burnticker/describe";
 
@@ -257,8 +257,11 @@ export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): (Pref
     // LA-4: the draft-held notice is split from the refusal; any other hit still refuses, in the same sentence as before
     const hits = lookalikeHits(cand, ctx.existing, { draftNotice: !!ctx.draftNotice && !cand.creator });
     for (const h of hits.filter((x) => x.how === "draft-held")) out.push({ status: 409, code: "draft-held", message: h.reason, field: "ticker" });
-    const look = lookalikeRefusalOf(hits.filter((x) => x.how !== "draft-held"));
-    if (look) out.push({ status: 409, code: "lookalike", message: look.reason, field: "ticker" });
+    // HS-52 / HB-117 (run 10): a name hit is said under the Name field in its own sentence; the ticker sentence keeps the ticker's hits
+    const refusing = hits.filter((x) => x.how !== "draft-held"), nameHits = refusing.filter((x) => x.field === "name" && x.how !== "platform-name");
+    const look = lookalikeRefusalOf(refusing.filter((x) => !nameHits.includes(x)));
+    if (look) out.push({ status: 409, code: "lookalike", message: look.reason, field: look.hits.every((x) => x.field === "name") ? "name" : "ticker" });
+    if (nameHits.length) out.push({ status: 409, code: "lookalike", message: `${[...new Set(nameHits.map((x) => x.reason))].join(" ")} ${SAME_RULE_NAME_ASK}`, field: "name" });
   }
   return out;
 }
@@ -268,12 +271,12 @@ export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): (Pref
  * feed's title, or a named launch's own name from its saved sample), so the review's statement and description never fall back to the
  * raw series id (ChatGPT audit 6 item 26). Null for market and derby rules.
  */
-export function sourceText(r: BurnRule, now: number = Date.now()): { title: string; unitLabel: string | null; subjectName: string | null; feed: { title: string; sourceName: string; unitLabel: string } | null } | null {
+export function sourceText(r: BurnRule, now: number = Date.now()): { title: string; unitLabel: string | null; subjectName: string | null; feed: { title: string; sourceName: string; unitLabel: string; crossRead: string | null } | null } | null {
   if (r.oracle !== "catalogue" || !r.series) return null;
   const native = nativeSourceById(r.series);
   if (native) return { title: native.title, unitLabel: native.unit?.label ?? null, subjectName: null, feed: null };
   const feed = feedById(r.series);
   if (!feed) return null;
   const elig = sampleEligibility(feed, now);
-  return { title: elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : feed.title, unitLabel: feed.unit?.label ?? null, subjectName: elig.subject?.name ?? null, feed: feed.unit ? { title: feed.title, sourceName: feed.sourceName, unitLabel: feed.unit.label } : null };
+  return { title: elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : feed.title, unitLabel: feed.unit?.label ?? null, subjectName: elig.subject?.name ?? null, feed: feed.unit ? { title: feed.title, sourceName: feed.sourceName, unitLabel: feed.unit.label, crossRead: feedCrossReadName(feed) } : null };
 }

@@ -752,8 +752,13 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
     const no = r.binary.onNo ? ` When it settles NO, ${r.binary.onYes ? "it" : "the keeper"} ${mapText(r.binary.onNo, "for that market")}.` : " A NO settlement burns nothing.";
     const pair = r.pair?.race ? ` Candidates pair ${r.pair.pairId}, side ${r.pair.side}: the other coin follows the other candidate's market (${candidatesPartnerMarket(r)}) of the same race (${r.pair.race.slug}). The race counts once, when both markets are final: if exactly one of the two settles YES, that coin won the race and the other lost it; if both settle NO, both settle YES or either one splits its payout, neither coin won and the result moves nothing between them.`
       : r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side burns on the opposite outcome, so each settlement burns exactly one of the two.` : "";
-    const poly = r.oracle === "polymarket" ? " YES is the market's first outcome and NO its second; the result is the payout the Conditional Tokens contract on Polygon records, and a 50-50 resolution is a void." : "";
-    return `${yes}${no}${pair}${pairClauseText(r)}${winnerTakesBurnText(r)}${poly} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
+    // HB-103 (hourly run 8): in a candidates pair a 50-50 payout (or a voided market) is "no single winner" (pairForwardKeeper.ts
+    // raceVerdict "none"), so each pool ends in the pair-winner sink's fallback, $DEFICIT's burn; only a voided PAIR burns down on the coin
+    const poly = r.oracle !== "polymarket" ? "" : r.pair?.race
+      ? " YES is the market's first outcome and NO its second; the result is the payout the Conditional Tokens contract on Polygon records. In this pair a 50-50 resolution counts as no single winner, not as a void."
+      : " YES is the market's first outcome and NO its second; the result is the payout the Conditional Tokens contract on Polygon records, and a 50-50 resolution is a void.";
+    return `${yes}${no}${pair}${pairClauseText(r)}${winnerTakesBurnText(r)}${poly} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r, null, r.pair?.race ? "a voided pair" : null)}`;
+
   }
   const s = r.scalar!;
   const base = s.baseline === "previousSettlement" ? "the previous settlement" : `a fixed baseline of ${s.baseline}`;

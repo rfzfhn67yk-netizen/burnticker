@@ -7,7 +7,7 @@ import { settledPairInput } from "@/lib/burnticker/launchPreflight";
 import type { BurnRule, LockedRule } from "@/lib/burnticker/rules";
 import { statedCtx } from "@/lib/burnticker/coinText";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
-import { isTeamRule, tickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
+import { reviewTickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { platform } from "@/lib/burnticker/server";
 import { liveSinks, type SinkCoin } from "@/lib/burnticker/endSinks";
@@ -21,6 +21,7 @@ import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { meetingsVerdictFor } from "@/lib/burnticker/meetingsLeft";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
 import { cachedTimeLockSecs, currentStatusLive } from "@/lib/burnticker/currentStatus";
+import { derbyStore } from "@/lib/burnticker/derby/store";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +108,10 @@ export async function POST(req: Request) {
     // the end-sink picker: the live coins on this network a rule may name to take the rest (endSinks.ts); unreadable = none
     let sinks: SinkCoin[] = [];
     try { const p = platform(); sinks = liveSinks(p.registry, p.cluster); } catch { sinks = []; }
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, sourceNote, meetingsNote, meetingsRefusal });
+    // HS-48 (hourly run 9): whether a coin comparison's coins have any stored daily reading (unreadable = not said either way)
+    let derbyHistory: ((feed: string) => boolean) | undefined;
+    try { const ds = derbyStore(platform().registry.db); derbyHistory = (feed) => ds.hasPoints(feed); } catch { derbyHistory = undefined; }
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, derbyHistory, sourceNote, meetingsNote, meetingsRefusal });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];
@@ -115,14 +119,14 @@ export async function POST(req: Request) {
     // prelaunch audit 2026-10-18 A-2 / A-40: a ticker another creator's coin holds is refused (the ticker field carries the sentence, from
     // identityRefusals above) with two free tickers that pass the launch's own check; only launched coins are described, never a draft.
     // A registry that cannot be read leaves the list empty.
-    let tickers: TickerCheck[] = [];
+    let tickers: TickerCheck[] = [], coins = r.review.coins;
     try {
       const reg = platform().registry, reserved = loadReserved();
       const creator = typeof (body as { creator?: unknown }).creator === "string" ? String((body as { creator: string }).creator) : null;
-      const team = isTeamRule((body as { rule?: unknown }).rule);   // HB-6: team words only for a team coin
       const ruleA = (body as { rule?: unknown }).rule as Pick<BurnRule, "oracle" | "series"> | null | undefined;
-      tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker, team, rule: c.side === "A" ? ruleA ?? null : null })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status: x.status, creator: x.creator })), reserved, existing: existingRows, creator });
-    } catch { tickers = []; }
-    return ok({ ...r.review, existing, tickers });
+      // HB-117: the suggested ticker is never one another coin holds (or one like it); a hazard coin is offered its own word first
+      ({ tickers, coins } = reviewTickerChecks(r.review.coins, ruleA, { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status: x.status, creator: x.creator })), reserved, existing: existingRows, creator }));
+    } catch { tickers = []; coins = r.review.coins; }
+    return ok({ ...r.review, coins, existing, tickers });
   }));
 }

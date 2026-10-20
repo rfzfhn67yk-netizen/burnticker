@@ -13,6 +13,14 @@ agree. `test/burntickerApiBudget.test.ts` fails if a source in the code is missi
 - **Rate buckets** for per-second, per-minute and per-hour limits. An empty bucket waits. It does not fail. If the wait would be
   longer than 20 seconds, the call answers "busy" and that read is skipped until the next cycle. A bucket never holds more than
   10 seconds of its rate, so a quiet spell cannot build up into a burst.
+- **Burst floor of two on shared hosts (2026-10-19).** A minute or hour bucket whose share allows more than one read a minute holds
+  at least two tokens (`MIN_SHARED_BURST` and `burstCapOf` in `apiBudget.ts`). This matters most for `other-http`: the site's share
+  of a house-default host is about 1.8 reads a minute, so ten seconds of rate was one token, and that token took about 33 seconds to
+  come back. A launch pre-flight makes two reads of the same host (the primary reading and its cross-read), so the second read found
+  the bucket empty and Launch was refused with "the request rate budget is full". With two tokens both reads go through. The rate is
+  not raised: tokens still come back at the share's rate, and the per-second bucket and the day budget are unchanged. The extra read
+  fits inside the 40% left over by the 60% rule. A source that spends its whole plan (API-Sports) keeps the plain cap. The pre-flight
+  also reuses a reading the review fetched in the last 5 minutes (`coverage/freshReading.ts`), which then spends no budget at all.
 - **A day budget** per UTC day. A monthly limit counts as 30 days, and rate limits cap the day too. The count is kept in the
   `status` table: the registry for the platform keeper and the site, the ledger for the $DEFICIT keeper. Keys are
   `apiBudget.day.<role>.<source>`. Each add is a single atomic upsert, so a restart keeps the count and two processes never lose

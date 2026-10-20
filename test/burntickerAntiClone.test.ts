@@ -110,7 +110,7 @@ describe("lookalike refusal", () => {
     assert.equal(editDistance("DEFICIT", "DEFICT"), 1); assert.equal(editDistance("DEFICIT", "DEFCIIT"), 1, "a swap is one edit"); assert.equal(editDistance("ABCDEF", "UVWXYZ", 1), 2);
   });
   test("refused: same letters, one edit, copycat suffix / prefix, the platform's name; each with a clear reason", () => {
-    const cases: [string, string, string][] = [["DEF1CIT", "Debt", "reads as the same letters as $DEFICIT"], ["DEFICT", "Debt", "one letter away from $DEFICIT"], ["DEFICIT2", "Debt Two", "reads as the same letters as $DEFICIT"], ["DEFICITINU", "x y", "copycat variant of $DEFICIT"], ["REALDEFICIT", "x y", "copycat variant of $DEFICIT"], ["BRONC0", "Horse", "same letters as $BRONCO"], ["ABC", "Burnticker Official", "platform's name"], ["XYZQ", "Deficit", 'reads as the same letters as "Deficit", the name of $DEFICIT'], ["QQQQ", "Def1cit", "reads as"]];
+    const cases: [string, string, string][] = [["DEF1CIT", "Debt", "reads as the same letters as $DEFICIT"], ["DEFICT", "Debt", "one letter away from $DEFICIT"], ["DEFICIT2", "Debt Two", "reads as the same letters as $DEFICIT"], ["DEFICITINU", "x y", "copycat variant of $DEFICIT"], ["REALDEFICIT", "x y", "copycat variant of $DEFICIT"], ["BRONC0", "Horse", "same letters as $BRONCO"], ["ABC", "Burnticker Official", "platform's name"], ["XYZQ", "Deficit", "This is the name of the live $DEFICIT."], ["QQQQ", "Def1cit", "reads as"]];
     for (const [ticker, name, why] of cases) {
       const r = lookalikeRefusal({ ticker, name }, EX);
       assert.ok(r, `${ticker} / ${name} must be refused`); assert.ok(r!.reason.includes(why), `${ticker}: ${r!.reason}`);

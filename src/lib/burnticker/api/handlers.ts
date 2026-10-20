@@ -7,7 +7,7 @@ import type { Platform } from "@/lib/burnticker/server";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { launchLabCostLamports, solText } from "@/lib/burnticker/launchCost";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule, oneMarketDate, meetingsPairNames, MEETINGS_NONE_LEFT_LINE, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
-import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
+import { catalogue, feedCrossReadName, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
 import { liveSinks } from "@/lib/burnticker/endSinks";
 import { REAL_BURN_FAMILY_CODE, realBurnFamilyProblem } from "@/lib/burnticker/burnRealEligibility";
@@ -23,7 +23,7 @@ import { validateRule, lockRule, ruleStatement, isMeetingsRule, BURNTICKER_RULES
 import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
 import { POLYMARKET_TAG_FOR, type BrowseSeries } from "@/lib/burnticker/oracle/browse";
-import { categoryCards, categoryList, formatReading, loadCategories, type FeedCardInput, publishedDataCategories } from "@/lib/burnticker/browse";
+import { categoryCards, categoryList, formatReading, loadCategories, type FeedCardInput, noMatchCategories, withStoredReadings } from "@/lib/burnticker/browse";
 import { KALSHI_UNAVAILABLE, POLYMARKET_UNAVAILABLE, scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
 import { espnClient, fecClient, nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { electionPairTemplate } from "@/lib/burnticker/electionPair";
@@ -141,7 +141,7 @@ function catalogueSourcesUncached(now: number, o: { includeConfig?: boolean } = 
     // provider, time, status, page and id (never a bare id)
     const elig = sampleEligibility(f, now);
     const title = elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : f.title;
-    return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: sourceTypeLabel(f), title, sourceName: f.sourceName, settlement: isSingleOfficialSource(f.config) ? singleSourceSentence(f.id) : null, sourceUrl: elig.subject?.url ?? verifyUrl(f, now), cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: elig.decided ? { ok: false, why: elig.reason } : f.launchable, resolved: elig.decided, eligibility: { decided: elig.decided, reason: elig.reason }, subject: elig.subject, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
+    return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: sourceTypeLabel(f), title, sourceName: f.sourceName, crossRead: feedCrossReadName(f), settlement: isSingleOfficialSource(f.config) ? singleSourceSentence(f.id) : null, sourceUrl: elig.subject?.url ?? verifyUrl(f, now), cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: elig.decided ? { ok: false, why: elig.reason } : f.launchable, resolved: elig.decided, eligibility: { decided: elig.decided, reason: elig.reason }, subject: elig.subject, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
   });
   const onchain = (Object.keys(ONCHAIN_FACTS) as (keyof typeof ONCHAIN_FACTS)[]).map((id) => { const s = onchainSource(id, null); return { id, kind: s.kind, tier: s.tier, tierLabel: sourceTypeLabel(s), title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: s.unit, direction: s.direction, baseline: s.baseline, carry: s.carry, valueLabel: s.valueLabel, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }; });
   const stubs = [polymarketCard(), umaStub(), driftBetStub(), hedgehogStub()].map((s) => ({ id: s.id, kind: s.kind, tier: s.tier, tierLabel: sourceTypeLabel(s), title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: null, direction: null, baseline: null, carry: s.carry, valueLabel: null, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }));
@@ -236,7 +236,9 @@ export async function search(p: Platform, q: { q?: string | null; closingSoon?: 
   const r = await universalSearch(q.q ?? "", { closingSoon: /^(1|true|yes)$/i.test(q.closingSoon ?? ""), venues, feeds: catalogueFeeds(now), espn: espnClient(), polyGet: venues.polymarket ? (u) => p.polymarket.get(u) : null, refuse: refuseTitlesList, kalshiSearch: venues.kalshi ? (x) => p.kalshi.searchSeries(x, { limit: 5 }) : null, derbyHref: derbyHrefFrom(), nowMs: now });
   let categories: { id: string; label: string; blurb: string }[] = [];
   // continuous audit run 4, HB-42: the hint's buttons open the Published data step, so it lists only the categories that step has a tab for
-  if (r.empty) { try { categories = publishedDataCategories(loadCategories()).map((c) => ({ id: c.id, label: c.label, blurb: c.blurb })); } catch { categories = []; } }
+  // HB-42 (hourly run 9): the same list the step's tabs come from (browse.ts categoryList feedsOnly: a category counts only feeds the
+  // catalogue really has), so "Financial markets", whose configured feeds are not catalogue cards, is never offered without a tab
+  if (r.empty) { try { categories = noMatchCategories(loadCategories(), catalogueFeeds(now) as unknown as FeedCardInput[], venues); } catch { categories = []; } }
   // suggested tickers: unique against the registry and clear of the refuse list's name patterns (RAYS26 → RAYS262 when taken)
   const list = loadRefuseList();
   const cards = dedupeTickers(r.cards, (t) => { try { return p.registry.tokenByTicker(t) !== null; } catch { return false; } }, (t) => nameRefusals(list, "", t).length > 0);
@@ -442,7 +444,8 @@ export async function browse(p: Platform, q: { category?: string | null; q?: str
   const venues = feedsOnly ? { ...venueFlags(p), polymarket: false, kalshi: false } : venueFlags(p);
   let cats;
   try { cats = loadCategories(); } catch (e) { return fail(500, safeErrorText(e, 600)); }
-  const feeds = (catalogueSources(now).sources as unknown as (FeedCardInput & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion");
+  // HB-41 (hourly run 9): a feed the keeper reads shows its newest stored reading when it is newer than the saved fixture (browse.ts)
+  const feeds = withStoredReadings((catalogueSources(now).sources as unknown as (FeedCardInput & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion"), (k) => p.registry?.lastReading(k) ?? null);
   // sources-3 (2026-10-12): the weather tile folded into Science, Space & Weather; an old link or a saved draft asking for it lands there
   const asked = q.category?.trim() || null;
   const id = asked === "weather" ? "science" : asked;
@@ -768,7 +771,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   // audit 6 item 9: major coins' tickers and control characters in the creator's texts (the review runs the same identityRefusals)
   { const ir = identityRefusals({ ticker: input.ticker, name: input.name, description: typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription) : "", note: typeof (body as { note?: unknown }).note === "string" ? String((body as { note: string }).note) : "" }, { refuseList: false, rule: locked.rule }); if (ir.length) return { error: fail(ir[0].status, ir[0].message, { code: ir[0].code, problems: ir.map((x) => x.message) }) }; }
   let seriesTitle: string | null = null;
-  let feedText: { title: string; sourceName: string; unitLabel: string } | null = null;
+  let feedText: { title: string; sourceName: string; unitLabel: string; crossRead?: string | null } | null = null;
   let statedText: ReturnType<typeof statedCtx> = null;
   // audit 6 item 26: a named launch's own name from the saved sample, so the description never falls back to the raw id
   let subjectName: string | null = null;
@@ -808,7 +811,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   } else if (locked.rule.oracle === "catalogue") {
     // an unknown feed, the feed's fixed unit / launchability and an already-decided one-time result were refused by ruleRefusals above
     const feed = feedById(locked.rule.series!)!;
-    feedText = feed.unit ? { title: feed.title, sourceName: feed.sourceName, unitLabel: feed.unit.label } : null;
+    feedText = feed.unit ? { title: feed.title, sourceName: feed.sourceName, unitLabel: feed.unit.label, crossRead: feedCrossReadName(feed) } : null;
     const elig = sampleEligibility(feed, Date.now());
     seriesTitle = elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : feed.title;
     subjectName = elig.subject?.name ?? null;

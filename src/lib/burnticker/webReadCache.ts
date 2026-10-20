@@ -24,6 +24,21 @@ export const chainRows = <T extends Pick<TokenRow, "status">>(tokens: readonly T
 /** The rebuild's memo window: 15 s while fewer than 50 coins are read from the chain, then 0.3 s per coin, at most two minutes. */
 export function memoWindowMs(chainCoins: number): number { return chainCoins < 50 ? 15_000 : Math.min(120_000, Math.ceil(chainCoins * 300)); }
 
+/**
+ * HB-99 residue (hourly run 8): the home memo served a body 547 s old under "max-age=10, s-maxage=15, stale-while-revalidate=30", because
+ * a refresh that never landed left the old answer a hit. The pair route got the same bound in run 7. A home answer older than this is
+ * no longer a hit: the refresh is waited for (the cold wait), a refresh in flight past SWR_BUILD_TIMEOUT_MS is dropped for a new one, and an
+ * old answer that is still all there is goes out no-store with its real age. 45 s is the header's s-maxage plus its stale window; a memo
+ * window longer than 15 s (50 coins or more) adds its own excess, so the memo is never "stale" inside its own window.
+ */
+export const HOME_MAX_STALE_MS = 45_000;
+export const homeMaxStaleMs = (memoMs: number): number => Math.max(HOME_MAX_STALE_MS, memoMs + 30_000);
+/** The home memo's answer for an age: a hit, a hit that starts a background refresh, or too old to hand out without waiting. */
+export function homeMemoState(ageMs: number, memoMs: number): "hit" | "refresh" | "stale" {
+  return ageMs >= homeMaxStaleMs(memoMs) ? "stale" : ageMs >= memoMs ? "refresh" : "hit";
+}
+
+
 interface View { cache: KeeperReadCache; pools: Map<string, string>; platform: Platform }
 const views = new WeakMap<Platform, View>();
 

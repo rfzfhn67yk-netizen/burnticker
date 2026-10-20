@@ -1,5 +1,5 @@
 import { utcDateTime } from "@/lib/burnticker/utcWords";
-import { NO_FURTHER_RESULT, decidedPairLine, decidedPairOf } from "@/lib/burnticker/decidedWarning";
+import { NO_FURTHER_RESULT, coinLifecycleState, decidedPairLine, decidedPairOf } from "@/lib/burnticker/decidedWarning";
 import { shortDay } from "@/lib/burnticker/cardView";
 import { sourcePublisher } from "@/lib/burnticker/coinSourceLine";
 
@@ -26,6 +26,8 @@ export interface UpcomingRow {
   ticker: string; name: string; href: string; network: "mainnet" | "devnet";
   /** the coin's mint, when known: with the network it is the follow key (watchlist.ts; private review 8 F1) */
   mint?: string | null;
+  /** HB-25 residue (hourly run 8): what the coin is doing now (decidedWarning.ts coinLifecycleState); absent on the $DEFICIT keeper row */
+  lifecycleState?: string;
   /** the result the rule waits for, in words */
   event: string;
   /** who publishes it, in words; never the event-contract venue's name */
@@ -125,7 +127,9 @@ export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike
   if (s.status === "draft" || s.status === "expired" || s.status === "retired") return null;
   const st0 = settlementOf(receipts, s.cluster, { sourceRead: !!s.feed?.lastFetchAt || (s.feed?.readings ?? 0) > 0, winCoin: isWinCoin(s.selectorKey) });
   // HB-80 / HS-27 (hourly run 5): a decided pair coin's row says won or lost in the one shared line (decidedWarning.ts decidedPairLine)
-  const dp = decidedPairOf(s, receipts);
+  // HB-25 residue (hourly run 8): the row reads what the coin is doing now (coinLifecycleState), not the registry row state
+  const lifecycleState = coinLifecycleState(s, receipts);
+  const dp = lifecycleState === "decided" ? decidedPairOf(s, receipts) : null;
   // HB-80 / HS-27 residue (hourly run 7): the chip says "Decided" (never "On hold"), and a decided coin has no next time
   const st = dp ? { ...st0, status: "decided" as const, text: decidedPairLine(s.ticker, dp) } : st0;
   const close = dp ? null : s.next.nextCloseTime, check = dp ? null : s.next.nextCheckAt;
@@ -137,7 +141,7 @@ export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike
   return {
     ticker: s.ticker, name: s.name, href: `/burnticker/t/${encodeURIComponent(key)}`, network: s.cluster === "devnet" ? "devnet" : "mainnet", mint,
     event: s.next.nextMarket ? `${s.seriesTitle ?? s.profile?.oneLiner ?? s.selectorKey}, market ${s.next.nextMarket}` : s.seriesTitle ?? s.profile?.oneLiner ?? s.selectorKey,
-    source: sourceWords(s.oracle, s.selectorKey), sourceUrl: latestSrc, schedule, nextAt: close ?? check, status: st.status, statusText: st.text, receiptHref: st.receiptHref,
+    source: sourceWords(s.oracle, s.selectorKey), sourceUrl: latestSrc, schedule, nextAt: close ?? check, status: st.status, statusText: st.text, receiptHref: st.receiptHref, lifecycleState,
   };
 }
 

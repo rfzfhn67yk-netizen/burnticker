@@ -1,4 +1,6 @@
 import { isSingleSourceSeries } from "@/lib/burnticker/singleSource";
+import { sosLinkLabel } from "@/lib/burnticker/sosLabel";
+
 import { gameCardCopy } from "@/lib/burnticker/pairForms";
 import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import fs from "node:fs";
@@ -27,6 +29,7 @@ import { scheduleProblem, SPORTS_CHIP } from "@/lib/burnticker/sources/provenanc
 import { asksWomen, compoundOf, compoundSentence, isWomenLeague, milestoneOf, milestoneSentence, regularSeasonOnly, REGULAR_SEASON_SENTENCE, womenSentence, type Compound } from "@/lib/burnticker/teamQuery";
 import { fitName } from "@/lib/burnticker/launchFields";
 import { recordCloseCardText, recordCloseHref, recordCloseIntent } from "@/lib/burnticker/recordCloseSearch";
+import { gameStatusWords } from "@/lib/burnticker/gameStatus";
 
 /** How long a team search waits for the team's schedule before it answers without it (prelaunch audit H1, 2026-10-15). */
 export const SEARCH_SCHEDULE_WAIT_MS = 2_500;
@@ -103,7 +106,7 @@ export interface Suggestion {
   href: string | null; suggestedName: string | null; suggestedTicker: string | null; refused: string[]; score: number;
 }
 export interface WindowOption { kind: WindowKind; label: string; title: string; rule: BurnRule; text: CoinText; endText: string }
-export interface FeedLike { id: string; title: string; sourceName: string; cadence: string; unit: { size: number; label: string; definition: string } | null; direction: "up" | "down" | "abs" | null; baseline: "previousSettlement" | number | null; launchable: { ok: boolean; why: string | null } }
+export interface FeedLike { id: string; title: string; sourceName: string; cadence: string; unit: { size: number; label: string; definition: string } | null; direction: "up" | "down" | "abs" | null; baseline: "previousSettlement" | number | null; launchable: { ok: boolean; why: string | null }; /** HB-113: the second publisher the keeper checks this feed against (catalogue feedCrossReadName), null when none */ crossRead?: string | null }
 
 export interface SearchDeps {
   venues: VenueFlags; feeds: readonly FeedLike[]; espn: EspnClient | null; /** H1: how long a team search waits for the schedule (default SEARCH_SCHEDULE_WAIT_MS) */ scheduleWaitMs?: number; polyGet: ((url: string) => Promise<unknown>) | null; refuse: TitleRefuser;
@@ -269,7 +272,7 @@ function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Sugges
   const a = side(g.away), b = side(g.home);
   return {
     ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "pair",
-    title: copy.title, subtitle: g.detail || g.startsAt, settlement: GAME_SETTLEMENT_WORDS, crossRead: GAME_CROSS_WORDS,
+    title: copy.title, subtitle: gameStatusWords(g.detail) ?? "Scheduled", settlement: GAME_SETTLEMENT_WORDS, crossRead: GAME_CROSS_WORDS,
     nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game", howSettles: copy.howSettles,
     matchup: { league: t.league, eventId: g.eventId, title: g.name, startsAt: g.startsAt, a, b }, score: 2.8,
   };
@@ -474,7 +477,7 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
     const score = kw ? 1.4 + kw * 0.1 : overlap(q, `${f.title} ${f.sourceName}`) >= 0.5 ? 1 : 0;
     if (!score) continue;
     const rule = { schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: f.id, market: null, filter: {}, kind: "scalar", scalar: { unit: f.unit.size, perUnit: { fractionOfPool: DEFAULT_SHARE.recurring }, baseline: f.baseline, direction: f.direction }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null } as BurnRule;
-    const descCtx = { feed: { title: f.title, sourceName: f.sourceName, unitLabel: f.unit.label }, suggest: FEED_SUGGEST[f.id.split(":")[0]] ?? null };
+    const descCtx = { feed: { title: f.title, sourceName: f.sourceName, unitLabel: f.unit.label, crossRead: f.crossRead ?? null }, suggest: FEED_SUGGEST[f.id.split(":")[0]] ?? null };
     const text = describeRule(rule, { ticker: "", ...descCtx });
     out.push({
       ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName}, a first-party source`, shape: "recurring", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.recurring)} ${perUnitPhrase(f.unit.label)} — ${f.title}`, subtitle: f.cadence,
@@ -505,7 +508,7 @@ export function raceCards(races: readonly Race[], q: string): Suggestion[] {
     return {
       ...base, id: `polymarket:${o.conditionId}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot",
       title: outcomeCardTitle(r, o), subtitle: `${r.title}${r.hiddenPlaceholders ? `. ${r.hiddenPlaceholders === 1 ? "One placeholder market with no name is" : `${r.hiddenPlaceholders} placeholder markets with no name are`} hidden.` : ""}`,
-      settlement: `${r.settlement} — ${r.sos.name}`, crossRead: `${r.sos.name}`, crossReadUrl: r.sos.url, nextAt: r.settlesOn, settleAt: r.settlesOn, endAt: r.settlesOn, endText: "ends when the race resolves",
+      settlement: sosLinkLabel(r.sos) === r.sos.name ? `${r.settlement} — ${r.sos.name}` : r.settlement, crossRead: sosLinkLabel(r.sos), crossReadUrl: r.sos.url, nextAt: r.settlesOn, settleAt: r.settlesOn, endAt: r.settlesOn, endText: "ends when the race resolves",
       howSettles: `${outcomeSettlesNote(r, o)}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, rule,
       pick: { oracle: "polymarket", series: null, market: o.conditionId, title: `${o.label} wins the ${raceName} race (resolves once)`, yes: o.yes, no: o.no },
       text, descCtx, href: r.url, suggestedName: text.name, suggestedTicker: text.ticker, refused: r.refused, score: 1 + score,

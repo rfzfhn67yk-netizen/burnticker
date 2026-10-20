@@ -50,6 +50,8 @@ export class DerbyStore {
     this.db.prepare("INSERT OR IGNORE INTO derby_points (feed, boundary, publish_time, price, conf, expo, value, slot, update_sha256, update_b64, url, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
       .run(p.feed, p.boundary, p.publishTime, p.price, p.conf, p.expo, p.value, p.slot, p.updateSha256, p.updateBase64, p.url, p.fetchedAt);
   }
+  /** HS-48 (hourly run 9): has any daily boundary of this Pyth feed been stored? (the review's coin comparison back-test line) */
+  hasPoints(feed: string): boolean { return !!this.db.prepare("SELECT 1 FROM derby_points WHERE feed=? LIMIT 1").get(feed); }
   point(feed: string, boundary: number): PointRow | null {
     const r = this.db.prepare("SELECT * FROM derby_points WHERE feed=? AND boundary=?").get(feed, boundary) as Row | undefined;
     return r ? { feed: String(r.feed), boundary: Number(r.boundary), publishTime: Number(r.publish_time), price: String(r.price), conf: String(r.conf), expo: Number(r.expo), value: String(r.value), slot: n(r.slot), updateSha256: String(r.update_sha256), updateBase64: String(r.update_b64), url: String(r.url), fetchedAt: Number(r.fetched_at) } : null;
