@@ -84,4 +84,7 @@ export type LaunchWaitPhase = "wallet" | "chain" | "record" | null;
 export const waitLineFor = (busy: boolean, phase: LaunchWaitPhase): string | null => (!busy ? null : phase === "chain" ? CHAIN_CONFIRM_LINE : phase === "record" ? READ_BACK_LINE : null);
 
 /** Above the Launch button when a launch signs more than one transaction (owner, 2026-10-14: say so before the wallet opens). */
-export const signsLine = (n: number): string => `Your wallet asks ${n} times, once for each transaction, in order. Progress is kept between them, so a later step can be retried without redoing an earlier one.`;
+export const signsLine = (n: number, o: { proof?: boolean } = {}): string => (o.proof
+  // HB-53 (sixth pass): the count includes the sign-message request that proves the launch is the wallet's own
+  ? `Your wallet asks ${n} times: first to sign a request that proves this launch is yours, which sends nothing and costs nothing, then once for each transaction, in order. Progress is kept between the transactions, so a later step can be retried without redoing an earlier one.`
+  : `Your wallet asks ${n} times, once for each transaction, in order. Progress is kept between them, so a later step can be retried without redoing an earlier one.`);

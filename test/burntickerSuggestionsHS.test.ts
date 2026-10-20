@@ -83,11 +83,12 @@ describe("HS-6: the pair-link account's rent is measured", () => {
 });
 
 describe("HS-8: generated pair names read 'over'", () => {
-  test("'Nuggets over Lakers', tickers unchanged, within the byte limit; a typed name is untouched", () => {
+  test("'Nuggets over Lakers', matchup tickers, within the byte limit; a typed name is untouched", () => {
     const den = { abbr: "DEN", nickname: "Nuggets", name: "Denver Nuggets" }, lal = { abbr: "LAL", nickname: "Lakers", name: "Los Angeles Lakers" };
     const n = winPairNames(den, lal);
     assert.equal(n.a.name, "Nuggets over Lakers"); assert.equal(n.b.name, "Lakers over Nuggets");
-    assert.equal(n.a.ticker, "DENWIN"); assert.equal(n.b.ticker, "LALWIN");
+    // B-12 (sixth-pass audit): the tickers are the server's matchup tickers ($DENWIN was another coin's, $LALWIN one letter from $BALWIN)
+    assert.equal(n.a.ticker, "DENVLAL"); assert.equal(n.b.ticker, "LALVDEN");
     const long = winPairNames({ abbr: "MIN", nickname: "Minnesota Timberwolves", name: "Minnesota Timberwolves" }, { abbr: "POR", nickname: "Portland Trail Blazers", name: "Portland Trail Blazers" });
     for (const s of [long.a, long.b]) { assert.ok(utf8Bytes(s.name) <= NAME_MAX_BYTES, s.name); assert.match(s.name, / over /); assert.doesNotMatch(s.name, /Wins/); }
     // the polarity helper still works on top: a typed (or source) name follows its own side, never this generator

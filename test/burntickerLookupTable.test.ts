@@ -93,6 +93,14 @@ describe("the lookup table holds every fixed account the real bundles reference"
       const { pc } = await pairCurveSet(n);
       assert.equal(planNetwork(pc.transactions.map((t) => t.instructions)), n, "a pair-curve set (no LaunchLab instruction) is placed by its platform and AmmConfig");
     }
+    // the owner's devnet check (2026-10-19): the creator's wallet is the mainnet operator treasury, a table entry there; as a SIGNER it
+    // never decides the network, so the devnet plan still reads as devnet; the same key read as a plain account still makes it ambiguous
+    const treasury = LOOKUP_TABLE_ENTRIES.mainnet.find((e) => e.what === "operator treasury")!.key;
+    const dv = (await singleCoin("devnet")).bundle.transactions.map((t) => t.instructions.map((ix) => ({ ...ix, keys: [...ix.keys] })));
+    dv[0][0].keys.push({ pubkey: treasury, isSigner: true, isWritable: true } as (typeof dv)[0][0]["keys"][number]);
+    assert.equal(planNetwork(dv), "devnet", "a signing wallet that is a table entry elsewhere does not change the plan's network");
+    dv[0][0].keys[dv[0][0].keys.length - 1] = { pubkey: treasury, isSigner: false, isWritable: false } as (typeof dv)[0][0]["keys"][number];
+    assert.equal(planNetwork(dv), null, "the same account read as a fixed account is a genuine cross-network mix");
     const d = await singleCoin("devnet"), m = await singleCoin("mainnet");
     assert.equal(planNetwork([...d.bundle.transactions, ...m.bundle.transactions].map((t) => t.instructions)), null);
     assert.equal(planNetwork([[{ programId: "11111111111111111111111111111111", keys: [] }]]), null);

@@ -53,7 +53,8 @@ export function browserSwapStore(): SwapStore | null {
  * SEC-02: the server's copy of a held swap (swap/pendingServer.ts, /api/burnticker/swap-pending). `save` posts the signed transaction
  * (the server checks the wallet signed it) and resolves only once the server acknowledged it kept that signature (it throws otherwise);
  * `load` reads the wallet's held swap for this coin: a record, null only when the server answered that there is none, and a throw when
- * the answer failed or could not be read; `clear` removes it by its signature.
+ * the answer failed or could not be read (HB-65: a sealed hold, one that may still land, also throws: unknown, not absent); `clear` asks
+ * the server to remove it by its signature, which it does only once its own chain read shows the swap settled.
  */
 export interface PendingRemote {
   save(rec: PendingSwap, raw: Uint8Array): Promise<void>;
@@ -83,6 +84,9 @@ export function httpPendingRemote(fetchFn: Fetch, base = "/api/burnticker/swap-p
       if (!j || typeof j !== "object" || !("pending" in j)) throw new Error("the server's answer could not be read");
       const p = j.pending;
       if (p === null) return null;
+      // HB-65: a swap that may still land comes back sealed (no signature): held, not absent; the panel offers Check again until the
+      // chain shows it can no longer land, when the server sends the whole record and the panel settles it as before
+      if (p && (p as { sealed?: unknown }).sealed === true) throw new Error("an earlier swap from this wallet may still settle");
       if (p && p.v === 1 && p.network === network && p.mint === mint && p.owner === owner && typeof p.signature === "string" && Number.isInteger(p.lastValidBlockHeight)) return p;
       throw new Error("the server's held swap could not be read");
     },

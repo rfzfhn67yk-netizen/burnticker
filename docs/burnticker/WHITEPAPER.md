@@ -793,7 +793,7 @@ terms are drafted in `SECURITY.md` but not published.
   no incidents recorded. Review reports are in `docs/burnticker/reviews/`.
 - **Wallet list.** The transparency file (`config/burnticker/transparency.json`) names every role: operations, deployer, keeper,
   developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading
-  wallets. In this draft every public key is a placeholder until it is set.
+  wallets. The mainnet keys are set, and each one is listed there with its role.
 - **Policies.** Posts on X are not deleted, and corrections go in the same thread with the receipt. There is no paid promotion and no
   talk of what any coin trades at. Nothing is described as forthcoming. The platform buys no coin; the one disclosed exception is the
   0.1 SOL test purchase of $REHEARSAL when it was created.

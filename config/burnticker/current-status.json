@@ -167,7 +167,7 @@
           "title": "every finding",
           "fix": "fixed or documented in docs/burn-receipts/CHANGELOG.md",
           "recheck": "re-checked by blind review 3",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         }
       ]
     },
@@ -182,7 +182,7 @@
           "title": "closing a pair, a pre-funded vault and an executable developer wallet",
           "fix": "fixed in fa8627a4, with the leftovers fixed in fcda14eb",
           "recheck": "re-checked, with the leftovers spot-checked on devnet",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         }
       ]
     },
@@ -197,7 +197,7 @@
           "title": "Fee Key registration measured against current LP supply",
           "fix": "fixed (round 2)",
           "recheck": "not re-checked",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         },
         {
           "id": "RL-3",
@@ -205,7 +205,7 @@
           "title": "no per-cluster platform pin",
           "fix": "fixed (round 2)",
           "recheck": "not re-checked",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         }
       ]
     },
@@ -220,7 +220,7 @@
           "title": "a loser's queue could wedge",
           "fix": "fixed (round 2)",
           "recheck": "closed by the re-check",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         },
         {
           "id": "M-1",
@@ -228,7 +228,7 @@
           "title": "a losing side's attesters could withhold its losses",
           "fix": "fixed in round 3 (shared attester set)",
           "recheck": "round-3 re-check not done",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         },
         {
           "id": "RN-1",
@@ -236,7 +236,7 @@
           "title": "30-day unlink evidence could unlink a healthy open pair",
           "fix": "fixed in round 3 (terminal evidence only)",
           "recheck": "round-3 re-check not done",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         },
         {
           "id": "RN-2",
@@ -244,7 +244,7 @@
           "title": "the same rule against LaunchLab pairs on their curves",
           "fix": "fixed in round 3",
           "recheck": "round-3 re-check not done",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         }
       ]
     },
@@ -259,7 +259,7 @@
           "title": "the keeper fence, the pair scan, launch verification, keeping sent signatures and the pair sentence",
           "fix": "fixed in code",
           "recheck": "not re-checked",
-          "deployed": "in the web and keeper code; the host deployment is not verified here"
+          "deployed": "mainnet (the live site and keeper)"
         },
         {
           "id": "F5",
@@ -267,7 +267,7 @@
           "title": "dead-pair evidence before unlinking an open curve",
           "fix": "fixed in pair round 3",
           "recheck": "round-3 re-check not done",
-          "deployed": "devnet"
+          "deployed": "mainnet and devnet (in the round 4 and round 5 builds)"
         }
       ]
     },
@@ -282,7 +282,7 @@
           "title": "an unreadable ProgramData account read as 'no upgrade authority'; a failed mainnet lookup as 'not deployed'",
           "fix": "fixed in code (website-4)",
           "recheck": "not re-checked",
-          "deployed": "in the web code; the host deployment is not verified here"
+          "deployed": "mainnet (the live site)"
         }
       ]
     }

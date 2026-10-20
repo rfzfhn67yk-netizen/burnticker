@@ -43,12 +43,14 @@ export default async function CreatorPage({ params }: Params) {
       {d.kind === "ok" && d.coins.length === 0 && <p className={card + " text-neutral-400"}>{CREATOR_PAGE.empty}</p>}
       {/* audit 7: a coin whose page could not be read is listed as unavailable; the account never looks empty because of it */}
       {d.kind === "ok" && d.unavailable > 0 && <p className={card + " text-amber-300"} role="status" data-creator-partial>{CREATOR_PAGE.partial(d.unavailable)}</p>}
+      {/* sixth pass B-10: a coin whose first read is still running is listed with its rule and receipts; its details follow on refresh */}
+      {d.kind === "ok" && d.loading > 0 && <p className={card + " text-neutral-300"} role="status" data-creator-loading>{CREATOR_PAGE.loading(d.loading)}</p>}
       {/* coin card status 2026-10-18: the no-rank line every coin shares is said once above the list (cardView.ts rankLayout) */}
       {d.kind === "ok" && ranks.shared && <p className="text-xs text-neutral-400" data-rank-shared title={RANK_MEANING}>{ranks.shared}</p>}
       {d.kind === "ok" && d.coins.length > 0 && (
         <ul className="grid gap-3 md:grid-cols-2" aria-label="coins">
           {d.coins.map((c, i) => (
-            <li key={c.mint} className={card + " min-w-0 space-y-2"} data-creator-coin={c.ticker} data-available={c.available ? "yes" : "no"}>
+            <li key={c.mint} className={card + " min-w-0 space-y-2"} data-creator-coin={c.ticker} data-available={c.available ? "yes" : c.loading ? "loading" : "no"}>
               <div className="flex gap-3">
                 <Link href={c.page} tabIndex={-1} aria-label={`${c.name} $${c.ticker}, coin page`}><CoinThumb src={c.imageUrl} ticker={c.ticker} size={56} generated /></Link>
                 <div className="min-w-0 flex-1">

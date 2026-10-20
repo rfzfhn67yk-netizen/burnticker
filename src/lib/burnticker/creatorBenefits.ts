@@ -32,6 +32,10 @@ export const CREATOR_PAGE = {
   coinUnavailable: "This coin's details could not be read just now.",
   /** audit 7 creator aggregation: some coins could not be read; the list shows the rest */
   partial: (n: number) => `${n === 1 ? "One coin" : `${n} coins`} could not be read just now, so ${n === 1 ? "its details are" : "their details are"} missing below.`,
+  /** sixth pass HS-19 / B-10: a coin whose page read has not finished yet (it keeps running for the next visit) */
+  coinLoading: "Still loading this coin. Refresh in a few seconds.",
+  /** sixth pass B-10: some coins are still being read; the list shows each with its rule and receipts meanwhile */
+  loading: (n: number) => `${n === 1 ? "One coin is" : `${n} coins are`} still loading. Refresh in a few seconds to see ${n === 1 ? "its" : "their"} latest details.`,
 } as const;
 
 /** The coin page's link to its creator's page (WIRING-17.md): "Created by Ab12…cd34". */

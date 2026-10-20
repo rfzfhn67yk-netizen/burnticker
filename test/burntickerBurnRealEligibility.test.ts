@@ -222,7 +222,7 @@ describe("owner 2026-10-19: team and candidate rivalries keep burning each other
 describe("HB-4: change cases only on a rule that measures change", () => {
   test("earthquake counts (and the fade side, $QUIETM6) list neither 85 nor 111; the debt lists both", () => {
     const quake = rule("usgs.quakes:6"), quiet = { ...rule("usgs.quakes:6"), inverse: true } as BurnRule;
-    for (const r of [quake, quiet]) { assert.deepEqual(changeRuleEdgeIds(r), [87]); assert.equal(isMovingBaselineChangeRule(r), false); }
+    for (const r of [quake, quiet]) { assert.deepEqual(changeRuleEdgeIds(r), []); /* HB-36: an event count gets no missing-reading case */ assert.equal(isMovingBaselineChangeRule(r), false); }
     assert.deepEqual(changeRuleEdgeIds(debt()), [85, 111, 87]);
     assert.deepEqual(changeRuleEdgeIds(BRONCOS as unknown as BurnRule), []);
     assert.match(edgeCase(85)!, /measures change/); assert.match(edgeCase(111)!, /An up rule counts rises/);

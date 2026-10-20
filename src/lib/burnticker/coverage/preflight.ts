@@ -1,6 +1,6 @@
 import { utcDay } from "@/lib/burnticker/utcWords";
 import { catalogue, feedById, loadSourceEntries, type Feed } from "@/lib/burnticker/catalogue";
-import { fetchBody, parseBody } from "@/lib/burnticker/sources/attestedHttp";
+import { parseBody } from "@/lib/burnticker/sources/attestedHttp";
 import { chainResult, gammaResult, settledAtOf, type GammaMarket, type PolymarketClient } from "@/lib/burnticker/oracle/polymarket";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import type { BurnRule } from "@/lib/burnticker/rules";
@@ -23,6 +23,7 @@ import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import { isSingleOfficialSource, singleSourceMethod } from "@/lib/burnticker/singleSource";
 import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
+import { busyRetryText, busyWaitOf, readFresh } from "@/lib/burnticker/coverage/freshReading";
 
 /**
  * THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit). Before a coin is created on a selector, the selector is run live
@@ -64,6 +65,8 @@ export interface PreflightDeps {
   sources?: SourceDescriptor[];
   /** Burn Derby's readers (2026-10-10). */
   derby?: DerbyPreflightDeps;
+  /** The wait for a short busy rate bucket (freshReading.ts; tests pass a fake). */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 const reading = (e: SettledEvent | null | undefined): PreflightReading | null => (e ? { id: e.id, value: e.value, result: e.result, at: e.at } : null);
@@ -76,9 +79,16 @@ function result(rule: BurnRule, now: number, part: Partial<PreflightResult> & { 
   };
 }
 
-async function readLive(feed: Feed, now: number, fetchImpl: FetchLike): Promise<{ readings: SettledEvent[]; refusals: string[] }> {
-  return parseBody(feed.config, await fetchBody(feed.config, now, fetchImpl), now);
+/** A catalogue read for the launch check: a reading made for the same selector in the last five minutes is reused (freshReading.ts). */
+async function readLive(feed: Feed, now: number, fetchImpl: FetchLike, deps: PreflightDeps = {}): Promise<{ readings: SettledEvent[]; refusals: string[] }> {
+  const r = await readFresh(feed.config, now, fetchImpl, { sleep: deps.sleep });
+  return parseBody(feed.config, r.body, r.fetchedAt);
 }
+/** A read error as the refusal shows it; a busy rate bucket adds how long to wait. */
+const readErrorText = (e: unknown, n: number): string => {
+  const t = safeErrorText(e, n), w = busyWaitOf(e);
+  return w === null ? t : `${t}${/[.!?]$/.test(t) ? "" : "."}${busyRetryText(w)}`;
+};
 
 export async function preflightSelector(rule: BurnRule, deps: PreflightDeps = {}): Promise<PreflightResult> {
   const now = deps.now ?? Date.now();
@@ -103,7 +113,8 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
   const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
   let pr: { readings: SettledEvent[]; refusals: string[] };
   let body: unknown;
-  try { body = await fetchBody(feed.config, now, fetchImpl); pr = parseBody(feed.config, body, now); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${safeErrorText(e, 160)}`, status: 502 }); }
+  // the owner's devnet check 2026-10-19: a reading of this selector made in the last five minutes is reused, and a short busy bucket is waited out
+  try { const r = await readFresh(feed.config, now, fetchImpl, { sleep: deps.sleep }); body = r.body; pr = parseBody(feed.config, body, r.fetchedAt); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: safeErrorText(e, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${readErrorText(e, 160)}`, status: 502 }); }
   const last = pr.readings[pr.readings.length - 1] ?? null;
   const next = nextExpected(feed.config, last?.id ?? null, now);
   const primary = { ...primaryBase, lastReading: reading(last), error: pr.refusals.length ? pr.refusals.slice(0, 2).join("; ") : null };
@@ -128,7 +139,7 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
     if (!cf) continue;
     let cr: { readings: SettledEvent[]; refusals: string[] };
     const t0 = Date.now();
-    try { cr = await readLive(cf, now, fetchImpl); } catch (e) { lastErr = `${c.id}: ${safeErrorText(e, 160)}`; continue; }
+    try { cr = await readLive(cf, now, fetchImpl, deps); } catch (e) { lastErr = `${c.id}: ${readErrorText(e, 160)}`; continue; }
     const cmp = compareFact(feed.config.fact!, pr.readings, cf.config.fact!, cr.readings, { primaryReadAt: now, crossReadAt: now + (Date.now() - t0) });
     const latest = cmp.comparisons[cmp.comparisons.length - 1] ?? null;
     const crossRead = { id: c.id, operator: c.operator, lastReading: reading(cr.readings[cr.readings.length - 1]), error: null };

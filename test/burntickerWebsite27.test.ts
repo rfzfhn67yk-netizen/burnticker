@@ -259,7 +259,7 @@ describe("WIRING-AUDIT12 items 4, 5, 8, 10, 11, 13, 15, 16 and the two other pag
   test("10: one coin or two, said by mode", () => {
     assert.match(tile, /whichHeading\("coins", null, kind === "high" \? "record" : "race"\)/);
     assert.match(read("src/app/burnticker/launch/GuidedSteps.tsx"), /\{c\.id === "coins" \? createsLineFor\("coins", null\) : createsLine\(c\.coins\)\}/);
-    assert.match(page, /data-names-remade>\{namesRemadeLine\(pairOn \? 2 : 1\)\}/);
+    assert.match(page, /data-names-remade>\{namesRemadeLine\(pairOn \? 2 : 1, namesRemade \|\| "follows"\)\}/);
     assert.match(NAMES_REMADE_LINE, /both coins/);
   });
   test("11: the record close says whether it can start here, beside the choice; only a yes or no leaves the server", () => {

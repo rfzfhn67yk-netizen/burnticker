@@ -269,13 +269,14 @@ The registry is WAL-mode SQLite and append-only. **Never copy the live file or i
 whole). Always the online backup API. Since 2026-10-16 (prelaunch audit F-7) a timer does it:
 
 - **`mct-burnticker-backup.timer`**, every 6 hours (00:17, 06:17, 12:17, 18:17 UTC), runs `scripts/service/run-burnticker-backup.sh`:
-  `sqlite3 <db> ".backup …"` of `data/burnticker.db` (the registry), `data/burnkeeper.db` (the $DEFICIT ledger) and
-  `data/burnticker-mintbank.db` (the mint key bank) into `data/backups/<name>-<UTC stamp>-000.db` (mode 0600), `PRAGMA quick_check` on
+  `sqlite3 <db> ".backup …"` of `data/burnticker.db` (the registry), `data/burnkeeper.db` (the $DEFICIT ledger),
+  `data/burnticker-mintbank.db` (the mint key bank) and `data/burnticker-swap-pending.db` (the held-swap records) into `data/backups/<name>-<UTC stamp>-000.db` (mode 0600), `PRAGMA quick_check` on
   each copy, the newest 14 of each kept. Never an env file or a key file (the script refuses such a path).
 - **Off the box**: this run's copies go to `BURNTICKER_BACKUP_DEST` (`user@host:path` over scp with a key, a local path, or
   `rclone:<remote>:<path>`), set in the environment or on its own line of `.env.local` (the script reads only that line). Unset, the log
-  says `off-box copy SKIPPED` and the copies stay on the box: the owner names the destination (TODO-OWNER.md #29). The mint key bank is
-  never copied off the box.
+  says `off-box copy SKIPPED` and the copies stay on the box: the owner names the destination (TODO-OWNER.md #29). This push never sends
+  the mint key bank; the pull described next takes every file in `data/backups/`, the mint key bank's copy included (its keys are
+  sealed, and opening them needs the key in the host's settings file).
 - **Off the box, the way this host does it**: the destination is left unset on purpose. Instead, a copy is pulled to separate storage
   every six hours: the operator's own machine fetches the backups over ssh, checks each database copy with `PRAGMA quick_check`, keeps
   it for 30 days in the operator's own storage, and then records the pull on the host in `data/offbox-pull.json` (schema
@@ -303,6 +304,24 @@ systemctl --user start mct-burnticker-web mct-burnticker-keeper
 The restore checks the backup (quick_check), copies it with the backup API into a temporary file, checks that, moves it into place and
 prints the seconds taken; it refuses a target that exists, or one whose `-wal` or `-journal` is still beside it. The restore drill (`test/burntickerBackup.test.ts`) times it on a fixture.
 A backup is also what an auditor runs `scripts/burnticker-audit.mts` against (`BURNTICKER_DB=<copy> BURNTICKER_PUBLISH_DIR=/tmp/x`).
+
+### Where the backups are, and a restore from scratch
+
+What is where, in plain words (no secret is written here):
+
+- **On the host**: the timer's copies of the four databases in `data/backups/`, the newest 14 of each.
+- **Off the host**: the operator's own machine pulls `data/backups/` every six hours and keeps 30 days of copies in two places on its own storage. The newest copy of each database is checked with `PRAGMA quick_check` before it counts.
+- **The host's settings file and the two signer files** travel as one encrypted bundle in the operator's storage. One passphrase opens it, and that passphrase is kept in one place today: the keychain of the operator's machine. A second copy kept offline is an owner step (TODO-OWNER.md #33). The databases alone cannot sign anything.
+- **The pull script and the restore drill** are kept in the private repository and installed on the operator's machine. The installed copy is the one that runs, and a test fails when the two differ.
+
+**The restore drill.** On the operator's machine, `sh restore-drill.sh` (installed beside the pull script) restores the newest copy of each database into a new temporary directory, runs `PRAGMA quick_check` and `PRAGMA integrity_check` on each one, counts the coins, receipts and readings, opens the registry with the site's own reader, and checks that the encrypted bundle opens without writing any of it to disk. It prints one paragraph and saves the same result as `last-restore-drill.json` beside the pull's own record. It never touches the host, and it refuses a scratch directory inside live data or inside the backups.
+
+**Rebuilding a host from the backups**, in order:
+
+1. Provision a new host and install the release (`docs/burnticker/deploy.md`). Leave the keeper and the web stopped.
+2. Copy the newest database copies to the new host and restore each one with the step above, under the names the services use: `--restore <copy> --to data/burnticker.db`, then the same for `burnkeeper.db`, `burnticker-mintbank.db` and `burnticker-swap-pending.db`.
+3. On the operator's machine, open the encrypted bundle with the passphrase, put the settings file and the two signer files back where the settings file says (mode 0600, owned by the service user), and delete the opened copies from the operator's machine.
+4. Start the web, then the keeper, and check ops.json, the status page and one token page. Write the restore up in `docs/burnticker/incidents/LOG.md` with the time it took.
 
 ## Go / no-go gates — ticked, with proof, before `--send` on $DEFICIT
 

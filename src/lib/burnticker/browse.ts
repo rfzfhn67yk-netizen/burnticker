@@ -95,6 +95,8 @@ export function unitExample(unit: { label: string } | null, measured?: { baselin
   if (!unit) return "burns on each settled reading";
   const l = unit.label.trim();
   if (/^the milestone$/i.test(l)) return "burns once when the count reaches the milestone";
+  // continuous audit run 4, HB-41: a next-event label reads as an event ("burns once on the next earthquake of magnitude 6.5 or more")
+  if (/^the next\s/i.test(l)) return `burns once on ${l.replace(/^the next magnitude\b/i, "the next earthquake of magnitude")}`;
   if (/^the\s/i.test(l)) return `burns once if ${l}`;
   // audit 201: a rule measured against the previous reading burns for each full CHANGE of the unit, never for a total
   if (measured?.baseline === "previousSettlement") {
@@ -110,7 +112,9 @@ export function unitExample(unit: { label: string } | null, measured?: { baselin
  * a source's health is inferred from a sample.
  */
 export function sampleReadingLabel(r: { id: string; value: string | null }, observedAt: string | null | undefined, valueLabel: string | null = null): string {
-  return `Sample reading ${r.id}${r.value !== null ? `: ${formatReading(r.value, valueLabel)}` : ""}${observedAt ? `, observed ${observedAt.slice(0, 10)}` : ", from a saved sample"}`;
+  // continuous audit run 4, HB-41: the catalogue's saved sample can be days old beside a coin's live strip, so it is named as the
+  // catalogue's sample, never as a current reading
+  return `Sample from the catalogue: reading ${r.id}${r.value !== null ? `, ${formatReading(r.value, valueLabel)}` : ""}${observedAt ? `, saved ${observedAt.slice(0, 10)}` : ""}`;
 }
 /**
  * A READING AS A PERSON READS IT (QA pass 9 #25, 2026-10-13: the national debt showed as 40310000000000 and FRED's GFDEBTN, which is in
@@ -199,7 +203,9 @@ export function kalshiCard(s: BrowseSeries & { refused: string[] }): SourceCard 
 export function categoryList(cats: readonly CategoryDef[], feeds: readonly FeedCardInput[], venues: VenueFlags, o: { feedsOnly?: boolean } = {}): { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[]; guided: string | null; adjudicatedOnly: boolean }[] {
   // continuous audit run 2, HB-21: the Published data step asks for feeds only; markets belong to Event outcome, so a feeds-only list
   // names no Polymarket tag or Kalshi category and leaves out a category with no feed of its own (sports, elections)
-  if (o.feedsOnly) return categoryList(cats, feeds, { ...venues, polymarket: false, kalshi: false }).filter((c) => c.feeds > 0 && !c.guided);
+  // continuous audit run 4 (HB-21 leftover): feeds-only means published public-data numbers. A natural-disaster feed has its own step-1
+  // family and a team result its own, so neither is counted here, and a category left with nothing (Sports, Natural disasters) drops out
+  if (o.feedsOnly) return categoryList(cats.filter((c) => !OTHER_FAMILY_CATEGORIES.includes(c.id)), feeds, { ...venues, polymarket: false, kalshi: false }).filter((c) => c.feeds > 0 && !c.guided);
   return cats.map((c) => ({ id: c.id, label: c.label, blurb: c.blurb, feeds: venues.feeds ? feeds.filter((f) => c.feeds.includes(baseId(f.id)) && !f.resolved).length + (c.native?.length ?? 0) : 0, polymarket: venues.polymarket ? c.polymarket : [], kalshi: venues.kalshi ? c.kalshi : [], guided: c.guided ?? null, adjudicatedOnly: c.adjudicatedOnly ?? false }));
 }
 
@@ -223,9 +229,13 @@ export function eventFitsCategory(id: string, title: string): boolean {
   if (!(id in CATEGORY_HOME)) return true;   // science, culture, financials and disasters keep their own title patterns (categories.json)
   return !homes.length || homes.includes(id);
 }
+/** HB-21 (run 4): the categories the Published data step leaves out, because another step-1 family owns them (Team, Natural disaster). */
+export const OTHER_FAMILY_CATEGORIES: readonly string[] = ["sports", "disasters"];
+/** HB-42: the categories the Published data step shows a tab for (a feed of its own, not guided, not another family's). */
+export const publishedDataCategories = <C extends Pick<CategoryDef, "id" | "feeds" | "guided">>(cats: readonly C[]): C[] => cats.filter((c) => c.feeds.length > 0 && !c.guided && !OTHER_FAMILY_CATEGORIES.includes(c.id));
 /** One category's cards: feeds first (in the config's order), then Polymarket events, then Kalshi series; an optional text filter over title and source. */
 export function categoryCards(c: CategoryDef, parts: { feeds: readonly FeedCardInput[]; polymarket: readonly PolyEventHit[]; kalshi: readonly (BrowseSeries & { refused: string[] })[] }, o: { q?: string | null; feedsOnly?: boolean } = {}): SourceCard[] {
-  if (o.feedsOnly) return categoryCards(c, { feeds: parts.feeds, polymarket: [], kalshi: [] }, { q: o.q });
+  if (o.feedsOnly) return OTHER_FAMILY_CATEGORIES.includes(c.id) ? [] : categoryCards(c, { feeds: parts.feeds, polymarket: [], kalshi: [] }, { q: o.q });
   const order = (id: string) => { const i = c.feeds.indexOf(baseId(id)); return i < 0 ? 999 : i; };
   // QA pass 9 #33: a one-time source whose result is already in is not offered, so it is not listed either
   const feeds = parts.feeds.filter((f) => c.feeds.includes(baseId(f.id)) && !f.resolved).sort((a, b) => order(a.id) - order(b.id)).map(feedCard);

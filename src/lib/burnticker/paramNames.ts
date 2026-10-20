@@ -42,8 +42,26 @@ export function sourceSubjectLabel(series: string | null | undefined): string | 
  * Wikipedia article "Bitcoin", the raydium protocol). That parameter is the only one the card's sample was read for; any other choice
  * is checked by its format when it is typed and read live at review before a coin can launch on it. Null for a card without a parameter.
  */
+/**
+ * Continuous audit run 4, HB-41: the example's subject in words for the natural-disaster families, whose parameters are codes ("al" is
+ * the Atlantic basin, "ep.3" a category 3 hurricane in the eastern Pacific). A family not listed here says "one setting", never the code.
+ */
+const BASIN_WORDS: Record<string, string> = { al: "the Atlantic basin", ep: "the eastern Pacific basin", cp: "the central Pacific basin" };
+const groupDigits = (n: string): string => (/^\d+$/.test(n) ? Number(n).toLocaleString("en-US") : n);
+export function exampleSubjectWords(series: string): string | null {
+  const i = series.indexOf(":");
+  if (i < 0) return null;
+  const fam = series.slice(0, i), p = series.slice(i + 1), parts = p.split(".");
+  if (fam === "usgs.quakes" || fam === "usgs.quakenext") return `earthquakes of magnitude ${parts.join(".").split("/")[0]} or more`;
+  if (fam === "nhc.storms") return BASIN_WORDS[parts[0]] ?? null;
+  if (fam === "nhc.hurricanes" || fam === "nhc.next") return BASIN_WORDS[parts[0]] && parts[1] ? `category ${parts[1]} hurricanes in ${BASIN_WORDS[parts[0]]}` : null;
+  if (fam === "spc.tornadoes") return p === "US" ? "the whole United States" : null;
+  if (fam === "spc.tornadoday") { const [n, area] = p.split("/"); return area === "US" ? `days with ${n} or more tornado reports across the United States` : null; }
+  if (fam === "nifc.firesize") return `wildfires of ${groupDigits(p)} acres or more`;
+  return null;
+}
 export function paramExampleNote(series: string, param: string | null): string | null {
   if (!param) return null;
-  const subject = sourceSubjectLabel(series)?.split(" · ")[1] ?? param;
-  return `Shown with one example, ${subject}. Its sample is the only one read for this card. Any other choice is checked when you enter it and read live at review before a coin can launch on it.`;
+  const subject = sourceSubjectLabel(series)?.split(" · ")[1] ?? exampleSubjectWords(series) ?? (/^[A-Za-z][A-Za-z ]+$/.test(param) && param.length > 3 ? param : null);
+  return `${subject ? `Shown with one example, ${subject}.` : "Shown with one example setting."} Its sample is the only one read for this card. Any other choice is checked when you enter it and read live at review before a coin can launch on it.`;
 }

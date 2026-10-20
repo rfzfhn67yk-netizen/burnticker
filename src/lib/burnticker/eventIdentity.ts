@@ -45,6 +45,21 @@ const tickerOf = (s: string, suffix: string) => { const base = s.toUpperCase().r
  */
 export const PLURAL_NICKNAMES: ReadonlySet<string> = new Set(["red sox", "white sox", "heat", "thunder", "magic", "jazz", "avalanche", "wild", "kraken", "lightning", "mammoth", "dream", "sky", "sun", "fever", "lynx", "liberty", "mercury", "fire", "storm", "tempo"]);
 
+/**
+ * HS-12 (continuous audit run 4): a work's title ("Dune: Part Three", "Toy Story 5") gives its FIRST word plus the sequel number as a digit
+ * ($DUNE3, $TOY5), never the last word ($THREE). A title with a colon and no number gives its first word. Null otherwise.
+ */
+const NUMBER_WORDS: Record<string, string> = { two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10", ii: "2", iii: "3", iv: "4", vi: "6", vii: "7", viii: "8", ix: "9" };
+export function titleEntity(bare: string): string | null {
+  const parts = bare.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  const first = parts[0].split(/[^A-Za-z0-9]+/).find(Boolean) ?? "";
+  const last = parts[parts.length - 1].replace(/[^A-Za-z0-9]/g, "");
+  const n = /^\d{1,2}$/.test(last) ? last : NUMBER_WORDS[last.toLowerCase()] ?? null;
+  if (n !== null && first) return `${first}${n}`;
+  return bare.includes(":") && first ? first : null;
+}
+
 export interface EventIdentity { subject: string; verb: string | null; rest: string; phrase: string; name: string; ticker: string; confident: boolean }
 
 export function eventIdentity(question: string): EventIdentity {
@@ -63,7 +78,7 @@ export function eventIdentity(question: string): EventIdentity {
   const phrase = `${subject} ${conj}${rest}`;
   const parts = bare.split(/\s+/);
   const alias = ALIAS[bare.toLowerCase()];
-  const entityWord = alias ?? (parts.length > 1 && GENERIC_TAIL.has(parts[parts.length - 1].toLowerCase()) ? parts[0] : parts[parts.length - 1]);
+  const entityWord = alias ?? titleEntity(bare) ?? (parts.length > 1 && GENERIC_TAIL.has(parts[parts.length - 1].toLowerCase()) ? parts[0] : parts[parts.length - 1]);
   const figure = restWords.find((w) => /\d/.test(w) && !/^(19|20)\d\d$/.test(w));
   const copula = verb === "be" || verb === "have" || verb === "become";
   const tail = copula && restWords[0] ? [titleCase(restWords[0].replace(/[,.;:]$/, ""))] : figure && ["reach", "hit", "cross", "exceed", "surpass", "top", "drop", "fall"].includes(verb) ? [figure.replace(/[,.;:]$/, "")] : [];

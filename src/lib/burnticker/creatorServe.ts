@@ -5,7 +5,8 @@ import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { registryCoinKey } from "@/lib/burnticker/coinLookup";
 import { rankLines, receiptsThisWeek, weeklySummary, type RankView } from "@/lib/burnticker/coinRank";
 import { safeParam } from "@/lib/burnticker/safeParam";
-import { ruleOneLiner } from "@/lib/burnticker/coinCard";
+import { ruleOneLinerFor } from "@/lib/burnticker/coinCard";
+import { rememberedCoinPage } from "@/lib/burnticker/coinPageMemo";
 import { KeyedSwr, SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
 import { COIN_MAX_STALE_MS } from "@/lib/burnticker/coinFreshness";
 import { nextTimes, type ResultReceipt, type ResultState } from "@/lib/burnticker/nextResult";
@@ -25,6 +26,13 @@ import type { TokenStatusJson } from "@/lib/burnticker/pageTypes";
  *   end-to-end deadline (CREATOR_DEADLINE_MS), behind a short per-wallet memo (CREATOR_MEMO_MS; keyedSwr.ts with the coin page's bounds);
  * - a coin whose page fails or runs past its bound is listed as unavailable (`available: false`, registry facts only), and the result
  *   counts them (`unavailable`), so a failing coin never makes the account look empty.
+ *
+ * Sixth pass B-10 / HB-52 (2026-10-19): the seven-coin creator still got "5 coins could not be read just now" on every cold load (four
+ * at a time, 8 s each, 12 s overall) and a rule printed as a raw Polymarket id. The page's default path now reads every coin at once
+ * through the shared coin-page memo (coinPageMemo.ts, also behind "Your coins"): a coin whose read has not finished in
+ * COIN_PAGE_COLD_WAIT_MS is listed with its registry facts and "Still loading this coin. Refresh in a few seconds." (`loading: true`),
+ * and the read carries on for the next visit. A coin's rule always comes from ruleOneLinerFor (the coin page's describer), never an id.
+ * An injected reader or memo (tests) keeps the bounded path above.
  */
 
 export const WALLET_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -44,6 +52,8 @@ export interface CreatorCoinBase {
 export interface CreatorCoinView extends CreatorCoinBase {
   /** false when this coin's own page could not be read in time: the registry facts only, never dropped from the list */
   available: boolean;
+  /** sixth pass B-10: true while this coin's first page read is still running (registry facts only; refresh in a few seconds) */
+  loading: boolean;
   imageUrl: string | null; rule: string; creatorText: string | null; links: { label: string; url: string }[];
   lastBurnAt: string | null;
   /** the next RESULT (null for a decided or voided one-shot), never the keeper's next poll of the source (audit 7 F08) */
@@ -54,7 +64,7 @@ export interface CreatorCoinView extends CreatorCoinBase {
   nextCheckAt: string | null; nextCheckLine: string | null;
   result: ResultState | null;
 }
-export type CreatorData = { kind: "bad-wallet" } | { kind: "unavailable"; wallet: string } | { kind: "ok"; wallet: string; coins: CreatorCoinView[]; readAt: string; unavailable: number };
+export type CreatorData = { kind: "bad-wallet" } | { kind: "unavailable"; wallet: string } | { kind: "ok"; wallet: string; coins: CreatorCoinView[]; readAt: string; unavailable: number; loading: number };
 export type CreatorSummary = { kind: "bad-wallet" } | { kind: "unavailable"; wallet: string } | { kind: "ok"; wallet: string; coins: CreatorCoinBase[]; readAt: string };
 
 const sentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUpperCase()); return /[.!?]$/.test(t) ? t : `${t}.`; };
@@ -101,12 +111,17 @@ function baseOf(c: Ctx, t: TokenRow): CreatorCoinBase {
 }
 
 /** A coin whose page could not be read: its registry facts, said to be unavailable (never dropped). */
-function unavailableOf(c: Ctx, t: TokenRow): CreatorCoinView {
+function unavailableOf(c: Ctx, t: TokenRow, loading = false): CreatorCoinView {
   let rule = t.name;
-  try { rule = ruleOneLiner(c.plat.registry.lockedRule(t).rule, null); } catch { /* the name stands in */ }
+  try { rule = ruleOneLinerFor(c.plat.registry.lockedRule(t).rule, null, t.description, t.ticker); } catch { /* the name stands in */ }
   let lastBurnAt: string | null = null;
   try { lastBurnAt = c.plat.registry.receipts(t.mint).filter((r) => r.status === "confirmed" && (r.burnRaw ?? BigInt(0)) > BigInt(0)).map((r) => r.settledAt).sort().at(-1) ?? null; } catch { lastBurnAt = null; }
-  return { ...baseOf(c, t), available: false, imageUrl: t.imageUrl, rule: sentence(rule), creatorText: null, links: [], lastBurnAt, nextAt: null, nextLine: CREATOR_PAGE.coinUnavailable, nextCheckAt: null, nextCheckLine: null, result: null };
+  return { ...baseOf(c, t), available: false, loading, imageUrl: t.imageUrl, rule: sentence(rule), creatorText: null, links: [], lastBurnAt, nextAt: null, nextLine: loading ? CREATOR_PAGE.coinLoading : CREATOR_PAGE.coinUnavailable, nextCheckAt: null, nextCheckLine: null, result: null };
+}
+
+/** The coin's rule in one line from the registry and an optional venue title (never a raw selector or id). */
+function ruleLine(c: Ctx, t: TokenRow, title: string | null): string {
+  try { return ruleOneLinerFor(c.plat.registry.lockedRule(t).rule, title, t.description, t.ticker); } catch { return t.name; }
 }
 
 export type CoinDetail = (p: Platform, t: TokenRow, now: number) => Promise<{ status: TokenStatusJson; receipts: readonly (ResultReceipt & { burned?: string | null })[] }>;
@@ -115,8 +130,8 @@ function viewOf(c: Ctx, t: TokenRow, d: Awaited<ReturnType<CoinDetail>>): Creato
   const s = d.status, base = baseOf(c, t);
   const receipts = c.burnsBy.get(s.mint)?.length ?? d.receipts.filter((r) => r.status === "confirmed" && Number(r.burned ?? 0) > 0).length;
   return {
-    ...base, receipts, available: true,
-    imageUrl: s.profile?.imageUrl ?? null, rule: sentence(s.profile?.oneLiner ?? s.seriesTitle ?? s.selectorKey), creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [],
+    ...base, receipts, available: true, loading: false,
+    imageUrl: s.profile?.imageUrl ?? null, rule: sentence(s.profile?.oneLiner ?? ruleLine(c, t, s.seriesTitle)), creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [],
     lastBurnAt: s.burned.lastAt ?? null, ...creatorNextFields(s, d.receipts, c.now),
   };
 }
@@ -165,12 +180,20 @@ export function creatorSummary(wallet: string, now = Date.now(), p: Platform | n
   return { kind: "ok", wallet: w, coins: rows.map((t) => baseOf(c, t)), readAt: new Date(now).toISOString() };
 }
 
+/** The default path (sixth pass B-10): every coin at once from the shared coin-page memo; a coin still being read is "still loading". */
+async function rememberedDetail(plat: Platform, w: string, rows: readonly TokenRow[], now: number): Promise<CreatorData> {
+  const c = context(plat, now);
+  const reads = await Promise.all(rows.map((t) => rememberedCoinPage(plat, t, now).catch(() => null)));
+  const coins = rows.map((t, k) => { const d = reads[k]; return d ? viewOf(c, t, d) : unavailableOf(c, t, true); });
+  return { kind: "ok", wallet: w, coins, readAt: new Date(now).toISOString(), unavailable: 0, loading: coins.filter((x) => x.loading).length };
+}
+
 async function buildDetail(plat: Platform, w: string, rows: readonly TokenRow[], now: number, o: CreatorDataOptions): Promise<CreatorData> {
   const c = context(plat, now);
   const detail: CoinDetail = o.detail ?? ((pl, t, n) => tokenPageData(pl, t, n));
   const coins = await boundedMap(rows, { limit: o.concurrency ?? CREATOR_CONCURRENCY, eachMs: o.coinMs ?? CREATOR_COIN_MS, deadlineMs: o.deadlineMs ?? CREATOR_DEADLINE_MS },
     async (t) => viewOf(c, t, await detail(plat, t, now)), (t) => unavailableOf(c, t));
-  return { kind: "ok", wallet: w, coins, readAt: new Date(now).toISOString(), unavailable: coins.filter((x) => !x.available).length };
+  return { kind: "ok", wallet: w, coins, readAt: new Date(now).toISOString(), unavailable: coins.filter((x) => !x.available).length, loading: 0 };
 }
 
 // one memo per registry (a platform swapped in tests never serves another registry's answers)
@@ -189,6 +212,9 @@ export async function creatorData(wallet: string, now = Date.now(), p: Platform 
   try { plat = p ?? platform(); } catch { return { kind: "unavailable", wallet: w }; }
   const rows = creatorRows(plat, w);
   if (!rows) return { kind: "unavailable", wallet: w };
+  // sixth pass B-10: the page's own call (no reader, no memo given) reads through the shared coin-page memo; no per-wallet memo on top,
+  // so a coin that was still loading shows its details on the very next visit
+  if (o.memo === undefined && !o.detail) { try { return await rememberedDetail(plat, w, rows, now); } catch { return { kind: "unavailable", wallet: w }; } }
   const memo = o.memo === undefined ? memoFor(plat.registry) : o.memo;
   if (!memo) return buildDetail(plat, w, rows, now, o);
   // the version: the wallet's coins and each coin's page version (a launch or a new receipt rebuilds at once)
@@ -196,6 +222,6 @@ export async function creatorData(wallet: string, now = Date.now(), p: Platform 
   try { version = rows.map((t) => `${t.mint}:${plat.registry.pageVersion(t.mint)}`).join(","); } catch { version = rows.map((t) => t.mint).join(","); }
   try {
     const got = await memo.get(w, version, () => buildDetail(plat, w, rows, now, o));
-    return got ? got.value : { kind: "ok", wallet: w, coins: rows.map((t) => unavailableOf(context(plat, now), t)), readAt: new Date(now).toISOString(), unavailable: rows.length };
+    return got ? got.value : { kind: "ok", wallet: w, coins: rows.map((t) => unavailableOf(context(plat, now), t)), readAt: new Date(now).toISOString(), unavailable: rows.length, loading: 0 };
   } catch { return { kind: "unavailable", wallet: w }; }
 }

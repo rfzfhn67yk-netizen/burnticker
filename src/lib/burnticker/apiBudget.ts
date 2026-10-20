@@ -44,8 +44,28 @@ export const BUDGET_FRACTION = 0.6;
 export const ALERT_AT = 0.8;
 /** The longest one call waits for a rate bucket before it answers "busy". */
 export const DEFAULT_MAX_WAIT_MS = 20_000;
-/** A bucket holds at most this much of its rate: no bursts after a quiet spell. */
+/**
+ * A bucket holds at most this much of its rate: no bursts after a quiet spell.
+ *
+ * THE TWO-READ FLOOR (owner's devnet check 2026-10-19). Ten seconds of a small share rounds down to a single token: the web's share of a
+ * house-default host (10 a minute, times 60%, times the web's 0.3) is 1.8 a minute, so its per-minute bucket held one token that came back
+ * only after about 33 s. The launch review reads the coin's source and the Launch pre-flight reads it again seconds later, so the second
+ * read found the bucket empty and the launch was refused with "the request rate budget is full", and a retry repeated the pair. So a
+ * minute or hour bucket whose share allows more than one read a minute holds at least two tokens (burstCapOf). The rate itself is not
+ * raised: tokens still come back at the share's rate, the per-second bucket and the day budget still apply unchanged, and at most one
+ * extra read per process per quiet spell is allowed, which the 40% left over by BUDGET_FRACTION covers for every source this applies to
+ * (three processes, one extra read each, against a documented limit of 10 or more a minute). A source that spends its whole plan
+ * (SourceSpec.fraction, API-Sports) has no such headroom and keeps the plain cap.
+ */
 const BURST_WINDOW_MS = 10_000;
+/** The fewest tokens a minute or hour bucket holds when its share allows more than one read a minute (see BURST_WINDOW_MS). */
+export const MIN_SHARED_BURST = 2;
+/** A rate bucket's cap: ten seconds of its rate, at least one token, and at least MIN_SHARED_BURST for a minute or hour bucket whose
+ *  share allows more than one read a minute on a source that keeps the 60% headroom. */
+export function burstCapOf(perMs: number, windowMs: number, spec: Pick<SourceSpec, "fraction">): number {
+  const cap = Math.max(1, perMs * Math.min(windowMs, BURST_WINDOW_MS));
+  return windowMs >= 60_000 && spec.fraction === undefined && perMs * 60_000 > 1 ? Math.max(cap, MIN_SHARED_BURST) : cap;
+}
 
 export interface SourceLimit { perSec?: number; perMin?: number; perHour?: number; perDay?: number; perMonth?: number }
 export interface SourceSpec {
@@ -291,7 +311,9 @@ export function memoryStore(): BudgetStore & { rows: Map<string, string> } {
 
 export type TakeOutcome = { state: "ok"; waitedMs: number } | { state: "hold"; used: number; budget: number } | { state: "busy"; waitMs: number };
 export interface BudgetAlert { kind: "bt-api-budget"; key: string; text: string; meta: Record<string, unknown>; level: "80" | "hold" }
-export interface BudgetLine { source: string; label: string; role: BudgetRole; day: string; used: number; budget: number; unit: SourceSpec["unit"]; state: "ok" | "past-80" | "hold"; established: boolean }
+export interface BudgetLine { source: string; label: string; role: BudgetRole; day: string; used: number; budget: number; unit: SourceSpec["unit"]; state: "ok" | "past-80" | "hold"; established: boolean;
+  /** HB-45: the other roles' persisted counts for this source today (their own shares), when the budget has a store */
+  others?: { role: BudgetRole; used: number; budget: number }[] }
 
 export class BudgetHoldError extends Error {
   readonly source: string; readonly outcome: Exclude<TakeOutcome, { state: "ok" }>;
@@ -385,7 +407,8 @@ export class ApiBudget {
       const b = budgetFor(specOf(source), this.role);
       const sp = this.role === "web" ? LANE_SPLIT[source] : undefined;
       const f = sp ? sharedRateOf(sp) : 1;   // A-38: a split source's shared bucket is what the reserved lanes leave
-      const buckets = b.rates.map((r) => { const perMs = r.perMs * f, cap = Math.max(1, perMs * Math.min(r.windowMs, BURST_WINDOW_MS)); return { ratePerMs: perMs, cap, tokens: cap, last: now }; });
+      const spec = specOf(source);
+      const buckets = b.rates.map((r) => { const perMs = r.perMs * f, cap = burstCapOf(perMs, r.windowMs, spec); return { ratePerMs: perMs, cap, tokens: cap, last: now }; });
       let stored = 0;
       if (this.store) { try { stored = this.store.add(this.dayKey(source), day, 0, now); } catch { stored = 0; } }
       s = { buckets, day, stored, pending: 0, lastFlush: now, alerted80: false, held: false, methodDeltas: {}, methodsLocal: {}, lanes: {}, laneBuckets: {} };
@@ -528,7 +551,7 @@ export class ApiBudget {
     if (!this.enforce) return;
     const spec = specOf(source), who = WHO[this.role];
     this.emit({ level: "80", key: `bt-api-budget:${this.role}:${source}:${s.day}:80`, meta: { role: this.role, source, day: s.day, used, budget, unit: spec.unit },
-      text: `${who} has used ${Math.floor((100 * used) / budget)}% of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}). If it reaches the budget, reads from ${spec.label} stop until midnight UTC.` });
+      text: `${who} has used ${Math.floor((100 * used) / budget)}% of its own share of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}). If it reaches the budget, reads from ${spec.label} stop until midnight UTC.` });
   }
   private onHold(source: string, s: SourceState, used: number, budget: number): void {
     if (s.held) return;
@@ -543,8 +566,8 @@ export class ApiBudget {
     if (!this.enforce) return;
     this.emit({ level: "hold", key: `bt-api-budget:${this.role}:${source}:${s.day}:hold`, meta: { role: this.role, source, day: s.day, used, budget, unit: spec.unit },
       text: fb
-        ? `${who} used all of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}). Until midnight UTC it reads from ${fb} instead, more slowly, and sends nothing: readings, cranks and claims wait until then.`
-        : `${who} used all of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}), so it stopped reading from it until midnight UTC. Reads start again on their own after that. Nothing is retried in the meantime.` });
+        ? `${who} used all of its own share of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}). Until midnight UTC it reads from ${fb} instead, more slowly, and sends nothing: readings, cranks and claims wait until then.`
+        : `${who} used all of its own share of today's budget for ${spec.label} (${fmt(used)} of ${fmt(budget)} ${spec.unit === "credit" ? "credits" : "requests"}), so it stopped reading from it until midnight UTC. Reads start again on their own after that. Nothing is retried in the meantime.` });
   }
   /** A lane stopped (C2): logged once per lane per day; the reserve's stop also alerts (ordinary reads wait while confirmations go on). */
   private onLaneHold(source: string, s: SourceState, lane: BudgetLane, l: { held: boolean }, used: number, ceiling: number, why: "reserve" | "cap"): void {
@@ -575,9 +598,29 @@ export class ApiBudget {
     const out: BudgetLine[] = [];
     for (const [source] of this.states) {
       const s = this.state(source), spec = specOf(source), budget = this.dayBudget(source), used = s.stored + s.pending;
-      out.push({ source, label: spec.label, role: this.role, day: s.day, used, budget, unit: spec.unit, established: spec.established, state: used >= budget || s.held ? "hold" : used >= ALERT_AT * budget ? "past-80" : "ok" });
+      out.push({ source, label: spec.label, role: this.role, day: s.day, used, budget, unit: spec.unit, established: spec.established, state: used >= budget || s.held ? "hold" : used >= ALERT_AT * budget ? "past-80" : "ok", others: this.otherShares(source, s.day) });
     }
     return out.sort((a, b) => a.source.localeCompare(b.source));
+  }
+  /**
+   * HB-45 (continuous audit 2026-10-19): the other processes' persisted counts for `source` today, read from the same status table. Each
+   * role spends its own share of the 60% (SourceSpec.shares), counted per role and UTC day in the store, so the site's "600 of 600" and
+   * the keeper's "210 / 600" for the Polygon public RPC were two shares of one 1,200 budget, not one count reset by a restart. The status
+   * line now prints both, so the two numbers are read side by side.
+   */
+  otherShares(source: string, day: string = utcDay(this.now())): { role: BudgetRole; used: number; budget: number }[] {
+    if (!this.store) return [];
+    const spec = specOf(source);
+    const roles = (spec.shares ? (Object.keys(spec.shares) as BudgetRole[]) : (Object.keys(ROLE_SHARES) as BudgetRole[])).filter((r) => r !== this.role);
+    const out: { role: BudgetRole; used: number; budget: number }[] = [];
+    for (const role of roles) {
+      const budget = budgetFor(spec, role).perDay;
+      if (!budget) continue;
+      let used = 0;
+      try { const j = JSON.parse(this.store.get(`apiBudget.day.${role}.${source}`) ?? "{}") as { day?: string; used?: number }; used = j.day === day ? Number(j.used ?? 0) : 0; } catch { used = 0; }
+      out.push({ role, used, budget });
+    }
+    return out;
   }
 }
 const WHO: Record<BudgetRole, string> = { keeper: "The Burnticker keeper", deficit: "The $DEFICIT keeper", web: "The Burnticker site" };
@@ -598,8 +641,11 @@ export function budgetTopMethodLines(b: ApiBudget, n = 8): string[] {
 
 /** The status lines: "api budget helius: 1,234 / 120,000 credits today (1%) · ok". */
 export function budgetStatusLines(lines: readonly BudgetLine[]): string[] {
-  return lines.map((l) => `api budget ${l.source}: ${fmt(l.used)} / ${fmt(l.budget)} ${l.unit === "credit" ? "credits" : "requests"} today (${l.budget ? Math.floor((100 * l.used) / l.budget) : 0}%) · ${l.state === "hold" ? "ON HOLD until 00:00 UTC" : l.state === "past-80" ? "past 80%" : "ok"}`);
+  // HB-45: a source shared with another process names whose share the count is and prints the others' persisted counts beside it
+  const share = (l: BudgetLine): string => (l.others?.length ? ` · ${SHARE_NAME[l.role]} share; ${l.others.map((o) => `${SHARE_NAME[o.role]} ${fmt(o.used)} / ${fmt(o.budget)}`).join(", ")}` : "");
+  return lines.map((l) => `api budget ${l.source}: ${fmt(l.used)} / ${fmt(l.budget)} ${l.unit === "credit" ? "credits" : "requests"} today (${l.budget ? Math.floor((100 * l.used) / l.budget) : 0}%) · ${l.state === "hold" ? "ON HOLD until 00:00 UTC" : l.state === "past-80" ? "past 80%" : "ok"}${share(l)}`);
 }
+const SHARE_NAME: Record<BudgetRole, string> = { keeper: "keeper", web: "site", deficit: "$DEFICIT keeper" };
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The process's budget and the call-site helpers

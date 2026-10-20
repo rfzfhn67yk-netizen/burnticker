@@ -343,7 +343,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       <div><dt>Burns</dt><dd data-stat="burns"><span class="stat-skel" aria-hidden="true"></span></dd></div>
       <div><dt>Receipts verified</dt><dd data-stat="verified"><span class="stat-skel" aria-hidden="true"></span></dd></div>
     </dl>
-    <p class="stats-note" data-stats-note>Until a coin burns on mainnet, the first two figures count the devnet practice burns and say so.</p>
+    <p class="stats-note" data-stats-note>These figures count burns on mainnet.</p>
   </section>
 <!-- site-shell:hero:begin -->
 <section class="hero wrap" aria-labelledby="hero-h">
@@ -379,7 +379,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 <!-- site-shell:hero:end -->
 
   <section class="wrap" id="coins" aria-labelledby="coins-h">
-    <div class="head"><h2 id="coins-h">Featured coin and test receipts</h2><a href="/burnticker">Browse coins</a></div>
+    <div class="head"><h2 id="coins-h">Featured coin</h2><a href="/burnticker">Browse coins</a></div>
     <p class="small muted" data-featured-line></p>
     <div class="grid" data-featured aria-live="polite">
       <div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div>
@@ -709,7 +709,7 @@ window.btWhy = function (label, why, name, noMark) {
     else { put("burned", group(s.burnedTokens)); put("burns", group(s.burns)); put("verified", s.receiptsVerified === null ? "\u2014" : group(s.receiptsVerified), s.receiptsWhy); }
     // private review 8: the note says which network the figures count, so a mainnet host's zeros never sit under "devnet burns are counted"
     var note = document.querySelector("[data-stats-note]");
-    if (note && s) note.textContent = s.burns === 0 && s.devnet && s.devnet.burns > 0 ? "Until a coin burns on mainnet, the first two figures count the devnet practice burns and say so." : s.burns === 0 ? "These figures count burns on mainnet, and none has happened yet." : "These figures count burns on mainnet.";
+    if (note && s) note.textContent = s.burns === 0 && s.devnet && s.devnet.burns > 0 ? "Until a coin burns on mainnet, the first two figures are practice burns on devnet, marked as such." : s.burns === 0 ? "These figures count burns on mainnet, and none has happened yet." : "These figures count burns on mainnet.";
     if (line) {
       line.textContent = "";
       line.appendChild(document.createTextNode(j && j.statusLine ? j.statusLine + " " : "The current status did not load just now. "));

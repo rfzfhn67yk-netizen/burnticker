@@ -15,7 +15,7 @@ import { LEFTOVER_SEE_END } from "@/lib/burnticker/retirementCopy";
 import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
 import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
-import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, PAIR_DIAGRAM_LABEL, UPFRONT_LABEL, lpDisclosureFor, profileMoreLabel, shareExample, type LaunchVenue } from "@/lib/burnticker/guidedLaunch";
+import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, PAIR_DIAGRAM_LABEL, UPFRONT_LABEL, lpDisclosureFor, profileMoreLabel, shareExample, type LaunchVenue, marketClosesLine } from "@/lib/burnticker/guidedLaunch";
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { freeRowLead } from "@/lib/burnticker/tickerSwap";
@@ -64,6 +64,8 @@ export interface ReviewCardProps {
   busy: boolean;
   /** how many transactions this launch signs (review.transactions.count); above 1 the card says so before the button */
   signs?: number | null;
+  /** HB-53: `signs` counts the sign-message proof as its first prompt */
+  signsProof?: boolean;
   /** Names, tickers and the rule are valid (the button stays enabled without a wallet: pressing it opens the wallet chooser). */
   ready: boolean;
   creator: string | null;
@@ -401,7 +403,7 @@ export function ReviewCard(p: ReviewCardProps) {
       {p.duplicate}
       {p.event && (
         <div className="min-w-0 break-words rounded border border-neutral-800 p-2 text-xs text-neutral-300" data-event>
-          <p>The source states the event as “{p.event.question}”.{p.event.outcome ? ` The coin burns if it resolves ${p.event.outcome}.` : ""}{p.event.resolves ? ` The market is due to close around ${p.event.resolves}.` : ""}{p.event.url && <> <a className="underline" href={p.event.url} rel="noopener" target="_blank">Open the market ↗</a></>}</p>
+          <p>The source states the event as “{p.event.question}”.{p.event.outcome ? ` The coin burns if it resolves ${p.event.outcome}.` : ""}{p.event.resolves ? ` ${marketClosesLine(p.event.resolves)}` : ""}{p.event.url && <> <a className="underline" href={p.event.url} rel="noopener" target="_blank">Open the market ↗</a></>}</p>
           {p.event.stated && <p className="mt-1" data-stated>{statedSentences(p.event.stated, p.event.stated.finalAfter)}</p>}
           {p.event.stated?.text && <details className="mt-1 text-neutral-400"><summary className="cursor-pointer">Details</summary><p className="break-words">“{p.event.stated.text}”</p><p>{p.event.stated.finalAfter.ifDisputed}</p></details>}
           {p.event.criteria && <p className="mt-1 whitespace-pre-wrap text-neutral-400">{p.event.criteria.length > 600 ? `${p.event.criteria.slice(0, 600)}… The full rules are on the market page.` : p.event.criteria}</p>}
@@ -483,7 +485,7 @@ export function ReviewCard(p: ReviewCardProps) {
         {fieldProblems.length > 0 && problemList("Not ready to launch", problemsId)}
         {p.blocked && <p id={blockedId} className="min-w-0 break-words text-xs text-amber-300" data-wallet-blocked>{p.blocked}</p>}
         <button ref={launchBtn} type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-40" aria-describedby={[p.blocked ? blockedId : "", fieldProblems.length ? problemsId : ""].filter(Boolean).join(" ") || undefined} disabled={!p.ready || p.busy || p.problems.length > 0 || !!p.blocked || fieldProblems.length > 0} onClick={launch}>{label}</button>
-        {!!p.signs && p.signs > 1 && !p.busy && <p className="min-w-0 break-words text-xs text-neutral-300" data-signs-line>{signsLine(p.signs)}</p>}
+        {!!p.signs && p.signs > 1 && !p.busy && <p className="min-w-0 break-words text-xs text-neutral-300" data-signs-line>{signsLine(p.signs, { proof: !!p.signsProof })}</p>}
         {p.busy && <p className="min-w-0 break-words text-sm text-amber-300" role="status" aria-live="polite" data-launching>{LAUNCHING_NOTICE}</p>}
         {!p.creator && !p.blocked && <p className="min-w-0 break-words text-[11px] text-neutral-500" data-connect-note>Connecting shares only your wallet&apos;s public address. The button then becomes Launch, and launching is a separate step that your wallet asks you to sign.</p>}
       </div>

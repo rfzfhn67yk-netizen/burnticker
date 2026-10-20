@@ -6,7 +6,7 @@
 // opening and the whitepaper's title line.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
+import { BOTH_TIERS_LINE } from "@/lib/burnticker/feeShareLine";
 import fs from "node:fs";
 import { door2Html, withDoor2 } from "@/lib/burnticker/landingDoors";
 import { leagueIndex } from "@/lib/burnticker/leagues";
@@ -127,7 +127,8 @@ describe("the landing page (site/burnticker/index.html)", () => {
     const sg = SAFEGUARDS.map((x) => x.text).join(" "), wg = WHO_GETS_WHAT.map((x) => x.text).join(" ");
     assert.match(sg, /a short list of up to three approved accounts can be required instead, for at most 90 days/);
     assert.match(sg, /If the operator stops, readings stop and burns stop\. Holders keep their coins/);
-    assert.ok(wg.includes(`After a coin moves to its trading pool, the liquidity is locked forever. ${OPERATOR_SHARE_LINE}`), "the operator's share is led by the whole swap (fees copy, 2026-10-12)");
+    // sixth pass B-16 (2026-10-19): both tiers, each led by the whole swap
+    assert.ok(wg.includes(`After a coin moves to its trading pool, the liquidity is locked forever. ${BOTH_TIERS_LINE}`), "the operator's share is led by the whole swap (fees copy, 2026-10-12)");
     for (const t of [sg, wg]) clean(t, "safeguards");
     for (const gone of [/anyone can crank/i, /if we disappear/i, /keep working/i, /set to none after review/i, /not built yet/i, /within 14 days/i, /nothing to trust/i, /<li>reviewed<\/li>/]) { assert.doesNotMatch(html, gone, String(gone)); assert.doesNotMatch(sg + wg, gone, String(gone)); }
   });

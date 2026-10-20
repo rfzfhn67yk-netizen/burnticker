@@ -127,7 +127,7 @@ export function unitStep(rule: BurnRule, ev: SettledEvent, prev: { value: string
   if (units === BigInt(0)) return { units: 0, mapping: null, kind: "under-unit", carryOut: fromScaled(rem, scale), baseline: baselineStr, note: `moved ${fromScaled(moved, scale)}${carry === "consecutive-increases" && cin > BigInt(0) ? ` (+ ${carryIn} carried)` : ""}: under one unit of ${unitStr}${carry === "consecutive-increases" ? `; ${fromScaled(rem, scale)} carried` : ""}` };
   if (units > BigInt(1_000_000)) throw new Error(`units ${units} exceed the 1,000,000 sanity cap — refused`);
   const unitWord = units === BigInt(1) ? "unit" : "units";
-  return { units: Number(units), mapping: s.perUnit, kind: dir === "down" ? "down" : "up", carryOut: fromScaled(rem, scale), baseline: baselineStr, note: `moved ${fromScaled(moved, scale)}${carry === "consecutive-increases" && cin > BigInt(0) ? ` (+ ${carryIn} carried)` : ""} = ${units} ${unitWord} of ${unitStr}${rem > BigInt(0) ? `; ${fromScaled(rem, scale)} carried` : ""}` };
+  return { units: Number(units), mapping: s.perUnit, kind: delta < BigInt(0) ? "down" : "up", carryOut: fromScaled(rem, scale), baseline: baselineStr, note: `moved ${fromScaled(moved, scale)}${carry === "consecutive-increases" && cin > BigInt(0) ? ` (+ ${carryIn} carried)` : ""} = ${units} ${unitWord} of ${unitStr}${rem > BigInt(0) ? `; ${fromScaled(rem, scale)} carried` : ""}` };
 }
 
 /** Many events in `at` order, threading the previous value and carry. */

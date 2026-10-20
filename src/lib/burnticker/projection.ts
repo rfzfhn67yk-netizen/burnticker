@@ -67,6 +67,8 @@ export const quakesPerDay = (magnitude: number): number => (150 * 10 ** (6 - mag
  * earthquakes of magnitude 4 at 5% each, drained in days with no word before the collapsed backtest). From the saved sample when it is
  * this rule's own, else from a known long-term rate; null when the pool would last more than four weeks to half, or nothing is known.
  */
+/** HB-37: the shortest saved sample a half-life is projected from. */
+export const MIN_PROJECTION_DAYS = 14;
 export function drainWarning(rule: BurnRule, p: Projection): string | null {
   const share = (rule.kind === "scalar" ? rule.scalar?.perUnit : (rule.binary?.onYes ?? rule.binary?.onNo)) as { fractionOfPool?: number } | undefined;
   const f = typeof share?.fractionOfPool === "number" ? share.fractionOfPool : null;
@@ -74,9 +76,12 @@ export function drainWarning(rule: BurnRule, p: Projection): string | null {
   const half = unitsToHalf(f);
   let perDay: number | null = null, basis = "";
   const row = p.rows.find((r) => Math.abs(r.share - f) < 1e-9);
+  const sampleDays = p.from && p.to ? (Date.parse(p.to) - Date.parse(p.from)) / 86_400_000 : 0;
   if (p.available && row && p.from && p.to) {
-    const days = Math.max(1, (Date.parse(p.to) - Date.parse(p.from)) / 86_400_000);
-    perDay = row.units / days; basis = `the saved readings from ${p.from} to ${p.to}`;
+    // continuous audit run 4, HB-37: a rate from fewer than MIN_PROJECTION_DAYS of readings (one day of Federal Register rules) is not a
+    // rate, so no half-life is said from it
+    if (!(sampleDays >= MIN_PROJECTION_DAYS)) return null;
+    perDay = row.units / sampleDays; basis = `the saved readings from ${p.from} to ${p.to}`;
   } else {
     const q = rule.oracle === "catalogue" && rule.series ? parseUsgsSeries(rule.series) : null;
     if (q && !q.region && !rule.inverse) { perDay = quakesPerDay(Number(q.magnitude)); basis = "the U.S. Geological Survey's long-term count of earthquakes worldwide"; }

@@ -105,8 +105,8 @@ describe("A-3: the daily uploads behind a wallet's signature", () => {
 
   test("the launch page and the Coin vs Coin tile send the signature with every prepare", async () => {
     const fs = await import("node:fs");
-    assert.match(fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8"), /const walletProof = await signLaunchRequest\(wallet\.signMessage,/);
-    assert.equal((fs.readFileSync("src/app/burnticker/launch/CoinVsCoinTile.tsx", "utf8").match(/await signLaunchRequest\(wallet\.signMessage,/g) ?? []).length, 2);
+    assert.match(fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8"), /const walletProof = await requireLaunchProof\(wallet\.signMessage,/);
+    assert.equal((fs.readFileSync("src/app/burnticker/launch/CoinVsCoinTile.tsx", "utf8").match(/await requireLaunchProof\(wallet\.signMessage,/g) ?? []).length, 2);
   });
 });
 

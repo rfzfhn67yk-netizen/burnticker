@@ -161,7 +161,7 @@ describe("item 4: the back-test fails gracefully (Claude site audit 3 item 2)", 
     const { BACKTEST_UNAVAILABLE } = await import("@/lib/burnticker/oracle/backtest");
     assert.equal(BACKTEST_UNAVAILABLE, "Backtest unavailable."); clean(BACKTEST_UNAVAILABLE, "backtest");
     const pg = read("src/app/burnticker/launch/page.tsx");
-    assert.match(pg, /\{btErr && btFor === btKey && !rv\?\.projection && <div[^>]*data-backtest-unavailable><p>\{btErr\.includes\(BACKTEST_SLOW\) \? BACKTEST_SLOW : BACKTEST_UNAVAILABLE\}<\/p><details/, "website-20: shown only when the review has no projection (WIRING-PARITY audit 6 #11)");
+    assert.match(pg, /\{btErr && !btWaiting && btFor === btKey && !rv\?\.projection && <div[^>]*data-backtest-unavailable><p>\{btErr\.includes\(BACKTEST_SLOW\) \? BACKTEST_SLOW : BACKTEST_UNAVAILABLE\}<\/p><details/, "website-20: shown only when the review has no projection (WIRING-PARITY audit 6 #11)");
     assert.match(pg, /await r\.json\(\)\.catch\(\(\) =>/, "a non-JSON 502 page is still an error, not a crash");
     const route = read("src/app/api/burnticker/oracle/backtest/route.ts");
     assert.match(route, /console\.error\("\[burnticker\/backtest\] the back-test route failed:", e\)/);

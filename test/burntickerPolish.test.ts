@@ -63,7 +63,8 @@ describe("item 1: the terms and privacy pages", () => {
     const ids = TERMS_SECTIONS.map((s) => s.id);
     for (const id of ["what-it-is", "creators", "takedown", "no-accounts", "stores", "no-advice", "operator"]) assert.ok(ids.includes(id), id);
     const all = ALL_LEGAL_COPY.join(" ");
-    assert.match(all, /never trades, never takes an order and never pays anything/);
+    // sixth pass B-16 (2026-10-19): the disclosed test purchase is named beside "never trades"
+    assert.match(all, /the platform never trades\. It never takes an order and never pays anything/);
     assert.match(all, /confirms that they have the right to use it/);
     assert.match(all, /marks are used at the creator's own risk/);
     assert.match(TAKEDOWN_SENTENCE, /contact@burnticker\.com/); assert.match(TAKEDOWN_SENTENCE, /Arweave.*permanent/);

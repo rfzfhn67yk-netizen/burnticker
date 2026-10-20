@@ -189,8 +189,8 @@ const hash = (s: string): string => { let h = 0; for (let i = 0; i < s.length; i
 export interface BackupStatus { ok: boolean; at: string; files?: string[]; offBox?: string; error?: string | null; /** a destination is set (BURNTICKER_BACKUP_DEST) */ destConfigured?: boolean; /** the last run whose copies left the box */ lastOffBoxAt?: string | null; /** the first run that saw a destination */ firstConfiguredAt?: string | null }
 /** A low-priority note when a destination is set but nothing has left the box for this long (F-7 review). */
 export const OFFBOX_STALE_MS = 24 * 3_600_000;
-export function backupAlerts(s: BackupStatus | null, now: number, pull: OffboxPullReceipt | null = null): UnitAlert[] {
-  const pullOut = offboxPullAlerts(pull, now);
+export function backupAlerts(s: BackupStatus | null, now: number, pull: OffboxPullReceipt | null = null, pullRead: Partial<Pick<OffboxPullRead, "problem" | "seenPulledAt">> = {}): UnitAlert[] {
+  const pullOut = offboxPullAlerts(pull, now, pullRead);
   if (!s) return pullOut;
   const out = [...backupRunAlerts(s, now), ...pullOut];
   // F-7 review: a destination is set, and no copy has left the box for a day (never, counted from when the destination was first seen).
@@ -225,32 +225,93 @@ export interface OffboxPullFact { offBox: "pulled" | "stale" | "none"; lastOffBo
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 /** The receipt, or null when it is not exactly the v1 shape (unknown keys, wrong types, a failed check, a time in the future). */
 export function parseOffboxPull(raw: string, now: number = Date.now()): OffboxPullReceipt | null {
+  const c = checkOffboxPull(raw, now);
+  return "receipt" in c ? c.receipt : null;
+}
+/** A word from the receipt said back only when it is a plain short token (ops.json is public; a value is never echoed otherwise). */
+const sayWord = (x: unknown): string => (typeof x === "string" && /^[A-Za-z0-9._-]{1,32}$/.test(x) ? `"${x}"` : "an unexpected value");
+/**
+ * HB-49: the receipt, or the plain reason it is not one, so an unreadable receipt alerts with the reason instead of reading as "none".
+ * The reason names a key or a short word at most, never a value that could carry a secret.
+ */
+export function checkOffboxPull(raw: string, now: number = Date.now()): { receipt: OffboxPullReceipt } | { reason: string } {
   let j: unknown;
-  try { j = JSON.parse(raw); } catch { return null; }
-  if (!isObj(j) || Object.keys(j).some((k) => !OFFBOX_PULL_KEYS.includes(k))) return null;
+  try { j = JSON.parse(raw); } catch { return { reason: "it is not valid JSON" }; }
+  if (!isObj(j)) return { reason: "it is not a JSON object" };
+  const extra = Object.keys(j).find((k) => !OFFBOX_PULL_KEYS.includes(k));
+  if (extra !== undefined) return { reason: `it has a field this check does not accept (${sayWord(extra)})` };
   const f = j.files;
-  if (!isObj(f) || Object.keys(f).some((k) => !OFFBOX_PULL_FILE_KEYS.includes(k))) return null;
-  if (j.schema !== OFFBOX_PULL_SCHEMA || j.dbQuickCheck !== "ok") return null;
-  if (typeof j.pulledAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(j.pulledAt)) return null;
+  if (!isObj(f)) return { reason: "its files entry is missing or not an object" };
+  const extraFile = Object.keys(f).find((k) => !OFFBOX_PULL_FILE_KEYS.includes(k));
+  if (extraFile !== undefined) return { reason: `its files entry has a field this check does not accept (${sayWord(extraFile)})` };
+  if (j.schema !== OFFBOX_PULL_SCHEMA) return { reason: `its schema is ${sayWord(j.schema)}, not ${OFFBOX_PULL_SCHEMA}` };
+  if (j.dbQuickCheck !== "ok") return { reason: `its database check says ${sayWord(j.dbQuickCheck)}, not "ok"` };
+  if (typeof j.pulledAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(j.pulledAt)) return { reason: "its pull time is missing or not a UTC time" };
   const at = Date.parse(j.pulledAt);
-  if (!Number.isFinite(at) || at - now > 5 * 60_000) return null;
-  if (j.method !== OFFBOX_PULL_METHOD) return null;
-  if (!Number.isInteger(f.db) || (f.db as number) < 1 || typeof f.secretsBundle !== "boolean") return null;
-  if (!Number.isInteger(j.retentionDays) || (j.retentionDays as number) < 1) return null;
-  if (j.host !== undefined && (typeof j.host !== "string" || !/^[A-Za-z0-9,._-]{1,64}$/.test(j.host))) return null;
-  return { schema: OFFBOX_PULL_SCHEMA, pulledAt: j.pulledAt, method: OFFBOX_PULL_METHOD, files: { db: f.db as number, secretsBundle: f.secretsBundle }, dbQuickCheck: "ok", retentionDays: j.retentionDays as number, host: typeof j.host === "string" ? j.host : null };
+  if (!Number.isFinite(at)) return { reason: "its pull time is not a real time" };
+  if (at - now > 5 * 60_000) return { reason: `its pull time ${j.pulledAt} is more than 5 minutes ahead of the host's clock` };
+  if (j.method !== OFFBOX_PULL_METHOD) return { reason: `its method is ${sayWord(j.method)}, not "${OFFBOX_PULL_METHOD}"` };
+  if (!Number.isInteger(f.db) || (f.db as number) < 1) return { reason: "it counts no database copy" };
+  if (typeof f.secretsBundle !== "boolean") return { reason: "it does not say whether the secrets bundle was copied" };
+  if (!Number.isInteger(j.retentionDays) || (j.retentionDays as number) < 1) return { reason: "its retention days entry is missing or not a whole number" };
+  if (j.host !== undefined && (typeof j.host !== "string" || !/^[A-Za-z0-9,._-]{1,64}$/.test(j.host))) return { reason: "its host entry is not a plain machine name" };
+  return { receipt: { schema: OFFBOX_PULL_SCHEMA, pulledAt: j.pulledAt, method: OFFBOX_PULL_METHOD, files: { db: f.db as number, secretsBundle: f.secretsBundle }, dbQuickCheck: "ok", retentionDays: j.retentionDays as number, host: typeof j.host === "string" ? j.host : null } };
 }
 export function readOffboxPull(root: string, now: number = Date.now()): OffboxPullReceipt | null {
-  try { return parseOffboxPull(fs.readFileSync(path.join(root, OFFBOX_PULL_FILE), "utf8"), now); } catch { return null; }
+  return readOffboxPullFile(root, now).receipt;
+}
+/**
+ * HB-49: THE "SEEN" MARKER (data/offbox-pull.seen, written by the keeper's unit check). Once a good receipt has been read, its pulledAt is
+ * kept here, so a receipt that later goes missing is told apart from "no pull was ever set up": none after 12 hours then alerts like stale.
+ */
+export const OFFBOX_PULL_SEEN_FILE = path.join("data", "offbox-pull.seen");
+/** What the unit check reads: the receipt, or why there is none ("missing", or the reason it cannot be read), and the last good pull seen. */
+export interface OffboxPullRead { receipt: OffboxPullReceipt | null; problem: string | null; seenPulledAt: string | null }
+export function readOffboxPullFile(root: string, now: number = Date.now()): OffboxPullRead {
+  const seenPulledAt = readOffboxPullSeen(root);
+  let raw: string;
+  try { raw = fs.readFileSync(path.join(root, OFFBOX_PULL_FILE), "utf8"); }
+  catch (e) { return { receipt: null, problem: (e as NodeJS.ErrnoException)?.code === "ENOENT" ? "missing" : "the file could not be opened", seenPulledAt }; }
+  const c = checkOffboxPull(raw, now);
+  return "receipt" in c ? { receipt: c.receipt, problem: null, seenPulledAt } : { receipt: null, problem: c.reason, seenPulledAt };
+}
+export function readOffboxPullSeen(root: string): string | null {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(root, OFFBOX_PULL_SEEN_FILE), "utf8")) as { pulledAt?: unknown };
+    return typeof j?.pulledAt === "string" && Number.isFinite(Date.parse(j.pulledAt)) ? j.pulledAt : null;
+  } catch { return null; }
+}
+/** Keeps the newest good pulledAt in the marker (atomic; never throws). Returns the marker's time after the write. */
+export function recordOffboxPullSeen(root: string, r: OffboxPullReceipt | null, seenPulledAt: string | null): string | null {
+  if (!r || (seenPulledAt !== null && Date.parse(seenPulledAt) >= Date.parse(r.pulledAt))) return seenPulledAt;
+  try {
+    const file = path.join(root, OFFBOX_PULL_SEEN_FILE);
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, `${JSON.stringify({ pulledAt: r.pulledAt })}\n`, { mode: 0o640 });
+    fs.renameSync(tmp, file);
+  } catch { /* the marker is a convenience for the alert; failing to write it never stops the keeper */ }
+  return r.pulledAt;
 }
 export function offboxPullFact(r: OffboxPullReceipt | null, now: number): OffboxPullFact {
   if (!r) return { offBox: "none", lastOffBoxAt: null, offBoxMethod: null, offBoxPulledAt: null };
   const fresh = now - Date.parse(r.pulledAt) <= OFFBOX_PULL_STALE_MS;
   return { offBox: fresh ? "pulled" : "stale", lastOffBoxAt: r.pulledAt, offBoxMethod: r.method, offBoxPulledAt: r.pulledAt };
 }
-/** The pull's own alert: a receipt older than OFFBOX_PULL_STALE_MS (no receipt at all raises nothing: there may be no pull yet). */
-export function offboxPullAlerts(r: OffboxPullReceipt | null, now: number): UnitAlert[] {
-  if (!r || offboxPullFact(r, now).offBox !== "stale") return [];
+/**
+ * The pull's own alerts: a receipt older than OFFBOX_PULL_STALE_MS; HB-49: a receipt that is there but cannot be read (always, with the
+ * reason); and no receipt at all once one has been seen (the marker) and that last good pull is more than 12 hours old. No receipt and
+ * no marker raises nothing: no pull has been set up yet.
+ */
+export function offboxPullAlerts(r: OffboxPullReceipt | null, now: number, read: Partial<Pick<OffboxPullRead, "problem" | "seenPulledAt">> = {}): UnitAlert[] {
+  if (!r && read.problem && read.problem !== "missing") {
+    return [{ kind: "bt-backup-offbox-stale", key: "bt-backup-offbox-pull-unreadable", text: `The off-box pull receipt on the host could not be read: ${read.problem}. Check the Mac's backup agent.`, meta: { offBox: "unreadable", reason: read.problem, offBoxPulledAt: read.seenPulledAt ?? null } }];
+  }
+  if (!r) {
+    const seen = Date.parse(read.seenPulledAt ?? "");
+    if (!Number.isFinite(seen) || now - seen <= OFFBOX_PULL_STALE_MS) return [];
+    return [{ kind: "bt-backup-offbox-stale", key: "bt-backup-offbox-pull-stale", text: `The off-box pull receipt is gone from the host, and the last pull it showed was at ${read.seenPulledAt}, more than 12 hours ago. Check the Mac's backup agent.`, meta: { offBox: "none", offBoxMethod: null, offBoxPulledAt: read.seenPulledAt ?? null } }];
+  }
+  if (offboxPullFact(r, now).offBox !== "stale") return [];
   return [{ kind: "bt-backup-offbox-stale", key: "bt-backup-offbox-pull-stale", text: `The off-box backup pull has not reported for more than 12 hours. The last pull was at ${r.pulledAt}. Check the Mac's backup agent.`, meta: { offBox: "stale", offBoxMethod: r.method, offBoxPulledAt: r.pulledAt } }];
 }
 /** The ops line (null for a document without the fact). */
@@ -318,7 +379,10 @@ export async function runUnitCheck(o: { sink: AlertSink; now: number; root?: str
   }
   catch (e) { note = `the unit check could not list the units (${String((e as Error)?.message ?? e).slice(0, 120)}); nothing raised for units`; }
   const b = readBackupStatusFile(o.root ?? process.cwd());
-  alerts.push(...backupAlerts(b.status, o.now, readOffboxPull(o.root ?? process.cwd(), o.now)));
+  // HB-49: the pull receipt with why it is missing or unreadable, and the last good pull seen (kept in data/offbox-pull.seen)
+  const pull = readOffboxPullFile(o.root ?? process.cwd(), o.now);
+  const seenPulledAt = recordOffboxPullSeen(o.root ?? process.cwd(), pull.receipt, pull.seenPulledAt);
+  alerts.push(...backupAlerts(b.status, o.now, pull.receipt, { problem: pull.problem, seenPulledAt }));
   // no readable status at all: said only on the host (the units listed, the backup timer installed), after the timer's first run was due
   if (b.problem && backupTimerInstalled && o.now - (o.startedAt ?? PROCESS_STARTED_AT) >= BACKUP_STATUS_GRACE_MS) alerts.push(missingBackupStatusAlert(b.problem));
   const raised: UnitAlert[] = [];

@@ -17,7 +17,7 @@ import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { SignCard } from "./SignCard";
 import { MintAddressBlock, useMintPool } from "./MintSearch";
 import { base58, secretBase58, serverKeyFor, withLocalKey, withMintSource, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
-import { sendWithProofFallback, signLaunchRequest } from "@/lib/burnticker/walletProof";
+import { requireLaunchProof, sendWithProofFallback, walletPromptCount } from "@/lib/burnticker/walletProof";
 import { launchlabPlan, pairCurvePlan, withPlanDeadline } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { PAIR_REVIEW_LINE, winnerTakesBurnFacts } from "@/lib/burnticker/describe";
@@ -45,6 +45,8 @@ import { targetActionSentence } from "@/lib/burnticker/burnTarget";
 import { BurnRealChoice } from "./BurnRealChoice";
 import { derbyReadOnlySentence } from "@/lib/burnticker/derby/spec";
 import { SIDE_REAL_OFF, realBlockers, realField, realNotOffered, realPickFor, realReadSentence, realReviewNotes, withRealBurn, type SideReal } from "./burnReal";
+/** HB-53 (sixth pass): the Unusual-cases block on Coin comparison reviews, pair curve included: ties, a missing last day, drafts across midnight, one coin under two names, pools opening apart, the fingerprint. */
+const COINVS_EDGE_IDS = { race: [69, 70, 72, 74, 76, 174], flip: [66, 70, 74, 76, 174], single: [70, 72, 174] } as const;
 
 /**
  * "COIN VS COIN" — the Burn Derby wizard tile (2026-10-10; cut to presets the same day, the owner: "the UI needs to be simpler, even if it
@@ -225,7 +227,7 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
       const got = await prepareIfCurrent(sentRev, () => curRev.current, () => withMintSource({ pool: mintPool, n: 1, stale: () => curRev.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE }, async (keys: GroundMint[] | null) => {
         const kA = keys?.[0];
         // prelaunch audit 2026-10-18 A-3: the wallet signs the request (walletProof.ts)
-        const walletProof = await signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: [ticker], mints: kA ? [kA.publicKey] : [] }, base58);
+        const walletProof = await requireLaunchProof(wallet.signMessage, { origin: window.location.origin, creator, tickers: [ticker], mints: kA ? [kA.publicKey] : [] }, base58);
         // review of block M: a refused signature is sent once more unsigned (walletProof.ts sendWithProofFallback)
         const j = await sendWithProofFallback({ ...body, ...(kA ? { mint: kA.publicKey } : {}), ...(walletProof ? { walletProof } : {}) }, async (sent) => {
           const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(sent) });
@@ -282,6 +284,8 @@ function RecordClose({ blocked = null, customImages = true, phase: phaseIn = nul
     const b = budgetCopy(rule, fraction, null);
     return (<>
       {!out && <ReviewCard mode="review"
+        signs={shown.review?.transactions.count ? walletPromptCount({ transactions: shown.review.transactions.count, proof: !wallet.connected || !!wallet.signMessage }) : null} signsProof={!wallet.connected || !!wallet.signMessage}
+        edgeNotes={COINVS_EDGE_IDS.single.map((i) => edgeCase(i)).filter((x): x is string => !!x)}
         facts={[
           { label: FACT_LABELS.trigger, value: triggerText({ lead: text.lead, fallback: text.oneLiner }), edit: () => onPhase?.("which") },
           { label: FACT_LABELS.coin, value: whichCoinLine(names.ticker.toUpperCase() || "TICKER", null), edit: () => onPhase?.("name") },
@@ -476,7 +480,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
         const got = await prepareIfCurrent(sentRev, () => prepRev.current, () => withMintSource({ pool: mintPool, n: 2, stale: () => prepRev.current !== sentRev, staleLine: STALE_PREPARE_SENTENCE }, async (keys: GroundMint[] | null) => {
           const [kA, kB] = keys ?? [];
           // prelaunch audit 2026-10-18 A-3: the wallet signs the request for both coins (walletProof.ts)
-          const walletProof = await signLaunchRequest(wallet.signMessage, { origin: window.location.origin, creator, tickers: [body.ticker, body.pair.ticker], mints: kA && kB ? [kA.publicKey, kB.publicKey] : [] }, base58);
+          const walletProof = await requireLaunchProof(wallet.signMessage, { origin: window.location.origin, creator, tickers: [body.ticker, body.pair.ticker], mints: kA && kB ? [kA.publicKey, kB.publicKey] : [] }, base58);
           const sentBody = { ...(kA && kB ? { ...body, mint: kA.publicKey, pair: { ...body.pair, mint: kB.publicKey } } : body), ...(walletProof ? { walletProof } : {}) };
           const j = await sendWithProofFallback(sentBody, (b) => postPairLaunch((u, init) => fetch(u, init), b, v));   // review of block M: unsigned once on a refused signature
           return { j, kA, kB };
@@ -655,6 +659,8 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
     return (
       <div className="space-y-3" data-derby-guided="pair">
         {!out && !pcOut && <ReviewCard mode="review"
+          signs={shown.review?.transactions.count ? walletPromptCount({ transactions: shown.review.transactions.count, proof: !wallet.connected || !!wallet.signMessage }) : null} signsProof={!wallet.connected || !!wallet.signMessage}
+          edgeNotes={((model.rule.derby as { flip?: boolean } | undefined)?.flip ? COINVS_EDGE_IDS.flip : COINVS_EDGE_IDS.race).map((i) => edgeCase(i)).filter((x): x is string => !!x)}
           facts={[
             { label: FACT_LABELS.trigger, value: triggerText({ pair: { a: TA, b: TB, oneA: ruleOneLiner(model.rule), oneB: ruleB ? ruleOneLiner(ruleB) : "" }, fallback: sentence! }), edit: () => onPhase?.("which") },
             { label: FACT_LABELS.coin, value: whichCoinLine(TA, TB, true), edit: () => onPhase?.("name") },

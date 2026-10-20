@@ -26,6 +26,7 @@ export const PRODUCT_SCHEMAS: Record<string, Schema> = {
     queuedUnits: int, nextSettlementAt: nstr, lastReading: { anyOf: [obj({ id: nstr, value: nstr, at: nstr }), { type: "null" }] },
     agreement: obj({ reads: int, methods: nstr, held: nstr }, ["reads"]), receipts: int, windDown: nstr, pairId: nstr,
     todayPost: obj({ text: str, lintOk: bool, hits: arr(str) }, ["text", "lintOk"]),
+    loading: { type: "boolean", description: "True while this coin's page is still being read on the server. Its registry facts are shown, and asking again in a few seconds gives the rest." },
   }, ["ticker", "mint", "state", "receipts", "todayPost"]),
   Creator: obj({ wallet: PUBKEY, coins: arr({ $ref: "#/components/schemas/CreatorCoin" }), pairs: arr(obj({ pairId: str, page: str, sides: arr(str), voided: bool }, ["pairId", "sides"])), note: str }, ["wallet", "coins", "pairs"], { description: "Read-only: the coins and pairs whose creator wallet matches." }),
 };

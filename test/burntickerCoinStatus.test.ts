@@ -47,7 +47,8 @@ describe("the status sentence, one per state", () => {
     assert.equal(say({ ...oneShotPair, lifecycle: { ended: { mode: "winddown" } } }, [r({ pairRole: "lost", status: "nothing", units: 0 })]), "Decided: Chiefs won. Its pool goes to the winning coin.");
     assert.equal(say({ ...oneShotPair, lifecycle: { ended: { mode: "drain" } } }, [r({ pairRole: "lost", status: "nothing", units: 0 })]), "Decided: Chiefs won. Its pool goes to the winning coin.");
     // a one-shot outside a pair still burns its own pool down after its rule ends
-    assert.equal(say({ ...oneShotPair, pair: null, lifecycle: { ended: { mode: "winddown" } } }, [r({ status: "nothing", units: 0, result: "no" })]), "Decided: Broncos lost. Its burn pool now burns down a little each day.");
+    assert.equal(say({ ...oneShotPair, pair: null, lifecycle: { ended: { mode: "winddown" } } }, [r({ status: "nothing", units: 0, result: "no" })]), "Decided: Broncos lost. Its burn pool winds down once the coin graduates.");   // HB-50: still on its curve
+    assert.equal(say({ ...oneShotPair, market: { phase: "graduated" }, pair: null, lifecycle: { ended: { mode: "winddown" } } }, [r({ status: "nothing", units: 0, result: "no" })]), "Decided: Broncos lost. Its burn pool now burns down a little each day.");
     assert.equal(say(oneShotPair, [r({ pairRole: "draw", status: "nothing", units: 0 })]), "Decided: a draw. This coin does not burn on it.");
     assert.equal(say(oneShotPair, [r({ status: "void", units: 0 })]), "Decided: the result was voided. Nothing burns on it.");
     // a one-shot outside a pair has no other side to name

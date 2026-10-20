@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { cadenceMsFor, type CycleReport } from "@/lib/burnticker/multiKeeper";
-import { oneShotDecided, selectorIdle } from "@/lib/burnticker/readPlan";
+import { hasSettlementReceipt, oneShotDecided, selectorIdle } from "@/lib/burnticker/readPlan";
 import type { FeedState, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
 import { readAudit, type AuditSummary } from "@/lib/burnticker/trust";
 import { PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
@@ -48,7 +48,7 @@ export interface TokenSnapshot {
   mint: string; ticker: string; status: TokenRow["status"]; mode: string; selectorKey: string; liveSince: number; cadenceMs: number;
   /** readPlan.ts selectorIdle: why the keeper correctly reads this selector no more (null: it is read); an idle selector is never stalled */
   idle?: string | null;
-  /** HB-29: the coin's result is settled for good (its rule end recorded, or its own one-shot result recorded); absent = judged from `idle` */
+  /** HB-29: the coin's result is settled for good (its rule end recorded, or its own one-shot result recorded and a settlement receipt of its own, HB-48); absent = open */
   decided?: boolean;
   feed: FeedState;
   pending: { eventId: string; status: string; attempts: number; lastError: string | null }[];
@@ -103,8 +103,9 @@ export function collectSnapshot(o: { registry: Registry; siteDir: string; now: n
     let idle: string | null = null;
     try { idle = t.status === "live" ? selectorIdle(reg, t.selectorKey, live.filter((x) => x.selectorKey === t.selectorKey)) : null; } catch { idle = null; }
     let decided = false;
-    try { decided = reg.ruleEnd(t.mint) !== null || oneShotDecided(reg, t.selectorKey, t, reg.lockedRule(t).rule); } catch { decided = false; }
     const rows: ReceiptRow[] = reg.receipts(t.mint);
+    // HB-48: a one-shot is decided only when the plan's verdict AND the coin's own receipts agree, so a wrong idle verdict leaves it open
+    try { decided = reg.ruleEnd(t.mint) !== null || (oneShotDecided(reg, t.selectorKey, t, reg.lockedRule(t).rule) && hasSettlementReceipt(rows)); } catch { decided = false; }
     const confirmed = rows.filter((r) => r.status === "confirmed");
     const recent = confirmed.filter((r) => (r.confirmedAt ?? 0) >= now - 86_400_000);
     const att = reg.attesters(t.mint).filter((a) => a.active);
@@ -147,11 +148,15 @@ export function evaluateAlerts(s: BurntickerSnapshot): BurntickerAlert[] {
   // the read plan's idle verdict (the live $NEXTM6 was skipped as "idle" because of readings from before it launched, and the stall check
   // trusted that verdict), so a wrong skip is pushed and shown in ops.json instead of passing silently.
   const overdue = new Set<string>();
-  const open = (x: TokenSnapshot): boolean => !(x.decided ?? !!x.idle);
+  // HB-48: an absent `decided` reads as open, never as the idle verdict this check exists to question. A selector the plan skipped as
+  // idle is due one of the coin's own cadences after its last good read, not at a time the skip erased (or kept). A selector the plan
+  // still reads with no planned time is the stall check's (above), judged on the same cadence, so it is not said twice.
+  const open = (x: TokenSnapshot): boolean => !(x.decided ?? false);
   for (const t of live) {
     if (!open(t) || overdue.has(t.selectorKey) || s.paused) continue;
-    const due = t.feed.nextFetchAt;
-    if (due === null || due === undefined || s.now <= due + t.cadenceMs || (t.feed.lastFetchAt ?? 0) >= due) continue;
+    const planned = t.feed.nextFetchAt ?? null;
+    const due = t.idle ? Math.max(t.feed.lastOkAt ?? 0, t.liveSince) + t.cadenceMs : planned;
+    if (due === null || s.now < due + t.cadenceMs || (t.feed.lastFetchAt ?? 0) >= due) continue;
     overdue.add(t.selectorKey);
     const coins = live.filter((x) => x.selectorKey === t.selectorKey && open(x));
     const why = t.idle ? `the read plan skipped it as idle (${t.idle}), but the coin's result is still open`

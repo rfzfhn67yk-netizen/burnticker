@@ -64,8 +64,10 @@ describe("HB-13: a coin's fee legs come from the tier it pinned; the site-wide c
   });
   test("footer, current-status, trust, fee ledger and the operator note all carry both tiers", () => {
     assert.ok(DEV_FEE_LINE.includes(EARLIER_COINS_LINE), DEV_FEE_LINE);
-    assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{OPERATOR_SHARE_LINE\} \$\{EARLIER_COINS_LINE\}/);
-    assert.match(read("src/lib/burnticker/trust.ts"), /\$\{postGraduationShareLine\(newCoinFees\)\} \$\{EARLIER_COINS_LINE\}/);
+    // sixth pass B-16 (2026-10-19): current status and the mainnet trust statement lead with the tier every live coin pays (BOTH_TIERS_LINE)
+    assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{BOTH_TIERS_LINE\}/);
+    // HB-50 (run 4): another network names its own tier
+    assert.match(read("src/lib/burnticker/trust.ts"), /cluster === "mainnet" \? BOTH_TIERS_LINE : `\$\{postGraduationShareLine\(newCoinFees\)\} \$\{earlierCoinsLineFor\(cluster\)\}`/);
     const ledger = lpFeeLine("mainnet", null).title;
     assert.match(ledger, /about 0\.13% of every swap .* on new coins, and about 0\.04% of every swap .* on coins created before 19 October 2026, 20:17 UTC, which stay on tier 9, after graduation$/);
     assert.ok(OPERATOR_COPY.devFeeNote.includes(EARLIER_OPERATOR_CLAUSE));
@@ -300,7 +302,7 @@ describe("PROD-05: a voided pair's warning tells the winddown from the game resu
   test("a single voided market: nothing burns only while nothing does; its void receipt dates it", () => {
     const single = { ...VBASE, selectorKey: "polymarket:0xabc", oracle: "polymarket", pair: null, lifecycle: { ended: null } } as unknown as DecidedWarningInput;
     const v = { status: "void", units: 0, settledAt: "2026-10-20T01:00:00Z", kind: "binary" };
-    assert.equal(decidedSwapWarning(single, [v]), "This coin's one result was voided on 20 October 2026. No further result is read for it. Nothing burns on it.");
+    assert.equal(decidedSwapWarning(single, [v]), "This coin's one result was voided on 20 October 2026. No further result is read for it. No burn happens for the result. Its burn pool winds down on this coin once the rule ends.");
     assert.equal(decidedSwapWarning({ ...single, lifecycle: { ended: { mode: "winddown" } } } as DecidedWarningInput, [v, wdRow]), "This coin's one result was voided on 20 October 2026. No burn happens for the result. Its burn pool now winds down on this coin.");
   });
   test("the card sentence of a voided coin whose rule ended says its pool burns down", () => {

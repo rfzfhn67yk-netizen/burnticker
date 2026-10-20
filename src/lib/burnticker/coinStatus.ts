@@ -223,6 +223,8 @@ export const DECIDED_TAILS = {
   notThis: "This coin does not burn on it.",
   notThisDrain: "Its burn pool is being spent down.",
   notThisWinddown: "Its burn pool now burns down a little each day.",
+  /** HB-50 (run 4): a coin still on its curve has no pool to burn from, so its wind-down waits for graduation */
+  winddownOnCurve: "Its burn pool winds down once the coin graduates.",
   /** review M1: a pair's losing side burns nothing of its own; once its fuel moves or its rule ends, its pool goes to the winner */
   toWinner: "Its pool goes to the winning coin.",
   "pending-pair": "Burns once both coins in the pair have a trading pool.",
@@ -293,9 +295,10 @@ export function coinStatusSentence(f: CoinStatusFacts): string {
     if (!d) return f.pair?.waiting ? STATUS_SENTENCES.waitingPair : f.waiting ?? STATUS_SENTENCES.waitingMarket;
     const head = decidedHead(f, d);
     // PROD-05: a voided one-shot whose rule has ended still burns down its pool; "Nothing burns on it" only while nothing does
-    const tail = d.outcome === "void" ? (f.ended === "winddown" ? DECIDED_TAILS.notThisWinddown : f.ended === "drain" ? DECIDED_TAILS.notThisDrain : DECIDED_TAILS.void)
+    const onCurve = f.phase === "curve" || f.phase === "migrating";
+    const tail = d.outcome === "void" ? (f.ended === "winddown" ? (onCurve ? DECIDED_TAILS.winddownOnCurve : DECIDED_TAILS.notThisWinddown) : f.ended === "drain" ? DECIDED_TAILS.notThisDrain : DECIDED_TAILS.void)
       : !d.burnsThis && d.outcome === "other" && f.pair ? (f.ended || d.forwarded ? DECIDED_TAILS.toWinner : DECIDED_TAILS.notThis)
-      : !d.burnsThis ? (f.ended === "winddown" ? DECIDED_TAILS.notThisWinddown : f.ended === "drain" ? DECIDED_TAILS.notThisDrain : DECIDED_TAILS.notThis)
+      : !d.burnsThis ? (f.ended === "winddown" ? (onCurve ? DECIDED_TAILS.winddownOnCurve : DECIDED_TAILS.notThisWinddown) : f.ended === "drain" ? DECIDED_TAILS.notThisDrain : DECIDED_TAILS.notThis)
       : d.hold === null ? lastBurnSentence(f) ?? DECIDED_TAILS.other
       : DECIDED_TAILS[d.hold];
     return `${head} ${tail}`;

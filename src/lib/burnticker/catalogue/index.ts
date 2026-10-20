@@ -170,7 +170,10 @@ export function fixtureReadings(feed: Feed, nowMs: number, root = process.cwd())
 export function previewFromFixture(feed: Feed, rule: BurnRule, nowMs: number, root = process.cwd()): Backtest & { window: { from: string; to: string }; lastReading: SettledEvent | null } {
   const { readings } = fixtureReadings(feed, nowMs, root);
   const b = backtest(rule, readings, nowMs, 24);
-  return { ...b, window: { from: readings[0]?.at ?? "", to: readings[readings.length - 1]?.at ?? "" }, lastReading: readings[readings.length - 1] ?? null };
+  // continuous audit run 4, HB-43: the window is the rows the back-test counted (its 24 months), so a heading built from it states the
+  // counted span ("2024-11 to 2026-08"), never the whole saved sample
+  const counted = b.rows.length ? b.rows : null;
+  return { ...b, window: { from: counted?.[0].at ?? readings[0]?.at ?? "", to: counted?.[counted.length - 1].at ?? readings[readings.length - 1]?.at ?? "" }, lastReading: readings[readings.length - 1] ?? null };
 }
 
 /** A tier-2 rule must agree with the source's fixed unit, direction and baseline; the source's carry policy rides along. */

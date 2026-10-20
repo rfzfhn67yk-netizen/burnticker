@@ -55,6 +55,22 @@ export async function signLaunchRequest(signMessage: ((m: Uint8Array) => Promise
   try { return { message, signature: encode58(await signMessage(new TextEncoder().encode(message))) }; } catch { return null; }
 }
 
+/**
+ * Sixth-pass audit HB-53 / B-13: a wallet that can sign messages is ASKED to sign the request, and a refusal (or a failure) stops the press
+ * before anything is prepared or sent. Only a wallet that cannot sign messages at all goes on unsigned (it is never asked, so it is not
+ * counted as a prompt either).
+ */
+export const PROOF_REJECTED_SENTENCE = "The wallet did not sign the request that proves this launch is yours, so nothing was sent. Press the button to try again.";
+export class LaunchProofRejected extends Error { constructor() { super(PROOF_REJECTED_SENTENCE); this.name = "LaunchProofRejected"; } }
+export async function requireLaunchProof(signMessage: ((m: Uint8Array) => Promise<Uint8Array>) | undefined, f: Parameters<typeof signLaunchRequest>[1], encode58: (b: Uint8Array) => string, now = Date.now()): Promise<WalletProof | null> {
+  if (!signMessage || !f.creator) return null;
+  const p = await signLaunchRequest(signMessage, f, encode58, now);
+  if (!p) throw new LaunchProofRejected();
+  return p;
+}
+/** HB-53: the wallet prompts a launch plan asks for: the sign-message proof when the wallet is asked for it, plus one per transaction step. */
+export const walletPromptCount = (o: { transactions: number; proof: boolean }): number => Math.max(0, o.transactions) + (o.proof ? 1 : 0);
+
 /** The prepare's code for a signature that does not check out (api/handlers.ts). */
 export const WALLET_PROOF_INVALID_CODE = "wallet-proof-invalid";
 /**

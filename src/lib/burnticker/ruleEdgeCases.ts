@@ -59,6 +59,15 @@ export function finalDelaySentence(days: number): string | null {
 }
 
 export const edgeCase =(item: number): string | null => RULE_EDGE_CASES.find((e) => e.item === item)?.sentence ?? null;
+/**
+ * Continuous audit run 4, HB-36: an edge case said for the rule in hand. Item 79's last sentence is about a one-game coin, so a season
+ * coin gets only the postponed-game part.
+ */
+export function edgeCaseFor(item: number, o: { oneGame?: boolean } = {}): string | null {
+  const s = edgeCase(item);
+  if (s && item === 79 && !o.oneGame) return s.replace(/\s*A one-game coin whose game is cancelled[\s\S]*$/, "");
+  return s;
+}
 
 /**
  * Continuous audit HB-33 (run 3): the review's general unusual cases, only where they can happen. The minimum-burn case (164, with its

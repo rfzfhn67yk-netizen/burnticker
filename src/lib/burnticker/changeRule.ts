@@ -10,7 +10,13 @@ import { isHazardSeries } from "@/lib/burnticker/hazards";
 export const isMovingBaselineChangeRule = (rule: { kind: string; series: string | null; scalar: { baseline: unknown } | null }): boolean =>
   rule.kind === "scalar" && rule.scalar?.baseline === "previousSettlement" && !isHazardSeries(rule.series);
 
+/**
+ * Continuous audit run 4, HB-36: 87 is about a published figure that can go unreported for a day. A team's win count (espn.*) and a
+ * count of events (earthquakes, storms, tornado reports) are counts of things that happened, where a day with nothing is simply nothing,
+ * so neither gets it.
+ */
 export function changeRuleEdgeIds(rule: { kind: string; series: string | null; scalar: { baseline: unknown } | null }): number[] {
   if (rule.kind !== "scalar") return [];
+  if (/^espn\./.test(rule.series ?? "") || isHazardSeries(rule.series)) return [];
   return isMovingBaselineChangeRule(rule) ? [85, 111, 87] : [87];
 }

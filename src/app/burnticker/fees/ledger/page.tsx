@@ -16,7 +16,7 @@ interface Ledger {
   balanceLamports: string | null; totals: { inLamports: string; outLamports: string; transactions: number; complete: boolean };
   months: { month: string; inLamports: string; outLamports: string; txIn: number; txOut: number }[];
   entries: { signature: string; blockTime: string | null; deltaLamports: string; direction: "in" | "out"; counterparty: string | null; err: boolean }[];
-  expenses: { whatTheFeePaysFor: string; items: { id: string; label: string; cadence: string; usd: number | null; placeholder: boolean; todo: string | null; note: string }[] };
+  expenses: { whatTheFeePaysFor: string; items: { id: string; label: string; cadence: string; usd: number | null; placeholder: boolean; note: string }[] };
   /** LP locked forever (2026-10-10): the operator's 20 % of post-graduation LP fees, paid by claim_lock_fees to the operator treasury. */
   lpFees?: { title: string; treasury: string | null; treasuryPinned: boolean; split: { burnBps: number; operatorBps: number }; claims: number; solLamports: string; toOperatorLamports: string; toBurnPoolLamports: string; source: string; note: string };
 }

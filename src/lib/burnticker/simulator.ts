@@ -2,6 +2,25 @@ import { buybackSpend, reserveSpendCap } from "@/lib/burnReceipts/math";
 import { DEFAULT_CAP_LAMPORTS, LAMPORTS, MAX_SPEND_RESERVE_BPS } from "@/lib/burnticker/burnMath";
 import { outcomeResults, outcomeWords, parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import type { BurnRule } from "@/lib/burnticker/rules";
+import { windowKindOf } from "@/lib/burnticker/describe";
+
+/** "over four weeks" for the default 28 days, else "over N days": how long a pool winds down (rule.onEnd.windDownDays). */
+export const windDownOver = (days: number | null | undefined): string => {
+  const d = typeof days === "number" && days > 0 ? days : 28;
+  return d === 28 ? "over four weeks" : `over ${d} ${d === 1 ? "day" : "days"}`;
+};
+/**
+ * Continuous audit run 4, HB-39: the rows of "What one result does" per family. A published number (a catalogue reading that is not a team
+ * result) has no tie, and its voided row is "No reading is published"; a one-shot's voided row agrees with its end line (the pool winds
+ * down on the coin over its windDownDays), never "keeps its SOL for the next result".
+ */
+export function simFamilyOf(rule: BurnRule): "published" | "one-shot" | "recurring" {
+  if (rule.oracle === "catalogue" && rule.kind === "scalar" && !parseEspnSeries(rule.series ?? "")) return "published";
+  return windowKindOf(rule) === "one-shot" ? "one-shot" : "recurring";
+}
+export const SIM_NO_READING_LABEL = "No reading is published";
+export const SIM_NO_READING_LINE = "A period with no published reading burns nothing, and it is never read as zero. The burn pool keeps its SOL for the next reading.";
+export const simOneShotVoidLine = (days: number | null | undefined): string => `A voided or cancelled result burns nothing for the result. The rule then ends, and whatever is in the burn pool burns down on this coin ${windDownOver(days)}.`;
 
 /**
  * THE RESULT SIMULATOR'S MATH (cheap-features pass item 6, owner 2026-10-13). What one result does to a coin's burn pool, for a
@@ -112,7 +131,9 @@ export function simulateResults(rule: BurnRule, o: SimOptions = {}): Simulation 
     return { side, ticker, spendSol: lamportsToSol(r.spend), receivedSol: lamportsToSol(received), sentSol: "0", waitsSol: lamportsToSol(r.waits), poolAfterSol: lamportsToSol(pool + received - r.spend), burns: true, line };
   };
   const rows: SimRow[] = [];
+  const family = simFamilyOf(rule);
   for (const c of SIM_CASES) {
+    if (c === "tie" && family === "published" && !o.pair) continue;
     let coins: SimCoin[];
     let line: string;
     if (c === "result") {
@@ -125,9 +146,9 @@ export function simulateResults(rule: BurnRule, o: SimOptions = {}): Simulation 
       } else { coins = [burning("A", tA, zero), idle("B", tB, `$${tB} burns only on its own result, from its own pool.`)]; line = `${coins[0].line} $${tB} burns only on its own result, from its own pool.`; }
     } else if (c === "tie") {
       if (f.drawFires && !o.pair) { coins = [burning("A", tA, zero)]; line = `This coin burns on a tie. ${coins[0].line}`; }
-      else { line = rule.series && parseEspnSeries(rule.series) ? "A tie is not the result this rule burns on, so nothing burns and the pool keeps its SOL." : "This kind of event has no tie. A result that is neither side counts as voided, so nothing burns."; if (o.pair) line = `A tie moves nothing between the two coins and nothing burns. Each pool keeps its SOL.`; coins = [idle("A", tA, line), ...(o.pair ? [idle("B", tB, line)] : [])]; }
+      else { line = rule.series && parseEspnSeries(rule.series) ? "A tie is not the result this rule burns on, so nothing burns and the pool keeps its SOL." : family === "one-shot" ? "This kind of event has no tie. A result that is neither side counts as voided, as the next row says." : "This kind of event has no tie. A result that is neither side counts as voided, so nothing burns."; if (o.pair) line = `A tie moves nothing between the two coins and nothing burns. Each pool keeps its SOL.`; coins = [idle("A", tA, line), ...(o.pair ? [idle("B", tB, line)] : [])]; }
     } else if (c === "void") {
-      line = "A voided or cancelled event burns nothing. The burn pool keeps its SOL for the next result.";
+      line = family === "published" ? SIM_NO_READING_LINE : family === "one-shot" ? simOneShotVoidLine(rule.onEnd?.windDownDays) : "A voided or cancelled event burns nothing. The burn pool keeps its SOL for the next result.";
       if (o.pair) line = "A voided or cancelled event moves nothing between the two coins and nothing burns. Each pool keeps its SOL.";
       coins = [idle("A", tA, line), ...(o.pair ? [idle("B", tB, line)] : [])];
     } else if (c === "no-result") {
@@ -138,7 +159,7 @@ export function simulateResults(rule: BurnRule, o: SimOptions = {}): Simulation 
       line = "Before the curve completes and the pool is registered, nothing can burn. The result is still recorded, and trading fees collect in the burn pool.";
       coins = [idle("A", tA, line), ...(o.pair ? [idle("B", tB, line)] : [])];
     }
-    rows.push({ case: c, label: SIM_CASE_LABEL[c], coins, line });
+    rows.push({ case: c, label: c === "void" && family === "published" && !o.pair ? SIM_NO_READING_LABEL : SIM_CASE_LABEL[c], coins, line });
   }
   return { ...base, available: true, reason: null, share: f.share, shareLabel: pctLabel(f.share), firesOn: f.firesOn, rows };
 }

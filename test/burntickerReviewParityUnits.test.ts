@@ -23,7 +23,9 @@ import { lockRule, DEFAULT_ON_END, shareLimitsText, RULE_BOUNDS, type BurnRule }
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { teamSeries, gameSeries } from "@/lib/burnticker/sources/espn";
 import { DEBT_RULE, BRONCOS } from "./burntickerHelpers.ts";
-import { CREATOR, makeWorld } from "./burntickerApiHelpers.ts";
+import { CREATOR, encodeAccount, makeWorld } from "./burntickerApiHelpers.ts";
+import { PublicKey } from "@solana/web3.js";
+import { configPda } from "@/lib/burnReceipts/pda";
 
 const HOSTILE = ["<script>alert(1)</script>", "<img src=x onerror=alert(1)>", `Quote " and ' & amp`];
 const lock = (r: unknown) => lockRule({ ...(r as object), onEnd: { ...DEFAULT_ON_END } });
@@ -149,7 +151,11 @@ describe("WIRING-MEDIA-RECOVERY items 221 and 235", () => {
     const first = await prepareLaunch(w.p, body, { register: true }) as { pair?: { tokens: { a: { mint: string } } } };
     assert.ok(first.pair, "the first plan builds");
     const minted = first.pair!.tokens.a.mint;
+    // B-15 (sixth pass): a created side A is the burn program's TokenConfig naming this creator; dust at the mint is not
+    const prog = new PublicKey(w.p.program.programId), config = configPda(prog, new PublicKey(minted)).toBase58();
     w.p.market = { getAccountInfo: async (k: { toBase58(): string }) => (k.toBase58() === minted ? { lamports: 1 } : null) } as never;
+    assert.equal(await createdSideA(w.p, { creator: CREATOR, ticker: "MILEHI", name: "Mile High" }), null);
+    w.p.market = { getAccountInfo: async (k: { toBase58(): string }) => (k.toBase58() === minted ? { lamports: 1 } : k.toBase58() === config ? { owner: prog, data: encodeAccount("TokenConfig", (v) => { v.mint = new PublicKey(minted); v.creator = new PublicKey(CREATOR); }) } : null) } as never;
     assert.equal(await createdSideA(w.p, { creator: CREATOR, ticker: "MILEHI", name: "Mile High" }), minted);
     const again = await prepareLaunch(w.p, body, { register: true });
     assert.ok("error" in again); assert.equal(again.error.status, 409); assert.equal((again.error.body as { mint: string }).mint, minted);

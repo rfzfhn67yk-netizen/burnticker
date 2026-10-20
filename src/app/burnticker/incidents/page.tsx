@@ -8,6 +8,7 @@ import { repoUrl } from "@/lib/burnticker/currentStatusLinks";
 import { EmptyState } from "../_components/EmptyState";
 import { Page, PageHeader, Panel } from "../_components/Panel";
 import { RepoText } from "../_components/RepoText";
+import { markdownLinkParts } from "@/lib/burnticker/publicPaths";
 import { withShareCard } from "@/lib/burnticker/pageMeta";
 
 export const metadata: Metadata = withShareCard({ title: INCIDENTS_COPY.title, description: INCIDENTS_COPY.description, alternates: { canonical: "/burnticker/incidents" } });
@@ -28,8 +29,9 @@ export default function IncidentsPage() {
       <Panel title={INCIDENTS_COPY.recordedTitle} id="recorded">
         {!log.present ? <EmptyState kind="unavailable" body={INCIDENTS_COPY.unavailable} compact />
           : log.entries.length === 0 ? <EmptyState kind="no-activity" body={<>{INCIDENTS_COPY.none} {INCIDENTS_COPY.noneMore}</>} compact />
-          : <ol className="bt-list">{log.entries.map((e) => <li key={e.heading}><h3 className="bt-h3">{e.heading}</h3><pre className="bt-pre">{e.body}</pre></li>)}</ol>}
-        <p className="bt-meta">{INCIDENTS_COPY.logLink}: <RepoText text={INCIDENTS_FILE} /></p>
+          : <ol className="bt-list">{log.entries.map((e) => <li key={e.heading}><h3 className="bt-h3">{e.heading}</h3><div className="bt-body-text" data-incident-body>{e.body.split("\n").filter((l) => l.trim()).map((l, i) => <p key={i}>{markdownLinkParts(l.replace(/^\s*[-*]\s+/, "")).map((p, j) => (p.href ? <a key={j} className="underline" href={p.href} target="_blank" rel="noreferrer">{p.text}</a> : <span key={j}>{p.text}</span>))}</p>)}</div></li>)}</ol>}
+        {/* HB-46 (run 4): the log is linked in the public repository, never printed as a repository path */}
+        <p className="bt-meta"><a className="underline" href={repoUrl(INCIDENTS_FILE)} target="_blank" rel="noreferrer">{INCIDENTS_COPY.logLink}</a></p>
       </Panel>
       <Panel title={INCIDENTS_COPY.caughtTitle} id="caught">
         <p className="bt-body-text">{INCIDENTS_COPY.caughtIntro}</p>

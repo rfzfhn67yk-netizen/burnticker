@@ -102,9 +102,14 @@ export function lookupTableProblems(network: Network, address: string, state: Lo
 
 export const LOOKUP_TABLE_MISMATCH = "lookup table mismatch — nothing was sent";
 
-/** The network a plan's instructions belong to, read from the network-specific fixed accounts they name; null when none or both match. */
-export function planNetwork(instructionSets: readonly { programId: string; keys: readonly { pubkey: string }[] }[][]): Network | null {
-  const seen = new Set(instructionSets.flatMap((ixs) => ixs.flatMap((ix) => [ix.programId, ...ix.keys.map((k) => k.pubkey)])));
+/**
+ * The network a plan's instructions belong to, read from the network-specific fixed accounts they name; null when none or both match.
+ * Signers are left out of the reading (2026-10-19, the owner's devnet check): a fixed table account is never a signer of a launch, and
+ * a creator's wallet always is, so a wallet that is also a table entry on the other network (the operator treasury sits in the mainnet
+ * table) must not make a devnet plan look like both networks.
+ */
+export function planNetwork(instructionSets: readonly { programId: string; keys: readonly { pubkey: string; isSigner?: boolean }[] }[][]): Network | null {
+  const seen = new Set(instructionSets.flatMap((ixs) => ixs.flatMap((ix) => [ix.programId, ...ix.keys.filter((k) => !k.isSigner).map((k) => k.pubkey)])));
   const only = (n: Network) => { const other = new Set(NETWORKS.filter((x) => x !== n).flatMap((x) => lookupTableKeys(x))); return lookupTableKeys(n).filter((k) => !other.has(k)); };
   const hits = NETWORKS.filter((n) => only(n).some((k) => seen.has(k)));
   return hits.length === 1 ? hits[0] : null;

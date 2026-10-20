@@ -255,12 +255,12 @@ describe("the claim_lock_fees crank (keeper)", () => {
 });
 
 describe("the public lp block", () => {
-  test("before graduation: policy, lock program, fee-keys PDA, 100 %, no claim, a plain note", () => {
+  test("before graduation: policy, lock program, fee-keys PDA, no percentage yet (sixth pass B-16a), no claim, a plain note", () => {
     const j = buildLpLockJson({ cluster: "devnet", state: null, feeKeysPda: "FeeKeysPda1111111111111111111111111111111111", operatorTreasury: OPERATOR_TREASURY.devnet, claims: [] });
     assert.equal(j.policy, "locked-forever");
     assert.equal(j.lockProgram, LP_LOCK_PROGRAM.devnet);
     assert.equal(j.feeKeyOwner, "FeeKeysPda1111111111111111111111111111111111");
-    assert.equal(j.lockedPct, 100);
+    assert.equal(j.lockedPct, null);
     assert.deepEqual(j.split, { burnBps: 8000, operatorBps: 2000, coinSide: "burned", fixedInCode: true });
     assert.equal(j.lastClaim, null);
     assert.match(j.note!, /not graduated yet/);

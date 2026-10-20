@@ -31,6 +31,8 @@ export interface BadgeSide {
   receipts: { count: number; label: string };
   rulesSha12: string;
   pageUrl: string; verifyUrl: string;
+  /** HB-47 (run 4): a decided one-game coin on the losing side, with the game's day (YYYY-MM-DD); its card says it lost */
+  lost?: string | null;
 }
 export interface Snippets { iframe: string; markdown: string; html: string }
 export interface CoinBadgeJson extends BadgeSide {
@@ -66,6 +68,8 @@ export function seasonScope(rule: Pick<BurnRule, "oracle" | "series">, nowMs: nu
 
 export interface SideInput { status: TokenStatusJson; receipts: readonly ReceiptJson[]; rule: Pick<BurnRule, "oracle" | "series">; origin: string; now: number; /** the coin's URL key (coinKey.ts): its ticker while it alone holds it, its mint once the ticker is shared; defaults to the ticker */ key?: string }
 
+/** HB-47 (run 4): a stored one-liner written before the coinCard fix ("burns on the The next …") is shown with one article. */
+export const dedupeArticle = (t: string): string => t.replace(/\bthe the\b/gi, (m) => m.slice(0, 3));
 export function badgeSide(i: SideInput): BadgeSide {
   const s = i.status, o = i.origin.replace(/\/$/, "");
   const burns = confirmedBurns(i.receipts);
@@ -74,9 +78,10 @@ export function badgeSide(i: SideInput): BadgeSide {
   const last = [...burns].sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
   const page = `${o}/burnticker/t/${encodeURIComponent(i.key ?? s.ticker)}`;
   return {
-    ticker: s.ticker, name: s.name, oneLiner: s.profile?.oneLiner || s.seriesTitle || s.selectorKey, window: s.profile?.badge || null, status: s.status,
+    ticker: s.ticker, name: s.name, oneLiner: dedupeArticle(s.profile?.oneLiner || s.seriesTitle || s.selectorKey), window: s.profile?.badge || null, status: s.status,
     lastBurn: last ? { at: last.settledAt, units: last.units, burned: last.burned ?? "0" } : null,
     receipts: { count: inScope.length, label: scope.label }, rulesSha12: s.rules.sha12, pageUrl: page, verifyUrl: `${page}#verify`,
+    lost: lostDayOf(s, i.receipts),
   };
 }
 
@@ -169,7 +174,18 @@ export function clip(text: string, max: number): string {
 export const day = (iso: string): string => iso.slice(0, 10);
 const fmtInt = (s: string) => s.split(".")[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
-export function lastBurnLine(s: Pick<BadgeSide, "lastBurn" | "status">): string {
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monDay = (d: string): string => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? `${MON[Number(m[2]) - 1]} ${Number(m[3])}` : d; };
+/** HB-47: the losing side of a decided pair: the game's day from its badge ("ONE-SHOT · Oct 15, 2026"), else the result receipt's day. */
+export function lostDayOf(s: Pick<TokenStatusJson, "next" | "profile">, receipts: readonly Pick<ReceiptJson, "pairRole" | "settledAt" | "kind">[]): string | null {
+  if (s.next?.result !== "decided") return null;
+  const r = [...receipts].filter((x) => !["winddown", "drain", "sweep"].includes(x.kind ?? "")).sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
+  if (r?.pairRole !== "lost") return null;
+  const b = /ONE-SHOT\s*·\s*([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(s.profile?.badge ?? "");
+  return b ? `${b[3]}-${String(MON.indexOf(b[1]) + 1).padStart(2, "0")}-${b[2].padStart(2, "0")}` : r.settledAt.slice(0, 10);
+}
+export function lastBurnLine(s: Pick<BadgeSide, "lastBurn" | "status"> & { lost?: string | null }): string {
+  if (s.lost) return `lost on ${monDay(s.lost)}; cannot burn on this result`;
   if (!s.lastBurn) return s.status === "draft" ? "not launched yet · no receipts" : "no burn yet";
   return `last burn ${day(s.lastBurn.at)} · ${s.lastBurn.units} unit${s.lastBurn.units === 1 ? "" : "s"} · ${fmtInt(s.lastBurn.burned)} burned`;
 }
