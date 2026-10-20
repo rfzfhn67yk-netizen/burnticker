@@ -170,7 +170,29 @@ export function pickerTeams(league: LeagueId, o: { division?: PickerDivision | n
   const all = teamsOf(league).filter((t) => league !== "cfb" || o.division === "all" || (!!t.id && FBS_TEAM_IDS.has(t.id)));
   return [...all].sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
 }
-const normQ = (s: string) => ` ${s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
+/**
+ * HB-145 (2026-10-20, the launch review that held the web's event loop for 4.5 s): the team-name normal forms below are pure functions of
+ * their text, and a schedule parse (nbaGames, tsdbGames, mlbGames, nhlGames) asks ourTeam for both sides of every listed game, each answer
+ * normalising every team name of the league again. A listing whose names miss the exact form ran the regex chain about a hundred times
+ * per side, every game, every parse, and a launch review parses several schedules. The answers are kept in bounded memos (the same
+ * answer, computed once); a memo that fills up is emptied and starts again. setTeamMemoForTests(false) turns them off, so a test can hold
+ * the answers equal both ways.
+ */
+let teamMemoOn = true;
+export function setTeamMemoForTests(on: boolean): void { teamMemoOn = on; }
+const STRING_MEMO_MAX = 20_000;
+function memoString<T>(f: (s: string) => T, max = STRING_MEMO_MAX): (s: string) => T {
+  const m = new Map<string, T>();
+  return (s: string): T => {
+    if (!teamMemoOn) return f(s);
+    if (m.has(s)) return m.get(s) as T;
+    const v = f(s);
+    if (m.size >= max) m.clear();
+    m.set(s, v);
+    return v;
+  };
+}
+const normQ = memoString((s: string) => ` ${s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `);
 /** Teams a free-text query names (nickname, city, abbreviation, alternative), across every league. */
 export function findTeams(q: string): EspnTeam[] {
   const fromAlias = aliasLookup(q).map((a) => { const lg = (Object.values(LEAGUES).find((l) => l.alias === a.league)?.id ?? null); return lg ? toTeam(lg, a) : null; }).filter((t): t is EspnTeam => t !== null);
@@ -350,7 +372,7 @@ export const SCHEDULE_NEEDS_KEY = "schedule needs the licensed key (BURNTICKER_T
  * Hove Albion", so the team showed no next game while its fixtures were listed). Accents, case, apostrophes and periods do not matter,
  * "&" is read as "and", and "Saint" as "St" ("Union St.-Gilloise" = "Union Saint-Gilloise", "D.C. United" = "DC United").
  */
-export const teamNameKey = (s: string): string => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/&/g, " and ").replace(/['’.]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\bsaint\b/g, "st");
+export const teamNameKey: (s: string) => string = memoString((s: string): string => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/&/g, " and ").replace(/['’.]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\bsaint\b/g, "st"));
 const normName = teamNameKey;
 /** Club words that are not part of a club's own name ("FC", "AC", "de", "and"), dropped when two names are compared word by word. */
 const CLUB_WORDS = new Set(["fc", "cf", "afc", "sc", "ac", "as", "ssc", "cd", "ca", "rc", "rcd", "us", "club", "de", "del", "da", "do", "the", "and", "y", "calcio", "sv", "vfb", "vfl", "tsg", "fk", "sk", "if", "cp", "04", "05", "07"]);
@@ -372,7 +394,22 @@ const uniqueOf = <T,>(xs: T[]): T | null => (xs.length === 1 ? xs[0] : null);
  * nickname ("Los Angeles Lakers"); for clubs, the ONE team whose own words all appear in the provider's name or the reverse ("Estoril
  * Praia" = "Estoril", "Sarmiento" = "Sarmiento (Junín)"). A club's last word alone never decides it: "Inter Milan" is not "AC Milan".
  */
+/** HB-145: ourTeam's answers per league table (static: teamsOf keeps one array per league), by abbreviation and name. */
+const ourTeamMemo = new WeakMap<readonly EspnTeam[], Map<string, EspnTeam | null>>();
+const OUR_TEAM_MEMO_MAX = 5_000;
 export function ourTeam(league: LeagueId, name: string, abbr: string | null = null): EspnTeam | null {
+  if (!teamMemoOn) return ourTeamUncached(league, name, abbr);
+  const ts = teamsOf(league);
+  let m = ourTeamMemo.get(ts);
+  if (!m) { m = new Map(); ourTeamMemo.set(ts, m); }
+  const k = `${abbr ?? ""}\u0000${name}`;
+  if (m.has(k)) return m.get(k) ?? null;
+  const v = ourTeamUncached(league, name, abbr);
+  if (m.size >= OUR_TEAM_MEMO_MAX) m.clear();
+  m.set(k, v);
+  return v;
+}
+function ourTeamUncached(league: LeagueId, name: string, abbr: string | null): EspnTeam | null {
   const ts = teamsOf(league), n = normName(name);
   if (abbr) { const A = abbr.toUpperCase(); const byProv = ts.find((t) => PROVIDER_TEAM_IDS[`${league}:${t.abbr}`] === A); if (byProv) return byProv; const byAbbr = ts.find((t) => t.abbr === A); if (byAbbr) return byAbbr; }
   if (!n) return null;

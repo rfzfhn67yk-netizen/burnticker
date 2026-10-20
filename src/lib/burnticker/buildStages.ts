@@ -107,3 +107,27 @@ export function stageClock(o: StageClockOptions = {}): StageClock {
   } as StageClock;
   return clock;
 }
+
+/**
+ * THE LAUNCH REVIEW'S SLOW LINE (HB-145, 2026-10-20: every 4.3 to 4.8 s hold of the web's event loop landed on a POST /v1/launch/review,
+ * and the slow log could not say which part of the review it was). The review route times each of its stages on a stageClock; a review
+ * slower than REVIEW_SLOW_MS writes one line in the build lines' shape:
+ *
+ *   [burnticker/review] built in 4716 ms, rule catalogue espn.team: body 0, proof 1, registry 3, season 2, game 0, note 0, meetings 4402,
+ *     lastSeason 210, sinks 1, build 60, existing 1, tickers 30; cpu 4650 ms, loop max 4400 ms, budget store 0 ms
+ *
+ * The rule is named by its oracle and the family of its series (the part before the first ":"), never the creator's words or wallet.
+ * The line is always finished (it stops the clock's event-loop monitor) and returned only when the review was slow; null otherwise.
+ */
+export const REVIEW_SLOW_MS = 1_000;
+export function reviewRuleLabel(rule: unknown): string {
+  const r = rule && typeof rule === "object" ? (rule as { oracle?: unknown; series?: unknown; market?: unknown }) : null;
+  const word = (v: unknown) => (typeof v === "string" ? v.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 24) : "");
+  const oracle = word(r?.oracle) || "unknown";
+  const family = typeof r?.series === "string" && r.series ? word(r.series.split(":")[0]) : typeof r?.market === "string" && r.market ? "one market" : "";
+  return `rule ${oracle}${family ? ` ${family}` : ""}`;
+}
+export function reviewSlowLine(clock: StageClock, totalMs: number, rule: unknown, slowMs: number = REVIEW_SLOW_MS): string | null {
+  const line = clock.line("[burnticker/review]", reviewRuleLabel(rule));
+  return totalMs > slowMs ? line : null;
+}
