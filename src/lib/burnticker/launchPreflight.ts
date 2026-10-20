@@ -12,7 +12,7 @@ import { loadRefuseList, nameRefusals } from "@/lib/burnticker/oracle/refuse";
 import { isReserved, loadMajors, loadReserved, majorProblem, reservedProblem, RESERVED_TICKER_REFUSAL } from "@/lib/burnticker/reservedNames";
 import { controlCharProblem } from "@/lib/burnticker/launchFields";
 import { regexProblem } from "@/lib/burnticker/safeRegex";
-import { lookalikeRefusal, type LookalikeExisting } from "@/lib/burnticker/lookalike";
+import { lookalikeHits, lookalikeRefusalOf, type LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { parseEspnSeries, teamByAbbr, teamCodeOf, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { windowKindOf } from "@/lib/burnticker/describe";
 
@@ -213,7 +213,8 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
 }
 
 export interface IdentityInput { ticker: string; name: string; description?: string; note?: string }
-export interface IdentityCtx { /** false: the caller runs the refuse list's name patterns itself (the bundle route folds them into its refusals) */ refuseList?: boolean; reserved?: ReadonlySet<string>; majors?: ReadonlySet<string>; existing?: readonly LookalikeExisting[] | null; rule?: Pick<BurnRule, "oracle" | "series"> | null; /** A-2: the creator's wallet, when known: an identical ticker of their own coin is not refused */ creator?: string | null }
+export interface IdentityCtx { /** false: the caller runs the refuse list's name patterns itself (the bundle route folds them into its refusals) */ refuseList?: boolean; reserved?: ReadonlySet<string>; majors?: ReadonlySet<string>; existing?: readonly LookalikeExisting[] | null; rule?: Pick<BurnRule, "oracle" | "series"> | null; /** A-2: the creator's wallet, when known: an identical ticker of their own coin is not refused */ creator?: string | null;
+  /** LA-4: the review only. With no proven creator, an exact ticker held by an unlaunched draft comes back as code "draft-held" (a notice the review shows with Launch on), never as a lookalike refusal. The bundle route never sets it. */ draftNotice?: boolean }
 
 /** A side's name, ticker and texts: the refuse list's name patterns, reserved names, major coins, control characters, lookalikes. */
 /**
@@ -251,7 +252,14 @@ export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): (Pref
   { const mp = majorProblem(s, majors); if (mp) out.push({ status: 403, code: "major-ticker", message: mp, field: isReserved(s.ticker, majors) ? "ticker" : "name" }); }
   { const ot = otherTeamTickerProblem(s.ticker, ctx.rule); if (ot) out.push({ status: 403, code: "other-team-ticker", message: ot, field: "ticker" }); }
   if (ctx.refuseList !== false) try { const nr = nameRefusals(loadRefuseList(), s.name, s.ticker); if (nr.length) out.push({ status: 403, code: "refused", message: `This launch is refused: ${nr.map((x) => x.reason).join("; ")}`, field: "name" }); } catch { /* the bundle reads it again */ }
-  if (ctx.existing) { const look = lookalikeRefusal({ ticker: s.ticker, name: s.name, rule: ctx.rule ?? null, creator: ctx.creator ?? null }, ctx.existing); if (look) out.push({ status: 409, code: "lookalike", message: look.reason, field: "ticker" }); }
+  if (ctx.existing) {
+    const cand = { ticker: s.ticker, name: s.name, rule: ctx.rule ?? null, creator: ctx.creator ?? null };
+    // LA-4: the draft-held notice is split from the refusal; any other hit still refuses, in the same sentence as before
+    const hits = lookalikeHits(cand, ctx.existing, { draftNotice: !!ctx.draftNotice && !cand.creator });
+    for (const h of hits.filter((x) => x.how === "draft-held")) out.push({ status: 409, code: "draft-held", message: h.reason, field: "ticker" });
+    const look = lookalikeRefusalOf(hits.filter((x) => x.how !== "draft-held"));
+    if (look) out.push({ status: 409, code: "lookalike", message: look.reason, field: "ticker" });
+  }
   return out;
 }
 

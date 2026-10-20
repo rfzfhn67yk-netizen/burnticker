@@ -137,7 +137,7 @@ describe("F06: one active-condition aggregator for ops.json and the check-in", (
     const k = path.join(import.meta.dirname, "..", "scripts", "burnticker-keeper.mts");
     if (!fs.existsSync(k)) { t.skip("not in this tree"); return; }
     const s = fs.readFileSync(k, "utf8");
-    assert.match(s, /buildOpsJson\(\{[^\n]*health, conditionMemory: memory, signals, heartbeat: heartbeat\.state, hostFacts \}\)/);
+    assert.match(s, /buildOpsJson\(\{[^\n]*health, conditionMemory: memory, signals, heartbeat: heartbeat\.state, hostFacts(, tradeClicks: [^\n]*)? \}\)/);   // campaign readiness 2026-10-19 adds the trade-click counts after it
     assert.match(s, /registry\.setStatus\(CONDITIONS_KEY, foldConditions\(memory, activeConditions\(r\.snapshot, health, \{ \.\.\.signals, alerts, lastCycleAt: r\.snapshot\?\.lastCycle\?\.at \?\? null \}\), now\), now\)/);
     // second audit A-7: the unit check's computed alerts and the budget's lines reach the conditions
     assert.match(s, /const signals = \{ units: unitCheck\.active, budget: budget\.lines\(\) \};/);

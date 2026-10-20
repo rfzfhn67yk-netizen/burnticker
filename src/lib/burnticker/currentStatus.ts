@@ -49,7 +49,7 @@ export const upgradeAuthorityOf = (d: Uint8Array): string | null | undefined => 
   return undefined;
 };
 
-import { fmtSecs } from "@/lib/burnticker/currentStatusText";
+import { fmtSecs, timeLockPlanSentence } from "@/lib/burnticker/currentStatusText";
 export { fmtSecs };
 
 interface Acct { owner: string; data: [string, string] }
@@ -152,9 +152,9 @@ const isKey = (s: string): boolean => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 /** The time-lock sentence: the value read from chain, the plan beside it (never the plan stated as the fact). */
 export function timeLockLine(cluster: Cluster, live: number | null, planned: number, plannedFrom: string | null): string {
   const Name = cluster === "mainnet" ? "The mainnet" : "The devnet";
-  if (live === null) return `${Name} Squads time lock could not be read from chain just now. The plan is ${fmtSecs(planned)}.`;
+  if (live === null) return `${Name} Squads time lock could not be read from chain just now. ${timeLockPlanSentence(planned, plannedFrom)}`;
   if (live === planned) return `${Name} Squads time lock is ${fmtSecs(live)}, read from chain.`;
-  return `${Name} Squads time lock is ${fmtSecs(live)} today, read from chain. The plan is ${fmtSecs(planned)}${plannedFrom ? ` from ${plannedFrom}` : ""}.`;
+  return `${Name} Squads time lock is ${fmtSecs(live)} today, read from chain. ${timeLockPlanSentence(planned, plannedFrom)}`;
 }
 
 /** A plain name for each program, said before its code name (website-9 copy pass). */

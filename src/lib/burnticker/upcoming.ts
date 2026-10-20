@@ -1,4 +1,5 @@
 import { utcDateTime } from "@/lib/burnticker/utcWords";
+import { decidedPairLine, decidedPairOf } from "@/lib/burnticker/decidedWarning";
 import { shortDay } from "@/lib/burnticker/cardView";
 import { sourcePublisher } from "@/lib/burnticker/coinSourceLine";
 
@@ -87,12 +88,14 @@ const sourceWords = (oracle: string, selectorKey: string): string => sourcePubli
 
 interface StatusLike {
   ticker: string; name: string; cluster: string; status: string; oracle: string; selectorKey: string; seriesTitle: string | null;
-  next: { nextCheckAt: string | null; nextMarket: string | null; nextCloseTime: string | null };
+  next: { nextCheckAt: string | null; nextMarket: string | null; nextCloseTime: string | null; result?: string | null };
+  rules?: { oneShot?: boolean } | null;
+  pair?: { clause?: { state?: string | null; voidBy?: string | null } | null } | null;
   profile?: { oneLiner?: string; badge?: string } | null;
   /** the source reads so far: a read with no receipt is not "nothing read" (a loss writes no row for a win coin) */
   feed?: { lastFetchAt?: string | null; readings?: number } | null;
 }
-interface ReceiptLike { status: string; settledAt: string; units: number; signature: string | null; readingDate?: string | null; waitReason?: string | null; skippedReason?: string | null; settlementSourceUrl?: string | null; market?: string; execution?: string | null }
+interface ReceiptLike { pairRole?: string | null; kind?: string | null; status: string; settledAt: string; units: number; signature: string | null; readingDate?: string | null; waitReason?: string | null; skippedReason?: string | null; settlementSourceUrl?: string | null; market?: string; execution?: string | null }
 
 const hhmmUtc = (iso: string) => utcDateTime(iso);
 
@@ -120,7 +123,10 @@ export function settlementOf(receipts: readonly ReceiptLike[], cluster: string, 
 /** `key`: the coin's URL key (coinKey.ts), its ticker while it alone holds it and its mint once the ticker is shared. */
 export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike[], key: string = s.ticker, mint: string | null = null): UpcomingRow | null {
   if (s.status === "draft" || s.status === "expired" || s.status === "retired") return null;
-  const st = settlementOf(receipts, s.cluster, { sourceRead: !!s.feed?.lastFetchAt || (s.feed?.readings ?? 0) > 0, winCoin: isWinCoin(s.selectorKey) });
+  const st0 = settlementOf(receipts, s.cluster, { sourceRead: !!s.feed?.lastFetchAt || (s.feed?.readings ?? 0) > 0, winCoin: isWinCoin(s.selectorKey) });
+  // HB-80 / HS-27 (hourly run 5): a decided pair coin's row says won or lost in the one shared line (decidedWarning.ts decidedPairLine)
+  const dp = decidedPairOf(s, receipts);
+  const st = dp ? { ...st0, text: decidedPairLine(s.ticker, dp) } : st0;
   const close = s.next.nextCloseTime, check = s.next.nextCheckAt;
   const schedule = close ? `The market is scheduled to close on ${hhmmUtc(close)}. The result counts once the source settles it, on the source's own timing.`
     // walkthrough 13: the check time is said once, in Denver time, by the list (NextResults.tsx), not here in UTC as well

@@ -223,7 +223,7 @@ describe("HS-12: a title gives its first word plus the sequel number", () => {
 
 describe("HB-47: embeds and the pair page", () => {
   test("no doubled article; a decided losing coin says it lost; the one-game pair heading", () => {
-    assert.equal(ruleOneLiner(scalar("usgs.quakenext:6", 0), "The next reviewed magnitude 6 or more anywhere in the world (USGS)"), "burns on the next reviewed magnitude 6 or more anywhere in the world (USGS) feed");
+    assert.equal(ruleOneLiner(scalar("usgs.quakenext:6", 0), "The next reviewed magnitude 6 or more anywhere in the world (USGS)"), "burns once, on the next reviewed earthquake of magnitude 6 or more anywhere in the world (USGS)");
     assert.equal(dedupeArticle("burns on the The next reviewed quake feed"), "burns on the next reviewed quake feed");
     const lost = lostDayOf({ next: { result: "decided" }, profile: { badge: "ONE-SHOT · Oct 15, 2026" } } as never, [{ pairRole: "lost", settledAt: "2026-10-16T04:00:00Z", kind: "binary" }]);
     assert.equal(lost, "2026-10-15");

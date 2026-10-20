@@ -114,6 +114,8 @@ export const HAZARD_MEASURES: Readonly<Record<HazardKindId, { every: string; onc
   wildfire: { every: "Recurring: each 100,000 acres added to the year's national total of acres burned counts, across all fires together.", once: "One time: the first single wildfire discovered after launch that reaches the size burns once, dated on its discovery day. Acres from other fires do not add up toward it." },
   volcano: { every: "Each time the USGS raises the alert level at any U.S. volcano it monitors, that raise counts.", once: "The first time after launch that the USGS raises the chosen volcano to WARNING burns once." },
 };
+/** HB-75 (hourly run 5): the help beside a control: an area picker gets the area help, every other control the threshold help (fieldHelp.ts). */
+export const hazardHelpId = (id: HazardControl["id"]): "hazard-area" | "hazard-threshold" => (id === "area" || id === "region" || id === "basin" ? "hazard-area" : "hazard-threshold");
 /** GET /v1/catalogue `hazards`: the five kinds with their controls and what each pattern measures. */
 export const hazardCatalogue = (): { id: HazardKindId; label: string; publisher: string; measures: { every: string; once: string }; controls: { every: HazardControl[]; once: HazardControl[] } }[] =>
   HAZARD_KINDS.map((k) => ({ id: k.id, label: k.label, publisher: k.publisher, measures: HAZARD_MEASURES[k.id], controls: hazardControls()[k.id] }));
@@ -195,6 +197,30 @@ export function hazardPatternOptions(rule: BurnRule, nowMs: number, o: { dispers
   const mk = (id: PatternId, reason: string | null, label?: string, sentence?: string): PatternOption => ({ id, label: label ?? PATTERNS[id].label, sentence: sentence ?? PATTERNS[id].sentence, available: reason === null, reason });
   return {
     options: [mk("every", null, HAZARD_PATTERNS.every.label, hazardEverySentence(series)), mk("fade", fadeReason), mk("once", onceReason, HAZARD_PATTERNS.once.label, hazardOnceSentence(o.dispersal === true)), mk("winner", PATTERN_REASON.needsTwo)],
-    preselected: once ? "once" : rule.inverse ? "fade" : "every",
+    preselected: hazardPreselected({ series, inverse: !!rule.inverse }),
   };
+}
+
+/** A natural-disaster coin's pattern state: its series and whether the fade side (burn when it does not happen) is on. */
+export interface HazardPatternState { series: string; inverse: boolean }
+/** The card a state shows as chosen: a next-event series is "once", the fade side "fade", else "every". */
+export const hazardPreselected = (s: HazardPatternState): PatternId => (NEXT_EVENT_ONE_SHOT_RE.test(s.series) ? "once" : s.inverse ? "fade" : "every");
+/**
+ * HB-71 (hourly run 5): the step-3 card switch as a pure reducer. "Every time it happens" and "Once" always turn the fade side off (the
+ * page left it on, so after "When it does not happen" the every card could never be chosen again); "When it does not happen" moves a
+ * next-event coin back to its per-event form first. Returns the next state with the notice to show, the refusal, or null (winner).
+ */
+export function hazardPatternSwitch(cur: HazardPatternState, pt: PatternId, nowMs: number): { next: HazardPatternState; notice: string | null } | { refused: string } | null {
+  if (pt === "winner") return null;
+  if (pt === "fade") {
+    if (!NEXT_EVENT_ONE_SHOT_RE.test(cur.series)) return { next: { series: cur.series, inverse: true }, notice: null };
+    const back = hazardSwap(cur.series, "every", nowMs);
+    if (!back) return null;
+    if ("refused" in back) return back;
+    return { next: { series: back.series, inverse: true }, notice: null };
+  }
+  const sw = hazardSwap(cur.series, pt === "once" ? "once" : "every", nowMs);
+  if (!sw) return null;
+  if ("refused" in sw) return sw;
+  return { next: { series: sw.series, inverse: false }, notice: sw.notice ?? null };
 }

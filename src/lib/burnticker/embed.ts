@@ -79,7 +79,10 @@ export function nextLine(b: Pick<BadgeJson, "nextSettlementAt" | "nextSettlement
 
 /** The whole embed document. Every visible word is the card's lines plus the next-settlement line and the footer (all linted in tests). */
 export function renderEmbedHtml(b: BadgeJson, nowMs: number): string {
-  const n = nextLine(b, nowMs);
+  const n0 = nextLine(b, nowMs);
+  // HB-80 / HS-27 (hourly run 5): a decided pair coin's embed says the same won-or-lost line as its creator card and home row
+  const decided = b.kind === "coin" ? b.decided ?? null : [b.a, b.b].filter((x) => x.decided).map((x) => `$${x.ticker}: ${x.decided}`).join(" ") || null;
+  const n = decided ? { before: decided, at: null, utc: null, after: "" } : n0;
   const title = b.kind === "coin" ? `$${b.ticker} receipts · Burnticker` : `$${b.a.ticker} vs $${b.b.ticker} receipts · Burnticker`;
   const next = n.at ? `${esc(n.before)}<span data-local="${esc(n.at)}">${esc(n.utc!)}</span>${esc(n.after)}` : `<b>${esc(n.before)}</b>`;
   return [

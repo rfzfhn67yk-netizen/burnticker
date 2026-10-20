@@ -106,7 +106,8 @@ describe("HB-65: a held swap that may still land cannot be read whole or removed
     const big = await route.DELETE(new Request(`https://${host}/api/burnticker/swap-pending`, { method: "DELETE", headers: h, body: "x".repeat(20_000) }));
     assert.equal(big.status, 400);
     const src = fs.readFileSync("src/app/api/burnticker/swap-pending/route.ts", "utf8");
-    assert.match(src, /heldState\(await swapPendingChain\(rec\.network\), rec\)/);
+    // HB-65 v4: GET and DELETE judge with the server's own chain reader, after an unknown expiry is revalidated from it
+    assert.equal(src.match(/const chain = await swapPendingChain\(rec\.network\);\s*rec = await revalidateExpiry\(swapPendingStore\(\), chain, rec\);[^\n]*\n\s*const state = await heldState\(chain, rec\);/g)?.length, 2);
   });
 });
 

@@ -109,7 +109,7 @@ const isMainnet = (c: string) => c === "mainnet";
 /** Deep links for a mint, from the one builder (tradeLinks.ts coinLinks). Mainnet only: Raydium's and Jupiter's swap pages do not serve devnet. */
 export function tradeLinks(cluster: string, mint: string, phase: CurvePhase | null, status: string): TradeLinks {
   const l = coinLinks({ cluster, mint, phase, status });
-  return { links: l.trade.map((x) => ({ id: x.id as TradeLinks["links"][number]["id"], label: x.label, url: x.url })), note: l.note };
+  return { links: l.trade.map((x) => ({ id: x.id as TradeLinks["links"][number]["id"], label: x.label, url: x.url, ...(x.href ? { href: x.href } : {}) })), note: l.note };
 }
 
 /** GeckoTerminal's chart embed for the pool that trades now: the CPMM pool after graduation, the LaunchLab curve pool before (only a pool read on chain this cycle — never an unverified id). */

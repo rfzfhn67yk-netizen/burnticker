@@ -1,3 +1,4 @@
+import { visitorTime } from "@/lib/burnticker/visitorTime";
 /**
  * WHERE A COIN STANDS ON THE WAY TO ITS BURNS (website follow-up 2026-10-11; docs/burnticker/FIRST-BURN-PATH.md). A coin cannot burn
  * before graduation: crank_buyback requires a registered, verified CPMM pool (`require!(c.pool_verified, PoolNotVerified)`), and the
@@ -91,9 +92,10 @@ export function readinessFromStatus(s: { status: string; market?: { phase: "curv
  */
 export type DataState = "loading" | "empty" | "unavailable" | "stale" | "error";
 export const DATA_STATES: DataState[] = ["loading", "empty", "unavailable", "stale", "error"];
+// HS-25: the stale line is shown in the browser after a read, so its time is in the visitor's own zone with the zone named
 const hhmm = (iso: string | null | undefined): string | null => {
   if (!iso || Number.isNaN(Date.parse(iso))) return null;
-  return new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+  return visitorTime(iso, "client");
 };
 /** One sentence for a data state. `what` names the data in words ("curve progress", "the burn history"); `empty` says what none means. */
 export function dataStateSentence(state: DataState, what: string, o: { empty?: string; readAt?: string | null } = {}): string {
@@ -103,7 +105,7 @@ export function dataStateSentence(state: DataState, what: string, o: { empty?: s
     case "loading": return `Reading ${what}.`;
     case "empty": return o.empty ?? `${What} was read, and there is nothing to show.`;
     case "unavailable": return `${What} is unavailable on this site, so this cannot say whether anything matches.`;
-    case "stale": return at ? `${What} was last read on ${at} Denver time and may be out of date.` : `${What} may be out of date.`;
+    case "stale": return at ? `${What} was last read on ${at} and may be out of date.` : `${What} may be out of date.`;
     case "error": return `${What} could not be read just now. Try again in a moment.`;
   }
 }

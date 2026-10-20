@@ -289,7 +289,8 @@ export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | 
   if (d.flip) {
     const a = `$${tickerA} burns ${pctText(fraction)} once, the first ${d.window === "daily" ? "day" : "week"} ${d.a.symbol}'s market cap passes ${d.b.symbol}'s (${src} × circulating supply, ${boundary(d.window)}).`;
     const b = tickerB ? ` $${tickerB} burns ${pctText(fraction)} once if the run ends without it.` : "";
-    return `${a}${b} ${derbyReadOnlySentence(d)} Runs for ${d.season.days} days, then winds down.`;
+    // HB-78 (hourly run 5): a flippening pair says its one end (FLIP_REST_LINE), the same words as the "At the end" block and the review
+    return `${a}${b} ${derbyReadOnlySentence(d)} ${tickerB ? `Runs for ${d.season.days} days. ${FLIP_REST_LINE}` : `Runs for ${d.season.days} days, then winds down.`}`;
   }
   const by = d.measure === "mcap" ? " by market cap" : "";
   const verb = `${d.a.symbol} out-gains ${d.b.symbol}${by}`;
@@ -303,6 +304,12 @@ export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | 
   return `${ab} ${derbyReadOnlySentence(d)} ${tickerB ? raceEndSentence(d.season.days, d.window === "weekly" ? "weeks" : "days") : `Runs for ${d.season.days} days, then winds down.`}`;
 }
 
+/**
+ * HB-78 (hourly run 5): the flippening pair's one end. The coin whose rule fires is the pair's winner (coin A when its market cap passes,
+ * coin B when the run ends without that); describe.ts's pair-winner end then sends the other coin's rest to the winner's burn and the
+ * winner's own rest to $DEFICIT's burn. The burn step's sentence, the "At the end" block and the review's "When it ends" all say this.
+ */
+export const FLIP_REST_LINE = "The coin that burns is the winner. At the end, the rest of the other coin's pool, and any fees that arrive later, goes to the winner's burn, and whatever is left on the winner goes to $DEFICIT's burn. Then both coins retire.";
 /** Cheap-features item 14: the run lengths the web launcher offers beside the share presets (the API takes any length up to 366 days). */
 export const DERBY_RUN_PRESETS = [7, 14, 30] as const;
 export const runPresetLabel = (days: number): string => `${days} days`;

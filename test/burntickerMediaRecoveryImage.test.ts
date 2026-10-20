@@ -100,7 +100,7 @@ describe("221 the plain image is used when the mark service cannot answer", () =
 
 describe("222 the size advice sits beside the image control", () => {
   test("16 pixels minimum and the recommended square size", () => {
-    assert.match(IMAGE_SIZE_HELP, /16 pixels/); assert.match(IMAGE_SIZE_HELP, /square image at least 512 pixels/);
+    assert.match(IMAGE_HELP, /16 pixels/); assert.match(IMAGE_SIZE_HELP, /square image at least 512 pixels/);   // WZ6-12: the minimum sits in IMAGE_HELP
     assert.ok(lintCopy(IMAGE_SIZE_HELP, cfg).ok);
     assert.match(read("src/app/burnticker/launch/ProfileFields.tsx"), /\{IMAGE_WAYS\} \{IMAGE_HELP\} \{IMAGE_SIZE_HELP\}/);
     assert.match(read("src/lib/burnticker/creatorBadge.ts"), /if \(w < 16 \|\| h < 16\)/, "the 16 in the help is the server's own floor");

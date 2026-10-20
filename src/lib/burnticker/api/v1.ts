@@ -1,4 +1,5 @@
 import { safeParam } from "@/lib/burnticker/safeParam";
+import { receiptsCountLine } from "@/lib/burnticker/coinStatus";
 import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { reviewProjection } from "@/lib/burnticker/projection";
 import { feedById, loadFixture, previewFromFixture } from "@/lib/burnticker/catalogue";
@@ -13,6 +14,7 @@ import { feedSourceReading, kalshiSourceReading, polymarketSourceReading, verify
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
 import { trustSwr } from "@/lib/burnticker/trustServe";
+import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import type { TokenRow, TokenStatus } from "@/lib/burnticker/registry";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, kalshiCategories, browse, search, elections, electionPair, sportsTeams, sportsGames, sportsRivalry, polymarketSearch, publicConfig } from "@/lib/burnticker/api/handlers";
@@ -195,7 +197,7 @@ export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {
     const burned = confirmed.reduce((a, b) => a + (b.burnRaw ?? ZERO), ZERO);
     const burns = confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO);
     const lastBurnAt = burns.map((b) => b.settledAt).sort().pop() ?? null;
-    return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, /* HB-25 (run 4): which count is which */ receiptsRecorded: rows.length, receiptsOnChain: confirmed.filter((b) => !!b.signature).length, burns: burns.length, burnedTokens: rawToTokens(burned, 6), imageUrl: t.imageUrl, lastBurnAt, links: links(t, registryCoinKey(p.registry, t)) };
+    return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, /* HB-25 (run 4): which count is which */ receiptsRecorded: rows.length, receiptsOnChain: confirmed.filter((b) => !!b.signature).length, /* HS-29 */ receiptsLine: receiptsCountLine(rows.length, confirmed.filter((b) => !!b.signature).length), burns: burns.length, burnedTokens: rawToTokens(burned, 6), imageUrl: t.imageUrl, lastBurnAt, links: links(t, registryCoinKey(p.registry, t)) };
   });
   const flagship = status === null || status === "live" ? flagshipToken(p) : null;
   // the flagship is the list's last row (index all.length): on the page that reaches it, never past it (review L3)
@@ -277,7 +279,9 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
     const reader = rpc ? await web3ChainReader(rpc).catch(() => null) : null;
     const attesters = p.registry.tokens().map((t) => { const a = p.registry.attesters(t.mint).filter((x) => x.active); return { ticker: t.ticker, attesters: a.length, independent: a.filter((x) => x.role === "independent").length, quorum: Math.max(1, Math.min(1, a.length)) }; });
     const live = p.registry.tokens("live");
-    return buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster, skipFeeLedger: true });
+    // HB-69 / CH6-6: the same cached mainnet time-lock read as /api/burnticker/trust, so this answer does not say it "could not be read"
+    const upgradeTimeLockSecs = await currentStatusLive().then((s) => s.upgradeAuthority.find((u) => u.cluster === "mainnet")?.timeLockSecs ?? null).catch(() => null);
+    return buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster, upgradeTimeLockSecs, skipFeeLedger: true });
   };
   const memo = rpc ? await trustSwr.get("v1", "1", build) : null;
   const page = (memo?.value as Awaited<ReturnType<typeof build>> | undefined) ?? await build();
@@ -286,7 +290,7 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
     generatedAt: page.generatedAt, cluster: p.cluster, powers: page.powers, operator: page.operator,
     fees: { designed: page.designedFees, live: { platformId: page.livePlatform.platformId, found: page.livePlatform.found, readAt: page.livePlatform.readAt, error: page.livePlatform.error, fields: liveBps } },
     lpLock: page.lpLock,
-    program: page.program, attesters: page.attesters, audit: page.audit, statements: page.statements, operatorLine: page.operatorLine, useOfFees: page.useOfFees, preAuditCapSol: page.preAuditCapSol,
+    program: page.program, attesters: page.attesters, secondSigner: page.secondSigner, audit: page.audit, statements: page.statements, operatorLine: page.operatorLine, useOfFees: page.useOfFees, preAuditCapSol: page.preAuditCapSol,
     cannot: ["Change any token's rule. A different rule makes a different token.", "Claim, redirect or discount any fee through this API.", "Adopt an existing token. The program needs the new mint's signature when the token is set up.", "Sign, send or hold a key for you."],
     rpcConfigured: !!rpc, stubs: p.stubs,
   });

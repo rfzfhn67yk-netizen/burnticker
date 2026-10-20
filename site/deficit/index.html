@@ -395,6 +395,8 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       <p class="rl" id="readyLabel">Not launched</p>
       <!-- private review 8: one short sentence first; the full path stays one tap away -->
       <p class="rd" id="readyDetail">Burns can begin only after the coin graduates, its pool is registered, and the Treasury reports a qualifying rise in debt.</p>
+      <p class="rd" id="gradLine" hidden></p>
+      <p class="rk" id="readyRead" hidden></p>
       <details class="rd-more"><summary>How the first burn happens</summary><p class="rd">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once buyers have put in its raise, which this page reads from the coin's own pool after launch, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p></details>
     </div>
     <!-- the queued-units counter (website-14, LAUNCHPAD-PATH §73): filled in from status.json and burns.json by deficitQueueCore below -->
@@ -422,6 +424,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       <a class="btn" id="receiptsCta" href="https://burnticker.com/burnticker/check?demo=1#verify" data-prelaunch-href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>
       <a class="btn ghost" href="rules.json">Read the rule file</a>
     </div>
+    <p class="replay" id="followLine" data-follow-feeds>Get the next result: <a href="https://burnticker.com/api/burnticker/feeds/coin/DEFICIT.rss" data-feed-rss>RSS</a> · <a href="https://burnticker.com/api/burnticker/v1/coins/DEFICIT/calendar.ics" data-feed-ics>Calendar</a></p>
     <p class="replay">We replayed the rule over the Treasury's Debt to the Penny figures from January 2, 2025 to October 8, 2026, using a copy of the series fetched on 2026-10-09 (site/deficit/sample/treasury-fixture.json in the public repository) and the keeper's own unit, carry and reset logic. It would have counted <b>235 burn days</b> and <b>6,490 units</b>. The biggest day was <b>2025-07-07</b>, when the debt rose <b>$366.44B</b>, which counts as <b>366 units</b>. That was the next business day after the July 4, 2025 debt-limit increase. Units are what the rule counts. How much a burn would have bought depends on the burn pool, which this replay does not model, and it predicts nothing.</p>
   </section>
 
@@ -479,7 +482,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 
   <section class="wrap" id="receipts">
     <h2><span>§3</span>Receipts</h2>
-    <p class="dim intro">Each row is one burn day. The reading is the Treasury's number for that date. Units are what the rule counted. The swap bought the tokens, and the burn destroyed them. <b>Verify</b> opens the exact command that fetches the data, the arithmetic and the memo the burn carries on chain.</p>
+    <p class="dim intro">Each row is one reading that counted units. A row is a receipt only once its burn has executed. Until then it is a queued reading, with no burn yet. The reading is the Treasury's number for that date. Units are what the rule counted. The swap bought the tokens, and the burn destroyed them. <b>Verify</b> opens the exact command that fetches the data, the arithmetic and the memo the burn carries on chain.</p>
     <div class="tablewrap">
       <table id="tbl">
         <thead><tr>
@@ -570,7 +573,7 @@ burn  = every token the swap delivered</pre>
     <div class="sh-rule"></div>
     <dl class="sh-rows">
       <div><dt>OPERATOR</dt><dd><span data-operator-line>Operated by one independent operator (United States) — contact: contact@burnticker.com</span> <a href="https://burnticker.com/burnticker/trust">What the operator controls</a></dd></div>
-      <div><dt>DEV FEE</dt><dd><span data-fee-line>Burnticker takes 0.25% of curve volume. After graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%. Coins created from 19 October 2026, 20:17 UTC use fee tier 14 (1.25% per swap). Earlier coins, mostly on tier 9, pay 1%: about 0.88% to the burn pool, 0.04% to the operator. Pair coins differ.</span> <a href="https://burnticker.com/burnticker/fees/ledger">The fee ledger</a></dd></div>
+      <div><dt>DEV FEE</dt><dd><span data-fee-line>Burnticker takes 0.25% of curve volume. After graduation, coins created before 19 October 2026, 20:17 UTC pay 1% per swap: about 0.88% to the burn pool, 0.04% to the operator and 0.08% to Raydium. Coins created after that pay 1.25%: 0.98%, 0.13% and 0.15%. Coin-vs-coin pair pools use their own split, shown on the pair page.</span> <a href="https://burnticker.com/burnticker/fees/ledger">The fee ledger</a></dd></div>
       <div><dt>API</dt><dd><a href="https://burnticker.com/api/burnticker/v1">/api/burnticker/v1</a> · <a href="https://burnticker.com/burnticker/docs">Docs</a></dd></div>
     </dl>
     <div class="sh-rule"></div>
@@ -640,8 +643,21 @@ burn  = every token the swap delivered</pre>
       { id: "solscan", label: "Mint on Solscan", url: "https://solscan.io/token/" + m }
     ];
   }
+  // campaign readiness item 5: the page links the counted redirect on Burnticker (src/lib/burnticker/tradeClicks.ts), which counts the
+  // click for the coin and the day and answers 302 to the same Raydium or Jupiter address; any other address (LINKS.trade set by hand,
+  // DexScreener, Solscan) is linked as is
+  var GO = "https://burnticker.com/burnticker/go";
+  /* @counted-begin */
+  function counted(url) {
+    var u = String(url || ""), m;
+    if ((m = /^https:\/\/raydium\.io\/launchpad\/token\/\?mint=([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(u))) return GO + "/raydium?mint=" + m[1];
+    if ((m = /^https:\/\/raydium\.io\/swap\/\?inputMint=sol&outputMint=([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(u))) return GO + "/raydium?mint=" + m[1] + "&to=swap";
+    if ((m = /^https:\/\/jup\.ag\/swap\/SOL-([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(u))) return GO + "/jupiter?mint=" + m[1];
+    return u;
+  }
+  /* @counted-end */
   function enableTrade(url) {
-    ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); if (!a) return; a.href = url; a.target = "_blank"; a.rel = "noopener"; a.classList.remove("off"); a.removeAttribute("aria-disabled"); a.removeAttribute("data-trade-unavailable"); a.removeAttribute("title"); a.setAttribute("data-trade-link", ""); a.textContent = id === "tradeTop" ? "Trade" : "Trade on Raydium"; });
+    ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); if (!a) return; a.href = counted(url); a.target = "_blank"; a.rel = "noopener"; a.classList.remove("off"); a.removeAttribute("aria-disabled"); a.removeAttribute("data-trade-unavailable"); a.removeAttribute("title"); a.setAttribute("data-trade-link", ""); a.textContent = id === "tradeTop" ? "Trade" : "Trade on Raydium"; });
     $("trade").textContent = "$DEFICIT trades on Raydium. Burnticker never takes an order: each trade link opens Raydium, Jupiter, DexScreener or Solscan. The trade link is " + url;
   }
   if (LINKS.trade) enableTrade(LINKS.trade);
@@ -649,7 +665,7 @@ burn  = every token the swap delivered</pre>
   function renderMintLinks(mint, phase) {
     var box = $("mintAddr"); if (!box) return;
     var ls = tradeLinksFor(mint, phase);
-    box.innerHTML = "Mint address: <code>" + esc(mint) + '</code> <button type="button" id="copyMint" class="copy">Copy address</button><br>' + ls.map(function (l, i) { return '<a ' + (i === 0 ? 'class="btn red" ' : "") + 'href="' + esc(l.url) + '" target="_blank" rel="noopener" data-link="' + l.id + '">' + esc(l.label) + "</a>"; }).join(" ");
+    box.innerHTML = "Mint address: <code>" + esc(mint) + '</code> <button type="button" id="copyMint" class="copy">Copy address</button><br>' + ls.map(function (l, i) { return '<a ' + (i === 0 ? 'class="btn red" ' : "") + 'href="' + esc(counted(l.url)) + '" target="_blank" rel="noopener" data-link="' + l.id + '">' + esc(l.label) + "</a>"; }).join(" ");
     var c = $("copyMint"); if (c) c.addEventListener("click", function () { if (navigator.clipboard) navigator.clipboard.writeText(mint).then(function () { c.textContent = "Copied"; setTimeout(function () { c.textContent = "Copy address"; }, 1500); }).catch(function () {}); });
   }
 
@@ -726,13 +742,25 @@ burn  = every token the swap delivered</pre>
     }).join("");
     el.setAttribute("aria-label", label);
   }
+  /* @queued-begin (campaign readiness item 3: the same rule as src/lib/burnticker/queuedReading.ts) */
+  var QUEUED_READING = "Queued reading, no burn yet";
+  var QUEUED_STATUSES = ["planned", "sending", "swap-sent", "swapped"];
+  function isQueued(b) { return !!b && QUEUED_STATUSES.indexOf(b.status) >= 0; }
+  // the hero's caption under the latest reading: "receipt" only for a burn that executed
+  function heroCaption(last, ticker, n) {
+    var units = "That is <b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b>. ";
+    if (last.status === "skipped") return units + "Nothing was bought, because the spend was under the $1 floor." + ' <a href="#r-' + n + '">See the reading</a>.';
+    if (last.status === "confirmed") return units + "<b>" + fmtInt(last.burned || "0") + "</b> $" + esc(ticker) + " were bought and burned." + ' <a href="#r-' + n + '">See the receipt</a>.';
+    return units + QUEUED_READING + "." + ' <a href="#r-' + n + '">See the queued reading</a>.';
+  }
+  /* @queued-end */
   // The red figure is the latest burn day's debt delta ("$1b", the unit, until a receipt exists); amber is what was burned.
   function renderHero() {
     var last = burns.length ? burns[burns.length - 1] : null;
     if (last) {
       seg7($("heroFig"), "$" + (Number(last.delta) / 1e9).toFixed(2) + "b", fmtB(last.delta) + " of new U.S. debt on " + last.recordDate);
       $("heroLabel").textContent = "New U.S. debt on Debt to the Penny for " + last.recordDate;
-      $("heroCap").innerHTML = "That is <b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b>. " + (last.status === "skipped" ? "Nothing was bought, because the spend was under the $1 floor." : last.burned ? "<b>" + fmtInt(last.burned) + "</b> $" + esc(status && status.ticker || "DEFICIT") + " were bought and burned." : "The burn is pending.") + ' <a href="#r-' + burns.length + '">See receipt #' + burns.length + "</a>.";
+      $("heroCap").innerHTML = heroCaption(last, status && status.ticker || "DEFICIT", burns.length);
     } else seg7($("heroFig"), "$1b", "$1B of new U.S. debt per burn unit");
     if (status && status.burned) seg7($("heroBurn"), fmtInt(status.burned.total), fmtInt(status.burned.total) + " $DEFICIT bought and burned to date");
     else seg7($("heroBurn"), "-------", "not published yet");
@@ -740,11 +768,25 @@ burn  = every token the swap delivered</pre>
   renderHero();
 
   // ------------------------------------------------------------------ live strip
+  /* @graduation-begin (campaign readiness item 4: the same sentence as src/lib/burnticker/graduationLine.ts, from the coin's own raise and the disclosed seed) */
+  function graduationLine(threshold, quote, seed) {
+    var amt = function (x) { if (x == null || String(x).trim() === "") return null; var n = Number(x); return isFinite(n) && n > 0 ? String(Number(n.toFixed(4))) : null; };
+    var t = amt(threshold), q = quote || "SOL", sd = amt(seed);
+    if (!t) return null;
+    return sd ? "Graduation needs " + t + " " + q + " of net swapping into the coin on its curve. Swaps in count, swaps out subtract, and the " + sd + " " + q + " seed in the burn pool does not count."
+      : "Graduation needs " + t + " " + q + " of net swapping into the coin on its curve. Swaps in count, and swaps out subtract. A gift to the burn pool does not count.";
+  }
+  /* @graduation-end */
   function renderStatus(s) {
-    // ONE readiness state (src/lib/burnticker/readiness.ts), derived by the keeper into status.json; the static default above is "Not launched".
+    // ONE readiness state (src/lib/burnticker/readiness.ts), derived by the keeper into status.json; the static default above is the pre-launch state (deploy-sites.sh renders the live one into the served page).
     // website-15 item 6: the same six steps as the app's progress strip (src/lib/burnticker/progress.ts PROGRESS_DONE), never a seven-step count
     var READY_DONE = { "not-launched": 0, "on-curve": 2, "awaiting-registration": 3, "awaiting-event": 4, "below-floor": 4, deferred: 5, burned: 6 };
     if (s.readiness && s.readiness.label) { $("readiness").setAttribute("data-readiness", s.readiness.state); var more = document.querySelector(".rd-more"); if (more) more.hidden = s.readiness.state !== "not-launched"; $("readyStep").textContent = "Step " + (READY_DONE[s.readiness.state] != null ? READY_DONE[s.readiness.state] : "?") + " of 6 toward a first burn"; $("readyLabel").textContent = s.readiness.label; $("readyDetail").textContent = s.readiness.detail; }
+    var gl = $("gradLine"), gc = s.curve && s.curve.phase !== "graduated" && s.curve.phase !== "migrating" ? s.curve : null;
+    var gt = gc ? graduationLine(gc.threshold, gc.quote, s.buyback && s.buyback.funding && s.buyback.funding.seedSol) : null;
+    if (gl) { gl.textContent = gt || ""; gl.hidden = !gt; }
+    var rr = $("readyRead"), ra = s.curve && s.curve.readAt || s.generatedAt;
+    if (rr && ra && isFinite(Date.parse(ra))) { rr.textContent = "This page read the coin's state at " + new Date(ra).toISOString().slice(0, 10) + " " + new Date(ra).toISOString().slice(11, 16) + " UTC."; rr.hidden = false; }
     var isSample = !!s.sample || s.cluster === "replay";
     if (isSample || (s.cluster && !isMainnet(s.cluster))) {
       var b = $("banner"); b.classList.add("show");
@@ -802,23 +844,24 @@ burn  = every token the swap delivered</pre>
     if (!rows.length) { $("count").textContent = ""; return; }
     var shown = showAll ? rows : rows.slice(0, LIMIT);
     tb.innerHTML = shown.map(function (b, i) {
-      var skipped = b.status === "skipped", no = rows.length - i;
-      var check = b.verify && b.verify.verified ? '<span class="ok" title="Recomputed from the feed and the rule. It matches the memo.">✓</span>' : b.status === "confirmed" ? '<span class="bad" title="' + esc((b.verify && b.verify.checks || []).join("; ")) + '">!</span>' : '<span class="muted">' + esc(b.status) + "</span>";
-      return '<tr id="r-' + no + '">' +
-        "<td class=\"mono\" title=\"receipt #" + no + "\">" + esc(b.recordDate) + "</td>" +
+      var skipped = b.status === "skipped", no = rows.length - i, queued = isQueued(b);
+      // campaign readiness item 3: a reading that has not burned is a queued reading, never a receipt (src/lib/burnticker/queuedReading.ts)
+      var check = b.verify && b.verify.verified ? '<span class="ok" title="Recomputed from the feed and the rule. It matches the memo.">✓</span>' : b.status === "confirmed" ? '<span class="bad" title="' + esc((b.verify && b.verify.checks || []).join("; ")) + '">!</span>' : '<span class="muted">' + esc(queued ? QUEUED_READING : b.status) + "</span>";
+      return '<tr id="r-' + no + '"' + (queued ? ' data-queued=""' : "") + ">" +
+        "<td class=\"mono\" title=\"" + (b.status === "confirmed" ? "receipt" : queued ? QUEUED_READING : esc(b.status)) + "\">" + esc(b.recordDate) + "</td>" +
         "<td class=\"r num\" title=\"$" + esc(b.now) + "\">" + fmtT(b.now) + "</td>" +
         "<td class=\"r num\">" + fmtB(b.delta) + (Number(b.carryIn) > 0 ? ' <span class="muted" title="Carried over from a run of rises in a row">+$' + (Number(b.carryIn) / 1e9).toFixed(2) + "B carried</span>" : "") + "</td>" +
         "<td class=\"r units\">" + b.units + "</td>" +
-        "<td class=\"r num\">" + (skipped ? "—" : b.spent == null ? "pending" : esc(Number(b.spent).toFixed(4))) + "</td>" +
-        "<td class=\"r num\">" + (b.got == null ? (skipped ? "—" : "pending") : fmtInt(b.got)) + "</td>" +
-        "<td class=\"r num\">" + (skipped ? '<span class="muted" title="' + esc(b.skippedReason) + '">skipped</span>' : b.burned == null ? "pending" : "<b>" + fmtInt(b.burned) + "</b>") + "</td>" +
+        "<td class=\"r num\">" + (skipped || queued ? "—" : b.spent == null ? "pending" : esc(Number(b.spent).toFixed(4))) + "</td>" +
+        "<td class=\"r num\">" + (b.got == null ? (skipped || queued ? "—" : "pending") : fmtInt(b.got)) + "</td>" +
+        "<td class=\"r num\">" + (skipped ? '<span class="muted" title="' + esc(b.skippedReason) + '">skipped</span>' : queued ? '<span class="muted">no burn yet</span>' : b.burned == null ? "pending" : "<b>" + fmtInt(b.burned) + "</b>") + "</td>" +
         "<td>" + (b.swapSig ? link(b.swapUrl, b.swapSig, "—") : esc(skipped ? "—" : b.execution === "program" && b.signature ? "same transaction" : "—")) + "</td>" +
         "<td>" + link(b.txUrl, b.signature, skipped ? "—" : b.signature ? "" : "—") + "</td>" +
         "<td>" + check + "</td>" +
         '<td><button type="button" class="vbtn" data-i="' + i + '" aria-expanded="false">verify</button></td>' +
         "</tr>";
     }).join("");
-    $("count").textContent = (showAll ? rows.length : Math.min(LIMIT, rows.length)) + " of " + rows.length + " burn days";
+    $("count").textContent = (showAll ? rows.length : Math.min(LIMIT, rows.length)) + " of " + rows.length + " rows";
     var more = $("more"); more.hidden = showAll || rows.length <= LIMIT;
     tb.onclick = function (e) {
       var btn = e.target.closest ? e.target.closest("button.vbtn") : null; if (!btn) return;
@@ -990,7 +1033,7 @@ burn  = every token the swap delivered</pre>
   // ------------------------------------------------------------------ load
   function getJson(name) { return fetch(base + name, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status + " " + name); return r.json(); }); }
   // The four empty states (src/lib/burnticker/emptyState.ts headings, word for word): a missing status.json before launch is
-  // "Not launched"; any other failure is "Data unavailable", with the diagnostic behind a details disclosure.
+  // the not-launched heading; any other failure is "Data unavailable", with the diagnostic behind a details disclosure.
   function offline(msg, detail) {
     var n = $("notice"); n.textContent = msg;
     if (detail) { var d = document.createElement("details"), sm = document.createElement("summary"), p = document.createElement("span"); sm.textContent = "Details"; p.textContent = " " + detail; d.appendChild(sm); d.appendChild(p); n.appendChild(d); }
@@ -1057,7 +1100,7 @@ burn  = every token the swap delivered</pre>
 </script>
 <!-- site-shell:queue-core:begin -->
 <script>
-window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now) {
+window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now, writtenAt) {
   var PENDING = ["planned", "sending", "swap-sent", "swapped"], STALE = 60 * 60 * 1000;
   var ticker = status && status.ticker ? String(status.ticker) : "DEFICIT";
   function out(state, o) {
@@ -1074,7 +1117,7 @@ window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now) {
   var rows = Array.isArray(burnsFile) ? burnsFile : burnsFile && typeof burnsFile === "object" && Array.isArray(burnsFile.burns) ? burnsFile.burns : null;
   if (rows) for (var j = 0; j < rows.length; j++) if (!rows[j] || typeof rows[j] !== "object" || typeof rows[j].status !== "string") { rows = null; break; }
   if (!rows) return out("unavailable", { headline: "The queue is unavailable, because the keeper's list of readings and burns did not load.", generatedAt: status.generatedAt || null });
-  var gen = Date.parse(status.generatedAt);
+  var gen = writtenAt === undefined ? Date.parse(status.generatedAt) : writtenAt === null ? NaN : typeof writtenAt === "number" ? writtenAt : Date.parse(writtenAt);
   var stale = isFinite(gen) && now - gen > STALE;
   var feed = status.feed || {};
   var prog = status.program || null;
@@ -1103,32 +1146,43 @@ window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now) {
   var readingDate = feed.lastRecordDate || null;
   var base = { riseUsd: riseUsd, units: units, unsigned: unsigned, sharePct: sharePct, formula: formula, readingDate: readingDate, generatedAt: status.generatedAt || null, stale: stale, raiseSol: raiseSol };
   var lines = [];
-  var freshness = "The keeper published this " + (isFinite(gen) ? "at " + denver(gen) + " Denver time" : "at a time it did not record") + "." + (stale ? " That was more than an hour ago, so it may be out of date." : "");
+  // HB-90: the time the keeper wrote its status file; when that time is not known, no line at all
+  var freshness = isFinite(gen) ? "The keeper last wrote its status file at " + denver(gen) + " Denver time." + (stale ? " That was more than an hour ago, so it may be out of date." : "") : null;
   if (!readingDate) {
     base.headline = "The keeper has not published a reading since launch yet. The first reading is the baseline, and nothing is counted for it.";
-    base.lines = [freshness];
+    base.lines = freshness ? [freshness] : [];
     return out("no-reading", base);
   }
-  var riseText = riseUsd === null ? null : Number(riseUsd) >= 0 ? "The debt has risen " + usd(riseUsd) + " since launch." : "The debt is " + usd(String(-Number(riseUsd))) + " lower than at launch.";
-  var unitsText = units === 1 ? "One unit is queued." : units === 0 ? "No units are queued." : groupInt(units) + " units are queued.";
+  // Hourly run 6 HB-90: units count every rise from one reading to the next, so a fall and its recovery both count, and the rise is
+  // measured from the baseline reading. The headline says both things as what they are, with the baseline's own date.
+  var baseDate = feed.baseline && feed.baseline.recordDate ? shortDate(String(feed.baseline.recordDate)) : null;
+  var since = baseDate ? "than on " + baseDate : "than at the first reading";
+  var riseText = riseUsd === null ? null : Number(riseUsd) >= 0 ? "The debt is " + usd(riseUsd) + " higher " + since + "." : "The debt is " + usd(String(-Number(riseUsd))) + " lower " + since + ".";
+  var sinceText = baseDate ? "since " + baseDate : "since the first reading";
+  var unitsText = units === 0 ? "No units are queued." : "Daily rises " + sinceText + " add up to " + (units === 1 ? "one queued unit" : groupInt(units) + " queued units") + " ($1B each).";
   if (!poolOpen) {
-    base.headline = [riseText, unitsText].filter(Boolean).join(" ");
+    base.headline = [unitsText, riseText].filter(Boolean).join(" ");
     if (units > 0 && sharePct !== null) lines.push("When the curve fills" + (raiseSol ? " at " + raiseSol + " SOL" : "") + " and its pool is registered, the queued readings run in order and together spend " + formula + " of the burn pool, which is " + sharePct + "%. One burn run spends at most 2% of the trading pool's SOL, and the rest carries to the next run.");
     else if (units === 0) lines.push("A unit is queued for each full $1B the debt rises from one business day to the next. Nothing burns before the curve fills and its pool is registered.");
-    if (riseUsd === null) lines.push("The rise since launch is not in the keeper's published file yet.");
+    if (riseUsd === null) lines.push("The rise since the first reading is not in the keeper's published file yet.");
     if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");
-    lines.push("The latest reading is the Treasury figure for " + readingDate + ". " + freshness);
+    lines.push("The latest reading is the Treasury figure for " + readingDate + "." + (freshness ? " " + freshness : ""));
     base.lines = lines;
     base.card = units > 0 ? "0 $" + ticker + ", " + (units === 1 ? "1 unit" : groupInt(units) + " units") + " queued" : null;
     return out("queued", base);
   }
   base.headline = [riseText, units === 0 ? "The pool is registered, and no units are waiting." : "The pool is registered. " + (units === 1 ? "One unit is" : groupInt(units) + " units are") + " waiting for a burn run."].filter(Boolean).join(" ");
   if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");
-  lines.push("The latest reading is the Treasury figure for " + readingDate + ". " + freshness);
+  lines.push("The latest reading is the Treasury figure for " + readingDate + "." + (freshness ? " " + freshness : ""));
   base.lines = lines;
   return out("pool-open", base);
 
   function groupInt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function shortDate(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+    if (!m) return null;
+    return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(m[2]) - 1] + " " + Number(m[3]);
+  }
   function trimNum(s) { var t = String(s); return t.indexOf(".") >= 0 ? t.replace(/0+$/, "").replace(/\.$/, "") : t; }
   function usd(s) {
     var v = Number(s);

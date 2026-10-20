@@ -83,7 +83,8 @@ describe("HB-12 + PROD-01: the real-token burn contract (burnRealEligibility.ts)
     }
     assert.deepEqual(review({ rule: { ...debt(), burnTarget: BONK } }, ON).problems, [REAL_BURN_FAMILY_REFUSAL]);
     const off = review({ rule: { ...debt(), burnTarget: BONK } }, R5);
-    assert.ok(off.problems.includes(BURN_REAL_WAITING)); assert.equal(off.signable, false);
+    // LA6-3 (sixth pass): a token the family can never burn is refused once, without the "not offered yet" line, and gets no pin step
+    assert.deepEqual(off.problems, [REAL_BURN_FAMILY_REFUSAL]); assert.deepEqual(off.pins, []); assert.equal(off.signable, false);
     assert.equal(siteLaunchState(R5).burnReal.available, false, "flag off: the page offers the choice nowhere");
     assert.equal(siteLaunchState(ON).burnReal.available, true);
   });
@@ -139,6 +140,9 @@ describe("owner 2026-10-19: a Coin comparison coin burns only the coin it is mea
     const ok = review({ rule: { ...cvc(), burnTarget: WIF_T }, ticker: "TEAMWIF", name: "Team WIF", pair: { ticker: "TEAMBONK", name: "Team BONK", burnTarget: BONK } }, ON);
     const burnish = (ps: string[]) => ps.filter((x) => /measured against|burns its own token|burnTarget/.test(x));
     assert.deepEqual(burnish(ok.problems), [], ok.problems.join(" | "));
+    // LA6-3 (sixth pass): the pin steps and their rent stay for a side that may burn its token (test/burntickerPinSteps.test.ts now shows
+    // that a refused family gets none)
+    assert.deepEqual(ok.pins.map((x) => [x.side, x.symbol]), [["A", "WIF"], ["B", "BONK"]]);
     const wrongA = review({ rule: { ...cvc(), burnTarget: BONK }, ticker: "TEAMWIF", name: "Team WIF", pair: { ticker: "TEAMBONK", name: "Team BONK" } }, ON);
     assert.ok(wrongA.problems.includes(realBurnNotOwnCoin("WIF")), wrongA.problems.join(" | "));
     const wrongB = review({ rule: cvc(), ticker: "TEAMWIF", name: "Team WIF", pair: { ticker: "TEAMBONK", name: "Team BONK", burnTarget: WIF_T } }, ON);

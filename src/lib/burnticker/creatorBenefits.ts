@@ -25,7 +25,8 @@ export const CREATOR_PAGE = {
   unavailable: "The coin registry could not be read just now, so this list is unavailable.",
   badWallet: "That is not a Solana wallet address.",
   creatorText: "From the creator, not part of the rule",
-  labels: { receipts: "Receipts", lastBurn: "Last burn", next: "Next result", check: "Next source check", rank: "Rank" },
+  // HB-25 (hourly run 6): the count is confirmed burns, so its label says so; /v1/tokens labels its recorded-results count apart
+  labels: { receipts: "Burn receipts", lastBurn: "Last burn", next: "Next result", check: "Next source check", rank: "Rank" },
   noBurn: "No burn yet",
   noNext: "None scheduled",
   /** audit 7 F08: the coin's line in a partial list, when its own page could not be read */

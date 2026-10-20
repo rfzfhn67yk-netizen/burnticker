@@ -34,7 +34,8 @@ export interface DeficitQueue {
 }
 
 /** `burns` is null when burns.json is missing or unparsable (website-15: unavailable, never an empty history); `burnsError` says why. */
-export interface KeeperFiles { status: Record<string, unknown> | null; burns: unknown; error: string | null; burnsError?: string | null }
+/** `writtenAt` (hourly run 6 HB-90): when the keeper last wrote status.json, from the file itself (ISO); null when not known. */
+export interface KeeperFiles { status: Record<string, unknown> | null; burns: unknown; error: string | null; burnsError?: string | null; writtenAt?: string | null }
 
 export const keeperPublishDir = (env: Record<string, string | undefined> = process.env, root = process.cwd()): string =>
   path.resolve(root, env.BURNKEEPER_PUBLISH_DIR?.trim() || path.join("data", "burnkeeper-site"));
@@ -45,15 +46,18 @@ export function readKeeperFiles(env: Record<string, string | undefined> = proces
   let status: Record<string, unknown> | null = null;
   try { status = JSON.parse(fs.readFileSync(path.join(dir, "status.json"), "utf8")) as Record<string, unknown>; }
   catch (e) { return { status: null, burns: null, error: (e as NodeJS.ErrnoException).code === "ENOENT" ? "The keeper has not published a status file on this host." : "The keeper's status file could not be read." }; }
+  let writtenAt: string | null = null;
+  try { writtenAt = fs.statSync(path.join(dir, "status.json")).mtime.toISOString(); } catch { writtenAt = null; }
   let burns: unknown = null;
   let burnsError: string | null = null;
   try { burns = JSON.parse(fs.readFileSync(path.join(dir, "burns.json"), "utf8")); }
   catch (e) { burns = null; burnsError = (e as NodeJS.ErrnoException).code === "ENOENT" ? "The keeper has not published a burn list on this host." : "The keeper's burn list could not be read."; }
-  return { status, burns, error: null, burnsError };
+  return { status, burns, error: null, burnsError, writtenAt };
 }
 
 export function deficitQueue(files: KeeperFiles | null, now = Date.now()): DeficitQueue {
-  return deficitQueueCore(files?.status ?? null, files?.burns ?? null, now) as DeficitQueue;
+  // HB-90: the "published at" line is the status file's write time; a caller without it (an object built in memory) prints no time
+  return deficitQueueCore(files?.status ?? null, files?.burns ?? null, now, files?.writtenAt ?? null) as DeficitQueue;
 }
 
 /** The $DEFICIT rule file's feed and schedule (the locked rules file named in current-status.json), for the next-results row. Null when unreadable. */

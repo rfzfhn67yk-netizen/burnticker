@@ -16,7 +16,7 @@ import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
 import { drainWarning, reviewProjection, type Projection } from "@/lib/burnticker/projection";
 import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
-import type { LookalikeExisting } from "@/lib/burnticker/lookalike";
+import { lookalikeRefusalsByField, type LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
 import { linksProblems, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { meetingsMirror, noPlayoffs, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
@@ -108,6 +108,12 @@ export interface LaunchReview {
    * so a page never reads sentences to place them. Every `text` is also in `problems` (with "Coin B. " in front on a pair's side B).
    */
   fieldProblems: { side: "A" | "B"; field: "name" | "ticker" | "note" | "description" | "links"; text: string }[];
+  /**
+   * LA-4 (2026-10-19): field notices that do NOT refuse the launch and never appear in `problems`. Today one kind: "draft-held", a ticker
+   * an unlaunched draft holds while the review cannot tell who is asking (no signed request, or one past its age limit). Launch stays on;
+   * the press signs, and the prepare lets only that draft's own wallet through (launchGuards.ts). `ticker` is the side's ticker.
+   */
+  notices: { side: "A" | "B"; field: "ticker"; kind: "draft-held"; ticker: string; text: string }[];
   /** website-19: what graduation means, with the raise choices and the fee rates (guidedLaunch.ts graduationExplainer). */
   graduation: string[];
   /**
@@ -290,6 +296,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
   /** owner 2026-10-14: the launch check's informational note on the next game (native.ts NativePreflight.note: Polymarket has not listed it yet); never a refusal */ sourceNote?: string | null;
+  /** HB-72 (hourly run 5): a rivalry series with no meeting left on the season schedule (the route reads it) */ meetingsNote?: string | null;
   /** audit 12 item 2: a one-market pair's void date as the bundle route reads it (handlers.ts oneShotVoidBy); absent, side A's text is a draft */ pairVoidBy?: string | null;
   /** sources-7 H6: the season-over refusal (seasonOver.ts seasonOverFor, read by the route); refused as a problem, never only a warning */ seasonOver?: SeasonOverRefusal | null;
   /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null;
@@ -299,6 +306,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const cluster = hostCluster(env);
   const problems: string[] = [];
   const fieldProblems: LaunchReview["fieldProblems"] = [];
+  const notices: LaunchReview["notices"] = [];
   /** One field problem: in the flat list (side B prefixed on a two-coin review) and in fieldProblems. */
   const onField = (side: "A" | "B", field: LaunchReview["fieldProblems"][number]["field"], text: string, two: boolean) => { problems.push(two || side === "B" ? `Coin ${side}. ${text}` : text); fieldProblems.push({ side, field, text }); };
   if (!body.rule || typeof body.rule !== "object" || Array.isArray(body.rule)) return { problems: ["rule is required (a burnticker.rules/v1 object)"] };
@@ -349,7 +357,19 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   let reserved: ReadonlySet<string> = new Set();
   try { reserved = o.reserved ?? loadReserved(); } catch { /* an unreadable list refuses nothing here; the launch route reads it again */ }
   const descOf = (i: number) => { const d = i === 0 ? (body as { creatorDescription?: unknown }).creatorDescription : second?.creatorDescription; return typeof d === "string" ? d : ""; };
-  sides.forEach((s, i) => { for (const x of identityRefusals({ ticker: s.ticker, name: s.name, description: descOf(i), note: i === 0 ? note : "" }, { reserved, existing: o.existing ?? null, rule: i === 0 ? locked.rule : null, creator: typeof (body as { creator?: unknown }).creator === "string" ? (body as { creator: string }).creator : null })) onField(s.side, x.field, x.message, two); });
+  sides.forEach((s, i) => {
+    const creator = typeof (body as { creator?: unknown }).creator === "string" ? (body as { creator: string }).creator : null, rule = i === 0 ? locked.rule : null;
+    // LA-4: `creator` here is only ever a proven wallet (the route drops an unproven one); without it, a ticker an unlaunched draft holds
+    // is a notice (Launch stays on), so a creator whose signature ran out is asked to sign again instead of being locked out
+    const ids = identityRefusals({ ticker: s.ticker, name: s.name, description: descOf(i), note: i === 0 ? note : "" }, { reserved, existing: o.existing ?? null, rule, creator, draftNotice: true });
+    // WZ6-10: a ticker refused as reserved is not refused a second time for using the platform's name; a name hit goes under the name
+    const tickerReserved = ids.some((x) => x.code === "reserved" && x.field === "ticker");
+    for (const x of ids) {
+      if (x.code === "draft-held") { if (!tickerReserved) notices.push({ side: s.side, field: "ticker", kind: "draft-held", ticker: s.ticker, text: x.message }); continue; }
+      if (x.code === "lookalike" && tickerReserved && o.existing) { for (const y of lookalikeRefusalsByField({ ticker: s.ticker, name: s.name, rule, creator }, o.existing, { tickerReserved })) onField(s.side, y.field, y.reason, two); continue; }
+      onField(s.side, x.field, x.message, two);
+    }
+  });
   if (note.length > NOTE_MAX) onField("A", "note", `The note can be at most ${NOTE_MAX} characters.`, false);
   // audit 7 item 3: the creator's links, checked exactly as the bundle checks them (creatorProfile.ts linksProblems)
   if ((body as { links?: unknown }).links !== undefined) for (const x of linksProblems((body as { links?: unknown }).links)) onField("A", "links", x, false);
@@ -449,7 +469,11 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // A's rule (it is built from it), a Matchup's coin B by its own rule
   for (const [r, t, who, side] of [[locked.rule, targets[0], "", "A"], [pair ? locked.rule : companionLocked?.rule ?? null, targets[1], "Coin B. ", "B"]] as [BurnRule | null, BurnTargetField | null, string, "A" | "B"][]) {
     const fp = realBurnFamilyProblem(r, t, side); if (fp && !problems.includes(`${who}${fp}`)) problems.push(`${who}${fp}`);
+    // LA6-3: a token this coin can never burn gets no pin step and no pin rent in the review
+    if (fp) targets[side === "A" ? 0 : 1] = null;
   }
+  // LA6-3: when every named token was refused by its family, the "not offered on this site yet" sentence repeats that refusal; one is enough
+  if (!targets.some(Boolean) && problems.includes(BURN_REAL_WAITING)) problems.splice(problems.indexOf(BURN_REAL_WAITING), 1);
   const pins: LaunchReview["pins"] = [];
   const pinRent = rentLamports(BURN_TARGET_ACCOUNT_BYTES);
   // owner decision 2026-10-19: the incinerator end (a single coin on LaunchLab; a pair rule with it is refused by rules.ts) is pinned in
@@ -526,6 +550,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   if (o.seasonOver) problems.push(o.seasonOver.message);
   else if (o.seasonWarning) warnings.unshift(o.seasonWarning);
   if (o.sourceNote && !warnings.includes(o.sourceNote)) warnings.push(o.sourceNote);
+  // HB-72 (hourly run 5): a rivalry series with no meeting left on the schedule says so (the route's season read)
+  if (o.meetingsNote && !warnings.includes(o.meetingsNote)) warnings.unshift(o.meetingsNote);
   const n = steps.length;
   // the first step of side B (1-based): after side A's two transactions (LaunchLab) or its one (pair curve)
   const stepB = venue === "pair-curve" ? 2 : 3;
@@ -553,7 +579,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const review: LaunchReview = {
     schema: "burnticker.launch-review/v1", network: cluster, mode: model.mode, type, typeAvailable, typeReason,
     signable,
-    rule: { text: lockedA.text, sha256: lockedA.sha256, sha12: lockedA.sha12, statement: ruleStatement(lockedA.rule, { seriesTitle: o.seriesTitle ?? null, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), sentence: text.lead, share: shareText, presets: linkedOneShot ? LINKED_ONE_SHOT_LINE : `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, end) },
+    rule: { text: lockedA.text, sha256: lockedA.sha256, sha12: lockedA.sha12, statement: ruleStatement(lockedA.rule, { seriesTitle: o.seriesTitle ?? null, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), sentence: text.lead, share: shareText, presets: linkedOneShot ? LINKED_ONE_SHOT_LINE : `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule, { dispersal: webDispersalOn(env, o.root) }))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, end) },
     coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null, profile: { description: i === 0 ? creatorText : creatorTextB }, descriptionRoom: i === 0 ? descriptionRoom(text.paragraph) : paragraphB ? descriptionRoom(paragraphB) : DESCRIPTION_MAX, suggestedTicker: i === 0 ? text.ticker || null : tickerB })),
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), teamAllocationPct: 0, lpLockedPct: LP_LOCKED_PCT },
     feesPerSol: venue === "pair-curve" ? [perPc(PAIR_CURVE_FEES.curve), perPc(PAIR_CURVE_FEES.post)] : [per(CURVE_FEES), per(postGraduationFeesFor(cluster))],
@@ -582,6 +608,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     warnings,
     problems,
     fieldProblems,
+    notices,
     graduation: graduationLines(cluster),
     rules: [
       { side: "A" as const, ticker: tk(0), name, step: 1, text: lockedA.text, sha256: lockedA.sha256, derived: false, ...finalOf(sideA) },

@@ -54,7 +54,8 @@ describe("the operator's share sentence (fees copy, 2026-10-12)", () => {
   });
 
   test("every surface that states the share carries the sentence", () => {
-    assert.ok(USE_OF_FEES.startsWith(`Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume. ${EXPECTED} `));
+    // hourly run 5, HS-26: the use-of-fees paragraph opens with the footer's line (both tiers, the live one first)
+    assert.ok(USE_OF_FEES.startsWith(`Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume. After graduation, coins created before`));
     assert.ok(feeSplitSentence().includes(EXPECTED));
     assert.ok(FEE_FLOW_LINE.endsWith(EXPECTED));
     // sixth pass B-16 (2026-10-19): the trust page's guardrail and money lines name both tiers, the live one first
@@ -63,7 +64,7 @@ describe("the operator's share sentence (fees copy, 2026-10-12)", () => {
     // continuous audit run 2, HB-13: the new-coin share first, then the tier-9 share of coins created before the cutover
     assert.ok(OPERATOR_COPY.devFeeNote.endsWith(`its share of each graduated pool's swaps: ${operatorShareClause()} on new coins, and ${EARLIER_OPERATOR_CLAUSE}.`));
     assert.match(lpFeeLine("mainnet", null).title, /^Operator: about 0\.13% of every swap \(20% of the locked pool's liquidity fees\) on new coins, and about 0\.04% of every swap \(20% of the locked pool's liquidity fees\) on coins created before 19 October 2026, 20:17 UTC, which stay on tier 9, after graduation$/);
-    for (const f of ["docs/burnticker/WHITEPAPER.md", "site/burnticker/whitepaper.html", "config/burnticker/transparency.json", "docs/burnticker/README.md", "docs/burnticker/api.md", "site/deficit/index.html"])
+    for (const f of ["docs/burnticker/WHITEPAPER.md", "site/burnticker/whitepaper.html", "config/burnticker/transparency.json", "docs/burnticker/README.md", "docs/burnticker/api.md"])   // hourly run 5, HS-26: site/deficit carries the share only in its footer, now the both-tier line
       assert.ok(read(f).includes(EXPECTED.split(" — ")[0].replace("After graduation, ", "")), `${f} states the operator's share from the whole`);
   });
 

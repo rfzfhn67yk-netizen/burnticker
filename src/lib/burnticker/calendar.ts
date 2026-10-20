@@ -90,6 +90,18 @@ export async function coinCalendar(i: CalendarInput): Promise<CoinCalendar> {
   return { ...base, source: entries.length ? "status" : "none", entries, ...(entries.length ? {} : { note: `No next reading is scheduled for this coin. ${NOTE}` }) };
 }
 
+/**
+ * Campaign readiness 2026-10-19 (item 6): a Treasury coin this host serves from its keeper's files rather than a registry row ($DEFICIT
+ * before it is registered here) still gets its calendar: the next business days, the same entries as a registered Treasury coin.
+ */
+export function treasuryCalendar(i: { ticker: string; mint: string; page: string; ics: string; firesOn: string; now?: number }): CoinCalendar {
+  const days: string[] = [];
+  let d = new Date(i.now ?? Date.now()).toISOString().slice(0, 10);
+  if (!isBusinessDay(d)) d = nextBusinessDay(d);
+  while (days.length < CALENDAR_MAX) { days.push(d); d = nextBusinessDay(d); }
+  return { ticker: i.ticker, mint: i.mint, page: i.page, ics: i.ics, note: NOTE, source: "business-days", entries: days.map((day) => ({ id: `reading-${day}`, kind: "reading-day" as const, at: null, day, allDay: true, title: `$${i.ticker}: Treasury reading day`, detail: `The Treasury posts a reading on each business day. This coin burns on ${i.firesOn}.` })) };
+}
+
 // ---- iCalendar (RFC 5545) ----
 
 const icsText = (s: string): string => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");

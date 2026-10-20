@@ -5,6 +5,7 @@ import { platform } from "@/lib/burnticker/server";
 import { pairPageFound } from "@/lib/burnticker/publicPairs";
 import { pairSeed, type PairSeed } from "@/lib/burnticker/pairPageMeta";
 import { withShareCard } from "@/lib/burnticker/pageMeta";
+import { receiptCardPath } from "@/lib/burnticker/receiptCardServe";
 import { metadata as NOT_FOUND_METADATA } from "../../not-found";
 import { PairSeedProvider } from "./PairSeed";
 
@@ -25,7 +26,11 @@ export async function generateMetadata({ params }: { params: Promise<{ pairId: s
   if (!pairPageFound(() => platform().registry, pairId)) return NOT_FOUND_METADATA;
   const s = seedOf(pairId);
   if (!s) return { title: "Rivalry pair" };
-  return withShareCard({ title: s.title, description: s.description, alternates: { canonical: s.canonical } });
+  const m = withShareCard({ title: s.title, description: s.description, alternates: { canonical: s.canonical } });
+  // OP6-11: the pair's own share image (a launched side's receipt card) instead of the site's generic card
+  if (!s.imageMint) return m;
+  const image = { url: `https://burnticker.com${receiptCardPath(s.imageMint)}`, width: 1200, height: 630, alt: `A receipt card from the pair ${s.title}` };
+  return { ...m, openGraph: { ...m.openGraph, images: [image] }, twitter: { ...m.twitter, images: [image.url] } };
 }
 
 /**

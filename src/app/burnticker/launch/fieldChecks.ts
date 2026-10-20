@@ -93,6 +93,17 @@ export function profileIssues(v: ProfileValue, generated: string | null = null):
 
 /** Beside the disabled Review button on the name step. */
 export const NAME_STEP_BLOCKED = "Fix the fields marked in red first. Each one says what to change.";
+/**
+ * HB-86 (hourly audit run 6): DENW1N against DENWIN, and DENWIN held by a draft, passed the name step and were refused only on the
+ * review, while DEFICIT (the reserved list, checked in the page) was refused at once. The ticker checks against other coins are the
+ * server's (the review answer, the same one the Review step shows), and the name step let the creator move on before that answer was
+ * back. Now the Review button waits for the answer for the draft on screen, so exact, near and draft-held tickers are said under the
+ * field on this step. An answer that failed does not hold it (the Review step says why and Launch waits there).
+ */
+export const NAME_STEP_CHECKING = "Checking the ticker and name against every Burnticker coin. The Review button waits until that check is back.";
+export function nameStepWaitsForReview(o: { reviewCurrent: boolean; reviewError: string | null }): boolean {
+  return !o.reviewCurrent && !o.reviewError;
+}
 
 /** The server's per-hit lint line (coinText.ts creatorTextProblems): said here as one sentence per field, so never repeated. */
 export const isLintLine = (problem: string): boolean => /^(Coin [AB]\. )?The (name|ticker|note|description|link label) [“"][\s\S]*[”"] contains [“"][\s\S]*[”"], which is not allowed\./.test(problem);

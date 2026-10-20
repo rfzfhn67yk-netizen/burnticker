@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import fs from "node:fs";
 import path from "node:path";
 import { coinSharePreview, previewMetadata } from "@/lib/burnticker/sharePreviewServe";
+import { DEFICIT_PAGE_TITLE, deficitPreview } from "@/lib/burnticker/sharePreview";
 import { platform } from "@/lib/burnticker/server";
 import { coinPageFound, coinPageTitle, deficitMintTarget, lookupCoin, registryCoinKey, type CoinLookup } from "@/lib/burnticker/coinLookup";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
@@ -25,7 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ ticker: s
   try {
     const p = platform();
     l = lookupCoin(p.registry, ticker);
-    if (l.kind === "many") return { title: `$${l.ticker} on Burnticker`, description: `Several coins use the ticker $${l.ticker}. Pick one by its mint address.` };
+    if (l.kind === "many") return { title: { absolute: `$${l.ticker} on Burnticker` }, description: `Several coins use the ticker $${l.ticker}. Pick one by its mint address.` };
     if (l.kind === "one") { mint = l.token.mint; key = registryCoinKey(p.registry, l.token); }
   } catch { /* the registry could not be read: the ticker as written */ }
   // prelaunch audit 2026-10-18 A-24: a page that answers 404 keeps the 404's own title (it used to flip to "$NOPE on Burnticker" after
@@ -33,7 +34,12 @@ export async function generateMetadata({ params }: { params: Promise<{ ticker: s
   if (l?.kind === "none" && !coinPageFound(ticker, () => l!, servedPages())) return NOT_FOUND_METADATA;
   const p = await coinSharePreview(mint ?? ticker.toUpperCase());
   const canonical = mint ? coinCanonicalHref(mint) : `/burnticker/t/${encodeURIComponent(ticker.toUpperCase())}`;
-  return p ? { ...previewMetadata(p, canonical), alternates: { canonical, types: { "application/rss+xml": feedHref({ coin: key }, "rss"), "application/feed+json": feedHref({ coin: key }, "json") } } } : { title: coinPageTitle(ticker, l) };
+  const alternates = (c: string) => ({ canonical: c, types: { "application/rss+xml": feedHref({ coin: key }, "rss"), "application/feed+json": feedHref({ coin: key }, "json") } });
+  // AP6-8: $DEFICIT (no registry row) gets its own preview, its own og:url and a title that is not doubled by the site's title template
+  if (!p && key === "DEFICIT") { const c = "/burnticker/t/DEFICIT"; return { ...previewMetadata(deficitPreview(), c), title: { absolute: DEFICIT_PAGE_TITLE }, alternates: alternates(c) }; }
+  // campaign readiness item 7: the canonical address is the mint page (never a utm_* or ref parameter), with or without a share preview
+  // coinPageTitle already ends "on Burnticker", so it is absolute (the template would add "· Burnticker" again)
+  return p ? { ...previewMetadata(p, canonical), alternates: alternates(canonical) } : { title: { absolute: coinPageTitle(ticker, l) }, ...(mint ? { alternates: { canonical } } : {}) };
 }
 
 /** The pages that exist without a registry row besides $DEFICIT's: disclosed rehearsal coins. Null when the list cannot be read. */

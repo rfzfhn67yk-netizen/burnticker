@@ -150,9 +150,11 @@ describe("b-reload-relaunch: a refusal, a reload and Launch again from the kept 
     assert.equal(usableReviewProof(kept, Keypair.generate().publicKey.toBase58(), ["SYRLNZPV"], parseWalletProof), null, "never for another wallet");
     assert.equal(usableReviewProof(kept, ownerKey, ["OTHER"], parseWalletProof), null, "never for other tickers");
     const review = async (extra: Record<string, unknown>) => (await (await callRoute(`${API}/launch/review`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ rule: BRONCOS, ticker: "SYRLNZPV", name: "Synth reload", ...extra }) })).json()) as Any;
-    // publish 93: the reload's review carried no proof, so the creator's own draft read as another coin's ticker
+    // publish 93: the reload's review carried no proof, so the creator's own draft read as another coin's ticker. LA-4 (2026-10-19):
+    // without a proof it is now a draft-held notice that leaves Launch on (test/burntickerDraftHeldNotice.test.ts), never the refusal
     const before = await review({ creator: ownerKey });
-    assert.match(JSON.stringify(before), new RegExp(sameTickerSentence("SYRLNZPV").replace(/[$.]/g, "\\$&")));
+    assert.doesNotMatch(JSON.stringify(before.problems), new RegExp(sameTickerSentence("SYRLNZPV").replace(/[$.]/g, "\\$&")));
+    assert.deepEqual(before.notices.map((n: Any) => n.kind), ["draft-held"]);
     // with the kept proof: no ticker refusal, not taken
     const after = await review({ creator: ownerKey, walletProof: kept });
     assert.doesNotMatch(JSON.stringify(after), /already the ticker of another Burnticker coin/);

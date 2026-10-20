@@ -64,7 +64,7 @@ describe("a coin's numbers come from the tier it pinned", () => {
     const tp = read("src/lib/burnticker/tokenPage.ts");
     // continuous audit run 2, HB-13: one pinned split feeds fees.postGraduation, fees.sentence and lifecycle.fees
     assert.match(tp, /const postGraduation = postGraduationFeesFor\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig\);/);
-    assert.match(tp, /fees: \{ curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig, \{ tierUnread \}\)/);
+    assert.match(tp, /fees: \{ curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig, \{ tierUnread, graduated: lpLockedPct !== null \}\)/);  // HB-56 (hourly run 6): the lock sentence follows the coin's state
     assert.match(tp, /fees: feeFlowLine\(postGraduation, lpLockedPct, tierUnread\) \}/);
     assert.match(tp, /\$\{esc\(feeFlowLine\(s\.fees\.postGraduation, s\.trust\.lpLockedPct \?\? null, !!s\.fees\.tierUnread\)\)\}/);
     assert.match(read("src/lib/burnKeeper/programAdapter.ts"), /cpConfig: c\.ll_cp_config\.toBase58\(\)/);

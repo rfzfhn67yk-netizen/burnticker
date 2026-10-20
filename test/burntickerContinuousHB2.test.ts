@@ -63,7 +63,8 @@ describe("HB-13: a coin's fee legs come from the tier it pinned; the site-wide c
     assert.doesNotMatch(EARLIER_COINS_LINE, /\d{4}-\d{2}-\d{2}/);
   });
   test("footer, current-status, trust, fee ledger and the operator note all carry both tiers", () => {
-    assert.ok(DEV_FEE_LINE.includes(EARLIER_COINS_LINE), DEV_FEE_LINE);
+    // hourly run 5, HS-26: the footer line names both tiers, the one every live coin pays first (feeShareLine.ts feeTiersLine)
+    assert.ok(DEV_FEE_LINE.includes(`coins created before ${TIER_14_CUTOVER_WORDS}`) && DEV_FEE_LINE.indexOf("0.88%") < DEV_FEE_LINE.indexOf("0.98%"), DEV_FEE_LINE);
     // sixth pass B-16 (2026-10-19): current status and the mainnet trust statement lead with the tier every live coin pays (BOTH_TIERS_LINE)
     assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{BOTH_TIERS_LINE\}/);
     // HB-50 (run 4): another network names its own tier

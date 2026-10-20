@@ -52,8 +52,8 @@ describe("F1/F2: the round-5 burn target is off unless the owner's flag is on (f
     for (const env of [MAINNET, R5]) {
       const rv = review({ ...debt(), burnTarget: BONK }, env);
       assert.equal(siteLaunchState(env).burnReal.available, false, "the page hides the choice on this host");
-      // owner 2026-10-19: a published-data coin may not burn another token at all, so the family refusal joins the waiting line
-      assert.deepEqual(rv.problems, [BURN_REAL_WAITING, REAL_BURN_FAMILY_REFUSAL]);
+      // owner 2026-10-19: a published-data coin may not burn another token at all; LA6-3 (sixth pass): that refusal alone, said once
+      assert.deepEqual(rv.problems, [REAL_BURN_FAMILY_REFUSAL]);
       assert.equal(rv.signable, false);
     }
   });

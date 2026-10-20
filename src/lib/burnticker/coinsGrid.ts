@@ -20,8 +20,17 @@ export const GRID_TABS: { id: GridTab; label: string; rule: string }[] = [
   { id: "following", label: "Following", rule: "Coins you follow." },
 ];
 
-/** How old an index read may be before the grid says so (the index is cached for at most a minute; five means something is wrong). */
-export const STALE_AFTER_MS = 5 * 60_000;
+/**
+ * LD6-4 (sixth pass): the freshness window is tied to the read cadence. The page asks again every REREAD_MS (60 s); the server keeps its
+ * answer at most INDEX_SERVE_MAX_AGE_MS before it waits for a fresh build; the CDN may add s-maxage plus stale-while-revalidate (45 s);
+ * a build takes up to about 30 s. A read older than all of that together, rounded up to five minutes, means something is wrong.
+ * Before this fix the server handed out its last answer however old it was, so the first visitor after a quiet spell saw the line.
+ */
+export const INDEX_SERVE_MAX_AGE_MS = 120_000;
+export const INDEX_CADENCE_MS = 60_000 + INDEX_SERVE_MAX_AGE_MS + 45_000 + 30_000;
+export const STALE_AFTER_MS = Math.max(5 * 60_000, INDEX_CADENCE_MS);
+/** The server's choice: hand out the kept index at once, or wait (bounded) for a fresh build because the kept one is too old. */
+export function indexMemoTooOld(ageMs: number): boolean { return ageMs > INDEX_SERVE_MAX_AGE_MS; }
 
 export type GridState =
   | { kind: "loading" }

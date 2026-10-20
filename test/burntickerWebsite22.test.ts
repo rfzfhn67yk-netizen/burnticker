@@ -49,7 +49,8 @@ describe("QA 9 item 1: a natural disaster's burn-pattern cards are one stable se
     assert.match(page, /const curPattern: PatternId \| null = guide\.follow === "disaster" \? hazardPatternOptions\(rule, Date\.now\(\), \{ dispersal: site\.dispersal\.available \}\)\.preselected/);
     assert.match(page, /return stablePatternOptions\(cur\.options, sib && "series" in sib \? hazardPatternOptions\(hazardRule\(sib\.series\), now, \{ dispersal: site\.dispersal\.available \}\)\.options : null\);/);
     assert.match(page, /const options0 = guide\.follow === "disaster" \? po\.options : po\.options\.map/, "the hazard labels are never overwritten by the generic words");
-    assert.match(page, /const back = rule\.series \? hazardSwap\(rule\.series, "every", Date\.now\(\)\) : null;[\s\S]{0,260}setWantInverse\("on"\)/);
+    // hourly run 5, HB-71: the switch is the pure reducer hazards.ts hazardPatternSwitch (fade from Once moves to the per-event form there)
+    assert.match(page, /hazardPatternSwitch\(\{ series: rule\.series, inverse: !!rule\.inverse \}, pt, Date\.now\(\)\)/);
   });
 });
 
@@ -144,7 +145,7 @@ describe("QA 9 items 7, 13 and 14, audit 10 item 19: the image and the public pr
     assert.deepEqual(squareCrop(512, 512), { left: 0, top: 0, width: 100, height: 100 });
     assert.match(page, /disabled=\{nameStepBlocked\} onClick=\{\(\) => setGuide\(\(g\) => \(\{ \.\.\.g, phase: "review" \}\)\)\}>Review<\/button>/);
     // website-25 (QA 11 H5): the same line, now also for every other field problem (NAME_STEP_BLOCKED)
-    assert.match(page, /\{nameStepBlocked && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>\{rightsMissing \? IMAGE_RIGHTS_REQUIRED : NAME_STEP_BLOCKED\}<\/p>\}/);
+    assert.match(page, /\{nameStepBlocked && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>\{rightsMissing \? IMAGE_RIGHTS_REQUIRED : nameChecking && nameBlockers\.length === 0 && !coinsForName\.some\(\(c\) => !!c\.nameIssue \|\| !!c\.tickerIssue\) \? NAME_STEP_CHECKING : NAME_STEP_BLOCKED\}<\/p>\}/);
     // website-25 (QA 11 H5): held for every field problem, the image line among them
     assert.match(tile, /next=\{next\("Review", "review", nameBlockedP, nameBlockedP \? \(rightsMissing \? IMAGE_RIGHTS_REQUIRED : NAME_STEP_BLOCKED\) : null\)\}/);
     assert.match(fields, /data-image-not-square role="status"/); assert.match(fields, /squareCrop\(shape\.w, shape\.h\)/);

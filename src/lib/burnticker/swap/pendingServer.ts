@@ -18,6 +18,11 @@ import type { PendingSwap } from "@/lib/burnticker/swap/pending";
  * one of the transaction's accounts, so nobody can hold another wallet's swaps. A record is removed by naming its signature once the
  * chain shows the swap can no longer land (HB-65, heldState below; the panel asks once the swap settles), and it lapses after
  * RECORD_TTL_MS (the panel's own 24-hour release). While it may still land, a read shows it sealed, without the signature.
+ *
+ * HB-65 v4 (continuous audit 2026-10-20T0019Z): the expiry a record keeps always comes from the server's own height read, never from the
+ * caller. If the chain cannot be read when a swap is first saved, the save is refused (503) and the panel tries again; if the server has
+ * no chain reader at all, the record is kept with its expiry marked unknown, and it is never judged expired until a later height read
+ * stamps the server's own expiry on it.
  */
 export const RECORD_TTL_MS = 24 * 3_600_000 + 10 * 60_000;
 export const MAX_RECORDS = 50_000;
@@ -92,6 +97,14 @@ export class SwapPendingStore {
     const r = this.db.prepare("SELECT * FROM swap_pending WHERE k = ? AND at >= ?").get(SwapPendingStore.key(network, mint, owner), now - RECORD_TTL_MS) as { network: Network; mint: string; owner: string; signature: string; lvbh: number; side: Side; at: number } | undefined;
     return r ? { v: 1, network: r.network, mint: r.mint, owner: r.owner, signature: r.signature, lastValidBlockHeight: Number(r.lvbh), side: r.side, at: Number(r.at) } : null;
   }
+  /**
+   * HB-65 v4: gives a record kept with an unknown expiry the server's own expiry, once. Only a record that holds this signature and is
+   * still marked unknown changes, so an expiry already set is never re-dated. True when this call stamped it.
+   */
+  stampExpiry(network: Network, mint: string, owner: string, signature: string, lastValidBlockHeight: number): boolean {
+    if (!Number.isSafeInteger(lastValidBlockHeight) || lastValidBlockHeight < 0 || lastValidBlockHeight >= UNKNOWN_EXPIRY) return false;
+    return Number(this.db.prepare("UPDATE swap_pending SET lvbh = ? WHERE k = ? AND signature = ? AND lvbh >= ?").run(lastValidBlockHeight, SwapPendingStore.key(network, mint, owner), signature, UNKNOWN_EXPIRY).changes) > 0;
+  }
   /** Removes the record only when it holds this signature (a settled swap); true when one was removed. */
   clear(network: Network, mint: string, owner: string, signature: string): boolean {
     return Number(this.db.prepare("DELETE FROM swap_pending WHERE k = ? AND signature = ?").run(SwapPendingStore.key(network, mint, owner), signature).changes) > 0;
@@ -107,6 +120,7 @@ export class SwapPendingStore {
  *   pending   it may still land. A DELETE is refused (403 "swap-unsettled") and the record stays; a read gets the record SEALED: that a
  *             swap from this wallet is held, with no signature, so the owner's panel waits (Check again) and nobody else learns it.
  *   unknown   the chain could not be read: treated like pending (a DELETE answers 503 and keeps the record).
+ * A record whose expiry the server never established (UNKNOWN_EXPIRY, HB-65 v4) is settled only by a confirmed or failed status.
  * This keeps the owner's recovery after a cleared browser: the panel's read sees a sealed hold while the swap can still land, and the
  * whole record once it cannot, which it settles and clears as before.
  */
@@ -121,14 +135,39 @@ export const HELD_EXPIRY_MARGIN_BLOCKS = 150;
 export const BLOCKHASH_WINDOW_BLOCKS = 150;
 
 /**
- * HB-65 v2: the expiry the server keeps for a new record. The posted lastValidBlockHeight is the client's word, and a replay of the
- * same signed bytes could post 0 to make a live swap look expired. The server reads the chain's height at save and keeps height + the
- * blockhash window, which is never earlier than the real expiry (the blockhash was fetched before the save). Only when the chain cannot
- * be read is the posted value kept; either way it is fixed on first save (putIfCurrent never re-dates a signature it holds).
+ * HB-65 v4: the expiry kept for a record when the server has no chain reader. It is far past any real block height, so every reader of
+ * the record (this build's, and an older build's after a rollback) sees a swap that may still land, never one past its expiry.
  */
-export async function trustedExpiry(chain: SwapChainReader | null, posted: number): Promise<number> {
-  if (!chain) return posted;
-  try { return (await chain.getBlockHeight("confirmed")) + BLOCKHASH_WINDOW_BLOCKS; } catch { return posted; }
+export const UNKNOWN_EXPIRY = Number.MAX_SAFE_INTEGER;
+/** Whether a record's expiry was set by the server's own height read (false: it was kept while no chain reader was configured). */
+export const expiryKnown = (rec: Pick<PendingSwap, "lastValidBlockHeight">): boolean => rec.lastValidBlockHeight < UNKNOWN_EXPIRY;
+
+/**
+ * HB-65 v2 and v4: the expiry the server keeps for a record. The posted lastValidBlockHeight is the caller's word (a replay of the same
+ * signed bytes could post 0 to make a live swap look expired), so it is never used. The server reads the chain's height and keeps the
+ * height plus the blockhash window, which is never earlier than the real expiry because the blockhash was fetched before the save. With
+ * no chain reader the answer is UNKNOWN_EXPIRY. When the reader is configured but the read fails the answer is "unavailable", and the
+ * route refuses the save (503) rather than keep a value it did not establish.
+ */
+export async function trustedExpiry(chain: SwapChainReader | null): Promise<number | "unavailable"> {
+  if (!chain) return UNKNOWN_EXPIRY;
+  try {
+    const h = await chain.getBlockHeight("confirmed");
+    return Number.isSafeInteger(h) && h >= 0 ? h + BLOCKHASH_WINDOW_BLOCKS : "unavailable";
+  } catch { return "unavailable"; }
+}
+
+/**
+ * HB-65 v4: a record kept with an unknown expiry gets the server's own expiry the first time a height read succeeds (a re-POST of the
+ * same signature, a GET or a DELETE). Returns the record as it now stands: unchanged when its expiry is already known or the chain is
+ * still unreadable. The stamp is the height now plus the window, later than the real expiry, so it can only keep a hold longer.
+ */
+export async function revalidateExpiry(store: SwapPendingStore, chain: SwapChainReader | null, rec: PendingSwap): Promise<PendingSwap> {
+  if (expiryKnown(rec) || !chain) return rec;
+  const e = await trustedExpiry(chain);
+  if (e === "unavailable" || e >= UNKNOWN_EXPIRY) return rec;
+  try { store.stampExpiry(rec.network, rec.mint, rec.owner, rec.signature, e); return store.get(rec.network, rec.mint, rec.owner) ?? rec; }
+  catch { return rec; }
 }
 
 /** Whether the held swap `rec` can still land, from the chain (the panel's reconcileSubmitted judgement, read by the server). */
@@ -141,6 +180,8 @@ export async function heldState(chain: SwapChainReader | null, rec: Pick<Pending
     const height = await chain.getBlockHeight("confirmed");
     const st = await status();
     if (final(st)) return "settled";
+    // HB-65 v4: an expiry the server did not establish is never judged past; only a confirmed or failed status settles such a record
+    if (!expiryKnown(rec)) return "pending";
     if (st || height <= rec.lastValidBlockHeight + HELD_EXPIRY_MARGIN_BLOCKS) return "pending";
     const again = await status();
     if (final(again)) return "settled";

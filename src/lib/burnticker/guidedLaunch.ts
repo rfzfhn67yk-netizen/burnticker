@@ -560,13 +560,17 @@ export const END_CHOICE_LINES = {
 } as const;
 /** Why "the rest burns this coin" is not offered for the losing path (said once beside the choices). */
 export const SELF_ON_LOSS_LINE = "A coin does not burn itself when it loses or its rule ends without firing: the rest leaves this coin then.";
+/** HB-81 D4 (hourly run 5): the same fact for a coin with no losing side (a count, a reading, a natural disaster). */
+export const SELF_ON_END_LINE = "A coin does not burn itself with what is left when its rule ends: the rest leaves this coin then.";
+/** The line under the end choices: the losing words only for a rule that can lose (a team, a game or a market). */
+export const selfEndLineFor = (r: Pick<BurnRule, "oracle" | "series">): string => (r.oracle === "polymarket" || r.oracle === "kalshi" || (r.oracle === "catalogue" && !!r.series && !!parseEspnSeries(r.series)) ? SELF_ON_LOSS_LINE : SELF_ON_END_LINE);
 export const SINK_PICKER_LABEL = "Pick a coin";
 export const SINK_SEARCH_PLACEHOLDER = "Search by ticker, name or rule";
 export const SINK_NONE_LINE = "No other live coin on this network can take the rest yet, so it goes to $DEFICIT's burn.";
 export const SINK_NO_MATCH_LINE = "No live coin matches that search.";
 /** The picked coin, in a sentence, with end.rs's fall-through. */
 export const pickedSinkLine = (ticker: string): string => `The rest goes to $${ticker}'s burn; if $${ticker} is not live then, to $DEFICIT's burn.`;
-export interface EndChoiceModel { offered: boolean; winning: string | null; options: { kind: EndChoiceKind; line: string }[]; /** one burn of the whole pool (nextResult.ts oneShotFull): the lines say what reaches the pool later */ oneShot?: boolean }
+export interface EndChoiceModel { /** HB-81 D4: the line under the choices (selfEndLineFor) */ selfLine?: string; offered: boolean; winning: string | null; options: { kind: EndChoiceKind; line: string }[]; /** one burn of the whole pool (nextResult.ts oneShotFull): the lines say what reaches the pool later */ oneShot?: boolean }
 /**
  * What the end choice shows for `rule` (with its onEnd, or the default end): offered for a coin whose sink is $DEFICIT or a named coin and
  * that can end; never for a winner-takes-the-burn pair (the pair winner), a league-mode coin, a fixed-token rule or a coin with no end.
@@ -582,7 +586,7 @@ export function endChoiceModel(rule0: BurnRule, o: { burnSol?: boolean; sinkPick
   // owner decision 2026-10-19: a coin that spends its whole pool in one burn says what reaches the pool later (describe.ts ONE_SHOT_REST_*)
   const oneShot = !winning && !rule.pair && oneShotFull(rule);
   return {
-    offered, winning, oneShot,
+    offered, winning, oneShot, selfLine: selfEndLineFor(rule),
     options: [
       // owner decision 2026-10-13 evening: the "another coin" choice is hidden unless the host exposes it (BURNTICKER_END_SINK_PICKER=1)
       ...(o.sinkPicker ? [{ kind: "coin" as const, line: END_CHOICE_LINES.coin }] : []),
@@ -860,6 +864,23 @@ export function meetingsEndLine(a: Pick<BurnRule, "oracle" | "series"> | null | 
   return MEETINGS_END_LINE.replace("When both seasons are over,", oneSeasonOverClause(sa)).replace("burns down what is left on itself.", "burns down what is left on itself over four weeks.");
 }
 export const MEETINGS_NONE_LINE = "The league's schedule lists no game between these two teams this season, so this option is not offered for them.";
+/**
+ * HB-72 (hourly run 5): Broncos vs Seahawks met once in 2026 and that game is final, yet "Every game between them this season" stayed
+ * offered and the review answered signable with no warning. A series with no meeting left to play is greyed with this notice (the same
+ * schedule search the one-game option says), and the server review warns (meetingsNoneLeftWarning).
+ */
+export const MEETINGS_NONE_LEFT_LINE = "The schedule lists no game between them still to be played this season, so this option is not offered for them.";
+/** The meetings still to be played (a row whose result is "pending": scheduled or in progress). */
+export const meetingsLeft = (rows: readonly { result?: string | null }[]): number => rows.filter((r) => r.result === "pending").length;
+/** The third rivalry option's state from the rivalry read: offered only while a meeting is left; otherwise the reason it is greyed. */
+export function seriesOptionState(rv: { offered: boolean; offeredLine: string | null; meetings: readonly { result?: string | null }[] }): { offered: boolean; why: string | null } {
+  if (!rv.offered) return { offered: false, why: rv.offeredLine ?? NO_LISTED_MEETING_LINE };
+  return meetingsLeft(rv.meetings) > 0 ? { offered: true, why: null } : { offered: false, why: MEETINGS_NONE_LEFT_LINE };
+}
+/** The server review's warning for a rivalry series rule whose season lists no meeting still to be played. */
+export const meetingsNoneLeftWarning = (season: string, playoffs: boolean): string =>
+  playoffs ? `The schedule lists no game between these two teams still to be played in the ${season} season. This pair burns only if they meet in the playoffs.`
+    : `The schedule lists no game between these two teams still to be played in the ${season} season, so no game is left for this pair to burn on.`;
 /** rules.ts DEFAULT_ON_END, copied (rules.ts is not client-safe); test/burntickerRivalrySeriesReview.test.ts pins the two equal. */
 export const MEETINGS_ON_END = { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } as const;
 /** The two rules of a rivalry series pair: side A on its team's series, side B on the mirror; both end on the pair-winner sink. */
@@ -1131,4 +1152,21 @@ export function followForRule(r: Pick<BurnRule, "oracle" | "series" | "market"> 
   if (r.oracle === "catalogue" && r.series && parseEspnSeries(r.series)) return "team";
   if (o.hazard) return "disaster";
   return "number";
+}
+
+/**
+ * HB-79 (hourly run 5): the coin-vs-coin review lost its "How much it would have spent before" block without a word when the pair call
+ * hung for 20 seconds and answered 503. The block is always there: a waiting line while the review or the pair check is still being
+ * read, the review's projection lines when it has them, its reason when it has none, and a plain "not available" when the read failed.
+ */
+export const PAST_BURNS_HEADING = "How much it would have spent before";
+export const PAST_BURNS_WORKING = "Working out past burns…";
+export const PAST_BURNS_UNAVAILABLE = "Past burns are not available right now.";
+/** How long the page waits for the pair check (POST /v1/derby/pair) before it stops waiting, like the creator page's bounded reads. */
+export const PAIR_CHECK_TIMEOUT_MS = 8_000;
+export function pastBurnsLines(o: { loading: boolean; error: string | null; projection: { available: boolean; lines: readonly string[]; reason: string | null } | null | undefined }): string[] {
+  if (o.projection?.available && o.projection.lines.length) return [...o.projection.lines];
+  if (o.loading) return [PAST_BURNS_WORKING];
+  if (o.error || !o.projection) return [PAST_BURNS_UNAVAILABLE];
+  return [o.projection.reason ?? PAST_BURNS_UNAVAILABLE];
 }

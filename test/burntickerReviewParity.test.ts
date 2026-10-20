@@ -32,8 +32,9 @@ async function sportsRivalryFirst(p: Parameters<typeof sportsRivalry>[0], league
   for (const b of teamsOf(league)) {
     if (b.abbr === a) continue;
     const r = await sportsRivalry(p, { league, a, b: b.abbr });
-    const body = r.body as { offered?: boolean; year?: number | null };
-    if (r.status === 200 && body.offered && body.year) return { opp: b.abbr, year: body.year };
+    // hourly run 5, HB-72: a pair whose meetings are all played is no longer offered, but the parity still runs on any listed meeting
+    const body = r.body as { offered?: boolean; year?: number | null; meetings?: unknown[] };
+    if (r.status === 200 && (body.offered || (body.meetings?.length ?? 0) > 0) && body.year) return { opp: b.abbr, year: body.year };
     if (r.status === 200 && (body as { scheduleNote?: string | null }).scheduleNote) return null;   // this league's schedule is not readable here
   }
   return null;

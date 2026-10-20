@@ -157,3 +157,57 @@ export async function raiseFeedAlerts(health: readonly FeedHealth[], sink: Alert
   for (const a of feedAlerts(health)) { try { if (await sink(a.kind, a.key, a.text, a.meta, now)) raised.push(a); } catch { /* the channel failing never stops the keeper */ } }
   return raised;
 }
+
+/**
+ * HB-29 follow-up (hourly run 6): THE OUTAGE'S END IS RECORDED TOO. bt-feed-down said a source went down and nothing said it came back,
+ * so ops.json showed the outage with no end. While a source is down this keeps its outage in the status table (`ops.feedOutages`: when
+ * the last clean read before it was, and the most failures seen in a row); on the first health check that finds it answering again it
+ * returns one recovery, with the failure count and how long it was out (from the last clean read before the outage to the first one
+ * after), and forgets the outage. The caller records it as `bt-feed-recovered` in the same alert table; that kind has no push mapping
+ * (push.ts PUSH_KIND_OF_ALERT), so it is information on ops.json, never an alarm. Never throws.
+ */
+export const FEED_OUTAGE_KEY = "ops.feedOutages";
+export const FEED_RECOVERED_KIND = "bt-feed-recovered";
+export interface FeedOutage { since: number; failures: number }
+export interface FeedRecovery { kind: typeof FEED_RECOVERED_KIND; key: string; selectorKey: string; text: string; meta: { selectorKey: string; failures: number; since: number; recoveredAt: number; durationMs: number } }
+
+/** "2 h 31 min", "45 min", "under a minute". */
+export function outageDuration(ms: number): string {
+  const min = Math.floor(Math.max(0, ms) / 60_000);
+  if (min < 1) return "under a minute";
+  const h = Math.floor(min / 60), m = min % 60;
+  return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
+export function noteFeedRecoveries(reg: Pick<Registry, "getStatus" | "setStatus">, health: readonly FeedHealth[], now: number): FeedRecovery[] {
+  let outages: Record<string, FeedOutage> = {};
+  try { const s = reg.getStatus(FEED_OUTAGE_KEY); outages = s ? (JSON.parse(s) as Record<string, FeedOutage>) : {}; } catch { outages = {}; }
+  const out: FeedRecovery[] = [];
+  let changed = false;
+  for (const h of health) {
+    const o = outages[h.selectorKey];
+    if (h.state === "down" && h.failures >= FEED_DOWN_FAILURES) {
+      const since = o?.since ?? h.lastOkAt ?? h.lastFetchAt ?? now;
+      const failures = Math.max(o?.failures ?? 0, h.failures);
+      if (!o || o.since !== since || o.failures !== failures) { outages[h.selectorKey] = { since, failures }; changed = true; }
+      continue;
+    }
+    if (!o || h.state === "down") continue;
+    // answering again: a clean read after the outage began (a source that only left the live set is forgotten without a row)
+    if (h.lastOkAt !== null && h.lastOkAt > o.since) {
+      const who = `${h.selectorKey} (${h.tickers.map((t) => `$${t}`).join(", ")})`;
+      const durationMs = h.lastOkAt - o.since;
+      out.push({
+        kind: FEED_RECOVERED_KIND, key: `${FEED_RECOVERED_KIND}:${h.selectorKey}:${h.lastOkAt}`, selectorKey: h.selectorKey,
+        text: `Burnticker source ${who} answers again after ${o.failures} failed reads in a row. It was out for ${outageDuration(durationMs)}, from the last clean read before the failures to the first one after them.`,
+        meta: { selectorKey: h.selectorKey, failures: o.failures, since: o.since, recoveredAt: h.lastOkAt, durationMs },
+      });
+    }
+    delete outages[h.selectorKey]; changed = true;
+  }
+  // a source no longer in the health list (its coin ended) drops its outage too
+  const keys = new Set(health.map((h) => h.selectorKey));
+  for (const k of Object.keys(outages)) if (!keys.has(k)) { delete outages[k]; changed = true; }
+  if (changed) { try { reg.setStatus(FEED_OUTAGE_KEY, outages, now); } catch { /* the next check tries again */ } }
+  return out;
+}

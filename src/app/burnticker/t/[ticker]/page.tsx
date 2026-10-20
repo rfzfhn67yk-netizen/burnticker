@@ -18,7 +18,11 @@ import { ReadinessPanel } from "../../_components/ReadinessPanel";
 import { readinessFromStatus } from "@/lib/burnticker/readiness";
 import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
-import { receiptStatusWords } from "@/lib/burnticker/receiptWords";
+import { burnLogWords, queuedReadingsCount } from "@/lib/burnticker/queuedReading";
+import { graduationExplainer } from "@/lib/burnticker/graduationLine";
+import { nextResultLinks } from "@/lib/burnticker/followFeeds";
+import { coinWatchKey } from "@/lib/burnticker/watchlist";
+import { FollowFeeds } from "../../_components/FollowFeeds";
 import { targetActionSentence, targetTrustCopy } from "@/lib/burnticker/burnTarget";
 import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnReal";
 import { useParams } from "next/navigation";
@@ -55,6 +59,7 @@ import { decidedSwapWarning, type DecidedWarningInput, espnLinkOnDay, receiptGam
 import { LEADERBOARD_TITLE, receiptAlt } from "../../_components/featureCopy";
 import { TradeButtons } from "../../_components/TradeLinks";
 import { coinLinks } from "@/lib/burnticker/tradeLinks";
+import { burnPoolNote } from "@/lib/burnticker/burnPoolWords";
 
 /**
  * THE COIN PAGE (LAUNCHPAD-PATH §6; re-ordered by website-11 on 2026-10-12 for the owner's review items 6 and 8, as the website brief
@@ -191,10 +196,10 @@ export default function TokenPage() {
   const burnFacts: FactRow[] = [
     { key: "trigger", label: "What fires the rule", value: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, note: latest?.settlementSourceUrl ? "The source of the latest result is linked." : coinSourceNote(s.oracle, s.selectorKey), href: latest?.settlementSourceUrl ?? null },
     { key: "next", label: nextRow.label, value: nextRow.value, note: nextRow.note, more: SETTLEMENT_LINK },
-    { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? `SOL set aside for this coin's burns. ${s.pool.reserveSol} SOL of it is kept back for fees.` : "Tokens set aside for this coin's burns." },
+    { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? burnPoolNote(s.pool) : "Tokens set aside for this coin's burns." },
     { key: "burned", label: "Burned so far", value: `${fmt(s.burned?.total)} of ${fmt(s.supply?.initial)} tokens`, note: `${fixed(s.burned?.pctOfSupply)}% of the supply, in ${count(s.burned?.count, "burn")}.` },
     { key: "last", label: "Last receipt", value: latest ? utcDay(latest.settledAt) : "None yet", note: latest ? "Check it in your browser." : preBurn ? FIRST_BURN_AFTER_GRADUATION : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
-    { key: "pending", label: "Waiting", value: s.health.pending === 0 ? "Nothing waiting" : count(s.health.pending, "receipt"), note: s.health.pending ? "A burn can wait for the pool's checks or a spend floor. The unspent funds stay in the burn pool." : null },
+    { key: "pending", label: "Waiting", value: s.health.pending === 0 ? "Nothing waiting" : queuedReadingsCount(s.health.pending), note: s.health.pending ? "A burn can wait for the pool's checks or a spend floor. The unspent funds stay in the burn pool." : null },
   ];
 
   return (
@@ -213,6 +218,8 @@ export default function TokenPage() {
           </div>
           <p className="text-neutral-300">{prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey}</p>
           <p className="text-xs"><Link className="underline" href={creatorHref(s.addresses.creator)} data-created-by>{createdBy(shortAddress(s.addresses.creator))}</Link></p>
+          {/* campaign readiness item 6: Follow is this browser only, so the feed and the calendar sit beside it */}
+          {s.status !== "draft" && s.status !== "expired" && <FollowFeeds watchKey={coinWatchKey(s.cluster, s.mint)} ticker={s.ticker} {...nextResultLinks(key, s.mint)} />}
           {s.stated && <p className="text-xs text-neutral-400" data-stated>{statedSentences(s.stated, s.stated.finalAfter)}</p>}
           <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
             <span className="font-mono" title={s.mint}>CA {short(s.mint)}</span><CopyButton text={s.mint} label="copy address" />
@@ -261,6 +268,8 @@ export default function TokenPage() {
           <section className={card} aria-label="Pool">
             <CurveBar c={{ phase: m?.phase ?? null, progressPct: m?.curve?.progressPct ?? (m?.phase === "graduated" ? 100 : null), raised: m?.curve?.raised ?? null, threshold: m?.curve?.threshold ?? null, quote: m?.curve?.quote ?? null, curveNote: m?.curveNote }} />
             <p className="mt-2 text-xs text-neutral-400">{m?.phase === "graduated" ? `The bonding curve is complete. At graduation, all of the liquidity was locked forever. $${s.ticker} now trades in a Raydium pool${m.graduatedPool ? ` (${short(m.graduatedPool)})` : ""}.` : m?.curve ? `${fixed(m.curve.remaining)} ${m.curve.quote} to go before graduation. When the curve fills, the coin moves to a Raydium pool and its liquidity is locked forever. The pool's fees fund the burn.` : <span title={m?.curveNote}>{m?.curveNote ?? "The curve has not been read."}</span>}</p>
+            {/* campaign readiness item 4: what graduation counts, from the coin's own raise (never a typed 85) */}
+            {m?.phase !== "graduated" && m?.phase !== "migrating" && graduationExplainer(m?.curve?.threshold ?? null, m?.curve?.quote ?? "SOL") && <p className="mt-2 text-xs text-neutral-300" data-graduation-explainer>{graduationExplainer(m?.curve?.threshold ?? null, m?.curve?.quote ?? "SOL")}</p>}
             {preBurn && <p className="mt-2 text-xs text-neutral-300" data-burns-after-graduation>{afterGraduation}</p>}
             {/* launch night 2026-10-13: a draft has no pool and no supply yet, so the pool line is left out */}
             {s.status !== "draft" && s.status !== "expired" && <p className="mt-2 text-[11px] text-neutral-500">{snap.stale ? <span data-stale-snapshot>{m?.readAt ? `This site read the pool on ${utcDateTime(m.readAt)}. ` : ""}{staleSnapshotLine(snap.ageMs)}</span> : m?.readAt ? `This site read the pool on ${utcDateTime(m.readAt)}.` : "This site has not read the pool."} {fixed(typeof s.burned?.pctOfSupply === "number" ? 100 - s.burned.pctOfSupply : NaN)}% of the supply is left.</p>}
@@ -306,7 +315,7 @@ export default function TokenPage() {
                   </div>
                   {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{settledLine(b.title)}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={espnLinkOnDay(m[1], gameDay)} rel="noopener" target="_blank">see this game on ESPN</a>)}</div>}
                   <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
-                    <span>{b.status === "confirmed" ? (() => { const rl = receiptRealLine(b.memo, real); return rl ? <><b className="tabular-nums" data-real-receipt>{rl}</b> from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</>; })() : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{realHeldLine(real, b.skippedReason) ?? <>{receiptStatusWords(b.status)}{b.skippedReason ? `. ${b.skippedReason}` : ""}</>}</span>}</span>
+                    <span>{b.status === "confirmed" ? (() => { const rl = receiptRealLine(b.memo, real); return rl ? <><b className="tabular-nums" data-real-receipt>{rl}</b> from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</>; })() : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{realHeldLine(real, b.skippedReason) ?? <>{burnLogWords(b.status)}{b.skippedReason ? `. ${b.skippedReason}` : ""}</>}</span>}</span>
                     <span className="flex flex-wrap gap-2">{b.txUrl && <a className="underline" href={b.txUrl}>transaction</a>}{b.settlementSourceUrl && <a className="underline" href={b.settlementSourceUrl}>source</a>}{(() => { const v = receiptRowStatus(b); return <span className={v.status === "passed" ? "text-emerald-400" : v.status === "failed" ? "text-red-400" : "text-neutral-500"} title={v.title} data-receipt-status={v.status}>{v.status === "passed" ? "✓ " : v.status === "failed" ? "✗ " : ""}{v.label}</span>; })()}{(() => { const href = checkReceiptHref(b.signature, s.cluster); return href ? <a className="underline font-medium" href={href} data-check-receipt>Check receipt</a> : null; })()}</span>
                   </div>
                 </li>
@@ -317,15 +326,15 @@ export default function TokenPage() {
 
         <section id="verify" className="scroll-mt-20">
           <h2 className="font-medium mb-2">Verify it yourself</h2>
-          {rows.length === 0 ? <p className="text-neutral-500 text-xs">Each receipt shows up here with the command, the formula and the on-chain memo you can use to check it.</p> : rows.slice(0, 40).map((b) => <details key={b.eventId} className={card + " mb-2"}><summary className="cursor-pointer">{utcDay(b.settledAt)}, {b.market}: {b.result ?? b.value}, {count(b.units, "unit")}, {b.status === "confirmed" ? `${fmt(b.burned ?? "0")} burned` : receiptStatusWords(b.status)} ({receiptRowStatus(b).label})</summary>
+          {rows.length === 0 ? <p className="text-neutral-500 text-xs">Each receipt shows up here with the command, the formula and the on-chain memo you can use to check it.</p> : rows.slice(0, 40).map((b) => <details key={b.eventId} className={card + " mb-2"}><summary className="cursor-pointer">{utcDay(b.settledAt)}, {b.market}: {b.result ?? b.value}, {count(b.units, "unit")}, {b.status === "confirmed" ? `${fmt(b.burned ?? "0")} burned` : burnLogWords(b.status)} ({receiptRowStatus(b).label})</summary>
             <p className="mt-2">1. Read the settled result from the source:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.curl}</pre>{b.method && <p className="text-xs text-neutral-500">The value was read by {b.method}.</p>}
             <p>2. Apply the rule:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.formula}</pre>
             <p>3. Check that you get this: <strong>{b.verify.expected}</strong></p>
-            <p>4. The receipt memo on chain{b.txUrl && <> (<a className="underline" href={b.txUrl}>transaction</a>)</>}:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.memo ?? `No transaction yet: ${receiptStatusWords(b.status)}.`}</pre>
+            <p>4. The receipt memo on chain{b.txUrl && <> (<a className="underline" href={b.txUrl}>transaction</a>)</>}:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.memo ?? `No transaction yet: ${burnLogWords(b.status)}.`}</pre>
             {(b.verify?.checks?.length ?? 0) > 0 && <p className="text-red-400">Checks that did not pass: {joinList(b.verify.checks, "; ")}</p>}
           </details>)}
         </section>
-        <p className="text-xs text-neutral-500">{s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and {s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.{realHeld ? ` ${realHeld}` : s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}</p>
+        <p className="text-xs text-neutral-500">{s.health.pending === 1 ? "One reading is" : `${s.health.pending} readings are`} queued with no burn yet, and {s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.{realHeld ? ` ${realHeld}` : s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}</p>
       </div>
 
       <div id="panel-rule" role="tabpanel" aria-labelledby="tab-rule" hidden={tab !== "rule"} className="space-y-5">

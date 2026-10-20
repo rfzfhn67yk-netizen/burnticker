@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { clientKey, limiter } from "@/lib/burnticker/api/http";
 import { swapGuard } from "@/lib/burnticker/swap/guard";
+import { safeErrorText } from "@/lib/burnticker/api/errorText";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,6 @@ export async function GET(req: Request) {
   try {
     return NextResponse.json(swapGuard(), { headers: { "cache-control": "no-store" } });
   } catch (e) {
-    return NextResponse.json({ error: `The guard list could not be read: ${String((e as Error)?.message ?? e).slice(0, 120)}` }, { status: 503 });
+    return NextResponse.json({ error: `The guard list could not be read: ${safeErrorText(e, 120)}` }, { status: 503 });
   }
 }

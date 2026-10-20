@@ -382,7 +382,8 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
     burned: { text: `${groupDigits(t.burned)} $${t.ticker}${pct === null ? "" : `, ${pctOfSupply(pct)}`}`, why: t.burns > 0 ? `${t.burns} burn${t.burns === 1 ? "" : "s"} so far.` : "No burn has confirmed yet." },
     mint: null,
     href: page,
-    trade: coinLinks({ cluster, mint: t.mint, phase: t.phase, status: t.status }),
+    // campaign readiness item 8: on its curve the button reads "Swap on the curve (X of Y SOL)", from the curve read; "Trade on Raydium" after
+    trade: coinLinks({ cluster, mint: t.mint, phase: t.phase, status: t.status, curve: { raised: t.raised, threshold: t.threshold, quote: t.quote } }),
     receipt: t.burns > 0 ? { href: `${page}#receipts` } : null,
     receiptWhy: t.burns > 0 ? null : "This coin has no receipt yet.",
   };

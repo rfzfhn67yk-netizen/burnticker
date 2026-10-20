@@ -144,10 +144,13 @@ export async function v1DerbyPairCheck(p: Platform, body: Record<string, unknown
   const r = ruleFor(a, b);
   if (!r) return fail(400, "These two coins cannot be compared as a flippening.");
   try {
-    const pf = await preflightSelector(r, deps);
+    // HB-79 (hourly run 5): the size read is bounded well under the proxy's 20 seconds; past the bound the answer says so in words
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const bounded = <T,>(x: Promise<T>): Promise<T> => Promise.race([x, new Promise<T>((_, rej) => { timer = setTimeout(() => rej(new Error("the read took longer than 8 seconds")), 8_000); })]).finally(() => clearTimeout(timer));
+    const pf = await bounded(preflightSelector(r, deps));
     if (pf.ok || !pf.refusal) return ok({ ok: true, flip, swap: false, refusal: null });
     let swap = false;
-    if (pf.refusal.code === "already-decided") { const rb = ruleFor(b, a); if (rb) { const back = await preflightSelector(rb, deps); swap = back.ok; } }
+    if (pf.refusal.code === "already-decided") { const rb = ruleFor(b, a); if (rb) { const back = await bounded(preflightSelector(rb, deps)).catch(() => null); swap = !!back?.ok; } }
     return ok({ ok: false, flip, swap, refusal: { code: pf.refusal.code, reason: pf.refusal.reason } });
   } catch (e) { return fail(502, `The two coins' sizes could not be read just now. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
 }

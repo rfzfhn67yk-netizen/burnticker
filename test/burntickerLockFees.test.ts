@@ -13,7 +13,7 @@ import { buildLaunchBundle, FakeLaunchLab } from "@/lib/burnticker/launchBundle"
 import { runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { claimLockFeesFor, LOCK_FEES_EVENT, type LockFeesKeeperDeps } from "@/lib/burnticker/lockFeesKeeper";
 import {
-  LOCK_FEES_INTERFACE, LOCK_FEE_ERRORS, BURNTICKER_PLATFORM, lockFeeErrorSentence, lpLockPolicyJson, launchLabLockerFor, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCK_AUTHORITY, LP_LOCK_PROGRAM, LP_POLICY_LINE, OPERATOR_TREASURY, TREASURY_NOT_PINNED,
+  LOCK_FEES_INTERFACE, LOCK_FEE_ERRORS, BURNTICKER_PLATFORM, lockFeeErrorSentence, lpLockPolicyJson, launchLabLockerFor, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCK_AUTHORITY, LP_LOCK_PROGRAM, LP_POLICY_LINE, LP_POLICY_LINE_BEFORE_GRADUATION, OPERATOR_TREASURY, TREASURY_NOT_PINNED,
   buildLpLockJson, decodeLockedCpLiquidity, feeKeyRecordPda, feeKeysPda, formatLockFeesMemo, lockAuthorityPda, lockFeeClaimLine, lockedLiquidityPda, parseLockFeesMemo, splitLockFees, splitMatches,
 } from "@/lib/burnticker/lockFees";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
@@ -264,7 +264,8 @@ describe("the public lp block", () => {
     assert.deepEqual(j.split, { burnBps: 8000, operatorBps: 2000, coinSide: "burned", fixedInCode: true });
     assert.equal(j.lastClaim, null);
     assert.match(j.note!, /not graduated yet/);
-    assert.equal(j.line, LP_POLICY_LINE);
+    // HB-56 (hourly run 6): a coin that has not graduated says its liquidity locks at graduation
+    assert.equal(j.line, LP_POLICY_LINE_BEFORE_GRADUATION);
   });
   test("after claims: the last claim and the totals, with explorer links; an unpinned treasury is said plainly", () => {
     const claims = [

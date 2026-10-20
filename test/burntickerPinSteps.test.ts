@@ -153,40 +153,29 @@ describe("the pair curve (item 3)", () => {
 });
 
 describe("the review counts the pin (item 4)", () => {
+  // LA6-3 (sixth pass, 2026-10-19): only a Coin comparison side may burn another token (owner 2026-10-19), so a Broncos coin that names
+  // BONK is refused, and the review no longer lists a pin step or pin rent for a token it can never burn. The pin's place in the steps
+  // for a side that may pin is covered by the bundle tests above and test/burntickerBurnRealEligibility.test.ts (ok.pins).
   const env = { BURNTICKER_CLUSTER: "devnet", BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" };
   const review = (body: unknown, e: Record<string, string> = env) => { const r = buildLaunchReview(body as never, { env: e, reserved: new Set() }); assert.ok("review" in r); return (r as { review: Parameters<typeof withPinSteps>[0] }).review; };
-  test("single coin: two steps either way, the pin rides in the first; its rent is the only difference in the total; the page adds nothing", () => {
+  test("single coin: a refused token adds no pin step, no rent and no pin note; the steps match the coin that burns itself", () => {
     const self = review({ rule: BRONCOS, ticker: "TEAMBONK", name: "Team Bonk", raiseSol: "85" });
     const real = review({ rule: { ...BRONCOS, burnTarget: BONK }, ticker: "TEAMBONK", name: "Team Bonk", raiseSol: "85" });
-    assert.deepEqual(self.pins, []);
-    assert.deepEqual(real.transactions.steps.map((s) => s.label), ["Pin BONK's Raydium pool for $TEAMBONK after locking in its rule", "Create $TEAMBONK"]);
-    assert.equal(real.transactions.count, 2);
-    // 2026-10-15: a coin that burns itself is two steps too ("Lock in $X's rule", "Create $X"), so the pin adds no transaction
+    assert.deepEqual(self.pins, []); assert.deepEqual(real.pins, []);
+    assert.deepEqual(real.transactions.steps.map((s) => s.label), ["Lock in $TEAMBONK's rule", "Create $TEAMBONK"]);
     assert.deepEqual(self.transactions.steps.map((s) => s.label), ["Lock in $TEAMBONK's rule", "Create $TEAMBONK"]);
-    assert.deepEqual(real.pins, [{ side: "A", ticker: "TEAMBONK", symbol: "BONK", step: 1, bytes: 373, rentSol: real.pins[0].rentSol, signatures: 0 }]);
-    const added = rentLamports(BURN_TARGET_ACCOUNT_BYTES);
-    const diff = Math.round(Number(real.costs.totalSol) * 1e9) - Math.round(Number(self.costs.totalSol) * 1e9);
-    assert.ok(Math.abs(diff - added) <= 50_000, `${diff} vs ${added} (the total is shown to 4 places)`);
-    assert.equal(real.costs.lines.length, self.costs.lines.length + 1);
-    assert.match(real.costs.lines.find((l) => l.kind === "fee")!.sol, /^0\.00002/);
-    assert.ok(real.transactions.note.endsWith(PIN_STEP_NOTE));
-    assert.match(real.recovery[0], /asks 2 separate times/);
-    assert.equal(withPinSteps(real, [{ ticker: "TEAMBONK", symbol: "BONK" }]), real);
+    assert.equal(real.costs.totalSol, self.costs.totalSol);
+    assert.ok(!real.transactions.note.endsWith(PIN_STEP_NOTE));
+    assert.equal(real.signable, false);
     for (const s of [...real.transactions.steps.map((x) => x.label), ...real.costs.lines.map((x) => x.label), real.transactions.note]) plain(s);
   });
-  test("a pair: side B's pair.burnTarget is counted at its own step; a bad field is a Coin B problem", () => {
+  test("a pair: a refused side B token adds no pin step; a bad field is still a Coin B problem", () => {
     const RULE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } }, pair: null };
     const both = review({ rule: { ...RULE, burnTarget: BONK }, ticker: "MILEHI", name: "Mile High", pair: { ticker: "ARROWHD", name: "Arrowhead", burnTarget: WIF } });
-    assert.deepEqual(both.transactions.steps.map((s) => s.label), ["Pin BONK's Raydium pool for $MILEHI after locking in its rule", "Create $MILEHI", "Pin WIF's Raydium pool for $ARROWHD after locking in its rule and linking the two coins", "Create $ARROWHD"]);
-    assert.deepEqual(both.pins.map((x) => [x.side, x.symbol, x.step]), [["A", "BONK", 1], ["B", "WIF", 3]]);
-    assert.deepEqual((both as unknown as { rules: { side: string; step: number }[] }).rules.map((x) => [x.side, x.step]), [["A", 1], ["B", 3]]);
-    const onlyB = review({ rule: RULE, ticker: "MILEHI", name: "Mile High", pair: { ticker: "ARROWHD", name: "Arrowhead", burnTarget: WIF } });
-    assert.deepEqual(onlyB.transactions.steps.map((s) => s.label), ["Lock in $MILEHI's rule", "Create $MILEHI", "Pin WIF's Raydium pool for $ARROWHD after locking in its rule and linking the two coins", "Create $ARROWHD"]);
-    assert.equal(withPinSteps(onlyB, [{ ticker: "ARROWHD", symbol: "WIF" }]), onlyB);
-    // 2026-10-14: a pair review with no pin is four steps (each coin locks its rule, then is created); the page's own pin count puts the
-    // pin into side B's existing steps (no extra transaction, so no extra fee), the rent only
+    assert.deepEqual(both.pins, []);
+    assert.deepEqual(both.transactions.steps.map((s) => s.label), ["Lock in $MILEHI's rule", "Create $MILEHI", "Lock in $ARROWHD's rule and link the two coins", "Create $ARROWHD"]);
+    // the page's own pin count still folds a pin into side B's existing steps (no extra transaction, so no extra fee)
     const none = review({ rule: RULE, ticker: "MILEHI", name: "Mile High", pair: { ticker: "ARROWHD", name: "Arrowhead" } });
-    assert.deepEqual(none.transactions.steps.map((s) => s.label), ["Lock in $MILEHI's rule", "Create $MILEHI", "Lock in $ARROWHD's rule and link the two coins", "Create $ARROWHD"]);
     const paged = withPinSteps(none, [{ ticker: "ARROWHD", symbol: "WIF" }]);
     assert.deepEqual(paged.transactions.steps.map((s) => s.label), ["Lock in $MILEHI's rule", "Create $MILEHI", "Lock in $ARROWHD's rule and link the two coins", "Pin WIF's Raydium pool for $ARROWHD, then create $ARROWHD and link the two coins"]);
     assert.equal(paged.transactions.count, 4);
@@ -196,13 +185,13 @@ describe("the review counts the pin (item 4)", () => {
     assert.ok(bad.problems.some((p) => /^Coin B\. burnTarget\.feedId/.test(p)), bad.problems.join(" | "));
     assert.deepEqual(bad.pins, []);
   });
-  test("pair curve: the pin rides in the side's one transaction (no extra signatures), with its rent", () => {
+  test("pair curve: a refused token adds no pin to the side's one transaction", () => {
     const RULE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } }, pair: null };
     const pc = review({ rule: { ...RULE, burnTarget: BONK }, ticker: "MILEHI", name: "Mile High", pair: { ticker: "ARROWHD", name: "Arrowhead" } }, { ...env, BURNTICKER_PAIR_CURVE_ENABLED: "1" });
     assert.equal((pc as unknown as { venue: string }).venue, "pair-curve");
-    assert.equal(pc.transactions.count, 3);
-    assert.equal(pc.transactions.steps[0].label, "Pin BONK's Raydium pool for $MILEHI after locking in its rule, then create $MILEHI");
-    assert.deepEqual(pc.pins.map((x) => [x.side, x.step, x.signatures]), [["A", 1, 0]]);
+    assert.deepEqual(pc.pins, []);
+    assert.doesNotMatch(pc.transactions.steps[0].label, PIN_MARK);
     plain(pc.transactions.steps[0].label);
   });
 });
+

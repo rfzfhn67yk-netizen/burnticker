@@ -111,9 +111,10 @@ describe("B-3 / OPS-1: the off-box pull receipt", () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
-  test("the pulling script writes the receipt only after the database copy and quick_check succeed (skipped where the script is absent)", () => {
+  test("the pulling script writes the receipt only after the database copy and quick_check succeed (skipped where the script is absent)", (t) => {
     const script = process.env.BURNTICKER_OFFBOX_PULL_SCRIPT ?? path.join(os.homedir(), "mct-runner-study", "launch-debt-egg-2026-10-09", "ops", "box-backup-pull.sh");
-    if (!fs.existsSync(script)) return;
+    // TS6-6 (sixth pass): reported as skipped, not passed, where the Mac pull script is not on this host (CI, the public tree)
+    if (!fs.existsSync(script)) { t.skip("the off-box pull script is not on this host (set BURNTICKER_OFFBOX_PULL_SCRIPT to check it)"); return; }
     const src = fs.readFileSync(script, "utf8");
     const at = (needle: string) => { const i = src.indexOf(needle); assert.ok(i >= 0, `the script has ${needle}`); return i; };
     const write = at("offbox-pull.json\"; then exit 0");

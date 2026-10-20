@@ -63,9 +63,12 @@ export const edgeCase =(item: number): string | null => RULE_EDGE_CASES.find((e)
  * Continuous audit run 4, HB-36: an edge case said for the rule in hand. Item 79's last sentence is about a one-game coin, so a season
  * coin gets only the postponed-game part.
  */
-export function edgeCaseFor(item: number, o: { oneGame?: boolean } = {}): string | null {
+/** HB-81 D5 (hourly run 5): item 218 on a one-time coin, which does end on its own (its one burn, or its deadline). */
+export const ITEM_218_ONE_SHOT_TAIL = "The coin's burn pool keeps what it holds until the rule ends on its own terms.";
+export function edgeCaseFor(item: number, o: { oneGame?: boolean; oneShot?: boolean } = {}): string | null {
   const s = edgeCase(item);
   if (s && item === 79 && !o.oneGame) return s.replace(/\s*A one-game coin whose game is cancelled[\s\S]*$/, "");
+  if (s && item === 218 && o.oneShot) return s.replace(/The coin's burn pool keeps what it holds, and nothing ends the rule on its own today\.$/, ITEM_218_ONE_SHOT_TAIL);
   return s;
 }
 

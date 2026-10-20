@@ -10,5 +10,7 @@ export function safeErrorText(e: unknown, max = 160): string {
     .replace(/\b[a-z0-9-]+(\.[a-z0-9-]+)+\/[^\s"'<>)]*\?[^\s"'<>)]*/gi, "[address hidden]")
     .replace(/[?&][a-z0-9_-]*(key|token|secret|auth|signature)[a-z0-9_-]*=[^\s&"'<>)]*/gi, "")
     .replace(/\b(api[-_]?key|token|secret)\s*[:=]\s*\S+/gi, "$1 [hidden]")
+    // AP6-12 (sixth pass): a file error (ENOENT, EACCES) names the server's absolute path; the path is hidden, the reason kept
+    .replace(/(^|[\s'"(=,])\/(?:[\w.@+-]+\/)+[\w.@+-]*/g, "$1[path hidden]")
     .slice(0, max);
 }

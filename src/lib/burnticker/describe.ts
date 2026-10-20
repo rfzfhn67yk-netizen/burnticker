@@ -18,7 +18,7 @@ import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { CATALOGUE_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
 import { highLastDay, highText } from "@/lib/burnticker/derby/high";
-import { derbyReadOnlySentence, raceEnd, raceEndOf } from "@/lib/burnticker/derby/spec";
+import { FLIP_REST_LINE, derbyReadOnlySentence, raceEnd, raceEndOf } from "@/lib/burnticker/derby/spec";
 import { coinvsTickers, fightName } from "@/lib/burnticker/derby/tile";
 import { paramName } from "@/lib/burnticker/paramNames";
 import { fitName } from "@/lib/burnticker/launchFields";
@@ -289,6 +289,7 @@ export function endText(r: BurnRule, o: { team?: string | null; party?: boolean 
   if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
   // qa-12 L2: a two-coin daily race ends on its season tally (derby/adapter.ts recordTally; endSinkKeeper's pair winner burns itself down)
   if (sink === "pair-winner" && isDailyRace(r) && r.derby?.selector === "coinvs") { const e = raceEndOf(r.derby, days); return mk("pair-winner", e.result, e.tie); }
+  if (sink === "pair-winner" && r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip) return mk("pair-winner", FLIP_REST_LINE, VOID);
   if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
   if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team", sinkTickerOf(r)); return mk("champion", `${won} ${lost}`, VOID); }
   // end-sink picker: the coin the creator named, and end.rs's fall-through when that coin is not live at the end

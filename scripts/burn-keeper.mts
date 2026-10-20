@@ -376,7 +376,7 @@ async function publish(rt: Runtime, now: number): Promise<void> {
 
 const ctx: KeeperCtx = { ledger, loaded, log, now: () => Date.now(), dryRun: DRY, attester: null, cosigner: cosignerFromEnv(process.env) };
 // signer-2 (2026-10-12): unset BURNTICKER_COSIGNER_URL = no cosigner, nothing changes.
-if (ctx.cosigner) log(`second signer: ${process.env.BURNTICKER_COSIGNER_URL?.trim()} (each reading is co-signed there or held)`);
+if (ctx.cosigner) log(`second signer: ${process.env.BURNTICKER_COSIGNER_URL?.trim()} (advisory at quorum 1: a disagreement holds the reading; if the signer cannot check or cannot be reached, the reading is sent on this key alone; pair coins are not checked)`);
 
 async function cycle(rt: Runtime, pollNow: boolean): Promise<void> {
   const now = Date.now();

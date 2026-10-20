@@ -96,14 +96,51 @@ export const REVIEW_PROOF_STORE = "burnticker.launch.proof.v1";
 export const keptReviewProofText = (proof: ReviewProofLike | null): string | null => (proof ? JSON.stringify({ message: proof.message, signature: proof.signature }) : null);
 /** The proof read back from the slot: a well-formed proof whose text parses and is inside its age limit at `now`, else null. */
 export function keptReviewProof(raw: string | null | undefined, maxAgeMs: number, parse: ProofParse, now = Date.now()): ReviewProofLike | null {
+  const proof = readKeptProof(raw);
+  const at = reviewProofExpiresAt(proof, maxAgeMs, parse);
+  return proof && at !== null && at > now ? proof : null;
+}
+/** LA-4: the kept proof read back when it is well formed but PAST its age limit at `now` (else null), so the page can say why it asks again. */
+export function lapsedKeptProof(raw: string | null | undefined, maxAgeMs: number, parse: ProofParse, now = Date.now()): ReviewProofLike | null {
+  const proof = readKeptProof(raw);
+  const at = reviewProofExpiresAt(proof, maxAgeMs, parse);
+  return proof && at !== null && at <= now ? proof : null;
+}
+function readKeptProof(raw: string | null | undefined): ReviewProofLike | null {
   if (!raw) return null;
   let v: unknown;
   try { v = JSON.parse(raw); } catch { return null; }
   const p = v as Partial<ReviewProofLike> | null;
   if (!p || typeof p !== "object" || typeof p.message !== "string" || typeof p.signature !== "string" || p.message.length > 1_000 || p.signature.length > 120) return null;
-  const proof = { message: p.message, signature: p.signature };
-  const at = reviewProofExpiresAt(proof, maxAgeMs, parse);
-  return at !== null && at > now ? proof : null;
+  return { message: p.message, signature: p.signature };
+}
+
+/**
+ * LA-4 (owner on devnet, 2026-10-19): a Launch press signed, the prepare wrote the draft under its ticker, a wallet prompt failed, and the
+ * tab was reloaded over an hour later. The kept proof had passed its age limit, the review could not tell the creator from a stranger and
+ * refused the creator's own draft with Launch off: a deadlock. The review now answers such a ticker as a NOTICE (review.notices, kind
+ * "draft-held"; never in `problems`), so Launch stays on; pressing it signs again and the prepare lets only the draft's own wallet through.
+ *
+ * `draftHeldNotices` is what the page shows: the server's sentence, or, when this tab's own signature over that ticker and wallet ran
+ * out (`lapsed`), a sentence that says so.
+ */
+export interface DraftHeldNotice { side: "A" | "B"; ticker: string; text: string; expired: boolean }
+export const draftHeldExpiredSentence = (ticker: string, maxAgeMs: number): string => `Your wallet signature for $${ticker.toUpperCase()} is more than ${Math.round(maxAgeMs / 60_000)} minutes old, so it no longer counts. If the unfinished launch that holds $${ticker.toUpperCase()} is yours, press Launch and sign with the same wallet to continue; otherwise pick another ticker.`;
+export function draftHeldNotices(notices: readonly { side: "A" | "B"; kind: string; ticker: string; text: string }[] | null | undefined, o: { lapsed: ReviewProofLike | null; creator: string; maxAgeMs: number; parse: ProofParse }): DraftHeldNotice[] {
+  const f = o.lapsed && o.creator ? o.parse(o.lapsed.message) : null;
+  return (notices ?? []).filter((n) => n.kind === "draft-held").map((n) => {
+    // the lapsed signature was this wallet's, over this ticker: say it ran out; anyone else reads the server's own sentence
+    const expired = !!f && f.creator === o.creator && f.tickers.some((t) => t.toUpperCase() === n.ticker.toUpperCase());
+    return { side: n.side, ticker: n.ticker, text: expired ? draftHeldExpiredSentence(n.ticker, o.maxAgeMs) : n.text, expired };
+  });
+}
+
+/**
+ * LA-4: whether the review card's Launch button is off, in one pure place (ReviewCard.tsx). Notices (a draft-held ticker) are not
+ * blockers and never count here; problems and field problems do.
+ */
+export function launchButtonOff(p: { ready: boolean; busy: boolean; blocked: boolean; problems: number; fieldProblems: number }): boolean {
+  return !p.ready || p.busy || p.blocked || p.problems > 0 || p.fieldProblems > 0;
 }
 
 /** The part of the revision that says who asks: the wallet (or none) and the signature of the proof sent with it (or none). */

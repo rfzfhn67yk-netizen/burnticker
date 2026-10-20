@@ -84,6 +84,19 @@ site() {   # site <label> <brand dir> <publish dir> <www> <keeper index name>
     [ "$PUBLISH_ONLY" = 1 ] || add "  $label publish: $pub does not exist yet (the keeper writes it on its first cycle)"
   fi
 }
+# Campaign readiness 2026-10-19 (item 1): the $DEFICIT page's static text is rendered from the keeper's status.json and burns.json
+# (scripts/ops/deficit-first-paint.mts), so a crawler, a link preview or a slow first paint reads the coin's real state. Runs after the
+# brand copy on every publish (the timer's --publish-only too); writes index.html only when it changed. A failure keeps the last page.
+deficit_first_paint() {
+  [ -f "$BK_PUB/status.json" ] || return 0
+  if [ "$CHECK" = 1 ]; then add "  deficit first paint: would render $DEFICIT_WWW/index.html from $BK_PUB/status.json"; return 0; fi
+  [ -d "$DEFICIT_WWW" ] || return 0
+  if fp=$(node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/ops/deficit-first-paint.mts site/deficit/index.html "$BK_PUB/status.json" "$BK_PUB/burns.json" "$DEFICIT_WWW/index.html" 2>&1); then
+    [ -z "$fp" ] || add "  deficit first paint: $fp"
+  else
+    st=$?; RC=$st; add "  deficit first paint: FAILED (exit $st) $(printf '%s' "$fp" | tail -n 3 | tr '\n' ' ')"
+  fi
+}
 pages() {   # the status page, the app-down fallback and the static 404 / error pages: small, and Caddy needs them in place whatever else ships
   for p in status fallback notfound error; do
     if [ -d "site/burnticker/$p" ]; then
@@ -96,6 +109,7 @@ if [ "$PAGES_ONLY" = 1 ]; then
   pages
 else
   site deficit site/deficit "$BK_PUB" "$DEFICIT_WWW" status.html
+  deficit_first_paint
   site burnticker site/burnticker "$BT_PUB" "$BURNTICKER_WWW" tokens.html
   if [ "$PUBLISH_ONLY" = 1 ]; then
     pages

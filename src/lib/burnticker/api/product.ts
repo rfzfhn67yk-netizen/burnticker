@@ -75,6 +75,14 @@ const stateOf = (s: TokenStatusJson): CoinState => {
   return s.status === "draft" ? "draft" : "curve";
 };
 
+/**
+ * Hourly run 6 HB-64: the units still waiting to burn THIS coin. A pair coin that lost its result keeps a pending-pair receipt (its pool
+ * moves to the winner's burn), but nothing burns this coin for it, so that receipt queues no unit here; the winner's receipt does.
+ */
+export function queuedBurnUnits(rs: readonly { status: string; units?: number | null; pairRole?: string | null }[]): number {
+  return rs.filter((r) => (r.status === "planned" || r.status === "sending" || r.status === "pending-pair") && r.pairRole !== "lost").reduce((a, r) => a + (r.units ?? 0), 0);
+}
+
 /** A coin whose page read has not finished yet (sixth pass B-10): its registry facts only, marked `loading`, never dropped. */
 function loadingCoin(p: Platform, t: TokenRow): CreatorCoin {
   let rs: ReturnType<Platform["registry"]["receipts"]> = [];
@@ -82,7 +90,7 @@ function loadingCoin(p: Platform, t: TokenRow): CreatorCoin {
   const state: CoinState = t.status === "retired" ? "retired" : t.status === "paused" ? "paused" : "curve";
   return {
     ticker: t.ticker, name: t.name, mint: t.mint, page: `/burnticker/t/${encodeURIComponent(registryCoinKey(p.registry, t))}`, state, badge: null,
-    queuedUnits: rs.filter((r) => r.status === "planned" || r.status === "sending" || r.status === "pending-pair").reduce((a, r) => a + (r.units ?? 0), 0),
+    queuedUnits: queuedBurnUnits(rs),
     nextSettlementAt: null, lastReading: null, agreement: { reads: 0, methods: null, held: null }, receipts: rs.filter((r) => r.status === "confirmed").length,
     windDown: null, pairId: null, todayPost: { text: "", lintOk: true, hits: [] }, loading: true,
   };
@@ -104,7 +112,7 @@ export async function v1Creator(p: Platform, wallet: string, now = Date.now(), r
     const d = reads[k];
     if (!d) return loadingCoin(p, t);
     const s = d.status, rs = d.receipts;
-    const queued = rs.filter((r) => r.status === "planned" || r.status === "sending" || (r.status as string) === "pending-pair").reduce((a, r) => a + (r.units ?? 0), 0);
+    const queued = queuedBurnUnits(rs);
     const last = [...d.readings].sort((a, b) => (a.at < b.at ? -1 : 1)).pop() ?? null;
     const nReads = last?.method ? last.method.split("+").length : 0;
     const post = tokenDayText(s, rs, day), lint = lintCopy(post);

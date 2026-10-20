@@ -1,7 +1,7 @@
 import { LEAGUES, seasonYearAt, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { coinSeason, leaguePath, LEAGUES_PATH } from "@/lib/burnticker/leagues";
 import type { SeasonCoinInput } from "@/lib/burnticker/seasons";
-import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
+import { coinCanonicalHref, coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
 
 /**
  * THE SITEMAP (growth batch 2026-10-10): /sitemap.xml (Caddy rewrites the apex path to /burnticker/sitemap.xml). Lists the public pages
@@ -57,7 +57,7 @@ export function sitemapEntries(i: SitemapInput): SitemapEntry[] {
   const out: SitemapEntry[] = [
     ...STATIC_PAGES.map((s) => ({ loc: `${o}${s.path}`, changefreq: s.changefreq, priority: s.priority })),
     ...DOC_PAGES.map((p) => ({ loc: `${o}${p}`, changefreq: "weekly" as const, priority: 0.5 })),
-    ...i.coins.filter((c) => c.status === "live" || c.status === "paused" || c.status === "retired").map((c) => ({ loc: `${o}${coinPageHref({ ticker: c.ticker, mint: c.mint ?? c.ticker }, shared)}`, lastmod: today, changefreq: (c.status === "retired" ? "weekly" : "daily") as SitemapEntry["changefreq"], priority: 0.6 })),
+    ...i.coins.filter((c) => c.status === "live" || c.status === "paused" || c.status === "retired").map((c) => ({ loc: `${o}${c.mint ? coinCanonicalHref(c.mint) : coinPageHref({ ticker: c.ticker, mint: c.ticker }, shared)}`,   /* OP6-11: the canonical (mint) address each coin page declares */ lastmod: today, changefreq: (c.status === "retired" ? "weekly" : "daily") as SitemapEntry["changefreq"], priority: 0.6 })),
     ...i.pairs.map((p) => ({ loc: `${o}/burnticker/p/${encodeURIComponent(p.pairId)}`, changefreq: "daily" as const, priority: 0.5 })),
   ];
   for (const t of i.ownCoins ?? OWN_COIN_PAGES) {

@@ -101,6 +101,42 @@ export function losingPairLine(i: { ticker: string; otherTicker: string; sideNam
 }
 
 export const NO_FURTHER_RESULT = "No further result is read for it.";
+
+/**
+ * ONE DECIDED LINE FOR A PAIR COIN (hourly run 5, HB-80 and HS-27): the losing $SEAWIN read "Decided, waiting for graduation" on the
+ * creator card and "waits until both coins of the pair have a registered pool" in the home row, while its token page said it lost. The
+ * creator card, the home row, the embed and the badge print this one line for a decided one-game pair coin whose burn has not run:
+ *   winner  "Won on 15 October 2026. Burn runs once both coins graduate (by 14 November 2026)."
+ *   loser   "Lost on 15 October 2026. This result cannot make $SEAWIN burn."
+ * Dates through utcWords.ts. A surface that has no void date (the home's light read) leaves the "(by ...)" out. Pure and client-safe.
+ */
+export interface DecidedPair { role: "won" | "lost"; day: string | null; voidBy: string | null; bothGraduated: boolean }
+export function decidedPairLine(ticker: string, d: DecidedPair): string {
+  const on = d.day ? ` on ${utcDay(d.day)}` : "";
+  if (d.role === "lost") return `Lost${on}. This result cannot make $${ticker} burn.`;
+  if (d.bothGraduated) return `Won${on}. Burn runs on its trading pool.`;
+  return `Won${on}. Burn runs once both coins graduate${d.voidBy ? ` (by ${utcDay(d.voidBy)})` : ""}.`;
+}
+/** The input decidedPairOf reads: a status JSON's few fields (any of them may be missing on an older or light read). */
+export interface DecidedPairStatus {
+  rules?: { oneShot?: boolean } | null;
+  next?: { result?: string | null } | null;
+  selectorKey?: string | null;
+  profile?: { badge?: string | null } | null;
+  pair?: { clause?: { state?: string | null; voidBy?: string | null } | null } | null;
+}
+/**
+ * A decided pair coin's role, day and void date, or null: the latest result receipt (end receipts aside) names this coin's pair role
+ * ("won" or "lost") and the coin's one result is decided; a burn that already ran (a confirmed receipt) is not this line's case.
+ */
+export function decidedPairOf(s: DecidedPairStatus, receipts: readonly { status: string; settledAt: string; kind?: string | null; pairRole?: string | null }[]): DecidedPair | null {
+  if (s.rules?.oneShot === false || (s.next?.result !== undefined && s.next?.result !== null && s.next.result !== "decided")) return null;
+  const latest = [...receipts].filter((r) => !END_RECEIPT_KINDS.has(r.kind ?? "")).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
+  if (!latest || (latest.pairRole !== "won" && latest.pairRole !== "lost")) return null;
+  if (latest.status === "confirmed" || latest.status === "void" || latest.status === "voided") return null;
+  const day = gameDayOf({ profile: s.profile ? { badge: s.profile.badge ?? undefined } : null, selectorKey: s.selectorKey ?? null } as Pick<DecidedWarningInput, "profile" | "selectorKey">, latest.settledAt);
+  return { role: latest.pairRole, day, voidBy: s.pair?.clause?.voidBy ?? null, bothGraduated: s.pair?.clause?.state === "live" };
+}
 const raiseWords = (m: DecidedWarningInput["market"]): string => {
   const t = m?.curve?.threshold ? Number(m.curve.threshold) : NaN;
   return Number.isFinite(t) ? `their ${Math.round(t * 100) / 100} ${m?.curve?.quote ?? "SOL"} raise` : "their raise";

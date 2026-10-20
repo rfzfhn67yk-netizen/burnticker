@@ -7,6 +7,7 @@ import { computeFeedHealth, type FeedHealth } from "@/lib/burnticker/ops/feedHea
 import { conditionLines, conditionsView, readConditionMemory, type ActiveCondition, type ConditionRecord, type OpsSignals } from "@/lib/burnticker/ops/conditions";
 import { heartbeatLine, type HeartbeatState } from "@/lib/burnticker/ops/heartbeat";
 import { offboxPullLine, webProbeLine, type OffboxPullFact, type WebProbeFact } from "@/lib/burnticker/ops/unitHealth";
+import type { TradeClickRow } from "@/lib/burnticker/tradeClicks";
 import { collectSnapshot, devFeeDelta, lamportsToSol, registryAlertRows, solStr, type BurntickerSnapshot, type WebhookState } from "@/lib/burnticker/alerts";
 
 /**
@@ -37,6 +38,8 @@ export interface CheckinInput {
   heartbeat?: HeartbeatState | null;
   /** Prelaunch audit 2026-10-18 A-1 / R1: the five host facts the code depends on, as the keeper sees them; absent = not reported. */
   hostFacts?: HostFacts | null;
+  /** Campaign readiness 2026-10-19: counted trade-link clicks per coin, venue and UTC day (tradeClicks.ts); absent = not read */
+  tradeClicks?: TradeClickRow[] | null;
 }
 /** The host configuration the code depends on (names and yes/no only; never a value). */
 export interface HostFacts {
@@ -74,7 +77,7 @@ const signalsOf = (i: CheckinInput): OpsSignals => ({ ...(i.signals ?? {}), aler
 export const OPS_SCHEMA = "burnticker.ops/v1";
 /** `conditions`: the active conditions' labels (ops/conditions.ts, the same list the check-in prints); `conditionDetail` and `recovered`
  *  carry the rest (added 2026-10-16, F06; absent in older documents). */
-export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; conditionDetail?: ActiveCondition[]; recovered?: ConditionRecord[]; webhook: WebhookState | null; /** added 2026-10-18 (A-7) */ heartbeat?: HeartbeatState | null; /** A-1: absent in older documents */ hostFacts?: HostFacts | null }
+export interface OpsJson { schema: typeof OPS_SCHEMA; generatedAt: string; host: string; lines: string[]; conditions: string[]; conditionDetail?: ActiveCondition[]; recovered?: ConditionRecord[]; webhook: WebhookState | null; /** added 2026-10-18 (A-7) */ heartbeat?: HeartbeatState | null; /** A-1: absent in older documents */ hostFacts?: HostFacts | null; /** campaign readiness 2026-10-19: absent in older documents */ tradeClicks?: TradeClickRow[] | null }
 
 const ago = (now: number, ts: number | null): string => (ts === null || !ts ? "never" : `${Math.round((now - ts) / 60_000)} min ago`);
 
@@ -109,7 +112,9 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
   else {
     const al = i.alerts.filter((a) => a.kind.startsWith("bt-"));
     out.push(`- bt- alerts last 24 h: ${al.length}`);
-    for (const a of al.slice(0, 12)) out.push(`    ${new Date(a.ts).toISOString().slice(0, 16)}Z [${a.kind}] ${a.text.slice(0, 150)}${a.seenAt ? "" : " · UNSEEN"}${a.sent ? "" : " · not sent to Telegram"}`);
+    // OP6-11: Telegram is not configured and `sent` is never set (alerts.ts), so the line drops the old Telegram suffix it printed on every
+    // alert; phone pushes go through ntfy and are reported by the push lines
+    for (const a of al.slice(0, 12)) out.push(`    ${new Date(a.ts).toISOString().slice(0, 16)}Z [${a.kind}] ${a.text.slice(0, 150)}${a.seenAt ? "" : " · UNSEEN"}${a.sent ? " · sent to the alert webhook" : ""}`);
   }
   if (i.apiBudget) out.push(...(i.apiBudget.length ? i.apiBudget.map((l) => `- ${l}`) : ["- api budget: no provider read yet today"]));
   return out;
@@ -118,7 +123,7 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
 /** The block as the keeper publishes it for other hosts (the check-in there, the owner's phone). */
 export function buildOpsJson(i: CheckinInput & { now: number; host?: string }): OpsJson {
   const v = conditionsView(i.snapshot, i.health ?? null, i.conditionMemory ?? {}, i.now, signalsOf(i));
-  return { schema: OPS_SCHEMA, generatedAt: new Date(i.now).toISOString(), host: i.host ?? "burnticker", lines: burntickerCheckinLines(i), conditions: v.active.map((c) => c.label), conditionDetail: v.active, recovered: v.recovered, webhook: i.webhook ?? null, heartbeat: i.heartbeat ?? null, hostFacts: i.hostFacts ?? null };
+  return { schema: OPS_SCHEMA, generatedAt: new Date(i.now).toISOString(), host: i.host ?? "burnticker", lines: burntickerCheckinLines(i), conditions: v.active.map((c) => c.label), conditionDetail: v.active, recovered: v.recovered, webhook: i.webhook ?? null, heartbeat: i.heartbeat ?? null, hostFacts: i.hostFacts ?? null, tradeClicks: i.tradeClicks ?? null };
 }
 export function publishOps(siteDir: string, ops: OpsJson): void { publishSite(siteDir, { "ops.json": toJson(ops) }); }
 

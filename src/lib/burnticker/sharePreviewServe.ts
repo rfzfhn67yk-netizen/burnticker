@@ -7,6 +7,7 @@ import { memoBurn } from "@/lib/burnticker/home";
 import { coinPreview, receiptPreview, DEFAULT_OG, type SharePreview } from "@/lib/burnticker/sharePreview";
 import { lookupCoin, registryCoinKey } from "@/lib/burnticker/coinLookup";
 import { receiptCardPath } from "@/lib/burnticker/receiptCardServe";
+import { decidedSwapWarning, type DecidedWarningInput } from "@/lib/burnticker/decidedWarning";
 
 /**
  * The share previews' data (website-14, product idea 9): a registered coin's status and receipts (the verified ones only count toward
@@ -14,6 +15,13 @@ import { receiptCardPath } from "@/lib/burnticker/receiptCardServe";
  * page keeps its default preview. Server only.
  */
 const ORIGIN = "https://burnticker.com";
+/**
+ * AP6-8: a coin whose one result is in describes that result (decidedWarning.ts, the same sentence as the coin page), not the game as
+ * if it were still to come. Null for a coin still waiting on its result, or when the sentence cannot be built.
+ */
+function decidedLine(d: Awaited<ReturnType<typeof tokenPageData>>): string | null {
+  try { return decidedSwapWarning(d.status as unknown as DecidedWarningInput, d.receipts as unknown as Parameters<typeof decidedSwapWarning>[1]); } catch { return null; }
+}
 /** `key` is a mint or a ticker; a ticker several coins share keeps the default preview (owner 2026-10-12: tickers are not unique). */
 export async function coinSharePreview(key: string, now = Date.now()): Promise<SharePreview | null> {
   try {
@@ -25,7 +33,7 @@ export async function coinSharePreview(key: string, now = Date.now()): Promise<S
     const ok = d.receipts.filter((r) => r.status === "confirmed" && r.verify.verified);
     const total = ok.reduce((a, r) => a + Number(r.burned ?? 0), 0);
     const supply = Number(d.status.supply.initial);
-    return coinPreview({ ticker: d.status.ticker, name: d.status.name, rule: d.status.profile?.oneLiner ?? d.status.seriesTitle ?? d.status.selectorKey, cluster: d.status.cluster, verifiedBurned: String(total), verifiedCount: ok.length, pctOfSupply: supply > 0 ? (total / supply) * 100 : null, badgeUrl: d.status.status === "draft" ? null : `${ORIGIN}${receiptCardPath(t.mint)}` });
+    return coinPreview({ ticker: d.status.ticker, name: d.status.name, rule: decidedLine(d) ?? d.status.profile?.oneLiner ?? d.status.seriesTitle ?? d.status.selectorKey, cluster: d.status.cluster, verifiedBurned: String(total), verifiedCount: ok.length, pctOfSupply: supply > 0 ? (total / supply) * 100 : null, badgeUrl: d.status.status === "draft" ? null : `${ORIGIN}${receiptCardPath(t.mint)}` });
   } catch { return null; }
 }
 

@@ -6,7 +6,7 @@ import { webDispersalOn } from "@/lib/burnticker/programHash";
 import type { Platform } from "@/lib/burnticker/server";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { launchLabCostLamports, solText } from "@/lib/burnticker/launchCost";
-import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
+import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LEFT_LINE, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
 import { liveSinks } from "@/lib/burnticker/endSinks";
@@ -97,7 +97,7 @@ import { catalogueSettleRefusal } from "@/lib/burnticker/coverage/settleable";
  */
 
 export const ADMISSION = {
-  all: ["official or primary source", "machine-readable", "timestamped", "unambiguous units", "not controlled by anyone who can hold the token", "not a disaster", "elections only as one candidate's outcome of a Polymarket market, settled on its on-chain payout (Kalshi election series only on a host that turns Kalshi on); never a first-party election or vote feed", "never the token's own price"],
+  all: ["official or primary source", "machine-readable", "timestamped", "unambiguous units", "not controlled by anyone who can hold the token", "a natural disaster only as a count or size from the agency that measures it (USGS, NHC, SPC, NIFC), never on deaths, injuries or damage", "elections only as one candidate's outcome of a Polymarket market, settled on its on-chain payout (Kalshi election series only on a host that turns Kalshi on); never a first-party election or vote feed", "never the token's own price"],
   byTier: { 1: "An adjudicated market. Only settled results count, and the venue's window for making a result final is respected.", 2: "An optimistic assertion. It counts only once it is settled and nobody disputes it.", 3: "A primary API whose reading is attested by a secure enclave or a zero-knowledge proof, using the same address and selection as tier 4. Prices of outside assets are allowed from this tier up.", 4: "A primary API read by our keeper. No asset prices are allowed. Each source has one real saved sample and limits on what a believable reading looks like.", 5: "A value read from a web page. The operator approves each source, the pattern is fixed to the page's markup, and it is never a price." },
 };
 
@@ -396,7 +396,7 @@ export async function sportsRivalry(_p: Platform, q: { league?: string | null; a
     return { eventId: g.eventId, startsAt: g.startsAt, date: g.date, playoff: g.seasonType === 3, home: g.home.abbr, away: g.away.abbr, title: g.name, live, when: live ? LIVE_NOW : null, oneGame: open ? { aHome: g.home.abbr === ta.abbr, series: { aLoss: gameSeries(league, g.eventId, ta.abbr, "loss"), bLoss: gameSeries(league, g.eventId, tb.abbr, "loss") } } : null, status: result === "pending" ? (live || g.state === "in" ? "in progress" : "scheduled") : result === "void" ? "postponed or cancelled" : "final", result, score: g.completed && g.home.score !== null && g.away.score !== null ? { home: g.home.score, away: g.away.score } : null };
   });
   const tally = tallyMeetings(rows.map((r) => r.result));
-  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered: rows.length > 0, offeredLine: rows.length ? null : MEETINGS_NONE_LINE, meetings: rows, count: rows.length, oneGame: { label: RIVALRY_GAME_LABEL, searched: oneGameSearchLine(seasonLabel(league, year), rows.filter((r) => r.oneGame).length, !noPlayoffs(league)), count: rows.filter((r) => r.oneGame).length }, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
+  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered: rows.some((r) => r.result === "pending"), offeredLine: !rows.length ? MEETINGS_NONE_LINE : rows.some((r) => r.result === "pending") ? null : MEETINGS_NONE_LEFT_LINE, meetings: rows, count: rows.length, oneGame: { label: RIVALRY_GAME_LABEL, searched: oneGameSearchLine(seasonLabel(league, year), rows.filter((r) => r.oneGame).length, !noPlayoffs(league)), count: rows.filter((r) => r.oneGame).length }, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
 }
 
 /** Which venues this host serves (venues.ts): Kalshi behind BURNTICKER_KALSHI_ENABLED; Polymarket and the first-party feeds always. */

@@ -11,10 +11,11 @@ import { programHashFact } from "@/lib/burnticker/programHash";
 import { publicChangelogMarkdown } from "@/lib/burnticker/changelogPublic";
 import { loadOperator, type OperatorWallet } from "@/lib/burnticker/trustpack/operator";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
-import { upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
-import { BOTH_TIERS_LINE, earlierCoinsLineFor, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
+import { fmtSecs, operatorAloneUpgradeLine, timeLockPlanSentence, upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
+import { repoUrl } from "@/lib/burnticker/currentStatusLinks";
+import { BOTH_TIERS_LINE, earlierCoinsLineFor, feeTiersLine, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { lpLockPolicyJson, operatorTreasuryRecord, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
-import { compareLivePlatform, liveNewCoinTier, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
+import { compareLivePlatform, liveNewCoinTier, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, SECOND_SIGNER_LINE, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
 import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
 
 /**
@@ -36,7 +37,7 @@ import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
  *                     audit), every wallet (TODO until set), the decision log, the changelog, known limitations, policies
  */
 
-export interface Power { id: string; power: string; holder: string | null; holderKind: "key" | "multisig" | "program" | "none"; timelock: string | null; sunset: string | null; canDo: string[]; cannotDo: string[]; source: string }
+export interface Power { id: string; power: string; holder: string | null; holderKind: "key" | "multisig" | "program" | "none"; timelock: string | null; sunset: string | null; canDo: string[]; cannotDo: string[]; source: string; /** HB-46 (hourly run 6): the public-repository link to the register file; the file name stays on the link only */ sourceUrl?: string | null }
 export interface PowersRegister { schema: "burnticker.powers/v1"; placeholder: boolean; generatedAt: string; powers: Power[] }
 
 export const POWERS_REGISTER_FILE = path.join("docs", "burn-receipts", "powers-register.json");
@@ -49,7 +50,7 @@ export function loadPowersRegister(env: Readonly<Record<string, string | undefin
     if (j.schema === "burnticker.powers/v1" && Array.isArray(j.powers)) return { schema: "burnticker.powers/v1", placeholder: false, generatedAt: String(j.generatedAt ?? ""), powers: j.powers as Power[] };
     // Review 2 §2 (2026-10-11): the register the program ships (programs/burn-receipts/scripts/powers-register.mjs) has its own schema;
     // it was never recognised here, so the trust page showed the env placeholder with "placeholder until … ships" although it ships.
-    const shipped = registerPowersFromShipped(j as unknown as ShippedRegister, upgradeTimeLockSecs);
+    const shipped = registerPowersFromShipped(j as unknown as ShippedRegister, upgradeTimeLockSecs, mainnetTimeLockPlan(root));
     if (shipped) return { schema: "burnticker.powers/v1", placeholder: false, generatedAt: String((j as { generatedAt?: string }).generatedAt ?? ""), powers: shipped };
   }
   const key = (name: string): string | null => { const v = (env[name] ?? "").trim(); return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? v : null; };
@@ -59,10 +60,20 @@ export function loadPowersRegister(env: Readonly<Record<string, string | undefin
       { id: "keeper-data-key", power: "sign feed readings (attester, quorum 1) and crank burns", holder: key("BURNTICKER_KEEPER_PUBKEY"), holderKind: "key", timelock: null, sunset: "quorum 2 with an independent attester (v2)", canDo: ["submit a settled reading it read from the public source", "crank a burn the rule computes from that reading"], cannotDo: ["change a rule", "burn more than the rule says", "withdraw from any fee PDA or vault", "touch a holder's balance"], source: "placeholder: BURNTICKER_KEEPER_PUBKEY" },
       { id: "platform-admin", power: "LaunchLab PlatformConfig admin: may change the platform fee bps, the claim wallet and the LP split for FUTURE launches", holder: key("BURNTICKER_PLATFORM_ADMIN"), holderKind: "key", timelock: "none on chain (LaunchLab has no timelock); changes are visible on this page within one cycle", sunset: "transfer to a multisig before P3", canDo: ["raise or lower the developer fee within 0..500 bps for new trades", "change the developer wallet", "change the LP split for future graduations"], cannotDo: ["change any token's rule or burn", "take from a burn pool", "change the creator fee above 50 bps (program cap)", "redirect a coin's Fee Key or LP fees (initialize_token and every buyback crank refuse a platform whose lock-NFT wallet is not the burn program's fee-keys PDA or whose LP is not 100 % locked; the 80/20 claim split is compiled)"], source: "placeholder: BURNTICKER_PLATFORM_ADMIN" },
       { id: "dev-fee-wallet", power: "receives the developer's platform fee", holder: devFeeWallet(env), holderKind: "key", timelock: null, sunset: null, canDo: ["claim the platform fee vault"], cannotDo: ["anything to a token"], source: "BURNTICKER_FEE_WALLET" },
-      { id: "program-upgrade-authority", power: "upgrade the burn program (burn_receipts)", holder: key("BURNTICKER_UPGRADE_AUTHORITY"), holderKind: key("BURNTICKER_UPGRADE_AUTHORITY") ? "multisig" : "none", timelock: "Squads multisig (planned), then renounced after audit", sunset: "renounce after audit (LAUNCHPAD-PATH §2)", canDo: [upgradeDelaySummary(upgradeTimeLockSecs)], cannotDo: ["anything without a new deployment, which is public"], source: key("BURNTICKER_UPGRADE_AUTHORITY") ? "BURNTICKER_UPGRADE_AUTHORITY on this host" : "BURNTICKER_UPGRADE_AUTHORITY (not set on this host)" },
+      { id: "program-upgrade-authority", power: "upgrade the burn program (burn_receipts)", holder: key("BURNTICKER_UPGRADE_AUTHORITY"), holderKind: key("BURNTICKER_UPGRADE_AUTHORITY") ? "multisig" : "none", timelock: "Squads multisig (planned), then renounced after audit", sunset: "renounce after audit (LAUNCHPAD-PATH §2)", canDo: [upgradeDelaySummary(upgradeTimeLockSecs), ...[operatorAloneUpgradeLine(upgradeTimeLockSecs)].filter((x): x is string => !!x)], cannotDo: ["anything without a new deployment, which is public"], source: key("BURNTICKER_UPGRADE_AUTHORITY") ? "BURNTICKER_UPGRADE_AUTHORITY on this host" : "BURNTICKER_UPGRADE_AUTHORITY (not set on this host)" },
     ],
   };
 }
+
+/** HB-59 (hourly run 6): the mainnet time-lock plan from config/burnticker/current-status.json `squads.mainnet`; null when unreadable. */
+export function mainnetTimeLockPlan(root = process.cwd()): { plannedSecs: number; plannedFrom: string | null } | null {
+  try {
+    const sq = (JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "current-status.json"), "utf8")) as { squads?: { mainnet?: { plannedTimeLockSecs?: number; plannedFrom?: string | null } } }).squads?.mainnet;
+    return sq && typeof sq.plannedTimeLockSecs === "number" ? { plannedSecs: sq.plannedTimeLockSecs, plannedFrom: sq.plannedFrom ?? null } : null;
+  } catch { return null; }
+}
+/** HB-46 (hourly run 6): the words a public answer uses for the register, as the trust page names it elsewhere. */
+export const POWERS_REGISTER_WORDS = "the published powers register";
 
 /** docs/burn-receipts/powers-register.json as the program's generator writes it (schema burn-receipts.powers-register/v1). */
 interface ShippedRegister {
@@ -74,18 +85,24 @@ interface ShippedRegister {
 }
 /** The shipped register as Power rows: every privileged instruction, the upgrade authority and the external powers; null if not that schema. */
 /** `upgradeTimeLockSecs`: the mainnet Squads time lock read from chain (null = not read) — the upgrade row's "can do" says what it allows (R04). */
-export function registerPowersFromShipped(j: ShippedRegister, upgradeTimeLockSecs: number | null = null): Power[] | null {
+/** `plan` (HB-59): the time-lock plan; the upgrade row says it in timeLockPlanSentence's words instead of the register's own date. */
+export function registerPowersFromShipped(j: ShippedRegister, upgradeTimeLockSecs: number | null = null, plan: { plannedSecs: number; plannedFrom: string | null } | null = null): Power[] | null {
   if (j?.schema !== "burn-receipts.powers-register/v1" || !Array.isArray(j.instructions)) return null;
-  const src = "docs/burn-receipts/powers-register.json";
+  // HB-46 (hourly run 6): public words in `source`; the file name only on the public-repository link
+  const src = POWERS_REGISTER_WORDS;
+  const sourceUrl = repoUrl(POWERS_REGISTER_FILE.split(path.sep).join("/"));
   const kind = (role: string): Power["holderKind"] => (/squads|multisig|vault/i.test(j.roles?.[role] ?? "") ? "multisig" : role === "anyone" ? "none" : "key");
   const rows: Power[] = j.instructions.filter((i) => i.class === "privileged").map((i) => {
     const role = (i.signers ?? []).map((x) => x.role).find((r) => r !== "anyone") ?? "anyone";
-    return { id: i.name, power: i.name.replace(/_/g, " "), holder: role, holderKind: kind(role), timelock: i.timelock ?? null, sunset: i.sunset ?? null, canDo: i.can ? [i.can] : [], cannotDo: i.cannot ? [i.cannot] : [], source: `${src}, instructions.${i.name}` };
+    return { id: i.name, power: i.name.replace(/_/g, " "), holder: role, holderKind: kind(role), timelock: i.timelock ?? null, sunset: i.sunset ?? null, canDo: i.can ? [i.can] : [], cannotDo: i.cannot ? [i.cannot] : [], source: `${src}, instructions.${i.name}`, sourceUrl };
   });
-  if (j.upgrade_authority) rows.push({ id: "program-upgrade-authority", power: j.upgrade_authority.power ?? "program upgrade authority", holder: "upgrade_authority", holderKind: "multisig", timelock: j.upgrade_authority.holder_at_launch ?? null, sunset: j.upgrade_authority.sunset ?? null, canDo: [upgradeDelaySummary(upgradeTimeLockSecs)], cannotDo: [], source: `${src}, upgrade_authority` });
-  for (const [k, e] of (j.external_powers ?? []).entries()) rows.push({ id: `external-${k}`, power: e.power ?? "external power", holder: e.holder ?? null, holderKind: "key", timelock: e.timelock ?? null, sunset: null, canDo: e.can ? [e.can] : [], cannotDo: [], source: `${src}, external_powers[${k}]` });
+  if (j.upgrade_authority) rows.push({ id: "program-upgrade-authority", power: j.upgrade_authority.power ?? "program upgrade authority", holder: "upgrade_authority", holderKind: "multisig", timelock: plan ? `The Squads 2-of-3 vault. ${upgradeTimeLockNow(upgradeTimeLockSecs)}${timeLockPlanSentence(plan.plannedSecs, plan.plannedFrom)}` : j.upgrade_authority.holder_at_launch ?? null, sunset: j.upgrade_authority.sunset ?? null, canDo: [upgradeDelaySummary(upgradeTimeLockSecs), ...[operatorAloneUpgradeLine(upgradeTimeLockSecs)].filter((x): x is string => !!x)], cannotDo: [], source: `${src}, upgrade_authority`, sourceUrl });
+  for (const [k, e] of (j.external_powers ?? []).entries()) rows.push({ id: `external-${k}`, power: e.power ?? "external power", holder: e.holder ?? null, holderKind: "key", timelock: e.timelock ?? null, sunset: null, canDo: e.can ? [e.can] : [], cannotDo: [], source: `${src}, external_powers[${k}]`, sourceUrl });
   return rows.length ? rows : null;
 }
+
+/** The time lock as read now, as the opening of the upgrade row's time-lock cell (empty when it was not read). */
+const upgradeTimeLockNow = (secs: number | null): string => (secs === null ? "" : `Its time lock is ${fmtSecs(secs)} today, read from chain. `);
 
 /** What the operator can and cannot do — the block on every token page. Derived from the register, not free text. */
 export function operatorPowersSummary(reg: PowersRegister): { can: string[]; cannot: string[]; placeholder: boolean } {
@@ -162,13 +179,18 @@ export async function readFeeLedger(reader: ChainReader | null, wallet: string |
 
 // ---- team wallets, own-token refusal ----
 
-export interface TeamWallets { wallets: { label: string; pubkey: string }[]; ownTokensFile: string; ownTokensPresent: boolean; refusalRule: string }
+/** HB-46 (hourly run 6): the public words for two files a public answer used to name by repository path. */
+export const REFUSE_LIST_WORDS = "the published refuse list";
+export const TRANSPARENCY_FILE_WORDS = "the published transparency file";
+
+/** HB-46 (hourly run 6): `ownTokensFile` is the public words for the list; `ownTokensUrl` is its public-repository link (the file name stays there). */
+export interface TeamWallets { wallets: { label: string; pubkey: string }[]; ownTokensFile: string; ownTokensUrl: string; ownTokensPresent: boolean; refusalRule: string }
 export function teamWallets(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd()): TeamWallets {
   const pick = (label: string, name: string) => { const v = (env[name] ?? "").trim(); return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? [{ label, pubkey: v }] : []; };
   const file = path.join("config", "own-tokens.json");
   return {
     wallets: [...pick("developer fee wallet", "BURNTICKER_FEE_WALLET"), ...pick("platform admin", "BURNTICKER_PLATFORM_ADMIN"), ...pick("keeper data key", "BURNTICKER_KEEPER_PUBKEY")],
-    ownTokensFile: file, ownTokensPresent: fs.existsSync(path.join(root, file)),
+    ownTokensFile: REFUSE_LIST_WORDS, ownTokensUrl: repoUrl("config/own-tokens.json"), ownTokensPresent: fs.existsSync(path.join(root, file)),
     refusalRule: "Every trading bot the operator runs refuses any token launched on this platform. The bots check a refuse list before every trade. If a team wallet holds any platform token, this page shows it.",
   };
 }
@@ -296,9 +318,9 @@ export function operatorWalletsFor(root: string, env: Readonly<Record<string, st
 }
 
 export interface TransparencySection {
-  updatedAt: string; file: string;
+  updatedAt: string; file: string; fileUrl: string;
   publicRepo: TransparencyConfig["publicRepo"];
-  whoRunsThis: TransparencyConfig["whoRunsThis"] & { operatorLine: string; refuseListPresent: boolean };
+  whoRunsThis: TransparencyConfig["whoRunsThis"] & { operatorLine: string; refuseListPresent: boolean; refuseListConfigUrl: string };
   howBuilt: TransparencyConfig["howBuilt"] & { reviewsReadmePresent: boolean; reportsPresent: { id: string; present: boolean }[] };
   wallets: WalletRow[]; walletsTodo: number; rehearsals: TransparencyRehearsal[];
   limitations: TransparencyConfig["limitations"]; policies: TransparencyConfig["policies"];
@@ -310,8 +332,9 @@ export function buildTransparency(root = process.cwd(), env: Readonly<Record<str
   const cfg = loadTransparency(root);
   const wallets = resolveWallets(cfg, env, operatorWalletsFor(root, env));
   return {
-    updatedAt: cfg.updatedAt, file: TRANSPARENCY_FILE, publicRepo: cfg.publicRepo,
-    whoRunsThis: { ...cfg.whoRunsThis, operatorLine: OPERATOR_LINE, refuseListPresent: fs.existsSync(path.join(root, cfg.whoRunsThis.refuseListCode)) && fs.existsSync(path.join(root, cfg.whoRunsThis.refuseListConfig)) },
+    // HB-46 (hourly run 6): public words in the answer; each file name only on its public-repository link
+    updatedAt: cfg.updatedAt, file: TRANSPARENCY_FILE_WORDS, fileUrl: repoUrl(TRANSPARENCY_FILE.split(path.sep).join("/")), publicRepo: cfg.publicRepo,
+    whoRunsThis: { ...cfg.whoRunsThis, refuseListConfig: REFUSE_LIST_WORDS, refuseListConfigUrl: repoUrl(cfg.whoRunsThis.refuseListConfig), operatorLine: OPERATOR_LINE, refuseListPresent: fs.existsSync(path.join(root, cfg.whoRunsThis.refuseListCode)) && fs.existsSync(path.join(root, cfg.whoRunsThis.refuseListConfig)) },
     howBuilt: { ...cfg.howBuilt, reviewsReadmePresent: fs.existsSync(path.join(root, cfg.howBuilt.reviewsDir, "README.md")), reportsPresent: cfg.howBuilt.reviews.map((r) => ({ id: r.id, present: !!r.reportPath && fs.existsSync(path.join(root, r.reportPath)) })) },
     wallets, walletsTodo: wallets.filter((w) => w.source === "todo").length, rehearsals: cfg.rehearsals,
     limitations: cfg.limitations, policies: cfg.policies,
@@ -371,6 +394,8 @@ export function readAudit(siteDir: string): AuditSummary | null {
 // ---- the whole page ----
 
 export interface TrustPage {
+  /** HS-26 (hourly run 5): the mainnet fee line (feeShareLine.ts feeTiersLine); null on another network */
+  feeTiersLine?: string | null;
   generatedAt: string;
   /** I-1 (audit 2026-10-19): the host's network, so the audit headline names it ("no mainnet burn has executed yet"). */
   cluster: string;
@@ -383,7 +408,7 @@ export interface TrustPage {
   program: ProgramFacts; incidents: { markdown: string; entries: number }; audit: AuditSummary | null;
   transparency: TransparencySection;
   statements: string[];
-  operatorLine: string; contactIsTodo: boolean; useOfFees: string; attesterStatus: { line: string; dueBy: string | null }; preAuditCapSol: number;
+  operatorLine: string; contactIsTodo: boolean; useOfFees: string; attesterStatus: { line: string; dueBy: string | null }; /** HB-69: what the second signer really does */ secondSigner: string; preAuditCapSol: number;
   /** website-20 item 162: the burn-pool cap the program applies, read from chain (null: not read on this host). */
   effectiveCap: EffectiveCap | null;
 }
@@ -397,7 +422,7 @@ export async function readEffectiveCap(reader: ChainReader | null, programId: st
   } catch { return null; }
 }
 
-export async function buildTrustPage(i: { reader: ChainReader | null; env?: Readonly<Record<string, string | undefined>>; root?: string; siteDir: string; attesters: TrustPage["attesters"]; firstLaunchAt?: number | null; now?: number; cluster?: string; upgradeTimeLockSecs?: number | null; deltaCache?: Map<string, LamportsDelta>; skipFeeLedger?: boolean }): Promise<TrustPage> {
+export async function buildTrustPage(i: { reader: ChainReader | null; env?: Readonly<Record<string, string | undefined>>; root?: string; siteDir: string; attesters: TrustPage["attesters"]; firstLaunchAt?: number | null; /** HS-26: a live mainnet coin on tier 14 exists (null: not read) */ tier14Live?: boolean | null; now?: number; cluster?: string; upgradeTimeLockSecs?: number | null; deltaCache?: Map<string, LamportsDelta>; skipFeeLedger?: boolean }): Promise<TrustPage> {
   const env = i.env ?? process.env, root = i.root ?? process.cwd(), now = i.now ?? Date.now();
   const powers = loadPowersRegister(env, root, now, i.upgradeTimeLockSecs ?? null);
   const transparency = buildTransparency(root, env);
@@ -411,7 +436,9 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
   const newCoinFees = postGraduationFeesFor(cluster, liveNewCoinTier(liveCp) ? liveCp : null);
   return {
     generatedAt: new Date(now).toISOString(), cluster,
-    operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
+    // HS-26 (hourly run 5): the trust page's fee line, the footer's shape, with "(every coin live today)" computed from the registry
+    feeTiersLine: cluster === "mainnet" ? feeTiersLine({ tier14Live: i.tier14Live ?? null }) : null,
+    operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), secondSigner: SECOND_SIGNER_LINE, preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
     powers, operator: operatorPowersSummary(powers),
     livePlatform,
     designedFees: { curve: CURVE_FEES, postGraduation: newCoinFees, devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: newCoinFees.legs.find((l) => l.label === "burn pool (LP fees)")?.bps ?? LP_FEES_TO_BURN_POOL_BPS, operatorBps: newCoinFees.legs.find((l) => l.label === "Burnticker (operator, LP fees)")?.bps ?? LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },

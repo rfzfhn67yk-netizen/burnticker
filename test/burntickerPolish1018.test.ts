@@ -242,10 +242,10 @@ describe("A-30: copy in words, not keys, ids, raw statuses or arrows", () => {
     assert.equal(receiptStatusWords("pending-pair"), "Waiting until both coins of the pair have a registered pool");
     assert.equal(receiptStatusWords("some-new-state"), "some new state");
     for (const t of Object.values(RECEIPT_STATUS_WORDS)) clean(t, "receipt status");
-    assert.match(read(COIN), /\{receiptStatusWords\(b\.status\)\}/);
+    assert.match(read(COIN), /\{burnLogWords\(b\.status\)\}/);
   });
   test("review leftovers: status words in the verify summaries, no arrows on the pair page, no em dash in a selector's title", () => {
-    assert.match(read(COIN), /: receiptStatusWords\(b\.status\)\} \(\{receiptRowStatus\(b\)\.label\}\)<\/summary>/);
+    assert.match(read(COIN), /: burnLogWords\(b\.status\)\} \(\{receiptRowStatus\(b\)\.label\}\)<\/summary>/);
     assert.match(read("src/lib/burnticker/tokenPage.ts"), /esc\(receiptStatusWords\(b\.status\)\)/);
     assert.doesNotMatch(read(PAIR), /← Burnticker|\{trade\.label\} ↗/);
     assert.doesNotMatch(read(COIN), /← Coins/);

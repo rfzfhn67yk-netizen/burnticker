@@ -89,7 +89,7 @@ describe("H5: the field rules in the browser match the server's lint", () => {
     assert.equal(page.filter(Boolean).length, 3, "three fields, three sentences");
   });
   test("page wiring: Review is disabled while any field has a problem, errors show on return, Edit lands on the field", () => {
-    assert.match(page, /const nameStepBlocked = rightsMissing \|\| !ready \|\| nameBlockers\.length > 0 \|\| coinsForName\.some\(\(c\) => !!c\.nameIssue \|\| !!c\.tickerIssue\);/);
+    assert.match(page, /const nameStepBlocked = rightsMissing \|\| !ready \|\| nameChecking \|\| nameBlockers\.length > 0 \|\| coinsForName\.some\(\(c\) => !!c\.nameIssue \|\| !!c\.tickerIssue\);/);
     assert.match(page, /disabled=\{nameStepBlocked\}/);
     assert.match(page, /\.\.\.serverFields\.map\(\(x\) => \(\{ text: x\.text, edit: \(\) => editField\(x\.side, x\.field\) \}\)\)/);
     assert.match(page, /!isLintLine\(x\) && !serverFields\.some/);

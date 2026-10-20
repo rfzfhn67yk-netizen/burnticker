@@ -257,7 +257,7 @@ describe("the morning check's Burnticker block", () => {
     assert.match(text, /^- feeds: kalshi:KXNFLGAME:binary ok 2 min ago$/m);
     assert.match(text, /^- conditions now: bt-cap-binding$/m);
     assert.match(text, /^- bt- alerts last 24 h: 2$/m, "the non-bt alert is left to the Money section; the old bt- row is outside the window the caller passed");
-    assert.match(text, /\[bt-cap-binding\] Burnticker \$BRONCO: 1\.0 SOL above the cap · UNSEEN · not sent to Telegram$/m);
+    assert.match(text, /\[bt-cap-binding\] Burnticker \$BRONCO: 1\.0 SOL above the cap · UNSEEN$/m);
   });
   test("burntickerCheckin on a host: no db file → the one line (and the file is NOT created); a db → the block, registry closed after", async () => {
     const dir = tmpDir("bt-host-");

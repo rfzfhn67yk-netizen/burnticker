@@ -33,6 +33,23 @@ export function upgradeDelaySummary(timeLockSecs: number | null, threshold = "2 
   return `deploy new program code once ${threshold} approve a Squads proposal. A ${fmtSecs(timeLockSecs)} time lock then runs before it can execute.`;
 }
 
+/**
+ * Hourly run 6 HB-59 / N3: THE ONE SENTENCE FOR THE TIME-LOCK PLAN. The current-status line and the Powers Register's upgrade row (the
+ * trust page, /api/burnticker/trust and /v1/trust) both say the plan in these words, from config/burnticker/current-status.json `squads`,
+ * so the two can no longer name different times. `plannedFrom` is the file's own phrase; null leaves the "from" out.
+ */
+export function timeLockPlanSentence(plannedSecs: number, plannedFrom: string | null): string {
+  return `The plan is ${fmtSecs(plannedSecs)}${plannedFrom ? ` from ${plannedFrom}` : ""}.`;
+}
+
+/**
+ * HB-69 / HS-20: the upgrade row's plain consequence. The operator holds two of the three Squads keys, so with a time lock of 0 it alone
+ * can upgrade both programs at once. Null when the time lock is not 0 or was not read (the delay sentence above says what applies).
+ */
+export function operatorAloneUpgradeLine(timeLockSecs: number | null): string | null {
+  return timeLockSecs === 0 ? "Two of the three Squads keys are the operator's, and the time lock is 0, so the operator alone can upgrade both programs at once today." : null;
+}
+
 const WORD = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 const word = (n: number): string => WORD[n] ?? String(n);
 /**

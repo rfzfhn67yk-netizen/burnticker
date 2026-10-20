@@ -34,7 +34,7 @@ import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { LaunchRecovery } from "./LaunchRecovery";
 import { LAUNCH_GATE_LOADING, launchGateFromCatalogue, wizardMayRender, wizardMaySign, type LaunchGateState } from "@/lib/burnticker/launchGateState";
 import { availabilityFromCatalogue, launchTypeOf, PREVIEW_BANNER, siteLaunchStateFromCatalogue, SITE_LAUNCH_STATE_LOADING, type LaunchAvailabilityModel, type LaunchType, type SiteLaunchState } from "@/lib/burnticker/launchAvailability";
-import { createReviewRequester, EMPTY_REVIEW_SLOT, keptReviewProof, keptReviewProofText, launchRevisions, REVIEW_PROOF_STORE, reviewFor, reviewIdentity, reviewMatchesDraft, reviewProofExpiresAt, REVIEW_UPDATING, usableReviewProof, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
+import { createReviewRequester, draftHeldNotices, EMPTY_REVIEW_SLOT, keptReviewProof, keptReviewProofText, lapsedKeptProof, launchRevisions, REVIEW_PROOF_STORE, reviewFor, reviewIdentity, reviewMatchesDraft, reviewProofExpiresAt, REVIEW_UPDATING, usableReviewProof, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
 import { DEFAULT_SHARE, SLICED_ABOVE, isRaisePreset, shareOf, SHARE_PRESETS, presetRowLabel, pctLabel as presetPct, snapToPreset, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, LINKED_ONE_SHOT_LINE, shareShapeOf, sharePresetsForRule, type RaisePreset } from "@/lib/burnticker/launchPresets";
 import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
@@ -44,7 +44,7 @@ import { ownRealPicks, SIDE_REAL_OFF, realBlockers, realField, realReviewNotes, 
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
 import { BACKTEST_SLOW } from "@/lib/burnticker/api/backtestWait";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileFieldId, type ProfileUpdate, type ProfileValue } from "./ProfileFields";
-import { NAME_STEP_BLOCKED, fieldRuleSentence, isLintLine, noteIssue, profileIssues, serverFieldProblems } from "./fieldChecks";
+import { NAME_STEP_BLOCKED, NAME_STEP_CHECKING, fieldRuleSentence, isLintLine, nameStepWaitsForReview, noteIssue, profileIssues, serverFieldProblems } from "./fieldChecks";
 import { realBurnAllowed, dropIneligibleBurnTarget } from "@/lib/burnticker/burnRealEligibility";
 import { changeRuleEdgeIds } from "@/lib/burnticker/changeRule";
 import { endChoicesFor, perCoinEndLines } from "@/lib/burnticker/pairEnds";
@@ -89,8 +89,8 @@ import { prepareIfCurrent, profileRevision, STALE_PREPARE_SENTENCE } from "@/lib
 import { endText, settledPairSentence } from "@/lib/burnticker/describe";
 import { PARTIES_PAIR_SENTENCE, isPartySubject } from "@/lib/burnticker/pairFundsFlow";
 import { SETTLED_DEADLINE_LINE, SETTLED_END_LABEL, settledAsShown, settledPairBody, settledPairFields, settledWhichCoinLine, partyPairNames, type SettledPick } from "./settledPair";
-import { HAZARD_FOLLOW, HAZARD_KINDS, HAZARD_MEASURES, hazardControls, hazardPatternOptions, hazardSeriesFor, hazardSwap, isHazardSeries, type HazardKindId } from "@/lib/burnticker/hazards";
-import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsEndLine, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, activeUnit, eventForSide, followForRule, keptProfileLine, keptProfileParts, KEPT_PROFILE_FRESH, KEPT_PROFILE_REUSE, IMAGE_RIGHTS_REQUIRED, oneGameShare, PAIR_COST_EXCLUSIONS, mappingWarning, partyMarketWarning, pickDescribesRule, renderWarnings, reviewBlockers, shareOfBudgetLine, rivalrySeasonLine, stablePatternOptions, teamLine, triggerText, whichAnswer, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, pairDiagramLabel, namesRemadeLine, namesChangeOf, type NamesChange, budgetCopy, oneShotSentences, candidateFacts, candidatesPairRule, endSentences, gamePairFacts, gamePairRule, matchupFacts, pairIdentityProblems, pairNames, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
+import { HAZARD_FOLLOW, HAZARD_KINDS, HAZARD_MEASURES, hazardControls, hazardHelpId, hazardPatternOptions, hazardPatternSwitch, hazardSeriesFor, hazardSwap, isHazardSeries, type HazardKindId } from "@/lib/burnticker/hazards";
+import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsEndLine, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, seriesOptionState, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, activeUnit, eventForSide, followForRule, keptProfileLine, keptProfileParts, KEPT_PROFILE_FRESH, KEPT_PROFILE_REUSE, IMAGE_RIGHTS_REQUIRED, oneGameShare, PAIR_COST_EXCLUSIONS, mappingWarning, partyMarketWarning, pickDescribesRule, renderWarnings, reviewBlockers, shareOfBudgetLine, rivalrySeasonLine, stablePatternOptions, teamLine, triggerText, whichAnswer, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, pairDiagramLabel, namesRemadeLine, namesChangeOf, type NamesChange, budgetCopy, oneShotSentences, candidateFacts, candidatesPairRule, endSentences, gamePairFacts, gamePairRule, matchupFacts, pairIdentityProblems, pairNames, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { autoTickerSwaps, freePairTickers, pairTickerSwapLine, type TickerGuard } from "@/lib/burnticker/tickerSwap";
 import { PICKER_PAGE, pickerPage } from "@/lib/burnticker/polySearch";
@@ -421,6 +421,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // a new draft starts the count again
   // review of block M: the wallet's signature over the review's tickers, which lets the review count the creator's own drafts as theirs
   const [reviewProof, setReviewProof] = useState<WalletProof | null>(null);
+  // LA-4: the last proof this tab dropped at its age limit (or read back already past it after a reload), so a draft-held notice for
+  // that wallet and ticker says the signature ran out
+  const [lapsedProof, setLapsedProof] = useState<WalletProof | null>(null);
   const [btRetry, setBtRetry] = useState<{ key: string; n: number }>({ key: "", n: 0 });
   const searchRef = useRef<HTMLInputElement>(null), [focusSearch, setFocusSearch] = useState(false);
   const lastFollow = useRef<FollowId | null>(null);
@@ -1021,12 +1024,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   useEffect(() => {
     if (!reviewProof) return;
     const at = reviewProofExpiresAt(reviewProof, PROOF_MAX_AGE_MS, parseWalletProof) ?? 0;
-    const t = setTimeout(() => setReviewProof((p) => (p === reviewProof ? null : p)), Math.max(0, at - Date.now()));
+    // LA-4: dropping it changes the review key (reviewIdentity), so the review is asked again WITHOUT the proof and the slot holds no
+    // answer for the new key until it comes back (reviewMatchesDraft): Launch never rides on the earlier, proven answer
+    const t = setTimeout(() => { setLapsedProof(reviewProof); setReviewProof((p) => (p === reviewProof ? null : p)); }, Math.max(0, at - Date.now()));
     return () => clearTimeout(t);
   }, [reviewProof]);
   // synthetic creator b-reload-relaunch (launchReviewSync.ts keptReviewProof): the latest signed request over this draft's tickers is kept
   // in this tab, so a reload's kept review still counts the creator's own unlaunched draft as theirs; read back once on load
-  useEffect(() => { let raw: string | null = null; try { raw = sessionStorage.getItem(REVIEW_PROOF_STORE); } catch { raw = null; } const kept = keptReviewProof(raw, PROOF_MAX_AGE_MS, parseWalletProof); if (kept) setReviewProof((p) => p ?? kept); }, []);
+  useEffect(() => { let raw: string | null = null; try { raw = sessionStorage.getItem(REVIEW_PROOF_STORE); } catch { raw = null; } const kept = keptReviewProof(raw, PROOF_MAX_AGE_MS, parseWalletProof); if (kept) setReviewProof((p) => p ?? kept); else { const lapsed = lapsedKeptProof(raw, PROOF_MAX_AGE_MS, parseWalletProof); if (lapsed) setLapsedProof(lapsed); } }, []);
   // item 253 (launch integrity): the whole profile, image included, is part of the draft's revision, so a prepare answer for an older
   // profile is set aside
   // second audit 2026-10-19 I-12: two revisions (launchReviewSync.ts launchRevisions). draftKey (no wallet, no proof) is the prepare key
@@ -1066,7 +1071,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const reviewCurrent = reviewMatchesDraft(reviewSlot, reviewKey);
   // HB-30: the review checks the tickers as soon as the rule is picked (the burn step), so a generated ticker another coin holds or one
   // letter from another coin's is swapped for its own free ticker before the Name step shows it; a typed ticker is never changed
-  const autoSwaps = autoTickerSwaps(reviewCurrent ? (shownReview.review as (LaunchReview & { tickers?: TickerCheck[] }) | null)?.tickers ?? null : null, { a: ticker, b: pairOn ? tickerB : "" }, tickerAuto);
+  // LA-4: a ticker an unlaunched draft holds, asked with no usable proof: a notice beside Launch (and on the Name step), never a blocker
+  const draftHeld = reviewCurrent ? draftHeldNotices(shownReview.review?.notices, { lapsed: lapsedProof, creator, maxAgeMs: PROOF_MAX_AGE_MS, parse: parseWalletProof }) : [];
+  // LA-4: a generated ticker this tab already pressed Launch for (its signature ran out) is the creator's own draft's: never swapped away
+  const ownLapsed = new Set(draftHeld.filter((n) => n.expired).map((n) => n.ticker.toUpperCase()));
+  const autoSwaps = autoTickerSwaps(reviewCurrent ? ((shownReview.review as (LaunchReview & { tickers?: TickerCheck[] }) | null)?.tickers ?? null)?.filter((t) => !ownLapsed.has(t.ticker.toUpperCase())) ?? null : null, { a: ticker, b: pairOn ? tickerB : "" }, tickerAuto);
   useEffect(() => {
     if (!autoSwaps.a && !autoSwaps.b) return;
     setGenFix((m) => ({ ...m, ...(autoSwaps.a ? { [ticker.toUpperCase()]: autoSwaps.a } : {}), ...(autoSwaps.b ? { [tickerB.toUpperCase()]: autoSwaps.b } : {}) }));
@@ -1104,6 +1113,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     // WIRING-AUDIT12 P1-2: the bundles' rules are checked against the review's prepared rules before any wallet request; a difference
     // keeps the wallet closed and sends the creator back to the review with the sentences
     const preparedOnReview = reviewFor(reviewSlot, curRev.current).review?.prepared ?? null;
+    let pressProof: WalletProof | null = null;
     const checkBeforeWallet = async (a: Bundle, b: Bundle | null) => {
       const lines = preparedOnReview ? await preparedRulesCheckWeb(preparedOnReview, { a: { text: a.rules.text, sha256: a.rules.sha256, mint: a.mint }, b: b ? { text: b.rules.text, sha256: b.rules.sha256 } : null }) : [PREPARED_MISSING_LINE];
       if (lines.length) throw new Error(lines.join(" "));
@@ -1121,7 +1131,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       // addresses are spent only for a wallet that asked; one signature covers every ticker and mint of the press
       // HB-53: a refused or failed proof stops here, before any prepare or send (requireLaunchProof throws PROOF_REJECTED_SENTENCE)
       const walletProof = await requireLaunchProof(wallet.signMessage, { origin: window.location.origin, creator, tickers: pairOn && ruleB ? [sent.a, sent.b] : [sent.a], mints: [kA?.publicKey, kB?.publicKey].filter((m): m is string => !!m) }, base58);
-      if (walletProof) { Object.assign(common, { walletProof }); keepReviewProof(walletProof); }
+      if (walletProof) { Object.assign(common, { walletProof }); keepReviewProof(walletProof); pressProof = walletProof; }
       if (pairOn && ruleB && !meetingsOn && !settledPick) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         // website-18: each coin carries its own image, description and links (pinned in its own metadata file)
@@ -1170,7 +1180,12 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       if ("stale" in out) { setLaunchErr(STALE_PREPARE_SENTENCE); return; }
       out.ok(); setSignTickers(sent);
       setStep("launch"); setPlanAt(Date.now());
-    } catch (e) { const v = venueFrom409(e); if (v) setPairVenue(v); setLaunchErr(String((e as Error).message)); } finally { setBusy(false); }
+    } catch (e) { const v = venueFrom409(e); if (v) setPairVenue(v); setLaunchErr(String((e as Error).message)); } finally {
+      setBusy(false);
+      // LA-4: the press's signature also rides with the review from now on (set after the press, so the review key never moves mid-press):
+      // the draft's own wallet keeps Launch on; another wallet that signed sees the ordinary same-ticker refusal and Launch turns off
+      if (pressProof) { const p = pressProof; setReviewProof(p); }
+    }
   }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, profile, profileB, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title, meetingsOn, reviewMeetings, settledPick, reviewSettled, ctxB, mintPool, mintsNeeded]);
 
   // ---- navigation -----------------------------------------------------------------------------------------------------------------
@@ -1337,7 +1352,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     return one ? applyDial(r, "fraction", DEFAULT_SHARE.oneShot) : r;
   };
   const chooseHazard = (series: string, title: string, publisher: string) => {
-    markOrigin("browse"); setOrigin(null); setSrcWarnings([]); setShareNotice(null); setDraft(null); setCardCtx(null); setEventInfo(null);
+    // HB-74 (hourly run 5): a status line from the previous hazard's pattern switch is cleared with the hazard
+    markOrigin("browse"); setOrigin(null); setSrcWarnings([]); setShareNotice(null); setPatternNotice(null); setDraft(null); setCardCtx(null); setEventInfo(null);
     const src = sources.find((x) => x.id === series || series.startsWith(`${x.id}:`));
     applyRule(hazardRule(series), { oracle: "catalogue", series, market: null, title }, { settlement: publisher, source: src?.unit ? { unit: src.unit, baseline: src.baseline ?? 0, direction: src.direction ?? "up" } as Suggestion["source"] : undefined });
   };
@@ -1684,7 +1700,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     // website-21 (WIRING-RIVALRY-SERIES): the third option, every game between them this season, with its meetings list
                     const rv = rivalry?.key === `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}` ? rivalry : null;
                     const busy = !rv || rv.busy, failed = !!rv && !rv.busy && (!!rv.failed || !!rv.scheduleNote);
-                    const why = busy ? null : failed ? (rv!.scheduleNote ?? SCHEDULE_UNAVAILABLE_LINE) : rv!.offered ? null : (rv!.offeredLine ?? NO_LISTED_MEETING_LINE);
+                    // HB-72 (hourly run 5): greyed with a notice when no meeting is left to play (guidedLaunch.ts seriesOptionState)
+                    const why = busy ? null : failed ? (rv!.scheduleNote ?? SCHEDULE_UNAVAILABLE_LINE) : seriesOptionState(rv!).why;
                     const rows = rv && !busy && !failed ? meetingsListRows(rv.meetings, rivalA.abbr, rivalB.abbr) : [];
                     const off = busy || !!why;
                     return (
@@ -1696,11 +1713,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                         <div id="rivalry-series-why">
                           {busy ? <span className="mt-1 block text-xs text-neutral-400">Looking for their games.</span>
                             : failed ? <span className="mt-1 block text-xs text-amber-300" role="status" data-schedule-unavailable>{why} <button type="button" data-nav className="underline" onClick={() => setRivalryRetry((n) => n + 1)}>Retry</button></span>
-                            : why ? <span className="mt-1 block text-xs text-neutral-400" data-no-meeting>{why}</span>
+                            : why ? <span className="mt-1 block text-xs text-neutral-400" data-no-meeting>{why}{rows.length > 0 && <span className="block" data-meetings-played>{rows.map((m) => `${dayLabel(m.startsAt)} ${m.where}${m.state ? ` (${m.state})` : ""}`).join(", ")}</span>}</span>
                             : <div className="mt-2" data-meetings-list>
                                 <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">{MEETINGS_LIST_LABEL}</p>
                                 <ul className="mt-1 flex flex-wrap gap-1.5">{rows.map((m) => (
-                                  <li key={m.key} className="rounded-full border border-neutral-700 px-2.5 py-0.5 text-xs text-neutral-200" data-meeting-row={m.key}>{dayLabel(m.startsAt)} {m.where}{m.playoff && <span className="ml-1 text-amber-300" data-playoff>playoffs</span>}{m.state && <span className="ml-1 text-neutral-400">({m.state})</span>}</li>
+                                  <li key={m.key} className="rounded-full border border-neutral-700 px-2.5 py-0.5 text-xs text-neutral-200" data-meeting-row={m.key}>{dayLabel(m.startsAt)} {m.where}{m.playoff && <span className="ml-1 text-amber-300" data-playoff>playoffs</span>}{m.state && <>{" "}<span className="text-neutral-400">({m.state})</span></>}</li>
                                 ))}</ul>
                                 {rv?.source && <p className="mt-1 text-[11px] text-neutral-500" data-schedule-source>{rv.source} Dates are in Denver time.</p>}
                               </div>}
@@ -2005,17 +2022,13 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           }
           if (guide.follow === "market") { setDial("side", pt === "fade" ? "no" : "yes"); return; }
           if (guide.follow === "disaster") {
-            // website-22 (QA 9 item 1): the fade side lives on the per-event form; from the next-event form it switches there first
-            if (pt === "fade") {
-              if (dialsFor(rule, dialCtx).inverse) { setDial("inverse", "on"); return; }
-              const back = rule.series ? hazardSwap(rule.series, "every", Date.now()) : null;
-              if (back && "series" in back) { applyRule(hazardRule(back.series), { oracle: "catalogue", series: back.series, market: null, title: pick?.title ?? "" }, { settlement: settleNote }); setWantInverse("on"); }
-              return;
-            }
-            const sw = rule.series ? hazardSwap(rule.series, pt === "once" ? "once" : "every", Date.now()) : null;
-            if (!sw || "refused" in sw) { if (sw) setPatternNotice(sw.refused); return; }
-            const title = pick?.title ?? "";
-            applyRule(hazardRule(sw.series), { oracle: "catalogue", series: sw.series, market: null, title }, { settlement: settleNote });
+            // HB-71 (hourly run 5): one pure reducer (hazards.ts hazardPatternSwitch); Every and Once always turn the fade side off, so a
+            // stale draft that kept "inverse" on can never trap the creator on "When it does not happen"
+            const sw = rule.series ? hazardPatternSwitch({ series: rule.series, inverse: !!rule.inverse }, pt, Date.now()) : null;
+            if (!sw) return;
+            if ("refused" in sw) { setPatternNotice(sw.refused); return; }
+            if (sw.next.series === rule.series) { if (dialsFor(rule, dialCtx).inverse && !!rule.inverse !== sw.next.inverse) setDial("inverse", sw.next.inverse ? "on" : "off"); }
+            else { applyRule(hazardRule(sw.next.series), { oracle: "catalogue", series: sw.next.series, market: null, title: pick?.title ?? "" }, { settlement: settleNote }); setWantInverse(sw.next.inverse ? "on" : "off"); }
             // sources-6 (QA 9 #40): a switch that changes a threshold or the subject says so beside the cards
             if (sw.notice) setPatternNotice(sw.notice);
             return;
@@ -2084,8 +2097,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               <div className="space-y-2" data-hazard-controls>
                 <p className="text-xs text-neutral-300" data-hazard-measures>{HAZARD_MEASURES[hazardKind][pat]}</p>
                 {ctls.length > 0 && <div className="flex flex-wrap gap-3">{ctls.map((c) => (
-                  <label key={c.id} className="block text-xs text-neutral-400">{c.label}<FieldHelp id="hazard-threshold" />
-                    <select data-decision="what" data-help="hazard-threshold" aria-label={c.label} data-hazard-control={c.id} className={input + " mt-1 block w-auto"} value={shown[c.id] ?? c.default} onChange={(e) => change(c.id, e.target.value)}>{c.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+                  <label key={c.id} className="block text-xs text-neutral-400">{c.label}<FieldHelp id={hazardHelpId(c.id)} />
+                    <select data-decision="what" data-help={hazardHelpId(c.id)} aria-label={c.label} data-hazard-control={c.id} className={input + " mt-1 block w-auto"} value={shown[c.id] ?? c.default} onChange={(e) => change(c.id, e.target.value)}>{c.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
                   </label>
                 ))}</div>}
               </div>
@@ -2151,14 +2164,18 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const espnParsed = rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null;
         // website-25 (QA 11 M8): only the unusual cases this league can have: draws and cup ties where the league has draws, doubleheaders in MLB
         const espnCases = espnParsed ? [...(leagues.find((l) => l.id === espnParsed.league)?.draws ? [78] : []), 79, ...(espnParsed.league === "mlb" ? [80] : [])] : [];
+        const separatePair = pairOn && pairMode === "season" && !meetingsOn && !settledPick && !elPick;
         const edgeIds: number[] = [
-          ...espnCases, ...(pairOn && (!elPick || settledPick) ? [76] : []), ...(elPick ? [82] : []),
+          // HB-81 R1 (hourly run 5): the separate "Every loss this season" pair moves nothing between its coins, so the linked-pair cases
+          // (76 waiting for both pools, 168 leftover to another coin) are not listed for it
+          ...espnCases, ...(pairOn && !separatePair && (!elPick || settledPick) ? [76] : []), ...(elPick ? [82] : []),
           ...changeRuleEdgeIds(rule), ...(rule.oracle === "catalogue" && /^nws\./.test(rule.series ?? "") ? [86, 87] : []),
           // WIRING-SEMANTICS-2: the floor, the end's destination, the fingerprint, and Polymarket's split and unresolved payouts
           // HB-33: the minimum-burn (2% limit) and leftover-to-another-coin cases only where the rule can meet them
-          ...reviewEdgeIds({ oneShotFull: oneShotFull(rule), otherCoin: pairOn || endA.kind === "coin" || endB.kind === "coin" }), ...(rule.oracle === "polymarket" ? [178, 179, 180] : []), ...(rule.oracle === "catalogue" ? [218] : []),
+          ...reviewEdgeIds({ oneShotFull: oneShotFull(rule), otherCoin: (pairOn && !separatePair) || endA.kind === "coin" || endB.kind === "coin" }), ...(rule.oracle === "polymarket" ? [178, 179, 180] : []), ...(rule.oracle === "catalogue" ? [218] : []),
         ];
-        const edgeNotes = [...new Set(edgeIds)].map((i) => edgeCaseFor(i, { oneGame: espnParsed?.kind === "game" })).filter((x): x is string => !!x);
+        // HB-81 D5: item 218 on a one-time coin does not say that nothing ends the rule (its one burn or its deadline does)
+        const edgeNotes = [...new Set(edgeIds)].map((i) => edgeCaseFor(i, { oneGame: espnParsed?.kind === "game", oneShot: windowKindOf(rule) === "one-shot" })).filter((x): x is string => !!x);
         const coinsN: 1 | 2 = pairOn && ruleB ? 2 : 1;
         const editTo = (p: GuidedPhase) => () => { if (p === "which") toWhich(); else setGuide((g) => ({ ...g, phase: p })); };
         const reviewFacts = guide.follow ? [
@@ -2194,7 +2211,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         // QA 9 item 14: the image line is confirmed on step 4; Next waits, and says why beside it
         const rightsMissing = (!!profile.image && !profile.rights) || (two && !!profileB.image && !profileB.rights);
         // website-25 (QA 11 H5): Review stays disabled while any field on this step has a problem, as it already did for the image line
-        const nameStepBlocked = rightsMissing || !ready || nameBlockers.length > 0 || coinsForName.some((c) => !!c.nameIssue || !!c.tickerIssue);
+        // HB-86: the server's ticker checks (exact, near, draft-held) come back in the review answer; the step waits for it
+        const nameChecking = nameStepWaitsForReview({ reviewCurrent, reviewError: shownReview.error });
+        const nameStepBlocked = rightsMissing || !ready || nameChecking || nameBlockers.length > 0 || coinsForName.some((c) => !!c.nameIssue || !!c.tickerIssue);
         if (guide.follow && guide.phase === "name") {
           return <>
             {pairGen && pairSwap && tickerAuto && sideA && sideB && (pairSwap.a || pairSwap.b) && (() => { const sw = pairSwap, orig = freePairTickers(sideA, sideB, null); return <p className="text-xs text-neutral-300" role="status" data-pair-ticker-swap>{[sw.a ? pairTickerSwapLine(orig.a, pairGen.a.ticker) : null, sw.b ? pairTickerSwapLine(orig.b, pairGen.b.ticker) : null].filter(Boolean).join(" ")}</p>; })()}
@@ -2204,9 +2223,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             image={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`, true, "a")}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false, "b")}</div> : imageField(profile, setProfile, null)}
             profile={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" who={`$${ticker || "A"}`} side="a" /><ProfileFields value={profileB} onChange={setProfileB} generated={genB} part="text" who={`$${tickerB || "B"}`} side="b" /></div> : <ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" side="a" />}
             note={pairOn ? null : { value: note, onChange: setNote, problem: noteProblem }}
-            tickerChecks={reviewCurrent && rv?.tickers ? rv.tickers.map((t) => (t.reserved && coinsForName[t.side === "A" ? 0 : 1]?.tickerIssue === RESERVED_TICKER_LINE ? { ...t, reserved: false } : t)) : null} onProveTicker={proveTicker}
+            tickerChecks={reviewCurrent && rv?.tickers ? rv.tickers.map((t) => (t.reserved && coinsForName[t.side === "A" ? 0 : 1]?.tickerIssue === RESERVED_TICKER_LINE ? { ...t, reserved: false } : t)) : null} onProveTicker={proveTicker} draftHeld={draftHeld}
             profileProblems={nameBlockers}
-            next={<StickyAction>{nameStepBlocked && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>{rightsMissing ? IMAGE_RIGHTS_REQUIRED : NAME_STEP_BLOCKED}</p>}<button type="button" data-nav className={primary + " w-full sm:w-auto"} disabled={nameStepBlocked} onClick={() => setGuide((g) => ({ ...g, phase: "review" }))}>Review</button></StickyAction>} />
+            next={<StickyAction>{nameStepBlocked && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>{rightsMissing ? IMAGE_RIGHTS_REQUIRED : nameChecking && nameBlockers.length === 0 && !coinsForName.some((c) => !!c.nameIssue || !!c.tickerIssue) ? NAME_STEP_CHECKING : NAME_STEP_BLOCKED}</p>}<button type="button" data-nav className={primary + " w-full sm:w-auto"} disabled={nameStepBlocked} onClick={() => setGuide((g) => ({ ...g, phase: "review" }))}>Review</button></StickyAction>} />
           </>;
         }
         // website-22 (audit 10 item 10): the server's own problems join the list, each said once (a problem the page already names is not repeated)
@@ -2273,7 +2292,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               budget={budget}
               dispute={reviewCurrent ? rv?.dispute ?? null : null}
               graduation={rv?.graduation ?? null}
-              tickerChecks={reviewCurrent && rv?.tickers ? rv.tickers.map((t) => (t.reserved && coinsForName[t.side === "A" ? 0 : 1]?.tickerIssue === RESERVED_TICKER_LINE ? { ...t, reserved: false } : t)) : null} onProveTicker={proveTicker}
+              tickerChecks={reviewCurrent && rv?.tickers ? rv.tickers.map((t) => (t.reserved && coinsForName[t.side === "A" ? 0 : 1]?.tickerIssue === RESERVED_TICKER_LINE ? { ...t, reserved: false } : t)) : null} onProveTicker={proveTicker} draftHeld={draftHeld}
               notes={notes}
               simulator={reviewCurrent && rv?.simulation ? <SimulatorDisclosure simulation={rv.simulation} rule={rule} /> : null}
               namePrompt={!pairOn && text?.name === "Event Coin" ? "This question does not give a clear coin name: please name the coin (and check the ticker) before you launch." : null}

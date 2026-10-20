@@ -21,6 +21,7 @@ import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { freeRowLead } from "@/lib/burnticker/tickerSwap";
 import { fieldLinkText, nameFieldId } from "./fieldChecks";
 import { PROVE_TICKER_LABEL } from "@/lib/burnticker/walletProof";
+import { launchButtonOff, type DraftHeldNotice } from "@/lib/burnticker/launchReviewSync";
 import { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX, reservedLineSaid } from "./pageCopy";
 import type { FundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { REVIEW_IMAGE_GENERATED, REVIEW_IMAGE_UPLOADED } from "@/lib/burnticker/imagePin";
@@ -106,6 +107,8 @@ export interface ReviewCardProps {
   tickerChecks?: TickerCheck[] | null;
   /** review of block M: asks the wallet to sign the review's tickers, so the creator's own unfinished launch counts as theirs */
   onProveTicker?: (() => void) | null;
+  /** LA-4: tickers an unlaunched draft holds while the review cannot tell who asks (review.notices); said beside Launch, which stays on */
+  draftHeld?: DraftHeldNotice[] | null;
   /** website-19 (snag 11): extra plain lines under the rule sentence, such as a result due before graduation. */
   notes?: string[] | null;
   /** website-26 (WIRING-FEATURES item 11): a daily race's fight line (derby/tile.ts fightLead), the card's first line; null otherwise. */
@@ -279,6 +282,12 @@ export function ReviewCard(p: ReviewCardProps) {
   const chip = (on: boolean) => `rounded-full border px-3 py-1 text-sm ${on ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`;
   // continuous audit HB-7: the reserved-ticker refusal is said once; when the field's own problem already says it, the box only offers the free tickers
   const reservedSaid = (side: "A" | "B"): boolean => { const c = p.coins[side === "A" ? 0 : 1]; return reservedLineSaid([c?.tickerIssue ?? null, ...fieldProblems.map((x) => x.text)]); };
+  // review of block M and LA-4: the one "confirm it with your wallet" action (the page's proveTicker: one signature, then the review is
+  // asked again with it), shown under a taken ticker on the Name step and in the draft-held notice beside Launch
+  const proveButton = p.onProveTicker ? <p className="mt-1"><button type="button" data-decision="name" data-prove-ticker className="underline text-neutral-200" onClick={p.onProveTicker}>{PROVE_TICKER_LABEL}</button></p> : null;
+  // HB-86 and LA-4: the same notice on the Name step (beside the field) and on the Review step (beside Launch), one list for both
+  const heldSide = (side: "A" | "B") => (p.draftHeld ?? []).some((n) => n.side === side);
+  const draftHeldList = (p.draftHeld ?? []).length > 0 ?<div className="min-w-0 break-words rounded border border-amber-400/40 p-2 text-xs text-amber-200" role="status" data-draft-held>{(p.draftHeld ?? []).map((n) => <p key={n.side} data-draft-held-side={n.side} data-draft-held-expired={n.expired ? "" : undefined}>{many ? `Coin ${n.side}: ` : ""}{n.text}</p>)}{p.creator && proveButton}</div> : null;
   const tickerCheckList = <>{(p.tickerChecks ?? []).filter((t) => (t.reserved && (!reservedSaid(t.side) || t.suggestions.length > 0)) || (t.taken && (t.suggestions.length > 0 || !!p.onProveTicker)) || (!!t.lookalike && t.suggestions.length > 0)).map((t) => {
         const coin = p.coins[t.side === "A" ? 0 : 1];
         return (
@@ -286,7 +295,7 @@ export function ReviewCard(p: ReviewCardProps) {
             {/* A-2: a ticker another creator holds is refused under the field itself (the review's problem); only the free tickers are offered here */}
             {t.reserved && !reservedSaid(t.side) && <p>{many ? `Coin ${t.side}: ` : ""}{RESERVED_TICKER_LINE}</p>}
             {/* review of block M: the review treats a ticker as yours only with your wallet's signature; one press asks for it */}
-            {t.taken && p.onProveTicker && <p className="mt-1"><button type="button" data-decision="name" data-prove-ticker className="underline text-neutral-200" onClick={p.onProveTicker}>{PROVE_TICKER_LABEL}</button></p>}
+            {t.taken && !heldSide(t.side) && proveButton}
             {/* HB-30: one row per refused field, saying which field its free tickers are for */}
             {t.suggestions.length > 0 && coin && <p className="mt-1 flex flex-wrap items-center gap-2" data-free-for={t.side}>{freeRowLead(t.side, t.ticker, many)} {t.suggestions.map((s) => <button key={s} type="button" data-decision="name" aria-label={`Use $${s} for Coin ${t.side}`} className="rounded border border-neutral-600 px-2 py-0.5 font-mono" onClick={() => coin.onTicker(s)}>${s}</button>)}</p>}
           </div>
@@ -322,6 +331,7 @@ export function ReviewCard(p: ReviewCardProps) {
         })}
       </div>
       {tickerCheckList}
+      {draftHeldList}
       {p.image}
       <details className="min-w-0 rounded-lg border border-neutral-800 p-3" data-profile-more open={!!p.note?.value}>
         <summary className="cursor-pointer text-sm text-neutral-200">{profileMoreLabel(!!p.note)}</summary>
@@ -483,8 +493,9 @@ export function ReviewCard(p: ReviewCardProps) {
       {p.mintSearch}
       <div className="space-y-1 pt-1">
         {fieldProblems.length > 0 && problemList("Not ready to launch", problemsId)}
-        {p.blocked && <p id={blockedId} className="min-w-0 break-words text-xs text-amber-300" data-wallet-blocked>{p.blocked}</p>}
-        <button ref={launchBtn} type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-40" aria-describedby={[p.blocked ? blockedId : "", fieldProblems.length ? problemsId : ""].filter(Boolean).join(" ") || undefined} disabled={!p.ready || p.busy || p.problems.length > 0 || !!p.blocked || fieldProblems.length > 0} onClick={launch}>{label}</button>
+        {draftHeldList}
+        {p.blocked &&<p id={blockedId} className="min-w-0 break-words text-xs text-amber-300" data-wallet-blocked>{p.blocked}</p>}
+        <button ref={launchBtn} type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-40" aria-describedby={[p.blocked ? blockedId : "", fieldProblems.length ? problemsId : ""].filter(Boolean).join(" ") || undefined} disabled={launchButtonOff({ ready: p.ready, busy: p.busy, blocked: !!p.blocked, problems: p.problems.length, fieldProblems: fieldProblems.length })} onClick={launch}>{label}</button>
         {!!p.signs && p.signs > 1 && !p.busy && <p className="min-w-0 break-words text-xs text-neutral-300" data-signs-line>{signsLine(p.signs, { proof: !!p.signsProof })}</p>}
         {p.busy && <p className="min-w-0 break-words text-sm text-amber-300" role="status" aria-live="polite" data-launching>{LAUNCHING_NOTICE}</p>}
         {!p.creator && !p.blocked && <p className="min-w-0 break-words text-[11px] text-neutral-500" data-connect-note>Connecting shares only your wallet&apos;s public address. The button then becomes Launch, and launching is a separate step that your wallet asks you to sign.</p>}

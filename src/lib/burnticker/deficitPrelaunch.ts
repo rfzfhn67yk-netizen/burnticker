@@ -15,12 +15,12 @@ export interface DeficitPrelaunch {
   ticker: "DEFICIT"; servedAt: string; canonical: string;
   oneSentence: string; dial: { fractionPerUnit: string; percent: string; unitUsd: string; unitLabel: string };
   statement: string; rulesSha256: string; rulesFile: string;
-  launch: { date: string | null; note: string };
+  launch: { date: string | null; note: string; seedSol?: number | string | null };
   whitepaper: string;
   rehearsal: { cluster: string; date: string; note: string; demo: { signature: string; recordDate: string; checkHref: string; explorerUrl: string; summary: string } };
 }
 
-interface StatusFile { deficit: { servedAt: string; rulesFile: string; launch: { date: string | null; note: string }; whitepaper: string; rehearsal: { cluster: string; date: string; note: string } }; demo: { cluster: string; ticker: string; recordDate: string; evidence: string; summary: string } }
+interface StatusFile { deficit: { servedAt: string; rulesFile: string; launch: { date: string | null; note: string; seedSol?: number | string | null }; whitepaper: string; rehearsal: { cluster: string; date: string; note: string } }; demo: { cluster: string; ticker: string; recordDate: string; evidence: string; summary: string } }
 
 export function readStatusFile(root = process.cwd()): StatusFile & Record<string, unknown> {
   return JSON.parse(fs.readFileSync(path.join(root, CURRENT_STATUS_FILE), "utf8"));
