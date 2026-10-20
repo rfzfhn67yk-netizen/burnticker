@@ -48,7 +48,7 @@ export function PinnedCheck({ pinned }: { pinned: PinnedView | null | undefined 
   }, [pinned]);
   useEffect(() => { void run(); }, [run]);
   if (!pinned) return null;
-  if (pinned.hosted || !pinned.metadataUri) return <p className="text-xs text-amber-300">This coin&apos;s metadata is hosted on this server and is not pinned on Arweave. It is a devnet test coin made by a script.</p>;
+  if (pinned.hosted || !pinned.metadataUri) return <p className="text-xs text-amber-300">This coin&apos;s metadata is hosted on this server and is not pinned on Arweave. That is how every coin on the devnet copy is kept.</p>;
   return (
     <p className="text-xs text-neutral-400" aria-label="pinned metadata">
       The metadata is pinned on Arweave: {(pinned as { mint?: string }).mint ? <><a className="underline" href={`/api/burnticker/pin-check?mint=${encodeURIComponent((pinned as { mint?: string }).mint!)}&raw=1`} rel="noopener" target="_blank">open the pinned file through this site</a> (<a className="underline" href={pinned.metadataUri} rel="noopener" target="_blank">or at {pinned.metadataUri.replace(/^https:\/\//, "").slice(0, 28)}…</a>)</> : <a className="underline" href={pinned.metadataUri} rel="noopener" target="_blank">{pinned.metadataUri.replace(/^https:\/\//, "")}</a>} (sha256 <span className="font-mono">{pinned.metadataSha256?.slice(0, 16)}…</span>).

@@ -64,7 +64,8 @@ export interface KeeperCtx {
   attester?: AttesterGate | null;
   /**
    * The second reading signer on its own host (signer-2, 2026-10-12; src/lib/burnticker/attesters/cosign.ts). Program path only: each
-   * reading is co-signed there before submit_reading, or held when the signer disagrees. Unset: nothing changes.
+   * reading is shown to it before submit_reading and held when it disagrees. At quorum 1 it is advisory: when it cannot check or cannot
+   * be reached the reading is sent on the keeper key alone, and it does not check pair coins (HB-69). Unset: nothing changes.
    */
   cosigner?: Cosigner | null;
 }

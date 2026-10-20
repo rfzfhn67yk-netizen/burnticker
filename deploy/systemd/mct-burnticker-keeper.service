@@ -1,5 +1,5 @@
 [Unit]
-Description=Burnticker multi-token keeper (event-indexed burns for every token in data/burnticker.db; FakeBurnProgram until BURNTICKER_PROGRAM_ID is wired — nothing is sent)
+Description=Burnticker multi-token keeper (mainnet: signs readings with the platform keeper key, cranks burns, claims fees)
 After=network-online.target
 Wants=network-online.target
 

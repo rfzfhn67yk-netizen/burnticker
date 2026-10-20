@@ -24,9 +24,12 @@ export const QUEUE_STALE_MS = 60 * 60 * 1000;
  * @param {any} status the keeper's status.json (or null when unread)
  * @param {any} burnsFile the keeper's burns.json (an array, or { burns: [] }), or null
  * @param {number} now
+ * @param {string | number | null} [writtenAt] when the keeper wrote status.json (the file's own write time, which the app reads from disk).
+ *   Hourly run 6 HB-90: the "published at" line comes from it. Null means the time is not known, and the line is left out. Left out
+ *   entirely (the static site and its first paint, which read the file the keeper wrote beside them), the keeper's own stamp in the file is used.
  * @returns {{ state: "unavailable" | "not-launched" | "no-reading" | "queued" | "pool-open"; riseUsd: string | null; units: number; unsigned: number; sharePct: string | null; formula: string | null; readingDate: string | null; generatedAt: string | null; stale: boolean; raiseSol: string | null; headline: string; lines: string[]; card: string | null }}
  */
-export function deficitQueueCore(status, burnsFile, now) {
+export function deficitQueueCore(status, burnsFile, now, writtenAt) {
   var PENDING = ["planned", "sending", "swap-sent", "swapped"], STALE = 60 * 60 * 1000;
   var ticker = status && status.ticker ? String(status.ticker) : "DEFICIT";
   function out(state, o) {
@@ -43,7 +46,7 @@ export function deficitQueueCore(status, burnsFile, now) {
   var rows = Array.isArray(burnsFile) ? burnsFile : burnsFile && typeof burnsFile === "object" && Array.isArray(burnsFile.burns) ? burnsFile.burns : null;
   if (rows) for (var j = 0; j < rows.length; j++) if (!rows[j] || typeof rows[j] !== "object" || typeof rows[j].status !== "string") { rows = null; break; }
   if (!rows) return out("unavailable", { headline: "The queue is unavailable, because the keeper's list of readings and burns did not load.", generatedAt: status.generatedAt || null });
-  var gen = Date.parse(status.generatedAt);
+  var gen = writtenAt === undefined ? Date.parse(status.generatedAt) : writtenAt === null ? NaN : typeof writtenAt === "number" ? writtenAt : Date.parse(writtenAt);
   var stale = isFinite(gen) && now - gen > STALE;
   var feed = status.feed || {};
   var prog = status.program || null;
@@ -72,32 +75,43 @@ export function deficitQueueCore(status, burnsFile, now) {
   var readingDate = feed.lastRecordDate || null;
   var base = { riseUsd: riseUsd, units: units, unsigned: unsigned, sharePct: sharePct, formula: formula, readingDate: readingDate, generatedAt: status.generatedAt || null, stale: stale, raiseSol: raiseSol };
   var lines = [];
-  var freshness = "The keeper published this " + (isFinite(gen) ? "at " + denver(gen) + " Denver time" : "at a time it did not record") + "." + (stale ? " That was more than an hour ago, so it may be out of date." : "");
+  // HB-90: the time the keeper wrote its status file; when that time is not known, no line at all
+  var freshness = isFinite(gen) ? "The keeper last wrote its status file at " + denver(gen) + " Denver time." + (stale ? " That was more than an hour ago, so it may be out of date." : "") : null;
   if (!readingDate) {
     base.headline = "The keeper has not published a reading since launch yet. The first reading is the baseline, and nothing is counted for it.";
-    base.lines = [freshness];
+    base.lines = freshness ? [freshness] : [];
     return out("no-reading", base);
   }
-  var riseText = riseUsd === null ? null : Number(riseUsd) >= 0 ? "The debt has risen " + usd(riseUsd) + " since launch." : "The debt is " + usd(String(-Number(riseUsd))) + " lower than at launch.";
-  var unitsText = units === 1 ? "One unit is queued." : units === 0 ? "No units are queued." : groupInt(units) + " units are queued.";
+  // Hourly run 6 HB-90: units count every rise from one reading to the next, so a fall and its recovery both count, and the rise is
+  // measured from the baseline reading. The headline says both things as what they are, with the baseline's own date.
+  var baseDate = feed.baseline && feed.baseline.recordDate ? shortDate(String(feed.baseline.recordDate)) : null;
+  var since = baseDate ? "than on " + baseDate : "than at the first reading";
+  var riseText = riseUsd === null ? null : Number(riseUsd) >= 0 ? "The debt is " + usd(riseUsd) + " higher " + since + "." : "The debt is " + usd(String(-Number(riseUsd))) + " lower " + since + ".";
+  var sinceText = baseDate ? "since " + baseDate : "since the first reading";
+  var unitsText = units === 0 ? "No units are queued." : "Daily rises " + sinceText + " add up to " + (units === 1 ? "one queued unit" : groupInt(units) + " queued units") + " ($1B each).";
   if (!poolOpen) {
-    base.headline = [riseText, unitsText].filter(Boolean).join(" ");
+    base.headline = [unitsText, riseText].filter(Boolean).join(" ");
     if (units > 0 && sharePct !== null) lines.push("When the curve fills" + (raiseSol ? " at " + raiseSol + " SOL" : "") + " and its pool is registered, the queued readings run in order and together spend " + formula + " of the burn pool, which is " + sharePct + "%. One burn run spends at most 2% of the trading pool's SOL, and the rest carries to the next run.");
     else if (units === 0) lines.push("A unit is queued for each full $1B the debt rises from one business day to the next. Nothing burns before the curve fills and its pool is registered.");
-    if (riseUsd === null) lines.push("The rise since launch is not in the keeper's published file yet.");
+    if (riseUsd === null) lines.push("The rise since the first reading is not in the keeper's published file yet.");
     if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");
-    lines.push("The latest reading is the Treasury figure for " + readingDate + ". " + freshness);
+    lines.push("The latest reading is the Treasury figure for " + readingDate + "." + (freshness ? " " + freshness : ""));
     base.lines = lines;
     base.card = units > 0 ? "0 $" + ticker + ", " + (units === 1 ? "1 unit" : groupInt(units) + " units") + " queued" : null;
     return out("queued", base);
   }
   base.headline = [riseText, units === 0 ? "The pool is registered, and no units are waiting." : "The pool is registered. " + (units === 1 ? "One unit is" : groupInt(units) + " units are") + " waiting for a burn run."].filter(Boolean).join(" ");
   if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");
-  lines.push("The latest reading is the Treasury figure for " + readingDate + ". " + freshness);
+  lines.push("The latest reading is the Treasury figure for " + readingDate + "." + (freshness ? " " + freshness : ""));
   base.lines = lines;
   return out("pool-open", base);
 
   function groupInt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function shortDate(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+    if (!m) return null;
+    return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(m[2]) - 1] + " " + Number(m[3]);
+  }
   function trimNum(s) { var t = String(s); return t.indexOf(".") >= 0 ? t.replace(/0+$/, "").replace(/\.$/, "") : t; }
   function usd(s) {
     var v = Number(s);

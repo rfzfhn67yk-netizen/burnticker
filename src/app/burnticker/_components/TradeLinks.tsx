@@ -1,6 +1,6 @@
 "use client";
 
-import { allLinks, coinLinks, LINK_LABELS, type CoinLinks, type TradePhase } from "@/lib/burnticker/tradeLinks";
+import { allLinks, coinLinks, linkHref, LINK_LABELS, type CoinLinks, type TradePhase } from "@/lib/burnticker/tradeLinks";
 import { CopyButton } from "./CopyButton";
 import { useLaunchAvailability } from "./useLaunchAvailability";
 
@@ -21,8 +21,8 @@ export function TradeButtons({ links, mint, compact = false, ticker, primaryOnly
   if (!links.primary && !rest.length) return links.note && !compact ? <p className="text-xs text-neutral-500" data-trade-note>{links.note}</p> : null;
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 ${compact ? "text-xs" : "text-sm"}`} data-trade-links>
-      {links.primary && <a className={compact ? "bt-launch-btn px-3 py-1 text-xs" : "bt-launch-btn"} href={links.primary.url} rel="noopener" target="_blank" data-trade-link aria-label={ticker ? `${links.primary.label}: $${ticker}, opens Raydium` : undefined}>{links.primary.label} ↗</a>}
-      {rest.map((l) => <a key={l.id + l.url} className="underline text-neutral-300" href={l.url} rel="noopener" target="_blank" data-link={l.id}>{l.label}</a>)}
+      {links.primary && <a className={compact ? "bt-launch-btn px-3 py-1 text-xs" : "bt-launch-btn"} href={linkHref(links.primary)} rel="noopener" target="_blank" data-trade-link aria-label={ticker ? `${links.primary.label}: $${ticker}, opens Raydium` : undefined}>{links.primary.label} ↗</a>}
+      {rest.map((l) => <a key={l.id + l.url} className="underline text-neutral-300" href={linkHref(l)} rel="noopener" target="_blank" data-link={l.id}>{l.label}</a>)}
       {mint && <CopyButton text={mint} label={LINK_LABELS.copy} what={ticker ? `$${ticker}'s mint address` : "the mint address"} />}
     </div>
   );

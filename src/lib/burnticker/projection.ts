@@ -1,4 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
+import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { utcDay } from "@/lib/burnticker/utcWords";
 import { drainLine, drainPct as pct, spentFraction, teamDrainUnit, unitsToHalf, type DrainUnit } from "@/lib/burnticker/drain";
 import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { parseUsgsSeries } from "@/lib/burnticker/sources/usgs";
@@ -93,6 +95,14 @@ export function drainWarning(rule: BurnRule, p: Projection): string | null {
   return `At ${pctLabel(f)} each, about half the pool would be gone ${when}, going by ${basis}, if no new fees come in. A smaller share lasts longer.`;
 }
 
+/** HB-76: the one-time rule's back-test lines: the window by its real dates, the qualifying days in it, and at most one burn. */
+export function oneShotBacktestLines(from: string, to: string, qualifyingDays: readonly string[]): string[] {
+  const span = `In the saved readings from ${utcDay(from)} to ${utcDay(to)}`;
+  const n = qualifyingDays.length;
+  if (n === 0) return [`${span}, no day qualified, so this one-time rule would not have burned.`];
+  return [`${span}, ${n === 1 ? "one day qualified" : `${n} days qualified`}. This rule burns once, so it would have burned one time, on ${utcDay(qualifyingDays[0])}, and then ended.`];
+}
+
 export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?: string): Projection {
   const share = (rule.kind === "scalar" ? rule.scalar?.perUnit : (rule.binary?.onYes ?? rule.binary?.onNo)) as { fractionOfPool?: number } | undefined;
   const f = typeof share?.fractionOfPool === "number" ? share.fractionOfPool : null;
@@ -104,6 +114,16 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
   const feed = feedById(rule.series);
   if (!feed) return none(nativeSourceById(rule.series) ? "Team, game and weather sources are read live, so there is no saved sample to project from." : "There is no saved sample of this source to project from.");
   { const q = parseUsgsSeries(rule.series); if (q && (Number(q.magnitude) !== USGS_SAMPLE.magnitude || q.region !== USGS_SAMPLE.region)) return none(`The saved sample counts earthquakes of magnitude ${USGS_SAMPLE.magnitude} or more worldwide, not this rule's, so it is not projected here.`); }
+  // HB-76 (hourly run 5): a one-time rule burns at most once, so its back-test counts the qualifying days in the window and says one burn
+  // at most, never repeated burns at the per-event shares 1, 2 and 5%
+  if (f >= 1 || NEXT_EVENT_ONE_SHOT_RE.test(rule.series)) {
+    let pv;
+    try { pv = previewFromFixture(feed, rule, now, root); } catch { return none("The saved sample of this source could not be read."); }
+    if (!pv.rows.length) return none("The saved sample of this source has no readings yet.");
+    const days = [...new Set(pv.rows.filter((r) => r.mapping && r.units > 0).map((r) => r.at.slice(0, 10)))].sort();
+    const from1 = pv.window.from.slice(0, 10), to1 = pv.window.to.slice(0, 10);
+    return { available: true, weeks: null, from: from1, to: to1, rows: [], lines: oneShotBacktestLines(from1, to1, days), reason: null, drain };
+  }
   const rows: ProjectionRow[] = [];
   let from: string | null = null, to: string | null = null;
   // website-22 (QA 9 item 8): the share the creator chose is projected too, beside 1, 2 and 5%

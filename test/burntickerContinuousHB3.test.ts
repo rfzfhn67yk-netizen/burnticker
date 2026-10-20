@@ -159,7 +159,7 @@ describe("HB-33: a one-shot 100% review lists only the cases it can meet", () =>
     assert.deepEqual(reviewEdgeIds({ oneShotFull: false, otherCoin: true }), [164, 168, 174]);
     assert.match(edgeCase(164)!, /2% limit/); assert.match(edgeCase(168)!, /another coin/);
     const page = read("src/app/burnticker/launch/page.tsx");
-    assert.match(page, /reviewEdgeIds\(\{ oneShotFull: oneShotFull\(rule\), otherCoin: pairOn \|\| endA\.kind === "coin" \|\| endB\.kind === "coin" \}\)/);
+    assert.match(page, /reviewEdgeIds\(\{ oneShotFull: oneShotFull\(rule\), otherCoin: \(pairOn && !separatePair\) \|\| endA\.kind === "coin" \|\| endB\.kind === "coin" \}\)/);
     assert.doesNotMatch(page, /\n\s*164, 168, 174,/);
   });
 });

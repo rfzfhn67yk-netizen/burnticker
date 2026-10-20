@@ -194,7 +194,7 @@ describe("L02 — availability: closed, preview and open, per type, per source, 
     assert.equal(availabilityFromCatalogue(null).mode, "closed", "unreadable is closed");
     const page = read("src/app/burnticker/launch/page.tsx");
     assert.match(page, /data-preview-banner/); assert.match(page, /blocked=\{walletBlocked\(/, "the review card's wallet button carries the reason");
-    assert.match(read("src/app/burnticker/launch/ReviewCard.tsx"), /disabled=\{!p\.ready \|\| p\.busy \|\| p\.problems\.length > 0 \|\| !!p\.blocked/);
+    assert.match(read("src/app/burnticker/launch/ReviewCard.tsx"), /disabled=\{launchButtonOff\(\{ ready: p\.ready, busy: p\.busy, blocked: !!p\.blocked, problems: p\.problems\.length, fieldProblems: fieldProblems\.length \}\)\}/, "LA-4: one pure helper (launchReviewSync.ts launchButtonOff)");
   });
 
   test("the review payload: network, rule hash, the share, transactions and signers, estimated SOL, prerequisites, scoped authority", () => {

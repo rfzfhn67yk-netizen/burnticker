@@ -3,7 +3,7 @@ import { runCycle, type CycleReport, type KeeperDeps } from "@/lib/burnticker/mu
 import type { AlertSink } from "@/lib/burnticker/alerts";
 import type { PinUploader } from "@/lib/burnticker/pin";
 import { loadVerifiedBuild, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
-import { computeFeedHealth, observeCycle, raiseFeedAlerts, type FeedHealth } from "@/lib/burnticker/ops/feedHealth";
+import { computeFeedHealth, noteFeedRecoveries, observeCycle, raiseFeedAlerts, type FeedHealth } from "@/lib/burnticker/ops/feedHealth";
 import { hostIdHash, LeaderLock, roleConfigFromEnv, type FetchJson, type RoleDecision } from "@/lib/burnticker/ops/leaderLock";
 import type { FenceReport } from "@/lib/burnticker/ops/readingFence";
 import { latestSnapshot, snapshotIfDue } from "@/lib/burnticker/ops/snapshot";
@@ -74,6 +74,13 @@ export class KeeperOps {
     try { if (report) observeCycle(reg, report, now); } catch (e) { this.o.log(`  [ops] feed observations not written: ${(e as Error).message.slice(0, 160)}`); }
     try { this.health = computeFeedHealth(reg, now); } catch (e) { this.o.log(`  [ops] feed health failed: ${(e as Error).message.slice(0, 160)}`); }
     if (sink) this.pendingSink = sink;
+    // HB-29 follow-up (hourly run 6): a source that answers again after bt-feed-down gets an informational bt-feed-recovered row
+    try {
+      for (const r of noteFeedRecoveries(reg, this.health, now)) {
+        this.o.log(`  [ops] ${r.kind}: ${r.text}`);
+        try { await (this.pendingSink ? this.pendingSink(r.kind, r.key, r.text, r.meta, now) : reg.recordAlert({ kind: r.kind, key: r.key, text: r.text, meta: r.meta }, now)); } catch { /* never stops the keeper */ }
+      }
+    } catch (e) { this.o.log(`  [ops] feed recoveries not checked: ${(e as Error).message.slice(0, 160)}`); }
     if (this.role?.active && this.o.snapshots) {
       await snapshotIfDue({ registry: reg, uploader: this.o.uploader, now, cluster: this.o.cluster, log: this.o.log, alert: (kind, key, text) => this.pendingSink?.(kind, key, text, null, now) ?? reg.recordAlert({ kind, key, text, meta: null }, now) });
     }

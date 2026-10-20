@@ -47,6 +47,7 @@ import { testCoinKeys } from "../src/lib/burnticker/testCoins.ts";
 import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib/burnticker/trust.ts";
 import { CrankFailureTracker, devFeeDelta, recordBalanceSample, registryAlertRows, registryAlertSink, rpcBalanceLamports, runBurntickerAlertCheck, sinkFromEnv } from "../src/lib/burnticker/alerts.ts";
 import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
+import { tradeClickCounts } from "../src/lib/burnticker/tradeClicks.ts";
 import { activeConditions, CONDITIONS_KEY, foldConditions, readConditionMemory } from "../src/lib/burnticker/ops/conditions.ts";
 import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts";
 import type { MarketReader } from "../src/lib/burnticker/market.ts";
@@ -243,7 +244,7 @@ function dispersalOffAlert(now: number): void {
 }
 // signer-2 (2026-10-12): the second reading signer on its own host — unset BURNTICKER_COSIGNER_URL = no cosigner, nothing changes.
 const cosigner = cosignerFromEnv(process.env);
-if (cosigner) { deps.cosigner = cosigner; log(`second signer: ${process.env.BURNTICKER_COSIGNER_URL?.trim().replace(/\/\/[^/@]*@/, "//")} (each reading is co-signed there or held)`); }
+if (cosigner) { deps.cosigner = cosigner; log(`second signer: ${process.env.BURNTICKER_COSIGNER_URL?.trim().replace(/\/\/[^/@]*@/, "//")} (advisory at quorum 1: a disagreement holds the reading; if the signer cannot check or cannot be reached, the reading is sent on this key alone; pair coins are not checked)`); }
 const operator = operatorPowersSummary(loadPowersRegister());
 const KALSHI_ON = kalshiEnabled(process.env), POLY_DISCOVERY = polymarketDiscoveryEnabled(process.env);
 /** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */
@@ -411,7 +412,7 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
     webProbe: webProbeFact(readWebProbeStatus(process.cwd()), process.env),
     // B-3 / OPS-1 (2026-10-19): the off-box pull receipt (data/offbox-pull.json): pulled / stale / none, its time and method only
     ...offboxPullFact(readOffboxPull(process.cwd(), now), now) };
-  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state, hostFacts }));
+  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state, hostFacts, tradeClicks: (() => { try { return tradeClickCounts(registry.db, now); } catch { return null; } })() }));
   try { registry.setStatus(CONDITIONS_KEY, foldConditions(memory, activeConditions(r.snapshot, health, { ...signals, alerts, lastCycleAt: r.snapshot?.lastCycle?.at ?? null }), now), now); } catch (e) { log(`  [ops] condition memory not written: ${(e as Error).message.slice(0, 120)}`); }
 }
 

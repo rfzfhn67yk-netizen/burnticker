@@ -65,7 +65,9 @@ describe("14 and 15: run lengths, fight tickers and the end said as a result", (
     const spec = { selector: "coinvs" as const, a: wif, b: bonk, window: "daily" as const, measure: "pct" as const, season: { start: "2026-10-14", days: 14 }, flip: false };
     assert.match(derbySentence(spec, "WIFWINS", "BONKWINS", 0.02), /Runs for 14 days\. When the run ends, the coin with more winning days burns its share once more\. The other coin sends the rest of its pool, and any fees that arrive later, to that coin's burn while the two are linked, or to \$DEFICIT's burn if they are not\. The coin with more winning days burns down what is left on itself\. Then the coin retires\. If both coins won the same number of days, nothing moves between them, and each coin burns down what is left on itself over four weeks\.$/);
     assert.match(derbySentence(spec, "WIFWINS", null, 0.02), /Runs for 14 days, then winds down\.$/);
-    assert.match(derbySentence({ ...spec, measure: "mcap", flip: true }, "A", "B", 1), /then winds down\.$/);
+    // hourly run 5, HB-78: the flippening pair says its one end (FLIP_REST_LINE); a single flippening coin keeps "then winds down"
+    assert.ok(derbySentence({ ...spec, measure: "mcap", flip: true }, "A", "B", 1).endsWith("Runs for 14 days. The coin that burns is the winner. At the end, the rest of the other coin's pool, and any fees that arrive later, goes to the winner's burn, and whatever is left on the winner goes to $DEFICIT's burn. Then both coins retire."));
+    assert.match(derbySentence({ ...spec, measure: "mcap", flip: true }, "A", null, 1), /then winds down\.$/);
   });
 });
 

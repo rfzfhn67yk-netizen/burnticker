@@ -19,7 +19,8 @@ export const LINK_LABELS = ["X", "Telegram", "Website"] as const;
 
 export const RIGHTS_LINE = "I have the right to use this image. A team, league or company mark is used at my own risk.";
 export const TAKEDOWN_LINE = "To ask for an image to be removed from this site, email contact@burnticker.com. The copy on Arweave is permanent and cannot be removed.";
-export const IMAGE_HELP = "PNG, JPG, GIF or WebP, up to 2 MB. It is shown square. Without one, the coin uses its generated receipt art.";
+// WZ6-12 (sixth pass): the smallest accepted size and what happens to an animated GIF (creatorBadge.ts reads one page), said up front
+export const IMAGE_HELP = "PNG, JPG, GIF or WebP, up to 2 MB and at least 16 pixels on each side. An animated GIF is pinned as its first frame. It is shown square. Without one, the coin uses its generated receipt art.";
 /** website-19 (owner, 2026-10-12: "can you copy and paste an image in as a thumbnail?"): the three ways in, said once. */
 export const IMAGE_WAYS = "Choose a file, drop one here, or paste an image.";
 /**

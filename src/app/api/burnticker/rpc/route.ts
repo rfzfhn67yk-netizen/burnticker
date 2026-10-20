@@ -25,7 +25,8 @@ const refuse = (status: number, code: number, message: string, headers: Record<s
  * lane, which has its own ceiling (apiBudget.ts LANE_SPLIT). An old WebKit without Sec-Fetch-Site passes on its POST's Origin header.
  */
 export async function POST(req: Request) {
-  if (!isSameOrigin(req)) return refuse(403, -32600, "Requests from other sites are refused.");
+  // TS6-4: the shared refusal code beside the JSON-RPC error, as every other mutating route answers (ownerAction.test.ts)
+  if (!isSameOrigin(req)) return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Requests from other sites are refused." }, code: "cross-origin" }, { status: 403, headers: { "cache-control": "no-store" } });
   const client = clientKey(req), now = Date.now();
   // the limiter before the body is read (one call's worth); the rest of a batch is charged once its size is known
   const rl0 = proxyLimiter.take(client, "heavy", now, 1);

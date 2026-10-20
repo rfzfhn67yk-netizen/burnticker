@@ -62,7 +62,7 @@ export function EndChoicePicker({ model, value, onChange, sinks, who = null, loc
             )}
         </div>
       )}
-      <p className="text-xs text-neutral-500" data-self-on-loss>{SELF_ON_LOSS_LINE}</p>
+      <p className="text-xs text-neutral-500" data-self-on-loss>{model.selfLine ?? SELF_ON_LOSS_LINE}</p>
     </fieldset>
   );
 }

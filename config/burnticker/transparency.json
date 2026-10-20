@@ -1,6 +1,6 @@
 {
   "schema": "burnticker.transparency/v1",
-  "updatedAt": "2026-10-18",
+  "updatedAt": "2026-10-19",
   "note": "Rendered on /burnticker/trust by src/lib/burnticker/trust.ts (loadTransparency). Facts only. A null pubkey is a TODO the owner fills in before launch; the page shows it as TODO, never as blank. The operator's name comes from OPERATOR_LINE in src/lib/burnticker/fees.ts, not from this file. `rehearsals` lists every throwaway coin created under the real platform config to prove the machinery; each is also on config/own-tokens.json so the operator's bots refuse it.",
   "publicRepo": {
     "url": "https://github.com/rfzfhn67yk-netizen/burnticker",
@@ -120,7 +120,7 @@
       "contact": "security@burnticker.com",
       "wallet": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u",
       "walletTodo": "top-ups from the developer fee",
-      "howReportsArePaid": "config/public-repo/overlay/SECURITY.md § Bounty wallet",
+      "howReportsArePaid": "SECURITY.md in the public repository, in its Bounty wallet section",
       "reports": {
         "paid": [],
         "rejected": [],

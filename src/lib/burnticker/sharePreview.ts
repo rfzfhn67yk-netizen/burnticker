@@ -24,6 +24,19 @@ export function coinPreview(c: CoinFacts): SharePreview {
   };
 }
 
+/**
+ * AP6-8 (sixth pass): $DEFICIT is the operator's coin, served from its own keeper's files rather than a registry row, so the coin preview
+ * above never ran for it and /t/DEFICIT carried the site's generic tags. Its own preview says what it burns on.
+ */
+export const DEFICIT_PAGE_TITLE = "$DEFICIT · Burnticker";
+export function deficitPreview(): SharePreview {
+  return {
+    title: "$DEFICIT: burns when the U.S. national debt rises",
+    description: "$DEFICIT burns from its own pool on each day the U.S. national debt rises, read from the Treasury's Debt to the Penny figure. Every burn has a receipt anyone can check.",
+    imageUrl: DEFAULT_OG.url, imageAlt: DEFAULT_OG.alt,
+  };
+}
+
 export interface ReceiptFacts { ticker: string; cluster: string; settledAt: string; event: string | null; units: number; burned: string | null; verified: boolean; status: string; badgeUrl: string | null }
 export function receiptPreview(r: ReceiptFacts): SharePreview {
   const day = shortDay(r.settledAt) ?? r.settledAt.slice(0, 10);

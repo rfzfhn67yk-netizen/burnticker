@@ -307,3 +307,11 @@ export function coinStatusSentence(f: CoinStatusFacts): string {
   if (f.ended === "drain") return STATUS_SENTENCES.endedDrain;
   return lastBurnSentence(f) ?? windowSentence(f);
 }
+
+/**
+ * HS-29 (hourly run 5): two receipt counts side by side always say which is which. "1 recorded result, 0 burns on chain": results this
+ * site recorded (a skipped or waiting result included) and burns whose transaction is on chain.
+ */
+export const receiptsCountLine = (recorded: number, onChain: number): string => `${recorded} recorded ${recorded === 1 ? "result" : "results"}, ${onChain} ${onChain === 1 ? "burn" : "burns"} on chain`;
+/** The badge card's short form (the card line has room for about 45 characters): "1 recorded, 0 on chain". */
+export const receiptsCountShort = (recorded: number, onChain: number): string => `${recorded} recorded, ${onChain} on chain`;

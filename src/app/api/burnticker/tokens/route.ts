@@ -12,6 +12,7 @@ import { chainRows, memoWindowMs, webReadPlatform } from "@/lib/burnticker/webRe
 import { coinListingOf } from "@/lib/burnticker/coinsListServe";
 import type { CoinListing } from "@/lib/burnticker/coinsList";
 import { auditForIndex } from "@/lib/burnticker/home";
+import { indexMemoTooOld } from "@/lib/burnticker/coinsGrid";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,11 @@ async function allLimited<T>(tasks: (() => Promise<T>)[], n: number): Promise<Pr
 export async function GET() {
   const headers = { "cache-control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30" };
   if (indexMemo) {
-    if (Date.now() - indexMemo.at >= indexMemo.memoMs) void refreshIndex();
+    const age = Date.now() - indexMemo.at;
+    // LD6-4: a kept index older than INDEX_SERVE_MAX_AGE_MS (a quiet spell with no visitor) is built again before answering, up to the
+    // cold wait, so the first visitor after the spell is not told the list may be out of date
+    if (indexMemoTooOld(age)) await Promise.race([refreshIndex(), new Promise<void>((r) => setTimeout(r, INDEX_COLD_WAIT_MS))]);
+    else if (age >= indexMemo.memoMs) void refreshIndex();
     return NextResponse.json(indexMemo.body, { headers: { ...headers, "x-index-memo": "hit" } });
   }
   await Promise.race([refreshIndex(), new Promise<void>((r) => setTimeout(r, INDEX_COLD_WAIT_MS))]);

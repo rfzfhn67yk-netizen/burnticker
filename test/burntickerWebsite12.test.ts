@@ -328,7 +328,7 @@ describe("ChatGPT A5: loading, empty, unavailable, stale and error are five diff
     assert.equal(new Set(all).size, 5);
     assert.match(curveProgressSentence("unavailable"), /^Curve progress is unavailable/); assert.doesNotMatch(curveProgressSentence("unavailable"), /No coin/);
     assert.match(curveProgressSentence("empty"), /^No coin is past half its curve/);
-    assert.match(curveProgressSentence("stale", { readAt: "2026-10-12T18:00:00Z" }), /Oct 12, 12:00 PM Denver time/);
+    assert.match(curveProgressSentence("stale", { readAt: "2026-10-12T18:00:00Z" }), /Oct 12, \d{1,2}:00 [AP]M \S+ and may be out of date/);   // HS-25: the visitor's zone, named
     for (const x of [...all, ...DATA_STATES.map((s) => dataStateSentence(s, "the burn history"))]) lintOk(x, "data state");
   });
 });

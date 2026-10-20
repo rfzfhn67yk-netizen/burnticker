@@ -1,4 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
+import { receiptsCountShort } from "@/lib/burnticker/coinStatus";
+import { decidedPairLine, decidedPairOf } from "@/lib/burnticker/decidedWarning";
 import type { ReceiptJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
 import { parseEspnSeries, seasonLabel } from "@/lib/burnticker/sources/espn";
 
@@ -28,11 +30,13 @@ export interface BadgeSide {
   /** The latest confirmed burn: its settlement date, the units the rule counted, the tokens burned (decimal string). */
   lastBurn: { at: string; units: number; burned: string } | null;
   /** Confirmed burns inside the season scope (seasonScope): a team coin's own season window, else the calendar year. */
-  receipts: { count: number; label: string };
+  receipts: { count: number; label: string; /** HS-29 (hourly run 5): result receipts recorded in the same scope, so the card labels both counts */ recorded?: number };
   rulesSha12: string;
   pageUrl: string; verifyUrl: string;
   /** HB-47 (run 4): a decided one-game coin on the losing side, with the game's day (YYYY-MM-DD); its card says it lost */
   lost?: string | null;
+  /** HB-80 / HS-27 (hourly run 5): a decided pair coin's one shared won-or-lost line (decidedWarning.ts decidedPairLine); null otherwise */
+  decided?: string | null;
 }
 export interface Snippets { iframe: string; markdown: string; html: string }
 export interface CoinBadgeJson extends BadgeSide {
@@ -80,8 +84,9 @@ export function badgeSide(i: SideInput): BadgeSide {
   return {
     ticker: s.ticker, name: s.name, oneLiner: dedupeArticle(s.profile?.oneLiner || s.seriesTitle || s.selectorKey), window: s.profile?.badge || null, status: s.status,
     lastBurn: last ? { at: last.settledAt, units: last.units, burned: last.burned ?? "0" } : null,
-    receipts: { count: inScope.length, label: scope.label }, rulesSha12: s.rules.sha12, pageUrl: page, verifyUrl: `${page}#verify`,
+    receipts: { count: inScope.length, label: scope.label, recorded: i.receipts.filter((r) => !["winddown", "drain", "sweep"].includes(r.kind ?? "") && (!scope.from || r.settledAt.slice(0, 10) >= scope.from)).length }, rulesSha12: s.rules.sha12, pageUrl: page, verifyUrl: `${page}#verify`,
     lost: lostDayOf(s, i.receipts),
+    decided: (() => { const d = decidedPairOf(s, i.receipts); return d ? decidedPairLine(s.ticker, d) : null; })(),
   };
 }
 
@@ -189,7 +194,7 @@ export function lastBurnLine(s: Pick<BadgeSide, "lastBurn" | "status"> & { lost?
   if (!s.lastBurn) return s.status === "draft" ? "not launched yet · no receipts" : "no burn yet";
   return `last burn ${day(s.lastBurn.at)} · ${s.lastBurn.units} unit${s.lastBurn.units === 1 ? "" : "s"} · ${fmtInt(s.lastBurn.burned)} burned`;
 }
-export const receiptsLine = (s: Pick<BadgeSide, "receipts">): string => `receipts ${s.receipts.label}: ${s.receipts.count}`;
+export const receiptsLine = (s: Pick<BadgeSide, "receipts">): string => (s.receipts.recorded !== undefined && s.receipts.recorded !== s.receipts.count ? `receipts ${s.receipts.label}: ${receiptsCountShort(s.receipts.recorded, s.receipts.count)}` : `receipts ${s.receipts.label}: ${s.receipts.count}`);
 
 /** Every text line the coin card prints, top to bottom (the SVG and the embed page both render exactly these; the tests lint them). */
 export function coinCardLines(b: CoinBadgeJson): { head: string; window: string | null; liner: string; last: string; receipts: string; verify: string; foot: string } {
@@ -197,12 +202,28 @@ export function coinCardLines(b: CoinBadgeJson): { head: string; window: string 
 }
 export function pairCardLines(b: PairBadgeJson): { head: string; score: string; a: string; b: string; last: string; verify: string; foot: string } {
   const lastOf = [b.a, b.b].filter((s) => s.lastBurn).sort((x, y) => (x.lastBurn!.at < y.lastBurn!.at ? 1 : -1))[0];
+  const decided = pairDecidedLine(b.a, b.b);
   return {
     head: `$${b.a.ticker} vs $${b.b.ticker}`, score: `burns ${b.score.a} : ${b.score.b}`,
     a: clip(`$${b.a.ticker} ${b.a.oneLiner}`, 58), b: clip(`$${b.b.ticker} ${b.b.oneLiner}`, 58),
-    last: lastOf ? `last burn ${day(lastOf.lastBurn!.at)} · $${lastOf.ticker} · ${lastOf.lastBurn!.units} unit${lastOf.lastBurn!.units === 1 ? "" : "s"}` : "no burn yet",
-    verify: "verify →", foot: `pair ${clip(b.pairId, 30)} · burnticker`,
+    last: lastOf ? `last burn ${day(lastOf.lastBurn!.at)} · $${lastOf.ticker} · ${lastOf.lastBurn!.units} unit${lastOf.lastBurn!.units === 1 ? "" : "s"}` : decided ?? "no burn yet",
+    // HB-47 (hourly run 6): the foot names both rule hashes, never the pair's raw id
+    verify: "verify →", foot: `rules sha256 ${b.a.rulesSha12} and ${b.b.rulesSha12} · burnticker`,
   };
+}
+/**
+ * HB-47 (hourly run 6): a decided pair's state on its card, from each side's own decided line (decidedPairLine: "Won on Oct 15. …",
+ * "Lost on Oct 15. …"): "$DENWIN won on Oct 15; $SEAWIN lost". Null while neither side is decided.
+ */
+export function pairDecidedLine(a: Pick<BadgeSide, "ticker" | "decided">, b: Pick<BadgeSide, "ticker" | "decided">): string | null {
+  const role = (s: Pick<BadgeSide, "decided">) => { const m = /^(Won|Lost)( on [^.]+)?\./.exec(s.decided ?? ""); return m ? { won: m[1] === "Won", on: m[2] ?? "" } : null; };
+  const ra = role(a), rb = role(b);
+  const w = ra?.won ? { s: a, r: ra } : rb?.won ? { s: b, r: rb } : null;
+  const l = ra && !ra.won ? { s: a, r: ra } : rb && !rb.won ? { s: b, r: rb } : null;
+  if (w && l) return `$${w.s.ticker} won${w.r.on}; $${l.s.ticker} lost`;
+  if (w) return `$${w.s.ticker} won${w.r.on}`;
+  if (l) return `$${l.s.ticker} lost${l.r.on}`;
+  return null;
 }
 
 /** The paper slip shared by both cards: a torn bottom edge, the BURNTICKER stamp, dashed rules. */

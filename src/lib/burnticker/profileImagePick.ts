@@ -17,7 +17,7 @@ import type { Latest } from "@/lib/burnticker/latestOnly";
  */
 
 /** Launch audit 222: the size advice, beside IMAGE_HELP. The server refuses anything under 16 pixels on a side (creatorBadge.ts). */
-export const IMAGE_SIZE_HELP = "A square image at least 512 pixels on each side looks best. The smallest one accepted is 16 pixels on each side.";
+export const IMAGE_SIZE_HELP = "A square image at least 512 pixels on each side looks best.";   // WZ6-12: the 16 pixel minimum moved into IMAGE_HELP
 /** Launch audit 221: shown in place of the mark choice when the mark could not be added. */
 export const BADGE_UNAVAILABLE_LINE = "The receipt mark could not be added just now, so this image is used without it. Choose the file again to try the mark.";
 export const PREVIOUS_IMAGE_KEPT = "The previous image is kept.";

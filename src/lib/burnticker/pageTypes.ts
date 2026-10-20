@@ -46,7 +46,7 @@ export interface CurveJson {
 }
 export interface HolderRow { account: string; owner: string | null; amount: string; pct: number; label: string | null }
 /** Where to trade: deep links only — Burnticker hosts no swap. */
-export interface TradeLinks { links: { id: "launchlab" | "raydium" | "jupiter"; label: string; url: string }[]; note: string | null }
+export interface TradeLinks { links: { id: "launchlab" | "raydium" | "jupiter"; label: string; url: string; /** the counted redirect on this site (tradeLinks.ts goHref) */ href?: string }[]; note: string | null }
 export interface ChartJson { provider: "geckoterminal" | null; embedUrl: string | null; pageUrl: string | null; note: string }
 /** status.json's market block. Every field the chain did not give is null and carries its reason. */
 export interface MarketJson {
@@ -123,7 +123,7 @@ export interface TokenStatusJson {
   addresses: { mint: string; mintUrl: string; feePda: string; feePdaUrl: string; feeWsol: string | null; feeWsolUrl: string | null; vault: string | null; vaultUrl: string | null; creator: string; creatorUrl: string; programId: string; poolId: string | null; launchTx: string | null; launchTxUrl: string | null };
   supply: { initial: string; current: string; source: "chain" | "registry" };
   burned: { total: string; pctOfSupply: number; count: number; last30d: string; /** settled time of the latest confirmed burn */ lastAt: string | null };
-  pool: { feePdaSol: string | null; spendableSol: string | null; reserveSol: string; vaultBalance: string | null; vaultAllocation: string | null; shortfallOutstanding: string; capSol: number; queuedSol: string | null; queuedNote: string };
+  pool: { feePdaSol: string | null; spendableSol: string | null; reserveSol: string; /** HS-24: creator-fee vault fees not yet claimed (no reader yet: absent) */ unclaimedSol?: string | null; vaultBalance: string | null; vaultAllocation: string | null; shortfallOutstanding: string; capSol: number; queuedSol: string | null; queuedNote: string };
   /** impliedChance is always null: no odds or prices for any coin (owner decision 2026-10-10). */
   /**
    * audit 7 F08: `nextCheckAt` / `nextSourceCheckAt` is the keeper's next read of the source (a poll, not a result); `nextResultAt` is when

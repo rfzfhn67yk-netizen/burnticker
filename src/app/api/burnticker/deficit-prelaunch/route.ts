@@ -3,6 +3,7 @@ import { deficitPrelaunch } from "@/lib/burnticker/deficitPrelaunch";
 import { deficitQueue, readKeeperFiles } from "@/lib/burnticker/deficitQueue";
 import { eventsFromKeeper, sortEvents } from "@/lib/burnticker/activity";
 import { deficitMint } from "@/lib/burnticker/home";
+import { safeErrorText } from "@/lib/burnticker/api/errorText";
 
 export const dynamic = "force-dynamic";
 
@@ -24,5 +25,5 @@ export async function GET() {
       queue: deficitQueue(k, now),
       keeper: live ? { readiness: st!.readiness ?? null, curve: st!.curve ?? null, events: sortEvents(eventsFromKeeper(k.status, k.burns, { includeBurns: true }), 40) } : null,
     }, { headers: { "cache-control": "public, max-age=60" } });
-  } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500 }); }
+  } catch (e) { return NextResponse.json({ error: safeErrorText(e) }, { status: 500 }); }   // AP6-12: no server path in the answer
 }

@@ -27,7 +27,7 @@ export interface TradePanelProps {
   graduatedPool: string | null;
   /** the burn pool's basis points of each CPMM swap, from the page's fee table (fees.ts postGraduationFeesFor) */
   poolBurnBps: number;
-  links: { id: string; label: string; url: string }[];
+  links: { id: string; label: string; url: string; href?: string }[];
   /** the page's fee sentence (curve and pool fees), printed above the other venues */
   feesNote?: string;
   /** what the page says when there are no links yet (a draft, an unread pool) */
@@ -67,7 +67,7 @@ export function TradePanel(p: TradePanelProps) {
     <div className="text-xs" data-swap-alternatives>
       {p.feesNote && <p className="mb-1 text-neutral-400" data-fees-before-trade>{p.feesNote}</p>}
       {p.links.length > 0 ? <p><span className="text-neutral-500">{SWAP_COPY.otherVenues}: </span>
-        {p.links.map((l, i) => <span key={l.id}>{i > 0 && <span className="text-neutral-500"> · </span>}<a className="underline" href={l.url} rel="noopener" target="_blank">{l.label}</a></span>)}</p>
+        {p.links.map((l, i) => <span key={l.id}>{i > 0 && <span className="text-neutral-500"> · </span>}<a className="underline" href={l.href ?? l.url} rel="noopener" target="_blank">{l.label}</a></span>)}</p>
         : p.linksNote ? <p className="text-neutral-400" data-trade-note>{p.linksNote}</p> : null}
     </div>
   ) : null;

@@ -102,8 +102,8 @@ describe("walkthrough 13: the end of a team's season coin", () => {
 
 describe("walkthrough 13: disclosures that said more than the code does", () => {
   test("the operator's one disclosed purchase ($REHEARSAL, 0.1 SOL) is named wherever 'never trades' is said", () => {
-    // sixth pass B-16 (2026-10-19): the next guardrail prints the exception; "no team buy" names $REHEARSAL without repeating the sentence
-    assert.match(GUARDRAIL_DETAIL["no team buy"].text, /disclosed test purchase of \$REHEARSAL/);
+    // hourly run 6 HB-59: the next guardrail prints the exception, and "no team buy" no longer says it a second time
+    assert.doesNotMatch(GUARDRAIL_DETAIL["no team buy"].text, /REHEARSAL/);
     assert.ok(GUARDRAIL_DETAIL["the platform buys no coin except one test coin"].text.includes(REHEARSAL_BUY_EXCEPTION));
     assert.ok(WHO_GETS_WHAT.find((w) => w.who === "Burnticker")!.text.includes(REHEARSAL_BUY_EXCEPTION));
     assert.match(USE_OF_FEES, /apart from a disclosed 0\.1 SOL purchase of the \$REHEARSAL test coin/);

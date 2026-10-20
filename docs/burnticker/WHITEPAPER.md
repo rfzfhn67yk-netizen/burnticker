@@ -14,14 +14,15 @@ Memecoins got boring. Burnticker ties every coin to something that actually happ
 Draft 1 of this technical paper was written on 2026-10-10 from the code and documents of the Burnticker repository at commit
 `76b9caa`. This version is dated 2026-10-12. Every statement names its source file. Where a component does not exist, the paper says "not built" or "not done".
 
-**Status on 2026-10-16.** Three facts below were wrong in earlier versions of this paper and are corrected here. The table after this
-one is the status on 2026-10-10, kept for the record.
+**Status on 2026-10-19.** The facts below were wrong or out of date in earlier versions of this paper and are corrected here. The table
+after this one is the status on 2026-10-10, kept for the record.
 
 | Fact | State on 2026-10-16 | Source |
 |---|---|---|
 | Mainnet deployment | `burn_receipts` (`AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM`) has run round 5 on mainnet since 2026-10-15 (Squads proposal 3; the bytes read back from chain hash to `152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821`). `pair_curve` (`2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN`) runs round 4, deployed on 2026-10-12. Both were first deployed on mainnet on 2026-10-11. | `docs/burnticker/VERIFIED-BUILD.md`, `docs/burnkeeper/evidence/mainnet-round5/` |
 | Upgrade authority and its time lock | The Squads 2-of-3 vault `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV`. Its time lock is **0** through launch week, by the owner's decision of 2026-10-11, so a 2-of-3 vote can act at once. The owner holds two of the three keys, so the owner alone meets the threshold. | `config/burnticker/current-status.json` (`squads`), the trust page (read from chain) |
 | Operator treasury | The developer fee wallet `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5`, which the owner holds. It is compiled into the mainnet builds and is also the LaunchLab platform fee wallet. It is not the Squads vault, and the vault receives no fees. | `config/burnticker/transparency.json`, `config/burnticker/operator.json` |
+| Mainnet rehearsal coin | done: $REHEARSAL (mint `FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp`) was created on LaunchLab mainnet on 2026-10-11 under the real platform settings, and its first reading was signed. It has not burned, because its curve has not filled. Creator coins have launched on LaunchLab mainnet since 2026-10-13. | `config/burnticker/transparency.json` (`rehearsals`), `docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json` |
 | $DEFICIT | created on mainnet on 2026-10-13 (mint `AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj`); creator launches opened the same evening | `config/burnticker/current-status.json` (`deficit.launch`) |
 
 **Status on 2026-10-10, kept for the record.** The program is deployed on devnet for the rehearsal of 2026-10-10 (`docs/burnkeeper/devnet-run.md`).
@@ -763,8 +764,10 @@ terms are drafted in `SECURITY.md` but not published.
 - **Settlement coverage.** Without Kalshi, settled numbers exist only where a primary source has an independent cross-read. That is five
   of eleven categories today (section 3.4). Everything else settles on Polymarket's payout vector or not at all, and Polymarket is
   binary-only. Coins launched on a Kalshi rule before 2026-10-10 carry the event-contract disclosure on every page.
-- **LaunchLab is closed source.** The claim, the migration's pool address, `pool_creator` and LP handling rest on its SDK and docs. They
-  have run only against a stand-in. Confirming them is a devnet-rehearsal gate, and it is not done.
+- **LaunchLab is closed source.** The claim, the migration's pool address, `pool_creator` and LP handling rest on its SDK and docs. The
+  create and the curve's fee routing have run on LaunchLab mainnet since 2026-10-11, first with the $REHEARSAL coin and then with the
+  creator coins. The migration to a pool, its address, `pool_creator` and the LP lock at graduation have been tested only on devnet and
+  against a stand-in, because no mainnet coin's curve has filled yet.
 - **Sandwich bound.** A sandwich can take up to `slippage_bps` (≤ 3 %) of each crank's spend, and that spend is at most 2 % of the
   reserve. Once the allowlist lapses, a manipulator who holds the rate up for a full TWAP window can still shift a crank.
 - **Quorum 1 at launch.** The operator's key alone signs readings. A false reading is permanent and public, but it would size a burn.
@@ -792,8 +795,9 @@ terms are drafted in `SECURITY.md` but not published.
 - **Logs.** The decision log (`docs/burnticker/decisions.md`) is append-only. The incident log (`docs/burnticker/incidents/LOG.md`) has
   no incidents recorded. Review reports are in `docs/burnticker/reviews/`.
 - **Wallet list.** The transparency file (`config/burnticker/transparency.json`) names every role: operations, deployer, keeper,
-  developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading
-  wallets. The mainnet keys are set, and each one is listed there with its role.
+  developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading-bot
+  wallets on other machines. Their only trade in a platform coin is the 0.1 SOL of $REHEARSAL at its creation, which the same file
+  discloses. The mainnet keys are set, and each one is listed there with its role.
 - **Policies.** Posts on X are not deleted, and corrections go in the same thread with the receipt. There is no paid promotion and no
   talk of what any coin trades at. Nothing is described as forthcoming. The platform buys no coin; the one disclosed exception is the
   0.1 SOL test purchase of $REHEARSAL when it was created.

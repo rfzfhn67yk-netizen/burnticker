@@ -8,7 +8,7 @@ import { pairSideHrefs } from "@/lib/burnticker/publicPairs";
  * heading at once; the slow reads (curves, receipts, the scoreboard) stay in the browser. Pure apart from the registry reads.
  */
 export interface PairSide { ticker: string; name: string; href: string }
-export interface PairSeed { pairId: string; a: PairSide; b: PairSide; matchup: string; title: string; description: string; canonical: string }
+export interface PairSeed { pairId: string; a: PairSide; b: PairSide; matchup: string; title: string; description: string; canonical: string; /** OP6-11: the launched coin whose receipt card is the pair's share image (side A first); null = the site card */ imageMint?: string | null }
 
 type Tok = { ticker: string; name: string; mint: string; status: string; description?: string } | null;
 
@@ -42,5 +42,6 @@ export function pairSeed(registry: Source, pairId: string): PairSeed | null {
     title: oneGame ? `$${a.ticker} vs $${b.ticker}: ${matchup}` : `$${a.ticker} vs $${b.ticker}`,
     description: `$${a.ticker} (${a.name}) and $${b.ticker} (${b.name}) are a rivalry pair on Burnticker. Each coin has its own locked rule, and this page shows both coins' burns, their receipts and the running score.`,
     canonical: pairCanonical(pairId),
+    imageMint: ta && ta.status === "live" ? pr.mintA : tb && tb.status === "live" ? pr.mintB : null,
   };
 }

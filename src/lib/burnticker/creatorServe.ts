@@ -1,4 +1,5 @@
 import { CREATOR_PAGE, creatorNextLine, dayLine } from "@/lib/burnticker/creatorBenefits";
+import { decidedPairLine, decidedPairOf, type DecidedPairStatus } from "@/lib/burnticker/decidedWarning";
 import "server-only";
 import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { leagueData } from "@/lib/burnticker/leaguesServe";
@@ -73,7 +74,7 @@ const sentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUp
  * The creator views' next fields from a coin's status JSON (the producer's `rules.oneShot` and `next`) and its receipts: the next result
  * and its words, and the next source check under its own label (dropped for a decided or voided one-shot). Pure.
  */
-export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & { market?: { phase?: string | null } | null }, receipts: readonly ResultReceipt[], now: number): Pick<CreatorCoinView, "nextAt" | "nextLine" | "nextCheckAt" | "nextCheckLine" | "result"> {
+export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & { market?: { phase?: string | null } | null; ticker?: string } & DecidedPairStatus, receipts: readonly (ResultReceipt & { pairRole?: string | null })[], now: number): Pick<CreatorCoinView, "nextAt" | "nextLine" | "nextCheckAt" | "nextCheckLine" | "result"> {
   const oneShot = !!s.rules.oneShot;
   // the producer's fields when present (tokenPage.ts); recomputed the same way for an older status JSON
   const t = s.next.result !== undefined ? { result: s.next.result, nextResultAt: s.next.nextResultAt ?? null, nextSourceCheckAt: s.next.nextSourceCheckAt ?? s.next.nextCheckAt ?? null } : nextTimes({ oneShot, receipts, nextCloseTime: s.next.nextCloseTime, nextCheckAt: s.next.nextCheckAt });
@@ -81,7 +82,8 @@ export function creatorNextFields(s: Pick<TokenStatusJson, "rules" | "next"> & {
   const nextCheckAt = settled ? null : t.nextSourceCheckAt;
   return {
     nextAt: t.nextResultAt, result: t.result,
-    nextLine: creatorNextLine({ oneShot, receipts, graduated: s.market?.phase === "graduated", nextAt: t.nextResultAt, result: t.result }, now),
+    // HB-80 / HS-27 (hourly run 5): a decided pair coin says won or lost in the one shared line, never "waiting" on the losing side
+    nextLine: (() => { const dp = oneShot && t.result === "decided" && s.ticker ? decidedPairOf(s, receipts.map((r) => ({ status: r.status, settledAt: String(r.settledAt ?? ""), kind: r.kind ?? null, pairRole: r.pairRole ?? null }))) : null; return dp ? decidedPairLine(s.ticker!, dp) : creatorNextLine({ oneShot, receipts, graduated: s.market?.phase === "graduated", nextAt: t.nextResultAt, result: t.result }, now); })(),
     nextCheckAt, nextCheckLine: nextCheckAt && nextCheckAt !== t.nextResultAt ? dayLine(nextCheckAt, now) : null,
   };
 }

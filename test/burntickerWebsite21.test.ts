@@ -69,7 +69,8 @@ describe("website-21: step 2, the third rivalry option and its meetings list", (
     assert.match(page, /\$\{V1\}\/sports\/rivalry\?league=\$\{encodeURIComponent\(leagueSeries\)\}&a=\$\{encodeURIComponent\(rivalA\.abbr\)\}&b=\$\{encodeURIComponent\(rivalB\.abbr\)\}/);
     assert.match(page, /\{RIVALRY_SERIES_LABEL\}/); assert.match(page, /\{RIVALRY_SERIES_LINE\}/); assert.match(page, /\{MEETINGS_LIST_LABEL\}/);
     // not offered: greyed with the server's offeredLine (MEETINGS_NONE_LINE); a failed read says the schedule could not be read, with Retry
-    assert.match(page, /rv!\.offered \? null : \(rv!\.offeredLine \?\? NO_LISTED_MEETING_LINE\)/);
+    // hourly run 5, HB-72: and greyed when no meeting is left to play (guidedLaunch.ts seriesOptionState)
+    assert.match(page, /seriesOptionState\(rv!\)\.why/);
     assert.match(page, /failed \? \(rv!\.scheduleNote \?\? SCHEDULE_UNAVAILABLE_LINE\)/);
     assert.match(page, /setRivalryRetry\(\(n\) => n \+ 1\)/);
     assert.match(page, /data-playoff>playoffs</);

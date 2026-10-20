@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { clientKey, limiter } from "@/lib/burnticker/api/http";
 import { isSameOrigin } from "@/lib/sameOrigin";
-import { clearOf, heldState, queryOf, sealedHold, swapPendingChain, swapPendingStore, trustedExpiry, verifyPendingClaim } from "@/lib/burnticker/swap/pendingServer";
+import { clearOf, heldState, queryOf, revalidateExpiry, sealedHold, swapPendingChain, swapPendingStore, trustedExpiry, verifyPendingClaim } from "@/lib/burnticker/swap/pendingServer";
 
 export const dynamic = "force-dynamic";
 
 const headers = { "cache-control": "no-store" };
 const MAX_BODY = 8_000;
 const tooMany = (s: number) => NextResponse.json({ error: `Too many requests. Try again in ${s} seconds.` }, { status: 429, headers: { ...headers, "retry-after": String(s) } });
+/** HB-65 v4: how long the panel waits before saving again when the chain could not be read at first save. */
+const CHAIN_RETRY_MS = 1_000;
+const chainUnavailable = () => NextResponse.json({ ok: false, error: "The chain could not be read just now, so the swap was not recorded and should not be sent yet. Try again in a moment.", code: "chain-unavailable", retryAfterMs: CHAIN_RETRY_MS }, { status: 503, headers: { ...headers, "retry-after": String(Math.ceil(CHAIN_RETRY_MS / 1000)) } });
 const crossOrigin = () => NextResponse.json({ error: "Requests from other sites are refused.", code: "cross-origin" }, { status: 403, headers });
 /** HB-65 (AP6-4): stops reading at MAX_BODY characters instead of reading the whole body first. */
 const readBody = async (req: Request): Promise<unknown> => {
@@ -31,7 +34,8 @@ const readBody = async (req: Request): Promise<unknown> => {
  *   POST { network, mint, owner, signature, lastValidBlockHeight, side, tx }   written from the signed transaction, before it is sent
  *   DELETE { network, mint, owner, signature }                                  removed only once the chain shows that signature settled
  * POST and DELETE are same-origin only (a CSRF check) and rate limited. HB-65: the signature is not a secret, so it never authorizes a
- * removal by itself; the server's own chain read does (pendingServer.ts heldState). Public keys and signatures only.
+ * removal by itself; the server's own chain read does (pendingServer.ts heldState). Public keys and signatures only. HB-65 v4: the
+ * posted lastValidBlockHeight is never kept; a POST while the chain cannot be read answers 503 "chain-unavailable" and stores nothing.
  */
 export async function GET(req: Request) {
   const rl = limiter.take(clientKey(req), "read");
@@ -43,7 +47,9 @@ export async function GET(req: Request) {
   catch { return NextResponse.json({ error: "The held swap could not be read just now." }, { status: 503, headers }); }
   if (!rec) return NextResponse.json({ pending: null }, { headers });
   // HB-65: a swap that may still land is shown sealed, so nobody learns its signature from this page
-  const state = await heldState(await swapPendingChain(rec.network), rec);
+  const chain = await swapPendingChain(rec.network);
+  rec = await revalidateExpiry(swapPendingStore(), chain, rec);   // HB-65 v4: an unknown expiry gets the server's own, once
+  const state = await heldState(chain, rec);
   return NextResponse.json({ pending: state === "settled" ? rec : sealedHold(rec) }, { headers });
 }
 
@@ -59,10 +65,18 @@ export async function POST(req: Request) {
   let existing;
   try { existing = swapPendingStore().get(v.rec.network, v.rec.mint, v.rec.owner); }
   catch { return NextResponse.json({ error: "The held swap could not be saved just now." }, { status: 503, headers }); }
-  if (existing && existing.signature === v.rec.signature) return NextResponse.json({ ok: true, signature: v.rec.signature }, { headers });
   const chain = await swapPendingChain(v.rec.network);
+  // HB-65 v4: the same signature again is the retry after an outage; a record kept with an unknown expiry gets the server's own, once
+  if (existing && existing.signature === v.rec.signature) {
+    await revalidateExpiry(swapPendingStore(), chain, existing);
+    return NextResponse.json({ ok: true, signature: v.rec.signature }, { headers });
+  }
   if (existing && (await heldState(chain, existing)) !== "settled") return held409();
-  const rec = { ...v.rec, lastValidBlockHeight: await trustedExpiry(chain, v.rec.lastValidBlockHeight) };
+  // HB-65 v4: the posted expiry is never kept. A configured chain that cannot be read refuses the save, so nothing unverified is stored
+  // and the panel (which sends nothing without this acknowledgement) tries again
+  const expiry = await trustedExpiry(chain);
+  if (expiry === "unavailable") return chainUnavailable();
+  const rec = { ...v.rec, lastValidBlockHeight: expiry };
   // continuous audit 2026-10-19T1919Z SEC-02: the answer names the signature it kept; the panel sends the swap only on that acknowledgement
   let r;
   try { r = swapPendingStore().putIfCurrent(rec, existing?.signature ?? null); }
@@ -82,7 +96,9 @@ export async function DELETE(req: Request) {
   catch { return NextResponse.json({ error: "The held swap could not be removed just now." }, { status: 503, headers }); }
   // another wallet, coin, network or signature: nothing of this wallet's is touched
   if (!rec || rec.signature !== c.signature) return NextResponse.json({ error: "There is no held swap with that signature for this wallet and coin.", code: "swap-not-held" }, { status: 403, headers });
-  const state = await heldState(await swapPendingChain(rec.network), rec);
+  const chain = await swapPendingChain(rec.network);
+  rec = await revalidateExpiry(swapPendingStore(), chain, rec);   // HB-65 v4: an unknown expiry gets the server's own, once
+  const state = await heldState(chain, rec);
   if (state === "unknown") return NextResponse.json({ error: "The swap's state could not be read from the chain just now, so its record was kept. Try again in a moment." }, { status: 503, headers });
   if (state === "pending") return NextResponse.json({ error: "This swap may still settle, so its record is kept until the chain shows it settled.", code: "swap-unsettled" }, { status: 403, headers });
   try { return NextResponse.json({ ok: true, removed: swapPendingStore().clear(c.network, c.mint, c.owner, c.signature) }, { headers }); }

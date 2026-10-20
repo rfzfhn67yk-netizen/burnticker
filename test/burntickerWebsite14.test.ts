@@ -70,11 +70,12 @@ describe("item 1: the queued-units counter (LAUNCHPAD-PATH §73), from the keepe
     assert.equal(q.state, "queued"); assert.equal(q.units, 15); assert.equal(q.unsigned, 2, "a reading past the last one on chain is not counted as queued");
     assert.equal(q.riseUsd, "22345678901.23");
     assert.equal(q.sharePct, ((1 - Math.pow(0.98, 15)) * 100).toFixed(2)); assert.equal(q.formula, "1 − 0.98^15");
-    assert.equal(q.headline, "The debt has risen $22.35 billion since launch. 15 units are queued.");
+    // hourly run 6 HB-90: the headline says what the two numbers are, from the baseline's own date
+    assert.equal(q.headline, "Daily rises since Oct 14 add up to 15 queued units ($1B each). The debt is $22.35 billion higher than on Oct 14.");
     assert.ok(q.lines.some((l) => l.startsWith(`When the curve fills at 85 SOL and its pool is registered, the queued readings run in order and together spend 1 − 0.98^15 of the burn pool, which is ${q.sharePct}%.`)), "the raise is the one the keeper read from the pool");
     assert.ok(q.lines.some((l) => /One burn run spends at most 2% of the trading pool's SOL/.test(l)));
     assert.ok(q.lines.some((l) => /^2 more units are recorded by the keeper and not yet signed on chain\.$/.test(l)));
-    assert.ok(q.lines.some((l) => /^The latest reading is the Treasury figure for 2026-10-19\. The keeper published this at Oct 20, 3:50 PM Denver time\.$/.test(l)));
+    assert.ok(q.lines.some((l) => /^The latest reading is the Treasury figure for 2026-10-19\. The keeper last wrote its status file at Oct 20, 3:50 PM Denver time\.$/.test(l)));
     assert.equal(q.stale, false); assert.equal(q.card, "0 $DEFICIT, 15 units queued");
     for (const t of [q.headline, ...q.lines, q.card!]) clean(t, "queue");
   });
@@ -89,7 +90,7 @@ describe("item 1: the queued-units counter (LAUNCHPAD-PATH §73), from the keepe
     const stale = deficitQueueCore(keeperStatus({ generatedAt: "2026-10-20T18:00:00Z" }), keeperBurns, NOW);
     assert.equal(stale.stale, true); assert.ok(stale.lines.some((l) => /more than an hour ago, so it may be out of date/.test(l)));
     const noBase = deficitQueueCore(keeperStatus({ baseline: false }), keeperBurns, NOW);
-    assert.equal(noBase.riseUsd, null); assert.equal(noBase.headline, "15 units are queued."); assert.ok(noBase.lines.includes("The rise since launch is not in the keeper's published file yet."));
+    assert.equal(noBase.riseUsd, null); assert.equal(noBase.headline, "Daily rises since the first reading add up to 15 queued units ($1B each)."); assert.ok(noBase.lines.includes("The rise since the first reading is not in the keeper's published file yet."));
     const open = deficitQueueCore(keeperStatus({ registered: true }), keeperBurns, NOW);
     assert.equal(open.state, "pool-open"); assert.match(open.headline, /The pool is registered\. 15 units are waiting for a burn run\./); assert.equal(open.card, null);
     const zero = deficitQueueCore(keeperStatus(), [], NOW);
@@ -117,7 +118,7 @@ describe("item 1: the queued-units counter (LAUNCHPAD-PATH §73), from the keepe
   test("the featured card says the queue instead of nothing burned, and its curve, progress and raise come from the keeper's pool read", () => {
     const root = scratchRoot("launched");
     const f = featuredCoins(root, null, [], { status: keeperStatus(), burns: keeperBurns, error: null }, NOW)[0];
-    assert.equal(f.burned.text, "0 $DEFICIT, 15 units queued"); assert.equal(f.burned.why, "The debt has risen $22.35 billion since launch. 15 units are queued.");
+    assert.equal(f.burned.text, "0 $DEFICIT, 15 units queued"); assert.equal(f.burned.why, "Daily rises since Oct 14 add up to 15 queued units ($1B each). The debt is $22.35 billion higher than on Oct 14.");
     assert.deepEqual([f.curve.raised, f.curve.of], ["31.5", "85 SOL"]);
     assert.equal(f.progress!.from, "on-curve"); assert.match(f.progress!.next, /^31\.5 of 85 SOL raised; 53\.5 more to graduate\. 15 units are queued for that moment\.$/);
     // unread keeper files after the create: Unavailable (F4), never a queue or a zero

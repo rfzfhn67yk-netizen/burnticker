@@ -24,6 +24,7 @@ call, leaving out whatever would push the step past the 1,232-byte packet; the a
 | b-double-press | Two quick presses send one launch request, and the wallet is asked at most once per step (a single coin is two steps: its rule locked, then the coin created). |
 | b-reject-retry | The wallet refuses, the card says the step was not signed, nothing is sent; the second press reuses the plan and draft (no "already registered"). |
 | b-reload-relaunch | The wallet refuses, the tab reloads on the kept review (`?resume=review`), and Launch works again with no "already registered". |
+| b-reload-expired | The same, but the kept signature is aged past its 15-minute limit before the reload (its Issued line moved back 20 minutes). The review shows the draft-held notice saying the signature no longer counts, Launch stays on, and a signed press launches (LA-4). |
 | b-reload-pair, b-pair-twice | Not driven yet (the pair form is driven by a-rivalry-game; these need a pair landed on chain, or launched twice). |
 | c-deploy-window | With `/deploying.json` served and Caddy's JSON 503 on the launch route, the review says the site is being updated, never "catching up". |
 | d-mint-source | An empty bank falls back to the browser search (address ends in burn, the page sends its own public key); a bank hands its key with no search panel. With `--empty-base` (the box) it runs on the instance with no bank and must see the search; otherwise `BURNTICKER_SYNTH_EXPECT_BANK=empty|filled` asserts which. |

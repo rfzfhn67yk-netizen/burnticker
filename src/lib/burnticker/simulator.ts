@@ -18,6 +18,8 @@ export function simFamilyOf(rule: BurnRule): "published" | "one-shot" | "recurri
   if (rule.oracle === "catalogue" && rule.kind === "scalar" && !parseEspnSeries(rule.series ?? "")) return "published";
   return windowKindOf(rule) === "one-shot" ? "one-shot" : "recurring";
 }
+/** HB-81 D1 (hourly run 5): a count or a reading has no tie and no sides, so its tie row says that without market or pair words. */
+export const SIM_NO_TIE_COUNT = "A count has no tie. A reading either qualifies or it does not, and one that does not burns nothing.";
 export const SIM_NO_READING_LABEL = "No reading is published";
 export const SIM_NO_READING_LINE = "A period with no published reading burns nothing, and it is never read as zero. The burn pool keeps its SOL for the next reading.";
 export const simOneShotVoidLine = (days: number | null | undefined): string => `A voided or cancelled result burns nothing for the result. The rule then ends, and whatever is in the burn pool burns down on this coin ${windDownOver(days)}.`;
@@ -146,7 +148,7 @@ export function simulateResults(rule: BurnRule, o: SimOptions = {}): Simulation 
       } else { coins = [burning("A", tA, zero), idle("B", tB, `$${tB} burns only on its own result, from its own pool.`)]; line = `${coins[0].line} $${tB} burns only on its own result, from its own pool.`; }
     } else if (c === "tie") {
       if (f.drawFires && !o.pair) { coins = [burning("A", tA, zero)]; line = `This coin burns on a tie. ${coins[0].line}`; }
-      else { line = rule.series && parseEspnSeries(rule.series) ? "A tie is not the result this rule burns on, so nothing burns and the pool keeps its SOL." : family === "one-shot" ? "This kind of event has no tie. A result that is neither side counts as voided, as the next row says." : "This kind of event has no tie. A result that is neither side counts as voided, so nothing burns."; if (o.pair) line = `A tie moves nothing between the two coins and nothing burns. Each pool keeps its SOL.`; coins = [idle("A", tA, line), ...(o.pair ? [idle("B", tB, line)] : [])]; }
+      else { line = rule.series && parseEspnSeries(rule.series) ? "A tie is not the result this rule burns on, so nothing burns and the pool keeps its SOL." : family === "one-shot" ? (rule.oracle === "catalogue" ? SIM_NO_TIE_COUNT : "This kind of event has no tie. A result that is neither side counts as voided, as the next row says.") : rule.oracle === "catalogue" ? SIM_NO_TIE_COUNT : "This kind of event has no tie. A result that is neither side counts as voided, so nothing burns."; if (o.pair) line = `A tie moves nothing between the two coins and nothing burns. Each pool keeps its SOL.`; coins = [idle("A", tA, line), ...(o.pair ? [idle("B", tB, line)] : [])]; }
     } else if (c === "void") {
       line = family === "published" ? SIM_NO_READING_LINE : family === "one-shot" ? simOneShotVoidLine(rule.onEnd?.windDownDays) : "A voided or cancelled event burns nothing. The burn pool keeps its SOL for the next result.";
       if (o.pair) line = "A voided or cancelled event moves nothing between the two coins and nothing burns. Each pool keeps its SOL.";

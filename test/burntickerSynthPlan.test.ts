@@ -23,7 +23,7 @@ describe("which instance each scenario runs on", () => {
   test("with the empty-bank instance: d-mint-source runs there and must see the fallback; everything else runs on the bank", () => {
     assert.equal(EMPTY_BANK_SCENARIO, "d-mint-source");
     assert.deepEqual({ ...bankPlan("d-mint-source", { base, emptyBase, expectEnv: "filled" }), why: "" }, { base: emptyBase, expect: "empty", why: "" }, "the empty instance wins over the env");
-    for (const id of ["a-event", "a-team", "a-rivalry-game", "a-rivalry-series", "b-double-press", "b-reject-retry", "b-reload-relaunch", "c-deploy-window", "e-slow", "e-tamper"]) {
+    for (const id of ["a-event", "a-team", "a-rivalry-game", "a-rivalry-series", "b-double-press", "b-reject-retry", "b-reload-relaunch", "b-reload-expired", "c-deploy-window", "e-slow", "e-tamper"]) {
       const p = bankPlan(id, { base, emptyBase, expectEnv: "" });
       assert.equal(p.base, base, id); assert.equal(p.expect, null, `${id}: a dry bank only makes the page search, never a failure`);
     }

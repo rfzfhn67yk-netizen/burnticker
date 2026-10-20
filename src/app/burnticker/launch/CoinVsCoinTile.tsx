@@ -1,5 +1,6 @@
 "use client";
 
+import { PAIR_CHECK_TIMEOUT_MS, PAST_BURNS_HEADING, pastBurnsLines } from "@/lib/burnticker/guidedLaunch";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -430,10 +431,13 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
     if (!pairCheckKey || !a?.underlying || !b?.underlying) { setPairCheck(null); return; }
     let live = true;
     setPairCheck({ key: pairCheckKey, ok: true, swap: false, reason: null, busy: true });
-    fetch("/api/burnticker/v1/derby/pair", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ a: a.underlying, b: b.underlying, flip }) })
+    // HB-79 (hourly run 5): the check is bounded (PAIR_CHECK_TIMEOUT_MS); a slow or failed answer stops the wait and refuses nothing here
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), PAIR_CHECK_TIMEOUT_MS);
+    fetch("/api/burnticker/v1/derby/pair", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ a: a.underlying, b: b.underlying, flip }), signal: ctl.signal })
       .then(async (r) => { const j = await r.json().catch(() => null) as { ok?: boolean; swap?: boolean; refusal?: { reason: string } | null; error?: string } | null; if (!live) return; if (!r.ok) { setPairCheck({ key: pairCheckKey, ok: true, swap: false, reason: null, busy: false }); return; } setPairCheck({ key: pairCheckKey, ok: j?.ok !== false, swap: !!j?.swap, reason: j?.refusal?.reason ?? null, busy: false }); })
-      .catch(() => { if (live) setPairCheck({ key: pairCheckKey, ok: true, swap: false, reason: null, busy: false }); });
-    return () => { live = false; };
+      .catch(() => { if (live) setPairCheck({ key: pairCheckKey, ok: true, swap: false, reason: null, busy: false }); })
+      .finally(() => clearTimeout(timer));
+    return () => { live = false; clearTimeout(timer); ctl.abort(); };
   }, [pairCheckKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const pairRefused = !!pairCheck && pairCheck.key === pairCheckKey && !pairCheck.ok;
   const pairCheckLine = pairRefused ? (
@@ -684,6 +688,7 @@ export function CoinVsCoinTile({ recordKeyed = null, burnReal = null, network = 
           cost={shown.review && reviewCurrent ? pairCostSentence(shown.review.costs.totalSol, shown.review.venue) : null} costNote={shown.review?.venue === "pair-curve" ? shown.review.costs.note : PAIR_COST_EXCLUSIONS}
           summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
           blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
+        {!out && !pcOut && <details className="text-xs text-neutral-300" data-projection data-past-burns><summary className="cursor-pointer">{PAST_BURNS_HEADING}</summary>{pastBurnsLines({ loading: shown.loading || !!(pairCheck?.busy && pairCheck.key === pairCheckKey), error: shown.error, projection: reviewCurrent ? (shown.review as (LaunchReview & { projection?: { available: boolean; lines: string[]; reason: string | null } | null }) | null)?.projection : null }).map((x) => <p key={x} className="mt-1" role="status">{x}</p>)}</details>}
         {!out && !pcOut && <details className="text-xs text-neutral-300"><summary className="cursor-pointer">What this creates, in full</summary><ul className="mt-1 min-w-0 list-disc space-y-0.5 break-words pl-5" aria-label="What this creates" data-derby-facts><li>{realList.length ? `${model.spec.a.symbol} and ${model.spec.b.symbol} are reference feeds. ${realReadSentence({ a: model.spec.a.symbol, b: model.spec.b.symbol }, realList)}` : x.references}</li><li>{x.created}</li><li>{x.window}</li><li>{x.start}</li><li>{x.end}</li><li>{x.tie}</li><li>{x.missing}</li>{flip && <li>{edgeCase(66)}</li>}{flip && <li>{edgeCase(70)}</li>}<li>{edgeCase(72)}</li><li>{edgeCase(62)}</li>{realList.map((r) => <li key={r.ticker} data-burn-real-fact>${r.ticker}: {targetActionSentence(r.symbol)}</li>)}</ul></details>}
         {prepared && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${prepared.tickers.a} and $${prepared.tickers.b}`} coinHref={coinCanonicalHref} onStartOver={() => { setOut(null); setPcOut(null); setErr(null); setNow(Date.now()); }} />}
         {(pcOut || out) && <p className="text-xs"><a className="underline" href={`/burnticker/p/${(pcOut ?? out)!.pairId}`}>Open the pair page →</a></p>}

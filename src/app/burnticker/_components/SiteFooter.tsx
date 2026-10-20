@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { OPERATOR_LINE, DEV_FEE_LINE } from "@/lib/burnticker/fees";
+import { OPERATOR_LINE, BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
+import { footerFeeLine } from "@/lib/burnticker/feeShareLine";
+import { tier14LiveNow } from "@/lib/burnticker/tier14Live";
 import { FOOTER_COPY, FOOTER_LEGAL_LINKS, FOOTER_ROWS } from "@/lib/burnticker/siteNav.mjs";
 import { NAV, LEARN, API_BASE_PATH, type NavItem } from "./nav";
 import { MailSafe } from "./MailSafe";
@@ -42,7 +44,7 @@ export function SiteFooter() {
         <div className="bt-rule" />
         <dl className="bt-rows">
           <div><dt>{R.operator.label}</dt><dd><span data-operator-line><MailSafe text={OPERATOR_LINE} /></span> <Link href={R.operator.href} prefetch={false}>{R.operator.more}</Link></dd></div>
-          <div><dt>{R.fees.label}</dt><dd><span data-fee-line>{DEV_FEE_LINE}</span> <Link href={R.fees.href} prefetch={false}>{R.fees.more}</Link></dd></div>
+          <div><dt>{R.fees.label}</dt><dd><span data-fee-line>{footerFeeLine(BURNTICKER_DEV_FEE_BPS, { tier14Live: tier14LiveNow() })}</span> <Link href={R.fees.href} prefetch={false}>{R.fees.more}</Link></dd></div>
           <div><dt>{R.api.label}</dt><dd><a href={API_BASE_PATH}>{API_BASE_PATH}</a> · <Link href={R.api.href} prefetch={false}>{R.api.more}</Link></dd></div>
         </dl>
         <div className="bt-rule" />

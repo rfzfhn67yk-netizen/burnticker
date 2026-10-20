@@ -44,8 +44,14 @@ const BURN_RECEIPTS_PROGRAM_ID = BURN_RECEIPTS_LOCALNET_PROGRAM_ID;
 
 /** The one-line policy statement every surface uses (copy-lint clean: no price, no promise, no prize). */
 export const LP_POLICY_LINE = "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)";
+/** Hourly run 6 HB-56: the same line for a coin that has not graduated, whose liquidity is not locked yet. */
+export const LP_POLICY_LINE_BEFORE_GRADUATION = "LP locks forever at graduation; its fees fund the burn (80% burned, 20% operator, fixed in code)";
+/** A coin's own policy line: locked once a locked percentage is known (it has graduated), "locks at graduation" until then. */
+export const lpPolicyLineFor = (lockedPct: number | null | undefined): string => (typeof lockedPct === "number" ? LP_POLICY_LINE : LP_POLICY_LINE_BEFORE_GRADUATION);
 /** The short badge on token and pair pages. */
 export const LP_POLICY_BADGE = "Liquidity locked forever, and its fees fund the burn";
+/** HB-56 (hourly run 6): the heading for a coin that has not graduated yet. */
+export const LP_POLICY_BADGE_BEFORE_GRADUATION = "Liquidity locks forever at graduation, and its fees fund the burn";
 
 /**
  * THE PROGRAM INTERFACE this adapter is bound to (the program builder's, 2026-10-10: names, seeds and accounts final). The constants
@@ -373,7 +379,7 @@ export function buildLpLockJson(i: { cluster: string; mint?: string; programId?:
     lastClaim: last ? { at: new Date(last.at).toISOString(), signature: last.signature, sol: lamportsToSol(last.solLamports), toBurnPool: lamportsToSol(last.toBurnPoolLamports), toOperator: lamportsToSol(last.toOperatorLamports), tokenBurnedRaw: last.tokenBurnedRaw.toString(), txUrl: url(last.signature, "tx"), line: lockFeeClaimLine(last) } : null,
     totals: { claims: sorted.length, sol: lamportsToSol(sum("solLamports")), toBurnPool: lamportsToSol(sum("toBurnPoolLamports")), toOperator: lamportsToSol(sum("toOperatorLamports")), tokenBurnedRaw: sum("tokenBurnedRaw").toString() },
     urls: { lockProgram: url(lockProgram), feeKey: url(feeKey), feeKeyOwner: url(feeKeyOwner), lockedLiquidity: url(lockedLiquidity), operatorTreasury: url(i.operatorTreasury) },
-    line: LP_POLICY_LINE,
+    line: lpPolicyLineFor(i.state?.graduated ? (i.state.lockedPct ?? LP_LOCKED_PCT) : null),
     note: notes.length ? notes.join(" ") : null,
     lastError: i.lastError ? { at: new Date(i.lastError.at).toISOString(), error: i.lastError.error, sentence: lockFeeErrorSentence(i.lastError.error) } : null,
   };

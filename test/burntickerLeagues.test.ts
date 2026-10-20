@@ -164,7 +164,8 @@ describe("the sitemap", () => {
     const res = await mod.GET();
     assert.equal(res.status, 200); assert.match(res.headers.get("content-type")!, /application\/xml/);
     const body = await res.text();
-    assert.match(body, /\/burnticker\/t\/BRONCO<\/loc>/); assert.match(body, /\/burnticker\/t\/DEFICIT2<\/loc>/); assert.match(body, /\/burnticker\/leagues\/nhl\/\d{4}-\d{2}<\/loc>/);
+    // OP6-11 (sixth pass): coins are listed at their canonical (mint) address, not the ticker
+    assert.match(body, /\/burnticker\/t\/[1-9A-HJ-NP-Za-km-z]{32,44}<\/loc>/); assert.doesNotMatch(body, /\/burnticker\/t\/(BRONCO|DEFICIT2)<\/loc>/); assert.match(body, /\/burnticker\/leagues\/nhl\/\d{4}-\d{2}<\/loc>/);
   });
   test("the league OpenGraph route renders a PNG; an unknown league is a 404", async () => {
     const mod = await import("../src/app/burnticker/leagues/[league]/[season]/og/route.ts");

@@ -208,7 +208,7 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
     // review 2 §2: one served $DEFICIT destination — its own site until the coin is created and registered here
     href: deficitHref(created && !!live),
     // owner 2026-10-14: the trade link on the card (Raydium's launchpad page on the curve, its pool after graduation)
-    trade: created ? coinLinks({ cluster: "mainnet", mint: deficit?.address, phase: readable ? live!.phase ?? null : kc?.phase ?? null, status: "live" }) : null,
+    trade: created ? coinLinks({ cluster: "mainnet", mint: deficit?.address, phase: readable ? live!.phase ?? null : kc?.phase ?? null, status: "live", curve: readable ? { raised: live!.raised, threshold: live!.threshold, quote: live!.quote } : kc ? { raised: kc.raised, threshold: kc.threshold, quote: kc.quote } : null }) : null,
     receipt: sig ? { href: checkReceiptHref(sig, readable ? live!.cluster ?? "mainnet" : "mainnet")! } : null,
     receiptWhy: sig ? null : !created ? "The coin is not created yet." : !readable && !ks ? unreadWhy : "No burn has confirmed yet.",
   });

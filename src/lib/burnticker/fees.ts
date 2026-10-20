@@ -3,7 +3,7 @@ import { feeSplit as liveFeeSplit, PPM, ppmToBps, type AmmConfigView, type Globa
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCKED_PCT, LP_POLICY_LINE, feeKeysPda, operatorTreasuryRecord } from "@/lib/burnticker/lockFees";
 import { CPMM_CONFIG_ID, CPMM_PLATFORM_TIERS, CPMM_TIER, cpmmTierLabel, cpmmTierOf, postGraduationBps, tierForPin, type CpmmCluster } from "@/lib/burnticker/cpmmTier";
-import { EARLIER_COINS_LINE, PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
+import { EARLIER_COINS_LINE, PAIR_OPERATOR_SHARE_LINE, footerFeeLine, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 
 /**
  * BURNTICKER FEE SPLIT — the one place the DESIGNED numbers live (the owner, 2026-10-09; sources: docs/burnkeeper/fees.md, read from
@@ -143,7 +143,9 @@ export function devFeeLineFor(venue: "launchlab" | "pair-curve" | null = null): 
   const curve = `Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume.`;
   if (venue === "launchlab") return `${curve} ${OPERATOR_SHARE_LINE} ${EARLIER_COINS_LINE}`;
   if (venue === "pair-curve") return `${curve} ${PAIR_OPERATOR_SHARE_LINE}`;
-  return `${curve} ${OPERATOR_SHARE_LINE} ${EARLIER_COINS_LINE} Pair coins differ.`;
+  // HS-26 (hourly run 5): the footer line leads with the split every live coin pays; this constant cannot read the registry, so it leaves
+  // "(every coin live today)" out (SiteFooter and the trust page pass the live answer)
+  return footerFeeLine(BURNTICKER_DEV_FEE_BPS, { tier14Live: null });
 }
 export const DEV_FEE_LINE = devFeeLineFor(null);
 export const USE_OF_FEES = `${DEV_FEE_LINE} The operator's part of the liquidity fees is fixed in code, and the coin side of those fees is burned. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own, apart from a disclosed 0.1 SOL purchase of the $REHEARSAL test coin when it was created. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.`;
@@ -152,6 +154,12 @@ export const USE_OF_FEES = `${DEV_FEE_LINE} The operator's part of the liquidity
  * independent second attester exists. `dueBy` (14 days after the first launch) stays as the owner's internal check-in date only.
  */
 export const ATTESTER_STATUS_LINE = "One operator attester is configured; no independent second attester is live.";
+/**
+ * HB-69 / HS-20 (sixth pass): what the second signer on its own host really does today (attesters/cosign.ts askCosigner and
+ * cosignSigner.ts). At quorum 1 its signature is not needed, so it is advisory: a disagreement holds the reading, while "cannot check"
+ * or no answer sends the reading on the keeper key alone. Its signer refuses rivalry-pair coins and pair results.
+ */
+export const SECOND_SIGNER_LINE = "A second signer runs on another host. It is shown each reading before it is sent, and a reading it disagrees with is held. At quorum 1 it is advisory: when it cannot check a reading, or cannot be reached, the reading is sent on the operator's keeper key alone. It does not check pair coins.";
 export const ATTESTER2_DAYS_AFTER_FIRST_LAUNCH = 14;
 export function attesterStatusLine(firstLaunchAtMs: number | null): { line: string; dueBy: string | null } {
   const dueBy = firstLaunchAtMs === null ? null : new Date(firstLaunchAtMs + ATTESTER2_DAYS_AFTER_FIRST_LAUNCH * 86_400_000).toISOString().slice(0, 10);
@@ -180,7 +188,14 @@ export function devFeeWallet(env: Readonly<Record<string, string | undefined>> =
  * new coins get; its pages say the tier could not be read.
  */
 export const TIER_UNREAD_LINE = "This coin's pool fee tier could not be read, so its split after graduation is not shown here.";
-export function feeSplitSentence(cluster = "mainnet", cpConfig?: string | null, o: { tierUnread?: boolean } = {}): string {
+/**
+ * Hourly run 6 HB-56: the lock sentence follows the coin's own state. `graduated` false (no locked percentage read yet) says the liquidity
+ * locks at graduation; true, or left out (the launch review describes the design, not a coin), says it as the rule.
+ */
+const lpLockedClause = (graduated: boolean | undefined): string => graduated === false
+  ? `${LP_LOCKED_PCT}% of the liquidity locks forever at graduation, and its fees fund the burn.`
+  : `${LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn.`;
+export function feeSplitSentence(cluster = "mainnet", cpConfig?: string | null, o: { tierUnread?: boolean; graduated?: boolean } = {}): string {
   const c = CURVE_FEES.legs;
   const to = (label: string) => (label === "burn pool" ? "the burn pool" : label === "Raydium protocol" ? "Raydium" : label);
   const legs = c.map((l) => `${bpsPerSol(l.bps)} SOL to ${to(l.label)}`);
@@ -188,8 +203,8 @@ export function feeSplitSentence(cluster = "mainnet", cpConfig?: string | null, 
   const creatorLine = t.creatorFeeShareRate > 0
     ? `Most of the burn pool's share, ${bpsPerSol(b.creatorToBurnPool)} SOL per 1 SOL, comes from Raydium's fixed CPMM creator fee of ${bpsPerSol(b.creatorFee)} SOL per 1 SOL, after Raydium's ${ppmPct(t.creatorFeeShareRate)} share.`
     : `Of the burn pool's share, ${bpsPerSol(b.creatorToBurnPool)} SOL per 1 SOL comes from Raydium's fixed CPMM creator fee.`;
-  if (o.tierUnread) return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). ${TIER_UNREAD_LINE} ${LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. The human creator receives no cash from fees, and the keeper only pays network fees.`;
-  return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). ${postGraduationShareLine(postGraduationFeesFor(cluster, cpConfig))} In all, each trade in the Raydium pool pays ${b.tradersPay / 100}% in fees. ${LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. The operator's part of those liquidity fees is fixed in code, and the coin side of them is burned. ${creatorLine} The coin's creator on LaunchLab is the burn program's fee account, so the creator-fee slot can only pay the burn pool. The human creator receives no cash from fees, and the keeper only pays network fees.`;
+  if (o.tierUnread) return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). ${TIER_UNREAD_LINE} ${lpLockedClause(o.graduated)} The human creator receives no cash from fees, and the keeper only pays network fees.`;
+  return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). ${postGraduationShareLine(postGraduationFeesFor(cluster, cpConfig))} In all, each trade in the Raydium pool pays ${b.tradersPay / 100}% in fees. ${lpLockedClause(o.graduated)} The operator's part of those liquidity fees is fixed in code, and the coin side of them is burned. ${creatorLine} The coin's creator on LaunchLab is the burn program's fee account, so the creator-fee slot can only pay the burn pool. The human creator receives no cash from fees, and the keeper only pays network fees.`;
 }
 
 /** The platform-config dials these constants translate to (what scripts/burnticker-platform-config.mts builds). */

@@ -16,6 +16,10 @@ import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burnticker/exportLinks";
 import { TradeButtons } from "../../_components/TradeLinks";
 import { coinLinks } from "@/lib/burnticker/tradeLinks";
+import { graduationExplainer } from "@/lib/burnticker/graduationLine";
+import { nextResultLinks } from "@/lib/burnticker/followFeeds";
+import { coinWatchKey } from "@/lib/burnticker/watchlist";
+import { FollowFeeds } from "../../_components/FollowFeeds";
 
 /**
  * /burnticker/t/DEFICIT BEFORE THE COIN IS REGISTERED ON THIS HOST (website brief 2026-10-11 §1). A useful page instead of "no token":
@@ -39,6 +43,8 @@ export function DeficitPrelaunch({ fallbackSite }: { fallbackSite: string }) {
         <h1 className="text-2xl font-semibold">$DEFICIT</h1>
         <p className="text-neutral-300">{d?.keeper ? "The first Burnticker coin: it burns when the U.S. national debt rises. It is created, and this site has not registered it yet, so the figures below come from its keeper's published files." : "The first Burnticker coin: it burns when the U.S. national debt rises. This site has not read it on this network, so it shows no rule account, reading or receipt here."}</p>
         {d?.mint && <div data-header-trade><TradeButtons links={coinLinks({ cluster: "mainnet", mint: d.mint, phase: d.keeper?.curve?.phase ?? null, status: "live" })} mint={d.mint} ticker="DEFICIT" /></div>}
+        {/* campaign readiness item 6: Follow is this browser only, so the feed and the calendar sit beside it */}
+        {d?.mint && <FollowFeeds watchKey={coinWatchKey("mainnet", d.mint)} ticker="DEFICIT" {...nextResultLinks(d.ticker, d.mint)} />}
         <p className="text-xs text-neutral-400">The $DEFICIT page itself is <a className="underline" href={d?.servedAt ?? fallbackSite}>{(d?.servedAt ?? fallbackSite).replace(/^https:\/\//, "").replace(/\/$/, "")}</a>.</p>
       </header>
       {!d && !err && <EmptyState kind="loading" body="Reading the $DEFICIT rule file." />}
@@ -48,7 +54,7 @@ export function DeficitPrelaunch({ fallbackSite }: { fallbackSite: string }) {
           const r = d.keeper?.readiness ?? readinessOf({ launched: false, phase: null, raisedSol: null, poolVerified: null, latest: null });
           const c = d.keeper?.curve ?? null;
           return <>
-            <section className={card} aria-label="Progress"><h2 className="mb-2 font-medium">Where $DEFICIT stands</h2><ProgressStrip p={progressOf(r, { raiseSol: c ? Number(c.threshold) : null, raisedSol: c ? Number(c.raised) : null, queuedUnits: d.queue?.state === "queued" ? d.queue.units : null })} /></section>
+            <section className={card} aria-label="Progress"><h2 className="mb-2 font-medium">Where $DEFICIT stands</h2><ProgressStrip p={progressOf(r, { raiseSol: c ? Number(c.threshold) : null, raisedSol: c ? Number(c.raised) : null, queuedUnits: d.queue?.state === "queued" ? d.queue.units : null })} />{c && c.phase !== "graduated" && c.phase !== "migrating" && graduationExplainer(c.threshold, "SOL", d.launch.seedSol ?? null) && <p className="mt-2 text-xs text-neutral-300" data-graduation-explainer>{graduationExplainer(c.threshold, "SOL", d.launch.seedSol ?? null)}</p>}</section>
             <ReadinessPanel r={r} firstBurnPathUrl={FIRST_BURN_PATH_URL} />
             {d.queue && <QueuePanel q={d.queue} />}
             <section className={card} aria-label="What launch day looks like"><h2 className="font-medium">What happens after launch</h2><p className="mt-1 text-xs text-neutral-300">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once {c ? `${Number(c.threshold)} SOL` : "its raise"} has been raised, and a seed gift to the burn pool does not count toward that. {c ? "This site read that raise from the coin's own pool." : "The raise is read from the coin's own pool once it exists."} Then its Raydium pool is registered and verified. Only after that can a Treasury reading with at least one full $1B unit start a burn.</p></section>

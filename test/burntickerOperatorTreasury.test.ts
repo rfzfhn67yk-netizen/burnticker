@@ -55,14 +55,14 @@ test("every fee table and statement takes the operator leg's recipient from the 
 
 // Audit R04 (2026-10-11): the Powers Register's upgrade row said "a public, time-locked proposal" while the mainnet time lock read 0.
 test("R04: the upgrade-authority summary is derived from the time lock read from chain", async () => {
-  const { upgradeDelaySummary } = await import("@/lib/burnticker/currentStatusText");
+  const { operatorAloneUpgradeLine, upgradeDelaySummary } = await import("@/lib/burnticker/currentStatusText");
   const { loadPowersRegister } = await import("@/lib/burnticker/trust");
   assert.match(upgradeDelaySummary(0), /time lock is 0 today, so an approved upgrade can execute at once, with no notice period/);
   assert.doesNotMatch(upgradeDelaySummary(0), /time-locked/);
   assert.match(upgradeDelaySummary(172800), /A 48 h time lock then runs before it can execute/);
   assert.match(upgradeDelaySummary(null), /could not be read/);
   const row = (secs: number | null) => loadPowersRegister({}, process.cwd(), 0, secs).powers.find((p) => p.id === "program-upgrade-authority")!;
-  assert.deepEqual(row(0).canDo, [upgradeDelaySummary(0)]);
+  assert.deepEqual(row(0).canDo, [upgradeDelaySummary(0), operatorAloneUpgradeLine(0)]);   // HB-69 / HS-20: the operator-alone line at time lock 0
   assert.deepEqual(row(172800).canDo, [upgradeDelaySummary(172800)]);
   assert.deepEqual(row(null).canDo, [upgradeDelaySummary(null)]);
   assert.match(fs.readFileSync("src/app/api/burnticker/trust/route.ts", "utf8"), /currentStatusLive\(\)[\s\S]*timeLockSecs[\s\S]*buildTrustPage\(\{[^}]*upgradeTimeLockSecs/);

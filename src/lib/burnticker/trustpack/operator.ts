@@ -26,7 +26,7 @@ export interface OperatorConfig {
   operator: { name: string; state?: string | null; country: string; contact: string; security: string; entity: string; entityPending: string };
   links: { site: string; app: string; deficitSite: string; github: string; githubOrg: string; x: string[] };
   clusters: Record<Cluster, ClusterConfig>;
-  signedMessage: { status: string; signerRole: string; cluster: Cluster; message: string; signature: string | null; how: string };
+  signedMessage: { status: string; signerRole: string; cluster: Cluster; message: string; signature: string | null; how: string; /** HB-69: a dated note beside the signed text (never part of it) */ clarification?: { date: string; text: string } };
   neverBuys: { rule: string; rehearsalNote: string };
 }
 
@@ -138,16 +138,17 @@ export function statementSignatureFormat(message: string, signatureB58: string, 
   return null;
 }
 
-export interface SignedMessageView { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string }
+export interface SignedMessageView { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string; clarification: { date: string; text: string } | null }
 
 /** The signed-statement slot as the page shows it: the message with {PUBKEY} filled when the signer exists, and the check. */
 export function signedMessageView(cfg: OperatorConfig): SignedMessageView {
   const s = cfg.signedMessage;
   const signer = walletOf(cfg, s.cluster, s.signerRole);
   const message = s.message.replace("{PUBKEY}", signer ?? "{PUBKEY}");
-  if (!s.signature || TODO_RE.test(s.status) || !signer) return { status: "todo", signer, message, signature: null, verified: null, how: s.how, detail: signer ? "The wallet is set. The statement is not signed yet." : "The wallet is not set yet, so the statement is not signed." };
+  const clarification = s.clarification && typeof s.clarification.text === "string" && s.clarification.text.trim() ? { date: s.clarification.date, text: s.clarification.text } : null;
+  if (!s.signature || TODO_RE.test(s.status) || !signer) return { status: "todo", signer, message, signature: null, verified: null, how: s.how, clarification, detail: signer ? "The wallet is set. The statement is not signed yet." : "The wallet is not set yet, so the statement is not signed." };
   const format = /\{DATE\}/.test(message) ? null : statementSignatureFormat(message, s.signature, signer);
   const ok = format !== null;
   const how = format === "offchain" ? " It was signed as a Solana off-chain message, the form the Solana command line and hardware wallets use." : "";
-  return { status: ok ? "signed" : "invalid", signer, message, signature: s.signature, verified: ok, how: s.how, detail: ok ? `The ed25519 signature by ${signer} over the exact text above is valid.${how}` : "The signature does not match the text and the signer, or the date in the text is still blank." };
+  return { status: ok ? "signed" : "invalid", signer, message, signature: s.signature, verified: ok, how: s.how, clarification, detail: ok ? `The ed25519 signature by ${signer} over the exact text above is valid.${how}` : "The signature does not match the text and the signer, or the date in the text is still blank." };
 }

@@ -70,7 +70,22 @@ const PREFIX = new Set(["REAL", "THE", "NEW", "OG", "BABY", "MINI", "SUPER", "TR
 export const PLATFORM_MARKS = ["BURNTICKER"].map(skeleton);
 
 export interface LookalikeExisting { ticker: string; name: string; status: string; rule?: Pick<BurnRule, "oracle" | "series"> | null; /** A-2: the coin's creator wallet; an identical ticker of the candidate's own coin is not a hit */ creator?: string | null }
-export interface LookalikeHit { field: "ticker" | "name"; existing: string; how: "same-letters" | "one-edit" | "suffix" | "platform-name"; reason: string }
+export type LookalikeHow = "same-letters" | "one-edit" | "suffix" | "platform-name";
+export interface LookalikeHit { field: "ticker" | "name"; existing: string; /** LA-4: "draft-held" only with `draftNotice` (a review asked with no proven wallet) */ how: LookalikeHow | "draft-held"; reason: string }
+
+/**
+ * LA-4 (owner, devnet 2026-10-19): the review's sentence for a ticker an unlaunched DRAFT holds, when the review cannot tell who is asking
+ * (no signed request, or one past its 15-minute age limit). The creator of that draft may be the one asking: a press of Launch signs a
+ * fresh request, the prepare checks the ticker with that signed wallet (launchGuards.ts), and only the draft's own wallet is let through;
+ * anyone else gets the ordinary same-ticker refusal after signing. A notice, never a refusal: the review does not turn Launch off for it.
+ */
+export const draftHeldSentence = (ticker: string): string => `$${ticker.toUpperCase()} is held by a coin that has not launched yet. If that draft is yours, press Launch and sign with the same wallet to continue; otherwise pick another ticker.`;
+/**
+ * LA-4: a ticker one letter from (or a copycat of) an unlaunched draft's ticker. It stays a refusal for everyone, the draft's own creator
+ * included: a draft whose first steps landed can still be finished, and two coins one letter apart is what the lookalike rule forbids.
+ * The way out it names is that draft's own ticker (which the creator can finish) or another ticker.
+ */
+export const nearDraftSentence = (ticker: string): string => `$${ticker.toUpperCase()} is too close to the ticker of another Burnticker coin that has not launched yet. If that unfinished launch is yours, go back to its own ticker to finish it.`;
 
 const teamOf = (r: Pick<BurnRule, "oracle" | "series"> | null | undefined): string | null => {
   const e = r && r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
@@ -78,7 +93,7 @@ const teamOf = (r: Pick<BurnRule, "oracle" | "series"> | null | undefined): stri
 };
 
 /** How two SKELETONS resemble each other (same letters, one edit, a copycat suffix / prefix), or null. Exported for the clone watch. */
-export function compare(cand: string, ex: string): LookalikeHit["how"] | null {
+export function compare(cand: string, ex: string): LookalikeHow | null {
   if (!cand || !ex) return null;
   if (cand === ex) return "same-letters";
   if (cand.length >= 4 && ex.length >= 4 && editDistance(cand, ex, 1) <= 1) return "one-edit";
@@ -93,10 +108,10 @@ export function compare(cand: string, ex: string): LookalikeHit["how"] | null {
 /** A-2: the sentence for a ticker another creator's coin already holds (it names no mint, name or rule: the holder may be a draft). */
 export const sameTickerSentence = (ticker: string): string => `$${ticker.toUpperCase()} is already the ticker of another Burnticker coin.`;
 
-const HOW_TEXT: Record<LookalikeHit["how"], string> = { "same-letters": "reads as the same letters as", "one-edit": "is one letter away from", suffix: "is a copycat variant of", "platform-name": "uses the platform's name" };
+const HOW_TEXT: Record<LookalikeHow, string> = { "same-letters": "reads as the same letters as", "one-edit": "is one letter away from", suffix: "is a copycat variant of", "platform-name": "uses the platform's name" };
 
 /** Every way a new coin's ticker or name passes for an existing coin's (or for Burnticker). Empty = no lookalike. */
-export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null; creator?: string | null }, existing: readonly LookalikeExisting[]): LookalikeHit[] {
+export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null; creator?: string | null }, existing: readonly LookalikeExisting[], o: { /** LA-4: the review's form (launchReview.ts): with no proven creator, an exact ticker held by a draft is a "draft-held" notice, not a refusal. The prepare never passes it. */ draftNotice?: boolean } = {}): LookalikeHit[] {
   const hits: LookalikeHit[] = [];
   const ct = skeleton(cand.ticker), cn = skeleton(cand.name), team = teamOf(cand.rule);
   for (const mark of PLATFORM_MARKS) for (const [field, v] of [["ticker", ct], ["name", cn]] as const) if (v.includes(mark)) hits.push({ field, existing: "Burnticker", how: "platform-name", reason: `The ${field} uses the platform's name, Burnticker.` });
@@ -107,14 +122,18 @@ export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<
     if (cand.ticker.trim().toUpperCase().replace(/^\$/, "") === e.ticker.toUpperCase()) {
       // review of block M: every ticker is one coin, so the creator's own LAUNCHED coin refuses it too (a second coin would turn
       // /t/<TICKER> into a chooser); only their own unfinished draft is exempt, so they can prepare it again
-      if (!(cand.creator && e.creator && cand.creator === e.creator && e.status === "draft")) hits.push({ field: "ticker", existing: `$${e.ticker}`, how: "same-letters", reason: sameTickerSentence(e.ticker) });
+      const ownDraft = !!(cand.creator && e.creator && cand.creator === e.creator && e.status === "draft");
+      // LA-4: nobody proven is asking and a DRAFT holds it, so its creator may be the one asking: the review says so and leaves Launch
+      // on. The press signs; the prepare (and the review asked again with that proof) decide with the signed wallet, as above.
+      if (!ownDraft && o.draftNotice && !cand.creator && e.status === "draft") hits.push({ field: "ticker", existing: "a coin not launched yet", how: "draft-held", reason: draftHeldSentence(e.ticker) });
+      else if (!ownDraft) hits.push({ field: "ticker", existing: `$${e.ticker}`, how: "same-letters", reason: sameTickerSentence(e.ticker) });
       continue;
     }
     if (team && teamOf(e.rule) === team) continue;   // another window of the same team: RAYS26 / RAYS27
     const et = skeleton(e.ticker), en = skeleton(e.name);
     const t = compare(ct, et);
     // review of block M: a draft's ticker is never named (it is not public until the coin exists)
-    if (t) hits.push(e.status === "draft" ? { field: "ticker", existing: "a coin not launched yet", how: t, reason: `$${cand.ticker.toUpperCase()} is too close to the ticker of another Burnticker coin.` } : { field: "ticker", existing: `$${e.ticker}`, how: t, reason: `$${cand.ticker.toUpperCase()} ${HOW_TEXT[t]} $${e.ticker}, which is an existing Burnticker coin.` });
+    if (t) hits.push(e.status === "draft" ? { field: "ticker", existing: "a coin not launched yet", how: t, reason: nearDraftSentence(cand.ticker) } : { field: "ticker", existing: `$${e.ticker}`, how: t, reason: `$${cand.ticker.toUpperCase()} ${HOW_TEXT[t]} $${e.ticker}, which is an existing Burnticker coin.` });
     if (e.status === "draft") continue;   // a draft reserves its TICKER (checked above); names are compared with launched coins only
     const n = cn.length >= 5 ? compare(cn, en) : null;
     const nt = !n && cn.length >= 4 && et.length >= 4 && cn === et ? "same-letters" : null;   // a name that spells an existing ticker
@@ -127,8 +146,26 @@ export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<
 /** The launch handler's refusal: null, or one sentence listing every hit (HTTP 409, code "lookalike"). An exact ticker held by another
  *  creator's coin is refused first by launchGuards.ts (code "ticker-taken"), which also covers a same-team coin this check skips. */
 export function lookalikeRefusal(cand: { ticker: string; name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null; creator?: string | null }, existing: readonly LookalikeExisting[]): { reason: string; hits: LookalikeHit[] } | null {
-  const hits = lookalikeHits(cand, existing);
+  return lookalikeRefusalOf(lookalikeHits(cand, existing));
+}
+/** The refusal sentence for hits already found (LA-4: the review leaves its draft-held notices out first). */
+export function lookalikeRefusalOf(hits: LookalikeHit[]): { reason: string; hits: LookalikeHit[] } | null {
   return hits.length ? { reason: `This launch is refused. ${[...new Set(hits.map((h) => h.reason))].join(" ")} Please pick a ticker and name that cannot be mistaken for it.`, hits } : null;
+}
+
+/**
+ * WZ6-10 (sixth pass): the lookalike refusal split by field, for a review that already refused the ticker as reserved. Typing BURNTICKER
+ * gave two refusals in the ticker field, the second about the name. Here the ticker's platform-name hit is left out (the reserved
+ * sentence already says it) and each other hit goes to its own field, so the name's sentence sits under the name.
+ */
+export function lookalikeRefusalsByField(cand: { ticker: string; name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null; creator?: string | null }, existing: readonly LookalikeExisting[], o: { tickerReserved: boolean }): { field: "ticker" | "name"; reason: string }[] {
+  const hits = lookalikeHits(cand, existing).filter((h) => !(o.tickerReserved && h.field === "ticker" && h.how === "platform-name"));
+  const out: { field: "ticker" | "name"; reason: string }[] = [];
+  for (const field of ["ticker", "name"] as const) {
+    const mine = [...new Set(hits.filter((h) => h.field === field).map((h) => h.reason))];
+    if (mine.length) out.push({ field, reason: `This launch is refused. ${mine.join(" ")} Please pick a ${field} that cannot be mistaken for it.` });
+  }
+  return out;
 }
 
 /**

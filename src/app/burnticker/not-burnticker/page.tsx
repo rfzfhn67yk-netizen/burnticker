@@ -49,6 +49,7 @@ export default function NotBurntickerPage() {
           </li>
         ))}</ul>
       )}
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a JSON API answer, not a page; the API's JSON 404 catch-all made the rule see /api as pages */}
       <p className="text-xs text-neutral-500">The same list is available as JSON at <a className="underline" href="/api/burnticker/v1/clones">/api/burnticker/v1/clones</a>.</p>
     </main>
   );

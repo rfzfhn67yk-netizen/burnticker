@@ -81,8 +81,8 @@ describe("1. burning a real token is off by default", () => {
   test("the review: a pinned token (side A, side B or a Matchup companion) is one plain problem while the flag is off", () => {
     const off = review({ ...debt(), burnTarget: BONK }, R5);
     // owner 2026-10-19: a published-data coin may not burn another token at all (only a Coin comparison coin, its own pitted coin;
-    // test/burntickerBurnRealEligibility.test.ts), so the family refusal joins the waiting line and stays when the flag is on
-    assert.deepEqual(off.problems, [BURN_REAL_WAITING, REAL_BURN_FAMILY_REFUSAL]); assert.equal(off.signable, false);
+    // test/burntickerBurnRealEligibility.test.ts); LA6-3 (sixth pass): that refusal alone, said once, flag on or off
+    assert.deepEqual(off.problems, [REAL_BURN_FAMILY_REFUSAL]); assert.equal(off.signable, false);
     assert.deepEqual(review({ ...debt(), burnTarget: BONK }, { ...R5, [BURN_REAL_ENABLED_FLAG]: "1" }).problems, [REAL_BURN_FAMILY_REFUSAL]);
     assert.deepEqual(review(debt(), R5).problems, [], "a coin that burns itself is unaffected");
     plain(BURN_REAL_WAITING);

@@ -52,12 +52,13 @@ export const pairLineFor = (pairing: Template["pairing"]): string | undefined =>
  * website-20 item 57: what the web launcher lets the creator change for this template, said per template (the gallery used to promise
  * "Every dial stays editable until launch" for every one, though Coin vs Coin fixes its windows and a one-shot burns once).
  */
-export function settingsLine(t: Pick<Template, "shape" | "type" | "id">): string {
+export function settingsLine(t: Pick<Template, "shape" | "type" | "id">, c: { dispersal?: boolean } = {}): string {
   // audit 12 item 1: a linked pair on one result (the flippening, two candidates, one game) burns the whole pool, 100 % and nothing else
   if (t.id === "flippening") return `Fixed on the web: one reading a day at 00:00 UTC. You pick a run of 7, 14 or 30 days. The two coins are linked, so the burn uses the whole pool: ${presetRowLabel("linkedOneShot")}.`;
   // website-26 (WIRING-FEATURES item 14): the tile offers three run lengths (derby/spec.ts DERBY_RUN_PRESETS)
   if (t.type === "derby") return "Fixed on the web: one reading a day at 00:00 UTC. You pick a run of 7, 14 or 30 days and the share per burn.";
-  if (t.shape === "one-shot") return SHARE_PRESETS.oneShot.length === 1 ? "It burns once, using the whole pool." : `It burns once. You pick ${presetRowLabel("oneShot")} of the pool.`;
+  // WZ6-3: on a host with burn dispersal a single one-shot may burn half the pool too, so the line names both (the review row does)
+  if (t.shape === "one-shot") { const shape = c.dispersal ? "oneShotDispersal" : "oneShot"; return SHARE_PRESETS[shape].length === 1 ? "It burns once, using the whole pool." : `It burns once. You pick ${presetRowLabel(shape)} of the pool.`; }
   if (t.type === "pairs" || t.type === "matchup") return `Each coin burns once. The two coins are linked, so the coin that burns uses its whole pool and takes the other coin's: ${presetRowLabel("linkedOneShot")}.${t.type === "matchup" ? " You pick one game or the season. The season burns a share per game instead." : ""}`;
   if (t.shape === "pair") return `You pick one game or the season, and the share per burn.`;
   return `You pick the share per burn: ${RROW}.`;

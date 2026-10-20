@@ -116,6 +116,9 @@ export const PRIVACY_THIRD_PARTY_PARAGRAPHS: readonly string[] = [
   "The $DEFICIT page loads its lettering from Google Fonts (fonts.googleapis.com and fonts.gstatic.com). The rest of the site serves its own fonts and asks Google for nothing.",
 ];
 
+/** Campaign readiness 2026-10-19 (item 5): the counted trade links (tradeClicks.ts). */
+export const PRIVACY_TRADE_CLICK_SENTENCE = "When you follow a trade link from this site, the site counts that click for the coin and the day. It stores no cookie, no address and nothing about you.";
+
 export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     id: "browser", heading: "In your browser",
@@ -134,6 +137,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       PRIVACY_ORIGIN_LOG_SENTENCE,
       "To limit how often one visitor can call the API, the app counts requests per address in memory. That count is never written down and is gone when the app restarts.",
       "When a search on the launch page finds nothing, or finds cards and none is used, the site keeps the search words and the hour, without an address, an id or a cookie. This shows which results people look for and cannot find.",
+      PRIVACY_TRADE_CLICK_SENTENCE,
       PRIVACY_HELD_SWAP_SERVER,
     ],
   },

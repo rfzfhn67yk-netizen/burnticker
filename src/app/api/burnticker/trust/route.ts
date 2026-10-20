@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tier14CoinExists } from "@/lib/burnticker/feeShareLine";
 import { platform } from "@/lib/burnticker/server";
 import { buildTrustPage, jsonSafe, web3ChainReader } from "@/lib/burnticker/trust";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
@@ -16,7 +17,10 @@ async function buildTrust(): Promise<unknown> {
   const live = p.registry.tokens("live");
   // audit R04: the upgrade row says what today's mainnet time lock allows — the same cached chain read as /v1/current-status
   const upgradeTimeLockSecs = await currentStatusLive().then((s) => s.upgradeAuthority.find((u) => u.cluster === "mainnet")?.timeLockSecs ?? null).catch(() => null);
-  const page = await buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster, upgradeTimeLockSecs, deltaCache: TRUST_DELTA_CACHE });
+  // HS-26 (hourly run 5): "(every coin live today)" in the fee line only while no live mainnet coin is on tier 14
+  let tier14Live: boolean | null = null;
+  try { tier14Live = tier14CoinExists(p.registry.tokens()); } catch { tier14Live = null; }
+  const page = await buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster, upgradeTimeLockSecs, deltaCache: TRUST_DELTA_CACHE, tier14Live });
   // jsonSafe: the live platform view and any chain-read value may hold bigints (R01, 2026-10-11)
   // legitimacy pass item 1: the latest three releases for "How this was built" (docs/burnticker/CHANGELOG.md, read as it is now)
   const latestReleases = readReleases()?.slice(-3).reverse().map(publicRelease) ?? null;   // A-6: no monorepo commit in the answer

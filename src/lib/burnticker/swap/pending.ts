@@ -63,7 +63,10 @@ export interface PendingRemote {
 }
 /** How long the panel waits for the server's copy to answer; no answer in time counts as a failure (the swap is not sent). */
 export const REMOTE_WAIT_MS = 8_000;
-type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; cache?: "no-store"; signal?: AbortSignal }) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
+/** HB-65 v4: how many times a save refused with 503 "chain-unavailable" is tried in all, and the longest wait between tries. */
+export const SAVE_ATTEMPTS = 3;
+export const SAVE_RETRY_MAX_MS = 1_500;
+type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; cache?: "no-store"; signal?: AbortSignal }) => Promise<{ ok: boolean; status?: number; json(): Promise<unknown> }>;
 const b64 = (u: Uint8Array): string => { let s = ""; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
 /** The panel's client for the server's copy. */
 export function httpPendingRemote(fetchFn: Fetch, base = "/api/burnticker/swap-pending", waitMs = REMOTE_WAIT_MS): PendingRemote {
@@ -71,10 +74,18 @@ export function httpPendingRemote(fetchFn: Fetch, base = "/api/burnticker/swap-p
   const send = (method: string, body: unknown) => timed((signal) => fetchFn(base, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal }));
   return {
     // 1919Z SEC-02: acknowledged only by a 2xx answer that names this swap's signature
+    // HB-65 v4: a 503 "chain-unavailable" stored nothing (the server could not read the chain to date the swap), so the same save is
+    // tried again after a short wait, at most SAVE_ATTEMPTS times in all; the caller's own time limit still bounds the whole save
     async save(rec, raw) {
-      const r = await send("POST", { network: rec.network, mint: rec.mint, owner: rec.owner, signature: rec.signature, lastValidBlockHeight: rec.lastValidBlockHeight, side: rec.side, tx: b64(raw) });
-      const j = r.ok ? ((await r.json().catch(() => null)) as { signature?: unknown } | null) : null;
-      if (!r.ok || !j || j.signature !== rec.signature) throw new Error("the server did not keep the held swap");
+      const body = { network: rec.network, mint: rec.mint, owner: rec.owner, signature: rec.signature, lastValidBlockHeight: rec.lastValidBlockHeight, side: rec.side, tx: b64(raw) };
+      for (let attempt = 1; ; attempt++) {
+        const r = await send("POST", body);
+        const j = (await Promise.resolve().then(() => r.json()).catch(() => null)) as { signature?: unknown; code?: unknown; retryAfterMs?: unknown } | null;
+        if (r.ok && j && j.signature === rec.signature) return;
+        if (r.ok || r.status !== 503 || j?.code !== "chain-unavailable" || attempt >= SAVE_ATTEMPTS) throw new Error("the server did not keep the held swap");
+        const wait = typeof j.retryAfterMs === "number" && j.retryAfterMs > 0 ? Math.min(j.retryAfterMs, SAVE_RETRY_MAX_MS) : SAVE_RETRY_MAX_MS;
+        await new Promise((ok) => setTimeout(ok, wait));
+      }
     },
     // 1919Z SEC-02: null only for a 2xx answer of { pending: null }; anything else that is not a valid record throws (unknown, not absent)
     async load(network, mint, owner) {

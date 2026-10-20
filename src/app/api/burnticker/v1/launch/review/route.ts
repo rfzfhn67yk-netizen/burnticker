@@ -17,7 +17,8 @@ import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { seasonNotStartedLine, seasonOverFor } from "@/lib/burnticker/seasonOver";
 import { espnClient, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { lastSeasonBacktest } from "@/lib/burnticker/lastSeason";
-import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
+import { meetingOutcome, noPlayoffs, parseEspnSeries, seasonLabel } from "@/lib/burnticker/sources/espn";
+import { meetingsNoneLeftWarning } from "@/lib/burnticker/guidedLaunch";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
 import { cachedTimeLockSecs, currentStatusLive } from "@/lib/burnticker/currentStatus";
 
@@ -33,6 +34,24 @@ async function gameFor(rule: unknown): Promise<{ eventId: string; startsAt: stri
   clearTimeout(timer);
   const g = games?.find((x) => x.eventId === e.eventId) ?? null;
   return g ? { eventId: g.eventId, startsAt: g.startsAt, name: g.name, detail: g.detail } : null;
+}
+
+/**
+ * HB-72 (hourly run 5): a rivalry series rule (window `meetings`) whose season lists no meeting still to be played carries a warning, from
+ * the same season schedule the rivalry picker reads (at most 3 seconds; nothing said when not read).
+ */
+async function meetingsNoneLeftFor(rule: unknown): Promise<string | null> {
+  const r = rule && typeof rule === "object" ? (rule as { oracle?: unknown; series?: unknown }) : null;
+  const e = r && r.oracle === "catalogue" && typeof r.series === "string" ? parseEspnSeries(r.series) : null;
+  if (!e || e.kind !== "team" || e.window.kind !== "meetings") return null;
+  const w = e.window;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const games = await Promise.race([espnClient().season(e.league, e.abbr).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 3_000); })]);
+  clearTimeout(timer);
+  if (!games) return null;
+  const meetings = games.filter((g) => g.home.abbr === w.opp || g.away.abbr === w.opp);
+  if (meetings.some((g) => meetingOutcome(g, e.abbr) === "pending")) return null;
+  return meetingsNoneLeftWarning(seasonLabel(e.league, w.year), !noPlayoffs(e.league));
 }
 
 /**
@@ -81,6 +100,7 @@ export async function POST(req: Request) {
     const seasonOver = await seasonOverFor((body as { rule?: unknown }).rule, platform().seasonSchedule);
     const game = await gameFor((body as { rule?: unknown }).rule);
     const sourceNote = await sportsNoteFor((body as { rule?: unknown }).rule);
+    const meetingsNote = await meetingsNoneLeftFor((body as { rule?: unknown }).rule);
     // audit 12 item 2: a one-market pair's void date is the market's own end date, read as the bundle route reads it (handlers.ts
     // oneShotVoidBy, at most 4 seconds), so the review's side A rule is the exact one; no read leaves it labelled a draft
     let pairVoidBy: string | null = null;
@@ -95,7 +115,7 @@ export async function POST(req: Request) {
     // the end-sink picker: the live coins on this network a rule may name to take the rest (endSinks.ts); unreadable = none
     let sinks: SinkCoin[] = [];
     try { const p = platform(); sinks = liveSinks(p.registry, p.cluster); } catch { sinks = []; }
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, sourceNote });
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, sourceNote, meetingsNote });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];

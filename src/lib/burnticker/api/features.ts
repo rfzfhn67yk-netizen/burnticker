@@ -4,7 +4,8 @@ import { fail, ok, okRaw, type ApiResult } from "@/lib/burnticker/api/http";
 import { lookupCoin, sharedTickerBody } from "@/lib/burnticker/coinLookup";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { API_PREFIX } from "@/lib/burnticker/api/spec";
-import { calendarIcs, coinCalendar, type CoinCalendar } from "@/lib/burnticker/calendar";
+import { calendarIcs, coinCalendar, treasuryCalendar, type CoinCalendar } from "@/lib/burnticker/calendar";
+import { deficitMint } from "@/lib/burnticker/home";
 import { leaderboard } from "@/lib/burnticker/leaderboard";
 import { buildDigest, digestDay } from "@/lib/burnticker/digest";
 import { checklistOf } from "@/lib/burnticker/checklist";
@@ -40,17 +41,30 @@ async function calendarFor(p: Platform, t: TokenRow, now: number): Promise<CoinC
   });
 }
 
+/**
+ * Campaign readiness 2026-10-19: $DEFICIT before this host registers it (its page is served from its keeper's files) answers with its
+ * Treasury reading days, by its mint or its ticker; null for any other coin.
+ */
+function deficitCalendar(id: string, now: number): CoinCalendar | null {
+  const mint = deficitMint();
+  if (!mint || (id !== mint && id.toUpperCase() !== "DEFICIT")) return null;
+  return treasuryCalendar({ ticker: "DEFICIT", mint, page: "/burnticker/t/DEFICIT", ics: `${API_PREFIX}/coins/${encodeURIComponent(mint)}/calendar.ics`, firesOn: "each full $1B rise in the U.S. national debt", now });
+}
+
 /** GET /coins/{mint}/calendar: the next scheduled readings (calendar.ts). */
 export async function v1CoinCalendar(p: Platform, id: string, now = Date.now()): Promise<ApiResult> {
   const c = coin(p, id);
-  if ("error" in c) return c.error;
+  if ("error" in c) { const d = c.error.status === 404 ? deficitCalendar(id, now) : null; return d ? ok(d) : c.error; }
   return ok(await calendarFor(p, c.t, now));
 }
 
 /** GET /coins/{mint}/calendar.ics: the same entries as an iCalendar file. */
 export async function v1CoinCalendarIcs(p: Platform, id: string, origin: string, now = Date.now()): Promise<ApiResult> {
   const c = coin(p, id);
-  if ("error" in c) return c.error;
+  if ("error" in c) {
+    const d = c.error.status === 404 ? deficitCalendar(id, now) : null;
+    return d ? okRaw(calendarIcs(d, { origin, now }), "text/calendar; charset=utf-8", { "content-disposition": `attachment; filename="${d.ticker}-readings.ics"` }) : c.error;
+  }
   const cal = await calendarFor(p, c.t, now);
   return okRaw(calendarIcs(cal, { origin, now }), "text/calendar; charset=utf-8", { "content-disposition": `attachment; filename="${c.t.ticker}-readings.ics"` });
 }

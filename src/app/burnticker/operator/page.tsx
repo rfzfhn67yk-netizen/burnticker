@@ -9,6 +9,7 @@ import { MailSafe } from "../_components/MailSafe";
 import { TAKEDOWN_LINE } from "@/lib/burnticker/creatorProfile";
 import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
 import { RepoText } from "../_components/RepoText";
+import { visitorTime } from "@/lib/burnticker/visitorTime";
 
 /**
  * /burnticker/operator — WHO RUNS THIS (trust pack, 2026-10-10). Rendered from GET /api/burnticker/v1/operator
@@ -23,7 +24,7 @@ interface View {
   operator: { name: string; state?: string | null; country: string; contact: string; security: string; entity: string; entityPending: string };
   links: { site: string; app: string; deficitSite: string; github: string; githubOrg: string; x: string[] };
   clusters: Record<"devnet" | "mainnet", ClusterCfg>;
-  signedMessage: { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string };
+  signedMessage: { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string; clarification?: { date: string; text: string } | null };
   neverBuys: { rule: string; rehearsalNote: string; line: string; status: "clear" | "explained" | "received" | "red" | "not-checked" | "not-run" | "holding" | "incomplete"; scopeLine?: string | null; stale?: boolean; report: null | { ranAt: string; holdings: { role: string; wallet: string; symbol: string; amountRaw: string; tokenAccount: string }[]; acquisitions: { role: string; wallet: string; symbol: string; amountRaw: string; signature: string; blockTime: string | null; explainedBy: string | null }[]; scanned: { tokenAccounts: number; transactions: number }; errors: string[]; scope?: { since: string | null } } };
   placeholders: { path: string; value: string }[];
   deployments?: Record<"devnet" | "mainnet", Record<string, { readAt: string; matchesBuild: boolean } | null>>;
@@ -84,6 +85,7 @@ export default function OperatorPage() {
           <pre className="text-xs whitespace-pre-wrap rounded bg-neutral-950 p-2 mt-2">{v.signedMessage.message}</pre>
           {v.signedMessage.signature && <p className="text-xs break-all mt-1">The signature is <code>{v.signedMessage.signature}</code>, made by <code>{v.signedMessage.signer}</code>.</p>}
           <p className="text-xs text-neutral-500 mt-1">{v.signedMessage.how}</p>
+          {v.signedMessage.clarification && <p className="text-xs text-neutral-300 mt-2" data-statement-clarification>Note added on {visitorTime(v.signedMessage.clarification.date, "client")}: {v.signedMessage.clarification.text}</p>}
         </section>
 
         <section className={card}>

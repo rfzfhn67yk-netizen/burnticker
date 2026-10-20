@@ -67,7 +67,8 @@ describe("HB-67: no doubled article", () => {
   test("$NEXTM6 reads 'burns on the next reviewed …', never 'the The'", () => {
     const m6 = FIXTURE.coins.find((c) => c.ticker === "NEXTM6")!;
     const line = ruleOneLiner(m6.rule, "The next reviewed magnitude 6 or more anywhere in the world (USGS)");
-    assert.equal(line, "burns on the next reviewed magnitude 6 or more anywhere in the world (USGS) feed");
+    // hourly run 6 HB-67: the line names the earthquake (it no longer burns "on a feed")
+    assert.equal(line, "burns once, on the next reviewed earthquake of magnitude 6 or more anywhere in the world (USGS)");
     assert.doesNotMatch(line, /\bthe the\b/i);
     assert.equal(ruleOneLiner(m6.rule, "Daily debt"), "burns on the Daily debt feed");
   });
@@ -161,7 +162,8 @@ describe("B-16: honest copy", () => {
     clean(BOTH_TIERS_LINE);
     assert.equal(BOTH_TIERS_LINE, `Coins created before ${TIER_14_CUTOVER_WORDS} pay 1% per swap after graduation (fee tier 9): about 0.88% to the burn pool, about 0.04% to the operator and about 0.08% to Raydium. Coins created from then on pay 1.25% (fee tier 14): about 0.98% to the burn pool, about 0.13% to the operator and about 0.15% to Raydium. On both, the operator's part is 20% of the locked pool's liquidity fees.`);
     assert.ok(BOTH_TIERS_LINE.indexOf("0.88%") < BOTH_TIERS_LINE.indexOf("0.98%"));
-    assert.match(read("src/app/burnticker/trust/page.tsx"), /\{BOTH_TIERS_LINE\}/);
+    // hourly run 5, HS-26: the trust page prints the server's fee line (the footer's shape), BOTH_TIERS_LINE when the JSON has none
+    assert.match(read("src/app/burnticker/trust/page.tsx"), /\{t\.feeTiersLine \?\? BOTH_TIERS_LINE\}/);
     assert.doesNotMatch(read("src/app/burnticker/trust/page.tsx"), /postGraduationShareLine\(t\.designedFees\.postGraduation\)/);
     assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{BOTH_TIERS_LINE\}/);
     assert.ok(Object.values(GUARDRAIL_DETAIL).some((d) => d.text.includes(BOTH_TIERS_LINE)));

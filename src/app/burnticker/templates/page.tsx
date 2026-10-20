@@ -10,6 +10,7 @@ import { CreatorOnboarding } from "../_components/CreatorOnboarding";
 import { CreatorBenefitsList } from "./CreatorBenefitsList";
 import { ExampleTickets } from "./ExampleTickets";
 import { withShareCard } from "@/lib/burnticker/pageMeta";
+import { webDispersalOn } from "@/lib/burnticker/programHash";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,8 @@ export default function TemplatesPage() {
   // takes; a pair template (shape "pair") greys out with the one pair line while pairs are unavailable (launchAvailability.ts siteLaunchState)
   const site = siteLaunchState(process.env);
   const launch = { open: site.wizard };
+  // WZ6-3: the one-shot settings line names 50% only where this host runs burn dispersal (the review row and presetProblem agree)
+  const dispersal = webDispersalOn();
   const isPair = (t: (typeof TEMPLATES)[number]) => t.shape === "pair" || t.type === "derby" || t.type === "pairs";
   const unavailable = (t: (typeof TEMPLATES)[number]): string | null => (isPair(t) && !site.pairs.available ? site.pairs.line : t.type && !site.types[t.type].available ? `${site.types[t.type].label} launches are not available on this site.` : null);
   return (
@@ -66,7 +69,7 @@ export default function TemplatesPage() {
             {t.pairLine && <p className="mt-1 text-xs text-amber-200" aria-label="pair rule">{t.pairLine}</p>}
             <details className="mt-2 text-xs text-neutral-500" data-template-settles><summary className="cursor-pointer">How it settles</summary><p className="mt-1">{settlesRest(t)}{settlesRest(t) ? " " : ""}It settles on {t.settles}.</p></details>
             {/* launch audit 5 L10: what "Start from this" opens, said before the click */}
-            <p className="mt-1 text-xs text-neutral-400" data-template-lands={t.lands}>{t.operatorOnly ? `${t.operatorOnly} ` : ""}{t.lands === "review" ? "This opens step 3, how it burns, with exactly this example filled in." : `This opens the launch page so you can ${t.choices}.`} <span data-template-settings>{settingsLine(t)}</span></p>
+            <p className="mt-1 text-xs text-neutral-400" data-template-lands={t.lands}>{t.operatorOnly ? `${t.operatorOnly} ` : ""}{t.lands === "review" ? "This opens step 3, how it burns, with exactly this example filled in." : `This opens the launch page so you can ${t.choices}.`} <span data-template-settings>{settingsLine(t, { dispersal })}</span></p>
             {unavailable(t) ? <details className="mt-auto pt-3 text-xs text-amber-300" data-pairs-blocked={isPair(t) ? "" : undefined}><summary className="cursor-pointer">{unavailable(t)}</summary><p className="mt-1 text-neutral-300">{isPair(t) ? site.pairs.detail : site.types[t.type].reason}</p></details>
  : null}
             {launch.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href={t.href}>{t.cta} →</Link>}

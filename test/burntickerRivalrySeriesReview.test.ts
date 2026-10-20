@@ -11,7 +11,7 @@ import { buildPairBundles, FakeLaunchLab, MEETINGS_END_SINK_REFUSAL } from "@/li
 import { FakeBurnProgram } from "@/lib/burnticker/program";
 import { describeRule, endText, MEETINGS_LEVEL_SENTENCE, meetingsEndResult, WINDOW_SENTENCE, windowKindOf } from "@/lib/burnticker/describe";
 import { meetingsFundsFlow } from "@/lib/burnticker/pairFundsFlow";
-import { MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_NONE_LINE, MEETINGS_ON_END, MEETINGS_WINNER_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, meetingsPairNames, meetingsPairRules, patternOptions, patternWords, teamTickerForRule } from "@/lib/burnticker/guidedLaunch";
+import { MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_NONE_LEFT_LINE, MEETINGS_NONE_LINE, MEETINGS_ON_END, MEETINGS_WINNER_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, meetingsPairNames, meetingsPairRules, patternOptions, patternWords, teamTickerForRule } from "@/lib/burnticker/guidedLaunch";
 import { sportsRivalry } from "@/lib/burnticker/api/handlers";
 import { setNativeClients } from "@/lib/burnticker/sources/native";
 import { teamByAbbr, teamSeries } from "@/lib/burnticker/sources/espn";
@@ -127,7 +127,8 @@ describe("item 4: GET /v1/sports/rivalry", () => {
     assert.equal(b.tally.PHI, 1); assert.equal(b.a.ticker, "PHIVBOS");
     assert.doesNotMatch(b.source, /ESPN/);
     const none = await sportsRivalry(null as never, { league: "nba", a: "PHI", b: "MIA" });
-    assert.equal((none.body as { offered: boolean }).offered, true, "the filler lists a PHI–MIA game");
+    // hourly run 5, HB-72: the filler's PHI–MIA game is played, so with no meeting left the option is not offered and says why
+    assert.deepEqual([(none.body as { offered: boolean }).offered, (none.body as { offeredLine: string }).offeredLine, (none.body as { meetings: unknown[] }).meetings.length > 0], [false, MEETINGS_NONE_LEFT_LINE, true]);
     const nobody = await sportsRivalry(null as never, { league: "nba", a: "NYK", b: "MIA" });
     assert.deepEqual([(nobody.body as { offered: boolean }).offered, (nobody.body as { offeredLine: string }).offeredLine], [false, MEETINGS_NONE_LINE]);
     assert.equal((await sportsRivalry(null as never, { league: "nba", a: "PHI", b: "PHI" })).status, 400);

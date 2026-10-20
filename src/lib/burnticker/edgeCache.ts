@@ -36,7 +36,7 @@ export const NO_STORE = { "cache-control": "no-store" } as const;
  */
 export const PAGE_CACHE_SOURCES = [
   "/burnticker",
-  "/burnticker/:path((?!(?:embed|img|brand|launch)(?:/|$)|sitemap\\.xml$|leagues/[^/]+/[^/]+/og$|creator/[^/]+/summary$).*)",
+  "/burnticker/:path((?!(?:embed|img|brand|launch|go)(?:/|$)|sitemap\\.xml$|leagues/[^/]+/[^/]+/og$|creator/[^/]+/summary$).*)",
 ] as const;
 type HeaderMatch = { type: "header" | "query"; key: string };
 export interface HeaderRule { source: string; has?: HeaderMatch[]; missing?: HeaderMatch[]; headers: { key: string; value: string }[] }

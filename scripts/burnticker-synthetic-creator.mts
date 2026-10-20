@@ -709,6 +709,41 @@ const SCENARIOS: Scenario[] = [
       return { detail: [`first press: ${first.text}`, `launch requests: ${preparesOf(seen.launchPosts).map((p) => `${p.status} ${p.json?.code ?? "ok"}`).join(", ")}`, ...(await assertLaunched(page, seen, out, { expectGuard: true }))] };
     }),
   },
+  {
+    // LA-4 (owner on devnet, 2026-10-19): the reload came after the signature's 15-minute age limit, the review refused the creator's own
+    // draft with Launch off and nothing to sign again. The stored signature is aged here (its Issued line moved back 20 minutes, so the page
+    // reads it as past the limit and drops it, exactly as an hour-old tab would): Launch must stay on with the draft-held notice saying the
+    // signature ran out, and a signed press must complete.
+    id: "b-reload-expired", title: "A refusal, a reload after the signature's age limit: the draft-held notice with Launch on, then a signed press launches", run: (c) => withPage(c, async (page, seen) => {
+      c.wallet.mode = "lighthouse"; c.wallet.queue = ["reject"];
+      await reviewEvent(page, tickerFor("RX"));
+      await pressLaunch(page, { seen });
+      const first = await signOutcome(page);
+      if (!/was not signed in the wallet/.test(first.text)) fail(`After the wallet refused, the card should say the step was not signed. It says: ${first.text}`);
+      const aged = await page.evaluate(() => {
+        const k = "burnticker.launch.proof.v1", raw = sessionStorage.getItem(k);
+        if (!raw) return false;
+        const p = JSON.parse(raw) as { message: string; signature: string };
+        p.message = p.message.replace(/^Issued: .*$/m, `Issued: ${new Date(Date.now() - 20 * 60_000).toISOString()}`);
+        sessionStorage.setItem(k, JSON.stringify(p));
+        return true;
+      });
+      if (!aged) fail("The press kept no signed request in the tab (launchReviewSync.ts REVIEW_PROOF_STORE), so there was nothing to age.");
+      await page.goto(`${baseOf(page)}/burnticker/launch?resume=review`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      try { await page.locator("[data-draft-held]").first().waitFor({ timeout: 60_000 }); } catch { fail(`After a reload past the age limit the review showed no draft-held notice. The page shows: ${(await mainText(page)).slice(0, 300)}`); }
+      const notice = (await page.locator("[data-draft-held]").first().innerText().catch(() => "")).trim();
+      if (!/no longer counts/.test(notice)) fail(`The notice should say the signature ran out. It says: ${notice}`);
+      const btn = page.locator('button[data-decision="launch"]').first();
+      let on = false;
+      for (let i = 0; i < 60 && !on; i++) { on = await btn.isEnabled().catch(() => false); if (!on) await sleep(500); }
+      if (!on) fail(`Launch stayed off beside the draft-held notice (LA-4 deadlock). The page shows: ${(await mainText(page)).slice(0, 300)}`);
+      const got = await pressLaunch(page, { seen });
+      if (got === "alert") { const a = (await lastAlert(page)) ?? ""; fail(a); }
+      const out = await signOutcome(page);
+      if (/already the ticker of another Burnticker coin|already registered|different rule or ticker/i.test(await mainText(page))) fail(`The signed press was refused: ${out.text}`);
+      return { detail: [`first press: ${first.text}`, `notice: ${notice}`, `launch requests: ${preparesOf(seen.launchPosts).map((p) => `${p.status} ${p.json?.code ?? "ok"}`).join(", ")}`, ...(await assertLaunched(page, seen, out, { expectGuard: true }))] };
+    }),
+  },
   { id: "b-reload-pair", title: "Reload after step 1 of a pair offers the right next step", run: async () => { throw new Skip("Not driven yet: needs a pair whose step 1 lands on chain (real chain only); the pair form itself is driven by a-rivalry-game."); } },
   { id: "b-pair-twice", title: "A matchup pair launched twice gets its own pair id", run: async () => { throw new Skip("Not driven yet: the pair form is driven by a-rivalry-game; launching it twice is not automated in this version."); } },
   {

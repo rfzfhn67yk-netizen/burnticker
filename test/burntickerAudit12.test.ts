@@ -279,7 +279,9 @@ describe("private review 9 F1: old ticker follows migrate only against the compl
     const { EARLIER_COINS_LINE } = await import("@/lib/burnticker/feeShareLine");
     // owner decision 2026-10-19: the shares are the new-coin tier; continuous audit run 2 (HB-13): the line names both tiers and the
     // cutover in words (no machine date)
-    assert.ok(DEV_FEE_LINE.endsWith(` ${EARLIER_COINS_LINE} Pair coins differ.`), DEV_FEE_LINE);
+    // hourly run 5, HS-26: the footer line leads with the split every live coin pays and says where pair pools are explained
+    void EARLIER_COINS_LINE;
+    assert.ok(DEV_FEE_LINE.endsWith(" Coin-vs-coin pair pools use their own split, shown on the pair page."), DEV_FEE_LINE);
     assert.doesNotMatch(devFeeLineFor("launchlab"), /pair-curve/);
   });
 });

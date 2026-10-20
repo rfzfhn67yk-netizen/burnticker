@@ -104,3 +104,22 @@ export const BOTH_TIERS_LINE = (() => {
   const t9 = sharesForTier(CPMM_MAINNET_TIER_9), t14 = sharesForTier(CPMM_MAINNET_TIER_14);
   return `Coins created before ${TIER_14_CUTOVER_WORDS} pay ${tradersPayPct(CPMM_MAINNET_TIER_9)} per swap after graduation (fee tier ${CPMM_MAINNET_TIER_9.index}): ${aboutPct(t9.burnPool)} to the burn pool, ${aboutPct(t9.operator)} to the operator and ${aboutPct(t9.raydium)} to Raydium. Coins created from then on pay ${tradersPayPct(CPMM_MAINNET_TIER_14)} (fee tier ${CPMM_MAINNET_TIER_14.index}): ${aboutPct(t14.burnPool)} to the burn pool, ${aboutPct(t14.operator)} to the operator and ${aboutPct(t14.raydium)} to Raydium. On both, the operator's part is ${t9.operatorPctOfLp}% of the locked pool's liquidity fees.`;
 })();
+
+/**
+ * THE FOOTER AND TRUST FEE LINE (hourly run 5, HS-26, launch-critical): the split every live coin pays first, Raydium's share included,
+ * then the new-coin tier, then where pair pools are explained. "(every coin live today)" is computed: it is said only when the caller read
+ * the registry and found no live mainnet coin created on or after the tier-14 cutover (tier14CoinExists), and it is left out once one
+ * exists or when the registry was not read (`tier14Live` null, as on the static pages). No number is typed; the tier records give them.
+ */
+export function tier14CoinExists(tokens: readonly { cluster: string; status: string; createdAt: number }[], since: string = CPMM_TIER_14_SINCE): boolean {
+  const t0 = Date.parse(since);
+  return tokens.some((t) => t.cluster === "mainnet" && t.status !== "draft" && t.status !== "expired" && t.createdAt >= t0);
+}
+export function feeTiersLine(o: { tier14Live: boolean | null }): string {
+  const t9 = sharesForTier(CPMM_MAINNET_TIER_9), t14 = sharesForTier(CPMM_MAINNET_TIER_14);
+  const bare = (bps: number) => aboutPct(bps).replace(/^about /, "");
+  const live = o.tier14Live === false ? " (every coin live today)" : "";
+  return `After graduation, coins created before ${TIER_14_CUTOVER_WORDS}${live} pay ${tradersPayPct(CPMM_MAINNET_TIER_9)} per swap: ${aboutPct(t9.burnPool)} to the burn pool, ${bare(t9.operator)} to the operator and ${bare(t9.raydium)} to Raydium. Coins created after that pay ${tradersPayPct(CPMM_MAINNET_TIER_14)}: ${bare(t14.burnPool)}, ${bare(t14.operator)} and ${bare(t14.raydium)}. Coin-vs-coin pair pools use their own split, shown on the pair page.`;
+}
+/** The footer's fee row: the curve fee, then feeTiersLine. `curveBps` is fees.ts BURNTICKER_DEV_FEE_BPS (passed in: this module stays client-safe). */
+export const footerFeeLine = (curveBps: number, o: { tier14Live: boolean | null }): string => `Burnticker takes ${curveBps / 100}% of curve volume. ${feeTiersLine(o)}`;

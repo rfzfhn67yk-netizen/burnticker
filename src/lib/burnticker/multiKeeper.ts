@@ -17,6 +17,7 @@ import { expectedConfigFor, viewMismatch, type ExpectedHost } from "@/lib/burnti
 import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type BurnProgramClient } from "@/lib/burnticker/program";
 import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFeesKeeper";
 import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForward";
+import { pairForwardNote } from "@/lib/burnticker/pairReceiptNote";
 import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, raceVerdict, recordForward, sidePayout, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 import { fenceToken, type FenceReport } from "@/lib/burnticker/ops/readingFence";
 import { championVerdict, endOutcomeOf, endSinkStep } from "@/lib/burnticker/endSinkKeeper";
@@ -445,11 +446,15 @@ function planRace(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate
   let step = own, role: PairRole | null = null;
   if (v.kind === "won" && own.units > 0 && own.mapping) {
     role = paired ? "won" : null;
-    step = { ...own, note: `${end(own.note)} ${cap1(v.why)}. ${paired ? `$${other.ticker}'s pool for the ${what} moves to this coin's burn pool, and both burn this coin.` : ""}`.trim() };
+    // CH6-11: while the pair waits on both pools, the forward is said as conditional, with the pair's void date
+    const pending = gate?.state === "waiting", voidBy = gate?.state === "waiting" ? gate.voidBy : null;
+    step = { ...own, note: `${end(own.note)} ${cap1(v.why)}. ${paired ? pairForwardNote({ role: "won", what, other: other.ticker, voidBy, pending }) : ""}`.trim() };
   } else if (v.kind === "lost" && paired) {
     // the units it would have had had it won: one unit at its own mapping (both shapes burn one unit on their own result)
     const mapping = ruleMappings(locked.rule)[0]?.mapping ?? null;
-    if (mapping) { step = { ...own, units: 1, mapping, note: `${end(own.note)} ${cap1(v.why)}. This coin's pool for the ${what} moves to $${other.ticker}'s burn pool and burns $${other.ticker}. The winner takes the burn.` }; role = "lost"; }
+    // CH6-11: no counter prefix ("no change: no burn; carry reset.") on a pair-loss note, and the forward is conditional while the pair waits
+    const pending = gate?.state === "waiting", voidBy = gate?.state === "waiting" ? gate.voidBy : null;
+    if (mapping) { step = { ...own, units: 1, mapping, note: `${cap1(v.why)}. ${pairForwardNote({ role: "lost", what, other: other.ticker, voidBy, pending })}` }; role = "lost"; }
   } else if (v.kind === "none") {
     step = { ...own, units: 0, mapping: null, note: `${end(own.note)} ${cap1(v.why)}: this coin burns nothing for the ${what} and nothing moves between the two coins. At the end its pool goes to $DEFICIT's burn.` };
   }

@@ -112,13 +112,15 @@ describe("the review", () => {
     assert.match(tile, /notes=\{\[x\.window, x\.tie, \.\.\.realReviewNotes\(realList\)\]\}/);
     assert.match(page, /notes\.push\(\.\.\.realReviewNotes\(realOneList\)\);/);
   });
-  test("the server's review counts the pin itself (launchReview.ts pins), so the page adds nothing", () => {
+  test("the server's review lists no pin for a market coin, which may not burn another token (LA6-3); a Coin comparison side keeps its pin", () => {
+    // owner 2026-10-19: only a Coin comparison coin may burn another token; LA6-3 (sixth pass): a refused token gets no pin step or rent
+    // (the pin's step for a side that may pin: test/burntickerBurnRealEligibility.test.ts ok.pins and the bundle tests in PinSteps)
     const rv = buildLaunchReview({ rule: withRealBurn(SINGLE, realField(HELD, "devnet")), ticker: "WIFFIRE", name: "Wif Fire", raiseSol: "85" } as never, { env: ENV, reserved: new Set() });
     assert.ok("review" in rv); if (!("review" in rv)) return;
     assert.equal(rv.review.transactions.count, 2);
-    assert.match(rv.review.transactions.steps[0].label, /^Pin .+'s Raydium pool for \$/);
-    assert.deepEqual(rv.review.pins.map((x) => [x.ticker, x.symbol, x.step]), [["WIFFIRE", "BONK", 1]]);
-    assert.equal(withPinSteps(rv.review, [{ ticker: "WIFFIRE", symbol: "BONK" }]), rv.review, "the server counted it: the page adds nothing");
+    assert.doesNotMatch(rv.review.transactions.steps[0].label, /^Pin .+'s Raydium pool for \$/);
+    assert.deepEqual(rv.review.pins, []);
+    assert.equal(rv.review.signable, false);
     assert.equal(BURN_TARGET_BYTES, 373);
   });
   test("the pre-wallet summary counts the pin: inside a coin's two steps (rent only), or one more transaction for an older one-step review; idempotent", () => {

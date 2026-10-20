@@ -47,7 +47,8 @@ export const GUARDRAIL_DETAIL: Record<(typeof GUARDRAILS)[number], { kind: Guard
   "three blind AI reviews, not a firm audit": { kind: "observed", text: "The program had three blind AI reviews and later AI code reviews. These are AI reviews. They are not a professional security audit, and no security firm has audited the code." },
   "creators earn nothing": { kind: "enforced", text: "Creators receive no trading-fee revenue. The platform settings send the creator's share of the curve fees to the coin's burn pool. A creator can still hold or trade the coin like anyone else." },
   // walkthrough 13: the one disclosed exception (the Test coins page: "The operator bought 0.1 SOL of it at creation") is named here too
-  "no team buy": { kind: "policy", text: "There is no team allocation, and the operator makes no opening purchase. The one exception is the disclosed test purchase of $REHEARSAL, described on this page." },
+  // HB-59 (hourly run 6): the $REHEARSAL exception is said once, in the next line, not here as well
+  "no team buy": { kind: "policy", text: "There is no team allocation, and the operator makes no opening purchase in a creator's coin." },
   "the platform buys no coin except one test coin": { kind: "policy", text: `The operator and its wallets never trade a coin launched here. ${REHEARSAL_BUY_EXCEPTION} This is a policy, checked by the monitor on the operator page. It is separate from each coin's program-run buyback, which buys only to burn.` },
   "LP locked forever, its fees fund the burn": { kind: "enforced", text: `At graduation the platform settings lock all of the pool's liquidity with Raydium's lock. ${LP_BEFORE_GRADUATION_TRUST} ${BOTH_TIERS_LINE}` },
   "rules locked at launch": { kind: "enforced", text: "No instruction in the current program can change a coin's rule. The program itself can still be upgraded, and the current status says who can approve an upgrade." },

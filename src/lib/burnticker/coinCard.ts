@@ -100,6 +100,9 @@ export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, 
   if (all) return all;
   if (rule.oracle === "catalogue" && rule.series && /^(espn|nws)\./.test(rule.series)) { try { return describeRule(rule, { ticker: "COIN" }).oneLiner; } catch { /* an unknown team or station: the generic line */ } }
   // HB-67: a catalogue title that opens with "The" ("The next reviewed magnitude 6 …") read "burns on the The next …"
+  // HB-67 (hourly run 6): the next-earthquake title has no noun ("magnitude 6 or more … feed"); say the earthquake, as the rule sentence does
+  const quake = rule.oracle === "catalogue" ? /^the next reviewed magnitude (\d+(?:\.\d+)?) or more (.+)$/i.exec(title) : null;
+  if (quake) return `burns once, on the next reviewed earthquake of magnitude ${quake[1]} or more ${quake[2]}`;
   if (rule.oracle === "catalogue") return `burns on the ${(title || rule.series || "source").replace(/^the\s+/i, "")} feed`;
   // Burn Derby (2026-10-10): the input is another coin's (or asset's) move — named as the rule's input, never this coin's.
   if (rule.oracle === "derby" && rule.derby) {
