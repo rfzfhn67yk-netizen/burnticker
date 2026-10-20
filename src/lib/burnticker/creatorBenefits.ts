@@ -1,3 +1,4 @@
+import { denverTime } from "@/lib/burnticker/denverTime";
 import { utcDay } from "@/lib/burnticker/utcWords";
 import { latestResult, oneShotState, type ResultReceipt, type ResultState } from "@/lib/burnticker/nextResult";
 /**
@@ -26,7 +27,7 @@ export const CREATOR_PAGE = {
   badWallet: "That is not a Solana wallet address.",
   creatorText: "From the creator, not part of the rule",
   // HB-25 (hourly run 6): the count is confirmed burns, so its label says so; /v1/tokens labels its recorded-results count apart
-  labels: { receipts: "Burn receipts", lastBurn: "Last burn", next: "Next result", check: "Next source check", rank: "Rank" },
+  labels: { receipts: "Burn receipts", lastBurn: "Last burn", next: "Next result", check: "Next source check", rank: "Rank", /** HB-80 residue (hourly run 7): a decided or voided coin has a result, not a next one */ result: "Result" },
   noBurn: "No burn yet",
   noNext: "None scheduled",
   /** audit 7 F08: the coin's line in a partial list, when its own page could not be read */
@@ -94,10 +95,26 @@ export function creatorNextLine(c: { oneShot: boolean; receipts: readonly Result
   return dayLine(c.nextAt, now);
 }
 
-/** A time as a UTC day, "overdue" in words once past; "None scheduled" for none. */
+/**
+ * HB-98 (hourly run 7): the creator view called a source check "overdue" six minutes after it ran, dated by the UTC day. A time is judged
+ * as an instant against `now`, never as a calendar day, and a time past by less than OVERDUE_GRACE_MS is "due now", not overdue (the
+ * cached coin page can be a few minutes behind the keeper's read).
+ */
+export const OVERDUE_GRACE_MS = 15 * 60_000;
+export const DUE_NOW = "Due now";
+/** A time as a UTC day, "overdue" in words once past the grace; "None scheduled" for none. */
 export function dayLine(at: string | null, now: number): string {
   if (!at) return CREATOR_PAGE.noNext;
   const t = Date.parse(at);
   if (Number.isNaN(t)) return CREATOR_PAGE.noNext;
-  return t <= now ? `Was due on ${utcDay(t)} and is overdue` : utcDay(t);
+  if (t > now) return utcDay(t);
+  return now - t < OVERDUE_GRACE_MS ? DUE_NOW : `Was due on ${utcDay(t)} and is overdue`;
+}
+/** HB-98: the next source check, a time of day in Denver time with its zone, "due now" inside the grace, "overdue" after it. */
+export function checkLine(at: string | null, now: number): string {
+  if (!at) return CREATOR_PAGE.noNext;
+  const t = Date.parse(at);
+  if (Number.isNaN(t)) return CREATOR_PAGE.noNext;
+  if (t > now) return `About ${denverTime(at)}`;
+  return now - t < OVERDUE_GRACE_MS ? DUE_NOW : `Was due at ${denverTime(at)} and is overdue`;
 }

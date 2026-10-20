@@ -16,3 +16,14 @@ export const isExecutedBurn = (r: { status: string }): boolean => r.status === "
 export const burnLogWords = (status: string): string => (isQueuedReading(status) ? QUEUED_READING : receiptStatusWords(status));
 /** "1 queued reading" / "3 queued readings": the count of readings waiting for a burn. */
 export const queuedReadingsCount = (n: number): string => `${n} queued reading${n === 1 ? "" : "s"}`;
+/**
+ * HB-96 (hourly run 7): /t/DENWIN said "0 receipts are pending" under a row "waiting for both coins to graduate". A reading that waits
+ * counts as waiting whether it waits for the pool (a queued reading) or for both coins of a pair to graduate ("pending-pair").
+ */
+export const isWaitingReading = (status: string): boolean => isQueuedReading(status) || status === "pending-pair";
+/** The token page's health line, the same words on the static page and the React page (only executed burns can be unverified). */
+export function healthLine(waiting: number, unverified: number): string {
+  const w = waiting === 0 ? "No reading is" : waiting === 1 ? "One reading is" : `${waiting} readings are`;
+  const u = unverified === 0 ? "no executed burn is" : unverified === 1 ? "one executed burn is" : `${unverified} executed burns are`;
+  return `${w} waiting with no burn yet, and ${u} unverified.`;
+}

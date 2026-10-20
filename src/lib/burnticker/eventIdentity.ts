@@ -60,13 +60,18 @@ export function titleEntity(bare: string): string | null {
   return bare.includes(":") && first ? first : null;
 }
 
+/** Words after which a verb-looking word is a noun ("by end", "the close", "a raise"). */
+const NOUN_AFTER: ReadonlySet<string> = new Set(["by", "of", "the", "a", "an", "before", "after", "until", "till", "in", "at", "on", "for", "from", "its", "their", "his", "her"]);
+
 export interface EventIdentity { subject: string; verb: string | null; rest: string; phrase: string; name: string; ticker: string; confident: boolean }
 
 export function eventIdentity(question: string): EventIdentity {
   const raw = question.trim().replace(/\s*\(resolves once\)$/i, "").replace(/\?+$/, "").replace(/^will\s+/i, "").trim();
   const words = raw.split(/\s+/).filter(Boolean);
   let vi = -1;
-  for (let i = 1; i < words.length && i <= 6; i++) if (baseOf(words[i])) { vi = i; break; }
+  // BT-INC-20261020T0049Z-02 (with HS-33): a word after a preposition or an article is a noun, never the outcome verb ("Netanyahu out by
+  // end of 2026" read "end" as the verb and named the coin "Netanyahu out by Ends"); such a question keeps its own whole words
+  for (let i = 1; i < words.length && i <= 6; i++) if (baseOf(words[i]) && !NOUN_AFTER.has(words[i - 1].toLowerCase())) { vi = i; break; }
   if (vi < 0) {
     const first = words.find((w) => /^[A-Z0-9]/.test(w) && w.length > 1) ?? words[0] ?? "EVENT";
     return { subject: raw, verb: null, rest: "", phrase: raw, name: fitName(raw), ticker: tickerOf(first, ""), confident: false };

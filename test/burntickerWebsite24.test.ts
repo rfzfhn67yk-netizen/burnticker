@@ -14,6 +14,7 @@ import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { BURNTICKER_RULES_SCHEMA, validateRule, type BurnRule } from "@/lib/burnticker/rules";
 import { rentLamports, LAMPORTS_PER_SIGNATURE } from "@/lib/burnticker/launchCost";
 import { candidatesPairRule } from "@/lib/burnticker/guidedLaunch";
+import { walletPromptsLine } from "@/lib/burnticker/walletProof";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import {
   BURN_TARGET_BYTES, PIN_NOTE, POOL_FIELD_LABEL, REAL_OFF_LINE, SIDE_REAL_OFF, ownRealPicks, admissionFrom, admissionKey, admissionUrl, checkingLine, lockStepLabel, noPoolLine,
@@ -140,7 +141,7 @@ describe("the review", () => {
     assert.doesNotMatch(after.transactions.note, /one more transaction/);
     assert.equal(withPinSteps(after, [{ ticker: "WIFFIRE", symbol: "BONK" }]), after, "counted once");
     assert.equal(withPinSteps(before, []), before);
-    assert.match(after.recovery?.[0] ?? "", /asks 2 separate times/);
+    assert.match(after.recovery?.[0] ?? "", /asks 3 times in all/);   // hourly run 7, HB-92: the proof and 2 transactions
     // an older server's one-step review: one more transaction, two signatures, the account's rent
     const old = { ...before, transactions: { ...before.transactions, count: 1, steps: [{ label: "Create $WIFFIRE and lock in its rule", signers: before.transactions.steps[0].signers }] }, recovery: ["If you reject the request in your wallet, nothing is sent and nothing is charged.", "x"] };
     const oldAfter = withPinSteps(old, [{ ticker: "WIFFIRE", symbol: "BONK" }]);
@@ -150,10 +151,11 @@ describe("the review", () => {
     assert.ok(Math.abs(Number(oldAfter.costs.totalSol) - (Number(old.costs.totalSol) + added / 1e9)) <= 0.00005, `${old.costs.totalSol} + ${added} lamports → ${oldAfter.costs.totalSol}`);
     assert.equal(oldAfter.costs.lines.length, old.costs.lines.length + 2);
     assert.match(oldAfter.transactions.note, new RegExp(PIN_NOTE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    assert.match(oldAfter.recovery?.[0] ?? "", /asks 2 separate times/);
+    assert.match(oldAfter.recovery?.[0] ?? "", /asks 3 times in all/);
     // a review already counting several transactions has its count in the recovery line moved up too
     const three = { ...before, transactions: { ...before.transactions, count: 3, steps: [{ label: "Create $A and lock in its rule", signers: ["your wallet"] }, { label: "Create $B and lock in its rule", signers: ["your wallet"] }, { label: "Link the two coins", signers: ["your wallet"] }] }, recovery: ["Your wallet asks 3 separate times, once for each transaction, in the order above.", "x"] };
     assert.equal(withPinSteps(three, [{ ticker: "A", symbol: "WIF" }]).recovery![0], "Your wallet asks 4 separate times, once for each transaction, in the order above.");
+    assert.equal(withPinSteps({ ...three, recovery: [walletPromptsLine(3, true), "x"] }, [{ ticker: "A", symbol: "WIF" }]).recovery![0], walletPromptsLine(4, true), "HB-92: a line that counts the proof keeps counting it");
     for (const s of [...after.transactions.steps.map((x) => x.label), ...oldAfter.costs.lines.slice(-2).map((x) => x.label), after.transactions.note, oldAfter.transactions.note]) plain(s);
     // a linked pair's side B keeps "and link the two coins" after its pin
     const pair = { ...before, transactions: { ...before.transactions, count: 2, steps: [{ label: "Create $A and lock in its rule", signers: ["your wallet"] }, { label: "Create $B and link the two coins", signers: ["your wallet"] }] } };

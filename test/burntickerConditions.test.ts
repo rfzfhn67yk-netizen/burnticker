@@ -140,7 +140,8 @@ describe("F06: one active-condition aggregator for ops.json and the check-in", (
     assert.match(s, /buildOpsJson\(\{[^\n]*health, conditionMemory: memory, signals, heartbeat: heartbeat\.state, hostFacts(, tradeClicks: [^\n]*)? \}\)/);   // campaign readiness 2026-10-19 adds the trade-click counts after it
     assert.match(s, /registry\.setStatus\(CONDITIONS_KEY, foldConditions\(memory, activeConditions\(r\.snapshot, health, \{ \.\.\.signals, alerts, lastCycleAt: r\.snapshot\?\.lastCycle\?\.at \?\? null \}\), now\), now\)/);
     // second audit A-7: the unit check's computed alerts and the budget's lines reach the conditions
-    assert.match(s, /const signals = \{ units: unitCheck\.active, budget: budget\.lines\(\) \};/);
+    // HB-82 (hourly run 6): and today's missing registry snapshot
+    assert.match(s, /const signals = \{ units: unitCheck\.active, budget: budget\.lines\(\), snapshot: \(\(\) => \{ try \{ return snapshotMissingFact\(registry, now\); \} catch \{ return null; \} \}\)\(\) \};/);
   });
 });
 

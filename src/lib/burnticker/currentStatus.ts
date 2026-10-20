@@ -118,6 +118,8 @@ export interface CurrentStatus {
   /** the $DEFICIT prerequisite chain (docs/burnticker/FIRST-BURN-PATH.md) and its one line */
   firstBurnPath: { doc: string; line: string };
   lines: string[];
+  /** HB-82 (hourly run 6): today's (UTC) registry snapshot, from this host's registry (null: not read) */
+  registrySnapshot?: { date: string; pinned: boolean; line: string | null } | null;
 }
 
 /** A program's devnet authority from the live read (when one was made) or the verified-build record. */
@@ -165,7 +167,7 @@ const NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven
 /** A count at the start of a sentence: "Eight", or digits past twelve. */
 export const countWord = (n: number): string => NUMBER_WORDS[n] ?? String(n);
 
-export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<string, string | undefined>>; chain: Partial<Record<Cluster, ChainFacts>>; now?: number }): CurrentStatus {
+export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<string, string | undefined>>; chain: Partial<Record<Cluster, ChainFacts>>; now?: number; registrySnapshot?: { date: string; pinned: boolean; line: string | null } | null }): CurrentStatus {
   const root = i.root ?? process.cwd(), env = i.env ?? process.env, now = i.now ?? Date.now();
   const st = readStatusFile(root) as unknown as StatusFileFull;
   const vb = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "verified-build.json"), "utf8")) as VerifiedBuild;
@@ -214,19 +216,22 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     `The operator earns 0.25% of curve trading volume. ${BOTH_TIERS_LINE} The coin side of the liquidity fees is burned. Creators take no cash from fees.`,
     `No security firm has audited the code. ${waiting === 1 ? "One fixed finding still waits" : `${countWord(waiting)} fixed findings still wait`} for an independent re-check.`,
     `${openCount === 1 ? "One thing is" : `${countWord(openCount)} things are`} still open before release.${anyMain || mainUnknown ? "" : " The first is the mainnet deployment."}`,
+    // HB-82: while today's registry snapshot is not pinned, the summary says so
+    ...(i.registrySnapshot && !i.registrySnapshot.pinned && i.registrySnapshot.line ? [i.registrySnapshot.line] : []),
   ];
   const readAt = Object.values(i.chain).map((c) => c?.readAt).filter(Boolean).sort().pop() ?? new Date(now).toISOString();
   return {
     schema: "burnticker.current-status/v1", checkedAt: st.checkedAt, readAt, source: CURRENT_STATUS_FILE, phase: st.phase, host,
     networks: (["devnet", "mainnet"] as Cluster[]).map((c) => ({ cluster: c, role: st.networks[c].role, deployment: c === "mainnet" && anyMain ? "deployed" : c === "mainnet" && mainUnknown ? "unknown, because the chain read failed" : st.networks[c].deployment, since: st.networks[c].since })),
     programs, upgradeAuthority, attesters: st.attesters, settlement: st.settlement, reviews: st.reviews, releaseRequirements, design: st.design, historical: st.historical, firstBurnPath: st.deficit.firstBurnPath, lines,
+    ...(i.registrySnapshot !== undefined ? { registrySnapshot: i.registrySnapshot } : {}),
   };
 }
 
 // ---- the served object (cached chain reads) ----
 
 let cache: { at: number; facts: Partial<Record<Cluster, ChainFacts>> } | null = null;
-export async function currentStatusLive(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), now = Date.now()): Promise<CurrentStatus> {
+export async function currentStatusLive(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), now = Date.now(), o: { registrySnapshot?: { date: string; pinned: boolean; line: string | null } | null } = {}): Promise<CurrentStatus> {
   if (!cache || now - cache.at > 300_000) {
     const op = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "operator.json"), "utf8")) as OperatorFile;
     const vb = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "verified-build.json"), "utf8")) as VerifiedBuild;
@@ -235,7 +240,7 @@ export async function currentStatusLive(env: Readonly<Record<string, string | un
     const [devnet, mainnet] = await Promise.all((["devnet", "mainnet"] as Cluster[]).map((c) => { const ms = op.clusters[c].squads.multisig; return readChainFacts(c, jsonRpc(rpcUrl(c), fetch, { attempts: 2 }), isKey(ms) ? ms : null, ids, now); }));
     cache = { at: now, facts: { devnet, mainnet } };
   }
-  return buildCurrentStatus({ root, env, chain: cache.facts, now });
+  return buildCurrentStatus({ root, env, chain: cache.facts, now, ...(o.registrySnapshot !== undefined ? { registrySnapshot: o.registrySnapshot } : {}) });
 }
 
 /**

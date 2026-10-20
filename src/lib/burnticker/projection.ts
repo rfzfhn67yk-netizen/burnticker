@@ -7,6 +7,7 @@ import { parseUsgsSeries } from "@/lib/burnticker/sources/usgs";
 import { feedById, previewFromFixture } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { pctLabel } from "@/lib/burnticker/launchPresets";
+import { offSeasonBacktestLine } from "@/lib/burnticker/hazardSeason";
 
 /**
  * THE PLAIN PROJECTION (ChatGPT audit 6 item 11 and audit 7 item 6, 2026-10-12: the review said "Backtest unavailable" although the
@@ -126,6 +127,7 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
   }
   const rows: ProjectionRow[] = [];
   let from: string | null = null, to: string | null = null;
+  let burnDays: string[] = [];
   // website-22 (QA 9 item 8): the share the creator chose is projected too, beside 1, 2 and 5%
   for (const s of projectionShares(f)) {
     let pv;
@@ -133,6 +135,7 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
     const fired = pv.rows.filter((r) => r.mapping && r.units > 0);
     if (!pv.rows.length) return none("The saved sample of this source has no readings yet.");
     from = pv.window.from.slice(0, 10); to = pv.window.to.slice(0, 10);
+    if (!rows.length) burnDays = fired.map((r) => r.at.slice(0, 10));
     rows.push({ share: s, triggers: fired.length, units: fired.reduce((a, r) => a + r.units, 0), spentPct: Math.round(spentFraction(fired.map((r) => r.units), s) * 10_000) / 100 });
   }
   const weeks = from && to ? Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / (7 * 86_400_000))) : null;
@@ -141,6 +144,8 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
   // sources-7 M4: the count is of burns (units), with the readings they came on; "triggered 15 times" beside "99% spent at 1%" read wrong
   const lines = [
     u === t ? `${span}, this rule would have burned ${u} ${u === 1 ? "time" : "times"}.` : `${span}, this rule would have burned ${u} times, on ${t} ${t === 1 ? "reading" : "readings"} (one burn for each ${typeof unitWord === "string" ? unitWord : unitWord.one}).`,
+    // HB-93 (hourly run 7): an inverse rule on a source with a season says how many of its burns fell outside it (hazardSeason.ts)
+    ...(() => { const l = offSeasonBacktestLine(rule, burnDays); return l ? [l] : []; })(),
     ...rows.map((r) => `At ${pctLabel(r.share)}${f !== null && Math.abs(r.share - f) < 1e-9 ? ", the share you chose" : ""}: ${pct(r.spentPct / 100)} of the pool spent.`),
     "This holds the pool fixed apart from the rule's own spending, with no new fees and no per-run cap, so it shows how fast the rule drains a pool, not what a coin ends up holding.",
   ];

@@ -126,9 +126,14 @@ describe("item 4: GET /v1/sports/rivalry", () => {
     assert.deepEqual(b.meetings.map((m) => [m.date, m.status, m.result, m.playoff]), [["2025-11-03", "final", "win", false], ["2026-02-03", "postponed or cancelled", "void", false], ["2026-03-03", "scheduled", "pending", false]]);
     assert.equal(b.tally.PHI, 1); assert.equal(b.a.ticker, "PHIVBOS");
     assert.doesNotMatch(b.source, /ESPN/);
-    const none = await sportsRivalry(null as never, { league: "nba", a: "PHI", b: "MIA" });
-    // hourly run 5, HB-72: the filler's PHI–MIA game is played, so with no meeting left the option is not offered and says why
-    assert.deepEqual([(none.body as { offered: boolean }).offered, (none.body as { offeredLine: string }).offeredLine, (none.body as { meetings: unknown[] }).meetings.length > 0], [false, MEETINGS_NONE_LEFT_LINE, true]);
+    const none = await sportsRivalry(null as never, { league: "nba", a: "PHI", b: "MIA" }, NOW);
+    // hourly run 5, HB-72, and its consistency fix (run 7, meetingsLeft.ts): the filler's PHI–MIA game is played and no league read is
+    // given, so while PHI's regular season runs a playoff meeting is still possible: offered, with the playoff warning
+    assert.deepEqual([(none.body as { offered: boolean }).offered, (none.body as { offeredLine: string | null }).offeredLine, (none.body as { meetings: unknown[] }).meetings.length > 0], [true, null, true]);
+    assert.match((none.body as { warning: string }).warning, /burns only if they meet in the playoffs/);
+    // the same pair read after that season is over: greyed with the line (an earlier season cannot meet again)
+    const later = await sportsRivalry(null as never, { league: "nba", a: "PHI", b: "MIA" }, Date.parse("2026-10-19T12:00:00Z"));
+    assert.deepEqual([(later.body as { offered: boolean }).offered, (later.body as { offeredLine: string }).offeredLine], [false, MEETINGS_NONE_LEFT_LINE]);
     const nobody = await sportsRivalry(null as never, { league: "nba", a: "NYK", b: "MIA" });
     assert.deepEqual([(nobody.body as { offered: boolean }).offered, (nobody.body as { offeredLine: string }).offeredLine], [false, MEETINGS_NONE_LINE]);
     assert.equal((await sportsRivalry(null as never, { league: "nba", a: "PHI", b: "PHI" })).status, 400);

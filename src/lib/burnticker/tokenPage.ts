@@ -21,6 +21,7 @@ import { parseReceiptMemo } from "@/lib/burnticker/receipt";
 import { fullSpendUnits, unitStep, windDownUnits, type SettledEvent } from "@/lib/burnticker/units";
 import { pairWords, unitsFormula, verifyCommand } from "@/lib/burnticker/receiptFormula";
 import { pairLastSentence, receiptStatusWords, type PairLastFacts } from "@/lib/burnticker/receiptWords";
+import { healthLine, isWaitingReading } from "@/lib/burnticker/queuedReading";
 import { feedById } from "@/lib/burnticker/catalogue";
 import type { ImpliedChance } from "@/lib/burnticker/oracle/types";
 import type { AttesterRow, FeedState, ReadingRow, ReceiptRow, Registry, TokenRow, TokenState } from "@/lib/burnticker/registry";
@@ -458,7 +459,8 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
     // owner decision 2026-10-19: a coin's post-graduation numbers come from the tier IT pinned (TokenConfig.ll_cp_config), not the new-coin tier
     fees: { curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence(i.chain.cluster, i.chain.program?.config?.cpConfig, { tierUnread, graduated: lpLockedPct !== null }), creatorSliceBps: 0, ...(tierUnread ? { tierUnread: true } : {}) },
-    health: { pending: i.receipts.filter((b) => b.status === "planned" || b.status === "sending").length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
+    // HB-96 (hourly run 7): a reading waiting for both coins to graduate counts as waiting too (queuedReading.ts isWaitingReading)
+    health: { pending: i.receipts.filter((b) => isWaitingReading(b.status)).length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
     trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
     // HB-56 (hourly run 6): the policy line says "locks at graduation" until the coin's lock is known, from the same lpLockedPct
@@ -633,7 +635,7 @@ ${lpLockHtml(s.lp)}
 <ul class="addr"><li><span class="muted">Mint</span> <a href="${esc(s.addresses.mintUrl)}"><code>${esc(s.addresses.mint)}</code></a></li><li><span class="muted">Burn pool. This is the burn program's fee account, and it is also the coin's creator on LaunchLab. Anyone can deposit and nobody can withdraw. The keeper only pays network fees.</span> <a href="${esc(s.addresses.feePdaUrl)}"><code>${esc(s.addresses.feePda)}</code></a></li>${s.addresses.feeWsol ? `<li><span class="muted">The burn pool's wrapped SOL account, where claimed curve fees land</span> <a href="${esc(s.addresses.feeWsolUrl)}"><code>${esc(s.addresses.feeWsol)}</code></a></li>` : ""}${s.addresses.vault ? `<li><span class="muted">Vault</span> <a href="${esc(s.addresses.vaultUrl)}"><code>${esc(s.addresses.vault)}</code></a></li>` : ""}<li><span class="muted">Creator</span> <a href="${esc(s.addresses.creatorUrl)}"><code>${esc(s.addresses.creator)}</code></a></li><li><span class="muted">Burn program</span> <code>${esc(s.addresses.programId)}</code></li>${s.addresses.launchTx ? `<li><span class="muted">Launch</span> <a href="${esc(s.addresses.launchTxUrl)}"><code>${esc(s.addresses.launchTx)}</code></a></li>` : ""}</ul>
 ${s.disclosure.eventContract ? `<p class="rule">${esc(s.disclosure.eventContract)}</p>` : ""}
 <p class="rule">${s.lifecycle ? `${esc(s.lifecycle.line)} ` : ""}${esc(feeFlowLine(s.fees.postGraduation, s.trust.lpLockedPct ?? null, !!s.fees.tierUnread))}</p>
-<footer>${esc(s.disclosure.disclaimer)} ${s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and ${s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.${s.health.lastError ? ` The last error was: ${esc(s.health.lastError)}` : ""}</footer>
+<footer>${esc(s.disclosure.disclaimer)} ${esc(healthLine(s.health.pending, s.health.unverified))}${s.health.lastError ? ` The last error was: ${esc(s.health.lastError)}` : ""}</footer>
 </main>
 <script>
 (function(){var el=document.getElementById("next");if(!el)return;var at=Date.parse(el.getAttribute("data-at")||"");if(!at)return;

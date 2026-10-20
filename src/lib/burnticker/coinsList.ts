@@ -170,3 +170,26 @@ export function writeOpenOnly(s: StorageLike, on: boolean): void {
 export function browserStorage(): StorageLike {
   try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; }
 }
+
+// ---- the Pairs tab's row words (HS-41, hourly run 7) ----
+
+/** HS-41: the Pairs tab says "no burn yet" where a side has never burned, instead of a dash. */
+export const PAIR_NO_BURN_YET = "no burn yet";
+/**
+ * HS-41: a decided pair's one line under its row, from the two sides' own result lines (the same words the New tab's cards say):
+ * "$DENWIN won on Oct 16; $SEAWIN lost. Burn after graduation." Null while neither side is decided.
+ */
+export function pairDecidedRowLine(a: { ticker: string; listing?: CoinListing | null }, b: { ticker: string; listing?: CoinListing | null }, z: ClockZone): string | null {
+  const side = (s: { ticker: string; listing?: CoinListing | null }) => (s.listing && s.listing.group !== "open" && s.listing.result && (s.listing.result.outcome === "won" || s.listing.result.outcome === "lost") ? { ticker: s.ticker, r: s.listing.result } : null);
+  const sa = side(a), sb = side(b);
+  const w = sa?.r.outcome === "won" ? sa : sb?.r.outcome === "won" ? sb : null;
+  const l = sa?.r.outcome === "lost" ? sa : sb?.r.outcome === "lost" ? sb : null;
+  if (!w && !l) return null;
+  const first = w ?? l!;
+  const day = first.r.settledAt ? dayText(first.r.settledAt, z) : null;
+  const on = day ? ` on ${day}` : "";
+  const head = w && l ? `$${w.ticker} won${on}; $${l.ticker} lost.` : w ? `$${w.ticker} won${on}.` : `$${l!.ticker} lost${on}.`;
+  const next = (w ?? l!).r.next;
+  const tail = next === "end-sink" ? NEXT_WORDS.nothing : NEXT_WORDS[next];
+  return `${head} ${tail}`;
+}

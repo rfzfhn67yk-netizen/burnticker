@@ -22,7 +22,7 @@
 // data/own-tokens.generated.json when the registry's token set changed — the arms' refuse list for platform coins (src/lib/ownTokens.ts
 // merges it with config/own-tokens.json; the arms never open this database), and (b) every ALERT_EVERY_MS runs the ops alert check
 // (src/lib/burnticker/alerts.ts → the registry's alerts table, then the operator's alert webhook): feed stalls, refused readings, cranks failing
-// 3× in a row, audit mismatches, the keeper key under 0.05 SOL, the pre-audit cap binding, a daily one-line summary. Balances come
+// 3× in a row, audit mismatches, the keeper key under 0.1 SOL, the pre-audit cap binding, a daily one-line summary. Balances come
 // from BURNTICKER_RPC_URL (plain getBalance on BURNTICKER_KEEPER_PUBKEY and BURNTICKER_FEE_WALLET, public keys); without it they
 // are "unknown", never a false alarm. --once skips the alert check unless --alerts is given (a smoke run must not page the owner).
 import fs from "node:fs";
@@ -69,7 +69,10 @@ import { connectionPoolPort } from "../src/lib/burnticker/derby/pools.ts";
 import type { FetchLike } from "../src/lib/burnticker/oracle/types.ts";
 // TRUST OPS (2026-10-10 night): leader/standby role + the foreign-reading fence, feed health, the daily Arweave snapshot, status/status.json.
 import { KeeperOps } from "../src/lib/burnticker/ops/keeperOps.ts";
+import { snapshotMissingFact } from "../src/lib/burnticker/ops/snapshot.ts";
 import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
+// AUTOMATIC SOL TOP-UPS (2026-10-19): the keeper key refills the upload wallet, its Irys balance and the $DEFICIT keeper key (ops/topUp.ts)
+import { topUpOpsLines, topUpRunnerFromEnv } from "../src/lib/burnticker/ops/topUp.ts";
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
 import { Heartbeat, heartbeatUrlFromEnv, heartbeatVerdict } from "../src/lib/burnticker/ops/heartbeat.ts";
@@ -248,7 +251,10 @@ if (cosigner) { deps.cosigner = cosigner; log(`second signer: ${process.env.BURN
 const operator = operatorPowersSummary(loadPowersRegister());
 const KALSHI_ON = kalshiEnabled(process.env), POLY_DISCOVERY = polymarketDiscoveryEnabled(process.env);
 /** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */
-const ops = new KeeperOps({ registry, siteDir: SITE, cluster, env: process.env, log, uploader: uploaderFromEnv(process.env, cluster), snapshots: !DRY, signer: built.chain ? { publicKey: built.chain.payer.publicKey.toBase58(), secretKey: built.chain.payer.secretKey } : null });
+// On unless BURNTICKER_TOP_UP=off; skipped on a dry run, a read-only keeper, and a non-mainnet keeper without an upload payer.
+const topUp = topUpRunnerFromEnv({ env: process.env, cluster: built.chain?.cluster ?? cluster, dryRun: DRY, connection: built.chain && RPC ? new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const }, RPC_FALLBACK)) : null, signer: built.chain?.payer ?? null, log });
+log(`automatic SOL top-ups: ${topUp.why}`);
+const ops = new KeeperOps({ registry, siteDir: SITE, cluster, env: process.env, log, uploader: uploaderFromEnv(process.env, cluster), snapshots: !DRY, topUp: topUp.runner, signer: built.chain ? { publicKey: built.chain.payer.publicKey.toBase58(), secretKey: built.chain.payer.secretKey } : null });
 const marketReader: MarketReader | null = RPC ? (new Connection(RPC, budgetedRpcConfig({ commitment: "confirmed" as const, disableRetryOnRateLimit: true }, RPC_FALLBACK)) as unknown as MarketReader) : null;
 // THE READ CACHE (2026-10-13, keeperReadCache.ts, docs/burnticker/API-BUDGETS.md): the publish loop reads each coin's chain state through
 // a per-coin cache (5 min for supply, the TokenConfig, the LP lock and the vault; 60 s for the fee PDA and the market read) and one batched
@@ -401,7 +407,8 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   // F06: ops.json's conditions come from the one aggregator (keeper-level + per-source health); the memory feeds "recovered"
   const health = ops.feedHealth(), memory = readConditionMemory(registry);
   // second audit 2026-10-18 A-7: failed units, backups and budget holds are conditions too (a keeper refusal is read from the alert rows)
-  const signals = { units: unitCheck.active, budget: budget.lines() };
+  // HB-82 (hourly run 6): today's registry snapshot still missing is a condition on ops.json until it is pinned
+  const signals = { units: unitCheck.active, budget: budget.lines(), snapshot: (() => { try { return snapshotMissingFact(registry, now); } catch { return null; } })() };
   // A-1: the host facts (names and yes/no only)
   // review 4 and 5: every process's dispersal decision (this keeper, the web launcher's from its own env file, the $DEFICIT keeper's record)
   let deficitDispersal: boolean | null = null;
@@ -412,7 +419,7 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
     webProbe: webProbeFact(readWebProbeStatus(process.cwd()), process.env),
     // B-3 / OPS-1 (2026-10-19): the off-box pull receipt (data/offbox-pull.json): pulled / stale / none, its time and method only
     ...offboxPullFact(readOffboxPull(process.cwd(), now), now) };
-  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state, hostFacts, tradeClicks: (() => { try { return tradeClickCounts(registry.db, now); } catch { return null; } })() }));
+  publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook, apiBudget: budgetLines, health, conditionMemory: memory, signals, heartbeat: heartbeat.state, hostFacts, tradeClicks: (() => { try { return tradeClickCounts(registry.db, now); } catch { return null; } })(), topUps: (() => { try { return topUpOpsLines(registry, now); } catch { return null; } })() }));
   try { registry.setStatus(CONDITIONS_KEY, foldConditions(memory, activeConditions(r.snapshot, health, { ...signals, alerts, lastCycleAt: r.snapshot?.lastCycle?.at ?? null }), now), now); } catch (e) { log(`  [ops] condition memory not written: ${(e as Error).message.slice(0, 120)}`); }
 }
 

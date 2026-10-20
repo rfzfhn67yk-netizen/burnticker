@@ -91,6 +91,8 @@ deficit_first_paint() {
   [ -f "$BK_PUB/status.json" ] || return 0
   if [ "$CHECK" = 1 ]; then add "  deficit first paint: would render $DEFICIT_WWW/index.html from $BK_PUB/status.json"; return 0; fi
   [ -d "$DEFICIT_WWW" ] || return 0
+  # publish 99 (2026-10-19): the host release is cut from the public tree; a helper that is not in it must not fail the every-minute unit
+  [ -f scripts/ops/deficit-first-paint.mts ] || { add "  deficit first paint: skipped (scripts/ops/deficit-first-paint.mts is not in this release)"; return 0; }
   if fp=$(node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/ops/deficit-first-paint.mts site/deficit/index.html "$BK_PUB/status.json" "$BK_PUB/burns.json" "$DEFICIT_WWW/index.html" 2>&1); then
     [ -z "$fp" ] || add "  deficit first paint: $fp"
   else

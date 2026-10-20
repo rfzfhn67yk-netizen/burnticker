@@ -45,12 +45,19 @@ function teamCode(abbr: string, league: string | null | undefined): string {
   return A;
 }
 
+/** Whether a team's code is used by more than one league (its default ticker then carries the league's tag). */
+export function teamCodeShared(abbr0: string, league: string | null | undefined): boolean {
+  if (!league) return false;
+  const abbr = league in LEAGUES ? displayAbbr(league as LeagueId, abbr0) : abbr0;
+  return (codeLeagues().get(code(abbr))?.size ?? 0) > 1;
+}
+
 export type TeamWindow = "season" | "post" | "next" | "perpetual" | "title" | "game";
-export function teamTicker(abbr0: string, o: { league?: string | null; window?: TeamWindow | null; games?: number | null; outcome?: "win" | "loss" | "draw" | "windraw" | "drawloss" | "winloss" | null; inverse?: boolean }): string {
+export function teamTicker(abbr0: string, o: { league?: string | null; window?: TeamWindow | null; games?: number | null; outcome?: "win" | "loss" | "draw" | "windraw" | "drawloss" | "winloss" | null; inverse?: boolean; /** HB-85: the league tag even when the code is the league's own (a pair whose other side needs it) */ withTag?: boolean }): string {
   // QA pass 9 #29: a default ticker starts with the team's conventional display code ($MCI, not $MNC); the pin abbreviation is unchanged
   const abbr = o.league && o.league in LEAGUES ? displayAbbr(o.league as LeagueId, abbr0) : abbr0;
   const A = teamCode(abbr, o.league);
-  const shared = !!o.league && (codeLeagues().get(code(abbr))?.size ?? 0) > 1;
+  const shared = !!o.league && (!!o.withTag || teamCodeShared(abbr0, o.league));
   const tag = shared ? LEAGUE_TAG[o.league!] ?? code(o.league!, 3) : "";
   if (o.window === "title") return `${A}${CHAMP[o.league ?? ""] ?? "CHAMP"}`.slice(0, 10);
   // two of the three results (soccer): both words, short form both initials ($ARSWINDRAW, $ARSWD), never the fade side's NOLOSS

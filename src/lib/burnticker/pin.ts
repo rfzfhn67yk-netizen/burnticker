@@ -21,7 +21,12 @@ export interface PinUploader {
   readonly name: string;
   /** Uploads bytes; returns the transaction id and the gateway URL (https://arweave.net/<id>, or Irys devnet's gateway on devnet). */
   upload(body: Uint8Array, contentType: string, tags: { name: string; value: string }[]): Promise<{ id: string; url: string }>;
+  /** HB-82: the prefunded upload balance and the price of `bytes` (Irys; a test double may leave it out). */
+  balance?(bytes: number): Promise<UploadBalance>;
 }
+/** HB-82: an uploader's balance read, in lamports. */
+export interface UploadBalance { address: string; balanceLamports: bigint; priceLamports: bigint }
+type IrysClient = { address?: string; upload(data: Buffer, o: { tags: { name: string; value: string }[] }): Promise<{ id: string }>; getBalance(): Promise<{ toString(): string }>; getPrice(bytes: number): Promise<{ toString(): string }> };
 export interface PinnedCoin {
   metadataUri: string; metadataTx: string; metadataSha256: string; metadataJson: string;
   imageUri: string; imageTx: string; imageSha256: string;
@@ -38,10 +43,26 @@ export class IrysUploader implements PinUploader {
   readonly name = "irys";
   private o: { cluster: "devnet" | "mainnet" | "localnet"; payer: string | null; rpcUrl?: string | null };
   constructor(o: { cluster: "devnet" | "mainnet" | "localnet"; payer: string | null; rpcUrl?: string | null }) { this.o = o; }
+  /** HB-82 (hourly run 6): the payer's prefunded Irys balance and the price of `bytes`, two reads inside the "irys" budget (the same reads scripts/ops/irys-fund.mts makes). */
+  async balance(bytes: number): Promise<UploadBalance> {
+    const client = await this.client();
+    await takeOrThrow("irys", { units: 2, requests: 2 });
+    const big = (v: { toString(): string }): bigint => BigInt(v.toString().split(".")[0]);
+    const [b, p] = await withUploadTimeout(Promise.all([client.getBalance(), client.getPrice(bytes)]), UPLOAD_TIMEOUT_MS);
+    return { address: String(client.address ?? ""), balanceLamports: big(b), priceLamports: big(p) };
+  }
   async upload(body: Uint8Array, contentType: string, tags: { name: string; value: string }[]): Promise<{ id: string; url: string }> {
+    const client = await this.client();
+    await takeOrThrow("irys");   // the request budget (apiBudget.ts): a spent day refuses the upload (the launch is refused, as for any upload failure)
+    const r = await withUploadTimeout(client.upload(Buffer.from(body), { tags: [{ name: "Content-Type", value: contentType }, ...tags] }), UPLOAD_TIMEOUT_MS);
+    // 2026-10-13: Irys bundles free uploads to Arweave on its own schedule (the 10-12 $DEFICIT pin was still unseeded a day later, so
+    // arweave.net answered 404 while gateway.irys.xyz served it). The gateway URL is the same id, served at once and from Arweave once
+    // seeded, and it is one of the three forms launchGate's PINNED_URI_RE accepts.
+    return { id: r.id, url: this.o.cluster === "mainnet" ? `https://gateway.irys.xyz/${r.id}` : `https://devnet.irys.xyz/${r.id}` };
+  }
+  private async client(): Promise<IrysClient> {
     if (!this.o.payer) throw new Error("BURNTICKER_UPLOAD_PAYER (the ops wallet that pays Irys) is not set");
     type IrysChain = { withWallet(k: string): IrysChain; withRpc(u: string): IrysChain; devnet(): IrysChain; then: Promise<IrysClient>["then"] };
-    type IrysClient = { upload(data: Buffer, o: { tags: { name: string; value: string }[] }): Promise<{ id: string }> };
     let Uploader: (c: unknown) => IrysChain, Solana: unknown;
     try {
       const pkgA = "@irys/upload", pkgB = "@irys/upload-solana";
@@ -51,13 +72,7 @@ export class IrysUploader implements PinUploader {
     // the SDK's own HTTP timeout (its 20 s default) cancels a slow request; withUploadTimeout (UPLOAD_TIMEOUT_MS, 30 s) is the backstop above it
     let chain = Uploader(Solana).withWallet(this.o.payer);
     if (this.o.cluster !== "mainnet") chain = chain.withRpc(this.o.rpcUrl ?? "https://api.devnet.solana.com").devnet();
-    const client = await chain;
-    await takeOrThrow("irys");   // the request budget (apiBudget.ts): a spent day refuses the upload (the launch is refused, as for any upload failure)
-    const r = await withUploadTimeout(client.upload(Buffer.from(body), { tags: [{ name: "Content-Type", value: contentType }, ...tags] }), UPLOAD_TIMEOUT_MS);
-    // 2026-10-13: Irys bundles free uploads to Arweave on its own schedule (the 10-12 $DEFICIT pin was still unseeded a day later, so
-    // arweave.net answered 404 while gateway.irys.xyz served it). The gateway URL is the same id, served at once and from Arweave once
-    // seeded, and it is one of the three forms launchGate's PINNED_URI_RE accepts.
-    return { id: r.id, url: this.o.cluster === "mainnet" ? `https://gateway.irys.xyz/${r.id}` : `https://devnet.irys.xyz/${r.id}` };
+    return await chain;
   }
 }
 

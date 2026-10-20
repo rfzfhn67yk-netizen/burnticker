@@ -1,3 +1,4 @@
+import { WX_HIGH_MAX_F, WX_HIGH_MIN_F, WX_HIGH_RANGE_LINE } from "@/lib/burnticker/wxBounds";
 /**
  * THE LAUNCH FIELDS' CHECKS, IN WORDS (ChatGPT launch audit 5, L07, 2026-10-11: "abc" as a weather threshold made "Use this rule" do
  * nothing; a blank name let "done" hide the field without a word; "A B!?" became "AB" silently). Each check returns the sentence shown
@@ -46,6 +47,14 @@ const STRAY_ZWJ_RE = /(?<!\p{Extended_Pictographic}\uFE0F?)\u200D|\u200D(?!\p{Ex
 export function controlCharProblem(text: string, field: "name" | "description" | "note" = "name"): string {
   return CONTROL_RE.test(text) || STRAY_ZWJ_RE.test(text) ? `The ${field} has a line break, tab, invisible or text-direction character. Use plain letters, digits, spaces and punctuation.` : "";
 }
+/**
+ * HS-36 (hourly run 6): HTML tags ("<b>", "<script>") and entities ("&amp;") in the creator's own text are refused the way links are:
+ * the text is pinned with the coin as typed, so the tags would show as literal characters on every copy.
+ */
+const MARKUP_TAG_RE = /<\/?[a-z!][^<>]*>/i, MARKUP_ENTITY_RE = /&(?:#\d{1,7}|#x[0-9a-f]{1,6}|[a-z][a-z0-9]{1,31});/i;
+export function markupProblem(text: string, field: "description" | "note" = "description"): string {
+  return MARKUP_TAG_RE.test(text) || MARKUP_ENTITY_RE.test(text) ? `The ${field} cannot have HTML tags or entities. Write it as plain text.` : "";
+}
 export function nameProblem(name: string): string {
   const n = name.trim(), seen = Array.from(visibleText(n)).length, bytes = utf8Bytes(n);
   return !n ? "Enter a name for the coin."
@@ -72,6 +81,6 @@ export function wxThresholdProblem(metric: "high" | "rain", raw: string): string
   if (!v) return metric === "high" ? "Enter a temperature in whole degrees Fahrenheit, for example 90." : "Enter an amount of rain in inches, for example 0.50.";
   if (!/^-?\d+(\.\d+)?$/.test(v)) return metric === "high" ? `“${v}” is not a temperature. Enter whole degrees Fahrenheit, for example 90.` : `“${v}” is not an amount of rain. Enter inches, for example 0.50.`;
   const n = Number(v);
-  if (metric === "high") return !Number.isInteger(n) ? "The climate report gives whole degrees, so enter a whole number." : n < -60 || n > 135 ? "Enter a temperature between -60 and 135 °F." : null;
+  if (metric === "high") return !Number.isInteger(n) ? "The climate report gives whole degrees, so enter a whole number." : n < WX_HIGH_MIN_F || n > WX_HIGH_MAX_F ? WX_HIGH_RANGE_LINE : null;
   return n <= 0 || n >= 10 ? "Enter an amount above 0 and below 10 inches." : !/^\d+(\.\d{1,2})?$/.test(v) ? "The climate report gives hundredths of an inch, so use at most two decimals." : null;
 }

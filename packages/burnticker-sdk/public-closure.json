@@ -74,7 +74,8 @@
     "src/lib/burnticker/utcWords.ts",
     "src/lib/burnticker/vanityMint.ts",
     "src/lib/burnticker/verify.ts",
-    "src/lib/burnticker/walletProof.ts"
+    "src/lib/burnticker/walletProof.ts",
+    "src/lib/burnticker/wxBounds.ts"
   ],
   "npm": [
     "@raydium-io/raydium-sdk-v2",

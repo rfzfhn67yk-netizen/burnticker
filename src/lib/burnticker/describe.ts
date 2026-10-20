@@ -402,6 +402,27 @@ const possessive = (n: string) => (n.endsWith("s") ? `${n}'` : `${n}'s`);
 export const shortDate = (iso: string | null | undefined): string | null => (iso ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00Z` : iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" }) : null);
 const day = shortDate;
 export const tickerFrom = (s: string, suffix = ""): string => { const base = s.toUpperCase().replace(/[^A-Z0-9]/g, ""); return (base.slice(0, Math.max(2, 10 - suffix.length)) + suffix).slice(0, 10); };
+/** HS-35 (hourly run 6): the catalogue's short names for published-data series whose code is not a readable ticker. */
+export const FEED_SHORT_TICKERS: Readonly<Record<string, string>> = {
+  "fred.UNRATE": "UNRATE", "bls.LNS14000000": "UNRATE", "fred.CPIAUCSL": "CPI", "bls.CUSR0000SA0": "CPI", "fred.GFDEBTN": "USDEBT", "treasury.debt": "USDEBT",
+  "us.debt.total-public-outstanding": "USDEBT", "bls.eggs": "EGGS", "usda.eggs": "EGGS", "bls.APU0000708111": "EGGS", "fred.APU0000708111": "EGGS", "eia.gasoline": "GAS", "bea.gdp": "GDP",
+};
+/**
+ * HS-35: a published-data coin's ticker base, never a word cut in half ($UNEMPLOYME): the catalogue short name, else the series code when
+ * it is a short upper-case code (fred.UNRATE → UNRATE), else whole words of the title that fit in `room`, else the title's initials.
+ */
+export function feedTickerBase(series: string, title: string, room = 10): string {
+  const short = FEED_SHORT_TICKERS[series] ?? FEED_SHORT_TICKERS[series.split(":")[0]];
+  if (short && short.length <= room) return short;
+  const code = series.split(":")[0].split(".").slice(1).join("");
+  if (/^[A-Z][A-Z0-9]{1,9}$/.test(code) && code.length <= room) return code;
+  const words = title.replace(/^U\.?S\.?\s+/i, "").split(/[(—,]/)[0].split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w.toUpperCase());
+  let out = "";
+  for (const w of words) { if ((out + w).length > room) break; out += w; }
+  if (out.length >= 2) return out;
+  const initials = words.map((w) => w[0]).join("");
+  return initials.length >= 2 ? initials.slice(0, room) : tickerFrom(title).slice(0, room);
+}
 // the NBA's feed is named only while it answers (espn.ts NBA_OFFICIAL_ANSWERS; gameSettle.ts countedOfficialOf)
 const CROSS: Record<string, string> = { nhl: "NHL's official scores", mlb: "MLB's official feed", ...(NBA_OFFICIAL_ANSWERS ? { nba: "NBA's official feed" } : {}) };
 const CHAMP_CODE: Record<string, string> = { mlb: "WS", nfl: "SB", nba: "TITLE", nhl: "CUP" };
@@ -634,7 +655,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const not = r.scalar?.baseline === 0 ? "reads zero" : dir === "up" ? "does not rise" : dir === "down" ? "does not fall" : "does not move";
     const did = r.scalar?.baseline === 0 ? "is above zero" : dir === "up" ? "rises" : dir === "down" ? "falls" : "moves";
     const sub = paramSubject(series), what = sub ? sub.name : title;
-    return build(fadeName(series, sub ? sub.name : title, r.scalar?.baseline === 0), tickerFrom(`NO${sub ? sub.ticker : title.replace(/^U\.?S\.?\s+/i, "")}`), `burns on every reading of ${what} that ${not}`,
+    return build(fadeName(series, sub ? sub.name : title, r.scalar?.baseline === 0), (sub ? tickerFrom(`NO${sub.ticker}`) : `NO${feedTickerBase(series, f.title, 8)}`), `burns on every reading of ${what} that ${not}`,
       (t) => `For every reading of ${what} that ${not}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}.${sub ? ` Each reading is ${sub.window}.` : ""} A reading that ${did}, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "catalogue" && ctx.feed) {
@@ -647,7 +668,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
         (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel} ${sub.what}`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Each reading is ${sub.window}. Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
     }
     const title0 = f.title.split(/[(—,]/)[0].trim(), ch = changePhrase(r, f.unitLabel, title0, false);
-    return build(title0, tickerFrom(f.title.replace(/^U\.?S\.?\s+/i, "").split(/[\s(,—-]/)[0]), ch ? `burns for ${ch}` : `burns for every ${f.unitLabel} (${title0})`,
+    return build(title0, feedTickerBase(series, f.title), ch ? `burns for ${ch}` : `burns for every ${f.unitLabel} (${title0})`,
       (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel}`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "polymarket" && r.market && r.binary && !r.binary.onYes && r.binary.onNo) {
@@ -739,6 +760,27 @@ export function titleSuggest(t: { abbr: string; league: LeagueId; nickname: stri
   const code = championshipCode(t.league);
   const ticker = teamTicker(t.abbr, { league: t.league, window: "title" });
   return negated ? { name: fitName(`${t.nickname} Fall Short`), ticker: `NO${ticker}`.slice(0, 10) } : { name: fitName(`${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`), ticker };
+}
+/** HS-33 (hourly run 6): the winner-market event titles (search.ts CHAMPIONSHIP's `title` patterns), each with its league. */
+const CHAMP_EVENT_TITLES: readonly [RegExp, LeagueId][] = [[/^MLB World Series Champion (\d{4})$/, "mlb"], [/^Pro Football: (\d{4}) Champion/, "nfl"], [/^NBA: (\d{4}) Champion$/, "nba"], [/^NHL: (\d{4}) Champion/, "nhl"]];
+/**
+ * HS-33: an outcome of a league's winner market ("Denver Broncos" under "Pro Football: 2027 Champion") is named for its rule, "Broncos
+ * Champs 2027", never the bare team name, which reads as an official team coin. The ticker is the one team-title ticker (titleSuggest,
+ * HB-20), so the search card, the wizard and the review agree. null for any other event or outcome.
+ */
+export function championOutcomeSuggest(eventTitle: string | null | undefined, outcome: string | null | undefined): { name: string; ticker: string } | null {
+  const o = (outcome ?? "").trim().toLowerCase();
+  if (!eventTitle || !o) return null;
+  for (const [re, league] of CHAMP_EVENT_TITLES) {
+    const m = re.exec(eventTitle.trim());
+    if (!m) continue;
+    const hits = findTeams(outcome!).filter((t) => t.league === league && (t.name.toLowerCase() === o || t.nickname.toLowerCase() === o));
+    if (hits.length !== 1) return null;
+    const t = hits[0], base = titleSuggest({ abbr: t.abbr, league, nickname: t.nickname });
+    // "Win It All" trips the copy lint's win-money rule, so the name is the one title name plus the season ("Broncos Champs 2027")
+    return { name: fitName([`${base.name} ${m[1]}`, base.name]), ticker: base.ticker };
+  }
+  return null;
 }
 /** The championship words search.ts CHAMPIONSHIP names each title with, back to the league ("the 2027 NHL championship" → nhl). */
 const TITLE_WORDS: readonly [RegExp, LeagueId][] = [[/^the \d{4} World Series$/, "mlb"], [/^the \d{4} pro football championship$/, "nfl"], [/^the \d{4} NBA championship$/, "nba"], [/^the \d{4} NHL championship$/, "nhl"]];

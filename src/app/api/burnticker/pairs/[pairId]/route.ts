@@ -6,7 +6,7 @@ import { derbyPairBlock } from "@/lib/burnticker/api/derby";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { pairIsPublic, pairLifecycle, pairSideHrefs } from "@/lib/burnticker/publicPairs";
 import { heavyRefusal, pageLimiter } from "@/lib/burnticker/api/http";
-import { KeyedSwr } from "@/lib/burnticker/keyedSwr";
+import { KeyedSwr, SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
 import { EDGE_JSON_CACHE, NO_STORE } from "@/lib/burnticker/edgeCache";
 
 export const dynamic = "force-dynamic";
@@ -18,10 +18,17 @@ export const dynamic = "force-dynamic";
  * read waits up to PAIR_COLD_WAIT_MS, then answers 503 with retry-after.
  */
 const PAIR_MEMO_MS = 15_000, PAIR_COLD_WAIT_MS = 12_000, PAIR_RETRY_SEC = 3;
+/**
+ * HB-99 (hourly run 7): a pair body 49 minutes old was served as a hit under a 60 s cache header, because a refresh that never landed kept
+ * the old answer "fresh". An answer older than PAIR_MAX_STALE_MS (the header's max-age plus its stale-while-revalidate window) is no
+ * longer a hit: the refresh is waited for, a hung refresh is dropped after SWR_BUILD_TIMEOUT_MS, and an old answer that is still all there
+ * is goes out with no-store and its real age (x-pair-age-sec), never under the 60 s header.
+ */
+const PAIR_MAX_STALE_MS = 75_000;
 const memos = new WeakMap<object, KeyedSwr<unknown>>();
 const memoFor = (registry: object): KeyedSwr<unknown> => {
   let m = memos.get(registry);
-  if (!m) { m = new KeyedSwr<unknown>({ freshMs: PAIR_MEMO_MS, coldWaitMs: PAIR_COLD_WAIT_MS, maxKeys: 128, log: (k, e) => console.error(`[burnticker/pairs] ${k}: the pair could not be read:`, e) }); memos.set(registry, m); }
+  if (!m) { m = new KeyedSwr<unknown>({ freshMs: PAIR_MEMO_MS, coldWaitMs: PAIR_COLD_WAIT_MS, maxKeys: 128, maxStaleMs: PAIR_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, log: (k, e) => console.error(`[burnticker/pairs] ${k}: the pair could not be read:`, e) }); memos.set(registry, m); }
   return m;
 };
 
@@ -54,5 +61,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ pairId: 
   const version = `${p.registry.pageVersion(a.mint)}|${p.registry.pageVersion(b.mint)}`;
   const got = await memoFor(p.registry).get(pairId, version, build);
   if (!got) return NextResponse.json({ loading: true, error: "this pair is being read; try again in a few seconds", code: "pair-loading", retryAfterSec: PAIR_RETRY_SEC }, { status: 503, headers: { ...NO_STORE, "retry-after": String(PAIR_RETRY_SEC) } });
+  // HB-99: a stale answer (no refresh landed) says its real age and is never cached under the 60 s header
+  if (got.state === "stale" || got.state === "stale-version") return NextResponse.json(got.value, { headers: { ...NO_STORE, "x-pair-memo": got.state, "x-pair-age-sec": String(Math.round(got.ageMs / 1000)) } });
   return NextResponse.json(got.value, { headers: { ...EDGE_JSON_CACHE, "x-pair-memo": got.state } });
 }

@@ -20,7 +20,7 @@ import { FIRST_PARTY_CARD_IDS, GRID_TABS, cardMatches, firstPartyCards, gridStat
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
 import { sharedTickers } from "@/lib/burnticker/coinKey";
 import { rereadDue } from "@/lib/burnticker/rereadCache";
-import { LIST_COPY, browserStorage, collapsedLine, groupCoins, readOpenOnly, withListLines, writeOpenOnly } from "@/lib/burnticker/coinsList";
+import { LIST_COPY, PAIR_NO_BURN_YET, browserStorage, collapsedLine, groupCoins, pairDecidedRowLine, readOpenOnly, withListLines, writeOpenOnly } from "@/lib/burnticker/coinsList";
 
 /**
  * THE COINS PAGE (/burnticker; list-first since 2026-10-12: Claude site audit 2 item 5, ChatGPT audit 6 A5 and A10, Codex review 5
@@ -32,7 +32,7 @@ import { LIST_COPY, browserStorage, collapsedLine, groupCoins, readOpenOnly, wit
  * screens, this page's on phones.
  */
 interface IndexToken extends IndexCoin { oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; pctOfSupply: number; raised: string | null; threshold: string | null; quote: string | null }
-interface PairSide { ticker: string; name: string; burns: number; burned: string; supply: string; lastBurnAt: string | null }
+interface PairSide { ticker: string; name: string; mint?: string; burns: number; burned: string; supply: string; lastBurnAt: string | null }
 interface Index { generatedAt?: string; tokens: IndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSide; b: PairSide }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean } | null; cluster: string; stubs: string[] }
 export interface SeasonsPreview { leagues: number; teamCoins: number; /** HS-5: home.ts seasonsStripLine, made on the server */ line: string; sports: { id: string; label: string; leagues: { id: string; label: string; href: string; coins: number }[] }[] }
 
@@ -119,6 +119,8 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const sharedSet = useMemo(() => sharedTickers(listable), [listable]);
   const coins = useMemo(() => tabCoins(tab, listable.filter((t) => t.status !== "draft").filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), (t) => { const k = coinWatchKey(ix?.cluster, t.mint); return !!k && watch.list.coins.includes(k); }), [listable, tab, s, watch.list.coins, ix?.cluster]);
   const pairs = useMemo(() => (ix?.pairs ?? []).filter((p) => !s || `${p.a.ticker} ${p.b.ticker} ${p.a.name} ${p.b.name} ${p.seriesTitle ?? ""}`.toLowerCase().includes(s)), [ix, s]);
+  // HS-41: a pair side's listing (its result line), by mint, else by ticker
+  const sideListing = (s: PairSide) => (ix?.tokens ?? []).find((t) => (s.mint ? t.mint === s.mint : t.ticker === s.ticker))?.listing ?? null;
   const audit = auditBadgeView(ix?.audit ?? null);
   const launch = useLaunchAvailability();
   // website-17 wiring item 3: the earned slots lead the public grid in rule order, each tagged with its rule's label; the rest keep their order
@@ -188,7 +190,9 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
                       <span className="text-2xl tabular-nums">{p.a.burns} <span className="text-neutral-500">:</span> {p.b.burns}</span>
                       <span className="text-lg font-semibold">${p.b.ticker}</span>
                     </div>
-                    <div className="mt-1 flex justify-between text-[11px] text-neutral-500"><span>last burn {ago(p.a.lastBurnAt, now)}</span><span>burns</span><span>last burn {ago(p.b.lastBurnAt, now)}</span></div>
+                    {/* HS-41 (hourly run 7): words, not dashes, and the decided line under a decided pair (coinsList.ts) */}
+                    <div className="mt-1 flex justify-between text-[11px] text-neutral-500"><span>{p.a.lastBurnAt ? `last burn ${ago(p.a.lastBurnAt, now)}` : PAIR_NO_BURN_YET}</span><span>burns</span><span>{p.b.lastBurnAt ? `last burn ${ago(p.b.lastBurnAt, now)}` : PAIR_NO_BURN_YET}</span></div>
+                    {(() => { const d = pairDecidedRowLine({ ticker: p.a.ticker, listing: sideListing(p.a) }, { ticker: p.b.ticker, listing: sideListing(p.b) }, { now }); return d ? <p className="mt-1 text-xs text-neutral-300" data-pair-decided>{d}</p> : null; })()}
                   </Link>
                 ))}
               </div>

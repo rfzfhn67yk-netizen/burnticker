@@ -108,7 +108,8 @@ describe("PROD-02: the launch page wiring", () => {
   });
   test("every suggestion records its side: the search card, the event outcome and a Polymarket pick", () => {
     assert.match(page, /setSrcSuggest\(\{ name: o\.name \?\? null, ticker: o\.ticker \?\? null, side: ruleSide\(r\) \}\);/);
-    assert.match(page, /setSrcSuggest\(\{ name: m\.outcome \? m\.outcome\.slice\(0, 32\) : null, ticker: null, side: "yes" \}\);/);
+    // HS-33 (hourly run 6): a winner-market outcome is named for its rule first (describe.ts championOutcomeSuggest)
+    assert.match(page, /setSrcSuggest\(\{ name: champ\?\.name \?\? \(m\.outcome \? m\.outcome\.slice\(0, 32\) : null\), ticker: champ\?\.ticker \?\? null, side: "yes" \}\);/);
     assert.doesNotMatch(page, /srcSuggest\.name \?\?/, "the raw suggestion never wins over the side");
   });
   test("the draft saves and restores the suggestion", () => {

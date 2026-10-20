@@ -167,7 +167,8 @@ describe("the API: /search, /elections, /elections/pair, /sports — schemas, no
     for (const id of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "mcbb", "wcbb", "eng.1", "usa.1", "uefa.champions"]) assert.ok(lg.leagues.some((l) => l.id === id), id);
     const t = await get("/sports/teams?league=mlb&q=rays", "listSportsTeams") as { teams: { abbr: string; series: { win: string }; next: { opponent: string } | null }[]; scheduleNote: string | null };
     assert.equal(t.teams[0].abbr, "TB"); assert.match(t.teams[0].series.win, /^espn\.team:mlb-TB\.30-win-s\d{4}$/); assert.equal(t.scheduleNote, null);
-    assert.equal(t.teams[0].next?.opponent, "CLE/CWS", "MLB's official schedule lists the next game, opponent still to be decided");
+    // HB-87 (hourly run 6): the feed's "CLE/CWS" placeholder is never printed: no opponent, marked undecided
+    assert.equal(t.teams[0].next?.opponent, null, "MLB's official schedule lists the next game, opponent still to be decided"); assert.equal((t.teams[0].next as { undecided?: boolean } | null)?.undecided, true);
     const g = await get("/sports/games?league=mlb&q=dodgers", "listSportsGames") as { games: { eventId: string; a: { abbr: string }; b: { abbr: string }; series: { aLoss: string; bLoss: string } }[] };
     assert.equal(g.games[0].eventId, "849809"); assert.equal(g.games[0].series.aLoss, "espn.game:mlb-849809-LAD-loss"); assert.equal(g.games[0].series.bLoss, "espn.game:mlb-849809-MIL-loss");
     const nfl = await get("/sports/teams?league=nfl&q=eagles", "listSportsTeams") as { teams: { abbr: string; next: unknown }[]; scheduleNote: string | null };

@@ -18,7 +18,7 @@ import { ReadinessPanel } from "../../_components/ReadinessPanel";
 import { readinessFromStatus } from "@/lib/burnticker/readiness";
 import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
-import { burnLogWords, queuedReadingsCount } from "@/lib/burnticker/queuedReading";
+import { burnLogWords, healthLine, queuedReadingsCount } from "@/lib/burnticker/queuedReading";
 import { graduationExplainer } from "@/lib/burnticker/graduationLine";
 import { nextResultLinks } from "@/lib/burnticker/followFeeds";
 import { coinWatchKey } from "@/lib/burnticker/watchlist";
@@ -334,7 +334,7 @@ export default function TokenPage() {
             {(b.verify?.checks?.length ?? 0) > 0 && <p className="text-red-400">Checks that did not pass: {joinList(b.verify.checks, "; ")}</p>}
           </details>)}
         </section>
-        <p className="text-xs text-neutral-500">{s.health.pending === 1 ? "One reading is" : `${s.health.pending} readings are`} queued with no burn yet, and {s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.{realHeld ? ` ${realHeld}` : s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}</p>
+        <p className="text-xs text-neutral-500" data-health-line>{healthLine(s.health.pending, s.health.unverified)}{realHeld ? ` ${realHeld}` : s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}</p>
       </div>
 
       <div id="panel-rule" role="tabpanel" aria-labelledby="tab-rule" hidden={tab !== "rule"} className="space-y-5">

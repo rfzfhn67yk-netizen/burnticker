@@ -70,6 +70,16 @@ export async function requireLaunchProof(signMessage: ((m: Uint8Array) => Promis
 }
 /** HB-53: the wallet prompts a launch plan asks for: the sign-message proof when the wallet is asked for it, plus one per transaction step. */
 export const walletPromptCount = (o: { transactions: number; proof: boolean }): number => Math.max(0, o.transactions) + (o.proof ? 1 : 0);
+/**
+ * HB-92 (hourly run 7): the review's "Before you connect a wallet" line said "asks 2 separate times" beside a button that said "asks 3
+ * times" (the proof counted only on the button). Both now come from walletPromptCount: this line counts the proof when it is asked.
+ */
+export const walletPromptsLine = (transactions: number, proof: boolean): string => {
+  const n = walletPromptCount({ transactions, proof });
+  return proof
+    ? `Your wallet asks ${n} times in all: first to sign the request that proves this launch is yours, which sends nothing, then once for each of the ${transactions} transactions, in the order above.`
+    : `Your wallet asks ${n} separate times, once for each transaction, in the order above.`;
+};
 
 /** The prepare's code for a signature that does not check out (api/handlers.ts). */
 export const WALLET_PROOF_INVALID_CODE = "wallet-proof-invalid";

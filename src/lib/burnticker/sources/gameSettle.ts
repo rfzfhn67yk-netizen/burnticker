@@ -1,6 +1,6 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHits, SETTLE_AFTER_START_MS, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome, apiSportsRefusal } from "@/lib/burnticker/sources/espn";
+import { outcomeOf, LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHits, SETTLE_AFTER_START_MS, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome, apiSportsRefusal } from "@/lib/burnticker/sources/espn";
 
 /**
  * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10). NO ESPN READS: the game list comes from the league's free official schedule (MLB
@@ -1028,7 +1028,7 @@ export function lastListedDue(games: readonly Game[], now: number): number | nul
   return ts.length ? Math.max(...ts) : null;
 }
 
-export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number; seriesId?: string | null } = {}): Promise<ResolvedSelector> {
+export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number; seriesId?: string | null; /** HB-83: the review's display-only back-test */ display?: boolean } = {}): Promise<ResolvedSelector> {
   // the deps' clock when the host gives one (the keeper's wall clock; a test's or rehearsal's moved clock), so the 6-hour read gate and a
   // game coin's two reads are measured on the same clock
   const now = o.nowMs ?? d.now?.() ?? Date.now();
@@ -1052,6 +1052,18 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
     if (!g.completed && g.state !== "post") { if (!POSTPONED_RE.test(g.detail)) due(gameDueAt(g, now)); continue; }
     if (!g.completed && POSTPONED_RE.test(g.detail)) continue;
     if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; waitingDays.add(g.date); due(gameDueAt(g, now)); continue; }
+    // HB-83 (hourly run 6): the review's back-test is display-only, so it counts each final from the schedule it already read. Settling
+    // every game (a league feed's day pages, the on-chain market, TheSportsDB per game) spent the MLB Stats API's whole rate budget on
+    // one wizard walk; the keeper never takes this branch.
+    if (o.display && s.kind === "team") {
+      const out = outcomeOf(g, s.abbr, tid);
+      if (out === null) continue;
+      const cur = byDay.get(g.date) ?? { value: 0, titles: [], url: "", method: "schedule (display only)" };
+      if (outcomeHits(s.outcome, out)) cur.value++;
+      cur.titles.push(`${g.away.abbr} ${g.away.score} @ ${g.home.abbr} ${g.home.score} final (${out === "tie" || out === "draw" ? "draw" : `${s.abbr} ${out}`}) · read from the league's schedule, for display only`);
+      byDay.set(g.date, cur);
+      continue;
+    }
     const v = await settleGame(client, g, d, sched);
     if (v.kind === "awaiting") { awaiting++; waitingDays.add(g.date); if (v.dueAt) due(v.dueAt); else undated++; continue; }
     if (v.kind === "held") { const r = /^no primary|^cross-read missing/.test(v.why) ? v.why : `${g.eventId} ${g.name}: ${v.why}`; if (!refusals.includes(r)) refusals.push(r); continue; }

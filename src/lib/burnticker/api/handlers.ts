@@ -6,7 +6,7 @@ import { webDispersalOn } from "@/lib/burnticker/programHash";
 import type { Platform } from "@/lib/burnticker/server";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { launchLabCostLamports, solText } from "@/lib/burnticker/launchCost";
-import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LEFT_LINE, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
+import { EVENT_LEVEL_REFUSAL, eventLevelRule, oneMarketDate, meetingsPairNames, MEETINGS_NONE_LEFT_LINE, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
 import { liveSinks } from "@/lib/burnticker/endSinks";
@@ -34,10 +34,14 @@ import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBa
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { IMAGE_URL_REFUSED, imageUrlSent } from "@/lib/burnticker/imagePin";
 import { seasonOverFor, seasonStatus } from "@/lib/burnticker/seasonOver";
+import { meetingsRefusal, meetingsVerdict, meetingsVerdictFor } from "@/lib/burnticker/meetingsLeft";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, sha256Hex, uploadMayHaveCompleted, type PinHooks, type PinnedCoin } from "@/lib/burnticker/pin";
 import { checkWalletProof, provenReviewCreator, spendProof } from "@/lib/burnticker/walletProofCheck";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
+import { BudgetHoldError, isBudgetHold } from "@/lib/burnticker/apiBudget";
+import { busyRetryText } from "@/lib/burnticker/coverage/freshReading";
+import { BACKTEST_SLOW_RETRY_SEC } from "@/lib/burnticker/api/backtestWait";
 import { describeRule } from "@/lib/burnticker/describe";
 import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
 import { BALLOT_NOTE, RACE_TYPES, candidateMappingLine, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
@@ -294,6 +298,20 @@ const NBA_SCHEDULE_SOURCE = NBA_FEED_WORDING;
 const scheduleSource = (league: LeagueId): string => (league === "mlb" || league === "nhl" ? "The schedule comes from the league's official feed." : league === "nba" ? "The schedule comes from the NBA's feed when it answers, otherwise from TheSportsDB under licence." : "The schedule comes from TheSportsDB, with a licensed key.");
 /** The cache line of an answer served without a schedule that is still being read or failed (H1 re-review): seconds, never minutes. */
 export const DEGRADED_CACHE = "public, max-age=5";
+/**
+ * HB-87 (hourly run 6): a team's next game as the team list says it. `home` is from the team's own side of the game, so of the two
+ * teams in one game exactly one reads "vs" and the other "at" (guidedLaunch.ts nextGameWords). An opponent the schedule has not named
+ * yet (the feed's "TB/CLE" placeholder for a series still being played) is never printed: `opponent` is null and `undecided` is true.
+ * A second game against the same opponent on the same day (a doubleheader) is counted in `gamesThatDay`.
+ */
+export function teamNextGame(games: readonly Game[], g: Game, abbr: string): { eventId: string; title: string; startsAt: string; detail: string; opponent: string | null; undecided: boolean; home: boolean; gamesThatDay: number } {
+  const home = g.home.abbr === abbr;
+  const opp = home ? g.away : g.home;
+  const undecided = opp.abbr === "TBD" || /\//.test(opp.nickname || opp.name || "");
+  const sameDay = games.filter((x) => !x.completed && x.date === g.date && (x.home.abbr === abbr || x.away.abbr === abbr) && (x.home.abbr === abbr ? x.away : x.home).abbr === opp.abbr).length;
+  return { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: undecided ? null : opp.nickname || opp.abbr, undecided, home, gamesThatDay: Math.max(1, sameDay) };
+}
+
 /** How long the team picker waits for a league's schedule before it serves the table without next games (H1). */
 export const TEAMS_SCHEDULE_WAIT_MS = 3_000;
 /** GET /v1/sports/teams?league= — the team picker for team coins (the league's own schedule or TheSportsDB; no ESPN reads): the static team table with each team's next game and record. No league → the leagues. */
@@ -324,13 +342,12 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
   const teams = listed.filter((t) => !named || named.has(t.abbr) || t.name.toLowerCase().includes(needle.toLowerCase())).slice(0, needle ? 200 : 400).map((t) => {
     // a game being played comes first, then the next one (a live game is "Live now", QA pass 9 #35)
     const g = games.filter((x) => (x.home.abbr === t.abbr || x.away.abbr === t.abbr) && !x.completed).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
-    const opp = g ? (g.home.abbr === t.abbr ? g.away : g.home) : null;
     const me = g ? (g.home.abbr === t.abbr ? g.home : g.away) : null;
     const win = teamSeries(league, t.abbr, "win", { kind: "season", year });
     // audit 6 item 10: a record only when the schedule carries one; the field is left out otherwise (never null, never a bare dash)
     const record = me?.record ?? null;
     const live = !!g && isLive(g, nowMs);
-    return { abbr: t.abbr, code: teamCodeOf(t), city: t.city, nickname: t.nickname, name: t.name, ticker: teamTicker(t.abbr, { league, window: "season", outcome: "win" }), league, series: { win, loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, ...(record ? { record } : {}), next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr, live, when: live ? LIVE_NOW : null } : null, season: seasonStatus(t.abbr, games, readable) };
+    return { abbr: t.abbr, code: teamCodeOf(t), city: t.city, nickname: t.nickname, name: t.name, ticker: teamTicker(t.abbr, { league, window: "season", outcome: "win" }), league, series: { win, loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, ...(record ? { record } : {}), next: g ? { ...teamNextGame(games, g, t.abbr), live, when: live ? LIVE_NOW : null } : null, season: seasonStatus(t.abbr, games, readable) };
   });
   const divisionInfo = league === "cfb" ? { division: { shown: division, line: division === "fbs" ? FBS_DEFAULT_LINE(listed.length, teamsOf("cfb").length - listed.length) : null, all: "/api/burnticker/v1/sports/teams?league=cfb&division=all" } } : {};
   const body = ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote, scheduleDetail, ...divisionInfo, order: "alphabetical", teams });
@@ -396,7 +413,18 @@ export async function sportsRivalry(_p: Platform, q: { league?: string | null; a
     return { eventId: g.eventId, startsAt: g.startsAt, date: g.date, playoff: g.seasonType === 3, home: g.home.abbr, away: g.away.abbr, title: g.name, live, when: live ? LIVE_NOW : null, oneGame: open ? { aHome: g.home.abbr === ta.abbr, series: { aLoss: gameSeries(league, g.eventId, ta.abbr, "loss"), bLoss: gameSeries(league, g.eventId, tb.abbr, "loss") } } : null, status: result === "pending" ? (live || g.state === "in" ? "in progress" : "scheduled") : result === "void" ? "postponed or cancelled" : "final", result, score: g.completed && g.home.score !== null && g.away.score !== null ? { home: g.home.score, away: g.away.score } : null };
   });
   const tally = tallyMeetings(rows.map((r) => r.result));
-  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered: rows.some((r) => r.result === "pending"), offeredLine: !rows.length ? MEETINGS_NONE_LINE : rows.some((r) => r.result === "pending") ? null : MEETINGS_NONE_LEFT_LINE, meetings: rows, count: rows.length, oneGame: { label: RIVALRY_GAME_LABEL, searched: oneGameSearchLine(seasonLabel(league, year), rows.filter((r) => r.oneGame).length, !noPlayoffs(league)), count: rows.filter((r) => r.oneGame).length }, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
+  // HB-72 consistency (hourly run 7): the one rule the review and the prepare use (meetingsLeft.ts); the league's next days are read only
+  // when no meeting is left (at most 3 seconds), to see whether either team's season is over
+  const pendingLeft = rows.some((r) => r.result === "pending");
+  let upcoming: Game[] | null = null;
+  if (rows.length && !pendingLeft && _p?.seasonSchedule) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    upcoming = await Promise.race([_p.seasonSchedule(league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 3_000); })]);
+    clearTimeout(timer);
+  }
+  const verdict = meetingsVerdict({ league, abbr: ta.abbr, opp: tb.abbr, year, season: games, upcoming, now: nowMs });
+  const offered = verdict.state === "open" || verdict.state === "playoffs" || (verdict.state === "unknown" && pendingLeft);
+  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered, offeredLine: offered ? null : verdict.state === "none" ? verdict.line : !rows.length ? MEETINGS_NONE_LINE : MEETINGS_NONE_LEFT_LINE, warning: verdict.state === "playoffs" ? verdict.warning : null, meetings: rows, count: rows.length, oneGame: { label: RIVALRY_GAME_LABEL, searched: oneGameSearchLine(seasonLabel(league, year), rows.filter((r) => r.oneGame).length, !noPlayoffs(league)), count: rows.filter((r) => r.oneGame).length }, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
 }
 
 /** Which venues this host serves (venues.ts): Kalshi behind BURNTICKER_KALSHI_ENABLED; Polymarket and the first-party feeds always. */
@@ -504,12 +532,33 @@ export async function polymarketSearch(p: Platform, q: { q?: string | null; stat
     // audit 12 item 8: a scheduled close already past (still listed by the source, so not settled yet) is marked as its own state, never
     // shown as an upcoming close; the source's state decides whether it is open, this only labels it
     const passed = (endDate: string | null) => status === "open" && !!endDate && Number.isFinite(Date.parse(endDate)) && Date.parse(endDate) < now;
-    const markets = r.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate), closePassed: passed(m.endDate) })), events = r.events.map((e) => ({ ...e, closingSoon: soon(e.endDate), closePassed: passed(e.endDate), markets: e.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate), closePassed: passed(m.endDate) })) }));
+    // HB-84 (hourly run 6): an event's header close and its "past its scheduled close" mark read ONE field, the date the page prints in
+    // the header (guidedLaunch.ts oneMarketDate: the outcome markets' shared close, else the event's), on this one clock. A row is marked
+    // past only by its own close, and the page shows a row's own close only when the header prints none, so a future header date never
+    // sits above a "past its scheduled close" row.
+    const markets = r.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate), closePassed: passed(m.endDate) })), events = r.events.map((e) => {
+      const closesAt = oneMarketDate(e);
+      const rows = e.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate), closePassed: passed(m.endDate) && (closesAt === null || passed(closesAt)) }));
+      return { ...e, closesAt, closingSoon: soon(closesAt), closePassed: passed(closesAt), markets: rows };
+    });
     const keptM = show ? markets : markets.filter((m) => !m.closingSoon), keptE = show ? events : events.filter((e) => !e.closingSoon);
     return ok({ query, status, venue: "polymarket", events: keptE, markets: keptM, hiddenClosingSoon: markets.length - keptM.length + events.length - keptE.length, closePassedNote: CLOSE_PASSED_SEARCH_NOTE, tags: r.tags, note: "Only yes-or-no markets are listed. YES is a market's first outcome and NO is its second. The result is read from the on-chain payout on Polygon. No prices, odds or volume are returned." });
   } catch (e) {
     return fail(502, `Polymarket could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
+}
+
+/** HB-83: the back-test's answer when a source's request budget refused the read (apiBudget.ts BudgetHoldError, also when wrapped). */
+export const BACKTEST_BUDGET_CODE = "backtest-budget";
+export function backtestBudgetRefusal(e: unknown, now = Date.now()): { error: string; retryAfterSec: number } | null {
+  for (let x: unknown = e, i = 0; x && i < 5; x = (x as { cause?: unknown }).cause, i++) {
+    if (!(x instanceof BudgetHoldError)) continue;
+    if (x.outcome.state === "busy") return { error: `The source's read budget is in use.${busyRetryText(x.outcome.waitMs)}`, retryAfterSec: Math.max(1, Math.ceil(x.outcome.waitMs / 1000)) };
+    const midnight = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1);
+    return { error: "The source's read budget for today is used up, so past burns cannot be counted until it resets at midnight UTC.", retryAfterSec: Math.max(60, Math.ceil((midnight - now) / 1000)) };
+  }
+  if (isBudgetHold(e)) return { error: `The source's read budget is in use.${busyRetryText(BACKTEST_SLOW_RETRY_SEC * 1000)}`, retryAfterSec: BACKTEST_SLOW_RETRY_SEC };
+  return null;
 }
 
 /** The back-test of a rule from the venue's own settled history (catalogue rules: the source's frozen fixture; Polymarket: Gamma's closed markets). */
@@ -550,6 +599,9 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
     const refusals = refusalsFor(loadRefuseList(), { titles: [info?.title ?? "", ...r.events.map((e) => e.title ?? "")], categories: info?.category ? [info.category] : [] });
     return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { seriesTitle: info?.title ?? null }), backtest: bt, sentence: backtestSentence(bt), refusals, seriesTitle: info?.title ?? null, settlementSourceUrl: r.settlementSourceUrl, awaitingFinal: r.awaitingFinal, oracleRefusals: r.refusals, matched: r.events.length });
   } catch (e) {
+    // HB-83 (hourly run 6): a source whose request budget is busy or spent answers at once with how long to wait, never a slow 502
+    const hold = backtestBudgetRefusal(e);
+    if (hold) return fail(503, hold.error, { code: BACKTEST_BUDGET_CODE, retryAfterSec: hold.retryAfterSec });
     console.error("[burnticker/backtest] the back-test failed:", e);
     return fail(502, `The back-test could not run just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
@@ -707,6 +759,9 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), burnSol: burnSolEnabledFromEnv(process.env), dispersal: webDispersalOn(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: [o.mint, o.mintB, bankA, bankB].filter((x): x is string => !!x), partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   // sources-7 (QA walkthrough 11 H6): a season rule on a team whose season is over, from the platform's schedule port (one bounded read)
   { const so = await seasonOverFor(locked.rule, p.seasonSchedule); if (so) return { error: fail(so.status, so.message, { code: so.code, next: so.next, problems: [so.message] }) }; }
+  // HB-72 consistency (hourly run 7): a rivalry series with no meeting left and no playoff meeting possible is refused with the line the
+  // page greys the option with (meetingsLeft.ts, the same rule as the page and the review; an unread schedule refuses nothing)
+  { const mr = meetingsRefusal(await meetingsVerdictFor(locked.rule, { season: p.teamSeason, schedule: p.seasonSchedule })); if (mr) return { error: fail(mr.status, mr.message, { code: mr.code, problems: [mr.message] }) }; }
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   // website-19 (owner, 2026-10-12): the platform's reserved names (config/burnticker/reserved-tickers.json), for the ticker and the name;

@@ -73,11 +73,14 @@ describe("HB-72: a rivalry series with no meeting left", () => {
   const played = [{ eventId: "1", startsAt: "2026-10-15T20:15:00Z", playoff: false, home: "DEN", away: "SEA", status: "final", result: "win" }];
   test("the series option is greyed with a notice when every meeting is final", () => {
     assert.equal(meetingsLeft(played), 0);
-    assert.deepEqual(seriesOptionState({ offered: true, offeredLine: null, meetings: played }), { offered: false, why: MEETINGS_NONE_LEFT_LINE });
+    // hourly run 7 (HB-72 consistency, meetingsLeft.ts): the server decides; with no meeting left and a playoff meeting still possible
+    // it stays offered with the warning, and with none possible the server sends offered false and the line
+    assert.deepEqual(seriesOptionState({ offered: true, offeredLine: null, meetings: played, season: "2026" }), { offered: true, why: null, warning: meetingsNoneLeftWarning("2026", true) });
+    assert.deepEqual(seriesOptionState({ offered: false, offeredLine: MEETINGS_NONE_LEFT_LINE, meetings: played }), { offered: false, why: MEETINGS_NONE_LEFT_LINE, warning: null });
     const open = [...played, { ...played[0], eventId: "2", startsAt: "2026-12-20T20:15:00Z", status: "scheduled", result: "pending" }];
-    assert.deepEqual(seriesOptionState({ offered: true, offeredLine: null, meetings: open }), { offered: true, why: null });
-    assert.deepEqual(seriesOptionState({ offered: false, offeredLine: null, meetings: [] }), { offered: false, why: NO_LISTED_MEETING_LINE });
-    assert.match(page, /seriesOptionState\(rv!\)\.why/);
+    assert.deepEqual(seriesOptionState({ offered: true, offeredLine: null, meetings: open }), { offered: true, why: null, warning: null });
+    assert.deepEqual(seriesOptionState({ offered: false, offeredLine: null, meetings: [] }), { offered: false, why: NO_LISTED_MEETING_LINE, warning: null });
+    assert.match(page, /seriesOptionState\(rv!\)/);
     plain(MEETINGS_NONE_LEFT_LINE);
   });
   test("the server review warns, and the rivalry handler stops offering it", () => {
@@ -85,9 +88,10 @@ describe("HB-72: a rivalry series with no meeting left", () => {
     assert.equal(w, "The schedule lists no game between these two teams still to be played in the 2026 season. This pair burns only if they meet in the playoffs.");
     plain(w); plain(meetingsNoneLeftWarning("2026–27", false));
     const route = read("src/app/api/burnticker/v1/launch/review/route.ts");
-    assert.match(route, /async function meetingsNoneLeftFor/); assert.match(route, /meetingsNote \}\);/);
-    assert.match(read("src/lib/burnticker/launchReview.ts"), /if \(o\.meetingsNote && !warnings\.includes\(o\.meetingsNote\)\) warnings\.unshift\(o\.meetingsNote\)/);
-    assert.match(read("src/lib/burnticker/api/handlers.ts"), /offered: rows\.some\(\(r\) => r\.result === "pending"\)/);
+    // hourly run 7: the route reads the one verdict (meetingsLeft.ts) and passes the warning and the refusal
+    assert.match(route, /async function meetingsVerdictOf/); assert.match(route, /meetingsNote, meetingsRefusal \}\);/);
+    assert.match(read("src/lib/burnticker/launchReview.ts"), /else if \(o\.meetingsNote && !warnings\.includes\(o\.meetingsNote\)\) warnings\.unshift\(o\.meetingsNote\)/);
+    assert.match(read("src/lib/burnticker/api/handlers.ts"), /const offered = verdict\.state === "open" \|\| verdict\.state === "playoffs"/);
   });
   test("the games list reads \"vs SEA (DEN won)\" with a space", () => {
     const r = meetingsListRows(played, "DEN", "SEA")[0];

@@ -39,6 +39,8 @@ import { DEFAULT_SHARE, SLICED_ABOVE, isRaisePreset, shareOf, SHARE_PRESETS, pre
 import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { PreWalletSummary } from "./PreWalletSummary";
+import { offSeasonLine } from "@/lib/burnticker/hazardSeason";
+import { popstateFollows, stepAddress, stepHistoryAction, triggerEditPhase } from "@/lib/burnticker/stepHistory";
 import { BurnRealChoice } from "./BurnRealChoice";
 import { ownRealPicks, SIDE_REAL_OFF, realBlockers, realField, realReviewNotes, withRealBurn, type SideReal } from "./burnReal";
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
@@ -68,14 +70,14 @@ import { DuplicateNotice } from "./DuplicateNotice";
 import type { ExistingCoin } from "@/lib/burnticker/duplicateRule";
 import { PairFundsFlow } from "../_components/PairFundsFlow";
 import { FundsFlowView, type Blocker, type LaunchVenue, type ProfileFieldKey } from "./ReviewCard";
-import { championPathRule, describeRule, shortDate, windowKindOf, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
+import { championOutcomeSuggest, championPathRule, describeRule, shortDate, windowKindOf, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import { LEAGUES, LIVE_NOW, parseEspnSeries, seasonLabel, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import { TEMPLATES, TEMPLATE_START, weatherTemplateDraft, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { fold, meaningful, queryTokens } from "@/lib/burnticker/textMatch";
 import { EndChoicePicker } from "./EndChoicePicker";
 import { SimulatorDisclosure } from "./SimulatorDisclosure";
-import { relatedCardLine, BACKTEST_WAITING_LINE, backtestSourceOf, byeLine, nextGameWords, VISITOR_TIME_LINE, visitorTime, END_CHOICE_DEFAULT, endChoiceModel, followForPick, oneMarketDate, pastedLink, PASTED_LINK_REFUSAL, patternFollowFor, withEndChoice, type EndChoice } from "@/lib/burnticker/guidedLaunch";
+import { EVENT_SEARCH_HINT, OPEN_NOW_CATEGORIES, OPEN_NOW_LABEL, openNowCards, relatedCardLine, BACKTEST_WAITING_LINE, backtestSourceOf, byeLine, nextGameWords, VISITOR_TIME_LINE, visitorTime, END_CHOICE_DEFAULT, endChoiceModel, followForPick, oneMarketDate, pastedLink, PASTED_LINK_REFUSAL, patternFollowFor, withEndChoice, type EndChoice } from "@/lib/burnticker/guidedLaunch";
 import type { SinkCoin } from "@/lib/burnticker/endSinks";
 import { RereadCache } from "@/lib/burnticker/rereadCache";
 import { EndSection, FollowStep, GuidedTop, PatternStep, RivalryKindStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
@@ -83,7 +85,7 @@ import { edgeCase, edgeCaseFor, reviewEdgeIds } from "@/lib/burnticker/ruleEdgeC
 import { oneShotFull } from "@/lib/burnticker/nextResult";
 import { creatorLinks } from "@/lib/burnticker/creatorProfile";
 import { drainLine, teamDrainUnit } from "@/lib/burnticker/drain";
-import { SEASON_OVER_LINE, SEASON_OVER_LINK_LINE, NONE_LISTED_LINE } from "@/lib/burnticker/seasonOver";
+import { SEASON_OVER_LINE, SEASON_OVER_LINK_LINE, NONE_LISTED_LINE, seasonOverOrder, seasonOverRowTag, seasonOverSummaryLine } from "@/lib/burnticker/seasonOver";
 import { sourceSubjectLabel } from "@/lib/burnticker/paramNames";
 import { prepareIfCurrent, profileRevision, STALE_PREPARE_SENTENCE } from "@/lib/burnticker/preparedLaunch";
 import { endText, settledPairSentence } from "@/lib/burnticker/describe";
@@ -140,14 +142,14 @@ interface Source { id: string; kind: string; tier: number; tierLabel: string; ti
 interface Backtest { sentence: string; text: string; sha256: string; sha12: string; mode: string; statement: string; seriesTitle: string | null; refusals: { reason: string }[]; matched: number; backtest: { rows: { id: string; at: string; title: string | null; result: string | null; value: string | null; units: number; kind: string }[]; totals: { events: number; burnEvents: number; voids: number; units: number; poolFractionSpent: number | null; tokens: number | null }; oneShot: { resolvesOn: string | null } | null } }
 interface Bundle { ready: boolean; pending: string[]; mint: string; ticker: string; mintSecretKey: string | null; rules: { text: string; sha256: string; statement: string; mode: string }; addresses: { feePda: string; feeWsol: string; vault: string | null; poolId: string | null; platformId: string }; transactions: { label: string; signers: string[]; instructions: SerializedIx[] }[]; notes: string[] }
 interface League { id: string; label: string; series: { ticker: string; title: string }[]; sport?: string; crossRead?: string | null; draws?: boolean }
-interface Team { /** website-25 (WIRING-SOURCES7 H6): /v1/sports/teams says this team's season is over */ seasonOver?: boolean; /** WIRING-PARITY audit 6 #2: the season's state for this team, with its warning when no game is left */ seasonWarning?: string | null; abbr: string; /** sources-6 (QA 9 #29): the code shown and used for tickers; `abbr` is what the API takes */ code?: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null; when?: string | null; /** HS-14 */ home?: boolean | null } | null; record: { w: number; l: number; d: number; since: string }; series?: { win: string; loss: string }; recordText?: string | null }
+interface Team { /** website-25 (WIRING-SOURCES7 H6): /v1/sports/teams says this team's season is over */ seasonOver?: boolean; /** WIRING-PARITY audit 6 #2: the season's state for this team, with its warning when no game is left */ seasonWarning?: string | null; abbr: string; /** sources-6 (QA 9 #29): the code shown and used for tickers; `abbr` is what the API takes */ code?: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null; when?: string | null; /** HS-14 */ home?: boolean | null; /** HB-87 */ undecided?: boolean | null; gamesThatDay?: number | null } | null; record: { w: number; l: number; d: number; since: string }; series?: { win: string; loss: string }; recordText?: string | null }
 /** The sports pickers (GET /v1/sports/teams, /v1/sports/games): the leagues' own schedules or TheSportsDB, never ESPN. */
-interface SportsTeam { abbr: string; code?: string; city: string; nickname: string; name: string; ticker: string; league: string; series: { win: string; loss: string }; record?: string | null; season?: { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null }; next: { eventId: string; title: string; startsAt: string; detail: string; opponent: string; home: boolean; live?: boolean; when?: string | null } | null }
+interface SportsTeam { abbr: string; code?: string; city: string; nickname: string; name: string; ticker: string; league: string; series: { win: string; loss: string }; record?: string | null; season?: { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null }; next: { eventId: string; title: string; startsAt: string; detail: string; opponent: string | null; home: boolean; live?: boolean; when?: string | null; /** HB-87 */ undecided?: boolean; gamesThatDay?: number } | null }
 interface SportsSide { abbr: string; code?: string; name: string; nickname: string; ticker: string; record: string | null; /** sources-6 (QA 9 #2): this side plays at home */ home?: boolean }
 interface SportsGame { eventId: string; league: string; title: string; startsAt: string; detail: string; live?: boolean; when?: string | null; a: SportsSide; b: SportsSide; series: { aLoss: string; bLoss: string } }
 const recordOf = (r: string | null | undefined): { w: number; l: number; d: number; since: string } => { const m = /^(\d+)-(\d+)(?:-(\d+))?$/.exec(r ?? ""); return { w: m ? Number(m[1]) : 0, l: m ? Number(m[2]) : 0, d: m && m[3] ? Number(m[3]) : 0, since: "" }; };
 /** website-21: GET /v1/sports/rivalry as the step-2 option reads it (`failed`: the read itself failed, never "no game"). */
-interface RivalryRead { key: string; busy: boolean; failed: string | null; offered: boolean; offeredLine: string | null; scheduleNote: string | null; season: string | null; year: number | null; source: string | null; meetings: MeetingRow[]; /** sources-6 (QA 9 #4): what the one-game option searched */ oneGameSearched: string | null }
+interface RivalryRead { key: string; busy: boolean; failed: string | null; offered: boolean; offeredLine: string | null; /** HB-72 consistency: the playoff warning (meetingsLeft.ts) */ warning: string | null; scheduleNote: string | null; season: string | null; year: number | null; source: string | null; meetings: MeetingRow[]; /** sources-6 (QA 9 #4): what the one-game option searched */ oneGameSearched: string | null }
 interface Side { abbr: string; marketTicker: string; label: string; nickname: string | null; name: string; ticker: string; /** sources-6: the shown code (tickers); `abbr` stays the series pin */ code?: string; /** sources-6 (QA 9 #2): this side plays at home, from the schedule */ home?: boolean }
 interface PolyMarket { /** audit 12 item 8: past its scheduled close and waiting for its result */ closePassed?: boolean; conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; /** the outcome's name inside its event (Gamma groupItemTitle), when named */ outcome?: string | null; /** sources-2 (oracle/polymarket.ts polyStated) */ resolutionSource?: StatedSource; finalAfter?: FinalAfter }
 interface PolyEvent { closePassed?: boolean; slug: string; title: string; url: string; endDate: string | null; closed: boolean; markets: PolyMarket[]; marketCount: number; refused: string[] }
@@ -592,8 +594,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   useEffect(() => {
     if (!ready || step === "launch") return;
     const cur = new URLSearchParams(window.location.search).get("step") ?? "follow";
-    if (cur === urlStep) return;
-    try { window.history.pushState({ btStep: urlStep }, "", urlStep === "follow" ? window.location.pathname : `${window.location.pathname}?step=${urlStep}`); } catch { /* ignore */ }
+    // HB-94 (hourly run 7): a jump back (an Edit, a crumb) replaces the entry, so Back never lands on a step the draft has left
+    const act = stepHistoryAction(cur, urlStep);
+    if (act === "none") return;
+    try { window.history[act === "replace" ? "replaceState" : "pushState"]({ btStep: urlStep }, "", stepAddress(window.location.pathname, urlStep)); } catch { /* ignore */ }
   }, [urlStep, ready]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // owner, 2026-10-12: Start over at every step clears the draft and the stored choices and lands on question 1; it asks once only when a
@@ -708,7 +712,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     const teamsKey = `${leagueSeries}|${teamsDivision}`;
     // sources-6 (QA 9 #28, #29): the list is alphabetical as served; college football lists the FBS unless "Show all divisions" asks for all
     getJson<{ teams: SportsTeam[]; scheduleNote?: string | null; scheduleDetail?: string | null; division?: { shown: string; line: string | null } }>(`${V1}/sports/teams?league=${leagueSeries}${teamsDivision === "all" ? "&division=all" : ""}`).then((j) => { if (!live) throw new Error("stale"); return j; }).then((j) => (setScheduleNote(j.scheduleNote ?? null), setScheduleDetail(j.scheduleDetail ?? null), setDivisionLine(j.division?.line ?? null), j)).then((j) => setTeams(j.teams.map((t) => ({ abbr: t.abbr, code: t.code ?? t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league: t.league, filter: t.series.win, collisions: [], series: t.series, recordText: t.record ?? null, record: recordOf(t.record), seasonWarning: t.season?.status === "over" || t.season?.status === "none-listed" ? t.season.warning : null, seasonOver: t.season?.status === "over",
-      next: t.next ? { eventTicker: t.next.eventId, marketTicker: t.next.eventId, title: t.next.title, expectedAt: t.next.startsAt, opponent: t.next.opponent, home: t.next.home ?? null, when: t.next.when ?? null } : null })))).then(() => { if (live) setTeamsFor({ key: teamsKey, failed: false }); }).catch(() => { if (live) { setTeams([]); setTeamsFor({ key: teamsKey, failed: true }); } }).finally(() => { if (live) setTeamsBusy(false); });
+      next: t.next ? { eventTicker: t.next.eventId, marketTicker: t.next.eventId, title: t.next.title, expectedAt: t.next.startsAt, opponent: t.next.opponent, home: t.next.home ?? null, undecided: t.next.undecided ?? null, gamesThatDay: t.next.gamesThatDay ?? null, when: t.next.when ?? null } : null })))).then(() => { if (live) setTeamsFor({ key: teamsKey, failed: false }); }).catch(() => { if (live) { setTeams([]); setTeamsFor({ key: teamsKey, failed: true }); } }).finally(() => { if (live) setTeamsBusy(false); });
     return () => { live = false; };
   }, [flow, leagueSeries, guide.follow, teamsDivision]);
   useEffect(() => {
@@ -724,11 +728,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // both teams are picked; only the answer for the current two teams is kept
   useEffect(() => {
     if (flow !== "pair" || guide.follow !== "rivalry" || !leagueSeries || !rivalA || !rivalB) return;
-    const key = `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}`, empty = { failed: null, offered: false, offeredLine: null, scheduleNote: null, season: null, year: null, source: null, meetings: [] as MeetingRow[], oneGameSearched: null };
+    const key = `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}`, empty = { failed: null, offered: false, offeredLine: null, warning: null, scheduleNote: null, season: null, year: null, source: null, meetings: [] as MeetingRow[], oneGameSearched: null };
     let live = true;
     setRivalry({ key, busy: true, ...empty });
-    getJson<{ offered?: boolean; offeredLine?: string | null; scheduleNote?: string | null; season?: string | null; year?: number | null; source?: string | null; meetings?: MeetingRow[]; oneGame?: { searched?: string | null } }>(`${V1}/sports/rivalry?league=${encodeURIComponent(leagueSeries)}&a=${encodeURIComponent(rivalA.abbr)}&b=${encodeURIComponent(rivalB.abbr)}`)
-      .then((j) => { if (live) setRivalry({ key, busy: false, failed: null, offered: j.offered === true, offeredLine: j.offeredLine ?? null, scheduleNote: j.scheduleNote ?? null, season: j.season ?? null, year: j.year ?? null, source: j.source ?? null, meetings: j.meetings ?? [], oneGameSearched: j.oneGame?.searched ?? null }); })
+    getJson<{ offered?: boolean; offeredLine?: string | null; warning?: string | null; scheduleNote?: string | null; season?: string | null; year?: number | null; source?: string | null; meetings?: MeetingRow[]; oneGame?: { searched?: string | null } }>(`${V1}/sports/rivalry?league=${encodeURIComponent(leagueSeries)}&a=${encodeURIComponent(rivalA.abbr)}&b=${encodeURIComponent(rivalB.abbr)}`)
+      .then((j) => { if (live) setRivalry({ key, busy: false, failed: null, offered: j.offered === true, offeredLine: j.offeredLine ?? null, warning: j.warning ?? null, scheduleNote: j.scheduleNote ?? null, season: j.season ?? null, year: j.year ?? null, source: j.source ?? null, meetings: j.meetings ?? [], oneGameSearched: j.oneGame?.searched ?? null }); })
       .catch((e) => { if (live) setRivalry({ key, busy: false, ...empty, failed: detailOf(e) }); });
     return () => { live = false; };
   }, [flow, guide.follow, leagueSeries, rivalA?.abbr, rivalB?.abbr, rivalryRetry]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -752,6 +756,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     }, 400);
     return () => { live = false; clearTimeout(t); };
   }, [flow, q2, venues.kalshi, venues.polymarket, polyClosingSoon]);
+  // HS-32 (hourly run 6): before any query, up to six "Open now" cards from the Browse answers the Browse step reads (server-cached), once a visit
+  const [openNow, setOpenNow] = useState<SourceCardT[] | null>(null);
+  useEffect(() => {
+    if (flow !== "single" || step !== "pick" || openNow !== null || !venues.polymarket) return;
+    let live = true;
+    void Promise.all(OPEN_NOW_CATEGORIES.map((c) => getJson<{ cards: SourceCardT[] }>(`${V1}/browse?category=${c}`).then((j) => j.cards ?? []).catch(() => [] as SourceCardT[]))).then((lists) => { if (live) setOpenNow(openNowCards(lists)); });
+    return () => { live = false; };
+  }, [flow, step, openNow, venues.polymarket]);
 
   // ---- the rules ------------------------------------------------------------------------------------------------------------------
   // L01: the one typed path (launchDraft.ts) — the same pure functions the tests walk from every card to the locked rule
@@ -1239,6 +1251,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   useEffect(() => {
     const h = () => {
       const p = (new URLSearchParams(window.location.search).get("step") ?? "follow") as GuidedPhase;
+      // HB-94 (hourly run 7): a step the page cannot reopen leaves the address on the step that is shown
+      if (!popstateFollows({ asked: p, follow: guide.follow, step })) { try { window.history.replaceState({ btStep: urlStep }, "", stepAddress(window.location.pathname, urlStep)); } catch { /* ignore */ } return; }
       // website-25 (QA 11 M1): like Start over, the chip asks first, then clears the draft, and step 1 shows the choice that was made
     if (p === "follow") { if (needsConfirm) { setConfirmJump(true); return; } setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); return; }
       if (!guide.follow) return;
@@ -1248,7 +1262,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     };
     window.addEventListener("popstate", h);
     return () => window.removeEventListener("popstate", h);
-  }, [guide.follow, step]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [guide.follow, step, urlStep]);   // eslint-disable-line react-hooks/exhaustive-deps
   const back = () => {
     if (guide.follow) {
       // the guided steps: review, the end, the burn, back to the picker of question 2, then question 1
@@ -1482,7 +1496,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     : <div className={card + " space-y-3"}><h2 className="font-medium outline-none" tabIndex={-1} data-step-heading>Choose a league</h2>{leaguePicker}</div>;
   const chip = (v: Venue) => <span className={`ml-2 inline-block rounded px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide ring-1 ${v === "kalshi" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40" : "bg-indigo-500/15 text-indigo-300 ring-indigo-500/40"}`}>{v === "kalshi" ? "Kalshi" : "Polymarket"}</span>;
   // intent audit 2 item 1: a closed market is refused here as well as greyed in the list
-  const pickPoly = (m: PolyMarket) => { if (m.closed) return; markOrigin("exact"); setSrcWarnings([]); setSrcSuggest({ name: m.outcome ? m.outcome.slice(0, 32) : null, ticker: null, side: "yes" }); const ev = polyFound?.events.find((e) => e.markets.some((x) => x.conditionId === m.conditionId)) ?? (allOut?.markets?.some((x) => x.conditionId === m.conditionId) ? polyFound?.events.find((e) => e.slug === allOut.slug) : undefined); setEventInfo({ question: m.question, url: ev?.url ?? null, outcome: `“${m.yes}”`, resolves: m.endDate ? denver(m.endDate) : ev?.endDate ? denver(ev.endDate) : null, resolvesAt: m.endDate ?? ev?.endDate ?? null, criteria: null, stated: m.resolutionSource && m.finalAfter ? { phrase: m.resolutionSource.phrase, text: m.resolutionSource.text, crossRead: m.resolutionSource.crossRead ? { text: m.resolutionSource.crossRead.text } : null, finalAfter: { text: m.finalAfter.text, ifDisputed: m.finalAfter.ifDisputed } } : null }); setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setBurnOn("yes"); setOnYes(DEFAULT_SHARE.oneShot); setFilter(""); setPolyPreset(null); next(); };
+  const pickPoly = (m: PolyMarket) => { if (m.closed) return; markOrigin("exact"); setSrcWarnings([]); const ev = polyFound?.events.find((e) => e.markets.some((x) => x.conditionId === m.conditionId)) ?? (allOut?.markets?.some((x) => x.conditionId === m.conditionId) ? polyFound?.events.find((e) => e.slug === allOut.slug) : undefined); const champ = championOutcomeSuggest(ev?.title, m.outcome); /* HS-33: a winner-market outcome is named for its rule */ setSrcSuggest({ name: champ?.name ?? (m.outcome ? m.outcome.slice(0, 32) : null), ticker: champ?.ticker ?? null, side: "yes" }); setEventInfo({ question: m.question, url: ev?.url ?? null, outcome: `“${m.yes}”`, resolves: m.endDate ? denver(m.endDate) : ev?.endDate ? denver(ev.endDate) : null, resolvesAt: m.endDate ?? ev?.endDate ?? null, criteria: null, stated: m.resolutionSource && m.finalAfter ? { phrase: m.resolutionSource.phrase, text: m.resolutionSource.text, crossRead: m.resolutionSource.crossRead ? { text: m.resolutionSource.crossRead.text } : null, finalAfter: { text: m.finalAfter.text, ifDisputed: m.finalAfter.ifDisputed } } : null }); setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setBurnOn("yes"); setOnYes(DEFAULT_SHARE.oneShot); setFilter(""); setPolyPreset(null); next(); };
   const pickPolySeries = (series: string, title: string) => { markOrigin("exact"); setSrcWarnings([]); setPick({ oracle: "polymarket", series, market: null, title }); setKind("binary"); setFilter(""); setPolyPreset(series.includes("/moneyline") ? "^[^:]+ vs\\. [^:]+$" : null); next(); };
   const badge = (abbr: string) => <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 font-mono text-xs font-bold tracking-tight text-amber-300 ring-1 ring-neutral-700">{abbr}</span>;
   const kalshiOff = !venues.kalshi;
@@ -1639,12 +1653,21 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium outline-none" tabIndex={-1} data-step-heading>{whichHeading("team")}</h2><FieldHelp id="team-search" /><input data-decision="what" data-help="team-search" aria-label="Search teams in this league" className={input + " w-full sm:w-64"} placeholder={teams.length ? `${teams.slice(0, 3).map((t) => t.nickname ?? t.name).join(", ")}…` : "Type a team name"} value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
               {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}{leagueSeries === "cfb" && <p className="text-xs text-neutral-400" data-division>{teamsDivision === "fbs" ? divisionLine : null} <button type="button" data-nav className="underline" onClick={() => setTeamsDivision((d) => (d === "all" ? "fbs" : "all"))}>{teamsDivision === "all" ? "Show the FBS only" : "Show all divisions"}</button></p>}
               {!teamsBusy && !teams.length && teamsFor?.key === `${leagueSeries}|${teamsDivision}` && <p className="text-sm text-neutral-500" role={teamsFor.failed ? "alert" : undefined}>{teamsFor.failed ? TEAMS_UNREAD_LINE : TEAMS_NONE_LINE}</p>}
-              <div className="grid gap-2 sm:grid-cols-2">{teams.filter(teamFilter).map((t) => (
-                <button data-decision="what" key={t.abbr} aria-label={t.name} aria-pressed={team?.abbr === t.abbr} onClick={() => chooseTeam(t)} className={`flex items-center gap-3 rounded-lg border p-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${team?.abbr === t.abbr ? "border-amber-400" : "border-neutral-800"}`}>
+              {(() => {
+                // HS-37 (hourly run 6): season-over teams are said once at the top, greyed and listed after the teams still playing
+                const lg = leagueSeries as LeagueId, yr = seasonYearAt(lg, Date.now()), nextLabel = seasonLabel(lg, yr + 1);
+                const over = teams.filter((t) => t.seasonOver).length;
+                return over > 1 ? <p className="text-sm text-amber-300" data-season-over-summary>{seasonOverSummaryLine(over, seasonLabel(lg, yr), nextLabel)}</p> : null;
+              })()}
+              <div className="grid gap-2 sm:grid-cols-2">{seasonOverOrder(teams.filter(teamFilter)).map((t) => {
+                const grey = !!t.seasonOver && teams.filter((x) => x.seasonOver).length > 1;
+                return (
+                <button data-decision="what" key={t.abbr} aria-label={t.name} aria-pressed={team?.abbr === t.abbr} onClick={() => chooseTeam(t)} data-season-over={grey ? "" : undefined} className={`flex items-center gap-3 rounded-lg border p-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${team?.abbr === t.abbr ? "border-amber-400" : "border-neutral-800"} ${grey ? "opacity-60" : ""}`}>
                   {badge(t.code ?? t.abbr)}
-                  <div className="min-w-0"><div className="font-medium truncate">{t.name}</div><div className="text-xs text-neutral-400" data-team-line>{teamLine([t.recordText ? `${record(t)} this season` : null, t.next ? `next: ${nextGameWords(t.next)}, ${t.next.when ?? `starts ${visitorTime(t.next.expectedAt)}`}` : scheduleNote ? NEXT_GAME_UNAVAILABLE : null])}</div>{t.seasonWarning && <div className="text-xs text-amber-300" data-season-warning>{t.seasonWarning}</div>}</div>
+                  <div className="min-w-0"><div className="font-medium truncate">{t.name}</div><div className="text-xs text-neutral-400" data-team-line>{teamLine([t.recordText ? `${record(t)} this season` : null, t.next ? `next: ${nextGameWords(t.next)}, ${t.next.when ?? `starts ${visitorTime(t.next.expectedAt)}`}` : scheduleNote ? NEXT_GAME_UNAVAILABLE : null])}</div>{grey ? <div className="text-xs text-neutral-500" data-season-over-tag>{seasonOverRowTag(seasonLabel(leagueSeries as LeagueId, seasonYearAt(leagueSeries as LeagueId, Date.now()) + 1))}</div> : t.seasonWarning && <div className="text-xs text-amber-300" data-season-warning>{t.seasonWarning}</div>}</div>
                 </button>
-              ))}</div>
+                );
+              })}</div>
               <p className="text-xs text-neutral-500"><span className="bt-chip bt-chip-feed mr-1">on-chain payout · league&apos;s official feed</span>Each game settles on {SPORTS_PROVENANCE.settlement}. {sportsConfirmationLine()} Next games come from {SPORTS_PROVENANCE.schedule}. {VISITOR_TIME_LINE}</p>
             </div>
           )}
@@ -1701,7 +1724,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     const rv = rivalry?.key === `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}` ? rivalry : null;
                     const busy = !rv || rv.busy, failed = !!rv && !rv.busy && (!!rv.failed || !!rv.scheduleNote);
                     // HB-72 (hourly run 5): greyed with a notice when no meeting is left to play (guidedLaunch.ts seriesOptionState)
-                    const why = busy ? null : failed ? (rv!.scheduleNote ?? SCHEDULE_UNAVAILABLE_LINE) : seriesOptionState(rv!).why;
+                    // HB-72 consistency (hourly run 7): offered with the playoff warning while a playoff meeting is still possible (meetingsLeft.ts)
+                    const optionState = busy || failed ? null : seriesOptionState(rv!);
+                    const why = busy ? null : failed ? (rv!.scheduleNote ?? SCHEDULE_UNAVAILABLE_LINE) : optionState!.why;
+                    const playoffWarning = optionState?.warning ?? null;
                     const rows = rv && !busy && !failed ? meetingsListRows(rv.meetings, rivalA.abbr, rivalB.abbr) : [];
                     const off = busy || !!why;
                     return (
@@ -1715,6 +1741,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                             : failed ? <span className="mt-1 block text-xs text-amber-300" role="status" data-schedule-unavailable>{why} <button type="button" data-nav className="underline" onClick={() => setRivalryRetry((n) => n + 1)}>Retry</button></span>
                             : why ? <span className="mt-1 block text-xs text-neutral-400" data-no-meeting>{why}{rows.length > 0 && <span className="block" data-meetings-played>{rows.map((m) => `${dayLabel(m.startsAt)} ${m.where}${m.state ? ` (${m.state})` : ""}`).join(", ")}</span>}</span>
                             : <div className="mt-2" data-meetings-list>
+                                {playoffWarning && <p className="mb-1 text-xs text-amber-300" role="note" data-playoffs-only>{playoffWarning}</p>}
                                 <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">{MEETINGS_LIST_LABEL}</p>
                                 <ul className="mt-1 flex flex-wrap gap-1.5">{rows.map((m) => (
                                   <li key={m.key} className="rounded-full border border-neutral-700 px-2.5 py-0.5 text-xs text-neutral-200" data-meeting-row={m.key}>{dayLabel(m.startsAt)} {m.where}{m.playoff && <span className="ml-1 text-amber-300" data-playoff>playoffs</span>}{m.state && <>{" "}<span className="text-neutral-400">({m.state})</span></>}</li>
@@ -1758,6 +1785,12 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           <div className={card + " space-y-3"}>
             <h2 className="font-medium outline-none" tabIndex={-1} data-step-heading>{whichHeading("market")}</h2>
             <FieldHelp id="market-search" /><input data-decision="what" data-help="market-search" aria-label="Search markets by name" className={input + " text-base py-2"} placeholder="a team, a player, a person, a show, a city, an election…" value={q2} onChange={(e) => setQ2(e.target.value)} />
+            {q2.trim().length < 2 && <p className="text-xs text-neutral-400" data-event-hint>{EVENT_SEARCH_HINT}</p>}
+            {q2.trim().length < 2 && !!openNow?.length && (
+              <div className="space-y-1" data-open-now><h3 className="text-xs uppercase tracking-wide text-neutral-500">{OPEN_NOW_LABEL}</h3>
+                <div className="grid gap-2 sm:grid-cols-2">{openNow.map((c) => <button key={c.id} type="button" data-decision="what" className="rounded border border-neutral-800 p-2 text-left text-sm hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400" onClick={() => setQ2(c.title)}><span className="block truncate">{c.title}</span>{c.next?.label && <span className="block text-xs text-neutral-500">{c.next.label}</span>}</button>)}</div>
+              </div>
+            )}
             {findBusy && <p className="text-sm text-neutral-500">Searching…</p>}
             {found && (() => {
               const evs = (
@@ -2176,10 +2209,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         ];
         // HB-81 D5: item 218 on a one-time coin does not say that nothing ends the rule (its one burn or its deadline does)
         const edgeNotes = [...new Set(edgeIds)].map((i) => edgeCaseFor(i, { oneGame: espnParsed?.kind === "game", oneShot: windowKindOf(rule) === "one-shot" })).filter((x): x is string => !!x);
+        // HB-93 (hourly run 7): an inverse hurricane coin burns on every off-season day (hazardSeason.ts, the source's season dates)
+        { const off = offSeasonLine(rule); if (off) edgeNotes.unshift(off); }
         const coinsN: 1 | 2 = pairOn && ruleB ? 2 : 1;
         const editTo = (p: GuidedPhase) => () => { if (p === "which") toWhich(); else setGuide((g) => ({ ...g, phase: p })); };
         const reviewFacts = guide.follow ? [
-          { label: FACT_LABELS.trigger, value: trigger, edit: editTo("which") },
+          // HS-39 (hourly run 7): a hazard coin's trigger is built on the burn step (pattern, strength, area), so Edit opens it with those
+          // choices kept; "Change which" in the crumbs still changes the hazard
+          { label: FACT_LABELS.trigger, value: trigger, edit: editTo(triggerEditPhase(guide.follow)) },
           { label: FACT_LABELS.coin, value: settledPick ? settledWhichCoinLine(settledPick, { a: ticker || "A", b: tickerB || "B" }) : meetingsOn ? meetingsWhichCoinLine({ a: ticker || "A", b: tickerB || "B", teamA: A, teamB: B }) : whichCoinLine(ticker || "A", coinsN === 2 ? tickerB || "B" : null), edit: editTo("name") },
           { label: FACT_LABELS.amount, value: `${budget.line} ${shareOfBudgetLine(shareValue)} ${shareExample(shareValue)}`, edit: editTo("burn") },
           { label: FACT_LABELS.ends, value: meetingsOn ? meetingsEndFact : settledPick ? settledEndFact : endLines.join(endTextB ? "\n" : " ") || PERPETUAL_END_LINE, edit: null, extra: endChoiceReview },
@@ -2274,7 +2311,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               onLaunch={() => { void launch(); }}
               mintSearch={<MintAddressBlock pool={mintPool} />}
               duplicate={<DuplicateNotice existing={(shownReview.review as (LaunchReview & { existing?: ExistingCoin[] }) | null)?.existing ?? []} />}
-              summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} />}
+              summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} proof={proofAsked} />}
               cost={shownReview.review && reviewCurrent ? `The estimated cost is about ${shownReview.review.costs.totalSol} SOL.` : null}
               costNote={venue === "linked" || venue === "pair-curve" ? PAIR_COST_EXCLUSIONS : null}
               venue={venue}

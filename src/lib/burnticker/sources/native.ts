@@ -104,7 +104,8 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
     flags: [...(s.kind === "game" ? ["a game coin burns once two sources agree on the final, or once one source has shown the same final twice a few minutes apart; a disagreement holds it (owner 2026-10-16)"] : []), off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : s.league === "nba" ? "the game list comes from the NBA's feed when it answers, else from TheSportsDB under licence (needs BURNTICKER_THESPORTSDB_KEY)" : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", ...(s.kind === "game" ? [] : ["every source that reads a game must agree; a game with no Polymarket market and no league feed settles on TheSportsDB alone once its final score has stood for 12 hours (a source check; one operator attester signs the reading)"])],
     launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",
-    settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps(), { seriesId: id }),
+    // HB-83: crossRead false is the review's display-only back-test: it counts from the schedule, with no per-game settling reads
+    settledSince: (_rule, sinceIso, o = {}) => sportsSettled(espnClient(), s, sinceIso, deps(), { seriesId: id, display: o.crossRead === false }),
     ...(s.kind === "game" ? { eligibility: async () => { const g = (await gamesFor(espnClient(), s))[0]; return g ? gameEligibility(g) : null; } } : {}),
     preflight: async (nowMs) => {
       const c = espnClient(), d = deps();
