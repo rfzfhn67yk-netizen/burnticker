@@ -16,7 +16,7 @@
 # Exit 0 = every built program's executable hash equals the deployed program's hash on mainnet. Exit 1 = a difference (the table says
 # which). Exit 2 = it could not run (wrong architecture, a failed install, a failed build).
 set -euo pipefail
-COMMIT="2aa4d6b00313e2e13588d4e15b2bfdb1c1491018"
+COMMIT="747ec1fdf202f2e994430b11b627bbfacafd6918"
 # pair_curve runs round 4 (it was not upgraded in round 5). It links the burn_receipts crate (its constants, the CPMM pool reader and the
 # TokenConfig type), so building it from a round-5 tree gives other bytes without any change of its own. Public commit 7e7bab58 (2026-10-12)
 # carries exactly the program tree of monorepo 29f6f5de, the source of pair_curve's deployed bytes; pair_curve is built there.
