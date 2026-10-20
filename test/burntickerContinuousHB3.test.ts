@@ -62,7 +62,9 @@ describe("HB-30: a rivalry's generated tickers are checked before they are shown
       for (const c of after) assert.ok(!tickerRefused(c), `${x.abbr} vs ${y.abbr}: $${c.ticker} is still refused`);
       assert.notEqual(fa, fb);
     }
-    assert.ok(swapped > 0, "the fixture exercises the swap");
+    // B-12 (sixth-pass audit): the page now generates the server's matchup tickers, so with these four coins no NBA pair needs the
+    // review's swap at all (the first test above still exercises it; test/burntickerTickerB12PairSweep.test.ts sweeps every league)
+    assert.equal(swapped, 0, "the matchup generator leaves nothing for the review to swap");
   });
   test("one free-ticker row per field, naming its coin; the page applies the swap and the review card shows lookalike rows", () => {
     assert.equal(freeRowLead("B", "lalwin", true), "Free tickers for Coin B in place of $LALWIN:");

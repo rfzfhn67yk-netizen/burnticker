@@ -97,8 +97,49 @@ export const EVERY_SENTENCES = {
 export function everySentenceFor(r: Pick<BurnRule, "kind" | "oracle" | "series"> | null | undefined, follow?: FollowId | null): string {
   if (!r) return PATTERNS.every.sentence;
   if (follow === "team" || (r.oracle === "catalogue" && /^espn\./.test(r.series ?? ""))) return EVERY_SENTENCES.team;
+  // HB-50 (HB-18 leftover): a weather threshold (nws.*) is read as yes or no each day, whatever kind the rule carries
+  if (r.oracle === "catalogue" && /^nws\./.test(r.series ?? "")) return EVERY_SENTENCES.reading;
   return r.kind === "scalar" ? EVERY_SENTENCES.scalar : EVERY_SENTENCES.reading;
 }
+
+/**
+ * Continuous audit run 4, HB-42: a link pasted into "Or describe it". A Polymarket event link opens that event in Event outcome (its slug
+ * is what the market search reads); any other link is refused in one sentence that never repeats it.
+ */
+export type PastedLink = { kind: "polymarket"; slug: string } | { kind: "other" };
+export function pastedLink(text: string): PastedLink | null {
+  const t = text.trim();
+  if (!/^(https?:\/\/|www\.)\S+$/i.test(t)) return null;
+  const m = /^(?:https?:\/\/)?(?:www\.)?polymarket\.com\/(?:[a-z]{2}\/)?(?:event|market)\/([a-z0-9][a-z0-9-]*)/i.exec(t);
+  return m ? { kind: "polymarket", slug: m[1].toLowerCase() } : { kind: "other" };
+}
+export const PASTED_LINK_REFUSAL = "Links cannot be read here. Type what the coin should follow in words, such as a team, a figure or an event.";
+
+/**
+ * Continuous audit run 4, HB-43: one back-test source per rule. A team or game coin (espn.*) is counted from the league's schedule; every
+ * other rule from its venue's or feed's own history. HS-13: the line the review shows while the estimate is still being worked out.
+ */
+export const backtestSourceOf = (r: Pick<BurnRule, "oracle" | "series">): "schedule" | "venue" => (r.oracle === "catalogue" && /^espn\./.test(r.series ?? "") ? "schedule" : "venue");
+export const BACKTEST_WAITING_LINE = "Working out past burns… This takes a few seconds.";
+
+/**
+ * HS-14 (run 4): the team list's next game says "at" for an away game and "vs" for a home game ("next: at Broncos"). HS-11: the time is the
+ * visitor's own (the list is drawn in the browser), and the footnote says so.
+ */
+export function nextGameWords(n: { opponent: string | null; home?: boolean | null; title: string }): string {
+  return n.opponent ? `${n.home === false ? "at" : "vs"} ${n.opponent}` : n.title;
+}
+export const VISITOR_TIME_LINE = "Times are shown in your time zone.";
+export const visitorTime = (iso: string | null): string => {
+  if (!iso) return "time not listed";
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "time not listed";
+};
+/** HS-15: the bye-week note carried to the burn step and the review for a season coin whose team has no game in the next 8 days. */
+export const byeLine = (nickname: string): string => `The ${nickname} have no game in the next 8 days. The first result can come no sooner than their next game.`;
+
+/** HB-23 (run 4): a related search card says "you typed" only when the creator typed the search; a template's own words never count. */
+export const relatedCardLine = (o: { template: boolean; typed: boolean }): string => (o.template || !o.typed ? "A related rule from the same source." : "This is a related rule. It is not the exact event you typed.");
 
 /** The reserved-name refusal (reservedNames.ts reads the list; this sentence is client-safe). */
 export const RESERVED_REFUSAL = "That name is reserved for the platform.";
@@ -180,6 +221,22 @@ const plainInverseReason = (r: BurnRule): string => {
   if (/market rule/.test(why)) return PATTERN_REASON.marketFade;
   return why;
 };
+
+/**
+ * Continuous audit run 4, HB-37: the family a pick belongs to is the SOURCE's, never the family that opened the browse. A first-party feed
+ * picked under Event outcome (the election template's politics browse lists the Federal Register) is published data: its strip says so and
+ * it gets the feed patterns, never "If it resolves YES". Pure.
+ */
+export function followForPick(follow: FollowId | null, oracle: string | null | undefined): FollowId | null {
+  if (!follow) return follow;
+  if (oracle === "catalogue" && (follow === "market" || follow === "rivalry")) return "number";
+  return follow;
+}
+/** The family step 3's pattern cards are keyed on: the rule's own source (HB-37), so a catalogue rule never gets the market cards. */
+export function patternFollowFor(follow: FollowId, rule: Pick<BurnRule, "oracle" | "series"> | null): FollowId {
+  if (rule?.oracle === "catalogue" && follow === "market") return /^espn\./.test(rule.series ?? "") ? "team" : "number";
+  return follow;
+}
 
 /** The four patterns for the thing picked, each available or greyed with its reason, and the one chosen already. */
 export function patternOptions(i: PatternInput): { options: PatternOption[]; preselected: PatternId } {
@@ -340,9 +397,29 @@ export function createsLineFor(follow: FollowId, coinsMode: "race" | "record" | 
   return createsLine(FOLLOW_CHOICES.find((c) => c.id === follow)?.coins ?? 1);
 }
 /** Audit 12 item 10: the note after a change of what the coin follows renamed the coin(s), with the right count. */
-export const namesRemadeLine = (n: 1 | 2): string => n === 2
-  ? "You changed what the coins follow, so both coins got new names and tickers for the new rule. The ones you typed described the old rule. Type your own again if you like."
-  : "You changed what the coin follows, so it got a new name and ticker for the new rule. The ones you typed described the old rule. Type your own again if you like.";
+/**
+ * Continuous audit run 4, HB-40: the note names what actually changed. `follows` is step 1, `which` the thing picked in step 2, `burns`
+ * the pattern in step 3 (a team coin switched from each win to the title). The page shows it only when a name or ticker was typed.
+ */
+export type NamesChange = "follows" | "which" | "burns";
+export const namesRemadeLine = (n: 1 | 2, what: NamesChange = "follows"): string => {
+  const kept = "The ones you typed described the old rule. Type your own again if you like.";
+  if (what === "burns") return n === 2 ? `You changed how the coins burn, so the suggested names and tickers changed with it. ${kept}` : `You changed how the coin burns, so the suggested name and ticker changed with it. ${kept}`;
+  if (what === "which") return n === 2 ? `You picked a different pair, so both coins got new names and tickers for it. ${kept}` : `You picked a different one to follow, so the coin got a new name and ticker for it. ${kept}`;
+  return n === 2 ? `You changed what the coins follow, so both coins got new names and tickers for the new rule. ${kept}` : `You changed what the coin follows, so it got a new name and ticker for the new rule. ${kept}`;
+};
+/**
+ * HB-40: what changed between the subject a typed name belonged to and the subject now, from the page's subject keys
+ * (flow | follow | oracle | market or series | team | side A | side B). The flow alone is not a change of what the coin follows (a team
+ * coin moves to the single flow for its title market).
+ */
+export function namesChangeOf(before: string, after: string): NamesChange {
+  const a = before.split("|"), b = after.split("|");
+  if ((a[1] ?? "") !== (b[1] ?? "")) return "follows";
+  if ((a[4] ?? "") !== (b[4] ?? "") || (a[5] ?? "") !== (b[5] ?? "") || (a[6] ?? "") !== (b[6] ?? "")) return "which";
+  if (b[4] || b[5]) return "burns";
+  return "which";
+}
 /**
  * Audit 12 item 11: the record-close choice says whether it can start on this site BEFORE the creator sets it up. A record close needs past
  * daily closes: Pyth gives them only to a site with a Pyth access key, otherwise only closes this site saved itself count. Nothing is
@@ -362,13 +439,26 @@ export const PRE_AUDIT_CAP_SOL_TEXT = "25";
 /**
  * WHAT TO KNOW BEFORE YOU START (audit 6 item 14, pass B item 20): said at step 1 and again on the review, in plain words.
  */
-export function upfrontLines(raises: readonly string[]): string[] {
+/**
+ * Continuous audit run 4, HB-50: on the review the end line follows the coin. A coin whose creator picked the incinerator (or another coin)
+ * never reads "goes to $DEFICIT's burn", and the champion exception is said only on a team coin. Step 1, before anything is picked, keeps
+ * the general form (`o` left out).
+ */
+export function upfrontEndLine(o: { team?: boolean; end?: EndChoice | null; pair?: boolean } = {}): string {
+  const general = o.team === undefined && !o.end && o.pair === undefined;
+  const champion = general || o.team ? ` ${CHAMPION_EXPLAINER_LINE}` : "";
+  if (o.pair) return "When the rule ends on a result, whatever is left goes to the rival coin's burn.";
+  if (o.end?.kind === "burn-sol") return `When the rule ends on a result, whatever is left is sent to Solana's incinerator, which nothing can spend from.${champion}`;
+  if (o.end?.kind === "coin" && o.end.ticker) return `When the rule ends on a result, whatever is left goes to $${o.end.ticker}'s burn, or to $DEFICIT's burn if $${o.end.ticker} is not live then.${champion}`;
+  return general ? `When the rule ends on a result, whatever is left goes to $DEFICIT's burn, or to the rival coin for a linked pair.${champion}` : `When the rule ends on a result, whatever is left goes to $DEFICIT's burn.${champion}`;
+}
+export function upfrontLines(raises: readonly string[], o?: { team?: boolean; end?: EndChoice | null; pair?: boolean }): string[] {
   const list = `${raises.slice(0, -1).join(", ")} or ${raises[raises.length - 1]} SOL`;
   return [
     "Creators earn no fee revenue. The creator's share of the fees goes to the coin's own burn pool.",
     `Nothing burns until the coin graduates: buyers on its curve have to put in the raise you pick, ${list}, and then its pool is registered. A result that comes first is recorded and waits.`,
     `For now a burn pool spends from at most ${PRE_AUDIT_CAP_SOL_TEXT} SOL. Only the platform's multisig can raise that cap, after a public 48-hour wait, and SOL above it stays in the coin's pool.`,
-    `When the rule ends on a result, whatever is left goes to $DEFICIT's burn, or to the rival coin for a linked pair. ${CHAMPION_EXPLAINER_LINE}`,
+    upfrontEndLine(o),
     "Creating a coin costs a small amount of SOL from your wallet. The review shows the estimate before you sign.",
   ];
 }
@@ -391,6 +481,8 @@ export function electionAuthorityLines(certified: string): string[] {
 export type EndKind = "flagship" | "named-coin" | "pair-winner" | "incinerator" | "self";
 /** Round 5: the incinerator end's choice label (step 4 and the review's end facts). */
 export const INCINERATOR_CHOICE_LABEL = "The SOL left is sent to Solana's incinerator, which nothing can spend from";
+/** HB-50: why the other ends are not used on a coin whose creator picked the incinerator. */
+export const INCINERATOR_PICKED_REASON = "You picked Solana's incinerator for this coin instead.";
 export interface EndOption { kind: EndKind; label: string; available: boolean; reason: string | null }
 /**
  * THE END, FROM THE RULE (step 4). The program pins one end sink at creation (EndSink kinds 0, 1 and 3); the sentences come from the sink
@@ -422,10 +514,13 @@ export function endSentences(rule: BurnRule, o: { team?: string | null; party?: 
   const sentences = [...e.result.split(/(?<=\.)\s+(?=[A-Z$])/), ...(e.void ? [e.void] : [])];
   // website-20 item 58: a coin with no end never reaches its end sink, so no end is offered as "this coin's end"
   if (windowKindOf(rule) === "perpetual" && kind !== "pair-winner") return { kind: "self", sentences, options: [] };
+  // continuous audit run 4, HB-50: an incinerator coin's other rows say so (never "no end sink today"), and a single coin is not offered
+  // the rival row, which only a linked pair can have
+  const otherReason = kind === "incinerator" ? INCINERATOR_PICKED_REASON : "This kind of coin has no end sink today.";
   const options: EndOption[] = [
-    { kind: "flagship", label: kind === "flagship" && championPathRule(rule) ? sentences.join(" ") : "The rest goes to $DEFICIT", available: kind === "flagship", reason: kind === "flagship" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival first." : kind === "named-coin" ? "This coin names another coin instead." : "This kind of coin has no end sink today." },
-    { kind: "pair-winner", label: "The rest goes to the rival", available: kind === "pair-winner", reason: kind === "pair-winner" ? null : "Only two linked coins can name each other." },
-    { kind: "named-coin", label: kind === "named-coin" ? sentences[0] : "The rest goes to another coin you name", available: kind === "named-coin", reason: kind === "named-coin" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival." : kind === "flagship" ? "Pick it under When it ends." : "This kind of coin has no end sink today." },
+    { kind: "flagship", label: kind === "flagship" && championPathRule(rule) ? sentences.join(" ") : "The rest goes to $DEFICIT", available: kind === "flagship", reason: kind === "flagship" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival first." : kind === "named-coin" ? "This coin names another coin instead." : otherReason },
+    ...(kind === "pair-winner" ? [{ kind: "pair-winner" as const, label: "The rest goes to the rival", available: true, reason: null }] : []),
+    { kind: "named-coin", label: kind === "named-coin" ? sentences[0] : "The rest goes to another coin you name", available: kind === "named-coin", reason: kind === "named-coin" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival." : kind === "flagship" ? "Pick it under When it ends." : otherReason },
     // round 5 (owner 2026-10-13): burn the SOL itself; single coins only (a linked pair ends on the rival)
     { kind: "incinerator", label: INCINERATOR_CHOICE_LABEL, available: kind === "incinerator", reason: kind === "incinerator" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival." : "Pick it under When it ends." },
   ];
@@ -513,12 +608,25 @@ export function withEndChoice(rule: BurnRule, c: EndChoice): BurnRule {
 }
 
 /**
+ * HB-38: the date an event row in the search states. Each market has its own close; the event row shows one only when every market listed
+ * shares it (else each market row says its own), so one market never shows two dates.
+ */
+export function oneMarketDate(e: { endDate: string | null; markets: readonly { endDate: string | null }[] }): string | null {
+  const ds = [...new Set(e.markets.map((m) => m.endDate).filter((d): d is string => !!d))];
+  if (ds.length === 1) return ds[0];
+  return ds.length === 0 ? e.endDate : null;
+}
+/** HB-38: the one way a market's own close date is said (the search row, the review): "The market closes by …". */
+export const marketClosesLine = (when: string): string => `The market closes by ${when}.`;
+/**
  * A ONE-SHOT BEFORE GRADUATION (walkthrough snag 11). What the keeper does: a result recorded before the coin graduates stays queued, the
  * burn runs once the coin's pool exists and is registered, and only then is the end recorded (endSinkKeeper.ts waits while results are
  * still queued), so the rest goes to $DEFICIT after that burn.
  */
 export function beforeGraduationLine(when: string | null, rule?: BurnRule | null, linked?: "game" | "candidates" | "pair" | null): string {
-  return `${when ? `This result is due around ${when}. ` : ""}A coin burns only after it graduates. If the result comes first, it is recorded, and the burn waits until the coin graduates and its pool is registered. ${afterGraduationEnd(rule ?? null, linked ?? null)}`;
+  // continuous audit run 4, HB-38: a market's date is Polymarket's close deadline, not when the event happens, so it is said as that
+  const due = !when ? "" : rule?.oracle === "polymarket" ? `${marketClosesLine(when)} ` : `This result is due around ${when}. `;
+  return `${due}A coin burns only after it graduates. If the result comes first, it is recorded, and the burn waits until the coin graduates and its pool is registered. ${afterGraduationEnd(rule ?? null, linked ?? null)}`;
 }
 /**
  * PRIVATE REVIEW 9 F2 / AUDIT 12 item 4 (2026-10-13): where the rest goes once that waiting burn has run, from the rule's own pinned end

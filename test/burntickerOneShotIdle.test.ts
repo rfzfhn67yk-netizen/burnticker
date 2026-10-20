@@ -141,3 +141,104 @@ describe("HB-29: an overdue read of an undecided coin alerts, is pushed and is a
     assert.doesNotMatch(`${m.title} ${m.body}`, /→|\bwill\b|\d{4}-\d{2}-\d{2}/);
   });
 });
+
+// HB-64 (sixth-pass audit 2026-10-19, P3): the decided one-game pair $DENWIN / $SEAWIN (result in, receipts "pending-pair" while the pair
+// waits for both pools) was still planned for a source read at 04:09Z: oneShotDecided did not count a pending-pair receipt. The result is
+// recorded, and what the receipt waits for is the pair's pools, never the source, so the coin is decided: not read, no next read on its
+// page. A sibling on the same game selector whose own result is not recorded keeps the selector read.
+describe("HB-64: a decided pair coin is not planned for further reads of its game selector", () => {
+  const GAME = "catalogue:espn.game:nfl-2475453-DEN-win";
+  // the live $DENWIN rule: side B of the one-game pair with $SEAWIN (both-or-neither, winner takes the burn)
+  const GAME_RULE = validateRule({ schema: "burnticker.rules/v1", oracle: "catalogue", series: "espn.game:nfl-2475453-DEN-win", market: null, filter: {}, kind: "scalar", scalar: { unit: 1, perUnit: { fractionOfPool: 1 }, baseline: 0, direction: "up" }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null,
+    onEnd: { endSink: true, sweepThresholdLamports: 50_000_000, windDownDays: 28 },
+    pair: { clause: "both-or-neither", counterpartMint: "Bg545NmTcascUHGpH8HcJpTgrasUqFZEDNhYhuTbBURN", game: { series: ["espn.game:nfl-2475453-SEA-win", "espn.game:nfl-2475453-DEN-win"] }, pairId: "seawin-vs-denwin-espn-game-nfl-2475453-s", side: "B", voidBy: "2026-11-14", winnerTakesBurn: true } }) as BurnRule;
+  const gameCoin = (reg: Registry, ticker: string, baselineAt: string): TokenRow => {
+    const mint = `Mint${ticker}${++n}`.padEnd(43, "1");
+    return reg.register({ mint, ticker, name: ticker, creator: "Creator1111111111111111111111111111111111111", description: "", imageUrl: null, links: [], rulesText: lockRule(GAME_RULE).text, feePda: `Fee${mint}`.slice(0, 44), vault: null, tokenConfig: null, poolId: null, launchTx: `launch${ticker}`, cluster: "mainnet-beta", platformId: null, baselineAt, status: "live" }, Date.parse(baselineAt));
+  };
+  const RESULT = { id: "2026-10-16", at: "2026-10-16", result: null, value: "1", title: "Broncos won", sourceUrl: "https://www.espn.com/nfl/scoreboard" };
+
+  test("the decided coin (pending-pair receipt) is decided, idle on its own, and its page shows no next read; an undecided sibling keeps the selector planned", async () => {
+    const reg = openRegistry(":memory:");
+    const decided = gameCoin(reg, "DENWIN", "2026-10-15T02:44:10.000Z");
+    const readAt = Date.parse("2026-10-17T05:00:00Z");
+    reg.putReadings("catalogue", GAME, [RESULT], { settlementSourceUrl: null, attestedBy: ["k"] }, readAt);
+    assert.ok(reg.applyStep(decided.mint, { ...RESULT, settledAt: RESULT.at } as never, { units: 1, mapping: { fractionOfPool: 1 }, kind: "yes", note: "the Broncos won", carryOut: "0", baseline: null }, { value: null, carryOut: "0" }, false, readAt, "pending-pair"));
+    assert.equal(reg.receipt(decided.mint, RESULT.id)?.status, "pending-pair");
+    assert.equal(oneShotDecided(reg, GAME, decided, GAME_RULE), true, "a pending-pair receipt is a recorded result");
+    assert.ok(selectorIdle(reg, GAME, [decided]));
+    const planned = readAt + 6 * 3_600_000;
+    reg.setFeedState({ selectorKey: GAME, lastFetchAt: readAt, lastOkAt: Date.parse("2026-10-19T22:09:26Z"), failures: 0, lastError: null, nextFetchAt: planned });
+    assert.equal(plannedNextCheckAt(reg, GAME, [decided], planned), null, "the page prints no next read");
+    const k = keeper(reg, Date.parse("2026-10-20T04:10:00Z"));
+    const [r] = await fetchDue(k.d, [decided]);
+    assert.deepEqual([r.skipped, k.reads], [true, 0], "not planned for a read at 04:09Z");
+    assert.equal(reg.feedState(GAME).nextFetchAt, null, "and no next read is left behind");
+    assert.equal(overdue(snapshot(reg, Date.parse("2026-10-21T00:00:00Z"))).length, 0, "a decided pair coin is never overdue");
+
+    // an undecided sibling on the same selector, launched after that result: the selector stays planned for it; the decided coin's page still shows none
+    const sibling = gameCoin(reg, "DENWIN2", "2026-10-18T00:00:00.000Z");
+    assert.equal(oneShotDecided(reg, GAME, sibling, GAME_RULE), false);
+    assert.equal(selectorIdle(reg, GAME, reg.tokens("live")), null, "read while any coin on it is undecided");
+    reg.setFeedState({ ...reg.feedState(GAME), nextFetchAt: planned });
+    assert.equal(plannedNextCheckAt(reg, GAME, [sibling], planned), planned, "the sibling's page shows the next read");
+    assert.equal(plannedNextCheckAt(reg, GAME, [decided], planned), null, "the decided coin's page does not");
+    const [r2] = await fetchDue(k.d, reg.tokens("live"));
+    assert.deepEqual([r2.skipped, k.reads], [false, 1], "the selector is still read for the sibling");
+  });
+});
+
+// HB-48 (continuous audit 2026-10-19, hourly run 4): the idle skip nulled nextFetchAt and the overdue alert skipped a null due time, so a
+// wrongly idle selector went silent again. The alert now judges an idle or unplanned selector from the coin's own cadence and its last
+// good read, a coin is decided only when its own receipts agree, and an idle skip disputed by the receipts keeps the planned time.
+describe("HB-48: the overdue alert is judged from the coin's own cadence and receipts, not the erased due time", () => {
+  test("nextFetchAt null, idle 'one-shot recorded', no settlement receipt, last good read two cadences ago: bt-feed-overdue raised", () => {
+    const { reg } = hostRegistry();
+    const cadence = snapshot(reg, AUDIT_AT).tokens[0].cadenceMs;
+    const lastOk = AUDIT_AT - 2 * cadence;
+    reg.setFeedState({ selectorKey: KEY, lastFetchAt: lastOk, lastOkAt: lastOk, failures: 0, lastError: null, nextFetchAt: null });
+    const s = snapshot(reg, AUDIT_AT);
+    assert.equal(s.tokens[0].decided, false, "no settlement receipt: the coin's result is open");
+    const wrong: BurntickerSnapshot = { ...s, tokens: s.tokens.map((t) => ({ ...t, idle: "one-shot recorded" })) };
+    const [a] = overdue(wrong);
+    assert.ok(a, "bt-feed-overdue raised");
+    assert.match(a.text, /Why: the read plan skipped it as idle \(one-shot recorded\), but the coin's result is still open\./);
+    assert.equal((a.meta as { dueAt: number }).dueAt, lastOk + cadence, "due one cadence after the last good read");
+    // a snapshot without `decided` is open too, never judged from the idle verdict it is checking
+    const bare: BurntickerSnapshot = { ...wrong, tokens: wrong.tokens.map((t) => { const c = { ...t }; delete c.decided; return c; }) };
+    assert.equal(overdue(bare).length, 1);
+    // short of two cadences after the last good read it is not overdue yet
+    assert.equal(overdue({ ...wrong, now: lastOk + 2 * cadence - 60_000 }).length, 0);
+  });
+
+  test("a legitimately decided coin (its own receipt recorded, plan idle, nextFetchAt null, old read) raises none", () => {
+    const { reg, t } = hostRegistry();
+    const readAt = Date.parse("2026-10-23T01:00:00Z");
+    reg.putReadings("catalogue", KEY, [day("2026-10-21")], { settlementSourceUrl: null, attestedBy: ["k"] }, readAt);
+    const k = keeper(reg, readAt + 300_000);
+    planToken(k.d, t, reg.lockedRule(t));
+    reg.setFeedState({ selectorKey: KEY, lastFetchAt: readAt, lastOkAt: readAt, failures: 0, lastError: null, nextFetchAt: null });
+    const s = snapshot(reg, Date.parse("2026-11-05T00:00:00Z"));
+    assert.equal(s.tokens[0].decided, true);
+    assert.ok(s.tokens[0].idle);
+    assert.equal(overdue(s).length, 0);
+  });
+
+  test("an idle skip the coin's receipts dispute keeps the planned time in feed_state; an undisputed one clears it", async () => {
+    const { reg, t } = hostRegistry();
+    const readAt = Date.parse("2026-10-23T01:00:00Z");
+    reg.putReadings("catalogue", KEY, [day("2026-10-21")], { settlementSourceUrl: null, attestedBy: ["k"] }, readAt);
+    // the plan misjudges: it sees a result receipt on the reading, while the coin's own receipts hold none (HB-29's shape)
+    const misjudged = new Proxy(reg, { get(target, p) { if (p === "receipt") return () => ({ kind: "result", status: "confirmed" }); const v = Reflect.get(target, p, target) as unknown; return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v; } });
+    assert.ok(selectorIdle(misjudged, KEY, [t]), "the plan calls it idle");
+    const planned = readAt + 3 * 3_600_000;
+    reg.setFeedState({ selectorKey: KEY, lastFetchAt: readAt, lastOkAt: readAt, failures: 0, lastError: null, nextFetchAt: planned });
+    const k = keeper(misjudged, Date.parse("2026-10-30T00:00:00Z"));
+    const [r] = await fetchDue(k.d, [t]);
+    assert.equal(r.skipped, true, "the plan skips it");
+    assert.equal(reg.feedState(KEY).nextFetchAt, planned, "the planned read is kept for the alert");
+    const s = snapshot(reg, k.clock.now);
+    const [a] = overdue({ ...s, tokens: s.tokens.map((x) => ({ ...x, idle: "a one-shot whose own result is recorded" })) });
+    assert.ok(a, "and the alert sees it");
+  });
+});

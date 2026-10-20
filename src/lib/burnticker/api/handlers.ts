@@ -23,7 +23,7 @@ import { validateRule, lockRule, ruleStatement, isMeetingsRule, BURNTICKER_RULES
 import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
 import { POLYMARKET_TAG_FOR, type BrowseSeries } from "@/lib/burnticker/oracle/browse";
-import { categoryCards, categoryList, formatReading, loadCategories, type FeedCardInput } from "@/lib/burnticker/browse";
+import { categoryCards, categoryList, formatReading, loadCategories, type FeedCardInput, publishedDataCategories } from "@/lib/burnticker/browse";
 import { KALSHI_UNAVAILABLE, POLYMARKET_UNAVAILABLE, scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
 import { espnClient, fecClient, nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { electionPairTemplate } from "@/lib/burnticker/electionPair";
@@ -85,9 +85,10 @@ export async function oneShotVoidBy(p: Platform, locked: LockedRule): Promise<st
 }
 import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
 import { launchGuardRefusal, tickerTakenRefusal } from "@/lib/burnticker/launchGuards";
-import { CREATE_SEND_PENDING_MS, LAUNCH_PENDING_CODE, launchPendingRefusal, launchPendingSentence, ownLiveTickerSentence, verifySentCreate } from "@/lib/burnticker/launchPending";
+import { CREATE_SEND_PENDING_MS, LAUNCH_PENDING_CODE, createdOnChainBy, launchPendingRefusal, launchPendingSentence, ownLiveTickerSentence, verifySentCreate } from "@/lib/burnticker/launchPending";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 import { isSingleOfficialSource, singleSourceSentence } from "@/lib/burnticker/singleSource";
+import { catalogueSettleRefusal } from "@/lib/burnticker/coverage/settleable";
 
 /**
  * THE BURNTICKER ROUTES' SHARED LOGIC (2026-10-09). The wizard's routes (/api/burnticker/{catalogue,oracle/*,launch}) and the public
@@ -230,7 +231,8 @@ export async function search(p: Platform, q: { q?: string | null; closingSoon?: 
   const venues = venueFlags(p);
   const r = await universalSearch(q.q ?? "", { closingSoon: /^(1|true|yes)$/i.test(q.closingSoon ?? ""), venues, feeds: catalogueFeeds(now), espn: espnClient(), polyGet: venues.polymarket ? (u) => p.polymarket.get(u) : null, refuse: refuseTitlesList, kalshiSearch: venues.kalshi ? (x) => p.kalshi.searchSeries(x, { limit: 5 }) : null, derbyHref: derbyHrefFrom(), nowMs: now });
   let categories: { id: string; label: string; blurb: string }[] = [];
-  if (r.empty) { try { categories = loadCategories().map((c) => ({ id: c.id, label: c.label, blurb: c.blurb })); } catch { categories = []; } }
+  // continuous audit run 4, HB-42: the hint's buttons open the Published data step, so it lists only the categories that step has a tab for
+  if (r.empty) { try { categories = publishedDataCategories(loadCategories()).map((c) => ({ id: c.id, label: c.label, blurb: c.blurb })); } catch { categories = []; } }
   // suggested tickers: unique against the registry and clear of the refuse list's name patterns (RAYS26 → RAYS262 when taken)
   const list = loadRefuseList();
   const cards = dedupeTickers(r.cards, (t) => { try { return p.registry.tokenByTicker(t) !== null; } catch { return false; } }, (t) => nameRefusals(list, "", t).length > 0);
@@ -435,7 +437,15 @@ export async function browse(p: Platform, q: { category?: string | null; q?: str
       } catch (e) { errors.push(`Kalshi's ${cat} series could not be read. The reason given was: ${safeErrorText(e, 100)}`); }
     }
   }
-  const cards = categoryCards(c, { feeds, polymarket, kalshi }, { q: q.q ?? null, feedsOnly });
+  // continuous audit run 4, HB-37: a feed the creation preflight can never pass (not a primary, no second publisher) is not launchable
+  // on any browse, so its card shows the unavailable line instead of "use this source" (it was offered under Event outcome, then refused
+  // at the review)
+  const cards = categoryCards(c, { feeds, polymarket, kalshi }, { q: q.q ?? null, feedsOnly }).map((card) => {
+    if (card.venue !== "feed" || !card.launchable.ok || card.pick.oracle !== "catalogue" || !card.pick.series) return card;
+    let refusal: ReturnType<typeof catalogueSettleRefusal> = null;
+    try { refusal = catalogueSettleRefusal(card.pick.series); } catch { refusal = null; }
+    return refusal ? { ...card, launchable: { ok: false, why: refusal.message } } : card;
+  });
   return ok({ category: { id: c.id, label: c.label, blurb: c.blurb }, venues, cards, counts: { feeds: cards.filter((x) => x.venue === "feed").length, polymarket: cards.filter((x) => x.venue === "polymarket").length, kalshi: cards.filter((x) => x.venue === "kalshi").length }, errors, note: venues.kalshi ? "Our own feeds come first. Prediction markets come after them." : "Our own feeds come first. Kalshi is not turned on for this site." });
 }
 
@@ -1406,7 +1416,7 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
  * has landed, or is live (launchPendingRefusal, then the same judgement again inside the transaction that writes the row, so two racing
  * reports for two mints cannot both be recorded). 503 when the row cannot be written. Anything but the named row: the page does not send.
  */
-export async function markCreateSent(p: Pick<Platform, "registry" | "market">, mint: string, sentTx: unknown, now = Date.now()): Promise<ApiResult> {
+export async function markCreateSent(p: Pick<Platform, "registry" | "market"> & { program?: { programId: string } | null }, mint: string, sentTx: unknown, now = Date.now()): Promise<ApiResult> {
   const t = p.registry.token(mint);
   if (!t) return fail(404, "There is no draft for this mint.");
   if (t.launchTx || (t.status !== "draft" && t.status !== "expired")) return ok({ ok: true, recorded: false, note: "This coin is already launched." });
@@ -1424,13 +1434,14 @@ export async function markCreateSent(p: Pick<Platform, "registry" | "market">, m
 
 /**
  * WIRING-MEDIA-RECOVERY item 235: the mint of a side A this creator already created on chain from an earlier pair plan (a draft with the
- * same ticker and name, whose mint account exists), or null. A host without a chain reader (p.market) cannot tell and answers null.
+ * same ticker and name, whose creator's TokenConfig is on chain), or null. A host without a chain reader (p.market) cannot tell and
+ * answers null. B-15 (sixth pass): a bare account at the mint is not proof (anyone can send it dust after registering an unsigned plan
+ * in the creator's name); only the burn program's TokenConfig naming this creator counts (launchPending.ts createdOnChainBy).
  */
-export async function createdSideA(p: Pick<Platform, "registry" | "market">, a: { creator: string; ticker: string; name: string }): Promise<string | null> {
+export async function createdSideA(p: Pick<Platform, "registry" | "market"> & { program?: { programId: string } | null }, a: { creator: string; ticker: string; name: string }): Promise<string | null> {
   if (!p.market) return null;
-  let drafts: { mint: string }[] = [];
+  let drafts: TokenRow[] = [];
   try { drafts = p.registry.tokens().filter((t) => t.creator === a.creator && t.status === "draft" && t.ticker.toUpperCase() === a.ticker.toUpperCase() && t.name === a.name); } catch { return null; }
-  const { PublicKey } = await import("@solana/web3.js");
-  for (const t of drafts) { try { if ((await p.market.getAccountInfo(new PublicKey(t.mint))) !== null) return t.mint; } catch { /* unreadable: not proof */ } }
+  for (const t of drafts) { if ((await createdOnChainBy(p, t)) === true) return t.mint; }
   return null;
 }

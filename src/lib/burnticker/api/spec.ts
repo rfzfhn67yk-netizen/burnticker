@@ -79,7 +79,7 @@ export const SCHEMAS: Record<string, Schema> = {
     feeKeyOwner: { ...nullable(PUBKEY), description: "The holder of the Fee Key. It is an address owned by the burn program (burn_receipts), at the seed [\"fee_keys\"]." },
     lockedLiquidity: { ...nullable(PUBKEY), description: "Raydium's LockedCpLiquidityState [\"locked_liquidity\", feeKey]" },
     feeKeyRecord: { ...nullable(PUBKEY), description: "The FeeKeyRecord account of the burn program (burn_receipts), at the seeds [\"fee_key\", mint]. The register_fee_key instruction writes it." },
-    feeKeyRegistered: bool, lockedPct: num,
+    feeKeyRegistered: bool, lockedPct: { type: ["number", "null"], description: "null until the coin graduates (its liquidity is locked then)" },
     split: obj({ burnBps: { const: 8000 }, operatorBps: { const: 2000 }, coinSide: { const: "burned" }, fixedInCode: { const: true } }, ["burnBps", "operatorBps"]),
     operatorTreasury: { ...nullable(PUBKEY), description: "where claim_lock_fees pays the 20 % (the Squads vault compiled into the program); null = not pinned on this cluster (claims refuse TreasuryNotPinned and the fees stay in the lock)" },
     lastClaim: nullable(obj({ at: str, signature: str, sol: str, toBurnPool: str, toOperator: str, tokenBurnedRaw: str, txUrl: nstr, line: str }, ["at", "signature", "sol", "toBurnPool", "toOperator", "line"])),

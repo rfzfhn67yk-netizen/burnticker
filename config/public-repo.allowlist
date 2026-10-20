@@ -113,6 +113,9 @@ scripts/ops/loadtest.sh
 scripts/ops/loadtest.mjs
 # I-6 (2026-10-19): prints the ufw rules that admit only Cloudflare (applies nothing); docs/burnticker/runbook.md
 scripts/ops/cloudflare-ufw-rules.sh
+# NOT here, on purpose: scripts/ops/mac/ (HB-62, 2026-10-19: the operator's Mac pull script and restore drill). They name the host's
+# address, its paths and the keychain item that holds the backup passphrase, so they stay in the monorepo; the leak scan also refuses
+# that keychain item's name below. test/burntickerBackupSet.test.ts skips its Mac checks where the folder is absent.
 
 # --- tests and the fixtures they read ---
 test/burnKeeper*.ts
@@ -125,6 +128,7 @@ test/fixtures/reclaim-sample-proof.json
 test/fixtures/bom-weekend-2026W40-row1.html
 # the swap panel's saved devnet account states (swap-1, 2026-10-14; test/burntickerSwap.test.ts checks its math against the SDK on them)
 test/fixtures/burnticker-swap-devnet.json
+test/fixtures/burnticker/registry-rules-2026-10-19.json
 # the game clock's recorded SEA at DEN reads (2026-10-15; test/burntickerGameClock.test.ts replays them through the one game-coin schedule)
 test/fixtures/burnticker-gameclock/sea-den-2026-10-15.json
 

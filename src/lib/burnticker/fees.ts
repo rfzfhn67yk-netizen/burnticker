@@ -175,7 +175,12 @@ export function devFeeWallet(env: Readonly<Record<string, string | undefined>> =
 }
 
 /** One sentence for the review step and the token page (pass the coin's pinned AmmConfig). States the split; says nothing about price. */
-export function feeSplitSentence(cluster = "mainnet", cpConfig?: string | null): string {
+/**
+ * Continuous audit run 4, HB-50: a coin whose pinned tier was not read (a draft or expired row, a failed chain read) never borrows the tier
+ * new coins get; its pages say the tier could not be read.
+ */
+export const TIER_UNREAD_LINE = "This coin's pool fee tier could not be read, so its split after graduation is not shown here.";
+export function feeSplitSentence(cluster = "mainnet", cpConfig?: string | null, o: { tierUnread?: boolean } = {}): string {
   const c = CURVE_FEES.legs;
   const to = (label: string) => (label === "burn pool" ? "the burn pool" : label === "Raydium protocol" ? "Raydium" : label);
   const legs = c.map((l) => `${bpsPerSol(l.bps)} SOL to ${to(l.label)}`);
@@ -183,6 +188,7 @@ export function feeSplitSentence(cluster = "mainnet", cpConfig?: string | null):
   const creatorLine = t.creatorFeeShareRate > 0
     ? `Most of the burn pool's share, ${bpsPerSol(b.creatorToBurnPool)} SOL per 1 SOL, comes from Raydium's fixed CPMM creator fee of ${bpsPerSol(b.creatorFee)} SOL per 1 SOL, after Raydium's ${ppmPct(t.creatorFeeShareRate)} share.`
     : `Of the burn pool's share, ${bpsPerSol(b.creatorToBurnPool)} SOL per 1 SOL comes from Raydium's fixed CPMM creator fee.`;
+  if (o.tierUnread) return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). ${TIER_UNREAD_LINE} ${LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. The human creator receives no cash from fees, and the keeper only pays network fees.`;
   return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). ${postGraduationShareLine(postGraduationFeesFor(cluster, cpConfig))} In all, each trade in the Raydium pool pays ${b.tradersPay / 100}% in fees. ${LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. The operator's part of those liquidity fees is fixed in code, and the coin side of them is burned. ${creatorLine} The coin's creator on LaunchLab is the burn program's fee account, so the creator-fee slot can only pay the burn pool. The human creator receives no cash from fees, and the keeper only pays network fees.`;
 }
 

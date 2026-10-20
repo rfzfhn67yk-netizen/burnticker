@@ -4,7 +4,8 @@ import { MINT_ADDRESS_TRUST } from "@/lib/burnticker/mintAddressCopy";
 import { HostDiagnostics } from "../_components/HostDiagnostics";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
-import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
+import { BOTH_TIERS_LINE, earlierCoinsLineFor } from "@/lib/burnticker/feeShareLine";
+import { LP_BEFORE_GRADUATION_TRUST } from "@/lib/burnticker/lpLockCopy";
 import { TermNote } from "../_components/Term";
 import CoverageSection from "./CoverageSection";
 import TrustPackSection from "./TrustPackSection";
@@ -71,6 +72,7 @@ export default function TrustPage() {
       <section className={card}><h2 className="font-medium">The liquidity is locked forever, and its fees fund the burn</h2>
         <p>{t.lpLock.line}.</p>
         <p className="text-xs text-neutral-300 mt-1">At graduation, {t.lpLock.lockedPct}% of the LP is locked with Raydium&apos;s LP lock and can never be withdrawn. The Fee Key is the right to the LP&apos;s trading fees, and the burn program owns it. No person holds it. Anyone can call <code>{t.lpLock.instructions.claim}</code>. It sends the SOL side {t.lpLock.split.burnBps / 100}% to the coin&apos;s burn pool and {t.lpLock.split.operatorBps / 100}% to the operator treasury, and it burns the coin side. The split is compiled into the program, and no setting or key changes it. {UPGRADE_CAVEAT}</p>
+        <p className="text-xs text-neutral-300 mt-1" data-lp-before-graduation>{LP_BEFORE_GRADUATION_TRUST}</p>
         <p className="text-xs text-neutral-300 mt-1">Of each swap after graduation, {pct(t.lpLock.perSwapAfterGraduationBps.lpFees)} is liquidity fees: {pct(t.lpLock.perSwapAfterGraduationBps.toBurnPool)} of the swap goes to the burn pool and {pct(t.lpLock.perSwapAfterGraduationBps.toOperator)} goes to the operator. The creator fee adds {pct(t.lpLock.perSwapAfterGraduationBps.creatorFeeToBurnPool)} for the burn pool, so {pct(t.lpLock.perSwapAfterGraduationBps.burnedTotal)} of each swap goes to the burn in all.</p>
         <ul className="text-xs mt-1">
           <li>Lock program: <a className="underline break-all" href={t.lpLock.urls.lockProgram}><code>{t.lpLock.lockProgram}</code></a></li>
@@ -85,7 +87,8 @@ export default function TrustPage() {
       </section>
       <section className={card}><h2 className="font-medium">Live platform settings compared with the design</h2>
         {t.livePlatform.error ? <p className="text-amber-400 text-xs">{t.livePlatform.error}</p> : <div className="bt-table-wrap max-w-full overflow-x-auto" tabIndex={0} role="region" data-scroll-table aria-label="Live platform settings, scrolls sideways"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Field</th><th className="p-2">Designed</th><th className="p-2">Live ({t.livePlatform.platformId})</th><th className="p-2">Match</th></tr></thead><tbody>{t.livePlatform.comparison.map((c) => <tr key={c.field} className="border-t border-neutral-800"><td className="p-2">{c.field}</td><td className="p-2">{c.designed}</td><td className="p-2 break-all">{c.live}</td><td className={`p-2 ${c.matches ? "text-emerald-400" : "text-red-400"}`}>{c.matches ? "✓" : "DIFFERS"}</td></tr>)}</tbody></table><p className="text-xs text-neutral-500">Read at {denverTime(t.livePlatform.readAt)}.</p></div>}
-        <p className="text-xs text-neutral-500 mt-2">As designed, the developer takes {pct(t.designedFees.devFeeBps)} of trading volume on the launch curve. {t.designedFees.lpLockedPct ?? t.lpLock.lockedPct}% of the LP is locked. {postGraduationShareLine(t.designedFees.postGraduation)} Creators get {pct(t.designedFees.creatorCashBps)} in cash, and the team allocation is {t.designedFees.teamAllocationPct}%.</p>
+        {/* B-16 (sixth pass): mainnet names both tiers with the cutover; HB-50 (run 4): another network names its own tier, never mainnet's */}
+        <p className="text-xs text-neutral-500 mt-2">As designed, the developer takes {pct(t.designedFees.devFeeBps)} of trading volume on the launch curve. At graduation, {t.designedFees.lpLockedPct ?? t.lpLock.lockedPct}% of the LP is locked. {t.cluster === "devnet" ? <>{earlierCoinsLineFor(t.cluster)}</> : <>{BOTH_TIERS_LINE}</>} Creators get {pct(t.designedFees.creatorCashBps)} in cash, and the team allocation is {t.designedFees.teamAllocationPct}%.</p>
         {[t.designedFees.curve, t.designedFees.postGraduation].map((f, k) => <div key={k} className="bt-table-wrap mt-2 max-w-full overflow-x-auto" tabIndex={0} role="region" data-scroll-table aria-label={k === 0 ? "Fees on the curve, scrolls sideways" : "Fees after graduation, scrolls sideways"}><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">{k === 0 ? "On the launch curve" : "After graduation"}</th><th className="p-2 text-right">Basis points</th><th className="p-2">Goes to</th><th className="p-2">Set by</th></tr></thead><tbody>{f.legs.map((l) => <tr key={l.label} className="border-t border-neutral-800"><td className="p-2">{l.label}</td><td className="p-2 text-right">{l.bps}</td><td className="p-2">{l.recipient}</td><td className="p-2 text-neutral-500">{l.dial}</td></tr>)}</tbody></table></div>)}
       </section>
       {/* WIRING-SEMANTICS-2 item 162: the cap the program applies today, read from the platform's settings (null: not read here) */}

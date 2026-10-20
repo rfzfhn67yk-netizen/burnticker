@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletButton, useOpenWalletList } from "../_components/WalletButton";
 import { WALLET_COPY, meState, meWallet, shortAddress, wantsConnect } from "@/lib/burnticker/walletShell";
-import { ANALYTICS_COPY } from "@/lib/burnticker/creatorBenefits";
+import { ANALYTICS_COPY, CREATOR_PAGE } from "@/lib/burnticker/creatorBenefits";
 import { WEEK_MEANING } from "@/lib/burnticker/coinRank";
 import { LaunchChecklist } from "../_components/LaunchChecklist";
 import { DRAFTS_HEADING, meCoinView, splitMeCoins, stateChip } from "@/lib/burnticker/meCoins";
@@ -29,7 +29,7 @@ import { readLatest, shownFor } from "@/lib/burnticker/latestRead";
  * block of copyable lint-clean text, from GET /burnticker/creator/<wallet>/summary (the creator page's numbers). Words: creatorBenefits.ts.
  */
 interface Summary { coins: { ticker: string; mint?: string; receipts: number; week: number; rank: string | null; summary: string }[] }
-interface Coin { ticker: string; name: string; mint: string; page: string; state: string; badge: string | null; queuedUnits: number; nextSettlementAt: string | null; lastReading: { id: string | null; value: string | null; at: string | null } | null; agreement: { reads: number; methods: string | null; held: string | null }; receipts: number; windDown: string | null; pairId: string | null; todayPost: { text: string; lintOk: boolean; hits: string[] } }
+interface Coin { ticker: string; name: string; mint: string; page: string; state: string; badge: string | null; queuedUnits: number; nextSettlementAt: string | null; lastReading: { id: string | null; value: string | null; at: string | null } | null; agreement: { reads: number; methods: string | null; held: string | null }; receipts: number; windDown: string | null; pairId: string | null; todayPost: { text: string; lintOk: boolean; hits: string[] }; loading?: boolean }
 interface Data { wallet: string; coins: Coin[]; pairs: { pairId: string; page: string; sides: string[]; voided: boolean }[] }
 const denver = (iso: string | null) => (iso ? new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso)) : "—");
 
@@ -112,6 +112,8 @@ export default function CreatorDashboard() {
           {created.map((c) => (
             <li key={c.mint} className={card + " space-y-2"} data-coin-state={c.state}>
               <div className="flex flex-wrap items-center gap-2"><Link className="font-mono text-base underline" href={coinCanonicalHref(c.mint)}>${c.ticker}</Link><span className="text-neutral-400">{c.name}</span><span className="bt-chip">{stateChip(c.state)}</span>{c.badge && <span className="bt-chip bt-chip-window">{c.badge}</span>}</div>
+              {/* sixth pass B-10: this coin's page read is still running on the server; its registry facts show meanwhile */}
+              {c.loading && <p className="text-xs text-neutral-300" role="status" data-me-loading>{CREATOR_PAGE.coinLoading}</p>}
               <div data-me-trade><TradeButtons links={coinLinks({ cluster: host, mint: c.mint, phase: null, status: "live" })} mint={c.mint} ticker={c.ticker} compact /></div>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                 <dt className="text-neutral-500">queued units</dt><dd>{c.queuedUnits}</dd>

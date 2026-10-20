@@ -1,5 +1,5 @@
 [Unit]
-Description=Burnticker synthetic creator (a second next start on 127.0.0.1:3100 serving DEVNET from the shipped build, driven by Chrome like a creator, then stopped) — fired nightly by mct-burnticker-synth.timer
+Description=Burnticker synthetic creator (a second next start on 127.0.0.1:3100 serving DEVNET from the shipped build, driven by Chrome like a creator, then stopped), run nightly by its timer (mct-burnticker-synth.timer), or by hand
 After=network-online.target
 
 [Service]

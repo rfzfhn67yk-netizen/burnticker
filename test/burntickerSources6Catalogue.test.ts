@@ -65,7 +65,7 @@ describe("QA pass 9 #33, #34, #25, #32: catalogue and picker details", () => {
     assert.equal(formatReading("4.3", "percent"), "4.3%");
     assert.equal(formatReading("1234567", "views"), "1,234,567 views");
     assert.equal(formatReading("n/a", "USD"), "n/a");
-    assert.equal(sampleReadingLabel({ id: "2026-10-10", value: "40310000000000" }, "2026-10-10", "USD"), "Sample reading 2026-10-10: $40.31T, observed 2026-10-10");
+    assert.equal(sampleReadingLabel({ id: "2026-10-10", value: "40310000000000" }, "2026-10-10", "USD"), "Sample from the catalogue: reading 2026-10-10, $40.31T, saved 2026-10-10");
   });
   test("#32 a coin search result carries its short mint, liquidity and verified mark; audit 10 #22 the second source is a sentence", () => {
     const mint = "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm";

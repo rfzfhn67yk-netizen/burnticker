@@ -79,7 +79,46 @@ switch_link() {
   mv -T "$tmp" "$LINK" 2>/dev/null || perl -e 'rename($ARGV[0], $ARGV[1]) or die "rename: $!\n"' "$tmp" "$LINK"
 }
 
+# schema-guard begin
+# THE SCHEMA GUARD (HB-61, sixth pre-launch audit 2026-10-19). Publish 92 migrated the registry to schema 3, its smoke failed falsely, and
+# this script swapped back to publish 91, whose code knows only schema 2: it refused every launch for 20 minutes (I-17). The registry
+# writes the version its file is at to data/schema-version.json (registry.ts writeSchemaVersionFile); a build's code says which versions
+# it knows in REGISTRY_MIGRATIONS (its source, or its compiled server files). A switch to a build that knows a LOWER version than the
+# file carries is refused, before anything moves, with the fix-forward instruction.
+#   known_schema DIR   the highest registry schema the code under DIR knows (a release root, a checkout, or a .next build), or nothing
+#   schema_guard DIR DATA WHAT   0 when the switch may go ahead; 1 (with the reason printed) when it must not
+known_schema() {
+  if [ -f "$1/src/lib/burnticker/registry.ts" ]; then
+    grep -oE '\{ version: [0-9]+, note:' "$1/src/lib/burnticker/registry.ts" 2>/dev/null | sed -E 's/[^0-9]*([0-9]+).*/\1/' | sort -n | tail -1
+    return 0
+  fi
+  for b in "$1/.next/server" "$1/server"; do
+    if [ -d "$b" ]; then
+      grep -rhoE '\{version:[0-9]+,note:"20' "$b" 2>/dev/null | sed -E 's/[^0-9]*([0-9]+).*/\1/' | sort -n | tail -1
+      return 0
+    fi
+  done
+}
+schema_guard() {
+  carried=""
+  [ -f "$2/schema-version.json" ] && carried=$(sed -n 's/.*"version"[^0-9]*\([0-9][0-9]*\).*/\1/p' "$2/schema-version.json" | head -1)
+  [ -n "$carried" ] || { echo "schema check: no data/schema-version.json in $2 yet, so there is nothing to compare"; return 0; }
+  known=$(known_schema "$1")
+  if [ -z "$known" ]; then echo "schema check: could not tell which registry schema $3 knows (the registry file is at version $carried); going ahead"; return 0; fi
+  if [ "$known" -ge "$carried" ]; then echo "schema check: $3 knows registry schema $known; the file is at $carried"; return 0; fi
+  echo "SWAP REFUSED BY THE SCHEMA CHECK: the registry file is at schema version $carried (a newer build moved it there), and $3 only knows up to version $known. Running it would refuse every new launch until a newer build is back. Nothing was switched."
+  echo "FIX FORWARD: correct the newer build and deploy it again. If the newer build's smoke failure was false, switch it back in by hand rather than rolling back. Never roll back past a registry migration (docs/burnticker/ROLLBACK.md)."
+  return 1
+}
+# schema-guard end
+DATA_DIR="${BT_DATA_DIR:-}"
+if [ -z "$DATA_DIR" ]; then if [ -n "$RELEASE" ]; then DATA_DIR="$LINK/data"; else DATA_DIR=data; fi; fi
+
 [ -f "$STAGE/BUILD_ID" ] || { echo "SWAP REFUSED: no staged build ($STAGE/BUILD_ID); the running build is untouched"; exit 1; }
+# HB-61: the build switched to (a deploy's new build, or a rollback's older release) must know the registry file's schema
+if [ -n "$RELEASE" ]; then schema_guard "$RELEASE" "$DATA_DIR" "release $(basename "$RELEASE")" || exit 1
+else schema_guard "$STAGE" "$DATA_DIR" "the staged build" || exit 1
+fi
 NEW="$(cat "$STAGE/BUILD_ID")"
 [ -n "$NEW" ] || { echo "SWAP REFUSED: the staged BUILD_ID is empty; the running build is untouched"; exit 1; }
 OLD=""; [ -f "$RUN/BUILD_ID" ] && OLD="$(cat "$RUN/BUILD_ID")"
@@ -175,6 +214,12 @@ if restart && smoke "$NEW" "$DEADLINE" "$T0" "$ID0"; then
   exit 0
 fi
 echo "WEB SMOKE FAILED for build $NEW within ${DEADLINE} s: $WHY"
+# HB-61: the new build may have migrated the registry when it opened it; never swap back to code that knows a lower schema
+if [ -n "$RELEASE" ]; then BACK_TO="$PREV"; else BACK_TO=.next-old; fi
+if [ -d "$BACK_TO" ] && ! schema_guard "$BACK_TO" "$DATA_DIR" "the previous build${OLD:+ $OLD}"; then
+  echo "NOT SWAPPED BACK: build $NEW stays in place and the web is NOT confirmed healthy; act now (docs/burnticker/ROLLBACK.md)"
+  exit 1
+fi
 if [ -n "$RELEASE" ]; then
   switch_link "$PREV"
   : > "$RELEASE/.failed"

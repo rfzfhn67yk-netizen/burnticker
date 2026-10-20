@@ -12,7 +12,7 @@ import BN from "bn.js";
 import { CREATE_CPMM_POOL_PROGRAM, getCpmmPdaAmmConfigId, PlatformConfig } from "@raydium-io/raydium-sdk-v2";
 import { CPMM_MAINNET_TIER_0, CPMM_MAINNET_TIER_9, CPMM_MAINNET_TIER_14, CPMM_TIER, cpmmTierLabel, postGraduationBps } from "@/lib/burnticker/cpmmTier";
 import { DEV_FEE_LINE, LOCK_FEE_BURN_BPS, POST_GRADUATION_FEES, USE_OF_FEES, compareLivePlatform, feeSplitSentence, platformTierRow, postGraduationBpsFor, postGraduationFeesFor } from "@/lib/burnticker/fees";
-import { EARLIER_COINS_LINE, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
+import { BOTH_TIERS_LINE, EARLIER_COINS_LINE, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { feeFlowLine } from "@/lib/burnticker/tokenPage";
 import { buildTrustPage, type ChainReader } from "@/lib/burnticker/trust";
 import { decodePlatform } from "@/lib/burnKeeper/launch";
@@ -64,9 +64,9 @@ describe("a coin's numbers come from the tier it pinned", () => {
     const tp = read("src/lib/burnticker/tokenPage.ts");
     // continuous audit run 2, HB-13: one pinned split feeds fees.postGraduation, fees.sentence and lifecycle.fees
     assert.match(tp, /const postGraduation = postGraduationFeesFor\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig\);/);
-    assert.match(tp, /fees: \{ curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig\)/);
-    assert.match(tp, /fees: feeFlowLine\(postGraduation\) \}/);
-    assert.match(tp, /\$\{esc\(feeFlowLine\(s\.fees\.postGraduation\)\)\}/);
+    assert.match(tp, /fees: \{ curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig, \{ tierUnread \}\)/);
+    assert.match(tp, /fees: feeFlowLine\(postGraduation, lpLockedPct, tierUnread\) \}/);
+    assert.match(tp, /\$\{esc\(feeFlowLine\(s\.fees\.postGraduation, s\.trust\.lpLockedPct \?\? null, !!s\.fees\.tierUnread\)\)\}/);
     assert.match(read("src/lib/burnKeeper/programAdapter.ts"), /cpConfig: c\.ll_cp_config\.toBase58\(\)/);
   });
 });
@@ -87,7 +87,8 @@ describe("the trust row and page (live platform vs the code)", () => {
     assert.equal(on9.designedFees.postGraduation.totalBps, 100); assert.equal(on14.designedFees.postGraduation.totalBps, 125);
     assert.deepEqual([on9.designedFees.lpFeeSplit.operatorBps, on14.designedFees.lpFeeSplit.operatorBps], [4.2, 12.6]);
     assert.ok(on9.livePlatform.comparison.every((r) => !r.field.startsWith("Raydium pool fee tier") || r.matches));
-    assert.ok(on14.statements.some((s) => s.startsWith(`${postGraduationShareLine(POST_GRADUATION_FEES)} ${EARLIER_COINS_LINE}`)));
+    // sixth pass B-16 (2026-10-19): the trust statement names both tiers, the one every live coin pays first
+    assert.ok(on14.statements.some((s) => s.startsWith(BOTH_TIERS_LINE)));
     // an unlisted live id: the page falls back to the code's new-coin tier and the row says so
     const odd = await trustFor(Keypair.generate().publicKey.toBase58());
     assert.equal(odd.designedFees.postGraduation.totalBps, 125);

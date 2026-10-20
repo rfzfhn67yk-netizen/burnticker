@@ -92,7 +92,7 @@ describe("website-21: step 2, the third rivalry option and its meetings list", (
   });
   test("picking it builds the pair from the page's own rules, names it $PHIVBOS / $BOSVPHI and keeps the schedule's season year", () => {
     assert.match(page, /if \(pairMode === "meetings"\) \{ try \{ return meetingsPairRules\(leagueSeries as LeagueId, sideA\.abbr, sideB\.abbr, meetingsYear \?\?/);
-    assert.match(page, /const n = meetingsPairNames\(a, b\);/);
+    assert.match(page, /const n = meetingsPairNames\(a, b\), ft = freePairTickers\(a, b, tickerGuard\);/);
     assert.match(page, /setMeetingsYear\(rivalry\?\.key === `\$\{leagueSeries\}:\$\{a\.abbr\}:\$\{b\.abbr\}` \? rivalry\.year : null\)/);
     assert.match(page, /swap, pairMode, meetingsYear, pick,/, "the draft keeps the season year");
   });

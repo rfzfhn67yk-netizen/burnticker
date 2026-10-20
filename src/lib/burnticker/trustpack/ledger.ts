@@ -44,6 +44,12 @@ export function loadExpenses(root = process.cwd()): Expenses {
   return j;
 }
 
+/** HB-46: an expense row as the public API serves it (the internal `todo` token is left out). */
+export type PublicExpenses = Omit<Expenses, "items"> & { items: Omit<Expense, "todo">[] };
+export const NOT_RECORDED_NOTE = "Amounts shown as not recorded yet have not been recorded by the operator. None of them is zero.";
+export function publicExpenses(e: Expenses): PublicExpenses {
+  return { ...e, items: e.items.map(({ todo: _todo, ...rest }) => rest) };
+}
 export interface LedgerEntry { signature: string; slot: number; blockTime: string | null; month: string | null; deltaLamports: string; direction: "in" | "out"; counterparty: string | null; err: boolean }
 export interface LedgerMonth { month: string; inLamports: string; outLamports: string; txIn: number; txOut: number }
 export interface FeeLedgerDoc {
@@ -51,7 +57,8 @@ export interface FeeLedgerDoc {
   source: "chain" | "unavailable"; note: string;
   balanceLamports: string | null; totals: { inLamports: string; outLamports: string; transactions: number; complete: boolean };
   months: LedgerMonth[]; entries: LedgerEntry[];
-  expenses: Expenses; placeholders: string[];
+  /** HB-46 (run 4): the expenses as published: no internal placeholder tokens, one note for the amounts not recorded yet */
+  expenses: PublicExpenses; notRecorded: string | null;
   /** LP locked forever (2026-10-10): the operator's 20 % of post-graduation LP fees (claim_lock_fees), a second income line. */
   lpFees?: LpFeeLine;
 }
@@ -129,9 +136,10 @@ export function groupByMonth(entries: LedgerEntry[]): LedgerMonth[] {
 export function buildFeeLedgerDoc(i: { cluster: string; wallet: string | null; history: Awaited<ReturnType<typeof readWalletHistory>> | null; error?: string | null; expenses: Expenses; now?: number; lpClaims?: readonly Pick<LockFeeClaimFacts, "solLamports" | "toBurnPoolLamports" | "toOperatorLamports">[] | null }): FeeLedgerDoc {
   const lpFees = lpFeeLine(i.cluster, i.lpClaims ?? null);
   const generatedAt = new Date(i.now ?? Date.now()).toISOString();
-  const placeholders = i.expenses.items.filter((e) => e.placeholder && e.todo).map((e) => e.todo as string);
+  const notRecorded = i.expenses.items.some((e) => e.usd === null) ? NOT_RECORDED_NOTE : null;
+  const expenses = publicExpenses(i.expenses);
   if (!i.wallet || !i.history) {
-    return { schema: "burnticker.fee-ledger/v1", generatedAt, cluster: i.cluster, wallet: i.wallet, source: "unavailable", note: i.wallet ? `the chain could not be read: ${i.error ?? "no RPC"}` : `No developer fee wallet is set for ${i.cluster} yet.`, balanceLamports: null, totals: { inLamports: "0", outLamports: "0", transactions: 0, complete: false }, months: [], entries: [], expenses: i.expenses, placeholders, lpFees };
+    return { schema: "burnticker.fee-ledger/v1", generatedAt, cluster: i.cluster, wallet: i.wallet, source: "unavailable", note: i.wallet ? `the chain could not be read: ${i.error ?? "no RPC"}` : `No developer fee wallet is set for ${i.cluster} yet.`, balanceLamports: null, totals: { inLamports: "0", outLamports: "0", transactions: 0, complete: false }, months: [], entries: [], expenses, notRecorded, lpFees };
   }
   const months = groupByMonth(i.history.entries);
   const tin = months.reduce((a, m) => a + BigInt(m.inLamports), BigInt(0)), tout = months.reduce((a, m) => a + BigInt(m.outLamports), BigInt(0));
@@ -139,7 +147,7 @@ export function buildFeeLedgerDoc(i: { cluster: string; wallet: string | null; h
     schema: "burnticker.fee-ledger/v1", generatedAt, cluster: i.cluster, wallet: i.wallet, source: "chain",
     note: `${i.history.entries.length} ${i.history.entries.length === 1 ? "transaction" : "transactions"} changed the balance of ${i.wallet}, read from the ${i.cluster} RPC. ${i.history.complete ? "This is the whole history." : "Only the most recent 2,000 signatures are read, so older ones are not shown."}`,
     balanceLamports: i.history.balanceLamports, totals: { inLamports: tin.toString(), outLamports: tout.toString(), transactions: i.history.entries.length, complete: i.history.complete },
-    months, entries: i.history.entries, expenses: i.expenses, placeholders, lpFees,
+    months, entries: i.history.entries, expenses, notRecorded, lpFees,
   };
 }
 

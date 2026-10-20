@@ -100,6 +100,35 @@ describe("L-5: the web drains on SIGTERM within a bound", () => {
     assert.ok(Date.now() - t0 < 2_000);
   });
 
+  // HB-44 (continuous audit 2026-10-19): Next's cleanup closed the server a second time after the drain, and logged
+  // "Error: Server is not running ... ERR_SERVER_NOT_RUNNING" on every deploy.
+  test("HB-44: the second close (Next's cleanup) is not an error, and the stop prints one clean stopped line", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bt-graceful-"));
+    const file = path.join(dir, "next-like.cjs");
+    fs.writeFileSync(file, `const s=require("node:http").createServer((q,r)=>r.end("ok")); s.listen(0,"127.0.0.1",()=>process.stdout.write("PORT\\n"));
+process.on("SIGTERM",()=>{ s.close((err)=>{ if (err) process.stderr.write("Error: "+err.message+" code: "+err.code+"\\n"); process.exit(143); }); });`);
+    const c = spawn(process.execPath, ["--require", PRELOAD, file], { env: { PATH: process.env.PATH ?? "", BT_WEB_DRAIN_MS: "300", BT_WEB_EXIT_GRACE_MS: "2000" } as unknown as NodeJS.ProcessEnv });
+    let out = "", err = "";
+    c.stderr.on("data", (b) => { err += b; });
+    await new Promise<void>((r) => c.stdout.on("data", (b) => { out += b; if (/PORT/.test(out)) r(); }));
+    c.kill("SIGTERM");
+    const code = await new Promise<number | null>((r) => c.on("exit", (x) => r(x)));
+    assert.equal(code, 143);
+    assert.doesNotMatch(err + out, /ERR_SERVER_NOT_RUNNING|Error:/, "no error line on a clean stop");
+    assert.equal((out.match(/the web server stopped/g) ?? []).length, 1, "one stopped line");
+    assert.match(out, /SIGTERM: the web server stopped \(exit 143\)/);
+  });
+
+  test("HB-44: the graceful script (source) tolerates ERR_SERVER_NOT_RUNNING and logs one stop line", () => {
+    if (!fs.existsSync(PRELOAD)) return;
+    const src = fs.readFileSync(PRELOAD, "utf8");
+    assert.match(src, /err\.code === "ERR_SERVER_NOT_RUNNING" \? undefined : err/);
+    assert.equal((src.match(/the web server stopped/g) ?? []).length, 1);
+    assert.match(src, /process\.once\("exit"/);
+    const synth = path.join(ROOT, "deploy", "systemd", "mct-burnticker-synth.service");
+    if (fs.existsSync(synth)) assert.match(fs.readFileSync(synth, "utf8"), /^Description=.*run nightly by its timer \(mct-burnticker-synth\.timer\), or by hand$/m);
+  });
+
   test("the run script preloads it and the unit's stop timeout is about 15 s, above drain plus grace", () => {
     const run = fs.readFileSync(path.join(ROOT, "scripts", "service", "run-burnticker-web.sh"), "utf8");
     assert.match(run, /GRACEFUL="\$\(pwd -P\)\/scripts\/service\/web-graceful\.cjs"/);

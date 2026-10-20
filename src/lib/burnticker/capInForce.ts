@@ -53,7 +53,8 @@ export function capSentence(e: EffectiveCap | null): string {
   if (e.capLamports === null) return `The burn-pool cap ended on ${day(e.sunsetTs)}, so each burn pool now spends from all of its SOL.`;
   const where = e.source === "platform-config" ? "read from the platform's settings on chain" : "the program's default, because the platform's settings have not been created";
   const pend = e.pending ? ` A raise to ${sol(e.pending.capLamports)} SOL is waiting and can be applied from ${day(e.pending.etaTs)}.` : "";
-  return `Each burn pool spends from at most ${sol(e.capLamports)} SOL today (${where}). The cap ends on ${day(e.sunsetTs)}.${pend} ${CAP_MECHANISM_SENTENCE}`;
+  // continuous audit run 4, HB-46: the end date is said once (the read sentence already gives it), not again in the mechanism
+  return `Each burn pool spends from at most ${sol(e.capLamports)} SOL today (${where}). The cap ends on ${day(e.sunsetTs)}.${pend} ${CAP_MECHANISM_SENTENCE.replace(/, and it expires by [^.]*? at the latest\./, ".")}`;
 }
 
 /** ACC-01: the same sentence on a page other than Trust (the launch review, the wallet summary, a token page): an unread cap points to Trust. */

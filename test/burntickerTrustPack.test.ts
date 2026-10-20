@@ -183,7 +183,7 @@ describe("expenses + the fee ledger (from chain, by month)", () => {
     assert.equal(h.complete, true); assert.equal(h.balanceLamports, "1234");
     assert.deepEqual(groupByMonth(h.entries), [{ month: "2026-09", inLamports: "5000", outLamports: "0", txIn: 1, txOut: 0 }, { month: "2026-10", inLamports: "4000", outLamports: "0", txIn: 1, txOut: 0 }]);
     const doc = buildFeeLedgerDoc({ cluster: "devnet", wallet: W, history: h, expenses: loadExpenses(ROOT), now: 0 });
-    assert.equal(doc.totals.inLamports, "9000"); assert.equal(doc.source, "chain"); assert.ok(doc.placeholders.includes("TODO_EXPENSE_HOSTING"));
+    assert.equal(doc.totals.inLamports, "9000"); assert.equal(doc.source, "chain"); assert.ok(!JSON.stringify(doc).includes("TODO_")); assert.ok(doc.notRecorded);   // HB-46: no placeholder tokens in the public answer
     const none = buildFeeLedgerDoc({ cluster: "mainnet", wallet: null, history: null, expenses: loadExpenses(ROOT) });
     assert.equal(none.source, "unavailable"); assert.match(none.note, /No developer fee wallet is set for mainnet yet/);
   });

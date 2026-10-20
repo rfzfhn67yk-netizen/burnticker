@@ -1,5 +1,6 @@
 import { fitName } from "@/lib/burnticker/launchFields";
 import { namesRemadeLine, shortTeamName } from "@/lib/burnticker/guidedLaunch";
+import { freePairTickers, type TickerGuard } from "@/lib/burnticker/tickerSwap";
 
 /**
  * website-25: short sentences the launch pages say that are not field checks. Plain English, lint-clean (test/burntickerWebsite25.test.ts).
@@ -20,15 +21,21 @@ export function pairCostSentence(totalSol: string, venue: "launchlab" | "pair-cu
  * QA walkthrough 11 H8 and M3: the generated names and tickers of a two-team linked pair say which way it burns. One game and every game
  * between them both burn the coin of the team that won ("Arsenal over Spurs", $ARSWIN; HS-8, continuous audit 2026-10-19: "Arsenal Wins vs
  * Spurs" read as a sentence with a grammar error); the season pair keeps its own generator ("Arsenal 2026 Losses"). Whole words only, at
- * most 32 bytes (fitName), tickers 10 characters at most and unchanged. A name the creator typed is never replaced by this.
+ * most 32 bytes (fitName). A name the creator typed is never replaced by this.
+ *
+ * B-12 (sixth-pass audit, WZ6-1): the tickers are the server's own matchup tickers ($DENVLAL and $LALVDEN, as meetingsPairNames gives
+ * them), no longer `<CODE>WIN`, which another coin already held or nearly held for 602 of 3,724 team pairs. With a `guard` (the tickers
+ * already in use), a matchup ticker that the review would refuse is replaced by the first free one before it is shown (tickerSwap.ts
+ * freePairTickers), and `swapped` says which. The page calls this only while the tickers are still generated, never on typed ones.
  */
-export function winPairNames(a: { abbr: string; code?: string | null; nickname: string | null; name: string }, b: { abbr: string; code?: string | null; nickname: string | null; name: string }): { a: { name: string; ticker: string }; b: { name: string; ticker: string } } {
+export function winPairNames(a: { abbr: string; code?: string | null; nickname: string | null; name: string }, b: { abbr: string; code?: string | null; nickname: string | null; name: string }, guard?: TickerGuard | null): { a: { name: string; ticker: string }; b: { name: string; ticker: string }; swapped: { a: boolean; b: boolean } } {
   const code = (t: typeof a) => (t.code ?? t.abbr).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
-  const one = (x: typeof a, y: typeof a) => {
+  const name = (x: typeof a, y: typeof a) => {
     const nx = x.nickname ?? x.name, ny = y.nickname ?? y.name;
-    return { name: fitName([`${nx} over ${ny}`, `${shortTeamName(nx)} over ${shortTeamName(ny)}`, `${nx} over ${code(y)}`, `${shortTeamName(nx)} over ${code(y)}`, `${code(x)} over ${code(y)}`]), ticker: `${code(x)}WIN`.slice(0, 10) };
+    return fitName([`${nx} over ${ny}`, `${shortTeamName(nx)} over ${shortTeamName(ny)}`, `${nx} over ${code(y)}`, `${shortTeamName(nx)} over ${code(y)}`, `${code(x)} over ${code(y)}`]);
   };
-  return { a: one(a, b), b: one(b, a) };
+  const t = freePairTickers(a, b, guard);
+  return { a: { name: name(a, b), ticker: t.a }, b: { name: name(b, a), ticker: t.b }, swapped: t.swapped };
 }
 /** H8: said once on the name step when a new rule replaced names the creator had typed (both coins, names and tickers alike). */
 // WIRING-AUDIT12 item 10: the page says namesRemadeLine(1 or 2) by the number of coins; this is the two-coin wording

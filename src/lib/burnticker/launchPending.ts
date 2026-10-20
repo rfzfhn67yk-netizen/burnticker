@@ -3,6 +3,8 @@ import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { LAUNCHLAB_INITIALIZE_V2, LL_SLOTS } from "@/lib/burnticker/launchCreateArgs";
 import type { Registry, TokenRow } from "@/lib/burnticker/registry";
+import { decodeTokenConfig } from "@/lib/burnReceipts/accounts";
+import { configPda } from "@/lib/burnReceipts/pda";
 
 /**
  * ONE CREATOR, ONE TICKER, ONE COIN (B-2, third audit 2026-10-19). The creator signed the first create; the page refreshed while it was
@@ -14,8 +16,8 @@ import type { Registry, TokenRow } from "@/lib/burnticker/registry";
  *             `action: "sent"`). verifySentCreate checks it is this draft's create, signed by the draft's creator and its mint (so nobody
  *             else can mark someone's draft), and the registry records the signature (draft_sends, append-only).
  *   PREPARE   launchPendingRefusal: a registering prepare by the same creator for the same ticker on another mint is refused with 409
- *             "launch-pending" while that draft's create can still land (sent in the last CREATE_SEND_PENDING_MS) or has landed (its mint
- *             exists on chain; checked for the creator's recent drafts of the ticker whether or not a send was posted). The answer sends
+ *             "launch-pending" while that draft's create can still land (sent in the last CREATE_SEND_PENDING_MS) or has landed (the creator's
+ *             TokenConfig for its mint exists on chain, B-15; checked for the creator's recent drafts of the ticker whether or not a send was posted). The answer sends
  *             the creator to the launch page's recovery notice, which checks the pending create and records it. A draft whose create was
  *             never sent keeps the exemption (a genuine retry reuses that draft, as before). The creator's own live coin on the ticker
  *             refuses the prepare too: a ticker is one coin.
@@ -74,15 +76,48 @@ export function verifySentCreate(t: Pick<TokenRow, "mint" | "creator" | "poolId"
   return { ok: true, signature: base58Encode(tx.signatures[0]) };
 }
 
-/** What launchPendingRefusal reads: the registry and, when the host has one, a chain reader for "does this mint exist". */
+/** What launchPendingRefusal reads: the registry and, when the host has one, a chain reader and the burn program it checks against. */
 export interface PendingDeps {
   registry: Pick<Registry, "tokens" | "createSends">;
   market?: { getAccountInfo(k: PublicKey): Promise<unknown> } | null;
+  program?: { programId: string } | null;
+}
+
+/**
+ * B-15 / HB-55 (sixth pre-launch audit 2026-10-19): whether `creator` created this draft's coin on chain. A prepare needs no wallet proof,
+ * so anyone can register a draft in another wallet's name, and anyone can send dust to its mint address; "an account exists at the mint"
+ * proved nothing and blocked the named creator's own launch of the ticker for about 25 hours. Only the burn program's TokenConfig for the
+ * mint (["config", mint]) counts: owned by the program, decoding as a TokenConfig, naming this mint and this creator. initialize_token
+ * requires the creator's signature, so this is the creator's own act and no stranger can make it true. Dust sent to the config address
+ * leaves a system-owned account with no data, which is not a TokenConfig.
+ *   true   the creator's coin exists on chain
+ *   false  the chain answered and there is no such TokenConfig
+ *   null   unknown: no chain reader, no program id or stored config address, or the read failed
+ */
+export async function createdOnChainBy(d: Pick<PendingDeps, "market" | "program">, t: Pick<TokenRow, "mint" | "creator"> & { tokenConfig?: string | null }): Promise<boolean | null> {
+  if (!d.market) return null;
+  const programId = (d.program?.programId ?? "").trim();
+  let address: PublicKey | null = null;
+  try { address = programId ? configPda(new PublicKey(programId), new PublicKey(t.mint)) : t.tokenConfig ? new PublicKey(t.tokenConfig) : null; } catch { return null; }
+  if (!address) return null;
+  let info: unknown;
+  try { info = await d.market.getAccountInfo(address); } catch { return null; }
+  if (info === null || info === undefined) return false;
+  const a = info as { data?: Uint8Array | Buffer; owner?: { toBase58(): string } };
+  if (programId && (!a.owner || typeof a.owner.toBase58 !== "function" || a.owner.toBase58() !== programId)) return false;
+  if (!a.data) return false;
+  try {
+    const cfg = decodeTokenConfig(a.data);
+    return cfg.mint.toBase58() === t.mint && cfg.creator.toBase58() === t.creator;
+  } catch { return false; }
 }
 
 /**
  * B-2 at prepare: the refusal for a registering prepare by `creator` of `ticker` on a mint other than `exceptMint`, or null. A chain read
  * that fails counts as "may have landed" for a draft whose create was sent (fail closed); for a draft with no send it proves nothing.
+ * B-15: every refusal rests on something only the creator's wallet can make: a recorded send (verifySentCreate checks the creator signed
+ * it) or the creator's TokenConfig on chain (createdOnChainBy). A draft someone else registered in the creator's name, unsigned, never
+ * blocks that creator by itself.
  */
 export async function launchPendingRefusal(d: PendingDeps, c: { creator: string; ticker: string; exceptMint: string | null }, now = Date.now()): Promise<{ status: 409; error: string; extra: { code: string; mint: string } } | null> {
   const ticker = c.ticker.trim().replace(/^\$/, "").toUpperCase();
@@ -91,16 +126,13 @@ export async function launchPendingRefusal(d: PendingDeps, c: { creator: string;
   const live = mine.find((t) => !!t.launchTx && (t.status === "live" || t.status === "paused"));
   if (live) return { status: 409, error: ownLiveTickerSentence(ticker, live.mint), extra: { code: "ticker-taken", mint: live.mint } };
   const open = mine.filter((t) => !t.launchTx && (t.status === "draft" || t.status === "expired") && now - t.createdAt < CHAIN_CHECK_WINDOW_MS).sort((a, b) => b.createdAt - a.createdAt);
-  const exists = async (mint: string): Promise<boolean | null> => {
-    if (!d.market) return null;
-    try { return (await d.market.getAccountInfo(new PublicKey(mint))) !== null; } catch { return null; }
-  };
   for (const [i, t] of open.entries()) {
     const sends = (() => { try { return d.registry.createSends(t.mint); } catch { return []; } })();
     const lastSent = sends.length ? Math.max(...sends.map((s) => s.sentAt)) : null;
     if (lastSent !== null && now - lastSent < CREATE_SEND_PENDING_MS) return { status: 409, error: launchPendingSentence(ticker, t.mint, false), extra: { code: LAUNCH_PENDING_CODE, mint: t.mint } };
     if (i >= PENDING_CHAIN_CHECKS) continue;
-    const onChain = await exists(t.mint);
+    // B-15: "landed" is the creator's own TokenConfig for the mint, never a bare account a stranger can fund (createdOnChainBy)
+    const onChain = await createdOnChainBy(d, t);
     if (onChain === true) return { status: 409, error: launchPendingSentence(ticker, t.mint, true), extra: { code: LAUNCH_PENDING_CODE, mint: t.mint } };
     if (onChain === null && lastSent !== null && d.market) return { status: 409, error: launchPendingSentence(ticker, t.mint, false), extra: { code: LAUNCH_PENDING_CODE, mint: t.mint } };
   }

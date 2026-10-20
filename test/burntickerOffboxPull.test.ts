@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { backupAlerts, offboxPullAlerts, offboxPullFact, offboxPullLine, parseOffboxPull, readOffboxPull, runUnitCheck, OFFBOX_PULL_FILE, OFFBOX_PULL_KEYS, OFFBOX_PULL_SCHEMA, OFFBOX_PULL_STALE_MS, type BackupStatus } from "@/lib/burnticker/ops/unitHealth";
+import { backupAlerts, checkOffboxPull, readOffboxPullFile, readOffboxPullSeen, offboxPullAlerts, offboxPullFact, offboxPullLine, parseOffboxPull, readOffboxPull, runUnitCheck, OFFBOX_PULL_FILE, OFFBOX_PULL_KEYS, OFFBOX_PULL_SCHEMA, OFFBOX_PULL_STALE_MS, type BackupStatus } from "@/lib/burnticker/ops/unitHealth";
 import { hostFactLines, type HostFacts } from "@/lib/burnticker/checkin";
 import { PUSH_KIND_OF_ALERT, PUSH_LOW_PRIORITY } from "@/lib/burnticker/push";
 import { lintCopy } from "@/lib/launch/copyLint";
@@ -143,5 +143,77 @@ describe("B-3 / OPS-1: the off-box pull receipt", () => {
       assert.doesNotMatch(s, /\b(buy|price|will|payout|target|guarantee)\b|→|->|icloud|\b20\d\d-\d\d-\d\d\b/i);
     }
     assert.doesNotMatch(docs + todo, /icloud/i, "the docs do not name the operator's storage service");
+  });
+});
+
+// HB-49 (continuous audit 2026-10-19, hourly run 4): a missing or unreadable receipt read as "none" and raised nothing, so a total loss of
+// the off-box copy was silent. Once a good receipt has been seen (data/offbox-pull.seen), a missing one alerts after 12 hours like a stale
+// one, and an unreadable one always alerts with the reason.
+describe("HB-49: a lost or unreadable off-box pull receipt alerts", () => {
+  const unitCheck = async (root: string, at: number) => {
+    const seen: string[] = [];
+    const texts: string[] = [];
+    await runUnitCheck({ now: at, root, listUnits: async () => "", sink: async (kind, key, text) => { if (kind.startsWith("bt-backup")) { seen.push(`${kind}|${key}`); texts.push(text); } return true; }, state: { activating: new Set(), restarts: new Map() } });
+    return { seen, texts };
+  };
+  const scratch = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bt-offbox-hb49-"));
+    fs.mkdirSync(path.join(root, "data", "backups"), { recursive: true });
+    fs.writeFileSync(path.join(root, "data", "backups", "last-backup.json"), JSON.stringify(noDest));
+    return root;
+  };
+
+  test("a good receipt writes the seen marker; deleted, with the last pull 13 hours old: one bt-backup-offbox-stale alert", async () => {
+    const root = scratch();
+    try {
+      const pulledAt = iso(now - 2 * 3_600_000);
+      fs.writeFileSync(path.join(root, OFFBOX_PULL_FILE), JSON.stringify(receipt({ pulledAt })));
+      assert.deepEqual((await unitCheck(root, now)).seen, [], "a fresh receipt raises nothing");
+      assert.equal(readOffboxPullSeen(root), pulledAt, "the seen marker keeps the last good pull");
+      fs.rmSync(path.join(root, OFFBOX_PULL_FILE));
+      assert.deepEqual((await unitCheck(root, now)).seen, [], "gone, but the last pull is under 12 hours old");
+      const later = Date.parse(pulledAt) + 13 * 3_600_000;
+      const { seen, texts } = await unitCheck(root, later);
+      assert.deepEqual(seen, ["bt-backup-offbox-stale|bt-backup-offbox-pull-stale"]);
+      assert.match(texts[0], /The off-box pull receipt is gone from the host, and the last pull it showed was at .+, more than 12 hours ago\. Check the Mac's backup agent\./);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("a marker 13 hours old and no receipt (the pure check)", () => {
+    const seenPulledAt = iso(now - 13 * 3_600_000);
+    const a = backupAlerts(noDest, now, null, { problem: "missing", seenPulledAt });
+    assert.equal(a.length, 1);
+    assert.equal(a[0].kind, "bt-backup-offbox-stale");
+    assert.deepEqual(offboxPullAlerts(null, now, { problem: "missing", seenPulledAt: iso(now - 11 * 3_600_000) }), []);
+  });
+
+  test("a receipt with method \"rsync\" alerts naming the reason, never silence", async () => {
+    const root = scratch();
+    try {
+      fs.writeFileSync(path.join(root, OFFBOX_PULL_FILE), JSON.stringify(receipt({ method: "rsync" })));
+      const read = readOffboxPullFile(root, now);
+      assert.equal(read.receipt, null);
+      assert.equal(read.problem, "its method is \"rsync\", not \"operator-pull\"");
+      const { seen, texts } = await unitCheck(root, now);
+      assert.deepEqual(seen, ["bt-backup-offbox-stale|bt-backup-offbox-pull-unreadable"]);
+      assert.equal(texts[0], "The off-box pull receipt on the host could not be read: its method is \"rsync\", not \"operator-pull\". Check the Mac's backup agent.");
+      assert.equal(readOffboxPullSeen(root), null, "an unreadable receipt never sets the marker");
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("every unreadable shape names a reason, and a value is never echoed unless it is a plain short word", () => {
+    for (const bad of ["{ not json", "[]", JSON.stringify(receipt({ dbQuickCheck: "failed" })), JSON.stringify(receipt({ pulledAt: iso(now + 3_600_000) })), JSON.stringify(receipt({ password: "x" })), JSON.stringify(receipt({ method: "s3://bucket/secret key" }))]) {
+      const c = checkOffboxPull(bad, now);
+      assert.ok("reason" in c && c.reason.length > 0, bad);
+      assert.doesNotMatch((c as { reason: string }).reason, /bucket|secret key/);
+    }
+  });
+
+  test("no receipt and no marker: none", async () => {
+    const root = scratch();
+    try {
+      assert.deepEqual((await unitCheck(root, now)).seen, []);
+      assert.deepEqual(offboxPullAlerts(null, now, { problem: "missing", seenPulledAt: null }), []);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 });

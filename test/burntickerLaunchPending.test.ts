@@ -18,7 +18,7 @@ import { sentReporter, type SignPlan } from "@/lib/burnticker/signPlan";
 import type { LaunchExpectation, LaunchVerifier } from "@/lib/burnticker/launchVerify";
 import { lintCopy } from "@/lib/launch/copyLint";
 import { PUSH_KIND_OF_ALERT, PUSH_LEAD } from "@/lib/burnticker/push";
-import { makeWorld } from "./burntickerApiHelpers.ts";
+import { encodeAccount, makeWorld } from "./burntickerApiHelpers.ts";
 import { BRONCOS } from "./burntickerHelpers.ts";
 
 const RULE = { ...BRONCOS, pair: null };
@@ -119,17 +119,23 @@ describe("B-2 at prepare: a sent create blocks a second coin on the same ticker"
     const creator = Keypair.generate().publicKey.toBase58(), t0 = Date.now();
     const d = reg.register({ mint: r().toBase58(), ticker: "WIN", name: "Window", creator, description: "", imageUrl: null, links: [], rulesText: lockRuleText(), feePda: "F", vault: null, tokenConfig: null, poolId: r().toBase58(), launchTx: null, cluster: "devnet", platformId: null, baselineAt: new Date(t0).toISOString(), status: "draft" }, t0);
     reg.recordCreateSent(d.mint, sig("7"), t0);
-    const ask = (market: { getAccountInfo(k: PublicKey): Promise<unknown> } | null, now: number) => launchPendingRefusal({ registry: reg, market }, { creator, ticker: "win", exceptMint: null }, now);
+    // B-15 (sixth pass): "the coin exists" is the burn program's TokenConfig for the mint naming this creator, not any account
+    const PROGRAM = r();
+    const created = (mint: string) => ({ owner: PROGRAM, data: encodeAccount("TokenConfig", (v) => { v.mint = new PublicKey(mint); v.creator = new PublicKey(creator); }) });
+    const configOf = (mint: string) => configPda(PROGRAM, new PublicKey(mint)).toBase58();
+    const program = { programId: PROGRAM.toBase58() };
+    const ask = (market: { getAccountInfo(k: PublicKey): Promise<unknown> } | null, now: number) => launchPendingRefusal({ registry: reg, market, program }, { creator, ticker: "win", exceptMint: null }, now);
     assert.equal((await ask(null, t0 + 60_000))?.extra.code, LAUNCH_PENDING_CODE, "inside the window");
     assert.equal(await ask(null, t0 + CREATE_SEND_PENDING_MS + 1), null, "past it, with no chain reader: free again (the confirm still refuses a second live coin)");
     assert.equal(await ask({ getAccountInfo: async () => null }, t0 + CREATE_SEND_PENDING_MS + 1), null, "past it, and the mint does not exist: the send expired");
-    assert.equal((await ask({ getAccountInfo: async () => ({}) }, t0 + CREATE_SEND_PENDING_MS + 1))?.extra.code, LAUNCH_PENDING_CODE, "the coin exists on chain: still pending its record");
+    assert.equal((await ask({ getAccountInfo: async (k) => (k.toBase58() === configOf(d.mint) ? created(d.mint) : null) }, t0 + CREATE_SEND_PENDING_MS + 1))?.extra.code, LAUNCH_PENDING_CODE, "the coin exists on chain: still pending its record");
+    assert.equal(await ask({ getAccountInfo: async () => ({ lamports: 890_880, owner: PublicKey.default, data: Buffer.alloc(0) }) }, t0 + CREATE_SEND_PENDING_MS + 1), null, "dust at the addresses is not a created coin (B-15)");
     assert.equal((await ask({ getAccountInfo: async () => { throw new Error("rpc down"); } }, t0 + CREATE_SEND_PENDING_MS + 1))?.extra.code, LAUNCH_PENDING_CODE, "an unreadable chain after a send: fail closed");
     assert.equal(await launchPendingRefusal({ registry: reg, market: null }, { creator: r().toBase58(), ticker: "WIN", exceptMint: null }, t0 + 60_000), null, "another creator is the ticker rules' business, not this one");
     assert.equal(await launchPendingRefusal({ registry: reg, market: null }, { creator, ticker: "WIN", exceptMint: d.mint }, t0 + 60_000), null, "a retry of that same draft");
     // a create that landed with no send report (an older page) is found on chain too
     const quiet = reg.register({ mint: r().toBase58(), ticker: "QUIET", name: "Quiet", creator, description: "", imageUrl: null, links: [], rulesText: lockRuleText(), feePda: "F", vault: null, tokenConfig: null, poolId: r().toBase58(), launchTx: null, cluster: "devnet", platformId: null, baselineAt: new Date(t0).toISOString(), status: "draft" }, t0);
-    assert.equal((await launchPendingRefusal({ registry: reg, market: { getAccountInfo: async (k) => (k.toBase58() === quiet.mint ? {} : null) } }, { creator, ticker: "QUIET", exceptMint: null }, t0 + 60_000))?.extra.code, LAUNCH_PENDING_CODE);
+    assert.equal((await launchPendingRefusal({ registry: reg, market: { getAccountInfo: async (k) => (k.toBase58() === configOf(quiet.mint) ? created(quiet.mint) : null) }, program }, { creator, ticker: "QUIET", exceptMint: null }, t0 + 60_000))?.extra.code, LAUNCH_PENDING_CODE);
   });
 
   test("the card reports only the create step, once per coin it confirms", async () => {

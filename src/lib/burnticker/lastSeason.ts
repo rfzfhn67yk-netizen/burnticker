@@ -59,7 +59,8 @@ export function countLastSeason(rule: BurnRule, games: readonly Game[], year: nu
   const lines = [sentence];
   if (w.kind === "next") lines.push(`This coin follows ${w.n} ${w.n === 1 ? "game" : "games"}, not a whole season, so it burns at most ${w.n} ${w.n === 1 ? "time" : "times"}.`);
   if (spent !== null) lines.push(`At ${Math.round(f! * 1000) / 10}% each, that would have spent ${drainPct(spent / 100)} of a burn pool that got no new fees.`);
-  lines.push("Counted from the league's own schedule for that season. Past results say nothing about the next season.");
+  // HS-13 (run 4): the line names the season the count came from
+  lines.push(`Counted from the league's ${season} schedule. Past results say nothing about the next season.`);
   return { available: true, reason: null, league, year, season, games: games_, burns, spentPct: spent, sentence, lines };
 }
 

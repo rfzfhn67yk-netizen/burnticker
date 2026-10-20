@@ -36,6 +36,6 @@ describe("a rivalry pair of two teams", () => {
     assert.match(page, /if \(!\(mode === "game" && meet\)\) \{ setPairMode\("season"\); renameForSeason\(a, b\); \}/, "website-20 audit 7 item 9: the season coins are renamed for what they count");
     assert.match(page, /\{flow === "pair" && step === "pick" && guide\.follow !== "rivalry" && \(/);
     assert.match(page, /chooseGame\(mode === "game" && meet \? meet : seasonHit\);/, "the review names both sides by the matchup tickers (chooseGame sets pairTickers)");
-    assert.match(page, /const tk = pairTickers\(g\.pair\.a\.code \?\? g\.pair\.a\.abbr, g\.pair\.b\.code \?\? g\.pair\.b\.abbr\)/);
+    assert.match(page, /const tk = freePairTickers\(\{ abbr: g\.pair\.a\.abbr, code: g\.pair\.a\.code \}, \{ abbr: g\.pair\.b\.abbr, code: g\.pair\.b\.code \}, tickerGuard\)/);
   });
 });

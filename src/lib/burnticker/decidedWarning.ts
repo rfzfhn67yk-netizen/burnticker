@@ -14,6 +14,8 @@ export interface DecidedWarningInput extends StatusInput {
   market?: { phase: "curve" | "migrating" | "graduated" | null; curve?: { threshold: string; quote: string } | null } | null;
   pair?: (NonNullable<StatusInput["pair"]> & { counterpart: { name: string; ticker: string; sideName?: string | null }; clause?: { state: "live" | "waiting" | "voided"; voidBy: string; decidedAt?: string | null } | null }) | null;
   lifecycle?: { ended: { mode: "drain" | "winddown" } | null; windDown?: { days: number; done: number } | null } | null;
+  /** the rule's onEnd.windDownDays when the caller has it (HB-50) */
+  windDownDays?: number | null;
 }
 
 /**
@@ -28,15 +30,22 @@ export const VOID_TAILS = {
   woundDown: "Its burn pool has wound down on this coin.",
   pending: "Its burn pool winds down on this coin once the rule ends.",
 } as const;
+/** "over four weeks" for the default 28 days, else "over N days" (rule.onEnd.windDownDays, HB-50: never a hard-coded four weeks). */
+export const windDownOver = (days: number | null | undefined): string => {
+  const d = typeof days === "number" && days > 0 ? days : 28;
+  return d === 28 ? "over four weeks" : `over ${d} ${d === 1 ? "day" : "days"}`;
+};
 const END_RECEIPT_KINDS = new Set(["winddown", "drain", "sweep"]);
-export function voidedLine(s: Pick<DecidedWarningInput, "pair" | "lifecycle" | "selectorKey">, receipts: readonly ReceiptInput[]): string {
+export function voidedLine(s: Pick<DecidedWarningInput, "pair" | "lifecycle" | "selectorKey"> & { market?: DecidedWarningInput["market"] }, receipts: readonly ReceiptInput[]): string {
   const pair = s.pair && !s.pair.unpaired ? s.pair : null;
   const ends = receipts.filter((r) => END_RECEIPT_KINDS.has(r.kind ?? ""));
   const mode = s.lifecycle?.ended?.mode ?? (ends.some((r) => r.kind === "drain") ? "drain" : ends.length ? "winddown" : null);
   const wd = s.lifecycle?.windDown;
+  // continuous audit run 4, HB-50: a voided single coin is not "Nothing burns on it" before its wind-down starts; like a pair, its pool
+  // winds down once the rule ends
   const tail = mode === "drain" ? VOID_TAILS.drain
     : mode === "winddown" ? (wd && wd.days > 0 && wd.done >= wd.days ? VOID_TAILS.woundDown : VOID_TAILS.winddown)
-    : pair ? VOID_TAILS.pending : null;
+    : VOID_TAILS.pending;
   // the void's own date: a pair's clause records when it voided; a single coin's void receipt is the void reading
   const voidRow = [...receipts].filter((r) => !END_RECEIPT_KINDS.has(r.kind ?? "") && (r.status === "void" || r.status === "voided")).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
   // the pair itself voided (its clause): dated only by the clause's own void time; otherwise the result was voided (a cancelled game, a
@@ -46,7 +55,7 @@ export function voidedLine(s: Pick<DecidedWarningInput, "pair" | "lifecycle" | "
   const on = at ? ` on ${utcDay(at)}` : "";
   const what = /(?:^|:)espn\.game:/.test(s.selectorKey ?? "") ? "the game result" : "the result";
   if (pairVoided) return `The pair was voided${on}. No burn happens for ${what}. ${tail}`;
-  return tail ? `This coin's one result was voided${on}. No burn happens for ${what}. ${tail}` : `This coin's one result was voided${on}. ${NO_FURTHER_RESULT} Nothing burns on it.`;
+  return `This coin's one result was voided${on}. ${!pair && tail === VOID_TAILS.pending ? `${NO_FURTHER_RESULT} ` : ""}No burn happens for ${what}. ${tail}`;
 }
 
 /**
@@ -66,13 +75,29 @@ export function gameDayOf(s: Pick<DecidedWarningInput, "profile" | "selectorKey"
   const fromBadge = /(?:^|:)espn\.game:/.test(s.selectorKey ?? "") ? badgeDay(s.profile?.badge) : null;
   return fromBadge ?? settledAt;
 }
-export function losingPairLine(i: { ticker: string; otherTicker: string; sideName: string | null; otherSideName: string | null; selectorKey?: string | null; gameDay: string | null; voidBy: string | null }): string {
+/**
+ * HB-50 (run 4): once both coins have graduated (the pair clause is "live"), the graduation condition is past, so the line says only where
+ * the pool goes; the wind-down length is the coin's own windDownDays.
+ */
+/**
+ * HB-15 (run 4 leftover): a one-game coin's receipt is dated by the game's own day (the badge's, as the header shows it), and the ESPN link
+ * a receipt stored before the Eastern-day fix carries is moved to that day. Null / unchanged for any other coin.
+ */
+export function receiptGameDay(s: Pick<DecidedWarningInput, "profile" | "selectorKey">): string | null {
+  return /(?:^|:)espn\.game:/.test(s.selectorKey ?? "") ? badgeDay(s.profile?.badge) : null;
+}
+export function espnLinkOnDay(url: string, day: string | null): string {
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return url;
+  return url.replace(/\/date\/\d{8}\b/, `/date/${day.replace(/-/g, "")}`);
+}
+export function losingPairLine(i: { ticker: string; otherTicker: string; sideName: string | null; otherSideName: string | null; selectorKey?: string | null; gameDay: string | null; voidBy: string | null; bothGraduated?: boolean; windDownDays?: number | null }): string {
   const on = i.gameDay ? ` on ${utcDay(i.gameDay)}` : "";
   const beat = i.otherSideName && i.sideName ? `${cap1(teamRef(i.otherSideName, i.selectorKey))} beat ${teamRef(i.sideName, i.selectorKey)}${on}.`
     : i.otherSideName ? `${cap1(teamRef(i.otherSideName, i.selectorKey))} won${on}.`
     : `The other side won${on}.`;
   const by = i.voidBy ? ` by ${utcDay(i.voidBy)}` : "";
-  return `$${i.ticker} lost. ${beat} Swapping into $${i.ticker} now cannot make it burn. At the end, its burn pool goes to $${i.otherTicker}'s burn if both coins graduate${by}. If they do not, the pair is voided and $${i.ticker}'s pool burns down on $${i.ticker} over four weeks.`;
+  if (i.bothGraduated) return `$${i.ticker} lost. ${beat} Swapping into $${i.ticker} now cannot make it burn. At the end, its burn pool goes to $${i.otherTicker}'s burn.`;
+  return `$${i.ticker} lost. ${beat} Swapping into $${i.ticker} now cannot make it burn. At the end, its burn pool goes to $${i.otherTicker}'s burn if both coins graduate${by}. If they do not, the pair is voided and $${i.ticker}'s pool burns down on $${i.ticker} ${windDownOver(i.windDownDays)}.`;
 }
 
 export const NO_FURTHER_RESULT = "No further result is read for it.";
@@ -101,7 +126,7 @@ export function decidedSwapWarning(s: DecidedWarningInput, receipts: readonly Re
     : d?.result && /^(yes|no)$/i.test(d.result) ? `This coin's one result is in: the market settled ${d.result.charAt(0).toUpperCase()}${d.result.slice(1).toLowerCase()}${on}.`
     : `This coin's one result is in${on}.`;
   if (!d) return `${head} ${NO_FURTHER_RESULT}`;
-  if (d.outcome === "other" && pair) return losingPairLine({ ticker: s.ticker, otherTicker: pair.counterpart.ticker, sideName: side, otherSideName, selectorKey: s.selectorKey, gameDay: day, voidBy: pair.clause?.voidBy ?? null });
+  if (d.outcome === "other" && pair) return losingPairLine({ ticker: s.ticker, otherTicker: pair.counterpart.ticker, sideName: side, otherSideName, selectorKey: s.selectorKey, gameDay: day, voidBy: pair.clause?.voidBy ?? null, bothGraduated: pair.clause?.state === "live", windDownDays: s.lifecycle?.windDown?.days ?? s.windDownDays ?? null });
   if (!d.burnsThis || d.outcome === "other") return `${head} ${NO_FURTHER_RESULT} ${d.outcome === "other" ? "The losing side burns nothing of its own." : "This coin burns nothing on it."}`;
   if (d.hold === null) return `${head} ${NO_FURTHER_RESULT} Its burn is done.`;
   if (pair) {

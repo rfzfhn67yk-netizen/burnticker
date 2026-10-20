@@ -244,11 +244,13 @@ async function championshipCard(t: EspnTeam, d: SearchDeps, ti: TeamIntent = { y
   const rule = ti.negated ? polyRuleNo(m.conditionId, DEFAULT_SHARE.oneShot) : polyRule(m.conditionId, DEFAULT_SHARE.oneShot);
   const phrase = `${teamRef(t)} win ${champ}`;
   const suggest = titleSuggest(t, ti.negated);   // audit 6 item 6: the one generator (describe.ts titleSuggest, HB-20: the server's review uses it too)
-  const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: ev.endDate, suggest };
+  // HB-38 (run 4): the market's own close, never the event's, so the search row, the Name header and the review give one date
+  const mEnd = m.endDate ?? ev.endDate;
+  const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: mEnd, suggest };
   const text = describeRule(rule, { ticker: "", ...descCtx });
   const side = ti.negated ? `the NO side: it burns only if the market settles NO, meaning ${teamRef(t)} did not win ${champ}. A voided or cancelled market never counts as a NO` : `the YES side: it burns if Polymarket's payout says ${teamRef(t)} won ${champ}`;
   return card({
-    title, subtitle: `${t.name}, in ${ev.title}`, nextAt: ev.endDate, settleAt: ev.endDate, endAt: ev.endDate, endText: "ends when the market resolves",
+    title, subtitle: `${t.name}, in ${ev.title}`, nextAt: mEnd, settleAt: mEnd, endAt: mEnd, endText: "ends when the market resolves",
     howSettles: `Settles on Polymarket's on-chain payout for "${m.groupItemTitle}" in ${ev.title}; ${OFFICIAL[t.league]} are the published cross-check.${ev.description ? `\n\nResolution rules (Polymarket): ${ev.description}` : ""}`,
     rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${teamRef(t)} ${verb} ${champ} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" },
     text, descCtx, leagueSet: ti.negated ? null : { id: `champ-${t.league}-${year || "season"}`, outcome: t.abbr }, href: `https://polymarket.com/event/${ev.slug}`, suggestedName: text.name, suggestedTicker: text.ticker,

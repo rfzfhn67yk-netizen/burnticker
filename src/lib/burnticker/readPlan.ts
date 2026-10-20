@@ -110,8 +110,10 @@ const END_RECEIPT_KINDS = new Set(["winddown", "drain", "sweep"]);
 /**
  * HB-29 (continuous audit 2026-10-19): HAS THIS COIN'S OWN ONE-SHOT RESULT BEEN RECORDED? Only a reading settled after the coin's own
  * baselineAt (registry.readings(key, baselineAt), the window planToken plans from) with a result receipt for THIS coin counts: that
- * reading settled the coin's rule (multiKeeper.ts detectRuleEnd reads the same receipt; a pair receipt still waiting for its other pool
- * does not count yet). Readings on the same selector from before the coin launched (an earlier coin's result, a rehearsal, or the
+ * reading settled the coin's rule (multiKeeper.ts detectRuleEnd reads the same receipt). HB-64 (sixth-pass audit 2026-10-19): a pair
+ * receipt still waiting for its other pool ("pending-pair") counts too: the result is recorded, and what it waits for is the pair's pools
+ * (multiKeeper.ts pairGates makes it planned or voided), never another read of the source; the program's own read of the result's UTC
+ * day is still planned by attestReadAt once the receipt is pending execution. Readings on the same selector from before the coin launched (an earlier coin's result, a rehearsal, or the
  * history a first read brings back: the live $NEXTM6's first read stored ten magnitude-6 days from before its launch) never decide it.
  * A derby one-shot keeps its boundary samples in the readings table and a recurring rule never resolves once, so neither is decided by
  * its readings, only by its recorded rule end.
@@ -122,9 +124,18 @@ export function oneShotDecided<T extends { mint: string; baselineAt?: string | n
   try {
     return reg.readings(key, t.baselineAt).some((r) => {
       const b = reg.receipt!(t.mint, r.id);
-      return !!b && !END_RECEIPT_KINDS.has(b.kind ?? "") && b.status !== "pending-pair";
+      return !!b && !END_RECEIPT_KINDS.has(b.kind ?? "");
     });
   } catch { return false; }
+}
+
+/**
+ * HB-48: DOES THIS COIN HOLD A SETTLEMENT RECEIPT? Judged from the coin's own receipts alone, never the selector's readings, so it can
+ * check the read plan's idle verdict instead of repeating it: a result receipt, not an end receipt (a pair receipt waiting for its other
+ * pool is a recorded result, HB-64). A one-shot without one has a result that is still open, whatever the plan says.
+ */
+export function hasSettlementReceipt(rows: readonly { kind?: string | null; status?: string | null }[]): boolean {
+  return rows.some((b) => !END_RECEIPT_KINDS.has(b.kind ?? ""));
 }
 
 /**

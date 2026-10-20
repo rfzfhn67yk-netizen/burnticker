@@ -121,7 +121,7 @@ describe("launch-intent audit 5", () => {
     assert.match(read("src/app/burnticker/_components/CoinCard.tsx"), /<span className="min-w-0 truncate">\{c\.name \|\| "Coin name"\}<\/span> <span className="shrink-0 font-mono text-sm text-neutral-400">\$\{c\.ticker \|\| "TICKER"\}<\/span>/);
   });
   test("4: a game's start is labelled as its start, not its result", () => {
-    assert.match(page, /starts \$\{denver\(t\.next\.expectedAt\)\}/); assert.match(page, /starts \$\{denver\(g\.expectedAt\)\}`\}, result after the final/);
+    assert.match(page, /starts \$\{visitorTime\(t\.next\.expectedAt\)\}/); assert.match(page, /starts \$\{denver\(g\.expectedAt\)\}`\}, result after the final/);
     assert.doesNotMatch(page, /result ~\$\{denver\(t\.next\.expectedAt\)\}/);
   });
   test("5: chosen leagues, categories and race types say so to assistive technology", () => {

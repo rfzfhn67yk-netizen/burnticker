@@ -28,7 +28,7 @@ import { parseTargetMemo } from "@/lib/burnReceipts/memo";
 import { DISPERSAL_STATE_KEY, runDispersal, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
 import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
 import { FilterUnsupportedError, storedFilterProblem } from "@/lib/burnticker/safeRegex";
-import { dueNextAt, selectorIdle, windowNextAt, type ReadWindow } from "@/lib/burnticker/readPlan";
+import { dueNextAt, hasSettlementReceipt, selectorIdle, windowNextAt, type ReadWindow } from "@/lib/burnticker/readPlan";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -274,7 +274,12 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
     const need = attestReadAt(d, onKey, st.lastOkAt);
     if (idle && need === null) {
       // HB-28: an idle selector has no next read, so none is left in feed_state for a page to print (a failing read keeps its backoff)
-      if (st.nextFetchAt !== null && st.failures === 0) d.registry.setFeedState({ ...st, nextFetchAt: null });
+      // HB-48: unless a coin on it whose rule has not ended holds no settlement receipt (the plan's verdict and the coin's receipts
+      // disagree): then the planned time stays in feed_state for the overdue alert (alerts.ts bt-feed-overdue), and the pages still print
+      // none (plannedNextCheckAt)
+      let disputed = false;
+      try { disputed = onKey.some((x) => !d.registry.ruleEnd(x.mint) && !hasSettlementReceipt(d.registry.receipts(x.mint))); } catch { disputed = false; }
+      if (!disputed && st.nextFetchAt !== null && st.failures === 0) d.registry.setFeedState({ ...st, nextFetchAt: null });
       out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue;
     }
     const dueAt = st.failures > 0 && st.nextFetchAt !== null ? st.nextFetchAt

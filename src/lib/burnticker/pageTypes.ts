@@ -132,11 +132,11 @@ export interface TokenStatusJson {
   next: { nextCheckAt: string | null; impliedChance: number | null; impliedBasis: string | null; nextMarket: string | null; nextCloseTime: string | null; awaitingFinal: number; result?: "recurring" | "pending" | "decided" | "void"; nextResultAt?: string | null; nextSourceCheckAt?: string | null };
   feed: { lastEventId: string | null; lastValue: string | null; lastSettledAt: string | null; readings: number; lastFetchAt: string | null; lastError: string | null; failures: number };
   attesters: { pubkey: string; role: string; active: boolean }[]; quorum: number;
-  fees: { curve: FeeSplit; postGraduation: FeeSplit; sentence: string; creatorSliceBps: 0 };
+  fees: { curve: FeeSplit; postGraduation: FeeSplit; sentence: string; creatorSliceBps: 0; /** HB-50: the coin's pinned tier was not read, so postGraduation is the new-coin tier and is not stated */ tierUnread?: boolean };
   health: { pending: number; unverified: number; lastError: string | null };
   disclosure: { disclaimer: string; eventContract: string | null };
   /** lpBurnedPct is 0 since 2026-10-10 (LP locked forever): read lpLockedPct / lpPolicy and the `lp` block. */
-  trust: { lpBurnedPct: number; lpLockedPct?: number; lpPolicy?: "locked-forever"; creatorCashBps: 0; teamAllocationPct: 0; operator: { can: string[]; cannot: string[]; placeholder: boolean }; registerUrl: string };
+  trust: { lpBurnedPct: number; lpLockedPct?: number | null; lpPolicy?: "locked-forever"; creatorCashBps: 0; teamAllocationPct: 0; operator: { can: string[]; cannot: string[]; placeholder: boolean }; registerUrl: string };
   /**
    * LP LOCKED FOREVER (owner decision 2026-10-10): the policy, Raydium's lock program, the Fee Key (NFT mint) and its owner (the burn
    * program's fee-keys PDA), the locked-liquidity account, the 80/20 split, the last claim_lock_fees receipt and the totals. Absent on

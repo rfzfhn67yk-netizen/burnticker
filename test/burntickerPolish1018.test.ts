@@ -125,7 +125,7 @@ describe("item 2: dates in user prose name UTC in a human form", () => {
       assert.doesNotMatch(src, /slice\(11, 16\)\}? UTC/, `${f}: a bare clock without its day`);
     }
     // the coin page's burn log keeps the machine form in the time element's attribute
-    assert.match(read(COIN), /<time className="font-mono text-xs" dateTime=\{b\.settledAt\}>\{utcDateTime\(b\.settledAt\)\}<\/time>/);
+    assert.match(read(COIN), /<time className="font-mono text-xs" dateTime=\{b\.settledAt\}>\{gameDay \? `Game of \$\{utcDay\(gameDay\)\} · settled \$\{utcDateTime\(b\.settledAt\)\}` : utcDateTime\(b\.settledAt\)\}<\/time>/);
     const row = nextTimeRow("2026-10-16T13:38:00Z", null, Date.parse("2026-10-16T00:00:00Z"));
     assert.equal(row.value, "16 October 2026, 13:38 UTC");
   });

@@ -15,8 +15,9 @@ import type { PendingSwap } from "@/lib/burnticker/swap/pending";
  * What is kept, per network + coin + wallet: the swap's signature, its blockhash expiry, its side and when it was received. Nothing
  * else: no amount, no IP, no transaction bytes. A record is written only from the SIGNED transaction itself (posted before it is sent):
  * the fee payer's ed25519 signature over the message must verify, the fee payer must be the wallet named, and the coin's mint must be
- * one of the transaction's accounts, so nobody can hold another wallet's swaps. A record is removed by naming its signature (the panel
- * does that once the swap settles), and it lapses after RECORD_TTL_MS (the panel's own 24-hour release).
+ * one of the transaction's accounts, so nobody can hold another wallet's swaps. A record is removed by naming its signature once the
+ * chain shows the swap can no longer land (HB-65, heldState below; the panel asks once the swap settles), and it lapses after
+ * RECORD_TTL_MS (the panel's own 24-hour release). While it may still land, a read shows it sealed, without the signature.
  */
 export const RECORD_TTL_MS = 24 * 3_600_000 + 10 * 60_000;
 export const MAX_RECORDS = 50_000;
@@ -69,6 +70,24 @@ export class SwapPendingStore {
     if (n >= MAX_RECORDS) this.db.prepare("DELETE FROM swap_pending WHERE k IN (SELECT k FROM swap_pending ORDER BY at ASC LIMIT ?)").run(n - MAX_RECORDS + 1);
     this.db.prepare("INSERT OR REPLACE INTO swap_pending (k, network, mint, owner, signature, lvbh, side, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(SwapPendingStore.key(rec.network, rec.mint, rec.owner), rec.network, rec.mint, rec.owner, rec.signature, rec.lastValidBlockHeight, rec.side, rec.at);
   }
+  /**
+   * HB-65 v2 (auditor's replay follow-up, 2026-10-19): the write the route uses, one sqlite transaction. A record already held for this
+   * network + coin + wallet is replaced only when it is the one the caller saw settled on chain (`settledSignature`); the same signature
+   * again changes nothing (its first expiry stays); any other case keeps the record ("held"). So a replayed older transaction never
+   * replaces an unresolved hold, a replay never re-dates one, and two different signatures posted at once leave one record.
+   */
+  putIfCurrent(rec: PendingSwap, settledSignature: string | null, now = Date.now()): "written" | "same" | "held" {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM swap_pending WHERE at < ?").run(now - RECORD_TTL_MS);
+      const row = this.db.prepare("SELECT signature FROM swap_pending WHERE k = ?").get(SwapPendingStore.key(rec.network, rec.mint, rec.owner)) as { signature: string } | undefined;
+      if (row && row.signature === rec.signature) { this.db.exec("COMMIT"); return "same"; }
+      if (row && row.signature !== settledSignature) { this.db.exec("COMMIT"); return "held"; }
+      this.put(rec, now);
+      this.db.exec("COMMIT");
+      return "written";
+    } catch (e) { try { this.db.exec("ROLLBACK"); } catch { /* already ended */ } throw e; }
+  }
   get(network: Network, mint: string, owner: string, now = Date.now()): PendingSwap | null {
     const r = this.db.prepare("SELECT * FROM swap_pending WHERE k = ? AND at >= ?").get(SwapPendingStore.key(network, mint, owner), now - RECORD_TTL_MS) as { network: Network; mint: string; owner: string; signature: string; lvbh: number; side: Side; at: number } | undefined;
     return r ? { v: 1, network: r.network, mint: r.mint, owner: r.owner, signature: r.signature, lastValidBlockHeight: Number(r.lvbh), side: r.side, at: Number(r.at) } : null;
@@ -77,6 +96,78 @@ export class SwapPendingStore {
   clear(network: Network, mint: string, owner: string, signature: string): boolean {
     return Number(this.db.prepare("DELETE FROM swap_pending WHERE k = ? AND signature = ?").run(SwapPendingStore.key(network, mint, owner), signature).changes) > 0;
   }
+}
+
+/**
+ * HB-65 (sixth pre-launch audit 2026-10-19, AP6-4, and the auditor's follow-up): a held swap's signature is not a secret (the GET used to
+ * hand it to anyone who named the wallet, and it is on chain once the swap lands), so it can never authorize removing the record. The
+ * server now decides from the chain itself, with its own RPC reader:
+ *   settled   the signature is confirmed or failed on chain, or the chain is past its blockhash expiry and the swap is nowhere: it can
+ *             no longer land, so the record has done its job. Only then may a DELETE remove it, and only then does a read show it whole.
+ *   pending   it may still land. A DELETE is refused (403 "swap-unsettled") and the record stays; a read gets the record SEALED: that a
+ *             swap from this wallet is held, with no signature, so the owner's panel waits (Check again) and nobody else learns it.
+ *   unknown   the chain could not be read: treated like pending (a DELETE answers 503 and keeps the record).
+ * This keeps the owner's recovery after a cleared browser: the panel's read sees a sealed hold while the swap can still land, and the
+ * whole record once it cannot, which it settles and clears as before.
+ */
+export type HeldState = "settled" | "pending" | "unknown";
+export interface SwapChainReader {
+  getSignatureStatuses(sigs: string[], config?: { searchTransactionHistory: boolean }): Promise<{ value: ({ err: unknown; confirmationStatus?: string } | null)[] }>;
+  getBlockHeight(commitment?: "confirmed"): Promise<number>;
+}
+/** The same margin the panel uses (swap/chain.ts EXPIRY_MARGIN_BLOCKS): this far past its expiry height a swap cannot land. */
+export const HELD_EXPIRY_MARGIN_BLOCKS = 150;
+/** A recent blockhash is valid for 150 blocks; one the wallet signed before the save expires no later than the height at save plus this. */
+export const BLOCKHASH_WINDOW_BLOCKS = 150;
+
+/**
+ * HB-65 v2: the expiry the server keeps for a new record. The posted lastValidBlockHeight is the client's word, and a replay of the
+ * same signed bytes could post 0 to make a live swap look expired. The server reads the chain's height at save and keeps height + the
+ * blockhash window, which is never earlier than the real expiry (the blockhash was fetched before the save). Only when the chain cannot
+ * be read is the posted value kept; either way it is fixed on first save (putIfCurrent never re-dates a signature it holds).
+ */
+export async function trustedExpiry(chain: SwapChainReader | null, posted: number): Promise<number> {
+  if (!chain) return posted;
+  try { return (await chain.getBlockHeight("confirmed")) + BLOCKHASH_WINDOW_BLOCKS; } catch { return posted; }
+}
+
+/** Whether the held swap `rec` can still land, from the chain (the panel's reconcileSubmitted judgement, read by the server). */
+export async function heldState(chain: SwapChainReader | null, rec: Pick<PendingSwap, "signature" | "lastValidBlockHeight">): Promise<HeldState> {
+  if (!chain) return "unknown";
+  try {
+    const status = async () => (await chain.getSignatureStatuses([rec.signature], { searchTransactionHistory: true })).value[0] ?? null;
+    const final = (st: { err: unknown; confirmationStatus?: string } | null) => !!st && (!!st.err || st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized");
+    // the height first: a status read after it that still finds nothing proves the transaction can no longer land
+    const height = await chain.getBlockHeight("confirmed");
+    const st = await status();
+    if (final(st)) return "settled";
+    if (st || height <= rec.lastValidBlockHeight + HELD_EXPIRY_MARGIN_BLOCKS) return "pending";
+    const again = await status();
+    if (final(again)) return "settled";
+    if (again) return "pending";
+    return "settled";   // past its expiry and seen nowhere on two reads: it can no longer land
+  } catch { return "unknown"; }
+}
+
+/** What a read shows of a record that may still land: that a swap is held for this wallet and coin, never its signature. */
+export interface SealedHold { v: 1; network: Network; mint: string; owner: string; sealed: true; side: Side; at: number }
+export const sealedHold = (rec: PendingSwap): SealedHold => ({ v: 1, network: rec.network, mint: rec.mint, owner: rec.owner, sealed: true, side: rec.side, at: rec.at });
+
+let chainOverride: ((network: Network) => SwapChainReader | null) | null = null;
+const chains = new Map<Network, SwapChainReader>();
+/** Tests: the chain reader the route uses (null restores the RPC). */
+export function setSwapPendingChainForTests(f: ((network: Network) => SwapChainReader | null) | null): void { chainOverride = f; }
+/** The server's read-only chain reader for `network` (networks.ts rpcUrlFor: the host's RPC on its own network, else the public one). */
+export async function swapPendingChain(network: Network): Promise<SwapChainReader | null> {
+  if (chainOverride) return chainOverride(network);
+  const have = chains.get(network);
+  if (have) return have;
+  try {
+    const [{ Connection }, { rpcUrlFor }] = await Promise.all([import("@solana/web3.js"), import("@/lib/burnticker/networks")]);
+    const c = new Connection(rpcUrlFor(network), "confirmed") as unknown as SwapChainReader;
+    chains.set(network, c);
+    return c;
+  } catch { return null; }
 }
 
 let shared: SwapPendingStore | null = null;

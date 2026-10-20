@@ -48,7 +48,7 @@ describe("the owner's three Best Picture queries", () => {
       assert.equal(top.title, "Pick a film: Oscars 2027: Best Picture Winner — your coin burns 100% once if it wins");
       assert.equal(top.picker!.outcomes.length, 23, "the 23 named films; placeholders (Film E … Film Z, Other) are never offered");
       assert.ok(!top.picker!.outcomes.some((o) => /^(Film [A-Z]|Other)$/.test(o.label)));
-      assert.ok(top.picker!.outcomes.some((o) => o.label === "Dune: Part Three" && o.ticker === "DUNE"));
+      assert.ok(top.picker!.outcomes.some((o) => o.label === "Dune: Part Three" && o.ticker === "DUNE3"));   // HS-12: the sequel number
       assert.ok(!top.picker!.outcomes.some((o) => /spider/i.test(o.label)), "the fixture: Spider-Man: Brand New Day has no Best Picture market");
       assert.match(top.note!, /is not one of this market's films — pick a listed film, or use the nearest/);
       const vfx = r.cards.find((c) => c.title === VFX_TITLE);
@@ -114,7 +114,7 @@ describe("the pieces", () => {
   test("tickers from the outcome: first distinctive word, uppercased, at most 8 characters; collisions get a number", () => {
     assert.equal(outcomeTicker("Spider-Man: Brand New Day"), "SPIDER");
     assert.equal(outcomeTicker("The Odyssey"), "ODYSSEY");
-    assert.equal(outcomeTicker("Dune: Part Three"), "DUNE");
+    assert.equal(outcomeTicker("Dune: Part Three"), "DUNE3");   // HS-12
     assert.equal(outcomeTicker("The Adventures of Cliff Booth"), "ADVENTUR");
     const card = { id: "polyevent:x", suggestedTicker: null, text: null, windows: null, matchup: null, picker: { slug: "x", title: "x", noun: "film", outcomes: [{ label: "Spider-Man", conditionId: "a", question: "q", yes: "Yes", no: "No", ticker: "SPIDER" }, { label: "Spider-Verse", conditionId: "b", question: "q", yes: "Yes", no: "No", ticker: "SPIDER" }] } } as unknown as Suggestion;
     const [out] = dedupeTickers([card], (t) => t === "SPIDER");

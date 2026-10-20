@@ -85,3 +85,5 @@
 # (the product name, in the deploy notes and the test that checks them; never an address)
 /\bhetzner\b/i
 /mct-mailbox/
+# the operator's Mac backup scripts (scripts/ops/mac/, HB-62): the keychain item that holds the backup passphrase is named only there
+/burnticker-backup-passphrase/

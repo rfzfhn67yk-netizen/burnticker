@@ -164,9 +164,9 @@ describe("a multi-transaction launch says how many times the wallet asks, above 
     assert.deepEqual(lintCopy(signsLine(4)).hits, []);
     const fs = await import("node:fs");
     const card = fs.readFileSync(new URL("../src/app/burnticker/launch/ReviewCard.tsx", import.meta.url), "utf8");
-    assert.match(card, /p\.signs > 1 && !p\.busy && <p [^>]*data-signs-line>\{signsLine\(p\.signs\)\}<\/p>/);
+    assert.match(card, /p\.signs > 1 && !p\.busy && <p [^>]*data-signs-line>\{signsLine\(p\.signs, \{ proof: !!p\.signsProof \}\)\}<\/p>/);
     const page = fs.readFileSync(new URL("../src/app/burnticker/launch/page.tsx", import.meta.url), "utf8");
-    assert.match(page, /signs=\{shownReview\.review\?\.transactions\.count \?\? null\}/);
+    assert.match(page, /signs=\{shownReview\.review\?\.transactions\.count \? walletPromptCount\(\{ transactions: shownReview\.review\.transactions\.count, proof: proofAsked \}\) : null\}/);
   });
 });
 

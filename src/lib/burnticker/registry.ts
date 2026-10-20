@@ -175,6 +175,22 @@ export const REGISTRY_MIGRATIONS: readonly { version: number; note: string }[] =
 ];
 export const REGISTRY_SCHEMA_VERSION = REGISTRY_MIGRATIONS[REGISTRY_MIGRATIONS.length - 1].version;
 
+/**
+ * HB-61 (sixth pre-launch audit 2026-10-19, OP6-3): publish 92 migrated the registry to schema 3, its smoke failed falsely, and the deploy
+ * swapped back to publish 91, which refused every launch for 20 minutes (I-17). The registry now writes the schema version its file is at
+ * to data/schema-version.json (next to the registry file) each time it opens a file whose version differs from the one written there;
+ * the deploy's swap (scripts/ops/swap-web-build.sh) reads it and refuses to switch to a build whose code knows a lower version.
+ */
+export const SCHEMA_VERSION_FILE_NAME = "schema-version.json";
+export function writeSchemaVersionFile(target: string, version: number, at = Date.now()): void {
+  try {
+    try { const prev = JSON.parse(fs.readFileSync(target, "utf8")) as { version?: unknown }; if (prev.version === version) return; } catch { /* absent or unreadable: written below */ }
+    const tmp = `${target}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ version, writtenAt: new Date(at).toISOString(), codeKnows: REGISTRY_SCHEMA_VERSION }) + "\n");
+    fs.renameSync(tmp, target);
+  } catch { /* the deploy then cannot compare and says so; the registry itself is unaffected */ }
+}
+
 /** Columns added to burns for program execution (2026-10-10), added in place to an older registry file. */
 const BURN_PROGRAM_COLUMNS: [string, string][] = [
   ["pair_role", "TEXT"],
@@ -344,6 +360,9 @@ export class Registry {
     for (const m of REGISTRY_MIGRATIONS) ins.run(m.version, at, m.note);
     // I-17: a file a newer build migrated: say so, and refuse new launches (reads go on)
     const recorded = this.schemaVersion()?.version ?? 0;
+    // HB-61 (sixth pass): the version the file is at, beside it in schema-version.json, so the deploy's swap can refuse to switch back to
+    // a build that knows a lower one without opening the database (scripts/ops/swap-web-build.sh schema_guard)
+    if (file !== ":memory:") writeSchemaVersionFile(path.join(path.dirname(file), SCHEMA_VERSION_FILE_NAME), recorded, at);
     if (recorded > REGISTRY_SCHEMA_VERSION) {
       this.newerSchemaVersion = recorded;
       try {

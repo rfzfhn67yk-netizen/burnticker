@@ -4,7 +4,9 @@
  * short status and links here; the trust page renders this module once, as static copy (no API read, so it shows even when the live data
  * cannot be read). Client-safe: one import, the operator-share line (feeShareLine.ts, itself client-safe). Copy-linted by test/burntickerHome.test.ts.
  */
-import { OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
+import { BOTH_TIERS_LINE } from "@/lib/burnticker/feeShareLine";
+import { SETTLEMENT_SOURCES_SENTENCE } from "@/lib/burnticker/singleSource";
+import { LP_BEFORE_GRADUATION_TRUST } from "@/lib/burnticker/lpLockCopy";
 
 /** Walkthrough 13: the disclosed exception to "the operator never buys" (transparency.json rehearsals: 0.1 SOL of $REHEARSAL at creation). */
 export const REHEARSAL_BUY_EXCEPTION = "The one exception is $REHEARSAL, a disclosed test coin: the operator bought 0.1 SOL of it when it was created on Oct 11.";
@@ -45,9 +47,9 @@ export const GUARDRAIL_DETAIL: Record<(typeof GUARDRAILS)[number], { kind: Guard
   "three blind AI reviews, not a firm audit": { kind: "observed", text: "The program had three blind AI reviews and later AI code reviews. These are AI reviews. They are not a professional security audit, and no security firm has audited the code." },
   "creators earn nothing": { kind: "enforced", text: "Creators receive no trading-fee revenue. The platform settings send the creator's share of the curve fees to the coin's burn pool. A creator can still hold or trade the coin like anyone else." },
   // walkthrough 13: the one disclosed exception (the Test coins page: "The operator bought 0.1 SOL of it at creation") is named here too
-  "no team buy": { kind: "policy", text: `There is no team allocation, and the operator makes no opening purchase. ${REHEARSAL_BUY_EXCEPTION}` },
+  "no team buy": { kind: "policy", text: "There is no team allocation, and the operator makes no opening purchase. The one exception is the disclosed test purchase of $REHEARSAL, described on this page." },
   "the platform buys no coin except one test coin": { kind: "policy", text: `The operator and its wallets never trade a coin launched here. ${REHEARSAL_BUY_EXCEPTION} This is a policy, checked by the monitor on the operator page. It is separate from each coin's program-run buyback, which buys only to burn.` },
-  "LP locked forever, its fees fund the burn": { kind: "enforced", text: `At graduation the platform settings lock all of the pool's liquidity with Raydium's lock. ${OPERATOR_SHARE_LINE}` },
+  "LP locked forever, its fees fund the burn": { kind: "enforced", text: `At graduation the platform settings lock all of the pool's liquidity with Raydium's lock. ${LP_BEFORE_GRADUATION_TRUST} ${BOTH_TIERS_LINE}` },
   "rules locked at launch": { kind: "enforced", text: "No instruction in the current program can change a coin's rule. The program itself can still be upgraded, and the current status says who can approve an upgrade." },
 };
 export const GUARDRAIL_SUMMARY = "Each coin has one rule, and the rule is locked at launch. A program spends the coin's own fee pool on each burn, and nobody chooses the amount. Today one operator signs every reading. The program has had AI reviews, and no security firm has audited it.";
@@ -64,11 +66,11 @@ export const SAFEGUARDS: { id: string; title: string; text: string }[] = [
 ];
 
 /** The admission rules for a source (the old homepage "sources" box). */
-export const ADMISSION_RULES = "A rule settles on a public result. Its input is never a market's odds and never the token's price. The result must come from a primary source that a second, independent publisher confirms, or from the on-chain payout of an adjudicated Polymarket market. The units must be clear. Nobody who could hold the coin may control the result. Markets on deaths, violence, terror or casualty counts are refused. A natural hazard's own reading, such as an earthquake's magnitude, is allowed. Prediction markets are for discovery only. Burnticker shows their questions and rules, and never a price.";
+export const ADMISSION_RULES = `A rule settles on a public result. Its input is never a market's odds and never the token's price. ${SETTLEMENT_SOURCES_SENTENCE} The units must be clear. Nobody who could hold the coin may control the result. Markets on deaths, violence, terror or casualty counts are refused. A natural hazard's own reading, such as an earthquake's magnitude, is allowed. Prediction markets are for discovery only. Burnticker shows their questions and rules, and never a price.`;
 
 /** Who gets what (the old homepage "economics" cards). */
 export const WHO_GETS_WHAT: { who: string; text: string }[] = [
   { who: "The coin", text: "Its share of the trading fees goes to its burn pool, which is its burn budget. Burns draw on the accumulated budget. Trading adds funds, and a burn can be delayed or skipped when the spendable amount is too small. There is no team allocation, and the team buys nothing at launch." },
   { who: "The creator", text: "The creator pays the venue's creation cost and the network fee. The creator earns no cash from fees, because the creator's share is fixed at zero. What the creator gets is a coin whose burns are paid for by its own trading." },
-  { who: "Burnticker", text: `Burnticker takes 25 basis points of trading volume on the launch curve. That rate is set in the LaunchLab platform settings, and this page reads it live below. After a coin moves to its trading pool, the liquidity is locked forever. ${OPERATOR_SHARE_LINE} Nothing is ever taken from a burn pool. The operator never trades a coin launched here. ${REHEARSAL_BUY_EXCEPTION} Apart from that, the only purchases are the program's own buybacks, and everything bought is burned.` },
+  { who: "Burnticker", text: `Burnticker takes 25 basis points of trading volume on the launch curve. That rate is set in the LaunchLab platform settings, and this page reads it live below. After a coin moves to its trading pool, the liquidity is locked forever. ${BOTH_TIERS_LINE} Nothing is ever taken from a burn pool. The operator never trades a coin launched here. ${REHEARSAL_BUY_EXCEPTION} Apart from that, the only purchases are the program's own buybacks, and everything bought is burned.` },
 ];

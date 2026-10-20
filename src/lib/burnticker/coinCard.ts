@@ -61,16 +61,46 @@ export function ruleReadingDirection(rule: BurnRule): "up" | "down" | null {
   return rule.scalar.direction === "up" || rule.scalar.direction === "down" ? rule.scalar.direction : null;
 }
 
+/** A venue's raw id (sixth pass HB-52): a Polymarket condition id is 0x and 64 hex digits; no one-liner ever prints one. */
+export const HEX_ID_RE = /0x[0-9a-fA-F]{16,}/;
+const idless = (s: string | null | undefined): string | null => (s && !HEX_ID_RE.test(s) ? s : null);
+
+/**
+ * The event of a coin's stored rule statement (registry `description`, written at launch from the same rule): "$TWOCUTS burns if 2 Fed
+ * rate cuts happen in 2026." gives "2 Fed rate cuts happen in 2026". Null when the statement does not open that way. Pure.
+ */
+export function eventFromStatement(statement: string | null | undefined, ticker: string): string | null {
+  const esc = ticker.replace(/[^A-Za-z0-9]/g, "");
+  const m = new RegExp(`^\\$${esc} burns (?:everything |once )?(?:if|when) (.+?)\\.(?:\\s|$)`).exec((statement ?? "").trim());
+  const ev = m?.[1]?.trim() ?? null;
+  return ev && !HEX_ID_RE.test(ev) && ev.length <= 160 ? ev : null;
+}
+
+/**
+ * THE ONE-LINER WITH THE COIN'S OWN WORDS (sixth pass HB-52, 2026-10-19): the creator page printed "Burns everything if 0xe0d9f508…"
+ * for $TWOCUTS, because a Polymarket market's title comes from a live read and the line fell back to the condition id. When the venue
+ * title is missing and the rule names its market only by id, the event comes from the coin's stored statement; failing that, the line
+ * says "its Polymarket market" (ruleOneLiner never prints an id). The coin page, the creator page and its loading line all use this.
+ */
+export function ruleOneLinerFor(rule: BurnRule, seriesTitle: string | null, statement: string | null, ticker: string, endDate: string | null = null): string {
+  let title = (seriesTitle ?? "").trim() || null;
+  if (!title && (HEX_ID_RE.test(rule.market ?? "") || HEX_ID_RE.test(rule.series ?? ""))) title = eventFromStatement(statement, ticker);
+  return ruleOneLiner(rule, title, TEAM_ALIASES, endDate);
+}
+
 export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, aliases: readonly TeamAlias[] = TEAM_ALIASES, endDate: string | null = null): string {
   const title = (seriesTitle ?? "").trim();
+  const yesNo = rule.binary?.onYes ? "YES" : "NO";
+  const byId = rule.oracle === "polymarket" ? "its Polymarket market" : "its market";
   // website-20 item 54: a flippening at 100 % names the event in words ("SOL's market cap passes ETH's") on BOTH sides, never the
   // rule's internal selector id; side B (the inverted rule) fires when the pass never comes
   const fd = rule.oracle === "derby" && rule.derby?.selector === "coinvs" && rule.derby.flip ? rule.derby : null;
   const flipEvent = fd ? (rule.binary?.onNo && !rule.binary.onYes ? `${fd.a.symbol}'s market cap never passes ${fd.b.symbol}'s` : `${fd.a.symbol}'s market cap passes ${fd.b.symbol}'s`) : null;
-  const all = oneShotAllLiner(rule, flipEvent ?? (title || rule.market || rule.series || "the event"), endDate ?? rule.pair?.voidBy ?? (fd ? "the run ends" : null));
+  const all = oneShotAllLiner(rule, flipEvent ?? (title || idless(rule.market) || idless(rule.series) || (rule.market || rule.series ? `${byId} settles ${yesNo}` : "the event")), endDate ?? rule.pair?.voidBy ?? (fd ? "the run ends" : null));
   if (all) return all;
   if (rule.oracle === "catalogue" && rule.series && /^(espn|nws)\./.test(rule.series)) { try { return describeRule(rule, { ticker: "COIN" }).oneLiner; } catch { /* an unknown team or station: the generic line */ } }
-  if (rule.oracle === "catalogue") return `burns on the ${title || rule.series} feed`;
+  // HB-67: a catalogue title that opens with "The" ("The next reviewed magnitude 6 …") read "burns on the The next …"
+  if (rule.oracle === "catalogue") return `burns on the ${(title || rule.series || "source").replace(/^the\s+/i, "")} feed`;
   // Burn Derby (2026-10-10): the input is another coin's (or asset's) move — named as the rule's input, never this coin's.
   if (rule.oracle === "derby" && rule.derby) {
     const d = rule.derby, every = (w: string) => (w === "weekly" ? "week" : "day");
@@ -98,7 +128,7 @@ export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, 
         if (t) return side === "both" ? `burns on the ${t.nickname} game` : `burns if the ${t.nickname} ${side} this game`;
       }
     }
-    const what = title || rule.market || rule.series || "the market";
+    const what = title || idless(rule.market) || idless(rule.series) || (rule.market || rule.series ? byId : "the market");
     if (side === "both") return `burns when ${what} settles`;
     return `burns when ${what} settles ${side === "win" ? "YES" : "NO"}`;
   }

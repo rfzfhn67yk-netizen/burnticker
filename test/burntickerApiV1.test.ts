@@ -107,7 +107,7 @@ describe("v1 read endpoints", () => {
   test("GET /tokens/{ticker}: the lp block (since 1.8.0) — locked forever, the Fee Key at the fee-keys PDA, the last claim_lock_fees receipt", async () => {
     const before = await call("getToken", { ticker: "DEFICIT2" });
     const lp0 = (before.body.status as { lp: { policy: string; feeKey: string | null; lockedPct: number; lastClaim: unknown; split: { burnBps: number; operatorBps: number } } }).lp;
-    assert.deepEqual([lp0.policy, lp0.feeKey, lp0.lockedPct, lp0.lastClaim, lp0.split.burnBps, lp0.split.operatorBps], ["locked-forever", null, 100, null, 8000, 2000]);
+    assert.deepEqual([lp0.policy, lp0.feeKey, lp0.lockedPct, lp0.lastClaim, lp0.split.burnBps, lp0.split.operatorBps], ["locked-forever", null, null, null, 8000, 2000], "sixth pass B-16a: no lock percentage before graduation");
     const port = w.program.lockFees.port(w.deficit.mint).graduate().accrue(BigInt(1234567));
     const r = await claimLockFeesFor({ registry: w.registry, lockFees: w.program.lockFees, log: () => {}, now: () => Date.UTC(2026, 9, 11, 12), dryRun: false }, w.deficit);
     assert.equal(r.outcome, "claimed");

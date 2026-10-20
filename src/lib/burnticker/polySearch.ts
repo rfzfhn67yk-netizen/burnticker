@@ -1,5 +1,5 @@
 import { fold, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
-import { eventIdentity } from "@/lib/burnticker/eventIdentity";
+import { eventIdentity, titleEntity } from "@/lib/burnticker/eventIdentity";
 import type { GammaEvent, GammaMarket } from "@/lib/burnticker/oracle/polymarket";
 import { ladderOrder } from "@/lib/burnticker/oracle/outcomeFilter";
 
@@ -74,6 +74,7 @@ export const plainQuestion = (q: string): string => {
 const TICKER_SKIP = new Set(["the", "a", "an", "of", "la", "le", "el", "los", "las", "part", "and", "mr", "mrs", "dr", "st"]);
 /** A ticker from an outcome: its first distinctive word, uppercased, at most 8 characters ("Spider-Man: Brand New Day" → SPIDER). */
 export function outcomeTicker(label: string): string {
+  { const te = titleEntity(label.trim()); if (te) return te.toUpperCase().slice(0, 8); }   // HS-12: "Dune: Part Three" is $DUNE3
   const words = fold(label).split(" ").filter((w) => w && !TICKER_SKIP.has(w) && !/^\d+$/.test(w));
   return (words[0] ?? (fold(label).replace(/ /g, "") || "COIN")).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "COIN";
 }

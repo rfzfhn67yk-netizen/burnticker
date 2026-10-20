@@ -3,7 +3,7 @@ import { CAP_ENFORCED_SENTENCE, capHeldSentence, capSentenceAway } from "@/lib/b
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
-import { CURVE_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_SHARE_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
+import { TIER_UNREAD_LINE, CURVE_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_SHARE_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { isFirstSnowRule, nextTimes, resolvesOnce } from "@/lib/burnticker/nextResult";
 import { sourceText } from "@/lib/burnticker/launchPreflight";
@@ -35,11 +35,12 @@ import type { HoldersRead } from "@/lib/burnticker/holders";
 import { onlyPoolHolders, walletHolders } from "@/lib/burnticker/cardView";
 import type { LifecycleDates } from "@/lib/burnticker/lifecycleDates";
 import type { FinalAfter, StatedSource } from "@/lib/burnticker/sources/polyStated";
-import { ruleOneLiner, ruleReadingDirection, ruleSideName } from "@/lib/burnticker/coinCard";
+import { ruleOneLinerFor, ruleReadingDirection, ruleSideName } from "@/lib/burnticker/coinCard";
 import { PAIR_STATE_NAMES, parseForwardMemo, type PairLinks } from "@/lib/burnticker/pairForward";
 import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
 import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { LP_POLICY_BADGE, buildLpLockJson, feeKeysPda, operatorTreasuryFor, solscanUrl, type LpLockJson } from "@/lib/burnticker/lockFees";
+import { LP_ADMIN_KEY_LINE, LP_BEFORE_GRADUATION_LINE, lpLockLine } from "@/lib/burnticker/lpLockCopy";
 import { byCoin, siteKeysOf } from "@/lib/burnticker/coinKey";
 
 /**
@@ -139,7 +140,7 @@ export function sideSummary(s: Pick<TokenStatusJson, "ticker" | "name" | "mint" 
 /** The fee-flow sentence every coin page carries (the app's coin page, t/[ticker]/page.tsx, prints the same words). */
 export const FEE_FLOW_LINE = `Creator fees go to the burn pool and are burned. The liquidity is locked forever. ${OPERATOR_SHARE_LINE}`;
 /** The same line for one coin, from the post-graduation split its page carries (the tier it pinned; 2026-10-19). */
-export const feeFlowLine = (post: Pick<FeeSplit, "legs">): string => `Creator fees go to the burn pool and are burned. The liquidity is locked forever. ${postGraduationShareLine(post)}`;
+export const feeFlowLine = (post: Pick<FeeSplit, "legs">, lockedPct: number | null = LP_LOCKED_PCT, tierUnread = false): string => `Creator fees go to the burn pool and are burned. ${lpLockLine(lockedPct)} ${tierUnread ? TIER_UNREAD_LINE : postGraduationShareLine(post)}`;
 
 /** A coin that is trading and still reading its source. */
 export const LIVE_LINE = "This coin is live.";
@@ -436,6 +437,11 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
   const times = nextTimes({ oneShot, receipts: i.receipts, nextCloseTime, nextCheckAt, burnedOnly: isFirstSnowRule(rule) });
   // continuous audit run 2, HB-13: the coin's post-graduation split, from the tier IT pinned; fees.sentence and lifecycle.fees both read it
   const postGraduation = postGraduationFeesFor(i.chain.cluster, i.chain.program?.config?.cpConfig);
+  // HB-50 (run 4): an unread pin is said as unread, never as the new-coin tier's split
+  const tierUnread = !i.chain.program?.config?.cpConfig;
+  // sixth pass B-16a / HB-56: the liquidity is locked at graduation; before it (no lock read, no registered pool) no percentage is claimed
+  const lp = i.lp ?? defaultLp(i);
+  const lpLockedPct = lp.lockedPct ?? (program?.pool.registered ? LP_LOCKED_PCT : null);
   return {
     schema: TOKEN_STATUS_SCHEMA, generatedAt: new Date(i.now).toISOString(), ticker: t.ticker, name: t.name, mint: t.mint, cluster: i.chain.cluster, status: t.status, launchedAt: i.dates?.created.state === "read" ? i.dates.created.at : t.launchTx ? t.baselineAt : null,
     oracle: rule.oracle, selectorKey: t.selectorKey, seriesTitle: i.seriesTitle, mode: i.locked.mode,
@@ -450,16 +456,16 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     feed: { lastEventId: i.state.lastEventId, lastValue: i.state.lastValue, lastSettledAt: i.state.lastSettledAt, readings: i.readings.length, lastFetchAt: i.feedState.lastFetchAt ? new Date(i.feedState.lastFetchAt).toISOString() : null, lastError: i.feedState.lastError, failures: i.feedState.failures },
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
     // owner decision 2026-10-19: a coin's post-graduation numbers come from the tier IT pinned (TokenConfig.ll_cp_config), not the new-coin tier
-    fees: { curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence(i.chain.cluster, i.chain.program?.config?.cpConfig), creatorSliceBps: 0 },
+    fees: { curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence(i.chain.cluster, i.chain.program?.config?.cpConfig, { tierUnread }), creatorSliceBps: 0, ...(tierUnread ? { tierUnread: true } : {}) },
     health: { pending: i.receipts.filter((b) => b.status === "planned" || b.status === "sending").length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
-    trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
-    lp: i.lp ?? defaultLp(i),
+    trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
+    lp,
     program,
-    profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), sideName: ruleSideName(rule), readingDirection: ruleReadingDirection(rule), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
+    profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLinerFor(rule, i.seriesTitle, t.description, t.ticker), sideName: ruleSideName(rule), readingDirection: ruleReadingDirection(rule), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
     pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
     market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market, cpmm: i.cpmm, holders: i.holders, dates: i.dates }),
-    lifecycle: i.lifecycle ? { ...i.lifecycle, line: lifecycleLineFor(i.lifecycle.line, times.result), fees: feeFlowLine(postGraduation) } : null,
+    lifecycle: i.lifecycle ? { ...i.lifecycle, line: lifecycleLineFor(i.lifecycle.line, times.result), fees: feeFlowLine(postGraduation, lpLockedPct, tierUnread) } : null,
     stated: i.stated && rule.oracle === "polymarket" && rule.market ? { phrase: i.stated.resolutionSource.phrase, text: i.stated.resolutionSource.text, crossRead: i.stated.resolutionSource.crossRead ? { text: i.stated.resolutionSource.crossRead.text } : null, finalAfter: { text: i.stated.finalAfter.text, ifDisputed: i.stated.finalAfter.ifDisputed } } : null,
     pair: i.pair ? { ...i.pair, tally: { burnsThis: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnsOther: i.pair.counterpart.burns, burnedThis: rawToTokens(totalRaw, DECIMALS), burnedOther: i.pair.counterpart.burned, supplyThis: rawToTokens(current, DECIMALS), supplyOther: i.pair.counterpart.supply }, pageUrl: `/burnticker/p/${i.pair.pairId}` } : null,
   };
@@ -477,7 +483,7 @@ export function lpLockHtml(lp: LpLockJson | null | undefined): string {
   if (!lp) return "";
   const a = (addr: string | null, url: string | null) => (addr ? (url ? `<a href="${esc(url)}"><code>${esc(addr)}</code></a>` : `<code>${esc(addr)}</code>`) : "<em>shown at graduation</em>");
   return `<h2>${esc(LP_POLICY_BADGE)}</h2>
-<p>${esc(lp.line)}. ${lp.lockedPct}% of the liquidity from graduation is locked with Raydium's lock and can never be withdrawn. The burn program owns the Fee Key, which collects the locked liquidity's share of the pool's trading fees, and anyone can claim those fees (claim_lock_fees). ${lp.split.burnBps / 100}% of the SOL goes to this coin's burn pool and ${lp.split.operatorBps / 100}% goes to the operator treasury. The coin's own tokens from the fees are burned.</p>
+<p>${esc(lp.line)}. ${lp.lockedPct === null ? esc(LP_BEFORE_GRADUATION_LINE) : `${lp.lockedPct}% of the liquidity from graduation is locked with Raydium's lock and can never be withdrawn.`} The burn program owns the Fee Key, which collects the locked liquidity's share of the pool's trading fees, and anyone can claim those fees (claim_lock_fees). ${lp.split.burnBps / 100}% of the SOL goes to this coin's burn pool and ${lp.split.operatorBps / 100}% goes to the operator treasury. The coin's own tokens from the fees are burned.</p>
 <p class="muted">The lock program is ${a(lp.lockProgram, lp.urls.lockProgram)}. The Fee Key is ${a(lp.feeKey, lp.urls.feeKey)}, and its owner is ${a(lp.feeKeyOwner, lp.urls.feeKeyOwner)}.${lp.lockedLiquidity ? ` The locked liquidity is ${a(lp.lockedLiquidity, lp.urls.lockedLiquidity)}.` : ""} The operator treasury is ${lp.operatorTreasury ? a(lp.operatorTreasury, lp.urls.operatorTreasury) : "<em>not set on this network</em>"}.</p>
 <p class="muted">${lp.lastClaim ? `The last claim was on ${esc(utcDateTime(lp.lastClaim.at))}: ${lp.lastClaim.txUrl ? `<a href="${esc(lp.lastClaim.txUrl)}">${esc(lp.lastClaim.line)}</a>` : esc(lp.lastClaim.line)} ${lp.totals.claims === 1 ? "There has been one claim" : `There have been ${lp.totals.claims} claims`}, ${esc(lp.totals.sol)} SOL in all: ${esc(lp.totals.toBurnPool)} SOL to the burn pool and ${esc(lp.totals.toOperator)} SOL to the operator.` : "Nobody has claimed the pool's fees yet."}${lp.note ? ` ${esc(lp.note)}` : ""}</p>`;
 }
@@ -613,10 +619,10 @@ ${tradeLinksHtml(s)}
 <p>${esc(s.fees.sentence)}</p>
 <div class="scroll">${feeTable(s.fees.curve)}</div>
 <div class="scroll" style="margin-top:8px">${feeTable(s.fees.postGraduation)}</div>
-<p class="muted">The creator's share of fees is ${s.fees.creatorSliceBps / 100}%. Creators earn no cash from fees, because the creator-fee slot pays the burn pool. At graduation, ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. ${esc(postGraduationShareLine(s.fees.postGraduation))} The operator's part of the liquidity fees is fixed in code. Of the burn pool's share, ${postLegPct(s.fees.postGraduation, "burn pool")} of every swap comes from Raydium's fixed CPMM creator fee.</p>
+<p class="muted">The creator's share of fees is ${s.fees.creatorSliceBps / 100}%. Creators earn no cash from fees, because the creator-fee slot pays the burn pool. At graduation, ${LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn.${s.trust.lpLockedPct == null ? ` ${esc(LP_ADMIN_KEY_LINE)}` : ""} ${esc(postGraduationShareLine(s.fees.postGraduation))} The operator's part of the liquidity fees is fixed in code. Of the burn pool's share, ${postLegPct(s.fees.postGraduation, "burn pool")} of every swap comes from Raydium's fixed CPMM creator fee.</p>
 ${lpLockHtml(s.lp)}
 <h2>What the operator can and cannot do</h2>
-<p class="muted">These lists come from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>.${s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever. ${esc(postGraduationShareLine(s.fees.postGraduation))} ${s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} The team allocation is ${s.trust.teamAllocationPct}%.</p>
+<p class="muted">These lists come from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>.${s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} ${s.trust.lpLockedPct == null ? esc(LP_BEFORE_GRADUATION_LINE) : `${s.trust.lpLockedPct}% of the liquidity is locked forever.`} ${esc(postGraduationShareLine(s.fees.postGraduation))} ${s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} The team allocation is ${s.trust.teamAllocationPct}%.</p>
 <div class="rule"><strong>Can:</strong> ${s.trust.operator.can.map(esc).join("; ")}.<br><strong>Cannot:</strong> ${s.trust.operator.cannot.map(esc).join("; ")}.</div>
 <p class="muted">${esc(OPERATOR_LINE)}</p><p class="muted">${esc(USE_OF_FEES)} Creators may stay anonymous, but the creator's wallet is shown below.${s.mode === "buyback" ? ` ${esc(s.pool.queuedNote)}` : ""}</p>
 <h2>Reading signers</h2>
@@ -624,7 +630,7 @@ ${lpLockHtml(s.lp)}
 <h2>Addresses</h2>
 <ul class="addr"><li><span class="muted">Mint</span> <a href="${esc(s.addresses.mintUrl)}"><code>${esc(s.addresses.mint)}</code></a></li><li><span class="muted">Burn pool. This is the burn program's fee account, and it is also the coin's creator on LaunchLab. Anyone can deposit and nobody can withdraw. The keeper only pays network fees.</span> <a href="${esc(s.addresses.feePdaUrl)}"><code>${esc(s.addresses.feePda)}</code></a></li>${s.addresses.feeWsol ? `<li><span class="muted">The burn pool's wrapped SOL account, where claimed curve fees land</span> <a href="${esc(s.addresses.feeWsolUrl)}"><code>${esc(s.addresses.feeWsol)}</code></a></li>` : ""}${s.addresses.vault ? `<li><span class="muted">Vault</span> <a href="${esc(s.addresses.vaultUrl)}"><code>${esc(s.addresses.vault)}</code></a></li>` : ""}<li><span class="muted">Creator</span> <a href="${esc(s.addresses.creatorUrl)}"><code>${esc(s.addresses.creator)}</code></a></li><li><span class="muted">Burn program</span> <code>${esc(s.addresses.programId)}</code></li>${s.addresses.launchTx ? `<li><span class="muted">Launch</span> <a href="${esc(s.addresses.launchTxUrl)}"><code>${esc(s.addresses.launchTx)}</code></a></li>` : ""}</ul>
 ${s.disclosure.eventContract ? `<p class="rule">${esc(s.disclosure.eventContract)}</p>` : ""}
-<p class="rule">${s.lifecycle ? `${esc(s.lifecycle.line)} ` : ""}${esc(feeFlowLine(s.fees.postGraduation))}</p>
+<p class="rule">${s.lifecycle ? `${esc(s.lifecycle.line)} ` : ""}${esc(feeFlowLine(s.fees.postGraduation, s.trust.lpLockedPct ?? null, !!s.fees.tierUnread))}</p>
 <footer>${esc(s.disclosure.disclaimer)} ${s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and ${s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.${s.health.lastError ? ` The last error was: ${esc(s.health.lastError)}` : ""}</footer>
 </main>
 <script>

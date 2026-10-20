@@ -45,6 +45,7 @@
     "src/lib/burnticker/linearRegex.ts",
     "src/lib/burnticker/linkedShare.ts",
     "src/lib/burnticker/lockFees.ts",
+    "src/lib/burnticker/lpLockCopy.ts",
     "src/lib/burnticker/lru.ts",
     "src/lib/burnticker/mintSuffix.ts",
     "src/lib/burnticker/nextResult.ts",

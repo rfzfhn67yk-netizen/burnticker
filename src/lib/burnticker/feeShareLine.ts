@@ -5,7 +5,7 @@
  * split. Client-safe (cpmmTier.ts and type imports only): the client pages build the line from the FeeSplit their JSON carries or from the
  * tier record, fees.ts from the designed split, so no number in the sentence is typed.
  */
-import { CPMM_MAINNET_TIER_14, CPMM_MAINNET_TIER_9, CPMM_TIER, CPMM_TIER_14_SINCE, postGraduationBps, type CpmmCluster, type CpmmTier } from "@/lib/burnticker/cpmmTier";
+import { CPMM_DEVNET_TIER_0, CPMM_MAINNET_TIER_14, CPMM_MAINNET_TIER_9, CPMM_TIER, CPMM_TIER_14_SINCE, postGraduationBps, type CpmmCluster, type CpmmTier } from "@/lib/burnticker/cpmmTier";
 import { utcDateTime } from "@/lib/burnticker/utcWords";
 import type { FeeSplit } from "@/lib/burnticker/fees";
 
@@ -78,6 +78,15 @@ export const EARLIER_COINS_LINE = (() => {
   return `Coins created from ${TIER_14_CUTOVER_WORDS} use fee tier ${CPMM_MAINNET_TIER_14.index} (${tradersPayPct(CPMM_MAINNET_TIER_14)} per swap). Earlier coins, mostly on tier ${CPMM_MAINNET_TIER_9.index}, pay ${tradersPayPct(CPMM_MAINNET_TIER_9)}: ${aboutPct(t9.burnPool)} to the burn pool, ${aboutPct(t9.operator).replace(/^about /, "")} to the operator.`;
 })();
 
+/**
+ * Continuous audit run 4, HB-50: the tier line for the network the page is on. Mainnet names both mainnet tiers (EARLIER_COINS_LINE); a
+ * devnet host names its own one tier, never the mainnet ones.
+ */
+export function earlierCoinsLineFor(cluster: string | null | undefined): string {
+  if (cluster !== "devnet") return EARLIER_COINS_LINE;
+  return `Coins on this test network use fee tier ${CPMM_DEVNET_TIER_0.index} (${tradersPayPct(CPMM_DEVNET_TIER_0)} per swap).`;
+}
+
 /** The operator's share on the earlier tier, for a sentence that already gives the new-coin share (the fee ledger, the operator note). */
 export const EARLIER_OPERATOR_CLAUSE = `${operatorShareClause(sharesForTier(CPMM_MAINNET_TIER_9))} on coins created before ${TIER_14_CUTOVER_WORDS}, which stay on tier ${CPMM_MAINNET_TIER_9.index}`;
 
@@ -85,3 +94,13 @@ export const EARLIER_OPERATOR_CLAUSE = `${operatorShareClause(sharesForTier(CPMM
 export const OPERATOR_SHARE_LINE = postGraduationShareLine(sharesForCluster("mainnet"));
 /** The mainnet line for a pair coin (creator fee off). */
 export const PAIR_OPERATOR_SHARE_LINE = postGraduationShareLine(sharesForCluster("mainnet", { pair: true }));
+
+/**
+ * BOTH TIERS, THE LIVE ONE FIRST (sixth pass B-16c, HB-57, 2026-10-19): the trust page's body opened with the tier-14 split (0.98 / 0.13 /
+ * 0.15) as current fact while every live coin pays tier 9 (0.88 / 0.04 / 0.08). A site-wide sentence about the post-graduation split
+ * names the cutover and both tiers, coins created before it first. No number is typed; the tier records give them.
+ */
+export const BOTH_TIERS_LINE = (() => {
+  const t9 = sharesForTier(CPMM_MAINNET_TIER_9), t14 = sharesForTier(CPMM_MAINNET_TIER_14);
+  return `Coins created before ${TIER_14_CUTOVER_WORDS} pay ${tradersPayPct(CPMM_MAINNET_TIER_9)} per swap after graduation (fee tier ${CPMM_MAINNET_TIER_9.index}): ${aboutPct(t9.burnPool)} to the burn pool, ${aboutPct(t9.operator)} to the operator and ${aboutPct(t9.raydium)} to Raydium. Coins created from then on pay ${tradersPayPct(CPMM_MAINNET_TIER_14)} (fee tier ${CPMM_MAINNET_TIER_14.index}): ${aboutPct(t14.burnPool)} to the burn pool, ${aboutPct(t14.operator)} to the operator and ${aboutPct(t14.raydium)} to Raydium. On both, the operator's part is ${t9.operatorPctOfLp}% of the locked pool's liquidity fees.`;
+})();

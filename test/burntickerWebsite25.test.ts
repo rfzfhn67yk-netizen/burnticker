@@ -129,10 +129,11 @@ describe("H4: the coin comparison's cost is the server's two-coin estimate for i
 
 describe("H8: both coins of a two-team pair regenerate together, and the names say which way they burn", () => {
   const ars = { abbr: "ARS", code: "ARS", nickname: "Arsenal", name: "Arsenal" }, tot = { abbr: "TOT", code: "TOT", nickname: "Tottenham Hotspur", name: "Tottenham Hotspur" };
-  test("winPairNames: Wins in the name, WIN in the ticker, whole words within 32 bytes", () => {
+  test("winPairNames: 'over' in the name, the matchup in the ticker (B-12), whole words within 32 bytes", () => {
     const n = winPairNames(ars, tot);
-    for (const s of [n.a, n.b]) { assert.ok(new TextEncoder().encode(s.name).length <= 32, s.name); assert.match(s.name, / over /); assert.match(s.ticker, /^[A-Z0-9]{2,10}$/); assert.match(s.ticker, /WIN$/); }
-    assert.equal(n.a.ticker, "ARSWIN"); assert.equal(n.b.ticker, "TOTWIN");
+    for (const s of [n.a, n.b]) { assert.ok(new TextEncoder().encode(s.name).length <= 32, s.name); assert.match(s.name, / over /); assert.match(s.ticker, /^[A-Z0-9]{2,10}$/); }
+    // B-12 (sixth-pass audit): the server's own matchup tickers, as meetingsPairNames gives them, no longer <CODE>WIN
+    assert.equal(n.a.ticker, "ARSVTOT"); assert.equal(n.b.ticker, "TOTVARS");
     const long = winPairNames({ abbr: "WOL", nickname: "Wolverhampton Wanderers", name: "Wolverhampton Wanderers" }, { abbr: "BHA", nickname: "Brighton & Hove Albion", name: "Brighton & Hove Albion" });
     for (const s of [long.a, long.b]) { assert.ok(new TextEncoder().encode(s.name).length <= 32, s.name); assert.doesNotMatch(s.name, /\b(vs|&)$/); }
   });
@@ -142,9 +143,9 @@ describe("H8: both coins of a two-team pair regenerate together, and the names s
     assert.match(page, /const ga = fixGen\(pairGen\.a\.ticker\), gb = fixGen\(pairGen\.b\.ticker\);\n    if \(tickerAuto && \(ticker !== ga \|\| tickerB !== gb\)\) \{ setTicker\(ga\); setTickerB\(gb\); \}/);
     assert.match(page, /if \(flow === "pair" && pairGen\) return pairGen\.a\.ticker;/);
     assert.match(page, /if \(pairMode === "season"\) return seasonPairNames\(/);
-    assert.match(page, /setEditedFor\(null\); if \(editedFor !== null\) setNamesRemade\(true\);/);
+    assert.match(page, /setEditedFor\(null\); if \(editedFor !== null && typed\) setNamesRemade\(namesChangeOf\(editedFor, subjectKey\)\);/);
     assert.match(page, /onTicker: \(v: string\) => \{ setTickerB\(v\); setTickerAuto\(false\); setEditedFor\(subjectKey\); noteEdit\(\); \}/);
-    assert.match(page, /\{namesRemade && <p [^>]*data-names-remade>\{namesRemadeLine\(pairOn \? 2 : 1\)\}<\/p>\}/, "WIRING-AUDIT12 item 10: one coin or two");
+    assert.match(page, /\{namesRemade && <p [^>]*data-names-remade>\{namesRemadeLine\(pairOn \? 2 : 1, namesRemade \|\| "follows"\)\}<\/p>\}/, "WIRING-AUDIT12 item 10: one coin or two");
     plain(NAMES_REMADE_LINE);
   });
 });

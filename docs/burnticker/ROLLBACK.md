@@ -19,6 +19,8 @@ the commit rollback below when the release you want is older than the previous o
 - It never touches the chain. Programs, readings, receipts and burn pools stay exactly where they are. It does not touch the host's
   `data/`, `logs/`, environment file or `node_modules/` either (the mirror never deletes or overwrites them).
 - A database migration that the newer code already ran is not undone. Read the commits between the two before rolling back across one.
+  The swap refuses to switch to a build that knows a lower registry schema than `data/schema-version.json` records (HB-61): an older
+  build on a newer registry file refuses every new launch. Fix forward instead: correct the newer build and deploy it again.
 
 ## The command
 

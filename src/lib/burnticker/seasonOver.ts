@@ -16,6 +16,8 @@ export const SEASON_OVER_LINE = "Season over for this team: this coin would end 
 /** The league page's line beside a team whose season is over (its link opens the launch page with `season=over`). */
 export const SEASON_OVER_LINK_LINE = "This team's season is over. A coin on it can follow next season, or next season's title market.";
 
+/** HS-15: the team list's line for a team with no game in the next days (the burn step and the review carry it as byeLine). */
+export const NONE_LISTED_LINE = "No game is listed for this team in the next 8 days. A season coin only burns on games still to come.";
 export function seasonStatus(abbr: string, games: readonly Game[], readable: boolean): { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null } {
   if (!readable) return { status: "unknown", warning: "This league's schedule could not be read, so whether this team has games left is not known." };
   const open = games.filter((g) => !g.completed);
@@ -24,7 +26,7 @@ export function seasonStatus(abbr: string, games: readonly Game[], readable: boo
   // never that its season is over or that it has no game in the next days
   if (games.some(isFallbackGame)) return { status: "unknown", warning: "Only part of this league's schedule could be read just now, so whether this team has games left is not known." };
   if (open.length && open.every((g) => g.seasonType === 3)) return { status: "over", warning: SEASON_OVER_LINE };
-  return { status: "none-listed", warning: "No game is listed for this team in the next 8 days. A season coin only burns on games still to come." };
+  return { status: "none-listed", warning: NONE_LISTED_LINE };
 }
 
 export interface SeasonOverRefusal { code: "season-over"; status: 409; message: string; next: { series: string; year: number; label: string; window: "season" | "post" | "meetings" } }

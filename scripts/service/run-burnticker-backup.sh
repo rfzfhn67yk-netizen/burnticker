@@ -7,7 +7,9 @@
 #   sh scripts/service/run-burnticker-backup.sh --restore <file> --to <path> restore one backup into <path> (a NEW file; see below)
 #
 # What a run does, for each database in BURNTICKER_BACKUP_DBS (default: the registry data/burnticker.db, the $DEFICIT ledger
-# data/burnkeeper.db and the mint key bank data/burnticker-mintbank.db; a missing optional one is skipped and said):
+# data/burnkeeper.db, the mint key bank data/burnticker-mintbank.db and the held-swap records data/burnticker-swap-pending.db, or
+# BURNTICKER_SWAP_PENDING_DB when that is set in the environment (HB-62, sixth audit 2026-10-19: a restore lacked them); a missing
+# optional one is skipped and said):
 #   1. `sqlite3 <db> ".backup <file>"`: SQLite's online backup API, safe while the keeper and the site write (never cp or rsync a live db)
 #   2. `PRAGMA quick_check` on the copy: anything but "ok" fails the run
 #   3. keeps the newest BURNTICKER_BACKUP_KEEP (default 14) copies of each database in data/backups/, mode 0600
@@ -29,7 +31,7 @@ ROOT=${BURNTICKER_BACKUP_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}
 cd "$ROOT"
 DIR=${BURNTICKER_BACKUP_DIR:-data/backups}
 KEEP=${BURNTICKER_BACKUP_KEEP:-14}
-DBS=${BURNTICKER_BACKUP_DBS:-data/burnticker.db data/burnkeeper.db data/burnticker-mintbank.db}
+DBS=${BURNTICKER_BACKUP_DBS:-data/burnticker.db data/burnkeeper.db data/burnticker-mintbank.db ${BURNTICKER_SWAP_PENDING_DB:-data/burnticker-swap-pending.db}}
 REQUIRED=${BURNTICKER_BACKUP_REQUIRED:-data/burnticker.db}
 stamp() { date -u '+%F %TZ'; }
 say() { echo "[$(stamp)] $*"; }

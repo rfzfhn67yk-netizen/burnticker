@@ -1,5 +1,5 @@
 import type { Registry, TokenRow } from "@/lib/burnticker/registry";
-import { ruleOneLiner } from "@/lib/burnticker/coinCard";
+import { ruleOneLinerFor } from "@/lib/burnticker/coinCard";
 import { coinCanonicalHref, coinKey, isMintKey, type CoinCandidate } from "@/lib/burnticker/coinKey";
 export type { CoinCandidate } from "@/lib/burnticker/coinKey";
 
@@ -40,7 +40,7 @@ export function registryCoinKey(r: Pick<Registry, "tokensByTicker">, t: Pick<Tok
 
 export function candidateOf(r: Pick<Registry, "lockedRule">, t: TokenRow): CoinCandidate {
   let rule: string;
-  try { rule = ruleOneLiner(r.lockedRule(t).rule); } catch { rule = t.description.split(/(?<=\.)\s/)[0] ?? ""; }
+  try { rule = ruleOneLinerFor(r.lockedRule(t).rule, null, t.description, t.ticker); } catch { rule = t.description.split(/(?<=\.)\s/)[0] ?? ""; }
   return { mint: t.mint, ticker: t.ticker, name: t.name, creator: t.creator, status: t.status, rule: rule.replace(/^./, (c) => c.toUpperCase()), href: coinCanonicalHref(t.mint), api: `/api/burnticker/tokens/${encodeURIComponent(t.mint)}` };
 }
 

@@ -1,12 +1,14 @@
 import { registryCoinKey } from "@/lib/burnticker/coinLookup";
 import { opsDenied } from "@/lib/burnticker/opsAuth";
-import { tokenPageData, type Platform } from "@/lib/burnticker/server";
+import type { Platform } from "@/lib/burnticker/server";
 import { productStore } from "@/lib/burnticker/productStore";
 import { tokenDayText } from "@/lib/launch/dailyPost";
 import { lintCopy } from "@/lib/launch/copyLint";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import type { TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { safeParam } from "@/lib/burnticker/safeParam";
+import { rememberedCoinPage, type CoinPageReader } from "@/lib/burnticker/coinPageMemo";
+import type { TokenRow } from "@/lib/burnticker/registry";
 
 /**
  * THE PRODUCT BATCH IN THE API (2026-10-10; OpenAPI 1.6.0): search-miss reports from the launch page, the ops summary of misses and
@@ -60,6 +62,8 @@ export interface CreatorCoin {
   queuedUnits: number; nextSettlementAt: string | null; lastReading: { id: string | null; value: string | null; at: string | null } | null;
   agreement: { reads: number; methods: string | null; held: string | null }; receipts: number; windDown: string | null;
   pairId: string | null; todayPost: { text: string; lintOk: boolean; hits: string[] };
+  /** sixth pass B-10: true while this coin's page read is still running (registry facts only); refresh in a few seconds */
+  loading: boolean;
 }
 
 const stateOf = (s: TokenStatusJson): CoinState => {
@@ -71,30 +75,48 @@ const stateOf = (s: TokenStatusJson): CoinState => {
   return s.status === "draft" ? "draft" : "curve";
 };
 
-/** GET /v1/creators/{wallet} — the coins and pairs whose creator wallet matches (read-only; the creator dashboard). */
-export async function v1Creator(p: Platform, wallet: string, now = Date.now()): Promise<ApiResult> {
+/** A coin whose page read has not finished yet (sixth pass B-10): its registry facts only, marked `loading`, never dropped. */
+function loadingCoin(p: Platform, t: TokenRow): CreatorCoin {
+  let rs: ReturnType<Platform["registry"]["receipts"]> = [];
+  try { rs = p.registry.receipts(t.mint); } catch { rs = []; }
+  const state: CoinState = t.status === "retired" ? "retired" : t.status === "paused" ? "paused" : "curve";
+  return {
+    ticker: t.ticker, name: t.name, mint: t.mint, page: `/burnticker/t/${encodeURIComponent(registryCoinKey(p.registry, t))}`, state, badge: null,
+    queuedUnits: rs.filter((r) => r.status === "planned" || r.status === "sending" || r.status === "pending-pair").reduce((a, r) => a + (r.units ?? 0), 0),
+    nextSettlementAt: null, lastReading: null, agreement: { reads: 0, methods: null, held: null }, receipts: rs.filter((r) => r.status === "confirmed").length,
+    windDown: null, pairId: null, todayPost: { text: "", lintOk: true, hits: [] }, loading: true,
+  };
+}
+
+/**
+ * GET /v1/creators/{wallet} — the coins and pairs whose creator wallet matches (read-only; the creator dashboard). Sixth pass B-10: the
+ * coins are read at once through the shared coin-page memo (coinPageMemo.ts), so a cold call answers in about COIN_PAGE_COLD_WAIT_MS
+ * however many coins the wallet has; a coin still being read is listed with its registry facts and `loading: true`.
+ */
+export async function v1Creator(p: Platform, wallet: string, now = Date.now(), read?: CoinPageReader): Promise<ApiResult> {
   const w = safeParam(wallet).trim();
   if (!PUBKEY.test(w)) return fail(400, "The wallet must be a Solana public key.");
   // F-25: a creator's public view lists launched coins only (a draft's mint and plan stay out of public reads)
   const mine = p.registry.tokens().filter((t) => t.creator === w && t.status !== "expired" && t.status !== "draft").slice(0, 50);
   const day = new Date(now).toISOString().slice(0, 10);
-  const coins: CreatorCoin[] = [];
-  for (const t of mine) {
-    let d;
-    try { d = await tokenPageData(p, t, now); } catch { continue; }
+  const reads = await Promise.all(mine.map((t) => rememberedCoinPage(p, t, now, read).catch(() => null)));
+  const coins: CreatorCoin[] = mine.map((t, k) => {
+    const d = reads[k];
+    if (!d) return loadingCoin(p, t);
     const s = d.status, rs = d.receipts;
     const queued = rs.filter((r) => r.status === "planned" || r.status === "sending" || (r.status as string) === "pending-pair").reduce((a, r) => a + (r.units ?? 0), 0);
     const last = [...d.readings].sort((a, b) => (a.at < b.at ? -1 : 1)).pop() ?? null;
-    const reads = last?.method ? last.method.split("+").length : 0;
+    const nReads = last?.method ? last.method.split("+").length : 0;
     const post = tokenDayText(s, rs, day), lint = lintCopy(post);
-    coins.push({
+    return {
       ticker: s.ticker, name: s.name, mint: s.mint, page: `/burnticker/t/${encodeURIComponent(registryCoinKey(p.registry, t))}`, state: stateOf(s), badge: s.profile?.badge ?? null,
       queuedUnits: queued, nextSettlementAt: s.next.nextCheckAt, lastReading: last ? { id: last.id, value: last.value, at: last.at } : null,
-      agreement: { reads, methods: last?.method ?? null, held: s.feed.lastError }, receipts: rs.filter((r) => r.status === "confirmed").length,
+      agreement: { reads: nReads, methods: last?.method ?? null, held: s.feed.lastError }, receipts: rs.filter((r) => r.status === "confirmed").length,
       // launch night 2026-10-13: a draft was never created, so it has no wind-down (the line said "This coin is live." on a draft card)
       windDown: t.status === "draft" || t.status === "expired" ? null : s.lifecycle?.line ?? null, pairId: s.pair?.pairId ?? null, todayPost: { text: post, lintOk: lint.ok, hits: lint.hits.map((h) => h.phrase) },
-    });
-  }
+      loading: false,
+    };
+  });
   const pairs = [...new Set(coins.map((c) => c.pairId).filter((x): x is string => !!x))].map((id) => { const pr = p.registry.pair(id); return pr ? { pairId: id, page: `/burnticker/p/${id}`, sides: coins.filter((c) => c.pairId === id).map((c) => c.ticker), voided: coins.some((c) => c.pairId === id && c.state === "voided") } : null; }).filter((x): x is NonNullable<typeof x> => !!x);
   return ok({ wallet: w, coins, pairs, note: "This is read-only. Nothing is signed or posted. Today's post is checked text that you can copy." });
 }

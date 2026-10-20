@@ -27,6 +27,8 @@ export const CONTACT_EMAIL = "contact@burnticker.com";
 export const GOVERNING_LAW_SENTENCE = "The law that governs these terms has not been decided yet. This page says so plainly instead of guessing.";
 export const TAKEDOWN_SENTENCE = `To ask for an image to be taken down, email ${CONTACT_EMAIL}. The copy stored on Arweave when the coin was created is permanent, and nobody can delete it.`;
 
+/** Sixth pass B-16e / HB-59 (AP6-13): the terms, the press page and the fee ledger said the platform "never trades"; the trust page discloses one test purchase. */
+export const NEVER_TRADES_SENTENCE = "Apart from one disclosed test purchase of $REHEARSAL (0.1 SOL, when it was created), the platform never trades.";
 export const TERMS_TITLE = "Terms of use";
 export const TERMS_INTRO = "These terms cover burnticker.com, its pages and its public API. They are short on purpose. By using the site, you agree to them.";
 
@@ -35,7 +37,8 @@ export const TERMS_SECTIONS: LegalSection[] = [
     id: "what-it-is", heading: "What Burnticker is",
     paragraphs: [
       "Burnticker is a launchpad for Solana memecoins whose coins burn on public results. Each coin has one locked rule. When a result settles that rule, the coin's own trading fees buy it back on its own pool, and a program burns what they bought.",
-      "The platform never trades, never takes an order and never pays anything to a coin's holders. It holds no coins and no money for anyone. The only money it sends to people is the bounty for a security report, paid from the bounty wallet.",
+      // sixth pass B-16e / HB-59: the one disclosed test purchase is named where "never trades" is said
+      `${NEVER_TRADES_SENTENCE} It never takes an order and never pays anything to a coin's holders. It holds no coins and no money for anyone. The only money it sends to people is the bounty for a security report, paid from the bounty wallet.`,
       "Coins trade on Raydium, an outside Solana trading service. This site links to it, and a coin page's swap panel builds a swap that your own wallet signs and sends straight to the coin's Raydium curve or pool. This site has no control over Raydium.",
     ],
   },
@@ -86,6 +89,15 @@ export const TERMS_SECTIONS: LegalSection[] = [
   },
 ];
 
+
+/**
+ * Sixth pass B-16f / HB-60 (AP6-6, SEC-02): the page said it lists everything the site keeps, and left out the held-swap records. After a
+ * swap is signed, the browser (swap/pending.ts, local storage) and the server (swap/pendingServer.ts, RECORD_TTL_MS) each keep a short
+ * record of it, so a reload or a second tab never sends the same swap twice.
+ */
+export const PRIVACY_HELD_SWAP_BROWSER = "After you sign a swap on a coin page, this browser keeps a short record of it for up to 24 hours, even if you close the tab: the network, the coin, your wallet's public address, the swap's signature, whether it was a purchase or a sale, when it was signed and when it expires on chain. It is kept so the same swap is never sent twice, and it is removed once the swap settles.";
+export const PRIVACY_HELD_SWAP_SERVER = "The server keeps the same record of a signed swap (network, coin, wallet address, swap signature, purchase or sale, expiry and the time it arrived) for up to 24 hours and 10 minutes, then deletes it. It is removed sooner once the swap settles.";
+
 export const PRIVACY_TITLE = "Privacy";
 export const PRIVACY_INTRO = "Burnticker has no accounts and keeps as little as it can. This page lists everything the site keeps and where it is kept.";
 
@@ -110,7 +122,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     paragraphs: [
       "Your theme, light or dark, is kept in this browser's local storage. So is your watchlist of coins and results. Neither is ever sent to the site.",
       "If you connect a wallet, the wallet connector remembers which wallet you chose, so the connection comes back when you reload. It is kept in the same local storage.",
-      "While a tab is open, it remembers the Coins tab you picked and, on the launch page, your unfinished form and any transaction your wallet signed, so a reload does not lose them. Closing the tab clears them.",
+      "While a tab is open, it remembers the Coins tab you picked and, on the launch page, your unfinished form and any launch transaction your wallet signed, so a reload does not lose them. Closing the tab clears them.",
+      PRIVACY_HELD_SWAP_BROWSER,
       "Clearing this site's data in your browser removes all of it.",
     ],
   },
@@ -121,6 +134,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       PRIVACY_ORIGIN_LOG_SENTENCE,
       "To limit how often one visitor can call the API, the app counts requests per address in memory. That count is never written down and is gone when the app restarts.",
       "When a search on the launch page finds nothing, or finds cards and none is used, the site keeps the search words and the hour, without an address, an id or a cookie. This shows which results people look for and cannot find.",
+      PRIVACY_HELD_SWAP_SERVER,
     ],
   },
   {

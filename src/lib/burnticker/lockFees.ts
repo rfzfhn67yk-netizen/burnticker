@@ -3,6 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
 import { CPMM_TIER, postGraduationBps } from "@/lib/burnticker/cpmmTier";
 import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURNTICKER_PLATFORM as PROGRAM_BURNTICKER_PLATFORM, LAUNCHLAB_VAULT_AUTH, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCK_FEE_BURN_BPS as PROGRAM_LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS as PROGRAM_LOCK_FEE_OPERATOR_BPS, OPERATOR_TREASURY as PROGRAM_OPERATOR_TREASURY, SEED_FEE_KEY, SEED_FEE_KEYS } from "@/lib/burnReceipts/constants";
+import { LP_BEFORE_GRADUATION_LINE } from "@/lib/burnticker/lpLockCopy";
 
 /**
  * LP LOCKED FOREVER, ITS FEES FUND THE BURN (owner decision 2026-10-10, LAUNCHPAD-PATH §35; supersedes the 10-09 "all graduation LP
@@ -311,7 +312,8 @@ export interface LpLockJson {
   /** burn_receipts' FeeKeyRecord ["fee_key", mint] (written by register_fee_key); null when the program id is unknown. */
   feeKeyRecord: string | null;
   feeKeyRegistered: boolean;
-  lockedPct: number;
+  /** sixth pass B-16a: null until the coin graduates (its liquidity is locked then, not before) */
+  lockedPct: number | null;
   split: { burnBps: number; operatorBps: number; coinSide: "burned"; fixedInCode: true };
   operatorTreasury: string | null;
   lastClaim: LockFeeClaimJson | null;
@@ -361,11 +363,11 @@ export function buildLpLockJson(i: { cluster: string; mint?: string; programId?:
   let feeKeyRecord: string | null = null;
   try { feeKeyRecord = i.programId && i.mint ? feeKeyRecordPda(i.programId, i.mint).toBase58() : null; } catch { feeKeyRecord = null; }
   const notes = [
-    !i.state?.graduated ? "This coin has not graduated yet. Its liquidity is locked at graduation, and the Fee Key address shows up then." : null,
+    !i.state?.graduated ? `This coin has not graduated yet. ${LP_BEFORE_GRADUATION_LINE} The Fee Key address shows up at graduation.` : null,
     !i.operatorTreasury ? `The operator treasury is not set in this network's program build. Until it is, the fee claim is refused (${TREASURY_NOT_PINNED}) and the fees stay in the lock.` : null,
   ].filter((x): x is string => !!x);
   return {
-    policy: LP_POLICY, lockProgram, feeKey, feeKeyOwner, lockedLiquidity, feeKeyRecord, feeKeyRegistered: !!i.state?.feeKeyRegistered, lockedPct: i.state?.lockedPct ?? LP_LOCKED_PCT,
+    policy: LP_POLICY, lockProgram, feeKey, feeKeyOwner, lockedLiquidity, feeKeyRecord, feeKeyRegistered: !!i.state?.feeKeyRegistered, lockedPct: i.state?.graduated ? (i.state.lockedPct ?? LP_LOCKED_PCT) : null,
     split: { burnBps: LOCK_FEE_BURN_BPS, operatorBps: LOCK_FEE_OPERATOR_BPS, coinSide: "burned", fixedInCode: true },
     operatorTreasury: i.operatorTreasury,
     lastClaim: last ? { at: new Date(last.at).toISOString(), signature: last.signature, sol: lamportsToSol(last.solLamports), toBurnPool: lamportsToSol(last.toBurnPoolLamports), toOperator: lamportsToSol(last.toOperatorLamports), tokenBurnedRaw: last.tokenBurnedRaw.toString(), txUrl: url(last.signature, "tx"), line: lockFeeClaimLine(last) } : null,
