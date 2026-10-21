@@ -12,6 +12,7 @@ import { API, callRoute } from "./burntickerApiHelpers.ts";
 import { API_VERSION, apiIndex, endpoint } from "@/lib/burnticker/api/spec";
 import { CREATE_PREVIEW, FOOTER_COPY, FOOTER_ROWS, LAUNCH_CLOSED, LAUNCH_LABELS, SHELL_CSS, SHELL_FONTS, SITE_TABS, TWO_PATHS, createPathFor, shellFontCss, shellFooterHtml, shellScript } from "@/lib/burnticker/siteNav.mjs";
 import { DEV_FEE_LINE, OPERATOR_LINE, USE_OF_FEES } from "@/lib/burnticker/fees";
+import { FOOTER_FEE_LINE } from "@/lib/burnticker/visibleFeeLines";
 import { SITE_SENTENCE, siteLaunchState, siteLaunchStateFromCatalogue } from "@/lib/burnticker/launchAvailability";
 import { REGIONS, renderRegions } from "../scripts/burnticker-site-nav.mts";
 import { feeLine } from "../scripts/whitepaper-html.mjs";
@@ -219,13 +220,15 @@ describe("the private review: league pages and the footer", () => {
     assert.doesNotMatch(footer, /new Date\(\)/);
     for (const k of ["never", "notAdvice", "affiliation", "chain", "sources", "legal"]) assert.match(footer, new RegExp(`FOOTER_COPY\\.${k}`), k);
     for (const r of ["operator", "fees", "api"]) assert.match(footer, new RegExp(`R\\.${r}\\.href`), r);
-    const html = shellFooterHtml({ operatorLine: OPERATOR_LINE, feeLine: DEV_FEE_LINE });
+    // HS-96: the visible row is DEV_FEE_LINE plus the tier-pin sentence while the deployed burn program is pre-B17 (FOOTER_FEE_LINE)
+    assert.ok(FOOTER_FEE_LINE.startsWith(DEV_FEE_LINE.replace(/ Coin-vs-coin pair pools use their own split, shown on the pair page\.$/, "")));
+    const html = shellFooterHtml({ operatorLine: OPERATOR_LINE, feeLine: FOOTER_FEE_LINE });
     for (const s of [FOOTER_COPY.never, FOOTER_COPY.notAdvice, FOOTER_COPY.affiliation, FOOTER_COPY.chain]) assert.ok(html.includes(s.replace(/'/g, "'")), s.slice(0, 30));
-    assert.ok(html.includes(`<span data-fee-line>${DEV_FEE_LINE}</span> <a href="/burnticker/fees/ledger">The fee ledger</a>`));
+    assert.ok(html.includes(`<span data-fee-line>${FOOTER_FEE_LINE}</span> <a href="/burnticker/fees/ledger">The fee ledger</a>`));
     assert.ok(html.includes('<a href="/burnticker/trust">What the operator controls</a>'));
     assert.ok(!html.includes("COINS THAT BURN ON REAL-WORLD RESULTS"), "no tagline repeating the hero");
-    for (const f of STATIC) { const h = read(f); assert.ok(h.includes(`<span data-fee-line>${DEV_FEE_LINE.replace(/&/g, "&amp;")}</span>`), `${f} fee row`); assert.ok(!h.includes(`${USE_OF_FEES.slice(DEV_FEE_LINE.length + 1, DEV_FEE_LINE.length + 60)}`) || f.includes("whitepaper"), `${f}: no full fee paragraph in the footer`); }
-    assert.equal(feeLine(ROOT), DEV_FEE_LINE, "the whitepaper reads the same line");
+    for (const f of STATIC) { const h = read(f); assert.ok(h.includes(`<span data-fee-line>${FOOTER_FEE_LINE.replace(/&/g, "&amp;")}</span>`), `${f} fee row`); assert.ok(!h.includes(`${USE_OF_FEES.slice(DEV_FEE_LINE.length + 1, DEV_FEE_LINE.length + 60)}`) || f.includes("whitepaper"), `${f}: no full fee paragraph in the footer`); }
+    assert.equal(feeLine(ROOT), FOOTER_FEE_LINE, "the whitepaper reads the same line");
     // the compact footer (list pages) still links the full slip
     assert.match(footer, /href="\/burnticker#disclosure">Full disclosure/);
   });

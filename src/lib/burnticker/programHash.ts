@@ -127,15 +127,9 @@ export function compareProgramToRecord(record: ProgramHashFact, chain: ChainProg
 
 // ---- which register_fee_key account list the deployed program reads (B-17) ----
 
-/**
- * The deployed burn_receipts builds whose register_fee_key has NO launchlab_pool account: round 5, source 089024ff, the bytes on mainnet
- * (152929ce…) and on devnet (74659afd…) since 2026-10-15. Sending them the B-17 list fails at account validation (instructions.ts
- * registerFeeKeyIx), so these hashes never get the extra account, whatever the verified-build record says.
- */
-export const PRE_B17_PROGRAM_HASHES: ReadonlySet<string> = new Set([
-  "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821",
-  "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c",
-]);
+/** The pre-B17 hashes live in the client-safe deployedTierPin.ts (one list for the keeper and the public fee copy). */
+export { PRE_B17_PROGRAM_HASHES } from "@/lib/burnticker/deployedTierPin";
+import { PRE_B17_PROGRAM_HASHES } from "@/lib/burnticker/deployedTierPin";
 
 /**
  * True when register_fee_key may carry the launchlab_pool account: the program's hash on chain equals the B-17 build's, which is the

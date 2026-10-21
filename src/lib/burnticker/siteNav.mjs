@@ -273,7 +273,7 @@ export function shellHeaderHtml(o = {}) {
 /**
  * The static footer receipt (the app's SiteFooter prints the same lines) and the phone tab bar. `operatorLine` is the trust copy's
  * OPERATOR_LINE, passed in verbatim by the generator (src/lib/burnticker/trustpack/copy.ts).
- * `feeLine` is fees.ts DEV_FEE_LINE. Same order and rows as the app's SiteFooter (site-polish-2: one slip on every surface).
+ * `feeLine` is visibleFeeLines.ts FOOTER_FEE_LINE (fees.ts DEV_FEE_LINE plus the HS-96 tier-pin sentence while it applies). Same order and rows as the app's SiteFooter (site-polish-2: one slip on every surface).
  * @param {{ origin?: string; current?: string; operatorLine: string; feeLine: string }} o
  */
 export function shellFooterHtml(o) {

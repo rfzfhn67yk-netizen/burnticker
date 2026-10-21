@@ -6,6 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
+import { DEPLOYED_TIER_PIN_PENDING } from "@/lib/burnticker/deployedTierPin";
+import { DEPLOYED_TIER_PIN_LINE } from "@/lib/burnticker/feeShareLine";
 import { ADMISSION_RULES, GUARDRAIL_SUMMARY, SAFEGUARDS, WHO_GETS_WHAT } from "@/lib/burnticker/safeguards";
 
 const home = fs.readFileSync("site/burnticker/index.html", "utf8");
@@ -16,7 +18,10 @@ const visible = body.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<svg[\s\
 const words = visible.split(/\s+/).filter((w) => /[A-Za-z0-9$]/.test(w));
 
 test("site audit #7: at most 1,000 words before the status loads, leaving room for its four lines (~120 words)", () => {
-  assert.ok(words.length <= 880, `${words.length} words`);
+  // HS-96: while the deployed burn program is pre-B17 the footer's fee row carries the tier-pin sentence (a temporary disclosure that
+  // leaves by itself when config/burnticker/verified-build.json names the upgraded build); the budget allows exactly its words then
+  const pinWords = DEPLOYED_TIER_PIN_PENDING ? DEPLOYED_TIER_PIN_LINE.split(/\s+/).filter((w) => /[A-Za-z0-9$]/.test(w)).length : 0;
+  assert.ok(words.length <= 880 + pinWords, `${words.length} words`);
 });
 
 test("site audit #8: each fact once — the attester and time-lock lines are not printed by the page (they arrive once, from the status API)", () => {

@@ -14,7 +14,7 @@ import { shellHeaderHtml, shellFooterHtml, shellScript, shellFontCss, SHELL_CSS,
 import { deficitQueueCore } from "../src/lib/burnticker/deficitQueueCore.mjs";
 import { cardAge } from "../src/lib/burnticker/cardAge.mjs";
 import { OPERATOR_LINE } from "../src/lib/burnticker/trustpack/copy.ts";
-import { DEV_FEE_LINE } from "../src/lib/burnticker/fees.ts";
+import { FOOTER_FEE_LINE } from "../src/lib/burnticker/visibleFeeLines.ts";
 import { prerequisiteLineFor } from "../src/lib/burnticker/launchReview.ts";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -59,7 +59,7 @@ type Region = { file: string; name: string; render: () => string };
 const shell = (file: string, origin: string): Region[] => [
   { file, name: "css", render: () => `<style>${shellFontCss(origin)}\n${SHELL_CSS}</style>` },
   { file, name: "header", render: () => shellHeaderHtml({ origin }) },
-  { file, name: "footer", render: () => shellFooterHtml({ origin, operatorLine: OPERATOR_LINE, feeLine: DEV_FEE_LINE }) },
+  { file, name: "footer", render: () => shellFooterHtml({ origin, operatorLine: OPERATOR_LINE, feeLine: FOOTER_FEE_LINE }) },
   { file, name: "script", render: () => `<script>\n${shellScript({ origin })}\n</script>` },
 ];
 

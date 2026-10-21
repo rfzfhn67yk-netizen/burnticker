@@ -2,6 +2,7 @@ import Link from "next/link";
 import { OPERATOR_LINE, BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
 import { footerFeeLine } from "@/lib/burnticker/feeShareLine";
 import { tier14LiveNow } from "@/lib/burnticker/tier14Live";
+import { DEPLOYED_TIER_PIN_PENDING } from "@/lib/burnticker/deployedTierPin";
 import { FOOTER_COPY, FOOTER_LEGAL_LINKS, FOOTER_ROWS } from "@/lib/burnticker/siteNav.mjs";
 import { NAV, LEARN, API_BASE_PATH, type NavItem } from "./nav";
 import { MailSafe } from "./MailSafe";
@@ -24,7 +25,8 @@ export function FooterLink({ n }: { n: NavItem }) {
 /**
  * site-polish-2 (2026-10-13): the slip is the static pages' slip row for row (siteNav.mjs shellFooterHtml): no tagline repeating the
  * hero, and each row one line plus a link to its detail (the private review: the footer repeated whole explanations on every page). The
- * full use-of-fees paragraph (USE_OF_FEES) is on the Trust page; the row prints its first line, DEV_FEE_LINE. The API row's address
+ * full use-of-fees paragraph (USE_OF_FEES) is on the Trust page; the row prints its first line, DEV_FEE_LINE, plus the HS-96 tier-pin
+ * sentence while the deployed burn program is pre-B17 (visibleFeeLines.ts FOOTER_FEE_LINE, the static shells' row). The API row's address
  * answers (GET /api/burnticker/v1, QA pass 9 item 10). No year: the server's clock never changes the slip.
  */
 export function SiteFooter() {
@@ -44,7 +46,7 @@ export function SiteFooter() {
         <div className="bt-rule" />
         <dl className="bt-rows">
           <div><dt>{R.operator.label}</dt><dd><span data-operator-line><MailSafe text={OPERATOR_LINE} /></span> <Link href={R.operator.href} prefetch={false}>{R.operator.more}</Link></dd></div>
-          <div><dt>{R.fees.label}</dt><dd><span data-fee-line>{footerFeeLine(BURNTICKER_DEV_FEE_BPS, { tier14Live: tier14LiveNow() })}</span> <Link href={R.fees.href} prefetch={false}>{R.fees.more}</Link></dd></div>
+          <div><dt>{R.fees.label}</dt><dd><span data-fee-line>{footerFeeLine(BURNTICKER_DEV_FEE_BPS, { tier14Live: tier14LiveNow(), tierPinPending: DEPLOYED_TIER_PIN_PENDING })}</span> <Link href={R.fees.href} prefetch={false}>{R.fees.more}</Link></dd></div>
           <div><dt>{R.api.label}</dt><dd><a href={API_BASE_PATH}>{API_BASE_PATH}</a> · <Link href={R.api.href} prefetch={false}>{R.api.more}</Link></dd></div>
         </dl>
         <div className="bt-rule" />

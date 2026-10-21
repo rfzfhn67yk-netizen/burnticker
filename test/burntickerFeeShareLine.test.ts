@@ -7,7 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { CPMM_MAINNET_TIER_9, CPMM_TIER, postGraduationBps } from "@/lib/burnticker/cpmmTier";
 import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS } from "@/lib/burnReceipts/constants";
-import { BOTH_TIERS_LINE, EARLIER_COINS_LINE, EARLIER_OPERATOR_CLAUSE, LOCK_FEE_BURN_BPS_MIRROR, OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, aboutPct, operatorShareClause, postGraduationShareLine, sharesForCluster, sharesFromSplit } from "@/lib/burnticker/feeShareLine";
+import { DEPLOYED_TIER_PIN_PENDING } from "@/lib/burnticker/deployedTierPin";
+import { BOTH_TIERS_LINE, bothTiersLineNow, EARLIER_COINS_LINE, EARLIER_OPERATOR_CLAUSE, LOCK_FEE_BURN_BPS_MIRROR, OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, aboutPct, operatorShareClause, postGraduationShareLine, sharesForCluster, sharesFromSplit } from "@/lib/burnticker/feeShareLine";
 import { OPERATOR_SHARE_LINE as FEES_OPERATOR_SHARE_LINE, POST_GRADUATION_FEES, USE_OF_FEES, feeSplitSentence, postGraduationFeesFor, BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
 import { FEE_FLOW_LINE } from "@/lib/burnticker/tokenPage";
 import { GUARDRAIL_DETAIL, WHO_GETS_WHAT } from "@/lib/burnticker/safeguards";
@@ -59,7 +60,7 @@ describe("the operator's share sentence (fees copy, 2026-10-12)", () => {
     assert.ok(feeSplitSentence().includes(EXPECTED));
     assert.ok(FEE_FLOW_LINE.endsWith(EXPECTED));
     // sixth pass B-16 (2026-10-19): the trust page's guardrail and money lines name both tiers, the live one first
-    assert.ok(GUARDRAIL_DETAIL["LP locked forever, its fees fund the burn"].text.endsWith(BOTH_TIERS_LINE));
+    assert.ok(GUARDRAIL_DETAIL["LP locked forever, its fees fund the burn"].text.endsWith(bothTiersLineNow(DEPLOYED_TIER_PIN_PENDING)), "HS-96: plus the tier-pin sentence while the deployed program is pre-B17");
     assert.ok(WHO_GETS_WHAT.find((w) => w.who === "Burnticker")!.text.includes(BOTH_TIERS_LINE));
     // continuous audit run 2, HB-13: the new-coin share first, then the tier-9 share of coins created before the cutover
     // eighth pass B-23: one operator share for every coin, whenever it was made
