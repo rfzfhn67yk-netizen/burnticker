@@ -116,7 +116,8 @@ must settle at most one keeper scan of markets a week (600 at the defaults); a d
 **Wire size: version-0 transactions and the lookup table (re-check 2026-10-11).** A real single-coin create (`initialize_token` plus
 LaunchLab's `initialize_v2`) is 1,262 bytes as a legacy transaction, over Solana's 1,232-byte packet limit, so the launch page's
 signing plan (`src/lib/burnticker/signPlan.ts`) compiles every step as a version-0 transaction against the network's address lookup
-table: the fixed accounts every launch touches (both programs, LaunchLab's program, global config, authority, event authority and
+table (a wallet whose `solana:signTransaction` feature advertises version 1 gets each step as a version-1 transaction instead, 4,096
+bytes and no table: `signPlanV1.ts`, Phantom's review of 2026-10-19; the version-0 path below is the fallback): the fixed accounts every launch touches (both programs, LaunchLab's program, global config, authority, event authority and
 Burnticker's platform and its fee vault, the CPMM config, the fee-keys PDA, the operator treasury, the token, system, rent, metadata
 and memo programs, the WSOL mint) come from the table, and the creator, the mint and its accounts stay in the message. The entries
 and their order are `src/lib/burnticker/lookupTable.ts`; the address is pinned per network in `src/lib/burnticker/networks.ts`

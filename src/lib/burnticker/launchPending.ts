@@ -53,6 +53,23 @@ function verifySig(message: Uint8Array, sig: Uint8Array, key: PublicKey): boolea
 }
 
 /**
+ * The message bytes a wallet signed, sliced from a serialized transaction without re-encoding it. A version-1 transaction (first byte
+ * 0x81, SIMD-0298) is the message followed by its signatures; a legacy or version-0 one is a short-vector count, the signatures, then the
+ * message. null when the bytes are too short for the signatures they declare.
+ */
+export function signedMessageBytes(raw: Uint8Array, numRequiredSignatures: number): Uint8Array | null {
+  if (raw.length === 0) return null;
+  if (raw[0] === 0x81) {
+    const end = raw.length - numRequiredSignatures * 64;
+    return end > 0 ? raw.subarray(0, end) : null;
+  }
+  let count = 0, shift = 0, i = 0;
+  for (;;) { if (i >= raw.length) return null; const b = raw[i++]; count |= (b & 0x7f) << shift; if (!(b & 0x80)) break; shift += 7; if (shift > 14) return null; }
+  const start = i + count * 64;
+  return start < raw.length ? raw.subarray(start) : null;
+}
+
+/**
  * Whether `txBase64` (the signed transaction the page is about to send) is this draft's create: it deserializes, the draft's creator and
  * mint are among its signers and both signatures verify over its message, and (a LaunchLab draft) it carries initialize_v2 for the mint.
  * The first signature (the transaction's id) is returned.
@@ -64,7 +81,10 @@ export function verifySentCreate(t: Pick<TokenRow, "mint" | "creator" | "poolId"
   const msg = tx.message;
   const keys = msg.staticAccountKeys.map((k) => k.toBase58());
   const n = msg.header.numRequiredSignatures;
-  const bytes = msg.serialize();
+  // Phantom v1 step 3 (devnet, 2026-10-20): web3.js 1.99 reads version-1 messages but cannot serialize them, so the signatures are checked
+  // against the exact message bytes the wallet signed, sliced from the raw transaction (signedMessageBytes), for both layouts.
+  const bytes = signedMessageBytes(Buffer.from(txBase64, "base64"), n);
+  if (!bytes) return { ok: false, status: 400, reason: "The sent launch transaction could not be read." };
   for (const who of [t.creator, t.mint]) {
     const i = keys.indexOf(who);
     if (i < 0 || i >= n || !tx.signatures[i] || !verifySig(bytes, tx.signatures[i], new PublicKey(who))) return { ok: false, status: 422, reason: "The sent launch transaction is not signed by this draft's creator and mint." };

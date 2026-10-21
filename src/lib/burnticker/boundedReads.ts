@@ -130,6 +130,15 @@ export function readAgoText(atMs: number, nowMs: number): string {
 }
 
 /** The end-of-line note for a build: "2 coins from an earlier read (PITWIN 3 min, BALWIN late, no earlier read)". */
+/**
+ * Whether any coin read hit its deadline (served from an earlier read because it was late, or late with no earlier read). The list builds
+ * mark their chain stage "over its budget" from this, not from the stage's measured time: Node's timers run on a millisecond loop clock, so
+ * a read cut off at its 200 ms deadline can measure 199 ms (publish 106 gate, 2026-10-20).
+ */
+export function anyReadLate(reads: readonly BoundedRead<unknown>[]): boolean {
+  return reads.some((r) => (r.state === "earlier" && (r as { why?: string }).why === "late") || (r.state === "failed" && r.error instanceof ReadLateError));
+}
+
 export function earlierReadsNote(rows: readonly { ticker: string; r: BoundedRead<unknown> }[], nowMs: number): string {
   const earlier = rows.filter((x) => x.r.state === "earlier");
   const failed = rows.filter((x) => x.r.state === "failed" && x.r.error instanceof ReadLateError);

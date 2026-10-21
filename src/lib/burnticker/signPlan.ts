@@ -53,6 +53,12 @@ export interface SignPlan {
    * still be looked up on chain and recorded after it. Every launch SignCard requires it (PreparedSignPlan); absent = no deadline.
    */
   deadlineAt?: number;
+  /**
+   * Phantom v1 scope step 2 (2026-10-19): the transaction format every step of this plan is built in — 0 (version 0 against the lookup
+   * table, this module) or 1 (version 1, signPlanV1.ts) — decided ONCE from the wallet before anything is built (walletTxVersion.ts) and
+   * written to the plan record, so a resumed run keeps it. Absent = version 0 (the format a caller passes in SendDeps decides the build).
+   */
+  format?: 0 | 1;
 }
 /** A launch plan as every SignCard takes it: with its deadline (F06). */
 export type PreparedSignPlan = SignPlan & { deadlineAt: number };
@@ -100,7 +106,7 @@ export function planProblems(plan: SignPlan, creator: string | null): string[] {
   return out;
 }
 
-/** The packet limit every transaction must fit (legacy or v0; burnReceipts/constants.ts PACKET_DATA_SIZE). */
+/** The packet limit every version-0 transaction must fit (legacy or v0; burnReceipts/constants.ts PACKET_DATA_SIZE). A version-1 step's is signPlanV1.ts V1_PACKET_LIMIT. */
 export const PACKET_LIMIT = 1_232;
 /** The base fee per signature (no step carries a priority-fee instruction, so this is each landed step's whole network fee). */
 export const LAMPORTS_PER_SIGNATURE = 5_000;
@@ -282,6 +288,8 @@ export interface PlanRecord {
   paid?: { step: number; signature: string; lamports: number }[];
   /** SEC-03: the launch gate read "open" right before the plan's FIRST step was sent (written once, before that send) */
   gate?: PlanGate;
+  /** the transaction format this plan was started in (SignPlan.format); a resumed run keeps it */
+  format?: 0 | 1;
 }
 
 export { planGateOf, type PlanGate } from "@/lib/burnticker/launchGateAdmission";
@@ -330,7 +338,7 @@ export function loadPlanRecord(storage: PlanStorage | null | undefined, plan: Si
     v: 1, mints, confirmed: j.confirmed.slice(0, plan.steps.length), recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [],
     pending: isPending(j.pending) ? j.pending : null,
     failed: j.failed && Number.isInteger(j.failed.step) && typeof j.failed.signature === "string" ? j.failed : null,
-    updatedAt: Number(j.updatedAt) || 0, paid: paidOf(j.paid),
+    updatedAt: Number(j.updatedAt) || 0, paid: paidOf(j.paid), ...(j.format === 0 || j.format === 1 ? { format: j.format } : {}),
     ...(planGateOf(j.gate) ? { gate: planGateOf(j.gate) } : {}),
   };
 }
@@ -342,7 +350,14 @@ function notePaid(rec: { paid?: { step: number; signature: string; lamports: num
 }
 export function savePlanRecord(storage: PlanStorage | null | undefined, plan: SignPlan, rec: PlanRecord): void {
   if (!storage) return;
-  try { storage.set(planStorageKey(plan), JSON.stringify({ ...rec, v: 1, updatedAt: Date.now(), confirms: plan.confirms, steps: plan.steps.length, together: !!plan.confirmTogether, ...(plan.venue ? { venue: plan.venue } : {}), stepSigners: plan.steps.map((st) => st.signers.length), paid: rec.paid ?? [] })); } catch { /* storage full or gone: the run goes on */ }
+  try { storage.set(planStorageKey(plan), JSON.stringify({ ...rec, v: 1, updatedAt: Date.now(), confirms: plan.confirms, steps: plan.steps.length, together: !!plan.confirmTogether, ...(plan.venue ? { venue: plan.venue } : {}), stepSigners: plan.steps.map((st) => st.signers.length), paid: rec.paid ?? [], ...(plan.format === 0 || plan.format === 1 ? { format: plan.format } : {}) })); } catch { /* storage full or gone: the run goes on */ }
+}
+/** Phantom v1 step 2: pins the plan's format in its record before anything is built, so a resumed run after a reload keeps it. */
+export function pinPlanFormat(storage: PlanStorage | null | undefined, plan: SignPlan & { format: 0 | 1 }): void {
+  if (!storage) return;
+  const rec = loadPlanRecord(storage, plan) ?? emptyRecord(plan);
+  if (rec.format === plan.format) return;
+  savePlanRecord(storage, plan, { ...rec, format: plan.format });
 }
 const emptyRecord = (plan: SignPlan): PlanRecord => ({ v: 1, mints: plan.confirms.map((c) => c.mint), confirmed: [], recorded: [], pending: null, failed: null, updatedAt: 0, paid: [] });
 /** Marks drafts recorded as launched (the card, after confirmPlan); the whole record goes once every draft is recorded. */
@@ -375,7 +390,41 @@ export function reconcilePending(p: { lastValidBlockHeight: number }, status: Ch
   return "unknown";
 }
 
-export interface SendDeps {
+/**
+ * THE TRANSACTION FORMAT OF A RUN (Phantom v1 scope step 1, 2026-10-19). One runner, signAndSendPlan, keeps the deadline, the lock, the
+ * reconcile ladder and the recovery rules; everything that differs between a version-0 step (web3.js, the verified lookup table, 1,232
+ * bytes: v0Format below) and a version-1 step (kit, no table, 4,096 bytes: signPlanV1.ts v1Format) sits behind this object. `U` is a
+ * built, unsigned step; `S` is what the wallet hands back. The runner calls prepare once, then per step: build → dryRun → handed → sign
+ * → returnProblem → signKeys → serialize / firstSignature, in that order, and never reaches into U or S itself.
+ */
+export interface StepFormat<U = unknown, S = unknown> {
+  readonly version: 0 | 1;
+  /** the wire-size limit a signed step must fit (1,232 for v0, 4,096 for v1) */
+  readonly sizeLimit: number;
+  /** once per run, before anything is built (v0: fetches and verifies the lookup table); a throw stops the run with nothing sent */
+  prepare(): Promise<void>;
+  /** the unsigned step, no key signature on it (the wallet signs first); throws a plain sentence when it cannot be built or does not fit */
+  build(step: SignStep, creator: string, keys: Record<string, string | null | undefined>, bh: { blockhash: string; lastValidBlockHeight: number }): Promise<U>;
+  /** the dry run before the wallet sees the step: a sentence when it failed on chain, else the step as it goes to the wallet (v1 sizes it here); a throw = the dry run could not be run */
+  dryRun(built: U): Promise<{ problem: string } | { ready: U }>;
+  /** a copy of what the wallet is handed: the message bytes and the signature slots in signer order (a wallet may sign in place) */
+  handed(ready: U): { message: Uint8Array; signatures: Uint8Array[] };
+  /** the wallet signs; a rejection throws with the wallet's own words */
+  sign(ready: U): Promise<S>;
+  /** why what came back is not ours plus the wallet's own signature (walletReturnProblem), or null */
+  returnProblem(handed: { message: Uint8Array; signatures: Uint8Array[] }, returned: S, step: SignStep, plan: Pick<SignPlan, "expect" | "labels">): string | null;
+  /** the returned message, base64, for the console when it is refused (public bytes only) */
+  returnedMessageBase64(returned: S): string;
+  /** adds the step's own key signatures after the wallet's (signStepKeys), over the same message bytes */
+  signKeys(returned: S, step: SignStep, keys: Record<string, string | null | undefined>): Promise<S>;
+  /** the signed wire bytes, as sendRaw takes them */
+  serialize(signed: S): Uint8Array;
+  /** the fee payer's signature (the transaction's identity on chain), or null when its slot is empty */
+  firstSignature(signed: S): Uint8Array | null;
+}
+
+/** The deps every run shares, whatever its format. */
+export interface SendDepsCommon {
   /**
    * Prelaunch audit 2026-10-18 A-11: whether creator launches are still open on this site, read before each NEW step is built and again
    * when the wallet returns it. "closed" stops the run before anything more is sent (a create after the closure is refused by the
@@ -385,22 +434,8 @@ export interface SendDeps {
    */
   launchGate?(): Promise<"open" | "closed" | "unknown">;
   latestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }>;
-  signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction>;
-  /**
-   * Phantom's dApp guidance (ticket 438485, 2026-10-14): a transaction that fails on chain trips the wallet's warning, so each step is
-   * dry-run (simulateTransaction, sigVerify false) BEFORE the wallet is asked to sign. Returns why the dry run failed, or null when it
-   * passed. Phantom's second review (2026-10-16): a dry run the RPC could not perform (throws) ALSO stops the step before the wallet is
-   * asked, so the wallet never sees a transaction nothing has checked. Required.
-   */
-  simulate(tx: VersionedTransaction): Promise<string | null>;
   /** Diagnostics when a wallet's returned transaction is refused: both messages (base64) and the reason. Optional. */
   onRefused?(info: { handed: string; returned: string; why: string }): void;
-  /**
-   * The network's lookup table, VERIFIED (lookupTable.ts verifiedLookupTable: the pinned address, every entry at its index, authority the
-   * operations key or frozen) — it throws "lookup table mismatch — nothing was sent" otherwise, and the run stops before anything is
-   * signed. Read once per run. null = no table (tests; a real launch then fails the size check before the wallet sees it).
-   */
-  lookupTable(): Promise<AddressLookupTableAccount | null>;
   sendRaw(raw: Uint8Array): Promise<string>;
   confirm(sig: string, bh: { blockhash: string; lastValidBlockHeight: number }): Promise<{ err: unknown }>;
   /** one signature's status (Connection.getSignatureStatuses([sig], { searchTransactionHistory: true }).value[0]); absent → a lost confirmation stays "sent" */
@@ -443,10 +478,55 @@ export interface SendDeps {
    */
   expectedAccounts?(mints: string[]): Promise<"absent" | "present" | "unknown">;
 }
+/** The version-0 deps (the shipped path, untouched): the wallet adapter's signTransaction, the dry run over a web3.js object, the table. */
+export interface V0SendDeps extends SendDepsCommon {
+  format?: undefined;
+  signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction>;
+  /**
+   * Phantom's dApp guidance (ticket 438485, 2026-10-14): a transaction that fails on chain trips the wallet's warning, so each step is
+   * dry-run (simulateTransaction, sigVerify false) BEFORE the wallet is asked to sign. Returns why the dry run failed, or null when it
+   * passed. Phantom's second review (2026-10-16): a dry run the RPC could not perform (throws) ALSO stops the step before the wallet is
+   * asked, so the wallet never sees a transaction nothing has checked. Required.
+   */
+  simulate(tx: VersionedTransaction): Promise<string | null>;
+  /**
+   * The network's lookup table, VERIFIED (lookupTable.ts verifiedLookupTable: the pinned address, every entry at its index, authority the
+   * operations key or frozen) — it throws "lookup table mismatch — nothing was sent" otherwise, and the run stops before anything is
+   * signed. Read once per run. null = no table (tests; a real launch then fails the size check before the wallet sees it).
+   */
+  lookupTable(): Promise<AddressLookupTableAccount | null>;
+}
+/** A run whose format object does the building and signing (signPlanV1.ts v1Format; v0Format wraps the v0 deps the same way). */
+export interface FormatSendDeps extends SendDepsCommon { format: StepFormat }
+export type SendDeps = V0SendDeps | FormatSendDeps;
+
+/** Deps without a format object are the version-0 deps (the shipped path). */
+export const isV0Deps = (d: SendDeps): d is V0SendDeps => !d.format;
+/** The version-0 format: the shipped path (buildStepTx, the dry run, the adapter's signTransaction, walletReturnProblem, signStepKeys). */
+export function v0Format(d: Pick<V0SendDeps, "lookupTable" | "simulate" | "signTransaction">): StepFormat<VersionedTransaction, VersionedTransaction> {
+  let lut: AddressLookupTableAccount | null = null;
+  return {
+    version: 0,
+    sizeLimit: PACKET_LIMIT,
+    // the network's lookup table, verified once before anything is signed (a mismatch stops the run: nothing was sent)
+    async prepare() { lut = await d.lookupTable(); },
+    // Phantom ticket 438485: the wallet signs first (the transaction it sees carries no other signature), the mint keys sign after
+    async build(step, creator, keys, bh) { return buildStepTx(step, creator, keys, bh.blockhash, lut, false); },
+    async dryRun(built) { const why = await d.simulate(built); return why ? { problem: why } : { ready: built }; },
+    // launch integrity 253: a copy of what the wallet is handed (a wallet may sign the object in place), checked against what comes back
+    handed(tx) { return { message: tx.message.serialize(), signatures: tx.signatures.map((s) => Uint8Array.from(s)) }; },
+    sign(tx) { return d.signTransaction(tx); },
+    returnProblem(handed, returned, step, plan) { return walletReturnProblem(handed, returned, step, plan, lut ? [lut] : []); },
+    returnedMessageBase64(tx) { return Buffer.from(tx.message.serialize()).toString("base64"); },
+    async signKeys(tx, step, keys) { return signStepKeys(tx, step, keys); },
+    serialize(tx) { return tx.serialize(); },
+    firstSignature(tx) { const s = tx.signatures[0]; return hasSignature(s) ? s : null; },
+  };
+}
 /** `state` / `signature` describe the step at `failedAt` and are present only when a run stops. */
 export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true; /** A-11: stopped because creator launches closed */ closed?: true; /** SEC-03: stopped because the launch gate could not be read (pressing again reads it again) */ gateUnread?: true; /** SEC-05: stopped because the site did not acknowledge recording the create first (nothing was sent; pressing again signs it again) */ unrecorded?: true; /** SEC-05: stopped because the site already holds another attempt of this launch (nothing was sent) */ pendingElsewhere?: true; /** SEC-03: the open gate read before the plan's first step was sent (it goes with the confirm) */ gate?: PlanGate }
 
-export type ChainReadDeps = Pick<SendDeps, "getSignatureStatus" | "getBlockHeight" | "getTransaction" | "expectedAccounts">;
+export type ChainReadDeps = Pick<SendDepsCommon, "getSignatureStatus" | "getBlockHeight" | "getTransaction" | "expectedAccounts">;
 /**
  * Reads the block height, THEN the status, then reconciles. Launch recovery 255: an "expired" reading is not taken as proof that nothing
  * landed (a load-balanced RPC can answer the height from a current backend and the status from a lagging one; history can be briefly
@@ -507,7 +587,7 @@ export const STALE_BLOCKHASH_MS = 45_000;
 export const RESIGN_MAX = 2;
 const BLOCKHASH_REFUSED = /blockhash not found/i;
 /** Only a definite "no" counts as expired; a check that throws leaves the send to go ahead (a refusal then rebuilds it anyway). */
-async function blockhashExpired(d: Pick<SendDeps, "isBlockhashValid">, blockhash: string): Promise<boolean> {
+async function blockhashExpired(d: Pick<SendDepsCommon, "isBlockhashValid">, blockhash: string): Promise<boolean> {
   try { return (await d.isBlockhashValid!(blockhash)) === false; } catch { return false; }
 }
 /** Said to the creator while the wallet is asked again. */
@@ -611,10 +691,11 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
   // no second create can be attempted; the card offers only a new plan.
   if (signatures.length < n && planAbandoned(plan, rec)) return stop(signatures.length, "abandoned", abandonedSentence({ ...rec, confirms: plan.confirms, steps: n }));
 
-  // the network's lookup table, verified once before anything is signed (a mismatch stops the run: nothing was sent)
-  let lut: AddressLookupTableAccount | null = null;
+  // the format of every step of this run (SignPlan.format is the pin; the deps decide the build): v0 fetches and verifies the lookup
+  // table here, once before anything is signed (a mismatch stops the run: nothing was sent); v1 imports the mint keys
+  const f: StepFormat = isV0Deps(d) ? v0Format(d) : d.format;
   if (signatures.length < n) {
-    try { lut = await d.lookupTable(); } catch (e) { return stop(signatures.length, "not-sent", `Step ${signatures.length + 1} of ${n} failed. The error was: ${String((e as Error)?.message ?? e).slice(0, 240)}`); }
+    try { await f.prepare(); } catch (e) { return stop(signatures.length, "not-sent", `Step ${signatures.length + 1} of ${n} failed. The error was: ${String((e as Error)?.message ?? e).slice(0, 240)}`); }
   }
 
   const now = d.now ?? (() => Date.now());
@@ -645,36 +726,38 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       bh = await d.latestBlockhash();
       const fetchedAt = now();
       // Phantom ticket 438485: the wallet signs first (the transaction it sees carries no other signature), the mint keys sign after
-      const built = buildStepTx(plan.steps[i], creator, plan.keys, bh.blockhash, lut, false);
-      // launch integrity 253: a copy of what the wallet is handed (a wallet may sign the object in place), checked against what comes back
-      const handed = { message: built.message.serialize(), signatures: built.signatures.map((s) => Uint8Array.from(s)) };
+      const built = await f.build(plan.steps[i], creator, plan.keys, bh);
       // Phantom ticket 438485, second review 2026-10-16: an unavailable or failed dry run stops the step BEFORE the wallet is asked
-      let dry: string | null;
-      try { dry = await d.simulate(built); }
+      // (a v1 step is sized by this dry run, so the step the wallet sees is the one the dry run returns)
+      let dry: { problem: string } | { ready: unknown };
+      try { dry = await f.dryRun(built); }
       catch (e) { return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because its dry run could not be run just now (${String((e as Error)?.message ?? e).slice(0, 160)}). Try again in a moment.`); }
-      if (dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry}`);
-      const signed = await d.signTransaction(built);
+      if ("problem" in dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry.problem}`);
+      const ready = dry.ready;
+      // launch integrity 253: a copy of what the wallet is handed (a wallet may sign the object in place), checked against what comes back
+      const handed = f.handed(ready);
+      const signed = await f.sign(ready);
       // F06: the wallet can be held open for hours; the deadline is read again once it returns, before the transaction is kept or sent
       { const late = pastDeadline(i); if (late) return late; }
       { const shut = await closedNow(i); if (shut) return shut; }   // A-11: and whether launches closed meanwhile
       // SEC-03: the open read right before the FIRST step's send is kept (once, saved with the pending send below) and goes with the confirm
       if (i === 0 && !rec.gate && gateReadAt > 0) rec.gate = { state: "open", at: gateReadAt };
-      const changed = walletReturnProblem(handed, signed, plan.steps[i], plan, lut ? [lut] : []);
+      const changed = f.returnProblem(handed, signed, plan.steps[i], plan);
       if (changed) {
         // 2026-10-14: what the wallet handed back, for the console (public bytes only: no key material is ever in a message)
-        try { d.onRefused?.({ handed: Buffer.from(handed.message).toString("base64"), returned: Buffer.from(signed.message.serialize()).toString("base64"), why: changed }); } catch { /* diagnostics only */ }
+        try { d.onRefused?.({ handed: Buffer.from(handed.message).toString("base64"), returned: f.returnedMessageBase64(signed), why: changed }); } catch { /* diagnostics only */ }
         return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because ${changed}`);
       }
-      signStepKeys(signed, plan.steps[i], plan.keys);
+      const fully = await f.signKeys(signed, plan.steps[i], plan.keys);
       // the integrity check above ran first; only then is the blockhash's age looked at (a stale one is re-checked on chain)
       if (now() - fetchedAt > STALE_BLOCKHASH_MS && d.isBlockhashValid && (await blockhashExpired(d, bh.blockhash))) {
         if (resigns >= RESIGN_MAX) return stop(i, "not-sent", resignExhaustedSentence(i, n));
         resigns++; d.onNotice?.(resignSentence(i, n)); continue;
       }
-      raw = signed.serialize();
-      if (raw.length > PACKET_LIMIT) throw new Error(`the signed transaction is ${raw.length} bytes, over the ${PACKET_LIMIT.toLocaleString("en-US")}-byte limit`);
-      const first = signed.signatures[0];
-      if (!hasSignature(first)) throw new Error("the wallet returned the transaction without its signature");
+      raw = f.serialize(fully);
+      if (raw.length > f.sizeLimit) throw new Error(`the signed transaction is ${raw.length} bytes, over the ${f.sizeLimit.toLocaleString("en-US")}-byte limit`);
+      const first = f.firstSignature(fully);
+      if (!first) throw new Error("the wallet returned the transaction without its signature");
       pending = { step: i, signature: bytesToBase58(first), tx: Buffer.from(raw).toString("base64"), blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight, sentAt: Date.now() };
       rec.pending = pending; rec.failed = null; save(); // written BEFORE the send
       // B-2: the site hears of the send before it happens. SEC-05: a coin's create is sent only once the site acknowledges recording it;
@@ -967,7 +1050,7 @@ function parseStoredRecord(raw: string | null): StoredLaunch["rec"] | null {
   if (j.pending != null && !(isPending(j.pending) && inPlan(j.pending.step))) return null;
   if (j.failed != null && !(Number.isInteger(j.failed.step) && inPlan(j.failed.step) && typeof j.failed.signature === "string")) return null;
   const confirms = j.confirms;
-  return { v: 1 as const, mints: confirms.map((c) => c.mint), confirmed: [...j.confirmed], recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [], pending: j.pending ?? null, failed: j.failed ?? null, updatedAt: Number(j.updatedAt) || 0, confirms, steps, paid: paidOf(j.paid), together: typeof j.together === "boolean" ? j.together : j.venue === "pair-curve" || j.venue === "launchlab" ? j.venue === "pair-curve" : legacyTogether(confirms, steps), ...(j.venue === "pair-curve" || j.venue === "launchlab" ? { venue: j.venue } : {}), ...(Array.isArray(j.stepSigners) ? { stepSigners: [...j.stepSigners] } : {}), ...(planGateOf(j.gate) ? { gate: planGateOf(j.gate) } : {}) };
+  return { v: 1 as const, mints: confirms.map((c) => c.mint), confirmed: [...j.confirmed], recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [], pending: j.pending ?? null, failed: j.failed ?? null, updatedAt: Number(j.updatedAt) || 0, confirms, steps, paid: paidOf(j.paid), together: typeof j.together === "boolean" ? j.together : j.venue === "pair-curve" || j.venue === "launchlab" ? j.venue === "pair-curve" : legacyTogether(confirms, steps), ...(j.venue === "pair-curve" || j.venue === "launchlab" ? { venue: j.venue } : {}), ...(Array.isArray(j.stepSigners) ? { stepSigners: [...j.stepSigners] } : {}), ...(j.format === 0 || j.format === 1 ? { format: j.format } : {}), ...(planGateOf(j.gate) ? { gate: planGateOf(j.gate) } : {}) };
 }
 
 /**

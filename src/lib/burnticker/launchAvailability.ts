@@ -217,7 +217,7 @@ export function catalogueLaunches(env: Env = process.env, now: number = Date.now
  * Pure and client-safe. A missing or malformed catalogue field is read as the safe value (closed, cannot sign).
  */
 export type SiteLaunchRead = "loading" | "ready" | "unavailable" | "stale";
-export interface HostedSigning { complete: boolean; blockers: string[] }
+export interface HostedSigning { complete: boolean; blockers: string[]; /** Phantom v1 step 2: what only a version-0 wallet still needs (the lookup-table pin) */ fallbackBlockers?: string[] }
 export interface SiteLaunchState {
   read: SiteLaunchRead;
   mode: LaunchMode;
@@ -292,7 +292,7 @@ export const WALLET_NOTE = "Connecting a wallet only shares its public address w
 export function hostedSigningFor(cluster: string | null, env: Env = process.env): HostedSigning {
   const e = cluster === "mainnet" || cluster === "devnet" ? { ...env, BURNTICKER_CLUSTER: cluster } : env;
   const h = hostedSigningLive(e as Readonly<Record<string, string | undefined>>);
-  return { complete: h.canComplete, blockers: h.blockers };
+  return { complete: h.canComplete, blockers: h.blockers, fallbackBlockers: h.fallbackBlockers };
 }
 
 /** Round 5 from the model's `burn-real` source; a missing source or an unfresh reading is "waiting" (fail closed). */
@@ -340,7 +340,7 @@ export function siteLaunchStateFromCatalogue(body: unknown, o: { failure?: strin
   const l = ((body as { launches?: { hostedSigning?: unknown; readAt?: unknown } }).launches ?? {});
   const hs = l.hostedSigning as Partial<HostedSigning> | undefined;
   const hostedSigning: HostedSigning = hs && typeof hs.complete === "boolean" && Array.isArray(hs.blockers)
-    ? { complete: hs.complete, blockers: hs.blockers.filter((b): b is string => typeof b === "string") }
+    ? { complete: hs.complete, blockers: hs.blockers.filter((b): b is string => typeof b === "string"), ...(Array.isArray(hs.fallbackBlockers) ? { fallbackBlockers: hs.fallbackBlockers.filter((b): b is string => typeof b === "string") } : {}) }
     : { complete: false, blockers: ["This site did not say whether a launch can be signed here."] };
   const readAt = typeof l.readAt === "string" && !Number.isNaN(Date.parse(l.readAt)) ? l.readAt : null;
   const stale = readAt !== null && (o.now ?? Date.now()) - Date.parse(readAt) > STALE_AFTER_MS;

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import { buildStepTx, failureSentence, launchlabPlan, memoryPlanStorage, signAndSendPlan, simulationFailureText, walletReturnProblem, type SendDeps, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
+import { buildStepTx, failureSentence, launchlabPlan, memoryPlanStorage, signAndSendPlan, simulationFailureText, walletReturnProblem, type V0SendDeps, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
 import { createLatest } from "@/lib/burnticker/latestOnly";
 import { draftRevision } from "@/lib/burnticker/launchReviewSync";
 import { fingerprintFor, prepareIfCurrent, profileRevision, startFingerprint, STALE_PREPARE_SENTENCE } from "@/lib/burnticker/preparedLaunch";
@@ -27,7 +27,7 @@ const bundle = (ticker: string): LaunchlabBundleLike => {
 // ---- 253 ----------------------------------------------------------------------------------------------------------------------
 /** a wallet that does `tamper` to what it is handed, then signs as the creator */
 const run = async (plan: SignPlan, tamper: (tx: VersionedTransaction) => VersionedTransaction) => {
-  let sends = 0, store = memoryPlanStorage();
+  let sends = 0; const store = memoryPlanStorage();
   const r = await signAndSendPlan(plan, CREATOR, {
     latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 1 }),
     simulate: async () => null,   // a passing dry run (the runner requires one since Phantom's second review)
@@ -154,7 +154,7 @@ describe("252 [FIX] a response for an older draft is discarded; the signing scre
 // ---- Phantom ticket 438485 (2026-10-14): a dry run before the wallet signs --------------------------------------------------------
 describe("438485 a failed dry run stops the step before the wallet is asked", () => {
   const b = bundle("DRY"), plan = launchlabPlan([b]);
-  const runWith = async (simulate: NonNullable<SendDeps["simulate"]>) => {
+  const runWith = async (simulate: NonNullable<V0SendDeps["simulate"]>) => {
     let sends = 0, walletAsked = 0;
     const store = memoryPlanStorage();
     const r = await signAndSendPlan(plan, CREATOR, {

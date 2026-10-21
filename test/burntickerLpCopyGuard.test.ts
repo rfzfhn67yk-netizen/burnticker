@@ -27,7 +27,8 @@ function walk(dir: string, acc: string[] = []): string[] {
 
 const SCOPE = [...walk("src"), ...walk("site"), ...walk("docs/burnticker"), ...walk("config/burnticker"), ...walk("config/public-repo")]
   // the auditors' continuous folder is their own scratch (untracked reports, page sweeps, walk notes); it is not a public surface
-  .filter((f) => !f.startsWith("docs/burnticker/reviews/") && !f.startsWith("docs/burnticker/audits/continuous/"));
+  // the auditors' pass folders (prelaunch-*) are untracked evidence too; the public tree copies only git-tracked allowlisted files
+  .filter((f) => !f.startsWith("docs/burnticker/reviews/") && !f.startsWith("docs/burnticker/audits/continuous/") && !f.startsWith("docs/burnticker/audits/prelaunch-"));
 
 // ---- 1. LP burned → LP locked forever ----
 const LP_BURNED_CLAIMS: RegExp[] = [

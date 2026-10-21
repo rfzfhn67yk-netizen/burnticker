@@ -11,7 +11,7 @@ import { PlatformConfig, claimPlatformFeeFromVault, getPdaPlatformFeeVaultAuth, 
 import { readPlatformFees, platformFeeClaimIxs, v1OpsPlatformFees, type FeeAccountReader } from "@/lib/burnticker/platformFeeClaim";
 import { CLAIM_COPY, pollConfirm, claimIxProblems, claimPlatformFees, claimSentSentence, claimWalletProblem, fundingProblem, LAUNCHLAB_PROGRAMS, neededLamports, solFromLamports, ATA_PROGRAM, TOKEN_PROGRAM, WSOL_MINT, type PlatformFeesView } from "@/lib/burnticker/platformFeeClaimPlan";
 import { BURNTICKER_PLATFORM, LAUNCHLAB_PROGRAM_ID, OPERATOR_TREASURY } from "@/lib/burnReceipts/constants";
-import { simulationFailureText, type SendDeps } from "@/lib/burnticker/signPlan";
+import { simulationFailureText, type SendDeps, type V0SendDeps } from "@/lib/burnticker/signPlan";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { API, callRoute } from "./burntickerApiHelpers.ts";
 
@@ -139,7 +139,7 @@ describe("only the claim wallet can claim", () => {
 describe("signing order: dry run first, then the wallet, then the send", () => {
   const kp = Keypair.generate();
   const view = async () => (await v1OpsPlatformFees(req({ pin: "1234" }), ENV, reader(kp.publicKey))).body as PlatformFeesView;
-  const runWith = async (simulate: SendDeps["simulate"], wallet?: (tx: VersionedTransaction) => VersionedTransaction) => {
+  const runWith = async (simulate: V0SendDeps["simulate"], wallet?: (tx: VersionedTransaction) => VersionedTransaction) => {
     const order: string[] = [];
     const r = await claimPlatformFees(await view(), kp.publicKey.toBase58(), {
       latestBlockhash: async () => { order.push("blockhash"); return { blockhash: BH, lastValidBlockHeight: 100 }; },
