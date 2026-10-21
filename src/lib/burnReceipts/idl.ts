@@ -4213,6 +4213,14 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "name": "lp_lock_vault"
         },
         {
+          "name": "launchlab_pool",
+          "docs": [
+            "Policy 0: the token's LaunchLab pool [\"pool\", mint, WSOL]. Required when the pool's AmmConfig differs from the pinned one: the",
+            "Fee Key is then accepted only once LaunchLab reads migrated (eighth-pass CH8-4 gap 1, as register_pool). May be omitted otherwise."
+          ],
+          "optional": true
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         },

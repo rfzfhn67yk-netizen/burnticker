@@ -1,6 +1,8 @@
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { lookalikeHits, type LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { pairTickers } from "@/lib/burnticker/guidedLaunch";
+import { hazardAlternateName } from "@/lib/burnticker/hazards";
+import type { BurnRule } from "@/lib/burnticker/rules";
 
 // Client-safe (no node imports): the launch page reads it. tickerCheck.ts itself reads the reserved list from disk.
 
@@ -109,4 +111,25 @@ export function teamWordName(name: string, from: string, to: string): string | n
   if (at < 1 && parts.length > 1 && /^(win|wins|loss|losses|lose)$/i.test(parts[parts.length - 1])) at = parts.length - 1;
   if (at < 1) at = parts.length;
   return [...parts.slice(0, at), text, ...parts.slice(at)].join(" ");
+}
+
+/** Continuous audit HB-6: a coin on a team's games (the team words fit it), read from its rule. Client-safe; tickerCheck.ts re-exports it. */
+export function isTeamRule(rule: unknown): boolean {
+  const r = rule && typeof rule === "object" ? (rule as Partial<BurnRule>) : null;
+  if (!r) return false;
+  if (r.oracle === "catalogue" && typeof r.series === "string" && /^espn\./.test(r.series)) return true;
+  return r.oracle === "kalshi" && /^-[A-Z0-9]{2,5}$/.test(r.filter?.tickerIncludes ?? "");
+}
+
+/**
+ * HB-207 / HS-102 (ninth pre-launch audit, B-21): the name that goes with a swapped ticker, the same on the server's review and on the
+ * launch page. A hazard coin takes the hazard word's own name ("Next Magnitude 6 Quake" for $QUAKENXTM6); a team coin takes the team word
+ * into its name ("Eagles Fans 2026 Wins" for $PHINFLFANS); any other coin keeps its own event name, so null is returned and the caller
+ * keeps the name it has. The held coin's name is never the answer for a team or hazard swap.
+ */
+export function pairedSwapName(rule: Pick<BurnRule, "oracle" | "series"> | null | undefined, from: { ticker: string; name: string }, to: string): string | null {
+  if (!to || !from.name || to.toUpperCase() === from.ticker.toUpperCase()) return null;
+  const hz = hazardAlternateName(rule?.series, from, to);
+  if (hz) return hz;
+  return isTeamRule(rule) ? teamWordName(from.name, from.ticker, to) : null;
 }

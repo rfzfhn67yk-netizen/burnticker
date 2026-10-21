@@ -110,6 +110,7 @@ fn ix_register_fee_key(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft: &Pubke
             fee_nft_account: get_associated_token_address(&fee_keys(), nft),
             locked_liquidity: locked_liquidity(nft),
             lp_lock_vault: get_associated_token_address(&LOCK_CPMM_AUTHORITY, &cpmm::lp_mint_of(pool)),
+            launchlab_pool: Some(launchlab_pool_pda(mint)),
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: event_authority(),
             program: burn_receipts::ID,

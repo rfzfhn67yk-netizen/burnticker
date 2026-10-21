@@ -342,9 +342,9 @@ describe("ChatGPT A8: a dated current specification and a frozen October 10 arch
   test("the current paper is dated and names the public commit it describes; its version notice sits above the contents", () => {
     const md = read(WHITEPAPER_MD), html = read(WHITEPAPER_HTML);
     assert.doesNotMatch(md, /Historical version/);
-    assert.match(md, new RegExp(`Current specification, dated ${CURRENT_SPEC.date}`)); assert.ok(md.includes(CURRENT_SPEC.publicCommit));
-    assert.equal(CURRENT_SPEC.publicCommit, "af52b4a4ea0b80168a4c2e0f47a32045d1035c91");
-    assert.ok(html.indexOf("Current specification, dated") < html.indexOf('aria-label="Contents"'), "the notice comes before the contents on every width");
+    assert.match(md, new RegExp(`Current specification, publish ${CURRENT_SPEC.publish}, ${CURRENT_SPEC.date}, public commit`)); assert.ok(md.includes(CURRENT_SPEC.publicCommit));
+    assert.equal(CURRENT_SPEC.publicCommit, "2b20cf7b8219a8d801d2f08ef05319847b0453f5");   // ninth pass HS-100: publish 111
+    assert.ok(html.indexOf("Current specification, publish") < html.indexOf('aria-label="Contents"'), "the notice comes before the contents on every width");
     assert.match(html, /href="https:\/\/burnticker\.com\/whitepaper-2026-10-10\.html"/);
   });
   test("the archive is the 2026-10-10 draft byte for byte, rendered with an archive banner and its own canonical; the copy lint passes it", () => {

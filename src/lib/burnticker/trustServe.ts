@@ -35,8 +35,50 @@ export const trustSwr = makeTrustSwr();
  * of the 60 s, and a body past that goes out with no-store and its real age.
  */
 export const V1_TRUST_CACHE_SEC = 60, V1_TRUST_FRESH_MS = 30_000, V1_TRUST_MAX_STALE_MS = 2 * V1_TRUST_CACHE_SEC * 1000;
+/**
+ * HB-211 / HS-98 (ninth pre-launch audit, OP9-1): in the publish-111 deploy window a visitor's /v1/trust waited 20 s on the first build
+ * and got the proxy's 503 page. A read now waits at most V1_TRUST_DEADLINE_MS for a build (under the proxy's 20 s). Past it, the last
+ * good copy is served marked stale (x-trust-memo: stale, no-store, its real age); that copy is kept in the registry too, so a copy from
+ * before a restart answers while the first build after it runs. Only with no copy at all is the answer a short 503 with retry-after.
+ * The web's start-up warm call (scripts/service/web-warm.cjs) starts that first build before any visitor.
+ */
+export const V1_TRUST_DEADLINE_MS = 12_000;
+export const V1_TRUST_LAST_GOOD_KEY = "trust.v1.lastGood";
+export interface TrustLastGoodStore { load(): { at: number; value: unknown } | null; save(copy: { at: number; value: unknown }): void }
+/** A last-good store kept in memory and, when given, in the registry's status table (a read or write that fails is ignored). */
+export function trustLastGoodStore(reg?: { getStatus(key: string): string | null; setStatus(key: string, value: unknown, now?: number): void } | null): TrustLastGoodStore {
+  let mem: { at: number; value: unknown } | null = null;
+  return {
+    load() {
+      if (mem) return mem;
+      try { const raw = reg?.getStatus(V1_TRUST_LAST_GOOD_KEY); if (raw) { const j = JSON.parse(raw) as { at?: unknown; value?: unknown }; if (typeof j.at === "number" && j.value && typeof j.value === "object") mem = { at: j.at, value: j.value }; } } catch { /* unreadable: no copy */ }
+      return mem;
+    },
+    save(copy) {
+      if (mem && mem.at >= copy.at) return;
+      mem = copy;
+      try { reg?.setStatus(V1_TRUST_LAST_GOOD_KEY, JSON.stringify(copy, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), copy.at); } catch { /* the memory copy still serves */ }
+    },
+  };
+}
+/**
+ * HB-211: the /v1/trust answer from the memo within the deadline: the memo's answer (kept as the last good copy when it is not stale),
+ * else the last good copy marked stale, else null (the route answers 503 with retry-after). A first build that fails is the same as one
+ * still running. Never throws.
+ */
+export async function serveV1Trust(swr: KeyedSwr<unknown>, build: () => Promise<unknown>, store: TrustLastGoodStore, now: () => number = Date.now): Promise<{ value: unknown; headers: Record<string, string>; state: SwrState | "last-good" } | null> {
+  let r: Awaited<ReturnType<KeyedSwr<unknown>["get"]>> = null;
+  try { r = await swr.get("v1", "1", build); } catch { r = null; }
+  if (r) {
+    if (r.state !== "stale") store.save({ at: now() - r.ageMs, value: r.value });
+    return { value: r.value, headers: v1TrustHeaders(r), state: r.state };
+  }
+  const last = store.load();
+  if (!last) return null;
+  return { value: last.value, headers: v1TrustHeaders({ state: "stale", ageMs: now() - last.at }), state: "last-good" };
+}
 export const makeV1TrustSwr = (o: { clock?: () => number; coldWaitMs?: number } = {}): KeyedSwr<unknown> =>
-  new KeyedSwr<unknown>({ freshMs: V1_TRUST_FRESH_MS, coldWaitMs: o.coldWaitMs ?? TRUST_COLD_WAIT_MS, maxStaleMs: V1_TRUST_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, maxKeys: 2, log: (k, e) => console.error(`[burnticker/v1-trust] ${k} build failed:`, e) }, o.clock ?? Date.now);
+  new KeyedSwr<unknown>({ freshMs: V1_TRUST_FRESH_MS, coldWaitMs: o.coldWaitMs ?? V1_TRUST_DEADLINE_MS, maxStaleMs: V1_TRUST_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, maxKeys: 2, log: (k, e) => console.error(`[burnticker/v1-trust] ${k} build failed:`, e) }, o.clock ?? Date.now);
 export const v1TrustSwr = makeV1TrustSwr();
 /** HB-155: the /v1/trust headers for a body `ageMs` old in memo state `state` (they replace the API's fixed 60 s header). */
 export function v1TrustHeaders(r: { state: SwrState; ageMs: number }): Record<string, string> {

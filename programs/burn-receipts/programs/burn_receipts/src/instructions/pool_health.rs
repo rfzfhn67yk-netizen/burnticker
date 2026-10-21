@@ -235,7 +235,7 @@ pub fn handle_replace_pool(ctx: Context<ReplacePool>) -> Result<()> {
         &a.fee_vault.key(),
         &a.new_lp_mint,
         &a.new_lp_lock_vault.to_account_info(),
-        Some(LaunchLabProof { pool: &llp, platform: a.config.ll_platform, cp_config }),
+        Some(LaunchLabProof { pool: &llp, platform: a.config.ll_platform, cp_config, accept_migrated_config: false }),
     )?;
     let new_reason = untradeable_reason(&ctx.accounts.new_pool.to_account_info(), &ctx.accounts.new_wsol_vault.to_account_info(), &mint, now)?;
     require!(new_reason == UNTRADEABLE_NONE, BurnError::PoolNotTradable);

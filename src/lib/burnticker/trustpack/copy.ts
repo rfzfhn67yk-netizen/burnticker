@@ -110,10 +110,10 @@ export const TRUSTPACK_SECTION_COPY = {
 export const NEVER_BUYS_STATUS = {
   // continuous audit 2026-10-19 ACC-02: what the check found in the transactions it read, never a lifetime claim
   clear: "No unexplained purchases were found in the transactions checked. This checks recent history only, not every transaction the wallets ever made.",
-  explained: "No unexplained purchases were found in the transactions checked. The purchases found are recorded rehearsal trades or the disclosed exception, each listed below with what explains it. This checks recent history only, not every transaction the wallets ever made.",
+  explained: "No unexplained purchases were found in the transactions checked. The purchases found are recorded rehearsal trades or the disclosed exceptions, each listed below with what explains it. This checks recent history only, not every transaction the wallets ever made.",
   red: "Red. An operator wallet traded for a platform coin outside any recorded rehearsal. See the list below.",
   received: "No unexplained purchases were found in the transactions checked. A platform coin was sent to an operator wallet that did not trade for it. Anyone can send a token to a public wallet, so it is listed below and does not count against the rule.",
-  holding: "Finding. An operator wallet holds a platform coin right now, outside the disclosed exception. It may have arrived before the transactions checked, or been sent to it. See the holdings below.",
+  holding: "Finding. An operator wallet holds a platform coin right now, outside the disclosed exceptions. It may have arrived before the transactions checked, or been sent to it. See the holdings below.",
   incomplete: "Incomplete check. Some operator wallets or transactions could not be read, so no conclusion is available for those records. See the list below.",
   stale: "Out of date. The last run is too old to describe the operator wallets today.",
   notChecked: "Not checked. The last run could not read any operator wallet, so it says nothing about them.",

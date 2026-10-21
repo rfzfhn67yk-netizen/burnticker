@@ -130,6 +130,7 @@ pub fn ix_register_fee_key(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft_min
             fee_nft_account: get_associated_token_address(&fee_keys(), nft_mint),
             locked_liquidity: locked_liquidity(nft_mint),
             lp_lock_vault: lock_lp_vault(&crate::common::cpmm::lp_mint_of(pool)),
+            launchlab_pool: None,
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: br_event_authority(),
             program: burn_receipts::ID,

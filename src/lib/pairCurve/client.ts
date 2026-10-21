@@ -6,6 +6,8 @@ import { registerFeeKeyIx, registerPairPoolIx } from "@/lib/burnReceipts/instruc
 import { configPda, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, lockedLiquidityPda, lpLockVault } from "@/lib/burnReceipts/pda";
 import { anchorErrorName, confirmByPolling } from "@/lib/burnReceipts/crank";
 import { PAIR_CURVE_IDL } from "@/lib/pairCurve/idl";
+import { registerFeeKeyLaunchlabSlotOnChain } from "@/lib/burnticker/programHash";
+import type { VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, feeNftMintPda, fetchPair, METADATA_PROGRAM_ID, metadataPda, type PairAccount, pairPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda } from "@/lib/pairCurve/accounts";
 import { GRADUATION_STUCK_SECS, graduationReady, TOKEN_DECIMALS } from "@/lib/pairCurve/pricing";
 
@@ -143,11 +145,24 @@ export function lockLpIx(o: { cranker: PublicKey; pairAddress: PublicKey; pair: 
   }, { side: o.side });
 }
 
-/** burn_receipts.register_fee_key for a pair side (its Fee Key is the pair_curve PDA ["fee_nft", pair, [side]]). */
-export function registerSideFeeKeyIx(o: { payer: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; cluster: Cluster; burnReceiptsProgramId: PublicKey; programId?: PublicKey }): TransactionInstruction {
+/**
+ * burn_receipts.register_fee_key for a pair side (its Fee Key is the pair_curve PDA ["fee_nft", pair, [side]]). `launchlabPoolSlot`
+ * (B-17): the account list the deployed burn_receipts reads — true only for the B-17 build (sideFeeKeyLaunchlabSlot decides it from the
+ * burn program's hash on chain); the default is the round-5 list, without the launchlab_pool slot.
+ */
+export function registerSideFeeKeyIx(o: { payer: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; cluster: Cluster; burnReceiptsProgramId: PublicKey; programId?: PublicKey; launchlabPoolSlot?: boolean }): TransactionInstruction {
   const programId = o.programId ?? PAIR_CURVE_ID;
   const s = sidePoolAccounts(o.cluster, o.pairAddress, o.side, o.pair.mints[o.side], programId);
-  return registerFeeKeyIx({ programId: o.burnReceiptsProgramId, payer: o.payer, mint: o.pair.mints[o.side], pool: s.pool, feeNftMint: feeNftMintPda(o.pairAddress, o.side, programId), cluster: o.cluster, lpMint: s.lpMint });
+  return registerFeeKeyIx({ programId: o.burnReceiptsProgramId, payer: o.payer, mint: o.pair.mints[o.side], pool: s.pool, feeNftMint: feeNftMintPda(o.pairAddress, o.side, programId), cluster: o.cluster, lpMint: s.lpMint, launchlabPoolSlot: o.launchlabPoolSlot });
+}
+
+/**
+ * B-17: whether register_fee_key may carry the launchlab_pool account, read from the burn_receipts program this crank calls (its hash on
+ * chain against the B-17 build in config/burnticker/verified-build.json; programHash.ts registerFeeKeyLaunchlabSlot). A failed read, a
+ * round-5 program or an unrecorded hash gives false (the round-5 list).
+ */
+export function sideFeeKeyLaunchlabSlot(ctx: Pick<PairCurveContext, "connection" | "cluster" | "burnReceiptsProgramId" | "verifiedBuild">): Promise<boolean> {
+  return registerFeeKeyLaunchlabSlotOnChain({ accountBytes: async (a) => (await ctx.connection.getAccountInfo(new PublicKey(a), "confirmed"))?.data ?? null }, ctx.burnReceiptsProgramId.toBase58(), ctx.cluster, (b) => new PublicKey(b).toBase58(), ctx.verifiedBuild === undefined ? {} : { vb: ctx.verifiedBuild });
 }
 
 /** pair_curve's 30-day LP-lock fallback (lp-lock blind review L-2): LP_LOCK_FALLBACK_SECS after the graduation decision. */
@@ -284,6 +299,8 @@ export interface PairCurveContext {
   programId?: PublicKey;
   allowMainnet?: boolean;
   computeUnits?: number;
+  /** The verified-build record the register_fee_key account list is decided against (B-17); omitted = config/burnticker/verified-build.json. */
+  verifiedBuild?: VerifiedBuild | null;
 }
 
 /** The RPC's genesis must match `cluster`; mainnet only with allowMainnet. */
@@ -360,7 +377,7 @@ export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAdd
       if (p.pools[action.side].equals(PublicKey.default) || p.lp_locked[action.side] !== BigInt(0) || lockedNow[action.side]) continue;
       ixs = [burnLpIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, programId: ctx.programId })];
     }
-    if (action.kind === "fee_key") ixs = [registerSideFeeKeyIx({ payer: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
+    if (action.kind === "fee_key") ixs = [registerSideFeeKeyIx({ payer: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId, launchlabPoolSlot: await sideFeeKeyLaunchlabSlot(ctx) })];
     if (action.kind === "register") ixs = [registerSideIx({ registrar: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
     if (action.kind === "claim") ixs = [claimDeveloperFeeIx({ caller: cranker.publicKey, pairAddress, pair: p, programId: ctx.programId })];
     if (action.kind === "seed") ixs = seedObservationIxs({ cluster: ctx.cluster, payer: cranker.publicKey, pairAddress, pair: p, side: action.side, programId: ctx.programId });

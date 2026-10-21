@@ -218,3 +218,7 @@ export const SEED_CARRIED_PACE = Buffer.from("carried_pace", "utf8");
 /** Round-5 review R5-8: crank_carried's budget refills at one per-crank cap (2 % of the pool's WSOL reserve) per this many seconds, up to
  *  one cap; a piece above the budget, or a second piece in the same second, is refused (CarriedTooSoon). math.ts carriedBudget*. */
 export const CARRIED_BUDGET_WINDOW_SECS = 600;
+
+/** The LaunchLab pool's status byte (SDK LaunchpadPool "status", the program's LL_POOL_STATUS; LL_POOL_PLATFORM_ID is above) and its migrated value. */
+export const LL_POOL_STATUS = 17;
+export const LL_POOL_STATUS_MIGRATED = 2;

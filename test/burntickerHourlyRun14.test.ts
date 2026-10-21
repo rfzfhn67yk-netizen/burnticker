@@ -189,8 +189,9 @@ describe("HB-155: /v1/trust never serves a body older than its headers allow", (
   });
   test("the v1 handler reads its own memo and sends those headers", () => {
     const v1 = read("src/lib/burnticker/api/v1.ts");
-    assert.match(v1, /const memo = rpc \? await v1TrustSwr\.get\("v1", "1", build\) : null;/);
-    assert.match(v1, /const headers = memo \? v1TrustHeaders\(memo\) : undefined;/);
+    // HB-211 (ninth pass): through serveV1Trust, which reads the same memo within a 12 s deadline and sends v1TrustHeaders
+    assert.match(v1, /const served = await serveV1Trust\(v1TrustSwr, build, v1TrustLastGood\(p\)\);/);
+    assert.match(v1, /headers = served\.headers;/);
     assert.match(v1, /\}\), headers\);\n\}\nconst withHeaders = /);
   });
 });

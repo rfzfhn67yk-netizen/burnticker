@@ -340,8 +340,9 @@ writes `last-restore-drill.json` beside `last-pull.json`. Drills so far: 2026-10
 that set and was added to the pull the same day) and 2026-10-21 02:07Z (all four databases, 0 s, 26 coins, 3 receipts, 18 readings at
 schema 3; secrets bundle decrypts, 3 files). Run it after any change to the backup set and at least weekly. A timed rebuild of a whole
 host from these copies has not been done: it needs a scratch server (the research box was deleted on 10-06), and the owner decides when to
-provision one. The backup passphrase lives in the Mac keychain item the pull script reads; the owner keeps a second copy offline
-(a written copy in a place only the owner knows); without it no off-box secrets bundle opens.
+provision one. The backup passphrase lives in the Mac keychain item the pull script reads; the owner keeps a second copy in a notes app that
+syncs across the owner's devices (confirmed 2026-10-21); without it no off-box secrets bundle opens. That note shares an account
+with the off-box copies, so a copy outside that account would be stronger.
 A backup is also what an auditor runs `scripts/burnticker-audit.mts` against (`BURNTICKER_DB=<copy> BURNTICKER_PUBLISH_DIR=/tmp/x`).
 
 ### Where the backups are, and a restore from scratch

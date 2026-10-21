@@ -181,9 +181,10 @@ async function feeLedgerInner(p: Pick<Platform, "cluster" | "publishDir">, o: { 
 }
 
 /** Per network, per program: the deployed bytes recorded in verified-build.json (the operator page's program rows; audit 4 BT-02). */
-export function deploymentsOf(root = process.cwd()): Record<Cluster, Record<string, { readAt: string; matchesBuild: boolean } | null>> {
-  const vb = loadVerifiedBuild(root), out: Record<Cluster, Record<string, { readAt: string; matchesBuild: boolean } | null>> = { devnet: {}, mainnet: {} };
-  for (const p of vb.programs) for (const c of ["devnet", "mainnet"] as Cluster[]) { const d = p.deployed?.[c]; out[c][p.library] = d ? { readAt: d.readAt, matchesBuild: d.matchesBuild } : null; }
+export function deploymentsOf(root = process.cwd()): Record<Cluster, Record<string, { readAt: string; matchesBuild: boolean; pendingUpgrade?: boolean } | null>> {
+  const vb = loadVerifiedBuild(root), out: Record<Cluster, Record<string, { readAt: string; matchesBuild: boolean; pendingUpgrade?: boolean } | null>> = { devnet: {}, mainnet: {} };
+  // B-17 (2026-10-21, additive): pendingUpgrade true when a newer build's upgrade has not been deployed on that network
+  for (const p of vb.programs) for (const c of ["devnet", "mainnet"] as Cluster[]) { const d = p.deployed?.[c]; out[c][p.library] = d ? { readAt: d.readAt, matchesBuild: d.matchesBuild, ...(d.pendingUpgrade ? { pendingUpgrade: true } : {}) } : null; }
   return out;
 }
 

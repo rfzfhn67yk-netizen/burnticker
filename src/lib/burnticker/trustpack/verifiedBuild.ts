@@ -11,7 +11,13 @@ import crypto from "node:crypto";
 export const VERIFIED_BUILD_FILE = path.join("config", "burnticker", "verified-build.json");
 export type BuildVariant = "mainnet" | "devnet";
 export interface ProgramBuild { features: string[]; bytes: number; hash: string }
-export interface Deployed { hash: string; programData: string; upgradeAuthority: string; readAt: string; matchesBuild: boolean; /** the slot the deployed bytes were written at (recorded from round 5) */ slot?: number; /** the read-back's record: stored per program since round 5 (2026-10-16); else filled by the checklist from DEPLOY_EVIDENCE */ evidence?: string }
+export interface Deployed { hash: string; programData: string; upgradeAuthority: string; readAt: string; matchesBuild: boolean; /** the slot the deployed bytes were written at (recorded from round 5) */ slot?: number; /** the read-back's record: stored per program since round 5 (2026-10-16); else filled by the checklist from DEPLOY_EVIDENCE */ evidence?: string;
+  /**
+   * B-17 (2026-10-21): set when the record's build is newer than the bytes on this network and its upgrade has not been deployed yet
+   * (matchesBuild is then false, and `hash` is the earlier build that runs now). A plain note for the operator; the pages say it with
+   * pendingUpgradeSentence. Absent when the bytes match, or when they differ for any other reason (then the pages say they DO NOT match).
+   */
+  pendingUpgrade?: string }
 /**
  * Where each network's deployed-bytes read is recorded (audit R05, 2026-10-11): the check page's build table names it per row. The
  * table's own `deployed.<network>.evidence` wins (round 5, 2026-10-16: burn_receipts reads back in mainnet-round5, pair_curve still in
@@ -32,6 +38,8 @@ export interface VerifiedBuild {
     round?: number;
     /** The source commit of THIS program's builds when it differs from the table's (pair_curve: round 4's 29f6f5de). */
     sourceCommit?: string;
+    /** B-17 (2026-10-21): the source commit of the bytes on chain while an upgrade to this build is pending (burn_receipts: round 5's 089024ff). */
+    deployedSourceCommit?: string;
     builds: Record<BuildVariant, ProgramBuild>; deployed: { devnet: Deployed | null; mainnet: Deployed | null };
   }[];
 }
@@ -51,6 +59,8 @@ export function verifiedBuildProblems(t: Partial<VerifiedBuild> | null): string[
   if (JSON.stringify(libs) !== JSON.stringify(["burn_receipts", "pair_curve"])) out.push("programs must be burn_receipts and pair_curve");
   for (const p of t.programs ?? []) {
     if (p.sourceCommit !== undefined && !/^[0-9a-f]{40}$/.test(String(p.sourceCommit))) out.push(`${p.library}.sourceCommit must be a 40-hex git commit`);
+    if (p.deployedSourceCommit !== undefined && !/^[0-9a-f]{40}$/.test(String(p.deployedSourceCommit))) out.push(`${p.library}.deployedSourceCommit must be a 40-hex git commit`);
+    if (p.deployedSourceCommit !== undefined && !(["mainnet", "devnet"] as BuildVariant[]).some((v) => p.deployed?.[v]?.pendingUpgrade)) out.push(`${p.library}.deployedSourceCommit is set only while an upgrade is pending`);
     if (p.round !== undefined && !(Number.isInteger(p.round) && p.round >= 1)) out.push(`${p.library}.round must be a positive integer`);
   }
   for (const p of t.programs ?? []) for (const v of ["mainnet", "devnet"] as BuildVariant[]) {
@@ -59,8 +69,23 @@ export function verifiedBuildProblems(t: Partial<VerifiedBuild> | null): string[
     if (b && v === "devnet" && !b.features.includes("devnet")) out.push(`${p.library}.devnet must build with --features devnet`);
     const d = p.deployed?.[v];
     if (d && d.matchesBuild !== (d.hash === b?.hash)) out.push(`${p.library}.deployed.${v}.matchesBuild disagrees with the hashes`);
+    if (d && d.pendingUpgrade !== undefined && (d.matchesBuild || typeof d.pendingUpgrade !== "string" || !d.pendingUpgrade.trim())) out.push(`${p.library}.deployed.${v}.pendingUpgrade is a note, set only while the deployed bytes differ from the build`);
   }
   return out;
+}
+
+/**
+ * B-17 (2026-10-21): what the pages say for a network whose record holds a newer build than the bytes deployed there (deployed.pendingUpgrade).
+ * It never calls the newer build verified: that waits until the bytes read back from chain equal it.
+ */
+export function pendingUpgradeSentence(network: BuildVariant, buildHash: string, deployedHash: string): string {
+  return `This repository has a newer build (${buildHash}) whose upgrade has not been deployed on ${network}, so the bytes there are still the earlier build (${deployedHash}). The newer build is not verified on chain until the bytes read back from ${network} match it.`;
+}
+
+/** The deployed-bytes state of one network, for the pages: same as the build, a newer build not deployed yet, or different. */
+export type DeployedBytesState = "matches" | "upgrade-pending" | "differs";
+export function deployedBytesState(d: Pick<Deployed, "matchesBuild" | "pendingUpgrade">): DeployedBytesState {
+  return d.matchesBuild ? "matches" : d.pendingUpgrade ? "upgrade-pending" : "differs";
 }
 
 export function loadVerifiedBuild(root = process.cwd()): VerifiedBuild {

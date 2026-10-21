@@ -12,7 +12,7 @@ type Status = {
   design: string[];
   releaseRequirements: { id: string; text: string; status: "open" | "done" }[];
 };
-type VerifiedBuild = { programs: { library: string; round?: number; builds: { mainnet: { status: string; sha256: string } }; deployed: { mainnet: { slot: number; hash: string; readAt: string } } }[] };
+type VerifiedBuild = { programs: { library: string; round?: number; builds: { mainnet: { status: string; sha256: string } }; deployed: { mainnet: { slot: number; hash: string; readAt: string; pendingUpgrade?: string } } }[] };
 
 const st = JSON.parse(readFileSync("config/burnticker/current-status.json", "utf8")) as Status;
 const vb = JSON.parse(readFileSync("config/burnticker/verified-build.json", "utf8")) as VerifiedBuild;
@@ -32,7 +32,9 @@ test("the phase line, the program entries and the verified-build table name the 
     assert.equal(p.mainnetDeploy.slot, v!.deployed.mainnet.slot, `${p.name}: mainnet slot`);
     // review of the release identity: the on-chain hash is the read-back executable hash; the .so file's sha256 is named as a build fact
     assert.equal(p.mainnetDeploy.onChainExecutableHash, v!.deployed.mainnet.hash, `${p.name}: the on-chain executable hash is the read-back's`);
-    assert.equal(p.mainnetDeploy.buildFileSha256, v!.builds.mainnet.sha256, `${p.name}: the build file's sha256`);
+    // B-17 (2026-10-21): while an upgrade is pending the table's build is the newer one; the deployed bytes are round 5's build file
+    if (v!.deployed.mainnet.pendingUpgrade) assert.equal(p.mainnetDeploy.buildFileSha256, "cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290", `${p.name}: the deployed round-5 build file's sha256`);
+    else assert.equal(p.mainnetDeploy.buildFileSha256, v!.builds.mainnet.sha256, `${p.name}: the build file's sha256`);
     assert.ok(!("onChainSha256" in p.mainnetDeploy), `${p.name}: no field calls a file hash an on-chain hash`);
     assert.ok(p.mainnetDeploy.date <= v!.deployed.mainnet.readAt, `${p.name}: deployed (${p.mainnetDeploy.date}) on or before the verified-build read-back (${v!.deployed.mainnet.readAt})`);
   }

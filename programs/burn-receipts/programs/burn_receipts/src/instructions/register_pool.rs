@@ -14,9 +14,12 @@ use crate::state::TokenConfig;
 ///   POOL_POLICY_CREATOR_IS_FEE_PDA (0): records the pool. It must be LaunchLab's own migration pool for this token:
 ///     * the token's LaunchLab pool (["pool", mint, WSOL] under LaunchLab, owner-checked) records the fee PDA as creator and CPMM as
 ///       its migration target;
-///     * the CPMM pool is the deterministic PDA [POOL_SEED, cpConfigId, token_0, token_1] of the AmmConfig that the token's LaunchLab
-///       PLATFORM names for migrations (`cpConfigId`, SDK layout.ts PlatformConfig) — a random-keypair pool or a pool on any other
-///       AmmConfig is refused;
+///     * the CPMM pool is the deterministic PDA [POOL_SEED, amm_config, token_0, token_1] of its own AmmConfig — a random-keypair
+///       pool is refused. The AmmConfig is the one pinned at initialize_token, OR (B-17 / HB-167) any other one once the token's
+///       LaunchLab pool reads migrated: LaunchLab's migrate_to_cpswap takes the platform's cpConfigId AT MIGRATION (the LaunchLab
+///       PoolState stores no CPMM config), so a platform tier change between a coin's creation and its graduation moves the coin
+///       to the new tier. A pool PDA owned by CPMM proves the AmmConfig is a genuine CPMM AmmConfig (CPMM's initialize checks it);
+///       LaunchLab provenance is the migrated status plus the Fee Key record below (locker = LaunchLab's vault authority);
 ///     * its `pool_creator` is the fee PDA;
 ///     * ≥ 90 % of its LP is burned or held by Raydium's LP lock, as LaunchLab's migration leaves it (platform/creator lock NFTs +
 ///       burn: SDK instrument.ts createPlatformConfig `migrateCpLockNftScale {platformScale, creatorScale, burnScale}`).
@@ -63,6 +66,9 @@ pub struct LaunchLabProof<'a, 'info> {
     pub pool: &'a AccountInfo<'info>,
     pub platform: Pubkey,
     pub cp_config: Pubkey,
+    /// B-17 / HB-167 (register_pool only): also accept the pool's own AmmConfig when it differs from `cp_config`, provided the
+    /// LaunchLab pool reads migrated. replace_pool keeps the strict match on the platform's current cpConfigId.
+    pub accept_migrated_config: bool,
 }
 
 /// Every provenance check shared by register_pool and replace_pool (and the fixed-pool check without `launchlab`).
@@ -92,8 +98,12 @@ pub fn verify_pool_provenance(
         require!(lp.migrate_type == LL_MIGRATE_TYPE_CPMM, BurnError::NotMigrationPool);
         require_keys_eq!(lp.creator, *fee_vault, BurnError::PoolCreatorMismatch);
         require_keys_eq!(lp.platform_id, ll.platform, BurnError::InvalidLaunchLabAccount);
-        require_keys_eq!(pool.amm_config, ll.cp_config, BurnError::NotMigrationPool);
-        require_keys_eq!(*pool_acc.key, cpmm::pool_pda(&ll.cp_config, &NATIVE_MINT, mint), BurnError::NotMigrationPool);
+        if pool.amm_config != ll.cp_config {
+            // B-17 / HB-167: LaunchLab migrated under a different AmmConfig than the pinned one (the platform's cpConfigId changed
+            // before graduation). Only after LaunchLab marked the curve migrated; the PDA check below ties the pool to that config.
+            require!(ll.accept_migrated_config && lp.status == LL_POOL_STATUS_MIGRATED, BurnError::NotMigrationPool);
+        }
+        require_keys_eq!(*pool_acc.key, cpmm::pool_pda(&pool.amm_config, &NATIVE_MINT, mint), BurnError::NotMigrationPool);
     }
     Ok((pool, locked_bps))
 }
@@ -112,15 +122,17 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
                 return err!(BurnError::LaunchLabAccountsRequired);
             };
             let llp = ll_pool.to_account_info();
-            // Review-3 M-3: the platform and its cpConfigId as PINNED at initialize_token — a later platform-admin change of
-            // cpConfigId (updateCpConfigId) cannot strand or redirect the registration.
+            // Review-3 M-3: the platform as PINNED at initialize_token. The cpConfigId pin alone used to be required, but LaunchLab
+            // migrates under the platform's cpConfigId at migration time, so a later updateCpConfigId stranded every earlier coin
+            // (seventh-pass B-17 / HB-167). The pinned AmmConfig is accepted outright; another one only once LaunchLab reads migrated,
+            // and the Fee Key record (locker = LaunchLab's vault authority, Fee Key at FEE_KEYS) must name this very pool.
             verify_pool_provenance(
                 &a.pool_state.to_account_info(),
                 &mint,
                 &fee,
                 &a.lp_mint,
                 &a.lp_lock_vault.to_account_info(),
-                Some(LaunchLabProof { pool: &llp, platform: c.ll_platform, cp_config: c.ll_cp_config }),
+                Some(LaunchLabProof { pool: &llp, platform: c.ll_platform, cp_config: c.ll_cp_config, accept_migrated_config: true }),
             )?;
             // RL-3: the LP fees must reach the burn — the Fee Key of the migration's lock position is recorded (register_fee_key,
             // which identifies the position by LaunchLab's locker and requires FEE_KEYS to hold its NFT) for this very pool.

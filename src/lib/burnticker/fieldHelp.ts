@@ -14,7 +14,7 @@ export const FIELD_HELP = {
   "browse-filter": { what: "A word to narrow this category's sources.", does: "It filters the cards below. It does not change any rule." },
   "outcome-filter": { what: "A name or a word to narrow this event's outcomes.", does: "It filters the list of outcomes below. It does not change any rule." },
   "league-search": { what: "Part of a league's name, such as MLB, Premier League, WNBA or college.", does: "It filters the league list. Picking a league loads its teams." },
-  "league-pick": { what: "The league your team plays in.", does: "It sets where the schedule comes from and which teams you can pick. The schedule comes from the league's official feed, or from TheSportsDB with its licensed key." },
+  "league-pick": { what: "The league your team plays in.", does: "It sets where the schedule comes from and which teams you can pick. The schedule comes from MLB's or the NHL's own feed, or for the other leagues from TheSportsDB with its licensed key." },
   "team-search": { what: "A team's name, city or short name.", does: "It filters the team list. Picking a team sets the coin's team. The team is pinned by its id, so a rename keeps working." },
   "team-pick": { what: "The team the coin follows.", does: "Every game this team plays in the chosen window can burn. Nothing else does." },
   "game-search": { what: "A team name, to find its next games.", does: "It filters the next games. Picking one creates two coins on that game, one for each team." },

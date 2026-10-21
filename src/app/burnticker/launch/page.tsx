@@ -102,10 +102,10 @@ import { NOT_OFFERED } from "@/lib/burnticker/exampleTickets";
 import { noProjectionLine } from "@/lib/burnticker/guidedLaunch";
 import { PARTIES_PAIR_SENTENCE, isPartySubject } from "@/lib/burnticker/pairFundsFlow";
 import { SETTLED_DEADLINE_LINE, SETTLED_END_LABEL, settledAsShown, settledPairBody, settledPairFields, settledWhichCoinLine, partyPairNames, type SettledPick } from "./settledPair";
-import { HAZARD_FOLLOW, HAZARD_KINDS, HAZARD_MEASURES, hazardControls, hazardHelpId, hazardPatternOptions, hazardPatternSwitch, hazardSeriesFor, hazardSwap, isHazardSeries, hazardAlternateName, type HazardKindId } from "@/lib/burnticker/hazards";
+import { HAZARD_FOLLOW, HAZARD_KINDS, HAZARD_MEASURES, hazardControls, hazardHelpId, hazardPatternOptions, hazardPatternSwitch, hazardSeriesFor, hazardSwap, isHazardSeries, type HazardKindId } from "@/lib/burnticker/hazards";
 import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, meetingsStandingLine, rivalrySeriesLabel, subjectKeysMatch, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsEndLine, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, seriesOptionState, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, activeUnit, eventForSide, followForRule, keptProfileLine, keptProfileParts, KEPT_PROFILE_FRESH, KEPT_PROFILE_REUSE, IMAGE_RIGHTS_REQUIRED, oneGameShare, PAIR_COST_EXCLUSIONS, mappingWarning, partyMarketWarning, pickDescribesRule, renderWarnings, reviewBlockers, shareOfBudgetLine, rivalrySeasonLine, stablePatternOptions, teamLine, triggerText, whichAnswer, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, pairDiagramLabel, namesRemadeLine, namesChangeOf, type NamesChange, budgetCopy, oneShotSentences, candidateFacts, candidatesPairRule, endSentences, gamePairFacts, gamePairRule, matchupFacts, pairIdentityProblems, pairNames, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
-import { autoTickerSwaps, freePairTickers, hazardSwapLine, pairTickerSwapLine, teamWordName, type TickerGuard } from "@/lib/burnticker/tickerSwap";
+import { autoTickerSwaps, freePairTickers, hazardSwapLine, pairedSwapName, pairTickerSwapLine, type TickerGuard } from "@/lib/burnticker/tickerSwap";
 import { PICKER_PAGE, pickerPage } from "@/lib/burnticker/polySearch";
 import { draftKeys, keyRotatingFetch, PREPARE_KEY_STORE, type KeyStore } from "@/lib/burnticker/prepareKey";
 import { PLAN_EXPIRED_SENTENCE, planExpired, planExpiresInMs } from "@/lib/burnticker/planAge";
@@ -1000,9 +1000,16 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const sideNow = ruleSide(ruleShown);
   /** HB-117: the generated name, or the hazard alternative's name when the review swapped the generated ticker for that alternative. */
   // HB-170: a team coin's ticker swapped for a team-word ticker ($PHINFLFANS) takes the word into its name too ("Eagles Fans 2026 Wins")
-  // LA7-4 / reviewer D: the server's review now pairs its suggested ticker with its suggested name; that pair is used first
+  // LA7-4 / reviewer D: the server's review pairs its suggested ticker with its suggested name. HB-207 (ninth pass, B-21): the page works
+  // the swapped ticker's name out first with the server's own helper (pairedSwapName: the hazard word's name, the team word for a team
+  // coin), and a review name is taken only when it is not the very name being replaced (the live coin's "Eagles 2026 Wins")
   const reviewNames = useRef<Record<string, string>>({});
-  const hazardNameFor = (t: CoinText): string => { const to = t.ticker ? genFix[t.ticker.toUpperCase()] : undefined; return (to && (reviewNames.current[to.toUpperCase()] ?? hazardAlternateName(ruleShown?.series, { ticker: t.ticker, name: t.name }, to) ?? teamWordName(t.name, t.ticker, to))) || t.name; };
+  const hazardNameFor = (t: CoinText): string => {
+    const to = t.ticker ? genFix[t.ticker.toUpperCase()] : undefined;
+    if (!to) return t.name;
+    const rn = reviewNames.current[to.toUpperCase()];
+    return pairedSwapName(ruleShown, { ticker: t.ticker, name: t.name }, to) ?? (rn && rn !== t.name ? rn : null) ?? t.name;
+  };
   /** HB-117: the swap the name step announces for a single coin's generated ticker (and name), or null. */
   const singleSwap = !pairOn && tickerAuto && text?.ticker && genFix[text.ticker.toUpperCase()] && genFix[text.ticker.toUpperCase()] === ticker.toUpperCase()
     ? { from: text.ticker, to: ticker, name: nameAuto && name !== text.name ? name : null } : null;
@@ -1126,7 +1133,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             : meetingsOn
             // website-21: a rivalry series pair is reviewed as the linked pair it launches as (side B rides in `pair`; never a two-coin `companion`)
             ? { pair: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, links: creatorLinks({ x: profileB.x, telegram: profileB.telegram, website: profileB.website }).links } }
-            : { companion: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, rule: ruleB } }) : {}) } : null);
+            : { companion: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, rule: ruleB, descCtx: ctxB } }) : {}) } : null);
   }, [step, reviewKey, gate.kind]);   // eslint-disable-line react-hooks/exhaustive-deps -- the body belongs to the render its key was built in; A-2 and F03: the wallet and its proof are in the key
   const shownReview = reviewFor(reviewSlot, reviewKey);
   const reviewCurrent = reviewMatchesDraft(reviewSlot, reviewKey);
@@ -1738,7 +1745,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                 </button>
                 );
               })}</div>
-              <p className="text-xs text-neutral-500"><span className="bt-chip bt-chip-feed mr-1">on-chain payout · league&apos;s official feed</span>Each game settles on {SPORTS_PROVENANCE.settlement}. {sportsConfirmationLine()} Next games come from {SPORTS_PROVENANCE.schedule}. {VISITOR_TIME_LINE}</p>
+              <p className="text-xs text-neutral-500"><span className="bt-chip bt-chip-feed mr-1">on-chain payout · licensed final score</span>Each game settles on {SPORTS_PROVENANCE.settlement}. {sportsConfirmationLine()} Next games come from {SPORTS_PROVENANCE.schedule}. {VISITOR_TIME_LINE}</p>
             </div>
           )}
           {navRow(null)}

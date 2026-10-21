@@ -73,9 +73,19 @@ describe("burnReceipts client — LP lock and fee split (LAUNCHPAD-PATH §35)", 
     assert.ok(at("locked_liquidity").pubkey.equals(lockedLiquidityPda("devnet", nft)));
     assert.ok(at("fee_vault").pubkey.equals(feePda(PID, MINT)) && at("cranker").isSigner);
     assert.equal(ix.data.length, 8, "lp-lock blind review L-3: no amount argument — the program always collects everything accrued");
-    const r = registerFeeKeyIx({ programId: PID, payer: Keypair.generate().publicKey, mint: MINT, pool: pool.pool, feeNftMint: nft, cluster: "devnet", lpMint: pool.lpMint });
+    const r = registerFeeKeyIx({ programId: PID, payer: Keypair.generate().publicKey, mint: MINT, pool: pool.pool, feeNftMint: nft, cluster: "devnet", lpMint: pool.lpMint, launchlabPoolSlot: true });
     assert.ok(r.keys[order("register_fee_key").indexOf("fee_key")].pubkey.equals(feeKeyRecordPda(PID, MINT)));
     assert.ok(r.keys[order("register_fee_key").indexOf("lp_lock_vault")].pubkey.equals(lpLockVault("devnet", pool.lpMint)), "r2 RL-2: majority of the lock account");
+    assert.ok(r.keys[order("register_fee_key").indexOf("launchlab_pool")].pubkey.equals(launchlabPoolPda(LAUNCHLAB_PROGRAM_ID.devnet, MINT)), "eighth-pass CH8-4 gap 1: the coin's LaunchLab pool (migrated check off the pinned tier)");
+    // B-17: the default is the round-5 list the deployed program reads: no launchlab_pool slot, system_program right after lp_lock_vault
+    const r5 = registerFeeKeyIx({ programId: PID, payer: Keypair.generate().publicKey, mint: MINT, pool: pool.pool, feeNftMint: nft, cluster: "devnet", lpMint: pool.lpMint });
+    const o = order("register_fee_key");
+    assert.equal(r5.keys.length, r.keys.length - 1);
+    assert.ok(r5.keys[o.indexOf("lp_lock_vault") + 1].pubkey.equals(SystemProgram.programId), "round 5: system_program follows lp_lock_vault");
+    assert.ok(r5.keys[o.indexOf("lp_lock_vault") + 2].pubkey.equals(eventAuthority(PID)) && r5.keys[o.indexOf("lp_lock_vault") + 3].pubkey.equals(PID));
+    assert.ok(!r5.keys.some((k) => k.pubkey.equals(launchlabPoolPda(LAUNCHLAB_PROGRAM_ID.devnet, MINT))));
+    assert.ok(r.keys[o.indexOf("system_program")].pubkey.equals(SystemProgram.programId) && r.keys[o.indexOf("event_authority")].pubkey.equals(eventAuthority(PID)));
+    assert.deepEqual(r5.data, r.data);
   });
 });
 

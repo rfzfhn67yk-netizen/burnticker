@@ -107,7 +107,7 @@ export const EXAMPLE_TICKETS: readonly ExampleTicket[] = [
   {
     ticker: "SIXERS", name: "Philadelphia 76ers, one season", type: "team",
     rule: "Each 76ers win burns a share; retires when the season ends.",
-    sourceLine: "NBA official feed", source: { kind: "catalogue", id: "nba.cdn" },
+    sourceLine: "TheSportsDB final score", source: { kind: "catalogue", id: "nba.cdn" },
     opens: { href: "/burnticker/launch?league=nba&team=PHI", line: "Opens the team path on the NBA with the 76ers picked. Choose this season there." },
     notOffered: null,
     affiliation: "This example is not affiliated with the Philadelphia 76ers or the NBA.",
@@ -115,7 +115,7 @@ export const EXAMPLE_TICKETS: readonly ExampleTicket[] = [
   {
     ticker: "PHIvBOS", name: "76ers vs Celtics, one season", type: "matchup",
     rule: "Each game between them, the loser's pool burns the winner.",
-    sourceLine: "NBA official feed", source: { kind: "catalogue", id: "nba.cdn" },
+    sourceLine: "TheSportsDB final score", source: { kind: "catalogue", id: "nba.cdn" },
     opens: { href: "/burnticker/launch?template=matchup", line: "Opens the pair path. Pick the NBA, the 76ers and the Celtics, then every game between them. A link cannot fill in the two teams yet." },
     notOffered: null,
     affiliation: "This example is not affiliated with the Philadelphia 76ers, the Boston Celtics or the NBA.",

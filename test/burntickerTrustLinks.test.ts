@@ -28,7 +28,7 @@ test("BT-11 / A8: the whitepaper opens with its version notice (the dated curren
   const html = read("site/burnticker/whitepaper.html");
   const notice = html.indexOf('<aside class="notice" role="note">'), firstSection = html.indexOf("<section");
   assert.ok(notice > 0 && (firstSection < 0 || notice < firstSection), "the notice comes before the first section");
-  assert.match(html, /Current specification, dated 2026-10-12\./); assert.match(html, /status is as of 2026-10-10 and is kept for the record/); assert.match(html, /href="https:\/\/burnticker\.com\/burnticker\/trust"/);
+  assert.match(html, /Current specification, publish 111, 2026-10-21, public commit/); assert.match(html, /status is as of 2026-10-10 and is kept for the record/); assert.match(html, /href="https:\/\/burnticker\.com\/burnticker\/trust"/);
 });
 
 test("BT-12: the summary line names key control and notice (owner holds two of three keys; time lock 0 = no advance notice)", () => {
@@ -41,7 +41,8 @@ test("BT-12: the summary line names key control and notice (owner holds two of t
 });
 
 test("BT-18: categorical claims carry their actor and scope", () => {
-  assert.match(USE_OF_FEES, /operator and its wallets never trade any coin/); assert.match(USE_OF_FEES, /program-run burn-pool purchases/);
+  // ninth pass B-26: not "any coin" (the disclosed wallet owns a trading bot that trades other memecoins)
+  assert.match(USE_OF_FEES, /The operator's wallets never trade a coin launched here, apart from the two disclosed tests on the test-coins page\./); assert.match(USE_OF_FEES, /program-run burn-pool purchases/);
   assert.doesNotMatch(USE_OF_FEES, /The platform never buys back any coin/);
   // private review 10: specific, not absolute: no withdrawal to a personal wallet, the end-sink forward, reading signers, the upgrade authority
   assert.match(CHECK_COPY.powersIntro, /cannot withdraw a burn pool to a personal wallet/); assert.match(CHECK_COPY.powersIntro, /upgrade authority can replace the program/);

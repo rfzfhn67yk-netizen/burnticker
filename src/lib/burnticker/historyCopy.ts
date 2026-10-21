@@ -1,3 +1,5 @@
+import { disclosedTestsClause, operatorTradeReasons } from "@/lib/burnticker/operatorCreators";
+
 /**
  * THE WORDS OF THE HISTORY PAGES (legitimacy pass, website-16, 2026-10-12): the changelog, the incident log, the bounty, the press kit,
  * the verify-it-yourself walk-through and the "History and reviews" page that gathers them. Plain English, US spelling, no price talk,
@@ -124,8 +126,9 @@ export const PRESS_COPY = {
   boilerplate: "Burnticker is a launchpad for Solana memecoins that burn on real-world results. Each coin locks one rule that names a public result, such as a game score or the national debt figure. When the result is published, fees from trading the coin buy back some of it from its pool, and everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it against the source.",
   notTitle: "What Burnticker is not",
   not: [
-    // sixth pass B-16e / HB-59: the one disclosed test purchase is named where "never trades" is said
-    "Burnticker is not an exchange, and it never takes an order. Apart from one disclosed test purchase of $REHEARSAL (0.1 SOL, when it was created), it never trades a coin.",
+    // sixth pass B-16e / HB-59: the one disclosed test purchase is named where "never trades" is said; ninth pass B-26 / HS-95: and the
+    // operator's own wallet's $SEAWIN test, with the owner's reason (transparency.json operatorTrades)
+    `Burnticker is not an exchange, and it never takes an order. Apart from ${disclosedTestsClause()}, it never trades a coin.${operatorTradeReasons() ? ` ${operatorTradeReasons()}` : ""}`,
     "Burnticker coins are not an investment. They pay nothing and promise nothing.",
     "Burnticker is not affiliated with any team, league, candidate, agency or market whose results its coins read.",
   ],

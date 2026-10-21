@@ -13,7 +13,7 @@ import { compileUnsigned } from "@/lib/burnticker/transactions";
 import { feedSourceReading, kalshiSourceReading, polymarketSourceReading, verifyReceiptCore, type ChainReading, type SourceReading } from "@/lib/burnticker/verify";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { attesterRows, buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
-import { v1TrustHeaders, v1TrustSwr } from "@/lib/burnticker/trustServe";
+import { serveV1Trust, trustLastGoodStore, v1TrustSwr, type TrustLastGoodStore } from "@/lib/burnticker/trustServe";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
 import type { TokenRow, TokenStatus } from "@/lib/burnticker/registry";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
@@ -283,10 +283,16 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
     const upgradeTimeLockSecs = await currentStatusLive().then((s) => s.upgradeAuthority.find((u) => u.cluster === "mainnet")?.timeLockSecs ?? null).catch(() => null);
     return buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster, upgradeTimeLockSecs, skipFeeLedger: true });
   };
-  // HB-155: the API answer's own memo, bounded by its 60 s header (trustServe.ts v1TrustSwr); its headers count the body's age
-  const memo = rpc ? await v1TrustSwr.get("v1", "1", build) : null;
-  const page = (memo?.value as Awaited<ReturnType<typeof build>> | undefined) ?? await build();
-  const headers = memo ? v1TrustHeaders(memo) : undefined;
+  // HB-155: the API answer's own memo, bounded by its 60 s header (trustServe.ts v1TrustSwr); its headers count the body's age.
+  // HB-211: a read waits at most V1_TRUST_DEADLINE_MS (12 s) for a build; past it the last good copy goes out marked stale, and only
+  // with no copy at all a short 503 with retry-after (never the proxy's 20 s page)
+  let page: Awaited<ReturnType<typeof build>>, headers: Record<string, string> | undefined;
+  if (rpc) {
+    const served = await serveV1Trust(v1TrustSwr, build, v1TrustLastGood(p));
+    if (!served) return withHeaders(fail(503, "The trust details are being read. Please try again in a few seconds.", { code: "trust-loading", retryAfterSec: 5 }), { "retry-after": "5", "cache-control": "no-store" });
+    page = served.value as Awaited<ReturnType<typeof build>>;
+    headers = served.headers;
+  } else page = await build();
   const liveBps = page.livePlatform.found ? Object.fromEntries(page.livePlatform.comparison.map((r) => [r.field, { designed: r.designed, live: r.live, matches: r.matches }])) : null;
   return withHeaders(ok({
     generatedAt: page.generatedAt, cluster: p.cluster, powers: page.powers, operator: page.operator,
@@ -298,6 +304,14 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
   }), headers);
 }
 const withHeaders = (r: ApiResult, headers: Record<string, string> | undefined): ApiResult => (headers ? { ...r, headers: { ...(r.headers ?? {}), ...headers } } : r);
+/** HB-211: the /v1/trust last good copy, in memory and in this platform's registry (one store per registry). */
+const lastGoodStores = new WeakMap<object, TrustLastGoodStore>();
+function v1TrustLastGood(p: Platform): TrustLastGoodStore {
+  const reg = p.registry as unknown as object;
+  let s = lastGoodStores.get(reg);
+  if (!s) { s = trustLastGoodStore(p.registry); lastGoodStores.set(reg, s); }
+  return s;
+}
 
 export const v1OpenApi = (): ApiResult => ok(buildOpenApi());
 

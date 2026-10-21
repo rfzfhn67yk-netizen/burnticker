@@ -301,7 +301,7 @@ export function unitPhrase(unit: { label: string } | null | undefined, valueLabe
  * THE BUDGET ROW, FROM THE RULE (ChatGPT launch-intent audit item 6): its label and one sentence on what a reading spends, from the
  * program's own arithmetic (burnMath.ts simulateCrank, burnReceipts/math.ts buybackSpend): units compound, each one spending its share of
  * what the one before left, so 3 units at 2 % spend about 5.9 %; one burn run buys with at most 2 % of the trading pool's SOL, and the
- * rest waits for the next run. A fade-side reading counts one unit at most. A one-shot spends its share once.
+ * rest is burned in smaller pieces, usually finished within a day (HB-205; a pinned-token coin's rest waits for its next run). A fade-side reading counts one unit at most. A one-shot spends its share once.
  */
 /**
  * HS-43 (hourly run 8): a whole-pool one-time burn said with its per-burn slice, so "100%" and "at most 2%" do not read as a contradiction.
@@ -338,7 +338,7 @@ export function budgetCopy(rule: BurnRule, share: number, unit: string | null, o
     const dirOf = rule.scalar?.direction;
     return { label: "Share of the burn pool per reading", line: `Each reading where the number ${dirOf === "up" ? "does not rise" : dirOf === "down" ? "does not fall" : "is the same as the previous reading"} spends ${p} of the burn pool ${act}. A reading counts once at most, however flat it was.`, math: null };
   }
-  const cap = sym ? `One burn run spends at most 2% of the SOL in ${sym}'s pinned Raydium pool, and the rest waits for the next run.` : "One burn run buys with at most 2% of the SOL in the coin's Raydium pool, and the rest waits for the next run.";
+  const cap = sym ? `One burn run spends at most 2% of the SOL in ${sym}'s pinned Raydium pool, and the rest waits for the next run.` : "One burn run buys with at most 2% of the SOL in the coin's Raydium pool; the rest is burned in smaller pieces and is usually finished within a day.";
   if (rule.kind === "scalar" && unit) {
     const three = Math.round((1 - (1 - share) ** 3) * 10000) / 100;
     const u = unit.replace(/^1\s+(?=\D)/, "");

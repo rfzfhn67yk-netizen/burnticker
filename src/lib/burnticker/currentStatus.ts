@@ -7,6 +7,7 @@ import { jsonRpc, type Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
 import { rpcUrlFor } from "@/lib/burnticker/networks";
 import { CURRENT_STATUS_FILE, readStatusFile } from "@/lib/burnticker/deficitPrelaunch";
 import type { AuthoritySource } from "@/lib/burnticker/currentStatusText";
+import { pendingUpgradeSentence } from "@/lib/burnticker/trustpack/verifiedBuild";
 export { upgradeAuthorityText, upgradeDelaySummary, type AuthoritySource } from "@/lib/burnticker/currentStatusText";
 
 /**
@@ -103,7 +104,7 @@ interface StatusFileFull {
   design: string[]; historical: { label: string; path: string }[];
   deficit: { firstBurnPath: { doc: string; line: string } };
 }
-interface VerifiedBuild { kind: string; programs: { library: string; programId: string; builds: Record<Cluster, { hash: string }>; deployed: Record<Cluster, { hash: string; matchesBuild: boolean; upgradeAuthority: string; readAt?: string } | null> }[] }
+interface VerifiedBuild { kind: string; programs: { library: string; programId: string; builds: Record<Cluster, { hash: string }>; deployed: Record<Cluster, { hash: string; matchesBuild: boolean; upgradeAuthority: string; readAt?: string; pendingUpgrade?: string } | null> }[] }
 interface OperatorFile { clusters: Record<Cluster, { squads: { vault: string; multisig: string; threshold: string } }> }
 
 export interface CurrentStatus {
@@ -111,7 +112,7 @@ export interface CurrentStatus {
   phase: { label: string; line: string };
   host: { cluster: string; programIdWired: boolean; creatorLaunchesOpen: boolean; /** website-12: a launch started on this site can be signed (siteLaunchState.canSign) */ canSign: boolean; line: string };
   networks: { cluster: Cluster; role: string; deployment: string; since: string | null }[];
-  programs: { name: string; programId: string; version: string; note: string; verifiedBuild: string; devnet: { deployed: boolean; matchesBuild: boolean | null; upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt: string | null; recordedUpgradeAuthority: string | null }; mainnet: { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string; matchesBuild?: boolean | null } }[];
+  programs: { name: string; programId: string; version: string; note: string; verifiedBuild: string; devnet: { deployed: boolean; matchesBuild: boolean | null; upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt: string | null; recordedUpgradeAuthority: string | null; /** B-17 (2026-10-21): pendingUpgradeSentence when a newer build is not deployed on devnet yet */ upgradePending?: string }; mainnet: { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string; matchesBuild?: boolean | null; upgradePending?: string } }[];
   upgradeAuthority: { cluster: Cluster; vault: string; multisig: string; threshold: string; members: number | null; timeLockSecs: number | null; timeLockSource: "chain" | "unavailable"; plannedTimeLockSecs: number; plannedFrom: string | null; why: string; line: string }[];
   attesters: StatusFileFull["attesters"]; settlement: StatusFileFull["settlement"]; reviews: StatusFileFull["reviews"];
   releaseRequirements: StatusFileFull["releaseRequirements"]; design: string[]; historical: StatusFileFull["historical"];
@@ -135,14 +136,16 @@ export function devnetAuthority(live: ProgramRead | undefined, recorded: string 
  * successful chain read; "not deployed" only when the read succeeded (or no read was made and the record says so); "unknown" when a
  * read was made and failed before it reached this program.
  */
-export function mainnetDeployment(recorded: boolean, facts: ChainFacts | undefined, programId: string, build?: { matchesBuild: boolean; upgradeAuthority: string; readAt?: string } | null): { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string; matchesBuild?: boolean | null } {
+export function mainnetDeployment(recorded: boolean, facts: ChainFacts | undefined, programId: string, build?: { matchesBuild: boolean; upgradeAuthority: string; readAt?: string; hash?: string; pendingUpgrade?: string } | null, buildHash?: string): { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string; matchesBuild?: boolean | null; upgradePending?: string } {
   const live = facts?.programs[programId];
   if (recorded || live?.deployed) {
     // I-1 (audit 2026-10-19): the mainnet read-back is stated too (bytes and authority), never only devnet's
     const auth = live?.deployed && live.authorityRead === "decoded" ? (live.upgradeAuthority ? `Its mainnet upgrade authority is ${live.upgradeAuthority}, read from chain.` : "It has no mainnet upgrade authority, read from chain.")
       : build ? `Its mainnet upgrade authority is ${build.upgradeAuthority}, as recorded in verified-build.json${build.readAt ? ` on ${build.readAt}` : ""}.` : "";
-    const bytes = build ? (build.matchesBuild ? " Its bytes there match this repository's recorded build." : " Its bytes there DO NOT match the recorded build.") : "";
-    return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: `It is deployed on mainnet.${bytes}${auth ? ` ${auth}` : ""}`, ...(build ? { matchesBuild: build.matchesBuild } : {}) };
+    // B-17 (2026-10-21): a newer build whose upgrade has not been deployed is said as that, and the newer build is not called verified
+    const pending = build && !build.matchesBuild && build.pendingUpgrade && build.hash && buildHash ? pendingUpgradeSentence("mainnet", buildHash, build.hash) : null;
+    const bytes = build ? (build.matchesBuild ? " Its bytes there match this repository's recorded build." : pending ? ` ${pending}` : " Its bytes there DO NOT match the recorded build.") : "";
+    return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: `It is deployed on mainnet.${bytes}${auth ? ` ${auth}` : ""}`, ...(build ? { matchesBuild: build.matchesBuild } : {}), ...(pending ? { upgradePending: pending } : {}) };
   }
   if (live) return { deployed: false, source: "chain", line: "It is not deployed on mainnet yet." };
   if (facts) return { deployed: null, source: "unavailable", line: "Its mainnet deployment is unknown because the chain read failed." };
@@ -167,6 +170,15 @@ const NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven
 /** A count at the start of a sentence: "Eight", or digits past twelve. */
 export const countWord = (n: number): string => NUMBER_WORDS[n] ?? String(n);
 
+/**
+ * B-17 (2026-10-21): the pending-upgrade sentences (devnet's, then mainnet's, each with its own hashes) for a program deployed on both
+ * networks, after the match sentence.
+ */
+function pendingBoth(p: { devnet: { upgradePending?: string }; mainnet: { upgradePending?: string } }): string {
+  const s = [p.devnet.upgradePending, p.mainnet.upgradePending].filter((x): x is string => !!x);
+  return s.length ? ` ${s.join(" ")}` : "";
+}
+
 export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<string, string | undefined>>; chain: Partial<Record<Cluster, ChainFacts>>; now?: number; registrySnapshot?: { date: string; pinned: boolean; line: string | null } | null }): CurrentStatus {
   const root = i.root ?? process.cwd(), env = i.env ?? process.env, now = i.now ?? Date.now();
   const st = readStatusFile(root) as unknown as StatusFileFull;
@@ -184,8 +196,8 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     const devReadFailed = !!i.chain.devnet && !liveDev;
     return {
       name: p.library, programId: p.programId, version: meta.version, note: meta.note, verifiedBuild: vb.kind,
-      devnet: { deployed: liveDev ? liveDev.deployed : !!dev, matchesBuild: dev ? dev.matchesBuild : null, ...devnetAuthority(liveDev, dev?.upgradeAuthority, devReadFailed), recordedAt: dev?.readAt ?? null, recordedUpgradeAuthority: dev?.upgradeAuthority ?? null },
-      mainnet: mainnetDeployment(!!p.deployed.mainnet, i.chain.mainnet, p.programId, p.deployed.mainnet),
+      devnet: { deployed: liveDev ? liveDev.deployed : !!dev, matchesBuild: dev ? dev.matchesBuild : null, ...devnetAuthority(liveDev, dev?.upgradeAuthority, devReadFailed), recordedAt: dev?.readAt ?? null, recordedUpgradeAuthority: dev?.upgradeAuthority ?? null, ...(dev && !dev.matchesBuild && dev.pendingUpgrade ? { upgradePending: pendingUpgradeSentence("devnet", p.builds.devnet.hash, dev.hash) } : {}) },
+      mainnet: mainnetDeployment(!!p.deployed.mainnet, i.chain.mainnet, p.programId, p.deployed.mainnet, p.builds.mainnet.hash),
     };
   });
   const upgradeAuthority = (["mainnet", "devnet"] as Cluster[]).map((c) => {
@@ -207,8 +219,8 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     st.deficit.firstBurnPath.line,
     // Claude audit 2 item 2c: one sentence per program when both networks agree it is deployed
     ...programs.map((p) => (p.devnet.deployed && p.mainnet.deployed === true
-      ? `${cap(plainName(p.name))} (${p.name}) is deployed on devnet and on mainnet.${p.devnet.matchesBuild && p.mainnet.matchesBuild ? " On both networks its bytes match this repository's recorded build." : p.mainnet.matchesBuild ? " On mainnet its bytes match this repository's recorded build." : p.devnet.matchesBuild ? " On devnet its bytes match this repository's build." : ""}`
-      : `${cap(plainName(p.name))} (${p.name}) is ${p.devnet.deployed ? `deployed on devnet${p.devnet.matchesBuild ? ", and its bytes match this repository's build" : ""}` : "not on devnet"}. ${p.mainnet.line}`)),
+      ? `${cap(plainName(p.name))} (${p.name}) is deployed on devnet and on mainnet.${p.devnet.matchesBuild && p.mainnet.matchesBuild ? " On both networks its bytes match this repository's recorded build." : p.mainnet.matchesBuild ? " On mainnet its bytes match this repository's recorded build." : p.devnet.matchesBuild ? " On devnet its bytes match this repository's build." : ""}${pendingBoth(p)}`
+      : `${cap(plainName(p.name))} (${p.name}) is ${p.devnet.deployed ? `deployed on devnet${p.devnet.matchesBuild ? ", and its bytes match this repository's build" : ""}` : "not on devnet"}.${p.devnet.upgradePending ? ` ${p.devnet.upgradePending}` : ""} ${p.mainnet.line}`)),
     st.attesters.line,
     // audit 4 BT-12: who can authorise an upgrade and how much notice there is, in the top-level summary (keys vs controllers)
     `The 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock, an approved upgrade executes at once, with no advance notice." : ""}`,

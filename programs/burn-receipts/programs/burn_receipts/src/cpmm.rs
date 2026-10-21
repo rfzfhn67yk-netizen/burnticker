@@ -340,6 +340,8 @@ pub fn locked_lp_bps(lp_supply: u64, lp_mint_supply: u64, locked: u64) -> u128 {
 /// on, and whether it migrates to CPMM. Owner- and address-checked (only LaunchLab can create an account at its own PDA).
 #[derive(Debug, Clone, Copy)]
 pub struct LaunchLabPoolView {
+    /// LL_POOL_STATUS_MIGRATED once LaunchLab's migrate_to_cpswap has run.
+    pub status: u8,
     pub migrate_type: u8,
     pub platform_id: Pubkey,
     pub mint_a: Pubkey,
@@ -356,6 +358,7 @@ impl LaunchLabPoolView {
         let d = acc.try_borrow_data()?;
         require!(d.len() >= LL_POOL_MIN_LEN, BurnError::InvalidLaunchLabAccount);
         Ok(LaunchLabPoolView {
+            status: d[LL_POOL_STATUS],
             migrate_type: d[LL_POOL_MIGRATE_TYPE],
             platform_id: pk(&d, LL_POOL_PLATFORM_ID),
             mint_a: pk(&d, LL_POOL_MINT_A),

@@ -26,7 +26,7 @@ import { sideLaunched } from "@/lib/burnticker/publicPairs";
  *   retired                    { count, coins[] { ticker, retiredAt, lastSweepDate, sweepThresholdLamports } }
  *   windDowns                  { pending (count), coins[] { ticker, mode drain|winddown, reason, endedAt, daysDone, windDownDays, receiptsPending } }
  *   snapshot                   { date, sha256, arweaveTxId, url, rowCounts, capturedAt } | null — the latest pinned registry snapshot
- *   programs[]                 { name, programId, cluster, deployedHash, buildHash, verified "matches"|"differs"|"not-deployed", buildKind, readAt }
+ *   programs[]                 { name, programId, cluster, deployedHash, buildHash, verified "matches"|"upgrade-pending"|"differs"|"not-deployed" (upgrade-pending: a newer build is recorded and its upgrade is not deployed, B-17 2026-10-21), buildKind, readAt }
  *   fence                      { held[] { ticker, why }, adopted (count this cycle) } — the foreign-reading fence (readingFence.ts)
  *   pairs[]                    (since 2026-10-11, winner takes the burn) { pairId, a, b (tickers), winnerTakesBurn, forwards (count),
  *                                lastForward { recordDate, from, to, lamports, signature, at } | null, unpaired (reason; after unlink_pair) }
@@ -36,7 +36,7 @@ export const OPS_STATUS_SCHEMA = "burnticker.ops-status/v1";
 export const OPS_STATUS_DIR = "status";
 export const OPS_STATUS_FILE = "status.json";
 
-export interface ProgramStatus { name: string; programId: string; cluster: "devnet" | "mainnet"; deployedHash: string | null; buildHash: string | null; verified: "matches" | "differs" | "not-deployed"; buildKind: string; readAt: string | null }
+export interface ProgramStatus { name: string; programId: string; cluster: "devnet" | "mainnet"; deployedHash: string | null; buildHash: string | null; verified: "matches" | "upgrade-pending" | "differs" | "not-deployed"; buildKind: string; readAt: string | null }
 export interface OpsStatusJson {
   schema: typeof OPS_STATUS_SCHEMA; generatedAt: string;
   keeper: {
@@ -62,7 +62,7 @@ export function programStatuses(vb: VerifiedBuild | null, cluster: string): Prog
   const c: "devnet" | "mainnet" = cluster === "mainnet" ? "mainnet" : "devnet";
   return vb.programs.map((p) => {
     const dep = p.deployed?.[c] ?? null, build = p.builds?.[c] ?? null;
-    return { name: p.library, programId: p.programId, cluster: c, deployedHash: dep?.hash ?? null, buildHash: build?.hash ?? null, verified: !dep ? "not-deployed" : dep.matchesBuild && dep.hash === build?.hash ? "matches" : "differs", buildKind: vb.kind, readAt: dep?.readAt ?? null };
+    return { name: p.library, programId: p.programId, cluster: c, deployedHash: dep?.hash ?? null, buildHash: build?.hash ?? null, verified: !dep ? "not-deployed" : dep.matchesBuild && dep.hash === build?.hash ? "matches" : dep.pendingUpgrade ? "upgrade-pending" : "differs", buildKind: vb.kind, readAt: dep?.readAt ?? null };
   });
 }
 

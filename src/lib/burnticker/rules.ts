@@ -668,7 +668,7 @@ export function rulesFromText(text: string): LockedRule {
 }
 
 const pctOf = (f: number) => `${(f * 100).toFixed(f * 100 % 1 === 0 ? 0 : 2)}%`;
-const mapText = (m: BurnMapping, what: string) => (m.fractionOfPool !== undefined ? (m.fractionOfPool >= 1 ? `spends the whole fee pool (100%) buying the token at market ${what} — across daily cranks, each at most 2% of the pool's reserve, until nothing is carried — and burns everything received` : `spends ${pctOf(m.fractionOfPool)} of the fee pool buying the token at market and burns everything received ${what}`) : `burns ${m.tokens!.toLocaleString("en-US")} tokens from the vault ${what}`);
+const mapText = (m: BurnMapping, what: string) => (m.fractionOfPool !== undefined ? (m.fractionOfPool >= 1 ? `spends the whole fee pool (100%) buying the token at market ${what} — one burn at most 2% of the pool's reserve, the rest in smaller pieces, usually finished within a day — and burns everything received` : `spends ${pctOf(m.fractionOfPool)} of the fee pool buying the token at market and burns everything received ${what}`) : `burns ${m.tokens!.toLocaleString("en-US")} tokens from the vault ${what}`);
 
 /** The rule in one plain paragraph for the review step and the token page. States the rule; says nothing about price. */
 /** A Polymarket selector in words ("every binary Polymarket market tagged nfl of type moneyline whose event slug matches nfl-*den-*"). */

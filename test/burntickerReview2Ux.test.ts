@@ -101,7 +101,20 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
     const p = programFacts({}, ROOT);
     assert.match(p.hostWiring, /^This site is not connected to a burn program\./);
     const br = p.chain.find((c) => c.library === "burn_receipts")!;
-    assert.match(br.devnet, /^deployed/); assert.match(br.mainnet, /^deployed \(read 2026-10-16, and the bytes match the recorded build; upgrade authority 8zsH/);   // the round-5 read-back (third prelaunch audit, 2026-10-16)
+    // B-17 (2026-10-21): the table's burn_receipts build is the B-17 build, not deployed yet; the chain still holds round 5 (read 2026-10-16)
+    assert.match(br.devnet, /^deployed \(read 2026-10-16, and the bytes are the earlier build because the upgrade to this repository's newer build has not been deployed\)$/);
+    assert.match(br.mainnet, /^deployed \(read 2026-10-16, and the bytes are the earlier build because the upgrade to this repository's newer build has not been deployed; upgrade authority 8zsH/);
+    assert.doesNotMatch(`${br.devnet} ${br.mainnet}`, /DO NOT match|bytes match the recorded build/);
+    assert.deepEqual(br.pending, [
+      "This repository has a newer build (34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee) whose upgrade has not been deployed on devnet, so the bytes there are still the earlier build (74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c). The newer build is not verified on chain until the bytes read back from devnet match it.",
+      "This repository has a newer build (b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b) whose upgrade has not been deployed on mainnet, so the bytes there are still the earlier build (152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821). The newer build is not verified on chain until the bytes read back from mainnet match it.",
+    ]);
+    for (const t of [br.devnet, br.mainnet, ...br.pending!]) assert.deepEqual(lint(t), [], t);
+    const pc = p.chain.find((c) => c.library === "pair_curve")!;
+    assert.match(pc.mainnet, /^deployed \(read 2026-10-12, and the bytes match the recorded build; upgrade authority 8zsH/); assert.equal(pc.pending, undefined);
+    // the page's build hash is the bytes on chain (round 5), never the B-17 build's
+    assert.equal(p.buildHash, "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c"); // devnet by default: programHashFact reads deployed.devnet.hash
+    assert.match(read("src/app/burnticker/trust/page.tsx"), /c\.pending\?\.map\(\(t\) => <span key=\{t\} className="block text-amber-300" data-upgrade-pending>/);
     assert.match(p.compiled, /^The burn program's address, compiled into the program and its interface file \(IDL\), is AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM\.$/);
     assert.ok(!p.verify.some((v) => /not deployed yet/.test(v)), "no 'not deployed' line on a host that is merely not wired");
     const page = read("src/app/burnticker/trust/page.tsx");

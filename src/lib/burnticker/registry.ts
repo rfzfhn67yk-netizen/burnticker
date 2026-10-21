@@ -559,11 +559,13 @@ export class Registry {
   private tickerHolder(ticker: string, creator: string, now: number, callerProven = true): "token" | "reservation" | null {
     // B-19: an unproven draft (no launch transaction, no send recorded in the last SENT_HOLD_MS: HB-187) never holds against a proven
     // caller, and holds against an unproven one for UNPROVEN_HOLD_MS only
+    // HB-208 (ninth pass): the send windows run from the draft's FIRST reported send (MIN(sent_at)), so re-signing the never-broadcast
+    // create with a fresh blockhash every few minutes adds rows but never restarts the hold
     if (this.db.prepare(`SELECT 1 FROM tokens t WHERE t.ticker=? AND t.status <> 'expired' AND t.creator <> ? AND (
         t.status <> 'draft' OR t.launch_tx IS NOT NULL
         OR NOT EXISTS (SELECT 1 FROM status k WHERE k.key = ? || t.mint)
-        OR EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = t.mint AND s.sent_at > ?)
-        OR (EXISTS (SELECT 1 FROM status u WHERE u.key = ? || t.mint) AND EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = t.mint AND s.sent_at > ?))
+        OR (SELECT MIN(s.sent_at) FROM draft_sends s WHERE s.mint = t.mint) > ?
+        OR (EXISTS (SELECT 1 FROM status u WHERE u.key = ? || t.mint) AND (SELECT MIN(s.sent_at) FROM draft_sends s WHERE s.mint = t.mint) > ?)
         OR (? = 0 AND t.created_at > ?)) LIMIT 1`).get(ticker, creator, UNPROVEN_DRAFT_PREFIX, now - SENT_HOLD_MS, SEND_UNREAD_PREFIX, now - SENT_HOLD_FAIL_MAX_MS, callerProven ? 1 : 0, now - UNPROVEN_HOLD_MS)) return "token";
     if (this.db.prepare("SELECT 1 FROM ticker_reservations WHERE ticker=? AND creator <> ? AND expires_at > ?").get(ticker, creator, now)) return "reservation";
     return null;
@@ -638,11 +640,12 @@ export class Registry {
   /**
    * B-19: the mints of unproven drafts with no create send recorded in the last SENT_HOLD_MS (those hold only briefly; see
    * UNPROVEN_HOLD_MS). HB-187: a draft whose chain read failed (SEND_UNREAD_PREFIX) is left out while its send is under SENT_HOLD_FAIL_MAX_MS old.
+   * HB-208: both windows run from the draft's first reported send (MIN(sent_at)), as tickerHolder reads them.
    */
   unprovenDraftMints(now = Date.now()): Set<string> {
     const rows = this.db.prepare(`SELECT substr(k.key, ?) AS mint FROM status k WHERE k.key >= ? AND k.key < ?
-        AND NOT EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = substr(k.key, ?) AND s.sent_at > ?)
-        AND NOT (EXISTS (SELECT 1 FROM status u WHERE u.key = ? || substr(k.key, ?)) AND EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = substr(k.key, ?) AND s.sent_at > ?))`)
+        AND NOT COALESCE((SELECT MIN(s.sent_at) FROM draft_sends s WHERE s.mint = substr(k.key, ?)) > ?, 0)
+        AND NOT (EXISTS (SELECT 1 FROM status u WHERE u.key = ? || substr(k.key, ?)) AND COALESCE((SELECT MIN(s.sent_at) FROM draft_sends s WHERE s.mint = substr(k.key, ?)) > ?, 0))`)
       .all(UNPROVEN_DRAFT_PREFIX.length + 1, UNPROVEN_DRAFT_PREFIX, `${UNPROVEN_DRAFT_PREFIX}\uffff`, UNPROVEN_DRAFT_PREFIX.length + 1, now - SENT_HOLD_MS, SEND_UNREAD_PREFIX, UNPROVEN_DRAFT_PREFIX.length + 1, UNPROVEN_DRAFT_PREFIX.length + 1, now - SENT_HOLD_FAIL_MAX_MS) as { mint: string }[];
     return new Set(rows.map((r) => String(r.mint)));
   }

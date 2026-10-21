@@ -21,6 +21,7 @@ its content unchanged (it held no entries).
 - Changed since: the deploy starts a newly added timer only after the release switch, and the alert for an older build on a newer registry says that it is expected while a deploy switches back.
 - Cause of the two restarts: the server kept up to 1,000 whole answers from Polymarket's search in memory, about 1.9 MB each, and searches in the launch wizard filled the process's 2 GB limit. No burn, reading or receipt was affected. Fix in the same release: the answer caches are limited by size, the server's memory limit is set on purpose, and a restart like this now reaches the operator's phone. Evidence: the web unit's journal on the host (two stops with status 6, ABRT) and logs/burnticker-web.log ("JavaScript heap out of memory").
 - Postmortem: due under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).
+- 2026-10-21: postmortem published, [2026-10-19-web-out-of-memory.md](2026-10-19-web-out-of-memory.md).
 
 ## 2026-10-19 — the every-minute static publish failed for 16 minutes after publish 99
 
@@ -30,6 +31,7 @@ its content unchanged (it held no entries).
 - Until publish 100, the served release held that one hand-placed file outside its release record (the record's public tree did not list it). Publish 100 carries the file in its own tree, so the host again matches its record.
 - Gate rule from now on: a deploy-time script may only run files that are in the public tree. A test reads scripts/ops/deploy-sites.sh, collects every scripts/ path it runs, and fails unless each one is in config/public-repo.allowlist.
 - Postmortem: due under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).
+- 2026-10-21: postmortem published, [2026-10-19-static-publish-failed.md](2026-10-19-static-publish-failed.md).
 
 ## 2026-10-20 — a five-minute web outage, short stalls on publishes 102 and 103, and unknown coin pages answering 500
 
@@ -40,6 +42,7 @@ its content unchanged (it held no entries).
 - No burn, reading or receipt was affected.
 - Cause of the stalls: page builds waited on chain reads that had no time limit, and the launch review redid slow team-name matching for every game it read, which held the web process. Changes: 63c34cf8 and 2b5c7536 put time limits on those reads and log slow requests, 9aa893e6 stops page data being rebuilt when nobody asked for it, and cafdd563 (publish 105, live 07:52 Denver) removes the repeated matching. The 500s came from a new route for unknown coin pages and were fixed by 68c7e450 in publish 104.
 - Postmortem: due under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).
+- 2026-10-21: postmortem published, [2026-10-20-web-stalls-and-500s.md](2026-10-20-web-stalls-and-500s.md).
 
 ## 2026-10-19 — the daily registry snapshot was not pinned
 
@@ -47,6 +50,7 @@ its content unchanged (it held no entries).
 - No burn, reading or receipt was affected. Each coin's own receipts and pinned descriptions are separate and were not touched.
 - An alert (bt-snapshot-failed) was raised to the operator at the time. This entry was added on 2026-10-20 after the eighth review found it missing.
 - Postmortem: due under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).
+- 2026-10-21: postmortem published, [2026-10-19-registry-snapshot-not-pinned.md](2026-10-19-registry-snapshot-not-pinned.md).
 
 ## 2026-10-20 — correction to the entry "a five-minute web outage, short stalls on publishes 102 and 103, and unknown coin pages answering 500"
 

@@ -241,7 +241,8 @@ fn create_token(ctx: Context<InitializeToken>, args: InitializeTokenArgs) -> Res
         let Some(p) = ctx.accounts.launchlab_platform.as_ref() else {
             return err!(BurnError::LaunchLabPlatformRequired);
         };
-        // lp-lock blind review RL-3: only the operator's own platform (compiled per cluster; its admin under the Squads vault) — a
+        // lp-lock blind review RL-3: only the operator's own platform (compiled per cluster; on mainnet its admin is the operator's
+        // platform-admin key EMht6aGc…, a plain wallet, not the Squads vault — seventh-pass CH7-2) — a
         // creator-controlled platform's admin could redirect the LP-lock Fee Key, and with it the LP fees, before migration.
         require!(BURNTICKER_PLATFORM != Pubkey::default(), BurnError::PlatformNotPinned);
         require_keys_eq!(p.key(), BURNTICKER_PLATFORM, BurnError::PlatformNotAllowed);

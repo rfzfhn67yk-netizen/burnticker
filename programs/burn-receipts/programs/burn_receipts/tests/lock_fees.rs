@@ -97,6 +97,10 @@ fn ix_lock(launcher: &Pubkey, nft_owner: &Pubkey, nft: &Pubkey, p: &Pool, lp: u6
 }
 
 fn ix_register_fee_key(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft: &Pubkey) -> Instruction {
+    ix_register_fee_key_ll(payer, mint, pool, nft, Some(launchlab_pool_pda(mint)))
+}
+
+fn ix_register_fee_key_ll(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft: &Pubkey, launchlab_pool: Option<Pubkey>) -> Instruction {
     Instruction::new_with_bytes(
         burn_receipts::ID,
         &burn_receipts::instruction::RegisterFeeKey {}.data(),
@@ -110,6 +114,7 @@ fn ix_register_fee_key(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft: &Pubke
             fee_nft_account: get_associated_token_address(&fee_keys(), nft),
             locked_liquidity: locked_liquidity(nft),
             lp_lock_vault: get_associated_token_address(&LOCK_CPMM_AUTHORITY, &cpmm::lp_mint_of(pool)),
+            launchlab_pool,
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: event_authority(),
             program: burn_receipts::ID,
@@ -173,6 +178,13 @@ struct Coin {
 /// (percent of the launcher's LP per position) by LaunchLab's vault authority (the locker @128), each Fee Key minted to `owner`
 /// (default FEE_KEYS). Not yet registered: `register` runs register_fee_key → register_pool.
 fn coin(env: &mut Env, shares: &[u64], owner: Option<Pubkey>) -> Coin {
+    coin_on(env, shares, owner, 0, true)
+}
+
+/// `coin`, with the migration pool on AmmConfig `amm_index` (initialize_token still pins the platform's AmmConfig 0; a non-zero
+/// index plays B-17 / HB-167: the platform's cpConfigId changed before graduation and LaunchLab migrated under the new one) and,
+/// when `launchlab_locker` is false, the LP locked by the launcher itself (a squatter's lock, not LaunchLab's migration).
+fn coin_on(env: &mut Env, shares: &[u64], owner: Option<Pubkey>, amm_index: u16, launchlab_locker: bool) -> Coin {
     let (mint_kp, creator, att) = (Keypair::new(), Keypair::new(), Keypair::new());
     let payer = env.payer.pubkey();
     env.ok(&[ix_initialize(&payer, &creator.pubkey(), &mint_kp.pubkey(), init_args(buyback_rule(), vec![att.pubkey()], 1))], &[&creator, &mint_kp]);
@@ -190,7 +202,15 @@ fn coin(env: &mut Env, shares: &[u64], owner: Option<Pubkey>) -> Coin {
             k
         }
     };
-    let amm = cpmm::amm_config_0();
+    let amm = if amm_index == 0 {
+        cpmm::amm_config_0()
+    } else {
+        let id = cpmm::pda(&[b"amm_config", &amm_index.to_be_bytes()]);
+        if env.svm.get_account(&id).is_none() {
+            cpmm::create_amm_config(env, amm_index);
+        }
+        id
+    };
     let lt = env.create_ata(&launcher.pubkey(), &mint);
     let me = env.payer.insecure_clone();
     env.mint_to(&mint, &me, &lt, 800_000_000 * TOKEN);
@@ -204,7 +224,9 @@ fn coin(env: &mut Env, shares: &[u64], owner: Option<Pubkey>) -> Coin {
         left -= lp;
         let nft = Keypair::new();
         env.ok(&[ix_lock(&launcher.pubkey(), &owner, &nft.pubkey(), &pool, lp)], &[&launcher, &nft]);
-        cpmm::set_locker(env, &locked_liquidity(&nft.pubkey()), &cpmm::launchlab_vault_auth());
+        if launchlab_locker {
+            cpmm::set_locker(env, &locked_liquidity(&nft.pubkey()), &cpmm::launchlab_vault_auth());
+        }
         nfts.push(nft.pubkey());
     }
     cpmm::launchlab_migrated_without_fee_key(env, &mint, &pool);
@@ -407,6 +429,86 @@ fn register_pool_requires_the_recorded_fee_key_for_policy_0() {
     assert!(!env.config(&config_pda(&c.mint)).pool_verified);
     register(&mut env, &c, 0);
     assert!(env.config(&config_pda(&c.mint)).pool_verified);
+}
+
+/// Sets the token's LaunchLab pool status byte (LL_POOL_STATUS: 0 curve, 1 waiting, 2 migrated).
+fn set_launchlab_status(env: &mut Env, mint: &Pubkey, status: u8) {
+    let ll = launchlab_pool_pda(mint);
+    let mut a = env.svm.get_account(&ll).expect("launchlab pool");
+    a.data[LL_POOL_STATUS] = status;
+    env.svm.set_account(ll, a).unwrap();
+}
+
+/// Seventh-pass B-17 / HB-167: the coin pinned AmmConfig 0 at initialize_token; the platform admin then switched cpConfigId to
+/// AmmConfig 1 and LaunchLab's migrate_to_cpswap (which reads the platform's cpConfigId at migration) built the pool on AmmConfig 1.
+/// Before the fix register_fee_key and register_pool refused it for ever (NotMigrationPool). Now: once LaunchLab reads migrated, the
+/// pool registers on its own AmmConfig, the pin stays on record, and the LP fees reach the burn.
+#[test]
+fn b17_a_coin_registers_after_launchlab_migrates_it_under_the_platforms_new_tier() {
+    let mut env = lock_env();
+    let payer = env.payer.insecure_clone();
+    let c = coin_on(&mut env, &[100], None, 1, true);
+    let amm1 = cpmm::pda(&[b"amm_config", &1u16.to_be_bytes()]);
+    assert_eq!(c.pool.amm_config, amm1);
+    assert_eq!(env.config(&config_pda(&c.mint)).ll_cp_config, cpmm::amm_config_0(), "pinned the platform's tier at initialize_token");
+    // register_fee_key and register_pool: refused while LaunchLab does not read migrated (the pinned-tier path never needed the
+    // status; eighth-pass CH8-4 gap 1 put the same check on register_fee_key) …
+    for status in [0u8, 1] {
+        set_launchlab_status(&mut env, &c.mint, status);
+        expect_anchor_err(env.send(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]), "NotMigrationPool");
+    }
+    // … and accepted once it does: the pool PDA of its own AmmConfig, LaunchLab's vault authority as locker.
+    set_launchlab_status(&mut env, &c.mint, LL_POOL_STATUS_MIGRATED);
+    env.ok(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]);
+    set_launchlab_status(&mut env, &c.mint, 1);
+    expect_anchor_err(env.send(&[ix_register_pool(&payer.pubkey(), &c.mint, &c.pool.pool)], &[]), "NotMigrationPool");
+    set_launchlab_status(&mut env, &c.mint, LL_POOL_STATUS_MIGRATED);
+    env.ok(&[ix_register_pool(&payer.pubkey(), &c.mint, &c.pool.pool)], &[]);
+    let cfg = env.config(&config_pda(&c.mint));
+    assert!(cfg.pool_verified && cfg.cpmm_pool == c.pool.pool);
+    assert_eq!(cfg.ll_cp_config, cpmm::amm_config_0(), "the pin is a record; it is not rewritten");
+    // The LP fees reach the burn on the new tier's pool.
+    trade(&mut env, &c, 3);
+    let k = Keypair::new();
+    env.fund(&k.pubkey(), SOL);
+    let fee0 = env.lamports(&fee_pda(&c.mint));
+    let meta = env.ok(&[ix_claim(&k.pubkey(), &c.mint, &c.pool, &c.nfts[0], &TREASURY)], &[&k]);
+    let ev: LockFeesClaimed = event(&meta);
+    assert!(ev.to_burn_pool > 0 && env.lamports(&fee_pda(&c.mint)) - fee0 == ev.to_burn_pool);
+}
+
+/// Eighth-pass CH8-4 gap 1: on another AmmConfig than the pin, register_fee_key needs the coin's LaunchLab pool (LaunchLabAccountsRequired
+/// without it) and refuses a LaunchLab pool account that is not the coin's PDA; on the pinned AmmConfig nothing changes (no status, no
+/// LaunchLab account needed).
+#[test]
+fn b17_register_fee_key_on_another_tier_needs_launchlabs_migrated_status() {
+    let mut env = lock_env();
+    let payer = env.payer.insecure_clone();
+    let c = coin_on(&mut env, &[100], None, 1, true);
+    set_launchlab_status(&mut env, &c.mint, LL_POOL_STATUS_MIGRATED);
+    let without = ix_register_fee_key_ll(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0], None);
+    expect_anchor_err(env.send(&[without], &[]), "LaunchLabAccountsRequired");
+    let wrong = ix_register_fee_key_ll(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0], Some(c.pool.pool));
+    expect_anchor_err(env.send(&[wrong], &[]), "InvalidLaunchLabAccount");
+    env.ok(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]);
+    // the pinned tier: status 0 and no LaunchLab account, as before
+    let mut env2 = lock_env();
+    let payer2 = env2.payer.insecure_clone();
+    let p = coin(&mut env2, &[100], None);
+    env2.ok(&[ix_register_fee_key_ll(&payer2.pubkey(), &p.mint, &p.pool.pool, &p.nfts[0], None)], &[]);
+}
+
+/// B-17 bounds: on another AmmConfig than the pin, a pool whose LP the launcher locked itself (not LaunchLab's migration) never gets
+/// a Fee Key record (LockerMismatch), so register_pool refuses it even when the LaunchLab pool reads migrated.
+#[test]
+fn b17_a_squatter_on_another_tier_is_still_refused() {
+    let mut env = lock_env();
+    let payer = env.payer.insecure_clone();
+    let c = coin_on(&mut env, &[100], None, 1, false);
+    set_launchlab_status(&mut env, &c.mint, LL_POOL_STATUS_MIGRATED);
+    expect_anchor_err(env.send(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]), "LockerMismatch");
+    expect_anchor_err(env.send(&[ix_register_pool(&payer.pubkey(), &c.mint, &c.pool.pool)], &[]), "FeeKeyNotRegistered");
+    assert!(!env.config(&config_pda(&c.mint)).pool_verified);
 }
 
 /// LaunchLab platform pins (policy 0): only the compiled BURNTICKER_PLATFORM (RL-3), and it must lock 100 % of the migrated LP with

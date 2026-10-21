@@ -53,7 +53,9 @@ describe("B-24 / HS-72: the operator's own wallet in transparency.json", () => {
 
 describe("B-24 / HS-72: the coin-page sentence comes from the coin's creator", () => {
   test("the operator's wallet gets the sentence; any other creator gets nothing", () => {
-    assert.equal(operatorCreatorLine(OPERATOR), LINE);
+    // ninth pass B-26: with no coin named the sentence says only what is true of every such coin; a coin with no listed trade keeps LINE
+    assert.equal(operatorCreatorLine(OPERATOR), "Created by the operator's own wallet 8sJf…LvGbs during the soft launch. The operator holds none of it.");
+    assert.equal(operatorCreatorLine(OPERATOR, "J45hvg6FYGzDMj3iYS3BJPU2pwqfoZhA7B8isnW4fin8"), LINE);
     assert.equal(operatorCreatorLine("ESyaRxd4UavQpd2KAhjZ3BvGLxeJEtLqR5jPVhpdwqFy"), null);
     assert.equal(operatorCreatorLine(null), null);
     clean(LINE);
