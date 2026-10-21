@@ -530,7 +530,8 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
   return {
     generatedAt: new Date(now).toISOString(), cluster,
     // HS-26 (hourly run 5): the trust page's fee line, the footer's shape, with "(every coin live today)" computed from the registry
-    feeTiersLine: cluster === "mainnet" ? feeTiersLine({ tier14Live: i.tier14Live ?? null }) : null,
+    // ninth pass HS-96: the trust page prints this line too, so the pre-upgrade tier pin is said on the page and not only in the API
+    feeTiersLine: cluster === "mainnet" ? `${feeTiersLine({ tier14Live: i.tier14Live ?? null })}${deployedTierPinLine(root) ? ` ${DEPLOYED_TIER_PIN_LINE}` : ""}` : null,
     operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: feesUseWithReasons(USE_OF_FEES), attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), secondSigner: SECOND_SIGNER_LINE, preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
     powers, operator: operatorPowersSummary(powers),
     livePlatform,
