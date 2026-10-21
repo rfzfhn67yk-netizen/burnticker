@@ -12,6 +12,7 @@ import { decodeLaunchLabPool, readMarket } from "@/lib/burnticker/market";
 import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import { pairCounterpartFrom } from "@/lib/burnticker/tokenPage";
 import { DISPERSAL_STATE_KEY, dispersalLines } from "@/lib/burnticker/dispersalKeeper";
+import { readTwapEmpty } from "@/lib/burnticker/twapEmpty";
 import { DECIMALS, TOTAL_SUPPLY } from "@/lib/burnticker/rules";
 import type { Registry, TokenRow } from "@/lib/burnticker/registry";
 
@@ -318,7 +319,7 @@ export function cachedMarketReader(reader: MarketReader, cache: KeeperReadCache,
 export async function coinChainReads(o: { registry: Registry; program: BurnProgramClient; cluster: string; t: TokenRow; mode: "buyback" | "vault"; marketReader: MarketReader | null; now: number }) {
   const { registry, program, cluster, t } = o;
   return {
-    chain: { cluster, programId: program.programId, supplyRaw: await program.supplyRaw(t.mint), feePdaLamports: await program.feePdaBalanceLamports(t.mint), vaultRaw: o.mode === "vault" ? await program.vaultBalanceRaw(t.mint) : null, program: await programPageBlock(program, t.mint, registry.lastProgramTx(t.mint, "reading"), dispersalLines(registry.getStatus(DISPERSAL_STATE_KEY(t.mint)))) },
+    chain: { cluster, programId: program.programId, supplyRaw: await program.supplyRaw(t.mint), feePdaLamports: await program.feePdaBalanceLamports(t.mint), vaultRaw: o.mode === "vault" ? await program.vaultBalanceRaw(t.mint) : null, program: await programPageBlock(program, t.mint, registry.lastProgramTx(t.mint, "reading"), dispersalLines(registry.getStatus(DISPERSAL_STATE_KEY(t.mint))), readTwapEmpty(registry, t.mint)) },
     pair: await pairCounterpartFrom(registry, (m) => program.supplyRaw(m), t, async (m) => { try { return (await program.port(m).config())?.poolRegistered ?? null; } catch { return null; } }, program.pairForward ? (a, b) => program.pairForward!.port(a, b).links() : undefined),
     // the coin card's curve progress + top holders (read-only, the same RPC); without an RPC status.json says "not read" and the card shows —
     lp: await lpLockBlock(registry, program, cluster, t.mint),

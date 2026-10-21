@@ -111,6 +111,11 @@ export interface ProgramPort {
   /** The registered CPMM pool's WSOL reserve net of owed fees (the per-crank cap and the price move are measured on it), or null. */
   poolSolReserve?(): Promise<bigint | null>;
   /**
+   * The registered CPMM pool's price-history ring (burnReceipts/cpmm.ts ObservationRing), or null when unreadable. Read only when a crank
+   * is deferred with TwapUnavailable: an empty ring means the pool has never traded, which only a swap fixes. Optional.
+   */
+  observationRing?(): Promise<{ newestTs: number; lastUpdate: number; filled: number; empty: boolean } | null>;
+  /**
    * Adapter-specific refusals that also mean "not now" (e.g. the SyncNative-before-crank error the next client treats as retryable),
    * on top of WAIT_REASONS. Optional.
    */

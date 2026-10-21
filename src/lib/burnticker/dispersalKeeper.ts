@@ -1,7 +1,7 @@
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { CARRIED_BUDGET_WINDOW_SECS } from "@/lib/burnReceipts/constants";
 import { carriedBudgetReadySec } from "@/lib/burnReceipts/math";
-import { addReading, behind, debtLine, keepReceipts, markChunk, nextDueAt, reconcile, seedOf, stateFromJson, stateToJson, step, type Debt, type DispersalState } from "@/lib/burnticker/dispersal";
+import { addReading, behind, debtLine, keepReceipts, markChunk, nextDueAt, PROGRAM_CAP_BPS, reconcile, seedOf, stateFromJson, stateToJson, step, type Debt, type DispersalState } from "@/lib/burnticker/dispersal";
 
 /**
  * BURN DISPERSAL — THE KEEPER STEP (owner decision 2026-10-13 night; the pure plan is dispersal.ts). One call per coin per keeper wake,
@@ -44,7 +44,7 @@ const TOO_SOON = /CarriedTooSoon|\b6141\b|0x17fd/;
 /** After a CarriedTooSoon refusal, the next try is no sooner than this (a lagging cluster clock must not make the keeper retry every second). */
 export const TOO_SOON_MIN_RETRY_MS = 30_000;
 /** The program's per-crank cap on this reserve (MAX_SPEND_RESERVE_BPS, 2 %): the budget's refill rate per window. */
-const capOf = (reserve: bigint): bigint => (reserve * BigInt(200)) / BigInt(10_000);
+const capOf = (reserve: bigint): bigint => (reserve * BigInt(PROGRAM_CAP_BPS)) / BigInt(10_000);
 /**
  * How long until a piece of `lamports` fits the coin's carried budget (ms; 0 = now), measured on the chain's clock and turned into a wait
  * on the local one; null when the port cannot tell (the plan's "too-soon" and the program's refusal tell then).
@@ -73,11 +73,12 @@ export interface DispersalDeps {
 }
 
 /**
- * The dispersal step's phone alerts: bt-burn-behind (a reading not fully spent a day after it landed) and bt-dispersal-receipt (a
+ * The dispersal step's phone alerts: bt-burn-behind (a reading not fully spent a day after it landed), bt-dispersal-receipt (a
  * piece's receipt the keeper cannot settle from its own transaction: its memo unread after three days, or naming more than the piece
- * asked for). Both reach the phone through push.ts.
+ * asked for) and bt-dispersal-stuck (no piece the program accepts fits the pool: the rule's floor is above the per-crank cap and more
+ * than the cap is carried; dispersal.ts stuckWhy). All reach the phone through push.ts.
  */
-export interface DispersalAlert { kind: "bt-burn-behind" | "bt-dispersal-receipt"; key: string; text: string; meta: Record<string, unknown> | null }
+export interface DispersalAlert { kind: "bt-burn-behind" | "bt-dispersal-receipt" | "bt-dispersal-stuck"; key: string; text: string; meta: Record<string, unknown> | null }
 
 export interface DispersalReport {
   action: "off" | "idle" | "wait" | "sent" | "landed" | "refused" | "dry-run";
@@ -217,6 +218,13 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
   const s = step(st.window, { now, carriedLamports: cfg.carriedSpendLamports, reserveLamports: reserve, queueEmpty, floorLamports: cfg.floorLamports, seed: seedOf(`${d.mint}:${now}`) });
   st = { ...st, window: s.window };
   if (s.action.kind === "idle") return out({ action: "idle", why: s.action.why });
+  if (s.action.kind === "wait" && s.action.stuck) {
+    // the registry dedupes per key per day: one alert a day while the coin stays stuck
+    const text = `$${d.ticker}: the burn dispersal is ${s.action.why}.`;
+    if (d.alert) d.alert({ kind: "bt-dispersal-stuck", key: `${d.mint}:stuck`, text, meta: { mint: d.mint, carriedLamports: cfg.carriedSpendLamports.toString(), reserveLamports: reserve.toString(), floorLamports: cfg.floorLamports.toString() } });
+    d.log(`  [dispersal] $${d.ticker}: ${s.action.why}`);
+    return out({ action: "wait", why: s.action.why, nextDueAt: s.action.untilMs });
+  }
   if (s.action.kind === "wait") return out({ action: "wait", why: s.action.why, nextDueAt: s.action.untilMs });
   if (st.retryAt && now < st.retryAt) return out({ action: "wait", why: "a piece was deferred by the program; retrying", nextDueAt: st.retryAt });
   const lamports = s.action.lamports, idx = s.action.chunkIndex;

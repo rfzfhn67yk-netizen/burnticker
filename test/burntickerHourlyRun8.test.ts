@@ -469,7 +469,7 @@ describe("HS-42 · leagues whose games cannot end tied say nothing about ties", 
 
 describe("HS-43 · the whole-pool burn says its per-run slice in numbers", () => {
   test("85 SOL raise: about 1.7 SOL a run", () => {
-    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent, but not in one go: one burn spends at most 2% of the trading pool's SOL (about 1.7 SOL on an 85 SOL raise). The rest is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart, and a new window starts if any is left, so a large burn lands over hours, not in one go.");
+    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent, but not in one go: one burn spends at most 2% of the trading pool's SOL (about 1.7 SOL on an 85 SOL raise). The rest is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart, and a new window starts if any is left, so a whole pool is mostly burned within about three days, not in one go.");
     assert.doesNotMatch(wholePoolSliceLine("85"), /daily run|several days/, "the budget refills every 600 s and the keeper spreads the rest over hours (dispersal.ts)");
     assert.match(wholePoolSliceLine("85"), /six-hour window, at least 20 minutes apart/, "spreadCopy.ts wording");
     assert.match(wholePoolSliceLine("40"), /about 0\.8 SOL on a 40 SOL raise/);

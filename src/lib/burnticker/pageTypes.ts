@@ -110,7 +110,7 @@ export interface TokenProgramJson {
   attesters: { key: string; kind: string; heldByKeeper: boolean }[]; quorum: number; keeperHolds: number; quorumMet: boolean; adminRenounced: boolean;
   lastReading: { date: string; signature: string; txUrl: string } | null;
   queue: { lastOnChain: string | null; crankCursor: string | null; notAttested: number; awaitingCrank: number; carriedSpendSol: string; waits: { eventId: string; reason: string }[]; partials: { readingDate: string; note: string }[]; /** Burn dispersal (2026-10-13): "spent X of Y SOL for the reading of <date>; remainder being spent", one per reading not fully spent. Absent when off. */ dispersal?: string[] };
-  pool: { registered: boolean; address: string | null; untradeableSince: string | null };
+  pool: { registered: boolean; address: string | null; untradeableSince: string | null; /** devnet e2e 2026-10-20 (twapEmpty.ts): the pool has had no swap since it was made, so the burn waits for its first trade (since when the keeper saw it); absent otherwise */ firstTradeWait?: { since: string } };
   totals: { readings: number; burns: number; burned: string; spentSol: string };
 }
 

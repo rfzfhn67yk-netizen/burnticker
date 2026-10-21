@@ -390,3 +390,54 @@ describe("the private send route (BURNTICKER_PRIVATE_SEND_URL)", () => {
     assert.equal(typeof plain.poolSolReserve, "function");
   });
 });
+
+describe("small pools (devnet 2026-10-20): floor-sized pieces on the in-memory program, and bt-dispersal-stuck", () => {
+  const FLOOR = BigInt(9_399_141);
+  async function smallPool(reserve: bigint) {
+    const { f } = await carriedCoin();
+    deps.dispersal = false;
+    await runCycle(deps);
+    const carried = f.cfg.carriedSpendLamports;
+    assert.ok(carried > FLOOR);
+    f.cfg = { ...f.cfg, floorLamports: FLOOR };
+    f.poolReserveWsol = reserve;
+    let json: string | null = null;
+    const log: string[] = [], alerts: { kind: string; key: string; text: string }[] = [];
+    const run = () => runDispersal({ port: f, mint: f.mint, ticker: "BRONCO", load: () => json, save: (j) => { json = j; }, log: (l) => log.push(l), now: () => clock, dryRun: false, alert: (a) => alerts.push(a) } satisfies DispersalDeps);
+    return { f, carried, run, log, alerts };
+  }
+
+  test("a 0.613 SOL pool: every piece is at least the floor or the whole remainder, the program accepts each, and the carry reaches zero", async () => {
+    const h = await smallPool(BigInt(613_000_000));
+    const spent: bigint[] = [];
+    for (let i = 0; i < 2_000 && h.f.cfg.carriedSpendLamports > BigInt(0); i++) {
+      const r = await h.run();
+      if (r.action === "landed") spent.push(r.spentLamports!);
+      assert.notEqual(r.action, "refused", r.why);
+      clock = r.action === "wait" && r.nextDueAt ? Math.max(r.nextDueAt, clock + 1_000) : clock + 60_000;
+    }
+    assert.equal(h.f.cfg.carriedSpendLamports, BigInt(0));
+    assert.ok(!h.log.some((l) => /BelowFloor/.test(l)), h.log.join("\n"));
+    const last = spent[spent.length - 1];
+    assert.ok(spent.slice(0, -1).every((s) => s === FLOOR), "floor-sized pieces");
+    assert.ok(last > BigInt(0) && last <= FLOOR, "then the whole remainder");
+    assert.equal(spent.reduce((a, s) => a + s, BigInt(0)), h.carried);
+    assert.deepEqual(h.alerts, []);
+  });
+
+  test("a pool under floor / 2 % with more than the cap carried: nothing is signed, the step says stuck and bt-dispersal-stuck is raised", async () => {
+    const h = await smallPool(BigInt(300_000_000));
+    const r = await h.run();
+    assert.equal(r.action, "wait");
+    assert.match(r.why!, /^stuck: .* SOL is carried, but the rule's smallest allowed burn \(0\.0094 SOL\) is above the program's per-crank cap on this pool/);
+    assert.equal(h.f.signed.filter((x) => x.payload.kind === "carried").length, 0);
+    assert.equal(h.alerts.length, 1);
+    assert.equal(h.alerts[0].kind, "bt-dispersal-stuck");
+    assert.equal(h.alerts[0].key, `${h.f.mint}:stuck`);
+    assert.ok(h.log.some((l) => /\[dispersal\] \$BRONCO: stuck:/.test(l)));
+    assert.equal(PUSH_KIND_OF_ALERT["bt-dispersal-stuck"], "dispersal-stuck");
+    assert.ok(PUSH_TITLE["dispersal-stuck"] && PUSH_LEAD["dispersal-stuck"]);
+    const cfg = loadCopyLintConfig();
+    for (const t of [PUSH_TITLE["dispersal-stuck"], PUSH_LEAD["dispersal-stuck"], h.alerts[0].text]) assert.ok(lintCopy(t, cfg).ok, `${t}: ${JSON.stringify(lintCopy(t, cfg).hits)}`);
+  });
+});

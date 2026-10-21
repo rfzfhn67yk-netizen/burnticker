@@ -89,6 +89,9 @@ export interface GameDeps {
   /** THE LIVE SCHEDULE READ (espn.ts LIVE_SCHEDULE_TTL_MS; the keeper sets it): a league with a tracked game in play, or final and not
    *  yet confirmed, is marked live on the client, so its free official schedule is read about every minute and the next read comes sooner. */
   liveSchedule?: boolean;
+  /** THE LIVE SIGHTING (launchCut.ts gameCountsAfterLaunch): when each game was last seen not final on a schedule read. The keeper's is
+   *  persistent (statusLiveSeenStore). Absent: nothing recorded, and a day reading carries no sighting (the bound alone decides). */
+  liveSeen?: LiveSeenStore | null;
 }
 
 /** How long a TheSportsDB-only final must stand unchanged before it settles (owner, 2026-10-14). */
@@ -286,6 +289,42 @@ export function statusFinalCheckStore(reg: { getStatus(key: string): string | nu
     get: (k) => { const m = read()[k]; return isFinalCheck(m) ? m : null; },
     set: (k, m) => { const all = read(), t = now(); for (const [x, v] of Object.entries(all)) if (!(t - Number(v?.at) < HOLD_KEEP_MS)) delete all[x]; if (m) all[k] = m; else delete all[k]; reg.setStatus(FINAL_CHECK_STATUS_KEY, all, t); },
   };
+}
+/**
+ * THE LIVE SIGHTING (2026-10-21, BT-LAUNCH-CUT-LONG-01): per game (gameKeyOf), the latest time a schedule read showed it started and NOT
+ * final. It is the listing's own fetch time (EspnClient.listedAt), never the keeper's clock, so a cached listing cannot claim a game was
+ * still being played later than it was seen. A day reading's game times carry it (gameTimeOf), so a coin launched during a game that ran
+ * past the usual length still counts that game (launchCut.ts gameCountsAfterLaunch).
+ */
+export interface LiveSeenStore { get(key: string): number | null; set(key: string, at: number): void }
+export function memoryLiveSeenStore(): LiveSeenStore & { marks: Map<string, number> } {
+  const marks = new Map<string, number>();
+  return { marks, get: (k) => marks.get(k) ?? null, set: (k, t) => { marks.set(k, t); } };
+}
+/** The registry status key the keeper's live-sighting store writes (one JSON map, keyed by gameKeyOf(game), of epoch ms). */
+export const LIVE_SEEN_STATUS_KEY = "games.liveSeen";
+/** The keeper's PERSISTENT live-sighting store (the status table). Sightings older than 60 days are dropped on a write. */
+export function statusLiveSeenStore(reg: { getStatus(key: string): string | null; setStatus(key: string, value: unknown, now?: number): void }, now: () => number = Date.now): LiveSeenStore {
+  const read = (): Record<string, number> => { try { const v = JSON.parse(reg.getStatus(LIVE_SEEN_STATUS_KEY) ?? "{}") as unknown; return v && typeof v === "object" ? v as Record<string, number> : {}; } catch { return {}; } };
+  return {
+    get: (k) => { const t = Number(read()[k]); return Number.isFinite(t) ? t : null; },
+    set: (k, at) => { const all = read(), t = now(); for (const [x, v] of Object.entries(all)) if (!(t - Number(v) < HOLD_KEEP_MS)) delete all[x]; all[k] = at; reg.setStatus(LIVE_SEEN_STATUS_KEY, all, t); },
+  };
+}
+/**
+ * Records each listed game the schedule shows started and not final (not postponed, cancelled or suspended) at its listing's fetch time,
+ * when that is later than the stored sighting. A row whose listing time is unknown (a client that does not stamp rows) records nothing.
+ */
+export function noteLiveSightings(client: EspnClient, d: Pick<GameDeps, "liveSeen">, games: readonly Game[]): void {
+  const store = d.liveSeen; if (!store) return;
+  const listedAt = (client as EspnClient & { listedAt?: (g: Game) => number | null }).listedAt;
+  if (typeof listedAt !== "function") return;
+  for (const g of games) {
+    if (g.completed || g.state === "post" || POSTPONED_RE.test(g.detail)) continue;
+    const t = listedAt.call(client, g), start = Date.parse(g.startsAt);
+    if (t === null || !Number.isFinite(t) || !Number.isFinite(start) || t < start) continue;
+    try { const k = gameKeyOf(g), had = store.get(k); if (had === null || t > had) store.set(k, t); } catch { /* a sighting is evidence only */ }
+  }
 }
 /** The FINAL CHECK listener (GameDeps.onFinalCheck); a throwing listener never changes a reading. */
 const noteCheck = (d: GameDeps, g: Game, why: string): void => { try { d.onFinalCheck?.({ game: g, why }); } catch { /* log only */ } };
@@ -1221,9 +1260,10 @@ export async function plannedGameRead(client: EspnClient, s: EspnSeries, sinceIs
 }
 
 /** A counted game's times for its day reading (launchCut.ts THE LAUNCH-DAY CUT). */
-const gameTimeOf = (g: Game, v: Extract<GameVerdict, { kind: "settled" }>): GameTime => {
+const gameTimeOf = (g: Game, v: Extract<GameVerdict, { kind: "settled" }>, d: Pick<GameDeps, "liveSeen">): GameTime => {
   const f = v.finalFirstReadAt ?? v.firstReadAt ?? v.singleSince;
-  return { id: g.eventId, league: g.league, start: g.startsAt, final: f !== undefined && Number.isFinite(f) ? new Date(f).toISOString() : null };
+  let seen: number | null = null; try { seen = d.liveSeen?.get(gameKeyOf(g)) ?? null; } catch { seen = null; }
+  return { id: g.eventId, league: g.league, start: g.startsAt, final: f !== undefined && Number.isFinite(f) ? new Date(f).toISOString() : null, ...(seen !== null && Number.isFinite(seen) ? { lastSeenLiveAt: new Date(seen).toISOString() } : {}) };
 };
 
 export async function sportsSettled(client0: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number; seriesId?: string | null; /** HB-83: the review's display-only back-test */ display?: boolean; /** reviewer G: the earliest launch of a coin on this selector */ launchedAtMs?: number | null } = {}): Promise<ResolvedSelector> {
@@ -1236,6 +1276,7 @@ export async function sportsSettled(client0: EspnClient, s: EspnSeries, sinceIso
   if (ms) return meetingsSettled(client, ms, d, now, o.seriesId ?? null);
   const all = await gamesFor(client, s, sinceIso);
   const games = all.filter((g) => !sinceIso || g.date > sinceIso.slice(0, 10));
+  noteLiveSightings(client, d, games);
   const tid = s.kind === "team" ? s.teamId : null;
   const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string; games?: GameTime[] }>();
   let awaiting = 0, dueAt: number | null = null, undated = 0; const refusals: string[] = [];
@@ -1281,7 +1322,7 @@ export async function sportsSettled(client0: EspnClient, s: EspnSeries, sinceIso
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
     cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date, g.startsAt)}`);
     cur.method = methodOf(v);
-    (cur.games ??= []).push(gameTimeOf(g, v));
+    (cur.games ??= []).push(gameTimeOf(g, v, d));
     noteSingle(d, o.seriesId ?? null, g, v);
     byDay.set(g.date, cur);
   }
@@ -1419,6 +1460,7 @@ export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "
 export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: GameDeps, now: number, seriesId: string | null = null): Promise<ResolvedSelector> {
   const w = s.window;
   const meetings = await gamesFor(client, s, null);
+  noteLiveSightings(client, d, meetings);
   const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string; games?: GameTime[] }>();
   const waitingDays = new Set<string>(), refusals: string[] = [], outcomes: MeetingOutcome[] = [], stuck: string[] = [];
   let awaiting = 0, unsettled = 0, undated = 0, dueAt: number | null = null;
@@ -1439,7 +1481,7 @@ export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: 
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
     cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}, head to head) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date, g.startsAt)}`);
     cur.method = methodOf(v);
-    (cur.games ??= []).push(gameTimeOf(g, v));
+    (cur.games ??= []).push(gameTimeOf(g, v, d));
     noteSingle(d, seriesId, g, v);
     byDay.set(g.date, cur);
   }

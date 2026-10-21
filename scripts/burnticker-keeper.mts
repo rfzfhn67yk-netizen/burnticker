@@ -53,7 +53,7 @@ import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts"
 import type { MarketReader } from "../src/lib/burnticker/market.ts";
 import { espnClient, gameDeps, nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
 import { polyGameGate } from "../src/lib/burnticker/sources/polyGame.ts";
-import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusFinalCheckStore, statusFirstReadStore, statusHoldStore } from "../src/lib/burnticker/sources/gameSettle.ts";
+import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusFinalCheckStore, statusFirstReadStore, statusHoldStore, statusLiveSeenStore } from "../src/lib/burnticker/sources/gameSettle.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG, PairScanCache } from "../src/lib/burnKeeper/pairCurveCrank.ts";
 import { CycleAccountCache } from "../src/lib/burnticker/cycleAccountCache.ts";
@@ -172,6 +172,9 @@ setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReader
   // THE LIVE SCHEDULE READ (owner 2026-10-20): a league with a tracked game in play reads its free official schedule about every minute
   // and a tracked NBA or soccer game in play reads its own TheSportsDB event lookup with a 90 s cache (espn.ts THE LIVE GAME READ ON THESPORTSDB)
   liveSchedule: true,
+  // THE LIVE SIGHTING (2026-10-21): when each game was last seen not final, kept in games.liveSeen, so a coin launched during a game
+  // that runs long still counts it (launchCut.ts gameCountsAfterLaunch)
+  liveSeen: statusLiveSeenStore(registry),
   onFinalCheck: (e) => log(`  [final-check] ${e.game.league}:${e.game.eventId} ${e.game.name} ${e.game.date}: ${e.why}`),
   onSingleSource: (e) => {
     log(`  [single-source] ${e.seriesId ?? "?"} ${e.game.name} ${e.game.date}: ${e.final.away}–${e.final.home} (away–home), ${e.settledBy}, first seen ${new Date(e.heldSince).toISOString()}`);

@@ -2,7 +2,7 @@ import { backoffMs } from "@/lib/burnKeeper/schedule";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { formatDate, utcDate } from "@/lib/burnReceipts/math";
-import { WAIT_REASONS, WAIT_RETRY_MS, type ProgramConfigView, type ProgramPort, type ProgramReadingView } from "@/lib/burnKeeper/programChain";
+import { deferralRing, twapWait, WAIT_REASONS, WAIT_RETRY_MS, type ProgramConfigView, type ProgramPort, type ProgramReadingView } from "@/lib/burnKeeper/programChain";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -30,6 +30,7 @@ import { parseTargetMemo } from "@/lib/burnReceipts/memo";
 import { DISPERSAL_STATE_KEY, runDispersal, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
 import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
 import { FilterUnsupportedError, storedFilterProblem } from "@/lib/burnticker/safeRegex";
+import { clearTwapEmpty, noteTwapEmpty } from "@/lib/burnticker/twapEmpty";
 import { dueNextAt, hasSettlementReceipt, selectorIdle, windowFailureNextAt, windowNextAt, type ReadWindow } from "@/lib/burnticker/readPlan";
 
 /**
@@ -714,11 +715,15 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
       const tx = await plan.build();
       const sim = await port.simulate(tx.raw);
       if (sim.err) {
-        const wait = WAIT_REASONS[sim.err] ?? (port.retryableErrors?.has(sim.err) ? "waiting — the program reported a retryable condition" : undefined);
+        // devnet e2e 2026-10-20: TwapUnavailable on a pool that has never traded says so, is recorded for the coin page, and alerts
+        const tw = twapWait(sim.err, await deferralRing(port, sim.err));
+        const wait = tw?.wait ?? (port.retryableErrors?.has(sim.err) ? "waiting — the program reported a retryable condition" : undefined);
+        if (tw?.empty) noteTwapEmpty(reg, t, Ds, now, d.log); else clearTwapEmpty(reg, mint, now);
         if (wait) { reg.setReadingWait(mint, D, `${sim.err}: ${wait}`, now + WAIT_RETRY_MS, now); d.log(`  [crank] $${t.ticker} ${Ds}: deferred by the program (${sim.err}) — ${wait}`); hold(`${sim.err}: ${wait}`, rows); }
         else fail(`crank_${plan.kind} simulation refused: ${sim.err}${sim.logs.length ? ` · ${sim.logs.slice(-2).join(" · ")}` : ""}`);
         break;
       }
+      clearTwapEmpty(reg, mint, now);
       reg.recordSignature({ signature: tx.signature, mint, eventId: key, memo: `crank_${plan.kind} ${Ds}`, burnRaw: BigInt(0), spendLamports: BigInt(0), blockhash: tx.blockhash, lastValidBlockHeight: tx.lastValidBlockHeight, sentAt: now });
       reg.markReadingSending(mint, D, now);
       try { await port.send(tx.raw); } catch (e) { d.log(`  [crank] $${t.ticker} ${Ds}: send raised ${(e as Error).message.slice(0, 120)} — the signature is on the ledger and will be resolved`); }

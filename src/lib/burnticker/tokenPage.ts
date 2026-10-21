@@ -62,7 +62,7 @@ export interface TokenPageInput {
   token: TokenRow; locked: LockedRule; readings: readonly ReadingRow[]; receipts: readonly ReceiptRow[]; attesters: readonly AttesterRow[]; state: TokenState; feedState: FeedState;
   chain: { cluster: string; programId: string; supplyRaw: bigint | null; feePdaLamports: bigint | null; vaultRaw: bigint | null;
     /** PROGRAM EXECUTION (2026-10-10): the TokenConfig as read this cycle, the keeper's attester keys, the last reading's transaction. */
-    program?: { config: ProgramConfigView | null; keeperKeys: readonly string[]; lastReading: { date: string; signature: string } | null; /** burn dispersal lines (dispersalKeeper.ts dispersalLines) */ dispersal?: readonly string[] } | null };
+    program?: { config: ProgramConfigView | null; keeperKeys: readonly string[]; lastReading: { date: string; signature: string } | null; /** burn dispersal lines (dispersalKeeper.ts dispersalLines) */ dispersal?: readonly string[]; /** twapEmpty.ts: the pool has never traded */ firstTradeWait?: { since: number } } | null };
   now: number; nextCheckAt: number | null; implied: ImpliedChance | null; seriesTitle: string | null; selectorPending: number;
   /** What the operator can and cannot do, derived from the Powers Register (trust.ts), never free text. */
   operator: { can: string[]; cannot: string[]; placeholder: boolean };
@@ -516,7 +516,7 @@ export function buildTokenProgram(i: TokenPageInput): TokenProgramJson | null {
         .map((b) => ({ readingDate: b.readingDate !== null ? formatU32(b.readingDate) : "?", note: [(b.carriedOutLamports ?? ZERO) > ZERO && (b.spendLamports ?? ZERO) > ZERO ? `${sol(b.carriedOutLamports)} SOL carried (2% reserve cap)` : null, b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports ? `burn-pool cap: ${sol(b.poolLamports)} of ${sol(b.poolActualLamports)} SOL` : null].filter(Boolean).join("; ") })),
       ...(p.dispersal && p.dispersal.length ? { dispersal: [...p.dispersal] } : {}),
     },
-    pool: { registered: !!c?.poolRegistered, address: c?.pool ?? null, untradeableSince: c?.poolUntradeableSince ? new Date(c.poolUntradeableSince * 1000).toISOString() : null },
+    pool: { registered: !!c?.poolRegistered, address: c?.pool ?? null, untradeableSince: c?.poolUntradeableSince ? new Date(c.poolUntradeableSince * 1000).toISOString() : null, ...(p.firstTradeWait ? { firstTradeWait: { since: new Date(p.firstTradeWait.since).toISOString() } } : {}) },
     totals: { readings: c?.readings ?? 0, burns: c?.burns ?? 0, burned: rawToTokens(c?.totalBurned ?? ZERO, DECIMALS), spentSol: sol(c?.totalSpentLamports ?? ZERO) ?? "0" },
   };
 }

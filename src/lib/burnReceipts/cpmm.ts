@@ -91,3 +91,38 @@ export async function fetchCpmmPool(connection: Connection, address: PublicKey, 
   if (!info.owner.equals(cpmmProgramId)) throw new Error(`pool ${address.toBase58()} is not owned by the CPMM program`);
   return decodeCpmmPool(address, info.data);
 }
+
+/**
+ * Raydium CPMM ObservationState (the pool's price-history ring the program's TWAP guard reads; programs/burn-receipts/.../src/cpmm.rs
+ * twap_sol_price_x32): discriminator, initialized (u8 @8), observation_index (u16 @9, the newest entry), pool_id (@11), then 100
+ * observations of 40 bytes from @43 (block_timestamp u64, two cumulative prices u128), then last_update_timestamp (u64 @4043).
+ *
+ * CPMM writes an observation only on a swap. A pool fresh from migration has every timestamp at 0: the program's TWAP is None
+ * (TwapUnavailable) and time alone never changes that; its first trade does (devnet e2e 2026-10-20).
+ */
+export const OBSERVATION_STATE_DISCRIMINATOR = Buffer.from([122, 174, 197, 53, 129, 9, 165, 132]);
+export const OBSERVATION_STATE_LEN = 4075;
+export const OBSERVATION_NUM = 100;
+const OBS_AT = 43, OBS_LEN = 40, LAST_UPDATE_AT = OBS_AT + OBSERVATION_NUM * OBS_LEN;
+
+export interface ObservationRing {
+  /** the newest observation's timestamp (unix s); 0 when the ring is empty */
+  newestTs: number;
+  /** the time the newest observation's cumulative is current to (unix s); 0 when never updated */
+  lastUpdate: number;
+  /** how many of the 100 entries carry a nonzero timestamp */
+  filled: number;
+  /** no observation has a nonzero timestamp: the pool has had no swap since it was made */
+  empty: boolean;
+}
+
+export function decodeObservationRing(data: Buffer | Uint8Array): ObservationRing {
+  const d = Buffer.from(data);
+  if (d.length < OBSERVATION_STATE_LEN || !d.subarray(0, 8).equals(OBSERVATION_STATE_DISCRIMINATOR)) throw new Error("not a CPMM ObservationState");
+  const idx = d.readUInt16LE(9);
+  if (idx >= OBSERVATION_NUM) throw new Error(`CPMM ObservationState index ${idx} out of range`);
+  let filled = 0;
+  for (let i = 0; i < OBSERVATION_NUM; i++) if (d.readBigUInt64LE(OBS_AT + i * OBS_LEN) > BigInt(0)) filled++;
+  const newestTs = Number(d.readBigUInt64LE(OBS_AT + idx * OBS_LEN));
+  return { newestTs, lastUpdate: Number(d.readBigUInt64LE(LAST_UPDATE_AT)), filled, empty: filled === 0 };
+}

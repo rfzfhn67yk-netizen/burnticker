@@ -33,6 +33,8 @@ import { noticeMarkLamports, REFERENCE_IRYS_PRICES, SIGNER_FLOOR_LAMPORTS, signe
  *                            ops/topUp.ts); the text says how much to send
  *   bt-cap-binding           a burn pool holds more than the 25 SOL pre-audit cap: the excess is queued, not spent
  *   bt-keeper-stale          no cycle recorded for > 10 min while not paused (the keeper is down or wedged)
+ *   bt-twap-empty            (raised by the keeper, twapEmpty.ts) a burn waits because the coin's pool has never traded: no price history
+ *                            for the TWAP guard until its first swap; once per coin per 6 h
  *   bt-daily-summary         one line a day after 07:00 Denver: "N tokens, M burns, pools X SOL, dev fees Y SOL"
  */
 

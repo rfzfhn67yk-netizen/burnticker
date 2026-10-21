@@ -82,6 +82,8 @@ export class FakeProgram implements ProgramPort {
   tokensPerSol = big(1_000_000) * big(1_000_000);
   capLamports: bigint | null = big(25_000_000_000);
   twap: "ok" | "unavailable" | "deviation" = "ok";
+  /** The pool price-history ring observationRing() reports: "empty" (never traded), "recent" (too short), null (unreadable). */
+  ring: "empty" | "recent" | null = null;
   poolTradable = true;
   // the RPC
   height = 100;
@@ -380,6 +382,11 @@ export class FakeProgram implements ProgramPort {
     const ready = carriedBudgetReadySec(this.lastCarriedAt, this.carriedBudgetLamports, reserveSpendCap(this.poolReserveWsol, MAX_SPEND_RESERVE_BPS), need, nowSec);
     if (ready !== null && ready > nowSec) return { status: "too-soon", nextAtMs: this.now() + (ready - nowSec) * 1000 };
     return { build: async () => this.mk({ kind: "carried", maxSpend: maxSpendLamports }) };
+  }
+  async observationRing(): Promise<{ newestTs: number; lastUpdate: number; filled: number; empty: boolean } | null> {
+    if (!this.cfg.poolRegistered || this.ring === null) return null;
+    const t = Math.floor(this.now() / 1000) - 60;
+    return this.ring === "empty" ? { newestTs: 0, lastUpdate: 0, filled: 0, empty: true } : { newestTs: t, lastUpdate: t, filled: 1, empty: false };
   }
   async poolSolReserve(): Promise<bigint | null> { return this.cfg.poolRegistered ? this.poolReserveWsol : null; }
   /** Round-5 review R5-8 (CarriedPace): the last carried piece (unix seconds; 0 = never), the budget left after it, and the piece count

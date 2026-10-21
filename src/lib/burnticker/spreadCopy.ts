@@ -23,7 +23,7 @@ export const SPREAD_LINES: readonly string[] = [
   `If some is still left when the window ends, a new ${windowHours}-hour window starts, and this repeats until all of it is burned. The random times come from a fixed seed, so restarting the keeper does not change them.`,
 ];
 /** The carried part in one sentence, for a line that has already said the per-burn cap (guidedLaunch.ts wholePoolSliceLine). */
-export const SPREAD_REST_SENTENCE = `The rest is burned in smaller pieces at random times over a ${windowHours}-hour window, at least ${gapMin} minutes apart, and a new window starts if any is left, so a large burn lands over hours, not in one go.`;
+export const SPREAD_REST_SENTENCE = `The rest is burned in smaller pieces at random times over a ${windowHours}-hour window, at least ${gapMin} minutes apart, and a new window starts if any is left, so a whole pool is mostly burned within about three days, not in one go.`;
 /**
  * BT-108-COPY-01 (2026-10-20): the one scheduling sentence for a one-time burn, on the guided amount step, the review's "How much" row and
  * the one-shot review sentences of every family (event, earthquake and the other hazards, 50% and 100%), so no surface says "daily run"

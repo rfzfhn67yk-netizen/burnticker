@@ -20,6 +20,7 @@ import { CatalogueAdapter, feedById } from "@/lib/burnticker/catalogue";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { SOL_MINT, usdPrice } from "@/lib/burnKeeper/jupiterSwap";
 import { FakeBurnProgram, programPageBlock, type BurnProgramClient } from "@/lib/burnticker/program";
+import { readTwapEmpty } from "@/lib/burnticker/twapEmpty";
 import { ProgramBurnClient } from "@/lib/burnticker/programClient";
 import type { LaunchLabClient } from "@/lib/burnticker/launchBundle";
 import { launchLabFromEnv, type LaunchLabAccountReader } from "@/lib/burnticker/launchLabChain";
@@ -245,7 +246,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   const marketRead = (supplyRaw: bigint | null) => live && p.market
     ? readMarket(p.market, { cluster: p.cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: supplyRaw ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS), decimals: DECIMALS }, now).catch(() => null)
     : Promise.resolve(null);
-  const programRead = () => programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading"));
+  const programRead = () => programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading"), undefined, readTwapEmpty(p.registry, t.mint));
   const holdersRead = () => rpc ? readHolders(rpc, { cluster: p.cluster, mint: t.mint, labels: { ...poolOwnerLabels(p.cluster), [t.feePda]: "burn pool", [t.creator]: "creator" } }, now) : Promise.resolve(null);
   const datesRead = (market: Awaited<ReturnType<typeof marketRead>>, poolRegistered: boolean | null) => rpc && network ? readLifecycleDates(rpc, { network, mint: t.mint, launchTx: t.launchTx, curvePool: t.poolId, phase: market?.pool && t.poolId ? curveProgress(market.pool, t.poolId).phase : null, poolRegistered }, now) : Promise.resolve(null);
   const registeredOf = (b: Awaited<ReturnType<typeof programRead>>) => (b?.config ? !!b.config.poolRegistered : null);

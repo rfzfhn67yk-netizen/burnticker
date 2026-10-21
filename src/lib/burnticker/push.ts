@@ -14,6 +14,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *   burn-behind       a reading's spend is not fully spent 24 hours after it landed (burn dispersal: dispersalKeeper.ts bt-burn-behind)
  *   dispersal-receipt a burn dispersal piece's receipt cannot be settled from its own transaction: its memo was not read in three days,
  *                     or it named more than the piece asked for (dispersalKeeper.ts bt-dispersal-receipt; audit F10 review)
+ *   dispersal-stuck   no burn piece the program accepts fits a coin's small pool (its floor is above the 2% per-crank cap) and more
+ *                     than one cap is carried, so the carried amount cannot be spent (dispersalKeeper.ts bt-dispersal-stuck; once a day)
  *   api-budget        a provider passed 80% of a process's day budget or was put on hold (apiBudget.ts bt-api-budget)
  *   single-source     measure only: a coin's game settled on TheSportsDB alone after the 12-hour hold, the first time for that coin
  *                     (gameSettle.ts; the keeper records bt-single-source once per coin)
@@ -80,7 +82,11 @@ export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "cr
   // HB-108 (hourly run 8): the drain stop refused a target that needed SOL too often (ops/topUp.ts)
   | "top-up-draining"
   // HB-180 (seventh pre-launch audit): the daily ceiling on the keeper key's top-ups stopped every top-up until 00:00 UTC
-  | "top-up-ceiling";
+  | "top-up-ceiling"
+  // devnet e2e 2026-10-20 (twapEmpty.ts): a burn waits because the coin's pool has never traded, so it has no price history
+  | "twap-empty"
+  // devnet 2026-10-20 (dispersal.ts stuckWhy): no burn piece the program accepts fits a coin's small pool, so its carried amount cannot be spent
+  | "dispersal-stuck";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -92,6 +98,7 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-launch-failed": "launch-failed",
   "bt-burn-behind": "burn-behind",
   "bt-dispersal-receipt": "dispersal-receipt",
+  "bt-dispersal-stuck": "dispersal-stuck",
   "bt-api-budget": "api-budget",
   "bt-single-source": "single-source",
   "bt-mint-bank-low": "mint-bank-low",
@@ -130,6 +137,8 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-feed-overdue": "feed-overdue",
   // 2026-10-19 (ops/topUp.ts): a top-up that failed twice in a row; a top-up that landed is an informational row (bt-top-up), not pushed
   "bt-top-up-failed": "top-up-failed",
+  // devnet e2e 2026-10-20: the burn waits for the first trade in a pool that has never traded (multiKeeper.ts, twapEmpty.ts; once per coin per 6 h)
+  "bt-twap-empty": "twap-empty",
   "bt-top-up-draining": "top-up-draining",
   "bt-top-up-ceiling": "top-up-ceiling",
   "derby-withheld": "derby-withheld",
@@ -171,6 +180,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "launch-failed": "Burnticker launch failed",
   "burn-behind": "Burnticker burn behind",
   "dispersal-receipt": "Burnticker burn piece needs a look",
+  "dispersal-stuck": "Burnticker burn pieces cannot be spent",
   "api-budget": "Burnticker data budget running low",
   "single-source": "Burnticker game settled on one source",
   "mint-bank-low": "Burnticker prepared addresses running low",
@@ -191,6 +201,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "feed-stale": "Burnticker source stale",
   "feed-overdue": "Burnticker source read overdue",
   "top-up-failed": "Burnticker wallet top-up failing",
+  "twap-empty": "Burnticker burn waiting for a first trade",
   "top-up-draining": "Burnticker wallet top-up stopped: draining",
   "top-up-ceiling": "Burnticker top-ups stopped for the day",
   "feed-disagree": "Burnticker sources disagree",
@@ -214,7 +225,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "ticker-live": "Burnticker second coin on a live ticker",
 };
 /** Kinds pushed at low priority: a note, not trouble that needs someone now. */
-export const PUSH_LOW_PRIORITY: ReadonlySet<PushKind> = new Set(["backup-offbox", "cap-binding", "pin-orphan", "late-reading"]);
+export const PUSH_LOW_PRIORITY: ReadonlySet<PushKind> = new Set(["backup-offbox", "cap-binding", "pin-orphan", "late-reading", "twap-empty"]);
 export const PUSH_LEAD: Record<PushKind, string> = {
   "keeper-refused": "The keeper stopped before its first cycle. Nothing is read or burned until it starts again.",
   "signer-disagree": "A reading is held because the second signer did not agree with the keeper. Nothing burns for it until someone looks.",
@@ -223,6 +234,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "launch-failed": "Someone's launch request failed on the site with a server error, a pin failure or a launch-check refusal. The sentence below is what they saw.",
   "burn-behind": "A reading's burn is not fully spent a day after it landed. The keeper keeps spending the rest in small pieces; the line below says how much is left.",
   "dispersal-receipt": "The keeper could not settle how much one small burn piece spent from that piece's own transaction. Either its record could not be read for three days, or it named more than the piece asked for, which the program should never allow. The coin's carried total still matches the chain; only this piece's receipt is in doubt. The line below names the coin and the transaction.",
+  "dispersal-stuck": "A coin's carried burn cannot be spent in pieces: its trading pool is so small that the program's per-burn cap (2% of the pool's SOL) is below the rule's smallest allowed burn, and more than one cap is carried. The amount stays carried, nothing is lost, and it goes out once the pool grows. The line below names the coin and the amounts.",
   "api-budget": "One of the outside services the keeper or the site reads from has used most of its daily allowance, or all of it. When it is all used, reads from that service stop until midnight UTC and start again on their own.",
   "mint-bank-low": "The site has had few prepared coin addresses for more than an hour. Launches still work, but each creator's browser has to find its own address, which takes about a minute. Check that the mint key bank service is running and has its key.",
   "synthetic-failed": "Last night's test creator could not finish every launch on the devnet copy of the site. A real creator may hit the same problem. The lines below name each check that failed and what the page said.",
@@ -241,6 +253,7 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "keeper-takeover": "The standby keeper took over from the leader. Check why the leader stopped, and make sure only one keeper sends.",
   "feed-stale": "A source has not given a new reading for longer than it should. No new reading means no burn. Check the source by hand.",
   "feed-overdue": "A live coin's source was due a read and has not been read, while the coin's result is still open. Its rule cannot settle until the source is read. The line below names the source, the coin, the due time and why the read did not happen.",
+  "twap-empty": "A coin's burn is waiting because its trading pool has had no swap since it was made, so the program has no price history to check the burn against. Time alone does not fix this; the first trade in the pool does. The line below names the coin and the day.",
   "top-up-failed": "The keeper tried twice in a row to move SOL from its own key to an operations wallet and both tries failed. The line below names the wallet and the error. Until it lands, that wallet keeps running down.",
   "top-up-draining": "One operations wallet needed SOL from the keeper key too many times in a short window, so the keeper stopped refilling it. A wallet that spends normally needs a top-up every few days; this one is losing SOL faster, which points to a leaked key or a bug. The line below names the wallet and the amounts. It stays stopped until the operator finds the cause and clears it with scripts/ops/top-up.mts --clear-drain.",
   "top-up-ceiling": "The keeper key sent as much SOL to the operations wallets today as the daily ceiling allows, so the keeper stopped every top-up until 00:00 UTC. Normal spending is far below the ceiling, so this points to a leaked key or a bug. The line below gives the amounts.",
