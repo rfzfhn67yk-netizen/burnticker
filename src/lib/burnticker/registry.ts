@@ -609,6 +609,8 @@ export class Registry {
 
   // ---- status ----
   setStatus(key: string, value: unknown, now = Date.now()): void { this.db.prepare("INSERT INTO status (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at").run(key, typeof value === "string" ? value : JSON.stringify(value), now); }
+  /** HS-119: removes one status row (the search memo drops the queries past its bound). */
+  deleteStatus(key: string): void { this.db.prepare("DELETE FROM status WHERE key=?").run(key); }
   getStatus(key: string): string | null { const r = this.db.prepare("SELECT value FROM status WHERE key=?").get(key) as { value: string } | undefined; return r ? r.value : null; }
 
   // ---- tokens ----

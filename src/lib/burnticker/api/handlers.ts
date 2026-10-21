@@ -59,6 +59,7 @@ import { expectedCreateFromBundle } from "@/lib/burnticker/launchCreateArgs";
 import { expectedConfigFor, expectedConfigKey, expectedHostOf, loadExpectedConfig, mergeExpected, pairCurveExpected } from "@/lib/burnticker/admission";
 import { buildPairCurveLaunch, pairCurveEnabled, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
+import { searchMemoHeaders, searchMemoKey, searchMemoStore, withSearchMemo, type SearchMemoStore } from "@/lib/burnticker/searchMemo";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import { derbyAdmission } from "@/lib/burnticker/derby/admission";
 import { seasonEndMs, isoDate } from "@/lib/burnticker/derby/spec";
@@ -527,13 +528,25 @@ export async function kalshiCategories(p: Platform, q: { category?: string | nul
  */
 /** Audit 12 item 8: beside the search's closing-soon filter, what a market marked closePassed is (not hidden: it may still be open). */
 export const CLOSE_PASSED_SEARCH_NOTE = "A market marked as past its scheduled close is still listed by Polymarket and waiting for its result. It is not hidden by the 48-hour filter, because it may still take a coin; its result may come before a new coin graduates.";
+/** HS-119: what a stale search answer says beside its results. */
+export const SEARCH_STALE_NOTE = "Polymarket could not be reached just now, so this is the last answer we had for the same search. Markets may have opened or closed since.";
+/** HS-119: one search memo per registry (its status table holds the copies), else per Polymarket client. */
+const searchMemos = new WeakMap<object, SearchMemoStore<Awaited<ReturnType<Platform["polymarket"]["search"]>>>>();
+function polySearchMemo(p: Platform): SearchMemoStore<Awaited<ReturnType<Platform["polymarket"]["search"]>>> {
+  const owner = (p.registry ?? p.polymarket) as object;
+  let s = searchMemos.get(owner);
+  if (!s) { s = searchMemoStore(p.registry ?? null); searchMemos.set(owner, s); }
+  return s;
+}
 export async function polymarketSearch(p: Platform, q: { q?: string | null; status?: string | null; closingSoon?: string | null }, now = Date.now()): Promise<ApiResult> {
   const query = (q.q ?? "").trim();
   const status = q.status === "closed" || q.status === "all" ? q.status : "open";
   if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE);
   if (query.length < 2) return fail(400, "Type at least two characters. You can search for a team, a person, an event, an event slug or a condition id.");
   try {
-    const r = scrubMarketData(await p.polymarket.search(query, { status, limit: 10 }));
+    // HS-119: the last good answer for this query answers an upstream failure, marked stale (searchMemo.ts)
+    const held = await withSearchMemo(polySearchMemo(p), searchMemoKey(query, status), async () => scrubMarketData(await p.polymarket.search(query, { status, limit: 10 })));
+    const r = held.body;
     // QA pass 9 #17: the event-outcome path hides a market closing within CLOSING_SOON_HOURS, as the universal search does (a coin made now
     // would not graduate before the result); closingSoon=1 lists them, each marked. A market past its end date and not yet resolved is left to the market's own state
     const soon = (endDate: string | null) => status === "open" && !!endDate && Number.isFinite(Date.parse(endDate)) && Date.parse(endDate) >= now && Date.parse(endDate) - now < CLOSING_SOON_HOURS * 3_600_000;
@@ -551,7 +564,9 @@ export async function polymarketSearch(p: Platform, q: { q?: string | null; stat
       return { ...e, closesAt, closingSoon: soon(closesAt), closePassed: passed(closesAt), markets: rows };
     });
     const keptM = show ? markets : markets.filter((m) => !m.closingSoon), keptE = show ? events : events.filter((e) => !e.closingSoon);
-    return ok({ query, status, venue: "polymarket", events: keptE, markets: keptM, hiddenClosingSoon: markets.length - keptM.length + events.length - keptE.length, closePassedNote: CLOSE_PASSED_SEARCH_NOTE, tags: r.tags, note: "Only yes-or-no markets are listed. YES is a market's first outcome and NO is its second. The result is read from the on-chain payout on Polygon. No prices, odds or volume are returned." });
+    const answer = ok({ query, status, venue: "polymarket", events: keptE, markets: keptM, hiddenClosingSoon: markets.length - keptM.length + events.length - keptE.length, closePassedNote: CLOSE_PASSED_SEARCH_NOTE, tags: r.tags, note: "Only yes-or-no markets are listed. YES is a market's first outcome and NO is its second. The result is read from the on-chain payout on Polygon. No prices, odds or volume are returned.",
+      ...(held.stale ? { stale: true, staleAgeSec: Math.floor(held.ageMs / 1000), staleNote: SEARCH_STALE_NOTE } : {}) });
+    return { ...answer, headers: searchMemoHeaders(held.stale, held.ageMs) };
   } catch (e) {
     return fail(502, `Polymarket could not be reached just now. The reason given was: ${safeErrorText(e, 160)}`);
   }
