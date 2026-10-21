@@ -326,8 +326,8 @@
     },
     {
       "id": "signed-operator-message",
-      "status": "not done",
-      "text": "The operator's statement was first signed on 2026-10-14 by the mainnet developer fee wallet (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5). On 2026-10-19 its text changed to name both keeper keys, and the same wallet signed the new text that day. On 2026-10-21 its text changed again to name both disclosed tests: the operator's 0.1 SOL swap into $REHEARSAL, and the operator's own wallet's 0.1 SOL test purchase and immediate sale of $SEAWIN. The new text is not signed yet. Once the same wallet signs it, /burnticker/operator checks the signature with ed25519 each time and shows the result and the time of the check."
+      "status": "done 2026-10-21",
+      "text": "The operator's statement was signed on 2026-10-21 by the mainnet developer fee wallet (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5), after its text changed to name both keeper keys and both disclosed test trades. The statement and its signature are on /burnticker/operator, which checks the signature with ed25519 each time and shows the result and the time of the check."
     },
     {
       "id": "paircurve-findings-open",
