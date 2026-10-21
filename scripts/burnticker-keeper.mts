@@ -53,7 +53,7 @@ import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts"
 import type { MarketReader } from "../src/lib/burnticker/market.ts";
 import { espnClient, gameDeps, nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
 import { polyGameGate } from "../src/lib/burnticker/sources/polyGame.ts";
-import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusFirstReadStore, statusHoldStore } from "../src/lib/burnticker/sources/gameSettle.ts";
+import { envGameDeps, polymarketGameReaders, singleSourceAlert, statusFinalCheckStore, statusFirstReadStore, statusHoldStore } from "../src/lib/burnticker/sources/gameSettle.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG, PairScanCache } from "../src/lib/burnKeeper/pairCurveCrank.ts";
 import { CycleAccountCache } from "../src/lib/burnticker/cycleAccountCache.ts";
@@ -163,10 +163,15 @@ polymarket.payoutStore = statusPayoutStore(registry, "keeper");
 // ONE SOURCE (owner 2026-10-14): a final game with no Polymarket market and no league feed settles on TheSportsDB alone after its score
 // has stood 12 hours. The first-seen score and time persist in the registry's status table (statusHoldStore), so a restart keeps the
 // hold. Measure only: each such settlement is logged, and the first one per coin raises bt-single-source (push.ts) for the owner.
-// GAME COINS (owner 2026-10-16, 2026-10-18 evening): a single-game coin burns once two sources agree on its final, else once one source
-// has shown the same final on two reads a few minutes apart; each source's reads persist in the status table (statusFirstReadStore,
-// games.firstReads), so a restart keeps them and a pair's two coins share them.
-setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket), holds: statusHoldStore(registry), firstReads: statusFirstReadStore(registry), now: () => Date.now(),
+// GAME COINS (owner 2026-10-16, 2026-10-18 evening, 2026-10-20): a game is read as soon as the schedule marks it final, and a single-game
+// coin burns once one source has shown the same final on two reads at least 5 minutes apart; each source's reads persist in the status
+// table (statusFirstReadStore, games.firstReads), so a restart keeps them and a pair's two coins share them. A team, season or rivalry
+// coin's game is confirmed the same way (owner 2026-10-20): its first agreeing read persists in games.finalChecks (statusFinalCheckStore),
+// so a restart never settles a game on one read; each time a game's count starts again the reason is logged.
+setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket), holds: statusHoldStore(registry), firstReads: statusFirstReadStore(registry), finalChecks: statusFinalCheckStore(registry), now: () => Date.now(),
+  // THE LIVE SCHEDULE READ (owner 2026-10-20): a league with a tracked game in play reads its free official schedule about every minute
+  liveSchedule: true,
+  onFinalCheck: (e) => log(`  [final-check] ${e.game.league}:${e.game.eventId} ${e.game.name} ${e.game.date}: ${e.why}`),
   onSingleSource: (e) => {
     log(`  [single-source] ${e.seriesId ?? "?"} ${e.game.name} ${e.game.date}: ${e.final.away}–${e.final.home} (away–home), ${e.settledBy}, first seen ${new Date(e.heldSince).toISOString()}`);
     const a = singleSourceAlert(registry, e);
@@ -480,6 +485,8 @@ while (!stopping) {
   budget.flush();
   // one bounded GET per cycle, never throws (A-7): ok for a completed cycle whose errors are per coin or fence holds, fail when the cycle
   // failed or every live coin errored, nothing otherwise (ops/heartbeat.ts heartbeatVerdict; review and re-review, 2026-10-18)
+  // THE LIVE SCHEDULE READ: the free official schedule reads taken under the one-minute cache this cycle, per league
+  { const live = espnClient().takeLiveReads(); const n = Object.values(live).reduce((a, b) => a + b, 0); if (n) log(`  [live-schedule] ${Object.entries(live).map(([l, k]) => `${l} ${k}`).join(", ")} read${n === 1 ? "" : "s"} this cycle (games in play)`); }
   await heartbeat.beat(Date.now(), heartbeatVerdict(cycleReport, registry.tokens("live")));
   budget.setPhase("ops");
   if (ALERTS && Date.now() - lastAlertAt >= ALERT_EVERY_MS) { lastAlertAt = Date.now(); try { await opsCheck(lastAlertAt, paused); } catch (e) { log(`  [alert] check failed: ${(e as Error).message.slice(0, 160)}`); } }

@@ -653,7 +653,14 @@ export function tsdbNamePairs(g: Game): [string, string][] {
 }
 /** The User-Agent the readers send. */
 export const ESPN_UA = "burnticker/0.1";
-export const SETTLE_AFTER_START_MS = 6 * 3_600_000;
+/**
+ * A listed game that is still not marked final this long after its start is treated as a stale listing: it is no longer offered as the
+ * league's next or current game (upcoming(), the launch check's next game, the near-game retry). This is NOT a settlement wait. Until
+ * 2026-10-20 the same six hours (then named SETTLE_AFTER_START_MS) was also the earliest a game's result was read; the owner's decision of
+ * 2026-10-20 ("coins should burn right after the final whistle and wait for a second verification 5 min later") removed that wait:
+ * gameSettle.ts reads a game as soon as the schedule marks it final and settles it on a second agreeing read GAME_CONFIRM_GAP_MS later.
+ */
+export const LISTED_GAME_WINDOW_MS = 6 * 3_600_000;
 
 export interface EspnClientOpts {
   fetchImpl?: FetchLike; now?: () => number; /** the clock a fetch is stamped with (fetchedAt; default `now`): the season rehearsal stamps its moved clock */ fetchClock?: () => number; minIntervalMs?: number; ttlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null;
@@ -687,13 +694,34 @@ export const FAIL_BACKOFF_MS = { base: 30_000, max: 600_000 } as const;
  *   season file    the season schedule file (isSeasonScheduleUrl) may take SEASON_SCHEDULE_TIMEOUT_MS; small reads keep 8 s
  *   game near      a failed read of a league whose next game starts within SOON_GAME_WINDOW_MS is tried again after at most
  *                  SOON_FAIL_MAX_MS, however often it failed (the doubling backoff applies otherwise)
- *   next           upcoming() offers no game that is over: not final, not postponed, not started more than SETTLE_AFTER_START_MS ago
+ *   next           upcoming() offers no game that is over: not final, not postponed, not started more than LISTED_GAME_WINDOW_MS ago
  *   second source  a league in APISPORTS_SCHEDULE (the NFL) reads its day listing from API-Sports fixtures by date while TheSportsDB
  *                  cannot be read (BURNTICKER_APISPORTS_KEY; its own budget source, 100 a day on the free plan). Display only: those games
  *                  carry an `apisports-` id, which no game coin can be made from, and season() never falls back (a partial season
  *                  would read as a season that ended).
  */
 export const SEASON_SCHEDULE_TIMEOUT_MS = 20_000;
+/**
+ * THE LIVE SCHEDULE READ (owner 2026-10-20: "right after the final whistle"). While the keeper tracks a game being played in a league
+ * whose schedule is a FREE OFFICIAL feed (MLB StatsAPI, the NHL's api-web: liveScheduleLeague), the league's DAY LISTING (liveDayUrl: one
+ * URL per league, whatever the number of games or coins) is read with a LIVE_SCHEDULE_TTL_MS cache and laid over each team's season
+ * file (season()), so a final shows within about two minutes (one keeper cycle plus this cache). The season files keep the client's TTL.
+ * TheSportsDB and API-Sports are never read this way: their spacing, TTLs and budgets are unchanged (the NBA's schedule comes from
+ * TheSportsDB while its own feed answers 403). A league is live for LIVE_MARK_MS after it was last marked (gameSettle.ts markLiveGames, the
+ * keeper only), so the extra reads stop on their own when no tracked game is in play; at most LIVE_READS_PER_DAY are taken per league per
+ * UTC day (inside the house budget of the MLB and NHL hosts), after which the season file's ordinary cache applies again. Each read is
+ * counted (takeLiveReads) for the keeper's log.
+ */
+export const LIVE_SCHEDULE_TTL_MS = 60_000;
+export const LIVE_MARK_MS = 10 * 60_000;
+export const LIVE_READS_PER_DAY = 400;
+/** Leagues whose schedule comes from a free official feed with a day listing (MLB, NHL). */
+export const liveScheduleLeague = (league: LeagueId): boolean => league === "mlb" || league === "nhl";
+/** The league's day listing read while live: yesterday and today (UTC), so a game that started late yesterday is still in it. */
+export function liveDayUrl(league: LeagueId, nowMs: number): string | null {
+  const day = (t: number) => new Date(t).toISOString().slice(0, 10), today = day(nowMs), yesterday = day(nowMs - 86_400_000);
+  return league === "mlb" ? mlbRangeUrl(yesterday, today) : league === "nhl" ? nhlWeekUrl(yesterday) : null;
+}
 export const SOON_GAME_WINDOW_MS = 24 * 3_600_000;
 export const SOON_FAIL_MAX_MS = 60_000;
 /** The read's queue: its provider, and for TheSportsDB the league id in the URL. */
@@ -786,16 +814,26 @@ export class EspnClient {
     this.tsdbKey = o.tsdbKey === undefined ? ((process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null) : o.tsdbKey;
     this.apiSportsKey = o.apiSportsKey === undefined ? ((process.env.BURNTICKER_APISPORTS_KEY ?? "").trim() || null) : o.apiSportsKey;
   }
+  /** THE LIVE SCHEDULE READ (above): per league, until when its free official schedule is kept LIVE_SCHEDULE_TTL_MS; and the reads taken so. */
+  private liveUntil = new Map<LeagueId, number>(); private liveReads = new Map<LeagueId, number>(); private liveDay = new Map<LeagueId, { day: string; n: number }>();
+  /** The live day-listing reads taken today (UTC) for a league (LIVE_READS_PER_DAY). */
+  liveReadsToday(league: LeagueId): number { const x = this.liveDay.get(league); return x && x.day === new Date(this.now()).toISOString().slice(0, 10) ? x.n : 0; }
+  /** Marks a league live (a tracked game being played, or final and not yet confirmed) for LIVE_MARK_MS from now. Free official feeds only. */
+  markLive(league: LeagueId): void { if (liveScheduleLeague(league)) this.liveUntil.set(league, this.now() + LIVE_MARK_MS); }
+  /** Whether a league is marked live now. */
+  isLive(league: LeagueId): boolean { const u = this.liveUntil.get(league); if (u === undefined) return false; if (this.now() < u) return true; this.liveUntil.delete(league); return false; }
+  /** The reads taken under the short live cache since the last call, per league (the keeper logs them each cycle). */
+  takeLiveReads(): Record<string, number> { const out = Object.fromEntries(this.liveReads); this.liveReads.clear(); return out; }
   /** F-4: notes the league's next open game from a schedule just read. */
   private noteGames(league: LeagueId, games: readonly Game[]): void {
     const now = this.now();
-    const starts = games.filter((g) => !g.completed && g.state !== "post").map((g) => Date.parse(g.startsAt)).filter((t) => Number.isFinite(t) && t > now - SETTLE_AFTER_START_MS);
+    const starts = games.filter((g) => !g.completed && g.state !== "post").map((g) => Date.parse(g.startsAt)).filter((t) => Number.isFinite(t) && t > now - LISTED_GAME_WINDOW_MS);
     if (starts.length) this.nextGameAt.set(league, Math.min(...starts)); else this.nextGameAt.delete(league);
   }
   /** F-4: whether the league's next game (as last read) starts within SOON_GAME_WINDOW_MS, or is being played. */
   gameSoon(league: LeagueId): boolean {
     const t = this.nextGameAt.get(league);
-    return t !== undefined && t - this.now() <= SOON_GAME_WINDOW_MS && t > this.now() - SETTLE_AFTER_START_MS;
+    return t !== undefined && t - this.now() <= SOON_GAME_WINDOW_MS && t > this.now() - LISTED_GAME_WINDOW_MS;
   }
   /**
    * When an answer body this client returned was fetched (its clock), or null for a body it did not fetch. A cached answer keeps the
@@ -803,9 +841,11 @@ export class EspnClient {
    */
   fetchedAt(body: unknown): number | null { return body && typeof body === "object" ? this.fetchedBodies.get(body) ?? null : null; }
   /** GET with the shared politeness and cache; `headers` carry a licensed reader's key (never cached into the key, never logged). */
-  async get(url: string, headers: Record<string, string> = {}, o: { /** the league the read is for (F-4: retried sooner while its next game is near) */ league?: LeagueId; /** this answer's own TTL */ ttlMs?: number; /** a body the provider answered 200 with but that says it failed: its message, else null */ refuse?: (body: unknown) => string | null; /** skip the cache: a game coin's confirming read (gameSettle.ts) must be a new fetch */ fresh?: boolean } = {}): Promise<unknown> {
+  async get(url: string, headers: Record<string, string> = {}, o: { /** the league the read is for (F-4: retried sooner while its next game is near) */ league?: LeagueId; /** this answer's own TTL */ ttlMs?: number; /** THE LIVE SCHEDULE READ: kept LIVE_SCHEDULE_TTL_MS, counted */ live?: boolean; /** a body the provider answered 200 with but that says it failed: its message, else null */ refuse?: (body: unknown) => string | null; /** skip the cache: a game coin's confirming read (gameSettle.ts) must be a new fetch */ fresh?: boolean } = {}): Promise<unknown> {
     const hit = this.cache.get(url);
-    if (hit && !o.fresh && this.now() - hit.at < (hit.ttl ?? this.ttl)) return hit.body;
+    // THE LIVE SCHEDULE READ: a free official feed of a league marked live is kept at most LIVE_SCHEDULE_TTL_MS
+    const live = !!o.live && !!o.league;
+    if (hit && !o.fresh && this.now() - hit.at < (live ? LIVE_SCHEDULE_TTL_MS : hit.ttl ?? this.ttl)) return hit.body;
     // H1: a recent failure is answered from memory (with its own words) until its backoff ends
     const failed = this.failures.get(url);
     if (failed && this.now() < failed.until) throw new Error(failed.message);
@@ -818,6 +858,7 @@ export class EspnClient {
       const wait = (this.lastAt.get(source) ?? 0) + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       await takeOrThrow(source);   // the request budget (apiBudget.ts): waits for its bucket; a spent day budget skips the read
       this.lastAt.set(source, this.now()); logRequest(this.requests, redactKey(url));
+      if (live && o.league) { this.liveReads.set(o.league, (this.liveReads.get(o.league) ?? 0) + 1); this.liveDay.set(o.league, { day: new Date(this.now()).toISOString().slice(0, 10), n: this.liveReadsToday(o.league) + 1 }); }
       try {
         const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers }, signal: AbortSignal.timeout(limitMs) });
         if (!res.ok) throw new Error(`HTTP ${res.status} for ${redactKey(url).slice(0, 120)}`);
@@ -905,6 +946,12 @@ export class EspnClient {
     else if (league === "nhl") games = nhlGames(await this.get(nhlClubScheduleUrl(t.abbr, y), {}, { league }));
     else if (league === "nba") games = await this.nbaSchedule(y);
     else games = await this.tsdb(league, y, true);
+    // THE LIVE SCHEDULE READ (above): the league's day listing, one minute old at most, over the season file's games
+    if ((league === "mlb" || league === "nhl") && y === seasonYearAt(league, this.now()) && this.isLive(league) && this.liveReadsToday(league) < LIVE_READS_PER_DAY) {
+      const url = liveDayUrl(league, this.now());
+      const day = url ? await this.get(url, {}, { league, live: true }).then((b) => (league === "mlb" ? mlbGames(b) : nhlGames(b)), () => null) : null;
+      if (day?.length) { const now = new Map(day.map((g) => [g.eventId, g])); games = games.map((g) => { const d = now.get(g.eventId); return d ? { ...d, seasonYear: g.seasonYear ?? d.seasonYear } : g; }); }
+    }
     // a team's season (MLB, NHL) holds only its own games: the league's next game is noted from the whole-league reads only
     if (league !== "mlb" && league !== "nhl" && (year === null || year === seasonYearAt(league, this.now()))) this.noteGames(league, games);
     return dedupeListings(games.filter(mine)).map((g) => ({ ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
@@ -927,7 +974,7 @@ export class EspnClient {
     const now = this.now();
     this.noteGames(league, games);
     // F-4: nothing that is over is offered as a next game (final, postponed or cancelled, or started more than six hours ago)
-    return games.filter((g) => g.date >= from && g.date <= to && !g.completed && g.state !== "post" && Date.parse(g.startsAt) > now - SETTLE_AFTER_START_MS).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    return games.filter((g) => g.date >= from && g.date <= to && !g.completed && g.state !== "post" && Date.parse(g.startsAt) > now - LISTED_GAME_WINDOW_MS).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
   /**
    * F-4: a league's games from API-Sports fixtures by date, today and the next `extra` days (at most APISPORTS_SCHEDULE_DAYS reads; each
@@ -1072,7 +1119,7 @@ export function windowFor(league: LeagueId, games: readonly Game[], nowMs: numbe
   const year = games.find((g) => g.seasonYear)?.seasonYear ?? seasonYearAt(league, nowMs);
   const window: Window = { kind: "season", year };
   const status = windowStatus({ kind: "team", league, abbr: "", teamId: null, outcome: "win", window }, games, nowMs);
-  const next = games.filter((g) => isOpen(g, nowMs) && Date.parse(g.startsAt) > nowMs - SETTLE_AFTER_START_MS).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
+  const next = games.filter((g) => isOpen(g, nowMs) && Date.parse(g.startsAt) > nowMs - LISTED_GAME_WINDOW_MS).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
   return { window, year, label: `this season (${seasonLabel(league, year)}${noPlayoffs(league) ? "" : ", playoffs included"})`, endsAt: status.endsAt, next, status };
 }
 /** The four window choices for a team at a moment (the dials and the card's inline options). */

@@ -158,7 +158,7 @@ describe("item 6: one signer vs two publishers; the rule's winner is not the tea
     for (const f of ["src/app/burnticker/leagues/[league]/[season]/page.tsx", "src/app/burnticker/derby/page.tsx", "src/app/burnticker/derby/[tournamentId]/page.tsx", "src/app/burnticker/p/[pairId]/page.tsx", "src/lib/burnticker/api/derby.ts", "src/lib/burnticker/coverage/leagues.ts", "src/lib/burnticker/sources/native.ts"]) {
       assert.doesNotMatch(read(f), /(second|an|two) independent operators?\b(?! \(United States\))/i, f);
     }
-    assert.match(read("src/app/burnticker/leagues/[league]/[season]/page.tsx"), /A game counts once a second publisher reports the same final score\. That second source is a check on the data\. It is not a second signer: one signer, run by the operator, signs every reading\./);
+    assert.match(read("src/app/burnticker/leagues/[league]/[season]/page.tsx"), /A game counts once a second publisher reports the same final score and a second check five minutes later agrees\. That second source is a check on the data\. It is not a second signer: one signer, run by the operator, signs every reading\./);
   });
   test("the pair sentence names the coin whose rule fires, says nothing is paid to holders, and never 'nobody is paid'", async () => {
     const { PAIR_BURN_SENTENCE, pairResultSentence } = await import("@/lib/burnticker/describe");

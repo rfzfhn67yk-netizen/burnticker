@@ -263,12 +263,12 @@ locked `derby` block (`src/lib/burnticker/derby/spec.ts`); design note: [DERBY.m
   `espn.game:<league>-<event>-<ABBR>-win|loss` (no ESPN reads: the schedule from MLB StatsAPI, the NHL feed, the NBA feed, else TheSportsDB v2 with
   `BURNTICKER_THESPORTSDB_KEY`; each game settles on its on-chain payout where a Polymarket moneyline market exists, else on
   TheSportsDB's final, and counts only when a second independent operator agrees — the payout and TheSportsDB confirm each other,
-  the league's official feed is a further read where free, API-Sports (`BURNTICKER_APISPORTS_KEY`) optional; a game is read ≥ 6 h
-  after its start; src/lib/burnticker/sources/gameSettle.ts; owner 2026-10-16: a single-game `espn.game:` coin, and both coins of two
-  teams in one game, burn once two independent sources agree on the final, or (owner 2026-10-18 evening) once one source has shown the same final
-  twice a few minutes apart, every source that answers must agree or the burn is held (a game once held burns only on one source's two
-  reads after the hold), and each source's reads are kept in the status table key `games.firstReads`, keyed
-  `league:eventId`; a one-market Polymarket coin on a game moneyline runs on the same schedule, sources/polyGame.ts; a stuck disagreement
+  the league's official feed is a further read where free, API-Sports (`BURNTICKER_APISPORTS_KEY`) optional; owner 2026-10-20: a game
+  is read when the schedule marks it final (no six-hour wait) and settles on a second agreeing read at least five minutes later,
+  for team, season and rivalry coins too (status table key `games.finalChecks`); src/lib/burnticker/sources/gameSettle.ts; a single-game
+  `espn.game:` coin, and both coins of two teams in one game, burn once one source has shown the same final on two reads at least five
+  minutes apart, every source that answers must agree or the burn is held (a game once held burns only on one source's two reads after
+  the hold), and each source's reads are kept in the status table key `games.firstReads`, keyed `league:eventId`; a one-market Polymarket coin on a game moneyline runs on the same schedule, sources/polyGame.ts; a stuck disagreement
   is released only with scripts/burnticker-game-hold.mts, runbook "A game coin held by a disagreement"), `nws.high:<ST>-<°F>`, `nws.rain:<ST>-<in>`, `nws.snow:<ST>` (NWS CLI final reports;
   the Iowa Environmental Mesonet as the cross-read), `fec.beats:<A>-<B>` (OpenFEC receipts per report; same-operator cross-read, refused
   by the coverage gate). Scalar, unit 1, baseline 0, direction up. Their descriptors (kind `native`) in `config/burnticker/sources.json`

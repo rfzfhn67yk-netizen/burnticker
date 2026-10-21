@@ -1,5 +1,6 @@
 "use client";
 
+import { SPREAD_REVIEW_LINE } from "@/lib/burnticker/spreadCopy";
 import { coinCanonicalHref } from "@/lib/burnticker/coinKey";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -2098,6 +2099,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const realOneList = fieldOne ? [{ ticker: ticker.toUpperCase(), symbol: fieldOne.symbol }] : [];
         notes.push(...realReviewNotes(realOneList));
         if (imageGone && !profile.image && !profileB.image) notes.push(IMAGE_NOT_KEPT);
+        // owner 2026-10-20: how a burn above the per-burn cap is spread out, said when this host runs burn dispersal (spreadCopy.ts)
+        if (site.dispersal.available) notes.push(SPREAD_REVIEW_LINE);
         const timing = reviewCurrent ? (shownReview.review as (LaunchReview & { timing?: { dueLabel: string | null; warning: string | null; unplayed: string | null } | null }) | null)?.timing ?? null : null;
         if (timing?.dueLabel) notes.push(timing.dueLabel);
         if (timing?.unplayed) notes.push(timing.unplayed);

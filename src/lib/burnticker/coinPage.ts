@@ -104,7 +104,7 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
       : typeof m?.fractionOfPool === "number" ? `${each} spends ${pct(m.fractionOfPool)} of the burn pool ${on} and burns what it gets.` : null;
     const kind = windowKindOf(r);
     const window = kind === "perpetual" ? PERPETUAL_SENTENCE
-      // owner 2026-10-16: a single-game coin burns once two sources agree, else once one source has shown the same final twice (gameSettle.ts gameSchedule, 2026-10-18)
+      // owner 2026-10-20: a single-game coin burns once the game is final and a second check five minutes later agrees (gameSettle.ts gameSchedule)
       : kind === "one-shot" || oneShot ? `This coin resolves once. One result decides it.${r.oracle === "catalogue" && parseEspnSeries(r.series ?? "")?.kind === "game" ? ` ${GAME_BURN_LINE}` : ""}`
       : kind === "next" ? "This coin covers a fixed number of games, and then its rule ends."
       : kind === "post" ? "This coin covers one postseason, and then its rule ends."

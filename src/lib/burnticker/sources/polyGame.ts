@@ -9,8 +9,9 @@ import { GAME_CONFIRM_GAP_MS, POLY_LEAGUE_TAG, confirmingRead, gameKeyOf, gameSc
  * one-market rule (`market`: a condition id) whose market is a sports game moneyline (Gamma sportsMarketType "moneyline", a game start,
  * two team outcomes) used to settle the moment its payout was on chain. It now runs on the game-coin schedule (gameSettle.ts gameSchedule):
  * the resolved payout is a read like any other, TheSportsDB and the league's feed are read for the same game and must agree, and the
- * reading is released as soon as two of them agree on the final, or, when only one answers, once that one has shown the same final on
- * two reads a few minutes apart (owner, 2026-10-18 evening: the 12-hour wait is gone; gameSettle.ts GAME_CONFIRM_GAP_MS). Recurring tag
+ * reading is released once one of them has shown the same final on two reads at least five minutes apart (owner, 2026-10-18 evening:
+ * the 12-hour wait is gone; owner, 2026-10-20: a second check five minutes later, even when two sources agree; gameSettle.ts
+ * GAME_CONFIRM_GAP_MS). Recurring tag
  * and event series (every game of a team, a whole night) keep their own cadence, like team coins.
  *
  * A soccer yes/no leg of a game's three-way moneyline ("Will Coventry City FC win on 2026-10-12?", gameCoin.ts isGameMoneyline) is one
@@ -59,7 +60,7 @@ export function polyGameGate(o: { client: () => EspnClient; deps: () => GameDeps
     if (ev.result === "void") {
       // nothing burns on a void; it is released when read void again GAME_CONFIRM_GAP_MS or more after its first read (the record's
       // anchor; a void on chain does not change), never anchoring a tie for the score reads
-      const k = `${key.league}:${key.eventId}:void`, mk = store.get(k), why = "the game's market settled void; it is released once that is read again a few minutes later";
+      const k = `${key.league}:${key.eventId}:void`, mk = store.get(k), why = "the game's market settled void; it is released once that is read again at least five minutes later";
       if (!mk) { store.set(k, { firstReadAt: now, by: "on-chain payout", winner: "tie", home: null, away: null, ops: ["on-chain payout"] }); return { release: false, why, dueAt: now + GAME_CONFIRM_GAP_MS, held: false }; }
       if (now < mk.firstReadAt + GAME_CONFIRM_GAP_MS) return { release: false, why, dueAt: mk.firstReadAt + GAME_CONFIRM_GAP_MS, held: false };
       // 2026-10-18 review: the confirming read goes to the RPC again (the client caches a resolved vector for good)

@@ -429,7 +429,7 @@ export class PolymarketClient implements OracleAdapter {
   chainReads: string[] = [];
   /**
    * ONE SCHEDULE FOR EVERY SINGLE-GAME COIN (owner 2026-10-16): the keeper sets this to sources/polyGame.ts polyGameGate, and a one-market
-   * rule on a game moneyline then releases its result only on the game-coin schedule (once two sources agree, else once one source has shown the same final twice; before 2026-10-18, 12 hours after the first
+   * rule on a game moneyline then releases its result only on the game-coin schedule (since 2026-10-20, once one source has shown the same final on two reads at least five minutes apart; before 2026-10-18, 12 hours after the first
    * read, every source agreeing). Null (the web, tests): unchanged.
    */
   gameGate: ((rule: BurnRule, m: GammaMarket, ev: SettledEvent) => Promise<{ release: true } | { release: false; why: string; dueAt: number | null; held: boolean }>) | null = null;
