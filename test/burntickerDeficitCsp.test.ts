@@ -22,6 +22,14 @@ test("?data= accepts only the committed sample folder; every other host, scheme 
   }
 });
 
+test("HB-194: on the official hosts ?data= is ignored, so ?data=sample/ never fetches the undeployed sample folder", () => {
+  const guard = pick(/  if \(base && \/\(\^\|\\\.\)burnticker\\\.com\$\/i\.test\(location\.hostname \|\| ""\)\) base = "";/);
+  const run = (search: string, hostname: string) => (new Function("location", `${baseLine}\nif (base && !/\\/$/.test(base)) base += "/";\n${guard}\nreturn base;`) as (l: { search: string; hostname: string }) => string)({ search, hostname });
+  assert.equal(run("?data=sample/", "deficit.burnticker.com"), "");
+  assert.equal(run("?data=sample/", "burnticker.com"), "");
+  assert.equal(run("?data=sample/", "localhost"), "sample/", "a local preview still reads the sample");
+});
+
 test("hrefs built from the data files are plain https or not links at all", () => {
   const escSrc = pick(/var esc = function \(s\) \{[^\n]+/);
   const hrefSrc = pick(/var href = function \(u\) \{[^\n]+/);
@@ -47,6 +55,12 @@ test("the $DEFICIT host and /deficit/ send an enforced CSP that covers what the 
   for (const m of page.matchAll(/var \w+ = "(https:\/\/[^/"]+)\/[^"]*";/g)) if (/treasury/.test(m[1])) assert.ok(connect.includes(m[1]), m[1]);
   const img = dir("img-src");
   for (const m of page.matchAll(/<img[^>]+src="(https:\/\/[^/"]+)/g)) assert.ok(img.includes(m[1]), `img-src allows ${m[1]}`);
+  // coordinator 2026-10-20: the shared header's search form posts to https://burnticker.com/burnticker
+  const formAction = dir("form-action");
+  const forms = [...page.matchAll(/<form\b[^>]*\baction="(https:\/\/[^/"]+)/g)].map((m) => m[1]);
+  assert.ok(forms.length > 0, "the page has the header search form");
+  for (const h of forms) assert.ok(formAction.includes(h), `form-action allows ${h}`);
+  assert.ok(!formAction.includes("https:") && !formAction.includes("*"), "form-action lists hosts");
   const font = dir("font-src");
   for (const m of page.matchAll(/src:url\("(https:\/\/[^/"]+)/g)) assert.ok(font.includes(m[1]), `font-src allows ${m[1]}`);
   assert.ok(font.includes("https://fonts.gstatic.com") && dir("style-src").includes("https://fonts.googleapis.com"), "Oswald from Google Fonts");

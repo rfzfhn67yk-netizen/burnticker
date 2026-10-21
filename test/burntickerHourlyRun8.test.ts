@@ -271,17 +271,20 @@ describe("HB-108 · PAUSE and the one-sender lock", () => {
   });
   test("the operator's tool refuses --apply under PAUSE and while the lock is held, and offers --clear-drain", () => {
     const src = fs.readFileSync(path.join(ROOT, "scripts", "ops", "top-up.mts"), "utf8");
-    assert.match(src, /apply && fs\.existsSync\(KEEPER_PAUSE_FILE\)/);
-    assert.match(src, /takeTopUpLock\(TOP_UP_LOCK_FILE, "cli"/);
+    assert.match(src, /apply && fs\.existsSync\(PAUSE_FILE\)/);
+    assert.match(src, /takeTopUpLock\(LOCK_FILE, "cli"/);
+    // reviewer finding A: both files from the keeper's root, and the lock re-taken before every step
+    assert.match(src, /const \{ lock: LOCK_FILE, pause: PAUSE_FILE \} = topUpPaths\(ROOT\)/);
+    assert.match(src, /runTopUps\(\{ registry: reg, config, mode: topUpModeFromEnv\(env\), now, log, refreshLock,/);
     assert.match(src, /--clear-drain/);
     // the keeper reads the same PAUSE path
     const keeper = path.join(ROOT, "scripts", "burnticker-keeper.mts");
     if (fs.existsSync(keeper)) assert.match(fs.readFileSync(keeper, "utf8"), /const PAUSE = path\.join\("data", "PAUSE-burnticker"\)/);
   });
-  test("still no cap: the config and the code name no daily or hourly limit", () => {
+  test("HB-180: one hard daily ceiling for all targets together, and no other cap (no per-wallet or hourly limit)", () => {
     const raw = fs.readFileSync(path.join(ROOT, "config", "burnticker", "top-up.json"), "utf8");
     assert.doesNotMatch(raw, /maxPerDay|perHour|dailyCap|"cap"/i);
-    assert.match(raw, /There is no daily cap/);
+    assert.match(raw, /"dailyCeilingLamports": 500000000/);
   });
 });
 
@@ -466,7 +469,9 @@ describe("HS-42 · leagues whose games cannot end tied say nothing about ties", 
 
 describe("HS-43 · the whole-pool burn says its per-run slice in numbers", () => {
   test("85 SOL raise: about 1.7 SOL a run", () => {
-    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent, but not in one go: each daily run spends at most 2% of the trading pool's SOL (about 1.7 SOL on an 85 SOL raise), so a large burn lands over several days.");
+    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent, but not in one go: one burn spends at most 2% of the trading pool's SOL (about 1.7 SOL on an 85 SOL raise). The rest is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart, and a new window starts if any is left, so a large burn lands over hours, not in one go.");
+    assert.doesNotMatch(wholePoolSliceLine("85"), /daily run|several days/, "the budget refills every 600 s and the keeper spreads the rest over hours (dispersal.ts)");
+    assert.match(wholePoolSliceLine("85"), /six-hour window, at least 20 minutes apart/, "spreadCopy.ts wording");
     assert.match(wholePoolSliceLine("40"), /about 0\.8 SOL on a 40 SOL raise/);
     plain(wholePoolSliceLine("85"));
     assert.match(budgetCopy(candidatesPairRule(CID_A) as BurnRule, 1, null, { raiseSol: "60" }).line, /^This coin burns its whole pool once, when the result is in\. The whole pool is spent, but not in one go: .*about 1\.2 SOL on a 60 SOL raise/);

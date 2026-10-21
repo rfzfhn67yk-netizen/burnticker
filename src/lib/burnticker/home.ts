@@ -327,7 +327,11 @@ export function homeStats(totals: { burns: number; burnedTokens: string } | null
   const net = cluster === "mainnet" || cluster === "devnet" ? `${cluster} ` : "";
   const n = audit.receipts, executed = audit.executed ?? null;
   const verified = audit.chainChecked === true && typeof audit.chainVerified === "number" ? audit.chainVerified : 0;
-  const recorded = n === 0 ? "No receipt is recorded yet." : `The audit recomputed ${n === 1 ? "the 1 recorded receipt" : `the ${n} recorded receipts`} from their readings and rules. This is a recomputation of recorded receipts.`;
+  // seventh pass AP7-7: with nothing executed, the recorded rows are queued readings, and the $DEFICIT site says a row is a receipt only
+  // once its burn has executed; so the strip calls them readings, not "recorded receipts"
+  const recorded = n === 0 ? "No receipt is recorded yet."
+    : executed === 0 ? `${n === 1 ? "1 reading is" : `${n} readings are`} queued. None has burned, so there is no receipt yet. The audit recomputed ${n === 1 ? "it" : "each one"} from its reading and its rule.`
+    : `The audit recomputed ${n === 1 ? "the 1 recorded receipt" : `the ${n} recorded receipts`} from their readings and rules. This is a recomputation of recorded receipts.`;
   const why = executed === 0 || (executed === null && n === 0) ? `No ${net}burn has run yet, so no receipt is verified on chain. ${recorded}`
     : audit.chainChecked !== true ? `This run did not read the chain, so no receipt is counted as verified on chain. ${recorded}`
     : typeof audit.chainVerified !== "number" ? `This audit record does not say which receipts the chain showed, so none is counted as verified on chain. ${recorded}`

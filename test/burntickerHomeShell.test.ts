@@ -176,7 +176,7 @@ describe("the platform strip and the one-line status (Claude site audit 2 items 
     // the committed file (no chain read): what it says, nothing it does not
     const fromFile = homeData([], process.cwd()).statusLine!;
     // legitimacy pass: the dated counts follow (the reviews published and the releases since Oct 10, read from the files)
-    assert.match(fromFile, /^Burnticker is in soft launch\. Its programs have been on mainnet since Oct 11, 2026\. One key signs every reading\. \d+ reviews are published, and there have been \d+ releases since Oct 10\.$/);
+    assert.match(fromFile, /^Burnticker is in soft launch\. Its programs have been on mainnet since Oct 11, 2026\. One key signs every reading\. \d+ review reports by AI agents are published, and there have been \d+ releases since Oct 10\. No security firm has audited the code\.$/);
     clean(line!, "status line"); clean(fromFile, "status line from the file");
     const home = read("site/burnticker/index.html");
     assert.match(home, /data-status-line/); assert.doesNotMatch(home, /data-current-status|<h2 id="status-h">Current status/);

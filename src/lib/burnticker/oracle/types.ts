@@ -57,7 +57,12 @@ export interface OracleAdapter {
   searchSeries(query: string, opts?: { category?: string; limit?: number }): Promise<SeriesSummary[]>;
   seriesInfo(ticker: string): Promise<SeriesSummary | null>;
   /** Every settled outcome the rule's selector binds to, settled strictly after `sinceIso` (null = all the venue returns). */
-  settledSince(rule: BurnRule, sinceIso: string | null, opts?: { limitPages?: number }): Promise<ResolvedSelector>;
+  settledSince(rule: BurnRule, sinceIso: string | null, opts?: { limitPages?: number; /** reviewer G: the earliest launch (ms) of a coin on this selector, for a source whose reading is pinned by launch date */ launchedAtMs?: number | null }): Promise<ResolvedSelector>;
+  /**
+   * THE RULE'S OWN SCHEDULE without a settlement read, for a selector whose next read is set by the rule rather than by a budget (the
+   * sports results: gameSettle.ts plannedGameRead). undefined: not rule-paced, so a stored next read stands (multiKeeper.ts fetchDue).
+   */
+  plannedReadAt?(rule: BurnRule, sinceIso: string | null, nowMs: number): Promise<number | undefined>;
   /** The next unsettled market(s) the selector will bind to, with their current YES price — DISPLAY ONLY. */
   impliedChance(rule: BurnRule, prevValue: string | null): Promise<ImpliedChance>;
 }

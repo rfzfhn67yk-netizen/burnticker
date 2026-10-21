@@ -4,7 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { base58Decode } from "@/lib/burnKeeper/keyfile";
 import { Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransaction, type Connection } from "@solana/web3.js";
 import type { Registry } from "@/lib/burnticker/registry";
-import { apiBudget, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { apiBudget, BudgetHoldError, takeOrThrow } from "@/lib/burnticker/apiBudget";
 import { latestSnapshot } from "@/lib/burnticker/ops/snapshot";
 import { confirmByPolling } from "@/lib/burnReceipts/crank";
 import { dropIrysRead, freshIrysRead, IRYS_READ_TTL_MS, publishIrysRead } from "@/lib/burnticker/ops/irysReadMemo";
@@ -31,7 +31,11 @@ import { denverTime } from "@/lib/burnticker/denverTime";   // HB-140 L4: the ba
  * every other wallet in operator.json. A top-up never sends to or from the treasury or the fee wallet, so the trust and transparency
  * pages are unaffected: the only flows are keeper key to an operations wallet, and the payer wallet to its own Irys balance.
  *
- * NO CAPS (owner decision 2026-10-19): a target below its floor is moved to its fill level, every cycle if necessary. What stays is
+ * HB-180 / HS-69 (seventh pre-launch audit, LA7-7 / CH7-4): ONE HARD DAILY CEILING on what leaves the keeper key. The keeper key sends at
+ * most `dailyCeilingLamports` (default 0.5 SOL; config key dailyCeilingLamports, env BURNTICKER_TOP_UP_MAX_SOL_PER_DAY) in one UTC day. The
+ * first transfer that would pass it is refused, every top-up stops for the rest of that UTC day (a registry status row latches it), and
+ * bt-top-up-ceiling is pushed. It resumes at 00:00 UTC. Below the ceiling there is still no per-wallet cap (owner decision 2026-10-19):
+ * a target below its floor is moved to its fill level, every cycle if necessary. What stays is
  * correctness: (1) the keeper key never gives away the SOL it needs for its own fees (its floor plus the day's expected fees); (2) a
  * transfer is the fill level minus the balance, so nothing is overfilled; (3) every transfer is simulated before it is sent and every
  * attempt is recorded in the append-only `top_ups` table; (4) two failures in a row for one target raise bt-top-up-failed; (5) a
@@ -42,9 +46,9 @@ import { denverTime } from "@/lib/burnticker/denverTime";   // HB-140 L4: the ba
  * GUARDS AGAINST A RUNAWAY (HB-108, hourly audit run 8; still no cap on what a healthy wallet gets):
  *   (a) the DRAIN STOP: a target that needed a top-up `drainStop.count` times inside `drainStop.windowHours` (default 3 in 6 hours), or
  *       `drainStop.perDay` times inside 24 hours (default 6; HB-126), is
- *       refused with the reason "draining" and bt-top-up-draining is pushed naming the target and the amounts. It resumes on its own
- *       once the window has passed since the last of those top-ups, or earlier when the operator clears it
- *       (scripts/ops/top-up.mts --clear-drain <target>). A wallet that spends normally needs one top-up every few days, so the stop
+ *       refused with the reason "draining" and bt-top-up-draining is pushed naming the target and the amounts. HB-180: the stop is
+ *       LATCHED (a registry status row, ops.topUp.drainLatched): it does not resume when the window passes. It stays until the operator
+ *       clears it (scripts/ops/top-up.mts --clear-drain <target>), like PAUSE. A wallet that spends normally needs one top-up every few days, so the stop
  *       only ever meets a wallet that is losing SOL faster than anything here spends it (a leaked key, a bug).
  *   (b) PAUSE: the keeper skips the step while data/PAUSE-burnticker exists (the same file read that holds its cranks), and the
  *       operator's --apply refuses while it exists.
@@ -68,6 +72,16 @@ export const TX_FEE_LAMPORTS = BigInt(5_000);
 export const IRYS_FUND_FEE_LAMPORTS = BigInt(20_000);
 /** A transfer whose confirmation did not come back holds its target this long (past a blockhash's life) before it is planned again. */
 export const UNCONFIRMED_WAIT_MS = 3 * 60_000;
+/**
+ * Reviewer finding B (publishes 100-102): an Irys funding that was sent, or that threw after it may have broadcast, holds the Irys
+ * target this long before another funding is planned: the node credits a funding only after its own confirmations, so a balance read
+ * three minutes later can still be the old one and would fund again.
+ */
+export const IRYS_CREDIT_WAIT_MS = 30 * 60_000;
+/** Finding B: the error prefix of a failed Irys funding row whose transaction may have left the wallet (fund() threw after it was called). */
+export const MAY_HAVE_SENT = "may have been sent: ";
+/** Finding B: a failed Irys funding that may have broadcast counts like an unconfirmed send (drain stop, memo, credit wait). */
+export const mayHaveSent = (r: Pick<TopUpRow, "kind" | "status" | "error">): boolean => r.kind === "irys-fund" && r.status === "failed" && !!r.error?.startsWith(MAY_HAVE_SENT);
 /** Rent of one Reading account the keeper key pays per coin per reading: (8 + 286 bytes + 128) × 6,960 lamports per byte. */
 export const READING_RENT_LAMPORTS = BigInt(2_937_120);
 /** The keeper key's floor (bt-keeper-balance-low below it; it refills nothing below it). */
@@ -90,7 +104,11 @@ export interface TopUpConfig {
   noticeLaunchesPerDay: number;
   /** The drain stop (HB-108): `count` top-ups of one target inside `windowHours` stop that target until the window has passed. */
   drainStop: { count: number; windowHours: number; /** HB-126: also `perDay` top-ups inside 24 hours (catches a steady drain spaced just past windowHours) */ perDay?: number };
+  /** HB-180: the most the keeper key sends in one UTC day; the first transfer past it stops every top-up until 00:00 UTC. */
+  dailyCeilingLamports: bigint;
 }
+/** HB-180: the default daily ceiling (0.5 SOL). Normal spending is about one fill every few days per wallet (0.03 to 0.06 SOL). */
+export const DEFAULT_DAILY_CEILING_LAMPORTS = sol(0.5);
 export const DEFAULT_TOP_UP_CONFIG: TopUpConfig = {
   signer: { floorLamports: SIGNER_FLOOR_LAMPORTS, refillToLamports: SIGNER_REFILL_TO_LAMPORTS, feesPerCoinPerDayLamports: READING_RENT_LAMPORTS + BigInt(2) * TX_FEE_LAMPORTS, baseFeesPerDayLamports: sol(0.002) },
   uploadPayerWallet: { enabled: true, floorLamports: sol(0.01), fillLamports: sol(0.03) },
@@ -98,6 +116,7 @@ export const DEFAULT_TOP_UP_CONFIG: TopUpConfig = {
   deficitKeeper: { enabled: true, operatorRole: "keeper", floorLamports: sol(0.03), fillLamports: sol(0.06) },
   noticeLaunchesPerDay: 50,
   drainStop: { count: 3, windowHours: 6, perDay: 6 },
+  dailyCeilingLamports: DEFAULT_DAILY_CEILING_LAMPORTS,
 };
 export const TOP_UP_CONFIG_FILE = path.join("config", "burnticker", "top-up.json");
 
@@ -127,7 +146,9 @@ export function parseTopUpConfig(raw: unknown): TopUpConfig {
     deficitKeeper: { enabled: bool(k, "enabled", true), operatorRole: typeof k.operatorRole === "string" ? k.operatorRole : d.deficitKeeper.operatorRole, floorLamports: lam(k, "floorLamports", d.deficitKeeper.floorLamports), fillLamports: lam(k, "fillLamports", d.deficitKeeper.fillLamports) },
     noticeLaunchesPerDay: typeof o.noticeLaunchesPerDay === "number" && o.noticeLaunchesPerDay > 0 ? o.noticeLaunchesPerDay : d.noticeLaunchesPerDay,
     drainStop: { count: num(dr, "count", d.drainStop.count), windowHours: num(dr, "windowHours", d.drainStop.windowHours), perDay: num(dr, "perDay", d.drainStop.perDay ?? 6) },
+    dailyCeilingLamports: lam(o as Record<string, unknown>, "dailyCeilingLamports", d.dailyCeilingLamports),
   };
+  if (c.dailyCeilingLamports <= BigInt(0)) throw new Error("top-up.json: dailyCeilingLamports must be above 0");
   if (!Number.isInteger(c.drainStop.count) || c.drainStop.count < 2) throw new Error("top-up.json: drainStop.count must be a whole number of at least 2");
   if (!Number.isInteger(c.drainStop.perDay) || (c.drainStop.perDay ?? 0) < 2) throw new Error("top-up.json: drainStop.perDay must be a whole number of at least 2");
   if (c.signer.refillToLamports <= c.signer.floorLamports) throw new Error("top-up.json: signer.refillToLamports must be above signer.floorLamports");
@@ -136,6 +157,21 @@ export function parseTopUpConfig(raw: unknown): TopUpConfig {
   if (c.irys.maxLamports < c.irys.minLamports) throw new Error("top-up.json: irys.maxLamports must be at least irys.minLamports");
   return c;
 }
+
+/** HB-180: the env name that overrides the daily ceiling, in SOL (for example 0.5). */
+export const TOP_UP_CEILING_ENV = "BURNTICKER_TOP_UP_MAX_SOL_PER_DAY";
+/**
+ * The config with BURNTICKER_TOP_UP_MAX_SOL_PER_DAY applied. Unset keeps the config's ceiling. A value that is not a positive number
+ * (or is above 10 SOL) is refused with a reason and the config's ceiling stands: a typo can never remove the ceiling.
+ */
+export function withCeilingFromEnv(cfg: TopUpConfig, env: Readonly<Record<string, string | undefined>>): { config: TopUpConfig; note: string | null } {
+  const raw = (env[TOP_UP_CEILING_ENV] ?? "").trim();
+  if (!raw) return { config: cfg, note: null };
+  const n = /^\d+(\.\d+)?$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isFinite(n) || n <= 0 || n > 10) return { config: cfg, note: `${TOP_UP_CEILING_ENV} is not a number of SOL between 0 and 10; the ceiling stays ${solText(cfg.dailyCeilingLamports, 2)} SOL` };
+  return { config: { ...cfg, dailyCeilingLamports: sol(n) }, note: null };
+}
+export const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 // ---- the ledger (append-only, in the registry file; created on first use) ----
 
@@ -192,6 +228,10 @@ export interface TopUpInput {
   ledger: TopUpRow[];
   /** When the operator last cleared each target's drain stop (--clear-drain); rows at or before it do not count toward the stop. */
   drainClearedAt?: Partial<Record<TopUpTarget, number>>;
+  /** HB-180: when each target's drain stop tripped and latched; it holds while the latch is later than the operator's clear. */
+  drainLatchedAt?: Partial<Record<TopUpTarget, number>>;
+  /** HB-180: the UTC day the daily ceiling last stopped top-ups ("YYYY-MM-DD"); equal to today = every top-up waits for 00:00 UTC. */
+  ceilingStoppedDay?: string | null;
 }
 export interface PlannedStep { target: TopUpTarget; kind: TopUpKind; from: string; to: string; lamports: bigint; reason: string; /** index of the step this one waits on (the Irys two-step) */ after: number | null }
 export interface TargetLevel { target: TopUpTarget; address: string | null; balance: bigint | null; floor: bigint; fill: bigint }
@@ -210,6 +250,10 @@ export interface TopUpPlan {
   signerDays: number | null;
   /** Targets the drain stop refused this pass (each is also in `refused`, with a reason starting "draining"). */
   draining: DrainStop[];
+  /** HB-180: targets held by a latched drain stop whose window has passed (still stopped until the operator clears it). */
+  latched: TopUpTarget[];
+  /** HB-180: the keeper key's sends this UTC day against the daily ceiling; `stopped` = every top-up waits for 00:00 UTC. */
+  ceiling: { day: string; limitLamports: bigint; spentLamports: bigint; stopped: boolean; text: string | null };
 }
 /** A target stopped by the drain stop: the top-ups that tripped it (oldest first) and when it resumes on its own. */
 export interface DrainStop { target: TopUpTarget; count: number; windowHours: number; amounts: bigint[]; since: number; until: number }
@@ -262,8 +306,10 @@ function drainStopWindow(target: TopUpTarget, ledger: readonly TopUpRow[], now: 
   for (const r of ledger) {
     if (r.target !== target || r.at <= clearedAt || r.at > now) continue;
     const p = all.get(r.at) ?? { moved: BigInt(0), transfer: false, fund: false, fundFailed: false };
-    if (r.kind === "irys-fund") { p.fund = true; if (r.status === "failed") p.fundFailed = true; }
-    if (r.status !== "failed") { p.moved = maxB(p.moved, r.lamports); if (r.kind === "transfer") p.transfer = true; }
+    // finding B: a funding that threw after it may have broadcast counts as moved (like an unconfirmed send), not as a failure
+    const maybe = mayHaveSent(r);
+    if (r.kind === "irys-fund") { p.fund = true; if (r.status === "failed" && !maybe) p.fundFailed = true; }
+    if (r.status !== "failed" || maybe) { p.moved = maxB(p.moved, r.lamports); if (r.kind === "transfer") p.transfer = true; }
     all.set(r.at, p);
   }
   const passes = new Map<number, bigint>();
@@ -311,7 +357,12 @@ const hoursText = (h: number): string => `${h} ${h === 1 ? "hour" : "hours"}`;
 /** The alarm text for a drain stop: the target, the amounts, and how it resumes. */
 export function drainStopText(d: DrainStop): string {
   const total = d.amounts.reduce((a, b) => a + b, BigInt(0));
-  return `Burnticker stopped topping up ${TARGET_LABEL[d.target]}: it needed SOL ${d.count} times in ${hoursText(d.windowHours)} (${d.amounts.map((a) => solText(a)).join(", ")} SOL, ${solText(total)} SOL in all), so it is treated as draining. Nothing more goes to it until ${hoursText(d.windowHours)} have passed since the last top-up, or until the operator clears it with scripts/ops/top-up.mts --clear-drain ${d.target}.`;
+  return `Burnticker stopped topping up ${TARGET_LABEL[d.target]}: it needed SOL ${d.count} times in ${hoursText(d.windowHours)} (${d.amounts.map((a) => solText(a)).join(", ")} SOL, ${solText(total)} SOL in all), so it is treated as draining. Nothing more goes to it until the operator finds why and clears it with scripts/ops/top-up.mts --clear-drain ${d.target}. It does not resume on its own.`;
+}
+/** HB-180: the alarm text when the daily ceiling stops top-ups. */
+export function ceilingStopText(o: { day: string; limitLamports: bigint; spentLamports: bigint; target: TopUpTarget | null; lamports: bigint | null }): string {
+  const next = o.target && o.lamports !== null ? ` The next transfer, ${solText(o.lamports)} SOL to ${TARGET_LABEL[o.target]}, would pass it.` : "";
+  return `Burnticker stopped every top-up for the rest of the UTC day ${o.day}: the keeper key has sent ${solText(o.spentLamports)} SOL today and the daily ceiling is ${solText(o.limitLamports)} SOL (${TOP_UP_CEILING_ENV}).${next} Top-ups start again after 00:00 UTC (${denverTime(new Date(Date.parse(`${o.day}T00:00:00Z`) + 86_400_000).toISOString())}). A wallet that spends normally needs far less than this, so check the top_ups list for a leak.`;
 }
 
 export function planTopUps(i: TopUpInput): TopUpPlan {
@@ -326,7 +377,9 @@ export function planTopUps(i: TopUpInput): TopUpPlan {
   const today = { day, count: todayRows.length, signerLamports: todayRows.filter(fromSigner).reduce((a, r) => a + r.lamports, BigInt(0)) };
   // HB-114 follow-up: an Irys funding recorded as "sent" holds the Irys target for the same wait as an unconfirmed one, because the node
   // can credit it late and the next cycle's balance read would otherwise plan a second funding
-  const pendingFor = (t: TopUpTarget): TopUpRow | undefined => i.ledger.find((r) => r.target === t && (r.status === "unconfirmed" || (r.kind === "irys-fund" && r.status === "sent")) && i.now - r.at >= 0 && i.now - r.at < UNCONFIRMED_WAIT_MS);
+  // finding B: an Irys funding (sent, or one that may have broadcast) holds for IRYS_CREDIT_WAIT_MS; any other unconfirmed send for UNCONFIRMED_WAIT_MS
+  const waitOf = (r: TopUpRow): number => (r.kind === "irys-fund" && (r.status !== "failed" || mayHaveSent(r)) ? IRYS_CREDIT_WAIT_MS : r.status === "unconfirmed" ? UNCONFIRMED_WAIT_MS : 0);
+  const pendingFor = (t: TopUpTarget): TopUpRow | undefined => i.ledger.find((r) => r.target === t && waitOf(r) > 0 && i.now - r.at >= 0 && i.now - r.at < waitOf(r));
   // HB-125: a failed pass holds its target for the failure back-off window
   const backedOff = (t: TopUpTarget): boolean => {
     const b = failureBackoffFor(t, i.ledger, i.now);
@@ -336,11 +389,20 @@ export function planTopUps(i: TopUpInput): TopUpPlan {
   };
   // HB-108: the drain stop, checked only for a target that needs SOL now (a stopped target at or above its floor raises nothing)
   const draining: DrainStop[] = [];
+  const latched: TopUpTarget[] = [];
   const drained = (t: TopUpTarget): boolean => {
-    const d = drainStopFor(t, i.ledger, i.now, cfg.drainStop, i.drainClearedAt?.[t] ?? 0);
-    if (!d) return false;
+    const cleared = i.drainClearedAt?.[t] ?? 0;
+    const d = drainStopFor(t, i.ledger, i.now, cfg.drainStop, cleared);
+    if (!d) {
+      // HB-180: a stop that tripped and was never cleared holds after its window (the alarm went out when it tripped)
+      const at = i.drainLatchedAt?.[t];
+      if (at === undefined || at <= cleared) return false;
+      latched.push(t);
+      refused.push({ target: t, reason: `draining: the drain stop tripped at ${denverTime(new Date(at).toISOString())} and stays until the operator clears it (scripts/ops/top-up.mts --clear-drain ${t})` });
+      return true;
+    }
     draining.push(d);
-    refused.push({ target: t, reason: `draining: it needed SOL ${d.count} times in ${hoursText(d.windowHours)} (${d.amounts.map((a) => solText(a)).join(", ")} SOL); stopped until ${hoursText(d.windowHours)} after the last top-up or until the operator clears it` });
+    refused.push({ target: t, reason: `draining: it needed SOL ${d.count} times in ${hoursText(d.windowHours)} (${d.amounts.map((a) => solText(a)).join(", ")} SOL); stopped until the operator clears it (scripts/ops/top-up.mts --clear-drain ${t})` });
     return true;
   };
 
@@ -362,7 +424,7 @@ export function planTopUps(i: TopUpInput): TopUpPlan {
     if (i.payer.irysLamports === null) refused.push({ target: "irys-balance", reason: "the Irys balance could not be read this cycle" });
     else if (i.payer.irysLamports < lv.floor) {
       const pending = pendingFor("irys-balance");
-      if (pending) refused.push({ target: "irys-balance", reason: pending.status === "sent" ? "an Irys funding was sent less than 3 minutes ago and the node may not have credited it yet; waiting for it to settle" : "an earlier transfer for it has not confirmed yet; waiting for it to settle" });
+      if (pending) refused.push({ target: "irys-balance", reason: pending.kind === "irys-fund" ? `an Irys funding ${pending.status === "sent" ? "was sent" : "may have been sent"} less than ${IRYS_CREDIT_WAIT_MS / 60_000} minutes ago and the node may not have credited it yet; waiting for it to settle` : "an earlier transfer for it has not confirmed yet; waiting for it to settle" });
       else if (backedOff("irys-balance") || drained("irys-balance")) { /* refused above */ }
       else {
         const fund = lv.fill - i.payer.irysLamports;
@@ -384,15 +446,28 @@ export function planTopUps(i: TopUpInput): TopUpPlan {
     }
   }
 
+  // HB-180: the hard daily ceiling on what leaves the keeper key (UTC day). Once a transfer would pass it, nothing more goes today.
+  const uday = utcDay(i.now);
+  let spentUtc = i.ledger.filter((r) => fromSigner(r) && utcDay(r.at) === uday).reduce((a, r) => a + r.lamports, BigInt(0));
+  const spentBefore = spentUtc;
+  let ceilingStopped = i.ceilingStoppedDay === uday;
+  let ceilingText: string | null = ceilingStopped ? ceilingStopText({ day: uday, limitLamports: cfg.dailyCeilingLamports, spentLamports: spentBefore, target: null, lamports: null }) : null;
+
   // The keeper key's reserve: below its floor it refills nothing; otherwise each transfer must leave the reserve and its own fee.
   let available = i.signer.lamports - reserve;
   const short: bigint[] = [];
   const signerBelowFloor = i.signer.lamports < cfg.signer.floorLamports;
   for (const w of wants) {
     const cost = w.lamports > BigInt(0) ? w.lamports + TX_FEE_LAMPORTS : BigInt(0);
+    if (!ceilingStopped && spentUtc + w.lamports > cfg.dailyCeilingLamports) {
+      ceilingStopped = true;
+      ceilingText = ceilingStopText({ day: uday, limitLamports: cfg.dailyCeilingLamports, spentLamports: spentUtc, target: w.target, lamports: w.lamports });
+    }
+    if (ceilingStopped) { refused.push({ target: w.target, reason: `the daily ceiling: the keeper key has sent ${solText(spentUtc)} SOL this UTC day and the ceiling is ${solText(cfg.dailyCeilingLamports)} SOL; every top-up waits for 00:00 UTC (${denverTime(new Date(Date.parse(`${uday}T00:00:00Z`) + 86_400_000).toISOString())})` }); continue; }
     if (signerBelowFloor && cost > BigInt(0)) { refused.push({ target: w.target, reason: `the keeper key holds ${solText(i.signer.lamports)} SOL, below its own ${solText(cfg.signer.floorLamports)} SOL floor; it needs the owner first` }); short.push(cost); continue; }
     if (cost > BigInt(0) && cost > available) { refused.push({ target: w.target, reason: `the transfer of ${solText(w.lamports)} SOL would take the keeper key under its reserve of ${solText(reserve)} SOL (its floor plus the day's expected fees)` }); short.push(cost); continue; }
     available -= cost;
+    spentUtc += w.lamports;
     let after: number | null = null;
     if (w.lamports > BigInt(0)) { steps.push({ target: w.target, kind: "transfer", from: i.signer.address, to: w.to, lamports: w.lamports, reason: w.reason, after: null }); after = steps.length - 1; }
     if (w.irysFund !== undefined) steps.push({ target: "irys-balance", kind: "irys-fund", from: w.to, to: "irys", lamports: w.irysFund, reason: w.reason, after: w.target === "irys-balance" ? after : null });
@@ -410,7 +485,8 @@ export function planTopUps(i: TopUpInput): TopUpPlan {
   const burn = expectedFeesPerDay + avgTopUpsPerDay;
   const signerDays = burn > BigInt(0) ? Math.max(0, Number(i.signer.lamports - cfg.signer.floorLamports) / Number(burn)) : null;
   const mark = noticeMarkLamports(prices, cfg);
-  return { steps, refused, levels, signer: { address: i.signer.address, lamports: i.signer.lamports, floor: cfg.signer.floorLamports, reserve, expectedFeesPerDay }, signerShort, today, noticeMarkLamports: mark, overNotice: today.signerLamports > mark, signerDays, draining };
+  return { steps, refused, levels, signer: { address: i.signer.address, lamports: i.signer.lamports, floor: cfg.signer.floorLamports, reserve, expectedFeesPerDay }, signerShort, today, noticeMarkLamports: mark, overNotice: today.signerLamports > mark, signerDays, draining, latched,
+    ceiling: { day: uday, limitLamports: cfg.dailyCeilingLamports, spentLamports: spentBefore, stopped: ceilingStopped, text: ceilingText } };
 }
 
 // ---- the readers and the executor ----
@@ -511,6 +587,12 @@ export const TOP_UP_FAILED_ALERT = "bt-top-up-failed";
 export const TOP_UP_DRAINING_ALERT = "bt-top-up-draining";
 /** The registry status row holding the operator's drain-stop clears: { [target]: ms }. */
 export const TOP_UP_DRAIN_CLEARED_KEY = "ops.topUp.drainCleared";
+/** HB-180: the registry status row holding each target's latched drain stop: { [target]: ms it tripped }. */
+export const TOP_UP_DRAIN_LATCHED_KEY = "ops.topUp.drainLatched";
+/** HB-180: the registry status row holding the UTC day the daily ceiling stopped top-ups: { day, at }. */
+export const TOP_UP_CEILING_KEY = "ops.topUp.ceilingStopped";
+/** HB-180: pushed when the daily ceiling stops top-ups (once per UTC day). */
+export const TOP_UP_CEILING_ALERT = "bt-top-up-ceiling";
 export const TOP_UP_TARGETS: readonly TopUpTarget[] = ["upload-payer-wallet", "irys-balance", "deficit-keeper"];
 /** The operator's clears, read straight from the registry's status table (safe on a registry without one). */
 export function drainClears(db: DatabaseSync): Partial<Record<TopUpTarget, number>> {
@@ -521,6 +603,21 @@ export function drainClears(db: DatabaseSync): Partial<Record<TopUpTarget, numbe
     for (const t of TOP_UP_TARGETS) { const v = j[t]; if (typeof v === "number" && Number.isFinite(v)) out[t] = v; }
     return out;
   } catch { return {}; }
+}
+const statusJson = (db: DatabaseSync, key: string): Record<string, unknown> | null => {
+  try { const r = db.prepare("SELECT value FROM status WHERE key=?").get(key) as { value: string } | undefined; return r ? JSON.parse(r.value) as Record<string, unknown> : null; } catch { return null; }
+};
+/** HB-180: the latched drain stops, read straight from the registry's status table (safe on a registry without one). */
+export function drainLatches(db: DatabaseSync): Partial<Record<TopUpTarget, number>> {
+  const j = statusJson(db, TOP_UP_DRAIN_LATCHED_KEY) ?? {};
+  const out: Partial<Record<TopUpTarget, number>> = {};
+  for (const t of TOP_UP_TARGETS) { const v = j[t]; if (typeof v === "number" && Number.isFinite(v)) out[t] = v; }
+  return out;
+}
+/** HB-180: the UTC day the daily ceiling last stopped top-ups, or null. */
+export function ceilingStoppedDay(db: DatabaseSync): string | null {
+  const d = statusJson(db, TOP_UP_CEILING_KEY)?.day;
+  return typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
 /** The operator clears one target's drain stop (scripts/ops/top-up.mts --clear-drain): the top-ups up to `now` stop counting. */
 export function clearDrainStop(reg: Pick<Registry, "db" | "setStatus">, target: TopUpTarget, now: number): void {
@@ -533,8 +630,12 @@ export function clearDrainStop(reg: Pick<Registry, "db" | "setStatus">, target: 
 export const TOP_UP_LOCK_FILE = path.join("data", "burnticker-top-up.lock");
 /** The keeper refreshes its hold every cycle; it lapses this long after the last cycle (the standby heartbeat window). */
 export const KEEPER_LOCK_TTL_MS = 180_000;
-/** The operator's --apply holds the lock for one pass, at most this long. */
-export const CLI_LOCK_TTL_MS = 5 * 60_000;
+/**
+ * The operator's --apply holds the lock this long past its last refresh. Reviewer finding A (publishes 100-102): the pass re-takes it
+ * before every step, as the keeper does, so a slow pass never outlives it; one step is a transfer polled to blockhash expiry (about
+ * 90 s) or an Irys funding, so 10 minutes covers the slowest single step with room.
+ */
+export const CLI_LOCK_TTL_MS = 10 * 60_000;
 export type TopUpLockHolder = "keeper" | "cli";
 export interface TopUpLock { holder: TopUpLockHolder; pid: number; at: number; expiresAt: number }
 /** The lock as it stands now: null when there is none, or it has lapsed, or it does not read. */
@@ -573,6 +674,13 @@ export function releaseTopUpLock(file: string, holder: TopUpLockHolder, now: num
 }
 /** The keeper's PAUSE file (scripts/burnticker-keeper.mts reads the same path to hold its cranks). */
 export const KEEPER_PAUSE_FILE = path.join("data", "PAUSE-burnticker");
+/**
+ * Reviewer finding A: the lock and PAUSE files resolved from ONE root, for the keeper (KeeperOps, root = its root or the working
+ * directory, as the keeper script's own PAUSE read) and the operator's tool alike, so the two always look at the same files.
+ */
+export function topUpPaths(root: string = process.cwd()): { lock: string; pause: string } {
+  return { lock: path.resolve(root, TOP_UP_LOCK_FILE), pause: path.resolve(root, KEEPER_PAUSE_FILE) };
+}
 type Alert = (kind: string, key: string, text: string, meta: Record<string, unknown> | null) => Promise<unknown> | unknown;
 
 /**
@@ -601,7 +709,7 @@ const failedLastPass = (ledger: readonly TopUpRow[], t: TopUpTarget): boolean =>
   return mine.some((r) => r.at === last && r.status === "failed");
 };
 /** The last Irys funding (not failed) in the ledger, or 0. */
-const lastIrysFundAt = (ledger: readonly TopUpRow[]): number => ledger.reduce((m, r) => (r.kind === "irys-fund" && r.status !== "failed" && r.at > m ? r.at : m), 0);
+const lastIrysFundAt = (ledger: readonly TopUpRow[]): number => ledger.reduce((m, r) => (r.kind === "irys-fund" && (r.status !== "failed" || mayHaveSent(r)) && r.at > m ? r.at : m), 0);
 
 /**
  * Reads everything the planner needs: the balances (keeper key, upload wallet, Irys, the $DEFICIT keeper key), the live Irys prices
@@ -622,7 +730,9 @@ export async function readTopUpInput(o: { db: DatabaseSync; liveCoins: number; c
     // HB-125: while the Irys target's last pass failed (a failed attempt moved nothing), the last reads stay good for FAILING_READ_TTL_MS,
     // so a failure streak costs about one fund call an hour and little else
     const ttl = failedLastPass(ledger, "irys-balance") ? FAILING_READ_TTL_MS : IRYS_READ_TTL_MS;
-    const usable = (at: number): boolean => now - at >= 0 && now - at < ttl && (fundAt === 0 || at >= fundAt + UNCONFIRMED_WAIT_MS);
+    // finding B: a read taken inside a funding's credit wait is not reused once the wait is over (the planner funds again only on a read
+    // taken after the node had IRYS_CREDIT_WAIT_MS to credit it)
+    const usable = (at: number): boolean => now - at >= 0 && now - at < ttl && (fundAt === 0 || (at >= fundAt + UNCONFIRMED_WAIT_MS && !(at < fundAt + IRYS_CREDIT_WAIT_MS && now >= fundAt + IRYS_CREDIT_WAIT_MS)));
     let irysLamports: bigint | null = null;
     if (memo.balance && usable(memo.balance.at)) irysLamports = memo.balance.lamports;
     else {
@@ -661,7 +771,7 @@ export async function readTopUpInput(o: { db: DatabaseSync; liveCoins: number; c
     payer = { address: acct.address, walletLamports: wallet, irysLamports };
   }
   const deficitKeeper = deps.deficitKeeper ? { address: deps.deficitKeeper, lamports: await deps.readLamports(deps.deficitKeeper) } : null;
-  return { now, config: o.config, signer: { address: deps.signerAddress, lamports: signerLamports }, payer, irysPrices: prices, launchesLast7d, liveCoins: o.liveCoins, deficitKeeper, ledger, drainClearedAt: drainClears(o.db) };
+  return { now, config: o.config, signer: { address: deps.signerAddress, lamports: signerLamports }, payer, irysPrices: prices, launchesLast7d, liveCoins: o.liveCoins, deficitKeeper, ledger, drainClearedAt: drainClears(o.db), drainLatchedAt: drainLatches(o.db), ceilingStoppedDay: ceilingStoppedDay(o.db) };
 }
 
 /** Reads, plans, executes (unless the mode is off) and records. Never throws: a failed read is logged and the cycle goes on. */
@@ -675,6 +785,20 @@ export async function runTopUps(o: { registry: Pick<Registry, "db" | "setStatus"
   const done: TopUpRow[] = [], skipped: string[] = [];
   for (const r of plan.refused) log(`  [top-up] ${r.target} not refilled: ${r.reason}`);
   for (const d of plan.draining) await safeAlert(o.alert, TOP_UP_DRAINING_ALERT, `${TOP_UP_DRAINING_ALERT}:${d.target}:${d.since}`, drainStopText(d), { target: d.target, count: d.count, windowHours: d.windowHours, lamports: d.amounts.map(String), until: d.until });
+  // HB-180: latch each new drain stop, so it holds after its window until the operator clears it
+  const newLatch = plan.draining.filter((d) => !((input.drainLatchedAt?.[d.target] ?? 0) > (input.drainClearedAt?.[d.target] ?? 0)));
+  if (newLatch.length) {
+    try { reg.setStatus(TOP_UP_DRAIN_LATCHED_KEY, { ...drainLatches(reg.db), ...Object.fromEntries(newLatch.map((d) => [d.target, now])) }, now); }
+    catch (e) { log(`  [top-up] the drain latch did not write: ${(e as Error).message.slice(0, 120)}`); }
+  }
+  // HB-180: the daily ceiling (latched for the UTC day; one alarm per day)
+  if (plan.ceiling.stopped) {
+    if (input.ceilingStoppedDay !== plan.ceiling.day) {
+      log(`  [top-up] ${plan.ceiling.text}`);
+      try { reg.setStatus(TOP_UP_CEILING_KEY, { day: plan.ceiling.day, at: now }, now); } catch (e) { log(`  [top-up] the ceiling stop did not write: ${(e as Error).message.slice(0, 120)}`); }
+    }
+    await safeAlert(o.alert, TOP_UP_CEILING_ALERT, `${TOP_UP_CEILING_ALERT}:${plan.ceiling.day}`, plan.ceiling.text ?? "Burnticker top-ups stopped by the daily ceiling.", { day: plan.ceiling.day, limitLamports: plan.ceiling.limitLamports.toString(), spentLamports: plan.ceiling.spentLamports.toString() });
+  }
 
   if (plan.signerShort) { log(`  [top-up] ${plan.signerShort.text}`); await safeAlert(o.alert, "bt-keeper-balance-low", `bt-keeper-balance-low:${denverDay(now)}`, plan.signerShort.text, { lamports: plan.signer.lamports.toString(), sendLamports: plan.signerShort.sendLamports.toString() }); }
   const outcomes: (TopUpStatus | null)[] = [];
@@ -690,10 +814,11 @@ export async function runTopUps(o: { registry: Pick<Registry, "db" | "setStatus"
       const r = await deps.transfer(s.to, s.lamports);
       row = recordTopUp(reg.db, { at: now, target: s.target, kind: s.kind, from: s.from, to: s.to, lamports: s.lamports, status: r.status, signature: r.signature, reason: s.reason, error: r.status === "sent" ? null : r.error });
     } else {
-      let before: bigint | null = null;
+      let before: bigint | null = null, called = false;
       try {
         if (!deps.irys) throw new Error("no upload payer");
         before = await deps.readLamports(s.from);
+        called = true;
         const r = await deps.irys.fund(s.lamports);
         row = recordTopUp(reg.db, { at: now, target: s.target, kind: s.kind, from: s.from, to: s.to, lamports: s.lamports, status: "sent", signature: r.id, reason: s.reason, error: null });
       } catch (e) {
@@ -701,14 +826,17 @@ export async function runTopUps(o: { registry: Pick<Registry, "db" | "setStatus"
         // the amount, the row is "unconfirmed" and the Irys target waits UNCONFIRMED_WAIT_MS instead of funding a second time.
         let left = false;
         try { if (before !== null) left = before - (await deps.readLamports(s.from)) >= s.lamports; } catch { left = false; }
-        row = recordTopUp(reg.db, { at: now, target: s.target, kind: s.kind, from: s.from, to: s.to, lamports: s.lamports, status: left ? "unconfirmed" : "failed", signature: null, reason: s.reason, error: (e as Error).message.slice(0, 200) });
+        // finding B: fund() threw after it was called (not a spent request budget, which sends nothing): the transaction may have left even
+        // though the wallet has not dropped yet, so the row says so and counts like an unconfirmed send
+        const maybe = !left && called && !(e instanceof BudgetHoldError);
+        row = recordTopUp(reg.db, { at: now, target: s.target, kind: s.kind, from: s.from, to: s.to, lamports: s.lamports, status: left ? "unconfirmed" : "failed", signature: null, reason: s.reason, error: `${maybe ? MAY_HAVE_SENT : ""}${(e as Error).message}`.slice(0, 200) });
       }
     }
     outcomes.push(row.status);
     done.push(row);
     // HB-114: a funding that may have landed drops the memoised Irys balance (the ledger rule in readTopUpInput also holds off reuse
     // until the node has had UNCONFIRMED_WAIT_MS to credit it)
-    if (row.kind === "irys-fund" && row.status !== "failed" && deps.irys) invalidateIrysBalance(deps.irys);
+    if (row.kind === "irys-fund" && (row.status !== "failed" || mayHaveSent(row)) && deps.irys) invalidateIrysBalance(deps.irys);
     const what = `${solText(row.lamports)} SOL ${row.kind === "transfer" ? `from the keeper key to ${TARGET_LABEL[row.target === "irys-balance" ? "upload-payer-wallet" : row.target]}${row.target === "irys-balance" ? " for the Irys balance" : ""}` : "from the upload wallet into its Irys balance"}`;
     if (row.status === "sent") {
       log(`  [top-up] moved ${what}: ${row.signature} (${s.reason})`);
@@ -752,6 +880,9 @@ export function topUpRunnerFromEnv(o: { env: Readonly<Record<string, string | un
   if (o.cluster !== "mainnet" && !payer) return { runner: null, why: `skipped (${o.cluster} without an upload payer)` };
   let config: TopUpConfig;
   try { config = loadTopUpConfig(o.root); } catch (e) { return { runner: null, why: `skipped (${(e as Error).message.slice(0, 120)})` }; }
+  const ceil = withCeilingFromEnv(config, o.env);
+  config = ceil.config;
+  if (ceil.note) o.log(`  [top-up] ${ceil.note}`);
   const mode = topUpModeFromEnv(o.env);
   const conn = o.connection, signer = o.signer;
   const deficit = config.deficitKeeper.enabled ? deficitKeeperAddress(o.cluster, config.deficitKeeper.operatorRole, o.root) : null;
@@ -764,7 +895,7 @@ export function topUpRunnerFromEnv(o: { env: Readonly<Record<string, string | un
     if (irys === undefined && payer) { try { irys = await irysPayerAccount(o.env, o.cluster); } catch (e) { o.log(`  [top-up] the Irys client did not load, the payer targets wait: ${(e as Error).message.slice(0, 160)}`); } }
     return runTopUps({ registry, config, mode, now, log: o.log, alert, refreshLock, deps: { signerAddress: signer.publicKey.toBase58(), readLamports: async (a) => BigInt(await conn.getBalance(new PublicKey(a), "confirmed")), transfer: connectionTransfer(conn, signer), irys: irys ?? null, deficitKeeper: deficit } });
   };
-  return { runner, why: `${mode === "on" ? "on" : "OFF (BURNTICKER_TOP_UP=off: planned and logged, nothing sent)"}${payer ? "" : ", no upload payer"}${deficit ? ", with the $DEFICIT keeper key" : ""}` };
+  return { runner, why: `${mode === "on" ? "on" : "OFF (BURNTICKER_TOP_UP=off: planned and logged, nothing sent)"}, at most ${solText(config.dailyCeilingLamports, 2)} SOL a UTC day${payer ? "" : ", no upload payer"}${deficit ? ", with the $DEFICIT keeper key" : ""}` };
 }
 
 // ---- what ops.json and the daily summary say ----

@@ -59,6 +59,8 @@ export async function GET(req: Request) {
   return NextResponse.json({ loading: true, error: "the coin list is being read; try again in a few seconds", code: "index-loading", retryAfterSec: 5 }, { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } });
 }
 
+/** The words for a coin the index could not read (the home's omitted row says the same). */
+const OMITTED_REASON = "This site could not read the coin's page.";
 /**
  * HB-145 second half (2026-10-20): timed stage by stage (buildStages.ts; "[burnticker/tokens] built in N ms, 8 coins: registry …, batch …,
  * chain …, shape …; cpu …, loop max …, budget store …"). The chain stage reads every coin under one deadline (boundedReads.ts): a coin
@@ -106,7 +108,12 @@ async function buildIndex(): Promise<{ body: unknown; memoMs: number }> {
   const index = clock.run("shape", () => buildPlatformIndex(statuses, now, auditForIndex(audit)));
   // website-17 wiring item 2: each coin's rank line (coinRank.ts), null when the registry could not be ranked (never a guessed rank)
   const ranks = clock.run("ranks", () => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } });
-  const body = clock.run("shape", () => ({ ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.mint) ?? null, rank: ranks?.get(t.mint)?.line ?? null, statusFacts: facts.get(t.mint) ?? null, listing: listings.get(t.mint) ?? null, ...(readNotes.has(t.mint) ? { readNote: readNotes.get(t.mint)! } : {}) })), cluster: p.cluster, stubs: p.stubs }));
+  // audit 7 review: a coin with no read (a new coin, or every coin past the cold deadline after a restart) is named in `omitted`, as the
+  // home does, and the live and token counts come from the registry rows listed, never from the coins read; `totalsPartial` says the burn
+  // totals leave the omitted coins out
+  const omitted = tokens.flatMap((t, i) => (reads[i].state === "failed" ? [{ mint: t.mint, ticker: t.ticker, reason: OMITTED_REASON }] : []));
+  const totals = { ...index.totals, tokens: tokens.length, live: tokens.filter((t) => t.status === "live").length };
+  const body = clock.run("shape", () => ({ ...index, totals, omitted, ...(omitted.length ? { totalsPartial: true } : {}), tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.mint) ?? null, rank: ranks?.get(t.mint)?.line ?? null, statusFacts: facts.get(t.mint) ?? null, listing: listings.get(t.mint) ?? null, ...(readNotes.has(t.mint) ? { readNote: readNotes.get(t.mint)! } : {}) })), cluster: p.cluster, stubs: p.stubs }));
   console.info(clock.line("[burnticker/tokens]", `${statuses.length} coins`));
   return { memoMs: memoWindowMs(chainRows(tokens).length), body };
 }

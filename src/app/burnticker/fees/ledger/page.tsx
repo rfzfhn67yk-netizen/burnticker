@@ -47,7 +47,8 @@ export default function FeeLedgerPage() {
         </section>
         <section className={card}>
           <h2 className="font-medium">{LEDGER_COPY.incomeTitle}</h2>
-          {l.months.length === 0 ? <p className="text-xs text-neutral-500">The wallet has no transactions yet.</p> : <div className="overflow-x-auto"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Month (UTC)</th><th className="p-2 text-right">Received SOL</th><th className="p-2 text-right">Sent SOL</th><th className="p-2 text-right">Transactions in / out</th></tr></thead>
+          <p className="text-xs text-neutral-400 mb-1">{LEDGER_COPY.incomeNote}</p>
+          {l.months.length === 0 ? <p className="text-xs text-neutral-500">The wallet has no transactions yet.</p> : <div className="overflow-x-auto"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Month (UTC)</th><th className="p-2 text-right">Received SOL (all senders)</th><th className="p-2 text-right">Sent SOL</th><th className="p-2 text-right">Transactions in / out</th></tr></thead>
             <tbody>{l.months.map((m) => <tr key={m.month} className="border-t border-neutral-800"><td className="p-2">{m.month}</td><td className="p-2 text-right tabular-nums">{sol(m.inLamports)}</td><td className="p-2 text-right tabular-nums">{sol(m.outLamports)}</td><td className="p-2 text-right">{m.txIn} / {m.txOut}</td></tr>)}
               <tr className="border-t border-neutral-700 font-medium"><td className="p-2">total</td><td className="p-2 text-right tabular-nums">{sol(l.totals.inLamports)}</td><td className="p-2 text-right tabular-nums">{sol(l.totals.outLamports)}</td><td className="p-2 text-right">{l.totals.transactions}{l.totals.complete ? "" : " (partial)"}</td></tr></tbody></table></div>}
         </section>

@@ -39,6 +39,8 @@ const clean = (t: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${t}
 const read = (p: string) => fs.readFileSync(p, "utf8");
 /** A file that exists only in the monorepo: its text, or null (the caller skips) where it is absent. */
 const mono = (p: string): string | null => (fs.existsSync(p) ? read(p) : null);
+/** TS7-2: a test file that reaches burnticker or launch code (by import or by naming a burnticker ops script). */
+const touchesBurnticker = (src: string): boolean => /@\/lib\/burnticker|@\/app\/burnticker|@\/app\/api\/burnticker|@\/lib\/launch\/|src\/lib\/launch|scripts\/ops\/[^"' ]*burnticker/.test(src);
 const BONK = { mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", pool: "HVNwzt7Pxfu76KHCMQPTLuTCLTm6WnQ1esLv4eizseSv", symbol: "BONK", feedId: "72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419" };
 const R5 = { BURNTICKER_CLUSTER: "mainnet", BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1", BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "r5" };
 
@@ -87,7 +89,7 @@ describe("HB-70: the smaller sixth-pass items", () => {
   test("WZ6-3: the one-shot settings line and the review's preset line name 50% where dispersal runs", () => {
     assert.equal(settingsLine({ shape: "one-shot", id: "x", type: undefined } as never), "It burns once, using the whole pool.");
     const d = settingsLine({ shape: "one-shot", id: "x", type: undefined } as never, { dispersal: true });
-    assert.equal(d, "It burns once. You pick 100 or 50% of the pool."); clean(d);
+    assert.equal(d, "It burns once. You pick 100% or 50% of the pool."); clean(d);
     assert.match(read("src/lib/burnticker/launchReview.ts"), /presetRowLabel\(shareShapeOf\(locked\.rule, \{ dispersal: webDispersalOn\(env, o\.root\) \}\)\)/);
     assert.match(read("src/app/burnticker/templates/page.tsx"), /settingsLine\(t, \{ dispersal \}\)/);
   });
@@ -181,6 +183,13 @@ describe("HB-70: the smaller sixth-pass items", () => {
     assert.doesNotMatch(read("src/app/api/burnticker/tokens/route.ts"), /if \(indexMemoTooOld\(age\)\) await/);
     assert.equal(outcomeLabelsNote("Yes", "No"), ""); assert.equal(outcomeLabelsNote("Broncos", "Seahawks"), "(YES = Broncos, NO = Seahawks)");
   });
+  test("TS7-2: the widened coverage rule finds a burnticker test by what it imports, not by its name", () => {
+    assert.equal(touchesBurnticker(`import { x } from "@/lib/burnticker/registry";`), true);
+    assert.equal(touchesBurnticker(`import { y } from "@/app/api/burnticker/launch/route";`), true);
+    assert.equal(touchesBurnticker(`import { lintCopy } from "@/lib/launch/copyLint";`), true);
+    assert.equal(touchesBurnticker(`const s = read("scripts/ops/rollback-burnticker.sh");`), true);
+    assert.equal(touchesBurnticker(`import { z } from "@/lib/sameOrigin";`), false);
+  });
   test("TS6-4: the publish gate runs every burnticker test file, and the launch and ownerAction tests outside the name globs", (t) => {
     const sh = mono("scripts/ops/publish-and-deploy.sh"); if (sh === null) return t.skip("publish script absent");
     const globs = /^GLOBS="([^"]+)"/m.exec(sh)![1].split(/\s+/);
@@ -188,6 +197,8 @@ describe("HB-70: the smaller sixth-pass items", () => {
     const covered = (f: string) => globs.some((g) => toRe(g).test(`test/${f}`));
     const files = fs.readdirSync("test").filter((f) => f.endsWith(".test.ts"));
     for (const f of files.filter((x) => x.startsWith("burnticker"))) assert.ok(covered(f), `${f} is outside the gate`);
+    // TS7-2 (seventh pass): any test that reaches burnticker or launch code, whatever its name, runs in the gate
+    for (const f of files.filter((x) => touchesBurnticker(read(`test/${x}`)))) assert.ok(covered(f), `${f} reaches burnticker code but is outside the gate`);
     // the eight files the sixth pass found outside the gate all run now (copyLint joined 2026-10-19 after its three "moon" failures were fixed)
     const EXCLUDED: Record<string, string> = {};
     for (const f of ["ownerAction", "copyLint", "dailyPost", "launchConfirmMessages", "launchPairKinds", "launchPlanAge", "btOpsPrivate", "postQueue"].map((x) => `${x}.test.ts`)) {

@@ -37,8 +37,9 @@ test("a prepare that registers nothing exempts the owner's draft ticker only wit
   const m2 = mint();
   const walletProof = await signLaunchRequest(signer(owner), { creator: wallet, tickers: ["OWNDRF"], mints: [m2] }, base58);
   assert.notEqual(code(await prepareLaunch(w.p, { ...body("OWNDRF", wallet), walletProof }, { register: false, mint: m2, client: "c" })), "ticker-taken");
-  // the registering prepare keeps the exemption (it writes the draft under that wallet)
-  assert.equal(code(await prepareLaunch(w.p, body("OWNDRF", wallet), { register: true, mint: mint(), client: "c" })), "ok");
+  // the registering prepare keeps the ticker exemption (it is never ticker-taken); LA7-5: a new mint while that unsent draft is under 30
+  // minutes old is the creator's second draft of the ticker, refused draft-exists (the retry on the draft's own mint is the way on)
+  assert.equal(code(await prepareLaunch(w.p, body("OWNDRF", wallet), { register: true, mint: mint(), client: "c" })), "draft-exists");
 });
 
 test("the review's ticker panel, for a proven creator: their own launched coin is taken (with free tickers); their own draft is not", async () => {

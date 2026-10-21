@@ -257,7 +257,7 @@ describe("the morning check's Burnticker block", () => {
     assert.match(text, /^- feeds: kalshi:KXNFLGAME:binary ok 2 min ago$/m);
     assert.match(text, /^- conditions now: bt-cap-binding$/m);
     assert.match(text, /^- bt- alerts last 24 h: 2$/m, "the non-bt alert is left to the Money section; the old bt- row is outside the window the caller passed");
-    assert.match(text, /\[bt-cap-binding\] Burnticker \$BRONCO: 1\.0 SOL above the cap · UNSEEN$/m);
+    assert.match(text, /\[bt-cap-binding\] Burnticker \$BRONCO: 1\.0 SOL above the cap · no push record$/m, "OP7-7: never UNSEEN (nothing marks an alert seen)");
   });
   test("burntickerCheckin on a host: no db file → the one line (and the file is NOT created); a db → the block, registry closed after", async () => {
     const dir = tmpDir("bt-host-");
@@ -375,5 +375,19 @@ describe("the keeper's local alert record (the registry's alerts table)", () => 
     assert.throws(() => r.db.prepare("UPDATE alerts SET text='x'").run(), /append-only/);
     const { sink: s2 } = sinkFromEnv({}, { local: sink });
     assert.ok(await s2("bt-x", "k9", "t", null, MORNING));
+  });
+});
+
+describe("OP7-7: the ops lines say whether an alert reached the phone", () => {
+  test("pushed, pending, held by the hour's cap, due, not a phone alert, or no push run", async () => {
+    const { pushOutcome } = await import("@/lib/burnticker/push");
+    const T = Date.parse("2026-10-20T00:18:37Z");
+    const state = { cursor: T + 60_000, lastByKind: { "pin-failed": T + 3 * 60_000 }, sent: [], pending: [{ kind: "feed-down", title: "t", priority: "high", body: "b", text: "x", firstAt: T, attempts: 1, nextAt: T }] } as never;
+    assert.equal(pushOutcome("bt-pin-failed", T, state), "pushed to the operator's phone 00:21Z");
+    assert.equal(pushOutcome("bt-feed-down", T, state), "push not delivered yet, retrying");
+    assert.match(pushOutcome("bt-unit-failed", T, state), /^not pushed on its own/);
+    assert.equal(pushOutcome("bt-pin-failed", T + 120_000, state), "push due on the next check");
+    assert.equal(pushOutcome("bt-top-up", T, state), "not a phone alert");
+    assert.match(pushOutcome("bt-pin-failed", T, null), /^not pushed \(phone push not configured/);
   });
 });

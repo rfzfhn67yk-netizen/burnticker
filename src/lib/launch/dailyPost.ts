@@ -46,6 +46,8 @@ export const fmtB = (usd: string | number): string => { const n = Number(usd); r
 export const fmtSol = (s: string | number | null | undefined): string => (s == null ? "—" : `${Number(s).toFixed(4)} SOL`);
 export const fmtPct = (n: number): string => `${n.toFixed(2)}%`;
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+/** The keeper's statuses for a reading that counted units but has not burned (queuedReading.ts QUEUED_STATUSES; the page mirrors it). */
+const QUEUED_ROW: readonly string[] = ["planned", "sending", "swap-sent", "swapped"];
 
 // ---- Treasury's calendar ----
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -126,6 +128,10 @@ export function dailyText(status: StatusJson, burns: readonly BurnJson[], row: B
   const head = `Receipt #${n} · ${row.recordDate}\nDebt to the Penny: ${fmtDollars(row.now)} (${fmtB(row.delta)}${carry})`;
   if (row.status === "skipped") {
     return `${head}\n${plural(row.units, "unit")}, but the day's spend would have been under $1 — nothing bought; the pool keeps it for the next burn day\nSupply unchanged at ${fmtInt(supplyAfter(status, burns, row))}\nverify: ${verifyUrl(siteOf(site), n)}\n${DISCLAIMER}`;
+  }
+  // seventh pass HS-68: a queued reading (counted, not burned) printed "8 units → — $DEFICIT bought back and burned"
+  if (QUEUED_ROW.includes(row.status)) {
+    return `Queued reading · ${row.recordDate}\nDebt to the Penny: ${fmtDollars(row.now)} (${fmtB(row.delta)}${carry})\n${plural(row.units, "unit")} queued, with no burn yet. Queued units are spent once the pool is registered and the burn program runs.\nSupply unchanged at ${fmtInt(supplyAfter(status, burns, row))}\nverify: ${verifyUrl(siteOf(site), n)}\n${DISCLAIMER}`;
   }
   const spent = row.spent != null ? ` (${fmtSol(row.spent)})` : "";
   const tx = row.txUrl ?? "{TX}";

@@ -60,11 +60,12 @@ describe("a coin's numbers come from the tier it pinned", () => {
     assert.match(feeFlowLine(postGraduationFeesFor("mainnet", CPMM_MAINNET_TIER_9.id)), /about 0\.88% of every swap goes to the coin's burn pool and about 0\.04% to the operator/);
     assert.match(feeFlowLine(POST_GRADUATION_FEES), /about 0\.98% of every swap goes to the coin's burn pool and about 0\.13% to the operator/);
   });
-  test("the token page and the program port carry the pin (TokenConfig.ll_cp_config) into the fee table, the sentence and the HTML line", () => {
+  test("the token page states the platform tier's split for every coin (eighth pass B-23: the pin no longer decides it); the port still reads the pin", () => {
     const tp = read("src/lib/burnticker/tokenPage.ts");
-    // continuous audit run 2, HB-13: one pinned split feeds fees.postGraduation, fees.sentence and lifecycle.fees
-    assert.match(tp, /const postGraduation = postGraduationFeesFor\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig\);/);
-    assert.match(tp, /fees: \{ curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig, \{ tierUnread, graduated: lpLockedPct !== null \}\)/);  // HB-56 (hourly run 6): the lock sentence follows the coin's state
+    // owner B-17 decision: LaunchLab moves a graduating coin into the platform's current tier, so one split feeds fees.postGraduation,
+    // fees.sentence and lifecycle.fees, and it is not the pin's
+    assert.match(tp, /const postGraduation = postGraduationFeesFor\(i\.chain\.cluster\);/);
+    assert.match(tp, /fees: \{ curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence\(i\.chain\.cluster, null, \{ tierUnread, graduated: lpLockedPct !== null \}\)/);  // HB-56 (hourly run 6): the lock sentence follows the coin's state
     assert.match(tp, /fees: feeFlowLine\(postGraduation, lpLockedPct, tierUnread\) \}/);
     assert.match(tp, /\$\{esc\(feeFlowLine\(s\.fees\.postGraduation, s\.trust\.lpLockedPct \?\? null, !!s\.fees\.tierUnread\)\)\}/);
     assert.match(read("src/lib/burnKeeper/programAdapter.ts"), /cpConfig: c\.ll_cp_config\.toBase58\(\)/);
@@ -101,7 +102,7 @@ describe("the copy", () => {
   test("every new sentence passes the copy lint and has no future tense or arrows", () => {
     const cfg = loadCopyLintConfig();
     const wp = read("docs/burnticker/WHITEPAPER.md");
-    const tierBullet = wp.slice(wp.indexOf("- **The Raydium pool tier is 14 for new coins.**"), wp.indexOf("- **In rivalry pairs"));
+    const tierBullet = wp.slice(wp.indexOf("- **The Raydium pool tier is 14 for every coin.**"), wp.indexOf("- **In rivalry pairs"));
     // the entry alone: a publish appends its own entry after this one (its program path says "target"), so stop at the next heading
     const section = (rel: string) => read(rel).split("## 2026-10-19 — Raydium CPMM fee tier 14")[1].split("\n## ")[0];
     const changelog = section("docs/burnticker/CHANGELOG.md");

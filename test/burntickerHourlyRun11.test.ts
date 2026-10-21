@@ -112,6 +112,7 @@ describe("HB-130: the second copier of the showcase coin gets a ticker AND a nam
     assert.equal(tickers[0].suggestions[0], t);
     const name = hazardAlternateName(SERIES, { ticker: gen.ticker, name: gen.name }, t)!;
     assert.ok(name, `a name pairs with $${t}`);
+    assert.equal(coins[0].suggestedName, name, "WZ7-3: the review's suggested name moves with the swapped ticker, never the held one");
     assert.deepEqual(lookalikeHits({ ticker: t, name, rule, creator: "VisitorWallet" }, w.existing), [], `$${t} "${name}" passes both checks`);
     return { t, name };
   };

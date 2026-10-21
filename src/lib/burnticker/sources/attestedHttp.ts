@@ -377,12 +377,29 @@ export function parseBody(cfg: HttpSourceConfig, body: unknown, nowMs: number): 
 export function recordReadings(readings: readonly SettledEvent[], rec: { span: "all" | number; once?: boolean }, title: string): SettledEvent[] {
   const xs = [...readings].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const out: SettledEvent[] = [];
+  // audit 7 OP7-6 (2026-10-20): this was quadratic (every day copied and scanned all the days before it). DefiLlama's ~2,000-day history
+  // made it about 60 ms a call, called four times a feed per catalogue build (catalogueSources, rebuilt each minute on the request path),
+  // most of the 1.1 s event-loop holds on the host. Now one pass for "all" (the running maximum, earliest wins on a tie, as before) and
+  // a binary search for the window's start; the readings and titles are the same.
+  const vals = xs.map((x) => Number(x.value));
+  let runBest = 0;   // span "all": the index of the earliest maximum of xs[0..i-1]
   for (let i = 0; i < xs.length; i++) {
-    const from = rec.span === "all" ? null : addDays(xs[i].id, -rec.span);
-    const prev = xs.slice(0, i).filter((p) => from === null || p.id >= from);
-    if (!prev.length || (rec.span !== "all" && (prev[0].id !== from || prev.length < rec.span))) continue;
-    let best = prev[0];
-    for (const p of prev) if (Number(p.value) > Number(best.value)) best = p;
+    if (rec.span === "all" && i > 1 && vals[i - 1] > vals[runBest]) runBest = i - 1;
+    let lo = 0, best: SettledEvent;
+    if (rec.span === "all") {
+      if (i === 0) continue;
+      best = xs[runBest];
+    } else {
+      const from = addDays(xs[i].id, -rec.span);
+      // the days before i with id >= from are a suffix of xs[0..i-1] (xs is sorted by id): find where it starts
+      let hi = i;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (xs[m].id >= from) hi = m; else lo = m + 1; }
+      const n = i - lo;
+      if (!n || xs[lo].id !== from || n < rec.span) continue;
+      let b = lo;
+      for (let j = lo + 1; j < i; j++) if (vals[j] > vals[b]) b = j;
+      best = xs[b];
+    }
     const isRecord = Number(xs[i].value) > Number(best.value);
     if (rec.once && !isRecord) continue;
     out.push({ ...xs[i], value: isRecord ? "1" : "0", title: `${title}: ${xs[i].id} read ${xs[i].value}, ${isRecord ? "a record" : "not a record"} (the record before it was ${best.value} on ${best.id})` });

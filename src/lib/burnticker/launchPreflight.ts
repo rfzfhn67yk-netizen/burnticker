@@ -1,3 +1,4 @@
+import { canonicalEspnSeries } from "@/lib/burnticker/sources/espn";
 import { LINKED_ONE_SHOT_REFUSAL, ONE_SHOT_SHARE_REFUSAL, ONE_SHOT_TARGET_SHARE_REFUSAL } from "@/lib/burnticker/linkedShare";
 import { BURN_REAL_WAITING, BURN_SOL_OFF, burnRealEnabledFromEnv, sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
@@ -174,6 +175,10 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
   if (locked.mode === "vault") out.push({ status: 400, code: "vault-off", message: VAULT_HIDDEN_SENTENCE });
   if (r.oracle === "kalshi" && ctx.kalshiEnabled === false) out.push({ status: 503, code: "venue-off", message: KALSHI_UNAVAILABLE });
   if (r.oracle === "catalogue") {
+    // HB-188 (eighth pass LA8-2): an ESPN id is admitted only in its one spelling (the team's own letters and number, no leading zeros),
+    // so a copycat cannot write a live coin's window another way
+    const canon = /^espn\./.test(r.series ?? "") ? canonicalEspnSeries(r.series) : null;
+    if (canon && canon !== r.series) out.push({ status: 400, code: "series-not-canonical", message: `This rule writes its team's series as ${r.series}. Its one form is ${canon}. Use that form.` });
     const native = nativeSourceById(r.series!);
     if (native) { const np = nativeRuleProblems(native, r); if (np.length) out.push({ status: 400, code: "source-rule", message: np.join("; ") }); out.push(...meetingsRefusals(r, ctx)); }
     else {

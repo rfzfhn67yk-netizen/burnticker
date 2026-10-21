@@ -251,10 +251,10 @@ export class CatalogueAdapter implements OracleAdapter {
     const n = nativeSourceById(id);
     return n ? { oracle: "catalogue", ticker: n.id, title: n.title, category: "tier 4", frequency: n.cadence, settlementSource: { name: n.sourceName, url: n.sourceUrl }, tags: n.flags } : null;
   }
-  async settledSince(rule: BurnRule, sinceIso: string | null): Promise<ResolvedSelector> {
+  async settledSince(rule: BurnRule, sinceIso: string | null, opts?: { launchedAtMs?: number | null }): Promise<ResolvedSelector> {
     // native first-party sources (the sports results with their cross-read, NWS daily climate): their own reader, the same fixed-unit check
     const native = rule.series ? nativeSourceById(rule.series) : null;
-    if (native) { const np = nativeRuleProblems(native, rule); if (np.length) throw new Error(`catalogue: ${np.join("; ")}`); return native.settledSince(rule, sinceIso); }
+    if (native) { const np = nativeRuleProblems(native, rule); if (np.length) throw new Error(`catalogue: ${np.join("; ")}`); return native.settledSince(rule, sinceIso, opts?.launchedAtMs !== undefined ? { launchedAtMs: opts.launchedAtMs } : undefined); }
     const feed = rule.series ? feedById(rule.series, this.o) : null;
     if (!feed) throw new Error(`catalogue: unknown source ${rule.series}`);
     const problems = feedRuleProblems(feed, rule);
@@ -267,6 +267,11 @@ export class CatalogueAdapter implements OracleAdapter {
     const { readings, refusals } = feed.parse(await fetchBody(feed.config, t0, fetchImpl), t0);
     const events = readings.filter((r) => sinceIso === null || r.at > sinceIso);
     return corroborate(feed, readings, events, t0, { entries: loadSourceEntries(), crossFeed: (id) => feedById(id, this.o), fetchImpl, now }, { awaitingFinal: 0, refusals, settlementSourceUrl: feed.config.sourceUrl });
+  }
+  /** The sports sources' own schedule (NativeSource.plannedReadAt); undefined for every other source (their stored next read stands). */
+  async plannedReadAt(rule: BurnRule, sinceIso: string | null, nowMs: number): Promise<number | undefined> {
+    const native = rule.series ? nativeSourceById(rule.series) : null;
+    return native?.plannedReadAt ? native.plannedReadAt(sinceIso, nowMs) : undefined;
   }
   async impliedChance(): Promise<ImpliedChance> { return { chance: null, marketTicker: null, closeTime: null, basis: "primary source: there is no market to read" }; }
 }

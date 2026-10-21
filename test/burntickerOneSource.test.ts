@@ -153,7 +153,7 @@ describe("the public copy says one source can settle a game", () => {
     const cfg = loadCopyLintConfig();
     const f = { marketPollMin: 5, feedPollMin: 60, guardMinMin: 5, guardMaxMin: 20, spendCapPct: 2, umaHours: 2, deficitReads: ["16:30"], deficitZone: "America/New_York" };
     const settle = settlementSections(f).sections.flatMap((s) => s.paragraphs).filter((p) => /TheSportsDB/.test(p));
-    assert.equal(settle.length, 2);
+    assert.equal(settle.length, 3, "the season-coin hold, its typical time, and the per-league line (NBA, NFL and soccer finals from TheSportsDB)");
     const lines = [SINGLE_SOURCE_LINE, sportsConfirmationLine(), coinSourceNote("catalogue", `catalogue:${LAL}`), coinSourceNote("catalogue", teamSeries("mlb", "LAD", "win", { kind: "season", year: 2026 })), NEXT_GAME_NOTES.hold, NEXT_GAME_NOTES.noTag, NEXT_GAME_NOTES.official("MLB's official feed"), ...settle];
     for (const l of lines) {
       assert.ok(lintCopy(l, cfg).ok, `${lintCopy(l, cfg).hits.map((h) => h.phrase).join(", ")}: ${l}`);

@@ -97,14 +97,15 @@ describe("$DEFICIT before launch (website brief §1)", () => {
     assert.match(pre, /fetch\("\/api\/burnticker\/deficit-prelaunch"\)/); assert.ok(fs.existsSync("src/app/api/burnticker/deficit-prelaunch/route.ts"));
     assert.match(pre, /Holders&apos; balances are never touched/);
   });
-  test("deficit.burnticker.com: every Trade control says 'not available until launch' with no href until LINKS.trade is set; missing data reads 'Not launched' / 'Data unavailable'", () => {
+  test("deficit.burnticker.com: every Trade control says 'not available until launch' with no href until LINKS.trade is set; missing data reads 'Data unavailable' (a 404 included, seventh pass AP7-4: the coin is live)", () => {
     const html = fs.readFileSync("site/deficit/index.html", "utf8");
     const trade = [...html.matchAll(/<a [^>]*id="trade(?:Top|Hero|Foot)"[^>]*>[^<]*<\/a>/g)].map((m) => m[0]);
     assert.equal(trade.length, 3);
     for (const a of trade) { assert.doesNotMatch(a, /href=/, a); assert.match(a, /aria-disabled="true"/); assert.match(a, /not available/); }
     assert.match(html, /var LINKS = \{ trade: "" \}/);
     assert.doesNotMatch(html, /awaiting the keeper's status\.json|No receipts loaded/);
-    assert.match(html, new RegExp(`"${EMPTY_STATE_COPY["not-launched"].heading}\\. \\$DEFICIT has not launched yet`));
+    assert.doesNotMatch(html, /"Not launched\. \$DEFICIT has not launched yet/, "AP7-4: a 404 on status.json never calls the live coin not launched");
+    assert.match(html, new RegExp(`"${EMPTY_STATE_COPY.unavailable.heading}\\. The keeper's status file could not be loaded just now`));
     assert.match(html, new RegExp(`"${EMPTY_STATE_COPY.unavailable.heading}\\. The live figures did not load`));
   });
   test("the shared EmptyState replaces the ad-hoc loading / error lines on the coins, pair, coin, trust, operator, check and leagues pages", () => {

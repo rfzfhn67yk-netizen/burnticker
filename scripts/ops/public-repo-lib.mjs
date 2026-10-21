@@ -279,7 +279,7 @@ function generatePackageJson(external, declared) {
     description: "Burnticker: an open launchpad for memecoins whose supply burns when a settled real-world event says so — the on-chain program, the keeper, the platform and the trust page. Carved out of a private monorepo by an explicit allowlist; see README.md.",
     scripts: {
       test: "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs --test --test-concurrency=1 \"test/**/*.test.ts\"",
-      typecheck: "tsc --noEmit",
+      typecheck: "next typegen && tsc --noEmit",
       check: "npm run typecheck && npm test",
       dev: "next dev", build: "next build", start: "next start",
       "keeper": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-keeper.mts",
@@ -466,6 +466,9 @@ function verify(manifest) {
     return r.status === 0;
   };
   const okLint = lint(manifest);
+  // TS7-5 (seventh pre-launch audit): a fresh tree has no .next/types, so tsc cannot find Next's generated route types (LayoutProps);
+  // `next typegen` writes them first (its own failure shows in the log and then in the tsc step)
+  run("next typegen", path.join(OUT, "node_modules", ".bin", "next"), ["typegen"]);
   const okTsc = run("tsc --noEmit", path.join(OUT, "node_modules", ".bin", "tsc"), ["--noEmit", "-p", "tsconfig.json"]);
   // audit A-32 (2026-10-18): a per-test timeout (a hung test ends the run instead of holding the publish; 5 minutes is about three
   // times the slowest honest test, the review/bundle parity sweep at 104 s measured under a parallel run), and the TAP kept so a retry

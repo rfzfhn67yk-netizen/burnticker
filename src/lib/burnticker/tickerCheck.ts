@@ -1,8 +1,9 @@
+import { utcDateTime } from "@/lib/burnticker/utcWords";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { isReserved, normaliseName } from "@/lib/burnticker/reservedNames";
 import { lookalikeHits, sameTickerSentence, type LookalikeExisting } from "@/lib/burnticker/lookalike";
-import { hazardAlternates } from "@/lib/burnticker/hazards";
+import { hazardAlternateName, hazardAlternates } from "@/lib/burnticker/hazards";
 
 /**
  * THE TICKER CHECK AT REVIEW (walkthrough snag 9; prelaunch audit 2026-10-18 A-2 and A-40). For every side of a draft: whether another
@@ -13,9 +14,9 @@ import { hazardAlternates } from "@/lib/burnticker/hazards";
  * A reserved name is a refusal too (reservedNames.ts). The review route runs it on every keystroke's review request.
  */
 export interface InUseCoin { mint: string; name: string; ticker: string; href: string; rule: string }
-export interface TickerCheck { side: "A" | "B"; ticker: string; inUse: InUseCoin[]; /** A-2: another creator's coin (launched or a draft) holds this ticker */ taken: boolean; reserved: boolean; /** HB-30: the ticker reads as, or is one letter from, an existing coin's ticker (the launch's lookalike rule) */ lookalike?: boolean; suggestions: string[]; /** the refusal sentence when taken (it names no coin), else null */ warning: string | null }
+export interface TickerCheck { side: "A" | "B"; ticker: string; inUse: InUseCoin[]; /** A-2: another creator's coin (launched or a draft) holds this ticker */ taken: boolean; /** B-19 at review: when only unproven drafts hold it, the time (ISO) the last of them stops holding it */ freesAt?: string; reserved: boolean; /** HB-30: the ticker reads as, or is one letter from, an existing coin's ticker (the launch's lookalike rule) */ lookalike?: boolean; suggestions: string[]; /** the refusal sentence when taken (it names no coin), else null */ warning: string | null }
 /** `status` and `creator` may be left out by a caller that only has launched coins (then each row counts as another creator's launched coin). */
-export interface TickerRow { mint: string; name: string; ticker: string; rulesJson: string; status?: string; creator?: string }
+export interface TickerRow { mint: string; name: string; ticker: string; rulesJson: string; status?: string; creator?: string; /** B-19 at review: an unproven draft's hold ends at this time (ms); left out for every row that holds for good */ unprovenUntil?: number }
 
 const oneLine = (rulesJson: string): string => { try { return ruleOneLiner(JSON.parse(rulesJson) as BurnRule); } catch { return "its rule could not be read"; } };
 
@@ -23,6 +24,12 @@ const oneLine = (rulesJson: string): string => { try { return ruleOneLiner(JSON.
 export function inUseWarning(ticker: string, coins: readonly unknown[]): string | null {
   return coins.length ? `${sameTickerSentence(ticker)} Please pick another one.` : null;
 }
+
+/** B-19: the sentence for a ticker held only by a launch nobody has signed yet (the prepare's refusal and the review's warning). */
+export const unprovenHoldSentence = (ticker: string, mins: number, now: number = Date.now()): string =>
+  `$${ticker.toUpperCase()} is held by a launch that has not been signed yet. It frees up at ${utcDateTime(now + mins * 60_000)}, in ${mins === 1 ? "1 minute" : `${mins} minutes`}, or you can pick another ticker.`;   // HS-61: the clock time too
+/** B-19: whole minutes until `until` (at least 1). */
+export const minutesUntil = (until: number, now: number = Date.now()): number => Math.max(1, Math.ceil((until - now) / 60_000));
 
 /**
  * Words a team coin's suggestion may add (FANS, CLUB and the rest). None is a copycat suffix (lookalike.ts SUFFIX), so they pass the
@@ -83,7 +90,10 @@ export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; 
     const reserved = isReserved(ticker, deps.reserved), taken = held.length > 0;
     // HB-30: a ticker one letter from (or reading as) another coin's is refused by the launch too, so it gets its own free tickers
     const lookalike = !taken && lookalikeHits({ ticker, name: "", rule: s.rule ?? null, creator: deps.creator ?? null }, existing).some((h) => h.field === "ticker");
-    return { side: s.side, ticker, inUse, taken, reserved, lookalike, suggestions: reserved || taken || lookalike ? fromRule(s.generated, ticker, !!s.team, s.alternates ?? []) : [], warning: taken ? inUseWarning(ticker, held) : null };
+    // B-19 at review (LA7 fix A): a ticker held only by unproven drafts says so, and when it frees up (the prepare's own sentence)
+    const until = taken && held.every((t) => typeof t.unprovenUntil === "number") ? Math.max(...held.map((t) => t.unprovenUntil as number)) : null;
+    const warning = until !== null ? unprovenHoldSentence(ticker, minutesUntil(until)) : taken ? inUseWarning(ticker, held) : null;
+    return { side: s.side, ticker, inUse, taken, ...(until !== null ? { freesAt: new Date(until).toISOString() } : {}), reserved, lookalike, suggestions: reserved || taken || lookalike ? fromRule(s.generated, ticker, !!s.team, s.alternates ?? []) : [], warning };
   });
 }
 
@@ -110,5 +120,13 @@ export function reviewTickerChecks<C extends { side: "A" | "B"; ticker: string; 
   // while that name is free too, so the second copier of the showcase coin moves on to the next hazard word, then a numbered form
   const alts = (c: C) => { const gen = { ticker: c.suggestedTicker ?? "", name: c.suggestedName ?? "" }; return hazardAlternates(ruleA?.series, gen).map((a) => (gen.name ? a : a.ticker)); };
   const sides = coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker, team, rule: c.side === "A" ? ruleA ?? null : null, alternates: c.side === "A" ? alts(c) : [] }));
-  return { tickers: tickerChecks(sides, deps), coins: freeSuggestedTickers(coins, sides, deps) };
+  // WZ7-3 (seventh pass): a hazard swap answered QUAKENXTM6 with the held name "Next Magnitude 6"; the swapped ticker now carries the
+  // name the page pairs with it (hazardAlternateName), so an API caller gets a pair that is free on both fields
+  const free = freeSuggestedTickers(coins, sides, deps).map((c, i) => {
+    const o = coins[i];
+    if (c.side !== "A" || !c.suggestedTicker || c.suggestedTicker === o.suggestedTicker || !o.suggestedName) return c;
+    const n = hazardAlternateName(ruleA?.series, { ticker: o.suggestedTicker ?? "", name: o.suggestedName }, c.suggestedTicker);
+    return n ? { ...c, suggestedName: n } : c;
+  });
+  return { tickers: tickerChecks(sides, deps), coins: free };
 }

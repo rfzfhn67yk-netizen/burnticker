@@ -35,8 +35,10 @@ const fmtInt = (s: unknown): string => String(s ?? "0").split(".")[0].replace(/\
 const fmtT = (amount: unknown): string => `$${(Number(amount) / 1e12).toFixed(3)}T`;
 const fmtB = (delta: unknown): string => { const n = Number(delta); return `${n >= 0 ? "+" : "−"}$${(Math.abs(n) / 1e9).toFixed(2)}B`; };
 const fmtSol = (s: unknown): string => { if (s == null) return "—"; const n = Number(s); return `${n >= 100 ? n.toFixed(1) : n >= 1 ? n.toFixed(3) : n.toFixed(4)} SOL`; };
-/** "2026-10-19 23:41 UTC" */
-export const utcStamp = (iso: string): string => { const d = new Date(iso); return Number.isFinite(d.getTime()) ? `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC` : ""; };
+/** "19 October 2026, 23:41 UTC": the page script's fmtWhen, the one date format on the $DEFICIT site (seventh pass AP7-5 / HS-68) */
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const p2 = (n: number): string => String(n).padStart(2, "0");
+export const utcStamp = (iso: string): string => { const d = new Date(iso); return Number.isFinite(d.getTime()) ? `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())} UTC` : ""; };
 const isMainnet = (c: unknown) => c === "mainnet" || c === "mainnet-beta";
 
 /** Replaces the inner text of the one element with this id (a simple element with no children). */
@@ -125,6 +127,15 @@ export function deficitFirstPaint(template: string, status: Status, burnsFile: u
     h = setText(h, "debtNow", fmtT(s.feed.lastAmount));
     h = setText(h, "debtExact", `$${fmtInt(s.feed.lastAmount)}.${String(s.feed.lastAmount).split(".")[1] ?? "00"} on ${s.feed.lastRecordDate}`);
   } else h = setText(h, "debtExact", "No reading yet");
+  // seventh pass AP7-5: without the script the strip read "Last reading —", "Next feed check —" and "No feed check yet." under a header
+  // that gave the state's time; the reading date, the next check and the last check come from the same status file
+  const lastDate: string | null = s.feed?.lastReading?.recordDate ?? s.feed?.lastRecordDate ?? null;
+  if (lastDate) h = setText(h, "lastDate", String(lastDate));
+  if (s.feed?.nextPollAt && utcStamp(s.feed.nextPollAt)) {
+    h = setText(h, "next", utcStamp(s.feed.nextPollAt));
+    h = setText(h, "nextSub", `The next feed check is at ${utcStamp(s.feed.nextPollAt)}. A burn needs a full $1B of new debt since ${s.feed.lastRecordDate ?? "the last reading"}.${phase && phase !== "graduated" ? " Nothing can burn yet: the curve has to graduate and its pool has to be registered first." : ""}`);
+  }
+  if (s.feed?.lastPollAt && utcStamp(s.feed.lastPollAt)) h = setText(h, "healthSub", `Last feed check at ${utcStamp(s.feed.lastPollAt)}.${s.feed.lastPollOutcome ? ` The result was ${s.feed.lastPollOutcome}.` : ""}`);
   if (s.burned) h = setText(h, "burned", fmtInt(s.burned.total));
   if (s.buyback && s.buyback.feePoolSol != null) h = setText(h, "pool", fmtSol(s.buyback.feePoolSol));
   if (s.generatedAt) h = setText(h, "gen", utcStamp(s.generatedAt));

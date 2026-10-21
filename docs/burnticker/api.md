@@ -84,6 +84,10 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
   coin page's Open Graph and X image, and the stable URL by mint is the one to embed:
   `<img src="https://burnticker.com/burnticker/img/receipt/<MINT>.png" alt="..." width="600" height="315">`. Cached five minutes; the
   server renders each (coin, newest burn) once. Outside `/v1`, so it carries no rate-limit headers.
+- **Suggested ticker and name** (LA7-4): each `coins[]` entry of the review carries `suggestedTicker` and `suggestedName`. When the
+  generated ticker is held by another coin, the review offers a free one; for a natural-disaster coin that is the hazard word
+  (`$QUAKENXTM6`), and `suggestedName` is the name that goes with it ("Next Magnitude 6 Quake"). Use the two together: the
+  generated name with the swapped ticker can still be refused as the held coin's name.
 - **The review** (`POST /launch/review`) carries `backtest` (item 5: a team rule counted over the team's previous season from the
   league's own schedule, `available: false` with the reason otherwise) and `simulation` (item 6: the result, a tie, a void, no result
   and no graduation for a hypothetical 1 SOL burn pool and an 85 SOL trading pool, both coins for a pair; `src/lib/burnticker/simulator.ts`,
@@ -293,7 +297,7 @@ A bot that follows receipts, previews a launch or queues posts can start from `p
 
 Owner decision 2026-10-10: graduation LP is locked forever (Raydium's LP lock), the Fee Key is owned by the burn program's
 `["fee_keys"]` PDA, and the permissionless `claim_lock_fees` pays 80 % of the LP fees' SOL side to the coin's burn pool and 20 % to the
-operator treasury (fixed in code; the coin side is burned). On mainnet, for new coins: After graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%. Coins created before the change keep the tier they pinned (tier 9: about 0.88% to the burn pool, about 0.04% to the operator, about 0.08% to Raydium). All additions, nothing removed:
+operator treasury (fixed in code; the coin side is burned). On mainnet, for every coin: After graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%. Coins made before 19 October 2026 recorded tier 9 when they were created, but LaunchLab moves every graduating coin into a pool on the platform's current fee tier, 14, so they pay the same. All additions, nothing removed:
 
 - `GET /tokens/{ticker}` → `status.lp` (`LpLock`): `policy` "locked-forever", `lockProgram`, `feeKey` (the Fee Key NFT mint; null before
   graduation), `feeKeyOwner` (the fee-keys PDA), `lockedLiquidity`, `feeKeyRecord`, `lockedPct`, `split` { burnBps 8000, operatorBps

@@ -35,10 +35,21 @@ export function keyRotatingFetch(fetchFn: FetchLike, rotate: () => string): Fetc
  * keeps its key; a new revision starts a new one; `rotate` gives the current revision a fresh key after idempotency-key-reused.
  * Second audit 2026-10-19 I-12: the revision passed here is launchRevisions().draft, which carries no wallet or proof.
  */
-export function draftKeys(make: () => string = () => newPrepareKey()): { keyFor(rev: string): string; rotate(rev: string): string } {
+export function draftKeys(make: () => string = () => newPrepareKey(), store: KeyStore | null = null): { keyFor(rev: string): string; rotate(rev: string): string } {
+  // LA7-6 (seventh pre-launch audit; LA6-4): the key is also kept in the tab's storage, keyed by the draft revision, so a reload sends the
+  // same key for the same draft and the server answers with the first prepare (the same draft and mint) instead of building a second one
   let cur: { rev: string; key: string } | null = null;
+  const save = (c: { rev: string; key: string }) => { try { store?.write(JSON.stringify(c)); } catch { /* no memory, no harm */ } };
+  const kept = (rev: string): string | null => {
+    let raw: string | null = null;
+    try { raw = store?.read() ?? null; } catch { raw = null; }
+    try { const j = JSON.parse(raw ?? "null") as { rev?: unknown; key?: unknown } | null; return j && j.rev === rev && typeof j.key === "string" && /^draft_[A-Za-z0-9_]{8,120}$/.test(j.key) ? j.key : null; } catch { return null; }
+  };
   return {
-    keyFor(rev) { if (!cur || cur.rev !== rev) cur = { rev, key: make() }; return cur.key; },
-    rotate(rev) { cur = { rev, key: make() }; return cur.key; },
+    keyFor(rev) { if (!cur || cur.rev !== rev) { const k = kept(rev); cur = { rev, key: k ?? make() }; if (!k) save(cur); } return cur.key; },
+    rotate(rev) { cur = { rev, key: make() }; save(cur); return cur.key; },
   };
 }
+/** LA7-6: where the page keeps its prepare key across a reload (sessionStorage under PREPARE_KEY_STORE). */
+export interface KeyStore { read(): string | null; write(v: string): void }
+export const PREPARE_KEY_STORE = "burnticker.launch.prepareKey.v1";

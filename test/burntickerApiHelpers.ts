@@ -104,6 +104,19 @@ export async function makeWorld(): Promise<World> {
   return { p, program, registry, bronco: registry.token(bronco.mint)!, deficit: registry.token(deficit.mint)! };
 }
 
+/**
+ * LA7-5 (seventh pre-launch audit): a creator's unsent draft of a ticker refuses a second draft of it for 30 minutes (launchPending.ts
+ * OWN_DRAFT_DEDUPE_MS). A test whose point is what happens downstream of two drafts (the confirm's ticker-live guard, the pinned files,
+ * the send record) ages the drafts past that window first, as a creator who comes back later would.
+ */
+export function ageDraftsPastDedupe(registry: Registry, ms = 31 * 60_000): void {
+  // created_at is immutable in the registry (tokens_rule_immutable); the test lifts that trigger for the one update and puts it back
+  const trig = registry.db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='tokens_rule_immutable'").get() as { sql: string } | undefined;
+  if (trig) registry.db.exec("DROP TRIGGER tokens_rule_immutable");
+  try { registry.db.prepare("UPDATE tokens SET created_at = created_at - ? WHERE status = 'draft'").run(ms); }
+  finally { if (trig) registry.db.exec(trig.sql); }
+}
+
 // ---- the in-process router: URL → the v1 route module ----
 
 const ROUTES: [RegExp, string, string[]][] = [

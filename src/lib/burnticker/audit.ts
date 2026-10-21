@@ -1,4 +1,5 @@
 import { readingMatches, type Registry } from "@/lib/burnticker/registry";
+import { readingsAfterLaunch } from "@/lib/burnticker/launchCut";
 import { buildReceiptsJson } from "@/lib/burnticker/tokenPage";
 import { receiptKey } from "@/lib/burnticker/receipt";
 import type { BurnProgramClient } from "@/lib/burnticker/program";
@@ -20,7 +21,7 @@ export async function auditRegistry(registry: Registry, o: { program: BurnProgra
     let locked;
     try { locked = registry.lockedRule(t); } catch (e) { mismatches.push({ ticker: t.ticker, eventId: "-", checks: [`rule text does not re-lock: ${(e as Error).message}`] }); continue; }
     if (locked.sha256 !== t.rulesSha) mismatches.push({ ticker: t.ticker, eventId: "-", checks: [`The stored rules hash is ${t.rulesSha}, but the stored rules text hashes to ${locked.sha256}.`] });
-    const readings = registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
+    const readings = readingsAfterLaunch(registry, t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
     const rows = registry.receipts(t.mint);
     const json = buildReceiptsJson({ token: t, locked, readings, receipts: rows, attesters: registry.attesters(t.mint), state: registry.state(t.mint), feedState: registry.feedState(t.selectorKey), chain: { cluster: t.cluster, programId: o.program?.programId ?? "", supplyRaw: null, feePdaLamports: null, vaultRaw: null }, now: o.now, nextCheckAt: null, implied: null, seriesTitle: null, selectorPending: 0, operator: { can: [], cannot: [], placeholder: true }, pair: null });
     for (const r of json) {

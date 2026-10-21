@@ -6,7 +6,7 @@
   "description": "Burnticker: an open launchpad for memecoins whose supply burns when a settled real-world event says so — the on-chain program, the keeper, the platform and the trust page. Carved out of a private monorepo by an explicit allowlist; see README.md.",
   "scripts": {
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs --test --test-concurrency=1 \"test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "check": "npm run typecheck && npm test",
     "dev": "next dev",
     "build": "next build",

@@ -228,6 +228,26 @@ settles every game as a game coin too, on a memory store with the clock moved to
 
 Set BOTH `BURNTICKER_CREATOR_LAUNCHES_ENABLED` off (or `BURNTICKER_CREATOR_LAUNCHES_PREVIEW=1`) AND `BURNTICKER_CREATOR_LAUNCHES_CLOSED_AT=<ISO time of the closure>` in the web host's env and in the keeper's env, then restart both. While closed, a confirmation is still taken (the coin is already on chain), but only for a create whose block time is before that moment; the keeper's draft reconciler reads the same variable. Without it, the closure is the first time the web host handles a launch request while closed (registry status `launches.closedAt`), which is later than the real closure. Reopening clears that status on the next launch request.
 
+## Turning version-1 launch transactions off
+
+A wallet that offers version-1 signing (Phantom 26.33.1 and later) signs each launch step as a version-1 transaction, with no lookup
+table. To make every creator sign version 0 against the lookup table instead, set `BURNTICKER_WALLET_TX_V1=0` in the web host's env file
+and restart the web service. Unset, or any other value, leaves version 1 on (the default). The sign card reads the setting from
+`GET /api/burnticker/launch` (`walletTxV1`) when it opens, so no rebuild is needed; a card already open keeps the setting it read. A
+launch already signed in version 1 finishes in version 1; one that has not reached the wallet yet is decided again as version 0.
+
+Without the switch, a version-1 launch still falls back by itself: when the dry run of its first step says the network's node does not
+accept version 1 (an older cluster or RPC), the card builds the same step as version 0 with the lookup table and carries on, before the
+wallet is asked. It never switches after the wallet has signed a step, and any other dry-run failure stops the step as before. Each create's
+format is read from the signed bytes when the page reports the send, kept in the registry under `launch.txFormat.<mint>`, and written to
+the web log:
+
+```
+grep "create sent mint=" logs/burnticker-web.log     # format=v1, format=v0, and fallback-from-v1="..." when it fell back
+```
+
+Several `fallback-from-v1` lines in a row mean the RPC upstream no longer takes version 1: set the switch off until the provider is fixed.
+
 ## Add a token by hand
 
 The wizard (`/burnticker/launch`) is the path; by hand is for a rehearsal coin or a recovery. The rule text must be CANONICAL (the registry
@@ -290,8 +310,8 @@ whole). Always the online backup API. Since 2026-10-16 (prelaunch audit F-7) a t
   `burnticker.offbox-pull/v1`: the time of the pull, a method name, how many database copies, whether the encrypted settings bundle
   was written, the check result and the retention; no secret and no path). A receipt that is not exactly that shape is ignored. The
   keeper reads it: `offBox` is `pulled` while the receipt is under 12 hours old, `stale` after that (and `bt-backup-offbox-stale` is
-  pushed), `none` when there is no receipt. ops.json carries `offBox`, `lastOffBoxAt`, `offBoxMethod` and `offBoxPulledAt` in
-  `hostFacts`, and a line "off-box backup pull: ...". `backupDestConfigured` stays a separate fact and reads false here.
+  pushed), `none` when there is no receipt. ops.json carries `offBox`, `offBoxMethod` and `offBoxPulledAt` in `hostFacts` (OP7-8:
+  `lastOffBoxAt` is only the host push step's time in `last-backup.json`, null while no destination is set), and a line "off-box backup pull: ...". `backupDestConfigured` stays a separate fact and reads false here.
 - **Evidence**: `logs/burnticker-backup.log`; `data/backups/last-backup.json` (`ok`, `at`, `files`, `offBox`, `error`). A failed run
   leaves the unit failed; the keeper's unit check pushes `bt-unit-failed` and, from the status file, `bt-backup-failed` (see "On each alert").
 - Install: `sh scripts/ops/install-burnticker-units.sh` (copies, enables and starts the timer; needs `apt install sqlite3`).
@@ -309,7 +329,19 @@ systemctl --user start mct-burnticker-web mct-burnticker-keeper
 ```
 
 The restore checks the backup (quick_check), copies it with the backup API into a temporary file, checks that, moves it into place and
-prints the seconds taken; it refuses a target that exists, or one whose `-wal` or `-journal` is still beside it. The restore drill (`test/burntickerBackup.test.ts`) times it on a fixture.
+prints the seconds taken; it refuses a target that exists, or one whose `-wal` or `-journal` is still beside it. `test/burntickerBackup.test.ts`
+times that restore on a fixture; it is a test, not the drill.
+
+**The restore drill on real data** (HB-62, HB-177) is `scripts/ops/mac/restore-drill.sh`, run on the operator's Mac from the newest off-box
+copies (installed copy beside the pull script; the two must stay identical, `test/burntickerBackupSet.test.ts`). It restores all four
+databases (registry, $DEFICIT ledger, mint key bank, held-swap records) into a scratch directory with the backup API, runs quick_check and
+integrity_check, counts rows, opens the registry with the app's own reader, lists the secrets bundle without writing a decrypted byte, and
+writes `last-restore-drill.json` beside `last-pull.json`. Drills so far: 2026-10-19 23:12Z (first run; the held-swap copy was missing from
+that set and was added to the pull the same day) and 2026-10-21 02:07Z (all four databases, 0 s, 26 coins, 3 receipts, 18 readings at
+schema 3; secrets bundle decrypts, 3 files). Run it after any change to the backup set and at least weekly. A timed rebuild of a whole
+host from these copies has not been done: it needs a scratch server (the research box was deleted on 10-06), and the owner decides when to
+provision one. The backup passphrase lives in the Mac keychain item the pull script reads; the owner keeps a second copy offline
+(a written copy in a place only the owner knows); without it no off-box secrets bundle opens.
 A backup is also what an auditor runs `scripts/burnticker-audit.mts` against (`BURNTICKER_DB=<copy> BURNTICKER_PUBLISH_DIR=/tmp/x`).
 
 ### Where the backups are, and a restore from scratch

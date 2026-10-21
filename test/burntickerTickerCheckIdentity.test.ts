@@ -115,7 +115,9 @@ describe("A-2: keys by mint", () => {
   });
   test("the review route passes each holder's status and creator, and the launch page sends the wallet with the review", async () => {
     const fs = await import("node:fs");
-    assert.match(fs.readFileSync("src/app/api/burnticker/v1/launch/review/route.ts", "utf8"), /status: x\.status, creator: x\.creator/);
+    // LA7 fix A: the rows come from launchGuards.ts heldTickerRows (the prepare's B-19 hold), which passes each holder's status and creator
+    assert.match(fs.readFileSync("src/app/api/burnticker/v1/launch/review/route.ts", "utf8"), /inUse: \(t\) => heldTickerRows\(reg, t\)/);
+    assert.match(fs.readFileSync("src/lib/burnticker/launchGuards.ts", "utf8"), /rulesJson: x\.rulesJson, status, creator: x\.creator/);
     assert.match(fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8"), /reviewer\.want\(reviewKey, active \? \{ rule, \.\.\.\(creator \? \{ creator \} : \{\}\)/);   // audit 7 F02: the body goes to the requester
     assert.ok(CREATOR);
   });

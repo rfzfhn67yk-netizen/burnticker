@@ -47,7 +47,8 @@ describe("item 1: the changelog page is built from docs/burnticker/CHANGELOG.md"
   test("the home status line carries the dated counts; the Trust page shows the latest three and the one history link", () => {
     const c = historyCounts(ROOT);
     assert.equal(c.reviews, publishedReviews(ROOT).length); assert.ok(c.releases! > 0);
-    assert.equal(historyCountsLine({ reviews: 13, releases: 68 }), "13 reviews are published, and there have been 68 releases since Oct 10.");
+    assert.equal(historyCountsLine({ reviews: 13, releases: 68 }), "13 review reports by AI agents are published, and there have been 68 releases since Oct 10. No security firm has audited the code.");
+    assert.equal(historyCountsLine({ reviews: null, releases: 68 }), "There have been 68 releases since Oct 10.");
     assert.equal(historyCountsLine({ reviews: null, releases: null }), null);
     clean(historyCountsLine(c)!, "home counts");
     assert.equal(RELEASES_SINCE, "2026-10-10");

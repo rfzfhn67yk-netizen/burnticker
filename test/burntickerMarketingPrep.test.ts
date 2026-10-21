@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
-import { deficitFirstPaint, visibleHtml } from "@/lib/burnticker/deficitFirstPaint";
+import { deficitFirstPaint, utcStamp, visibleHtml } from "@/lib/burnticker/deficitFirstPaint";
 import { burnLogWords, isExecutedBurn, isQueuedReading, QUEUED_READING, queuedReadingsCount } from "@/lib/burnticker/queuedReading";
 import { graduationExplainer } from "@/lib/burnticker/graduationLine";
 import { coinLinks, curveSwapLabel, goDestination, goHref, jupiterUrl, launchLabUrl, linkHref, LINK_LABELS, raydiumSwapUrl } from "@/lib/burnticker/tradeLinks";
@@ -63,7 +63,7 @@ describe("1. the $DEFICIT site's first paint says what the keeper says", () => {
     assert.match(vis, /Step 2 of 6 toward a first burn/);
     assert.match(vis, /On the curve, waiting for graduation/);
     assert.match(vis, /0 of 85 SOL raised so far/);
-    assert.match(vis, /This page read the coin's state at 2026-10-19 23:41 UTC\./);
+    assert.match(vis, /This page read the coin's state at 19 October 2026, 23:41 UTC\./);
     assert.match(out, /id="readiness" data-readiness="on-curve"/);
   });
   test("the trade controls are live, counted links to Raydium's launchpad page for the mint", () => {
@@ -75,6 +75,23 @@ describe("1. the $DEFICIT site's first paint says what the keeper says", () => {
     assert.match(vis, /\$40\.388T/); assert.match(vis, /\$40,387,508,795,231\.67 on 2026-10-16/);
     assert.match(out, /id="queue" data-queue="queued"/);
     assert.match(vis, /42 more units are recorded by the keeper/);
+  });
+  test("seventh pass AP7-5 / HS-68: with no script, the strip gives the last reading, the next check and the last check, in one date format", () => {
+    const cell = (id: string) => new RegExp(`id="${id}"[^>]*>([^<]*)<`).exec(out)?.[1] ?? "";
+    assert.equal(cell("lastDate"), "2026-10-16");
+    assert.equal(cell("next"), "20 October 2026, 00:00 UTC");
+    assert.match(cell("nextSub"), /^The next feed check is at 20 October 2026, 00:00 UTC\. A burn needs a full \$1B of new debt since 2026-10-16\. Nothing can burn yet/);
+    assert.equal(cell("healthSub"), "Last feed check at 19 October 2026, 20:30 UTC.");
+    for (const id of ["lastDate", "next", "healthSub", "nextSub"]) { clean(cell(id), id); noArrows(cell(id)); }
+    assert.doesNotMatch(vis, /No feed check yet/);
+    // the page's script writes the same format, never the browser's locale string
+    assert.doesNotMatch(PAGE, /toLocaleString\(/);
+    const fmtWhen = new Function(`${/var MONTHS = [^\n]+/.exec(PAGE)![0]}\n${/var fmtWhen = function [^\n]+/.exec(PAGE)![0]}\nreturn fmtWhen;`)() as (iso: string) => string;
+    assert.equal(fmtWhen("2026-10-20T13:38:05Z"), "20 October 2026, 13:38 UTC");
+    assert.equal(fmtWhen("2026-10-19T23:41:12.085Z"), utcStamp("2026-10-19T23:41:12.085Z"));
+    // and a no-script sentence says what a dash means
+    const ns = /<noscript>([\s\S]*?)<\/noscript>/.exec(PAGE)?.[1] ?? "";
+    assert.match(ns, /JavaScript is off/); clean(ns.replace(/<[^>]+>/g, ""), "noscript");
   });
   test("a pre-launch or unreadable status leaves the template as it is", () => {
     assert.equal(deficitFirstPaint(TEMPLATE, JSON.parse(read("site/deficit/status.json")), { burns: [] }), TEMPLATE);
@@ -184,7 +201,9 @@ describe("5. counted trade links", () => {
     listed: (m: string) => m === DEFICIT || (!!reg.token(m) && reg.token(m)!.status !== "expired"),
     count: (m: string, v: "raydium" | "jupiter", now: number) => countTradeClick(reg.db, m, v, now), now: NOW, limiter,
   });
-  const get = (url: string) => new Request(`https://burnticker.com${url}`, { headers: { "x-real-ip": "203.0.113.9" } });
+  // OP7-11: a browser's own click (a top-level navigation with a browser's user agent); other requests are redirected and not counted
+  const BROWSER = { "x-real-ip": "203.0.113.9", "sec-fetch-mode": "navigate", "sec-fetch-user": "?1", "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15" };
+  const get = (url: string, h: Record<string, string> = BROWSER) => new Request(`https://burnticker.com${url}`, { headers: h });
   test("the builder: each trade link carries the counted address; the venue address is unchanged", () => {
     const c = coinLinks({ cluster: "mainnet", mint: EAGLES, phase: "curve", status: "live" });
     assert.equal(c.primary?.url, launchLabUrl(EAGLES)); assert.equal(c.primary?.href, `/burnticker/go/raydium?mint=${EAGLES}`);
@@ -221,6 +240,19 @@ describe("5. counted trade links", () => {
     assert.deepEqual(rows.map((r) => r.key).sort(), [`trade-clicks:2026-10-20:${EAGLES}:jupiter`, `trade-clicks:2026-10-20:${EAGLES}:raydium`]);
     assert.ok(!JSON.stringify(rows).includes("203.0.113.9"));
     assert.deepEqual(tradeClickCounts(reg.db, NOW + 20 * 86_400_000), [], "only the last fourteen days");
+  });
+  test("OP7-11: a prefetch, a link preview, a crawler, a script and a HEAD are redirected but not counted", () => {
+    const reg = registry();
+    const cases: Record<string, string>[] = [
+      { ...BROWSER, "sec-purpose": "prefetch" }, { ...BROWSER, purpose: "prefetch" }, { ...BROWSER, "user-agent": "Slackbot-LinkExpanding 1.0" },
+      { ...BROWSER, "user-agent": "facebookexternalhit/1.1" }, { ...BROWSER, "user-agent": "Googlebot/2.1" }, { "user-agent": "curl/8.4.0" },
+      { ...BROWSER, "sec-fetch-mode": "no-cors" }, { "x-real-ip": "203.0.113.9" },
+    ];
+    for (const h of cases) assert.equal(goRedirect(get(goHref("raydium", EAGLES), h), "raydium", deps(reg)).status, 302, JSON.stringify(h));
+    assert.equal(goRedirect(new Request(`https://burnticker.com${goHref("raydium", EAGLES)}`, { method: "HEAD", headers: BROWSER }), "raydium", deps(reg)).status, 302);
+    assert.deepEqual(tradeClickCounts(reg.db, NOW), [], "none of them is a click");
+    goRedirect(get(goHref("raydium", EAGLES)), "raydium", deps(reg));
+    assert.equal(tradeClickCounts(reg.db, NOW)[0].clicks, 1, "a browser's own click is");
   });
   test("rate limited like the other routes", () => {
     const reg = registry();

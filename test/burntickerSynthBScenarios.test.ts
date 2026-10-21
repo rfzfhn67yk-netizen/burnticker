@@ -168,7 +168,7 @@ describe("b-reload-relaunch: a refusal, a reload and Launch again from the kept 
     for (const raw of [null, "", "null", "{", JSON.stringify({ message: 1, signature: "x" }), JSON.stringify({ message: "not ours", signature: "x" })]) assert.equal(keptReviewProof(raw, PROOF_MAX_AGE_MS, parseWalletProof), null);
   });
 
-  test("the resumed prepare (a new mint) is admitted for a draft that was never sent; a draft whose create was recorded as sent is refused launch-pending", async () => {
+  test("LA7-5: the resumed prepare on a new mint is refused draft-exists with the first mint; on that mint it is admitted; a draft whose create was recorded as sent is refused launch-pending", async () => {
     const w = await makeWorld();
     (w.p as { market: unknown }).market = { getAccountInfo: async () => null };
     const creator = Keypair.generate(), key = creator.publicKey.toBase58();
@@ -177,10 +177,14 @@ describe("b-reload-relaunch: a refusal, a reload and Launch again from the kept 
     const a = await prepareLaunch(w.p, body, { register: true, mint: m1 });
     assert.ok("ok" in a, JSON.stringify("error" in a ? a.error.body : a).slice(0, 300));
     // the wallet refused, the tab reloaded, Launch again: a new mint for the same creator and ticker
-    const b = await prepareLaunch(w.p, body, { register: true, mint: m2 });
-    assert.ok("ok" in b, `a never-sent draft must not block its own creator: ${JSON.stringify("error" in b ? b.error.body : b).slice(0, 300)}`);
+    const refused = await prepareLaunch(w.p, body, { register: true, mint: m2 });
+    assert.ok("error" in refused); if (!("error" in refused)) return;
+    assert.equal((refused.error.body as { code?: string; mint?: string }).code, "draft-exists"); assert.equal((refused.error.body as { mint?: string }).mint, m1);
+    // the page keeps the mint and the prepare key across the reload (LA6-4 / LA7-6), so it resumes on m1
+    const b = await prepareLaunch(w.p, body, { register: true, mint: m1 });
+    assert.ok("ok" in b, `a never-sent draft is resumed on its own mint: ${JSON.stringify("error" in b ? b.error.body : b).slice(0, 300)}`);
     // once a create is recorded as sent, another mint is the launch-pending case
-    assert.equal(w.registry.recordCreateSent(m2, "5".repeat(88), Date.now()), true);
+    assert.equal(w.registry.recordCreateSent(m1, "5".repeat(88), Date.now()), true);
     const m3 = Keypair.generate().publicKey.toBase58();
     const c = await prepareLaunch(w.p, body, { register: true, mint: m3 });
     assert.ok("error" in c); if (!("error" in c)) return;

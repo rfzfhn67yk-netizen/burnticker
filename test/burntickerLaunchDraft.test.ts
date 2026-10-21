@@ -74,7 +74,7 @@ describe("L01 / L10 — one typed draft from every card and template to the prog
   test("the presets are one definition: recurring 1, 2, 5, 10 or 25 % (default 2), one-shot 100 % (50 % too only with burn dispersal, review 10 F1)", () => {
     assert.deepEqual(SHARE_PRESETS, { recurring: [0.01, 0.02, 0.05, 0.1, 0.25], oneShot: [1], linkedOneShot: [1], oneShotDispersal: [1, 0.5] });
     assert.deepEqual(DEFAULT_SHARE, { recurring: 0.02, oneShot: 1, linkedOneShot: 1, oneShotDispersal: 1 });
-    assert.equal(presetRowLabel("recurring"), "1, 2, 5, 10 or 25%");
+    assert.equal(presetRowLabel("recurring"), "1%, 2%, 5%, 10% or 25%");
     assert.deepEqual(snapToPreset(0.03, "recurring"), { value: 0.02, changed: true }, "a 3 % share is moved, and the move is reported");
     assert.match(presetProblem(firstPartyRule(nwsSeries("high", "DTW", 90), 0.03))!, /burns 3% each time/);
   });
@@ -112,7 +112,7 @@ describe("L01 / L10 — one typed draft from every card and template to the prog
       assert.ok([...SHARE_PRESETS.recurring, ...SHARE_PRESETS.oneShot].includes(t.share as never), `${t.id}: a preset share`);
       const named = [...t.example.matchAll(/(\d+(?:\.\d+)?)%/g)].map((m) => Number(m[1]) / 100);
       if (named.length) assert.equal(named[0], t.share, `${t.id}: the example's first share is the template's`);
-      assert.doesNotMatch(t.example, /\b1%/, `${t.id}: no template offers 1 %`);
+      assert.doesNotMatch(t.example.replace(presetRowLabel("recurring"), "the preset row"), /\b1%/, `${t.id}: no template offers 1 % as its share (the preset row names it as one choice)`);
       lintOk(t.example, t.id);
       if (t.lands === "choices") assert.ok(t.choices && t.choices.length > 5, `${t.id}: says what is left to choose`);
     }

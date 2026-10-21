@@ -117,14 +117,16 @@ describe("the review route and the prepare: a draft whose signature ran out", ()
     (w.p as { market: unknown }).market = { getAccountInfo: async () => null };
     const owner = Keypair.generate(), ownerKey = owner.publicKey.toBase58(), stranger = Keypair.generate(), strangerKey = stranger.publicKey.toBase58();
     const body = (creator: string) => ({ creator, ticker: "SYHELD", name: "Synth held", rule: { ...BRONCOS, pair: null }, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true } });
-    const a = await prepareLaunch(w.p, body(ownerKey), { register: true, mint: Keypair.generate().publicKey.toBase58() });
+    const ownMint = Keypair.generate().publicKey.toBase58();
+    const a = await prepareLaunch(w.p, body(ownerKey), { register: true, mint: ownMint });
     assert.ok("ok" in a, JSON.stringify("error" in a ? a.error.body : a).slice(0, 300));
     const walletProof = await signLaunchRequest(signer(stranger), { creator: strangerKey, tickers: ["SYHELD"], mints: [] }, base58);
     const s = await prepareLaunch(w.p, { ...body(strangerKey), walletProof }, { register: true, mint: Keypair.generate().publicKey.toBase58() });
     assert.ok("error" in s); if (!("error" in s)) return;
     assert.equal(s.error.status, 409);
     assert.equal((s.error.body as { code?: string }).code, "ticker-taken");
-    const again = await prepareLaunch(w.p, body(ownerKey), { register: true, mint: Keypair.generate().publicKey.toBase58() });
+    // LA7-5: the creator continues on the same draft (a second unsent draft of the ticker is refused draft-exists for 30 minutes)
+    const again = await prepareLaunch(w.p, body(ownerKey), { register: true, mint: ownMint });
     assert.ok("ok" in again, `the draft's own creator continues: ${JSON.stringify("error" in again ? again.error.body : again).slice(0, 300)}`);
   });
 });

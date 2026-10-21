@@ -40,3 +40,15 @@ its content unchanged (it held no entries).
 - No burn, reading or receipt was affected.
 - Cause of the stalls: page builds waited on chain reads that had no time limit, and the launch review redid slow team-name matching for every game it read, which held the web process. Changes: 63c34cf8 and 2b5c7536 put time limits on those reads and log slow requests, 9aa893e6 stops page data being rebuilt when nobody asked for it, and cafdd563 (publish 105, live 07:52 Denver) removes the repeated matching. The 500s came from a new route for unknown coin pages and were fixed by 68c7e450 in publish 104.
 - Postmortem: due under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).
+
+## 2026-10-19 — the daily registry snapshot was not pinned
+
+- 18:15 Denver (00:15 UTC on 10-20): the daily job that pins a copy of the coin registry to Arweave through Irys failed with "402: not enough balance for transaction". The upload account had run out of funds, so that day's public copy of the registry was not pinned.
+- No burn, reading or receipt was affected. Each coin's own receipts and pinned descriptions are separate and were not touched.
+- An alert (bt-snapshot-failed) was raised to the operator at the time. This entry was added on 2026-10-20 after the eighth review found it missing.
+- Postmortem: due under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).
+
+## 2026-10-20 — correction to the entry "a five-minute web outage, short stalls on publishes 102 and 103, and unknown coin pages answering 500"
+
+- That entry gave two release times about 12 minutes late. Publish 104 went live at 06:46 Denver, not 06:58, so the unknown-coin 500 answers ended 12 minutes earlier than it says. Publish 105 went live at 07:40 Denver, not 07:52. The times come from the web unit's start in the host journal.
+- The rest of that entry stands. It is left as written, because this log is append-only.

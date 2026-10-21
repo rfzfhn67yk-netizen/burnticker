@@ -244,6 +244,40 @@ describe("the other milestone shapes: terms first", () => {
     assert.deepEqual(recordReadings(xs, { span: "all", once: true }, "T").map((r) => r.id.slice(8)), ["02", "04", "06"]);
   });
 
+  test("recordReadings (audit 7 OP7-6): the linear pass gives exactly the readings and titles of the old quadratic one, and 2,000 days take milliseconds", () => {
+    // the old implementation, kept here as the reference
+    const reference = (readings: readonly { id: string; value: string | null }[], rec: { span: "all" | number; once?: boolean }, title: string) => {
+      const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+      const xs = [...readings].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      const out: { id: string; value: string; title: string }[] = [];
+      for (let i = 0; i < xs.length; i++) {
+        const from = rec.span === "all" ? null : addDays(xs[i].id, -rec.span);
+        const prev = xs.slice(0, i).filter((p) => from === null || p.id >= from);
+        if (!prev.length || (rec.span !== "all" && (prev[0].id !== from || prev.length < rec.span))) continue;
+        let best = prev[0];
+        for (const p of prev) if (Number(p.value) > Number(best.value)) best = p;
+        const isRecord = Number(xs[i].value) > Number(best.value);
+        if (rec.once && !isRecord) continue;
+        out.push({ id: xs[i].id, value: isRecord ? "1" : "0", title: `${title}: ${xs[i].id} read ${xs[i].value}, ${isRecord ? "a record" : "not a record"} (the record before it was ${best.value} on ${best.id})` });
+      }
+      return out;
+    };
+    let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    for (let trial = 0; trial < 60; trial++) {
+      const n = 1 + Math.floor(rnd() * 80);
+      const day0 = Date.parse("2026-01-01T00:00:00Z");
+      // gaps, ties, repeated values, a NaN-like value and shuffled input order
+      const xs = Array.from({ length: n }, (_, i) => ({ id: new Date(day0 + (i + Math.floor(rnd() * 3)) * 86_400_000 * (rnd() < 0.2 ? 2 : 1)).toISOString().slice(0, 10), at: "x", result: null, value: rnd() < 0.05 ? "n/a" : String(Math.floor(rnd() * 10)), title: "t", sourceUrl: "https://x" }))
+        .filter((x, i, a) => a.findIndex((y) => y.id === x.id) === i).sort(() => rnd() - 0.5);
+      for (const rec of [{ span: "all" as const }, { span: "all" as const, once: true }, { span: 1 }, { span: 3 }, { span: 7, once: true }]) {
+        assert.deepEqual(recordReadings(xs, rec, "T").map((r) => ({ id: r.id, value: r.value, title: r.title })), reference(xs, rec, "T"), `trial ${trial} ${JSON.stringify(rec)}`);
+      }
+    }
+    const long = Array.from({ length: 2_000 }, (_, i) => ({ id: new Date(Date.parse("2020-01-01T00:00:00Z") + i * 86_400_000).toISOString().slice(0, 10), at: "x", result: null, value: String(Math.sin(i / 50) * 1000 + i), title: "t", sourceUrl: "https://x" }));
+    const t0 = performance.now(); recordReadings(long, { span: "all" }, "T"); const ms = performance.now() - t0;
+    assert.ok(ms < 30, `2,000 days took ${ms.toFixed(1)} ms (the quadratic pass took about 60 ms)`);
+  });
+
   test("market value and rank (CoinGecko) are refused at the gate with the terms read, before anything is fetched", async () => {
     for (const id of ["coingecko.mcap:solana", "coingecko.rank:solana"]) {
       const f = feedById(id)!;

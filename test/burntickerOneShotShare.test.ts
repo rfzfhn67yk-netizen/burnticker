@@ -177,7 +177,7 @@ describe("review 10 F1: what the launcher offers and says", () => {
   });
   test("the budget row for a share under 100 % says the share is spent on the coin before the rest moves", () => {
     const line = budgetCopy(rule(0.5).rule, 0.5, null).line;
-    assert.match(line, /This coin burns 50% of its pool once, when the result is in\. The burn lands in slices sized to the pool's liquidity\./);
+    assert.match(line, /This coin burns 50% of its pool once, when the result is in\. One burn spends at most 2% of the trading pool's SOL\. The rest is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart/);
     assert.match(line, /The rest of the pool moves on only after this share has been spent on this coin\./);
     assert.doesNotMatch(budgetCopy(rule(1).rule, 1, null).line, /moves on only after/);
   });

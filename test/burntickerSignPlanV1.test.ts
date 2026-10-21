@@ -374,7 +374,8 @@ describe("Phantom support's rule (ticket 438485, Rory 2026-10-20): version 1 fro
 describe("the signing card and the host: the format is decided once, the v0 path and the pin stay, the pin blocks only the fallback", () => {
   test("SignCard reads the feature, pins the format before the runner builds anything, hands the v1 format or the untouched v0 deps to the ONE runner, and shows the three-way line", () => {
     const card = read("src/app/burnticker/launch/SignCard.tsx");
-    assert.match(card, /const versions = launchSignVersions\(wallet\.wallet\?\.adapter, walletKey, network\);/, "the account and the launch's chain decide version 1 (ticket 438485, 2026-10-20)");
+    // LA7 fix B: the host switch (BURNTICKER_WALLET_TX_V1=0) can only take version 1 away from what the account offers
+    assert.match(card, /const advertised = launchSignVersions\(wallet\.wallet\?\.adapter, walletKey, network\);\n\s+const versions = txV1 === false \? withoutV1\(advertised\) : advertised;/, "the account and the launch's chain decide version 1 (ticket 438485, 2026-10-20)");
     assert.ok(!/signTransactionVersions\(/.test(card), "the card never reads the wallet-wide set without the account check");
     assert.match(card, /useState<TxFormat \| null>\(\(\) => stored\?\.format \?\? null\)/, "a stored record's format is read before anything else");
     assert.ok(card.indexOf("pinPlanFormat(storage, planRun)") < card.indexOf("signAndSendPlan(planRun, creator, deps"), "pinned before the runner is called");

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
-import { EARLIER_OPERATOR_CLAUSE, operatorShareClause, sharesForCluster } from "@/lib/burnticker/feeShareLine";
+import { operatorShareClause, sharesForCluster } from "@/lib/burnticker/feeShareLine";
 import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, operatorTreasuryFor, operatorTreasuryRecord, type LockFeeClaimFacts } from "@/lib/burnticker/lockFees";
 
 /**
@@ -78,7 +78,7 @@ export function lpFeeLine(cluster: string, claims: readonly Pick<LockFeeClaimFac
   const sum = (k: "solLamports" | "toBurnPoolLamports" | "toOperatorLamports") => (claims ?? []).reduce((a, c) => a + c[k], BigInt(0)).toString();
   return {
     // continuous audit run 2, HB-13: mainnet names both tiers (new coins on tier 14, coins created before the cutover on tier 9)
-    title: `Operator: ${operatorShareClause(sharesForCluster(cluster === "devnet" ? "devnet" : cluster === "localnet" ? "localnet" : "mainnet"))}${cluster === "devnet" ? "" : ` on new coins, and ${EARLIER_OPERATOR_CLAUSE}`}, after graduation`,
+    title: `Operator: ${operatorShareClause(sharesForCluster(cluster === "devnet" ? "devnet" : cluster === "localnet" ? "localnet" : "mainnet"))}${cluster === "devnet" ? "" : " on every coin"}, after graduation`,
     treasury, treasuryPinned: !!treasury, split: { burnBps: LOCK_FEE_BURN_BPS, operatorBps: LOCK_FEE_OPERATOR_BPS },
     claims: claims?.length ?? 0, solLamports: sum("solLamports"), toOperatorLamports: sum("toOperatorLamports"), toBurnPoolLamports: sum("toBurnPoolLamports"),
     source: claims ? "keeper records" : "none",

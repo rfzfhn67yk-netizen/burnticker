@@ -101,10 +101,11 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
     const each = once ? "The one result that fires the rule" : r.kind === "binary" ? "Each result that fires the rule" : "Each unit";
     const on = r.burnTarget?.symbol ? `on ${r.burnTarget.symbol}` : "on this coin";
     const dial = m?.tokens !== undefined ? `${each} burns ${m.tokens.toLocaleString("en-US")} tokens from the coin's vault.`
-      : typeof m?.fractionOfPool === "number" ? `${each} spends ${pct(m.fractionOfPool)} of the burn pool ${on} and burns what it gets.` : null;
+      // seventh pass AP7-7: a repeating rule compounds, so each unit spends its share of what is left, not of the starting pool
+      : typeof m?.fractionOfPool === "number" ? `${each} spends ${pct(m.fractionOfPool)} of ${once ? "the burn pool" : "what is left in the burn pool"} ${on} and burns what it gets.` : null;
     const kind = windowKindOf(r);
     const window = kind === "perpetual" ? PERPETUAL_SENTENCE
-      // owner 2026-10-20: a single-game coin burns once the game is final and a second check five minutes later agrees (gameSettle.ts gameSchedule)
+      // owner 2026-10-20: a single-game coin burns once the game is final and a second read five minutes later agrees (gameSettle.ts gameSchedule)
       : kind === "one-shot" || oneShot ? `This coin resolves once. One result decides it.${r.oracle === "catalogue" && parseEspnSeries(r.series ?? "")?.kind === "game" ? ` ${GAME_BURN_LINE}` : ""}`
       : kind === "next" ? "This coin covers a fixed number of games, and then its rule ends."
       : kind === "post" ? "This coin covers one postseason, and then its rule ends."
@@ -114,7 +115,7 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
   const bb = (j.buyback ?? null) as { fractionPerUnit?: string } | null;
   const f = bb?.fractionPerUnit !== undefined ? Number(bb.fractionPerUnit) : NaN;
   return {
-    dial: Number.isFinite(f) && f > 0 ? `Each unit spends ${pct(f)} of the burn pool on this coin and burns what it gets.` : null,
+    dial: Number.isFinite(f) && f > 0 ? `Each unit spends ${pct(f)} of what is left in the burn pool on this coin and burns what it gets.` : null,
     window: oneShot ? "This coin resolves once. One result decides it." : PERPETUAL_SENTENCE,
     end: oneShot ? "When the rule ends, whatever is left in the burn pool is burned down, and then the coin retires." : "The rule has no end, so nothing winds down.",
   };

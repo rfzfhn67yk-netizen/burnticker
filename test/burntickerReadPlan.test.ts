@@ -6,9 +6,9 @@
 // Stubs and frozen fixtures; no network.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { fetchDue, attestReadAt, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
+import { fetchDue, attestReadAt, planStampOk, READ_PLAN_VERSION, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { READ_PLAN_MAX_IDLE_MS, READ_PLAN_MIN_GAP_MS, dueNextAt, nextWindowOpen, openWindowAt, selectorIdle, tzOffsetMs, windowNextAt, type ReadWindow } from "@/lib/burnticker/readPlan";
-import { GAME_CONFIRM_GAP_MS, GAME_FIRST_LOOK_MS, GAME_LIVE_POLL_MS, SCHEDULE_RECHECK_MS, gameDueAt, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
+import { GAME_CONFIRM_GAP_MS, GAME_FIRST_LOOK_MS, GAME_LIVE_POLL_MS, SCHEDULE_RECHECK_MS, gameDueAt, plannedGameRead, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { gameSeries, parseEspnSeries, teamSeries, type EspnClient, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { KalshiClient, fixtureFetch, marketApiUrl, seriesApiUrl } from "@/lib/burnticker/oracle/kalshi";
@@ -127,7 +127,7 @@ describe("markets: not before the stated close", () => {
 });
 
 // ---- the loop (fetchDue) on a stub registry ----
-function loop(o: { rule: BurnRule; key: string; adapter: (rule: BurnRule) => Promise<{ events: unknown[]; awaitingFinal: number; refusals: string[]; settlementSourceUrl: null; dueAt?: number | null }>; readings?: number; ruleEnded?: boolean; pending?: Partial<ReceiptRow>[] }) {
+function loop(o: { rule: BurnRule; key: string; adapter: (rule: BurnRule) => Promise<{ events: unknown[]; awaitingFinal: number; refusals: string[]; settlementSourceUrl: null; dueAt?: number | null }>; readings?: number; ruleEnded?: boolean; pending?: Partial<ReceiptRow>[]; /** the adapter's plannedReadAt (a rule-paced selector); absent = budget-paced */ planned?: (now: number) => number }) {
   const feeds = new Map<string, FeedState>(), status = new Map<string, string>();
   let reads = 0, written = o.readings ?? 0;
   const registry = {
@@ -141,11 +141,12 @@ function loop(o: { rule: BurnRule; key: string; adapter: (rule: BurnRule) => Pro
     putReadings: (_o: string, _k: string, events: unknown[]) => { written += events.length; return events.length; },
     recordAlert: () => null, ruleEnd: () => (o.ruleEnded ? { mode: "winddown" } : null), pending: () => (o.pending ?? []) as ReceiptRow[],
   };
-  const adapter = { id: "stub", settledSince: async (rule: BurnRule) => { reads++; return o.adapter(rule); } };
+  let plans = 0;
+  const adapter = { id: "stub", settledSince: async (rule: BurnRule) => { reads++; return o.adapter(rule); }, ...(o.planned ? { plannedReadAt: async (_r: BurnRule, _s: string | null, now: number) => { plans++; return o.planned!(now); } } : {}) };
   const clock = { now: Date.parse("2026-10-19T15:00:00Z") };
   const d = { registry, oracles: { kalshi: adapter, catalogue: adapter, polymarket: adapter }, attester: "k", log: () => {}, now: () => clock.now, dryRun: true } as unknown as KeeperDeps;
   const tokens = [{ selectorKey: o.key, ticker: "T", mint: "m", status: "live", baselineAt: "2026-10-01T00:00:00Z" } as unknown as TokenRow];
-  return { d, tokens, feeds, clock, get reads() { return reads; } };
+  return { d, tokens, feeds, status, clock, get reads() { return reads; }, get plans() { return plans; } };
 }
 
 describe("the loop honours the plan", () => {
@@ -238,5 +239,75 @@ describe("the stall alert follows the plan", () => {
   test("an idle selector (a decided one-shot) is never stalled; a failing read still is", () => {
     assert.equal(stalls(snap({ lastFetchAt: now - 30 * DAY, nextFetchAt: null }, { idle: "a one-shot whose result is recorded" })), 0);
     assert.equal(stalls(snap({ failures: 3, lastFetchAt: now - 5 * H, lastOkAt: now - 3 * DAY, nextFetchAt: now + H })), 1);
+  });
+});
+
+// PUBLISH 108 FOLLOW-UP (2026-10-20): next_fetch_at stored by the old rule (a game's start + 6 h) was kept, so no game was read before
+// it. A rule-paced selector's unstamped stored time is compared with the current rule's own schedule once, and read at the earlier.
+// (The devnet registry was cleared by hand on 2026-10-20; mainnet relies on this.)
+describe("a stored next read from an older rule", () => {
+  const gameRule = () => validateRule({ schema: "burnticker.rules/v1", oracle: "catalogue", series: gameSeries("nfl", "2475453", "DEN", "win"), market: null, filter: {}, kind: "scalar", scalar: { unit: 1, perUnit: { fractionOfPool: 1 }, baseline: 0, direction: "up" }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null }) as BurnRule;
+  const awaiting = { events: [], awaitingFinal: 1, refusals: [], settlementSourceUrl: null };
+
+  test("stored 6 h out by the old rule for a game already final: read on the next cycle, then the new rule's time is stamped and trusted", async () => {
+    const w = loop({ rule: gameRule(), key: "catalogue:g", planned: (now) => now, adapter: async () => ({ ...awaiting, dueAt: w.clock.now + GAME_CONFIRM_GAP_MS }) });
+    const old = w.clock.now + 6 * H;
+    w.feeds.set("catalogue:g", { selectorKey: "catalogue:g", lastFetchAt: w.clock.now - H, lastOkAt: w.clock.now - H, failures: 0, lastError: null, nextFetchAt: old });
+    await fetchDue(w.d, w.tokens);
+    assert.deepEqual([w.plans, w.reads], [1, 1], "the final is read now, not at the old rule's start + 6 h");
+    const next = w.feeds.get("catalogue:g")!.nextFetchAt!;
+    assert.equal(next, w.clock.now + GAME_CONFIRM_GAP_MS);
+    assert.ok(planStampOk(w.d.registry, "catalogue:g", next), "the time this plan wrote is stamped");
+    // inside the five-minute confirm gap the stamped time stands: the planner (which says "now" for a final) is not asked again
+    w.clock.now += MIN; await fetchDue(w.d, w.tokens);
+    assert.deepEqual([w.plans, w.reads], [1, 1]);
+    w.clock.now = next; await fetchDue(w.d, w.tokens);
+    assert.equal(w.reads, 2);
+  });
+
+  test("a stored time earlier than the rule's: unchanged (and stamped, so the planner is asked once)", async () => {
+    const w = loop({ rule: gameRule(), key: "catalogue:g", planned: (now) => now + 3 * H, adapter: async () => ({ ...awaiting, dueAt: w.clock.now + H }) });
+    const stored = w.clock.now + 30 * MIN;
+    w.feeds.set("catalogue:g", { selectorKey: "catalogue:g", lastFetchAt: null, lastOkAt: null, failures: 0, lastError: null, nextFetchAt: stored });
+    await fetchDue(w.d, w.tokens);
+    assert.deepEqual([w.plans, w.reads, w.feeds.get("catalogue:g")!.nextFetchAt], [1, 0, stored]);
+    w.clock.now += 10 * MIN; await fetchDue(w.d, w.tokens);
+    assert.deepEqual([w.plans, w.reads, w.feeds.get("catalogue:g")!.nextFetchAt], [1, 0, stored]);
+    w.clock.now = stored; await fetchDue(w.d, w.tokens);
+    assert.equal(w.reads, 1);
+  });
+
+  test("a stamp of an older plan version is checked again", async () => {
+    const w = loop({ rule: gameRule(), key: "catalogue:g", planned: (now) => now, adapter: async () => ({ ...awaiting, dueAt: w.clock.now + GAME_CONFIRM_GAP_MS }) });
+    const old = w.clock.now + 6 * H;
+    w.feeds.set("catalogue:g", { selectorKey: "catalogue:g", lastFetchAt: null, lastOkAt: null, failures: 0, lastError: null, nextFetchAt: old });
+    w.status.set("fetch.plan.catalogue:g", JSON.stringify({ v: READ_PLAN_VERSION - 1, at: old }));
+    await fetchDue(w.d, w.tokens);
+    assert.equal(w.reads, 1);
+  });
+
+  test("a budget-paced source (no plannedReadAt) keeps its stored time as its floor; a failing read keeps its backoff", async () => {
+    const w = loop({ rule: validateRule(BRONCOS) as BurnRule, key: "kalshi:KXNFLGAME:binary", adapter: async () => ({ events: [], awaitingFinal: 0, refusals: [], settlementSourceUrl: null }) });
+    const stored = w.clock.now + 6 * H;
+    w.feeds.set("kalshi:KXNFLGAME:binary", { selectorKey: "kalshi:KXNFLGAME:binary", lastFetchAt: null, lastOkAt: null, failures: 0, lastError: null, nextFetchAt: stored });
+    await fetchDue(w.d, w.tokens);
+    assert.deepEqual([w.reads, w.feeds.get("kalshi:KXNFLGAME:binary")!.nextFetchAt], [0, stored]);
+    const g = loop({ rule: gameRule(), key: "catalogue:g", planned: (now) => now, adapter: async () => awaiting });
+    g.feeds.set("catalogue:g", { selectorKey: "catalogue:g", lastFetchAt: null, lastOkAt: null, failures: 2, lastError: "HTTP 503", nextFetchAt: g.clock.now + 10 * MIN });
+    await fetchDue(g.d, g.tokens);
+    assert.deepEqual([g.plans, g.reads], [0, 0], "a backoff is not shortened by the plan");
+  });
+
+  test("plannedGameRead (the schedule alone): a final not yet read → now; a game being played → its next look; a future game → its first look", async () => {
+    const start = Date.parse("2026-10-18T20:25:00Z");
+    const base: Game = { eventId: "2475453", league: "nfl", seasonType: 2, seasonYear: 2026, startsAt: new Date(start).toISOString(), date: "2026-10-18", name: "Broncos at Seahawks", completed: true, state: "post", detail: "Final", home: { abbr: "SEA" } as Game["home"], away: { abbr: "DEN" } as Game["away"] };
+    const c = (g: Partial<Game>) => ({ season: async () => [{ ...base, ...g }] }) as unknown as EspnClient;
+    const s = parseEspnSeries(gameSeries("nfl", "2475453", "DEN", "win")) as EspnSeries;
+    const now = start + 3 * H;
+    assert.equal(await plannedGameRead(c({}), s, null, now), now, "a final the schedule shows: read at once");
+    assert.equal(await plannedGameRead(c({ completed: false, state: "in", detail: "4th" }), s, null, now), now + GAME_LIVE_POLL_MS);
+    assert.equal(await plannedGameRead(c({}), s, null, start + 30 * MIN), start + GAME_FIRST_LOOK_MS, "a final listed too early waits for the first look");
+    assert.equal(await plannedGameRead(c({ completed: false, state: "pre", detail: "Scheduled" }), s, null, start - 2 * DAY), start + GAME_FIRST_LOOK_MS);
+    assert.equal(await plannedGameRead(c({}), s, "2026-10-18", now), now + SCHEDULE_RECHECK_MS, "a day already read: nothing listed ahead, the schedule recheck");
   });
 });

@@ -136,12 +136,13 @@ describe("HS-26: the footer and trust fee line", () => {
   const cut = Date.parse(CPMM_TIER_14_SINCE);
   test("the exact shape, with the computed clause", () => {
     const live = footerFeeLine(25, { tier14Live: false });
-    assert.equal(live, "Burnticker takes 0.25% of curve volume. After graduation, coins created before 19 October 2026, 20:17 UTC (every coin live today) pay 1% per swap: about 0.88% to the burn pool, 0.04% to the operator and 0.08% to Raydium. Coins created after that pay 1.25%: 0.98%, 0.13% and 0.15%. Coin-vs-coin pair pools use their own split, shown on the pair page.");
+    // eighth pass B-23 (owner B-17 decision): one split for every coin, the platform's tier; the "(every coin live today)" clause is gone
+    assert.equal(live, "Burnticker takes 0.25% of curve volume. After graduation, every coin pays 1.25% per swap (Raydium fee tier 14): about 0.98% to the burn pool, 0.13% to the operator and 0.15% to Raydium. LaunchLab moves a graduating coin into a pool on the platform's current fee tier, which is 14; coins made before 19 October 2026 recorded tier 9 when they were created and pay 1.25% all the same. Coin-vs-coin pair pools use their own split, shown on the pair page.");
     clean(live);
     assert.doesNotMatch(footerFeeLine(25, { tier14Live: true }), /every coin live today/);
     assert.doesNotMatch(footerFeeLine(25, { tier14Live: null }), /every coin live today/);
     assert.equal(DEV_FEE_LINE, footerFeeLine(25, { tier14Live: null }));
-    assert.ok(feeTiersLine({ tier14Live: false }).startsWith("After graduation, coins created before"));
+    assert.ok(feeTiersLine({ tier14Live: false }).startsWith("After graduation, every coin pays"));
   });
   test("the clause vanishes once a live mainnet coin is created on tier 14", () => {
     const old = { cluster: "mainnet", status: "live", createdAt: cut - 60_000 };
@@ -167,7 +168,7 @@ describe("HB-76: a one-shot back-test", () => {
 
 describe("HB-77: the presets sentence lists the radios shown", () => {
   test("100 or 50% with dispersal", () => {
-    assert.equal(presetRowLabel("oneShotDispersal"), "100 or 50%");
+    assert.equal(presetRowLabel("oneShotDispersal"), "100% or 50%");
     assert.match(read("src/lib/burnticker/launchReview.ts"), /presetRowLabel\(shareShapeOf\(locked\.rule, \{ dispersal: webDispersalOn\(env, o\.root\) \}\)\)/);
   });
 });

@@ -44,34 +44,33 @@ describe("HB-13: a coin's fee legs come from the tier it pinned; the site-wide c
     const input = { ...base, chain: { ...base.chain, cluster: "mainnet", program: { ...(base.chain.program ?? {}), config: { ...(base.chain.program?.config ?? {}), cpConfig } } }, lifecycle: { ended: null, windDown: null, lastSweep: null, line: LIVE_LINE, fees: "stale global line" } } as typeof base;
     return buildTokenStatus(input, buildReceiptsJson(input));
   };
-  for (const [label, tier, burn, op] of [["tier 9", CPMM_MAINNET_TIER_9, "about 0.88%", "about 0.04%"], ["tier 14", CPMM_MAINNET_TIER_14, "about 0.98%", "about 0.13%"]] as const) {
-    test(`a coin pinned to ${label}: fees.sentence and lifecycle.fees state the same split, and it is the pin's`, async () => {
+  // eighth pass B-23 / HB-184 (owner B-17 decision): LaunchLab moves every graduating coin into the platform's current tier, so a coin's
+  // split is that tier's whatever it recorded at creation (it was the pin's until the decision)
+  for (const [label, tier] of [["tier 9", CPMM_MAINNET_TIER_9], ["tier 14", CPMM_MAINNET_TIER_14]] as const) {
+    test(`a coin that recorded ${label}: fees.sentence and lifecycle.fees state the platform tier's split`, async () => {
       const s = await statusFor(tier.id);
-      const pinned = postGraduationFeesFor("mainnet", tier.id);
-      assert.deepEqual(s.fees.postGraduation, pinned);
-      const line = postGraduationShareLine(pinned);
+      const current = postGraduationFeesFor("mainnet");
+      assert.deepEqual(s.fees.postGraduation, current);
+      const line = postGraduationShareLine(current);
       assert.ok(s.fees.sentence.includes(line), s.fees.sentence);
-      assert.equal(s.lifecycle?.fees, feeFlowLine(pinned));
-      assert.ok(s.lifecycle!.fees.includes(line));
-      assert.ok(line.includes(`${burn} of every swap goes to the coin's burn pool and ${op} to the operator`), line);
+      assert.equal(s.lifecycle?.fees, feeFlowLine(current));
+      assert.ok(line.includes("about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator"), line);
     });
   }
-  test("the both-tiers line names tier 14 for new coins and tier 9 for coins created before the cutover, the date in words", () => {
+  test("the earlier-coins line names the one tier and the date in words", () => {
     assert.equal(CPMM_TIER_14_SINCE, "2026-10-19T20:17:00Z");
     assert.equal(TIER_14_CUTOVER_WORDS, "19 October 2026, 20:17 UTC");
-    assert.equal(EARLIER_COINS_LINE, "Coins created from 19 October 2026, 20:17 UTC use fee tier 14 (1.25% per swap). Earlier coins, mostly on tier 9, pay 1%: about 0.88% to the burn pool, 0.04% to the operator.");
+    assert.equal(EARLIER_COINS_LINE, "Every coin graduates into a pool on the platform's current fee tier, tier 14 (1.25% per swap). Coins made before 19 October 2026 recorded tier 9 when they were created and pay 1.25% all the same.");
     assert.doesNotMatch(EARLIER_COINS_LINE, /\d{4}-\d{2}-\d{2}/);
   });
-  test("footer, current-status, trust, fee ledger and the operator note all carry both tiers", () => {
-    // hourly run 5, HS-26: the footer line names both tiers, the one every live coin pays first (feeShareLine.ts feeTiersLine)
-    assert.ok(DEV_FEE_LINE.includes(`coins created before ${TIER_14_CUTOVER_WORDS}`) && DEV_FEE_LINE.indexOf("0.88%") < DEV_FEE_LINE.indexOf("0.98%"), DEV_FEE_LINE);
-    // sixth pass B-16 (2026-10-19): current status and the mainnet trust statement lead with the tier every live coin pays (BOTH_TIERS_LINE)
+  test("footer, current-status, trust, fee ledger and the operator note all carry the one split", () => {
+    assert.ok(DEV_FEE_LINE.includes("every coin pays 1.25% per swap (Raydium fee tier 14)") && !DEV_FEE_LINE.includes("0.88%"), DEV_FEE_LINE);
     assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{BOTH_TIERS_LINE\}/);
-    // HB-50 (run 4): another network names its own tier
-    assert.match(read("src/lib/burnticker/trust.ts"), /cluster === "mainnet" \? BOTH_TIERS_LINE : `\$\{postGraduationShareLine\(newCoinFees\)\} \$\{earlierCoinsLineFor\(cluster\)\}`/);
+    // HB-50 (run 4): another network names its own tier; mainnet adds who decides the tier (eighth pass B-23)
+    assert.match(read("src/lib/burnticker/trust.ts"), /cluster === "mainnet" \? `\$\{BOTH_TIERS_LINE\} \$\{FEE_TIER_DECIDER_LINE\}` : `\$\{postGraduationShareLine\(newCoinFees\)\} \$\{earlierCoinsLineFor\(cluster\)\}`/);
     const ledger = lpFeeLine("mainnet", null).title;
-    assert.match(ledger, /about 0\.13% of every swap .* on new coins, and about 0\.04% of every swap .* on coins created before 19 October 2026, 20:17 UTC, which stay on tier 9, after graduation$/);
-    assert.ok(OPERATOR_COPY.devFeeNote.includes(EARLIER_OPERATOR_CLAUSE));
+    assert.match(ledger, /about 0\.13% of every swap .* on every coin, after graduation$/);
+    assert.ok(OPERATOR_COPY.devFeeNote.includes("on every coin, whenever it was made"));
     for (const s of [EARLIER_COINS_LINE, DEV_FEE_LINE, ledger, OPERATOR_COPY.devFeeNote]) clean(s);
   });
 });

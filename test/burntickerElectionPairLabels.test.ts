@@ -56,7 +56,7 @@ describe("F2: election pair identity", () => {
   test("the wizard uses it, not the last word of each label", () => {
     const src = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
     const body = src.slice(src.indexOf("const startElPair"), src.indexOf("const startElPair") + 2000);
-    assert.match(body, /electionPairIdentity\(a\.label, b\.label\)/);
+    assert.match(body, /electionPairIdentity\(a\.label, b\.label, r\.title\)/);
     assert.doesNotMatch(body, /pairTickers\(sur\(a\), sur\(b\)\)/);
   });
 });

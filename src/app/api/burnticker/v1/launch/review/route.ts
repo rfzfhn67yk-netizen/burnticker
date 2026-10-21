@@ -12,7 +12,7 @@ import { reviewTickerChecks, type TickerCheck } from "@/lib/burnticker/tickerChe
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { platform } from "@/lib/burnticker/server";
 import { liveSinks, type SinkCoin } from "@/lib/burnticker/endSinks";
-import { lookalikeRows } from "@/lib/burnticker/launchGuards";
+import { heldTickerRows, lookalikeRows } from "@/lib/burnticker/launchGuards";
 import { provenReviewCreator } from "@/lib/burnticker/walletProofCheck";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { seasonNotStartedLine, seasonOverFor } from "@/lib/burnticker/seasonOver";
@@ -142,7 +142,7 @@ async function review(req: Request, clock: StageClock, seen: { rule?: unknown })
       const creator = typeof (body as { creator?: unknown }).creator === "string" ? String((body as { creator: string }).creator) : null;
       const ruleA = (body as { rule?: unknown }).rule as Pick<BurnRule, "oracle" | "series"> | null | undefined;
       // HB-117: the suggested ticker is never one another coin holds (or one like it); a hazard coin is offered its own word first
-      clock.run("tickers", () => { ({ tickers, coins } = reviewTickerChecks(r.review.coins, ruleA, { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status: x.status, creator: x.creator })), reserved, existing: existingRows, creator })); });
+      clock.run("tickers", () => { ({ tickers, coins } = reviewTickerChecks(r.review.coins, ruleA, { inUse: (t) => heldTickerRows(reg, t), reserved, existing: existingRows, creator })); });
     } catch { tickers = []; coins = r.review.coins; }
     return ok({ ...r.review, coins, existing, tickers });
   }

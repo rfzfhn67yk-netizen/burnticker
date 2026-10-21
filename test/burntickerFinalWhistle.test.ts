@@ -12,7 +12,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { EspnClient as SportsClient, LIVE_MARK_MS, LIVE_READS_PER_DAY, gameSeries, parseEspnSeries, teamSeries, type EspnClient, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
+import { EspnClient as SportsClient, LIVE_MARK_MS, LIVE_READS_PER_DAY, TSDB_LIVE_READS_PER_DAY, TSDB_LIVE_TTL_MS, tsdbLiveLeague, tsdbLiveTtlFrom, gameSeries, parseEspnSeries, teamSeries, type EspnClient, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
 import {
   FINAL_CHECK_STATUS_KEY, LIVE_FREE_POLL_MS, GAME_CONFIRM_GAP_MS, GAME_FIRST_LOOK_MS, GAME_LIVE_POLL_MS, GAME_TWICE_WORDS, GAME_TWO_SOURCE_WORDS, STALE_GAME_MS, finalCheck, gameDueAt,
   memoryFinalCheckStore, memoryFirstReadStore, settleGame, settledWords, sportsSettled, statusFinalCheckStore, statusFirstReadStore,
@@ -331,5 +331,90 @@ describe("the live schedule read", () => {
     for (let i = 0; i < LIVE_READS_PER_DAY + 20; i++) { w.c.markLive("mlb"); await w.c.season("mlb", "LAD"); w.clock.now += MIN; if (new Date(w.clock.now).toISOString().slice(0, 10) !== new Date(MLB_START + 2 * H).toISOString().slice(0, 10)) break; }
     assert.ok(w.calls.day <= LIVE_READS_PER_DAY, String(w.calls.day));
     assert.ok(w.c.liveReadsToday("mlb") <= LIVE_READS_PER_DAY);
+  });
+});
+
+// THE LIVE GAME READ ON THESPORTSDB (owner 2026-10-20: can TheSportsDB be read faster for tracked NBA and soccer games, within the plan).
+// While the keeper tracks an NBA or soccer game being played, that GAME's own TheSportsDB event lookup is read with a 90 s cache and laid
+// over the season file's row; a final the lookup shows is kept until the season file says final too, so the lookups stop at the final.
+// Capped per league per UTC day; then the season file's 10-minute cache is the only view again.
+describe("the live game read on TheSportsDB (NBA and soccer)", () => {
+  const ID = "2400001", KICK = Date.parse("2026-10-10T11:30:00Z");
+  const row = (status: string, h = 1, a = 0, o: Record<string, string> = {}) => ({ idEvent: ID, strEvent: "Arsenal vs Leeds United", strHomeTeam: "Arsenal", strAwayTeam: "Leeds United", idLeague: "4328", intHomeScore: String(h), intAwayScore: String(a), dateEvent: "2026-10-10", strTimestamp: "2026-10-10T11:30:00", strStatus: status, ...o });
+  function eplWorld() {
+    const clock = { now: KICK }, state = { season: row("2H") as Record<string, string>, lookup: row("2H") as Record<string, string> }, calls = { season: 0, lookup: 0, other: 0 };
+    const fetchImpl = (async (url: string) => {
+      if (/\/schedule\/league\/4328\//.test(url)) { calls.season++; return { ok: true, status: 200, json: async () => ({ schedule: [state.season] }) }; }
+      if (url.includes(`/lookup/event/${ID}`)) { calls.lookup++; return { ok: true, status: 200, json: async () => ({ lookup: [state.lookup] }) }; }
+      calls.other++; return { ok: true, status: 200, json: async () => ({ events: [] }) };
+    }) as never;
+    const c = new SportsClient({ fetchImpl, now: () => clock.now, minIntervalMs: 0, tsdbKey: "k", apiSportsKey: null });
+    return { clock, state, calls, c };
+  }
+  const ARS = parseEspnSeries(gameSeries("eng.1", ID, "ARS", "win")) as EspnSeries;
+  const deps = (now: number, liveSchedule: boolean): GameDeps => ({ tsdbKey: null, apiSportsKey: null, market: null, payout: null, now: () => now, firstReads: memoryFirstReadStore(), liveSchedule });
+
+  test("only NBA and soccer games are marked, per game; the mark lapses on its own; the lookup cache is 90 s by default, 60 s to 10 min if set", () => {
+    const { clock, c } = eplWorld();
+    c.markLiveGame("eng.1", ID); c.markLiveGame("nba", "9"); c.markLiveGame("nfl", "8"); c.markLiveGame("mlb", "7");
+    assert.deepEqual([c.isLiveGame("eng.1", ID), c.isLiveGame("nba", "9"), c.isLiveGame("nfl", "8"), c.isLiveGame("mlb", "7"), c.isLiveGame("eng.1", "other")], [true, true, false, false, false]);
+    assert.equal(c.isLive("eng.1"), false, "the league-wide day listing stays MLB and NHL only");
+    clock.now += LIVE_MARK_MS;
+    assert.equal(c.isLiveGame("eng.1", ID), false);
+    assert.equal(c.tsdbLiveTtl, TSDB_LIVE_TTL_MS); assert.equal(TSDB_LIVE_TTL_MS, 90_000);
+    assert.deepEqual([tsdbLiveTtlFrom(undefined), tsdbLiveTtlFrom(""), tsdbLiveTtlFrom("abc"), tsdbLiveTtlFrom("120000"), tsdbLiveTtlFrom("1000"), tsdbLiveTtlFrom("99999999")], [90_000, 90_000, 90_000, 120_000, 60_000, 600_000]);
+    assert.deepEqual([tsdbLiveLeague("nba"), tsdbLiveLeague("eng.1"), tsdbLiveLeague("usa.1"), tsdbLiveLeague("nfl"), tsdbLiveLeague("wnba"), tsdbLiveLeague("mlb")], [true, true, true, false, false, false]);
+  });
+
+  test("the keeper's next look at a tracked NBA or soccer game being played: every minute", () => {
+    const t = KICK + 2 * H, startsAt = new Date(KICK).toISOString();
+    assert.equal(gameDueAt({ startsAt, league: "eng.1" }, t, true), t + LIVE_FREE_POLL_MS);
+    assert.equal(gameDueAt({ startsAt, league: "nba" }, t, true), t + LIVE_FREE_POLL_MS);
+    assert.equal(gameDueAt({ startsAt, league: "nba" }, t), t + GAME_LIVE_POLL_MS, "not the keeper: unchanged");
+  });
+
+  test("a match from its first look: about one lookup every two keeper minutes, season files unchanged, the final seen within about two minutes, then no more lookups", async () => {
+    const run = async (liveSchedule: boolean, whistle: number | null) => {
+      const w = eplWorld(); let seen: number | null = null, lookupsAtFinal = -1;
+      for (let t = KICK + GAME_FIRST_LOOK_MS; t < KICK + GAME_FIRST_LOOK_MS + H; t += MIN) {
+        w.clock.now = t;
+        if (whistle !== null && t >= whistle) w.state.lookup = row("FT", 2, 0);   // the season file lags: it still says 2H
+        const r = await sportsSettled(w.c, ARS, null, deps(t, liveSchedule), { nowMs: t });
+        if (seen === null && r.refusals.length) { seen = t; lookupsAtFinal = w.calls.lookup; }
+      }
+      return { ...w.calls, seen, lookupsAtFinal, live: w.c.takeLiveReads() };
+    };
+    const off = await run(false, null), on = await run(true, null);
+    assert.equal(off.lookup, 0, "without the keeper's flag no lookup is read");
+    assert.ok(on.lookup >= 28 && on.lookup <= 31, `${on.lookup} lookups in the hour (90 s cache, one look a minute)`);
+    assert.equal(on.season, off.season, "the season file keeps its ten-minute cache");
+    assert.deepEqual(on.live, { "eng.1": on.lookup }, "every live lookup is counted for the keeper's log");
+    const whistle = KICK + GAME_FIRST_LOOK_MS + 20 * MIN + 20_000;
+    const fin = await run(true, whistle);
+    assert.ok(fin.seen !== null && fin.seen - whistle <= 2 * MIN, `seen ${fin.seen === null ? "never" : (fin.seen - whistle) / 1000 + " s"} after the whistle`);
+    assert.equal(fin.lookup, fin.lookupsAtFinal, "no lookup after the final was seen; the kept final stands while the season file lags");
+    const offFin = await run(false, whistle);
+    assert.equal(offFin.seen, null, "without the read the lagging season file never shows the final in this hour");
+  });
+
+  test("a lookup row that is not this game (other teams, another league) is never laid over it", async () => {
+    for (const bad of [row("FT", 2, 0, { strAwayTeam: "Chelsea" }), row("FT", 2, 0, { idLeague: "4335" }), row("FT", 2, 0, { idEvent: "999" })]) {
+      const w = eplWorld(); w.clock.now = KICK + 2 * H; w.state.lookup = bad;
+      w.c.markLiveGame("eng.1", ID);
+      const g = (await w.c.season("eng.1", "ARS")).find((x) => x.eventId === ID);
+      assert.equal(g?.completed, false, JSON.stringify(bad));
+      assert.equal(w.calls.lookup, 1);
+    }
+  });
+
+  test("the day cap: after TSDB_LIVE_READS_PER_DAY lookups for a league in a UTC day, only the season file is read; the budget line notes the count", async () => {
+    const w = eplWorld(); w.clock.now = Date.parse("2026-10-10T00:05:00Z");
+    for (let i = 0; i < TSDB_LIVE_READS_PER_DAY + 20; i++) { w.c.markLiveGame("eng.1", ID); await w.c.season("eng.1", "ARS"); w.clock.now += 2 * MIN; if (new Date(w.clock.now).toISOString().slice(0, 10) !== "2026-10-10") break; }
+    assert.equal(w.calls.lookup, TSDB_LIVE_READS_PER_DAY);
+    assert.equal(w.c.liveReadsToday("eng.1"), TSDB_LIVE_READS_PER_DAY);
+    w.clock.now = Date.parse("2026-10-10T23:00:00Z");
+    assert.equal(w.c.tsdbLiveNote(), ` · live game lookups today: eng.1 ${TSDB_LIVE_READS_PER_DAY} / ${TSDB_LIVE_READS_PER_DAY}`);
+    w.clock.now = Date.parse("2026-10-11T01:00:00Z");
+    assert.equal(w.c.tsdbLiveNote(), "", "a new UTC day starts at zero");
   });
 });

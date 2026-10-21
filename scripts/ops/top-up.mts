@@ -16,6 +16,8 @@
  *             exists; for its one pass it holds the same lock, so a keeper that starts leading meanwhile skips its own step.
  *   --clear-drain <target>  clears the drain stop for one target (upload-payer-wallet, irys-balance or deficit-keeper) after the
  *             operator has found why it drained: the top-ups so far stop counting toward the stop. Writes one registry status row.
+ *             HB-180: a drain stop is latched and never resumes on its own; this is the only way to release it. The daily ceiling
+ *             (BURNTICKER_TOP_UP_MAX_SOL_PER_DAY, default 0.5 SOL) is not cleared here: it lapses at 00:00 UTC.
  *
  * The env file is parsed here, not sourced. No key material or env value is printed: public keys, balances and signatures only.
  */
@@ -24,7 +26,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { CLI_LOCK_TTL_MS, clearDrainStop, connectionTransfer, deficitKeeperAddress, describeStep, irysPayerAccount, KEEPER_PAUSE_FILE, loadTopUpConfig, planTopUps, readTopUpInput, releaseTopUpLock, runTopUps, solText, takeTopUpLock, topUpModeFromEnv, uploadPayerAddress, TARGET_LABEL, TOP_UP_LOCK_FILE, TOP_UP_TARGETS, type TopUpDeps, type TopUpTarget } from "@/lib/burnticker/ops/topUp";
+import { CLI_LOCK_TTL_MS, clearDrainStop, withCeilingFromEnv, connectionTransfer, deficitKeeperAddress, describeStep, irysPayerAccount, topUpPaths, loadTopUpConfig, planTopUps, readTopUpInput, releaseTopUpLock, runTopUps, solText, takeTopUpLock, topUpModeFromEnv, uploadPayerAddress, TARGET_LABEL, TOP_UP_TARGETS, type TopUpDeps, type TopUpTarget } from "@/lib/burnticker/ops/topUp";
 
 const args = process.argv.slice(2);
 const has = (f: string) => args.includes(f);
@@ -40,6 +42,11 @@ if (envFile) {
   }
 }
 const apply = has("--apply");
+// reviewer finding A: the lock and PAUSE files from the same root the keeper uses (its working directory, the repository root); run from
+// anywhere else, the guards would look at the wrong files, so the tool refuses
+const ROOT = process.cwd();
+if (!fs.existsSync(path.join(ROOT, "config", "burnticker"))) { console.error(`run this from the repository root (no config/burnticker under ${ROOT}): the top-up lock and PAUSE files are resolved from it`); process.exit(2); }
+const { lock: LOCK_FILE, pause: PAUSE_FILE } = topUpPaths(ROOT);
 const clearTarget = flag("--clear-drain");
 if (has("--clear-drain")) {
   if (!clearTarget || !TOP_UP_TARGETS.includes(clearTarget as TopUpTarget)) { console.error(`--clear-drain takes one of ${TOP_UP_TARGETS.join(", ")}`); process.exit(2); }
@@ -50,7 +57,7 @@ if (has("--clear-drain")) {
   process.exit(0);
 }
 if (!apply && !has("--plan")) { console.error("pass --plan (reads only), --apply (one pass of the executor) or --clear-drain <target>"); process.exit(2); }
-if (apply && fs.existsSync(KEEPER_PAUSE_FILE)) { console.error(`${KEEPER_PAUSE_FILE} is present: PAUSE holds every SOL move, so --apply is refused. Remove the file first if the pause is over.`); process.exit(2); }
+if (apply && fs.existsSync(PAUSE_FILE)) { console.error(`${PAUSE_FILE} is present: PAUSE holds every SOL move, so --apply is refused. Remove the file first if the pause is over.`); process.exit(2); }
 const env = process.env;
 const rpc = env.BURNTICKER_RPC_URL?.trim();
 if (!rpc) { console.error("BURNTICKER_RPC_URL is not set (pass --env <file> or export it)"); process.exit(2); }
@@ -63,7 +70,9 @@ if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(signerAddress)) { console.error("the k
 const payer = uploadPayerAddress(env);
 if (cluster !== "mainnet" && !payer) { console.log(`${cluster} without an upload payer: the keeper skips top-ups here, nothing to plan`); process.exit(0); }
 
-const config = loadTopUpConfig();
+const ceil = withCeilingFromEnv(loadTopUpConfig(), env);
+if (ceil.note) console.log(ceil.note);
+const config = ceil.config;
 const conn = new Connection(rpc, { commitment: "confirmed" });
 let irys: TopUpDeps["irys"] = null;
 if (payer) { try { irys = await irysPayerAccount(env, cluster); } catch (e) { console.log(`the Irys client did not load (${(e as Error).message.slice(0, 120)}); the payer targets are left out`); } }
@@ -83,6 +92,7 @@ if (!apply) {
   db.close();
   console.log(`\nkeeper key   ${solText(plan.signer.lamports)} SOL · floor ${solText(plan.signer.floor)} · reserve today ${solText(plan.signer.reserve)} (floor + ${solText(plan.signer.expectedFeesPerDay)} expected fees) · covers ${plan.signerDays === null ? "unknown" : `about ${Math.floor(plan.signerDays)} days`}`);
   for (const l of plan.levels) console.log(`${TARGET_LABEL[l.target].padEnd(28)} ${l.balance === null ? "unread" : `${solText(l.balance)} SOL`} · floor ${solText(l.floor)} · fill ${solText(l.fill)}${l.address ? ` · ${l.address}` : ""}`);
+  console.log(`ceiling      ${solText(plan.ceiling.spentLamports)} of ${solText(plan.ceiling.limitLamports)} SOL sent this UTC day (${plan.ceiling.day})${plan.ceiling.stopped ? ": STOPPED until 00:00 UTC" : ""}`);
   console.log(`today        ${plan.today.count} top-up(s), ${solText(plan.today.signerLamports)} SOL from the keeper key · 50-launch mark ${solText(plan.noticeMarkLamports)} SOL${plan.overNotice ? " (ABOVE it)" : ""}`);
   console.log(plan.steps.length ? `\na pass would:` : `\na pass would do nothing: every wallet is at or above its floor`);
   for (const s of plan.steps) console.log(`  ${describeStep(s)}`);
@@ -95,19 +105,21 @@ const { loadKeypair } = await import("@/lib/burnKeeper/keyfile");
 const kp = loadKeypair({ keyPath, passphrase: env.BURNTICKER_SIGNER_PASSPHRASE?.trim() || undefined });
 if (kp.publicKey.toBase58() !== signerAddress) { console.error(`the key at ${keyPath} (${kp.publicKey.toBase58()}) is not BURNTICKER_KEEPER_PUBKEY ${signerAddress}: refused`); process.exit(2); }
 // HB-108: one sender at a time. The leading keeper holds this lock (refreshed every cycle); while it does, --apply is refused.
-const lock = takeTopUpLock(TOP_UP_LOCK_FILE, "cli", Date.now(), CLI_LOCK_TTL_MS);
+const lock = takeTopUpLock(LOCK_FILE, "cli", Date.now(), CLI_LOCK_TTL_MS);
 if (!lock.ok) {
   console.error(lock.held.holder === "keeper"
-    ? `a keeper leads on this host and holds ${TOP_UP_LOCK_FILE} (until ${new Date(lock.held.expiresAt).toISOString()} unless it runs another cycle): refused. The keeper refills the wallets itself; to run a pass by hand, stop the keeper first.`
-    : `another --apply pass (pid ${lock.held.pid}) holds ${TOP_UP_LOCK_FILE}: refused`);
+    ? `a keeper leads on this host and holds ${LOCK_FILE} (until ${new Date(lock.held.expiresAt).toISOString()} unless it runs another cycle): refused. The keeper refills the wallets itself; to run a pass by hand, stop the keeper first.`
+    : `another --apply pass (pid ${lock.held.pid}) holds ${LOCK_FILE}: refused`);
   process.exit(2);
 }
-process.on("exit", () => { try { releaseTopUpLock(TOP_UP_LOCK_FILE, "cli", Date.now()); } catch { /* lapses on its own */ } });
+process.on("exit", () => { try { releaseTopUpLock(LOCK_FILE, "cli", Date.now()); } catch { /* lapses on its own */ } });
 const { openRegistry } = await import("@/lib/burnticker/registry");
 const reg = openRegistry(dbFile);
 try {
 
-  const r = await runTopUps({ registry: reg, config, mode: topUpModeFromEnv(env), now, log, alert: (kind, key, text, meta) => reg.recordAlert({ kind, key, text, meta }, now),
+  // reviewer finding A: the pass re-takes its lock before every step (as the keeper does); a lost lock stops the pass before a send
+  const refreshLock = (): boolean => takeTopUpLock(LOCK_FILE, "cli", Date.now(), CLI_LOCK_TTL_MS).ok;
+  const r = await runTopUps({ registry: reg, config, mode: topUpModeFromEnv(env), now, log, refreshLock, alert: (kind, key, text, meta) => reg.recordAlert({ kind, key, text, meta }, now),
     deps: { signerAddress, readLamports: async (a) => BigInt(await conn.getBalance(new PublicKey(a), "confirmed")), transfer: connectionTransfer(conn, kp), irys, deficitKeeper: deficit } });
   if (!r) process.exit(1);
   console.log(r.done.length ? `\n${r.done.length} step(s) recorded: ${r.done.map((d) => `${d.target} ${d.kind} ${solText(d.lamports)} SOL ${d.status}${d.signature ? ` ${d.signature}` : ""}`).join("; ")}` : r.skipped.length ? `\nnothing sent: ${r.skipped.join("; ")}` : "\nnothing to do: every wallet is at or above its floor");

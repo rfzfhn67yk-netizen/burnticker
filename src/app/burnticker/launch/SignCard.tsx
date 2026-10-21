@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, pinPlanFormat, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, sentAckOf, sentReporter, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendDeps, type SendDepsCommon, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, browserPlanStorage, formatFallbackAllowed, v0Format, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, pinPlanFormat, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, sentAckOf, sentReporter, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendDeps, type V0SendDeps, type SendDepsCommon, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
 import { connectionRpc, simulateBase64, v1Format, v1StepProblems } from "@/lib/burnticker/signPlanV1";
-import { chainIdOf, decideStepFormat, formatProblems, formatReadinessLine, launchSignVersions, phantomVersionLine, signWithStandardWallet, standardAccountFor, standardWalletOf, type TxFormat } from "@/lib/burnticker/walletTxVersion";
+import { chainIdOf, decideStepFormat, formatProblems, formatReadinessLine, FORMAT_SETTING_READING, launchSignVersions, phantomVersionLine, signWithStandardWallet, standardAccountFor, standardWalletOf, V0_FALLBACK_NOTICE, withoutV1, type TxFormat } from "@/lib/burnticker/walletTxVersion";
 import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
 import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
@@ -68,10 +68,12 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   // the lookup-table pin from the host (undefined = still reading, null = the read failed)
   // launch audit 231: a failed read is retried in place (Read the setting again); a reload would drop the mint keys held in memory
   const [pins, setPins] = useState<Record<Network, LookupTablePin> | null | undefined>(undefined), [pinTry, setPinTry] = useState(0);
+  // LA7 fix B: the host's BURNTICKER_WALLET_TX_V1 switch, read with the pins (undefined = still reading; an unreadable answer = off)
+  const [txV1, setTxV1] = useState<boolean | undefined>(undefined);
   useEffect(() => {
     let live = true;
     setPins(undefined);
-    fetch("/api/burnticker/launch", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) setPins(j?.lookupTables ?? null); }).catch(() => { if (live) setPins(null); });
+    fetch("/api/burnticker/launch", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) { setPins(j?.lookupTables ?? null); setTxV1(j ? j.walletTxV1 !== false : false); } }).catch(() => { if (live) { setPins(null); setTxV1(false); } });
     return () => { live = false; };
   }, [pinTry]);
   const pin = network && pins ? pins[network] ?? null : null;
@@ -79,12 +81,16 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   // wallet's signTransaction feature the moment the run starts (and pinned then). `effective` is what the card shows and checks now.
   // Phantom support, ticket 438485 (2026-10-20): version 1 only when the connected account itself lists solana:signTransaction, is on
   // this launch's chain, and the feature advertises 1 (walletTxVersion.ts accountSignsV1); never from the extension's version number
-  const versions = launchSignVersions(wallet.wallet?.adapter, walletKey, network);
-  const [format, setFormat] = useState<TxFormat | null>(() => stored?.format ?? null);
+  // LA7 fix B: with the host switch off (BURNTICKER_WALLET_TX_V1=0) version 1 is never offered, and a plan pinned to version 1 that has
+  // not reached a wallet or the chain yet is decided again (it becomes version 0); a plan already signed in version 1 keeps it
+  const advertised = launchSignVersions(wallet.wallet?.adapter, walletKey, network);
+  const versions = txV1 === false ? withoutV1(advertised) : advertised;
+  const [pinnedFormat, setFormat] = useState<TxFormat | null>(() => stored?.format ?? null);
+  const format = pinnedFormat === 1 && txV1 === false && formatFallbackAllowed({ version: 1, versionRefused: true, hasFallback: true, usedFallback: false, walletSigned: false, rec: loadPlanRecord(storage, plan) ?? { confirmed: [], pending: null, failed: null } }) ? null : pinnedFormat;
   const effective = format ?? decideStepFormat(null, versions);
   const v0InPlay = effective !== 1;
   const pinProblems = !v0InPlay ? [] : pins === undefined || pins === null ? pinReadProblems(pins) : lookupTablePinProblems(network, pin);
-  const problems = [...planProblems(plan, creator), ...pinProblems, ...(v0InPlay ? planSizeProblems(plan.steps, creator, network) : [...(network ? [] : ["the network of this launch could not be read from its instructions"]), ...v1StepProblems(plan.steps, creator, plan.expect)]), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet ? formatProblems(format, versions) : [])];
+  const problems = [...planProblems(plan, creator), ...pinProblems, ...(v0InPlay ? planSizeProblems(plan.steps, creator, network) : [...(network ? [] : ["the network of this launch could not be read from its instructions"]), ...v1StepProblems(plan.steps, creator, plan.expect)]), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet ? formatProblems(format, versions) : []), ...(effective === 1 && txV1 === undefined ? [FORMAT_SETTING_READING] : [])];
   const formatLine = walletKey && wallet.wallet ? formatReadinessLine(effective) : null;
   const phantomLine = walletKey && wallet.wallet ? phantomVersionLine(standardWalletOf(wallet.wallet.adapter), versions) : null;
   /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
@@ -140,6 +146,8 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
     if (format === null) setFormat(chosen);
     pinPlanFormat(storage, planRun);
     setBusy(true); setErr(null); setNotice(null); setClosedStop(false);
+    // LA7 fix B: the version-1 dry run's words when this run fell back to version 0 (reported with the create's send, for the ops log)
+    let fallbackWhy: string | null = null;
     try {
       const common: SendDepsCommon = {
         // prelaunch audit 2026-10-18 A-11: launches closed while signing stop the plan before its next step (a fresh catalogue read)
@@ -157,7 +165,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         // SEC-05 (continuous audit 2026-10-19): the create is sent only once the site's answer names the recorded send for that mint
         // (sentAckOf); a network error, a non-2xx, a refusal or an answer about another mint stops the run before anything is sent
         onSent: sentReporter(plan, async (body) => {
-          const res = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store" });
+          const res = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, ...(fallbackWhy ? { formatFallback: fallbackWhy.slice(0, 200) } : {}) }), cache: "no-store" });
           return sentAckOf(res.status, await res.json().catch(() => null), body.mint);
         }),
         // launch recovery 255: status, height, the transaction history and the accounts a step creates, before anything is called unlanded
@@ -165,20 +173,28 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         storage,
       };
       const std = standardWalletOf(wallet.wallet?.adapter), account = standardAccountFor(std, walletKey);
-      const deps: SendDeps = chosen === 1 ? {
-        ...common,
-        // Phantom v1 (ticket 438485): the wallet signs the raw bytes through its wallet-standard feature; the dry run is raw base64 over
-        // the same-origin proxy (the adapter's Connection carries the flight token), and it sizes the step (signPlanV1.ts)
-        format: v1Format({ signBytes: async (bytes) => { setPhase("wallet"); const signed = await signWithStandardWallet(std, account, chainIdOf(network ?? "devnet"), bytes); setPhase("chain"); return signed; }, simulate: (b64) => simulateBase64(connectionRpc(connection), b64) }, planRun),
-      } : {
-        ...common,
+      const v0: Pick<V0SendDeps, "signTransaction" | "simulate" | "lookupTable"> = {
         signTransaction: async (tx) => { setPhase("wallet"); const signed = await wallet.signTransaction!(tx); setPhase("chain"); return signed; },
         // Phantom ticket 438485: dry-run each step before the wallet sees it (a transaction that fails on chain trips the wallet's warning)
         simulate: async (tx) => { const r = (await connection.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" })).value; return r.err ? simulationFailureText(r.err, r.logs) : null; },
         lookupTable: () => verifiedLookupTable(connection, network, pin),
       };
+      // LA7 fix B: the version-0 fallback for a version-1 run, wired only when this wallet signs version 0, the table's pin is read and
+      // valid, and the plan fits version 0's size; the runner uses it only before the wallet is asked (signPlan.ts formatFallbackAllowed)
+      const v0Ready = !!versions?.has(0) && !!network && !!pin && lookupTablePinProblems(network, pin).length === 0 && planSizeProblems(plan.steps, creator, network).length === 0;
+      const deps: SendDeps = chosen === 1 ? {
+        ...common,
+        ...(v0Ready ? {
+          fallback: v0Format(v0),
+          onFormatFallback: ({ step, why }: { step: number; why: string }) => { fallbackWhy = why; console.info(`[burnticker launch] version 1 refused by the dry run of step ${step + 1}; sending as version 0:`, why); setFormat(0); setNotice(V0_FALLBACK_NOTICE); },
+        } : {}),
+        // Phantom v1 (ticket 438485): the wallet signs the raw bytes through its wallet-standard feature; the dry run is raw base64 over
+        // the same-origin proxy (the adapter's Connection carries the flight token), and it sizes the step (signPlanV1.ts)
+        format: v1Format({ signBytes: async (bytes) => { setPhase("wallet"); const signed = await signWithStandardWallet(std, account, chainIdOf(network ?? "devnet"), bytes); setPhase("chain"); return signed; }, simulate: (b64) => simulateBase64(connectionRpc(connection), b64) }, planRun),
+      } : { ...common, ...v0 };
       const r = await signAndSendPlan(planRun, creator, deps, (i, sig) => setDone((d) => (d.length === i ? [...d, sig] : d)), done);
       setDone(r.signatures);
+      if (r.format !== undefined && r.format !== chosen) setFormat(r.format);
       if (r.expired) setRanOut(true);
       if (r.error) {
         setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n)); setClosedStop(!!r.closed);

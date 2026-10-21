@@ -2,6 +2,7 @@ import { lockRule, DEFAULT_ON_END, type BurnRule } from "@/lib/burnticker/rules"
 import { selectorKeyOf } from "@/lib/burnticker/registry";
 import type { ExistingCoin, TokenLike } from "@/lib/burnticker/duplicateRule";
 import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
+import { canonicalEspnSeries } from "@/lib/burnticker/sources/espn";
 
 /**
  * A coin that was CREATED on chain: live, paused or retired. A draft is a prepared launch that may never be signed (the owner's
@@ -15,7 +16,10 @@ export const isCreatedStatus = (status: string): boolean => CREATED_STATUSES.inc
 export function existingCoinsFor(rule: unknown, tokens: readonly TokenLike[]): ExistingCoin[] {
   let key: string, sha: string | null = null;
   try {
-    const r = rule as BurnRule;
+    const r0 = rule as BurnRule;
+    // HB-188: an ESPN series is matched in its one spelling, so a window written another way still finds the live coin
+    const canon = r0 && r0.oracle === "catalogue" ? canonicalEspnSeries(r0.series) : null;
+    const r = canon && canon !== r0.series ? { ...r0, series: canon } : r0;
     key = selectorKeyOf(r);
     try { sha = lockRule((r as { onEnd?: unknown }).onEnd === undefined ? { ...r, onEnd: { ...DEFAULT_ON_END } } : r).sha256; } catch { sha = null; }
   } catch { return []; }

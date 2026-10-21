@@ -551,7 +551,7 @@ describe("the copy says it plainly", () => {
       assert.ok(lintCopy(t, cfg).ok, `${lintCopy(t, cfg).hits.map((h) => h.phrase).join(", ")}: ${t}`);
       assert.doesNotMatch(t, /→|\w\/\w|payout/i, t);
     }
-    assert.equal(GAME_BURN_LINE, "A game coin burns once the official feed has marked the game final and a second check five minutes later agrees.");
+    assert.equal(GAME_BURN_LINE, "A game coin burns once its final has been read and a second read five minutes later agrees.");
     assert.ok(text.ruleBlock.includes(GAME_BURN_LINE), text.ruleBlock);
     assert.ok(ruleFacts(JSON.stringify(rule), true).window.includes(GAME_BURN_LINE));
     assert.ok(!sportsConfirmationLine().includes(GAME_BURN_LINE), "the team-coin footer does not carry the game-coin sentence");

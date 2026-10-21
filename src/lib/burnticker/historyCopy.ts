@@ -212,12 +212,16 @@ export const HISTORY_COPY = {
   trustLatest: "The latest releases",
 };
 
-/** The home status line's dated counts (home.ts homeStatusLine): "13 reviews are published, and there have been 69 releases since Oct 10." */
+/**
+ * The home status line's dated counts (home.ts homeStatusLine): "13 review reports by AI agents are published, and there have been 69
+ * releases since Oct 10. No security firm has audited the code." Seventh pass AP7-7: the count is of report files (transparency.json
+ * howBuilt.reviews with a report in the repository), not of the review groups the current-status page lists, and every one is by an AI agent.
+ */
 export function historyCountsLine(c: { reviews: number | null; releases: number | null }): string | null {
   const parts: string[] = [];
-  if (c.reviews !== null) parts.push(`${c.reviews} ${c.reviews === 1 ? "review is" : "reviews are"} published`);
+  if (c.reviews !== null) parts.push(`${c.reviews} ${c.reviews === 1 ? "review report by an AI agent is" : "review reports by AI agents are"} published`);
   if (c.releases !== null) parts.push(`there ${c.releases === 1 ? "has been 1 release" : `have been ${c.releases} releases`} since Oct 10`);
   if (!parts.length) return null;
   const s = parts.join(", and ");
-  return `${s[0].toUpperCase()}${s.slice(1)}.`;
+  return `${s[0].toUpperCase()}${s.slice(1)}.${c.reviews !== null ? " No security firm has audited the code." : ""}`;
 }

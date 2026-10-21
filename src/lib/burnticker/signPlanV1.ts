@@ -4,6 +4,7 @@ import { fromLegacyTransactionInstruction } from "@solana/compat";
 import { address, appendTransactionMessageInstructions, compileTransaction, createKeyPairFromBytes, createTransactionMessage, getCompiledTransactionMessageDecoder, getTransactionDecoder, getTransactionEncoder, partiallySignTransaction, pipe, setTransactionMessageConfig, setTransactionMessageFeePayer, setTransactionMessageLifetimeUsingBlockhash, type Blockhash, type Instruction, type Transaction } from "@solana/kit";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { base58ToBytes, bytesToBase58, simulationFailureText, WALLET_GUARD_PROGRAMS, type SignPlan, type SignStep, type StepFormat } from "@/lib/burnticker/signPlan";
+import { isVersionRefusal } from "@/lib/burnticker/walletTxVersion";
 
 /**
  * A LAUNCH STEP AS A VERSION-1 TRANSACTION (Phantom's dApp review, ticket 438485; docs/burnticker/phantom-v1-scope-2026-10-19.md,
@@ -258,8 +259,12 @@ export function v1Format(d: V1SendDeps, plan: Pick<SignPlan, "steps" | "keys" | 
     async prepare() { pairs = await keyPairsOf(plan); },
     async build(step, creator, _keys, bh) { return buildStepV1(step, creator, plan.expect, bh, V1_GENEROUS); },
     async dryRun(built) {
-      const sim = await d.simulate(toBase64(wireOf(built.tx)));
-      if (sim.err != null) return { problem: simulationFailureText(sim.err, sim.logs) };
+      // LA7 fix B: a node that cannot read version 1 (it throws, or the simulation answers UnsupportedVersion) is flagged so the runner
+      // can build the same step as version 0 before the wallet is asked (signPlan.ts formatFallbackAllowed); any other failure is not
+      let sim: V1SimulateResult;
+      try { sim = await d.simulate(toBase64(wireOf(built.tx))); }
+      catch (e) { if (isVersionRefusal(e)) return { problem: `this network's node does not accept version-1 transactions (${String((e as Error)?.message ?? e).slice(0, 160)})`, versionRefused: true }; throw e; }
+      if (sim.err != null) return { problem: simulationFailureText(sim.err, sim.logs), ...(isVersionRefusal(sim.err) ? { versionRefused: true as const } : {}) };
       const limits = sizedLimits(sim);
       return { ready: buildStepV1(built.step, built.creator, plan.expect, built.bh, limits) };
     },

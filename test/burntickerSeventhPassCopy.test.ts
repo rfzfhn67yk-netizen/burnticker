@@ -29,7 +29,9 @@ describe("HB-170: a copycat on the same team window", () => {
   test("another window of the same team is still exempt", () => {
     const a = { oracle: "catalogue", series: "espn.team:nfl-PHI.21-win-s2026" } as never, b = { oracle: "catalogue", series: "espn.team:nfl-PHI.21-win-p2026" } as never;
     const season = [{ ticker: "PHIWIN26", name: "Eagles 2026 Wins", status: "live", creator: "X", rule: a }] as never;
-    assert.deepEqual(lookalikeHits({ ticker: "PHIWINPO", name: "Eagles 2026 Wins", rule: b, creator: "Y" }, season), []);
+    // HB-188 (eighth pass LA8-3): the ticker stays exempt on another window; the identical name does not
+    assert.deepEqual(lookalikeHits({ ticker: "PHIWINPO", name: "Eagles 2026 Wins", rule: b, creator: "Y" }, season).map((h) => h.field), ["name"]);
+    assert.deepEqual(lookalikeHits({ ticker: "PHIWINPO", name: "Eagles 2026 Postseason Wins", rule: b, creator: "Y" }, season), []);
     assert.ok(lookalikeHits({ ticker: "PHIWINPO", name: "Eagles 2026 Wins", rule: a, creator: "Y" }, season).some((h) => h.field === "name"));
   });
   test("the generated name moves with a team-word ticker, and that name passes", () => {

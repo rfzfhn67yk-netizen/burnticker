@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { DRAFT_TTL_MS, TICKER_LIVE_ALERT_KIND, TickerAlreadyLiveError, openRegistry, type TokenRow } from "@/lib/burnticker/registry";
 import { lockRule } from "@/lib/burnticker/rules";
-import { markCreateSent, markLaunched, prepareLaunch, resetConfirmGuards } from "@/lib/burnticker/api/handlers";
+import { markCreateSent, markLaunched, prepareLaunch, resetConfirmGuards, SENT_TX_FORMAT_PREFIX } from "@/lib/burnticker/api/handlers";
 import { limiter } from "@/lib/burnticker/api/http";
 import { SdkLaunchLab, type LaunchBundle } from "@/lib/burnticker/launchBundle";
 import { LAUNCHLAB_PROGRAM } from "@/lib/burnKeeper/launchlab";
@@ -18,7 +18,7 @@ import { sentReporter, type SignPlan } from "@/lib/burnticker/signPlan";
 import type { LaunchExpectation, LaunchVerifier } from "@/lib/burnticker/launchVerify";
 import { lintCopy } from "@/lib/launch/copyLint";
 import { PUSH_KIND_OF_ALERT, PUSH_LEAD } from "@/lib/burnticker/push";
-import { encodeAccount, makeWorld } from "./burntickerApiHelpers.ts";
+import { ageDraftsPastDedupe, encodeAccount, makeWorld } from "./burntickerApiHelpers.ts";
 import { BRONCOS } from "./burntickerHelpers.ts";
 
 const RULE = { ...BRONCOS, pair: null };
@@ -54,10 +54,17 @@ describe("B-2 at prepare: a sent create blocks a second coin on the same ticker"
     const a = await prepareLaunch(w.p, body, { register: true, mint: m1.publicKey.toBase58() });
     assert.ok("ok" in a, JSON.stringify("error" in a ? a.error.body : a).slice(0, 300));
     // the page reports the create (step 2) just before it sends it
-    const sent = await markCreateSent(w.p, m1.publicKey.toBase58(), signedStep(a.ok.bundle, 1, [creator, m1]));
+    const sentTx = signedStep(a.ok.bundle, 1, [creator, m1]);
+    const sent = await markCreateSent(w.p, m1.publicKey.toBase58(), sentTx);
     // SEC-05: the 200 names the recorded row (the page sends only on that acknowledgement)
     assert.equal(sent.status, 200, JSON.stringify(sent.body)); assert.equal((sent.body as { recorded: { mint: string } }).recorded.mint, m1.publicKey.toBase58()); assert.equal((sent.body as { fresh: boolean }).fresh, true);
     assert.equal(w.registry.createSends(m1.publicKey.toBase58()).length, 1);
+    // LA7 fix B: the format the create was sent in is read from its bytes and kept in the launch record (with the page's fallback note)
+    assert.equal((sent.body as { txFormat?: unknown }).txFormat, 0);
+    assert.deepEqual(JSON.parse(w.registry.getStatus(SENT_TX_FORMAT_PREFIX + m1.publicKey.toBase58())!), { format: 0 });
+    const noted = await markCreateSent(w.p, m1.publicKey.toBase58(), sentTx, Date.now(), { formatFallback: 'the node said "unsupported transaction version"\n' });
+    assert.equal(noted.status, 200);
+    assert.deepEqual(JSON.parse(w.registry.getStatus(SENT_TX_FORMAT_PREFIX + m1.publicKey.toBase58())!), { format: 0, fallback: "the node said 'unsupported transaction version' " });
     // the refresh: the idempotency key is gone, Launch is pressed again, the bank (or the browser) gives a new mint
     const m2 = Keypair.generate().publicKey.toBase58();
     const b = await prepareLaunch(w.p, body, { register: true, mint: m2 });
@@ -82,12 +89,17 @@ describe("B-2 at prepare: a sent create blocks a second coin on the same ticker"
     assert.equal(own?.extra.code, "ticker-taken"); assert.match(String(own?.error), /You already launched \$PEND/); assert.deepEqual(lintCopy(String(own?.error)).hits, []);
   });
 
-  test("a draft whose create was never sent keeps the exemption: the same creator's new prepare goes through", async () => {
+  test("a draft whose create was never sent: LA7-5 refuses a second draft on a new mint for 30 minutes (draft-exists); its own mint goes through; after the window a new one does too", async () => {
     const { w, body } = await world();
-    const a = await prepareLaunch(w.p, body, { register: true, mint: Keypair.generate().publicKey.toBase58() });
+    const m1 = Keypair.generate().publicKey.toBase58();
+    const a = await prepareLaunch(w.p, body, { register: true, mint: m1 });
     assert.ok("ok" in a);
     const b = await prepareLaunch(w.p, body, { register: true, mint: Keypair.generate().publicKey.toBase58() });
-    assert.ok("ok" in b, JSON.stringify("error" in b ? b.error.body : b).slice(0, 300));
+    assert.ok("error" in b); if ("error" in b) { assert.equal(code(b.error), "draft-exists"); assert.equal((b.error.body as { mint?: string }).mint, m1); }
+    assert.ok("ok" in await prepareLaunch(w.p, body, { register: true, mint: m1 }), "the same draft is prepared again");
+    ageDraftsPastDedupe(w.registry);
+    const c = await prepareLaunch(w.p, body, { register: true, mint: Keypair.generate().publicKey.toBase58() });
+    assert.ok("ok" in c, JSON.stringify("error" in c ? c.error.body : c).slice(0, 300));
   });
 
   test("only the creator's own signed create marks a draft: another wallet's signature, a lock step, or garbage is refused and records nothing", async () => {
@@ -156,6 +168,7 @@ describe("B-2 at confirm: a race that slips past prepare still yields one live c
     const { w, body } = await world();
     const m1 = Keypair.generate().publicKey.toBase58(), m2 = Keypair.generate().publicKey.toBase58();
     assert.ok("ok" in await prepareLaunch(w.p, body, { register: true, mint: m1 }));
+    ageDraftsPastDedupe(w.registry);   // LA7-5: a second draft exists only after the 30-minute window
     assert.ok("ok" in await prepareLaunch(w.p, body, { register: true, mint: m2 }), "no send was reported, so the exemption let it through");
     w.p.launchVerifier = { verify: async () => ({ ok: true as const, blockTimeMs: Date.now() }) };
     const c1 = await markLaunched(w.p, m1, sig("5"), Date.now(), "t");

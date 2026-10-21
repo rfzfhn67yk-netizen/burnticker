@@ -197,7 +197,8 @@ describe("B-5: the home strip counts only receipts the chain verified", () => {
     const s = homeStats({ burns: 0, burnedTokens: "0" }, { ok: true, receipts: 3, executed: 0, chainVerified: 0, mismatches: 0, chainChecked: true }, "mainnet")!;
     assert.equal(s.receiptsVerified, 0);
     assert.equal(s.receiptsRecorded, 3);
-    assert.equal(s.receiptsWhy, "No mainnet burn has run yet, so no receipt is verified on chain. The audit recomputed the 3 recorded receipts from their readings and rules. This is a recomputation of recorded receipts.");
+    assert.equal(s.receiptsWhy, "No mainnet burn has run yet, so no receipt is verified on chain. 3 readings are queued. None has burned, so there is no receipt yet. The audit recomputed each one from its reading and its rule.");
+    assert.doesNotMatch(s.receiptsWhy, /recorded receipts/, "AP7-7: queued readings are not receipts");
   });
   test("chain-verified receipts are the figure; a run without the chain counts none", () => {
     assert.equal(homeStats({ burns: 2, burnedTokens: "9" }, { ok: true, receipts: 5, executed: 2, chainVerified: 2, mismatches: 0, chainChecked: true })!.receiptsVerified, 2);

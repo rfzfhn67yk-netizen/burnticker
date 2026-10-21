@@ -1,4 +1,5 @@
 import { safeParam } from "@/lib/burnticker/safeParam";
+import { readingsAfterLaunch } from "@/lib/burnticker/launchCut";
 import { tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { fail, ok, okRaw, type ApiResult } from "@/lib/burnticker/api/http";
 import { lookupCoin, sharedTickerBody } from "@/lib/burnticker/coinLookup";
@@ -77,7 +78,7 @@ export async function v1CoinChecklist(p: Platform, id: string, now = Date.now())
   const d = await tokenPageData(p, t, now).catch(() => null);
   const burns = p.registry.receipts(t.mint).filter((r) => r.status === "confirmed" && (r.burnRaw ?? ZERO) > ZERO).length;
   let readings = d ? d.readings.length : 0;
-  if (!d) { try { readings = p.registry.readings(t.selectorKey, t.baselineAt).length; } catch { readings = 0; } }
+  if (!d) { try { readings = readingsAfterLaunch(p.registry, t.selectorKey, t.baselineAt).length; } catch { readings = 0; } }
   const s = d?.status ?? null;
   const cl = checklistOf({
     ticker: t.ticker, mint: t.mint, status: t.status, launched: t.status !== "draft" && t.status !== "expired",

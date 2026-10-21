@@ -66,6 +66,10 @@ export function sharesForTier(tier: CpmmTier): PostGraduationShares {
 const tradersPayPct = (t: CpmmTier): string => `${(t.tradeFeeRate + t.creatorFeeRate) / 10_000}%`;
 /** "19 October 2026, 20:17 UTC": the tier-14 cutover in words (utcWords.ts), the one way public prose names it. */
 export const TIER_14_CUTOVER_WORDS = utcDateTime(CPMM_TIER_14_SINCE);
+/** The trust page's line on who decides the tier (eighth pass B-23): the platform setting the LaunchLab admin wallet holds. */
+export const FEE_TIER_DECIDER_LINE = "The tier a coin graduates into is decided at graduation by the LaunchLab platform setting, which the platform admin wallet controls.";
+/** "19 October 2026": the cutover's day, for the HS-71 sentence. */
+export const TIER_14_DATE_WORDS = TIER_14_CUTOVER_WORDS.replace(/,.*$/, "");
 
 /**
  * BOTH TIERS IN ONE LINE (continuous audit run 2, HB-13): a site-wide sentence that states the new-coin shares (tier 14) adds this line,
@@ -73,9 +77,10 @@ export const TIER_14_CUTOVER_WORDS = utcDateTime(CPMM_TIER_14_SINCE);
  * (tokenPage.ts, from its pin), never this.
  */
 export const EARLIER_COINS_LINE = (() => {
-  const t9 = sharesForTier(CPMM_MAINNET_TIER_9);
-  // short enough for the footer on every page (the static home keeps its word budget, test/burntickerHome.test.ts)
-  return `Coins created from ${TIER_14_CUTOVER_WORDS} use fee tier ${CPMM_MAINNET_TIER_14.index} (${tradersPayPct(CPMM_MAINNET_TIER_14)} per swap). Earlier coins, mostly on tier ${CPMM_MAINNET_TIER_9.index}, pay ${tradersPayPct(CPMM_MAINNET_TIER_9)}: ${aboutPct(t9.burnPool)} to the burn pool, ${aboutPct(t9.operator).replace(/^about /, "")} to the operator.`;
+  // eighth pass B-23 / HB-184 (owner B-17 decision): every coin graduates into the platform's current tier, so the line no longer splits
+  // coins by creation date; it says the one tier and that the earlier coins' recorded tier does not change what they pay
+  const t = CPMM_TIER.mainnet;
+  return `Every coin graduates into a pool on the platform's current fee tier, tier ${t.index} (${tradersPayPct(t)} per swap). Coins made before ${TIER_14_DATE_WORDS} recorded tier ${CPMM_MAINNET_TIER_9.index} when they were created and pay ${tradersPayPct(t)} all the same.`;
 })();
 
 /**
@@ -88,7 +93,7 @@ export function earlierCoinsLineFor(cluster: string | null | undefined): string 
 }
 
 /** The operator's share on the earlier tier, for a sentence that already gives the new-coin share (the fee ledger, the operator note). */
-export const EARLIER_OPERATOR_CLAUSE = `${operatorShareClause(sharesForTier(CPMM_MAINNET_TIER_9))} on coins created before ${TIER_14_CUTOVER_WORDS}, which stay on tier ${CPMM_MAINNET_TIER_9.index}`;
+export const EARLIER_OPERATOR_CLAUSE = `the same on coins made before ${TIER_14_DATE_WORDS}, which graduate into the same tier ${CPMM_TIER.mainnet.index} pools`;
 
 /** The mainnet line for new coins, client-safe (what the shared copy modules print). */
 export const OPERATOR_SHARE_LINE = postGraduationShareLine(sharesForCluster("mainnet"));
@@ -101,8 +106,9 @@ export const PAIR_OPERATOR_SHARE_LINE = postGraduationShareLine(sharesForCluster
  * names the cutover and both tiers, coins created before it first. No number is typed; the tier records give them.
  */
 export const BOTH_TIERS_LINE = (() => {
-  const t9 = sharesForTier(CPMM_MAINNET_TIER_9), t14 = sharesForTier(CPMM_MAINNET_TIER_14);
-  return `Coins created before ${TIER_14_CUTOVER_WORDS} pay ${tradersPayPct(CPMM_MAINNET_TIER_9)} per swap after graduation (fee tier ${CPMM_MAINNET_TIER_9.index}): ${aboutPct(t9.burnPool)} to the burn pool, ${aboutPct(t9.operator)} to the operator and ${aboutPct(t9.raydium)} to Raydium. Coins created from then on pay ${tradersPayPct(CPMM_MAINNET_TIER_14)} (fee tier ${CPMM_MAINNET_TIER_14.index}): ${aboutPct(t14.burnPool)} to the burn pool, ${aboutPct(t14.operator)} to the operator and ${aboutPct(t14.raydium)} to Raydium. On both, the operator's part is ${t9.operatorPctOfLp}% of the locked pool's liquidity fees.`;
+  // eighth pass B-23 / HB-184 (HS-71 words): one split for every coin, the platform's current tier, from the tier record
+  const t = CPMM_TIER.mainnet, v = sharesForTier(t), bare = (bps: number) => aboutPct(bps).replace(/^about /, "");
+  return `After graduation, every coin pays ${tradersPayPct(t)} per swap (Raydium fee tier ${t.index}): ${aboutPct(v.burnPool)} to the burn pool, ${bare(v.operator)} to the operator and ${bare(v.raydium)} to Raydium. LaunchLab moves a graduating coin into a pool on the platform's current fee tier, which is ${t.index}; coins made before ${TIER_14_DATE_WORDS} recorded tier ${CPMM_MAINNET_TIER_9.index} when they were created and pay ${tradersPayPct(t)} all the same.`;
 })();
 
 /**
@@ -115,11 +121,9 @@ export function tier14CoinExists(tokens: readonly { cluster: string; status: str
   const t0 = Date.parse(since);
   return tokens.some((t) => t.cluster === "mainnet" && t.status !== "draft" && t.status !== "expired" && t.createdAt >= t0);
 }
-export function feeTiersLine(o: { tier14Live: boolean | null }): string {
-  const t9 = sharesForTier(CPMM_MAINNET_TIER_9), t14 = sharesForTier(CPMM_MAINNET_TIER_14);
-  const bare = (bps: number) => aboutPct(bps).replace(/^about /, "");
-  const live = o.tier14Live === false ? " (every coin live today)" : "";
-  return `After graduation, coins created before ${TIER_14_CUTOVER_WORDS}${live} pay ${tradersPayPct(CPMM_MAINNET_TIER_9)} per swap: ${aboutPct(t9.burnPool)} to the burn pool, ${bare(t9.operator)} to the operator and ${bare(t9.raydium)} to Raydium. Coins created after that pay ${tradersPayPct(CPMM_MAINNET_TIER_14)}: ${bare(t14.burnPool)}, ${bare(t14.operator)} and ${bare(t14.raydium)}. Coin-vs-coin pair pools use their own split, shown on the pair page.`;
+export function feeTiersLine(_o: { tier14Live: boolean | null }): string {
+  // eighth pass B-23: "(every coin live today) pay 1% (fee tier 9)" was false under the B-17 decision; every coin pays the current tier
+  return `${BOTH_TIERS_LINE} Coin-vs-coin pair pools use their own split, shown on the pair page.`;
 }
 /** The footer's fee row: the curve fee, then feeTiersLine. `curveBps` is fees.ts BURNTICKER_DEV_FEE_BPS (passed in: this module stays client-safe). */
 export const footerFeeLine = (curveBps: number, o: { tier14Live: boolean | null }): string => `Burnticker takes ${curveBps / 100}% of curve volume. ${feeTiersLine(o)}`;

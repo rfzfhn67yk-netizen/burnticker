@@ -1,7 +1,7 @@
 import type { Platform } from "@/lib/burnticker/server";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { lookalikeRefusal, mintAdoptionRefusal, sameTickerSentence, type LookalikeExisting, type LookalikeHit } from "@/lib/burnticker/lookalike";
-import { freeTickers, isTeamRule } from "@/lib/burnticker/tickerCheck";
+import { freeTickers, isTeamRule, minutesUntil, unprovenHoldSentence, type TickerRow } from "@/lib/burnticker/tickerCheck";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { DRAFT_TTL_MS, UNPROVEN_HOLD_MS, type TokenRow } from "@/lib/burnticker/registry";
 
@@ -44,7 +44,21 @@ export function unprovenHoldMinutes(registry: Pick<Platform["registry"], "tokens
   const unproven = unprovenOf(registry);
   const rows = registry.tokens().filter((t) => t.ticker.toUpperCase() === ticker.toUpperCase() && t.creator !== creator && tickerHoldStatus(t, now, { unproven: unproven.has(t.mint) }) !== "expired");
   if (!rows.length || rows.some((t) => !unproven.has(t.mint) || t.status !== "draft" || t.launchTx)) return null;
-  return Math.max(1, Math.ceil(Math.max(...rows.map((t) => t.createdAt + UNPROVEN_HOLD_MS - now)) / 60_000));
+  return minutesUntil(Math.max(...rows.map((t) => t.createdAt + UNPROVEN_HOLD_MS)), now);
+}
+/**
+ * B-19 at review (LA7 fix A): the rows holding a ticker as the prepare reads them (tickerHoldStatus with the unproven set), for the
+ * review's ticker check. A draft past its 24 hours, or an unproven draft past its 15 minutes, holds nothing; an unproven draft inside
+ * its window carries the time its hold ends. The proven caller's own draft is left in: tickerChecks exempts it by creator.
+ */
+export function heldTickerRows(registry: Pick<Platform["registry"], "tokensByTicker"> & UnprovenSource, ticker: string, now: number = Date.now()): TickerRow[] {
+  const unproven = unprovenOf(registry);
+  return registry.tokensByTicker(ticker).flatMap((x) => {
+    const isUnproven = unproven.has(x.mint), status = tickerHoldStatus(x, now, { unproven: isUnproven });
+    if (status === "expired") return [];
+    const until = isUnproven && status === "draft" ? x.createdAt + UNPROVEN_HOLD_MS : undefined;
+    return [{ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson, status, creator: x.creator, ...(until !== undefined ? { unprovenUntil: until } : {}) }];
+  });
 }
 export async function launchGuardRefusal(p: { registry: Pick<Platform["registry"], "tokens" | "lockedRule" | "tickerTaken" | "tokensByTicker" | "token" | "ownDraft"> & UnprovenSource; market?: Platform["market"] }, c: { ticker: string; name: string; rule: Pick<BurnRule, "oracle" | "series"> | null; mint?: string | null; /** 2026-10-14: the creator's own unfinished draft of this mint is not an adoption */ creator?: string | null; /** review of block M: the wallet whose own draft's ticker is exempt; null = nobody (an unproven claim) */ tickerOwner?: string | null; /** B-19: the caller's wallet proved control and holds the launch cost, so unproven drafts do not hold against it */ callerProven?: boolean }): Promise<GuardRefusal | null> {
   // prelaunch audit 2026-10-18 A-2: the registry's own ticker check, which also expires stale drafts first (their tickers are free again)
@@ -63,7 +77,7 @@ export async function launchGuardRefusal(p: { registry: Pick<Platform["registry"
     // B-19: a ticker held only by a launch nobody has signed yet says so, and when it frees up
     const mins = taken && !others.length ? unprovenHoldMinutes(p.registry, c.ticker, owner) : null;
     const error = mins !== null
-      ? `This launch is refused for now. $${c.ticker.toUpperCase()} is held by a launch that has not been signed yet. It frees up in ${mins === 1 ? "1 minute" : `${mins} minutes`}, or you can pick another ticker.${free}`
+      ? `This launch is refused for now. ${unprovenHoldSentence(c.ticker, mins)}${free}`
       : taken ? `This launch is refused. ${sameTickerSentence(c.ticker)}${others.length ? ` ${others.join(" ")}` : ""} Please pick another ticker.${free}` : look.reason;
     return { status: 409, error, extra: { code: taken ? "ticker-taken" : "lookalike", hits: look.hits, ...(suggestions.length ? { suggestions } : {}) } };
   }

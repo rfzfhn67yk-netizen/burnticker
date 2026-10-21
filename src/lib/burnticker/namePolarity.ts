@@ -36,8 +36,19 @@ export const NO_MARKER = " No";
  * so a long name ("Democrats win the Ohio election", 31 bytes) is shortened at a word boundary and never loses its "No" to the fit.
  */
 export function noName(base: string, max = NAME_MAX_BYTES): string {
-  return `${fitName(base, max - utf8Bytes(NO_MARKER))}${NO_MARKER}`;
+  const b = base.replace(/\s+/g, " ").trim();
+  if (utf8Bytes(`${b}${NO_MARKER}`) <= max) return `${b}${NO_MARKER}`;
+  // WZ6-8 / WZ7-4 (sixth and seventh passes): cutting a long name to make room for " No" gave "Democrats win the Ohio No". A name that
+  // does not fit with the marker after it takes the marker in front ("No: "), and the articles go before any word is cut, so the phrase
+  // stays whole where it can: "No: Democrats win Ohio election".
+  const room = max - utf8Bytes(NO_PREFIX);
+  const bare = b.split(" ").filter((w, i) => i === 0 || !/^(the|a|an)$/i.test(w)).join(" ");
+  return `${NO_PREFIX}${utf8Bytes(b) <= room ? b : utf8Bytes(bare) <= room ? bare : fitName(bare, room)}`;
 }
+/** The NO side's marker in front, for a name too long to take " No" after it. */
+export const NO_PREFIX = "No: ";
+/** True when a name carries the NO marker, either form. */
+export const hasNoMarker = (name: string): boolean => name.endsWith(NO_MARKER) || name.startsWith(NO_PREFIX);
 
 /** A saved draft's suggestion, read back defensively (an older draft has none). */
 export function suggestionFromDraft(v: unknown): SourceSuggestion {

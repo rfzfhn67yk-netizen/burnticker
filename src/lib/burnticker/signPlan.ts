@@ -406,7 +406,7 @@ export interface StepFormat<U = unknown, S = unknown> {
   /** the unsigned step, no key signature on it (the wallet signs first); throws a plain sentence when it cannot be built or does not fit */
   build(step: SignStep, creator: string, keys: Record<string, string | null | undefined>, bh: { blockhash: string; lastValidBlockHeight: number }): Promise<U>;
   /** the dry run before the wallet sees the step: a sentence when it failed on chain, else the step as it goes to the wallet (v1 sizes it here); a throw = the dry run could not be run */
-  dryRun(built: U): Promise<{ problem: string } | { ready: U }>;
+  dryRun(built: U): Promise<{ problem: string; /** LA7 fix B: the node refused the transaction's FORMAT (version 1), not the step */ versionRefused?: true } | { ready: U }>;
   /** a copy of what the wallet is handed: the message bytes and the signature slots in signer order (a wallet may sign in place) */
   handed(ready: U): { message: Uint8Array; signatures: Uint8Array[] };
   /** the wallet signs; a rejection throws with the wallet's own words */
@@ -497,7 +497,16 @@ export interface V0SendDeps extends SendDepsCommon {
   lookupTable(): Promise<AddressLookupTableAccount | null>;
 }
 /** A run whose format object does the building and signing (signPlanV1.ts v1Format; v0Format wraps the v0 deps the same way). */
-export interface FormatSendDeps extends SendDepsCommon { format: StepFormat }
+export interface FormatSendDeps extends SendDepsCommon {
+  format: StepFormat;
+  /**
+   * LA7 fix B (2026-10-20): the version-0 format (v0Format, with the verified lookup table) a version-1 run switches to when the dry run
+   * of its first step says the node does not accept version 1 (formatFallbackAllowed). Left out = no fallback (the run stops as before).
+   */
+  fallback?: StepFormat;
+  /** told once when the run switches to the fallback: the step and the dry run's words (the card logs it and reports it with the send) */
+  onFormatFallback?: (info: { step: number; why: string }) => void;
+}
 export type SendDeps = V0SendDeps | FormatSendDeps;
 
 /** Deps without a format object are the version-0 deps (the shipped path). */
@@ -524,7 +533,7 @@ export function v0Format(d: Pick<V0SendDeps, "lookupTable" | "simulate" | "signT
   };
 }
 /** `state` / `signature` describe the step at `failedAt` and are present only when a run stops. */
-export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true; /** A-11: stopped because creator launches closed */ closed?: true; /** SEC-03: stopped because the launch gate could not be read (pressing again reads it again) */ gateUnread?: true; /** SEC-05: stopped because the site did not acknowledge recording the create first (nothing was sent; pressing again signs it again) */ unrecorded?: true; /** SEC-05: stopped because the site already holds another attempt of this launch (nothing was sent) */ pendingElsewhere?: true; /** SEC-03: the open gate read before the plan's first step was sent (it goes with the confirm) */ gate?: PlanGate }
+export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; /** LA7 fix B: set only when the run changed format: the format it ended in (0 after a fallback) */ format?: 0 | 1; /** LA7 fix B: the version-1 dry run's words when the run fell back to version 0 */ fellBack?: string; state?: Exclude<StepState, "confirmed">; signature?: string; /** F06: stopped because the plan is past its deadline (the card offers Start over) */ expired?: true; /** A-11: stopped because creator launches closed */ closed?: true; /** SEC-03: stopped because the launch gate could not be read (pressing again reads it again) */ gateUnread?: true; /** SEC-05: stopped because the site did not acknowledge recording the create first (nothing was sent; pressing again signs it again) */ unrecorded?: true; /** SEC-05: stopped because the site already holds another attempt of this launch (nothing was sent) */ pendingElsewhere?: true; /** SEC-03: the open gate read before the plan's first step was sent (it goes with the confirm) */ gate?: PlanGate }
 
 export type ChainReadDeps = Pick<SendDepsCommon, "getSignatureStatus" | "getBlockHeight" | "getTransaction" | "expectedAccounts">;
 /**
@@ -653,6 +662,17 @@ async function reportSent(onSent: NonNullable<SendDeps["onSent"]>, p: PendingSen
 const SEND_REFUSED = /simulation failed|preflight|blockhash not found|insufficient funds/i;
 
 /**
+ * LA7 fix B (2026-10-20): whether a version-1 run may switch to version 0 after a dry-run failure. Only when the failure is about the
+ * format (versionRefused), a fallback format is wired, it has not been used already, and NOTHING of this plan has reached a wallet or the
+ * chain: no confirmed step, no pending or failed send, no fee paid, and no wallet signature in this run. After the wallet has signed a
+ * step the run never changes format (a resumed plan keeps the format it was signed in).
+ */
+export function formatFallbackAllowed(o: { version: 0 | 1; versionRefused: boolean; hasFallback: boolean; usedFallback: boolean; walletSigned: boolean; rec: Pick<PlanRecord, "confirmed" | "pending" | "failed" | "paid"> }): boolean {
+  return o.version === 1 && o.versionRefused && o.hasFallback && !o.usedFallback && !o.walletSigned
+    && o.rec.confirmed.length === 0 && !o.rec.pending && !o.rec.failed && (o.rec.paid ?? []).length === 0;
+}
+
+/**
  * The steps in order; stops at the first failure; `prior` (confirmed signatures) and the stored record resume at the failed step.
  * Before a step is built, a stored pending send for it is settled (adopt / rebuild / stay "sent"); a step that cannot be settled stops
  * the run with state "sent" and its signature — nothing new is built while the original can still land.
@@ -663,7 +683,10 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
   const signatures: string[] = (rec.confirmed.length > prior.length ? rec.confirmed : prior).slice(0, n);
   rec.confirmed = signatures;
   const save = () => savePlanRecord(store, plan, rec);
-  const stop = (i: number, state: Exclude<StepState, "confirmed">, error: string, signature?: string): SendResult => ({ signatures: [...signatures], failedAt: i, error, state, ...(signature ? { signature } : {}), ...(rec.gate ? { gate: rec.gate } : {}) });
+  // LA7 fix B: the format this run is in (it changes once, to 0, on a fallback) and the version-1 dry run's words when it did
+  let runFormat: 0 | 1 | undefined, fellBack: string | undefined;
+  const formatOut = (): Pick<SendResult, "format" | "fellBack"> => (fellBack && runFormat !== undefined ? { format: runFormat, fellBack } : {});
+  const stop = (i: number, state: Exclude<StepState, "confirmed">, error: string, signature?: string): SendResult => ({ signatures: [...signatures], failedAt: i, error, state, ...(signature ? { signature } : {}), ...(rec.gate ? { gate: rec.gate } : {}), ...formatOut() });
   const signersAt = (i: number) => plan.steps[i]?.signers.length ?? 1;
   const adopt = (i: number, sig: string) => { signatures.push(sig); notePaid(rec, i, sig, signersAt(i)); rec.pending = null; rec.failed = null; save(); onStep?.(i, sig); };
   /** settles a pending send against the chain: adopted when confirmed; cleared (rebuildable) when it failed or expired unlanded */
@@ -693,7 +716,10 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
 
   // the format of every step of this run (SignPlan.format is the pin; the deps decide the build): v0 fetches and verifies the lookup
   // table here, once before anything is signed (a mismatch stops the run: nothing was sent); v1 imports the mint keys
-  const f: StepFormat = isV0Deps(d) ? v0Format(d) : d.format;
+  let f: StepFormat = isV0Deps(d) ? v0Format(d) : d.format;
+  runFormat = f.version;
+  const fallback = isV0Deps(d) ? undefined : d.fallback, onFallback = isV0Deps(d) ? undefined : d.onFormatFallback;
+  let walletSigned = false;
   if (signatures.length < n) {
     try { await f.prepare(); } catch (e) { return stop(signatures.length, "not-sent", `Step ${signatures.length + 1} of ${n} failed. The error was: ${String((e as Error)?.message ?? e).slice(0, 240)}`); }
   }
@@ -729,13 +755,25 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       const built = await f.build(plan.steps[i], creator, plan.keys, bh);
       // Phantom ticket 438485, second review 2026-10-16: an unavailable or failed dry run stops the step BEFORE the wallet is asked
       // (a v1 step is sized by this dry run, so the step the wallet sees is the one the dry run returns)
-      let dry: { problem: string } | { ready: unknown };
+      let dry: { problem: string; versionRefused?: true } | { ready: unknown };
       try { dry = await f.dryRun(built); }
       catch (e) { return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because its dry run could not be run just now (${String((e as Error)?.message ?? e).slice(0, 160)}). Try again in a moment.`); }
-      if ("problem" in dry) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry.problem}`);
+      if ("problem" in dry) {
+        // LA7 fix B: the node does not take version 1 and nothing of this plan has been signed or sent: the same step is built again as
+        // version 0 against the verified lookup table, and the run carries on in version 0 (pinned in the plan record by save below)
+        if (fallback && formatFallbackAllowed({ version: f.version, versionRefused: dry.versionRefused === true, hasFallback: true, usedFallback: fellBack !== undefined, walletSigned, rec })) {
+          fellBack = dry.problem;
+          try { await fallback.prepare(); } catch (e) { return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent. This network did not accept a version-1 transaction, and the version-0 fallback could not start (${String((e as Error)?.message ?? e).slice(0, 160)}).`); }
+          f = fallback; runFormat = 0; plan = { ...plan, format: 0 }; save();
+          try { onFallback?.({ step: i, why: dry.problem }); } catch { /* diagnostics only */ }
+          continue;
+        }
+        return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because a dry run of it failed on chain: ${dry.problem}`);
+      }
       const ready = dry.ready;
       // launch integrity 253: a copy of what the wallet is handed (a wallet may sign the object in place), checked against what comes back
       const handed = f.handed(ready);
+      walletSigned = true;   // LA7 fix B: from the moment the wallet is asked, this run never changes format
       const signed = await f.sign(ready);
       // F06: the wallet can be held open for hours; the deadline is read again once it returns, before the transaction is kept or sent
       { const late = pastDeadline(i); if (late) return late; }
@@ -805,7 +843,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
     if (c.err) { notePaid(rec, i, sig, signersAt(i)); rec.pending = null; rec.failed = { step: i, signature: sig }; save(); return stop(i, "failed", chainRejected(i, n, c.err), sig); }
     adopt(i, sig);
   }
-  return { signatures, failedAt: null, error: null, ...(rec.gate ? { gate: rec.gate } : {}) };
+  return { signatures, failedAt: null, error: null, ...(rec.gate ? { gate: rec.gate } : {}), ...formatOut() };
 }
 
 /** Each step's state for the card: confirmed up to the signatures, the stopped step's state, not sent after it ("abandoned" carries on to every later step). */

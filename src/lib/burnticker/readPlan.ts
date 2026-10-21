@@ -1,4 +1,5 @@
 import { isOneShot, type BurnRule } from "@/lib/burnticker/rules";
+import { readingsAfterLaunch } from "@/lib/burnticker/launchCut";
 
 /**
  * THE KEEPER'S READ PLAN (owner 2026-10-19: "the keeper is only checking for results when it needs to"). Every selector used to be read
@@ -19,7 +20,8 @@ import { isOneShot, type BurnRule } from "@/lib/burnticker/rules";
  *           after 15:00 Eastern; a "read once per complete UTC day" feed: shortly after 00:00 UTC).
  *   POLL    anything else: the selector's poll, as before.
  *
- * A failed read keeps the existing backoff (multiKeeper.ts fetchDue). Pure and client-safe.
+ * A failed read keeps the existing backoff (multiKeeper.ts fetchDue), except a windowed feed's (windowFailureNextAt, CH7-3). Pure and
+ * client-safe.
  */
 
 export const READ_PLAN_MIN_GAP_MS = 60_000;
@@ -89,6 +91,29 @@ export function windowNextAt(w: ReadWindow, now: number, wroteNew: boolean, poll
   return nextWindowOpen(w, now);
 }
 
+/**
+ * CH7-3 (seventh pre-launch audit, HB-29 follow-up): A WINDOWED FEED'S FAILED READ. The once-a-day USGS read for $NEXTM6 timed out five
+ * times from 00:30Z on 10-20; a failure streak in a window had no bound and no fallback later in the day (the doubling back-off went on
+ * at its one-hour cap until the source answered). Now a failed read of a windowed feed is retried on a short
+ * back-off (WINDOW_FAST_RETRIES tries, at most WINDOW_FAST_CAP_MS apart), then hourly while its window stays open, then once more in a
+ * LATE window LATE_READ_AFTER_H after the opening (LATE_WINDOW_H long, hourly inside it), then at the next opening. That is about ten
+ * requests on a day when every read fails, fewer than the plain doubling back-off made (it went on all day at its one-hour cap), so the
+ * daily request budget holds. Pure; `fastMs(attempt)` is the keeper's back-off (burnKeeper/schedule.ts backoffMs).
+ */
+export const WINDOW_FAST_RETRIES = 4;
+export const WINDOW_FAST_CAP_MS = 5 * 60_000;
+export const WINDOW_RETRY_MS = H;
+export const LATE_READ_AFTER_H = 12;
+export const LATE_WINDOW_H = 2;
+export function windowFailureNextAt(w: ReadWindow, now: number, failures: number, fastMs: (attempt: number) => number): number {
+  if (failures <= WINDOW_FAST_RETRIES) return now + Math.min(WINDOW_FAST_CAP_MS, fastMs(Math.max(0, failures - 1)));
+  const opens = openings(w, now);
+  const spans = opens.flatMap((o) => [{ start: o, end: o + w.hours * H }, { start: o + LATE_READ_AFTER_H * H, end: o + (LATE_READ_AFTER_H + LATE_WINDOW_H) * H }]);
+  for (const sp of spans) if (sp.start <= now && now < sp.end && now + WINDOW_RETRY_MS < sp.end) return now + WINDOW_RETRY_MS;
+  const next = spans.map((sp) => sp.start).filter((t) => t > now).sort((a, b) => a - b)[0];
+  return next ?? now + DAY;
+}
+
 /** The adapter's dueAt as the next read, bounded (null when the adapter gave none, or one already past). */
 export function dueNextAt(dueAt: number | null | undefined, now: number): number | null {
   if (dueAt === null || dueAt === undefined || !Number.isFinite(dueAt)) return null;
@@ -99,7 +124,7 @@ export function dueNextAt(dueAt: number | null | undefined, now: number): number
 export interface IdleRegistry<T> {
   ruleEnd?(mint: string): unknown;
   /** the selector's readings settled after `sinceIso` (registry.ts readings: settled_at > sinceIso) */
-  readings?(key: string, sinceIso?: string | null): readonly { id: string }[];
+  readings?(key: string, sinceIso?: string | null): readonly { id: string; at?: string; proof?: string | null; fetchedAt?: number | null }[];
   /** this coin's receipt for one reading (receipts are keyed by mint and event id; readings by selector) */
   receipt?(mint: string, eventId: string): { kind?: string | null; status?: string | null } | null;
   lockedRule(t: T): { rule: BurnRule };
@@ -123,7 +148,8 @@ export function oneShotDecided<T extends { mint: string; baselineAt?: string | n
   if (rule.oracle === "derby" || !isOneShot({ market: rule.market, oracle: rule.oracle, derby: rule.derby, series: rule.series })) return false;
   if (!reg.readings || !reg.receipt || !t.baselineAt) return false;
   try {
-    return reg.readings(key, t.baselineAt).some((r) => {
+    // the launch-day cut (launchCut.ts): a game reading keyed by the launch's own UTC day is judged by its games, not as text
+    return readingsAfterLaunch({ readings: reg.readings.bind(reg) }, key, t.baselineAt).some((r) => {
       const b = reg.receipt!(t.mint, r.id);
       return !!b && !END_RECEIPT_KINDS.has(b.kind ?? "");
     });

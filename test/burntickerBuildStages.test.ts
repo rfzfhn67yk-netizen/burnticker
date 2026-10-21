@@ -102,7 +102,8 @@ describe("coin reads under one deadline (boundedReads.ts)", () => {
     release(2);
     const r = await b;
     assert.equal(reads, 1, "one read per coin at a time");
-    assert.deepEqual(r[0].state === "fresh" && r[0].value, 2);
+    // audit 7 review: the joined read was started by the earlier build, so it is served as earlier (why "joined"), never as fresh
+    assert.deepEqual(r[0].state === "earlier" && [r[0].why, r[0].value], ["joined", 2]);
     assert.equal(keptRead<number>("full:E", scope)?.value, 2);
   });
 

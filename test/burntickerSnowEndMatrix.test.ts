@@ -1,7 +1,7 @@
 // HB-164 FOLLOW-UP (2026-10-20): the first snow's end, pinned across the whole matrix the Codex auditor asked for (fractions 2%, 50%,
 // 100%; carried spend 0 and 1,000,000 lamports; burn dispersal off and on; a void reading; an already-ended rule; readings in both
-// orders). Tests only: this file pins what the keeper does today (publish 102's end for a share under 100%, the HB-147 drain at 100%),
-// it changes nothing. Driven by runCycle on the same fake world as test/burntickerHourlyRun15.test.ts, with owedBeforeEnd and
+// orders). The matrix pins publish 102's end for a share under 100% and the HB-147 drain at 100% for coins drafted before
+// FIRST_SNOW_HOLD_FROM_MS; reviewer F (publishes 102-105) adds the hold for coins drafted after it (its own describe below). Driven by runCycle on the same fake world as test/burntickerHourlyRun15.test.ts, with owedBeforeEnd and
 // detectRuleEnd called directly where that is simpler.
 //
 // Note on the auditor's fixture (docs/burnticker/audits/continuous/2026-10-20T1130Z/snow-hold.test.mjs): its "spending enabled"
@@ -17,7 +17,7 @@ import { openRegistry } from "@/lib/burnticker/registry";
 import { FakeBurnProgram } from "@/lib/burnticker/program";
 import { buildLaunchBundle, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
 import { CatalogueAdapter } from "@/lib/burnticker/catalogue";
-import { detectRuleEnd, owedBeforeEnd, runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
+import { detectRuleEnd, FIRST_SNOW_HOLD_FROM_MS, owedBeforeEnd, runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { DEFAULT_ON_END, isOneShot, lockRule, WIND_DOWN_ON_END, type BurnRule } from "@/lib/burnticker/rules";
 import { nativeRule } from "@/lib/burnticker/sources/native";
 import { nwsSeries } from "@/lib/burnticker/sources/nws";
@@ -45,7 +45,7 @@ const reserveFor = (fraction: number, carry: bigint): bigint => {
 };
 
 /** One Denver first-snow coin with an end sink ($DEFICIT); a 5 SOL burn pool; the reserve set for the carry asked. */
-async function snowWorld(o: { fraction: number; carry: bigint; dispersal: boolean }) {
+async function snowWorld(o: { fraction: number; carry: bigint; dispersal: boolean; /** reviewer F: a coin drafted after FIRST_SNOW_HOLD_FROM_MS */ held?: boolean }) {
   const registry = openRegistry(":memory:"), program = new FakeBurnProgram("devnet");
   program.autoRegisterPool = true; program.pinEndSinks = true;
   const clock = { now: D("2025-10-20T00:00:00Z") };
@@ -67,7 +67,7 @@ async function snowWorld(o: { fraction: number; carry: bigint; dispersal: boolea
   const held = (f: { feeLamports: bigint; wsol: bigint; strayWsolLamports: bigint }) => f.feeLamports + f.wsol + f.strayWsolLamports;
   const startCoin = held(coin), startSink = held(sinkCoin);
   const logs: string[] = [];
-  const deps: KeeperDeps = { registry, program, oracles: { kalshi: stub, catalogue: new CatalogueAdapter() }, attester: ATTESTER, log: (l) => logs.push(l), now: () => clock.now, dryRun: false, ...(o.dispersal ? { dispersal: true } : {}) };
+  const deps: KeeperDeps = { registry, program, oracles: { kalshi: stub, catalogue: new CatalogueAdapter() }, attester: ATTESTER, log: (l) => logs.push(l), now: () => clock.now, dryRun: false, ...(o.dispersal ? { dispersal: true } : {}), ...(o.held ? { firstSnowHoldFromMs: 0 } : {}) };
   const key = registry.token(t0.mint)!.selectorKey;
   const readings = (days: Day[]) => registry.putReadings("catalogue", key, days.map(([id, v]) => ({ id, at: id, result: v === "void" ? "void" : null, value: v === "void" ? null : v, title: `Denver ${id}`, sourceUrl: "https://api.weather.gov/x", method: "nws-cli-final+iem" }) as never), { settlementSourceUrl: null, attestedBy: [ATTESTER] }, clock.now);
   const sink = program.endSink.port(t0.mint);
@@ -292,8 +292,49 @@ const OWED_BEFORE_END_PUBLISH_102 = `export async function owedBeforeEnd(d: Keep
   return { owedLamports: cfg.carriedSpendLamports, canSpend: !!d.dispersal && typeof port.planCarried === "function" && !cfg.burnsTarget, readingDate: ev.readingDate ?? null };
 }`;
 
-describe("HB-164: owedBeforeEnd cannot drift from publish 102", () => {
-  test("the current function body equals the pre-cf36eb4c one, the HB-164 comment lines aside", () => {
+describe("reviewer F: a first snow drafted after the pin finishes its share on the coin before the end sink takes the rest", () => {
+  for (const fraction of [0.02, 0.5]) for (const dispersal of [false, true]) {
+    test(`${fraction * 100}%, carry ${CARRY}, dispersal ${dispersal ? "on" : "off"}`, async () => {
+      const w = await snowWorld({ fraction, carry: CARRY, dispersal, held: true });
+      w.readings([["2025-11-01", "0"], ["2025-11-03", "1"]]);
+      await w.run(D("2025-11-20T00:00:00Z"));
+      await w.run(HORIZON, 12 * H);
+      const tail = w.logs.slice(-12).join("\n");
+      const share = (POOL * BigInt(Math.round(fraction * 10_000))) / BigInt(10_000);
+      assert.ok(w.holds.length > 0, `held while the share is carried\n${tail}`);
+      const l = await w.ledger();
+      assert.equal(l.spent + l.forwarded + l.kept, l.start, "no lamport created or lost");
+      if (dispersal) {
+        // crank_carried spends the carry on the coin, then the end is recorded and the rest moves to the end sink
+        assert.equal(l.spent, share, `the whole share burned on the coin\n${tail}`);
+        assert.equal(l.carried, Z, "nothing left carried");
+        assert.equal(l.forwarded, POOL - share, "the rest reached the end sink");
+        assert.equal(l.endOnChain, true);
+      } else {
+        // nothing on this program can spend the carry without dispersal: the end waits, nothing moves, and the owner is told
+        assert.equal(l.spent, share - CARRY);
+        assert.equal(l.carried, CARRY, "the carry stays owed on the coin, not forwarded");
+        assert.equal(l.forwarded, Z, "nothing moved to the end sink while the share is owed");
+        assert.ok(w.registry.alertsSince(0).some((a) => a.key === `${w.mint}:end-owed`), "the end-owed alert");
+      }
+    });
+  }
+  test("carry 0: nothing is owed, so nothing is held (the end is the same as before)", async () => {
+    const w = await snowWorld({ fraction: 0.5, carry: Z, dispersal: false, held: true });
+    w.readings([["2025-11-03", "1"]]);
+    await w.run(D("2025-11-20T00:00:00Z"));
+    await w.run(HORIZON, 12 * H);
+    assert.deepEqual(w.holds, []);
+    const l = await conserved(w, "held, no carry");
+    assert.equal(l.spent, POOL / BigInt(2)); assert.equal(l.forwarded, POOL / BigInt(2));
+  });
+  test("a coin drafted before the pin keeps the publish-102 end (the matrix above)", () => {
+    assert.equal(FIRST_SNOW_HOLD_FROM_MS, Date.parse("2026-10-21T03:00:00Z"));
+  });
+});
+
+describe("HB-164: owedBeforeEnd cannot drift from publish 102 (reviewer F's first-snow hold aside)", () => {
+  test("the current function body equals the pre-cf36eb4c one, the comment lines and the reviewer F lines aside", () => {
     const src = fs.readFileSync(path.join(import.meta.dirname, "..", "src/lib/burnticker/multiKeeper.ts"), "utf8");
     const i = src.indexOf("export async function owedBeforeEnd(");
     assert.ok(i >= 0, "owedBeforeEnd is still exported from multiKeeper.ts");
@@ -303,7 +344,15 @@ describe("HB-164: owedBeforeEnd cannot drift from publish 102", () => {
     // the HB-164 note: its first line and the comment lines that continue it
     let stop = start;
     if (start >= 0) while (stop + 1 < lines.length && /^\s*\/\//.test(lines[stop + 1])) stop++;
-    const kept = start >= 0 ? [...lines.slice(0, start), ...lines.slice(stop + 1)] : lines;
-    assert.equal(kept.join("\n"), OWED_BEFORE_END_PUBLISH_102);
+    const kept = (start >= 0 ? [...lines.slice(0, start), ...lines.slice(stop + 1)] : lines).filter((l) => !/^\s*\/\//.test(l));
+    // reviewer F changed exactly these lines: the hold also takes a first snow drafted after the pin, whose result is its first day that burned
+    const f = [
+      `  const snowHeld = rule.oracle === "catalogue" && isFirstSnowSeries(rule.series) && typeof t.createdAt === "number" && t.createdAt >= (d.firstSnowHoldFromMs ?? FIRST_SNOW_HOLD_FROM_MS);`,
+      `  if (end.mode !== "winddown" || t.status === "retired" || locked.mode !== "buyback" || !(isOneShot(rule) || snowHeld) || !endSinkOf(rule) || !d.program.endSink) return null;`,
+      `  const ev = snowHeld ? d.registry.receipts(t.mint).find((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair" && b.units > 0) : d.registry.receipts(t.mint).filter((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair")[0];`,
+    ];
+    const was = OWED_BEFORE_END_PUBLISH_102.split("\n");
+    const expected = [was[0], was[1], ...f, ...was.slice(4)];
+    assert.equal(kept.join("\n"), expected.join("\n"));
   });
 });

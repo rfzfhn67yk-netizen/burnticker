@@ -101,7 +101,7 @@ describe("copy lint: moon", () => {
     for (const t of ["the first moon landing", "Harvest Moon", "a full moon tonight"]) clean(t);
   });
   test("copyLint runs in the publish gate now", () => {
-    if (fs.existsSync("scripts/ops/publish-and-deploy.sh")) assert.match(read("scripts/ops/publish-and-deploy.sh"), /test\/copyLint\.test\.ts"/);
+    if (fs.existsSync("scripts/ops/publish-and-deploy.sh")) assert.match(read("scripts/ops/publish-and-deploy.sh"), /test\/copyLint\.test\.ts[" ]/);
   });
 });
 

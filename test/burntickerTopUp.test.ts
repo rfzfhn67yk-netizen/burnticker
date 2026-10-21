@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
-  FAILURE_BACKOFF_CAP_MS, FAILURE_BACKOFF_FIRST_MS, failureBackoffFor,
+  FAILURE_BACKOFF_CAP_MS, FAILURE_BACKOFF_FIRST_MS, failureBackoffFor, IRYS_CREDIT_WAIT_MS, mayHaveSent, clearDrainStop, drainStopFor,
   DEFAULT_TOP_UP_CONFIG, REFERENCE_IRYS_PRICES, IRYS_FUND_FEE_LAMPORTS, TX_FEE_LAMPORTS, UNCONFIRMED_WAIT_MS, denverDay, irysLevels, loadTopUpConfig, noticeMarkLamports,
   parseTopUpConfig, perLaunchLamports, planTopUps, recordTopUp, runTopUps, topUpModeFromEnv, topUpOpsLines, topUpRowsSince, topUpRunnerFromEnv,
   type IrysPayerAccount, type TopUpInput, type TopUpRow, type TransferOutcome,
@@ -17,6 +17,7 @@ import { checkUploadBalance } from "@/lib/burnticker/ops/snapshot";
 import type { PinUploader } from "@/lib/burnticker/pin";
 
 const SOL = BigInt(1_000_000_000);
+const HOUR_MS = 3_600_000;
 const sol = (n: number) => BigInt(Math.round(n * 1e9));
 const SIGNER = "FQYod3oyUJNedCw3xbp6AHifyZmG4uNrD1XvLqtpGd5L", PAYER = "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23", DEFICIT = "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6";
 // 2026-10-19 12:00 Denver (MDT, UTC-6)
@@ -132,7 +133,9 @@ describe("no caps, one correctness wait", () => {
     // HB-108, which is per wallet and not a cap on the day)
     const many = Array.from({ length: 100 }, (_, k) => row({ id: k, target: "deficit-keeper", to: DEFICIT, at: NOON - 3_600_000 - k * 60_000, lamports: sol(0.03) }));
 
-    assert.equal(planTopUps(input({ ledger: many, payer: { address: PAYER, walletLamports: sol(0.001), irysLamports: sol(0.02) }, signer: { address: SIGNER, lamports: sol(10) } })).steps.length, 1);
+    // (HB-180: the one daily ceiling is for all wallets together; raised here so this test still isolates the per-wallet rule)
+    const wide = { ...cfg, dailyCeilingLamports: sol(100) };
+    assert.equal(planTopUps(input({ config: wide, ledger: many, payer: { address: PAYER, walletLamports: sol(0.001), irysLamports: sol(0.02) }, signer: { address: SIGNER, lamports: sol(10) } })).steps.length, 1);
   });
   test("a transfer whose confirmation did not come back holds its target for UNCONFIRMED_WAIT_MS, then it is planned again", () => {
     const low = { payer: { address: PAYER, walletLamports: sol(0.001), irysLamports: sol(0.02) } } as const;
@@ -159,8 +162,8 @@ describe("the 50-launch notice (a line, never a block)", () => {
     const next = planTopUps(input({ now: afterMidnight, ledger }));
     assert.equal(next.today.day, "2026-10-20"); assert.equal(next.today.count, 0); assert.equal(next.overNotice, false);
   });
-  test("above the mark the plan still sends", () => {
-    const p = planTopUps(input({ ledger: [row({ lamports: sol(1) })], signer: { address: SIGNER, lamports: sol(5) }, payer: { address: PAYER, walletLamports: BigInt(0), irysLamports: sol(0.02) } }));
+  test("above the mark the plan still sends (below the HB-180 daily ceiling of 0.5 SOL)", () => {
+    const p = planTopUps(input({ ledger: [row({ lamports: sol(0.3) })], signer: { address: SIGNER, lamports: sol(5) }, payer: { address: PAYER, walletLamports: BigInt(0), irysLamports: sol(0.02) } }));
     assert.equal(p.overNotice, true); assert.equal(p.steps.length, 1);
   });
 });
@@ -183,8 +186,9 @@ function fakeWorld(o: { signer?: bigint; wallet?: bigint; irys?: bigint; fundFai
     bal.set(SIGNER, bal.get(SIGNER)! - l - BigInt(5_000)); bal.set(to, (bal.get(to) ?? BigInt(0)) + l); return { status: "sent", signature: `tx${calls.transfer}` };
   };
   const db = new DatabaseSync(":memory:");
-  const status = new Map<string, string>();
-  const registry = { db, setStatus: (k: string, v: unknown) => { status.set(k, typeof v === "string" ? v : JSON.stringify(v)); }, getStatus: (k: string) => status.get(k) ?? null, tokens: () => [] as never[] };
+  // the registry's status table (the drain latch, the operator's clears and the ceiling stop are read from it, HB-180)
+  db.exec("CREATE TABLE status (key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER)");
+  const registry = { db, setStatus: (k: string, v: unknown, now = 0) => { db.prepare("INSERT INTO status (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(k, typeof v === "string" ? v : JSON.stringify(v), now); }, getStatus: (k: string) => (db.prepare("SELECT value FROM status WHERE key=?").get(k) as { value: string } | undefined)?.value ?? null, tokens: () => [] as never[] };
   const alerts: { kind: string; key: string; text: string }[] = [];
   const logs: string[] = [];
   const run = (mode: "on" | "off" = "on", now = NOON) => runTopUps({ registry, config: cfg, mode, now, log: (s) => logs.push(s), alert: (kind, key, text) => { alerts.push({ kind, key, text }); },
@@ -206,7 +210,7 @@ describe("HB-125: a failing top-up backs off (10 min, doubling to 1 h, reset on 
     // a failed step-one transfer holds its target too
     assert.ok(failureBackoffFor("deficit-keeper", [fail(NOON, "deficit-keeper", "transfer")], NOON + 60_000));
   });
-  test("24 hours of cycles with fund() always throwing: at most 24 fund calls, at most 48 Irys requests, then funds on the first cycle after recovery", async () => {
+  test("24 hours of cycles with fund() always throwing: at most 24 fund calls, at most 48 Irys requests; finding B: each throw may have sent, so the drain stop latches; after the operator's clear it funds once the source recovers", async () => {
     const w = fakeWorld({ wallet: sol(0.05), irys: BigInt(0), fundFails: Number.MAX_SAFE_INTEGER });
     for (let k = 0; k < 1_440; k++) await w.run("on", NOON + k * 60_000);
     const irysRequests = w.calls.balance + w.calls.price + w.calls.fund;
@@ -214,13 +218,14 @@ describe("HB-125: a failing top-up backs off (10 min, doubling to 1 h, reset on 
     assert.ok(irysRequests <= 48, `Irys requests ${irysRequests}`);
     const failedAts = topUpRowsSince(w.registry.db, 0).filter((r) => r.status === "failed").map((r) => r.at);
     assert.equal(failedAts.length, w.calls.fund, "one failed row per attempt");
-    // past the doubling's first hour: never two failed rows of the target inside an hour
-    const steady = failedAts.filter((a) => a >= NOON + 70 * 60_000);
-    for (let k = 1; k < steady.length; k++) assert.ok(steady[k] - steady[k - 1] >= FAILURE_BACKOFF_CAP_MS);
+    assert.ok(topUpRowsSince(w.registry.db, 0).every((r) => mayHaveSent(r)), "each throw after fund() was called may have sent");
+    assert.ok(w.calls.fund <= 3, `finding B: the drain stop holds a funding that may have sent three times (${w.calls.fund})`);
+    assert.ok(w.alerts.some((a) => a.kind === "bt-top-up-draining"));
     assert.equal(w.calls.transfer, 0);
-    // recovery: the node accepts again; the first cycle after the current window funds, within one window of the recovery
+    // recovery: the node accepts again and the operator clears the latched stop; the next cycle past the waits funds
     w.setFundFails(0);
     const recoveredAt = NOON + 1_440 * 60_000;
+    clearDrainStop(w.registry, "irys-balance", recoveredAt);
     let fundedAt: number | null = null;
     for (let k = 0; k < 24 * 60 && fundedAt === null; k++) { const r = await w.run("on", recoveredAt + k * 60_000); if (r?.done.some((d) => d.kind === "irys-fund" && d.status === "sent")) fundedAt = recoveredAt + k * 60_000; }
     assert.ok(fundedAt !== null && fundedAt - recoveredAt <= FAILURE_BACKOFF_CAP_MS, `funded ${fundedAt === null ? "never" : `${(fundedAt - recoveredAt) / 60_000} min`} after recovery`);
@@ -234,11 +239,12 @@ describe("HB-125: a failing top-up backs off (10 min, doubling to 1 h, reset on 
     assert.ok(r!.skipped.some((s) => /lock is no longer this keeper's/.test(s)));
   });
   test("a recovery inside the doubling is found on the first cycle after the window", async () => {
-    const w = fakeWorld({ wallet: sol(0.05), irys: BigInt(0), fundFails: 3 });   // fails at +0, +10, +30 min; recovers before +70
+    // fails at +0, +30, +60 min (finding B: each may have sent, so the next try waits IRYS_CREDIT_WAIT_MS, longer than the back-off)
+    const w = fakeWorld({ wallet: sol(0.05), irys: BigInt(0), fundFails: 2 });
     const funded: number[] = [];
     for (let k = 0; k < 120; k++) { const r = await w.run("on", NOON + k * 60_000); if (r?.done.some((d) => d.kind === "irys-fund" && d.status === "sent")) funded.push(k); }
-    assert.deepEqual(funded, [70]);
-    assert.equal(w.calls.fund, 4);
+    assert.deepEqual(funded, [2 * IRYS_CREDIT_WAIT_MS / 60_000]);
+    assert.equal(w.calls.fund, 3);
   });
 });
 
@@ -282,27 +288,39 @@ describe("HB-114: the Irys reads are memoised (at most one balance read an hour;
     assert.equal(w.calls.balance, 1);
     resetIrysReads();
   });
-  test("an Irys funding recorded as sent holds the Irys target for UNCONFIRMED_WAIT_MS (a late credit cannot fund twice); after it, one funding", () => {
+  test("an Irys funding recorded as sent holds the Irys target for IRYS_CREDIT_WAIT_MS (a late credit cannot fund twice); after it, one funding", () => {
     const low = { payer: { address: PAYER, walletLamports: sol(0.03), irysLamports: BigInt(0) } } as const;
     const ledger = [row({ at: NOON - 60_000, target: "irys-balance", kind: "irys-fund", from: PAYER, to: "irys", lamports: irysLv.fill, signature: "fund1" })];
     const inside = planTopUps(input({ ...low, ledger }));
     assert.deepEqual(inside.steps, []);
-    assert.match(inside.refused.find((r) => r.target === "irys-balance")!.reason, /sent less than 3 minutes ago/);
-    const after = planTopUps(input({ ...low, ledger, now: NOON - 60_000 + UNCONFIRMED_WAIT_MS }));
+    assert.match(inside.refused.find((r) => r.target === "irys-balance")!.reason, /was sent less than 30 minutes ago/);
+    assert.deepEqual(planTopUps(input({ ...low, ledger, now: NOON - 60_000 + UNCONFIRMED_WAIT_MS })).steps, [], "finding B: three minutes is too soon for the node");
+    const after = planTopUps(input({ ...low, ledger, now: NOON - 60_000 + IRYS_CREDIT_WAIT_MS }));
     assert.deepEqual(after.steps.map((s) => [s.target, s.kind]), [["irys-balance", "irys-fund"]]);
     // a sent transfer (not a funding) holds nothing: the two-step retry of the funding still goes the next cycle
     const transferOnly = [row({ at: NOON - 60_000, target: "irys-balance", kind: "transfer" })];
     assert.equal(planTopUps(input({ ...low, ledger: transferOnly })).steps.length, 1);
   });
-  test("end to end: the node credits late, the cycles inside the wait fund nothing, the first after it funds once", async () => {
+  test("end to end: the node credits late (12 minutes), the cycles inside the wait fund nothing, and no second funding follows", async () => {
     const w = fakeWorld({ wallet: sol(0.05), irys: BigInt(0) });
     await w.run("on", NOON);
     assert.equal(w.calls.fund, 1);
-    w.setIrys(BigInt(0));   // the node has not credited it
-    await w.run("on", NOON + 60_000); await w.run("on", NOON + 120_000);
-    assert.equal(w.calls.fund, 1, "no second funding inside the wait");
-    await w.run("on", NOON + UNCONFIRMED_WAIT_MS);
-    assert.equal(w.calls.fund, 2, "still low after the wait: one funding");
+    const funded = w.irysBalance();
+    w.setIrys(BigInt(0));   // the node has not credited it yet
+    for (let k = 1; k <= 60; k++) { if (k === 12) w.setIrys(funded); await w.run("on", NOON + k * 60_000); }
+    assert.equal(w.calls.fund, 1, "finding B: the late credit is seen before the wait ends, so it is never funded twice");
+  });
+  test("finding B: a funding that throws after it was called may have sent: the memo is dropped, it counts toward the drain stop, and the next try waits for the node to credit", async () => {
+    const w = fakeWorld({ wallet: sol(0.05), irys: BigInt(0), fundFails: 1 });
+    const balanceReads = () => w.calls.balance;
+    await w.run("on", NOON);
+    const [r] = topUpRowsSince(w.registry.db, 0);
+    assert.ok(mayHaveSent(r), r.error ?? "");
+    const reads = balanceReads();
+    const held = await w.run("on", NOON + FAILURE_BACKOFF_FIRST_MS);
+    assert.match(held!.plan.refused.find((x) => x.target === "irys-balance")!.reason, /may have been sent less than 30 minutes ago/);
+    assert.ok(balanceReads() > reads, "the memoised pre-funding balance was dropped, so the node is read again");
+    assert.equal(drainStopFor("irys-balance", [r, { ...r, id: 2, at: NOON + HOUR_MS }, { ...r, id: 3, at: NOON + 2 * HOUR_MS }], NOON + 2 * HOUR_MS + 1, cfg.drainStop)?.count, 3, "three that may have sent trip the drain stop");
   });
   test("ops.json's top-up line carries today's Irys requests against the keeper's share", async () => {
     const w = fakeWorld({ wallet: BigInt(0), irys: sol(0.02) });
@@ -320,9 +338,9 @@ describe("the executor", () => {
     assert.equal(w.calls.transfer, 1); assert.equal(w.irysBalance(), BigInt(0));
     assert.equal(w.alerts.filter((a) => a.kind === "bt-top-up").length, 1, "an informational row for the transfer that landed");
     const held = await w.run("on", NOON + 60_000);
-    assert.deepEqual(held!.done, [], "HB-125: held for the back-off window");
-    assert.match(held!.plan.refused.find((r) => r.target === "irys-balance")!.reason, /back-off/);
-    const r2 = await w.run("on", NOON + FAILURE_BACKOFF_FIRST_MS);
+    assert.deepEqual(held!.done, [], "held: the funding may have been sent (finding B), and HB-125's back-off");
+    assert.match(held!.plan.refused.find((r) => r.target === "irys-balance")!.reason, /may have been sent/);
+    const r2 = await w.run("on", NOON + IRYS_CREDIT_WAIT_MS);
     assert.ok(r2);
     assert.deepEqual(r2.done.map((d) => [d.kind, d.status]), [["irys-fund", "sent"]]);
     assert.equal(w.calls.transfer, 1, "no second transfer"); assert.equal(w.irysBalance(), irysLv.fill);
@@ -336,9 +354,9 @@ describe("the executor", () => {
     const w = fakeWorld({ fundFails: 5, wallet: sol(0.01) + sol(0.05) });
     await w.run();
     assert.equal(w.alerts.filter((a) => a.kind === "bt-top-up-failed").length, 0, "one failure is not an alarm");
-    await w.run("on", NOON + FAILURE_BACKOFF_FIRST_MS);
+    await w.run("on", NOON + IRYS_CREDIT_WAIT_MS);
     const alarm = w.alerts.filter((a) => a.kind === "bt-top-up-failed");
-    assert.equal(alarm.length, 1); assert.match(alarm[0].text, /failed twice in a row\. Last error: Irys node answered 503/);
+    assert.equal(alarm.length, 1); assert.match(alarm[0].text, /failed twice in a row\. Last error: (may have been sent: )?Irys node answered 503/);
   });
   test("a failed simulation sends nothing and is recorded as failed", async () => {
     const w = fakeWorld({ transferFails: true, wallet: BigInt(0) });
@@ -398,7 +416,7 @@ describe("the wiring", () => {
     if (!fs.existsSync(file)) return;
     assert.deepEqual(loadTopUpConfig(path.join(import.meta.dirname, "..")), DEFAULT_TOP_UP_CONFIG);
     const raw = fs.readFileSync(file, "utf8");
-    assert.match(raw, /50 launches/); assert.doesNotMatch(raw, /cap"|Ceiling|maxPerDay/i);
+    assert.match(raw, /50 launches/); assert.doesNotMatch(raw, /cap"|maxPerDay/i);
     assert.equal(SOL, BigInt(1_000_000_000));
   });
   test("a bad config is refused, not half applied", () => {

@@ -16,7 +16,7 @@ import { SdkLaunchLab, type LaunchBundle } from "@/lib/burnticker/launchBundle";
 import { LAUNCHLAB_PROGRAM } from "@/lib/burnKeeper/launchlab";
 import { LAUNCH_PENDING_CODE, launchPendingRefusal } from "@/lib/burnticker/launchPending";
 import { lintCopy, loadCopyLintConfig, formatHits } from "@/lib/launch/copyLint";
-import { makeWorld } from "./burntickerApiHelpers.ts";
+import { ageDraftsPastDedupe, makeWorld } from "./burntickerApiHelpers.ts";
 import { BRONCOS } from "./burntickerHelpers.ts";
 
 const cfg = loadCopyLintConfig();
@@ -203,6 +203,7 @@ describe("SEC-05 at the site: one intended mint per launch, whatever the page do
     const { w, creator, body } = await world();
     const k1 = Keypair.generate(), k2 = Keypair.generate();
     const a = await prepareLaunch(w.p, body, { register: true, mint: k1.publicKey.toBase58() });
+    ageDraftsPastDedupe(w.registry);   // LA7-5: a second unsent draft of a ticker only after the 30-minute window
     const b = await prepareLaunch(w.p, body, { register: true, mint: k2.publicKey.toBase58() });
     assert.ok("ok" in a && "ok" in b, "no send was recorded yet, so both drafts exist (the exemption)"); if (!("ok" in a) || !("ok" in b)) return;
     const res = await Promise.all([markCreateSent(w.p, k1.publicKey.toBase58(), signedCreate(a.ok.bundle, [creator, k1])), markCreateSent(w.p, k2.publicKey.toBase58(), signedCreate(b.ok.bundle, [creator, k2]))]);
@@ -223,6 +224,7 @@ describe("SEC-05 at the site: one intended mint per launch, whatever the page do
     assert.equal(w.registry.createSends(m1).length, 0);
     // the runner does not send a create whose report was not acknowledged (the tests above), so A was never broadcast and nothing was
     // paid for it: a prepare of B is a genuine retry, not a second paid create
+    ageDraftsPastDedupe(w.registry);   // LA7-5: within 30 minutes the creator retries on A's own mint; after it, a new mint is allowed
     const second = await prepareLaunch(w.p, body, { register: true, mint: m2 }); assert.ok("ok" in second); if (!("ok" in second)) return;
     // whichever is reported first is the one launch; the other's report is refused, so its create is never sent either
     const rA = await markCreateSent(w.p, m1, signedCreate(a.ok.bundle, [creator, k1]));
