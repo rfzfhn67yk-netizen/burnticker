@@ -112,7 +112,7 @@ describe("HB-59: one sentence and one source for the time-lock plan; the $REHEAR
   test("the current-status line and the register's upgrade row say the plan in the same words, from current-status.json", () => {
     assert.ok(plan, "config/burnticker/current-status.json squads.mainnet");
     const sentence = timeLockPlanSentence(plan!.plannedSecs, plan!.plannedFrom);
-    assert.equal(sentence, "The plan is 48 h from a week or more after the soft launch.");
+    assert.equal(sentence, "The 48-hour time lock has no date set yet.");   // eighth pass B-25 / B-16g (owner 2026-10-21)
     assert.ok(timeLockLine("mainnet", 0, plan!.plannedSecs, plan!.plannedFrom).endsWith(sentence));
     assert.ok(timeLockLine("mainnet", null, plan!.plannedSecs, plan!.plannedFrom).endsWith(sentence));
     const rows = registerPowersFromShipped({ schema: "burn-receipts.powers-register/v1", instructions: [], upgrade_authority: { power: "upgrade", holder_at_launch: "48 h planned from around 2026-10-23" } }, 0, plan)!;

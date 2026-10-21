@@ -1,7 +1,7 @@
 {
   "schema": "burnticker.well-known/v1",
   "name": "Burnticker",
-  "updatedAt": "2026-10-11",
+  "updatedAt": "2026-10-21",
   "operator": {
     "name": "Burnticker operator, one independent person whose identity is kept private until a legal entity is formed",
     "state": null,
@@ -46,7 +46,7 @@
         "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
         "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
         "threshold": "2 of 3",
-        "timeLock": "60 s on devnet; on mainnet it is 0 now, with 48 h planned"
+        "timeLock": "60 s on devnet; on mainnet it is 0 now, and the 48-hour time lock has no date set yet"
       },
       "wallets": {
         "dev-fee": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
@@ -113,7 +113,7 @@
         "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
         "threshold": "2 of 3",
-        "timeLock": "0 now for launch week; 48 h planned from a week or more after the soft launch"
+        "timeLock": "0 now; the 48-hour time lock has no date set yet"
       },
       "wallets": {
         "dev-fee": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",

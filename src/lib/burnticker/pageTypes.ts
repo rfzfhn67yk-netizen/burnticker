@@ -120,7 +120,7 @@ export interface TokenStatusJson {
   launchedAt: string | null;
   oracle: string; selectorKey: string; seriesTitle: string | null; mode: string;
   rules: { sha256: string; sha12: string; statement: string; file: "rules.json"; oneShot: boolean };
-  addresses: { mint: string; mintUrl: string; feePda: string; feePdaUrl: string; feeWsol: string | null; feeWsolUrl: string | null; vault: string | null; vaultUrl: string | null; creator: string; creatorUrl: string; programId: string; poolId: string | null; launchTx: string | null; launchTxUrl: string | null };
+  addresses: { mint: string; mintUrl: string; feePda: string; feePdaUrl: string; feeWsol: string | null; feeWsolUrl: string | null; vault: string | null; vaultUrl: string | null; creator: string; creatorUrl: string; /** eighth pass B-24 / HS-72: the sentence for a coin the operator's own wallet created (operatorCreators.ts); null otherwise */ creatorNote?: string | null; programId: string; poolId: string | null; launchTx: string | null; launchTxUrl: string | null };
   supply: { initial: string; current: string; source: "chain" | "registry" };
   burned: { total: string; pctOfSupply: number; count: number; last30d: string; /** settled time of the latest confirmed burn */ lastAt: string | null };
   pool: { feePdaSol: string | null; spendableSol: string | null; reserveSol: string; /** HS-24: creator-fee vault fees not yet claimed (no reader yet: absent) */ unclaimedSol?: string | null; vaultBalance: string | null; vaultAllocation: string | null; shortfallOutstanding: string; capSol: number; queuedSol: string | null; queuedNote: string };

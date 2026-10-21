@@ -229,6 +229,11 @@ export interface TransparencyConfig {
   whoRunsThis: { alsoRuns: string; refusal: string; refuseListCode: string; refuseListConfig: string; holdingsRule: string };
   howBuilt: { aiAssisted: boolean; statement: string; firmAudit: boolean; firmAuditStatement: string; reviews: TransparencyReview[]; tooling: string[]; toolingStatus: string; reviewsDir: string; reviewsRule: string; bounty: TransparencyBounty };
   wallets: TransparencyWallet[];
+  /**
+   * Eighth pass B-24 / HS-72 (owner confirmed 2026-10-21): wallets the operator owns that created coins through the site. Each is also
+   * listed in `wallets` with its address; a coin whose creator is one of them says so on its page (operatorCreators.ts).
+   */
+  operatorCreatorWallets?: string[];
   /** Throwaway coins created under the REAL platform config to prove fee routing and burns (the owner's $REHEARSAL); each is also on the refuse list. */
   rehearsals: TransparencyRehearsal[];
   limitations: { id: string; status: string; text: string }[];
@@ -284,6 +289,13 @@ export function transparencyProblems(j: Partial<TransparencyConfig> | null): str
       if (w.envVar !== null && typeof w.envVar !== "string") out.push(`wallet ${w.role}: envVar must be a string or null`);
     }
     for (const must of ["ops", "deployer", "keeper", "dev-fee", "squads-vault"]) if (!roles.has(must)) out.push(`wallet role ${must} missing`);
+  }
+  if (j.operatorCreatorWallets !== undefined) {
+    if (!Array.isArray(j.operatorCreatorWallets)) out.push("operatorCreatorWallets must be an array of public keys");
+    else for (const a of j.operatorCreatorWallets) {
+      if (!PUBKEY_RE.test(String(a))) out.push(`operatorCreatorWallets: ${String(a)} is not a base58 public key`);
+      else if (!Array.isArray(j.wallets) || !j.wallets.some((w) => w && w.pubkey === a)) out.push(`operatorCreatorWallets: ${a} must also be listed in wallets`);
+    }
   }
   if (!Array.isArray(j.rehearsals)) out.push("rehearsals must be an array (empty until a rehearsal coin exists)");
   else for (const r of j.rehearsals) {

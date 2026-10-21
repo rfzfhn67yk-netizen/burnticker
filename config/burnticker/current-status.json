@@ -36,7 +36,7 @@
   },
   "phase": {
     "label": "soft launch ($DEFICIT created on mainnet)",
-    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. On 2026-10-15 the burn program (burn_receipts) was upgraded again, to round 5 (a coin may burn another coin's token, a finished rule's leftover may be burned as SOL, and a carried spend is bought in small pieces), through the same vault; the pair program (pair_curve) stays on round 4. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night. $REHEARSAL is a test coin the operator made on Oct 11 to check fees and signing. It is kept off the coin list and shown on the Test coins page, linked from the Trust page, so you can see it exists, not so you trade it."
+    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. On 2026-10-15 the burn program (burn_receipts) was upgraded again, to round 5 (a coin may burn another coin's token, a finished rule's leftover may be burned as SOL, and a carried spend is bought in small pieces), through the same vault; the pair program (pair_curve) stays on round 4. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night by the operator's own wallet. $REHEARSAL is a test coin the operator made on Oct 11 to check fees and signing. It is kept off the coin list and shown on the Test coins page, linked from the Trust page, so you can see it exists, not so you trade it."
   },
   "networks": {
     "devnet": {
@@ -96,14 +96,14 @@
   "squads": {
     "mainnet": {
       "plannedTimeLockSecs": 172800,
-      "plannedFrom": "a week or more after the soft launch",
-      "why": "The owner decided on 2026-10-11, and again on 2026-10-12, to keep the mainnet vault's time lock at 0 through launch week, so that deploy and config fixes are not delayed. It is to be raised to 48 h at least a week after the soft launch. Until then, a 2-of-3 vote can act at once.",
+      "plannedFrom": null,
+      "why": "The owner decided on 2026-10-11, and again on 2026-10-12, to keep the mainnet vault's time lock at 0, so that deploy and config fixes are not delayed. While it is 0, a 2-of-3 vote can act at once.",
       "operatorControlledKeys": 2,
       "keyControl": "The vault has three keys but only two controllers. The owner holds members A and B, which are two of the three keys, so the owner alone meets the 2-of-3 threshold. Member C is a person outside the operator who holds the third key and is not named publicly. While the owner holds two keys, the third key adds no independent approval."
     },
     "devnet": {
       "plannedTimeLockSecs": 60,
-      "plannedFrom": null,
+      "plannedFrom": "the vault's creation",
       "why": "This is the rehearsal vault, with a 60 s time lock."
     }
   },

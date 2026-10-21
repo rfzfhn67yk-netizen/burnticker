@@ -1,6 +1,6 @@
 {
   "schema": "burnticker.transparency/v1",
-  "updatedAt": "2026-10-19",
+  "updatedAt": "2026-10-21",
   "note": "Rendered on /burnticker/trust by src/lib/burnticker/trust.ts (loadTransparency). Facts only. A null pubkey is a TODO the owner fills in before launch; the page shows it as TODO, never as blank. The operator's name comes from OPERATOR_LINE in src/lib/burnticker/fees.ts, not from this file. `rehearsals` lists every throwaway coin created under the real platform config to prove the machinery; each is also on config/own-tokens.json so the operator's bots refuse it.",
   "publicRepo": {
     "url": "https://github.com/rfzfhn67yk-netizen/burnticker",
@@ -169,7 +169,7 @@
       "label": "Squads 2-of-3 vault",
       "pubkey": null,
       "envVar": "BURNTICKER_UPGRADE_AUTHORITY",
-      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 during launch week, by owner decision on 2026-10-11, and 48 h is planned from a week or more after the soft launch. This page reads the live value from the chain. The second is the platform authority, which can only raise the pre-audit burn-pool cap, behind a 48 h time lock. The third is each token's config authority. Behind a 48 h time lock, it can change the attester set, propose a new pool for a coin's pinned token (the token and its feed never change), and switch a coin's registration policy, which is allowed only while the pre-audit cap is in force and no pool of the coin works. It can also give up the config authority for good (renounce), which takes effect at once."
+      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 today, by owner decision on 2026-10-11. The 48-hour time lock has no date set yet. This page reads the live value from the chain. The second is the platform authority, which can only raise the pre-audit burn-pool cap, behind a 48 h time lock. The third is each token's config authority. Behind a 48 h time lock, it can change the attester set, propose a new pool for a coin's pinned token (the token and its feed never change), and switch a coin's registration policy, which is allowed only while the pre-audit cap is in force and no pool of the coin works. It can also give up the config authority for good (renounce), which takes effect at once."
     },
     {
       "role": "squads-member-1",
@@ -200,12 +200,22 @@
       "description": "The mint of the owner's first launch, created on LaunchLab on 2026-10-13. The keypair signed once, when the coin was set up and created. The program holds no mint authority."
     },
     {
+      "role": "operator-own",
+      "label": "The operator's own wallet",
+      "pubkey": "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs",
+      "envVar": null,
+      "description": "The operator's own wallet (also the default owner of its Solana trading bot); it created seven soft-launch coins: $PHINFLWIN, $CLARITY, $PITWIN, $BALWIN, $SEAWIN, $DENWIN and $TWOCUTS. The operator holds none of them and has not traded them. Each of those coin pages names this wallet as the operator's."
+    },
+    {
       "role": "trading-wallets",
       "label": "The operator's trading-bot wallets, on other machines",
       "pubkey": null,
       "envVar": null,
-      "description": "These are not platform wallets. They are listed so anyone can check that they never hold a platform coin. The bots refuse platform coins in code (src/lib/ownTokens.ts). The owner decides which addresses to list here before launch."
+      "description": "These are not platform wallets. The bots refuse platform coins in code (src/lib/ownTokens.ts). One of them is listed above: the operator's own wallet, which is also the default owner of the Solana trading bot. The other bot wallets are not listed."
     }
+  ],
+  "operatorCreatorWallets": [
+    "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs"
   ],
   "rehearsals": [
     {
