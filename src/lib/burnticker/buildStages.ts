@@ -34,6 +34,8 @@ export interface StageClock {
   bounded<T>(name: string, budgetMs: number, fn: () => Promise<T>, fallback: () => T, o?: { onError?: (e: unknown) => T }): Promise<T>;
   /** Declares a budget for a stage that `run` times (a synchronous stage is named "over its budget" after the fact). */
   budget(name: string, ms: number): void;
+  /** Names a stage "over its budget" when the stage itself knows it was cut off (a bounded read that hit its deadline), whatever it measured. */
+  markOver(name: string): void;
   /** A short note for the end of the line ("2 coins from an earlier read (…)"). */
   note(s: string): void;
   /** The stages' times so far, in the order they ran (a stage run twice adds up). */
@@ -93,6 +95,7 @@ export function stageClock(o: StageClockOptions = {}): StageClock {
       }
     },
     budget(name: string, b: number) { budgets.set(name, b); },
+    markOver(name: string) { over.add(name); },
     note(s: string) { if (s) notes.push(s); },
     line(head: string, tail: string): string {
       const total = now() - started;

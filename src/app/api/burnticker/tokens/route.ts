@@ -10,7 +10,7 @@ import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 import { testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
 import { chainRows, memoWindowMs, webReadCachedView, webReadPlatform } from "@/lib/burnticker/webReadCache";
 import { stageClock } from "@/lib/burnticker/buildStages";
-import { LIST_BUILD_BUDGETS, earlierReadsNote, readAgoText, readCoinsBounded } from "@/lib/burnticker/boundedReads";
+import { LIST_BUILD_BUDGETS, earlierReadsNote, readAgoText, readCoinsBounded, anyReadLate } from "@/lib/burnticker/boundedReads";
 import { coinListingOf } from "@/lib/burnticker/coinsListServe";
 import type { CoinListing } from "@/lib/burnticker/coinsList";
 import { auditForIndex } from "@/lib/burnticker/home";
@@ -82,6 +82,7 @@ async function buildIndex(): Promise<{ body: unknown; memoMs: number }> {
   // HB-145 second half: the batch has a budget; past it the coin reads go on through the cache while the batch lands behind them
   const view = await clock.bounded("batch", B.batchMs, () => webReadPlatform(p, tokens), () => webReadCachedView(p), { onError: () => webReadCachedView(p) });
   const reads = await clock.run("chain", () => readCoinsBounded(tokens.map((t) => ({ key: `full:${t.mint}`, read: () => tokenPageData(view, t, now) })), { concurrency: INDEX_CONCURRENCY, deadlineMs: B.indexChainMs, coldDeadlineMs: B.chainColdMs, scope: p.registry }));
+  if (anyReadLate(reads)) clock.markOver("chain");
   clock.note(earlierReadsNote(tokens.map((t, i) => ({ ticker: t.ticker, r: reads[i] })), Date.now()));
   // a coin served from an earlier read says when it was read; a token whose page fails with no earlier read is left out, not invented
   const readNotes = new Map<string, string>();

@@ -18,7 +18,7 @@ import { coinKey, sharedTickers } from "@/lib/burnticker/coinKey";
 import { isTestCoin, testCoinKeys, withoutTestCoins } from "@/lib/burnticker/testCoins";
 import { chainRows, homeMemoState, memoWindowMs, webReadCachedView, webReadPlatform } from "@/lib/burnticker/webReadCache";
 import { stageClock, type StageClock } from "@/lib/burnticker/buildStages";
-import { LIST_BUILD_BUDGETS, earlierReadsNote, readAgoText, readCoinsBounded } from "@/lib/burnticker/boundedReads";
+import { LIST_BUILD_BUDGETS, earlierReadsNote, readAgoText, readCoinsBounded, anyReadLate } from "@/lib/burnticker/boundedReads";
 import { PUBLIC_READ_CORS } from "@/lib/burnticker/api/http";
 import { SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
 import { isVisitorRequest, memoRefresher } from "@/lib/burnticker/memoRefresher";
@@ -132,7 +132,7 @@ async function buildHomeBody(clock: StageClock): Promise<{ body: unknown; n: num
     // HB-145 second half: the batch has a budget; past it the coin reads go on through the cache while the batch lands behind them
     const view = await clock.bounded("batch", B.batchMs, () => webReadPlatform(p, tokens), () => webReadCachedView(p), { onError: () => webReadCachedView(p) });
     // six at a time, under one deadline (boundedReads.ts): a coin whose read is late is served from its last good read, marked with its age
-    const reads = await clock.run("chain", () => readCoinsBounded(tokens.map((t) => ({ key: `lite:${t.mint}`, read: () => tokenPageData(view, t, now, { lite: true }) })), { concurrency: 6, deadlineMs: B.chainMs, coldDeadlineMs: B.chainColdMs, scope: p.registry }));    clock.note(earlierReadsNote(tokens.map((t, i) => ({ ticker: t.ticker, r: reads[i] })), Date.now()));
+    const reads = await clock.run("chain", () => readCoinsBounded(tokens.map((t) => ({ key: `lite:${t.mint}`, read: () => tokenPageData(view, t, now, { lite: true }) })), { concurrency: 6, deadlineMs: B.chainMs, coldDeadlineMs: B.chainColdMs, scope: p.registry }));    clock.note(earlierReadsNote(tokens.map((t, i) => ({ ticker: t.ticker, r: reads[i] })), Date.now())); if (anyReadLate(reads)) clock.markOver("chain");
     clock.run("shape", () => {
       for (const [i, t] of tokens.entries()) {
         const key = coinKey(t, shared);

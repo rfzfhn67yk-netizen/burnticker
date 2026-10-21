@@ -23,6 +23,8 @@ export const mainnetLaunchesAllowed = (env: Readonly<Record<string, string | und
 
 export const MAINNET_OFF_SENTENCE = "This site does not create coins on Solana mainnet yet, so nothing is built or sent here.";
 export const NO_OPENING_PURCHASE_SENTENCE = "A coin made on this site starts with no opening purchase. Once it exists, you can trade on its curve like anyone else.";
+/** Phantom v1 step 2: the fallback blocker when no table is pinned (a wallet signing version 1 needs none). */
+export const NO_LOOKUP_TABLE_SENTENCE = (network: Network): string => `This site has no lookup table pinned for ${network}, so a launch cannot be signed here by a wallet that signs version-0 transactions.`;
 export const VAULT_HIDDEN_SENTENCE = "Coins made on this site burn from their own trading fees. Locking part of the supply in a vault is not offered, because no wallet can sign that step yet.";
 
 /** The opening purchase a hosted request asked for, in SOL; 0 when none (or the field is "0"). */
@@ -34,6 +36,11 @@ export interface HostedSigning {
   canComplete: boolean;
   /** each missing piece, one plain sentence; [] when canComplete */
   blockers: string[];
+  /**
+   * Phantom v1 scope step 2 (2026-10-19): pieces only the version-0 fallback needs (the lookup-table pin). A wallet that signs
+   * version-1 transactions does without them, so they do not block `canComplete`; the signing card refuses a version-0 wallet on them.
+   */
+  fallbackBlockers: string[];
 }
 
 /**
@@ -54,6 +61,7 @@ export function hostedSigning(env: Readonly<Record<string, string | undefined>> 
   if (network === "mainnet" && !has("NEXT_PUBLIC_BURNTICKER_RPC_URL")) blockers.push("This site's wallet connection points at devnet, so a mainnet launch cannot be signed here.");
   if (!has("BURNTICKER_FEE_WALLET")) blockers.push("This site does not name its fee wallet, so the launch would not be complete.");
   if ((env.BURNTICKER_LAUNCHLAB_CLIENT ?? "").trim() === "fake") blockers.push("This site is set to build practice launches only, which cannot be signed.");
-  if (!lookupTablePin(network, env).address) blockers.push(`This site has no lookup table pinned for ${network}, so a launch cannot be signed here.`);
-  return { network, canComplete: blockers.length === 0, blockers };
+  // the table is needed only by a wallet that signs version 0 (SignCard.tsx reads the pin while that fallback is in play)
+  const fallbackBlockers = lookupTablePin(network, env).address ? [] : [NO_LOOKUP_TABLE_SENTENCE(network)];
+  return { network, canComplete: blockers.length === 0, blockers, fallbackBlockers };
 }

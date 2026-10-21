@@ -12,7 +12,7 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import { LaunchpadConfig, PlatformConfig } from "@raydium-io/raydium-sdk-v2";
 import { buildLaunchBundle, FakeLaunchLab, SdkLaunchLab } from "@/lib/burnticker/launchBundle";
 import { ChainLaunchLab, launchLabFromEnv, type LaunchLabAccountReader } from "@/lib/burnticker/launchLabChain";
-import { hostedSigning, mainnetLaunchesAllowed, MAINNET_OFF_SENTENCE, NO_OPENING_PURCHASE_SENTENCE, VAULT_HIDDEN_SENTENCE } from "@/lib/burnticker/hostedLaunch";
+import { hostedSigning, mainnetLaunchesAllowed, MAINNET_OFF_SENTENCE, NO_OPENING_PURCHASE_SENTENCE, VAULT_HIDDEN_SENTENCE, NO_LOOKUP_TABLE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { LOOKUP_TABLES, lookupTablePin, lookupTablePins, PROGRAM_IDS, type Network } from "@/lib/burnticker/networks";
 import { planSizeProblems, v0WireSize } from "@/lib/burnticker/lookupTable";
 import { launchlabPlan } from "@/lib/burnticker/signPlan";
@@ -244,7 +244,11 @@ describe("(e) the lookup-table pin is read from the host at runtime", () => {
 describe("hostedSigning: whether a browser launch could land, from the host's settings", () => {
   const all = { BURNTICKER_CLUSTER: "devnet", BURNTICKER_RPC_URL: "https://rpc.invalid", BURNTICKER_PROGRAM_ID: PROGRAM_IDS.devnet.burn_receipts, BURNTICKER_PLATFORM_ID: BURNTICKER_PLATFORM.devnet.toBase58(), BURNTICKER_ADMIN: CREATOR, BURNTICKER_FEE_WALLET: FEE_WALLET, BURNTICKER_LOOKUP_TABLE: "7qLhZqX5yS8pVJ4j1i9V4o3v2hLm1nBz6bFqJc9uZT8W" };
   test("complete only with every piece; mainnet also needs the allowance; each blocker is one plain sentence", () => {
-    assert.deepEqual(hostedSigning(all), { network: "devnet", canComplete: true, blockers: [] });
+    assert.deepEqual(hostedSigning(all), { network: "devnet", canComplete: true, blockers: [], fallbackBlockers: [] });
+    // Phantom v1 step 2: the lookup-table pin is needed only by a wallet that signs version 0, so it is a fallback blocker, never a
+    // completion blocker (both networks are pinned in networks.ts, so the env alone cannot unpin one here: the sentence is checked as is)
+    assert.ok(!hostedSigning({ ...all, BURNTICKER_LOOKUP_TABLE: "" }).blockers.some((b) => /lookup table/.test(b)));
+    assert.match(NO_LOOKUP_TABLE_SENTENCE("devnet"), /^This site has no lookup table pinned for devnet, .*version-0 transactions\.$/); assert.ok(lintCopy(NO_LOOKUP_TABLE_SENTENCE("devnet"), loadCopyLintConfig()).ok);
     assert.equal(hostedSigning({}).canComplete, false);
     const main = hostedSigning({ ...all, BURNTICKER_CLUSTER: "mainnet" });
     assert.equal(main.canComplete, false); assert.ok(main.blockers.includes(MAINNET_OFF_SENTENCE));

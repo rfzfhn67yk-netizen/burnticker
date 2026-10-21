@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, sentAckOf, sentReporter, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, pinPlanFormat, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, sentAckOf, sentReporter, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendDeps, type SendDepsCommon, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { connectionRpc, simulateBase64, v1Format, v1StepProblems } from "@/lib/burnticker/signPlanV1";
+import { chainIdOf, decideStepFormat, formatProblems, formatReadinessLine, launchSignVersions, phantomVersionLine, signWithStandardWallet, standardAccountFor, standardWalletOf, type TxFormat } from "@/lib/burnticker/walletTxVersion";
 import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
 import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
@@ -39,6 +41,12 @@ const confirmFetch = retry429((u: string, init: { method: string; headers: Recor
  * launch-10 (2026-10-12): the table's address is read from the host at runtime (GET /api/burnticker/launch; networks.ts lookupTablePin),
  * so pinning a table needs no code release; until that answer arrives, or if it fails, nothing can be signed. The plan never carries an
  * opening purchase (hostedLaunch.ts): the creator trades on the curve after the create like anyone else.
+ *
+ * Phantom v1 scope step 2 (2026-10-19, ticket 438485): the wallet's `solana:signTransaction` feature decides the format ONCE per plan
+ * (walletTxVersion.ts) — version 1 when it advertises 1 (signPlanV1.ts: kit, no lookup table, signed through the feature with raw bytes,
+ * the dry run as raw base64 over the proxy), version 0 when it advertises 0 (the path above, untouched, the table included), neither:
+ * refused. The choice is pinned in the plan record before anything is built, so a resumed run keeps it; the table's pin and the v0
+ * size check apply only while version 0 is in play.
  */
 export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true, onLive, onStartOver }: { /** F06: every launch plan carries its deadline (withPlanDeadline) */ plan: PreparedSignPlan; creator: string | null; title: string; notes?: string[]; /** the coin page by its mint (coinKey.ts coinCanonicalHref): a ticker can be shared */ coinHref: (mint: string) => string; /** launch night 2026-10-13: every coin is live and recorded (the page drops its saved draft) */ onLive?: () => void; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean; /** F06: Start over once the plan is past its deadline (default: back to the review for a new plan) */ onStartOver?: () => void }) {
   const wallet = useWallet();
@@ -67,9 +75,18 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
     return () => { live = false; };
   }, [pinTry]);
   const pin = network && pins ? pins[network] ?? null : null;
-  const pinProblems = pins === undefined || pins === null ? pinReadProblems(pins) : lookupTablePinProblems(network, pin);
-  const v0 = wallet.wallet?.adapter.supportedTransactionVersions;
-  const problems = [...planProblems(plan, creator), ...pinProblems, ...planSizeProblems(plan.steps, creator, network), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet && !v0?.has(0) ? ["this wallet cannot sign version-0 transactions"] : [])];
+  // Phantom v1 step 2: the format this plan runs in — pinned by an earlier run of this plan (the stored record), else decided from the
+  // wallet's signTransaction feature the moment the run starts (and pinned then). `effective` is what the card shows and checks now.
+  // Phantom support, ticket 438485 (2026-10-20): version 1 only when the connected account itself lists solana:signTransaction, is on
+  // this launch's chain, and the feature advertises 1 (walletTxVersion.ts accountSignsV1); never from the extension's version number
+  const versions = launchSignVersions(wallet.wallet?.adapter, walletKey, network);
+  const [format, setFormat] = useState<TxFormat | null>(() => stored?.format ?? null);
+  const effective = format ?? decideStepFormat(null, versions);
+  const v0InPlay = effective !== 1;
+  const pinProblems = !v0InPlay ? [] : pins === undefined || pins === null ? pinReadProblems(pins) : lookupTablePinProblems(network, pin);
+  const problems = [...planProblems(plan, creator), ...pinProblems, ...(v0InPlay ? planSizeProblems(plan.steps, creator, network) : [...(network ? [] : ["the network of this launch could not be read from its instructions"]), ...v1StepProblems(plan.steps, creator, plan.expect)]), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet ? formatProblems(format, versions) : [])];
+  const formatLine = walletKey && wallet.wallet ? formatReadinessLine(effective) : null;
+  const phantomLine = walletKey && wallet.wallet ? phantomVersionLine(standardWalletOf(wallet.wallet.adapter), versions) : null;
   /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
   // launch audit 234: the replaced plan's signatures and mints stay readable in this tab's history (never a key)
   // review of block J: a coin whose create landed but was not recorded keeps its plan record here too (LaunchRecovery still finds it)
@@ -116,17 +133,20 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   };
   const run = async () => {
     if (!creator || !wallet.signTransaction) return;
+    // the format is decided once, before anything is built, and pinned in the plan record so a resumed run (after a reload) keeps it
+    const chosen = format ?? decideStepFormat(null, versions);
+    if (chosen === null) return;
+    const planRun = { ...plan, format: chosen };
+    if (format === null) setFormat(chosen);
+    pinPlanFormat(storage, planRun);
     setBusy(true); setErr(null); setNotice(null); setClosedStop(false);
     try {
-      const r = await signAndSendPlan(plan, creator, {
+      const common: SendDepsCommon = {
         // prelaunch audit 2026-10-18 A-11: launches closed while signing stop the plan before its next step (a fresh catalogue read)
         launchGate: () => fetch("/api/burnticker/catalogue", { cache: "no-store" }).then((x) => (x.ok ? x.json() : Promise.reject(new Error(`HTTP ${x.status}`)))).then((j) => signGateOf(launchGateFromCatalogue(j)), () => "unknown" as const),
         latestBlockhash: () => connection.getLatestBlockhash("confirmed"),
-        signTransaction: async (tx) => { setPhase("wallet"); const signed = await wallet.signTransaction!(tx); setPhase("chain"); return signed; },
-        // Phantom ticket 438485: dry-run each step before the wallet sees it (a transaction that fails on chain trips the wallet's warning)
-        simulate: async (tx) => { const r = (await connection.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" })).value; return r.err ? simulationFailureText(r.err, r.logs) : null; },
-        lookupTable: () => verifiedLookupTable(connection, network, pin),
         onRefused: (info) => { console.warn("[burnticker launch] the wallet's transaction was refused", info.why, "\nhanded:", info.handed, "\nreturned:", info.returned); },
+        // a version-1 envelope rides sendRaw unchanged: web3.js only base64-encodes the bytes it is given
         sendRaw: (raw) => connection.sendRawTransaction(raw, { preflightCommitment: "confirmed" }),
         confirm: async (sig, bh) => { setPhase("chain"); try { return (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value; } finally { setPhase(null); } },
         // launch night 2026-10-13: a wallet slower than the blockhash's life gets the step rebuilt and is asked again (signPlan.ts)
@@ -143,7 +163,21 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         // launch recovery 255: status, height, the transaction history and the accounts a step creates, before anything is called unlanded
         ...chainReadDeps(connection),
         storage,
-      }, (i, sig) => setDone((d) => (d.length === i ? [...d, sig] : d)), done);
+      };
+      const std = standardWalletOf(wallet.wallet?.adapter), account = standardAccountFor(std, walletKey);
+      const deps: SendDeps = chosen === 1 ? {
+        ...common,
+        // Phantom v1 (ticket 438485): the wallet signs the raw bytes through its wallet-standard feature; the dry run is raw base64 over
+        // the same-origin proxy (the adapter's Connection carries the flight token), and it sizes the step (signPlanV1.ts)
+        format: v1Format({ signBytes: async (bytes) => { setPhase("wallet"); const signed = await signWithStandardWallet(std, account, chainIdOf(network ?? "devnet"), bytes); setPhase("chain"); return signed; }, simulate: (b64) => simulateBase64(connectionRpc(connection), b64) }, planRun),
+      } : {
+        ...common,
+        signTransaction: async (tx) => { setPhase("wallet"); const signed = await wallet.signTransaction!(tx); setPhase("chain"); return signed; },
+        // Phantom ticket 438485: dry-run each step before the wallet sees it (a transaction that fails on chain trips the wallet's warning)
+        simulate: async (tx) => { const r = (await connection.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" })).value; return r.err ? simulationFailureText(r.err, r.logs) : null; },
+        lookupTable: () => verifiedLookupTable(connection, network, pin),
+      };
+      const r = await signAndSendPlan(planRun, creator, deps, (i, sig) => setDone((d) => (d.length === i ? [...d, sig] : d)), done);
       setDone(r.signatures);
       if (r.expired) setRanOut(true);
       if (r.error) {
@@ -205,6 +239,9 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
       <ul className="space-y-0.5 text-xs text-neutral-300" aria-label="Coin addresses" data-mint-addresses>{plan.confirms.map((c) => <li key={c.mint} className="break-all" data-mint-address={c.mint}>${c.ticker}&apos;s address is <code className="text-amber-200">{c.mint}</code></li>)}</ul>
       {plan.confirms.length > 0 && plan.confirms.every((c) => matchesSuffix(c.mint)) && <p className="text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p>}
       <p className="text-xs text-neutral-500" data-no-opening-purchase>{NO_OPENING_PURCHASE_SENTENCE}</p>
+      {/* Phantom v1 step 2: which transaction format this wallet signs (version 1, the version-0 fallback with the table, or neither above) */}
+      {formatLine && <p className="text-xs text-neutral-500" data-tx-format={effective ?? undefined}>{formatLine}</p>}
+      {phantomLine && <p className="text-xs text-neutral-500" data-phantom-version>{phantomLine}</p>}
       {notes.length > 0 && <ul className="list-disc pl-5 text-xs text-neutral-500">{notes.map((x) => <li key={x}>{x}</li>)}</ul>}
       {allLive ? (
         <div className="space-y-2" data-launch-complete>
