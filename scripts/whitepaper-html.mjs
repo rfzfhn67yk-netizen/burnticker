@@ -20,7 +20,7 @@ export function operatorLine(root = path.resolve(path.dirname(fileURLToPath(impo
 }
 
 /**
- * The footer's one-line fee disclosure (fees.ts DEV_FEE_LINE). This script runs without the TypeScript alias hook, so it reads the line
+ * The footer's one-line fee disclosure (visibleFeeLines.ts FOOTER_FEE_LINE: fees.ts DEV_FEE_LINE plus the HS-96 tier-pin sentence while it applies). This script runs without the TypeScript alias hook, so it reads the line
  * from the home page that scripts/burnticker-site-nav.mts writes from fees.ts (run that first; test/burntickerSitePolish2.test.ts holds
  * the two equal).
  */

@@ -150,7 +150,7 @@ describe("HS-26: the footer and trust fee line", () => {
     assert.equal(tier14CoinExists([old, { cluster: "mainnet", status: "live", createdAt: cut + 60_000 }]), true);
     assert.equal(tier14CoinExists([old, { cluster: "mainnet", status: "draft", createdAt: cut + 60_000 }]), false);
     assert.equal(tier14CoinExists([old, { cluster: "devnet", status: "live", createdAt: cut + 60_000 }]), false);
-    assert.match(read("src/app/burnticker/_components/SiteFooter.tsx"), /footerFeeLine\(BURNTICKER_DEV_FEE_BPS, \{ tier14Live: tier14LiveNow\(\) \}\)/);
+    assert.match(read("src/app/burnticker/_components/SiteFooter.tsx"), /footerFeeLine\(BURNTICKER_DEV_FEE_BPS, \{ tier14Live: tier14LiveNow\(\), tierPinPending: DEPLOYED_TIER_PIN_PENDING \}\)/);
     assert.match(read("src/app/burnticker/trust/page.tsx"), /t\.feeTiersLine \?\? BOTH_TIERS_LINE/);
     assert.match(read("src/app/api/burnticker/trust/route.ts"), /try \{ tier14Live = tier14CoinExists\(p\.registry\.tokens\(\)\); \}[\s\S]*deltaCache: TRUST_DELTA_CACHE, tier14Live \}\)/);
   });

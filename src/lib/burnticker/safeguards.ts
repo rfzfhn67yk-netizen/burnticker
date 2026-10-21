@@ -4,7 +4,8 @@
  * short status and links here; the trust page renders this module once, as static copy (no API read, so it shows even when the live data
  * cannot be read). Client-safe: one import, the operator-share line (feeShareLine.ts, itself client-safe). Copy-linted by test/burntickerHome.test.ts.
  */
-import { BOTH_TIERS_LINE } from "@/lib/burnticker/feeShareLine";
+import { BOTH_TIERS_LINE, bothTiersLineNow } from "@/lib/burnticker/feeShareLine";
+import { DEPLOYED_TIER_PIN_PENDING } from "@/lib/burnticker/deployedTierPin";
 import { SETTLEMENT_SOURCES_SENTENCE } from "@/lib/burnticker/singleSource";
 import { LP_BEFORE_GRADUATION_TRUST } from "@/lib/burnticker/lpLockCopy";
 import { operatorTradeReasons } from "@/lib/burnticker/operatorCreators";
@@ -42,7 +43,12 @@ export const GUARDRAILS = [
  */
 export type GuardrailKind = "enforced" | "policy" | "observed" | "planned";
 export const GUARDRAIL_KIND_LABEL: Record<GuardrailKind, string> = { enforced: "Enforced by the current program or settings", policy: "Operator policy, not enforced by code", observed: "Evidence you can check now", planned: "Planned, not in place yet" };
-export const GUARDRAIL_DETAIL: Record<(typeof GUARDRAILS)[number], { kind: GuardrailKind; text: string }> = {
+/**
+ * HS-96: the guardrail rows for a given tier-pin answer (deployedTierPin.ts). The LP-lock row ends with DEPLOYED_TIER_PIN_LINE while the
+ * deployed mainnet burn program is pre-B17; GUARDRAIL_DETAIL is the rows for this build's verified-build table.
+ */
+export function guardrailDetail(tierPinPending: boolean = DEPLOYED_TIER_PIN_PENDING): Record<(typeof GUARDRAILS)[number], { kind: GuardrailKind; text: string }> {
+  return {
   "settled on primary sources": { kind: "policy", text: "A rule may settle only on a primary source, or on an adjudicated market's on-chain payout." },
   "signed readings (one operator attester; no independent second attester is live)": { kind: "enforced", text: "The program accepts a reading only with the required signature. Today one signer, run by the operator, signs every reading, and no independent second signer is live." },
   "program-run burns": { kind: "enforced", text: "In the current program, a burn is one program step that buys and burns in the same transaction. Nobody picks the amount." },
@@ -54,9 +60,11 @@ export const GUARDRAIL_DETAIL: Record<(typeof GUARDRAILS)[number], { kind: Guard
   // HB-59 (hourly run 6): the $REHEARSAL exception is said once, in the next line, not here as well
   "no team buy": { kind: "policy", text: "There is no team allocation, and the operator makes no opening purchase in a creator's coin." },
   "the platform buys no coin except one test coin": { kind: "policy", text: `The operator and its wallets never trade a coin launched here. ${REHEARSAL_BUY_EXCEPTION} This is a policy, checked by the monitor on the operator page. It is separate from each coin's program-run buyback, which buys only to burn.` },
-  "LP locked forever, its fees fund the burn": { kind: "enforced", text: `At graduation the platform settings lock all of the pool's liquidity with Raydium's lock. ${LP_BEFORE_GRADUATION_TRUST} ${BOTH_TIERS_LINE}` },
+  "LP locked forever, its fees fund the burn": { kind: "enforced", text: `At graduation the platform settings lock all of the pool's liquidity with Raydium's lock. ${LP_BEFORE_GRADUATION_TRUST} ${bothTiersLineNow(tierPinPending)}` },
   "rules locked at launch": { kind: "enforced", text: "No instruction in the current program can change a coin's rule. The program itself can still be upgraded, and the current status says who can approve an upgrade." },
-};
+  };
+}
+export const GUARDRAIL_DETAIL = guardrailDetail();
 export const GUARDRAIL_SUMMARY = "Each coin has one rule, and the rule is locked at launch. A program spends the coin's own fee pool on each burn, and nobody chooses the amount. Today one operator signs every reading. The program has had AI reviews, and no security firm has audited it.";
 
 /** What protects a burn. The current values (signers, upgrade authority, time lock) are in the current-status summary, so they are not repeated here. */

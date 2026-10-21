@@ -119,6 +119,16 @@ export const BOTH_TIERS_LINE = (() => {
 })();
 
 /**
+ * HS-96: BOTH_TIERS_LINE as the visible pages print it. While the deployed mainnet burn program is a pre-B17 build (deployedTierPin.ts,
+ * from config/burnticker/verified-build.json) DEPLOYED_TIER_PIN_LINE follows "pay 1.25% all the same."; once the table names the upgraded
+ * build the line is BOTH_TIERS_LINE alone. The caller passes the answer: this module is in the SDK's public closure and reads no config,
+ * so the client pages pass deployedTierPin.ts DEPLOYED_TIER_PIN_PENDING and the server paths the one they read from the table.
+ */
+export function bothTiersLineNow(pending: boolean): string {
+  return pending ? `${BOTH_TIERS_LINE} ${DEPLOYED_TIER_PIN_LINE}` : BOTH_TIERS_LINE;
+}
+
+/**
  * THE FOOTER AND TRUST FEE LINE (hourly run 5, HS-26, launch-critical): the split every live coin pays first, Raydium's share included,
  * then the new-coin tier, then where pair pools are explained. "(every coin live today)" is computed: it is said only when the caller read
  * the registry and found no live mainnet coin created on or after the tier-14 cutover (tier14CoinExists), and it is left out once one
@@ -128,9 +138,11 @@ export function tier14CoinExists(tokens: readonly { cluster: string; status: str
   const t0 = Date.parse(since);
   return tokens.some((t) => t.cluster === "mainnet" && t.status !== "draft" && t.status !== "expired" && t.createdAt >= t0);
 }
-export function feeTiersLine(_o: { tier14Live: boolean | null }): string {
+export function feeTiersLine(o: { tier14Live: boolean | null; tierPinPending?: boolean }): string {
   // eighth pass B-23: "(every coin live today) pay 1% (fee tier 9)" was false under the B-17 decision; every coin pays the current tier
-  return `${BOTH_TIERS_LINE} Coin-vs-coin pair pools use their own split, shown on the pair page.`;
+  // HS-96: the tier-pin sentence follows "pay 1.25% all the same." while the deployed program is pre-B17 (bothTiersLineNow); the visible
+  // footer passes deployedTierPin.ts DEPLOYED_TIER_PIN_PENDING (visibleFeeLines.ts FOOTER_FEE_LINE), the trust JSON its own read
+  return `${bothTiersLineNow(o.tierPinPending ?? false)} Coin-vs-coin pair pools use their own split, shown on the pair page.`;
 }
 /** The footer's fee row: the curve fee, then feeTiersLine. `curveBps` is fees.ts BURNTICKER_DEV_FEE_BPS (passed in: this module stays client-safe). */
-export const footerFeeLine = (curveBps: number, o: { tier14Live: boolean | null }): string => `Burnticker takes ${curveBps / 100}% of curve volume. ${feeTiersLine(o)}`;
+export const footerFeeLine = (curveBps: number, o: { tier14Live: boolean | null; tierPinPending?: boolean }): string => `Burnticker takes ${curveBps / 100}% of curve volume. ${feeTiersLine(o)}`;

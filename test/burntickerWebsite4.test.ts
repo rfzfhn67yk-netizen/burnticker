@@ -2,7 +2,8 @@
 // its own file (test/burntickerF1Authority.test.ts); the rest are pinned here, one describe per item.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { BOTH_TIERS_LINE, EARLIER_COINS_LINE, OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
+import { BOTH_TIERS_LINE, bothTiersLineNow, EARLIER_COINS_LINE, OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
+import { DEPLOYED_TIER_PIN_PENDING } from "@/lib/burnticker/deployedTierPin";
 import fs from "node:fs";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
@@ -138,7 +139,8 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
     const money = buildCurrentStatus({ env: {}, chain: {}, now: 0 }).lines.find((l) => l.startsWith("The operator earns"))!;
     // continuous audit run 2, HB-13: the money line names both fee tiers
     // sixth pass B-16 (2026-10-19): both tiers, the one every live coin pays first
-    assert.equal(money, `The operator earns 0.25% of curve trading volume. ${BOTH_TIERS_LINE} The coin side of the liquidity fees is burned. Creators take no cash from fees.`);
+    // HS-96: plus the tier-pin sentence while the deployed burn program is pre-B17
+    assert.equal(money, `The operator earns 0.25% of curve trading volume. ${bothTiersLineNow(DEPLOYED_TIER_PIN_PENDING)} The coin side of the liquidity fees is burned. Creators take no cash from fees.`);
     clean(money, "money line");
     const page = read("src/app/burnticker/trust/page.tsx");
     const at = (m: string) => { const i = page.indexOf(m); assert.ok(i >= 0, m); return i; };
