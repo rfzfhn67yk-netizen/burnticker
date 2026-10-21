@@ -45,11 +45,11 @@ export const singleSourceMethod = (series: string): string => `single official s
 const singlePublishers = [...new Set(Object.values(SINGLE_SOURCE_PUBLISHER))];
 const listWords = (xs: readonly string[]): string => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 /** A game coin's one-source confirmation gap in minutes (sources/gameSettle.ts GAME_CONFIRM_GAP_MS; a test pins the two together). */
-export const GAME_CONFIRM_GAP_MINUTES = 4;
+export const GAME_CONFIRM_GAP_MINUTES = 5;
 
 /**
  * THE SETTLEMENT SENTENCE FOR THE TRUST PAGE (sixth pass B-16d, HB-58, 2026-10-19): the page said every result needs "a primary source
  * that a second, independent publisher confirms", while $NEXTM6 settles on the USGS alone by owner decision. It now says which sources
- * settle alone, and the owner's rule for game coins that settle on one source (the same final shown twice, minutes apart).
+ * settle alone, and the owner's rule for game coins (2026-10-20: read once the game is final, settled on a second check five minutes later).
  */
-export const SETTLEMENT_SOURCES_SENTENCE = `Each result comes from a primary source. Most rules also need a second, independent publisher to agree, or the on-chain payout of an adjudicated Polymarket market. A few rules use one official source alone, and their rule text says so: the natural-hazard feeds from ${listWords(singlePublishers)}. A game coin settles once two sources agree on the final, or once one source has shown the same final twice, at least ${GAME_CONFIRM_GAP_MINUTES} minutes apart.`;
+export const SETTLEMENT_SOURCES_SENTENCE = `Each result comes from a primary source. Most rules also need a second, independent publisher to agree, or the on-chain payout of an adjudicated Polymarket market. A few rules use one official source alone, and their rule text says so: the natural-hazard feeds from ${listWords(singlePublishers)}. A game coin settles once the official feed has marked the game final and a second check five minutes later agrees.`;

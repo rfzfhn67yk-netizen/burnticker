@@ -320,8 +320,8 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       recordWindowEnd(d, tokens.filter((x) => x.selectorKey === key), r);
       if (r.awaitingFinal > 0 && anchor === undefined) d.registry.setStatus(anchorKey, { since: sinceKey }, now);
       else if (r.awaitingFinal === 0 && anchor !== undefined) d.registry.setStatus(anchorKey, "", now);
-      // THE NEXT READ (readPlan.ts, owner 2026-10-19): the earliest moment a new result can exist, as the adapter says (a game's start plus
-      // the settle gap, then minutes until its final is confirmed; a market's close; a team's next game), else the feed's publish window,
+      // THE NEXT READ (readPlan.ts, owner 2026-10-19): the earliest moment a new result can exist, as the adapter says (a game shortly
+      // after its start, then minutes apart until its final is confirmed by a second read 5 minutes later; a market's close; a team's next game), else the feed's publish window,
       // else the poll
       d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: await nextReadAt(d, locked.rule, key, r, now, written) });
       if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new ${written === 1 ? "reading" : "readings"}${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);

@@ -7,8 +7,9 @@ import { isOneShot, type BurnRule } from "@/lib/burnticker/rules";
  *   NEVER   a selector no live coin needs any more: every coin on it has had its rule end recorded, or is a one-shot (one market, one
  *           game, one launch, one milestone; rules.ts isOneShot) whose OWN result is recorded: a reading after that coin's baseline
  *           with a result receipt for that coin, never an older reading on the same selector (HB-29). selectorIdle says why.
- *   DUE     the adapter's `dueAt` (oracle/types.ts ResolvedSelector): the earliest moment a new result CAN exist. A game is read at its
- *           start plus the settle gap and then every few minutes until its final is confirmed (sources/gameSettle.ts gameDueAt); a team
+ *   DUE     the adapter's `dueAt` (oracle/types.ts ResolvedSelector): the earliest moment a new result CAN exist. A game is read from
+ *           shortly after its start every few minutes until the schedule marks it final, then once more at least five minutes
+ *           later to confirm the final (owner 2026-10-20; sources/gameSettle.ts gameDueAt, finalCheck, gameSchedule); a team
  *           or rivalry coin at its next listed game; a market at its stated close (Kalshi close_time; Polymarket's Gamma end date, with
  *           Gamma's own closed flag checked hourly before it and no Polygon read until it closes). Honoured whether it is sooner or later
  *           than the selector's poll, never sooner than READ_PLAN_MIN_GAP_MS and never later than READ_PLAN_MAX_IDLE_MS (the schedule is

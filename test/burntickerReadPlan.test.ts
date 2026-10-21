@@ -1,6 +1,6 @@
 // THE KEEPER'S READ PLAN (owner 2026-10-19: "the keeper is only checking for results when it needs to"). Each selector is read when a
-// new result CAN exist and not otherwise: a game at its start plus the settle gap, then minutes apart until its final is confirmed, then
-// never; a team coin around its listed games; a market at its stated close (Kalshi close_time; Polymarket with no Polygon read before
+// new result CAN exist and not otherwise: a game from shortly after its start, minutes apart until its final is confirmed (owner
+// 2026-10-20: no six-hour wait; a second read 5 minutes after the first final), then never; a team coin around its listed games; a market at its stated close (Kalshi close_time; Polymarket with no Polygon read before
 // Gamma says it closed); a feed inside its publish window (Treasury after 15:00 Eastern on business days); a decided one-shot or an
 // ended rule never, except one read after the result's UTC day so the program can read that day. The stall alert follows the plan.
 // Stubs and frozen fixtures; no network.
@@ -8,8 +8,8 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { fetchDue, attestReadAt, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { READ_PLAN_MAX_IDLE_MS, READ_PLAN_MIN_GAP_MS, dueNextAt, nextWindowOpen, openWindowAt, selectorIdle, tzOffsetMs, windowNextAt, type ReadWindow } from "@/lib/burnticker/readPlan";
-import { GAME_LIVE_POLL_MS, SCHEDULE_RECHECK_MS, gameDueAt, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
-import { SETTLE_AFTER_START_MS, gameSeries, parseEspnSeries, teamSeries, type EspnClient, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
+import { GAME_CONFIRM_GAP_MS, GAME_FIRST_LOOK_MS, GAME_LIVE_POLL_MS, SCHEDULE_RECHECK_MS, gameDueAt, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
+import { gameSeries, parseEspnSeries, teamSeries, type EspnClient, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { KalshiClient, fixtureFetch, marketApiUrl, seriesApiUrl } from "@/lib/burnticker/oracle/kalshi";
 import { POLY_PRECLOSE_CHECK_MS } from "@/lib/burnticker/oracle/polymarket";
@@ -63,17 +63,17 @@ const game = (o: Partial<Game> & { startsAt: string }): Game => ({ eventId: "247
 const espn = (games: () => Game[]): EspnClient => ({ tsdbRead: async () => ({ events: [] }), get: async () => { throw new Error("HTTP 404"); }, season: async () => games() } as unknown as EspnClient);
 const noDeps = (now: number): GameDeps => ({ tsdbKey: null, apiSportsKey: null, market: null, payout: null, now: () => now });
 
-describe("games: not before kickoff plus the settle gap, minutes apart while the final is confirmed, then never", () => {
-  test("a game coin: its due time is the start plus the settle gap; in progress, one live poll ahead", async () => {
+describe("games: from shortly after kickoff, minutes apart while the final is confirmed, then never", () => {
+  test("a game coin: its due time is the first look after the start; in progress, one live poll ahead", async () => {
     const start = "2026-10-25T20:25:00Z";
     const s = parseEspnSeries(gameSeries("nfl", "2475453", "DEN", "win")) as EspnSeries;
     const before = Date.parse("2026-10-19T12:00:00Z");
     const r = await sportsSettled(espn(() => [game({ startsAt: start })]), s, null, noDeps(before), { nowMs: before });
-    assert.equal(r.dueAt, Date.parse(start) + SETTLE_AFTER_START_MS, "nothing is read before the game can have a final");
-    const during = Date.parse(start) + SETTLE_AFTER_START_MS + 10 * MIN;
+    assert.equal(r.dueAt, Date.parse(start) + GAME_FIRST_LOOK_MS, "nothing is read before the game can have a final");
+    const during = Date.parse(start) + GAME_FIRST_LOOK_MS + 10 * MIN;
     const r2 = await sportsSettled(espn(() => [game({ startsAt: start, state: "in" })]), s, null, noDeps(during), { nowMs: during });
     assert.equal(r2.dueAt, during + GAME_LIVE_POLL_MS, "the schedule does not say final yet: every few minutes");
-    assert.equal(gameDueAt({ startsAt: start }, before), Date.parse(start) + SETTLE_AFTER_START_MS);
+    assert.equal(gameDueAt({ startsAt: start }, before), Date.parse(start) + GAME_FIRST_LOOK_MS);
   });
 
   test("a team coin reads around its listed games only: the next game's due time; none listed, a schedule look in six hours", async () => {
@@ -82,7 +82,7 @@ describe("games: not before kickoff plus the settle gap, minutes apart while the
     const past = game({ startsAt: "2026-10-18T17:00:00Z", completed: true, state: "post", detail: "Final", home: { abbr: "PHI", name: "Philadelphia Eagles", nickname: "Eagles", score: 20, homeAway: "home", record: null } as Game["home"] });
     const next = game({ startsAt: "2026-10-27T00:15:00Z", home: { abbr: "PHI", name: "Philadelphia Eagles", nickname: "Eagles", score: null, homeAway: "home", record: null } as Game["home"] });
     const r = await sportsSettled(espn(() => [past, next]), s, "2026-10-19", noDeps(now), { nowMs: now });
-    assert.equal(r.dueAt, Date.parse("2026-10-27T00:15:00Z") + SETTLE_AFTER_START_MS, "the Monday-night game, 7.6 days out: no read until then");
+    assert.equal(r.dueAt, Date.parse("2026-10-27T00:15:00Z") + GAME_FIRST_LOOK_MS, "the Monday-night game, 7.6 days out: no read until then");
     const none = await sportsSettled(espn(() => [past]), s, "2026-10-19", noDeps(now), { nowMs: now });
     assert.equal(none.dueAt, now + SCHEDULE_RECHECK_MS);
   });
@@ -149,20 +149,20 @@ function loop(o: { rule: BurnRule; key: string; adapter: (rule: BurnRule) => Pro
 }
 
 describe("the loop honours the plan", () => {
-  test("a game coin from launch to its final: one read before kickoff, none until the start plus the settle gap, minutes apart while it confirms, then never", async () => {
-    const start = Date.parse("2026-10-25T20:25:00Z"), due = start + SETTLE_AFTER_START_MS;
+  test("a game coin from launch to its final: one read before kickoff, none until the first look after the start, minutes apart while it confirms, then never", async () => {
+    const start = Date.parse("2026-10-25T20:25:00Z"), due = start + GAME_FIRST_LOOK_MS;
     let phase: "pre" | "first" | "final" = "pre";
     const rule = validateRule({ schema: "burnticker.rules/v1", oracle: "catalogue", series: gameSeries("nfl", "2475453", "DEN", "win"), market: null, filter: {}, kind: "scalar", scalar: { unit: 1, perUnit: { fractionOfPool: 1 }, baseline: 0, direction: "up" }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null }) as BurnRule;
     const w = loop({ rule, key: `catalogue:${rule.series}`, adapter: async () => phase === "pre" ? { events: [], awaitingFinal: 0, refusals: [], settlementSourceUrl: null, dueAt: due }
-      : phase === "first" ? { events: [], awaitingFinal: 1, refusals: [], settlementSourceUrl: null, dueAt: w.clock.now + 4 * MIN }
+      : phase === "first" ? { events: [], awaitingFinal: 1, refusals: [], settlementSourceUrl: null, dueAt: w.clock.now + GAME_CONFIRM_GAP_MS }
       : { events: [{ id: "2026-10-25", at: "2026-10-25", result: null, value: "1" }], awaitingFinal: 0, refusals: [], settlementSourceUrl: null } });
     await fetchDue(w.d, w.tokens);
-    assert.equal(w.reads, 1); assert.equal(w.feeds.get(w.tokens[0].selectorKey)!.nextFetchAt, due, "next read: the start plus the settle gap, six days out");
+    assert.equal(w.reads, 1); assert.equal(w.feeds.get(w.tokens[0].selectorKey)!.nextFetchAt, due, "next read: the first look after the start, six days out");
     for (let t = w.clock.now + H; t < due; t += 6 * H) { w.clock.now = t; await fetchDue(w.d, w.tokens); }
     assert.equal(w.reads, 1, "nothing read before the game can have a final");
     w.clock.now = due; phase = "first"; await fetchDue(w.d, w.tokens);
-    assert.equal(w.feeds.get(w.tokens[0].selectorKey)!.nextFetchAt, due + 4 * MIN, "a first print: read again a few minutes later");
-    w.clock.now = due + 4 * MIN; phase = "final"; await fetchDue(w.d, w.tokens);
+    assert.equal(w.feeds.get(w.tokens[0].selectorKey)!.nextFetchAt, due + GAME_CONFIRM_GAP_MS, "a first final: read again five minutes later");
+    w.clock.now = due + GAME_CONFIRM_GAP_MS; phase = "final"; await fetchDue(w.d, w.tokens);
     assert.equal(w.reads, 3);
     for (let i = 0; i < 50; i++) { w.clock.now += H; await fetchDue(w.d, w.tokens); }
     assert.equal(w.reads, 3, "a one-shot whose result is recorded is never read again");

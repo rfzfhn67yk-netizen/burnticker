@@ -6,6 +6,8 @@
  * English, lint-clean, in test/burntickerPlainCopy.test.ts. "About" marks a typical range; nothing here promises a time.
  */
 
+import { SPREAD_DEFICIT_LINE, SPREAD_LINES } from "@/lib/burnticker/spreadCopy";
+
 export const SETTLEMENT_PATH = "/burnticker/how-burns-settle";
 export const SETTLEMENT_TITLE = "How burns are settled";
 /** The coin page's one line under "Next result". */
@@ -52,21 +54,23 @@ export function settlementSections(f: SettlementFacts): { intro: string; section
       ] },
       { id: "final", heading: "When a result counts", paragraphs: [
         "A result counts only when it is final.",
-        "A game counts when its feed marks it final.",
+        "A game is read when its feed marks it final, and it counts once a second check five minutes later agrees.",
         "A game with no Polymarket market and no league feed counts on TheSportsDB alone, once its final score has stood unchanged for 12 hours.",
-        "A game coin burns once two sources agree on the final, or once one source has shown the same final twice a few minutes apart. Every source that reads the game must agree, and a disagreement holds the burn until they do. The game's on-chain settlement counts as one source.",
+        "A game coin burns once the official feed has marked the game final and a second check five minutes later agrees. Every source that reads the game must agree, and a disagreement holds the burn until they do. The game's on-chain settlement counts as one source.",
         `A Polymarket market counts only after its on-chain payout is recorded. That follows UMA's dispute window of about ${hours(f.umaHours)}, and longer if a proposal is disputed.`,
         "A scheduled publisher's number counts when it is posted.",
       ] },
       { id: "burn", heading: "From a final result to the burn", paragraphs: [
         "The cycle that sees a final result submits the reading and runs the burn in the same pass.",
         `Before it swaps, the program checks the pool's current rate against its average over the last ${f.guardMinMin} to ${f.guardMaxMin} minutes. A pool that is already trading has that history.`,
-        `One burn spends at most ${f.spendCapPct}% of the pool's SOL reserve. The rest carries to the next burn, so a large burn arrives in slices.`,
+        // owner 2026-10-20: how a burn above the cap is spread out (spreadCopy.ts; dispersal.ts), and $DEFICIT's own wording
+        ...SPREAD_LINES,
+        SPREAD_DEFICIT_LINE,
       ] },
       { id: "times", heading: "Typical times after the event", paragraphs: [
         `Sports results and scheduled data: about ${f.marketPollMin} to ${f.marketPollMin + f.guardMaxMin} minutes.`,
         "A game settled on TheSportsDB alone: about 12 hours after its final score is first read.",
-        "A game coin, or two teams in one game: once two sources agree on the final, or once one source has shown the same final twice a few minutes apart.",
+        "A game coin, or two teams in one game: about five minutes after the final whistle, once the official feed has marked the game final and a second check five minutes later agrees.",
         `Polymarket markets: about ${hours(f.umaHours)}, plus a few minutes.`,
         "$DEFICIT: within about an hour of the read that first sees each new Treasury figure, which is posted on the business day after the day it describes.",
       ] },

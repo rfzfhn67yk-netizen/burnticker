@@ -130,7 +130,10 @@ describe("a game coin that only API-Sports answers (review 2026-10-18)", () => {
     const w = world([NFL], { asFinal: () => true, tsdbFinal: () => true });
     w.at(START + 3 * H);
     const a = await settleGame(w.client, NFL, w.deps, { schedule: "game" });
-    assert.equal(a.kind, "settled", "two sources at once");
+    assert.equal(a.kind, "awaiting", "owner 2026-10-20: two sources agreeing wait for the second read too");
+    w.at(START + 3 * H + 5 * MIN);
+    const b = await settleGame(w.client, NFL, w.deps, { schedule: "game" });
+    assert.equal(b.kind, "settled", "the second read five minutes later");
   });
 });
 
@@ -200,9 +203,11 @@ describe("a skipped read changes nothing in settlement", () => {
     const v = await settleGame(w.client, NFL, w.deps);
     assert.equal(v.kind, "settled", JSON.stringify(v)); assert.equal(v.kind === "settled" ? v.singleSince : 0, undefined);
   });
-  test("a game coin: two sources inside the window settle at once", async () => {
+  test("a game coin: two sources inside the window settle on the second read five minutes later (owner 2026-10-20)", async () => {
     const w = world([NFL], { tsdbFinal: () => true, asFinal: () => true });
     w.at(START + 4 * H);
+    assert.equal((await settleGame(w.client, NFL, w.deps, { schedule: "game" })).kind, "awaiting");
+    w.at(START + 4 * H + 5 * MIN);
     const v = await settleGame(w.client, NFL, w.deps, { schedule: "game" });
     assert.equal(v.kind, "settled", JSON.stringify(v));
     assert.equal(v.kind === "settled" ? v.twoSources : false, true);

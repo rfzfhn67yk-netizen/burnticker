@@ -171,7 +171,7 @@ describe("B-16: honest copy", () => {
   test("(d) which sources settle alone, and the one-source rule for games", () => {
     clean(SETTLEMENT_SOURCES_SENTENCE);
     assert.equal(GAME_CONFIRM_GAP_MINUTES * 60_000, GAME_CONFIRM_GAP_MS);
-    assert.equal(SETTLEMENT_SOURCES_SENTENCE, "Each result comes from a primary source. Most rules also need a second, independent publisher to agree, or the on-chain payout of an adjudicated Polymarket market. A few rules use one official source alone, and their rule text says so: the natural-hazard feeds from the U.S. Geological Survey, the National Hurricane Center, the Storm Prediction Center and the National Interagency Fire Center. A game coin settles once two sources agree on the final, or once one source has shown the same final twice, at least 4 minutes apart.");
+    assert.equal(SETTLEMENT_SOURCES_SENTENCE, "Each result comes from a primary source. Most rules also need a second, independent publisher to agree, or the on-chain payout of an adjudicated Polymarket market. A few rules use one official source alone, and their rule text says so: the natural-hazard feeds from the U.S. Geological Survey, the National Hurricane Center, the Storm Prediction Center and the National Interagency Fire Center. A game coin settles once the official feed has marked the game final and a second check five minutes later agrees.");
     assert.ok(ADMISSION_RULES.includes(SETTLEMENT_SOURCES_SENTENCE));
     assert.doesNotMatch(ADMISSION_RULES, /second, independent publisher confirms/);
   });

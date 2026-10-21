@@ -42,7 +42,7 @@ export function coinSourceNote(oracle: string, rawSelectorKey: string | null | u
   const selectorKey = seriesOfSelector(rawSelectorKey);
   const sports = selectorKey ? parseEspnSeries(selectorKey) : null;
   // owner 2026-10-14: a second source checks a game where one can read it; otherwise TheSportsDB alone after a 12-hour hold
-  // owner 2026-10-16: a single-game coin burns once two sources agree on the final, or once one source has shown the same final twice (2026-10-18)
+  // owner 2026-10-20: a single-game coin burns once the game is final and a second check five minutes later agrees
   if (sports?.kind === "game") return `The game's result comes from ${GAME_SETTLEMENT}. ${GAME_BURN_LINE} ${GAME_AGREE_LINE}`;
   if (sports) return `Each game settles on ${SPORTS_PROVENANCE.settlement}. Where a second source can read the game, it must agree: ${leagueProvenance(sports.league).confirmation}. ${SINGLE_SOURCE_LINE}`;
   if (selectorKey && isSingleSourceSeries(selectorKey)) return `Read from ${SINGLE_SOURCE_PUBLISHER[selectorKey.split(":")[0]]}'s own published data.`;

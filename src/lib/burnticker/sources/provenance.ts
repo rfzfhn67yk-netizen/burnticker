@@ -15,7 +15,7 @@ import { LEAGUES, NBA_FEED_WORDING, type LeagueId } from "@/lib/burnticker/sourc
  *   confirmation  a second, independent operator where one can read the game: the league's official feed where free, the payout and the
  *                 licensed final confirming each other, or a second licensed provider. Owner 2026-10-14: a game no second source can read
  *                 (no Polymarket market, no league feed) settles on TheSportsDB alone once its final has stood 12 hours (SINGLE_SOURCE_LINE).
- *                 Owner 2026-10-16 and 2026-10-18: a single-game coin burns once two sources agree, else once one source shows the same final twice (GAME_BURN_LINE)
+ *                 Owner 2026-10-20: a game is read once its feed marks it final and burns once a second check five minutes later agrees (GAME_BURN_LINE)
  *
  * Every launch-flow sentence about sports provenance comes from here; the labels themselves come from gameSettle.ts (SETTLED_ON,
  * CROSS_LABEL), so a change of resolver changes the copy. ESPN appears only as a plain human link on a game row (never fetched).
@@ -51,15 +51,16 @@ export function sportsProvenanceLine(): string {
 export const SINGLE_SOURCE_LINE = "A game with no Polymarket market and no league feed settles on TheSportsDB alone, once its final score has stood unchanged for 12 hours.";
 /**
  * Owner 2026-10-16: ONE burn schedule for every single-game coin (a game coin, and both coins of two teams in one game). The burn waits
- * until two independent sources agree on the final, or once one source has shown the same final twice a few minutes apart
- * (gameSettle.ts gameSchedule); every source that answers must agree. The on-chain settlement counts as one source.
+ * until the official feed has marked the game final and a second check five minutes later agrees (owner 2026-10-20; gameSettle.ts gameSchedule); every source that answers must agree. The on-chain settlement counts as one source.
  */
 export { GAME_AGREE_LINE, GAME_BURN_LINE } from "@/lib/burnticker/gameCoin";
 /** Where a game coin's result comes from, in the order the reading names them (gameSettle.ts: the first score read, the on-chain settlement last). */
 export const GAME_SETTLEMENT = "a licensed final score from TheSportsDB, the league's own feed where it has one, or the game's on-chain settlement where Polymarket lists a market";
-/** Who must agree before a team coin's game counts, in three sentences (a game coin's own schedule is said only on game coins: GAME_BURN_LINE). */
+/** When a team coin's game is read and counts (owner 2026-10-20: no six-hour wait; a second check five minutes after the final). */
+export const GAME_TIMING_LINE = "Each game is read when the official feed marks it final, and it counts once a second check five minutes later agrees.";
+/** When a team coin's game counts and who must agree, in four sentences (a game coin's own schedule is said only on game coins: GAME_BURN_LINE). */
 export function sportsConfirmationLine(): string {
-  return `Where a second source can read the game, such as ${list(OFFICIAL_FEEDS)}, it must agree. ${SPORTS_PROVENANCE.confirmationOther} ${SINGLE_SOURCE_LINE}`;
+  return `${GAME_TIMING_LINE} Where a second source can read the game, such as ${list(OFFICIAL_FEEDS)}, it must agree. ${SPORTS_PROVENANCE.confirmationOther} ${SINGLE_SOURCE_LINE}`;
 }
 
 /** A league's schedule source and its confirmation source, in words. */

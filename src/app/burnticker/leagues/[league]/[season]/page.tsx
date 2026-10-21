@@ -127,7 +127,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
 
       <section className="space-y-2" aria-label="settled games">
         <h2 className="text-lg font-medium">Games settled in the last seven days <span className="text-neutral-500 text-sm font-normal">({p.games.range})</span></h2>
-        <p className="text-xs text-neutral-500">These are the games this league&apos;s coins settled, as each reading recorded them. A game counts once a second publisher reports the same final score. That second source is a check on the data. It is not a second signer: one signer, run by the operator, signs every reading.</p>
+        <p className="text-xs text-neutral-500">These are the games this league&apos;s coins settled, as each reading recorded them. A game counts once a second publisher reports the same final score and a second check five minutes later agrees. That second source is a check on the data. It is not a second signer: one signer, run by the operator, signs every reading.</p>
         {p.games.rows.length === 0 ? <p className="text-neutral-400 border border-neutral-800 rounded p-4">No games settled for {p.leagueLabel} coins in these dates.</p> : (
           <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{p.games.rows.map((g) => (
             <li key={`${g.date}-${g.away.abbr}-${g.home.abbr}`} className="p-3 space-y-1">

@@ -72,15 +72,16 @@ const statusTable = () => { const m = new Map<string, string>(); return { m, get
 const rpc = (outcome: () => number | null, calls: boolean[]) => async (_id: string, o?: { fresh?: boolean }): Promise<GamePayout> => { calls.push(!!o?.fresh); return { resolved: true, outcome: outcome() }; };
 
 describe("a game coin burns when two sources agree, or when one source has shown the same final twice", () => {
-  test("TheSportsDB reads it first, the on-chain settlement agrees inside the window: two sources agree, so it burns on that cycle, naming both", async () => {
+  test("TheSportsDB reads it first, the on-chain settlement agrees inside the window: two sources agree, and it burns on the second read five minutes after the first (owner 2026-10-20), naming both", async () => {
     const w = world(), store = memoryFirstReadStore();
     const a = await read(w, store, T0);
     assert.equal(a.kind, "awaiting"); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + GAP, "the keeper reads again for the second print");
     const m0 = store.get(gameKeyOf(G))!;
     assert.deepEqual({ firstReadAt: m0.firstReadAt, by: m0.by, winner: m0.winner, home: m0.home, away: m0.away, ops: m0.ops, startsAt: m0.startsAt }, { firstReadAt: T0, by: "TheSportsDB", winner: "home", home: 17, away: 14, ops: ["TheSportsDB"], startsAt: G.startsAt });
     w.paid = true;
-    const v = await read(w, store, T0 + 2 * 60_000);
-    assert.equal(v.kind, "settled", "two independent sources agree: settled that cycle");
+    assert.equal((await read(w, store, T0 + 2 * 60_000)).kind, "awaiting", "owner 2026-10-20: two sources agreeing wait for the second read too");
+    const v = await read(w, store, T0 + GAP);
+    assert.equal(v.kind, "settled", "two independent sources agree and the read five minutes after the first agrees: settled");
     if (v.kind !== "settled") return;
     assert.equal(v.winner, "home"); assert.deepEqual(v.final, { home: 17, away: 14 }); assert.equal(v.firstReadAt, T0); assert.equal(v.twoSources, true);
     assert.deepEqual(v.ops, ["TheSportsDB", "on-chain payout"]);
@@ -90,7 +91,7 @@ describe("a game coin burns when two sources agree, or when one source has shown
     const first = await sportsSettled(client(w1), DEN, null, deps(w1, s2, () => T0), { nowMs: T0 });
     assert.equal(first.events.length, 0); assert.equal(first.dueAt, T0 + GAP);
     w1.paid = true;
-    const due = await sportsSettled(client(w1), DEN, null, deps(w1, s2, () => T0 + 2 * 60_000), { nowMs: T0 + 2 * 60_000 });
+    const due = await sportsSettled(client(w1), DEN, null, deps(w1, s2, () => T0 + GAP), { nowMs: T0 + GAP });
     assert.equal(due.events.length, 1); assert.equal(due.events[0].value, "1"); assert.match(due.events[0].method ?? "", /\+two-sources-agreed$/);
   });
 
@@ -228,10 +229,11 @@ describe("a game coin burns when two sources agree, or when one source has shown
   });
 });
 
-describe("two independent sources agreeing burn at once (owner, 2026-10-16, second decision)", () => {
-  test("two sources agree on the first cycle: settled that cycle", async () => {
+describe("two independent sources agreeing (owner, 2026-10-16, second decision; since 2026-10-20 they too wait for the second read)", () => {
+  test("two sources agree on the first cycle: not settled on that read; the read five minutes later settles it", async () => {
     const w = world({ paid: true }), store = memoryFirstReadStore();
-    const v = await read(w, store, T0);
+    assert.equal((await read(w, store, T0)).kind, "awaiting", "owner 2026-10-20: never on one read");
+    const v = await read(w, store, T0 + GAP);
     assert.equal(v.kind, "settled", JSON.stringify(v));
     if (v.kind === "settled") { assert.equal(v.twoSources, true); assert.equal(v.firstReadAt, T0); assert.equal(v.winner, "home"); }
   });
@@ -294,17 +296,21 @@ describe("two independent sources agreeing burn at once (owner, 2026-10-16, seco
     const v = gameSchedule(store, NHL, [tsdb(24, 20)], T0 + 30 * H + C);
     assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.twoSources : null, undefined); assert.equal(v.kind === "ready" ? v.twice : null, true);
   });
-  test("the three-way draw leg never counts toward the two sources or the two reads: draw leg and TheSportsDB 1-1 wait; TheSportsDB and a league feed at 1-1 are ready", () => {
+  test("the three-way draw leg never counts toward the two sources or the two reads: draw leg and TheSportsDB 1-1 wait; TheSportsDB and a league feed at 1-1 are ready on their second read", () => {
     const EPL = { league: "eng.1" as const, eventId: "740100", startsAt: "2026-10-10T11:30:00Z" };
     const s1 = memoryFirstReadStore();
     const a = gameSchedule(s1, EPL, [{ op: "on-chain payout", winner: "tie", final: null, ninety: true }, { op: "TheSportsDB", winner: "tie", final: { home: 1, away: 1 } }], T0);
     assert.equal(a.kind, "awaiting", JSON.stringify(a)); assert.equal(a.kind === "awaiting" ? a.dueAt : null, T0 + GAP);
     const s2 = memoryFirstReadStore();
     const b = gameSchedule(s2, EPL, [{ op: "TheSportsDB", winner: "tie", final: { home: 1, away: 1 } }, { op: "apisports.games", winner: "tie", final: { home: 1, away: 1 } }], T0);
-    assert.equal(b.kind, "ready"); assert.equal(b.kind === "ready" ? b.twoSources : null, true);
+    assert.equal(b.kind, "awaiting", "owner 2026-10-20: two sources wait for the second read");
+    const b2 = gameSchedule(s2, EPL, [{ op: "TheSportsDB", winner: "tie", final: { home: 1, away: 1 } }, { op: "apisports.games", winner: "tie", final: { home: 1, away: 1 } }], T0 + GAP);
+    assert.equal(b2.kind, "ready"); assert.equal(b2.kind === "ready" ? b2.twoSources : null, true);
     // a win leg (decided inside 90 minutes) is a final and still counts with a score read
     const s3 = memoryFirstReadStore();
-    assert.equal(gameSchedule(s3, EPL, [{ op: "on-chain payout", winner: "home", final: null, ninety: true }, { op: "TheSportsDB", winner: "home", final: { home: 2, away: 1 } }], T0).kind, "ready");
+    assert.equal(gameSchedule(s3, EPL, [{ op: "on-chain payout", winner: "home", final: null, ninety: true }, { op: "TheSportsDB", winner: "home", final: { home: 2, away: 1 } }], T0).kind, "awaiting");
+    const w3 = gameSchedule(s3, EPL, [{ op: "on-chain payout", winner: "home", final: null, ninety: true }, { op: "TheSportsDB", winner: "home", final: { home: 2, away: 1 } }], T0 + GAP);
+    assert.equal(w3.kind, "ready"); assert.equal(w3.kind === "ready" ? w3.twoSources : null, true);
     // the draw leg read again later, with no new score read: the draw leg's own two reads never count
     assert.equal(gameSchedule(s1, EPL, [{ op: "on-chain payout", winner: "tie", final: null, ninety: true }], T0 + 2 * H).kind, "awaiting");
     // TheSportsDB's second 1-1: ready on the one-source rule
@@ -367,9 +373,12 @@ describe("one source read twice (owner, 2026-10-18 evening: the 12-hour wait is 
     assert.equal(gameSchedule(store, NBA, [tsdb(110, 101)], T0 + 2 * C).kind, "awaiting", "back to the first print is another change");
     assert.equal(gameSchedule(store, NBA, [tsdb(110, 101)], T0 + 3 * C).kind, "ready");
   });
-  test("two sources agree on the first read: ready at once", () => {
+  test("two sources agree on the first read: not ready at once (owner 2026-10-20); ready on the agreeing read five minutes later", () => {
     const store = memoryFirstReadStore();
-    const v = gameSchedule(store, NBA, [tsdb(110, 101), { op: "apisports.games", winner: "home", final: { home: 110, away: 101 } }], T0);
+    const r = [tsdb(110, 101), { op: "apisports.games", winner: "home" as const, final: { home: 110, away: 101 } }];
+    assert.equal(gameSchedule(store, NBA, r, T0).kind, "awaiting");
+    assert.equal(gameSchedule(store, NBA, r, T0 + GAP - 60_000).kind, "awaiting", "four minutes is not enough");
+    const v = gameSchedule(store, NBA, r, T0 + GAP);
     assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.twoSources : null, true);
   });
   test("a record written under the 12-hour rule (no `since`, the live SEAWIN and DENWIN records) confirms on its next read of the same final", () => {
@@ -453,7 +462,9 @@ describe("one source read twice (owner, 2026-10-18 evening: the 12-hour wait is 
   });
   test("F07: one provider naming the winner and one not naming any is no dispute", () => {
     const store = memoryFirstReadStore();
-    const v = gameSchedule(store, CUPKEY, [pens("TheSportsDB", "home"), { op: "apisports.games", winner: "tie", final: { home: 1, away: 1 }, pens: true }], T0);
+    const r = [pens("TheSportsDB", "home"), { op: "apisports.games", winner: "tie" as const, final: { home: 1, away: 1 }, pens: true }];
+    assert.equal(gameSchedule(store, CUPKEY, r, T0).kind, "awaiting", "owner 2026-10-20: the second read first");
+    const v = gameSchedule(store, CUPKEY, r, T0 + GAP);
     assert.equal(v.kind, "ready"); assert.equal(v.kind === "ready" ? v.mark.declared : null, "home");
   });
   test("re-review: a read fetched during a hold never counts toward the two (a payout served from its cache when the dispute clears)", async () => {
@@ -497,11 +508,11 @@ describe("the live case of 2026-10-16, replayed: SEAWIN/DENWIN with TheSportsDB 
     }
     return { first, firstRead, reg, events };
   }
-  test("the schedule down with TheSportsDB: nothing is read all night; the first successful read finds both sources agreeing, so both coins burn then", async () => {
-    const { first, firstRead } = await replay(true);
-    const c0 = Date.parse(FIX.keeperFirstCycle), back = c0 + Math.ceil((downUntil - c0) / H) * H;   // the first hourly cycle after the outage
+  test("the schedule down with TheSportsDB: nothing is read all night; the first successful read finds both sources agreeing, and both coins burn on the read five minutes later", async () => {
+    const { first, firstRead } = await replay(true, C);
+    const c0 = Date.parse(FIX.keeperFirstCycle), back = c0 + Math.ceil((downUntil - c0) / C) * C;   // the first 5-minute cycle after the outage
     assert.equal(firstRead, back, "the keeper's first successful read is its first cycle after TheSportsDB answers again");
-    assert.equal(first.DEN, back, "TheSportsDB and the settled market agree on the first successful read: settled that cycle");
+    assert.equal(first.DEN, back + C, "TheSportsDB and the settled market agree on the first successful read; owner 2026-10-20: the second read five minutes later burns it");
     assert.equal(first.SEA, first.DEN);
   });
   test("the schedule cached, TheSportsDB's finals down: the resolved market is the first read and settles on its second read, the next 5-minute cycle", async () => {
@@ -540,7 +551,7 @@ describe("the copy says it plainly", () => {
       assert.ok(lintCopy(t, cfg).ok, `${lintCopy(t, cfg).hits.map((h) => h.phrase).join(", ")}: ${t}`);
       assert.doesNotMatch(t, /→|\w\/\w|payout/i, t);
     }
-    assert.equal(GAME_BURN_LINE, "A game coin burns once two sources agree on the final, or once one source has shown the same final twice a few minutes apart.");
+    assert.equal(GAME_BURN_LINE, "A game coin burns once the official feed has marked the game final and a second check five minutes later agrees.");
     assert.ok(text.ruleBlock.includes(GAME_BURN_LINE), text.ruleBlock);
     assert.ok(ruleFacts(JSON.stringify(rule), true).window.includes(GAME_BURN_LINE));
     assert.ok(!sportsConfirmationLine().includes(GAME_BURN_LINE), "the team-coin footer does not carry the game-coin sentence");
@@ -591,7 +602,9 @@ describe("a one-market Polymarket coin on a game moneyline runs on the same sche
     const gate1 = polyGameGate({ client: () => client(w1), deps: () => deps(w1, s1, () => t1) });
     assert.equal((await gate1(rule, M, ev("no"))).release, false);
     w1.tsdb = "up"; t1 = T0 + 60_000;
-    assert.equal((await gate1(rule, M, ev("no"))).release, true, "two sources agree: released on that cycle");
+    assert.equal((await gate1(rule, M, ev("no"))).release, false, "two sources agree, but owner 2026-10-20: the second read five minutes after the first comes first");
+    t1 = T0 + 60_000 + GAP;
+    assert.equal((await gate1(rule, M, ev("no"))).release, true, "TheSportsDB's read five minutes after its first agrees: released");
     const w2 = world({ score: { home: 14, away: 17 } }), s2 = memoryFirstReadStore();
     const gate2 = polyGameGate({ client: () => client(w2), deps: () => deps(w2, s2, () => T0) });
     const h = await gate2(rule, M, ev("no"));

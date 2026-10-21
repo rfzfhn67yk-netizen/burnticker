@@ -215,7 +215,7 @@ describe("two teams in one game through the keeper", () => {
     assert.equal(rb.pairRole, "lost"); assert.equal(rb.units, 1); assert.equal(rb.status, "forwarded");
     assert.ok(w.registry.pairForwards(w.pairId).some((f) => f.loserMint === w.b.mint && f.winnerMint === w.a.mint));
   });
-  test("owner 2026-10-16: two sources agreeing (the market and the NBA feed) burn both coins on the cycle that reads them both, on one shared record", async () => {
+  test("owner 2026-10-16 and 2026-10-20: two sources agreeing (the market and the NBA feed) burn both coins on the next read after the first, at least five minutes later, on one shared record", async () => {
     const g = game(START, "PHI", "BOS", 120, 100), all = [g, ...FILLER];
     const w = await gameWorld(g);
     setNativeClients({ espn: scheduleClient(all, () => w.clock.now), games: { ...fakeDeps(all, () => w.clock.now), firstReads: statusFirstReadStore(w.registry, () => w.clock.now) } });
@@ -229,7 +229,8 @@ describe("two teams in one game through the keeper", () => {
       else w.clock.now += step;
     }
     assert.ok(firstRead !== null && resultAt !== null, w.logs.slice(-8).join("\n"));
-    assert.equal(resultAt, firstRead, "settled on the cycle that first read both sources, not 12 hours later");
+    assert.ok(resultAt! >= firstRead! + GAME_CONFIRM_GAP_MS, "owner 2026-10-20: never on the first read alone, even with two sources");
+    assert.ok(resultAt! - firstRead! <= step, "settled on the next read after the one that first read both sources, not 12 hours later");
     assert.equal(results(w).get(20251103)?.winner, w.a.mint);
   });
   test("owner 2026-10-18 evening: with one source, both coins burn once that source shows the same final on a second read (persisted, shared); the keeper reads again for it", async () => {

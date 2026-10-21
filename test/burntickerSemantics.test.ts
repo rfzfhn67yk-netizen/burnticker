@@ -287,10 +287,12 @@ describe("team games", () => {
     const games = [game("1", at1, { home: 4, away: 2 }), game("2", at2, { home: 6, away: 3 })];
     const mlb = { [day("2026-07-04")]: mlbBody([{ at: at1, home: 4, away: 2 }, { at: at2, home: 6, away: 3 }]) };
     const tsdb = tsdbBody([{ date: "2026-07-04", ts: at1.slice(0, 19), home: 4, away: 2 }, { date: "2026-07-04", ts: at2.slice(0, 19), home: 6, away: 3 }]);
-    // the second game is too young to settle: the whole day waits (no reading of 1 that a later 2 would contradict)
-    const early = await sportsSettled(fakeClient(games, mlb, tsdb), WINS, null, deps, { nowMs: Date.parse(at2) + 2 * 3_600_000 });
-    assert.deepEqual(early.events, []); assert.equal(early.awaitingFinal, 1);
-    const late = await sportsSettled(fakeClient(games, mlb, tsdb), WINS, null, deps, { nowMs: Date.parse(at2) + 8 * 3_600_000 });
+    // the second game is still being played: the whole day waits (no reading of 1 that a later 2 would contradict). Owner 2026-10-20:
+    // a final game is read at once (no six-hour wait), so "not over yet" is the schedule's own state
+    const playing = [games[0], game("2", at2, { home: null, away: null, completed: false, state: "in", detail: "Top 7th" })];
+    const early = await sportsSettled(fakeClient(playing, mlb, tsdb), WINS, null, deps, { nowMs: Date.parse(at2) + 2 * 3_600_000 });
+    assert.deepEqual(early.events, []);
+    const late = await sportsSettled(fakeClient(games, mlb, tsdb), WINS, null, deps, { nowMs: Date.parse(at2) + 3 * 3_600_000 });
     assert.deepEqual(late.events.map((e) => [e.id, e.value]), [["2026-07-04", "2"]]);
   });
 

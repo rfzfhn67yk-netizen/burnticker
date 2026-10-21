@@ -39,8 +39,8 @@ export interface ResolvedSelector {
    *  (onEnd) reads `ended`; a perpetual window never ends. */
   /**
    * THE NEXT READ (owner 2026-10-19: "the keeper is only checking for results when it needs to"). The earliest moment a new result CAN
-   * exist for this selector, as the adapter knows it: a game's start plus the settle gap (or the next few minutes while a final is being
-   * confirmed), a market's stated close, the next scheduled game of a team coin. The keeper's next read is this time, whether it is
+   * exist for this selector, as the adapter knows it: a game's first look after its start, then every few minutes until it is final and
+   * its second read 5 minutes later confirms it (owner 2026-10-20; no six-hour wait), a market's stated close, the next scheduled game of a team coin. The keeper's next read is this time, whether it is
    * earlier or later than the selector's poll (multiKeeper.ts nextReadAt, bounded by READ_PLAN_MAX_IDLE_MS). Absent or null: the poll.
    */
   dueAt?: number | null;

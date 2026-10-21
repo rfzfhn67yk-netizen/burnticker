@@ -175,13 +175,17 @@ Every alert that changed anything gets a line in `docs/burnticker/incidents/LOG.
 ## A game coin held by a disagreement
 
 A single-game coin (one team in one game, both coins of two teams in one game, or a one-market Polymarket coin on a game moneyline)
-burns as soon as two independent sources agree on its final (each of TheSportsDB, the market's settlement on chain, the league's feed
-and API-Sports counts once), or once one source has shown the same final on two keeper reads at least 4 minutes apart (owner
-decisions 2026-10-16 and 2026-10-18 evening, which dropped the 12-hour wait; `src/lib/burnticker/sources/gameSettle.ts` `gameSchedule`). A tie read on chain (a split, or a soccer draw leg) never counts toward
-the two, so a draw burns early only when two score sources agree on it. A game that has been held by a disagreement or a contradiction, released by
-hand, or has an ignored source never takes the two-source path: it burns once one source has shown the agreed final twice after the
-hold ends. The reading's title says which rule settled it: "burned when two sources had confirmed it" or "burned when one source had
-confirmed the final twice" (readings written before 2026-10-18 say "burned 12 hours after the final was first read"). The keeper keeps one record per game in the status table key `games.firstReads`, keyed `league:eventId`: when the final
+is read when the schedule marks the game final, and burns once one source has shown the same final on two keeper reads at
+least 5 minutes apart and every source that answered agrees (each of TheSportsDB, the market's settlement on chain, the league's feed
+and API-Sports counts once). Owner decisions 2026-10-16, 2026-10-18 evening (the 12-hour wait dropped) and 2026-10-20 ("coins should
+burn right after the final whistle and wait for a second verification 5 min later": the six-hour wait after the start dropped, and two
+sources agreeing no longer burn at once); `src/lib/burnticker/sources/gameSettle.ts` `gameSchedule`. A source that had a final and then
+says the game is not final (an early or wrong final, overtime) starts the count again. A tie read on chain (a split, or a soccer draw
+leg) never counts. The reading's title says "burned when two sources had confirmed it" when two sources agreed on a game never held, else
+"burned when one source had confirmed the final twice" (readings written before 2026-10-18 say "burned 12 hours after the final was
+first read"). A team, season or rivalry coin's game is confirmed the same way: its first agreeing read is kept in the status table key
+`games.finalChecks` (keyed `league:eventId`) and it settles only on a later agreeing read at least 5 minutes after it; the keeper logs a
+`[final-check]` line each time a game's count starts again. The keeper keeps one record per game in the status table key `games.firstReads`, keyed `league:eventId`: when the final
 was first read, by which source, the agreed result, and each source's latest read. When two sources disagree, the record's `disputed`
 list is set and the game is held (`bt-feed-disagree`). It stays held while any source in that list is quiet, and it is released only when
 every one of them reads again and they all agree; after a dispute a source has to show the agreed final twice again.
