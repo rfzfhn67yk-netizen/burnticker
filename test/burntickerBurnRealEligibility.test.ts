@@ -313,7 +313,7 @@ describe("PROD-03: two independent rivalry coins, the same end choices and an en
     assert.match(page, /const choiceA = endPickable && rule \? endChoiceModel\(rule, \{ \.\.\.endChoicesFor\(rule, endSite\), team: teamRef \}\) : null;/);
     assert.match(page, /const choiceB = endPickable && pairOn && ruleB \? endChoiceModel\(ruleB, \{ \.\.\.endChoicesFor\(ruleB, endSite\), team: teamRefB \}\) : null;/);
     assert.match(page, /endLines\.join\(endTextB \? "\\n" : " "\)/);
-    assert.match(page, /companion: \{ ticker: tickerB\.toUpperCase\(\), name: nameB, creatorDescription: profileB\.description, rule: ruleB \}/);
+    assert.match(page, /companion: \{ ticker: tickerB\.toUpperCase\(\), name: nameB, creatorDescription: profileB\.description, rule: ruleB, descCtx: ctxB \}/);
     assert.match(page, /const ruleB: BurnRule \| null = useMemo\(\(\) => \(ruleB0 && endPickable \? withEndChoice\(ruleB0, endB\) : ruleB0\)/);
     assert.match(readFileSync("src/app/burnticker/launch/ReviewCard.tsx", "utf8"), /<dd className="whitespace-pre-line /);
   });

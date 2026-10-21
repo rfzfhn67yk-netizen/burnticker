@@ -16,7 +16,7 @@
 # Exit 0 = every built program's executable hash equals the deployed program's hash on mainnet. Exit 1 = a difference (the table says
 # which). Exit 2 = it could not run (wrong architecture, a failed install, a failed build).
 set -euo pipefail
-COMMIT="2b20cf7b8219a8d801d2f08ef05319847b0453f5"
+COMMIT="55a1818868aeba75ede7acc84cb204b2da24a1e3"
 # pair_curve runs round 4 (it was not upgraded in round 5). It links the burn_receipts crate (its constants, the CPMM pool reader and the
 # TokenConfig type), so building it from a round-5 tree gives other bytes without any change of its own. Public commit 7e7bab58 (2026-10-12)
 # carries exactly the program tree of monorepo 29f6f5de, the source of pair_curve's deployed bytes; pair_curve is built there.
@@ -37,12 +37,15 @@ done
 
 # What the table in config/burnticker/verified-build.json says for the mainnet builds. sha256 is the plain hash of the .so file; the executable
 # hash is solana-verify's (trailing zero bytes removed), the number get-program-hash prints for the chain. test/burntickerVerifiedBuild.test.ts
-# keeps these lines equal to the table. burn_receipts: round 5 (source 089024ff, upgraded on mainnet 2026-10-15 ~19:57 Denver), built at
-# COMMIT. pair_curve: still round 4 (source 29f6f5de, 2026-10-12), built at PAIR_CURVE_COMMIT (above).
-declare -A ID SHA EXE
+# keeps these lines equal to the table. burn_receipts: the B-17 build (monorepo source 116ff5ad, built on the Mac 2026-10-21), built at
+# COMMIT. It is NOT deployed yet: mainnet still runs round 5 (source 089024ff, upgraded 2026-10-15 ~19:57 Denver), whose hash is
+# DEPLOYED[burn_receipts]; until the upgrade the comparison says PENDING for it. pair_curve: still round 4 (source 29f6f5de,
+# 2026-10-12), built at PAIR_CURVE_COMMIT (above).
+declare -A ID SHA EXE DEPLOYED
 ID[burn_receipts]="AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"
-SHA[burn_receipts]="cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290"
-EXE[burn_receipts]="152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821"
+SHA[burn_receipts]="faf072925c169ede89788e17c66cd6ab446fa332d47ae0362fca46dbb1a4e4f8"
+EXE[burn_receipts]="b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b"
+DEPLOYED[burn_receipts]="152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821"
 ID[pair_curve]="2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
 SHA[pair_curve]="8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2"
 EXE[pair_curve]="567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895"
@@ -99,7 +102,9 @@ for lib in "${LIBS[@]}"; do
   chain=$( { solana-verify get-program-hash -u "$RPC" "${ID[$lib]}" 2>/dev/null || true; } | tail -1 | awk '{print $NF}')
   [ "$sha" = "${SHA[$lib]}" ] && r1="same as the Mac build" || r1="DIFFERENT from the Mac build ${SHA[$lib]:0:16}…"
   [ "$exe" = "${EXE[$lib]}" ] && r2="same as the table" || r2="DIFFERENT from the table ${EXE[$lib]:0:16}…"
-  if [ "$exe" = "$chain" ]; then r3="MATCH: this build is the deployed program"; else r3="DIFFER: the deployed program is not this build"; STATUS=1; fi
+  if [ "$exe" = "$chain" ]; then r3="MATCH: this build is the deployed program"
+  elif [ -n "${DEPLOYED[$lib]:-}" ] && [ "$chain" = "${DEPLOYED[$lib]}" ] && [ "$exe" = "${EXE[$lib]}" ]; then r3="PENDING: mainnet still runs the earlier build; the upgrade to this build has not been deployed"; STATUS=1
+  else r3="DIFFER: the deployed program is not this build"; STATUS=1; fi
   printf '%-14s %-10s %-66s %s\n' "$lib" "sha256" "$sha" "$r1"
   printf '%-14s %-10s %-66s %s\n' "" "build" "$exe" "$r2"
   printf '%-14s %-10s %-66s %s\n' "" "mainnet" "${chain:-unread}" "$r3"

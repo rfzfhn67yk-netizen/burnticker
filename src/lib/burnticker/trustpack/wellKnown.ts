@@ -22,7 +22,7 @@ export function buildWellKnown(root = process.cwd()): Record<string, unknown> {
     const cl = op.clusters[c];
     return {
       status: cl.status,
-      programs: Object.fromEntries(vb.programs.map((p) => [p.library, { programId: p.programId, deployed: !!p.deployed[c], executableHash: p.deployed[c]?.hash ?? null, buildHash: p.builds[c].hash, upgradeAuthority: p.deployed[c]?.upgradeAuthority ?? cl.squads.vault }])),
+      programs: Object.fromEntries(vb.programs.map((p) => [p.library, { programId: p.programId, deployed: !!p.deployed[c], executableHash: p.deployed[c]?.hash ?? null, buildHash: p.builds[c].hash, /* B-17 (2026-10-21, additive): the build is newer than the bytes on chain and its upgrade has not been deployed */ ...(p.deployed[c]?.pendingUpgrade ? { upgradePending: true } : {}), upgradeAuthority: p.deployed[c]?.upgradeAuthority ?? cl.squads.vault }])),
       launchlabPlatform: cl.launchlabPlatform,
       squads: { vault: cl.squads.vault, multisig: cl.squads.multisig, threshold: cl.squads.threshold, timeLock: cl.squads.timeLock },
       wallets: Object.fromEntries(cl.wallets.map((w) => [w.role, w.pubkey])),

@@ -54,7 +54,7 @@ import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import { redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
 import { ata, curveOf, feeNftMintPda, fetchPair, pairPda, sidePoolAccounts, STATUS_NAMES, vaultPda } from "../src/lib/pairCurve/accounts.ts";
-import { buyIx, claimDeveloperFeeIx, burnLpIx, lockLpIx, registerSideFeeKeyIx, syncVaultWsolIxs, closePairIx, crankPair, createPairMintIxs, graduateIx, initPairIx, registerSideIx, sellIx, simulateAndSend, voidPairIx, type PairCurveContext, type SendResult } from "../src/lib/pairCurve/client.ts";
+import { buyIx, claimDeveloperFeeIx, burnLpIx, lockLpIx, registerSideFeeKeyIx, sideFeeKeyLaunchlabSlot, syncVaultWsolIxs, closePairIx, crankPair, createPairMintIxs, graduateIx, initPairIx, registerSideIx, sellIx, simulateAndSend, voidPairIx, type PairCurveContext, type SendResult } from "../src/lib/pairCurve/client.ts";
 import { initParamProblems, pairPhase, quoteBuy, quoteRedeem, quoteSell, sideCosts, DEFAULT_CURVE_SUPPLY, DEFAULT_VIRTUAL_TOKEN_AMOUNT } from "../src/lib/pairCurve/pricing.ts";
 
 const args = process.argv.slice(2);
@@ -217,7 +217,13 @@ if (CMD === "graduate") {
 if (CMD === "register") { const side = sideOf(); await send([registerSideIx({ registrar: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts })], { side: side === 0 ? "A" : "B" }); }
 if (CMD === "lock") { const side = sideOf(); await send([lockLpIx({ cranker: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts })], { side: side === 0 ? "A" : "B", feeNftMint: feeNftMintPda(pairKey, side).toBase58() }); }
 if (CMD === "burn-lp") { const side = sideOf(); await send([burnLpIx({ cranker: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster })], { side: side === 0 ? "A" : "B" }); }
-if (CMD === "fee-key") { const side = sideOf(); await send([registerSideFeeKeyIx({ payer: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts })], { side: side === 0 ? "A" : "B" }); }
+if (CMD === "fee-key") {
+  const side = sideOf();
+  // B-17: the launchlab_pool account only when the deployed burn_receipts is the B-17 build (its hash on chain)
+  const launchlabPoolSlot = await sideFeeKeyLaunchlabSlot({ connection, cluster, burnReceiptsProgramId: burnReceipts });
+  console.log(`register_fee_key account list: ${launchlabPoolSlot ? "B-17 (with launchlab_pool)" : "round 5 (without launchlab_pool)"}`);
+  await send([registerSideFeeKeyIx({ payer: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts, launchlabPoolSlot })], { side: side === 0 ? "A" : "B" });
+}
 if (CMD === "claim-lock-fees") {
   const side = sideOf();
   const s = sidePoolAccounts(cluster, pairKey, side, p.mints[side]);

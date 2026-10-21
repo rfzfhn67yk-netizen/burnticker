@@ -124,3 +124,38 @@ export function compareProgramToRecord(record: ProgramHashFact, chain: ChainProg
   if (record.slot !== null && chain.slot !== record.slot) out.push(`it was deployed at slot ${chain.slot}, and the record says slot ${record.slot}`);
   return out.length ? `The burn program on ${record.cluster} does not match config/burnticker/verified-build.json: ${out.join("; ")}. The trust pages name the recorded build until someone updates the record.` : null;
 }
+
+// ---- which register_fee_key account list the deployed program reads (B-17) ----
+
+/**
+ * The deployed burn_receipts builds whose register_fee_key has NO launchlab_pool account: round 5, source 089024ff, the bytes on mainnet
+ * (152929ce…) and on devnet (74659afd…) since 2026-10-15. Sending them the B-17 list fails at account validation (instructions.ts
+ * registerFeeKeyIx), so these hashes never get the extra account, whatever the verified-build record says.
+ */
+export const PRE_B17_PROGRAM_HASHES: ReadonlySet<string> = new Set([
+  "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821",
+  "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c",
+]);
+
+/**
+ * True when register_fee_key may carry the launchlab_pool account: the program's hash on chain equals the B-17 build's, which is the
+ * build recorded for the cluster in config/burnticker/verified-build.json once that table is updated for the B-17 upgrade, and is not a
+ * pre-B17 hash. Anything else (a pre-B17 program, a read that gave nothing, a hash nobody recorded) sends the round-5 list. Localnet
+ * always runs the checkout's own build, so it always gets the account.
+ */
+export function registerFeeKeyLaunchlabSlot(chainHash: string | null, cluster: Cluster | "localnet", vb: VerifiedBuild | null): boolean {
+  if (cluster === "localnet") return true;
+  if (!chainHash || PRE_B17_PROGRAM_HASHES.has(chainHash)) return false;
+  const built = vb?.programs.find((p) => p.library === "burn_receipts")?.builds[cluster]?.hash ?? null;
+  return built === chainHash;
+}
+
+/** registerFeeKeyLaunchlabSlot with the hash read from chain (readProgramDataHash); a failed read sends the round-5 list. */
+export async function registerFeeKeyLaunchlabSlotOnChain(r: AccountBytesReader, programId: string, cluster: Cluster | "localnet", toBase58: (b: Uint8Array) => string, o: { vb?: VerifiedBuild | null; root?: string } = {}): Promise<boolean> {
+  if (cluster === "localnet") return true;
+  let vb: VerifiedBuild | null = o.vb ?? null;
+  if (o.vb === undefined) { try { vb = loadVerifiedBuild(o.root ?? process.cwd()); } catch { vb = null; } }
+  let chain: ChainProgram | null = null;
+  try { chain = await readProgramDataHash(r, programId, toBase58); } catch { chain = null; }
+  return registerFeeKeyLaunchlabSlot(chain?.hash ?? null, cluster, vb);
+}

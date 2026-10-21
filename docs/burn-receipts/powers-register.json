@@ -4,7 +4,7 @@
     "name": "burn_receipts",
     "version": "0.1.0",
     "address_in_idl": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
-    "idl_sha256": "6159806ac9068a11351d01655ba4aef34c27bc22d5dc56a6fef3a53b44d4f4a9"
+    "idl_sha256": "19af88a2f8677a1833e4fc6a48bb286facf2dfd1db0215f0f5640305343c4c92"
   },
   "roles": {
     "anyone": "Anyone with a funded wallet. Pays only the transaction fee (and rent where noted); chooses no amounts.",

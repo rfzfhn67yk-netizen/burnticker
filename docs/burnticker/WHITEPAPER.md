@@ -2,8 +2,8 @@
 
 Memecoins got boring. Burnticker ties every coin to something that actually happens: a game, a vote, a number in the news. When it happens, tokens burn. No team, no roadmap, no vibes. Just a result and a receipt anyone can check. On Solana.
 
-> **Current specification, dated 2026-10-12.** This paper describes the design in the code at public commit
-> [af52b4a](https://github.com/rfzfhn67yk-netizen/burnticker/tree/af52b4a4ea0b80168a4c2e0f47a32045d1035c91). It includes the decisions
+> **Current specification, publish 111, 2026-10-21, public commit
+> [2b20cf7b](https://github.com/rfzfhn67yk-netizen/burnticker/tree/2b20cf7b8219a8d801d2f08ef05319847b0453f5).** It includes the decisions
 > of 2026-10-11, such as the winner-takes-the-burn rule for pairs in section 5.5 and the locked-liquidity fees in section 6. Live
 > deployment and readiness are not part of this paper. They are on [the trust page](https://burnticker.com/burnticker/trust) and at
 > [/api/burnticker/v1/current-status](https://burnticker.com/api/burnticker/v1/current-status). Where a section states a status, such as
@@ -12,7 +12,7 @@ Memecoins got boring. Burnticker ties every coin to something that actually happ
 > [whitepaper-2026-10-10.html](https://burnticker.com/whitepaper-2026-10-10.html).
 
 Draft 1 of this technical paper was written on 2026-10-10 from the code and documents of the Burnticker repository at commit
-`76b9caa`. This version is dated 2026-10-12. Every statement names its source file. Where a component does not exist, the paper says "not built" or "not done".
+`76b9caa`. This version is publish 111, 2026-10-21. Every statement names its source file. Where a component does not exist, the paper says "not built" or "not done".
 
 **Status on 2026-10-19.** The facts below were wrong or out of date in earlier versions of this paper and are corrected here. The table
 after this one is the status on 2026-10-10, kept for the record.
@@ -20,7 +20,7 @@ after this one is the status on 2026-10-10, kept for the record.
 | Fact | State on 2026-10-16 | Source |
 |---|---|---|
 | Mainnet deployment | `burn_receipts` (`AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM`) has run round 5 on mainnet since 2026-10-15 (Squads proposal 3; the bytes read back from chain hash to `152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821`). `pair_curve` (`2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN`) runs round 4, deployed on 2026-10-12. Both were first deployed on mainnet on 2026-10-11. | `docs/burnticker/VERIFIED-BUILD.md`, `docs/burnkeeper/evidence/mainnet-round5/` |
-| Upgrade authority and its time lock | The Squads 2-of-3 vault `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV`. Its time lock is **0** through launch week, by the owner's decision of 2026-10-11, so a 2-of-3 vote can act at once. The owner holds two of the three keys, so the owner alone meets the threshold. | `config/burnticker/current-status.json` (`squads`), the trust page (read from chain) |
+| Upgrade authority and its time lock | The Squads 2-of-3 vault `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV`. Its time lock is **0** today and no date is set to raise it to 48 hours, so a 2-of-3 vote can act at once. The owner holds two of the three keys, so the owner alone meets the threshold. | `config/burnticker/current-status.json` (`squads`), the trust page (read from chain) |
 | Operator treasury | The developer fee wallet `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5`, which the owner holds. It is compiled into the mainnet builds and is also the LaunchLab platform fee wallet. It is not the Squads vault, and the vault receives no fees. | `config/burnticker/transparency.json`, `config/burnticker/operator.json` |
 | Mainnet rehearsal coin | done: $REHEARSAL (mint `FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp`) was created on LaunchLab mainnet on 2026-10-11 under the real platform settings, and its first reading was signed. It has not burned, because its curve has not filled. Creator coins have launched on LaunchLab mainnet since 2026-10-13. | `config/burnticker/transparency.json` (`rehearsals`), `docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json` |
 | $DEFICIT | created on mainnet on 2026-10-13 (mint `AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj`); creator launches opened the same evening | `config/burnticker/current-status.json` (`deficit.launch`) |
@@ -382,7 +382,7 @@ on any instruction or signer that has no description.
 | Raise the burn-pool cap | platform authority (intended: the Squads vault) | raise only | 48 h, applied by anyone | cap sunset, set once at `initialize_platform`, ≤ 365 days and ≤ 2027-10-01 |
 | Clear the cranker allowlist | platform authority or any listed key | clear only, never add | none | allowlist lapses at the cap sunset or 90 days after `initialize_platform` |
 | Registration-policy switch | token admin | stranding only (§4.7) | 48 h, 14-day expiry, attester veto | cap sunset; `renounce_admin` |
-| Program upgrade | upgrade authority: the Squads 2-of-3 vault | can replace all code | **0** through launch week (owner decision 2026-10-11) | set to none after review (§9) |
+| Program upgrade | upgrade authority: the Squads 2-of-3 vault | can replace all code | **0** today; no date set yet | set to none after review (§9) |
 | LaunchLab platform admin (outside the program) | the key that created the platform | fee rates, wallets, `cpConfigId`, `platformCpCreator`, LP scales for launches not yet migrated | **none** | none: the admin cannot be transferred |
 
 **What has no instruction.** There is no withdraw, sweep, transfer, close or set-recipient instruction for the fee PDA, its token
@@ -709,10 +709,10 @@ match, and the trust page says so.
 
 ## 9. Governance and custody
 
-- **A Squads 2-of-3 vault holds the upgrade authority, with no time lock during launch week.** The mainnet vault is
+- **A Squads 2-of-3 vault holds the upgrade authority, with no time lock today.** The mainnet vault is
   `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV`. The owner holds two of its keys, so the owner alone meets the threshold, and a trusted
-  third party holds the third. Its time lock is 0 through launch week, by the owner's decision of 2026-10-11, so that deploy and config
-  fixes are not delayed. The program's own 48-hour timelocks come
+  third party holds the third. Its time lock is 0 today and no date is set to raise it to 48 hours, so a 2-of-3 vote can act at once
+  and deploy and config fixes are not delayed. The program's own 48-hour timelocks come
   on top. The commands are in `docs/burn-receipts/README.md` section 5.2.
 - **Upgrade authority plan.** Deploy the verifiable build, hand the authority to the Squads vault, and after review set it to none. That
   last step is the BPF Upgradeable Loader's `SetAuthority` with no new authority, executed as a Squads vault transaction. The runbook's
@@ -793,15 +793,17 @@ are still a draft (see the status on 2026-10-19 above).
   scan (`config/public-repo.denypatterns`) decide what leaves. The operator's trading code never leaves. The license is MIT, with brand
   assets excluded. Every publish adds the commit, program hash, IDL hash and allowlist hash to `docs/burnticker/CHANGELOG.md`.
 - **Powers Register.** It is generated from the IDL and published as `docs/burn-receipts/powers-register.{md,json}`.
-- **Logs.** The decision log (`docs/burnticker/decisions.md`) is append-only. The incident log (`docs/burnticker/incidents/LOG.md`) has
-  no incidents recorded. Review reports are in `docs/burnticker/reviews/`.
+- **Logs.** The decision log (`docs/burnticker/decisions.md`) is append-only. The incident log (`docs/burnticker/incidents/LOG.md`) lists five
+  incidents; see [/burnticker/incidents](https://burnticker.com/burnticker/incidents). Review reports are in `docs/burnticker/reviews/`.
 - **Wallet list.** The transparency file (`config/burnticker/transparency.json`) names every role: operations, deployer, keeper,
   developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading-bot
-  wallets on other machines. Their only trade in a platform coin is the 0.1 SOL of $REHEARSAL at its creation, which the same file
-  discloses. The mainnet keys are set, and each one is listed there with its role.
+  wallets on other machines. Their only trades in a platform coin are the 0.1 SOL of $REHEARSAL at its creation and the operator's own
+  wallet's 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15, which the same file discloses. The operator has not yet
+  written down why that test was made. The mainnet keys are set, and each one is listed there with its role.
 - **Policies.** Posts on X are not deleted, and corrections go in the same thread with the receipt. There is no paid promotion and no
-  talk of what any coin trades at. Nothing is described as forthcoming. The platform buys no coin; the one disclosed exception is the
-  0.1 SOL test purchase of $REHEARSAL when it was created.
+  talk of what any coin trades at. Nothing is described as forthcoming. The platform buys no coin; the disclosed exceptions are the
+  0.1 SOL test purchase of $REHEARSAL when it was created and the operator's own wallet's 0.10 SOL test purchase and immediate sale of
+  $SEAWIN on 2026-10-15. The operator has not yet written down why that test was made.
 - **The operator also runs trading bots.** Each bot refuses any platform coin by mint and by ticker. The check is in code and fails
   closed (`src/lib/ownTokens.ts`, which reads `config/own-tokens.json`). Both files are published.
 - **The operator.** Burnticker is run by one independent operator in the United States. The contact address is contact@burnticker.com,

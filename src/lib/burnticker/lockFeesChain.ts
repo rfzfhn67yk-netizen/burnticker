@@ -1,10 +1,13 @@
 import { type Connection, type Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { decodeLockedLiquidity, fetchFeeKeyRecord, fetchTokenConfig } from "@/lib/burnReceipts/accounts";
-import { CPMM_PROGRAM_ID, LAUNCHLAB_VAULT_AUTH, NATIVE_MINT, TOKEN_PROGRAM_ID, type Cluster } from "@/lib/burnReceipts/constants";
+import { CPMM_PROGRAM_ID, LAUNCHLAB_VAULT_AUTH, TOKEN_PROGRAM_ID, type Cluster } from "@/lib/burnReceipts/constants";
 import { fetchCpmmPool, type CpmmPool } from "@/lib/burnReceipts/cpmm";
 import { anchorErrorName, assertClusterAllowed, memoFromTransaction, signTransaction, type ProgramContext } from "@/lib/burnReceipts/crank";
 import { claimLockFeesIx, registerFeeKeyIx, registerPoolIx } from "@/lib/burnReceipts/instructions";
-import { cpmmPoolPda, feeKeysPda as programFeeKeysPda, lockedLiquidityPda } from "@/lib/burnReceipts/pda";
+import { feeKeysPda as programFeeKeysPda, lockedLiquidityPda } from "@/lib/burnReceipts/pda";
+import { findMigrationPool } from "@/lib/burnReceipts/migrationPool";
+import { registerFeeKeyLaunchlabSlotOnChain } from "@/lib/burnticker/programHash";
+import type { VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
 import { factsOfMemo, operatorTreasuryFor, parseLockFeesMemo, type LockFeeClaimFacts, type LockFeesClient, type LockFeesPort, type LockFeesState } from "@/lib/burnticker/lockFees";
 
@@ -34,6 +37,8 @@ export interface ChainLockFeesOpts {
   /** Pays the fees (and two ATA rents it gets back). Null = read-only. */
   payer: Keypair | null;
   allowMainnet?: boolean;
+  /** The verified-build record register_fee_key's account list is decided against; omitted = read config/burnticker/verified-build.json. */
+  verifiedBuild?: VerifiedBuild | null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -86,12 +91,20 @@ export class ChainLockFees implements LockFeesClient {
       if (policy === 1) return "fixed";
       // round 2: policy 0 registers the Fee Key BEFORE register_pool — on the migration pool PDA (cpConfigId + WSOL/mint) until then
       const rec0 = await fetchFeeKeyRecord(c, o.programId, mint);
-      const poolKey = rec0?.record.pool ?? (cfg.config.poolRegistered ? cfg.config.cpmm_pool : policy === 0 ? cpmmPoolPda(CPMM_PROGRAM_ID[o.cluster], cfg.config.ll_cp_config, NATIVE_MINT, mint) : null);
+      // B-17 / HB-167: the migration pool is read from the Fee Key's own lock record (any AmmConfig LaunchLab used); the pinned and
+      // current-tier PDAs are only a hint, and a pool there counts only with the fee PDA as its creator (never a squatter's pool).
+      const mig = !rec0 && !cfg.config.poolRegistered && policy === 0 ? await findMigrationPool(c, o.cluster, o.programId, cfg.config, mint) : null;
+      if (mig && mig.status === "not-migrated") return null;
+      const poolKey = rec0?.record.pool ?? (cfg.config.poolRegistered ? cfg.config.cpmm_pool : mig?.status === "found" ? mig.pool : null);
       if (!poolKey) return null;
       let pool: CpmmPool;
       try { pool = await fetchCpmmPool(c, poolKey, CPMM_PROGRAM_ID[o.cluster]); } catch { return null; }   // no pool yet = not graduated
       const expectedLocker = policy === 0 ? LAUNCHLAB_VAULT_AUTH[o.cluster].toBase58() : pool.poolCreator.toBase58();
       const base = { expectedLocker, poolRegistered: cfg.config.poolRegistered, policy };
+      if (mig?.status === "found") {
+        if (mig.via === "fee-key") return { ...base, pool, feeNftMint: mig.feeNftMint, registered: false, lockedLp: mig.lockedLp, owner: keys.toBase58(), lockedLiquidity: mig.lockedLiquidity.toBase58(), locker: mig.locker.toBase58() };
+        return { ...base, pool, feeNftMint: null, registered: false, lockedLp: null, owner: null, lockedLiquidity: null, locker: null };
+      }
       const rec = rec0;
       if (rec) {
         const nft = rec.record.fee_nft_mint;
@@ -147,7 +160,10 @@ export class ChainLockFees implements LockFeesClient {
         const at = await locate();
         if (!at || at === "fixed") throw new Error("register_fee_key: the coin has no graduated pool yet");
         if (!at.feeNftMint) throw new Error("register_fee_key: no Fee Key for this pool is held by the fee-keys PDA");
-        return sign([registerFeeKeyIx({ programId: o.programId, payer: (await need()).publicKey, mint, pool: at.pool.address, feeNftMint: at.feeNftMint, cluster: o.cluster, lpMint: at.pool.lpMint })]);
+        // B-17: the launchlab_pool account only when the deployed program is the B-17 build (its hash on chain); the round-5 program
+        // refuses the longer account list
+        const launchlabPoolSlot = await registerFeeKeyLaunchlabSlotOnChain({ accountBytes: async (a) => (await c.getAccountInfo(new PublicKey(a), "confirmed"))?.data ?? null }, o.programId.toBase58(), o.cluster, (b) => new PublicKey(b).toBase58(), { vb: o.verifiedBuild });
+        return sign([registerFeeKeyIx({ programId: o.programId, payer: (await need()).publicKey, mint, pool: at.pool.address, feeNftMint: at.feeNftMint, cluster: o.cluster, lpMint: at.pool.lpMint, launchlabPoolSlot })]);
       },
       async buildRegisterPool() {
         const at = await locate();

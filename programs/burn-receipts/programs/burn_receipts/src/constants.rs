@@ -347,6 +347,10 @@ pub const REQUIRED_LL_PLATFORM_SCALE_PPM: u64 = 1_000_000;
 ///   PlatformConfig: cpConfigId @688 (944 bytes)
 /// Pinned against bytes encoded by the SDK's own layouts (fixtures/launchlab-accounts-sdk.json, tests/launchlab.rs).
 pub const LAUNCHLAB_POOL_SEED: &[u8] = b"pool";
+/// LaunchpadPool.status (u8 after epoch u64 + bump u8; SDK layout.ts LaunchpadPool): 0 trading on the curve, 1 waiting for migration,
+/// 2 migrated (raydium-cpi launch-cpi states.rs PoolStatus Fund / Migrate / Trade). B-17 / HB-167.
+pub const LL_POOL_STATUS: usize = 17;
+pub const LL_POOL_STATUS_MIGRATED: u8 = 2;
 pub const LL_POOL_MIGRATE_TYPE: usize = 20;
 pub const LL_POOL_PLATFORM_ID: usize = 173;
 pub const LL_POOL_MINT_A: usize = 205;

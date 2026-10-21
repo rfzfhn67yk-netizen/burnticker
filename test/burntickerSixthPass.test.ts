@@ -178,13 +178,13 @@ describe("B-16: honest copy", () => {
   });
   test("(e) 'never trades' carries the disclosed test purchase in the terms, the press page and the fee ledger note", () => {
     clean(NEVER_TRADES_SENTENCE);
-    assert.equal(NEVER_TRADES_SENTENCE, "Apart from one disclosed test purchase of $REHEARSAL (0.1 SOL, when it was created), the platform never trades.");
+    assert.match(NEVER_TRADES_SENTENCE, /^Apart from two disclosed tests \(0\.1 SOL of \$REHEARSAL at creation, and a 0\.10 SOL purchase and immediate sale of \$SEAWIN minutes after it was created\), the platform never trades\. (?:The \$SEAWIN test was made |The operator has not yet written down why that test was made\.)/);   // ninth pass B-26 / HS-95
     assert.ok(TERMS_SECTIONS.some((s) => s.paragraphs.some((p) => p.startsWith(NEVER_TRADES_SENTENCE))));
     const press = PRESS_COPY.not.find((x) => /exchange/.test(x))!;
     clean(press);
-    assert.equal(press, "Burnticker is not an exchange, and it never takes an order. Apart from one disclosed test purchase of $REHEARSAL (0.1 SOL, when it was created), it never trades a coin.");
+    assert.match(press, /^Burnticker is not an exchange, and it never takes an order\. Apart from two disclosed tests \(0\.1 SOL of \$REHEARSAL at creation, and a 0\.10 SOL purchase and immediate sale of \$SEAWIN minutes after it was created\), it never trades a coin\. (?:The \$SEAWIN test was made |The operator has not yet written down why that test was made\.)/);
     const ledger = read("config/burnticker/expenses.json");
-    assert.match(ledger, /Apart from one disclosed test purchase of \$REHEARSAL \(0\.1 SOL, when it was created\), the operator never trades any coin, including the platform's own\./);
+    assert.match(ledger, /Apart from two disclosed tests \(0\.1 SOL of \$REHEARSAL at creation, and a 0\.10 SOL purchase and immediate sale of \$SEAWIN on 2026-10-15\), the operator never trades a coin launched here\. (?:The \$SEAWIN test was made |The operator has not yet written down why that test was made\.)/);
     assert.doesNotMatch(ledger, /never buys any coin/);
     const team = GUARDRAIL_DETAIL["no team buy"].text;
     assert.doesNotMatch(team, /The one exception is \$REHEARSAL, a disclosed test coin/, "the exception sentence is not printed twice in a row");

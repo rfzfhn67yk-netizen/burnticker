@@ -40,12 +40,12 @@ describe("LA7-4: the review's suggested ticker and suggested name move together"
     const { coins } = reviewTickerChecks([{ side: "A" as const, ticker: gen.ticker, suggestedTicker: gen.ticker, suggestedName: gen.name }], rule, w.d);
     assert.equal(coins[0].suggestedTicker, gen.ticker); assert.equal(coins[0].suggestedName, gen.name);
   });
-  test("reviewer D: the OpenAPI review schema and the API doc name the pair, and the page uses the server's name first", async () => {
+  test("reviewer D: the OpenAPI review schema and the API doc name the pair, and the page uses the server's name unless it is the stale one (HB-207)", async () => {
     const fs = await import("node:fs"), path = await import("node:path");
     const root = path.join(import.meta.dirname, "..");
     const spec = fs.readFileSync(path.join(root, "src/lib/burnticker/api/spec.ts"), "utf8");
     assert.match(spec, /suggestedName: \{ \.\.\.nstr, description: "the name that goes with suggestedTicker/);
     assert.match(fs.readFileSync(path.join(root, "docs/burnticker/api.md"), "utf8"), /`suggestedTicker` and `suggestedName`/);
-    assert.match(fs.readFileSync(path.join(root, "src/app/burnticker/launch/page.tsx"), "utf8"), /reviewNames\.current\[to\.toUpperCase\(\)\] \?\? hazardAlternateName/);
+    assert.match(fs.readFileSync(path.join(root, "src/app/burnticker/launch/page.tsx"), "utf8"), /pairedSwapName\(ruleShown, \{ ticker: t\.ticker, name: t\.name \}, to\) \?\? \(rn && rn !== t\.name \? rn : null\) \?\? t\.name/);
   });
 });

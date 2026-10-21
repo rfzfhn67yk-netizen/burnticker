@@ -6,7 +6,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { neverBuysExceptions, neverBuysScopeLine, runNeverBuys, type NeverBuysException } from "@/lib/burnticker/trustpack/neverBuys";
+import { neverBuysExceptions, neverBuysScopeLine, neverBuysWallets, runNeverBuys, type NeverBuysException } from "@/lib/burnticker/trustpack/neverBuys";
 import { neverBuysView, NEVER_BUYS_STALE_MS } from "@/lib/burnticker/trustpack/api";
 import { NEVER_BUYS_STATUS } from "@/lib/burnticker/trustpack/copy";
 import type { Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
@@ -17,6 +17,11 @@ const MINT = "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F", ATA = "4VcsuCXw3sQq
 const REHEARSAL = "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp", RATA = "9t2bzymyAaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const BUY = { message: { accountKeys: [OP, "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6"], header: { numRequiredSignatures: 1 }, instructions: [{ programIdIndex: 1 }] } };
 const bal = (mint: string, amt: string) => [{ mint, owner: OP, uiTokenAmount: { amount: amt } }];
+// publish 112: the operator's own wallet's $SEAWIN test (transparency.json operatorTrades[0])
+const OWN = "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs", SEAWIN = "Bg545NmTcascUHGpH8HcJpTgrasUqFZEDNhYhuTbBURN", SATA = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+// the two signatures come from transparency.json (a literal 88-character base58 string trips the public repository's leak scan)
+const SEA_TRADE = (JSON.parse(fs.readFileSync("config/burnticker/transparency.json", "utf8")) as { operatorTrades: { ticker: string; buyTx: string; sellTx: string }[] }).operatorTrades.find((t) => t.ticker === "SEAWIN")!;
+const SEA_BUY = SEA_TRADE.buyTx, SEA_SELL = SEA_TRADE.sellTx;
 const EXC: NeverBuysException[] = [{ symbol: "REHEARSAL", mint: REHEARSAL, note: "the operator's disclosed $REHEARSAL test purchase" }];
 
 /** A scripted RPC: per wallet, its coin accounts (mint, amount) and their signatures, its own recent signatures, and the transactions. */
@@ -80,8 +85,41 @@ describe("ACC-02: the monitor says what it checked, and never 'clear' on partial
     const red = await runNeverBuys({ ...base, mints: [...base.mints, { symbol: "REHEARSAL", mint: REHEARSAL }], wallets: [{ role: "keeper", pubkey: OP }], rpc: rpc({ accounts: { [OP]: [{ pubkey: RATA, mint: REHEARSAL, amount: "123456", sigs: ["rbuy"] }] }, txs }) });
     assert.equal(red.status, "red");
   });
+  test("publish 112: the listed $SEAWIN trade by 8sJf… is disclosed; an unlisted purchase of the same coin stays red", async () => {
+    const own = (sig: string, pre: string, post: string, sol: [number, number]) => ({ blockTime: Date.parse("2026-10-15T02:46:23Z") / 1000, transaction: { message: { accountKeys: [OWN, "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"], header: { numRequiredSignatures: 1 }, instructions: [{ programIdIndex: 1 }] } }, meta: { err: null, fee: 5000, preBalances: [sol[0], 1], postBalances: [sol[1], 1], preTokenBalances: [{ mint: SEAWIN, owner: OWN, uiTokenAmount: { amount: pre } }], postTokenBalances: [{ mint: SEAWIN, owner: OWN, uiTokenAmount: { amount: post } }] } });
+    const txs: Record<string, unknown> = { [SEA_BUY]: own(SEA_BUY, "0", "3484436310353", [1_000_000_000, 898_495_000]), [SEA_SELL]: own(SEA_SELL, "3484436310353", "0", [898_495_000, 996_490_000]), later: own("later", "0", "1000000", [996_490_000, 946_490_000]) };
+    const exceptions = neverBuysExceptions();
+    const sea = exceptions.find((x) => x.symbol === "SEAWIN")!;
+    assert.deepEqual([sea.mint, sea.wallet, sea.signatures], [SEAWIN, OWN, [SEA_BUY, SEA_SELL]]);
+    // the monitor reads the trade's wallet even though operator.json does not list it
+    const wallets = neverBuysWallets([{ role: "keeper", pubkey: OP }, { role: "todo", pubkey: null }], exceptions);
+    assert.deepEqual(wallets, [{ role: "keeper", pubkey: OP }, { role: "operator-own", pubkey: OWN }]);
+    // the listed history: bought, then sold to zero; the coin is scanned although no other list names it
+    const ok = await runNeverBuys({ ...base, wallets, exceptions, rpc: rpc({ accounts: { [OWN]: [{ pubkey: SATA, mint: SEAWIN, amount: "0", sigs: [SEA_SELL, SEA_BUY] }] }, txs }) });
+    assert.ok(ok.mints.some((m) => m.mint === SEAWIN));
+    assert.equal(ok.status, "explained"); assert.equal(ok.line, NEVER_BUYS_STATUS.explained);
+    assert.equal(ok.acquisitions.length, 1);
+    assert.deepEqual([ok.acquisitions[0].wallet, ok.acquisitions[0].signature, ok.acquisitions[0].how], [OWN, SEA_BUY, "acquired"]);
+    assert.match(ok.acquisitions[0].explainedBy!, /disclosed exception: the operator's own wallet's disclosed \$SEAWIN test purchase on 2026-10-15/);
+    assert.match(neverBuysScopeLine(ok), /The disclosed \$SEAWIN test purchase by the wallet 8sJfoY6X… is a named exception for its own transactions only/);
+    assert.deepEqual(lintCopy(neverBuysScopeLine(ok)).hits, []);
+    // a later purchase of the same coin by the same wallet is not listed: red
+    const later = await runNeverBuys({ ...base, wallets, exceptions, rpc: rpc({ accounts: { [OWN]: [{ pubkey: SATA, mint: SEAWIN, amount: "0", sigs: ["later", SEA_SELL, SEA_BUY] }] }, txs }) });
+    assert.equal(later.status, "red");
+    assert.deepEqual(later.acquisitions.filter((a) => !a.explainedBy).map((a) => a.signature), ["later"]);
+    // the listed signature from a different wallet does not borrow the disclosure
+    const other = { ...sea, wallet: OP2 };
+    const wrong = await runNeverBuys({ ...base, wallets: [{ role: "operator-own", pubkey: OWN }], exceptions: [other], rpc: rpc({ accounts: { [OWN]: [{ pubkey: SATA, mint: SEAWIN, amount: "0", sigs: [SEA_BUY] }] }, txs }) });
+    assert.equal(wrong.status, "red");
+    // the trade is not a coin-wide exception: holding $SEAWIN now is still a finding
+    const held = await runNeverBuys({ ...base, wallets, exceptions, rpc: rpc({ accounts: { [OWN]: [{ pubkey: SATA, mint: SEAWIN, amount: "5", sigs: [SEA_BUY] }] }, txs }) });
+    assert.equal(held.status, "holding");
+    // the keeper and the trustpack script both add the trade's wallet
+    assert.match(fs.readFileSync("scripts/burnticker-keeper.mts", "utf8"), /const wallets = neverBuysWallets\(op\.wallets, exceptions\);/);
+    assert.match(fs.readFileSync("scripts/burnticker-trustpack.mts", "utf8"), /const wallets = neverBuysWallets\(cl\.wallets, exceptions\);/);
+  });
   test("the keeper reads the exception from transparency.json; Trust shows the scope; a stale report is not shown as current", async () => {
-    assert.deepEqual(neverBuysExceptions().map((x) => [x.symbol, x.mint]), [["REHEARSAL", REHEARSAL]]);
+    assert.deepEqual(neverBuysExceptions().map((x) => [x.symbol, x.mint]), [["REHEARSAL", REHEARSAL], ["SEAWIN", SEAWIN]]);
     const keeper = fs.readFileSync("scripts/burnticker-keeper.mts", "utf8");
     assert.match(keeper, /const exceptions = cluster === "mainnet" \? neverBuysExceptions\(process\.cwd\(\)\) : \[\];/);
     const r = await runNeverBuys({ ...base, wallets: [{ role: "keeper", pubkey: OP }], rpc: rpc({}) });

@@ -41,7 +41,7 @@ export const WHITEPAPER_HTML = "site/burnticker/whitepaper.html";
  * a frozen archive: docs/burnticker/WHITEPAPER-2026-10-10.md is that file byte for byte (test/burntickerWebsite12.test.ts pins its
  * SHA-256), rendered at whitepaper-2026-10-10.html under an archive banner the renderer adds. The archive's text is never edited.
  */
-export const CURRENT_SPEC = { date: "2026-10-12", publicCommit: "af52b4a4ea0b80168a4c2e0f47a32045d1035c91" };
+export const CURRENT_SPEC = { date: "2026-10-21", publish: 111, publicCommit: "2b20cf7b8219a8d801d2f08ef05319847b0453f5" };   // ninth pass HS-100
 export const ARCHIVE_MD = "docs/burnticker/WHITEPAPER-2026-10-10.md";
 export const ARCHIVE_HTML = "site/burnticker/whitepaper-2026-10-10.html";
 export const ARCHIVE_SHA256 = "3c0f0d9aa915fe19a3b2e8ebe8cd8bd11ba36e0f6c454dafd44283e476a7a78b";

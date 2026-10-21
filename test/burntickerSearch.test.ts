@@ -77,7 +77,7 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
 
   test("'Eagles win' → a team card (the NFL schedule needs the licensed key: said, not faked); 'US debt rises $1B' → Treasury; 'Detroit high above 90' → NWS; 'WIF vs SHIB' → the Coin vs Coin tile", async () => {
     const eagles = await universalSearch("Eagles win", deps());
-    assert.equal(eagles.cards[0].venue, "espn"); assert.equal(eagles.cards[0].rule?.series, "espn.team:nfl-PHI.21-win-s2026", "this season by default, the team pinned by its ESPN id"); assert.equal(eagles.cards[0].venueLabel, "On-chain payout · league's official feed"); assert.doesNotMatch(eagles.cards[0].settlement, /ESPN/);
+    assert.equal(eagles.cards[0].venue, "espn"); assert.equal(eagles.cards[0].rule?.series, "espn.team:nfl-PHI.21-win-s2026", "this season by default, the team pinned by its ESPN id"); assert.equal(eagles.cards[0].venueLabel, "On-chain payout · licensed final score"); assert.doesNotMatch(eagles.cards[0].settlement, /ESPN/);
     // launch audit 5 L05: said in plain words (no env-var name in user copy), and never a fallback to ESPN
     // website-15 item 8: the card says "Next game: not available." and nothing else about the feed; the reason goes to the log
     assert.equal(eagles.cards[0].scheduleUnavailable, true, "no TheSportsDB key on this host: no NFL schedule, and never a fallback to ESPN"); assert.equal(eagles.cards[0].note, null);

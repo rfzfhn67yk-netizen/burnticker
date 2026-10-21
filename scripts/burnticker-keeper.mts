@@ -82,7 +82,7 @@ import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 import { compareProgramToRecord, hostProgramRound, programHashFact, programHashSourceLine, readProgramDataHash, webDispersal, writeKeeperDispersal } from "../src/lib/burnticker/programHash.ts";
 import { denverDate } from "../src/lib/burnticker/alerts.ts";
 // NEVER-BUYS MONITOR (prelaunch audit 2026-10-18 A-6): the keeper runs it once a day
-import { evidenceSignatures, NEVER_BUYS_FILE, neverBuysExceptions, neverBuysMints, runNeverBuys } from "../src/lib/burnticker/trustpack/neverBuys.ts";
+import { evidenceSignatures, NEVER_BUYS_FILE, neverBuysExceptions, neverBuysMints, neverBuysWallets, runNeverBuys } from "../src/lib/burnticker/trustpack/neverBuys.ts";
 import { loadOperator } from "../src/lib/burnticker/trustpack/operator.ts";
 import { jsonRpc } from "../src/lib/burnticker/trustpack/receiptCheck.ts";
 import { publishSite, toJson } from "../src/lib/burnKeeper/statusPage.ts";
@@ -352,10 +352,11 @@ function neverBuysCheck(now: number): void {
       const op = loadOperator(process.cwd()).clusters[cluster];
       let deficit: { symbol: string; mint: string }[] = [];
       try { const st = JSON.parse(fs.readFileSync(path.join("config", "burnticker", "current-status.json"), "utf8")) as { deficit?: { launch?: { mint?: string } } }; if (cluster === "mainnet" && st.deficit?.launch?.mint) deficit = [{ symbol: "DEFICIT", mint: st.deficit.launch.mint }]; } catch { deficit = []; }
-      const wallets = op.wallets.filter((w) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.pubkey)).map((w) => ({ role: w.role, pubkey: w.pubkey }));
       const mints = neverBuysMints(registry.tokens(), cluster, op.platformMints, deficit);
-      // continuous audit 2026-10-19 ACC-02: the disclosed mainnet test coins (transparency.json `rehearsals`) are in scope, as named exceptions
+      // continuous audit 2026-10-19 ACC-02: the disclosed mainnet test coins (transparency.json `rehearsals`) are in scope, as named exceptions;
+      // publish 112: so is each listed operator trade (`operatorTrades`, the $SEAWIN test), scoped to its wallet and its two transactions
       const exceptions = cluster === "mainnet" ? neverBuysExceptions(process.cwd()) : [];
+      const wallets = neverBuysWallets(op.wallets, exceptions);
       const r = await runNeverBuys({ rpc: jsonRpc(RPC, fetch, { attempts: 4, minIntervalMs: 150 }), cluster, wallets, mints, evidence: evidenceSignatures(process.cwd()), now, exceptions });
       publishSite(SITE, { [NEVER_BUYS_FILE]: toJson(r) });
       neverBuysDay = denverDate(now);

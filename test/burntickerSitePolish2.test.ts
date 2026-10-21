@@ -212,7 +212,8 @@ describe("the private review: league pages and the footer", () => {
   });
   test("the footer keeps every disclosure as one line and a link, the same on the app and the static pages", () => {
     assert.ok(USE_OF_FEES.startsWith(`${DEV_FEE_LINE} `), "the fee row is the use-of-fees paragraph's first line");
-    assert.ok(DEV_FEE_LINE.length < USE_OF_FEES.length / 2);
+    // ninth pass B-26: the use-of-fees paragraph lost its $REHEARSAL clause (the tests are named on the test-coins page), so the footer line is now just over half of it
+    assert.ok(DEV_FEE_LINE.length < USE_OF_FEES.length * 0.55);
     const footer = read("src/app/burnticker/_components/SiteFooter.tsx");
     assert.doesNotMatch(footer, /\{USE_OF_FEES\}/, "the long paragraph lives on the Trust page");
     assert.doesNotMatch(footer, /new Date\(\)/);

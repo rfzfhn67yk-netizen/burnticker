@@ -68,6 +68,13 @@ const tradersPayPct = (t: CpmmTier): string => `${(t.tradeFeeRate + t.creatorFee
 export const TIER_14_CUTOVER_WORDS = utcDateTime(CPMM_TIER_14_SINCE);
 /** The trust page's line on who decides the tier (eighth pass B-23): the platform setting the LaunchLab admin wallet holds. */
 export const FEE_TIER_DECIDER_LINE = "The tier a coin graduates into is decided at graduation by the LaunchLab platform setting, which the platform admin wallet controls.";
+/**
+ * Ninth pass B-27 / HB-209 / HS-96: what the burn program deployed today does with a graduated coin's pool. Its register_fee_key accepts
+ * only the tier pinned when the coin was made (tier 9), so it cannot register the tier-14 pools LaunchLab now makes. The trust page says
+ * so while the deployed mainnet program is a pre-B17 build (programHash.ts PRE_B17_PROGRAM_HASHES), and drops it once the record in
+ * config/burnticker/verified-build.json names the upgraded hash.
+ */
+export const DEPLOYED_TIER_PIN_LINE = "The burn program running today accepts only the tier a coin recorded when it was made, so it would not yet register these coins' tier-14 pools. A program upgrade that accepts the tier LaunchLab actually uses is prepared and not yet deployed; until it is, a coin that graduates collects its fees but does not burn.";
 /** "19 October 2026": the cutover's day, for the HS-71 sentence. */
 export const TIER_14_DATE_WORDS = TIER_14_CUTOVER_WORDS.replace(/,.*$/, "");
 

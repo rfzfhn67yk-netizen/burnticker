@@ -27,7 +27,7 @@ test("F-13: the whitepaper names the developer fee wallet as the operator treasu
     assert.match(s, /8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5/, f);
     assert.match(s, /round 5 on mainnet since 2026-10-15/, f);
     assert.doesNotMatch(s, /\| 48 h Squads time lock \|/, f);
-    assert.match(s, /time lock is (\*\*0\*\*|<strong>0<\/strong>) through launch week/, f);
+    assert.match(s, /time lock is (\*\*0\*\*|<strong>0<\/strong>) today and no date is set to raise it to 48 hours/, f);   // ninth pass HS-100
     assert.doesNotMatch(s, /On mainnet the treasury is not compiled in yet/, f);
     assert.doesNotMatch(s, /48-hour lock is planned|48 h planned from/, `${f}: no forward-looking promise (review)`);
   }

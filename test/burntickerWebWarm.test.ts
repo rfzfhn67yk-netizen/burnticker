@@ -39,15 +39,15 @@ describe("HB-138: the web warms its home and coins memos at start", () => {
   test("on listen it asks itself for both memos, at once, and logs one line with each answer", async () => {
     const out = await run({ PORT: String(freePort()) }, 200);
     assert.match(out, /LISTENING/);
-    assert.match(out, /warm: building the home and coins memos \(\/api\/burnticker\/home, \/api\/burnticker\/tokens\) on http:\/\/127\.0\.0\.1:\d+/);
-    const m = /warm: home 200 in (\d+) ms, tokens 200 in (\d+) ms \(10 s bound\)/.exec(out);
+    assert.match(out, /warm: building the home, coins and trust memos \(\/api\/burnticker\/home, \/api\/burnticker\/tokens, \/api\/burnticker\/v1\/trust\) on http:\/\/127\.0\.0\.1:\d+/);
+    const m = /warm: home 200 in (\d+) ms, tokens 200 in (\d+) ms, v1\/trust 200 in (\d+) ms \(10 s bound\)/.exec(out);
     assert.ok(m, out);
-    assert.ok(Number(m[1]) < 1_000 && Number(m[2]) < 1_000, "both asked at once (about 200 ms each, not 400 one after the other)");
+    assert.ok(Number(m[1]) < 1_000 && Number(m[2]) < 1_000 && Number(m[3]) < 1_000, "all asked at once (about 200 ms each, not 400 one after the other)");
   });
 
   test("past the bound it stops waiting and says the build goes on; BT_WEB_WARM=0 turns it off; another port is left alone", async () => {
     const slow = await run({ PORT: String(freePort()), BT_WEB_WARM_WAIT_MS: "300" }, 900);
-    assert.match(slow, /warm: home still building after 0 s, tokens still building after 0 s \(0 s bound; the first visitors join that build\)/);
+    assert.match(slow, /warm: home still building after 0 s, tokens still building after 0 s, v1\/trust still building after 0 s \(0 s bound; the first visitors join that build\)/);
     const off = await run({ PORT: String(freePort()), BT_WEB_WARM: "0" });
     assert.match(off, /LISTENING/); assert.doesNotMatch(off, /warm:/);
     // the server listens on PORT; a preload whose PORT names another port (an internal server) does nothing
@@ -67,10 +67,11 @@ describe("HB-138: the web warms its home and coins memos at start", () => {
     }) as unknown as typeof fetch;
     const r = await warm().warmUp({ base: "http://127.0.0.1:1", fetchImpl, waitMs: 1_000, log: (s) => lines.push(s) });
     assert.deepEqual(lines, [r.line]);
-    assert.match(r.line, /^warm: home failed \(connect ECONNREFUSED\), tokens still building after 1 s \(1 s bound; the first visitors join that build\)$/);
+    assert.match(r.line, /^warm: home failed \(connect ECONNREFUSED\), tokens still building after 1 s, v1\/trust still building after 1 s \(1 s bound; the first visitors join that build\)$/);
     const ok = await warm().warmUp({ base: "http://x", fetchImpl: (async () => new Response("{}", { status: 503 })) as unknown as typeof fetch, waitMs: 1_000, log: () => {} });
-    assert.match(ok.line, /^warm: home 503 in \d+ ms, tokens 503 in \d+ ms \(1 s bound\)$/);
-    assert.deepEqual(warm().WARM_PATHS, ["/api/burnticker/home", "/api/burnticker/tokens"]);
+    assert.match(ok.line, /^warm: home 503 in \d+ ms, tokens 503 in \d+ ms, v1\/trust 503 in \d+ ms \(1 s bound\)$/);
+    // HB-211: the trust answer is warmed at start too
+    assert.deepEqual(warm().WARM_PATHS, ["/api/burnticker/home", "/api/burnticker/tokens", "/api/burnticker/v1/trust"]);
   });
 
   test("the loopback address: a wildcard bind is asked on 127.0.0.1, an IPv6 address is bracketed, a pipe has none", () => {

@@ -65,7 +65,12 @@ describe("the statement text", () => {
     assert.match(lines[88], signedNow ? /"signature": "[1-9A-HJ-NP-Za-km-z]{80,96}"/ : /"signature": null/);
     assert.deepEqual([signedMessageView(op).status, signedMessageView(op).verified], signedNow ? ["signed", true] : ["todo", null]);
     assert.match(read("docs/burnticker/TODO-OWNER.md"), signedNow ? /Signed operator statement — DONE \d{4}-\d{2}-\d{2}/ : /Signed operator statement — RE-SIGN PENDING/);
-    assert.match(read("config/burnticker/operator.json"), /with one exception: \$REHEARSAL, a test coin/);
+    // publish 112: the never-acquire sentence names both disclosed tests, and no longer says "one exception"
+    assert.match(m, /with two exceptions on the Test coins page: a 0\.1 SOL swap into \$REHEARSAL, my day-one test coin, and a 0\.1 SOL test purchase and immediate sale of \$SEAWIN just after I made it\./);
+    assert.doesNotMatch(m, /one exception/);
+    // signing adds four bytes ({DATE} becomes YYYY-MM-DD), so the template stays four under the bound
+    assert.ok(Buffer.byteLength(JSON.parse(unsigned(read("config/burnticker/operator.json"))).signedMessage.message) <= 1208);
+    assert.doesNotMatch(op.signedMessage.clarification?.text ?? "", /names one exception|has not been made yet/, "the note no longer corrects the text");
   });
 });
 

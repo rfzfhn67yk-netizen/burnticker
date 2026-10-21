@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- a CommonJS preload (node --require), loaded before Next */
 "use strict";
 /**
- * WARM THE HOME AND COINS MEMOS AT WEB START (HB-138, 2026-10-20). Preloaded into `next start` by run-burnticker-web.sh
+ * WARM THE HOME, COINS AND TRUST MEMOS AT WEB START (HB-138, 2026-10-20; /v1/trust added for HB-211, 2026-10-21). Preloaded into `next start` by run-burnticker-web.sh
  * (NODE_OPTIONS=--require), beside web-graceful.cjs.
  *
  * WHAT HAPPENED. Right after the publish-101 restart the deploy smoke found /burnticker/about, /bounty, /changelog and /derby with no
@@ -23,7 +23,8 @@
  */
 const http = require("node:http");
 
-const WARM_PATHS = ["/api/burnticker/home", "/api/burnticker/tokens"];
+// HB-211 / HS-98 (ninth pass): /v1/trust too; its first build took 20 s in the publish-111 window and a visitor got the proxy's 503
+const WARM_PATHS = ["/api/burnticker/home", "/api/burnticker/tokens", "/api/burnticker/v1/trust"];
 const WAIT_MS = Math.max(0, Number(process.env.BT_WEB_WARM_WAIT_MS ?? 10_000) || 0);
 
 function log(line) {
@@ -71,7 +72,7 @@ function onListening(server) {
   const base = loopbackBase(addr);
   if (!base) return;
   started = true;
-  log(`warm: building the home and coins memos (${WARM_PATHS.join(", ")}) on ${base}`);
+  log(`warm: building the home, coins and trust memos (${WARM_PATHS.join(", ")}) on ${base}`);
   // after this tick, so Next finishes its own listen callback first
   setImmediate(() => { void warmUp({ base }).catch(() => { /* never thrown */ }); });
 }

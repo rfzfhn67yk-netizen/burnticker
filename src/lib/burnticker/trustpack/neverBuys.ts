@@ -28,8 +28,23 @@ export interface Holding { wallet: string; role: string; tokenAccount: string; m
  * wallet, so a receipt is listed and never turns the line red.
  */
 export interface Acquisition { wallet: string; role: string; signature: string; mint: string; symbol: string; amountRaw: string; blockTime: string | null; explainedBy: string | null; how?: "acquired" | "received" }
-/** A disclosed exception to the rule (transparency.json `rehearsals`): the mainnet REHEARSAL coin the operator swapped into at creation. */
-export interface NeverBuysException { symbol: string; mint: string; note: string }
+/**
+ * A disclosed exception to the rule. Two kinds (publish 112):
+ *   - a coin (transparency.json `rehearsals`, the mainnet REHEARSAL coin the operator swapped into at creation): any purchase of that
+ *     mint is explained, and holding it is not a finding;
+ *   - one trade (transparency.json `operatorTrades`, the operator's own wallet's $SEAWIN test): `wallet` and `signatures` are set, and only
+ *     an acquisition of that mint by that wallet in one of those transactions is explained. Any other purchase of the mint, by any
+ *     wallet, stays red, and a balance of it held now is still a finding.
+ */
+export interface NeverBuysException { symbol: string; mint: string; note: string; wallet?: string; signatures?: string[] }
+
+/** True when the exception names one trade (a wallet and its transactions) rather than a whole coin. */
+const isTradeException = (x: NeverBuysException): boolean => !!x.wallet && Array.isArray(x.signatures) && x.signatures.length > 0;
+
+/** The disclosed exception that explains this acquisition, or null. */
+export function exceptionFor(exceptions: readonly NeverBuysException[], a: { wallet: string; mint: string; signature: string }): NeverBuysException | null {
+  return exceptions.find((x) => x.mint === a.mint && (isTradeException(x) ? x.wallet === a.wallet && x.signatures!.includes(a.signature) : true)) ?? null;
+}
 export interface NeverBuysReport {
   schema: "burnticker.never-buys/v1"; ranAt: string; cluster: string;
   /**
@@ -123,7 +138,7 @@ export function statusOf(acq: Acquisition[], o: { allReadsFailed?: boolean; inco
  */
 export async function runNeverBuys(i: { rpc: Rpc; cluster: string; wallets: { role: string; pubkey: string }[]; mints: { symbol: string; mint: string }[]; evidence: Map<string, string>; recentPerWallet?: number; perTokenAccount?: number; now?: number; exceptions?: readonly NeverBuysException[] }): Promise<NeverBuysReport> {
   const exceptions = (i.exceptions ?? []).filter((x) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(x.mint));
-  const exceptionOf = new Map(exceptions.map((x) => [x.mint, x]));
+  const coinExceptionMints = new Set(exceptions.filter((x) => !isTradeException(x)).map((x) => x.mint));
   const mints = [...i.mints, ...exceptions.filter((x) => !i.mints.some((m) => m.mint === x.mint)).map((x) => ({ symbol: x.symbol, mint: x.mint }))];
   const symbolOf = new Map(mints.map((m) => [m.mint, m.symbol]));
   const perTokenAccount = i.perTokenAccount ?? 100, recentPerWallet = i.recentPerWallet ?? 25;
@@ -141,7 +156,7 @@ export async function runNeverBuys(i: { rpc: Rpc; cluster: string; wallets: { ro
     if (tx.meta.err) return;
     for (const m of mints) {
       const d = walletMintDelta(tx, w.pubkey, m.mint);
-      const exc = exceptionOf.get(m.mint);
+      const exc = exceptionFor(exceptions, { wallet: w.pubkey, mint: m.mint, signature: sig });
       if (d > BigInt(0)) acquisitions.push({ wallet: w.pubkey, role: w.role, signature: sig, mint: m.mint, symbol: m.symbol, amountRaw: d.toString(), blockTime: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null, explainedBy: i.evidence.get(sig) ?? (exc ? `disclosed exception: ${exc.note}` : null), how: walletBought(tx, w.pubkey) ? "acquired" : "received" });
     }
   };
@@ -166,7 +181,7 @@ export async function runNeverBuys(i: { rpc: Rpc; cluster: string; wallets: { ro
   }
   const failedWallets = new Set(errors.map((e) => e.split(" ")[0]));
   if (nullTransactions.length) errors.push(`${nullTransactions.length} transaction${nullTransactions.length === 1 ? "" : "s"} could not be read (the node returned nothing): ${nullTransactions.slice(0, 3).map((s) => `${s.slice(0, 12)}…`).join(", ")}`);
-  const st = statusOf(acquisitions, { allReadsFailed: i.wallets.length > 0 && i.wallets.every((w) => failedWallets.has(w.role)), incomplete: failedWallets.size > 0 || nullTransactions.length > 0, holdings, exceptionMints: new Set(exceptionOf.keys()) });
+  const st = statusOf(acquisitions, { allReadsFailed: i.wallets.length > 0 && i.wallets.every((w) => failedWallets.has(w.role)), incomplete: failedWallets.size > 0 || nullTransactions.length > 0, holdings, exceptionMints: coinExceptionMints });
   const since = oldest === null ? null : new Date((oldest as number) * 1000).toISOString();
   return {
     schema: "burnticker.never-buys/v1", ranAt: new Date(i.now ?? Date.now()).toISOString(), cluster: i.cluster, status: st.status, line: st.line, wallets: i.wallets, mints, holdings,
@@ -188,7 +203,9 @@ export function neverBuysScopeLine(r: Pick<NeverBuysReport, "scope" | "incomplet
     : `Checked ${n(r.wallets.length, "wallet", "wallets")} and ${n(r.mints.length, "listed coin", "listed coins")}: ${n(r.scanned.transactions, "transaction", "transactions")} of recent history. This checks recent history only, not every transaction the wallets ever made.`];
   const miss = r.incomplete;
   if (miss && (miss.wallets.length || miss.nullTransactions.length)) parts.push(`Not read: ${[miss.wallets.length ? n(miss.wallets.length, "wallet", "wallets") : "", miss.nullTransactions.length ? n(miss.nullTransactions.length, "transaction", "transactions") : ""].filter(Boolean).join(" and ")}. No conclusion is available for those records.`);
-  for (const x of r.exceptions ?? []) parts.push(`The disclosed $${x.symbol} purchase is a named exception and is listed below when it appears in the transactions checked.`);
+  for (const x of r.exceptions ?? []) parts.push(x.wallet && x.signatures?.length
+    ? `The disclosed $${x.symbol} test purchase by the wallet ${x.wallet.slice(0, 8)}… is a named exception for its own transactions only, and is listed below when it appears in the transactions checked.`
+    : `The disclosed $${x.symbol} purchase is a named exception and is listed below when it appears in the transactions checked.`);
   return parts.join(" ");
 }
 
@@ -205,14 +222,36 @@ export function neverBuysMints(tokens: readonly { ticker: string; mint: string; 
 }
 
 /**
- * ACC-02: the disclosed exceptions, from config/burnticker/transparency.json `rehearsals` (the mainnet REHEARSAL coin the operator
- * swapped 0.1 SOL into at creation, also in config/own-tokens.json). An unreadable file gives none.
+ * ACC-02: the disclosed exceptions, from config/burnticker/transparency.json: `rehearsals` (the mainnet REHEARSAL coin the operator
+ * swapped 0.1 SOL into at creation, also in config/own-tokens.json), then `operatorTrades` (publish 112: the operator's own wallet's
+ * $SEAWIN test purchase and sale, each one trade scoped to its wallet and its two transactions). An unreadable file gives none.
  */
 export function neverBuysExceptions(root = process.cwd()): NeverBuysException[] {
+  const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/, SIG = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/;
   try {
-    const t = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "transparency.json"), "utf8")) as { rehearsals?: { symbol?: string; mint?: string; date?: string }[] };
-    return (t.rehearsals ?? []).flatMap((r) => (r.symbol && r.mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(r.mint) ? [{ symbol: r.symbol, mint: r.mint, note: `the operator's disclosed $${r.symbol} test purchase (transparency.json rehearsals)` }] : []));
+    const t = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "transparency.json"), "utf8")) as {
+      rehearsals?: { symbol?: string; mint?: string; date?: string }[];
+      operatorTrades?: { ticker?: string; mint?: string; wallet?: string; buyTx?: string | null; sellTx?: string | null; at?: string }[];
+    };
+    const coins = (t.rehearsals ?? []).flatMap((r) => (r.symbol && r.mint && B58.test(r.mint) ? [{ symbol: r.symbol, mint: r.mint, note: `the operator's disclosed $${r.symbol} test purchase (transparency.json rehearsals)` }] : []));
+    const trades = (t.operatorTrades ?? []).flatMap((x) => {
+      const signatures = [x.buyTx, x.sellTx].filter((s): s is string => typeof s === "string" && SIG.test(s));
+      return x.ticker && x.mint && B58.test(x.mint) && x.wallet && B58.test(x.wallet) && signatures.length
+        ? [{ symbol: x.ticker, mint: x.mint, wallet: x.wallet, signatures, note: `the operator's own wallet's disclosed $${x.ticker} test purchase${x.at ? ` on ${x.at.slice(0, 10)}` : ""} (transparency.json operatorTrades)` }]
+        : [];
+    });
+    return [...coins, ...trades];
   } catch { return []; }
+}
+
+/**
+ * The wallets the monitor reads: the operator record's wallets for the cluster, then each wallet a disclosed trade names that the record
+ * does not (role "operator-own"), so the disclosed trade is actually seen and checked against its listing.
+ */
+export function neverBuysWallets(wallets: readonly { role: string; pubkey: string | null }[], exceptions: readonly NeverBuysException[]): { role: string; pubkey: string }[] {
+  const out = wallets.filter((w): w is { role: string; pubkey: string } => typeof w.pubkey === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.pubkey)).map((w) => ({ role: w.role, pubkey: w.pubkey }));
+  for (const x of exceptions) if (x.wallet && !out.some((w) => w.pubkey === x.wallet)) out.push({ role: "operator-own", pubkey: x.wallet });
+  return out;
 }
 
 export function readNeverBuys(publishDir: string): NeverBuysReport | null {

@@ -950,7 +950,8 @@ burn  = every token the swap delivered</pre>
     }
     function noBurnText(status, burns, state, site) {
       var t = status.ticker, last = burns.length ? burns[burns.length - 1] : null;
-      var lastLine = last ? "Last receipt: #" + receiptNo(burns, last) + " · " + last.recordDate + " · " + fB(last.delta) + " → " + plural(last.units, "unit") + " → " + (last.status === "skipped" ? "nothing bought (under the $1 floor)" : fInt(last.burned) + " $" + t + " burned") : "No receipt yet: the first reading after launch is the baseline.";
+      // ninth pass HS-101 / AP9-2 (HB-185 residue): a queued last row is a reading, not a receipt, and nothing has burned for it
+      var lastLine = last && QUEUED_ROW.indexOf(last.status) >= 0 ? "Last reading: " + last.recordDate + ", " + fB(last.delta) + " → " + plural(last.units, "unit") + " queued, no burn yet" : last ? "Last receipt: #" + receiptNo(burns, last) + " · " + last.recordDate + " · " + fB(last.delta) + " → " + plural(last.units, "unit") + " → " + (last.status === "skipped" ? "nothing bought (under the $1 floor)" : fInt(last.burned) + " $" + t + " burned") : "No receipt yet: the first reading after launch is the baseline.";
       var pool = status.buyback && status.buyback.feePoolSol != null ? " · fee pool " + fSol(status.buyback.feePoolSol) : "";
       var label = state.kind === "weekend" ? "(" + WEEKDAY[wd(state.postDay)] + ")" : state.kind === "holiday" ? "(" + holiday(state.postDay) + ")" : state.expected ? "(figure for " + state.expected + ")" : "";
       return "No burn today, " + state.postDay + " " + label + "\n" + state.reason + "\n" + lastLine + "\nSupply " + fInt(status.supply.current) + pool + "\nverify: " + site + "/#receipts\n" + DISCLAIMER;

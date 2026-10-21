@@ -38,7 +38,7 @@ export const SPORTS_PROVENANCE = {
 } as const;
 
 /** The chip on sports cards (venueLabel). */
-export const SPORTS_CHIP = "On-chain payout · league's official feed";
+export const SPORTS_CHIP = "On-chain payout · licensed final score";   // ninth pass HS-117: no league feed is claimed for every league (NFL and soccer have none; the NBA's answers 403)
 /** The settlement source name a sports Browse card shows (sourceName). */
 export const SPORTS_SOURCE_NAME = "On-chain payout or licensed final score · first-party";
 

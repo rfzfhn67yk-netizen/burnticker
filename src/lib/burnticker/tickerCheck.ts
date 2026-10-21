@@ -3,7 +3,8 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { isReserved, normaliseName } from "@/lib/burnticker/reservedNames";
 import { lookalikeHits, sameTickerSentence, type LookalikeExisting } from "@/lib/burnticker/lookalike";
-import { hazardAlternateName, hazardAlternates } from "@/lib/burnticker/hazards";
+import { hazardAlternates } from "@/lib/burnticker/hazards";
+import { isTeamRule, pairedSwapName } from "@/lib/burnticker/tickerSwap";
 
 /**
  * THE TICKER CHECK AT REVIEW (walkthrough snag 9; prelaunch audit 2026-10-18 A-2 and A-40). For every side of a draft: whether another
@@ -38,13 +39,7 @@ export const minutesUntil = (until: number, now: number = Date.now()): number =>
  */
 const WORDS = ["FANS", "CLUB", "CREW", "HQ", "SQUAD", "GANG"] as const;
 
-/** Continuous audit HB-6: a coin on a team's games (the team words fit it), read from its rule. */
-export function isTeamRule(rule: unknown): boolean {
-  const r = rule && typeof rule === "object" ? (rule as Partial<BurnRule>) : null;
-  if (!r) return false;
-  if (r.oracle === "catalogue" && typeof r.series === "string" && /^espn\./.test(r.series)) return true;
-  return r.oracle === "kalshi" && /^-[A-Z0-9]{2,5}$/.test(r.filter?.tickerIncludes ?? "");
-}
+export { isTeamRule };
 
 /**
  * Free tickers built from `ticker` (A-2): not the draft's own other side, not reserved, held by no coin, and no lookalike of any coin (the
@@ -121,11 +116,13 @@ export function reviewTickerChecks<C extends { side: "A" | "B"; ticker: string; 
   const alts = (c: C) => { const gen = { ticker: c.suggestedTicker ?? "", name: c.suggestedName ?? "" }; return hazardAlternates(ruleA?.series, gen).map((a) => (gen.name ? a : a.ticker)); };
   const sides = coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker, team, rule: c.side === "A" ? ruleA ?? null : null, alternates: c.side === "A" ? alts(c) : [] }));
   // WZ7-3 (seventh pass): a hazard swap answered QUAKENXTM6 with the held name "Next Magnitude 6"; the swapped ticker now carries the
-  // name the page pairs with it (hazardAlternateName), so an API caller gets a pair that is free on both fields
+  // name the page pairs with it, so an API caller gets a pair that is free on both fields. HB-207 (ninth pass): every family, through the
+  // page's own helper (pairedSwapName): the hazard word's name, the team word in a team coin's name ($PHINFLFANS "Eagles Fans 2026 Wins",
+  // never the live $PHINFLWIN's "Eagles 2026 Wins"), and any other coin keeps its own event name
   const free = freeSuggestedTickers(coins, sides, deps).map((c, i) => {
     const o = coins[i];
     if (c.side !== "A" || !c.suggestedTicker || c.suggestedTicker === o.suggestedTicker || !o.suggestedName) return c;
-    const n = hazardAlternateName(ruleA?.series, { ticker: o.suggestedTicker ?? "", name: o.suggestedName }, c.suggestedTicker);
+    const n = pairedSwapName(ruleA, { ticker: o.suggestedTicker ?? "", name: o.suggestedName }, c.suggestedTicker);
     return n ? { ...c, suggestedName: n } : c;
   });
   return { tickers: tickerChecks(sides, deps), coins: free };

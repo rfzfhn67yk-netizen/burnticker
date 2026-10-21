@@ -14,6 +14,7 @@ import { SECOND_SIGNER_LINE } from "@/lib/burnticker/fees";
 import { operatorAloneUpgradeLine } from "@/lib/burnticker/currentStatusText";
 import { registerPowersFromShipped } from "@/lib/burnticker/trust";
 import { loadOperator, signedMessageView } from "@/lib/burnticker/trustpack/operator";
+import { statementTemplate } from "@/lib/burnticker/trustpack/statement";
 import { settingsLine } from "@/lib/burnticker/templates";
 import { lookalikeRefusalsByField } from "@/lib/burnticker/lookalike";
 import { IMAGE_HELP } from "@/lib/burnticker/creatorProfile";
@@ -75,9 +76,13 @@ describe("HB-69 / HS-20: the second signer, the vault and the time lock, said as
     assert.ok(rows.find((r) => r.id === "program-upgrade-authority")?.canDo.includes(line));
     assert.match(read("src/app/burnticker/trust/page.tsx"), /\{t\.secondSigner\}/);
   });
-  test("the operator statement: the signed text is unchanged; a dated clarification sits beside it and is shown", () => {
+  test("the operator statement: the text is pinned; a dated clarification sits beside it and is shown", () => {
     const op = loadOperator();
-    assert.equal(crypto.createHash("sha256").update(op.signedMessage.message).digest("hex"), "b93c2be67320a82cfee5da03e44b64fa24726c5091cc328ba444b884a6dfb848", "the signed message must not change");
+    // publish 112 (2026-10-21): the text now names both disclosed tests ($REHEARSAL and the $SEAWIN test purchase and sale), so it is a
+    // template again until the owner re-signs it; change this pin only together with the text
+    const tpl = statementTemplate(op.signedMessage);
+    assert.ok("template" in tpl, "the statement has a template");
+    assert.equal(crypto.createHash("sha256").update(tpl.template).digest("hex"), "1066ddd68b7843847402ee8cd821cf724c1a13d059447dc8fa76269ed8d1ba06", "the statement text must not change unnoticed");
     const v = signedMessageView(op);
     assert.equal(v.clarification?.date, "2026-10-19");
     clean(v.clarification!.text); assert.match(v.clarification!.text, /not part of it/); assert.match(v.clarification!.text, /does not check pair coins/);

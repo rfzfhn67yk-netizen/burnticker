@@ -181,11 +181,11 @@ describe("item 7, owner 2026-10-19: the two sports tickets", () => {
   const ids = new Set(loadSourceEntries().map((e) => (e as { id: string }).id));
   const launchPage = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
   const bruins = EXAMPLE_TICKETS.find((e) => e.ticker === "SIXERS")!, rivals = EXAMPLE_TICKETS.find((e) => e.ticker === "PHIvBOS")!;
-  test("both exist, cite the NBA official feed in the catalogue, and pass the copy lint", () => {
+  test("both exist, name their licensed source (ninth pass HS-117: not the NBA feed, which answers 403), and pass the copy lint", () => {
     for (const e of [bruins, rivals]) {
       assert.ok(e, "ticket present");
       assert.deepEqual(e.source, { kind: "catalogue", id: "nba.cdn" }); assert.ok(ids.has("nba.cdn"));
-      assert.equal(e.sourceLine, "NBA official feed");
+      assert.equal(e.sourceLine, "TheSportsDB final score");
       for (const t of exampleStrings(e)) clean(t, `${e.ticker}: ${t}`);
       assert.ok(e.rule.split(/\s+/).length <= 12, e.rule);
       assert.doesNotMatch(exampleStrings(e).join(" "), /\d{4}-\d{2}-\d{2}|→|\w\/\w+\//);

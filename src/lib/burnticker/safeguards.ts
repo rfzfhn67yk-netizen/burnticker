@@ -7,9 +7,13 @@
 import { BOTH_TIERS_LINE } from "@/lib/burnticker/feeShareLine";
 import { SETTLEMENT_SOURCES_SENTENCE } from "@/lib/burnticker/singleSource";
 import { LP_BEFORE_GRADUATION_TRUST } from "@/lib/burnticker/lpLockCopy";
+import { operatorTradeReasons } from "@/lib/burnticker/operatorCreators";
 
-/** Walkthrough 13: the disclosed exception to "the operator never buys" (transparency.json rehearsals: 0.1 SOL of $REHEARSAL at creation). */
-export const REHEARSAL_BUY_EXCEPTION = "The one exception is $REHEARSAL, a disclosed test coin: the operator bought 0.1 SOL of it when it was created on Oct 11.";
+/**
+ * Walkthrough 13: the disclosed exception to "the operator never buys" (transparency.json rehearsals: 0.1 SOL of $REHEARSAL at creation).
+ * Ninth pass B-26 / HS-95: there are two; the second is the operator's own wallet's $SEAWIN test (transparency.json operatorTrades).
+ */
+export const REHEARSAL_BUY_EXCEPTION = `There are two disclosed exceptions. The operator bought 0.1 SOL of $REHEARSAL, a disclosed test coin, when it was created on Oct 11. The operator's own wallet bought 0.10 SOL of $SEAWIN on Oct 15 and sold all of it 24 seconds later.${operatorTradeReasons() ? ` ${operatorTradeReasons()}` : ""}`;
 
 /** The eleven guardrails, in order (the old homepage strip). */
 export const GUARDRAILS = [

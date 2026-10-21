@@ -7,19 +7,20 @@ import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodePlatformConfig } from "@/lib/burnReceipts/accounts";
 import { platformPda } from "@/lib/burnReceipts/pda";
 import { CAP_ENFORCED_SENTENCE, capSentence, effectiveCap, type EffectiveCap } from "@/lib/burnticker/capInForce";
-import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
-import { programHashFact } from "@/lib/burnticker/programHash";
+import { deployedBytesState, loadVerifiedBuild, pendingUpgradeSentence, type Deployed } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { programHashFact, PRE_B17_PROGRAM_HASHES } from "@/lib/burnticker/programHash";
 import { publicChangelogMarkdown } from "@/lib/burnticker/changelogPublic";
 import { loadOperator, type OperatorWallet } from "@/lib/burnticker/trustpack/operator";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
 import { fmtSecs, operatorAloneUpgradeLine, timeLockPlanSentence, upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
 import { repoUrl } from "@/lib/burnticker/currentStatusLinks";
-import { BOTH_TIERS_LINE, FEE_TIER_DECIDER_LINE, earlierCoinsLineFor, feeTiersLine, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
+import { BOTH_TIERS_LINE, DEPLOYED_TIER_PIN_LINE, FEE_TIER_DECIDER_LINE, earlierCoinsLineFor, feeTiersLine, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { lpLockPolicyJson, operatorTreasuryRecord, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
 import { compareLivePlatform, liveNewCoinTier, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, SECOND_SIGNER_LINE, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
 import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
 import { SPREAD_DEFICIT_LINE, SPREAD_LINES } from "@/lib/burnticker/spreadCopy";
 import { counterpartyOf } from "@/lib/burnticker/trustpack/ledger";
+import { hasOperatorTradeReason, operatorTradeReason, feesUseWithReasons, type OperatorTrade } from "@/lib/burnticker/operatorCreators";
 
 /**
  * THE TRUST PAGE'S DATA (the owner, 2026-10-09: the platform must leave no room for suspicion that the operator is corrupt). Facts, no
@@ -234,6 +235,11 @@ export interface TransparencyConfig {
    * listed in `wallets` with its address; a coin whose creator is one of them says so on its page (operatorCreators.ts).
    */
   operatorCreatorWallets?: string[];
+  /**
+   * Ninth pass B-26 / HB-206 / HS-95: every trade an operator wallet made in a platform coin, with the owner's reason (operatorCreators.ts
+   * builds the public sentences from it; scripts/ops/operator-trades-check.mts stops a publish when the chain shows one not listed here).
+   */
+  operatorTrades?: OperatorTrade[];
   /** Throwaway coins created under the REAL platform config to prove fee routing and burns (the owner's $REHEARSAL); each is also on the refuse list. */
   rehearsals: TransparencyRehearsal[];
   limitations: { id: string; status: string; text: string }[];
@@ -297,6 +303,7 @@ export function transparencyProblems(j: Partial<TransparencyConfig> | null): str
       else if (!Array.isArray(j.wallets) || !j.wallets.some((w) => w && w.pubkey === a)) out.push(`operatorCreatorWallets: ${a} must also be listed in wallets`);
     }
   }
+  out.push(...operatorTradesProblems(j));
   if (!Array.isArray(j.rehearsals)) out.push("rehearsals must be an array (empty until a rehearsal coin exists)");
   else for (const r of j.rehearsals) {
     if (!r || typeof r.symbol !== "string" || typeof r.status !== "string" || typeof r.text !== "string") { out.push("every rehearsal needs symbol, status, text"); continue; }
@@ -310,6 +317,54 @@ export function transparencyProblems(j: Partial<TransparencyConfig> | null): str
   else for (const p of j.policies) if (!p || typeof p.id !== "string" || typeof p.text !== "string") out.push("every policy needs id, text");
   const text = JSON.stringify(j);
   for (const re of FORBIDDEN_PHRASES) if (re.test(text)) out.push(`contains "${re.source}" — unbuilt things are listed as not built, never as coming`);
+  return out;
+}
+
+/**
+ * HS-96: true while the mainnet burn program recorded as deployed (config/burnticker/verified-build.json burn_receipts deployed.mainnet)
+ * is a pre-B17 build, so the trust page says a graduated coin does not burn yet. An unreadable record keeps the sentence (the cautious side).
+ */
+export function deployedTierPinLine(root = process.cwd()): boolean {
+  try {
+    const p = loadVerifiedBuild(root).programs.find((x) => x.library === "burn_receipts") as { deployed?: { mainnet?: { hash?: string } } } | undefined;
+    const h = p?.deployed?.mainnet?.hash ?? null;
+    return !h || PRE_B17_PROGRAM_HASHES.has(h);
+  } catch { return true; }
+}
+
+const SIG_RE = /^[1-9A-HJ-NP-Za-km-z]{86,88}$/;
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+/**
+ * Ninth pass B-26 / HS-95: each listed operator trade is well formed, its wallet is a listed wallet, and the owner's reason sentence
+ * ("The $TICKER test was made <reason>.") is in every prose surface of this file that speaks about the operator's trading: the
+ * operator-own wallet entry, the $REHEARSAL test-coins text and the platform-never-buys policy. One reason string, said the same way
+ * everywhere; changing it means changing those sentences too. A reason of "" or null (not yet written down) is allowed, and then those
+ * surfaces must carry OPERATOR_TRADE_REASON_MISSING word for word instead.
+ */
+export function operatorTradesProblems(j: Partial<TransparencyConfig>): string[] {
+  const out: string[] = [];
+  if (j.operatorTrades === undefined) return out;
+  if (!Array.isArray(j.operatorTrades)) return ["operatorTrades must be an array"];
+  for (const t of j.operatorTrades) {
+    const id = `operatorTrades ${t?.ticker ?? "?"}`;
+    if (!t || typeof t.ticker !== "string" || !/^[A-Z0-9]{1,12}$/.test(t.ticker)) { out.push("every operator trade needs a ticker"); continue; }
+    if (!PUBKEY_RE.test(String(t.mint))) out.push(`${id}: mint is not a base58 public key`);
+    if (!PUBKEY_RE.test(String(t.wallet))) out.push(`${id}: wallet is not a base58 public key`);
+    else if (!Array.isArray(j.wallets) || !j.wallets.some((w) => w && w.pubkey === t.wallet)) out.push(`${id}: wallet ${t.wallet} must also be listed in wallets`);
+    if (typeof t.inSol !== "number" || !(t.inSol > 0)) out.push(`${id}: inSol must be a positive number`);
+    if (t.outSol !== null && (typeof t.outSol !== "number" || !(t.outSol >= 0))) out.push(`${id}: outSol must be a number or null`);
+    if (typeof t.outTokens !== "string" || !/^\d+(\.\d+)?$/.test(t.outTokens)) out.push(`${id}: outTokens must be a decimal string`);
+    if (!SIG_RE.test(String(t.buyTx))) out.push(`${id}: buyTx is not a transaction signature`);
+    if (t.sellTx !== null && !SIG_RE.test(String(t.sellTx))) out.push(`${id}: sellTx must be a transaction signature or null`);
+    if (!ISO_RE.test(String(t.at))) out.push(`${id}: at must be an ISO time (YYYY-MM-DDTHH:MM:SSZ)`);
+    for (const k of ["sellAt", "coinCreatedAt"] as const) if (t[k] !== null && t[k] !== undefined && !ISO_RE.test(String(t[k]))) out.push(`${id}: ${k} must be an ISO time or null`);
+    if (t.reason !== null && (typeof t.reason !== "string" || (hasOperatorTradeReason(t) && (!/^to \S/.test(t.reason) || /[.\s]$/.test(t.reason))) || (!hasOperatorTradeReason(t) && t.reason !== ""))) { out.push(`${id}: reason must be one string that starts with "to " and has no final full stop, or "" or null when not yet written down`); continue; }
+    const sentence = operatorTradeReason(t);
+    const own = (j.wallets ?? []).find((w) => w && w.pubkey === t.wallet);
+    if (own && !own.description.includes(sentence)) out.push(`${id}: the wallet entry ${own.role} must say "${sentence}"`);
+    for (const r of j.rehearsals ?? []) if (r && typeof r.text === "string" && /only (other )?trade/.test(r.text) && !r.text.includes(sentence)) out.push(`${id}: rehearsal ${r.symbol} must say "${sentence}"`);
+    for (const p of j.policies ?? []) if (p && p.id === "platform-never-buys" && !p.text.includes(sentence)) out.push(`${id}: policy platform-never-buys must say "${sentence}"`);
+  }
   return out;
 }
 
@@ -364,7 +419,7 @@ export function buildTransparency(root = process.cwd(), env: Readonly<Record<str
  * Three separate facts now: `hostWiring` (does THIS host's environment name a program — BURNTICKER_PROGRAM_ID), `chain` (where each
  * program is deployed, from config/burnticker/verified-build.json's read-back) and `compiled` (the id compiled into the IDL).
  */
-export interface ProgramChainFact { library: string; programId: string; devnet: string; mainnet: string }
+export interface ProgramChainFact { library: string; programId: string; devnet: string; mainnet: string; /** B-17 (2026-10-21): one sentence per network whose newer build is not deployed yet (pendingUpgradeSentence); absent when none */ pending?: string[] }
 export interface ProgramFacts { programId: string | null; deployed: boolean; buildHash: string | null; verify: string[]; hostWiring: string; chain: ProgramChainFact[]; compiled: string }
 export function programFacts(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd()): ProgramFacts {
   const id = (env.BURNTICKER_PROGRAM_ID ?? "").trim();
@@ -388,11 +443,17 @@ export function programFacts(env: Readonly<Record<string, string | undefined>> =
 
 /** Where each program is deployed, from the verified-build read-back (never from this host's environment). */
 function chainFacts(root: string): ProgramChainFact[] {
+  // B-17 (2026-10-21): a newer build whose upgrade has not been deployed is said as that, never as "DO NOT match" and never as verified
+  const bytes = (d: Deployed): string => ({ matches: ", and the bytes match the recorded build", "upgrade-pending": ", and the bytes are the earlier build because the upgrade to this repository's newer build has not been deployed", differs: ", and the bytes DO NOT match the recorded build" })[deployedBytesState(d)];
   try {
-    return loadVerifiedBuild(root).programs.map((p) => ({ library: p.library, programId: p.programId,
-      devnet: p.deployed.devnet ? `deployed (read ${p.deployed.devnet.readAt}${p.deployed.devnet.matchesBuild ? ", and the bytes match the recorded build" : ", and the bytes DO NOT match the recorded build"})` : "not deployed",
-      // I-1 (audit 2026-10-19): the mainnet read-back says whether the bytes match, like devnet's, and names mainnet's own authority
-      mainnet: p.deployed.mainnet ? `deployed (read ${p.deployed.mainnet.readAt}${p.deployed.mainnet.matchesBuild ? ", and the bytes match the recorded build" : ", and the bytes DO NOT match the recorded build"}; upgrade authority ${p.deployed.mainnet.upgradeAuthority})` : "not deployed" }));
+    return loadVerifiedBuild(root).programs.map((p) => {
+      const pending = (["devnet", "mainnet"] as const).flatMap((c) => { const d = p.deployed[c]; return d && deployedBytesState(d) === "upgrade-pending" ? [pendingUpgradeSentence(c, p.builds[c].hash, d.hash)] : []; });
+      return { library: p.library, programId: p.programId,
+        devnet: p.deployed.devnet ? `deployed (read ${p.deployed.devnet.readAt}${bytes(p.deployed.devnet)})` : "not deployed",
+        // I-1 (audit 2026-10-19): the mainnet read-back says whether the bytes match, like devnet's, and names mainnet's own authority
+        mainnet: p.deployed.mainnet ? `deployed (read ${p.deployed.mainnet.readAt}${bytes(p.deployed.mainnet)}; upgrade authority ${p.deployed.mainnet.upgradeAuthority})` : "not deployed",
+        ...(pending.length ? { pending } : {}) };
+    });
   } catch { return []; }
 }
 
@@ -470,7 +531,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     generatedAt: new Date(now).toISOString(), cluster,
     // HS-26 (hourly run 5): the trust page's fee line, the footer's shape, with "(every coin live today)" computed from the registry
     feeTiersLine: cluster === "mainnet" ? feeTiersLine({ tier14Live: i.tier14Live ?? null }) : null,
-    operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), secondSigner: SECOND_SIGNER_LINE, preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
+    operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: feesUseWithReasons(USE_OF_FEES), attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), secondSigner: SECOND_SIGNER_LINE, preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
     powers, operator: operatorPowersSummary(powers),
     livePlatform,
     designedFees: { curve: CURVE_FEES, postGraduation: newCoinFees, devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: newCoinFees.legs.find((l) => l.label === "burn pool (LP fees)")?.bps ?? LP_FEES_TO_BURN_POOL_BPS, operatorBps: newCoinFees.legs.find((l) => l.label === "Burnticker (operator, LP fees)")?.bps ?? LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
@@ -481,7 +542,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     transparency,
     statements: [
       `At graduation, ${LP_LOCKED_PCT}% of the LP is locked forever with Raydium's LP lock and can never be withdrawn. A creator cannot change this. The platform settings that do it are platformScale 1,000,000, creatorScale 0 and burnScale 0. The Fee Key belongs to the burn program's fee-keys account. Anyone can call the fee claim (claim_lock_fees), which splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury. That split is fixed in code, and the coin side is burned. The program also sets a minimum share of locked LP for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
-      `${cluster === "mainnet" ? `${BOTH_TIERS_LINE} ${FEE_TIER_DECIDER_LINE}` : `${postGraduationShareLine(newCoinFees)} ${earlierCoinsLineFor(cluster)}`} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No setting or admin key changes how the liquidity fees are split. ${UPGRADE_CAVEAT}`,
+      `${cluster === "mainnet" ? `${BOTH_TIERS_LINE} ${deployedTierPinLine(root) ? `${DEPLOYED_TIER_PIN_LINE} ` : ""}${FEE_TIER_DECIDER_LINE}` : `${postGraduationShareLine(newCoinFees)} ${earlierCoinsLineFor(cluster)}`} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No setting or admin key changes how the liquidity fees are split. ${UPGRADE_CAVEAT}`,
       "Creators get no cash from fees. The creator-fee slot pays 100% to the coin's burn pool.",
       "There is no team allocation. There is no presale, no private round and no airdrop to insiders. The platform holds no tokens at launch.",
       "Rules, readings and receipts are append-only. Database triggers refuse any update or delete. Changing a rule means launching a new token.",
@@ -494,7 +555,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
       SPREAD_LINES.join(" "),
       SPREAD_DEFICIT_LINE,
       "Anonymous creators are allowed, and the creator's wallet is always shown. One-shot markets are allowed, and their pages say 'resolves once on <date>'. Elections are allowed. Deaths, violence, terror, casualty counts and named private individuals are refused.",
-      USE_OF_FEES,
+      feesUseWithReasons(USE_OF_FEES),
       ...GATE_POLICY_IDS.map((id) => transparency.policies.find((p) => p.id === id)?.text).filter((t): t is string => !!t),
     ],
   };

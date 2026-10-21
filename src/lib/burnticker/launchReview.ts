@@ -61,7 +61,7 @@ import { END_SINK_ACCOUNT_BYTES, LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_S
  */
 
 /** `pair` = side B of a registered pair (its rule is derived from side A's); `companion` = a second, independent coin launched alongside (a matchup's other team). */
-export interface ReviewInput { rule?: unknown; /** A-2: the connected wallet, when the page has one (its own coins' tickers are not refused) */ creator?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** two candidates in one race: candidate B's market and the race slug */ market?: unknown; race?: unknown; /** two teams in one game: the other team */ opp?: unknown; /** a settled pair's side B: its own describe context (candidate B's event words, or team B's game), as `descCtx` is side A's */ descCtx?: unknown; /** round 5: side B's own pinned token (burnTarget.ts BurnTargetField); side A's is in `rule` */ burnTarget?: unknown; /** the two candidates' or teams' names, for the money path */ names?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
+export interface ReviewInput { rule?: unknown; /** A-2: the connected wallet, when the page has one (its own coins' tickers are not refused) */ creator?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** two candidates in one race: candidate B's market and the race slug */ market?: unknown; race?: unknown; /** two teams in one game: the other team */ opp?: unknown; /** a settled pair's side B: its own describe context (candidate B's event words, or team B's game), as `descCtx` is side A's */ descCtx?: unknown; /** round 5: side B's own pinned token (burnTarget.ts BurnTargetField); side A's is in `rule` */ burnTarget?: unknown; /** the two candidates' or teams' names, for the money path */ names?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown; /** HB-212: the second coin's own describe context, as its prepare sends it */ descCtx?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
 export interface ReviewCost { label: string; sol: string; kind: "rent" | "reserve" | "fee" }
 export interface LaunchReview {
   schema: "burnticker.launch-review/v1";
@@ -453,7 +453,17 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // its own ticker, as the bundle route pins it (handlers.ts: side.description from the locked side B rule), never null beside side A's
   const ruleBOwn = !meetingsBlock && !settledDescB ? preparedB ?? derbyB : null;
   const pairDescB = ruleBOwn ? (() => { try { return describeRule(ruleBOwn, { ...ctx, ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph; } catch { return ""; } })() : "";
-  const paragraphB = meetingsBlock?.descriptionB ?? (settledDescB || pairDescB || null);
+  // HB-212 / HS-99 (ninth pass, Codex BT-COMPANION-DESCRIPTION-01): a Matchup companion is prepared as its own single coin, and that
+  // prepare pins describe.ts's paragraph for ITS locked rule with ITS ticker and describe context (handlers.ts prepareLaunch); the review
+  // shows that same paragraph, never null beside side A's
+  const companionDescB = !pair && companionLocked && !pairDescB ? (() => {
+    try {
+      const cb = body.companion as { ticker?: unknown; descCtx?: unknown }, srcB = sourceText(companionLocked.rule, now);
+      const ctxC = { ...serverDescribeCtx(companionLocked.rule, cb.descCtx, { seriesTitle: srcB?.title ?? null, feed: srcB?.feed ?? null }), ...(srcB?.subjectName ? { subjectName: srcB.subjectName } : {}) };
+      return describeRule(companionLocked.rule, { ...ctxC, ticker: String(cb.ticker ?? "").toUpperCase() || "TICKER" }).paragraph;
+    } catch { return ""; }
+  })() : "";
+  const paragraphB = meetingsBlock?.descriptionB ?? (settledDescB || pairDescB || companionDescB || null);
   const tickerB: string | null = (() => { try { const rb = meetingsPair ? { ...asBuilt, series: meetingsMirror(asBuilt.series ?? "") } as BurnRule : settledPair?.b ?? derbyB; return rb ? describeRule(rb, { ...(ctxB && rb === settledPair?.b ? ctxB : ctx), ticker: "" }).ticker || null : null; } catch { return null; } })();
   for (const [gen, own, side] of [[text.paragraph, creatorText, "A"], ...(paragraphB ? [[paragraphB, creatorTextB, "B"]] : [])] as [string, string, "A" | "B"][]) {
     const rp = descriptionRoomProblem(gen, own);

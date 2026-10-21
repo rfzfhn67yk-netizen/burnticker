@@ -154,7 +154,8 @@ describe("one current-status source (website brief §4)", () => {
   test("design, deployed and historical are separate; mainnet programs read 'deployed on mainnet' (2026-10-11 record); host wiring is its own line; every summary line is lint-clean", async () => {
     const { buildCurrentStatus } = await import("@/lib/burnticker/currentStatus");
     const s = buildCurrentStatus({ env: { BURNTICKER_CLUSTER: "devnet" }, chain: {}, now: 0 });
-    for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.match(p.mainnet.line, /^It is deployed on mainnet\. Its bytes there match this repository's recorded build\. Its mainnet upgrade authority is /); assert.equal(p.devnet.deployed, true); }
+    // B-17 (2026-10-21): burn_receipts' newer build is not deployed yet, so its line says that instead of a match
+    for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.match(p.mainnet.line, p.name === "burn_receipts" ? /^It is deployed on mainnet\. This repository has a newer build \([0-9a-f]{64}\) whose upgrade has not been deployed on mainnet, so the bytes there are still the earlier build \([0-9a-f]{64}\)\. The newer build is not verified on chain until the bytes read back from mainnet match it\. Its mainnet upgrade authority is / : /^It is deployed on mainnet\. Its bytes there match this repository's recorded build\. Its mainnet upgrade authority is /); assert.equal(p.devnet.deployed, true); }
     assert.equal(s.networks.find((n) => n.cluster === "mainnet")!.deployment, "deployed");
     assert.equal(s.host.line, `This site is showing devnet. No program is connected on this site. ${(await import("@/lib/burnticker/launchAvailability")).siteLaunchState({ BURNTICKER_CLUSTER: "devnet" }).sentence}`);   // website-12: the one record's sentence
     assert.ok(s.design.length && s.historical.length && s.historical.every((h) => fs.existsSync(h.path.replace(/\/$/, ""))), "history links point at files that exist");

@@ -107,6 +107,10 @@ pub struct RegisterFeeKey<'info> {
     pub locked_liquidity: UncheckedAccount<'info>,
     /// CHECK: Raydium's lock account for the pool's LP mint, ATA(LOCK_CPMM_AUTHORITY, lp_mint) (address-checked in the handler).
     pub lp_lock_vault: UncheckedAccount<'info>,
+    /// Policy 0: the token's LaunchLab pool ["pool", mint, WSOL]. Required when the pool's AmmConfig differs from the pinned one: the
+    /// Fee Key is then accepted only once LaunchLab reads migrated (eighth-pass CH8-4 gap 1, as register_pool). May be omitted otherwise.
+    /// CHECK: PDA and owner checked by LaunchLabPoolView::load in the handler.
+    pub launchlab_pool: Option<UncheckedAccount<'info>>,
     pub system_program: Program<'info, System>,
 }
 
@@ -127,14 +131,31 @@ pub fn handle_register_fee_key(ctx: Context<RegisterFeeKey>) -> Result<()> {
     require_keys_eq!(lock.lp_mint, pool.lp_mint, BurnError::InvalidLockAccount);
     match c.registration_policy {
         POOL_POLICY_CREATOR_IS_FEE_PDA => {
-            // The migration pool: the pinned cpConfigId's pool PDA for WSOL / mint, created with the fee PDA as pool_creator.
+            // The migration pool: the pool PDA of its own AmmConfig for WSOL / mint (a CPMM-owned account at that PDA proves CPMM
+            // created it under that genuine AmmConfig), created with the fee PDA as pool_creator, its LP locked by LaunchLab's vault
+            // authority (checked below: only LaunchLab's migrate_to_cpswap locks as that PDA). B-17 / HB-167: the AmmConfig may differ
+            // from the one pinned at initialize_token — LaunchLab migrates under the platform's cpConfigId at migration time.
             require!(c.ll_cp_config != Pubkey::default(), BurnError::PoolNotRegistered);
-            require_keys_eq!(pool_key, cpmm::pool_pda(&c.ll_cp_config, &NATIVE_MINT, &mint), BurnError::NotMigrationPool);
+            require_keys_eq!(pool_key, cpmm::pool_pda(&pool.amm_config, &NATIVE_MINT, &mint), BurnError::NotMigrationPool);
             require!(pool.wsol_is_token_0(&NATIVE_MINT, &mint).is_some(), BurnError::InvalidPoolMints);
             let (fee_pda, _) = Pubkey::find_program_address(&[FEE_SEED, mint.as_ref()], &crate::ID);
             require_keys_eq!(pool.pool_creator, fee_pda, BurnError::PoolCreatorMismatch);
             if c.cpmm_pool != Pubkey::default() {
                 require_keys_eq!(c.cpmm_pool, pool_key, BurnError::FeeKeyMismatch);
+            }
+            if pool.amm_config != c.ll_cp_config {
+                // Eighth-pass CH8-4 gap 1 (defence in depth): a pool on another AmmConfig than the pin is accepted only once LaunchLab
+                // reads this coin migrated (status 2 at byte 17 of its LaunchLab-owned pool PDA, which only LaunchLab writes), its
+                // migration was to CPMM, its creator is the fee PDA and its platform the pinned one — the same checks register_pool makes.
+                let Some(ll_pool) = a.launchlab_pool.as_ref() else {
+                    return err!(BurnError::LaunchLabAccountsRequired);
+                };
+                let lp = cpmm::LaunchLabPoolView::load(&ll_pool.to_account_info(), &mint)?;
+                require!(lp.mint_a == mint && lp.mint_b == NATIVE_MINT, BurnError::InvalidLaunchLabAccount);
+                require!(lp.migrate_type == LL_MIGRATE_TYPE_CPMM, BurnError::NotMigrationPool);
+                require_keys_eq!(lp.creator, fee_pda, BurnError::PoolCreatorMismatch);
+                require_keys_eq!(lp.platform_id, c.ll_platform, BurnError::InvalidLaunchLabAccount);
+                require!(lp.status == LL_POOL_STATUS_MIGRATED, BurnError::NotMigrationPool);
             }
             let (vault_auth, _) = Pubkey::find_program_address(&[LAUNCHLAB_VAULT_AUTH_SEED], &LAUNCHLAB_PROGRAM_ID);
             require_keys_eq!(lock.locker, vault_auth, BurnError::LockerMismatch);

@@ -1,5 +1,6 @@
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { FOOTER_COPY } from "@/lib/burnticker/siteNav.mjs";
+import { disclosedTestsClause, operatorTradeReasons } from "@/lib/burnticker/operatorCreators";
 
 /**
  * TERMS AND PRIVACY (polish-1, 2026-10-12; PLATFORM-NEXT-2-BRIEF.md item 1). The words of /burnticker/terms and /burnticker/privacy, in
@@ -27,8 +28,12 @@ export const CONTACT_EMAIL = "contact@burnticker.com";
 export const GOVERNING_LAW_SENTENCE = "The law that governs these terms has not been decided yet. This page says so plainly instead of guessing.";
 export const TAKEDOWN_SENTENCE = `To ask for an image to be taken down, email ${CONTACT_EMAIL}. The copy stored on Arweave when the coin was created is permanent, and nobody can delete it.`;
 
-/** Sixth pass B-16e / HB-59 (AP6-13): the terms, the press page and the fee ledger said the platform "never trades"; the trust page discloses one test purchase. */
-export const NEVER_TRADES_SENTENCE = "Apart from one disclosed test purchase of $REHEARSAL (0.1 SOL, when it was created), the platform never trades.";
+/**
+ * Sixth pass B-16e / HB-59 (AP6-13): the terms, the press page and the fee ledger said the platform "never trades"; the trust page discloses
+ * one test purchase. Ninth pass B-26 / HS-95 (AP9-1): two disclosed tests, the second the operator's own wallet's $SEAWIN round trip, built
+ * from transparency.json `operatorTrades` with the owner's reason (operatorCreators.ts).
+ */
+export const NEVER_TRADES_SENTENCE = `Apart from ${disclosedTestsClause()}, the platform never trades.${operatorTradeReasons() ? ` ${operatorTradeReasons()}` : ""}`;
 export const TERMS_TITLE = "Terms of use";
 export const TERMS_INTRO = "These terms cover burnticker.com, its pages and its public API. They are short on purpose. By using the site, you agree to them.";
 
@@ -38,7 +43,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     paragraphs: [
       "Burnticker is a launchpad for Solana memecoins whose coins burn on public results. Each coin has one locked rule. When a result settles that rule, the coin's own trading fees buy it back on its own pool, and a program burns what they bought.",
       // sixth pass B-16e / HB-59: the one disclosed test purchase is named where "never trades" is said
-      `${NEVER_TRADES_SENTENCE} It never takes an order and never pays anything to a coin's holders. It holds no coins and no money for anyone. The only money it sends to people is the bounty for a security report, paid from the bounty wallet.`,
+      `${NEVER_TRADES_SENTENCE} The platform never takes an order and never pays anything to a coin's holders. It holds no coins and no money for anyone. The only money it sends to people is the bounty for a security report, paid from the bounty wallet.`,
       "Coins trade on Raydium, an outside Solana trading service. This site links to it, and a coin page's swap panel builds a swap that your own wallet signs and sends straight to the coin's Raydium curve or pool. This site has no control over Raydium.",
     ],
   },

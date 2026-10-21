@@ -111,7 +111,7 @@ export function loadRegister(root: string, p: ProgramName): Register {
  * prelaunch audit, 2026-10-16: burn_receipts round 5 is deployed since 2026-10-15, so its round-5 instructions are on chain; pair_curve
  * stays on round 4). The round-5 rows belong to burn_receipts (`sourceOnly` is "the register calls it Round 5").
  */
-export function moneySourceLine(money: readonly Pick<MoneyRow, "sourceOnly" | "program">[], build: Pick<VerifiedBuild, "sourceCommit"> & { programs?: readonly { library: string; round?: number; sourceCommit?: string }[] }): string {
+export function moneySourceLine(money: readonly Pick<MoneyRow, "sourceOnly" | "program">[], build: Pick<VerifiedBuild, "sourceCommit"> & { programs?: readonly { library: string; round?: number; sourceCommit?: string; deployedSourceCommit?: string }[] }): string {
   const short = (c: string | undefined) => String(c ?? "").slice(0, 10) || "(not recorded)";
   const plain = (lib: string) => `${lib === "pair_curve" ? "the pair program" : lib === "burn_receipts" ? "the burn program" : "the program"} (${lib})`;
   const progs = build.programs ?? [];
@@ -123,7 +123,7 @@ export function moneySourceLine(money: readonly Pick<MoneyRow, "sourceOnly" | "p
   const five = !r5.length ? "" : missing ? ` ${missing} of them are new in round 5 and are not on the deployed programs yet.`
     : ` ${r5.length} of them are new in round 5. They belong to ${libs.map(plain).join(" and ")}, which ${libs.length > 1 ? "run" : "runs"} round 5, so they are on the deployed program${libs.length > 1 ? "s" : ""} too.`;
   const deployed = progs.length
-    ? ` The deployed programs are ${progs.map((p) => `${plain(p.library)} at round ${p.round ?? 4}, from commit ${short(p.sourceCommit ?? build.sourceCommit)}`).join(", and ")}. Section 5 checks both.`
+    ? ` The deployed programs are ${progs.map((p) => `${plain(p.library)} at round ${p.round ?? 4}, from commit ${short(p.deployedSourceCommit ?? p.sourceCommit ?? build.sourceCommit)}${p.deployedSourceCommit ? ` (a newer build, from commit ${short(p.sourceCommit ?? build.sourceCommit)}, has not been deployed yet)` : ""}`).join(", and ")}. Section 5 checks both.`
     : ` The deployed programs are the build of commit ${short(build.sourceCommit)}, checked in section 5.`;
   return head + five + deployed;
 }
@@ -212,7 +212,7 @@ export function checklistMarkdown(c: Checklist): string {
   L.push("", "## 5. Is the deployed code this code?", "", `The build kind is **${c.build.kind}**. ${c.build.kindNote}`, "");
   // audit R05: one row per program and network; the deployed bytes, their read date and evidence are that network's own
   L.push("| Program | Network | Features | Executable hash (this repository) | Deployed bytes on that network | Read | Evidence |", "|---|---|---|---|---|---|---|");
-  for (const p of c.build.programs) for (const v of ["mainnet", "devnet"] as const) { const d = p.deployed[v]; L.push(`| ${p.library} | ${v} | ${p.builds[v].features.join(", ") || "default"} | \`${p.builds[v].hash}\` | ${d ? `\`${d.hash}\` ${d.matchesBuild ? "same as the build" : "differs from the build"}` : "none recorded"} | ${d?.readAt ?? "—"} | ${d?.evidence ?? "—"} |`); }
+  for (const p of c.build.programs) for (const v of ["mainnet", "devnet"] as const) { const d = p.deployed[v]; L.push(`| ${p.library} | ${v} | ${p.builds[v].features.join(", ") || "default"} | \`${p.builds[v].hash}\` | ${d ? `\`${d.hash}\` ${d.matchesBuild ? "same as the build" : d.pendingUpgrade ? "the earlier build: the upgrade to this build has not been deployed" : "differs from the build"}` : "none recorded"} | ${d?.readAt ?? "—"} | ${d?.evidence ?? "—"} |`); }
   L.push("", "The steps to reproduce the build are in docs/burnticker/VERIFIED-BUILD.md.", "");
   L.push("## 6. Verify a receipt", "", "On the page, paste a receipt's transaction signature, or pick a devnet receipt. Each check shows ✓ when it passed, ✗ when it failed, or – when the page cannot run it, with the reason. These are the checks:", "",
     "- The transaction exists and succeeded.", "- It ran the pinned program's `crank_buyback`.", "- The memo can be read.", "- The Reading account, which the program owns, agrees with the memo.", "- The TokenConfig belongs to that Reading.",

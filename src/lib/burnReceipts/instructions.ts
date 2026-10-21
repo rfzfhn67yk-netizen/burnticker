@@ -199,10 +199,17 @@ export function registerPairPoolIx(o: { programId: PublicKey; registrar: PublicK
  * (LockedCpLiquidityState @128 — LaunchLab's vault authority for policy 0, the pair's vault for pairs) and must hold a majority of the
  * LP in Raydium's lock account `lp_lock_vault`; for policy 0 it runs BEFORE register_pool, on the migration pool. `lpMint` defaults to
  * the CPMM LP mint PDA ["pool_lp_mint", pool].
+ *
+ * WHICH ACCOUNT LIST (B-17). The B-17 program adds the optional `launchlab_pool` account just before system_program. `#[event_cpi]`
+ * appends event_authority and program after every account, and Anchor reads accounts by position, so the two lists are not
+ * interchangeable: the round-5 program now on mainnet and devnet reads a LaunchLab pool in the system_program slot and refuses the
+ * whole instruction (InvalidProgramId), and the B-17 program given the round-5 list reads system_program as the LaunchLab pool and
+ * event_authority as system_program. `launchlabPoolSlot: true` builds the B-17 list; the default is the round-5 list, the one the
+ * deployed program reads. The keeper decides from the deployed program's hash (programHash.ts registerFeeKeyLaunchlabSlot).
  */
-export function registerFeeKeyIx(o: { programId: PublicKey; payer: PublicKey; mint: PublicKey; pool: PublicKey; feeNftMint: PublicKey; cluster: Cluster; lpMint?: PublicKey }): TransactionInstruction {
+export function registerFeeKeyIx(o: { programId: PublicKey; payer: PublicKey; mint: PublicKey; pool: PublicKey; feeNftMint: PublicKey; cluster: Cluster; lpMint?: PublicKey; launchlabPoolSlot?: boolean }): TransactionInstruction {
   const lpMint = o.lpMint ?? PublicKey.findProgramAddressSync([Buffer.from("pool_lp_mint"), o.pool.toBuffer()], CPMM_PROGRAM_ID[o.cluster])[0];
-  return build(o.programId, "register_fee_key", {
+  const ix = build(o.programId, "register_fee_key", {
     payer: o.payer,
     config: configPda(o.programId, o.mint),
     fee_key: feeKeyRecordPda(o.programId, o.mint),
@@ -212,8 +219,15 @@ export function registerFeeKeyIx(o: { programId: PublicKey; payer: PublicKey; mi
     fee_nft_account: feeNftAccount(o.programId, o.feeNftMint),
     locked_liquidity: lockedLiquidityPda(o.cluster, o.feeNftMint),
     lp_lock_vault: lpLockVault(o.cluster, lpMint),
+    // eighth-pass CH8-4 gap 1: the coin's LaunchLab pool, read only when the pool's AmmConfig is not the pinned one (then it must read
+    // migrated); unused for policies 1 and 2
+    launchlab_pool: launchlabPoolPda(LAUNCHLAB_PROGRAM_ID[o.cluster], o.mint),
     system_program: SystemProgram.programId,
   }, {});
+  if (o.launchlabPoolSlot) return ix;
+  // The round-5 program has no launchlab_pool slot: drop it, so system_program, event_authority and program sit where it reads them.
+  const slot = IDL.instructions.find((i) => i.name === "register_fee_key")!.accounts.findIndex((a) => a.name === "launchlab_pool");
+  return new TransactionInstruction({ programId: ix.programId, keys: ix.keys.filter((_, i) => i !== slot), data: ix.data });
 }
 
 /** The CPMM pool accounts claim_lock_fees needs (all from the PoolState): vaults and LP mint. */
