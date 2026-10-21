@@ -162,7 +162,9 @@ export async function readTextCapped(req: Request, max = MAX_JSON_BODY): Promise
     const { done, value } = await reader.read();
     if (done) break;
     n += value.byteLength;
-    if (n > max) { try { await reader.cancel(); } catch { /* the stream is dropped either way */ } return null; }
+    // HB-172: the cancel is not awaited. On a body that was cloned first (launchFailAlert.ts clones the request), a tee branch's cancel
+    // settles only when the other branch is cancelled too, so awaiting it held an over-cap chunked request open for good
+    if (n > max) { reader.cancel().catch(() => { /* the stream is dropped either way */ }); return null; }
     chunks.push(value);
   }
   const all = new Uint8Array(n);
@@ -185,7 +187,7 @@ export async function readTextGated(req: Request, max: number, gateAt: number, g
   const reader = req.body.getReader();
   const chunks: Uint8Array[] = [];
   let n = 0;
-  const stop = async () => { try { await reader.cancel(); } catch { /* the stream is dropped either way */ } };
+  const stop = async () => { reader.cancel().catch(() => { /* the stream is dropped either way */ }); };   // never awaited (see readTextCapped)
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -203,4 +205,21 @@ export async function readTextGated(req: Request, max: number, gateAt: number, g
 /** Parses a JSON body; null when it is not JSON or larger than MAX_JSON_BODY (the caller answers 400). */
 export async function readJson(req: Request): Promise<Record<string, unknown> | null> {
   try { const t = await readTextCapped(req); if (t === null) return null; const b = JSON.parse(t); return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : null; } catch { return null; }
+}
+
+/**
+ * HB-172 (seventh prelaunch audit LA7-3, 2026-10-20): the review route parsed bodies up to MAX_JSON_BODY (6.5 MB) on the 120-request
+ * read bucket, all on the one web process. Every v1 POST that carries no image (review, confirm, rule checks, backtests, derby checks,
+ * search misses, the operator's post mark) now reads at most SMALL_JSON_BODY; the bundle route, which carries the coin images, keeps
+ * MAX_JSON_BODY. The largest legitimate small body is a pair review or a confirm with its signed transactions, a few KB.
+ */
+export const SMALL_JSON_BODY = 256 * 1024;
+/** The 413 answer for a body over its route's cap. */
+export const bodyTooLarge = (max: number): ApiResult => fail(413, `This request is too large. The limit here is ${max >= 1_000_000 ? `${(max / 1_000_000).toFixed(1)} MB` : `${Math.round(max / 1024)} KB`}.`, { code: "body-too-large", maxBytes: max });
+/** The JSON object body read up to `max` bytes: `tooLarge` (a 413 to return as is) when it is larger, else `body` (null when not a JSON object). */
+export async function readJsonLimited(req: Request, max: number = SMALL_JSON_BODY): Promise<{ body: Record<string, unknown> | null } | { tooLarge: ApiResult }> {
+  let t: string | null;
+  try { t = await readTextCapped(req, max); } catch { return { body: null }; }
+  if (t === null) return { tooLarge: bodyTooLarge(max) };
+  try { const b = JSON.parse(t); return { body: b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : null }; } catch { return { body: null }; }
 }

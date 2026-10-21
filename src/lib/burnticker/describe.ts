@@ -26,8 +26,8 @@ import { fitName } from "@/lib/burnticker/launchFields";
 /**
  * THE AUTO-GENERATED COIN TEXT (2026-10-10, the owner thinks in sentences): from the LOCKED RULE, by deterministic templates — no model —
  * a name, a ticker, a one-liner ("burns when the Rays win") and a 3–4 sentence paragraph: what it tracks, exactly when and how much it
- * burns, the settlement source and its cross-read, what happens on the other outcome, the end, and "The creator earns nothing. The
- * liquidity pool is locked forever, and its fees fund the burn." (LP policy: owner decision 2026-10-10; plain-English pass 2026-10-11) Every template is built from words the copy lint (config/launch/copy-lint.json) allows; test/burntickerDescribe.test.ts
+ * burns, the settlement source and its cross-read, what happens on the other outcome, the end, and "The creator earns nothing. Liquidity
+ * locks forever at graduation, and its fees fund the burn." (LP policy: owner decision 2026-10-10; plain-English pass 2026-10-11) Every template is built from words the copy lint (config/launch/copy-lint.json) allows; test/burntickerDescribe.test.ts
  * generates the text for every fixture rule and lints it.
  *
  *   flavour   "$RAYS26 burns when the Rays win."           editable on the create screen
@@ -74,7 +74,9 @@ export type WindowKind = "season" | "post" | "next" | "perpetual" | "one-shot";
 /** `lead`: the rule block's first sentence, whole (leadSentence), for the cards and the review that show one sentence. */
 export interface CoinText { name: string; ticker: string; oneLiner: string; flavour: string; ruleBlock: string; lead: string; windowSentence: string; windowKind: WindowKind; badge: string; paragraph: string; shape: "recurring" | "one-shot" }
 
-const CLOSER = "The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.";
+// HB-179 (seventh pass B-20d, HS-65): the lock only exists once the coin graduates, so the closer says when. Descriptions already
+// pinned on Arweave or in token metadata keep the old sentence; they cannot be changed.
+const CLOSER = "The creator earns nothing. Liquidity locks forever at graduation, and its fees fund the burn.";
 /**
  * WINNER TAKES THE BURN (owner decision 2026-10-11, LAUNCHPAD-PATH §40): the locked description of a rivalry-pair coin carries this
  * sentence (its rule's pair.winnerTakesBurn). The words match rules.ts WINNER_TAKES_BURN_LINE; the copy lint's no-prizes check keeps

@@ -84,10 +84,36 @@ export function raceFromEvent(e: GammaEvent, refuse: (titles: string[]) => strin
 
 /** The card line: "Abdul El-Sayed (D) wins the Michigan Senate race, which settles on 2026-11-04." (the settlement source is its own line on the card). */
 export function outcomeCardTitle(r: Race, o: RaceOutcome): string {
+  const c = controlIdentity(r, o);
+  if (c) return `The ${c.party} Party wins control of the ${c.chamber}${r.settlesOn ? `, which settles on ${r.settlesOn}` : ""}.`;
   return `${o.label} wins the ${raceNoun(r)}${r.settlesOn ? `, which settles on ${r.settlesOn}` : ""}.`;
+}
+
+/**
+ * HB-171 (seventh pass WZ7-2, HS-66): a party-control outcome in plain words. The race title is a question ("Which party will win the
+ * Senate in 2026?"), so "<label> wins the <title> race" read "Democratic Party wins the Which party will win the Senate in 2026? race",
+ * every card was named "Party Wins" and the tickers came out as $DEMOCRATIC and $DEMOCRATI2. Here the party and the chamber make the
+ * event ("the Democratic Party wins control of the Senate in the 2026 election"), the name ("Democrats win the Senate") and the ticker
+ * ($DEMSENATE, $REPHOUSE). Null for any other race, or an outcome that names neither party.
+ */
+export interface ControlIdentity { party: "Democratic" | "Republican"; chamber: "Senate" | "House"; year: string | null; phrase: string; name: string; ticker: string }
+export function controlIdentity(r: Pick<Race, "type" | "title" | "settlesOn">, o: Pick<RaceOutcome, "label" | "question">): ControlIdentity | null {
+  if (r.type !== "control") return null;
+  const chamber = /\bSenate\b/i.test(r.title) ? "Senate" : /\bHouse\b/i.test(r.title) ? "House" : null;
+  const partyOf = (s: string) => (/\bDemocrat/i.test(s) ? "Democratic" : /\bRepublican/i.test(s) ? "Republican" : null);
+  const party = partyOf(o.label) ?? partyOf(o.question);
+  if (!chamber || !party) return null;
+  const year = /\b(20\d\d)\b/.exec(r.title)?.[1] ?? r.settlesOn?.slice(0, 4) ?? null;
+  return {
+    party, chamber, year,
+    phrase: `the ${party} Party wins control of the ${chamber}${year ? ` in the ${year} election` : ""}`,
+    name: `${party === "Democratic" ? "Democrats" : "Republicans"} win the ${chamber}`,
+    ticker: `${party === "Democratic" ? "DEM" : "REP"}${chamber.toUpperCase()}`,
+  };
 }
 /** What the coin settles on, in plain words (a party market labelled with its nominee settles on the party). */
 export function outcomeSettlesNote(r: Race, o: RaceOutcome): string {
+  if (r.type === "control") return `It settles on "${o.question}" resolving ${o.yes}.`;
   const party = /Democrat/i.test(o.question) ? "Democratic" : /Republican/i.test(o.question) ? "Republican" : null;
   return o.partyMarket && party
     ? `It settles on the ${party} nominee winning the ${raceNoun(r)} ("${o.question}"). ${o.label.replace(/\s*\([A-Z]\)$/, "")} is the name Polymarket shows for that nominee. If the nominee changes, the market follows the party.`

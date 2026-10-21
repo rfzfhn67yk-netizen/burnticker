@@ -68,7 +68,7 @@ describe("the generated description", () => {
       const n = (t.paragraph.match(new RegExp(re.source, "g")) ?? []).length;
       assert.equal(n, k === f.kind ? 1 : 0, `${f.label}: ${n} × ${k} window sentence\n${t.paragraph}`);
     }
-    assert.ok(t.paragraph.endsWith("The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn."));
+    assert.ok(t.paragraph.endsWith("The creator earns nothing. Liquidity locks forever at graduation, and its fees fund the burn."));
     assert.ok(t.paragraph.startsWith(`$${t.ticker} burns `));
     assert.equal(t.badge, windowBadge(f.rule, f.ctx));
   });
@@ -91,7 +91,7 @@ describe("the generated description", () => {
     const r = { ...team("mlb", "LAD", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
     const t = describeRule(r, { ticker: "" });
     assert.equal(t.ticker, "LADWIN");
-    assert.equal(t.paragraph, "$LADWIN burns when the Dodgers win. This coin burns 2% of its pool every game the Dodgers win, through the last game of the 2026 postseason. Each burn buys $LADWIN on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
+    assert.equal(t.paragraph, "$LADWIN burns when the Dodgers win. This coin burns 2% of its pool every game the Dodgers win, through the last game of the 2026 postseason. Each burn buys $LADWIN on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. Liquidity locks forever at graduation, and its fees fund the burn.");
     assert.equal(t.ruleBlock.split(/(?<=\.)\s/)[0], "This coin burns 2% of its pool every game the Dodgers win, through the last game of the 2026 postseason.", "the review card's sentence");
     assert.deepEqual(championEndSentences("the Dodgers"), ["If the Dodgers win the championship, the rest of the pool burns here.", "If they do not, the rest goes to $DEFICIT's burn."]);
     assert.equal(championPathRule(r), true);
@@ -107,7 +107,7 @@ describe("the generated description", () => {
   test("the Rays' season coin, word for word (the owner's target, with the window sentence and the year in the ticker)", () => {
     const t = describeRule(team("mlb", "TB", "win", S(2026)), { ticker: "" });
     assert.equal(t.ticker, "TBMLBWIN"); assert.equal(t.badge, "2026 SEASON");
-    assert.equal(t.paragraph, "$TBMLBWIN burns when the Rays win. For every Rays win in the 2026 season, the burn pool spends 2% buying $TBMLBWIN on Raydium and burns it, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 Rays season only, including the playoffs. After the Rays' last game, it burns down whatever is left over four weeks and then retires. It does not continue into 2027. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
+    assert.equal(t.paragraph, "$TBMLBWIN burns when the Rays win. For every Rays win in the 2026 season, the burn pool spends 2% buying $TBMLBWIN on Raydium and burns it, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 Rays season only, including the playoffs. After the Rays' last game, it burns down whatever is left over four weeks and then retires. It does not continue into 2027. The creator earns nothing. Liquidity locks forever at graduation, and its fees fund the burn.");
     const e = describeRule(team("nfl", "PHI", "win", S(2026)), { ticker: "" });
     assert.equal(e.ticker, "PHINFLWIN");
     assert.match(e.windowSentence, /^This coin covers the 2026 Eagles season only, including the playoffs\. After the Eagles' last game, it burns down whatever is left over four weeks and then retires\. It does not continue into 2027\.$/);

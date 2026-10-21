@@ -30,3 +30,13 @@ its content unchanged (it held no entries).
 - Until publish 100, the served release held that one hand-placed file outside its release record (the record's public tree did not list it). Publish 100 carries the file in its own tree, so the host again matches its record.
 - Gate rule from now on: a deploy-time script may only run files that are in the public tree. A test reads scripts/ops/deploy-sites.sh, collects every scripts/ path it runs, and fails unless each one is in config/public-repo.allowlist.
 - Postmortem: due under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).
+
+## 2026-10-20 — a five-minute web outage, short stalls on publishes 102 and 103, and unknown coin pages answering 500
+
+- 01:13 and 02:14 Denver, publish 102: some requests waited more than 20 seconds and got the "the app is catching up" page instead of an answer. They worked again on retry.
+- 05:13 to 05:18 Denver, publish 102: the web did not answer. The outside web check timed out at 05:13, and Healthchecks marked the site down at 05:13 and up again at 05:18, about five minutes in all. Publish 102 kept no slow-request log, so the exact cause of this one is not known.
+- 06:30 to 06:39 Denver, the first minutes of publish 103: the web process was held for about 13 seconds at a time, three times. Six searches and launch reviews took more than 20 seconds, so those visitors got the "catching up" page.
+- From publish 103 until publish 104 went live at 06:58 Denver: the page for a coin the site does not know answered with a server error (500) instead of "not found" (404). The release's own check caught it, and publish 104 restored the 404.
+- No burn, reading or receipt was affected.
+- Cause of the stalls: page builds waited on chain reads that had no time limit, and the launch review redid slow team-name matching for every game it read, which held the web process. Changes: 63c34cf8 and 2b5c7536 put time limits on those reads and log slow requests, 9aa893e6 stops page data being rebuilt when nobody asked for it, and cafdd563 (publish 105, live 07:52 Denver) removes the repeated matching. The 500s came from a new route for unknown coin pages and were fixed by 68c7e450 in publish 104.
+- Postmortem: due under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).

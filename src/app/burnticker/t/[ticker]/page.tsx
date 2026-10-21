@@ -407,7 +407,8 @@ function LpLockCard({ lp, card }: { lp: LpBlock; card: string }) {
   const addr = (a: string | null, url: string | null, empty: string) => (a ? (url ? <a className="underline font-mono break-all" href={url}>{short(a)}</a> : <span className="font-mono">{short(a)}</span>) : <span className="text-neutral-500">{empty}</span>);
   return (
     <section className={card} aria-label="LP locked forever">
-      <h2 className="font-mono text-xs uppercase tracking-widest">Liquidity locked forever</h2>
+      {/* HB-179: before graduation there is no pool and no lock yet, so the heading says when it happens */}
+      <h2 className="font-mono text-xs uppercase tracking-widest">{lp.lockedPct === null ? "Liquidity lock at graduation" : "Liquidity locked forever"}</h2>
       <p className="mt-2 text-xs">{lp.lockedPct === null ? LP_BEFORE_GRADUATION_LINE : `${lp.lockedPct}% of the liquidity from graduation is locked with Raydium's lock and can never be withdrawn.`} The burn program owns the Fee Key, which collects the locked liquidity&apos;s share of the pool&apos;s trading fees. Anyone can claim those fees. Of those liquidity fees, {lp.split.burnBps / 100}% of the SOL goes to this coin&apos;s burn pool and {lp.split.operatorBps / 100}% goes to the operator. The coin&apos;s own tokens from the fees are burned. These shares are fixed in code.</p>
       <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
         <div><dt className="text-neutral-500">lock program</dt><dd>{addr(lp.lockProgram, lp.urls.lockProgram, "—")}</dd></div>

@@ -25,7 +25,7 @@ test("unknown top-level fields are dropped; every field the launch page sends is
   const page = { ...launchBody({ creator: "W", ticker: "a", name: "n", description: "d", descCtx: {}, note: "", rule: BRONCOS as Any, timings: { a: 1 }, raiseSol: "85" }), creatorDescription: "", links: [], image: {}, imageRights: true, imageBadge: false, idempotencyKey: "k", mint: "M", walletProof: {}, pair: {}, venue: "launchlab", dryRun: true, action: "launched", launchTx: "t", recentBlockhash: "b", register: false };
   for (const k of Object.keys(page)) assert.ok(LAUNCH_BODY_FIELDS.includes(k), k);
   assert.match(fs.readFileSync("src/app/api/burnticker/launch/route.ts", "utf8"), /body = launchBodyOf\(body\);/);
-  assert.match(fs.readFileSync("src/app/api/burnticker/v1/launch/bundle/route.ts", "utf8"), /const body = launchBodyOf\(await readJson\(req\)\);/);
+  assert.match(fs.readFileSync("src/app/api/burnticker/v1/launch/bundle/route.ts", "utf8"), /const read = await readJsonLimited\(req, MAX_JSON_BODY\); if \("tooLarge" in read\) return read\.tooLarge; const body = launchBodyOf\(read\.body\);/);
 });
 
 test("the OpenAPI spec describes walletProof and the 401 it can answer", () => {

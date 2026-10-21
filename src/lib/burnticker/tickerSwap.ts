@@ -88,3 +88,25 @@ export const hazardSwapLine = (from: string, to: string, name: string | null): s
   name
     ? `$${from.toUpperCase()} is taken or too close to another coin's ticker, so this coin starts as $${to.toUpperCase()}, named "${name}". You can change both.`
     : pairTickerSwapLine(from, to);
+
+const TEAM_WORD_TEXT: Record<(typeof TEAM_WORDS)[number], string> = { FANS: "Fans", CLUB: "Club", CREW: "Crew", HQ: "HQ", SQUAD: "Squad", GANG: "Gang" };
+
+/**
+ * HB-170 (seventh pass B-21, HB-86 reopened): when a team coin's generated ticker is taken and swapped for a team-word ticker
+ * ($PHINFLWIN to $PHINFLFANS), the generated name moves with it, so the copy does not keep the live coin's name: "Eagles 2026 Wins"
+ * becomes "Eagles Fans 2026 Wins". The word goes before the year when the name has one, else before a closing Win, Wins, Loss, Losses
+ * or Lose, else at the end. Null when the new ticker adds no team word (a digit ending keeps the name, and the review says so).
+ */
+export function teamWordName(name: string, from: string, to: string): string | null {
+  const f = from.toUpperCase(), t = to.toUpperCase(), n = name.trim();
+  if (!n || f === t) return null;
+  const word = TEAM_WORDS.find((w) => t.endsWith(w) && !f.endsWith(w));
+  if (!word) return null;
+  const text = TEAM_WORD_TEXT[word];
+  if (new RegExp(`\\b${text}\\b`, "i").test(n)) return null;
+  const parts = n.split(/\s+/);
+  let at = parts.findIndex((p) => /^(19|20)\d\d$/.test(p));
+  if (at < 1 && parts.length > 1 && /^(win|wins|loss|losses|lose)$/i.test(parts[parts.length - 1])) at = parts.length - 1;
+  if (at < 1) at = parts.length;
+  return [...parts.slice(0, at), text, ...parts.slice(at)].join(" ");
+}

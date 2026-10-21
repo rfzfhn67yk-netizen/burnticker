@@ -205,7 +205,7 @@ function LpLine({ lp }: { lp: NonNullable<Side["status"]["lp"]> }) {
   const a = (addr: string | null, url: string | null, empty: string) => (addr ? (url ? <a className="underline font-mono" href={url}>{addr.slice(0, 4)}…{addr.slice(-4)}</a> : <span className="font-mono">{addr.slice(0, 4)}…{addr.slice(-4)}</span>) : <span>{empty}</span>);
   return (
     <div className="text-xs text-neutral-400 mt-2">
-      <p className="font-mono uppercase tracking-widest text-[11px]">Liquidity locked forever</p>
+      <p className="font-mono uppercase tracking-widest text-[11px]">{lp.lockedPct === null ? "Liquidity lock at graduation" : "Liquidity locked forever"}</p>
       <p className="mt-1">{lp.lockedPct === null ? LP_BEFORE_GRADUATION_LINE : `${lp.lockedPct}% of the liquidity is locked.`} Its fees go {lp.split.burnBps / 100}% to the burn pool and {lp.split.operatorBps / 100}% to the operator, fixed in code. The lock program is {a(lp.lockProgram, lp.urls.lockProgram, "not known")}. The Fee Key is {a(lp.feeKey, lp.urls.feeKey, "shown at graduation")}, and its owner is {a(lp.feeKeyOwner, lp.urls.feeKeyOwner, "not known")}.</p>
       {lp.lastClaim && <p className="mt-1">{lp.lastClaim.txUrl ? <a className="underline" href={lp.lastClaim.txUrl}>{lp.lastClaim.line}</a> : lp.lastClaim.line}</p>}
     </div>

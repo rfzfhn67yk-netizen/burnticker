@@ -215,8 +215,9 @@ export const RECEIPTS_LINE = "Every burn posts a public receipt: the reading it 
  * traded is in the summary below the card.
  */
 // fees copy (2026-10-12, WIRING-FEES.md; the owner: "it's showing I'm getting 20%"): the operator's share said from the constants
-export const LP_LINE = `The pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
-export const PAIR_LP_LINE = `The pool's liquidity is locked forever. ${PAIR_OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
+// HB-179 (seventh pass B-20d): before graduation there is no pool, so "What you confirm" says when the lock happens
+export const LP_LINE = `After graduation, the pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
+export const PAIR_LP_LINE = `After graduation, each pool's liquidity is locked forever. ${PAIR_OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
 /** A4: the dial's name. The share is of the coin's burn pool, never of its supply. */
 export const BUDGET_LABEL = "Share of the burn pool per result";
 /** Audit 6 item 5: the ticker field takes at most what the server accepts. */

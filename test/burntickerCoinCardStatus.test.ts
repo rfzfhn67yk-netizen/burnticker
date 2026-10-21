@@ -243,7 +243,7 @@ describe("the static fallback home prints the same card", () => {
   });
   test("an untraded curve says \"No trades yet\"; unread rows say \"Not read yet\"; no \"?\" as text anywhere on the card", async () => {
     const html = await staticCards([asApi(cardViewFromIndex({ ...COIN, holders: null, readiness: null }, null)), asApi(cardViewFromIndex({ ...COIN, phase: null, raised: null, progressPct: null, marketCap: null, holders: null, launchedAt: null }, null))]);
-    assert.match(html, /No trades yet/); assert.match(html, /Not read yet/);
+    assert.match(html, /Nothing net raised yet/); assert.match(html, /Not read yet/);
     assert.doesNotMatch(html.replace(/<[^>]+>/g, " "), /\?/);
     assert.doesNotMatch(html, /why-mark|No data yet|curve-implied/);
     // no status sent (an older answer): the rule stands in

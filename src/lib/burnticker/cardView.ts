@@ -265,12 +265,16 @@ export function emptyLabels(v: CardView): Record<(typeof EMPTY_ROWS)[number], st
  * A market cap read from the curve, before graduation, is the curve's current SOL per token times the whole supply, which can look large
  * beside a small raise (28 SOL beside 0.1 SOL raised). It carries its basis in words (coin card status 2026-10-18, the owner's UX
  * walkthrough; it said "(curve-implied)" before): "28 SOL from the curve". After graduation it is the pool's number and carries no words.
- * A curve nobody has traded on (0 raised) has no figure at all: the curve's opening ratio times the supply is not a market, so the row
- * says "No trades yet" and shows no SOL figure.
+ * A curve with nothing raised (0 raised) has no figure at all: the curve's opening ratio times the supply is not a market, so the row
+ * says "Nothing net raised yet" and shows no SOL figure.
+ *
+ * HB-173 (seventh pass B-20b, HS-64): it said "No trades yet", which was false on curves that were traded and sold back to nothing
+ * ($NEXTM6: 84 curve transactions, about 0.23 SOL of fees, nothing raised). Nothing here reads whether a curve has a swap signature, so
+ * the words now say only what the curve read shows, and are true both before the first trade and after buyers sold back.
  */
 export const CURVE_BASIS = "from the curve";
-export const NO_TRADES = "No trades yet";
-export const NO_TRADES_WHY = "Nobody has traded on this coin's curve yet, so there is no figure to show.";
+export const NO_TRADES = "Nothing net raised yet";
+export const NO_TRADES_WHY = "No SOL is raised on this coin's curve right now, so there is no figure to show. That is true before anyone trades, and also after buyers have sold back what they bought.";
 /**
  * Third prelaunch audit 2026-10-19 B-6: an untraded LaunchLab curve reads 1 lamport raised ("0.000000001"), not 0, so the card showed a
  * 28 SOL market cap on coins nobody had traded. Below NO_TRADE_DUST_SOL raised, the curve counts as untraded.
@@ -283,7 +287,7 @@ export function mcapText(value: string, quote: string | null | undefined, phase:
   if (noTradesYet(phase, raised)) return NO_TRADES;
   return `${groupDigits(value)} ${quote ?? "SOL"}${phase === "graduated" ? "" : ` ${CURVE_BASIS}`}`;
 }
-/** The market cap row: "No trades yet" on an untraded curve, the figure with its basis once there is a trade, or "—" with the reason. */
+/** The market cap row: "Nothing net raised yet" on a curve with nothing raised, the figure with its basis once there is a trade, or "—" with the reason. */
 export function mcapCell(c: { cap: string | null | undefined; quote?: string | null; phase?: IndexCoin["phase"]; raised?: string | null }, notRead: string = NOT_READ.mcapNotRead, poolNote: string | null = null): CardCell {
   if (noTradesYet(c.phase, c.raised)) return { text: NO_TRADES, why: NO_TRADES_WHY };
   if (c.cap) return { text: mcapText(c.cap, c.quote, c.phase, c.raised ?? null), why: c.phase === "graduated" ? MCAP_POOL_MEANING : CARD_MEANINGS.mcap };
