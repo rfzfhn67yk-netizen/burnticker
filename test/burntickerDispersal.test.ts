@@ -6,8 +6,9 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   addReading, behind, chunkCeiling, debtLine, DEPTH_PPM, DISPERSAL_MIN_GAP_MS, DISPERSAL_WINDOW_MS, dispersalEnabled, markChunk, nextDueAt, planWindow,
-  priceMovePct, reconcile, rng, seedOf, stateFromJson, stateToJson, step, EMPTY_STATE, type DispersalWindow, type Observation,
+  pieceSize, priceMovePct, PROGRAM_CAP_BPS, reconcile, rng, seedOf, stateFromJson, stateToJson, step, EMPTY_STATE, type DispersalWindow, type Observation,
 } from "@/lib/burnticker/dispersal";
+import { MAX_SPEND_RESERVE_BPS } from "@/lib/burnReceipts/constants";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 
 const SOL = BigInt(1_000_000_000);
@@ -225,5 +226,139 @@ describe("the window's end and a coarse wake", () => {
     // beyond one gap after the end, the remainder opens a new window instead
     const late = step(last, { now: w.endMs + DISPERSAL_MIN_GAP_MS, carriedLamports: last.expectedCarried, reserveLamports: sol(2), queueEmpty: true, seed: 9 });
     assert.notEqual(late.window!.startMs, w.startMs);
+  });
+});
+
+describe("small pools: the depth ceiling under the program's floor (devnet 2026-10-20, publish 109)", () => {
+  const FLOOR = BigInt(9_399_141);                 // the devnet rule floor
+  const capOf = (reserve: bigint) => (reserve * BigInt(MAX_SPEND_RESERVE_BPS)) / BigInt(10_000);
+  /** crank_carried.rs as it sizes a piece: refused above the cap, refused under the floor unless it is the whole remainder. */
+  const program = (maxSpend: bigint, carried: bigint, reserve: bigint): { spent: bigint } | { err: string } => {
+    if (maxSpend > capOf(reserve)) return { err: "SpendAboveCap" };
+    const spend = carried < maxSpend ? carried : maxSpend;
+    if (spend <= BigInt(0)) return { err: "NothingCarried" };
+    if (spend < FLOOR && spend !== carried) return { err: "BelowFloor" };
+    return { spent: spend };
+  };
+  /** Drives step() against the simulated program until nothing is carried; the pool does not move (the worst case for the floor). */
+  function drainOn(carried0: bigint, reserve: bigint, maxWakes = 5_000) {
+    let carried = carried0, w: DispersalWindow | null = null, now = T0;
+    const pieces: bigint[] = [], refusals: string[] = [];
+    for (let i = 0; i < maxWakes && carried > BigInt(0); i++) {
+      const r = step(w, { now, carriedLamports: carried, reserveLamports: reserve, queueEmpty: true, floorLamports: FLOOR, seed: 11 + i });
+      w = r.window;
+      if (r.action.kind === "crank") {
+        const res = program(r.action.lamports, carried, reserve);
+        if ("err" in res) { refusals.push(res.err); w = markChunk(w!, BigInt(0)); continue; }
+        pieces.push(res.spent); carried -= res.spent; w = markChunk(w!, res.spent, now);
+        continue;
+      }
+      if (r.action.kind === "wait") now = r.action.untilMs; else break;
+    }
+    return { pieces, refusals, carried, now };
+  }
+
+  test("the TS cap mirrors the program's MAX_SPEND_RESERVE_BPS", () => {
+    assert.equal(PROGRAM_CAP_BPS, MAX_SPEND_RESERVE_BPS);
+  });
+
+  test("0.613 SOL pool, 114M carried (THUVSPURS): floor-sized pieces the program accepts, then the whole remainder; all of it spends", () => {
+    const reserve = sol(0.613), carried = BigInt(114_000_000);
+    assert.ok(chunkCeiling(reserve) < FLOOR, "the depth ceiling (about 7.52M) is under the floor: the bug's precondition");
+    assert.deepEqual(pieceSize(reserve, FLOOR), { size: FLOOR, cap: capOf(reserve), mode: "floor" });
+    const w = planWindow({ carriedLamports: carried, reserveLamports: reserve, now: T0, seed: 5, floorLamports: FLOOR });
+    assert.deepEqual(w.chunks.map((c) => c.lamports), [...Array(12).fill(FLOOR), carried - BigInt(12) * FLOOR], "12 × 9,399,141 then a 1,210,308 whole remainder");
+    for (const c of w.chunks) assert.ok(c.lamports <= capOf(reserve), "never above the per-crank cap");
+    for (let i = 1; i < w.chunks.length; i++) assert.ok(w.chunks[i].atMs - w.chunks[i - 1].atMs >= DISPERSAL_MIN_GAP_MS, "the 20-minute gap holds");
+    assert.ok(w.chunks.every((c) => c.atMs >= T0 && c.atMs < w.endMs), "inside the 6-hour window");
+    const r = drainOn(carried, reserve);
+    assert.deepEqual(r.refusals, [], "no piece refused (before the fix: every 7.52M piece was BelowFloor)");
+    assert.equal(r.carried, BigInt(0));
+    assert.equal(r.pieces.length, 13);
+    assert.ok(r.now - T0 < DISPERSAL_WINDOW_MS, "inside one window");
+    assert.ok(priceMovePct(FLOOR, reserve) < 3.2, "a floor-sized piece moves this pool about 3 % (TwapDeviation may defer it; it retries)");
+  });
+
+  test("0.613 SOL pool, 51M carried (CHIVASOK): five floor pieces and a whole remainder", () => {
+    const reserve = sol(0.613), carried = BigInt(51_000_000);
+    const w = planWindow({ carriedLamports: carried, reserveLamports: reserve, now: T0, seed: 9, floorLamports: FLOOR });
+    assert.deepEqual(w.chunks.map((c) => c.lamports), [...Array(5).fill(FLOOR), carried - BigInt(5) * FLOOR]);
+    const r = drainOn(carried, reserve);
+    assert.deepEqual(r.refusals, []);
+    assert.equal(r.carried, BigInt(0));
+  });
+
+  test("more floor pieces than fit one window: 18 floor pieces now, the rest in the next window, never more pieces than the carry allows", () => {
+    const reserve = sol(0.613), carried = BigInt(300_000_000);
+    const w = planWindow({ carriedLamports: carried, reserveLamports: reserve, now: T0, seed: 1, floorLamports: FLOOR });
+    assert.equal(w.chunks.length, 18);
+    assert.ok(w.chunks.every((c) => c.lamports === FLOOR));
+    const few = planWindow({ carriedLamports: FLOOR * BigInt(3), reserveLamports: reserve, now: T0, seed: 1, floorLamports: FLOOR });
+    assert.deepEqual(few.chunks.map((c) => c.lamports), [FLOOR, FLOOR, FLOOR], "exactly three floors carried: three pieces, no dust piece");
+    const r = drainOn(carried, reserve);
+    assert.deepEqual(r.refusals, []);
+    assert.equal(r.carried, BigInt(0));
+  });
+
+  test("a 1.04 SOL pool is unchanged: the depth ceiling is above the floor, pieces are the even split as before", () => {
+    const reserve = sol(1.04), carried = BigInt(114_000_000);
+    const ceiling = chunkCeiling(reserve);
+    assert.ok(ceiling >= FLOOR);
+    assert.equal(pieceSize(reserve, FLOOR).mode, "depth");
+    const w = planWindow({ carriedLamports: carried, reserveLamports: reserve, now: T0, seed: 5, floorLamports: FLOOR });
+    const n = Number((carried + ceiling - BigInt(1)) / ceiling);
+    assert.equal(w.chunks.length, n);
+    const total = w.chunks.reduce((a, c) => a + c.lamports, BigInt(0));
+    assert.equal(total, carried);
+    for (const c of w.chunks) assert.ok(c.lamports <= ceiling && c.lamports >= carried / BigInt(n));
+    const old = planWindow({ carriedLamports: carried, reserveLamports: reserve, now: T0, seed: 5 });
+    assert.deepEqual(w.chunks, old.chunks, "the same plan with or without the floor: nothing changes on a pool deep enough");
+    assert.deepEqual(drainOn(carried, reserve).refusals, []);
+  });
+
+  test("whole remainder: under a floor carried on a small pool is one piece of all of it, which the program accepts", () => {
+    const reserve = sol(0.613), carried = BigInt(4_000_000);
+    const w = planWindow({ carriedLamports: carried, reserveLamports: reserve, now: T0, seed: 2, floorLamports: FLOOR });
+    assert.deepEqual(w.chunks.map((c) => c.lamports), [carried]);
+    assert.deepEqual(drainOn(carried, reserve), { pieces: [carried], refusals: [], carried: BigInt(0), now: drainOn(carried, reserve).now });
+    // a pool so small that even one floor is above the cap: a carried amount within the cap still goes, whole, in one piece
+    const tiny = sol(0.3);
+    assert.equal(pieceSize(tiny, FLOOR).mode, "below-floor");
+    const within = capOf(tiny) - BigInt(1);
+    const wt = planWindow({ carriedLamports: within, reserveLamports: tiny, now: T0, seed: 2, floorLamports: FLOOR });
+    assert.deepEqual(wt.chunks.map((c) => c.lamports), [within]);
+    assert.deepEqual(drainOn(within, tiny).refusals, []);
+  });
+
+  test("a piece refused earlier leaves the last planned piece under the floor and not the whole remainder: the step raises it to the floor", () => {
+    const reserve = sol(0.613), carried = FLOOR + BigInt(1_000_000);
+    let w: DispersalWindow | null = planWindow({ carriedLamports: carried, reserveLamports: reserve, now: T0, seed: 3, floorLamports: FLOOR });
+    assert.deepEqual(w.chunks.map((c) => c.lamports), [FLOOR, BigInt(1_000_000)]);
+    w = markChunk(w, BigInt(0));                      // the floor piece was deferred and given up; the chain still carries all of it
+    const r = step(w, { now: w.chunks[1].atMs, carriedLamports: carried, reserveLamports: reserve, queueEmpty: true, floorLamports: FLOOR, seed: 1 });
+    assert.equal(r.action.kind, "crank");
+    assert.equal((r.action as { lamports: bigint }).lamports, FLOOR);
+  });
+
+  test("the cap bound: a floor above 2 % of the pool with more than the cap carried is stuck: nothing planned, the step says so", () => {
+    const tiny = sol(0.3), carried = BigInt(114_000_000);
+    assert.ok(FLOOR > capOf(tiny));
+    const w = planWindow({ carriedLamports: carried, reserveLamports: tiny, now: T0, seed: 2, floorLamports: FLOOR });
+    assert.deepEqual(w.chunks, []);
+    assert.match(w.stuck!, /^stuck: 0\.114 SOL is carried, but the rule's smallest allowed burn \(0\.0094 SOL\) is above the program's per-crank cap on this pool \(2 % of 0\.3 SOL = 0\.006 SOL\)/);
+    const r = step(null, { now: T0, carriedLamports: carried, reserveLamports: tiny, queueEmpty: true, floorLamports: FLOOR, seed: 1 });
+    assert.equal(r.action.kind, "wait");
+    assert.equal((r.action as { stuck?: boolean }).stuck, true);
+    assert.equal((r.action as { untilMs: number }).untilMs, T0 + 10 * 60_000, "checked again in 10 minutes");
+    // the pool grows past floor / 2 %: the next step re-plans floor-sized pieces at once
+    const r2 = step(r.window, { now: T0 + 10 * 60_000, carriedLamports: carried, reserveLamports: sol(0.5), queueEmpty: true, floorLamports: FLOOR, seed: 2 });
+    assert.equal(r2.window!.stuck, undefined);
+    assert.ok(r2.window!.chunks.length > 0 && r2.window!.chunks.every((c) => c.lamports <= capOf(sol(0.5))));
+    // on every plan, no piece is ever above the cap
+    for (const res of [0.2, 0.47, 0.5, 0.613, 0.77, 1.04, 5, 85]) {
+      const rv = sol(res);
+      const p = planWindow({ carriedLamports: sol(3), reserveLamports: rv, now: T0, seed: 4, floorLamports: FLOOR });
+      for (const c of p.chunks) assert.ok(c.lamports <= capOf(rv), `${res} SOL pool: piece ${c.lamports} above the cap`);
+    }
   });
 });

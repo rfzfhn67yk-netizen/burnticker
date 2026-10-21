@@ -16,6 +16,18 @@
  *     reading's crank carried more, someone else cranked a piece, a piece was refused) the rest of the window is re-planned from now
  *     with the observed amount (same window end, a new seed derived from the old one).
  *   · DEBTS (for the page and the 24-hour alert): each reading's own spend, drained oldest-first by every spend the chain shows.
+ *   · SMALL POOLS (devnet 2026-10-20, keeper on publish 109): the program refuses a piece under the rule's floor unless it is the whole
+ *     carried remainder (crank_carried.rs:220, BelowFloor). When the depth ceiling is below the floor (a pool under floor / 1.227 % of
+ *     SOL: about 0.77 SOL on devnet's 9,399,141-lamport floor, about 0.55 SOL on mainnet's ≈ $1 floor, i.e. a drained pool) the plan
+ *     uses floor-sized pieces instead, never above the per-crank cap, plus one whole-remainder piece for what is left under the floor.
+ *     A floor-sized piece on such a pool moves the price by about 3 %, so the program may defer it with TwapDeviation; that is
+ *     acceptable, the keeper retries it. When even one floor-sized piece is above the cap (a pool under floor / 2 %), only a carried
+ *     amount within the cap can go, as one whole-remainder piece; anything more is STUCK: nothing is planned, the step says so and the
+ *     keeper raises bt-dispersal-stuck. Before this, each piece stayed at the depth ceiling under the floor and was refused window after
+ *     window (THUVSPURS 114M and CHIVASOK 51M lamports carried on 0.613 SOL pools).
+ *   · NOT DISPERSAL PIECES: the rule's one-shot end cranks (the "drain-YYYY-MM-DD" events, multiKeeper.ts planRuleEnd) each take the full
+ *     2 % per-crank cap in one transaction. They are not planned here and are not bound by the depth ceiling or the 20-minute gap (the
+ *     devnet watcher saw a 20.4M-lamport drain crank 22.6 min after the first); the chain's carried amount after them re-plans the window.
  */
 
 export const DISPERSAL_WINDOW_MS = 6 * 3_600_000;
@@ -42,6 +54,28 @@ const bmin = (...xs: bigint[]): bigint => xs.reduce((a, b) => (b < a ? b : a));
 export function chunkCeiling(reserveLamports: bigint, capBps = PROGRAM_CAP_BPS): bigint {
   if (reserveLamports <= B0) return B0;
   return bmin((reserveLamports * BigInt(capBps)) / BigInt(10_000), (reserveLamports * BigInt(DEPTH_PPM)) / BigInt(1_000_000));
+}
+
+/**
+ * The size one crank_carried piece is planned at on this pool, given the rule's floor:
+ *   depth        the floor fits under the depth ceiling: pieces of the ceiling (the usual case)
+ *   floor        the ceiling is under the floor but the floor is within the per-crank cap: pieces of the floor
+ *   below-floor  the floor is above the cap: no full piece is accepted; only a whole carried remainder within the cap can go
+ */
+export interface PieceSize { size: bigint; cap: bigint; mode: "depth" | "floor" | "below-floor" }
+export function pieceSize(reserveLamports: bigint, floorLamports: bigint = B0, capBps = PROGRAM_CAP_BPS): PieceSize {
+  const cap = reserveLamports > B0 ? (reserveLamports * BigInt(capBps)) / BigInt(10_000) : B0;
+  const ceiling = chunkCeiling(reserveLamports, capBps);
+  if (floorLamports <= ceiling) return { size: ceiling, cap, mode: "depth" };
+  if (floorLamports <= cap) return { size: floorLamports, cap, mode: "floor" };
+  return { size: cap, cap, mode: "below-floor" };
+}
+
+/** The sentence for a carried amount no piece can spend (the floor is above the per-crank cap and more than the cap is carried). */
+export function stuckWhy(carriedLamports: bigint, reserveLamports: bigint, floorLamports: bigint, capBps = PROGRAM_CAP_BPS): string {
+  const cap = (reserveLamports * BigInt(capBps)) / BigInt(10_000);
+  const need = (floorLamports * BigInt(10_000) + BigInt(capBps) - B1) / BigInt(capBps);
+  return `stuck: ${sol(carriedLamports)} SOL is carried, but the rule's smallest allowed burn (${sol(floorLamports)} SOL) is above the program's per-crank cap on this pool (${capBps / 100} % of ${sol(reserveLamports)} SOL = ${sol(cap)} SOL), so no piece can be spent; it stays carried until the pool holds about ${sol(need)} SOL`;
 }
 
 /** The price move a buy of `lamports` into a pool holding `reserveLamports` causes, in percent (1/(1−f)² − 1 with f = lamports / (reserve + lamports) — the share of the post-trade reserve). */
@@ -78,6 +112,8 @@ export interface DispersalWindow {
   expectedCarried: bigint;
   /** When the latest piece went out (carried across re-plans and into the next window, so the gap holds across them too). */
   lastAtMs?: number | null;
+  /** Set when nothing can be planned because no piece the program accepts fits (stuckWhy); the window is re-planned on every step. */
+  stuck?: string | null;
 }
 
 export interface PlanInput { carriedLamports: bigint; reserveLamports: bigint; capBps?: number; now: number; windowMs?: number; minGapMs?: number; seed: number; /** keep a window's end when re-planning */ endMs?: number; floorLamports?: bigint; /** the latest piece's time: the first new piece is at least the gap after it */ lastAtMs?: number | null }
@@ -85,31 +121,48 @@ export interface PlanInput { carriedLamports: bigint; reserveLamports: bigint; c
 /**
  * Plans [now, end): n = min(⌈carried / ceiling⌉, how many chunks fit at the minimum gap) pieces of an even split of min(carried, n ×
  * ceiling), at random times at least `minGapMs` apart (n sorted uniform points in [now, end − (n−1)·gap], the i-th shifted by i·gap).
- * The first piece is never earlier than `now`; the last is before `end`.
+ * The first piece is never earlier than `now`; the last is before `end`. On a pool whose depth ceiling is under the floor (pieceSize)
+ * the pieces are floor-sized, with the part under the floor as a last whole-remainder piece; see SMALL POOLS in the header.
  */
 export function planWindow(i: PlanInput): DispersalWindow {
   const windowMs = i.windowMs ?? DISPERSAL_WINDOW_MS;
   const endMs = i.endMs ?? i.now + windowMs;
   const base: DispersalWindow = { startMs: i.now, endMs, seed: i.seed >>> 0, chunks: [], done: 0, expectedCarried: i.carriedLamports, lastAtMs: i.lastAtMs ?? null };
-  const ceiling = chunkCeiling(i.reserveLamports, i.capBps);
+  const floor = i.floorLamports ?? B0;
+  const ps = pieceSize(i.reserveLamports, floor, i.capBps);
+  const ceiling = ps.size;
   // R5-8: never closer than the program's budget refills a full-size piece, whatever the caller asks (a 20-minute gap always is)
-  const gap = Math.max(i.minGapMs ?? DISPERSAL_MIN_GAP_MS, budgetGapMs(ceiling, (i.reserveLamports * BigInt(i.capBps ?? PROGRAM_CAP_BPS)) / BigInt(10_000)));
+  const gap = Math.max(i.minGapMs ?? DISPERSAL_MIN_GAP_MS, budgetGapMs(ceiling, ps.cap));
   const from = i.lastAtMs != null ? Math.max(i.now, i.lastAtMs + gap) : i.now;
   const span = endMs - from;
   if (i.carriedLamports <= B0 || ceiling <= B0 || span <= 0) return base;
   const fit = Math.max(1, Math.floor((span - 1) / gap) + 1);   // n points with n−1 gaps inside [now, end)
-  const need = (i.carriedLamports + ceiling - B1) / ceiling;
-  let n = Number(need < BigInt(fit) ? need : BigInt(fit));
-  let amount = bmin(i.carriedLamports, BigInt(n) * ceiling);
-  // never a piece under the floor unless it is the whole remainder
-  const floor = i.floorLamports ?? B0;
-  while (n > 1 && amount / BigInt(n) < floor) n--;
-  amount = bmin(i.carriedLamports, BigInt(n) * ceiling);
+  let sizes: bigint[];
+  if (ps.mode === "depth") {
+    const need = (i.carriedLamports + ceiling - B1) / ceiling;
+    let n = Number(need < BigInt(fit) ? need : BigInt(fit));
+    let amount = bmin(i.carriedLamports, BigInt(n) * ceiling);
+    // never a piece under the floor unless it is the whole remainder
+    while (n > 1 && amount / BigInt(n) < floor) n--;
+    amount = bmin(i.carriedLamports, BigInt(n) * ceiling);
+    const each = amount / BigInt(n), extra = amount % BigInt(n);
+    sizes = Array.from({ length: n }, (_, k) => each + (BigInt(k) < extra ? B1 : B0));
+  } else if (ps.mode === "floor") {
+    // floor-sized pieces (each accepted: at the floor, within the cap), then what is left under the floor as the whole remainder
+    const full = i.carriedLamports / ceiling, rest = i.carriedLamports % ceiling;
+    const n = Number(full < BigInt(fit) ? full : BigInt(fit));
+    sizes = Array.from({ length: n }, () => ceiling);
+    if (n < fit && rest > B0) sizes.push(rest);
+  } else {
+    // even one floor-sized piece is above the cap: only a whole remainder within the cap is accepted
+    if (i.carriedLamports > ps.cap) return { ...base, stuck: stuckWhy(i.carriedLamports, i.reserveLamports, floor, i.capBps) };
+    sizes = [i.carriedLamports];
+  }
+  const n = sizes.length;
   const r = rng(i.seed);
   const free = span - 1 - (n - 1) * gap;
   const offs = Array.from({ length: n }, () => Math.floor(r() * (free + 1))).sort((a, b) => a - b);
-  const each = amount / BigInt(n), extra = amount % BigInt(n);
-  base.chunks = offs.map((o, k) => ({ atMs: from + o + k * gap, lamports: each + (BigInt(k) < extra ? B1 : B0) }));
+  base.chunks = offs.map((o, k) => ({ atMs: from + o + k * gap, lamports: sizes[k] }));
   return base;
 }
 
@@ -128,7 +181,7 @@ export interface Observation {
 
 export type DispersalAction =
   | { kind: "idle"; why: string }
-  | { kind: "wait"; untilMs: number; why: string }
+  | { kind: "wait"; untilMs: number; why: string; /** set when no piece the program accepts fits (stuckWhy) */ stuck?: boolean }
   | { kind: "crank"; lamports: bigint; chunkIndex: number };
 
 /**
@@ -143,13 +196,21 @@ export function step(w0: DispersalWindow | null, o: Observation): { window: Disp
   // still goes out, within one gap of the end, instead of being pushed into a new random window.
   const gapMs = o.minGapMs ?? DISPERSAL_MIN_GAP_MS;
   const overdue = !!w && o.now >= w.endMs && o.now < w.endMs + gapMs && !!w.chunks[w.done] && w.expectedCarried === o.carriedLamports;
-  if (!w || (o.now >= w.endMs && !overdue)) w = planWindow({ ...common, carriedLamports: o.carriedLamports, now: o.now, seed: o.seed, lastAtMs: w?.lastAtMs ?? null });
+  if (!w || w.stuck || (o.now >= w.endMs && !overdue)) w = planWindow({ ...common, carriedLamports: o.carriedLamports, now: o.now, seed: o.seed, lastAtMs: w?.lastAtMs ?? null });
   else if (w.expectedCarried !== o.carriedLamports) w = { ...planWindow({ ...common, carriedLamports: o.carriedLamports, now: o.now, seed: (w.seed ^ seedOf(`${o.now}`)) >>> 0, endMs: w.endMs, lastAtMs: w.lastAtMs ?? null }), startMs: w.startMs };
   if (!o.queueEmpty) return { window: w, action: { kind: "wait", untilMs: o.now + 60_000, why: "a reading is waiting for its own crank; it carries the owed spend in its target" } };
+  const floor = o.floorLamports ?? B0;
+  const live = pieceSize(o.reserveLamports, floor, o.capBps);
+  if (w.stuck || (live.mode === "below-floor" && o.carriedLamports > live.cap)) {
+    return { window: w, action: { kind: "wait", untilMs: o.now + 10 * 60_000, why: w.stuck ?? stuckWhy(o.carriedLamports, o.reserveLamports, floor, o.capBps), stuck: true } };
+  }
   const next = w.chunks[w.done];
   if (!next) return { window: w, action: { kind: "wait", untilMs: w.endMs, why: "this window's pieces are done; the rest opens a new window" } };
   if (next.atMs > o.now) return { window: w, action: { kind: "wait", untilMs: next.atMs, why: "the next piece is not due yet" } };
-  const lamports = bmin(next.lamports, chunkCeiling(o.reserveLamports, o.capBps), o.carriedLamports);
+  let lamports = bmin(next.lamports, live.size, o.carriedLamports);
+  // A piece under the floor that is not the whole remainder is refused (BelowFloor): raise it to the floor, or to the whole remainder
+  // when less than the floor is carried, as long as that stays within the per-crank cap (an earlier piece refused, the reserve moved).
+  if (lamports < floor && lamports < o.carriedLamports) { const up = bmin(floor, o.carriedLamports); if (up <= live.cap) lamports = up; }
   if (lamports <= B0) return { window: w, action: { kind: "wait", untilMs: o.now + 10 * 60_000, why: "the pool has no reserve to size a piece against" } };
   return { window: w, action: { kind: "crank", lamports, chunkIndex: w.done } };
 }

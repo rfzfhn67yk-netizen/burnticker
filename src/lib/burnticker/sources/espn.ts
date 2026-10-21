@@ -902,7 +902,8 @@ export class EspnClient {
       .filter((e) => e && typeof e === "object" && String(e.idEvent ?? "") === id && (e.idLeague === undefined || e.idLeague === null || e.idLeague === "" || String(e.idLeague) === want));
     const row = tsdbGames(league, { events: rows }, y).find((x) => x.eventId === id && x.home.abbr === g.home.abbr && x.away.abbr === g.away.abbr);
     if (!row) return g;
-    const out: Game = { ...row, seasonYear: g.seasonYear ?? row.seasonYear };
+    this.stampRows([row], body);
+    const out: Game = this.keepStamp(row, { ...row, seasonYear: g.seasonYear ?? row.seasonYear });
     if (out.completed) this.liveFinals.set(k, { game: out, at: this.now() });
     return out;
   }
@@ -932,6 +933,17 @@ export class EspnClient {
    * time of its fetch, so a game coin's second read of a final is never the first one read again from the cache (gameSettle.ts).
    */
   fetchedAt(body: unknown): number | null { return body && typeof body === "object" ? this.fetchedBodies.get(body) ?? null : null; }
+  /**
+   * THE LIVE SIGHTING (launchCut.ts, 2026-10-21 BT-LAUNCH-CUT-LONG-01): when the listing a game row of season() came from was fetched (this
+   * client's fetch clock), or null when unknown. A cached listing keeps its fetch time, so a row read again from the cache never claims
+   * to be newer than it is: gameSettle.ts records a game seen not final at this time, never at the keeper's clock.
+   */
+  listedAt(g: Game): number | null { return this.listedRows.get(g) ?? null; }
+  private listedRows = new WeakMap<Game, number>();
+  /** Stamps rows parsed from `body` with its fetch time (listedAt). */
+  private stampRows<T extends Game>(rows: T[], body: unknown): T[] { const t = this.fetchedAt(body); if (t !== null) for (const g of rows) this.listedRows.set(g, t); return rows; }
+  /** A copy of a row that keeps its listing time. */
+  private keepStamp(from: Game, to: Game): Game { const t = this.listedRows.get(from); if (t !== undefined) this.listedRows.set(to, t); return to; }
   /** GET with the shared politeness and cache; `headers` carry a licensed reader's key (never cached into the key, never logged). */
   async get(url: string, headers: Record<string, string> = {}, o: { /** the league the read is for (F-4: retried sooner while its next game is near) */ league?: LeagueId; /** this answer's own TTL */ ttlMs?: number; /** THE LIVE SCHEDULE READ: kept LIVE_SCHEDULE_TTL_MS (or liveTtlMs), counted */ live?: boolean; /** a live read's own cache (THE LIVE GAME READ ON THESPORTSDB) */ liveTtlMs?: number; /** a body the provider answered 200 with but that says it failed: its message, else null */ refuse?: (body: unknown) => string | null; /** skip the cache: a game coin's confirming read (gameSettle.ts) must be a new fetch */ fresh?: boolean } = {}): Promise<unknown> {
     const hit = this.cache.get(url);
@@ -1012,7 +1024,7 @@ export class EspnClient {
   async nbaSchedule(year: number): Promise<Game[]> {
     const cdn = async () => {
       if (this.refusedFeeds.has(NBA_LEAGUE_SCHEDULE)) throw new Error(`HTTP 403 earlier in this run for ${NBA_LEAGUE_SCHEDULE} (not read again)`);
-      try { return nbaGames(await this.get(NBA_LEAGUE_SCHEDULE, {}, { league: "nba" })).filter((g) => g.seasonYear === year); }
+      try { const b = await this.get(NBA_LEAGUE_SCHEDULE, {}, { league: "nba" }); return this.stampRows(nbaGames(b), b).filter((g) => g.seasonYear === year); }
       catch (e) { if (/HTTP (401|403)\b/.test((e as Error).message)) this.refusedFeeds.add(NBA_LEAGUE_SCHEDULE); throw e; }
     };
     const tsdb = () => this.tsdb("nba", year);
@@ -1025,7 +1037,7 @@ export class EspnClient {
     if (!this.tsdbKey || !TSDB_LEAGUE[league]) throw new ScheduleUnavailable(`${LEAGUES[league].label}: ${SCHEDULE_NEEDS_KEY}`);
     const body = await this.tsdbRead(this.tsdbKey, tsdbScheduleUrl(league, year), (k) => tsdbV1Urls(k, league, year), league);
     if (whole && tsdbListingCut(body)) throw new ScheduleCut(tsdbCutSentence(league));
-    return tsdbGames(league, body, year);
+    return this.stampRows(tsdbGames(league, body, year), body);
   }
   /** A team's season (regular season and postseason): the current one, or season `year` (the league's own year naming, as ESPN's was). */
   async season(league: LeagueId, abbrOrId: string, year: number | null = null): Promise<Game[]> {
@@ -1034,15 +1046,15 @@ export class EspnClient {
     const y = year ?? seasonYearAt(league, this.now());
     const mine = (g: Game) => g.home.abbr === t.abbr || g.away.abbr === t.abbr;
     let games: Game[];
-    if (league === "mlb") games = mlbGames(await this.get(mlbTeamScheduleUrl(t.abbr, y), {}, { league }));
-    else if (league === "nhl") games = nhlGames(await this.get(nhlClubScheduleUrl(t.abbr, y), {}, { league }));
+    if (league === "mlb") { const b = await this.get(mlbTeamScheduleUrl(t.abbr, y), {}, { league }); games = this.stampRows(mlbGames(b), b); }
+    else if (league === "nhl") { const b = await this.get(nhlClubScheduleUrl(t.abbr, y), {}, { league }); games = this.stampRows(nhlGames(b), b); }
     else if (league === "nba") games = await this.nbaSchedule(y);
     else games = await this.tsdb(league, y, true);
     // THE LIVE SCHEDULE READ (above): the league's day listing, one minute old at most, over the season file's games
     if ((league === "mlb" || league === "nhl") && y === seasonYearAt(league, this.now()) && this.isLive(league) && this.liveReadsToday(league) < LIVE_READS_PER_DAY) {
       const url = liveDayUrl(league, this.now());
-      const day = url ? await this.get(url, {}, { league, live: true }).then((b) => (league === "mlb" ? mlbGames(b) : nhlGames(b)), () => null) : null;
-      if (day?.length) { const now = new Map(day.map((g) => [g.eventId, g])); games = games.map((g) => { const d = now.get(g.eventId); return d ? { ...d, seasonYear: g.seasonYear ?? d.seasonYear } : g; }); }
+      const day = url ? await this.get(url, {}, { league, live: true }).then((b) => this.stampRows(league === "mlb" ? mlbGames(b) : nhlGames(b), b), () => null) : null;
+      if (day?.length) { const now = new Map(day.map((g) => [g.eventId, g])); games = games.map((g) => { const d = now.get(g.eventId); return d ? this.keepStamp(d, { ...d, seasonYear: g.seasonYear ?? d.seasonYear }) : g; }); }
     }
     // THE LIVE GAME READ ON THESPORTSDB (above): a tracked NBA or soccer game in play, its own lookup at most tsdbLiveTtl old
     if (tsdbLiveLeague(league) && this.tsdbKey && y === seasonYearAt(league, this.now())) {
@@ -1053,7 +1065,7 @@ export class EspnClient {
     }
     // a team's season (MLB, NHL) holds only its own games: the league's next game is noted from the whole-league reads only
     if (league !== "mlb" && league !== "nhl" && (year === null || year === seasonYearAt(league, this.now()))) this.noteGames(league, games);
-    return dedupeListings(games.filter(mine)).map((g) => ({ ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    return dedupeListings(games.filter(mine)).map((g) => this.keepStamp(g, { ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
   /** A league's games in the next `days` days (the matchup picker and the team picker's next game). */
   async upcoming(league: LeagueId, days = 7): Promise<Game[]> {

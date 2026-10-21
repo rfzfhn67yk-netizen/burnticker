@@ -16,6 +16,10 @@ import { CatalogueAdapter, feedById, loadFixture } from "@/lib/burnticker/catalo
 import { executePending, fetchDue, planToken, runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { buildReceiptsJson, buildTokenStatus, buildPlatformIndex, publishTokenSite, publishPlatformIndex, renderTokenHtml, renderPlatformIndexHtml } from "@/lib/burnticker/tokenPage";
 import { parseBuybackMemo as parseProgramMemo } from "@/lib/burnReceipts/memo";
+import { TWAP_EMPTY_REASON, twapWait, WAIT_REASONS, WAIT_RETRY_MS } from "@/lib/burnKeeper/programChain";
+import { readTwapEmpty, TWAP_EMPTY_ALERT_EVERY_MS, TWAP_EMPTY_ALERT_KIND } from "@/lib/burnticker/twapEmpty";
+import { PUSH_KIND_OF_ALERT } from "@/lib/burnticker/push";
+import { decodeObservationRing, OBSERVATION_STATE_DISCRIMINATOR, OBSERVATION_STATE_LEN } from "@/lib/burnReceipts/cpmm";
 import { buybackSpend as programSpend } from "@/lib/burnReceipts/math";
 import { programExpressible, counterRule } from "@/lib/burnticker/program";
 import { MAX_SLIPPAGE_BPS, MAX_TWAP_DEVIATION_BPS, MAX_TWAP_WINDOW_SECS, MIN_TWAP_WINDOW_SECS, TWAP_BUCKET_TOLERANCE_BPS_SECS } from "@/lib/burnReceipts/constants";
@@ -176,6 +180,62 @@ describe("the multi-token keeper, on the burn_receipts program (the unit counter
     assert.match(rec.waitReason!, /^TwapUnavailable: waiting for TWAP history/); assert.equal(rec.attempts, 0);
     f.twap = "ok"; clock += 10 * 60_000 + 1;
     assert.equal((await runCycle(deps)).executed[0].outcome, "confirmed");
+  });
+  test("TWAP EMPTY (devnet e2e 2026-10-20): a pool that has never traded says so, is recorded for the coin page and alerts once per 6 h; recent observations keep the old wait", async () => {
+    const t = await launch(BRONCOS, "BRONCO"); program.deposit(t.mint, BigInt(5_000_000_000));
+    const f = program.fake(t.mint);
+    f.twap = "unavailable"; f.ring = "empty";
+    const r = await runCycle(deps);
+    assert.equal(r.executed[0].outcome, "waiting");
+    let rec = reg.receipt(t.mint, YES)!;
+    assert.equal(rec.waitReason, `TwapUnavailable: ${TWAP_EMPTY_REASON}`); assert.equal(rec.attempts, 0); assert.equal(rec.lastError, null);
+    const ops = lines.find((l) => l.includes("deferred by the program (TwapUnavailable)"))!;
+    assert.match(ops, /— the pool has had no swap since it was made, so there is no price history yet; the burn runs after its first trade$/);
+    assert.doesNotMatch(ops, /600–1,200 s/);
+    const state = readTwapEmpty(reg, t.mint)!;
+    assert.equal(state.since, clock); assert.equal(state.recordDate, "2026-09-28");
+    const alerts = () => reg.alertsSince(0).filter((a) => a.kind === TWAP_EMPTY_ALERT_KIND);
+    assert.equal(alerts().length, 1); assert.match(alerts()[0].text, /^\$BRONCO: the burn for 2026-09-28 is waiting because the coin's trading pool has had no swap/);
+    assert.equal(PUSH_KIND_OF_ALERT[TWAP_EMPTY_ALERT_KIND], "twap-empty");
+    // the next tries inside 6 h: still recorded, no second alert
+    for (let i = 0; i < 3; i++) { clock += WAIT_RETRY_MS + 1; await runCycle(deps); }
+    assert.equal(alerts().length, 1, "once per coin per 6 h");
+    assert.equal(readTwapEmpty(reg, t.mint)!.since, NOW, "the first sighting is kept");
+    // the coin page reads it from the status table
+    const block = await programPageBlock(program, t.mint, null, undefined, readTwapEmpty(reg, t.mint));
+    assert.deepEqual(block!.firstTradeWait, { since: NOW });
+    // 6 h after the alert: one more
+    clock = NOW + TWAP_EMPTY_ALERT_EVERY_MS; await runCycle(deps);
+    assert.equal(alerts().length, 2);
+    // a first trade writes an observation that is still too recent: the old wording, the record cleared, no alert
+    f.ring = "recent"; clock += WAIT_RETRY_MS + 1; await runCycle(deps);
+    rec = reg.receipt(t.mint, YES)!;
+    assert.match(rec.waitReason!, /^TwapUnavailable: waiting for TWAP history — the pool's oracle needs 600–1,200 s of observations/);
+    assert.equal(readTwapEmpty(reg, t.mint), null);
+    assert.equal(alerts().length, 2);
+    // an unreadable ring keeps the old wording too
+    f.ring = null; clock += WAIT_RETRY_MS + 1; await runCycle(deps);
+    assert.match(reg.receipt(t.mint, YES)!.waitReason!, /needs 600–1,200 s of observations/);
+    // the empty ring again within 6 h of the last alert: recorded, not re-alerted; then the crank goes through and clears it
+    f.ring = "empty"; clock += WAIT_RETRY_MS + 1; await runCycle(deps);
+    assert.ok(readTwapEmpty(reg, t.mint)); assert.equal(alerts().length, 2);
+    f.twap = "ok"; clock += WAIT_RETRY_MS + 1;
+    assert.equal((await runCycle(deps)).executed[0].outcome, "confirmed");
+    assert.equal(readTwapEmpty(reg, t.mint), null);
+  });
+  test("twapWait: TwapUnavailable on an empty ring is the first-trade wait; anything else keeps WAIT_REASONS", () => {
+    assert.deepEqual(twapWait("TwapUnavailable", { empty: true }), { wait: TWAP_EMPTY_REASON, empty: true });
+    assert.deepEqual(twapWait("TwapUnavailable", { empty: false }), { wait: WAIT_REASONS.TwapUnavailable, empty: false });
+    assert.deepEqual(twapWait("TwapUnavailable", null), { wait: WAIT_REASONS.TwapUnavailable, empty: false });
+    assert.deepEqual(twapWait("TwapDeviation", { empty: true }), { wait: WAIT_REASONS.TwapDeviation, empty: false });
+    assert.equal(twapWait("SomethingElse", { empty: true }), null);
+  });
+  test("decodeObservationRing: an untouched ring is empty; one observation makes it not empty", () => {
+    const d = Buffer.alloc(OBSERVATION_STATE_LEN); OBSERVATION_STATE_DISCRIMINATOR.copy(d, 0);
+    assert.deepEqual(decodeObservationRing(d), { newestTs: 0, lastUpdate: 0, filled: 0, empty: true });
+    d.writeUInt16LE(3, 9); d.writeBigUInt64LE(BigInt(1_760_000_000), 43 + 3 * 40); d.writeBigUInt64LE(BigInt(1_760_000_010), 43 + 100 * 40);
+    assert.deepEqual(decodeObservationRing(d), { newestTs: 1_760_000_000, lastUpdate: 1_760_000_010, filled: 1, empty: false });
+    assert.throws(() => decodeObservationRing(Buffer.alloc(OBSERVATION_STATE_LEN)), /not a CPMM ObservationState/);
   });
   test("QUORUM SHORT: a 2-of-2 token whose second attester this keeper does not hold — nothing is signed, the receipt waits", async () => {
     program.heldKeys = [ATTESTER];

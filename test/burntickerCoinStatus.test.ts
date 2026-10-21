@@ -24,6 +24,20 @@ const r = (x: Partial<ReceiptInput>): ReceiptInput => ({ status: "planned", unit
 const say = (s: StatusInput, rs: ReceiptInput[] = [], other: { profile: { sideName: string } } | null = CHIEFS) => coinStatusSentence(coinStatusFactsOf(s, rs, other));
 
 describe("the status sentence, one per state", () => {
+  test("devnet e2e 2026-10-20: a burn waiting for the pool's first trade says so in one plain sentence", () => {
+    const wait = { initialized: true, pool: { registered: true, firstTradeWait: { since: "2026-10-20T03:00:00Z" } } };
+    const want = "The result is in. The burn runs after the first trade in the coin's pool, which starts the trading history the burn needs.";
+    assert.equal(STATUS_SENTENCES.firstTrade, want); clean(want);
+    assert.equal(coinStatusFactsOf({ ...base, program: wait }, []).firstTradeWait, true);
+    assert.equal(coinStatusFactsOf({ ...base, program: { initialized: true, pool: { registered: true } } }, []).firstTradeWait, false);
+    assert.equal(say({ ...base, program: wait }, [r({ status: "planned" })]), want);
+    const grad = { ...oneShotPair, market: { phase: "graduated" as const }, program: wait };
+    assert.equal(say(grad, [r({ pairRole: "won", status: "planned" })]), want);
+    // the losing side of a pair and a paused coin keep their own sentences; no record, no change
+    assert.equal(say(grad, [r({ pairRole: "lost", status: "planned" })]).startsWith("Decided: Chiefs won."), true);
+    assert.equal(say({ ...base, status: "paused", program: wait }), STATUS_SENTENCES.paused);
+    assert.equal(say({ ...grad, program: { initialized: true, pool: { registered: true } } }, [r({ pairRole: "won", status: "planned" })]), "Decided: Broncos won. The burn is being sent.");
+  });
   test("decided one-shot, the winning side: the decision, then what its burn waits for", () => {
     assert.equal(say(oneShotPair, [r({ pairRole: "won" })]), "Decided: Broncos won. Burns once the curve fills.");
     assert.equal(say({ ...oneShotPair, market: { phase: "graduated" } }, [r({ pairRole: "won", status: "skipped" })]), "Decided: Broncos won. Burns once its trading pool is registered.");

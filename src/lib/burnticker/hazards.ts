@@ -111,7 +111,8 @@ export function hazardControls(): Record<HazardKindId, { every: HazardControl[];
 export const HAZARD_MEASURES: Readonly<Record<HazardKindId, { every: string; once: string }>> = {
   quake: { every: "Each reviewed earthquake at or above the magnitude counts once, on its UTC day.", once: "The first UTC day after launch with a reviewed earthquake at or above the magnitude burns once, and the coin then ends." },
   hurricane: { every: "Each storm counts once, on the day it first reaches the strength, in the basin's season.", once: "The first day after launch on which a storm in the basin reaches the category burns once. The coin ends with the season if none does." },
-  tornado: { every: "Each preliminary tornado report in the area counts, on its UTC day.", once: "The first UTC day after launch with at least the count of reports in the area burns once." },
+  // Codex BT-TORNADO-DAY-01 (2026-10-20): the SPC report day runs from 12:00 UTC to 12:00 UTC the next day, not a calendar day
+  tornado: { every: "Each preliminary tornado report in the area counts, in its SPC report day, which runs from 12:00 UTC to 12:00 UTC the next day.", once: "The first SPC report day after launch (12:00 UTC to 12:00 UTC the next day) with at least the count of reports in the area burns once." },
   wildfire: { every: "Recurring: each 100,000 acres added to the year's national total of acres burned counts, across all fires together.", once: "One time: the first single wildfire discovered after launch that reaches the size burns once, dated on its discovery day. Acres from other fires do not add up toward it." },
   volcano: { every: "Each time the USGS raises the alert level at any U.S. volcano it monitors, that raise counts.", once: "The first time after launch that the USGS raises the chosen volcano to WARNING burns once." },
 };

@@ -10,6 +10,8 @@
  *   live, with receipts           "Last burn 1,234 $RAYS on October 12."
  *   season / postseason / games   "Burns after each win this season."  (on its curve: "..., once the curve fills.")
  *   perpetual                     "Burns on each new reading."  (on its curve: "Burns on each new reading once the curve fills.")
+ *   burn waits for a first trade  "The result is in. The burn runs after the first trade in the coin's pool, ..." (the keeper found the
+ *                                 pool has never traded, so the program has no price history; twapEmpty.ts, devnet e2e 2026-10-20)
  *
  * Two pure steps so the embed and share text can reuse it: coinStatusFactsOf reads the few facts it needs from a coin's status.json and
  * receipts (status, pair, latest reading, next, lifecycle, graduation), and coinStatusSentence turns those facts into the sentence. The
@@ -57,6 +59,8 @@ export interface CoinStatusFacts {
   ended: "drain" | "winddown" | null;
   /** continuous audit run 2, HB-16: what an undecided one-shot waits for, by its source (a market, the next earthquake, a feed); absent on older facts */
   waiting?: string | null;
+  /** devnet e2e 2026-10-20: the keeper recorded that the coin's pool has never traded, so its burn waits for the first trade (status.json program.pool.firstTradeWait) */
+  firstTradeWait?: boolean;
 }
 
 import { utcDay } from "@/lib/burnticker/utcWords";
@@ -70,7 +74,7 @@ export interface StatusInput {
   rules: { oneShot: boolean };
   profile?: { badge?: string | null; oneLiner?: string | null; sideName?: string | null; readingDirection?: "up" | "down" | null } | null;
   market?: { phase: "curve" | "migrating" | "graduated" | null } | null;
-  program?: { initialized: boolean; pool: { registered: boolean } } | null;
+  program?: { initialized: boolean; pool: { registered: boolean; firstTradeWait?: { since: string } | null } } | null;
   pair?: { counterpart: { name: string }; clause?: { state: "live" | "waiting" | "voided"; voidBy?: string | null } | null; unpaired?: unknown } | null;
   lifecycle?: { ended: { mode: "drain" | "winddown" } | null } | null;
 }
@@ -173,6 +177,7 @@ export function coinStatusFactsOf(s: StatusInput, receipts: readonly ReceiptInpu
     // PROD-05: an end receipt shows the rule ended even when the caller did not pass the lifecycle block
     ended: s.lifecycle?.ended?.mode ?? (byTime.some((r) => r.kind === "drain") ? "drain" : byTime.some((r) => r.kind === "winddown") ? "winddown" : null),
     waiting: window === "one-shot" && !decision ? waitingSentenceOf(s.oracle, s.selectorKey) : null,
+    firstTradeWait: !!s.program?.pool.firstTradeWait,
   };
 }
 
@@ -218,6 +223,8 @@ export const STATUS_SENTENCES = {
   notCreated: "Not created yet.",
   practice: "This site does not track this practice coin's burns.",
   devnetDone: "The devnet practice run is over.",
+  /** the keeper found the coin's pool has never traded: the program needs the price history a first trade writes before it can burn */
+  firstTrade: "The result is in. The burn runs after the first trade in the coin's pool, which starts the trading history the burn needs.",
 } as const;
 
 /** What follows "Decided: ..." for a one-shot, by what its burn waits for. */
@@ -298,6 +305,9 @@ export function coinStatusSentence(f: CoinStatusFacts): string {
   if (f.status === "expired") return STATUS_SENTENCES.expired;
   if (f.status === "retired") return STATUS_SENTENCES.retired;
   if (f.status === "paused") return STATUS_SENTENCES.paused;
+  // devnet e2e 2026-10-20: a burn deferred because the pool has never traded (the keeper records it only while a burn is waiting); a
+  // one-shot whose result does not burn this coin keeps its own sentence
+  if (f.firstTradeWait && (f.window !== "one-shot" || (f.decision?.burnsThis && f.decision.outcome !== "other"))) return STATUS_SENTENCES.firstTrade;
   if (f.window === "one-shot") {
     const d = f.decision;
     if (!d) return f.pair?.waiting ? STATUS_SENTENCES.waitingPair : f.waiting ?? STATUS_SENTENCES.waitingMarket;

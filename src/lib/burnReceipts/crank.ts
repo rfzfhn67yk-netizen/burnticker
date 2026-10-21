@@ -2,7 +2,7 @@ import { type AddressLookupTableAccount, AddressLookupTableProgram, ComputeBudge
 import { attestReading, sourceUrlHash } from "@/lib/burnReceipts/attestation";
 import { bs58, fetchCarriedPace, fetchNextReadingInLine, fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, CPMM_PROGRAM_ID, MAX_SPEND_RESERVE_BPS, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LL_POOL_PLATFORM_ID, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, OUTCOME_NAMES, PACKET_DATA_SIZE, POOL_POLICY_CREATOR_IS_FEE_PDA, SYSVAR_INSTRUCTIONS_ID } from "@/lib/burnReceipts/constants";
-import { type BuybackPoolAccounts, buybackPoolAccounts, decodeCpmmPool, fetchCpmmPool } from "@/lib/burnReceipts/cpmm";
+import { type BuybackPoolAccounts, buybackPoolAccounts, decodeCpmmPool, decodeObservationRing, fetchCpmmPool, type ObservationRing } from "@/lib/burnReceipts/cpmm";
 import { carriedBudgetReadySec, formatDate, reserveSpendCap } from "@/lib/burnReceipts/math";
 import { fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_RESULT_GRACE_SECS, PAIR_RESULT_LOST, PAIR_STATE_PAIRED, pairResultFor } from "@/lib/burnReceipts/pairs";
 import { checkPoolHealthIx, claimLaunchlabCreatorFeeIx, crankBuybackIx, crankCarriedIx, crankNoUnitsIx, crankVaultIx, createAtaIdempotentIx, eventAuthority, registerPoolIx, submitReadingIx, syncNativeIx } from "@/lib/burnReceipts/instructions";
@@ -375,6 +375,23 @@ export async function poolSolReserve(ctx: ProgramContext): Promise<bigint | null
   const amount = Buffer.from(vault.data).readBigUInt64LE(64);
   const fees = wsol0 ? pool.fees0 : pool.fees1;
   return amount > fees ? amount - fees : BigInt(0);
+}
+
+/**
+ * The registered CPMM pool's price-history ring (cpmm.ts decodeObservationRing), read the way poolSolReserve reads the pool, or null when
+ * the config has no readable pool or observation account. The keeper reads it when a crank is deferred with TwapUnavailable, to tell a
+ * pool that has never traded (the ring is empty; only a swap fixes it) from one whose history is still too short.
+ */
+export async function poolObservationRing(ctx: ProgramContext): Promise<ObservationRing | null> {
+  const cfg = await fetchTokenConfig(ctx.connection, ctx.programId, ctx.mint);
+  if (!cfg || !cfg.config.poolRegistered) return null;
+  const info = await ctx.connection.getAccountInfo(cfg.config.cpmm_pool, "confirmed");
+  if (!info || !info.owner.equals(CPMM_PROGRAM_ID[ctx.cluster])) return null;
+  let pool;
+  try { pool = decodeCpmmPool(cfg.config.cpmm_pool, info.data); } catch { return null; }
+  const obs = await ctx.connection.getAccountInfo(pool.observationKey, "confirmed");
+  if (!obs || !obs.owner.equals(CPMM_PROGRAM_ID[ctx.cluster])) return null;
+  try { return decodeObservationRing(obs.data); } catch { return null; }
 }
 
 /**

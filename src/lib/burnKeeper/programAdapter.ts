@@ -2,7 +2,7 @@ import { type AddressLookupTableAccount, type Connection, type Keypair, PublicKe
 import { attestationMessage, ed25519SharedMessageInstruction, signAttestation, sourceUrlHash, verifyAttestation, ZERO_HASH } from "@/lib/burnReceipts/attestation";
 import { fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, type Cluster as ProgramCluster, LAUNCHLAB_PROGRAM_ID, MAX_QUORUM, MODE_BUYBACK, OUTCOME_NAMES, POOL_REPLACEMENT_DELAY_SECS, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
-import { anchorErrorName, assertClusterAllowed, carriedPaceView, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
+import { anchorErrorName, assertClusterAllowed, carriedPaceView, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolObservationRing, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
 import { type PrivateSender, privateSenderFromEnv } from "@/lib/burnKeeper/privateSend";
 import { submitReadingIx } from "@/lib/burnReceipts/instructions";
 import { findProcessingTx } from "@/lib/burnReceipts/processing";
@@ -268,6 +268,7 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
     },
     async feePdaLamports() { return BigInt(await c.getBalance(fee, "confirmed")); },
     async supplyRaw() { try { return BigInt((await c.getTokenSupply(o.mint, "confirmed")).value.amount); } catch { return null; } },
+    async observationRing() { return poolObservationRing(ctx); },
     retryableErrors: DEFERRABLE_ERRORS,
   };
   return port;

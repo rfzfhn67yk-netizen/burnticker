@@ -69,6 +69,26 @@ export const WAIT_REASONS: Record<string, string> = {
 };
 export const WAIT_RETRY_MS = 10 * 60_000;
 
+/**
+ * Devnet e2e 2026-10-20: TwapUnavailable on a pool whose observation ring is EMPTY (no observation with a nonzero timestamp). Raydium CPMM
+ * writes observations only on a swap, so time alone never fixes it; the pool's first trade does. WAIT_REASONS.TwapUnavailable ("needs
+ * 600–1,200 s of observations") stays for a ring whose observations are too recent, or one the keeper could not read.
+ */
+export const TWAP_EMPTY_REASON = "the pool has had no swap since it was made, so there is no price history yet; the burn runs after its first trade";
+
+/** The wait for a program refusal, given the pool's ring when it was read: TWAP_EMPTY_REASON for TwapUnavailable on an empty ring. */
+export function twapWait(err: string, ring: { empty: boolean } | null): { wait: string; empty: boolean } | null {
+  if (err === "TwapUnavailable" && ring?.empty) return { wait: TWAP_EMPTY_REASON, empty: true };
+  const w = WAIT_REASONS[err];
+  return w ? { wait: w, empty: false } : null;
+}
+
+/** Reads the pool's ring only for a TwapUnavailable refusal on a port that can; null otherwise or when the read fails. */
+export async function deferralRing(port: Pick<ProgramPort, "observationRing">, err: string): Promise<{ empty: boolean } | null> {
+  if (err !== "TwapUnavailable" || !port.observationRing) return null;
+  try { return await port.observationRing(); } catch { return null; }
+}
+
 export const recordDateU32 = (d: string): number => Number(d.replace(/-/g, ""));
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -210,7 +230,7 @@ export async function executeProgramPending(ctx: KeeperCtx, port: ProgramPort, o
       const tx = await plan.build();
       const sim = await port.simulate(tx.raw);
       if (sim.err) {
-        const wait = WAIT_REASONS[sim.err] ?? (port.retryableErrors?.has(sim.err) ? "waiting — the program reported a retryable condition" : undefined);
+        const wait = twapWait(sim.err, await deferralRing(port, sim.err))?.wait ?? (port.retryableErrors?.has(sim.err) ? "waiting — the program reported a retryable condition" : undefined);
         if (wait) {
           if (row) ledger.setWait(T, F, D, `${sim.err}: ${wait}`, now + WAIT_RETRY_MS, now);
           ctx.log(`  [program] ${D}: crank_${plan.kind} deferred by the program (${sim.err}) — ${wait}`);
