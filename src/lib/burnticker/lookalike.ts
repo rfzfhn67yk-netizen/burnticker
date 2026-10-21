@@ -14,7 +14,8 @@ import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
  *   · contains BURNTICKER, the platform's own name.
  *
  * One exemption: two TEAM coins of the same team in the same league (RAYS26 and RAYS27, a season and a postseason coin) are different
- * windows of one team — the generated season tickers carry the year on purpose — and do not refuse each other. Expired drafts do not
+ * windows of one team — the generated season tickers carry the year on purpose — and do not refuse each other. The same window (the
+ * identical rule) is not exempt (HB-170). Expired drafts do not
  * count (their ticker is free again); a live draft reserves its ticker, and names are compared with launched coins only. Prelaunch audit
  * 2026-10-18 A-2: an IDENTICAL ticker is a hit too (it used to be left to a registry check nobody called); the one exception is the
  * creator's own coin, so a creator may prepare their own draft again. Pure: the launch handler calls `lookalikeRefusal` with the registry's rows; the clone watch uses
@@ -87,6 +88,10 @@ export const draftHeldSentence = (ticker: string): string => `$${ticker.toUpperC
  */
 export const nearDraftSentence = (ticker: string): string => `$${ticker.toUpperCase()} is too close to the ticker of another Burnticker coin that has not launched yet. If that unfinished launch is yours, go back to its own ticker to finish it.`;
 
+/** HB-170: two rules are one window when the oracle and the series are the same. */
+const sameRuleOf = (a: Pick<BurnRule, "oracle" | "series"> | null | undefined, b: Pick<BurnRule, "oracle" | "series"> | null | undefined): boolean =>
+  !!(a && b && a.oracle === b.oracle && (a.series ?? null) === (b.series ?? null));
+
 const teamOf = (r: Pick<BurnRule, "oracle" | "series"> | null | undefined): string | null => {
   const e = r && r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
   return e ? `${e.league}:${e.abbr}` : null;
@@ -118,7 +123,7 @@ const HOW_TEXT: Record<LookalikeHow, string> = { "same-letters": "reads as the s
 export const SAME_RULE_NAME_ASK = "Pick a name that cannot be mistaken for it.";
 function nameCloneSentence(cand: { name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null }, e: LookalikeExisting, how: LookalikeHow): string {
   const coin = e.status === "live" ? `the live $${e.ticker}` : `$${e.ticker}, an existing Burnticker coin`;
-  const sameRule = !!(cand.rule && e.rule && cand.rule.oracle === e.rule.oracle && (cand.rule.series ?? null) === (e.rule.series ?? null));
+  const sameRule = sameRuleOf(cand.rule, e.rule);
   const tail = sameRule ? ", which follows the same rule" : "";
   const sameText = cand.name.trim().toLowerCase().replace(/\s+/g, " ") === e.name.trim().toLowerCase().replace(/\s+/g, " ");
   if (sameText) return `This is the name of ${coin}${tail}.`;
@@ -147,7 +152,9 @@ export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<
       // appear only after the ticker was changed)
       if (ownDraft || e.status === "draft") continue;
     }
-    if (!exact && team && teamOf(e.rule) === team) continue;   // another window of the same team: RAYS26 / RAYS27
+    // another window of the same team (RAYS26 / RAYS27) is exempt; HB-170 (seventh pass B-21): the SAME window is not, so a copycat on
+    // the identical rule is compared like any other coin (its name above all: "Eagles 2026 Wins" twice on one rule)
+    if (!exact && team && teamOf(e.rule) === team && !sameRuleOf(cand.rule, e.rule)) continue;
     const et = skeleton(e.ticker), en = skeleton(e.name);
     const t = exact ? null : compare(ct, et);
     // review of block M: a draft's ticker is never named (it is not public until the coin exists)

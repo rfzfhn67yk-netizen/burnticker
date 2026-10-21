@@ -1,5 +1,5 @@
 // Public API v1 (1.14.0): the read-only pre-wallet review (src/lib/burnticker/launchReview.ts; launch audit 5 L02 / L06).
-import { fail, ok, readJson, runV1, type ApiResult } from "@/lib/burnticker/api/http";
+import { fail, ok, readJsonLimited, runV1, type ApiResult } from "@/lib/burnticker/api/http";
 import { reviewSlowLine, stageClock, type StageClock } from "@/lib/burnticker/buildStages";
 import { withLaunchFailureAlert } from "@/lib/burnticker/api/launchFailAlert";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
@@ -76,7 +76,10 @@ export async function POST(req: Request) {
 async function review(req: Request, clock: StageClock, seen: { rule?: unknown }): Promise<ApiResult> {
   {
     if (launchModeFromEnv(process.env) === "closed") { const r = globalRefusal(process.env)!; return fail(r.status, r.body.error, { code: r.body.code, preview: false }); }
-    const body = await clock.run("body", () => readJson(req));
+    // HB-172 (LA7-3): the review carries no image, so its body is read up to SMALL_JSON_BODY (256 KB); larger answers 413
+    const read = await clock.run("body", () => readJsonLimited(req));
+    if ("tooLarge" in read) return read.tooLarge;
+    const body = read.body;
     if (!body) return fail(400, "invalid JSON body");
     seen.rule = (body as { rule?: unknown }).rule;
     // review of block M: the creator's own drafts count as theirs only when the request carries that wallet's signed request over these

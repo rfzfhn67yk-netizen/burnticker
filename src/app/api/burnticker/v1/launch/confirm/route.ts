@@ -1,5 +1,5 @@
 // Public API v1 (2026-10-09): see src/lib/burnticker/api/spec.ts (the one schema source) and docs/burnticker/api.md.
-import { clientKey, fail, readJson, runV1 } from "@/lib/burnticker/api/http";
+import { clientKey, fail, readJsonLimited, runV1 } from "@/lib/burnticker/api/http";
 import { platform, v1Confirm } from "@/lib/burnticker/api/v1";
 import { markLaneBusy } from "@/lib/burnticker/confirmBusy";
 
@@ -11,5 +11,5 @@ export const dynamic = "force-dynamic";
  * bundles spend. The chain decides (markLaunched verifies the transaction before anything is written).
  */
 export async function POST(req: Request) {
-  return runV1("confirmLaunch", req, async () => { const body = await readJson(req); return body ? markLaneBusy(await v1Confirm(platform(), body, clientKey(req))) : fail(400, "invalid JSON body"); });
+  return runV1("confirmLaunch", req, async () => { const r = await readJsonLimited(req); if ("tooLarge" in r) return r.tooLarge; const body = r.body; return body ? markLaneBusy(await v1Confirm(platform(), body, clientKey(req))) : fail(400, "invalid JSON body"); });
 }

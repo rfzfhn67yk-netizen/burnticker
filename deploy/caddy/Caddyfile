@@ -74,6 +74,20 @@
 	respond `{"error":"the app is catching up; receipts and the program are unaffected","code":"app-unavailable","retryAfterSec":30}` 503
 }
 
+# B-18 (seventh prelaunch audit, 2026-10-20): the $DEFICIT page sends an ENFORCED policy. Its whole inventory, read from
+# site/deficit/index.html and pinned by test/burntickerDeficitCsp.test.ts:
+#   connect  its own status.json, burns.json and rules.json ('self'), the home feed and API on https://burnticker.com, the Treasury feed,
+#            and Cloudflare Web Analytics if the proxy injects it
+#   script   its own inline blocks ('unsafe-inline'; no script file is loaded) and the Cloudflare beacon
+#   style    inline <style> and style attributes, Google Fonts CSS (Oswald)
+#   font     fonts.gstatic.com (Oswald) and https://burnticker.com/fonts (Courier Prime, Space Grotesk; CORS is opened for /fonts/* below)
+#   img      'self' (favicon, avatar), data:, the mark at https://burnticker.com/brand/favicon.png
+#   frames   none; nothing may frame it
+# connect-src is the lock that matters: even if a data source were spoofed, the page cannot read from or send to any other host.
+(deficit_csp) {
+	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://burnticker.com; img-src 'self' data: https://burnticker.com; connect-src 'self' https://burnticker.com https://api.fiscaldata.treasury.gov https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+}
+
 (static_site) {
 	import security
 	encode zstd gzip
@@ -258,6 +272,7 @@
 	# $DEFICIT's static status site on the main host too (status.json, burns.json, rules.json, index.html).
 	handle_path /deficit/* {
 		root * /var/www/deficit
+		import deficit_csp
 		import static_site
 	}
 
@@ -299,5 +314,6 @@
 
 {$DEFICIT_DOMAIN:deficit.burnticker.com} {
 	root * /var/www/deficit
+	import deficit_csp
 	import static_site
 }

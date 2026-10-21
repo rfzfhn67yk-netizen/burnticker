@@ -13,7 +13,7 @@ import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { gameLine } from "@/lib/burnticker/oneShotEligibility";
 import { climateDaySentence, FIRST_SNOW_SEASON, leastReportable, parseWeatherIntent, planWeather, type WeatherIntent, type WeatherPlan } from "@/lib/burnticker/weatherIntent";
 import { nativeRule, nativeSourceById } from "@/lib/burnticker/sources/native";
-import { loadRaces, outcomeCardTitle, outcomeSettlesNote, searchRaces, tokens, type Race } from "@/lib/burnticker/elections";
+import { controlIdentity, loadRaces, outcomeCardTitle, outcomeSettlesNote, searchRaces, tokens, type Race } from "@/lib/burnticker/elections";
 import { eventPageUrl, parseEventsBody, searchUrl, type GammaEvent, type TitleRefuser } from "@/lib/burnticker/oracle/polymarket";
 import { scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
 import { looksLikePerson, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
@@ -506,14 +506,17 @@ export function raceCards(races: readonly Race[], q: string): Suggestion[] {
   return searchRaces(races, q).slice(0, 3).map(({ race: r, outcome: o, score }) => {
     const rule = polyRule(o.conditionId);
     const raceName = r.title.replace(/ Election Winner$/, "");
-    const descCtx = { eventPhrase: `${o.label} wins the ${raceName} race`, crossRead: `the ${r.stateName ?? "state"} certified result`, endsAt: r.settlesOn };
+    // HB-171: a party-control race's title is a question, so its event, name and ticker come from the party and the chamber
+    const control = controlIdentity(r, o);
+    const phrase = control ? control.phrase : `${o.label} wins the ${raceName} race`;
+    const descCtx = { eventPhrase: phrase, crossRead: control ? "each state's certified results" : `the ${r.stateName ?? "state"} certified result`, endsAt: r.settlesOn, ...(control ? { suggest: { name: control.name, ticker: control.ticker } } : {}) };
     const text = describeRule(rule, { ticker: "", ...descCtx });
     return {
       ...base, id: `polymarket:${o.conditionId}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot",
-      title: outcomeCardTitle(r, o), subtitle: `${r.title}${r.hiddenPlaceholders ? `. ${r.hiddenPlaceholders === 1 ? "One placeholder market with no name is" : `${r.hiddenPlaceholders} placeholder markets with no name are`} hidden.` : ""}`,
+      title: outcomeCardTitle(r, o), subtitle: `${r.title}${r.hiddenPlaceholders ? `${/[.?!]$/.test(r.title) ? "" : "."} ${r.hiddenPlaceholders === 1 ? "One placeholder market with no name is" : `${r.hiddenPlaceholders} placeholder markets with no name are`} hidden.` : ""}`,
       settlement: sosLinkLabel(r.sos) === r.sos.name ? `${r.settlement} — ${r.sos.name}` : r.settlement, crossRead: sosLinkLabel(r.sos), crossReadUrl: r.sos.url, nextAt: r.settlesOn, settleAt: r.settlesOn, endAt: r.settlesOn, endText: "ends when the race resolves",
       howSettles: `${outcomeSettlesNote(r, o)}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, rule,
-      pick: { oracle: "polymarket", series: null, market: o.conditionId, title: `${o.label} wins the ${raceName} race (resolves once)`, yes: o.yes, no: o.no },
+      pick: { oracle: "polymarket", series: null, market: o.conditionId, title: `${phrase} (resolves once)`, yes: o.yes, no: o.no },
       text, descCtx, href: r.url, suggestedName: text.name, suggestedTicker: text.ticker, refused: r.refused, score: 1 + score,
     };
   });
@@ -525,7 +528,7 @@ const withBadges = (cards: Suggestion[]): Suggestion[] => cards.map((c) => ({ ..
 export type SuggestionGroup = "teams" | "elections" | "weather" | "disasters" | "feeds" | "markets" | "tiles";
 /** Each result group's heading (continuous audit HB-10: an earthquake card sat under "Public data"; step 1 calls these a natural disaster). */
 export const SUGGESTION_GROUP_LABELS: Readonly<Record<SuggestionGroup, string>> = { teams: "Teams", elections: "Elections", weather: "Weather", disasters: "Natural disaster", feeds: "Public data", markets: "Markets", tiles: "Coin vs Coin" };
-const groupOf = (c: Suggestion): SuggestionGroup => (c.venue === "espn" ? "teams" : c.venue === "nws" ? "weather" : c.venue === "feed" ? (isHazardSeries(c.pick?.series ?? null) ? "disasters" : "feeds") : c.venue === "tile" ? "tiles" : c.id.startsWith("polymarket:") && c.howSettles?.includes("Resolution rules") && /wins the .* race/.test(c.title) ? "elections" : c.id.startsWith("champ:") ? "teams" : "markets");
+const groupOf = (c: Suggestion): SuggestionGroup => (c.venue === "espn" ? "teams" : c.venue === "nws" ? "weather" : c.venue === "feed" ? (isHazardSeries(c.pick?.series ?? null) ? "disasters" : "feeds") : c.venue === "tile" ? "tiles" : c.id.startsWith("polymarket:") && c.howSettles?.includes("Resolution rules") && /wins (the .* race|control of the (Senate|House))/.test(c.title) ? "elections" : c.id.startsWith("champ:") ? "teams" : "markets");
 /** At most this many cards, each above MIN_SCORE; nothing above it → "no close match — try Browse". */
 export const MAX_CARDS = 6, MIN_SCORE = 1;
 

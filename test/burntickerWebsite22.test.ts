@@ -83,8 +83,8 @@ describe("audit 10 items 1 and 2: the source's words follow the active rule", ()
 });
 
 describe("audit 10 item 3: the fee sentence by the venue the launch really uses", () => {
-  const LP = `The pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
-  const PAIR = `The pool's liquidity is locked forever. ${PAIR_OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
+  const LP = `After graduation, the pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
+  const PAIR = `After graduation, each pool's liquidity is locked forever. ${PAIR_OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
   test("only the pair curve's pools say the pair line; two LaunchLab launches say the ordinary line for each coin", () => {
     assert.equal(lpDisclosureFor("single", LP, PAIR), LP);
     assert.equal(lpDisclosureFor("pair-curve", LP, PAIR), PAIR);

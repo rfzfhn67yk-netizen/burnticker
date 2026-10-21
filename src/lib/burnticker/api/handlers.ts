@@ -863,8 +863,27 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   // second audit 2026-10-19 I-17: an older build running on a registry file a newer build migrated (a rollback) does not know the newer
   // file's guards, so it takes no new launch; reads and dry runs go on (the registry alerted the owner when it opened the file)
   if (registers && typeof p.registry.newerSchemaVersion === "number") return { error: fail(503, REGISTRY_NEWER_REFUSAL, { code: "registry-newer", retryAfterSec: 600 }) };
+  /**
+   * B-19 (seventh prelaunch audit, 2026-10-20): an unsigned prepare under a made-up wallet held any free ticker for 24 hours against every
+   * creator. A registering prepare's draft now holds its ticker for the full window only when the wallet proved control (a valid proof
+   * for these tickers and mints) and holds the launch's cost, the same test as the signed reserve below (`trusted`), or when the caller
+   * is in process. Otherwise the draft is UNPROVEN (registry.ts UNPROVEN_HOLD_MS): it holds only against other unproven prepares, for 15
+   * minutes, until its create is reported as sent. A proven caller is never refused by it. The proof is only checked here; it is
+   * checked again and spent by proveWallet below, which refuses one that does not hold.
+   */
+  const holdProven = !registers ? false : o.client === undefined ? true : await (async (): Promise<boolean> => {
+    const raw = (body as { walletProof?: unknown }).walletProof;
+    if (raw === undefined || raw === null) return false;
+    const sideTicker = b.pair && typeof b.pair === "object" ? String((b.pair as { ticker?: unknown }).ticker ?? "").toUpperCase() : null;
+    const tickers = sideTicker === null ? [input.ticker] : [input.ticker, sideTicker];
+    const mints = (sideTicker === null ? [o.mint] : [o.mint, o.mintB]).filter((m): m is string => !!m);
+    try { if (!checkWalletProof(raw, { creator: input.creator, tickers, mints, origins: [publicOrigin()] }).ok) return false; } catch { return false; }
+    let cost: number;
+    try { cost = launchLabCostLamports(locked.rule.reserveSol, tickers.length); } catch { cost = launchLabCostLamports("0.02", tickers.length); }
+    return walletCovers(p, input.creator, cost);
+  })();
   const tickerOwner = registers ? input.creator : provenReviewCreator({ creator: input.creator, walletProof: (body as { walletProof?: unknown }).walletProof, ticker: input.ticker, pair: b.pair ?? null }, [publicOrigin()]);
-  { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null, creator: input.creator, tickerOwner }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
+  { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null, creator: input.creator, tickerOwner, callerProven: holdProven }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   /**
    * Third prelaunch audit 2026-10-19 F04: the mint lock above is per mint, so two creators' prepares for one unused ticker (different
    * mints) both passed the guard. The registry is the arbiter: a prepare that registers holds the ticker in the registry right after its
@@ -872,7 +891,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
    * (its draft holds the ticker from then on), and lapses on its own after 15 minutes. A dry run holds nothing.
    */
   const holdTicker = (ticker: string, mint: string | null, sideB: boolean): { error: ApiResult } | null => {
-    const r = p.registry.reserveTicker(ticker, input.creator, mint);
+    const r = p.registry.reserveTicker(ticker, input.creator, mint, Date.now(), 15 * 60_000, holdProven);
     if (!r.ok) { const g = tickerTakenRefusal(p, ticker, input.creator); return { error: fail(g.status, sideB ? sideBRefusal(g.error) : g.error, g.extra) }; }
     held.push(() => p.registry.releaseTicker(ticker, input.creator));
     return null;
@@ -1116,7 +1135,8 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
   const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: uriFor(input.ticker), keeperPubkey: p.keeperPubkey, allowMainnet: p.allowMainnet === true };
   const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[], creatorNote = "", poolId: string | null = bundle.addresses.poolId): TokenRow => {
     const reused = p.registry.ownDraft(bundle.mint, input.creator);   // 2026-10-14: the retry of an unfinished draft (checked above: same rule)
-    const token = reused && reused.rulesJson === bundle.rules.text ? reused : p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
+    const token = reused && reused.rulesJson === bundle.rules.text ? reused : p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft", unproven: !holdProven });
+    if (reused && holdProven) p.registry.markDraftProven(token.mint);   // B-19: a retry that proved the wallet makes the draft hold
     if (p.keeperPubkey) p.registry.addAttester({ mint: token.mint, pubkey: p.keeperPubkey, role: "data-key", addedAt: Date.now(), timelockUntil: null });
     const pin = pins.get(ticker) ?? null;
     // F4: the identity the metadata file was made from, recorded once with the draft (a retry is compared against it)
@@ -1157,7 +1177,7 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     const bRefusals = nameRefusals(list, side.name, side.ticker);
     { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
-    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}), creator: input.creator, tickerOwner }); if (g) return { error: fail(g.status, sideBRefusal(g.error), g.extra) }; }
+    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}), creator: input.creator, tickerOwner, callerProven: holdProven }); if (g) return { error: fail(g.status, sideBRefusal(g.error), g.extra) }; }
     if (registers && side.ticker !== input.ticker) { const lp = await pendingRefusal(side.ticker, o.mintB ?? null, true); if (lp) return lp; }   // B-2: side B's ticker too
     if (registers && side.ticker !== input.ticker) { const h = holdTicker(side.ticker, o.mintB ?? null, true); if (h) return h; }   // F04: side B's ticker too
     // two candidates: both markets must be named outcomes of the one race the body names (Polymarket's own index of open races)

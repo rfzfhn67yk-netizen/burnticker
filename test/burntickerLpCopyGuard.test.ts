@@ -83,11 +83,13 @@ describe("LP locked forever: no public surface still claims the LP is burned", (
 
   test("the policy line is the same words everywhere it is defined", () => {
     const LINE = "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)";
-    for (const f of ["src/lib/burnticker/lockFees.ts", "src/lib/burnticker/wizard.ts"]) assert.ok(fs.readFileSync(path.join(ROOT, f), "utf8").includes(LINE), f);
+    assert.ok(fs.readFileSync(path.join(ROOT, "src/lib/burnticker/lockFees.ts"), "utf8").includes(LINE), "lockFees.ts");
+    // HB-179 (seventh pass): the team sentence on the review says the lock happens at graduation, with the same split in brackets
+    assert.ok(fs.readFileSync(path.join(ROOT, "src/lib/burnticker/wizard.ts"), "utf8").includes("After graduation, the pool's liquidity is locked forever, and its fees fund the burn (80% burned, 20% operator, fixed in code)"), "wizard.ts");
     // website-12 (ChatGPT A4): the review card says the exact scope of the 80 / 20 split (the SOL side of the locked LP's fees) and that it funds the burn pool
     const card = fs.readFileSync(path.join(ROOT, "src/app/burnticker/launch/ReviewCard.tsx"), "utf8");
     // fees copy (2026-10-12): the operator's share is said from the constants (feeShareLine.ts)
-    assert.ok(card.includes("export const LP_LINE = `The pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE}"), "the review card's LP line reads the operator share line");
+    assert.ok(card.includes("export const LP_LINE = `After graduation, the pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE}"), "the review card's LP line reads the operator share line");
     assert.ok(!card.includes(LINE), "the imprecise '80% burned' line is gone from the review card");
   });
 });

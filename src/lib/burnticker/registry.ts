@@ -40,6 +40,16 @@ export type TokenStatus = "draft" | "live" | "paused" | "retired" | "expired";
 export const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 /** AUDIT A C1: a create whose block time is this far past the 24 h window still counts as in time (clock skew, a slow last confirmation). */
 export const DRAFT_GRACE_MS = 10 * 60 * 1000;
+/**
+ * B-19 (seventh prelaunch audit, 2026-10-20): an UNPROVEN draft is one a public prepare registered without a wallet that proved control
+ * and held the launch's cost (handlers.ts holdProven). Anyone can make one up, so it holds its ticker only against other unproven
+ * prepares, and only for this long after it was written; a proven creator is never refused by it. A draft whose create was reported as
+ * sent (draft_sends, signatures checked) holds like any other. Its own creator can still finish it for the full DRAFT_TTL_MS.
+ * The mark is a row in `status` under this prefix (no schema change); drafts without the mark, every row written before 2026-10-20 and
+ * every in-process caller's draft, hold as before.
+ */
+export const UNPROVEN_HOLD_MS = 15 * 60 * 1000;
+export const UNPROVEN_DRAFT_PREFIX = "draft.unproven.";
 /** Whether a create with this block time landed inside its draft's window (judged on the block time, never on when a sweep ran). */
 export const inDraftWindow = (createdAtMs: number, blockTimeMs: number): boolean => blockTimeMs <= createdAtMs + DRAFT_TTL_MS + DRAFT_GRACE_MS;
 export interface TokenRow {
@@ -310,7 +320,7 @@ export function readingMatches(rule: BurnRule, r: { id: string; title: string | 
   return true;
 }
 
-export interface RegisterInput { mint: string; ticker: string; name: string; creator: string; description: string; imageUrl: string | null; links: { label: string; url: string }[]; rulesText: string; feePda: string; vault: string | null; tokenConfig: string | null; poolId: string | null; launchTx: string | null; cluster: string; platformId: string | null; baselineAt: string; status: TokenStatus }
+export interface RegisterInput { mint: string; ticker: string; name: string; creator: string; description: string; imageUrl: string | null; links: { label: string; url: string }[]; rulesText: string; feePda: string; vault: string | null; tokenConfig: string | null; poolId: string | null; launchTx: string | null; cluster: string; platformId: string | null; baselineAt: string; status: TokenStatus; /** B-19: a public prepare's draft with no proven wallet behind it (holds its ticker only briefly) */ unproven?: boolean }
 
 /** The first pair id not yet taken: the base, else base-2, base-3 … kept within the 40-character pair id (registry.freePairId). */
 export function nextFreePairId(base: string, taken: (id: string) => boolean): string {
@@ -530,8 +540,14 @@ export class Registry {
    * unexpired reservation of another creator. The caller has expired stale drafts. The creator's own draft or reservation never counts
    * (a retry of their own unfinished draft). Tickers of old coins stay shared (owner 2026-10-12): only a new draft is ever refused.
    */
-  private tickerHolder(ticker: string, creator: string, now: number): "token" | "reservation" | null {
-    if (this.db.prepare("SELECT 1 FROM tokens WHERE ticker=? AND status <> 'expired' AND creator <> ? LIMIT 1").get(ticker, creator)) return "token";
+  private tickerHolder(ticker: string, creator: string, now: number, callerProven = true): "token" | "reservation" | null {
+    // B-19: an unproven draft (no launch transaction, no recorded send) never holds against a proven caller, and holds against an
+    // unproven one for UNPROVEN_HOLD_MS only
+    if (this.db.prepare(`SELECT 1 FROM tokens t WHERE t.ticker=? AND t.status <> 'expired' AND t.creator <> ? AND (
+        t.status <> 'draft' OR t.launch_tx IS NOT NULL
+        OR NOT EXISTS (SELECT 1 FROM status k WHERE k.key = ? || t.mint)
+        OR EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = t.mint)
+        OR (? = 0 AND t.created_at > ?)) LIMIT 1`).get(ticker, creator, UNPROVEN_DRAFT_PREFIX, callerProven ? 1 : 0, now - UNPROVEN_HOLD_MS)) return "token";
     if (this.db.prepare("SELECT 1 FROM ticker_reservations WHERE ticker=? AND creator <> ? AND expires_at > ?").get(ticker, creator, now)) return "reservation";
     return null;
   }
@@ -540,12 +556,12 @@ export class Registry {
    * another creator's draft or coin holds the ticker, or another creator's unexpired reservation does; the same creator renews its own.
    * The registry is the arbiter, so two processes (or two routes) racing for one ticker get one reservation.
    */
-  reserveTicker(ticker: string, creator: string, mint: string | null, now = Date.now(), ttlMs = 15 * 60_000): { ok: true } | { ok: false; heldBy: "reservation" | "token" } {
+  reserveTicker(ticker: string, creator: string, mint: string | null, now = Date.now(), ttlMs = 15 * 60_000, callerProven = true): { ok: true } | { ok: false; heldBy: "reservation" | "token" } {
     this.assertSchemaKnown();
     const t = normTicker(ticker);
     return this.tx(() => {
       this.expireDrafts(now);
-      const heldBy = this.tickerHolder(t, creator, now);
+      const heldBy = this.tickerHolder(t, creator, now, callerProven);
       if (heldBy) return { ok: false as const, heldBy };
       this.db.prepare(`INSERT INTO ticker_reservations (ticker, creator, mint, expires_at, created_at) VALUES (?,?,?,?,?)
         ON CONFLICT(ticker) DO UPDATE SET creator=excluded.creator, mint=excluded.mint, expires_at=excluded.expires_at, created_at=excluded.created_at`).run(t, creator, mint, now + ttlMs, now);
@@ -586,14 +602,23 @@ export class Registry {
       this.expireDrafts(now);   // owner 2026-10-12: tickers are not unique for old coins; stale drafts still expire here
       // F04 (2026-10-19): a new DRAFT is refused when another creator's draft, coin or unexpired reservation holds its ticker (checked in
       // the same transaction as the insert, so two racing prepares cannot both pass); a row already live on chain is recorded as it is
-      if (i.status === "draft" && this.tickerHolder(normTicker(i.ticker), i.creator, now)) throw new TickerTakenError(normTicker(i.ticker));
+      if (i.status === "draft" && this.tickerHolder(normTicker(i.ticker), i.creator, now, !i.unproven)) throw new TickerTakenError(normTicker(i.ticker));
       this.db.prepare(`INSERT INTO tokens (mint, ticker, name, creator, description, image_url, links_json, oracle, selector_key, rules_json, rules_sha, mode, fee_pda, vault, token_config, pool_id, launch_tx, cluster, platform_id, baseline_at, created_at, status)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(i.mint, i.ticker, i.name, i.creator, i.description, i.imageUrl, JSON.stringify(i.links), locked.rule.oracle, selectorKeyOf(locked.rule), locked.text, locked.sha256, locked.mode, i.feePda, i.vault, i.tokenConfig, i.poolId, i.launchTx, i.cluster, i.platformId, i.baselineAt, now, i.status);
       this.db.prepare("INSERT OR IGNORE INTO token_state (mint, carry_out, updated_at) VALUES (?, '0', ?)").run(i.mint, now);
       this.db.prepare("DELETE FROM ticker_reservations WHERE ticker=? AND creator=?").run(normTicker(i.ticker), i.creator);   // F04: the draft holds it now
+      if (i.status === "draft" && i.unproven) this.setStatus(UNPROVEN_DRAFT_PREFIX + i.mint, "1", now);   // B-19
       return this.token(i.mint)!;
     });
+  }
+  /** B-19: the creator proved the wallet on a retry of an unproven draft; from now on it holds its ticker like any draft. */
+  markDraftProven(mint: string): void { this.db.prepare("DELETE FROM status WHERE key=?").run(UNPROVEN_DRAFT_PREFIX + mint); }
+  /** B-19: the mints of unproven drafts that have no recorded create send (those hold only briefly; see UNPROVEN_HOLD_MS). */
+  unprovenDraftMints(): Set<string> {
+    const rows = this.db.prepare("SELECT substr(k.key, ?) AS mint FROM status k WHERE k.key >= ? AND k.key < ? AND NOT EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = substr(k.key, ?))")
+      .all(UNPROVEN_DRAFT_PREFIX.length + 1, UNPROVEN_DRAFT_PREFIX, `${UNPROVEN_DRAFT_PREFIX}\uffff`, UNPROVEN_DRAFT_PREFIX.length + 1) as { mint: string }[];
+    return new Set(rows.map((r) => String(r.mint)));
   }
   /**
    * The creator's OWN unfinished draft for a mint (status draft, no launch transaction, same creator), or null. A retry of the same

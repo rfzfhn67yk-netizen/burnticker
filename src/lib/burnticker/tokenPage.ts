@@ -140,7 +140,8 @@ export function sideSummary(s: Pick<TokenStatusJson, "ticker" | "name" | "mint" 
 }
 
 /** The fee-flow sentence every coin page carries (the app's coin page, t/[ticker]/page.tsx, prints the same words). */
-export const FEE_FLOW_LINE = `Creator fees go to the burn pool and are burned. The liquidity is locked forever. ${OPERATOR_SHARE_LINE}`;
+// HB-179: true before graduation too (no pool exists yet)
+export const FEE_FLOW_LINE = `Creator fees go to the burn pool and are burned. After graduation, the pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE}`;
 /** The same line for one coin, from the post-graduation split its page carries (the tier it pinned; 2026-10-19). */
 export const feeFlowLine = (post: Pick<FeeSplit, "legs">, lockedPct: number | null = LP_LOCKED_PCT, tierUnread = false): string => `Creator fees go to the burn pool and are burned. ${lpLockLine(lockedPct)} ${tierUnread ? TIER_UNREAD_LINE : postGraduationShareLine(post)}`;
 

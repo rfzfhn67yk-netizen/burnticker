@@ -20,7 +20,7 @@ export function teamCoinRule(series: string, abbr: string, burnOn: "win" | "lose
 
 /** The review screen's plain sentence for a team coin. */
 export function teamCoinSentence(team: string, ticker: string, burnOn: "win" | "lose", fraction = DEFAULT_FRACTION): string {
-  return `Every time the ${team} ${burnOn === "win" ? "win" : "lose"}, $${ticker} spends ${Math.round(fraction * 1000) / 10}% of its burn pool buying $${ticker} back with its own trading fees and burns it. The rule is locked forever. You earn nothing from fees. LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code).`;
+  return `Every time the ${team} ${burnOn === "win" ? "win" : "lose"}, $${ticker} spends ${Math.round(fraction * 1000) / 10}% of its burn pool buying $${ticker} back with its own trading fees and burns it. The rule is locked forever. You earn nothing from fees. After graduation, the pool's liquidity is locked forever, and its fees fund the burn (80% burned, 20% operator, fixed in code).`;
 }
 
 /**

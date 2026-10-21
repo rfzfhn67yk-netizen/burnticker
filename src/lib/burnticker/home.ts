@@ -203,7 +203,7 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       : kc ? curveCell({ phase: kc.phase, progressPct: kc.progressPct, raised: kc.raised, threshold: kc.threshold, quote: kc.quote }, null)
       : noCurve(ks ? "The keeper's files do not carry a curve reading yet." : unreadWhy),
     // walkthrough 13: before $DEFICIT is registered here, its keeper's curve reading carries the market cap (the coin page showed it, the card did not)
-    // coin card status 2026-10-18: an untraded curve says "No trades yet"; a traded one gives the figure with its basis (cardView.ts mcapCell)
+    // coin card status 2026-10-18: a curve with nothing raised says "Nothing net raised yet" (HB-173); a traded one gives the figure with its basis (cardView.ts mcapCell)
     mcap: !created ? cell(null, "The coin is not created yet.") : readable ? mcapCell({ cap: live!.marketCap, quote: live!.quote, phase: live!.phase ?? null, raised: live!.raised ?? null })
       : kc ? mcapCell({ cap: kc.marketCap, quote: kc.quote, phase: kc.phase, raised: kc.raised }) : cell(null, ks ? NOT_READ.mcapNotRead : unreadWhy),
     holders: !created ? cell(null, "The coin is not created yet.") : readable && typeof live!.holders === "number" ? holdersCell(live!.holders, live!.holdersOnlyPools ?? false, null) : cell(null, NOT_READ.holders),

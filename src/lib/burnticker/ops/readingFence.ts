@@ -56,8 +56,13 @@ export async function fenceToken(d: Pick<KeeperDeps, "registry" | "program" | "l
   if (!cfg?.hasBaseline) return;   // no TokenConfig (executePending holds) or no reading yet: nothing another keeper could have counted
   const d0 = receiptDay(unassigned[0].settledAt);
   if (cfg.lastRecordDate < d0) return;
-  // A reading of our own may still be landing: the write-ahead path (resolveSent) owns that case.
-  const inflight = reg.db.prepare("SELECT 1 FROM signatures WHERE mint=? AND event_id LIKE 'reading:%' AND status='sent' LIMIT 1").get(t.mint);
+  // A reading of our own may still be landing: the write-ahead path (resolveSent) owns that case. HB-178 / TS7-1 (seventh audit,
+  // fifth-pass CH-5): only an in-flight reading dated inside the range being fenced (on or after the oldest unassigned receipt's day)
+  // can be the one on chain; receipts are assigned to a reading only when it confirms, so an older in-flight row counted none of
+  // these receipts. Before, one stale 'sent' row for any old date switched the fence off for the coin, and a second keeper counted
+  // units the first had already landed (63 → 125). A date that does not parse still skips, as before.
+  const inflight = (reg.db.prepare("SELECT event_id FROM signatures WHERE mint=? AND event_id LIKE 'reading:%' AND status='sent'").all(t.mint) as { event_id: string }[])
+    .some((r) => { const n = Number(String(r.event_id).slice("reading:".length).replace(/-/g, "")); return !Number.isFinite(n) || n === 0 || n >= d0; });
   if (inflight) return;
   const ownLast = ownLastReading(reg.db, t.mint, reg.receipts(t.mint));
   // Walk the on-chain readings back from the newest to the last one this registry knows.

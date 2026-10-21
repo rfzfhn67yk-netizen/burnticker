@@ -615,7 +615,9 @@ burn  = every token the swap delivered</pre>
   var LINKS = { trade: "" }; // e.g. the Raydium LaunchLab / pool URL. Empty = the Trade buttons point at the footer note.
   var TREASURY = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt";
   // `?data=sample/` previews the page against the committed replay sample; production reads ./status.json beside the page.
-  var base = (new URLSearchParams(location.search).get("data") || "").replace(/[^\w./-]/g, "");
+  // B-18 (seventh audit): the only value accepted is the sample folder. Anything else (another host as //host/, a scheme, a backslash,
+  // a percent-encoded form, which URLSearchParams has already decoded) is dropped, so the page only ever reads its own files.
+  var base = (new URLSearchParams(location.search).get("data") || "").replace(/^(?!sample\/?$)[\s\S]*$/, "");
   if (base && !/\/$/.test(base)) base += "/";
 
   var $ = function (id) { return document.getElementById(id); };
@@ -625,7 +627,9 @@ burn  = every token the swap delivered</pre>
   var fmtB = function (delta) { var n = Number(delta); return (n >= 0 ? "+" : "−") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
   var fmtSol = function (s) { if (s == null) return "—"; var n = Number(s); return (n >= 100 ? n.toFixed(1) : n >= 1 ? n.toFixed(3) : n.toFixed(4)) + " SOL"; };
   var short = function (sig) { return sig ? sig.slice(0, 8) + "…" : "—"; };
-  var link = function (url, sig, fallback) { return url && sig ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(short(sig)) + "</a>" : esc(fallback || "—"); };
+  // B-18: a link built from a data file must be a plain https address; anything else (javascript:, data:, //host) is not linked
+  var href = function (u) { u = String(u == null ? "" : u); return /^https:\/\/[^\s"'<>\\]+$/i.test(u) ? u : ""; };
+  var link = function (url, sig, fallback) { var ok = /^https:\/\/[^\s"'<>\\]+$/i.test(String(url == null ? "" : url)); return ok && sig ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(short(sig)) + "</a>" : esc(fallback || "—"); };
 
   // Until a trade link is known the three Trade controls are explicit "not available until launch" labels: no href, aria-disabled.
   // Owner 2026-10-14 ("I don't see the $DEFICIT coin available to buy"): once the keeper's status.json carries the mainnet mint, the
@@ -810,12 +814,12 @@ burn  = every token the swap delivered</pre>
     $("healthSub").textContent = (s.feed.lastPollAt ? "Last feed check at " + new Date(s.feed.lastPollAt).toLocaleString() + "." : "No feed check yet.") + (s.feed.lastPollOutcome ? " The result was " + s.feed.lastPollOutcome + "." : "") + (s.health.lastError ? " The last error was " + s.health.lastError + "." : "");
     $("gen").textContent = new Date(s.generatedAt).toLocaleString();
     if (s.rules) { $("sha").textContent = "sha256: " + s.rules.sha256; $("statement").textContent = s.rules.statement; }
-    if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "Fee pool address: " + (s.buyback.funding.feeWalletUrl ? '<a href="' + esc(s.buyback.funding.feeWalletUrl) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? ". The operator added " + (s.buyback.funding.seedSol ? esc(s.buyback.funding.seedSol) + " SOL" : "a seed") + '; <a href="' + esc(s.buyback.funding.seedTxUrl) + '" target="_blank" rel="noopener">view the transaction</a>.' : ". Seed funding details have not been published here.");
+    if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "Fee pool address: " + (href(s.buyback.funding.feeWalletUrl) ? '<a href="' + esc(href(s.buyback.funding.feeWalletUrl)) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? ". The operator added " + (s.buyback.funding.seedSol ? esc(s.buyback.funding.seedSol) + " SOL" : "a seed") + (href(s.buyback.funding.seedTxUrl) ? '; <a href="' + esc(href(s.buyback.funding.seedTxUrl)) + '" target="_blank" rel="noopener">view the transaction</a>.' : ".") : ". Seed funding details have not been published here.");
     if (s.addresses && s.addresses.mint && isMainnet(s.cluster) && !isSample) {
       var phase = s.curve && s.curve.phase || null;
       enableTrade(tradeLinksFor(s.addresses.mint, phase)[0].url);
       renderMintLinks(s.addresses.mint, phase);
-    } else if (s.addresses && s.addresses.mint) $("mintAddr").innerHTML = "Mint address: " + (s.addresses.mintUrl ? '<a href="' + esc(s.addresses.mintUrl) + '" target="_blank" rel="noopener">' + esc(s.addresses.mint) + "</a>" : esc(s.addresses.mint));
+    } else if (s.addresses && s.addresses.mint) $("mintAddr").innerHTML = "Mint address: " + (href(s.addresses.mintUrl) ? '<a href="' + esc(href(s.addresses.mintUrl)) + '" target="_blank" rel="noopener">' + esc(s.addresses.mint) + "</a>" : esc(s.addresses.mint));
     startClock(s.feed && s.feed.nextPollAt);
     renderHero();
   }
@@ -873,8 +877,8 @@ burn  = every token the swap delivered</pre>
         "<div><b>2.</b> Apply the rule.</div><pre>" + esc(b.verify.formula) + "</pre>" +
         (b.carryRunSince ? '<div class="muted">The carried $' + esc(b.carryIn) + " comes from the run of consecutive increases since " + esc(b.carryRunSince) + ".</div>" : "") +
         "<div><b>3.</b> The expected result is " + esc(b.verify.expected) + "</div>" +
-        "<div style=\"margin-top:8px\"><b>4.</b> Read the memo on the burn transaction." + (b.txUrl ? ' <a href="' + esc(b.txUrl) + '" target="_blank" rel="noopener">Open the transaction</a>.' : "") + "</div><pre>" + esc(b.memo || (skippedText(b))) + "</pre>" +
-        '<div><a href="' + esc(b.sourceUrl) + '" target="_blank" rel="noopener">Treasury source row for ' + esc(b.recordDate) + "</a>. " + (b.verify.checks && b.verify.checks.length ? '<span class="bad">Some checks did not pass: ' + esc(b.verify.checks.join("; ")) + ".</span>" : '<span class="ok">The recomputation matches.</span>') + "</div>" +
+        "<div style=\"margin-top:8px\"><b>4.</b> Read the memo on the burn transaction." + (href(b.txUrl) ? ' <a href="' + esc(href(b.txUrl)) + '" target="_blank" rel="noopener">Open the transaction</a>.' : "") + "</div><pre>" + esc(b.memo || (skippedText(b))) + "</pre>" +
+        "<div>" + (href(b.sourceUrl) ? '<a href="' + esc(href(b.sourceUrl)) + '" target="_blank" rel="noopener">Treasury source row for ' + esc(b.recordDate) + "</a>. " : "Treasury source row for " + esc(b.recordDate) + ". ") + (b.verify.checks && b.verify.checks.length ? '<span class="bad">Some checks did not pass: ' + esc(b.verify.checks.join("; ")) + ".</span>" : '<span class="ok">The recomputation matches.</span>') + "</div>" +
         "</td>";
       tr.parentNode.insertBefore(d, tr.nextSibling); btn.setAttribute("aria-expanded", "true");
     };

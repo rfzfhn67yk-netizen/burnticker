@@ -97,7 +97,7 @@ describe("website-21 SOURCES4: POST /v1/derby/high", () => {
     assert.equal((await v1DerbyHighBaseline(platformWith(null), { u: WIF, span: 7 }, NOW)).status, 400);
   });
   test("the route, the spec entry and the docs row", () => {
-    assert.match(read("src/app/api/burnticker/v1/derby/high/route.ts"), /export async function POST\(req: Request\) \{\n  return runV1\("derbyHighBaseline", req, async \(\) => v1DerbyHighBaseline\(platform\(\), await readJson\(req\)\)\);/);
+    assert.match(read("src/app/api/burnticker/v1/derby/high/route.ts"), /export async function POST\(req: Request\) \{\n  return runV1\("derbyHighBaseline", req, async \(\) => \{ const r = await readJsonLimited\(req\); return "tooLarge" in r \? r\.tooLarge : v1DerbyHighBaseline\(platform\(\), r\.body\); \}\);/);
     assert.match(read("src/lib/burnticker/api/derbySpec.ts"), /operationId: "derbyHighBaseline", method: "POST" as const, path: "\/derby\/high"/);
     assert.match(read("docs/burnticker/api.md"), /\| POST \| `\/derby\/high` \|/);
   });

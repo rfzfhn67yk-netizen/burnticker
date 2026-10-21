@@ -114,7 +114,7 @@ describe("the generated rules", () => {
     assert.ok(r.events.every((e) => e.id.endsWith("-PHI")), "only the Eagles' own leg — never the opponent's leg of an Eagles game");
     const win = teamCoinRule("KXNFLGAME", "PHI", "win");
     assert.equal(resolveSelector(win, markets, { nowMs: T, sinceIso: since }).events.filter((e) => unitStep(win, e, null).units > 0).length, phi.record.w);
-    assert.equal(teamCoinSentence("Eagles", "EAGLES", "lose"), "Every time the Eagles lose, $EAGLES spends 1% of its burn pool buying $EAGLES back with its own trading fees and burns it. The rule is locked forever. You earn nothing from fees. LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code).");
+    assert.equal(teamCoinSentence("Eagles", "EAGLES", "lose"), "Every time the Eagles lose, $EAGLES spends 1% of its burn pool buying $EAGLES back with its own trading fees and burns it. The rule is locked forever. You earn nothing from fees. After graduation, the pool's liquidity is locked forever, and its fees fund the burn (80% burned, 20% operator, fixed in code).");
   });
   test("MATCHUP: this game only = one market, side B by inversion (a partition); every game = two own-leg rules (independent records)", () => {
     const g = matchupRules("KXNFLGAME", PHIJAC, "PHI", "JAC", "game");

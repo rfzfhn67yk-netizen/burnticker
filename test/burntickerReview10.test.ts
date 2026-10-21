@@ -86,7 +86,7 @@ describe("stale copy (a): the seed", () => {
     assert.match(read("scripts/burn-keeper.mts"), /\.\.\.seedDisclosure\(process\Wenv, mintS \?\? null,/);
   });
   test("the $DEFICIT page says the operator added the seed, or that details are not published", () => {
-    assert.ok(page.includes(`". The operator added " + (s.buyback.funding.seedSol ? esc(s.buyback.funding.seedSol) + " SOL" : "a seed") + '; <a href="`));
+    assert.ok(page.includes(`". The operator added " + (s.buyback.funding.seedSol ? esc(s.buyback.funding.seedSol) + " SOL" : "a seed") + (href(s.buyback.funding.seedTxUrl) ? '; <a href="`));
     assert.ok(page.includes("view the transaction</a>."));
     assert.ok(page.includes(`". Seed funding details have not been published here."`));
     assert.doesNotMatch(page, /It has no seed deposit/);
