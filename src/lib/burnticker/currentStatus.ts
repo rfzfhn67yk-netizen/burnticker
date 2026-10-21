@@ -202,7 +202,6 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     return r;
   });
   const waiting = st.reviews.reduce((n, r) => n + r.findings.filter((f) => /not done|not re-checked/.test(f.recheck)).length, 0);
-  const openCount = releaseRequirements.filter((r) => r.status === "open").length;
   const lines = [
     st.phase.line,
     st.deficit.firstBurnPath.line,
@@ -215,7 +214,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     `The 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock, an approved upgrade executes at once, with no advance notice." : ""}`,
     `The operator earns 0.25% of curve trading volume. ${BOTH_TIERS_LINE} The coin side of the liquidity fees is burned. Creators take no cash from fees.`,
     `No security firm has audited the code. ${waiting === 1 ? "One fixed finding still waits" : `${countWord(waiting)} fixed findings still wait`} for an independent re-check.`,
-    `${openCount === 1 ? "One thing is" : `${countWord(openCount)} things are`} still open before release.${anyMain || mainUnknown ? "" : " The first is the mainnet deployment."}`,
+    // eighth pass B-25 (owner 2026-10-21): the count of open release items is no longer a summary sentence; the list stays behind its disclosure
     // HB-82: while today's registry snapshot is not pinned, the summary says so
     ...(i.registrySnapshot && !i.registrySnapshot.pinned && i.registrySnapshot.line ? [i.registrySnapshot.line] : []),
   ];

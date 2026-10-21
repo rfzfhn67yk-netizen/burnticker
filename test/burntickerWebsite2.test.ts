@@ -144,7 +144,7 @@ describe("one current-status source (website brief §4)", () => {
     const now0 = buildCurrentStatus({ env: {}, chain: facts(0), now: 0 });
     const main = now0.upgradeAuthority.find((u) => u.cluster === "mainnet")!;
     assert.equal(main.timeLockSecs, 0); assert.equal(main.timeLockSource, "chain"); assert.equal(main.plannedTimeLockSecs, 172800);
-    assert.equal(main.line, "The mainnet Squads time lock is 0 (none) today, read from chain. The plan is 48 h from a week or more after the soft launch.");
+    assert.equal(main.line, "The mainnet Squads time lock is 0 (none) today, read from chain. The 48-hour time lock has no date set yet.");
     assert.match(main.why, /owner decided on 2026-10-11/i);
     assert.equal(now0.releaseRequirements.find((r) => r.id === "time-lock")!.status, "open");
     assert.equal(buildCurrentStatus({ env: {}, chain: facts(172800), now: 0 }).releaseRequirements.find((r) => r.id === "time-lock")!.status, "done");
@@ -166,7 +166,7 @@ describe("one current-status source (website brief §4)", () => {
   });
   test("no surface states 48 h as the mainnet time lock in effect; every page renders the one source", () => {
     const op = JSON.parse(fs.readFileSync("config/burnticker/operator.json", "utf8")) as { clusters: { mainnet: { squads: { timeLock: string } } } };
-    assert.match(op.clusters.mainnet.squads.timeLock, /^0 now .*48 h planned/);
+    assert.match(op.clusters.mainnet.squads.timeLock, /^0 now; the 48-hour time lock has no date set yet$/);
     for (const f of ["config/burnticker/transparency.json", "src/lib/burnticker/trustpack/checklist.ts", "docs/burn-receipts/powers-register.json", "docs/burnticker/CHECK-THIS-YOURSELF.md"]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /mainnet: 48 h\)|vault with a 48 h time lock|upgrade authority \(48 h time lock\)/, f);
     // website-15 item 17: the full block on Trust; the operator page prints its first line and a link (the same one source)
     assert.match(fs.readFileSync("src/app/burnticker/trust/page.tsx", "utf8"), /<CurrentStatusSummary card=\{card\} \/>/);

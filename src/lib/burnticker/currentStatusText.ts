@@ -36,11 +36,15 @@ export function upgradeDelaySummary(timeLockSecs: number | null, threshold = "2 
 /**
  * Hourly run 6 HB-59 / N3: THE ONE SENTENCE FOR THE TIME-LOCK PLAN. The current-status line and the Powers Register's upgrade row (the
  * trust page, /api/burnticker/trust and /v1/trust) both say the plan in these words, from config/burnticker/current-status.json `squads`,
- * so the two can no longer name different times. `plannedFrom` is the file's own phrase; null leaves the "from" out.
+ * so the two can no longer name different times. `plannedFrom` is the file's own phrase. Eighth pass B-25 / B-16g (owner 2026-10-21):
+ * null means no date is set, and the sentence says so plainly instead of naming a vague "from".
  */
 export function timeLockPlanSentence(plannedSecs: number, plannedFrom: string | null): string {
-  return `The plan is ${fmtSecs(plannedSecs)}${plannedFrom ? ` from ${plannedFrom}` : ""}.`;
+  if (!plannedFrom) return `The ${durationWord(plannedSecs)} time lock has no date set yet.`;
+  return `The plan is ${fmtSecs(plannedSecs)} from ${plannedFrom}.`;
 }
+/** A duration as an adjective: 172800 → "48-hour", 60 → "1-minute". */
+const durationWord = (s: number): string => (s % 3600 === 0 ? `${s / 3600}-hour` : s % 60 === 0 ? `${s / 60}-minute` : `${s}-second`);
 
 /**
  * HB-69 / HS-20: the upgrade row's plain consequence. The operator holds two of the three Squads keys, so with a time lock of 0 it alone

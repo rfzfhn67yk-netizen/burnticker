@@ -1,6 +1,6 @@
 {
   "schema": "burnticker.operator/v1",
-  "updatedAt": "2026-10-11",
+  "updatedAt": "2026-10-21",
   "note": "Rendered on /burnticker/operator and served by GET /api/burnticker/v1/operator (src/lib/burnticker/trustpack/operator.ts). Every value that starts with TODO_ is a placeholder the owner fills in; docs/burnticker/TODO-OWNER.md lists each one with its file and line, and the page says each one in words. Devnet public keys are copied from the rehearsal records named in each `source` (test/burntickerTrustPack.test.ts checks every one appears there). Mainnet rows carry the addresses the owner configured on 2026-10-11 (the keeper key is the attester in the mainnet rehearsal evidence; the deployer key ran the mainnet deploy); nothing here is a secret.",
   "operator": {
     "name": "Burnticker operator, one independent person whose identity is kept private until a legal entity is formed",
@@ -31,7 +31,7 @@
         "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
         "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
         "threshold": "2 of 3",
-        "timeLock": "60 s on devnet; on mainnet it is 0 now, with 48 h planned",
+        "timeLock": "60 s on devnet; on mainnet it is 0 now, and the 48-hour time lock has no date set yet",
         "source": "docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md"
       },
       "wallets": [
@@ -63,7 +63,7 @@
         "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
         "threshold": "2 of 3",
-        "timeLock": "0 now for launch week; 48 h planned from a week or more after the soft launch",
+        "timeLock": "0 now; the 48-hour time lock has no date set yet",
         "source": "docs/burn-receipts/powers-register.md"
       },
       "wallets": [

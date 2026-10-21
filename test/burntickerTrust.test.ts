@@ -62,9 +62,10 @@ describe("transparency.json", () => {
   test("wallets read TODO until a pubkey is set in the file or the named environment variable", () => {
     const cfg = loadTransparency(ROOT);
     const bare = resolveWallets(cfg, {});
-    // Since 2026-10-12 one row is set in the file: the $DEFICIT mint (a public key, pinned before the create). Every other row is a TODO.
-    const DEFICIT_MINT = "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj";
-    assert.deepEqual(bare.filter((w) => w.source !== "todo").map((w) => [w.role, w.source, w.resolved]), [["mint-deficit", "file", DEFICIT_MINT]], "only the $DEFICIT mint is set in the committed file");
+    // Since 2026-10-12 one row is set in the file: the $DEFICIT mint (a public key, pinned before the create); since 2026-10-21 (eighth
+    // pass B-24 / HS-72) also the operator's own wallet. Every other row is a TODO.
+    const DEFICIT_MINT = "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj", OPERATOR_OWN = "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs";
+    assert.deepEqual(bare.filter((w) => w.source !== "todo").map((w) => [w.role, w.source, w.resolved]), [["mint-deficit", "file", DEFICIT_MINT], ["operator-own", "file", OPERATOR_OWN]], "only the $DEFICIT mint and the operator's own wallet are set in the committed file");
     assert.ok(bare.filter((w) => w.source === "todo").every((w) => w.resolved === null), "every TODO row is blank, not a half-set value");
     const withEnv = resolveWallets(cfg, { BURNTICKER_KEEPER_PUBKEY: KEEPER });
     const keeper = withEnv.find((w) => w.role === "keeper")!;

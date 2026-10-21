@@ -408,7 +408,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     if (!s || s.schema !== "burnticker.current-status/v1" || !s.lines) throw new Error("not a current-status document");
     box.textContent = "";
     var ul = document.createElement("ul"); s.lines.forEach(function (l) { var li = document.createElement("li"); li.textContent = l; ul.appendChild(li); }); box.appendChild(ul);
-    var m = document.createElement("p"); m.className = "cs-meta"; m.textContent = "Checked on " + (window.btUtc || String)(s.checkedAt, true) + ". The chain was last read on " + (window.btUtc || String)(s.readAt, true) + "."; box.appendChild(m);
+    var m = document.createElement("p"); m.className = "cs-meta"; m.textContent = "Checked on " + (window.btUtc || String)(s.readAt, true) + "."; box.appendChild(m);
   }).catch(function (e) { say("Data unavailable", "We could not read the current status just now. This says nothing about the coins or their receipts.", String(e && e.message || e)); });
 })();
 (function () {

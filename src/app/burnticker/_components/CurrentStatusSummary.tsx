@@ -20,7 +20,6 @@ import { PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
  */
 const LINE_LINKS: { re: RegExp; target: string }[] = [
   { re: /fixed findings? still waits?/, target: "cs-findings" },
-  { re: /(things are|thing is) still open before release/, target: "cs-open" },
 ];
 function openList(id: string) { const d = document.getElementById(id); if (d instanceof HTMLDetailsElement) d.open = true; }
 function SummaryLine({ l }: { l: string }) {
@@ -52,7 +51,7 @@ export function CurrentStatusSummary({ card, compact = false }: { card: string; 
 export function CurrentStatusBody({ s, card }: { s: CurrentStatus; card: string }) {
   return (
     <section className={card} aria-label="Current status" id="current-status" data-current-status>
-      <h2 className="font-medium">Current status <span className="text-xs font-normal text-neutral-500">Checked on {utcDateTime(s.checkedAt)}. Chain read on {utcDateTime(s.readAt)}.</span></h2>
+      <h2 className="font-medium">Current status <span className="text-xs font-normal text-neutral-500">Checked on {utcDateTime(s.readAt)}.</span></h2>
       <ul className="mt-1 list-disc pl-5 text-xs text-neutral-200 space-y-0.5">{s.lines.map((l) => <SummaryLine key={l} l={l} />)}</ul>
       <p className="mt-1 text-xs text-neutral-500">{s.host.line}</p>
       <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-300">The deployed programs and who can upgrade them</summary>
