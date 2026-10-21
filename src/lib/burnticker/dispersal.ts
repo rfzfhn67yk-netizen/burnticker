@@ -19,9 +19,15 @@
  *   · SMALL POOLS (devnet 2026-10-20, keeper on publish 109): the program refuses a piece under the rule's floor unless it is the whole
  *     carried remainder (crank_carried.rs:220, BelowFloor). When the depth ceiling is below the floor (a pool under floor / 1.227 % of
  *     SOL: about 0.77 SOL on devnet's 9,399,141-lamport floor, about 0.55 SOL on mainnet's ≈ $1 floor, i.e. a drained pool) the plan
- *     uses floor-sized pieces instead, never above the per-crank cap, plus one whole-remainder piece for what is left under the floor.
- *     A floor-sized piece on such a pool moves the price by about 3 %, so the program may defer it with TwapDeviation; that is
- *     acceptable, the keeper retries it. When even one floor-sized piece is above the cap (a pool under floor / 2 %), only a carried
+ *     splits the whole carried amount evenly into as many pieces as it can with each piece at or above the floor and at or below the
+ *     per-crank cap (n from 1 up to the window's 18), so nothing under the floor is left over to wait a window on its own (devnet
+ *     publish 110: 51M carried on a 0.613 SOL pool went as 5 floor pieces and a 4.0M remainder that waited 6 hours; now 5 × 10.2M).
+ *     Only when no such n exists does it fall back: less than the floor carried is one whole-remainder piece (the program accepts
+ *     it); more than 18 cap-sized pieces carried is 18 cap-sized pieces now and the rest in the next window; and in the narrow case
+ *     where the floor-to-cap band holds no even split (e.g. 13M carried with a 9.4M floor and a 12.26M cap) it is floor-sized pieces
+ *     plus one whole-remainder piece, as before. A piece of this size on such a pool moves the price by about 3 % or more, so the
+ *     program may defer it with TwapDeviation; that is acceptable, the keeper retries it. When even one floor-sized piece is above
+ *     the cap (a pool under floor / 2 %), only a carried
  *     amount within the cap can go, as one whole-remainder piece; anything more is STUCK: nothing is planned, the step says so and the
  *     keeper raises bt-dispersal-stuck. Before this, each piece stayed at the depth ceiling under the floor and was refused window after
  *     window (THUVSPURS 114M and CHIVASOK 51M lamports carried on 0.613 SOL pools).
@@ -59,7 +65,8 @@ export function chunkCeiling(reserveLamports: bigint, capBps = PROGRAM_CAP_BPS):
 /**
  * The size one crank_carried piece is planned at on this pool, given the rule's floor:
  *   depth        the floor fits under the depth ceiling: pieces of the ceiling (the usual case)
- *   floor        the ceiling is under the floor but the floor is within the per-crank cap: pieces of the floor
+ *   floor        the ceiling is under the floor but the floor is within the per-crank cap: pieces between the floor (`size`) and the cap,
+ *                an even split of the carry (planWindow)
  *   below-floor  the floor is above the cap: no full piece is accepted; only a whole carried remainder within the cap can go
  */
 export interface PieceSize { size: bigint; cap: bigint; mode: "depth" | "floor" | "below-floor" }
@@ -122,7 +129,8 @@ export interface PlanInput { carriedLamports: bigint; reserveLamports: bigint; c
  * Plans [now, end): n = min(⌈carried / ceiling⌉, how many chunks fit at the minimum gap) pieces of an even split of min(carried, n ×
  * ceiling), at random times at least `minGapMs` apart (n sorted uniform points in [now, end − (n−1)·gap], the i-th shifted by i·gap).
  * The first piece is never earlier than `now`; the last is before `end`. On a pool whose depth ceiling is under the floor (pieceSize)
- * the pieces are floor-sized, with the part under the floor as a last whole-remainder piece; see SMALL POOLS in the header.
+ * the carried amount is split evenly into the most pieces that each stay between the floor and the per-crank cap (no sub-floor
+ * remainder); see SMALL POOLS in the header for the cases with no such split.
  */
 export function planWindow(i: PlanInput): DispersalWindow {
   const windowMs = i.windowMs ?? DISPERSAL_WINDOW_MS;
@@ -132,7 +140,8 @@ export function planWindow(i: PlanInput): DispersalWindow {
   const ps = pieceSize(i.reserveLamports, floor, i.capBps);
   const ceiling = ps.size;
   // R5-8: never closer than the program's budget refills a full-size piece, whatever the caller asks (a 20-minute gap always is)
-  const gap = Math.max(i.minGapMs ?? DISPERSAL_MIN_GAP_MS, budgetGapMs(ceiling, ps.cap));
+  // (on a small pool a piece can be as large as the cap, so the budget gap is the cap's)
+  const gap = Math.max(i.minGapMs ?? DISPERSAL_MIN_GAP_MS, budgetGapMs(ps.mode === "floor" ? ps.cap : ceiling, ps.cap));
   const from = i.lastAtMs != null ? Math.max(i.now, i.lastAtMs + gap) : i.now;
   const span = endMs - from;
   if (i.carriedLamports <= B0 || ceiling <= B0 || span <= 0) return base;
@@ -148,11 +157,25 @@ export function planWindow(i: PlanInput): DispersalWindow {
     const each = amount / BigInt(n), extra = amount % BigInt(n);
     sizes = Array.from({ length: n }, (_, k) => each + (BigInt(k) < extra ? B1 : B0));
   } else if (ps.mode === "floor") {
-    // floor-sized pieces (each accepted: at the floor, within the cap), then what is left under the floor as the whole remainder
-    const full = i.carriedLamports / ceiling, rest = i.carriedLamports % ceiling;
-    const n = Number(full < BigInt(fit) ? full : BigInt(fit));
-    sizes = Array.from({ length: n }, () => ceiling);
-    if (n < fit && rest > B0) sizes.push(rest);
+    const carried = i.carriedLamports, cap = ps.cap;
+    const most = carried / floor;                                   // the most pieces that can each be at least the floor
+    const n = Number(most < BigInt(fit) ? most : BigInt(fit));
+    if (n === 0) {
+      sizes = [carried];                                            // under the floor: one whole-remainder piece (within the cap)
+    } else if (carried > BigInt(fit) * cap) {
+      sizes = Array.from({ length: fit }, () => cap);               // more than a window of cap-sized pieces: the rest next window
+    } else {
+      const each = carried / BigInt(n), extra = carried % BigInt(n);
+      if (each + (extra > B0 ? B1 : B0) <= cap) {
+        // the even split: every piece between the floor (n ≤ carried / floor) and the cap, nothing left under the floor
+        sizes = Array.from({ length: n }, (_, k) => each + (BigInt(k) < extra ? B1 : B0));
+      } else {
+        // no even split fits the floor-to-cap band: floor-sized pieces, then what is left under the floor as the whole remainder
+        const rest = carried % floor;
+        sizes = Array.from({ length: n }, () => floor);
+        if (n < fit && rest > B0) sizes.push(rest);
+      }
+    }
   } else {
     // even one floor-sized piece is above the cap: only a whole remainder within the cap is accepted
     if (i.carriedLamports > ps.cap) return { ...base, stuck: stuckWhy(i.carriedLamports, i.reserveLamports, floor, i.capBps) };
@@ -207,7 +230,8 @@ export function step(w0: DispersalWindow | null, o: Observation): { window: Disp
   const next = w.chunks[w.done];
   if (!next) return { window: w, action: { kind: "wait", untilMs: w.endMs, why: "this window's pieces are done; the rest opens a new window" } };
   if (next.atMs > o.now) return { window: w, action: { kind: "wait", untilMs: next.atMs, why: "the next piece is not due yet" } };
-  let lamports = bmin(next.lamports, live.size, o.carriedLamports);
+  // (on a small pool the planned piece may be anywhere between the floor and the cap, so the live clamp there is the cap)
+  let lamports = bmin(next.lamports, live.mode === "floor" ? live.cap : live.size, o.carriedLamports);
   // A piece under the floor that is not the whole remainder is refused (BelowFloor): raise it to the floor, or to the whole remainder
   // when less than the floor is carried, as long as that stays within the per-crank cap (an earlier piece refused, the reserve moved).
   if (lamports < floor && lamports < o.carriedLamports) { const up = bmin(floor, o.carriedLamports); if (up <= live.cap) lamports = up; }

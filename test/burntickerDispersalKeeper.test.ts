@@ -391,7 +391,7 @@ describe("the private send route (BURNTICKER_PRIVATE_SEND_URL)", () => {
   });
 });
 
-describe("small pools (devnet 2026-10-20): floor-sized pieces on the in-memory program, and bt-dispersal-stuck", () => {
+describe("small pools (devnet 2026-10-20): even pieces between the floor and the cap on the in-memory program, and bt-dispersal-stuck", () => {
   const FLOOR = BigInt(9_399_141);
   async function smallPool(reserve: bigint) {
     const { f } = await carriedCoin();
@@ -418,9 +418,8 @@ describe("small pools (devnet 2026-10-20): floor-sized pieces on the in-memory p
     }
     assert.equal(h.f.cfg.carriedSpendLamports, BigInt(0));
     assert.ok(!h.log.some((l) => /BelowFloor/.test(l)), h.log.join("\n"));
-    const last = spent[spent.length - 1];
-    assert.ok(spent.slice(0, -1).every((s) => s === FLOOR), "floor-sized pieces");
-    assert.ok(last > BigInt(0) && last <= FLOOR, "then the whole remainder");
+    const cap = (BigInt(613_000_000) * BigInt(200)) / BigInt(10_000);
+    assert.ok(spent.every((s) => s >= FLOOR && s <= cap), `an even split between the floor and the cap, no sub-floor remainder: ${spent.join(",")}`);
     assert.equal(spent.reduce((a, s) => a + s, BigInt(0)), h.carried);
     assert.deepEqual(h.alerts, []);
   });
