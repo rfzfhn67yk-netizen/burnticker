@@ -1,6 +1,7 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
+import { gameTimesProof, type GameTime } from "@/lib/burnticker/launchCut";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { liveScheduleLeague, outcomeOf, LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHits, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome, apiSportsRefusal } from "@/lib/burnticker/sources/espn";
+import { clientBefore153, HB153_FROM_MS, liveScheduleLeague, tsdbLiveLeague, tsdbV1EventUrl, tsdbV2EventUrl, outcomeOf, LEAGUES, NBA_OFFICIAL_ANSWERS, TSDB_LEAGUE, tsdbFieldScores, outcomeHits, asMeetings, teamNameKey, dedupeListings, gamesFor, meetingsEndReason, ourTeam, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome, apiSportsRefusal } from "@/lib/burnticker/sources/espn";
 
 /**
  * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10). NO ESPN READS: the game list comes from the league's free official schedule (MLB
@@ -318,7 +319,7 @@ export function finalCheck(store: FinalCheckStore, g: Game, v: GameVerdict, io: 
     return { kind: "awaiting", dueAt: now + GAME_CONFIRM_GAP_MS, why: m ? `the final changed from${resultWords(m)} to${resultWords(res)}; it settles once a read at least five minutes from now shows the same final` : `the final${resultWords(res)} was first read now; it settles once a read at least five minutes from now shows the same final` };
   }
   const newest = Math.min(now, io.fetchedAt.length ? Math.max(...io.fetchedAt) : now);
-  if (newest - m.at >= GAME_CONFIRM_GAP_MS) return v;
+  if (newest - m.at >= GAME_CONFIRM_GAP_MS) return { ...v, finalFirstReadAt: m.at };
   return { kind: "awaiting", dueAt: Math.max(m.at + GAME_CONFIRM_GAP_MS, now + 60_000), why: `the final${resultWords(res)} was first read at ${iso(m.at)}; it settles once a read at least five minutes after that shows the same final` };
 }
 const scoreWords = (f: { home: number | null; away: number | null }): string => (f.home === null || f.away === null ? "" : ` ${f.away}–${f.home} (away–home)`);
@@ -567,8 +568,8 @@ export const tsdbV1SearchUrl = (key: string, names: [string, string]): string =>
  */
 export const tsdbV2DayUrl = (date: string): string => `https://www.thesportsdb.com/api/v2/json/filter/events/day/${encodeURIComponent(date)}`;
 export const tsdbV1DayUrl = (key: string, date: string): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/eventsday.php?d=${encodeURIComponent(date)}`;
-export const tsdbV2EventUrl = (id: string): string => `https://www.thesportsdb.com/api/v2/json/lookup/event/${encodeURIComponent(id)}`;
-export const tsdbV1EventUrl = (key: string, id: string): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/lookupevent.php?id=${encodeURIComponent(id)}`;
+/** The event lookup URLs live in espn.ts (the live game read reads them too); re-exported here for the existing callers. */
+export { tsdbV2EventUrl, tsdbV1EventUrl };
 const tsdbRows = (body: unknown): Record<string, unknown>[] => (body && typeof body === "object" ? Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][] : []).flat().filter((e) => typeof e === "object" && !!e && "idEvent" in e);
 /**
  * Which of the game's sides a provider's team name is, by OUR TEAM TABLE first (season rehearsal 2026-10-13, bug 1: name containment alone
@@ -716,7 +717,7 @@ export function finalFromApiSports(g: Game, body: unknown, url: string): Final |
 // ---- one game, settled ----------------------------------------------------------------------------------------------------------
 
 export type GameVerdict =
-  | { kind: "settled"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; /** the operator it settled on: "on-chain payout", "TheSportsDB", or (a game coin) a CrossId */ settledOn: string; confirmedBy: string; ops: string[]; detail: string; url: string; /** which operators settled it, in words: "on-chain payout and TheSportsDB", or SINGLE_SOURCE_SETTLED_BY (settleGame always sets it) */ settledBy?: string; /** set when TheSportsDB alone settled it after the 12-hour hold: when that final was first seen */ singleSince?: number; /** a game coin (GAME COINS above): when its final was first read by any operator; the burn was due 12 hours later */ firstReadAt?: number; /** a game coin settled because two independent sources agreed (gameSchedule TWO SOURCES) */ twoSources?: boolean; /** a game coin settled because one source showed the same final twice (gameSchedule ONE SOURCE TWICE) */ twice?: boolean }
+  | { kind: "settled"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; /** the operator it settled on: "on-chain payout", "TheSportsDB", or (a game coin) a CrossId */ settledOn: string; confirmedBy: string; ops: string[]; detail: string; url: string; /** which operators settled it, in words: "on-chain payout and TheSportsDB", or SINGLE_SOURCE_SETTLED_BY (settleGame always sets it) */ settledBy?: string; /** set when TheSportsDB alone settled it after the 12-hour hold: when that final was first seen */ singleSince?: number; /** a game coin (GAME COINS above): when its final was first read by any operator; the burn was due 12 hours later */ firstReadAt?: number; /** a team, season or rivalry coin (FINAL CHECK): when the agreeing final it settled on was first read (launchCut.ts) */ finalFirstReadAt?: number; /** a game coin settled because two independent sources agreed (gameSchedule TWO SOURCES) */ twoSources?: boolean; /** a game coin settled because one source showed the same final twice (gameSchedule ONE SOURCE TWICE) */ twice?: boolean }
   | { kind: "awaiting"; why: string; /** a game coin: the earliest its final can be confirmed by a second read, for the keeper's next read */ dueAt?: number | null }
   | { kind: "held"; why: string };
 
@@ -1122,6 +1123,20 @@ export const SCHEDULE_RECHECK_MS = 6 * 3_600_000;
 /** A game the schedule still shows unfinished this long after its start is read hourly, not every few minutes (a stale listing). */
 export const STALE_GAME_MS = 24 * 3_600_000;
 /**
+ * A listing still "in progress" this long after its start is reported (THE STUCK LISTING). No game of a league we list lasts 36 hours; a
+ * suspended or postponed game is relabelled by the schedule (POSTPONED_RE) and then holds nothing. The day stays held: writing it without
+ * the stuck game would be revised when that game settles (the registry refuses a changed value and holds the whole feed), which is worse
+ * than one held day. So the bound raises an alert (the cycle's refusals → bt-reading-implausible) for an operator to look at the listing;
+ * the hourly look (gameDueAt) goes on, so the day is read as soon as the listing turns final or postponed.
+ */
+export const STUCK_LISTING_MS = 36 * 3_600_000;
+/** The alert for a game listed in progress past STUCK_LISTING_MS, or null. */
+export function stuckListing(g: Pick<Game, "startsAt" | "eventId" | "name" | "date">, now: number): string | null {
+  const start = Date.parse(g.startsAt);
+  if (!Number.isFinite(start) || now - start <= STUCK_LISTING_MS) return null;
+  return `${g.eventId} ${g.name}: the schedule still lists this game in progress ${Math.floor((now - start) / 3_600_000)} hours after its start, so ${g.date} is held until it is listed final or postponed; check the listing`;
+}
+/**
  * The first look at a game's schedule after its start (owner 2026-10-20: no six-hour wait; a game is read as soon as it is final). No
  * game of any league we list is over sooner (a soccer game is 90 minutes plus a 15-minute break), so the polls before that are skipped.
  */
@@ -1134,7 +1149,8 @@ export function gameDueAt(g: Pick<Game, "startsAt"> & { league?: LeagueId }, now
   const start = Date.parse(g.startsAt);
   if (!Number.isFinite(start)) return null;
   // THE LIVE SCHEDULE READ: a free official schedule is looked at every LIVE_FREE_POLL_MS while the game is played (the keeper only)
-  const poll = live && g.league && liveScheduleLeague(g.league) ? LIVE_FREE_POLL_MS : GAME_LIVE_POLL_MS;
+  // THE LIVE GAME READ ON THESPORTSDB (espn.ts): a tracked NBA or soccer game too, through its own short-cached event lookup
+  const poll = live && g.league && (liveScheduleLeague(g.league) || tsdbLiveLeague(g.league)) ? LIVE_FREE_POLL_MS : GAME_LIVE_POLL_MS;
   return now - start > STALE_GAME_MS ? now + 3_600_000 : Math.max(start + GAME_FIRST_LOOK_MS, now + poll);
 }
 /** The keeper's look at a game being played whose schedule is a free official feed (liveSchedule): about every minute. */
@@ -1146,11 +1162,13 @@ export const LIVE_FREE_POLL_MS = 60_000;
  */
 export function markLiveGames(client: EspnClient, d: Pick<GameDeps, "liveSchedule">, games: readonly Game[], now: number): void {
   if (!d.liveSchedule) return;
-  const c = client as EspnClient & { markLive?: (l: LeagueId) => void };
+  const c = client as EspnClient & { markLive?: (l: LeagueId) => void; markLiveGame?: (l: LeagueId, id: string) => void };
   for (const g of games) {
     const start = Date.parse(g.startsAt);
     if (!Number.isFinite(start) || now < start + GAME_FIRST_LOOK_MS || now - start > STALE_GAME_MS || POSTPONED_RE.test(g.detail)) continue;
-    if (!g.completed && g.state !== "post") c.markLive?.(g.league);
+    if (g.completed || g.state === "post") continue;
+    // MLB and NHL: the whole league's day listing; the NBA and soccer (TheSportsDB): the one game's event lookup
+    if (tsdbLiveLeague(g.league)) c.markLiveGame?.(g.league, g.eventId); else c.markLive?.(g.league);
   }
 }
 /**
@@ -1179,7 +1197,38 @@ export function lastListedDue(games: readonly Game[], now: number): number | nul
   return ts.length ? Math.max(...ts) : null;
 }
 
-export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number; seriesId?: string | null; /** HB-83: the review's display-only back-test */ display?: boolean } = {}): Promise<ResolvedSelector> {
+/**
+ * THE RULE'S OWN SCHEDULE, from the schedule alone (no settlement source is read): when sportsSettled would ask to be read next, as far
+ * as the listing tells. The keeper (multiKeeper.ts fetchDue) uses it only to bring forward a next read stored by an older rule (the six
+ * hours after a game's start, before 2026-10-20), so a stored time is never later than what the current rule schedules. Mirrors the
+ * branches of sportsSettled and meetingsSettled: a game not over → gameDueAt; a final listed too early → its first look; a final the
+ * schedule shows and no reading of its day yet → now (read at once); otherwise the next listed game, else SCHEDULE_RECHECK_MS.
+ */
+export async function plannedGameRead(client: EspnClient, s: EspnSeries, sinceIso: string | null, now: number, live = false): Promise<number> {
+  const ms = asMeetings(s);
+  const all = await gamesFor(client, ms ?? s, ms ? null : sinceIso);
+  const since = sinceIso ? sinceIso.slice(0, 10) : null;
+  let t: number | null = null;
+  const at = (x: number | null) => { if (x !== null && Number.isFinite(x) && (t === null || x < t)) t = x; };
+  for (const g of all) {
+    if (since && g.date <= since) continue;
+    if (!g.completed && (g.state === "post" || POSTPONED_RE.test(g.detail))) continue;
+    if (!g.completed) { at(gameDueAt(g, now, live)); continue; }
+    if (listedTooEarly(g, now)) { at(gameDueAt(g, now)); continue; }
+    at(now);
+  }
+  return t ?? (ms ? lastListedDue(all, now) : nextListedDue(all, now)) ?? now + SCHEDULE_RECHECK_MS;
+}
+
+/** A counted game's times for its day reading (launchCut.ts THE LAUNCH-DAY CUT). */
+const gameTimeOf = (g: Game, v: Extract<GameVerdict, { kind: "settled" }>): GameTime => {
+  const f = v.finalFirstReadAt ?? v.firstReadAt ?? v.singleSince;
+  return { id: g.eventId, league: g.league, start: g.startsAt, final: f !== undefined && Number.isFinite(f) ? new Date(f).toISOString() : null };
+};
+
+export async function sportsSettled(client0: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number; seriesId?: string | null; /** HB-83: the review's display-only back-test */ display?: boolean; /** reviewer G: the earliest launch of a coin on this selector */ launchedAtMs?: number | null } = {}): Promise<ResolvedSelector> {
+  // reviewer G: a selector with a coin launched before HB-153 reads TheSportsDB's season types as that coin was launched under
+  const client = typeof o.launchedAtMs === "number" && o.launchedAtMs < HB153_FROM_MS ? clientBefore153(client0) : client0;
   // the deps' clock when the host gives one (the keeper's wall clock; a test's or rehearsal's moved clock), so the next-read times and a
   // game's two reads are measured on the same clock
   const now = o.nowMs ?? d.now?.() ?? Date.now();
@@ -1188,7 +1237,7 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
   const all = await gamesFor(client, s, sinceIso);
   const games = all.filter((g) => !sinceIso || g.date > sinceIso.slice(0, 10));
   const tid = s.kind === "team" ? s.teamId : null;
-  const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string }>();
+  const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string; games?: GameTime[] }>();
   let awaiting = 0, dueAt: number | null = null, undated = 0; const refusals: string[] = [];
   const due = (t: number | null) => { if (t !== null && Number.isFinite(t) && (dueAt === null || t < dueAt)) dueAt = t; };
   // a single-game coin (owner, 2026-10-16) burns once two sources agree or one source shows the same final twice (gameSchedule, 2026-10-18); team coins keep their rules
@@ -1197,13 +1246,13 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
   // holds, so a day is read only once every game of it has a result. A game still awaiting holds its whole day (a doubleheader's first
   // game is never written alone and then contradicted by the second). A postponed, cancelled or suspended game that is not final counts
   // for neither side and does not hold its day; a made-up game is read on the date it is played.
-  const waitingDays = new Set<string>();
+  const waitingDays = new Set<string>(), stuck: string[] = [];
   for (const g of games) {
     // a game not over yet (scheduled or in progress): looked at again soon after its start and then every few minutes (gameDueAt).
     // Owner 2026-10-20: a game marked final is read at once (no six-hour wait); settleGame then asks for the second read 5 minutes later.
     // A game not over yet also holds its day (2026-10-20): with no six-hour wait, a doubleheader's first game is final while the second is
     // still being played, and the day must not be written with one result that the second game would change.
-    if (!g.completed && g.state !== "post") { if (!POSTPONED_RE.test(g.detail)) { due(gameDueAt(g, now, !!d.liveSchedule)); waitingDays.add(g.date); } continue; }
+    if (!g.completed && g.state !== "post") { if (!POSTPONED_RE.test(g.detail)) { due(gameDueAt(g, now, !!d.liveSchedule)); waitingDays.add(g.date); const st = stuckListing(g, now); if (st && !stuck.includes(st)) stuck.push(st); } continue; }
     if (!g.completed && POSTPONED_RE.test(g.detail)) continue;
     // a final listed before the game can be over (before GAME_FIRST_LOOK_MS after its start) is a wrong listing: not read until then
     if (listedTooEarly(g, now)) { awaiting++; waitingDays.add(g.date); due(gameDueAt(g, now)); continue; }
@@ -1221,7 +1270,9 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
     }
     const v = await settleGame(client, g, d, sched);
     if (v.kind === "awaiting") { awaiting++; waitingDays.add(g.date); const t = v.dueAt ?? finalChaseDue(g, now); if (t) due(t); else undated++; continue; }
-    if (v.kind === "held") { const r = /^no primary|^cross-read missing/.test(v.why) ? v.why : `${g.eventId} ${g.name}: ${v.why}`; if (!refusals.includes(r)) refusals.push(r); continue; }
+    // a held game (a disagreement) holds its day too, exactly as meetingsSettled: a doubleheader's day is never written with game 1
+    // alone and then revised when game 2 settles (the registry refuses a changed value: RevisedReadingError holds the feed)
+    if (v.kind === "held") { const r = /^no primary|^cross-read missing/.test(v.why) ? v.why : `${g.eventId} ${g.name}: ${v.why}`; if (!refusals.includes(r)) refusals.push(r); waitingDays.add(g.date); continue; }
     const out = outcomeFor(v.winner, g, s.abbr, tid);
     if (out === null) continue;
     const cur = byDay.get(g.date) ?? { value: 0, titles: [], url: v.url, method: "" };
@@ -1230,19 +1281,22 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
     cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date, g.startsAt)}`);
     cur.method = methodOf(v);
+    (cur.games ??= []).push(gameTimeOf(g, v));
     noteSingle(d, o.seriesId ?? null, g, v);
     byDay.set(g.date, cur);
   }
   markLiveGames(client, d, games, now);
   for (const day of waitingDays) byDay.delete(day);
-  const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, x]) => ({ id: date, at: date, result: null, value: String(x.value), title: x.titles.join(" · "), sourceUrl: x.url, method: x.method } as SettledEvent));
+  const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, x]) => ({ id: date, at: date, result: null, value: String(x.value), title: x.titles.join(" · "), sourceUrl: x.url, method: x.method, ...(x.games?.length ? { proof: gameTimesProof(x.games) } : {}) } as SettledEvent));
   const window = windowStatus(s, s.kind === "team" && s.window.kind === "post" ? await client.season(s.league, s.teamId ?? s.abbr, s.window.year).catch(() => all) : all, now);
   // THE NEXT READ (owner 2026-10-19; 2026-10-20): the earliest moment a new result can exist. A final waiting on a source with no time of
   // its own is read every few minutes for FINAL_CHASE_MS after the start and then keeps the poll (null); otherwise the soonest of: a
   // waiting game's due time (its second read), the next listed game's next look (gameDueAt); with no game listed at all, the schedule is
   // looked at again in SCHEDULE_RECHECK_MS.
   const next: number | null = undated > 0 || refusals.length > 0 ? null : dueAt ?? nextListedDue(all, now) ?? now + SCHEDULE_RECHECK_MS;
-  return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: null, window, ...(next !== null ? { dueAt: next } : {}) };
+  // a listing stuck "in progress" past STUCK_LISTING_MS is reported (an alert) but keeps its day held and keeps its hourly look: it does
+  // not change THE NEXT READ above
+  return { events, awaitingFinal: awaiting, refusals: [...refusals, ...stuck], settlementSourceUrl: null, window, ...(next !== null ? { dueAt: next } : {}) };
 }
 
 /**
@@ -1365,13 +1419,13 @@ export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "
 export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: GameDeps, now: number, seriesId: string | null = null): Promise<ResolvedSelector> {
   const w = s.window;
   const meetings = await gamesFor(client, s, null);
-  const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string }>();
-  const waitingDays = new Set<string>(), refusals: string[] = [], outcomes: MeetingOutcome[] = [];
+  const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string; games?: GameTime[] }>();
+  const waitingDays = new Set<string>(), refusals: string[] = [], outcomes: MeetingOutcome[] = [], stuck: string[] = [];
   let awaiting = 0, unsettled = 0, undated = 0, dueAt: number | null = null;
   const due = (t: number | null) => { if (t !== null && Number.isFinite(t) && (dueAt === null || t < dueAt)) dueAt = t; };
   for (const g of meetings) {
     if (!g.completed && (g.state === "post" || POSTPONED_RE.test(g.detail))) { if (g.state === "post" || /cancel/i.test(g.detail)) outcomes.push("void"); continue; }
-    if (!g.completed) { unsettled++; due(gameDueAt(g, now, !!d.liveSchedule)); waitingDays.add(g.date); continue; }
+    if (!g.completed) { unsettled++; due(gameDueAt(g, now, !!d.liveSchedule)); waitingDays.add(g.date); const st = stuckListing(g, now); if (st && !stuck.includes(st)) stuck.push(st); continue; }
     if (listedTooEarly(g, now)) { awaiting++; unsettled++; waitingDays.add(g.date); due(gameDueAt(g, now)); continue; }
     // owner 2026-10-20: read at once when final (no six-hour wait); settleGame asks for the second read 5 minutes later
     const v = await settleGame(client, g, d);
@@ -1385,12 +1439,13 @@ export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: 
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
     cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}, head to head) · ${settledWords(v)} · see this game on ESPN → ${espnGameUrl(g.league, g.date, g.startsAt)}`);
     cur.method = methodOf(v);
+    (cur.games ??= []).push(gameTimeOf(g, v));
     noteSingle(d, seriesId, g, v);
     byDay.set(g.date, cur);
   }
   markLiveGames(client, d, meetings, now);
   for (const day of waitingDays) byDay.delete(day);
-  const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, x]) => ({ id: date, at: date, result: null, value: String(x.value), title: x.titles.join(" · "), sourceUrl: x.url, method: x.method } as SettledEvent));
+  const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, x]) => ({ id: date, at: date, result: null, value: String(x.value), title: x.titles.join(" · "), sourceUrl: x.url, method: x.method, ...(x.games?.length ? { proof: gameTimesProof(x.games) } : {}) } as SettledEvent));
   // the window: both teams' whole seasons (the later season end is the series' end)
   const [mine, theirs] = await Promise.all([client.season(s.league, s.teamId ?? s.abbr, w.year), client.season(s.league, w.oppId || w.opp, w.year)]);
   let window = windowStatus(s, dedupeListings([...mine, ...theirs]), now);
@@ -1405,5 +1460,5 @@ export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: 
   // THE NEXT READ: the next meeting's due time; after the last meeting, the later of the two seasons' last listed games (the series ends
   // with both seasons, and its season-end reading is read then)
   const next: number | null = undated > 0 || refusals.length > 0 ? null : dueAt ?? lastListedDue([...mine, ...theirs], now) ?? now + SCHEDULE_RECHECK_MS;
-  return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: null, window, ...(next !== null ? { dueAt: next } : {}) };
+  return { events, awaitingFinal: awaiting, refusals: [...refusals, ...stuck], settlementSourceUrl: null, window, ...(next !== null ? { dueAt: next } : {}) };
 }

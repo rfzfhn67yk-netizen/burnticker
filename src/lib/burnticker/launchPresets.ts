@@ -52,8 +52,8 @@ export function shareOf(rule: BurnRule): number | null {
 export const isPreset = (f: number, shape: ShareShape): boolean => (SHARE_PRESETS[shape] as readonly number[]).some((x) => Math.abs(x - f) < 1e-9);
 /** "2%", "10%", "100%", "0.5%". */
 export const pctLabel = (f: number): string => `${Math.round(f * 1000) / 10}%`;
-/** The preset row as words: "2, 5 or 10%" ("100%" for a row of one). */
-export const presetRowLabel = (shape: ShareShape): string => { const xs = (SHARE_PRESETS[shape] as readonly number[]).map((x) => `${Math.round(x * 1000) / 10}`); return xs.length === 1 ? `${xs[0]}%` : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}%`; };
+/** The preset row as words: "2%, 5% or 10%" ("100%" for a row of one). WZ7-10 (seventh pass): each number carries its own sign, since "100 or 50%" read as clipped. */
+export const presetRowLabel = (shape: ShareShape): string => { const xs = (SHARE_PRESETS[shape] as readonly number[]).map((x) => `${Math.round(x * 1000) / 10}%`); return xs.length === 1 ? xs[0] : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`; };
 
 /** Null when the rule's share is on its preset row; otherwise the sentence that says it is not (never silently replaced). */
 export function presetProblem(rule: BurnRule, c: ShareCtx = {}): string | null {

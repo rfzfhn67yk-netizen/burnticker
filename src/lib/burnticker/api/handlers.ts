@@ -44,7 +44,7 @@ import { busyRetryText } from "@/lib/burnticker/coverage/freshReading";
 import { BACKTEST_SLOW_RETRY_SEC } from "@/lib/burnticker/api/backtestWait";
 import { describeRule } from "@/lib/burnticker/describe";
 import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
-import { BALLOT_NOTE, RACE_TYPES, candidateMappingLine, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
+import { BALLOT_NOTE, RACE_TYPES, cachedRaces, candidateMappingLine, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
 import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEED_WORDING, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, teamByAbbr, meetingsPairSeries, meetingOutcome, tallyMeetings, seasonLabel, within, type Game, type LeagueId, isFallbackGame, FALLBACK_ONLY_LINE } from "@/lib/burnticker/sources/espn";
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
@@ -89,7 +89,7 @@ export async function oneShotVoidBy(p: Platform, locked: LockedRule): Promise<st
 }
 import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
 import { launchGuardRefusal, tickerTakenRefusal } from "@/lib/burnticker/launchGuards";
-import { CREATE_SEND_PENDING_MS, LAUNCH_PENDING_CODE, createdOnChainBy, launchPendingRefusal, launchPendingSentence, ownLiveTickerSentence, verifySentCreate } from "@/lib/burnticker/launchPending";
+import { CREATE_SEND_PENDING_MS, LAUNCH_PENDING_CODE, createdOnChainBy, launchPendingRefusal, launchPendingSentence, ownDraftRefusal, ownLiveTickerSentence, proveLandedDrafts, sentTxFormat, verifySentCreate } from "@/lib/burnticker/launchPending";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 import { isSingleOfficialSource, singleSourceSentence } from "@/lib/burnticker/singleSource";
 import { feedOfferRefusal } from "@/lib/burnticker/coverage/settleable";
@@ -228,12 +228,16 @@ export async function kalshiTeams(p: Platform, q: { series?: string | null }): P
 }
 
 const refuseTitlesList = (titles: string[]): string[] => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))];
+/** Audit 7 OP7-4: the open races, kept per Polymarket client for the Gamma cache's 10 minutes (elections.ts cachedRaces). */
+const racesFor = (p: Platform) => cachedRaces(p.polymarket, () => loadRaces((u) => p.polymarket.get(u), refuseTitlesList));
+/** Reads the race index into the kept copy (server.ts schedules it after a production start, behind the home and coins warm builds); never rejects. */
+export const warmRaces = (p: Platform): Promise<void> => (p.polymarketDiscovery === false ? Promise.resolve() : racesFor(p).then(() => undefined, () => undefined));
 const catalogueFeeds = (now: number): FeedLike[] => (catalogueSources(now).sources as unknown as (FeedLike & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion");
 
 /** GET /v1/search?q= — the universal search (src/lib/burnticker/search.ts): ready-made rules from every enabled venue and feed; the category list when nothing matches. */
 export async function search(p: Platform, q: { q?: string | null; closingSoon?: string | null }, now = Date.now()): Promise<ApiResult> {
   const venues = venueFlags(p);
-  const r = await universalSearch(q.q ?? "", { closingSoon: /^(1|true|yes)$/i.test(q.closingSoon ?? ""), venues, feeds: catalogueFeeds(now), espn: espnClient(), polyGet: venues.polymarket ? (u) => p.polymarket.get(u) : null, refuse: refuseTitlesList, kalshiSearch: venues.kalshi ? (x) => p.kalshi.searchSeries(x, { limit: 5 }) : null, derbyHref: derbyHrefFrom(), nowMs: now });
+  const r = await universalSearch(q.q ?? "", { closingSoon: /^(1|true|yes)$/i.test(q.closingSoon ?? ""), venues, feeds: catalogueFeeds(now), espn: espnClient(), polyGet: venues.polymarket ? (u) => p.polymarket.get(u) : null, races: () => racesFor(p), refuse: refuseTitlesList, kalshiSearch: venues.kalshi ? (x) => p.kalshi.searchSeries(x, { limit: 5 }) : null, derbyHref: derbyHrefFrom(), nowMs: now });
   let categories: { id: string; label: string; blurb: string }[] = [];
   // continuous audit run 4, HB-42: the hint's buttons open the Published data step, so it lists only the categories that step has a tab for
   // HB-42 (hourly run 9): the same list the step's tabs come from (browse.ts categoryList feedsOnly: a category counts only feeds the
@@ -259,7 +263,7 @@ export async function search(p: Platform, q: { q?: string | null; closingSoon?: 
 export async function elections(p: Platform, q: { type?: string | null; state?: string | null }): Promise<ApiResult> {
   if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE);
   try {
-    const races = await loadRaces((u) => p.polymarket.get(u), refuseTitlesList);
+    const races = await racesFor(p);
     const type = RACE_TYPES.some((t) => t.id === q.type) ? q.type! : null;
     const st = q.state?.trim().toUpperCase() || null;
     const ofType = type ? races.filter((r) => r.type === type) : [];
@@ -278,7 +282,7 @@ export async function electionPair(p: Platform, q: { slug?: string | null; a?: s
   if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE);
   if (!q.slug || !q.a || !q.b || q.a === q.b) return fail(400, "Send the race slug and two different outcomes of that race, as a and b.");
   try {
-    const races = await loadRaces((u) => p.polymarket.get(u), refuseTitlesList);
+    const races = await racesFor(p);
     const race = races.find((r) => r.slug === q.slug);
     if (!race) return fail(404, `There is no open race called ${q.slug}.`);
     const oa = race.outcomes.find((o) => o.conditionId === q.a!.toLowerCase()), ob = race.outcomes.find((o) => o.conditionId === q.b!.toLowerCase());
@@ -883,6 +887,8 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     return walletCovers(p, input.creator, cost);
   })();
   const tickerOwner = registers ? input.creator : provenReviewCreator({ creator: input.creator, walletProof: (body as { walletProof?: unknown }).walletProof, ticker: input.ticker, pair: b.pair ?? null }, [publicOrigin()]);
+  // HB-187: an unproven draft whose old "sent" report is backed by a create on chain holds like any draft (read before the guard judges)
+  await proveLandedDrafts(p, input.ticker);
   { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null, creator: input.creator, tickerOwner, callerProven: holdProven }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   /**
    * Third prelaunch audit 2026-10-19 F04: the mint lock above is per mint, so two creators' prepares for one unused ticker (different
@@ -903,6 +909,12 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     return lp ? { error: fail(lp.status, sideB ? sideBRefusal(lp.error) : lp.error, lp.extra) } : null;
   };
   if (registers) { const lp = await pendingRefusal(input.ticker, o.mint ?? null, false); if (lp) return lp; }
+  // LA7-5: the creator's own unsent draft of this ticker on another mint, from the last 30 minutes, refuses a second draft (409 draft-exists)
+  const ownDraft = (ticker: string, sideB: boolean): { error: ApiResult } | null => {
+    const r = ownDraftRefusal(p, { creator: input.creator, ticker, exceptMints: [o.mint, o.mintB] });
+    return r ? { error: fail(r.status, sideB ? sideBRefusal(r.error) : r.error, r.extra) } : null;
+  };
+  if (registers) { const od = ownDraft(input.ticker, false); if (od) return od; }
   if (registers) { const h = holdTicker(input.ticker, o.mint ?? null, false); if (h) return h; }
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
   // (Polymarket: the payout vector + Gamma) — and creation refused if anything fails. Kalshi is always refused here: its terms forbid
@@ -1177,8 +1189,10 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
     const bRefusals = nameRefusals(list, side.name, side.ticker);
     { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
+    await proveLandedDrafts(p, side.ticker);   // HB-187
     { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null, ...(o.mintB ? { mint: o.mintB } : {}), creator: input.creator, tickerOwner, callerProven: holdProven }); if (g) return { error: fail(g.status, sideBRefusal(g.error), g.extra) }; }
     if (registers && side.ticker !== input.ticker) { const lp = await pendingRefusal(side.ticker, o.mintB ?? null, true); if (lp) return lp; }   // B-2: side B's ticker too
+    if (registers && side.ticker !== input.ticker) { const od = ownDraft(side.ticker, true); if (od) return od; }   // LA7-5: side B's ticker too
     if (registers && side.ticker !== input.ticker) { const h = holdTicker(side.ticker, o.mintB ?? null, true); if (h) return h; }   // F04: side B's ticker too
     // two candidates: both markets must be named outcomes of the one race the body names (Polymarket's own index of open races)
     if (settled?.shape === "candidates" && settled.bundle.race) {
@@ -1496,7 +1510,9 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string, 
  * has landed, or is live (launchPendingRefusal, then the same judgement again inside the transaction that writes the row, so two racing
  * reports for two mints cannot both be recorded). 503 when the row cannot be written. Anything but the named row: the page does not send.
  */
-export async function markCreateSent(p: Pick<Platform, "registry" | "market"> & { program?: { programId: string } | null }, mint: string, sentTx: unknown, now = Date.now()): Promise<ApiResult> {
+/** LA7 fix B: the status key holding the transaction format a draft's create was sent in ("0" or "1"), and its fallback note. */
+export const SENT_TX_FORMAT_PREFIX = "launch.txFormat.";
+export async function markCreateSent(p: Pick<Platform, "registry" | "market"> & { program?: { programId: string } | null }, mint: string, sentTx: unknown, now = Date.now(), o: { /** LA7 fix B: the page's note that a version-1 dry run was refused and the launch fell back to version 0 */ formatFallback?: unknown } = {}): Promise<ApiResult> {
   const t = p.registry.token(mint);
   if (!t) return fail(404, "There is no draft for this mint.");
   if (t.launchTx || (t.status !== "draft" && t.status !== "expired")) return ok({ ok: true, recorded: false, note: "This coin is already launched." });
@@ -1509,7 +1525,13 @@ export async function markCreateSent(p: Pick<Platform, "registry" | "market"> & 
   try { r = p.registry.recordCreateSentExclusive(mint, v.signature, CREATE_SEND_PENDING_MS, now); }
   catch { return fail(503, "This site could not record the launch just now, so it was not sent. Wait a moment, then try again.", { code: "sent-unrecorded" }); }
   if (!r.ok) return r.live ? fail(409, r.sameCreator ? ownLiveTickerSentence(ticker, r.otherMint) : `There is already a live $${ticker} on this site (mint ${r.otherMint}), and a ticker is one coin here, so this $${ticker} was not sent.`, { code: "ticker-taken", mint: r.otherMint }) :fail(409, launchPendingSentence(ticker, r.otherMint, false), { code: LAUNCH_PENDING_CODE, mint: r.otherMint });
-  return ok({ ok: true, recorded: { mint, sentAt: r.sentAt }, fresh: r.fresh, signature: v.signature });
+  // LA7 fix B: the format the create was sent in, read from the signed bytes themselves (never from the page's word), is kept in the
+  // launch record and written to the ops log, with the page's fallback note when version 1 was refused first. Never blocks the send.
+  const format = sentTxFormat(Buffer.from(String(sentTx), "base64"));
+  const fallbackNote = typeof o.formatFallback === "string" ? o.formatFallback.replace(/[^\x20-\x7e]/g, " ").replace(/"/g, "'").slice(0, 200) : null;
+  try { p.registry.setStatus(SENT_TX_FORMAT_PREFIX + mint, JSON.stringify({ format, ...(fallbackNote ? { fallback: fallbackNote } : {}) }), now); } catch { /* the record of the format never blocks the send */ }
+  if (r.fresh) console.info(`[burnticker launch] create sent mint=${mint} format=${format === null ? "unknown" : format === "legacy" ? "legacy" : `v${format}`}${fallbackNote ? ` fallback-from-v1="${fallbackNote}"` : ""}`);
+  return ok({ ok: true, recorded: { mint, sentAt: r.sentAt }, fresh: r.fresh, signature: v.signature, ...(format !== null ? { txFormat: format } : {}) });
 }
 
 /**

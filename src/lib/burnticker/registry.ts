@@ -44,12 +44,28 @@ export const DRAFT_GRACE_MS = 10 * 60 * 1000;
  * B-19 (seventh prelaunch audit, 2026-10-20): an UNPROVEN draft is one a public prepare registered without a wallet that proved control
  * and held the launch's cost (handlers.ts holdProven). Anyone can make one up, so it holds its ticker only against other unproven
  * prepares, and only for this long after it was written; a proven creator is never refused by it. A draft whose create was reported as
- * sent (draft_sends, signatures checked) holds like any other. Its own creator can still finish it for the full DRAFT_TTL_MS.
+ * sent (draft_sends, signatures checked) holds like any other for SENT_HOLD_MS after the report, and after that only once its create
+ * is seen on chain (HB-187). Its own creator can still finish it for the full DRAFT_TTL_MS.
  * The mark is a row in `status` under this prefix (no schema change); drafts without the mark, every row written before 2026-10-20 and
  * every in-process caller's draft, hold as before.
  */
 export const UNPROVEN_HOLD_MS = 15 * 60 * 1000;
 export const UNPROVEN_DRAFT_PREFIX = "draft.unproven.";
+/**
+ * HB-187 (eighth audit LA8-1, 2026-10-20): a recorded send makes an unproven draft hold only while that create could still land, this
+ * long after the report (launchPending.ts CREATE_SEND_PENDING_MS, the same 5 minutes). Signing a create costs nothing and the report is
+ * checked on signatures alone, so a send that old proves nothing; from then on the draft holds only once its create is seen on chain
+ * (launchPending.ts proveLandedDrafts marks it proven; no chain answer leaves it unproven).
+ */
+export const SENT_HOLD_MS = 5 * 60 * 1000;
+/**
+ * HB-187 follow-up: when this host has a chain reader but the read after SENT_HOLD_MS failed (the RPC is down), the sent draft keeps
+ * holding, but never longer than this after its report, so a short outage cannot strand a real creator and a squatter cannot hold a
+ * ticker for hours. The mark (`status` under SEND_UNREAD_PREFIX) is set by a failed read and cleared by the next read that answers.
+ * A host with no chain reader sets no mark (no hold after SENT_HOLD_MS).
+ */
+export const SENT_HOLD_FAIL_MAX_MS = 60 * 60 * 1000;
+export const SEND_UNREAD_PREFIX = "draft.sendUnread.";
 /** Whether a create with this block time landed inside its draft's window (judged on the block time, never on when a sweep ran). */
 export const inDraftWindow = (createdAtMs: number, blockTimeMs: number): boolean => blockTimeMs <= createdAtMs + DRAFT_TTL_MS + DRAFT_GRACE_MS;
 export interface TokenRow {
@@ -541,13 +557,14 @@ export class Registry {
    * (a retry of their own unfinished draft). Tickers of old coins stay shared (owner 2026-10-12): only a new draft is ever refused.
    */
   private tickerHolder(ticker: string, creator: string, now: number, callerProven = true): "token" | "reservation" | null {
-    // B-19: an unproven draft (no launch transaction, no recorded send) never holds against a proven caller, and holds against an
-    // unproven one for UNPROVEN_HOLD_MS only
+    // B-19: an unproven draft (no launch transaction, no send recorded in the last SENT_HOLD_MS: HB-187) never holds against a proven
+    // caller, and holds against an unproven one for UNPROVEN_HOLD_MS only
     if (this.db.prepare(`SELECT 1 FROM tokens t WHERE t.ticker=? AND t.status <> 'expired' AND t.creator <> ? AND (
         t.status <> 'draft' OR t.launch_tx IS NOT NULL
         OR NOT EXISTS (SELECT 1 FROM status k WHERE k.key = ? || t.mint)
-        OR EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = t.mint)
-        OR (? = 0 AND t.created_at > ?)) LIMIT 1`).get(ticker, creator, UNPROVEN_DRAFT_PREFIX, callerProven ? 1 : 0, now - UNPROVEN_HOLD_MS)) return "token";
+        OR EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = t.mint AND s.sent_at > ?)
+        OR (EXISTS (SELECT 1 FROM status u WHERE u.key = ? || t.mint) AND EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = t.mint AND s.sent_at > ?))
+        OR (? = 0 AND t.created_at > ?)) LIMIT 1`).get(ticker, creator, UNPROVEN_DRAFT_PREFIX, now - SENT_HOLD_MS, SEND_UNREAD_PREFIX, now - SENT_HOLD_FAIL_MAX_MS, callerProven ? 1 : 0, now - UNPROVEN_HOLD_MS)) return "token";
     if (this.db.prepare("SELECT 1 FROM ticker_reservations WHERE ticker=? AND creator <> ? AND expires_at > ?").get(ticker, creator, now)) return "reservation";
     return null;
   }
@@ -613,11 +630,20 @@ export class Registry {
     });
   }
   /** B-19: the creator proved the wallet on a retry of an unproven draft; from now on it holds its ticker like any draft. */
-  markDraftProven(mint: string): void { this.db.prepare("DELETE FROM status WHERE key=?").run(UNPROVEN_DRAFT_PREFIX + mint); }
-  /** B-19: the mints of unproven drafts that have no recorded create send (those hold only briefly; see UNPROVEN_HOLD_MS). */
-  unprovenDraftMints(): Set<string> {
-    const rows = this.db.prepare("SELECT substr(k.key, ?) AS mint FROM status k WHERE k.key >= ? AND k.key < ? AND NOT EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = substr(k.key, ?))")
-      .all(UNPROVEN_DRAFT_PREFIX.length + 1, UNPROVEN_DRAFT_PREFIX, `${UNPROVEN_DRAFT_PREFIX}\uffff`, UNPROVEN_DRAFT_PREFIX.length + 1) as { mint: string }[];
+  markDraftProven(mint: string): void { this.db.prepare("DELETE FROM status WHERE key=?").run(UNPROVEN_DRAFT_PREFIX + mint); this.markSendRead(mint); }
+  /** HB-187: the chain read of this draft's sent create failed (the hold lasts up to SENT_HOLD_FAIL_MAX_MS after the send). */
+  markSendUnread(mint: string, now = Date.now()): void { this.setStatus(SEND_UNREAD_PREFIX + mint, "1", now); }
+  /** HB-187: a chain read of this draft's sent create answered (landed or not), so the failed-read hold ends. */
+  markSendRead(mint: string): void { this.db.prepare("DELETE FROM status WHERE key=?").run(SEND_UNREAD_PREFIX + mint); }
+  /**
+   * B-19: the mints of unproven drafts with no create send recorded in the last SENT_HOLD_MS (those hold only briefly; see
+   * UNPROVEN_HOLD_MS). HB-187: a draft whose chain read failed (SEND_UNREAD_PREFIX) is left out while its send is under SENT_HOLD_FAIL_MAX_MS old.
+   */
+  unprovenDraftMints(now = Date.now()): Set<string> {
+    const rows = this.db.prepare(`SELECT substr(k.key, ?) AS mint FROM status k WHERE k.key >= ? AND k.key < ?
+        AND NOT EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = substr(k.key, ?) AND s.sent_at > ?)
+        AND NOT (EXISTS (SELECT 1 FROM status u WHERE u.key = ? || substr(k.key, ?)) AND EXISTS (SELECT 1 FROM draft_sends s WHERE s.mint = substr(k.key, ?) AND s.sent_at > ?))`)
+      .all(UNPROVEN_DRAFT_PREFIX.length + 1, UNPROVEN_DRAFT_PREFIX, `${UNPROVEN_DRAFT_PREFIX}\uffff`, UNPROVEN_DRAFT_PREFIX.length + 1, now - SENT_HOLD_MS, SEND_UNREAD_PREFIX, UNPROVEN_DRAFT_PREFIX.length + 1, UNPROVEN_DRAFT_PREFIX.length + 1, now - SENT_HOLD_FAIL_MAX_MS) as { mint: string }[];
     return new Set(rows.map((r) => String(r.mint)));
   }
   /**

@@ -87,7 +87,8 @@ describe("item 1: the terms and privacy pages", () => {
     assert.match(fs.readFileSync(path.join(ROOT, "src/app/burnticker/_components/theme.ts"), "utf8"), /localStorage/); assert.match(priv, /theme/);
     assert.match(fs.readFileSync(path.join(ROOT, "src/lib/burnticker/watchlist.ts"), "utf8"), /localStorage/); assert.match(priv, /watchlist/);
     assert.match(fs.readFileSync(path.join(ROOT, "src/app/burnticker/_components/ShellWalletProviders.tsx"), "utf8"), /autoConnect=\{true\}/); assert.match(priv, /remembers which wallet you chose/);
-    assert.match(fs.readFileSync(path.join(ROOT, "deploy/caddy/Caddyfile"), "utf8"), /no access log is configured/);
+    // OP7-10: the access log keeps no visitor address, so the privacy page's sentence holds
+    assert.match(fs.readFileSync(path.join(ROOT, "deploy/caddy/Caddyfile"), "utf8"), /keeps an access log WITHOUT visitors' addresses/);
   });
 });
 

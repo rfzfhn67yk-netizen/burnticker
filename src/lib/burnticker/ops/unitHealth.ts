@@ -221,7 +221,11 @@ export const OFFBOX_PULL_KEYS: readonly string[] = ["schema", "pulledAt", "metho
 export const OFFBOX_PULL_FILE_KEYS: readonly string[] = ["db", "secretsBundle"];
 export interface OffboxPullReceipt { schema: typeof OFFBOX_PULL_SCHEMA; pulledAt: string; method: typeof OFFBOX_PULL_METHOD; files: { db: number; secretsBundle: boolean }; dbQuickCheck: "ok"; retentionDays: number; host: string | null }
 /** What hostFacts and ops.json carry: a state, a time and the method name. Never the receipt's host, never a path. */
-export interface OffboxPullFact { offBox: "pulled" | "stale" | "none"; lastOffBoxAt: string | null; offBoxMethod: string | null; offBoxPulledAt: string | null }
+/**
+ * OP7-8 (seventh pre-launch audit): `lastOffBoxAt` used to mean two things: the host's push step (last-backup.json, null by design here)
+ * and this pull. The pull's time is offBoxPulledAt only; lastOffBoxAt is the push step's alone (BackupStatus).
+ */
+export interface OffboxPullFact { offBox: "pulled" | "stale" | "none"; offBoxMethod: string | null; offBoxPulledAt: string | null }
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 /** The receipt, or null when it is not exactly the v1 shape (unknown keys, wrong types, a failed check, a time in the future). */
 export function parseOffboxPull(raw: string, now: number = Date.now()): OffboxPullReceipt | null {
@@ -293,9 +297,9 @@ export function recordOffboxPullSeen(root: string, r: OffboxPullReceipt | null, 
   return r.pulledAt;
 }
 export function offboxPullFact(r: OffboxPullReceipt | null, now: number): OffboxPullFact {
-  if (!r) return { offBox: "none", lastOffBoxAt: null, offBoxMethod: null, offBoxPulledAt: null };
+  if (!r) return { offBox: "none", offBoxMethod: null, offBoxPulledAt: null };
   const fresh = now - Date.parse(r.pulledAt) <= OFFBOX_PULL_STALE_MS;
-  return { offBox: fresh ? "pulled" : "stale", lastOffBoxAt: r.pulledAt, offBoxMethod: r.method, offBoxPulledAt: r.pulledAt };
+  return { offBox: fresh ? "pulled" : "stale", offBoxMethod: r.method, offBoxPulledAt: r.pulledAt };
 }
 /**
  * The pull's own alerts: a receipt older than OFFBOX_PULL_STALE_MS; HB-49: a receipt that is there but cannot be read (always, with the

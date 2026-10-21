@@ -160,8 +160,9 @@ describe("B-16: honest copy", () => {
   });
   test("(c) both tiers, the one every live coin pays first, on the trust page body, current status and the trust JSON", () => {
     clean(BOTH_TIERS_LINE);
-    assert.equal(BOTH_TIERS_LINE, `Coins created before ${TIER_14_CUTOVER_WORDS} pay 1% per swap after graduation (fee tier 9): about 0.88% to the burn pool, about 0.04% to the operator and about 0.08% to Raydium. Coins created from then on pay 1.25% (fee tier 14): about 0.98% to the burn pool, about 0.13% to the operator and about 0.15% to Raydium. On both, the operator's part is 20% of the locked pool's liquidity fees.`);
-    assert.ok(BOTH_TIERS_LINE.indexOf("0.88%") < BOTH_TIERS_LINE.indexOf("0.98%"));
+    // eighth pass B-23: one split for every coin, the platform's current tier (HS-71 words)
+    assert.match(BOTH_TIERS_LINE, /^After graduation, every coin pays 1\.25% per swap \(Raydium fee tier 14\): about 0\.98% to the burn pool, 0\.13% to the operator and 0\.15% to Raydium\./);
+    assert.doesNotMatch(BOTH_TIERS_LINE, /0\.88%|fee tier 9/);
     // hourly run 5, HS-26: the trust page prints the server's fee line (the footer's shape), BOTH_TIERS_LINE when the JSON has none
     assert.match(read("src/app/burnticker/trust/page.tsx"), /\{t\.feeTiersLine \?\? BOTH_TIERS_LINE\}/);
     assert.doesNotMatch(read("src/app/burnticker/trust/page.tsx"), /postGraduationShareLine\(t\.designedFees\.postGraduation\)/);
@@ -171,7 +172,7 @@ describe("B-16: honest copy", () => {
   test("(d) which sources settle alone, and the one-source rule for games", () => {
     clean(SETTLEMENT_SOURCES_SENTENCE);
     assert.equal(GAME_CONFIRM_GAP_MINUTES * 60_000, GAME_CONFIRM_GAP_MS);
-    assert.equal(SETTLEMENT_SOURCES_SENTENCE, "Each result comes from a primary source. Most rules also need a second, independent publisher to agree, or the on-chain payout of an adjudicated Polymarket market. A few rules use one official source alone, and their rule text says so: the natural-hazard feeds from the U.S. Geological Survey, the National Hurricane Center, the Storm Prediction Center and the National Interagency Fire Center. A game coin settles once the official feed has marked the game final and a second check five minutes later agrees.");
+    assert.equal(SETTLEMENT_SOURCES_SENTENCE, "Each result comes from a primary source. Most rules also need a second, independent publisher to agree, or the on-chain payout of an adjudicated Polymarket market. A few rules use one official source alone, and their rule text says so: the natural-hazard feeds from the U.S. Geological Survey, the National Hurricane Center, the Storm Prediction Center and the National Interagency Fire Center. A game coin settles once its final has been read and a second read five minutes later agrees.");
     assert.ok(ADMISSION_RULES.includes(SETTLEMENT_SOURCES_SENTENCE));
     assert.doesNotMatch(ADMISSION_RULES, /second, independent publisher confirms/);
   });

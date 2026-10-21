@@ -68,7 +68,7 @@ export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b:
  * live and still paired, else to $DEFICIT; the winning coin burns down its own rest (endSinkKeeper.ts); a level series records a void end
  * and each coin burns down on itself.
  */
-export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a: string; b: string }, o: { playoffs?: boolean; fees?: SplitLike | null } = {}): FundsFlow {
+export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a: string; b: string }, o: { playoffs?: boolean; fees?: SplitLike | null; /** HS-42 residue (seventh pass): an NBA, NHL or MLB pair lists no draw */ cannotTie?: boolean } = {}): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
   return {
     version: "winner-takes-the-burn", versionLabel: "Rule version: winner takes the burn, every game between two teams this season",
@@ -79,7 +79,7 @@ export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a:
       { title: "At the end of the season", text: `When both teams' seasons are over${o.playoffs === false ? "" : ", playoffs included"}, the coin of the team that won fewer of the games between them sends what is left in its burn pool, and any fees that arrive later, to the other coin's burn pool. The coin of the team that won more burns down what is left on itself. For example, if ${teamRefByName(teams.a)} won more, ${B} sends its rest to the ${A} burn pool and all of it burns ${A}.` },
     ],
     outcomes: [
-      { when: "A game ends in a draw", then: "Nothing moves for that game. It counts for neither team." },
+      ...(o.cannotTie ? [] : [{ when: "A game ends in a draw", then: "Nothing moves for that game. It counts for neither team." }]),
       { when: "A game is postponed or cancelled", then: "It counts for neither team until it is played." },
       { when: "The winning coin of a game has no live trading pool", then: "Nothing moves for that game. The share stays in the other coin's pool." },
       { when: "The two teams won the same number of games against each other", then: "Nothing moves at the end. Each coin burns down what is left on itself over four weeks." },

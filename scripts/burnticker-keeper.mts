@@ -170,6 +170,7 @@ polymarket.payoutStore = statusPayoutStore(registry, "keeper");
 // so a restart never settles a game on one read; each time a game's count starts again the reason is logged.
 setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket), holds: statusHoldStore(registry), firstReads: statusFirstReadStore(registry), finalChecks: statusFinalCheckStore(registry), now: () => Date.now(),
   // THE LIVE SCHEDULE READ (owner 2026-10-20): a league with a tracked game in play reads its free official schedule about every minute
+  // and a tracked NBA or soccer game in play reads its own TheSportsDB event lookup with a 90 s cache (espn.ts THE LIVE GAME READ ON THESPORTSDB)
   liveSchedule: true,
   onFinalCheck: (e) => log(`  [final-check] ${e.game.league}:${e.game.eventId} ${e.game.name} ${e.game.date}: ${e.why}`),
   onSingleSource: (e) => {
@@ -398,7 +399,8 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   const r = await runBurntickerAlertCheck({ registry, siteDir: SITE, now, paused, balances, crankStreaks: tracker.snapshot(), sink });
   budget.flush();
   const budgetLines = budgetStatusLines(budget.lines());
-  for (const l of budgetLines) log(`  [${l}]`);
+  // THE LIVE GAME READ ON THESPORTSDB: the TheSportsDB line also says how many live game lookups each league took today, against its cap
+  for (const l of budgetLines) log(`  [${l}${l.startsWith("api budget thesportsdb:") ? espnClient().tsdbLiveNote() : ""}]`);
   for (const l of budgetTopMethodLines(budget)) log(`  [${l}]`);
   if (cycleCache) { const c = cycleCache.stats; log(`  [cycle-cache] ${cycleCache.addresses().length} account(s) prefetched per cycle in ${Math.ceil(cycleCache.addresses().length / 100)} call(s); since start: ${c.cycles} cycle(s), ${c.served} read(s) served, ${c.passed} sent to the RPC, ${c.invalidations} drop(s) after a send`); }
   for (const a of r.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);
@@ -407,7 +409,7 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   for (const a of unitCheck.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);   // audit 2026-10-16 F-5: failed units, backups
   try { const p = await runPushCheck({ registry, env: process.env, now, log }); for (const m of p.sent) log(`  [push] ${m.kind}: ${m.title}`); } catch (e) { log(`  [push] check failed: ${(e as Error).message.slice(0, 160)}`); }
   const launched = registry.tokens("live").map((t) => Date.parse(t.baselineAt)).filter((x) => Number.isFinite(x));
-  let alerts: { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }[] | null = null;
+  let alerts: { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean; push?: string | null }[] | null = null;
   try { alerts = registryAlertRows(registry, now); } catch { alerts = null; }
   // F06: ops.json's conditions come from the one aggregator (keeper-level + per-source health); the memory feeds "recovered"
   const health = ops.feedHealth(), memory = readConditionMemory(registry);
@@ -486,7 +488,7 @@ while (!stopping) {
   // one bounded GET per cycle, never throws (A-7): ok for a completed cycle whose errors are per coin or fence holds, fail when the cycle
   // failed or every live coin errored, nothing otherwise (ops/heartbeat.ts heartbeatVerdict; review and re-review, 2026-10-18)
   // THE LIVE SCHEDULE READ: the free official schedule reads taken under the one-minute cache this cycle, per league
-  { const live = espnClient().takeLiveReads(); const n = Object.values(live).reduce((a, b) => a + b, 0); if (n) log(`  [live-schedule] ${Object.entries(live).map(([l, k]) => `${l} ${k}`).join(", ")} read${n === 1 ? "" : "s"} this cycle (games in play)`); }
+  { const live = espnClient().takeLiveReads(); const n = Object.values(live).reduce((a, b) => a + b, 0); if (n) log(`  [live-schedule] ${Object.entries(live).map(([l, k]) => `${l} ${k}`).join(", ")} read${n === 1 ? "" : "s"} this cycle (games in play; MLB and NHL day listings, NBA and soccer game lookups)`); }
   await heartbeat.beat(Date.now(), heartbeatVerdict(cycleReport, registry.tokens("live")));
   budget.setPhase("ops");
   if (ALERTS && Date.now() - lastAlertAt >= ALERT_EVERY_MS) { lastAlertAt = Date.now(); try { await opsCheck(lastAlertAt, paused); } catch (e) { log(`  [alert] check failed: ${(e as Error).message.slice(0, 160)}`); } }

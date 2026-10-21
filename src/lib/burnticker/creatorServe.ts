@@ -7,7 +7,7 @@ import { registryCoinKey } from "@/lib/burnticker/coinLookup";
 import { rankLines, receiptsThisWeek, weeklySummary, type RankView } from "@/lib/burnticker/coinRank";
 import { safeParam } from "@/lib/burnticker/safeParam";
 import { ruleOneLinerFor } from "@/lib/burnticker/coinCard";
-import { rememberedCoinPage } from "@/lib/burnticker/coinPageMemo";
+import { rememberedCoinPage, type CoinPageReader } from "@/lib/burnticker/coinPageMemo";
 import { KeyedSwr, SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
 import { COIN_MAX_STALE_MS } from "@/lib/burnticker/coinFreshness";
 import { nextTimes, type ResultReceipt, type ResultState } from "@/lib/burnticker/nextResult";
@@ -203,6 +203,33 @@ async function rememberedDetail(plat: Platform, w: string, rows: readonly TokenR
   const reads = await Promise.all(rows.map((t) => rememberedCoinPage(plat, t, now).catch(() => null)));
   const coins = rows.map((t, k) => { const d = reads[k]; return d ? viewOf(c, t, d) : unavailableOf(c, t, true); });
   return { kind: "ok", wallet: w, coins, readAt: new Date(now).toISOString(), unavailable: 0, loading: coins.filter((x) => x.loading).length };
+}
+
+/**
+ * AUDIT 7 B-10 (2026-10-20): the creator page streams each coin as its read finishes. The first cold load after a deploy showed "Still
+ * loading this coin" for 7 of 7 coins, because the whole page waited COIN_PAGE_COLD_WAIT_MS (2.4 s) for every coin and then rendered
+ * what it had, all or nothing. Now the page gets every coin's registry facts at once (the "still loading" card, the same one as before)
+ * and, per coin, the promise of its full card, waited for up to CREATOR_STREAM_WAIT_MS each; the page shows each coin as it resolves
+ * (React Suspense). A coin still unread at its bound stays "still loading", as before, and its read carries on for the next visit.
+ */
+export const CREATOR_STREAM_WAIT_MS = 15_000;
+export type CreatorStream = { kind: "bad-wallet" } | { kind: "unavailable"; wallet: string } | { kind: "ok"; wallet: string; readAt: string; coins: { loading: CreatorCoinView; view: Promise<CreatorCoinView> }[] };
+export function creatorStream(wallet: string, now = Date.now(), p: Platform | null = null, o: { waitMs?: number; read?: CoinPageReader } = {}): CreatorStream {
+  const w = safeParam(wallet).trim();
+  if (!WALLET_RE.test(w)) return { kind: "bad-wallet" };
+  let plat: Platform;
+  try { plat = p ?? platform(); } catch { return { kind: "unavailable", wallet: w }; }
+  const rows = creatorRows(plat, w);
+  if (!rows) return { kind: "unavailable", wallet: w };
+  const c = context(plat, now);
+  const waitMs = o.waitMs ?? CREATOR_STREAM_WAIT_MS;
+  const coins = rows.map((t) => {
+    const loading = unavailableOf(c, t, true);
+    // a read that failed or is still running keeps the loading card (as before); a read whose card cannot be built is unavailable
+    const view = rememberedCoinPage(plat, t, now, o.read, { waitMs }).catch(() => null).then((d) => (d ? viewOf(c, t, d) : loading)).catch(() => unavailableOf(c, t));
+    return { loading, view };
+  });
+  return { kind: "ok", wallet: w, readAt: new Date(now).toISOString(), coins };
 }
 
 async function buildDetail(plat: Platform, w: string, rows: readonly TokenRow[], now: number, o: CreatorDataOptions): Promise<CreatorData> {

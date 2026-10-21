@@ -105,7 +105,7 @@ export function teamWordName(name: string, from: string, to: string): string | n
   const text = TEAM_WORD_TEXT[word];
   if (new RegExp(`\\b${text}\\b`, "i").test(n)) return null;
   const parts = n.split(/\s+/);
-  let at = parts.findIndex((p) => /^(19|20)\d\d$/.test(p));
+  let at = parts.findIndex((p) => /^(19|20)\d\d([–-]\d\d)?$/.test(p));   // WZ8-3: a split season ("2026–27") is a year too
   if (at < 1 && parts.length > 1 && /^(win|wins|loss|losses|lose)$/i.test(parts[parts.length - 1])) at = parts.length - 1;
   if (at < 1) at = parts.length;
   return [...parts.slice(0, at), text, ...parts.slice(at)].join(" ");

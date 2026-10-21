@@ -48,7 +48,9 @@ type Coin = Pick<IndexCoin, "ticker" | "phase" | "progressPct" | "nextCheckAt" |
  * poll while its card said no date). An older answer with no listing keeps the close time, then the next check.
  */
 export function settleDateOf(t: Coin): string | null {
-  const at = t.listing !== undefined ? t.listing?.next?.at ?? null : t.nextCloseTime ?? t.nextCheckAt;
+  // audit 7 review: a coin whose listing could not be built (the index sends listing: null) keeps its own stated close time, never the
+  // keeper's next poll, instead of "No date yet."
+  const at = t.listing ? t.listing.next?.at ?? null : t.listing === null ? t.nextCloseTime ?? null : t.nextCloseTime ?? t.nextCheckAt;
   return at && Number.isFinite(Date.parse(at)) ? at : null;
 }
 /** HB-133: the word an undated coin carries on the Next to settle tab. */

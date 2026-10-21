@@ -27,6 +27,7 @@ import { launchlabPlan, pairCurvePlan, withPlanDeadline } from "@/lib/burnticker
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { ReviewCard } from "./ReviewCard";
 import { electionPairIdentity } from "@/lib/burnticker/electionPairLabels";
+import { controlIdentity } from "@/lib/burnticker/controlIdentity";
 import { launchErrorMessage, LaunchRequestError, PAIR_CURVE_REVIEW_LINE, postPairLaunch, venueFor, venueFrom409, type LaunchErrorBody, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { STATIONS, nwsSeries, parseNwsSeries, stationOptionLabel } from "@/lib/burnticker/sources/nws";
@@ -106,7 +107,7 @@ import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, meetingsStandingLine, 
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { autoTickerSwaps, freePairTickers, hazardSwapLine, pairTickerSwapLine, teamWordName, type TickerGuard } from "@/lib/burnticker/tickerSwap";
 import { PICKER_PAGE, pickerPage } from "@/lib/burnticker/polySearch";
-import { draftKeys, keyRotatingFetch } from "@/lib/burnticker/prepareKey";
+import { draftKeys, keyRotatingFetch, PREPARE_KEY_STORE, type KeyStore } from "@/lib/burnticker/prepareKey";
 import { PLAN_EXPIRED_SENTENCE, planExpired, planExpiresInMs } from "@/lib/burnticker/planAge";
 
 /**
@@ -143,7 +144,7 @@ type Suggestion = SearchSuggestion;
 /** Browse (GET /api/burnticker/v1/browse): one source, any venue, in one shape. */
 interface BrowseCategory { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[]; guided?: string | null; adjudicatedOnly?: boolean }
 interface ElOutcome { conditionId: string; label: string; question: string; yes: string; no: string; title: string; settles: string; rule: BurnRule; /** elections.ts RaceOutcome: the market is the party's result, not the candidate's by name */ partyMarket?: boolean; /** sources-6 (audit 10 #5): which market a candidate's coin settles on, and what a replaced nominee does */ mapping?: string | null }
-interface ElRace { slug: string; title: string; url: string; settlesOn: string | null; description: string | null; hiddenPlaceholders: number; sos: { name: string; url: string }; settlement: string; refused: string[]; outcomes: ElOutcome[] }
+interface ElRace { slug: string; title: string; /** WZ8-1: the race type the API sends (elections.ts Race.type) */ type?: string; url: string; settlesOn: string | null; description: string | null; hiddenPlaceholders: number; sos: { name: string; url: string }; settlement: string; refused: string[]; outcomes: ElOutcome[] }
 interface ElPairSide { candidate: string; name: string; ticker: string; components: { fecBeats: BurnRule | null; winner: BurnRule }; sentences: { fecBeats: string | null; winner: string }; outcome: { conditionId: string; question: string; yes: string; no: string } }
 interface ElPair { a: ElPairSide; b: ElPairSide; crossRead: { name: string; url: string }; pending: string[] }
 interface SourceCardT { id: string; venue: "feed" | "polymarket" | "kalshi"; venueLabel: string; tier: number; tierLabel: string; title: string; cadence: string | null; kind: "binary" | "scalar"; next: { label: string; at: string | null } | null; example: string; launchable: { ok: boolean; why: string | null }; refused: string[]; diagnostics?: string[]; flags: string[]; sourceName: string | null; sourceUrl: string | null; /** sources-3: the single-publisher settlement sentence (hazard feeds only) */ settlement?: string | null; /** sources-4 205: the parameter example's note */ paramNote?: string | null; /** sources-4 213: a title with a blank, resolved per child market */ outcomes?: { question: string; market: string }[] | null; pick: { oracle: "catalogue" | "polymarket" | "kalshi"; series: string | null; market: string | null; title: string }; configure?: { kind: "team"; league: string } | { kind: "weather"; metric: "high" | "rain" | "snow" } | null }
@@ -176,6 +177,8 @@ function keepReviewProof(p: WalletProof): void { try { sessionStorage.setItem(RE
 /** LA6-4: the single coin's prepared mint key across a reload (keptMintKey.ts), read for this wallet and ticker only; private mode keeps nothing. */
 function readKeptMint(creator: string | null | undefined, ticker: string): GroundMint | null { try { return keptMintKey(sessionStorage.getItem(PREPARED_MINT_STORE), { creator, ticker }); } catch { return null; } }
 function keepPreparedMint(k: { creator: string | null | undefined; ticker: string; mint: string; secret: string | null }): void { try { const t = keptMintText(k); if (t) sessionStorage.setItem(PREPARED_MINT_STORE, t); } catch { /* no memory, no harm */ } }
+/** LA7-6: the prepare key kept in this tab's storage across a reload (prepareKey.ts draftKeys); private mode keeps nothing. */
+const PREPARE_KEY_TAB_STORE: KeyStore = { read: () => sessionStorage.getItem(PREPARE_KEY_STORE), write: (v) => sessionStorage.setItem(PREPARE_KEY_STORE, v) };
 function dropPreparedMint(): void { try { sessionStorage.removeItem(PREPARED_MINT_STORE); } catch { /* ignore */ } }
 /** The draft to offer (launchDraftStore.ts pickOffer): the named one in progress, else the kept one that reached the review. */
 const readOffer = (): Record<string, unknown> | null => {
@@ -621,7 +624,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // name, a ticker or an image of the creator's own would be lost
   // website-20 pass A item 10: once anything is chosen, Start over asks first (it is the secondary action beside Back)
   const needsConfirm = !!guide.follow || step !== "choose" || (!nameAuto && !!name.trim()) || (!tickerAuto && !!ticker.trim()) || !!profile.image || !!profileB.image;
-  const startOver = (force = false) => { if (!force && needsConfirm) { setConfirmOver(true); return; } setPrevFollow(null); setConfirmOver(false); try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); sessionStorage.removeItem(CVC_STORE); sessionStorage.removeItem(REVIEW_PROOF_STORE); sessionStorage.removeItem(PREPARED_MINT_STORE); } catch { /* ignore */ } try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ } window.scrollTo({ top: 0 }); onReset(); };
+  const startOver = (force = false) => { if (!force && needsConfirm) { setConfirmOver(true); return; } setPrevFollow(null); setConfirmOver(false); try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); sessionStorage.removeItem(CVC_STORE); sessionStorage.removeItem(REVIEW_PROOF_STORE); sessionStorage.removeItem(PREPARED_MINT_STORE); sessionStorage.removeItem(PREPARE_KEY_STORE); } catch { /* ignore */ } try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ } window.scrollTo({ top: 0 }); onReset(); };
   // owner, 2026-10-12: "Launch a coin" again while on this page shows step 1, with the draft kept and offered (launchStart.ts)
   useEffect(() => {
     const h = () => {
@@ -634,7 +637,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     return () => window.removeEventListener(LAUNCH_START_EVENT, h);
   }, []);
   /** launch night 2026-10-13: once every coin is live and recorded, the draft that made them is no longer offered */
-  const dropDraft = () => { launched.current = true; try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); sessionStorage.removeItem(REVIEW_PROOF_STORE); sessionStorage.removeItem(PREPARED_MINT_STORE); } catch { /* ignore */ } setSavedDraft(null); };
+  const dropDraft = () => { launched.current = true; try { sessionStorage.removeItem(STORE); sessionStorage.removeItem(KEPT_STORE); sessionStorage.removeItem(REVIEW_PROOF_STORE); sessionStorage.removeItem(PREPARED_MINT_STORE); sessionStorage.removeItem(PREPARE_KEY_STORE); } catch { /* ignore */ } setSavedDraft(null); };
   const resumeDraft = () => { if (savedDraft) resumeFrom(savedDraft); setSavedDraft(null); window.scrollTo({ top: 0 }); };
 
   // site audit #18: the one shared catalogue read (catalogueClient.ts) — the header's availability uses the same promise
@@ -963,7 +966,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (flow === "pair" && pairGen) return pairGen.a.ticker;
     // walkthrough 13: an election pair's first coin keeps the ticker electionPairIdentity gave it ($DEMVREP beside $REPVDEM); the team
     // generator below turned the side word "Democrats" into $DEMOVREPU on the review
-    if (flow === "pair" && elPick) return electionPairIdentity(elPick.a.label, elPick.b.label).tickers.a;
+    if (flow === "pair" && elPick) return electionPairIdentity(elPick.a.label, elPick.b.label, elPick.race.title).tickers.a;
     if (flow === "pair" && sideA && sideB) return freePairTickers({ abbr: sideA.abbr, code: sideA.code }, { abbr: sideB.abbr, code: sideB.code }, tickerGuard).a;
     // walkthrough snag 13: the debt coin has one ticker from every path ($DEBT itself is reserved for the flagship's rule)
     if (rule.oracle === "catalogue" && rule.series === "treasury.debt") return rule.inverse ? "FLATDEBT" : "DEBTUP";
@@ -997,7 +1000,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const sideNow = ruleSide(ruleShown);
   /** HB-117: the generated name, or the hazard alternative's name when the review swapped the generated ticker for that alternative. */
   // HB-170: a team coin's ticker swapped for a team-word ticker ($PHINFLFANS) takes the word into its name too ("Eagles Fans 2026 Wins")
-  const hazardNameFor = (t: CoinText): string => { const to = t.ticker ? genFix[t.ticker.toUpperCase()] : undefined; return (to && (hazardAlternateName(ruleShown?.series, { ticker: t.ticker, name: t.name }, to) ?? teamWordName(t.name, t.ticker, to))) || t.name; };
+  // LA7-4 / reviewer D: the server's review now pairs its suggested ticker with its suggested name; that pair is used first
+  const reviewNames = useRef<Record<string, string>>({});
+  const hazardNameFor = (t: CoinText): string => { const to = t.ticker ? genFix[t.ticker.toUpperCase()] : undefined; return (to && (reviewNames.current[to.toUpperCase()] ?? hazardAlternateName(ruleShown?.series, { ticker: t.ticker, name: t.name }, to) ?? teamWordName(t.name, t.ticker, to))) || t.name; };
   /** HB-117: the swap the name step announces for a single coin's generated ticker (and name), or null. */
   const singleSwap = !pairOn && tickerAuto && text?.ticker && genFix[text.ticker.toUpperCase()] && genFix[text.ticker.toUpperCase()] === ticker.toUpperCase()
     ? { from: text.ticker, to: ticker, name: nameAuto && name !== text.name ? name : null } : null;
@@ -1005,7 +1010,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (!text || step !== "review") return;
     const sug = suggestionFor(srcSuggest, sideNow);
     // HB-117: when the review swapped a natural-disaster coin's generated ticker for its hazard-word alternative, the name follows it
-    const want0 = genTicker ?? sug.ticker ?? text.ticker, want = want0 ? fixGen(want0) : want0, wantName = sug.name ?? hazardNameFor(text);
+    const want0 = genTicker ?? sug.ticker ?? text.ticker, want = want0 ? fixGen(want0) : want0;
+    // HB-189 (eighth pass WZ8-4): a search card's name loses to the name of the swapped ticker: when the review swapped the card's ticker
+    // ($PHINFLWIN2 to $PHINFLFANS), the name takes the team word too ("Eagles Fans 2026 Wins"), never the live coin's own name
+    const sugSwap = sug.name && sug.ticker ? genFix[sug.ticker.toUpperCase()] : undefined;
+    const wantName = sugSwap ? hazardNameFor({ ...text, ticker: sug.ticker!, name: sug.name! }) : sug.name ?? hazardNameFor(text);
     if (tickerAuto && want && want !== ticker) setTicker(want);
     if (nameAuto && wantName && wantName !== name && flow !== "pair") setName(wantName);
   }, [text, step, tickerAuto, nameAuto, ticker, name, flow, genTicker, srcSuggest, sideNow, genFix]);   // eslint-disable-line react-hooks/exhaustive-deps -- fixGen reads genFix
@@ -1094,7 +1103,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // audit 2026-10-15 M2: one prepare per draft. The key stays the same for one draft revision (a double press or the same request sent
   // again gets the first answer, the same draft and the same addresses); an edit makes a new draft and a new key (api/idempotency.ts).
   // review 2026-10-15 item 1: on idempotency-key-reused the draft gets a new key and the request is sent once more (prepareKey.ts)
-  const [prepareKeys] = useState(() => draftKeys());
+  const [prepareKeys] = useState(() => draftKeys(undefined, PREPARE_KEY_TAB_STORE));
   const rotatePrepareKey = (): string => prepareKeys.rotate(curDraft.current);
   const launchFetch = keyRotatingFetch((u, init) => fetch(u, init), rotatePrepareKey);
   // audit 7 F02: the debounce, the request, late and out-of-order answers and the retry ladder live in createReviewRequester; the slot
@@ -1127,6 +1136,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const draftHeld = reviewCurrent ? draftHeldNotices(shownReview.review?.notices, { lapsed: lapsedProof, creator, maxAgeMs: PROOF_MAX_AGE_MS, parse: parseWalletProof }) : [];
   // LA-4: a generated ticker this tab already pressed Launch for (its signature ran out) is the creator's own draft's: never swapped away
   const ownLapsed = new Set(draftHeld.filter((n) => n.expired).map((n) => n.ticker.toUpperCase()));
+  if (reviewCurrent) for (const c of ((shownReview.review as { coins?: { suggestedTicker?: string | null; suggestedName?: string | null }[] } | null)?.coins ?? [])) if (c.suggestedTicker && c.suggestedName) reviewNames.current[c.suggestedTicker.toUpperCase()] = c.suggestedName;
   const autoSwaps = autoTickerSwaps(reviewCurrent ? ((shownReview.review as (LaunchReview & { tickers?: TickerCheck[] }) | null)?.tickers ?? null)?.filter((t) => !ownLapsed.has(t.ticker.toUpperCase())) ?? null : null, { a: ticker, b: pairOn ? tickerB : "" }, tickerAuto);
   useEffect(() => {
     if (!autoSwaps.a && !autoSwaps.b) return;
@@ -1492,7 +1502,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     const sur = (o: ElOutcome) => o.label.replace(/\s*\([A-Z]\)$/, "").trim().split(/\s+/).pop() ?? o.label;
     // private review 10 F2: party control is "Democrats vs Republicans" ($DEMVREP / $REPVDEM), never "Party vs Party"; one surname twice
     // takes a first initial, then the full name (electionPairLabels.ts)
-    const id = electionPairIdentity(a.label, b.label), tk = id.tickers, nm = id.names;
+    const id = electionPairIdentity(a.label, b.label, r.title), tk = id.tickers, nm = id.names;
     const side = (o: ElOutcome, t: string, w: string): Side => ({ abbr: w, marketTicker: o.conditionId, label: o.label, nickname: w, name: o.label, ticker: t });
     markOrigin("browse"); setOrigin(null);
     // snag 8: a market that is not about the person by name is said in one honest sentence (the party's market settles it)
@@ -1964,11 +1974,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                             ? <button data-decision="what" className={`text-xs underline ${esel.includes(o.conditionId) ? "text-neutral-100" : "text-amber-300"}`} aria-label={`${esel.includes(o.conditionId) ? "Picked: " : "Pick "}${o.label.replace(/\s*\([A-Z]\)$/, "")}`} aria-pressed={esel.includes(o.conditionId)} onClick={() => setEsel((xs) => (xs.includes(o.conditionId) ? xs.filter((x) => x !== o.conditionId) : [...xs.filter((x) => r.outcomes.some((y) => y.conditionId === x)), o.conditionId].slice(-2)))}>{esel.includes(o.conditionId) ? "Picked" : "Pick"}</button>
                             : <button data-decision="what" className="text-xs underline text-amber-300" aria-label={`Use ${o.label.replace(/\s*\([A-Z]\)$/, "")} wins`} onClick={() => {
                             // intent audit 2 item 5: the coin's sentence comes from the market's own question; a party market is said as one
-                            const sur = o.label.replace(/\s*\([A-Z]\)$/, "").trim().split(/\s+/).pop() ?? o.label, phrase = statementOf(o.question);
-                            const tk = sur.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+                            // eighth pass HB-196 / WZ8-1: a party-control outcome takes the party and the chamber ("Democrats win the Senate",
+                            // $DEMSENATE), as the step-1 search card does (controlIdentity), never "Party Wins" / $PARTY
+                            const ctl = controlIdentity({ type: etype ?? "", title: r.title, settlesOn: r.settlesOn }, o);
+                            const sur = o.label.replace(/\s*\([A-Z]\)$/, "").trim().split(/\s+/).pop() ?? o.label, phrase = ctl ? ctl.phrase : statementOf(o.question);
+                            const tk = ctl ? ctl.ticker : sur.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
                             markOrigin("browse"); setSrcWarnings(o.mapping ? [mappingWarning(o.mapping, "A")] : fold(o.question).includes(fold(sur)) ? [] : [partyMarketWarning(o.question, sur)]);
                             setEventInfo({ question: o.question, url: r.url, outcome: `“${o.yes}”`, resolves: r.settlesOn, criteria: r.description, certified: r.settlement.replace(/^.*checked against /, "") });
-                            applyRule(o.rule, { oracle: "polymarket", series: null, market: o.conditionId, title: `${phrase} (resolves once)`, yes: o.yes, no: o.no }, { name: `${sur} Wins`, ticker: tk, how: `${o.settles}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, settlement: `${r.settlement}, ${sosLinkLabel(r.sos)}` }); }}>Use: {o.label} wins</button>}
+                            applyRule(o.rule, { oracle: "polymarket", series: null, market: o.conditionId, title: `${phrase} (resolves once)`, yes: o.yes, no: o.no }, { name: ctl ? ctl.name : `${sur} Wins`, ticker: tk, how: `${o.settles}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, settlement: `${r.settlement}, ${sosLinkLabel(r.sos)}` }); }}>Use: {o.label} wins</button>}
                         </li>
                       ))}</ul>}
                       {guide.pairKind === "candidates" && !r.refused.length && (r.outcomes.length < 2

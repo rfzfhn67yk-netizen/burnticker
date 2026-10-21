@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { DEPTH_PPM, DISPERSAL_MIN_GAP_MS, DISPERSAL_WINDOW_MS, PROGRAM_CAP_BPS, dispersalEnabled, priceMovePct } from "@/lib/burnticker/dispersal";
-import { SPREAD_DEFICIT_LINE, SPREAD_LINES, SPREAD_REVIEW_LINE } from "@/lib/burnticker/spreadCopy";
+import { SPREAD_DEFICIT_LINE, SPREAD_DEFICIT_STANDALONE, SPREAD_LINES, SPREAD_REVIEW_LINE } from "@/lib/burnticker/spreadCopy";
 import { settlementSections } from "@/lib/burnticker/settlementCopy";
 import { MAX_SPEND_RESERVE_BPS } from "@/lib/burnReceipts/constants";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
@@ -64,7 +64,9 @@ describe("how a burn is spread out", () => {
     assert.match(trust, /SPREAD_LINES\.join\(" "\),\n\s+SPREAD_DEFICIT_LINE,/);
     assert.match(read("src/app/burnticker/launch/page.tsx"), /if \(site\.dispersal\.available\) notes\.push\(SPREAD_REVIEW_LINE\);/);
     const deficit = read("site/deficit/index.html");
-    assert.ok(deficit.includes(`<p class="replay" data-spread>${SPREAD_DEFICIT_LINE}</p>`));
-    assert.doesNotMatch(deficit, /six-hour window|random times/, "the $DEFICIT page never claims spreading");
+    // coordinator 2026-10-20: the $DEFICIT page has no creator-coin paragraphs, so its line says both halves (no "this way" without an antecedent)
+    assert.ok(deficit.includes(`<p class="replay" data-spread>${SPREAD_DEFICIT_STANDALONE}</p>`));
+    assert.doesNotMatch(SPREAD_DEFICIT_STANDALONE, /this way/); assert.ok(lintCopy(SPREAD_DEFICIT_STANDALONE).ok);
+    assert.doesNotMatch(deficit.replace(`<p class="replay" data-spread>${SPREAD_DEFICIT_STANDALONE}</p>`, ""), /six-hour window|random times/, "the $DEFICIT page never claims spreading for $DEFICIT (its one line names creator coins as the ones that spread)");
   });
 });

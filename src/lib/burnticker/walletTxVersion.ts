@@ -142,3 +142,38 @@ export async function signWithStandardWallet(std: StandardWalletLike | null, acc
   if (!out || !(out.signedTransaction instanceof Uint8Array)) throw new Error("the wallet returned no transaction");
   return out.signedTransaction;
 }
+
+// ---- the version-0 fallback (LA7 fix B, 2026-10-20) ---------------------------------------------------------------------------------
+
+/**
+ * The host switch BURNTICKER_WALLET_TX_V1 (docs/burnticker/runbook.md): "0" forces version 0 for every launch on this host, anything else
+ * (or unset) leaves version 1 on for wallets that offer it. The server reads it and hands it to the card (GET /api/burnticker/launch
+ * `walletTxV1`), so turning it off needs no rebuild.
+ */
+export const walletTxV1Enabled = (env: Readonly<Record<string, string | undefined>>): boolean => (env.BURNTICKER_WALLET_TX_V1 ?? "").trim() !== "0";
+
+/** The versions with version 1 removed (the host switch is off); null stays null. */
+export function withoutV1(versions: ReadonlySet<SolanaTransactionVersion> | null): ReadonlySet<SolanaTransactionVersion> | null {
+  return versions ? new Set([...versions].filter((v) => v !== 1)) : null;
+}
+
+/**
+ * Whether a dry-run failure of a version-1 step is about the transaction FORMAT rather than the step itself: the node cannot read a
+ * version-1 transaction (an older cluster or RPC answers that it does not support the version, or that the bytes do not deserialize),
+ * or the simulation's own error is UnsupportedVersion. Any other failure (an instruction error, insufficient funds, a blockhash) is
+ * about the step, and the same step built as version 0 would fail the same way, so it never falls back.
+ */
+const VERSION_REFUSAL = /unsupported ?(transaction )?version|version\W{0,3}1?\W{0,3}(is )?not supported|transaction version|failed to deserialize|could not deserialize|unable to deserialize|invalid transaction version|maxSupportedTransactionVersion/i;
+export function isVersionRefusal(x: unknown): boolean {
+  if (x == null) return false;
+  let text: string;
+  if (typeof x === "string") text = x;
+  else if (x instanceof Error) text = x.message;
+  else { try { text = JSON.stringify(x); } catch { text = String(x); } }
+  return VERSION_REFUSAL.test(text);
+}
+
+/** The card's notice when a launch falls back to version 0 before the wallet was asked (LA7 fix B). */
+export const V0_FALLBACK_NOTICE = "This network did not accept a version-1 transaction, so this launch is being sent as version-0 transactions against this site's lookup table. Nothing was signed or sent before the switch.";
+/** The card's line while it reads this site's format setting (GET /api/burnticker/launch). */
+export const FORMAT_SETTING_READING = "this page is still reading which transaction format this site uses";

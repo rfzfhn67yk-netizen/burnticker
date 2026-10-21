@@ -438,10 +438,11 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
   const src = (() => { try { return sourceText(rule, i.now); } catch { return null; } })();
   const nextCheckAt = i.nextCheckAt ? new Date(i.nextCheckAt).toISOString() : null, nextCloseTime = i.implied?.closeTime ?? null;
   const times = nextTimes({ oneShot, receipts: i.receipts, nextCloseTime, nextCheckAt, burnedOnly: isFirstSnowRule(rule) });
-  // continuous audit run 2, HB-13: the coin's post-graduation split, from the tier IT pinned; fees.sentence and lifecycle.fees both read it
-  const postGraduation = postGraduationFeesFor(i.chain.cluster, i.chain.program?.config?.cpConfig);
-  // HB-50 (run 4): an unread pin is said as unread, never as the new-coin tier's split
-  const tierUnread = !i.chain.program?.config?.cpConfig;
+  // eighth pass B-23 / HB-184 (owner B-17 decision, 2026-10-20): LaunchLab moves a graduating coin into a pool on the platform's CURRENT
+  // fee tier, whatever tier the coin recorded at creation, so the split is the platform's tier (cpmmTier.ts CPMM_TIER), never the pin.
+  // The pin is no longer needed for the numbers, so an unread pin no longer hides them (HB-50 is moot).
+  const postGraduation = postGraduationFeesFor(i.chain.cluster);
+  const tierUnread = false;
   // sixth pass B-16a / HB-56: the liquidity is locked at graduation; before it (no lock read, no registered pool) no percentage is claimed
   const lp = i.lp ?? defaultLp(i);
   const lpLockedPct = lp.lockedPct ?? (program?.pool.registered ? LP_LOCKED_PCT : null);
@@ -459,7 +460,7 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     feed: { lastEventId: i.state.lastEventId, lastValue: i.state.lastValue, lastSettledAt: i.state.lastSettledAt, readings: i.readings.length, lastFetchAt: i.feedState.lastFetchAt ? new Date(i.feedState.lastFetchAt).toISOString() : null, lastError: i.feedState.lastError, failures: i.feedState.failures },
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
     // owner decision 2026-10-19: a coin's post-graduation numbers come from the tier IT pinned (TokenConfig.ll_cp_config), not the new-coin tier
-    fees: { curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence(i.chain.cluster, i.chain.program?.config?.cpConfig, { tierUnread, graduated: lpLockedPct !== null }), creatorSliceBps: 0, ...(tierUnread ? { tierUnread: true } : {}) },
+    fees: { curve: CURVE_FEES, postGraduation, sentence: feeSplitSentence(i.chain.cluster, null, { tierUnread, graduated: lpLockedPct !== null }), creatorSliceBps: 0, ...(tierUnread ? { tierUnread: true } : {}) },
     // HB-96 (hourly run 7): a reading waiting for both coins to graduate counts as waiting too (queuedReading.ts isWaitingReading)
     health: { pending: i.receipts.filter((b) => isWaitingReading(b.status)).length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },

@@ -51,7 +51,7 @@ export function deficitPrelaunch(root = process.cwd()): DeficitPrelaunch {
   const unitLabel = `$${unitB}B`;
   return {
     ticker: "DEFICIT", servedAt: st.deficit.servedAt, canonical: st.deficit.servedAt,
-    oneSentence: `Each full ${unitLabel} that the U.S. national debt rises from one business day to the next is one unit. Each unit spends ${pct} of $DEFICIT's burn pool buying $DEFICIT at market, and everything bought is burned.`,
+    oneSentence: `Each full ${unitLabel} that the U.S. national debt rises from one business day to the next is one unit. Each unit spends ${pct} of what is left in $DEFICIT's burn pool, swapping it for $DEFICIT at market, and everything it gets is burned.`,
     dial: { fractionPerUnit: rules.buyback.fractionPerUnit, percent: pct, unitUsd: rules.rule.unitUsd, unitLabel },
     statement: rules.statement,
     rulesSha256: crypto.createHash("sha256").update(text).digest("hex"), rulesWords: DEFICIT_RULES_WORDS, rulesUrl: repoUrl(st.deficit.rulesFile),

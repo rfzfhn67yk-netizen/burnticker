@@ -21,11 +21,11 @@ const parse = (o: unknown) => parseOffboxPull(JSON.stringify(o), now);
 const noDest: BackupStatus = { ok: true, at: iso(now - 3_600_000), files: [], offBox: "skipped", destConfigured: false, lastOffBoxAt: null, error: null };
 
 describe("B-3 / OPS-1: the off-box pull receipt", () => {
-  test("a fresh receipt reads as pulled, with lastOffBoxAt = pulledAt and the method; no alert", () => {
+  test("a fresh receipt reads as pulled, with offBoxPulledAt = pulledAt and the method (OP7-8: no lastOffBoxAt, which is the push step's); no alert", () => {
     const r = parse(receipt());
     assert.ok(r);
     const f = offboxPullFact(r, now);
-    assert.deepEqual(f, { offBox: "pulled", lastOffBoxAt: r.pulledAt, offBoxMethod: "operator-pull", offBoxPulledAt: r.pulledAt });
+    assert.deepEqual(f, { offBox: "pulled", offBoxMethod: "operator-pull", offBoxPulledAt: r.pulledAt });
     assert.deepEqual(offboxPullAlerts(r, now), []);
     assert.deepEqual(backupAlerts(noDest, now, r), []);
     assert.equal(offboxPullFact(parse(receipt({ pulledAt: iso(now - OFFBOX_PULL_STALE_MS) })), now).offBox, "pulled", "exactly 12 hours is still fresh");
@@ -49,7 +49,7 @@ describe("B-3 / OPS-1: the off-box pull receipt", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "bt-offbox-"));
     try {
       assert.equal(readOffboxPull(root, now), null);
-      assert.deepEqual(offboxPullFact(null, now), { offBox: "none", lastOffBoxAt: null, offBoxMethod: null, offBoxPulledAt: null });
+      assert.deepEqual(offboxPullFact(null, now), { offBox: "none", offBoxMethod: null, offBoxPulledAt: null });
       assert.deepEqual(backupAlerts(noDest, now, null), []);
       fs.mkdirSync(path.join(root, "data"));
       fs.writeFileSync(path.join(root, OFFBOX_PULL_FILE), JSON.stringify(receipt()));
@@ -74,7 +74,7 @@ describe("B-3 / OPS-1: the off-box pull receipt", () => {
     assert.deepEqual(Object.keys(r).sort(), [...OFFBOX_PULL_KEYS].sort());
     assert.deepEqual(Object.keys(r.files).sort(), ["db", "secretsBundle"]);
     const f = offboxPullFact(r, now);
-    assert.deepEqual(Object.keys(f).sort(), ["lastOffBoxAt", "offBox", "offBoxMethod", "offBoxPulledAt"]);
+    assert.deepEqual(Object.keys(f).sort(), ["offBox", "offBoxMethod", "offBoxPulledAt"]);
     assert.ok(!JSON.stringify(f).includes("Mac15"), "the receipt's host stays out of ops.json");
   });
 

@@ -335,6 +335,22 @@ export function parseEspnSeries(id: string): EspnSeries | null {
   if (m) return teamByAbbr(m[1] as LeagueId, m[3]) && outcomeAllowed(m[1] as LeagueId, m[4]) ? { kind: "game", league: m[1] as LeagueId, eventId: m[2], abbr: m[3], outcome: m[4] as Outcome } : null;
   return null;
 }
+/**
+ * HB-188 (eighth pre-launch audit LA8-2; B-21 reopened): the one spelling of an ESPN series id. The parser finds a team by its ESPN
+ * number, so the letters in `espn.team:nfl-ZZZ.21-…` were free text and a copycat could write the live coin's window another way. This
+ * rebuilds the id from what it parsed to (the team's own abbreviation and number, the opponent's; a game's event id as the feed writes it);
+ * a new rule must be written this way (launchPreflight.ts ruleRefusals), and two ids are one window when their canonical forms agree.
+ * null when the id does not parse.
+ */
+export function canonicalEspnSeries(id: string | null | undefined): string | null {
+  const s = id ? parseEspnSeries(id) : null;
+  if (!s) return null;
+  // a game's event id is the feed's own (NBA ids start with zeros: 0022500001), so it is kept as written; the team letters are rebuilt
+  if (s.kind === "game") return gameSeries(s.league, s.eventId, s.abbr, s.outcome);
+  const w = s.window;
+  if (w.kind === "legacy") return teamSeries(s.league, s.abbr, s.outcome, w);
+  try { return teamSeries(s.league, s.abbr, s.outcome, w.kind === "meetings" ? { ...w, oppId: teamIdOf(s.league, w.opp) ?? w.oppId } : w); } catch { return null; }
+}
 export function espnSeriesTitle(s: EspnSeries): string {
   const t = teamByAbbr(s.league, s.abbr)!;
   if (s.kind === "team" && s.window.kind === "meetings") { const o = teamById(s.league, s.window.oppId) ?? teamByAbbr(s.league, s.window.opp); return `${t.name} against ${o?.name ?? s.window.opp}, head to head — ${windowPhrase(s.league, s.window)} (${LEAGUES[s.league].label})`; }
@@ -346,7 +362,7 @@ export function espnSeriesTitle(s: EspnSeries): string {
 // ---- parsing ESPN ---------------------------------------------------------------------------------------------------------
 
 export interface GameSide { abbr: string; /** ESPN team id ("" when the body has none) */ id?: string; /** ESPN's short name and location (TheSportsDB names clubs and colleges this way) */ short?: string; location?: string; /** ESPN's winner flag (a shoot-out decides a level knockout game) */ winner?: boolean | null; name: string; nickname: string; score: number | null; homeAway: "home" | "away"; record: string | null }
-export interface Game { eventId: string; league: LeagueId; /** 2 regular season, 3 postseason (from the schedule it was read from); null from a scoreboard */ seasonType?: 2 | 3 | null; /** ESPN season year of the schedule it was read from */ seasonYear?: number | null; startsAt: string; date: string; name: string; completed: boolean; state: string; detail: string; home: GameSide; away: GameSide }
+export interface Game { eventId: string; league: LeagueId; /** 2 regular season, 3 postseason (from the schedule it was read from); null from a scoreboard */ seasonType?: 2 | 3 | null; /** reviewer G: TheSportsDB's classification before HB-153, set only where it differs (coins launched before HB153_FROM_MS read it) */ seasonTypeBefore153?: 2 | 3; /** ESPN season year of the schedule it was read from */ seasonYear?: number | null; startsAt: string; date: string; name: string; completed: boolean; state: string; detail: string; home: GameSide; away: GameSide }
 
 const num = (v: unknown): number | null => { const x = typeof v === "object" && v !== null ? (v as { value?: unknown }).value : v; const n = Number(x); return x === null || x === undefined || x === "" || !Number.isFinite(n) ? null : n; };
 
@@ -585,13 +601,30 @@ export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[]
   // included) is read by game count (tsdbPostByCount)
   const rows = lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent) && keep(e));
   const byCount = TSDB_POST_BY_COUNT.has(league) ? tsdbPostByCount(league, rows) : new Set<string>();
+  // reviewer G (publishes 102-105): the classification before HB-153 (dd7f0efb), kept on the game where it differs, for coins launched before it
+  const postBefore153 = (e: Record<string, unknown>) => (league === "nba" || league === "nfl" ? nbaRound(e) >= 100 && nbaRound(e) < 500 : /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer");
   const post = (e: Record<string, unknown>) => (league === "nba" || league === "nfl" ? nbaRound(e) >= 100 && nbaRound(e) < 500
     : LEAGUES[league].sport !== "soccer" && (TSDB_POST_ROUND_RE.test(String(e.strRound ?? "")) || TSDB_POST_ROUND_RE.test(String(e.intRound ?? "")) || (nbaRound(e) >= 100 && nbaRound(e) < TSDB_PRESEASON_ROUND) || byCount.has(String(e.idEvent))));
   return rows.map((e) => {
     const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? "")), startsAt = String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`).replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
     const sc = tsdbFieldScores(league, e);   // bug 4: a college row's scores can follow the event's name, not the team fields
-    return mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : TSDB_LIVE_RE.test(String(e.strStatus ?? "")) ? "in" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, sc.home), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, sc.away));
+    const g = mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : TSDB_LIVE_RE.test(String(e.strStatus ?? "")) ? "in" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, sc.home), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, sc.away));
+    const before: 2 | 3 = postBefore153(e) ? 3 : 2;
+    return before !== g.seasonType ? { ...g, seasonTypeBefore153: before } : g;
   });
+}
+/**
+ * Reviewer G (publishes 102-105): HB-153 changed TheSportsDB's postseason reading for every non-soccer league other than the NBA and the
+ * NFL, with no launch-date pin. A coin launched before that commit keeps the reading it was launched under: its schedule is read with the
+ * pre-HB-153 season types (seasonTypeBefore153). The commit time of dd7f0efb.
+ */
+export const HB153_FROM_MS = Date.parse("2026-10-20T09:10:33Z");
+export const withSeasonTypesBefore153 = (games: readonly Game[]): Game[] => games.map((g) => (g.seasonTypeBefore153 ? { ...g, seasonType: g.seasonTypeBefore153 } : g));
+/** Reviewer G: a client that answers season() with the pre-HB-153 season types (the settlement read of a coin launched before it). */
+export function clientBefore153(client: EspnClient): EspnClient {
+  const c = Object.create(client) as EspnClient;
+  c.season = async (...a: Parameters<EspnClient["season"]>) => withSeasonTypesBefore153(await client.season(...a));
+  return c;
 }
 /**
  * ONE LISTING PER GAME (semantics-verify item 79, 2026-10-12). MLB's schedule lists a postponed game twice under one game id: on its
@@ -663,7 +696,7 @@ export const ESPN_UA = "burnticker/0.1";
 export const LISTED_GAME_WINDOW_MS = 6 * 3_600_000;
 
 export interface EspnClientOpts {
-  fetchImpl?: FetchLike; now?: () => number; /** the clock a fetch is stamped with (fetchedAt; default `now`): the season rehearsal stamps its moved clock */ fetchClock?: () => number; minIntervalMs?: number; ttlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null;
+  fetchImpl?: FetchLike; now?: () => number; /** the clock a fetch is stamped with (fetchedAt; default `now`): the season rehearsal stamps its moved clock */ fetchClock?: () => number; minIntervalMs?: number; ttlMs?: number; /** THE LIVE GAME READ ON THESPORTSDB: its lookup cache (default BURNTICKER_TSDB_LIVE_TTL_MS, else TSDB_LIVE_TTL_MS) */ tsdbLiveTtlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null;
   /** One read's limit, headers and body together (default SPORTS_FETCH_TIMEOUT_MS). */
   timeoutMs?: number;
   /** The season schedule file's limit (default SEASON_SCHEDULE_TIMEOUT_MS; isSeasonScheduleUrl). */
@@ -721,6 +754,32 @@ export const liveScheduleLeague = (league: LeagueId): boolean => league === "mlb
 export function liveDayUrl(league: LeagueId, nowMs: number): string | null {
   const day = (t: number) => new Date(t).toISOString().slice(0, 10), today = day(nowMs), yesterday = day(nowMs - 86_400_000);
   return league === "mlb" ? mlbRangeUrl(yesterday, today) : league === "nhl" ? nhlWeekUrl(yesterday) : null;
+}
+/**
+ * THE LIVE GAME READ ON THESPORTSDB (owner 2026-10-20: can TheSportsDB be read faster for tracked NBA and soccer games, within the plan).
+ * The NBA and soccer schedules are TheSportsDB's whole-season files, kept the client's TTL (10 minutes), so a final showed 10 to 25 minutes
+ * after the whistle. While the keeper tracks a game of one of these leagues being played (tsdbLiveLeague; marked per GAME, not per league,
+ * by gameSettle.ts markLiveGames, past its 90-minute first look and not yet listed final), that game's own event lookup (lookup/event/{id},
+ * the row that carries the status; v1 lookupevent.php for a key v2 refuses) is read with a TSDB_LIVE_TTL_MS cache and laid over the season
+ * file's row. One URL per game, shared by every coin on it. A lookup that says final is remembered (liveFinals) until the season file
+ * says final too, so the lookups stop at the final and the listing never goes back to "in play". At most TSDB_LIVE_READS_PER_DAY lookups
+ * per league per UTC day; then the season file's ordinary 10-minute cache is the only view again. The reads go through the TheSportsDB
+ * request budget like every other (apiBudget.ts), are counted with the MLB and NHL live reads (takeLiveReads, the keeper's [live-schedule]
+ * line) and are noted on the TheSportsDB api-budget line (tsdbLiveNote). The keeper only (GameDeps.liveSchedule).
+ */
+export const TSDB_LIVE_TTL_MS = 90_000;
+/** The live lookup cache may be set between these (BURNTICKER_TSDB_LIVE_TTL_MS, or the client option). */
+export const TSDB_LIVE_TTL_BOUNDS_MS = { min: 60_000, max: 600_000 } as const;
+export const TSDB_LIVE_READS_PER_DAY = 600;
+/** Leagues whose tracked games are read this way: the NBA and every soccer competition with a TheSportsDB league id. */
+export const tsdbLiveLeague = (league: LeagueId): boolean => (league === "nba" || LEAGUES[league]?.sport === "soccer") && !!TSDB_LEAGUE[league];
+/** TheSportsDB's event lookup: v2 (key in the header) and v1 (key in the path, never logged). gameSettle.ts reads the same URLs. */
+export const tsdbV2EventUrl = (id: string): string => `https://www.thesportsdb.com/api/v2/json/lookup/event/${encodeURIComponent(id)}`;
+export const tsdbV1EventUrl = (key: string, id: string): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/lookupevent.php?id=${encodeURIComponent(id)}`;
+/** The live lookup cache from the environment, inside TSDB_LIVE_TTL_BOUNDS_MS; unset or unreadable: TSDB_LIVE_TTL_MS. */
+export function tsdbLiveTtlFrom(raw: string | undefined): number {
+  const n = Number((raw ?? "").trim());
+  return raw && raw.trim() && Number.isFinite(n) ? Math.min(TSDB_LIVE_TTL_BOUNDS_MS.max, Math.max(TSDB_LIVE_TTL_BOUNDS_MS.min, Math.round(n))) : TSDB_LIVE_TTL_MS;
 }
 export const SOON_GAME_WINDOW_MS = 24 * 3_600_000;
 export const SOON_FAIL_MAX_MS = 60_000;
@@ -813,6 +872,39 @@ export class EspnClient {
     this.cache = new LruMap<string, { at: number; body: unknown; ttl?: number }>(o.maxCached ?? 500, { maxWeight: SPORTS_CACHE_BYTES, weigh: bodyBytes }); this.failures = new LruMap(500);   // HB-1: the cache by size as well
     this.tsdbKey = o.tsdbKey === undefined ? ((process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null) : o.tsdbKey;
     this.apiSportsKey = o.apiSportsKey === undefined ? ((process.env.BURNTICKER_APISPORTS_KEY ?? "").trim() || null) : o.apiSportsKey;
+    this.tsdbLiveTtl = o.tsdbLiveTtlMs !== undefined ? tsdbLiveTtlFrom(String(o.tsdbLiveTtlMs)) : tsdbLiveTtlFrom(typeof process !== "undefined" ? process.env?.BURNTICKER_TSDB_LIVE_TTL_MS : undefined);
+  }
+  /** THE LIVE GAME READ ON THESPORTSDB (above): the lookup cache; per game, until when it is live; the finals its lookup showed first. */
+  readonly tsdbLiveTtl: number;
+  private liveGames = new Map<string, number>(); private liveFinals = new Map<string, { game: Game; at: number }>();
+  /** Marks one game of a TheSportsDB league (tsdbLiveLeague) live for LIVE_MARK_MS from now: its event lookup is read with the short cache. */
+  markLiveGame(league: LeagueId, eventId: string): void { if (tsdbLiveLeague(league) && eventId) this.liveGames.set(`${league}:${eventId}`, this.now() + LIVE_MARK_MS); }
+  /** Whether a game is marked live now. */
+  isLiveGame(league: LeagueId, eventId: string): boolean { const k = `${league}:${eventId}`, u = this.liveGames.get(k); if (u === undefined) return false; if (this.now() < u) return true; this.liveGames.delete(k); return false; }
+  /** The note on the TheSportsDB api-budget line: the live lookups taken today per league against the cap ("" when none). */
+  tsdbLiveNote(): string {
+    const day = new Date(this.now()).toISOString().slice(0, 10);
+    const parts = [...this.liveDay.entries()].filter(([l, x]) => tsdbLiveLeague(l) && x.day === day && x.n > 0).map(([l, x]) => `${l} ${x.n} / ${TSDB_LIVE_READS_PER_DAY}`);
+    return parts.length ? ` · live game lookups today: ${parts.join(", ")}` : "";
+  }
+  /**
+   * One game of the team's season through its live lookup (THE LIVE GAME READ ON THESPORTSDB). The season file's row when the game is not
+   * marked, the day cap is spent, the lookup fails, or the lookup's row is not this game (another id, league or pair of teams).
+   */
+  private async tsdbLiveGame(league: LeagueId, g: Game, y: number): Promise<Game> {
+    const k = `${league}:${g.eventId}`, kept = this.liveFinals.get(k);
+    if (g.completed || g.state === "post") { if (kept) this.liveFinals.delete(k); return g; }
+    if (kept) return kept.game;
+    if (!this.tsdbKey || !this.isLiveGame(league, g.eventId) || this.liveReadsToday(league) >= TSDB_LIVE_READS_PER_DAY) return g;
+    const id = g.eventId, want = TSDB_LEAGUE[league];
+    const body = await this.tsdbRead(this.tsdbKey, tsdbV2EventUrl(id), (key) => [tsdbV1EventUrl(key, id)], league, { live: true, liveTtlMs: this.tsdbLiveTtl }).catch(() => null);
+    const rows = (body && typeof body === "object" ? (Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][]) : []).flat()
+      .filter((e) => e && typeof e === "object" && String(e.idEvent ?? "") === id && (e.idLeague === undefined || e.idLeague === null || e.idLeague === "" || String(e.idLeague) === want));
+    const row = tsdbGames(league, { events: rows }, y).find((x) => x.eventId === id && x.home.abbr === g.home.abbr && x.away.abbr === g.away.abbr);
+    if (!row) return g;
+    const out: Game = { ...row, seasonYear: g.seasonYear ?? row.seasonYear };
+    if (out.completed) this.liveFinals.set(k, { game: out, at: this.now() });
+    return out;
   }
   /** THE LIVE SCHEDULE READ (above): per league, until when its free official schedule is kept LIVE_SCHEDULE_TTL_MS; and the reads taken so. */
   private liveUntil = new Map<LeagueId, number>(); private liveReads = new Map<LeagueId, number>(); private liveDay = new Map<LeagueId, { day: string; n: number }>();
@@ -841,11 +933,11 @@ export class EspnClient {
    */
   fetchedAt(body: unknown): number | null { return body && typeof body === "object" ? this.fetchedBodies.get(body) ?? null : null; }
   /** GET with the shared politeness and cache; `headers` carry a licensed reader's key (never cached into the key, never logged). */
-  async get(url: string, headers: Record<string, string> = {}, o: { /** the league the read is for (F-4: retried sooner while its next game is near) */ league?: LeagueId; /** this answer's own TTL */ ttlMs?: number; /** THE LIVE SCHEDULE READ: kept LIVE_SCHEDULE_TTL_MS, counted */ live?: boolean; /** a body the provider answered 200 with but that says it failed: its message, else null */ refuse?: (body: unknown) => string | null; /** skip the cache: a game coin's confirming read (gameSettle.ts) must be a new fetch */ fresh?: boolean } = {}): Promise<unknown> {
+  async get(url: string, headers: Record<string, string> = {}, o: { /** the league the read is for (F-4: retried sooner while its next game is near) */ league?: LeagueId; /** this answer's own TTL */ ttlMs?: number; /** THE LIVE SCHEDULE READ: kept LIVE_SCHEDULE_TTL_MS (or liveTtlMs), counted */ live?: boolean; /** a live read's own cache (THE LIVE GAME READ ON THESPORTSDB) */ liveTtlMs?: number; /** a body the provider answered 200 with but that says it failed: its message, else null */ refuse?: (body: unknown) => string | null; /** skip the cache: a game coin's confirming read (gameSettle.ts) must be a new fetch */ fresh?: boolean } = {}): Promise<unknown> {
     const hit = this.cache.get(url);
     // THE LIVE SCHEDULE READ: a free official feed of a league marked live is kept at most LIVE_SCHEDULE_TTL_MS
     const live = !!o.live && !!o.league;
-    if (hit && !o.fresh && this.now() - hit.at < (live ? LIVE_SCHEDULE_TTL_MS : hit.ttl ?? this.ttl)) return hit.body;
+    if (hit && !o.fresh && this.now() - hit.at < (live ? o.liveTtlMs ?? LIVE_SCHEDULE_TTL_MS : hit.ttl ?? this.ttl)) return hit.body;
     // H1: a recent failure is answered from memory (with its own words) until its backoff ends
     const failed = this.failures.get(url);
     if (failed && this.now() < failed.until) throw new Error(failed.message);
@@ -898,15 +990,15 @@ export class EspnClient {
    * One TheSportsDB read with `key`: v2 with the key in the X-API-KEY header; when v2 refuses the key (HTTP 400 / 401 / 403) the v1
    * URLs (key in the path, never logged) are read instead and their event lists merged by idEvent.
    */
-  async tsdbRead(key: string, v2: string, v1: (key: string) => string[], league?: LeagueId): Promise<unknown> {
+  async tsdbRead(key: string, v2: string, v1: (key: string) => string[], league?: LeagueId, live: { live?: boolean; liveTtlMs?: number } = {}): Promise<unknown> {
     if (!this.tsdbV1) {
-      try { return await this.get(v2, { "X-API-KEY": key }, { league }); } catch (e) { if (!/HTTP (400|401|403)\b/.test((e as Error).message)) throw e; this.tsdbV1 = true; }
+      try { return await this.get(v2, { "X-API-KEY": key }, { league, ...live }); } catch (e) { if (!/HTTP (400|401|403)\b/.test((e as Error).message)) throw e; this.tsdbV1 = true; }
     }
     const seen = new Set<string>(), events: Record<string, unknown>[] = [];
     let got = 0, last: Error | null = null;
     for (const u of v1(key)) {
       let body: unknown;
-      try { body = await this.get(u, {}, { league }); got++; } catch (e) { last = e as Error; continue; }
+      try { body = await this.get(u, {}, { league, ...live }); got++; } catch (e) { last = e as Error; continue; }
       for (const list of body && typeof body === "object" ? Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][] : []) for (const ev of list) { const id = String(ev?.idEvent ?? ""); if (id && !seen.has(id)) { seen.add(id); events.push(ev); } }
     }
     if (!got && last) throw last;
@@ -951,6 +1043,13 @@ export class EspnClient {
       const url = liveDayUrl(league, this.now());
       const day = url ? await this.get(url, {}, { league, live: true }).then((b) => (league === "mlb" ? mlbGames(b) : nhlGames(b)), () => null) : null;
       if (day?.length) { const now = new Map(day.map((g) => [g.eventId, g])); games = games.map((g) => { const d = now.get(g.eventId); return d ? { ...d, seasonYear: g.seasonYear ?? d.seasonYear } : g; }); }
+    }
+    // THE LIVE GAME READ ON THESPORTSDB (above): a tracked NBA or soccer game in play, its own lookup at most tsdbLiveTtl old
+    if (tsdbLiveLeague(league) && this.tsdbKey && y === seasonYearAt(league, this.now())) {
+      const out: Game[] = [];
+      for (const g of games) out.push(mine(g) ? await this.tsdbLiveGame(league, g, y) : g);
+      games = out;
+      for (const [k, x] of this.liveFinals) if (this.now() - x.at > 24 * 3_600_000) this.liveFinals.delete(k);   // a season file that never says final
     }
     // a team's season (MLB, NHL) holds only its own games: the league's next game is noted from the whole-league reads only
     if (league !== "mlb" && league !== "nhl" && (year === null || year === seasonYearAt(league, this.now()))) this.noteGames(league, games);

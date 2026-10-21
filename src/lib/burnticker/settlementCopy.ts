@@ -7,6 +7,7 @@
  */
 
 import { SPREAD_DEFICIT_LINE, SPREAD_LINES } from "@/lib/burnticker/spreadCopy";
+import { GAME_FINAL_SOURCES_LINE } from "@/lib/burnticker/gameCoin";
 
 export const SETTLEMENT_PATH = "/burnticker/how-burns-settle";
 export const SETTLEMENT_TITLE = "How burns are settled";
@@ -54,9 +55,10 @@ export function settlementSections(f: SettlementFacts): { intro: string; section
       ] },
       { id: "final", heading: "When a result counts", paragraphs: [
         "A result counts only when it is final.",
-        "A game is read when its feed marks it final, and it counts once a second check five minutes later agrees.",
-        "A game with no Polymarket market and no league feed counts on TheSportsDB alone, once its final score has stood unchanged for 12 hours.",
-        "A game coin burns once the official feed has marked the game final and a second check five minutes later agrees. Every source that reads the game must agree, and a disagreement holds the burn until they do. The game's on-chain settlement counts as one source.",
+        // coordinator 2026-10-20: one game rule, said once (two reads five minutes apart), where each league's final is read
+        // (gameCoin.ts GAME_FINAL_SOURCES_LINE), and the season coins' single-source hold (gameSettle.ts SINGLE_SOURCE_HOLD_MS)
+        `A game coin burns once its final has been read and a second read five minutes later agrees. ${GAME_FINAL_SOURCES_LINE} Every source that reads the game must agree, and a disagreement holds the burn until they do. The game's on-chain settlement counts as one source.`,
+        "For a season coin, a game that no second source can read, because it has no Polymarket market and no league feed, counts on TheSportsDB alone, once its final score has stood unchanged for 12 hours.",
         `A Polymarket market counts only after its on-chain payout is recorded. That follows UMA's dispute window of about ${hours(f.umaHours)}, and longer if a proposal is disputed.`,
         "A scheduled publisher's number counts when it is posted.",
       ] },
@@ -68,9 +70,12 @@ export function settlementSections(f: SettlementFacts): { intro: string; section
         SPREAD_DEFICIT_LINE,
       ] },
       { id: "times", heading: "Typical times after the event", paragraphs: [
-        `Sports results and scheduled data: about ${f.marketPollMin} to ${f.marketPollMin + f.guardMaxMin} minutes.`,
-        "A game settled on TheSportsDB alone: about 12 hours after its final score is first read.",
-        "A game coin, or two teams in one game: about five minutes after the final whistle, once the official feed has marked the game final and a second check five minutes later agrees.",
+        // CH8-5 (Codex comprehensive run): the generic line no longer promises game results in minutes; games have their own lines below
+        `Scheduled data read on a timer (not game results): about ${f.marketPollMin} to ${f.marketPollMin + f.guardMaxMin} minutes after a new figure is posted.`,
+        // eighth pass HS-74 / HB-183 / HB-195: per league, and the market-payout wait said where it applies
+        "A game coin, or two teams in one game: about five to twenty minutes after its score source marks the game final; about five minutes for MLB and NHL games, whose official schedules are read every minute while a tracked game is played.",
+        `A team, season or rivalry coin whose game has a Polymarket market: about ${hours(f.umaHours)} after the game, because it waits for that market's on-chain payout, then a second read five minutes later.`,
+        "A season coin's game that only TheSportsDB can read: about 12 hours after its final score is first read.",
         `Polymarket markets: about ${hours(f.umaHours)}, plus a few minutes.`,
         "$DEFICIT: within about an hour of the read that first sees each new Treasury figure, which is posted on the business day after the day it describes.",
       ] },

@@ -5,7 +5,7 @@
  * future tense about what the platform does next, never the word "audit" for a review, and no venue named that the settlement rules
  * exclude. Text quoted from the Powers Registers is the program's own documentation and is rendered as data.
  */
-import { EARLIER_OPERATOR_CLAUSE, operatorShareClause } from "@/lib/burnticker/feeShareLine";
+import { operatorShareClause } from "@/lib/burnticker/feeShareLine";
 
 /** Private review 10 (2026-10-14): what the keys can and cannot do with funds, said specifically (the checker page and CHECK-THIS-YOURSELF.md). */
 export const POWERS_SCOPE = "These keys cannot withdraw a burn pool to a personal wallet. A finished rule's remainder can be forwarded to its end sink (the winner or $DEFICIT) by the keeper's signed reading; reading signers decide qualifying results; the upgrade authority can replace the program.";
@@ -39,7 +39,10 @@ export const LEDGER_COPY = {
   // and the expenses are operator-entered; each block names its own source.
   intro: "This page lists every lamport the developer fee wallet received or sent, grouped by month, next to what the fee pays for. Each block names where its data comes from: chain reads, the keeper's records, or values the operator entered.",
   walletLine: "The developer fee wallet set in the platform config is",
-  incomeTitle: "Received each month (from chain)",
+  // seventh pass AP7-6: the monthly figure is every lamport that arrived from any sender, not fee income; on mainnet it was 1.82 SOL of
+  // plain transfers while curve fees were about zero, so the heading and the note say what the figure counts
+  incomeTitle: "SOL the fee wallet received and sent, by month (from chain)",
+  incomeNote: "Received is the total SOL that arrived in the wallet in that month, from any sender. It is not the same as fee income: it includes plain transfers into the wallet that are not trading fees. The list of every transaction below names each sender.",
   entriesTitle: "Every transaction (from chain)",
   expensesTitle: "What the fee pays for",
   expensesSource: "These amounts are operator-entered: the operator typed them into config/burnticker/expenses.json. An amount that is not known yet says so.",
@@ -60,7 +63,7 @@ export const OPERATOR_COPY = {
   walletsTitle: "Operator wallets",
   walletsIntro: "Only public keys are shown, each with where it comes from. The devnet keys are copied from the rehearsal records. The mainnet keys are the addresses the operator set up.",
   /** under the mainnet table: what the developer fee wallet receives (the table cell names the role only) */
-  devFeeNote: `The developer fee wallet is also the operator treasury. It receives the 0.25% fee on curve trades, the launch fees, and its share of each graduated pool's swaps: ${operatorShareClause()} on new coins, and ${EARLIER_OPERATOR_CLAUSE}.`,
+  devFeeNote: `The developer fee wallet is also the operator treasury. It receives the 0.25% fee on curve trades, the launch fees, and its share of each graduated pool's swaps: ${operatorShareClause()} on every coin, whenever it was made.`,
   signedTitle: "Signed statement",
   signedPending: "The developer fee wallet listed above is the one that signs it. The text to sign is below.",
   neverBuysTitle: "Never buys a platform coin",

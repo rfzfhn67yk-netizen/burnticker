@@ -235,6 +235,6 @@ describe("HB-100: the smoke's route list checks the proxy's coin gate", { skip }
     assert.match(s.routeProblem(nope, { ...base, status: 200, text: "could not find" }) ?? "", /HTTP 200 \(wanted 404\)/);
     assert.equal(s.serverHtml("a<script type=\"x\">b</script>c<SCRIPT>d</SCRIPT>e"), "ace");
     const src = fs.readFileSync(SMOKE, "utf8");
-    assert.match(src, /\/burnticker\/t\/NOPE answers 404 WITH the words "could not/, "the note in the route list's comment");
+    assert.match(src, /\/burnticker\/t\/NOPE answers 404 \(any 404; since the\n\/\/\s+publish 103 hotfix the server-rendered not-found words are not required/, "the note in the route list's comment (reviewer H)");
   });
 });

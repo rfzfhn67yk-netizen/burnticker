@@ -25,7 +25,7 @@ export const FIELD_HELP = {
   "pair-image": { what: "Only on sites that allow custom images: an https link to a square picture.", does: "It replaces the generated receipt art for this side. By default every coin uses the art made from its rule." },
   // ---- the rule
   side: { what: "Win, loss or draw for a team. YES or NO for a market.", does: "This is the outcome that burns. The other outcomes burn nothing." },
-  yesno: { what: "YES if the thing happens, or NO if it does not.", does: "This is the settled answer that burns. A void or a 50-50 result burns nothing." },
+  yesno: { what: "YES if the event happens, or NO if it does not.", does: "This is the settled answer that burns. A void or a 50-50 result burns nothing." },
   "share-recurring": { what: "1 to 25 percent. 2 percent is suggested.", does: "This share of the burn pool is spent on each event. The pool is fees, not supply. 2 percent is close to the Fed's inflation goal." },
   "share-oneshot": { what: "50 or 100 percent on this site; the API takes 1 to 100 percent.", does: "It is spent once, when the event resolves. The rest of the pool then goes to $DEFICIT's burn, or burns down on this coin over four weeks if the result is voided." },
   "share-binary": { what: "The share of the burn pool, or of the vault tokens, that each settlement spends.", does: "It is fixed in the rule hash at launch. Each settlement spends this much and burns the tokens it gets." },

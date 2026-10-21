@@ -33,8 +33,13 @@ export function seasonOverOrder<T extends { seasonOver?: boolean }>(teams: reado
   return [...teams.filter((t) => !t.seasonOver), ...teams.filter((t) => !!t.seasonOver)];
 }
 
-/** HS-15: the team list's line for a team with no game in the next days (the burn step and the review carry it as byeLine). */
-export const NONE_LISTED_LINE = "No game is listed for this team in the next 8 days. A season coin only burns on games still to come.";
+/**
+ * HS-15: the team list's line for a team with no game in the next days (the burn step and the review carry it as byeLine). HS-67
+ * (seventh pass): the Bills, Jaguars and Chargers on a bye read as if their season were over. When other teams still have regular-season
+ * games listed, the gap is a bye week or a break, and the line says so; when the league lists no game at all, the quieter line is used.
+ */
+export const NONE_LISTED_LINE = "No game in the next 8 days, so this is a bye week or a break in the schedule. The season is not over, and a season coin burns on the games still to come.";
+export const NONE_LISTED_LEAGUE_LINE = "No game is listed for this league in the next 8 days. A season coin only burns on games still to come.";
 export function seasonStatus(abbr: string, games: readonly Game[], readable: boolean): { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null } {
   if (!readable) return { status: "unknown", warning: "This league's schedule could not be read, so whether this team has games left is not known." };
   const open = games.filter((g) => !g.completed);
@@ -46,7 +51,7 @@ export function seasonStatus(abbr: string, games: readonly Game[], readable: boo
   // cancelled or postponed leftover row is not a game still to be played, so it never keeps an eliminated team "in season")
   const toPlay = open.filter((g) => !CANCELLED_RE.test(g.detail) && !/postpon/i.test(g.detail));
   if (toPlay.length && toPlay.every((g) => g.seasonType === 3)) return { status: "over", warning: SEASON_OVER_LINE };
-  return { status: "none-listed", warning: NONE_LISTED_LINE };
+  return { status: "none-listed", warning: toPlay.some((g) => g.seasonType !== 3) ? NONE_LISTED_LINE : NONE_LISTED_LEAGUE_LINE };
 }
 
 export interface SeasonOverRefusal { code: "season-over"; status: 409; message: string; next: { series: string; year: number; label: string; window: "season" | "post" | "meetings" } }

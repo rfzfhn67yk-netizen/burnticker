@@ -159,7 +159,7 @@ describe("F7: the coin page and the review card's retirement facts contradict th
     assert.equal(ruleFacts(JSON.stringify(r), true).dial, "The one result that fires the rule spends 100% of the burn pool on this coin and burns what it gets.");
     assert.equal(ruleFacts(JSON.stringify(r)).dial, "The one result that fires the rule spends 100% of the burn pool on this coin and burns what it gets.", "from the rule alone");
     assert.equal(ruleFacts(JSON.stringify({ ...r, burnTarget: BONK })).dial, "The one result that fires the rule spends 100% of the burn pool on BONK and burns what it gets.");
-    assert.equal(ruleFacts(JSON.stringify(debt())).dial, "Each unit spends 2% of the burn pool on this coin and burns what it gets.", "a repeating rule keeps per unit");
+    assert.equal(ruleFacts(JSON.stringify(debt())).dial, "Each unit spends 2% of what is left in the burn pool on this coin and burns what it gets.", "a repeating rule keeps per unit");
   });
 });
 

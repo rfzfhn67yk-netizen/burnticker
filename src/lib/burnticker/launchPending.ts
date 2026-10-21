@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { LAUNCHLAB_INITIALIZE_V2, LL_SLOTS } from "@/lib/burnticker/launchCreateArgs";
-import type { Registry, TokenRow } from "@/lib/burnticker/registry";
+import { SENT_HOLD_MS, UNPROVEN_DRAFT_PREFIX as UNPROVEN_DRAFT_KEY, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { decodeTokenConfig } from "@/lib/burnReceipts/accounts";
 import { configPda } from "@/lib/burnReceipts/pda";
 
@@ -34,6 +34,41 @@ export const PENDING_CHAIN_CHECKS = 4;
 const CHAIN_CHECK_WINDOW_MS = 25 * 3_600_000;
 
 export const LAUNCH_PENDING_CODE = "launch-pending";
+
+/**
+ * LA7-5 (seventh pre-launch audit; LA6-2): a second registering prepare of the same ticker by the same creator on another mint, while the
+ * first draft was never sent, used to register a second draft: a second paid upload, a second key from the mint bank, and (for a client
+ * that never reports "sent") a second create that can land. A creator's unsent draft of the ticker made in the last OWN_DRAFT_DEDUPE_MS
+ * now refuses it with 409 "draft-exists" and that draft's mint: the client retries with that mint (the creator's own draft is reused, as
+ * before) or waits out the window. After the window a new draft is allowed, so a lost tab never holds the creator's ticker for long.
+ */
+export const OWN_DRAFT_DEDUPE_MS = 30 * 60_000;
+export const DRAFT_EXISTS_CODE = "draft-exists";
+export function draftExistsSentence(ticker: string, mint: string, minutesLeft: number): string {
+  const m = Math.max(1, Math.ceil(minutesLeft));
+  return `You already prepared a launch of $${ticker} that was not sent (mint ${mint}). Finish that one from the tab where you started it, or try again in about ${m} ${m === 1 ? "minute" : "minutes"}. Starting a second one now would pay for a second upload.`;
+}
+/**
+ * B-19 / B-15 parity: anyone can register an UNPROVEN draft under any wallet's address, so an unproven draft never refuses anyone (it
+ * could otherwise keep the real creator out, signed or not). Only a draft the wallet itself proved refuses, for OWN_DRAFT_DEDUPE_MS.
+ */
+export function ownDraftRefusal(d: { registry: Pick<Registry, "tokens"> & Partial<Pick<Registry, "unprovenDraftMints">> }, c: { creator: string; ticker: string; exceptMints: readonly (string | null | undefined)[] }, now = Date.now()): { status: 409; error: string; extra: { code: string; mint: string } } | null {
+  const ticker = c.ticker.trim().replace(/^\$/, "").toUpperCase();
+  const except = new Set(c.exceptMints.filter((m): m is string => !!m));
+  let rows: TokenRow[], unproven: Set<string>;
+  try { unproven = d.registry.unprovenDraftMints?.() ?? new Set(); } catch { unproven = new Set(); }
+  const windowOf = (t: TokenRow): number | null => (unproven.has(t.mint) ? null : OWN_DRAFT_DEDUPE_MS);
+  try {
+    rows = d.registry.tokens().filter((t) => {
+      if (t.creator !== c.creator || t.ticker.toUpperCase() !== ticker || except.has(t.mint) || t.status !== "draft" || t.launchTx) return false;
+      const win = windowOf(t);
+      return win !== null && now - t.createdAt >= 0 && now - t.createdAt < win;
+    });
+  } catch { return null; }
+  if (!rows.length) return null;
+  const t = rows.sort((a, b) => b.createdAt - a.createdAt)[0];
+  return { status: 409, error: draftExistsSentence(ticker, t.mint, (t.createdAt + (windowOf(t) ?? OWN_DRAFT_DEDUPE_MS) - now) / 60_000), extra: { code: DRAFT_EXISTS_CODE, mint: t.mint } };
+}
 
 export function launchPendingSentence(ticker: string, mint: string, landed: boolean): string {
   return `Your launch of $${ticker} is still going: ${landed ? "its coin was already created on chain" : "its create was sent from your wallet a few minutes ago and may still land"} (mint ${mint}). Open the notice at the top of the launch page and press "Check on chain and record" to finish that launch. Starting again would create and pay for a second $${ticker}.`;
@@ -101,6 +136,45 @@ export interface PendingDeps {
   registry: Pick<Registry, "tokens" | "createSends">;
   market?: { getAccountInfo(k: PublicKey): Promise<unknown> } | null;
   program?: { programId: string } | null;
+}
+
+/**
+ * HB-187 (eighth audit LA8-1, 2026-10-20): before a prepare judges a ticker, every unproven draft of it whose reported send is older
+ * than SENT_HOLD_MS (registry.ts) is read on chain once (createdOnChainBy, at most PENDING_CHAIN_CHECKS reads). A create that is there
+ * makes the draft proven, so it holds like any draft; no create leaves it unproven, so it holds only briefly (a report that was signed
+ * but never broadcast never becomes a 24-hour hold). A read that fails (the RPC is down) keeps the hold, but only up to
+ * SENT_HOLD_FAIL_MAX_MS after the send. A host with no chain reader reads nothing and holds nothing after SENT_HOLD_MS. Never throws.
+ */
+export async function proveLandedDrafts(d: Pick<PendingDeps, "market" | "program"> & { registry: Pick<Registry, "tokens" | "createSends" | "markDraftProven" | "markSendUnread" | "markSendRead" | "getStatus"> }, ticker: string, now = Date.now()): Promise<void> {
+  if (!d.market) return;   // no chain reader on this host (tests, local dev): no read, no mark, so no hold after SENT_HOLD_MS
+  try {
+    const want = ticker.trim().replace(/^\$/, "").toUpperCase();
+    // every unproven draft of this ticker with a send older than SENT_HOLD_MS, including one already marked unread (read again)
+    const marked = (m: string) => d.registry.getStatus(UNPROVEN_DRAFT_KEY + m) !== null;
+    const rows = d.registry.tokens().filter((t) => t.ticker.toUpperCase() === want && t.status === "draft" && !t.launchTx && marked(t.mint) && now - t.createdAt < CHAIN_CHECK_WINDOW_MS && d.registry.createSends(t.mint).some((s) => s.sentAt <= now - SENT_HOLD_MS))
+      .sort((a, b) => b.createdAt - a.createdAt).slice(0, PENDING_CHAIN_CHECKS);
+    for (const t of rows) {
+      const seen = await createdOnChainBy(d, t);
+      // landed: proven, holds like any draft; absent: the failed-read hold (if any) ends; no answer: hold up to SENT_HOLD_FAIL_MAX_MS
+      if (seen === true) d.registry.markDraftProven(t.mint);
+      else if (seen === false) d.registry.markSendRead(t.mint);
+      else d.registry.markSendUnread(t.mint, now);
+    }
+  } catch { /* the chain check never blocks a prepare */ }
+}
+
+/**
+ * LA7 fix B (2026-10-20): the format of a signed transaction from its raw bytes: 1 for the version-1 layout (it opens with 0x81, the
+ * message before the signatures), else the message's own prefix (0x80 | version: 0), else "legacy"; null when the bytes cannot be read.
+ */
+export function sentTxFormat(raw: Uint8Array): 0 | 1 | "legacy" | null {
+  if (raw.length === 0) return null;
+  if (raw[0] === 0x81) return 1;
+  const msg = signedMessageBytes(raw, 0);
+  if (!msg || msg.length === 0) return null;
+  if (!(msg[0] & 0x80)) return "legacy";
+  const v = msg[0] & 0x7f;
+  return v === 0 ? 0 : null;
 }
 
 /**

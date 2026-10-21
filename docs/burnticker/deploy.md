@@ -91,9 +91,13 @@ after the daily snapshot step. No new key was added for this: the keeper sends f
 
 How it works:
 
-- **Below its floor, a wallet is filled back to its level**, every cycle if necessary. There is no daily limit and no hourly limit
+- **Below its floor, a wallet is filled back to its level**, every cycle if necessary. There is no per-wallet limit and no hourly limit
   (owner decision 2026-10-19): a burst of launches that empties the Irys balance is refilled on the next cycle. A transfer is always
   the fill level minus the balance, so nothing is overfilled.
+- **One hard daily ceiling (HB-180).** The keeper key sends at most 0.5 SOL in one UTC day to all the wallets together
+  (`dailyCeilingLamports` in `config/burnticker/top-up.json`; `BURNTICKER_TOP_UP_MAX_SOL_PER_DAY`, in SOL, overrides it on a host). The
+  first transfer that would pass it is refused, every top-up stops for the rest of that UTC day and `bt-top-up-ceiling` is pushed.
+  Top-ups start again after 00:00 UTC. A value of the env that does not read keeps the ceiling; nothing turns it off.
 - **The keeper key keeps what it needs for itself.** It never sends SOL that would take it under its floor (0.1 SOL) plus the day's
   expected fees for the live coins. When it cannot refill a wallet without breaking that, it refills nothing it cannot afford and
   raises `bt-keeper-balance-low` with the amount to send. That alert is the one the owner acts on.
@@ -105,8 +109,8 @@ How it works:
   wallet raise `bt-top-up-failed`, which is pushed.
 - **Guards against a runaway (HB-108), not a cap.** A wallet that needed a top-up 3 times inside 6 hours (`drainStop` in
   `config/burnticker/top-up.json`) is treated as draining: the keeper stops refilling that one wallet and pushes `bt-top-up-draining`
-  with the amounts. It resumes on its own 6 hours after the last of those top-ups, or at once after
-  `scripts/ops/top-up.mts --clear-drain <target>`. The step is skipped while `data/PAUSE-burnticker` exists. The leading keeper holds
+  with the amounts (or 6 times inside 24 hours). HB-180: the stop is latched. It does not resume when the window passes; it holds
+  until the operator finds the cause and runs `scripts/ops/top-up.mts --clear-drain <target>`. The step is skipped while `data/PAUSE-burnticker` exists. The leading keeper holds
   `data/burnticker-top-up.lock` (refreshed every cycle), so `top-up.mts --apply` refuses while a keeper leads on the host and under
   PAUSE; a pass by hand needs the keeper stopped, and the keeper skips its step while such a pass holds the lock.
 

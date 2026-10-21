@@ -47,6 +47,14 @@ const day = (ts: number): string => new Intl.DateTimeFormat("en-US", { timeZone:
  */
 export const CAP_MECHANISM_SENTENCE = `The platform authority can raise the cap after a public ${CAP_TIMELOCK_SECS / 3600}-hour wait, and it expires by ${day(DEFAULT_CAP_SUNSET_TS)} at the latest. An audit is not required for either change. SOL above the cap stays in the coin's own fee account and is spent once the cap rises or ends.`;
 
+/**
+ * SEVENTH PASS AP7-7: the two ways a cap changes, said with their own subject. The older "An audit is not required for either." had no
+ * antecedent on the About list and the token page tile.
+ */
+export function capChangeSentence(sunsetTs: number = DEFAULT_CAP_SUNSET_TS): string {
+  return `The platform can raise the cap only after a public ${CAP_TIMELOCK_SECS / 3600}-hour wait, and the cap ends by ${day(sunsetTs)} at the latest. Neither change needs an audit.`;
+}
+
 /** The cap in force, in one sentence, from what was read on chain (null when it was not read). */
 export function capSentence(e: EffectiveCap | null): string {
   if (!e) return `The default burn-pool cap is ${sol(DEFAULT_BURN_POOL_CAP_LAMPORTS.toString())} SOL. ${CAP_MECHANISM_SENTENCE}`;
@@ -66,7 +74,7 @@ export function capSentenceAway(e: EffectiveCap | null): string {
 export function capHeldSentence(queuedSol: string, e: EffectiveCap | null): string {
   if (e && e.capLamports === null) return `${queuedSol} SOL was held above the burn-pool cap, which has ended, so it can be spent now.`;
   const cap = e && e.capLamports !== null ? `the ${sol(e.capLamports)} SOL burn-pool cap` : `the default ${sol(DEFAULT_BURN_POOL_CAP_LAMPORTS.toString())} SOL burn-pool cap`;
-  return `${queuedSol} SOL is held above ${cap} until the cap rises or ends. An audit is not required for either.`;
+  return `${queuedSol} SOL is held above ${cap} until the cap rises or ends. ${capChangeSentence(e ? e.sunsetTs : DEFAULT_CAP_SUNSET_TS)}`;
 }
 
 /**

@@ -30,18 +30,19 @@ export function boundedMemo<T>(o: { freshMs: number; coldWaitMs: number; maxKeys
     running.set(key, p);
     return p;
   };
-  const waitCold = async (key: string, read: () => Promise<T | null>): Promise<T | null> => {
+  const waitCold = async (key: string, read: () => Promise<T | null>, waitMs = o.coldWaitMs): Promise<T | null> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const v = await Promise.race([start(key, read), new Promise<null>((res) => { timer = setTimeout(() => res(null), o.coldWaitMs); })]);
+    const v = await Promise.race([start(key, read), new Promise<null>((res) => { timer = setTimeout(() => res(null), waitMs); })]);
     clearTimeout(timer);
     return v;
   };
   return {
-    async get(key: string, read: () => Promise<T | null>): Promise<T | null> {
+    /** `coldWaitMs` overrides the memo's own cold wait for this call (audit 7 B-10: the creator page streams each coin and waits longer). */
+    async get(key: string, read: () => Promise<T | null>, g: { coldWaitMs?: number } = {}): Promise<T | null> {
       const k = kept.get(key);
-      if (k && k.v === null && now() - k.at >= nullMs) return waitCold(key, read);
+      if (k && k.v === null && now() - k.at >= nullMs) return waitCold(key, read, g.coldWaitMs);
       if (k) { if (now() - k.at >= o.freshMs) void start(key, read); return k.v; }
-      return waitCold(key, read);
+      return waitCold(key, read, g.coldWaitMs);
     },
     clear(): void { kept.clear(); running.clear(); },
   };

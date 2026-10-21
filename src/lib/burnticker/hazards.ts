@@ -138,8 +138,13 @@ export function hazardSeriesFor(kind: HazardKindId, pattern: "every" | "once", v
   if (kind === "wildfire") return { series: pattern === "every" ? "nifc.acres" : `nifc.firesize:${val("acres")}` };
   return { series: pattern === "every" ? "usgs.volcanoraise" : `usgs.volcanowarning:${val("volcano")}` };
 }
+/**
+ * The natural-disaster next-event one-shots. WZ7-8 (seventh pass): NEXT_EVENT_ONE_SHOT_RE also lists defillama.tvlnext (a DeFi TVL
+ * record), which is a next-event one-shot but not a disaster, so the hazard test uses its own list.
+ */
+export const HAZARD_NEXT_EVENT_RE = /^(usgs\.quakenext|nhc\.next|spc\.tornadoday|nifc\.firesize|usgs\.volcanowarning):/;
 /** Whether a series is one of the natural-disaster series (either pattern). */
-export const isHazardSeries = (series: string | null | undefined): boolean => !!series && (NEXT_EVENT_ONE_SHOT_RE.test(series) || !!parseUsgsSeries(series) || !!parseNhcSeries(series) || !!parseSpcSeries(series) || !!parseNifcSeries(series) || !!parseVolcanoSeries(series));
+export const isHazardSeries = (series: string | null | undefined): boolean => !!series && (HAZARD_NEXT_EVENT_RE.test(series) || !!parseUsgsSeries(series) || !!parseNhcSeries(series) || !!parseSpcSeries(series) || !!parseNifcSeries(series) || !!parseVolcanoSeries(series));
 
 const yearOf = (nowMs: number) => new Date(nowMs).getUTCFullYear();
 const clampMag = (m: string): string => { const n = Math.min(8, Math.max(6, Math.round(Number(m) * 2) / 2)); return (USGS_NEXT_MAGNITUDES as readonly string[]).includes(String(n)) ? String(n) : "7"; };

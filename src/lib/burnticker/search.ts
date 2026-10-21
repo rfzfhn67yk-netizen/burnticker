@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
-import { findTeams, gameSeries, noPlayoffs, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, within, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
+import { NBA_OFFICIAL_ANSWERS, findTeams, gameSeries, noPlayoffs, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, within, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { findStations, type NwsMetric } from "@/lib/burnticker/sources/nws";
 import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { gameLine } from "@/lib/burnticker/oneShotEligibility";
@@ -116,6 +116,8 @@ export interface SearchDeps {
   kalshiSearch: ((q: string) => Promise<SeriesSummary[]>) | null; derbyHref: string | null; nowMs: number;
   /** ChatGPT audit 7 item 11: show markets that close within CLOSING_SOON_HOURS (hidden by default; the page's "Show closing soon") */
   closingSoon?: boolean;
+  /** Audit 7 OP7-4: the open election races from a kept index (elections.ts cachedRaces); absent: loadRaces over polyGet on each search. */
+  races?: () => Promise<Race[]>;
 }
 /** Markets closing within this many hours are hidden from search by default (a coin made now would not graduate before the result). */
 export const CLOSING_SOON_HOURS = 48;
@@ -153,9 +155,9 @@ const CHAMP_WORDS = /\b(world series|championship|champions?|title|super ?bowl|s
 /** Who settles a team coin's game, in words (gameSettle.ts): never ESPN. */
 export const SPORTS_SETTLEMENT = "the game's on-chain payout where a market exists, else a licensed final score";
 /** Who settles a single game (a game coin, two teams in one game; owner 2026-10-16) and when, in words. */
-export const GAME_SETTLEMENT_WORDS = "a licensed final score, the league's own feed, or the game's on-chain settlement; it burns once the official feed has marked the game final and a second check five minutes later agrees";
+export const GAME_SETTLEMENT_WORDS = "a licensed final score, the league's own feed, or the game's on-chain settlement; it burns once its final has been read and a second read five minutes later agrees";
 export const GAME_CROSS_WORDS = "every source that answers must agree; a disagreement holds the burn";
-const CROSS_NAME_: Partial<Record<LeagueId, string>> = { nhl: "NHL's official scores", mlb: "MLB's official feed", nba: "NBA's official feed" };
+const CROSS_NAME_: Partial<Record<LeagueId, string>> = { nhl: "NHL's official scores", mlb: "MLB's official feed", ...(NBA_OFFICIAL_ANSWERS ? { nba: "NBA's official feed" } : {}) };   // AP8-3: the NBA feed answers 403, so it is named only while it is counted
 const OFFICIAL_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official postseason results (statsapi.mlb.com)", nba: "the NBA's official results (nba.com)", nhl: "the NHL's official results (nhl.com)", nfl: "the league's official results" };
 const OFFICIAL_SHORT_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official results", nba: "the NBA's official results", nhl: "the NHL's official results", nfl: "the league's official results" };
 const CROSS_NAME = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => CROSS_NAME_[lg as LeagueId] ?? "a second independent source (the on-chain payout and the licensed final confirm each other)" });
@@ -547,6 +549,8 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
   return { ...r, cards, empty: r.empty || cards.length === 0, hiddenClosingSoon: r.cards.length - cards.length };
 }
 const COMPOUND_QUERY_MAX = 400;
+/** The open races: the kept index when the caller passes one (handlers.ts: elections.ts cachedRaces), else read now. */
+const racesOf = (d: SearchDeps): Promise<Race[]> => (d.races ? d.races() : loadRaces(d.polyGet!, d.refuse));
 async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[]; partialNote?: string }> {
   const query = q.trim().slice(0, 160);
   // no meaningful token (every token one or two letters: "e", "el", "el s") → nothing, never a partial match
@@ -581,7 +585,7 @@ async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; car
   const team = (women ? named.find((t) => isWomenLeague(t.league)) : null) ?? named[0] ?? null;
   // a person-looking query ("lakers tonight" is not one; "el sayed" is) goes to the people only when a candidate's name matches it
   let personHit = false;
-  if (team && person && d.venues.polymarket && d.polyGet) { try { personHit = searchRaces(await loadRaces(d.polyGet, d.refuse), query).some((h) => h.score >= 1.5); } catch { personHit = false; } }
+  if (team && person && d.venues.polymarket && d.polyGet) { try { personHit = searchRaces(await racesOf(d), query).some((h) => h.score >= 1.5); } catch { personHit = false; } }
   if (team && !personHit) {
     // a team is named: exactly the team's shapes (recurring, one-shot championship, the next game when both sides are known)
     const tc = await teamIntentCards(focus, team, d);
@@ -592,7 +596,7 @@ async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; car
   cards.push(...feedCards(query, d.feeds));   // a weather query returned above (weatherCards)
   if (d.venues.polymarket && d.polyGet) {
     // an award / event phrase ("oscars", "best picture", "emmys") is never a race query: no candidate cards for it
-    if (!split.phrase) { try { cards.push(...raceCards(await loadRaces(d.polyGet, d.refuse), query)); } catch (e) { errors.push(`elections: ${(e as Error).message.slice(0, 80)}`); } }
+    if (!split.phrase) { try { cards.push(...raceCards(await racesOf(d), query)); } catch (e) { errors.push(`elections: ${(e as Error).message.slice(0, 80)}`); } }
     if (!cards.some((c) => c.score >= 1.5) && !person) {
       try {
         // polySearch.ts: the whole query, the event phrase and the entity; EVERY market of every hit event is read (not markets[0])

@@ -41,7 +41,23 @@ const memoFor = (registry: object) => {
 
 const versionOf = (p: Platform, t: TokenRow): string => { try { return p.registry.pageVersion(t.mint); } catch { return ""; } };
 
-/** The coin's page data from the shared memo, or null while its first read is still running (or after it failed; it is retried). */
-export function rememberedCoinPage(p: Platform, t: TokenRow, now: number, read: CoinPageReader = tokenPageData): Promise<CoinPageData | null> {
-  return memoFor(p.registry).get(`${t.mint}:${versionOf(p, t)}`, () => gate(() => read(p, t, now)));
+/**
+ * The coin's page data from the shared memo, or null while its first read is still running (or after it failed; it is retried).
+ * `waitMs` (audit 7 B-10): how long a coin never read is waited for (default COIN_PAGE_COLD_WAIT_MS); the streamed creator page waits
+ * longer, because its other coins are already on screen.
+ */
+export function rememberedCoinPage(p: Platform, t: TokenRow, now: number, read: CoinPageReader = tokenPageData, o: { waitMs?: number } = {}): Promise<CoinPageData | null> {
+  return memoFor(p.registry).get(`${t.mint}:${versionOf(p, t)}`, () => gate(() => read(p, t, now)), o.waitMs === undefined ? {} : { coldWaitMs: o.waitMs });
+}
+
+/**
+ * Audit 7 B-10 / OP7-5 (2026-10-20): after a deploy the first creator page showed "Still loading this coin" for 7 of 7 coins, because
+ * no coin page had been read yet. A production start reads every live and paused coin into this memo once, server.ts COIN_WARM_DELAY_MS after the
+ * platform is built (behind the home and coins warm builds), through the same gate, so the first visitor finds them read. Never rejects.
+ */
+export async function warmCoinPages(p: Platform, read: CoinPageReader = tokenPageData, now: () => number = Date.now): Promise<number> {
+  let rows: TokenRow[] = [];
+  try { rows = p.registry.tokens().filter((t) => t.status !== "draft" && t.status !== "expired"); } catch { return 0; }
+  const got = await Promise.all(rows.map((t) => rememberedCoinPage(p, t, now(), read, { waitMs: COIN_PAGE_READ_MS }).catch(() => null)));
+  return got.filter((x) => x !== null).length;
 }

@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { eventIdentity } from "@/lib/burnticker/eventIdentity";
 import { teamTicker, type TeamWindow } from "@/lib/burnticker/tickers";
-import { NBA_OFFICIAL_ANSWERS, championSeries, displayAbbr, findTeams, isPairOutcome, LEAGUES, noPlayoffs, outcomeResults, outcomeWords, parseEspnSeries, seriesCannotTie, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
+import { NBA_OFFICIAL_ANSWERS, championSeries, displayAbbr, findTeams, isPairOutcome, LEAGUES, leagueCannotTie, noPlayoffs, outcomeResults, outcomeWords, parseEspnSeries, seriesCannotTie, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 import { fedregEoText, isFedregEo } from "@/lib/burnticker/sources/fedreg";
 import { ll2Text, parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
@@ -155,7 +155,7 @@ export function pairResultSentence(a: { ticker: string; rule: Pick<BurnRule, "ki
 export const CANDIDATES_PAIR_SENTENCE = "Two markets, one race: the winner's coin burns its own pool on the result and takes the loser's pool at the end. If neither candidate wins, both pools go to $DEFICIT's burn.";
 export const GAME_PAIR_SENTENCE = "One game, two teams: the winning team's coin burns its own pool on the result and takes the losing team's coin's pool at the end. After a draw, both pools go to $DEFICIT's burn.";
 export const CANDIDATES_PAIR_DETAIL = "The race counts once, when both candidates' markets are final. If exactly one of them settles YES, that candidate's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. If both settle NO, because a third candidate won, or a market settles 50-50, nothing moves between the two coins.";
-export const GAME_PAIR_DETAIL = "The game counts once the official feed has marked it final and a second check five minutes later agrees. The winning team's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. A postponed game keeps both coins waiting. A cancelled game moves nothing between them, and each coin burns down what is left on itself.";
+export const GAME_PAIR_DETAIL = "The game counts once its final has been read and a second read five minutes later agrees. The winning team's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. A postponed game keeps both coins waiting. A cancelled game moves nothing between them, and each coin burns down what is left on itself.";
 export const settledPairShapeOf = (r: Pick<BurnRule, "pair">): "candidates" | "game" | null => (r.pair?.race ? "candidates" : r.pair?.game ? "game" : null);
 /** The candidates sentence said for two party outcomes (the settlement subject is the party, whoever its nominee is). */
 export const PARTIES_PAIR_SENTENCE = "Two markets, one race, one party each: the coin of the party that wins burns its own pool on the result and takes the other coin's pool at the end. The result is the party's, whoever its nominee is. If neither party wins, both pools go to $DEFICIT's burn.";
@@ -439,9 +439,10 @@ const possessive = (n: string) => (n.endsWith("s") ? `${n}'` : `${n}'s`);
 export const shortDate = (iso: string | null | undefined): string | null => (iso ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00Z` : iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" }) : null);
 const day = shortDate;
 export const tickerFrom = (s: string, suffix = ""): string => { const base = s.toUpperCase().replace(/[^A-Z0-9]/g, ""); return (base.slice(0, Math.max(2, 10 - suffix.length)) + suffix).slice(0, 10); };
-/** HS-35 (hourly run 6): the catalogue's short names for published-data series whose code is not a readable ticker. */
+/** HS-35 (hourly run 6): the catalogue's short names for published-data series whose code is not a readable ticker. WZ7-6 (seventh pass): the
+ * debt feed is $DEBTUP here too, the ticker the launch page gives it, so the server's free-ticker row offers $DEBTUP variants. */
 export const FEED_SHORT_TICKERS: Readonly<Record<string, string>> = {
-  "fred.UNRATE": "UNRATE", "bls.LNS14000000": "UNRATE", "fred.CPIAUCSL": "CPI", "bls.CUSR0000SA0": "CPI", "fred.GFDEBTN": "USDEBT", "treasury.debt": "USDEBT",
+  "fred.UNRATE": "UNRATE", "bls.LNS14000000": "UNRATE", "fred.CPIAUCSL": "CPI", "bls.CUSR0000SA0": "CPI", "fred.GFDEBTN": "USDEBT", "treasury.debt": "DEBTUP",
   "us.debt.total-public-outstanding": "USDEBT", "bls.eggs": "EGGS", "usda.eggs": "EGGS", "bls.APU0000708111": "EGGS", "fred.APU0000708111": "EGGS", "eia.gasoline": "GAS", "bea.gdp": "GDP",
 };
 /**
@@ -577,7 +578,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const opp = c.game ? (L0.sport === "soccer" || s.league === "cfb" || s.league === "mcbb" || s.league === "wcbb" ? c.game.opponent : `the ${c.game.opponent}`) : null;
   const vs = c.game ? ` ${c.game.home ? "against" : "away against"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : " in the one game this coin follows";
   const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "away against"} ${opp}` : " the one game this coin follows"}`;
-  return mk(`${nick} ${two ? (o === "windraw" ? "Win or Draw" : o === "drawloss" ? "Draw or Loss" : "Win or Loss") : o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${GAME_RESULT}.${pens} ${GAME_BURN_LINE} Nothing happens otherwise${outcomeResults(o).includes("draw") ? "" : `, and a ${tie} burns nothing`}.`,
+  return mk(`${nick} ${two ? (o === "windraw" ? "Win or Draw" : o === "drawloss" ? "Draw or Loss" : "Win or Loss") : o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${GAME_RESULT}.${pens} ${GAME_BURN_LINE} Any other result burns nothing on this coin${outcomeResults(o).includes("draw") ? "" : `, and a ${tie} burns nothing`}.`,
     oneShotSentence(r, c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
 }
 
@@ -617,7 +618,7 @@ function meetingsText(r: BurnRule, league: LeagueId, abbr: string, w: Extract<Wi
   // (MEETINGS_LEVEL_VOID_SENTENCE), the penalties sentence is the short form, and the next season is not named (the window says "only").
   // The money path in full is on the review (pairFundsFlow.ts meetingsFundsFlow) and the pair page.
   const pens = o.pens ? ` ${MEETINGS_PENALTIES_SENTENCE}` : "";
-  const rules = `For each of those wins ${scope}, ${spend}, with a receipt on chain. Each game's result comes from ${SPORTS_RESULT}.${check}${pens} When ${oref} win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side.`;
+  const rules = `For each of those wins ${scope}, ${spend}, with a receipt on chain. Each game's result comes from ${SPORTS_RESULT}.${check}${pens} When ${oref} win instead, this coin's share for that game goes to the other coin's burn pool. ${leagueCannotTie(league) ? "A postponed or cancelled game counts for neither side." : "A draw, or a postponed or cancelled game, counts for neither side."}`;
   const windowSentence = `This coin covers the ${L} season only, including ${noPlayoffs(league) ? "every match of the competition" : "the playoffs"}. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. ${MEETINGS_LEVEL_VOID_SENTENCE}`;
   return mk(`${o.nick} vs ${oppNick} ${L}`, meetingsTicker(abbr, w.opp, league), `burns when ${o.ref} beat ${oref}`, rules, windowSentence, "season", "recurring");
 }
@@ -740,14 +741,14 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const titleTeam = ctx.suggest ? null : titleTeamOfPhrase(phrase0);
     if (titleTeam) ctx = { ...ctx, suggest: titleSuggest(titleTeam) };
     return build(id.verb && id.confident ? id.name : "Event Coin", id.verb && id.confident ? id.ticker : tickerFrom(id.ticker), `burns if ${phrase}`,
-      (t) => ctx.stated ? `If it happens, ${spends(r, t)} once, with a receipt on chain. ${statedSentences(ctx.stated, ctx.stated.finalAfter)} Nothing happens otherwise.` : `If it happens, ${spends(r, t)} once, with a receipt on chain. The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}. Nothing happens otherwise.`, oneShotSentence(r, ctx.endsAt), "one-shot");
+      (t) => ctx.stated ? `If it happens, ${spends(r, t)} once, with a receipt on chain. ${statedSentences(ctx.stated, ctx.stated.finalAfter)} If it does not happen, nothing burns on this coin.` : `If it happens, ${spends(r, t)} once, with a receipt on chain. The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}. If it does not happen, nothing burns on this coin.`, oneShotSentence(r, ctx.endsAt), "one-shot");
   }
   // audit 6 item 26: a catalogue source with no template is "this coin's source", never its raw id (the canonical rule carries the id)
   const what = ctx.eventPhrase ?? (r.oracle === "catalogue" ? "this coin's source" : r.series ?? r.market ?? "the source");
   const yes = r.kind !== "binary" || !!r.binary?.onYes;
   const once = windowKindOf(r) === "one-shot";
   return build("Event Coin", tickerFrom(r.oracle === "catalogue" && !ctx.eventPhrase ? r.series ?? "EVENT" : what), r.kind === "binary" ? `burns when ${what} settles ${yes ? "YES" : "NO"}` : `burns on each settled reading of ${what}`,
-    (t) => `${r.kind === "binary" ? `Each time ${what} settles ${yes ? "YES" : "NO"}` : `Each time ${what} settles`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${r.oracle === "polymarket" ? "Polymarket's on-chain payout" : "its published source"}${ctx.crossRead ? `, cross-checked against ${ctx.crossRead}` : ""}. Nothing happens otherwise.`,
+    (t) => `${r.kind === "binary" ? `Each time ${what} settles ${yes ? "YES" : "NO"}` : `Each time ${what} settles`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${r.oracle === "polymarket" ? "Polymarket's on-chain payout" : "its published source"}${ctx.crossRead ? `, cross-checked against ${ctx.crossRead}` : ""}. Any other result burns nothing on this coin.`,
     once ? oneShotSentence(r, ctx.endsAt) : PERPETUAL_SENTENCE, once ? "one-shot" : "recurring");
 }
 

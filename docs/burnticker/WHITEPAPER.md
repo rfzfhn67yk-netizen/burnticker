@@ -37,7 +37,7 @@ Nothing is deployed on mainnet, and no mainnet key exists.
 | Mainnet rehearsal coin | not done | `docs/burnticker/REHEARSAL-RUNSHEET.md` |
 | `pair_curve` program (rivalry pairs: both coins graduate or neither; Anchor 1.2.1) | built 2026-10-10; LiteSVM suite and TS fixtures pass; devnet rehearsal run (one pair graduated to two CPMM pools and registered, one pair voided and sold back); not on mainnet; not reviewed | `docs/burnticker/PAIR-CURVE.md`, `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md` |
 | Program deployment, program id, verifiable hash | devnet: deployed 2026-10-10 (`AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM`, upgrade authority a Squads 2-of-3 vault); mainnet: not done | `docs/burnkeeper/devnet-run.md` §4, `docs/burn-receipts/README.md` §5.4 |
-| Team-coin and matchup settlement (sports) | Nothing is read from ESPN. Schedules come from MLB StatsAPI, the NHL feed and the NBA feed, which are free, and from TheSportsDB v2 for every other league (`BURNTICKER_THESPORTSDB_KEY` is not set yet). Each game settles on its Polymarket on-chain payout where a moneyline market exists, and otherwise on TheSportsDB's final. Every source that reads a game must agree, and a game with no market and no league feed counts on TheSportsDB alone after its final score has stood 12 hours. Every game counts, and a game coin burns, once the official feed has marked the game final and a second check five minutes later agrees; every source that answers must agree, and the game's on-chain settlement counts as one source. The on-chain payout and TheSportsDB confirm each other, the league's official feed is used where it is free, and API-Sports is optional. | `src/lib/burnticker/sources/gameSettle.ts`, `docs/burnticker/SETTLEMENT-COVERAGE.md` |
+| Team-coin and matchup settlement (sports) | Nothing is read from ESPN. Schedules come from MLB StatsAPI and the NHL feed, which are free, and from TheSportsDB v2 for the NBA, the NFL and soccer. Each game settles on its Polymarket on-chain payout where a moneyline market exists, and otherwise on TheSportsDB's final. Every source that reads a game must agree, and for a season coin a game with no market and no league feed counts on TheSportsDB alone after its final score has stood 12 hours. MLB and NHL finals are read from the league's own feed within minutes of the final whistle; NBA, NFL and soccer finals are read from TheSportsDB's schedule, usually a few minutes to a quarter of an hour after it. Every game counts, and a game coin burns, once its final has been read and a second read five minutes later agrees; every source that answers must agree, and the game's on-chain settlement counts as one source. The on-chain payout and TheSportsDB confirm each other, the league's official feed is used where it is free, and API-Sports is optional. | `src/lib/burnticker/sources/gameSettle.ts`, `docs/burnticker/SETTLEMENT-COVERAGE.md` |
 | Second, independent attester | not built | `config/burnticker/transparency.json` (`switchboard-down`, `quorum-1`) |
 | Public repository | public | https://github.com/rfzfhn67yk-netizen/burnticker |
 | Operator contact | set: contact@burnticker.com; security@burnticker.com for reports | `src/lib/burnticker/fees.ts` (`OPERATOR_LINE`), `config/public-repo/overlay/SECURITY.md` |
@@ -142,7 +142,7 @@ sources share a `fact`. Sources that need a key are present but not launchable.
 
 **$DEFICIT is the stated exception.** The operator's own first coin reads U.S. Treasury "Debt to the Penny" (`tot_pub_debt_out_amt`)
 directly. Every full $1,000,000,000 added since the previous business day is one unit. Remainders carry only across consecutive
-increases. Each unit spends 2 % of the burn pool. That is the Federal Reserve's 2 % inflation goal, pointed the other way
+increases. Each unit spends 2 % of what is left in the burn pool. That is the Federal Reserve's 2 % inflation goal, pointed the other way
 (`config/burnkeeper/deficit.rules.json`). The devnet rehearsal coin used 1 %.
 
 **Some topics are refused whatever the source** (`config/burnticker/refuse.json`, applied at create time). They are deaths, violence,
@@ -174,7 +174,7 @@ first sighting. It also measures how often the primary and its cross-read disagr
 On the frozen fixtures of 2026-10-10, five of eleven categories are settleable (`docs/burnticker/SETTLEMENT-COVERAGE.md`). The first is
 Sports. Each game settles on its Polymarket on-chain payout where a moneyline market exists. Otherwise it settles on TheSportsDB under
 its commercial license, confirmed by the league's own feed (MLB, NHL or NBA) or by API-Sports. Nothing is read from ESPN, and schedules
-come from the leagues' own feeds or from TheSportsDB. Every game counts, and a game coin burns, once the official feed has marked the game final and a second check five minutes later agrees. The second is Economics, where four series are each checked against a cross-read.
+come from the leagues' own feeds or from TheSportsDB. Every game counts, and a game coin burns, once its final has been read and a second read five minutes later agrees. MLB and NHL finals are read from the league's own feed within minutes; NBA, NFL and soccer finals come from TheSportsDB's schedule, a few minutes to a quarter of an hour after the final whistle. The second is Economics, where four series are each checked against a cross-read.
 They are `fred.UNRATE` against BLS `LNS14000000`, `fred.CPIAUCSL` against BLS `CUSR0000SA0`, `bls.eggs` against FRED `APU0000708111`,
 and `treasury.debt` against FRED `GFDEBTN` at quarter ends. There were 0 disagreements in every shared month. The third is Financial
 markets, where Pyth is checked against RedStone. The fourth is Weather & Climate, where the NWS climate report is checked against the
@@ -192,7 +192,7 @@ The coverage matrix is served at `GET /api/burnticker/v1/coverage`, drawn on the
 
 A coin settled by a market is read every 5 minutes. A coin settled by a published data feed is read on that feed's own schedule, and a
 feed with no schedule of its own is read every 60 minutes. $DEFICIT reads the Treasury's debt figure at 4:30 p.m. and 8:00 p.m. New
-York time on business days. A result counts only when it is final: a game when its feed marks it final and a second check five minutes later agrees, a Polymarket market only after
+York time on business days. A result counts only when it is final: a game when its final has been read and a second read five minutes later agrees, a Polymarket market only after
 its on-chain payout is recorded, which follows UMA's dispute window of about 2 hours (longer if a proposal is disputed), and a scheduled
 publisher's number when it is posted. The cycle that sees a final result submits the reading and runs the burn in the same pass. Before
 it swaps, the program checks the pool's current rate against its average over the last 10 to 20 minutes, which a trading pool already
@@ -595,8 +595,7 @@ designed values are in `src/lib/burnticker/fees.ts`. The table gives fees in bas
 | Phase, per unit of volume | Raydium | Burnticker (developer / operator) | Burn pool (fee PDA) | Nobody |
 |---|---|---|---|---|
 | Bonding curve (LaunchLab) | 25 bps | 25 bps (platform `feeRate` 2,500 ppm) | 50 bps (`creatorFeeRate` 5,000 ppm, the maximum) | none |
-| After graduation, new coins (CPMM tier 14: 75 bps trade fee + 50 bps creator fee) | 12 bps of trade fee (9 protocol + 3 fund) + 2.5 bps (5 % of the creator fee) | 12.6 bps (20 % of the locked LP's 63 bps, by `claim_lock_fees`) | 50.4 bps (80 % of the locked LP's fees) + 47.5 bps (Raydium's fixed 50 bps creator fee, less 5 %) | none |
-| After graduation, coins created before the change (CPMM tier 9: 25 bps trade fee + 75 bps creator fee) | 4 bps of trade fee (3 protocol + 1 fund) + 3.75 bps (5 % of the creator fee) | 4.2 bps (20 % of the locked LP's 21 bps) | 16.8 bps (80 % of the locked LP's fees) + 71.25 bps (Raydium's fixed 75 bps creator fee, less 5 %) | none |
+| After graduation, every coin (CPMM tier 14: 75 bps trade fee + 50 bps creator fee) | 12 bps of trade fee (9 protocol + 3 fund) + 2.5 bps (5 % of the creator fee) | 12.6 bps (20 % of the locked LP's 63 bps, by `claim_lock_fees`) | 50.4 bps (80 % of the locked LP's fees) + 47.5 bps (Raydium's fixed 50 bps creator fee, less 5 %) | none |
 | Pair curve (`pair_curve`, §5.4) | 0 | 25 bps | 75 bps | none |
 | Pair coin after graduation (CPMM tier 14 for new pairs, public `initialize`, creator fee off) | 12 bps of trade fee | 12.6 bps (20 % of the locked LP's fees) | 50.4 bps (80 % of the locked LP's fees; public pool creation cannot turn the creator fee on) | none |
 
@@ -608,17 +607,17 @@ designed values are in `src/lib/burnticker/fees.ts`. The table gives fees in bas
   to the operator treasury, which on mainnet is the developer fee wallet `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5` (the owner's
   wallet, not the Squads vault). The coin side is burned. No admin key or config field can change the split.
   Per swap after graduation, that was about 21.55 basis points toward the burn on CPMM tier 0 (16.8 + 4.75; it was 4.75 with the LP
-  burned) and 4.2 basis points to the operator. For new coins, **after graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%.** Coins created before the change keep the tier they pinned: about 0.88% to the burn pool, about 0.04% to the operator and about 0.08% to Raydium on tier 9. The treasury is compiled into the mainnet
+  burned) and 4.2 basis points to the operator. For every coin, **after graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%.** The treasury is compiled into the mainnet
   build (the owner chose it on 2026-10-11). A build with no treasury pinned refuses every claim with `TreasuryNotPinned`, and the fees
   stay in the lock.
-- **The Raydium pool tier is 14 for new coins.** The owner decided this, replacing tier 9 (which replaced tier 0). The LaunchLab
+- **The Raydium pool tier is 14 for every coin.** The owner decided this, replacing tier 9 (which replaced tier 0). The LaunchLab
   platform's `cpConfigId` names Raydium CPMM AmmConfig index 14 (`52MZUkNsRYzP4gn2mCaLTVtJQy2tpoF79hp5K1HhAxxX`): a 75 bps trade fee
   and a 50 bps creator fee. Per 1 SOL of volume after graduation, traders pay 125 bps. The burn pool gets 97.90 bps (50.4 from the
   locked LP + 47.5 from the creator fee after Raydium's 5 % share), the operator 12.6 bps, and Raydium 14.50 bps.
-  `burn_receipts` pins the platform's `cpConfigId` into each coin at `initialize_token`, so a coin keeps the tier it pinned. Coins
-  created before the change stay on tier 9 (`LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC`; traders pay 100 bps, about 88.05 to the burn
-  pool, 4.2 to the operator, 7.75 to Raydium), or tier 0 for the earliest, and each coin's page states its own split. The platform
-  admin changes the platform's `cpConfigId` in a separate signed step. Devnet has no matching creator-fee tier, so the rehearsal stays
+  LaunchLab moves a graduating coin into a pool on the platform's current `cpConfigId`, so the platform setting at graduation decides
+  the tier, and the platform admin wallet controls that setting. Coins made before 19 October 2026 recorded tier 9 when they were
+  created and pay 125 bps all the same (owner decision of 2026-10-20 on B-17). The platform admin changes the platform's `cpConfigId` in a
+  separate signed step. Devnet has no matching creator-fee tier, so the rehearsal stays
   on its index 0 (25 bps trade, 25 bps creator fee). The ids and rates live in `src/lib/burnticker/cpmmTier.ts`.
 - **In rivalry pairs, the winner takes the burn.** The owner decided this on 2026-10-11 (section 5.5). In a pair, fees from both coins
   burn the winner's supply. At each result, the loser's burn-pool spend for that result moves to the winner's burn pool

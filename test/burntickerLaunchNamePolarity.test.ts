@@ -5,7 +5,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { noName, ruleSide, suggestionFor, suggestionFromDraft, type SourceSuggestion } from "@/lib/burnticker/namePolarity";
+import { hasNoMarker, noName, ruleSide, suggestionFor, suggestionFromDraft, type SourceSuggestion } from "@/lib/burnticker/namePolarity";
 import { NAME_MAX_BYTES, utf8Bytes } from "@/lib/burnticker/launchFields";
 import type { BurnRule } from "@/lib/burnticker/rules";
 
@@ -67,7 +67,7 @@ describe("PROD-02 v2: the NO marker survives the name length fit", () => {
     const yes = suggestionFor(s, "yes"), no = suggestionFor(s, "no");
     assert.equal(yes.name, src);
     assert.notEqual(no.name, yes.name, "a NO coin never gets the unchanged affirmative name");
-    assert.match(no.name!, / No$/, "the marker survives the fit");
+    assert.ok(hasNoMarker(no.name!), `the marker survives the fit: ${no.name}`);
     assert.ok(utf8Bytes(no.name!) <= NAME_MAX_BYTES, `${no.name} fits in ${NAME_MAX_BYTES} bytes`);
     assert.equal(no.ticker, "NODEMOCRAT");
     assert.deepEqual(suggestionFor(s, "yes"), yes, "YES again gives the original back");
@@ -76,21 +76,25 @@ describe("PROD-02 v2: the NO marker survives the name length fit", () => {
   };
   test("the auditor's three cases", () => {
     assert.equal(keepsNo("Dems sweep"), "Dems sweep No");
-    assert.equal(keepsNo("Ohio Senate and Governor Combo"), "Ohio Senate and Governor No");
-    assert.equal(keepsNo("Democrats win the Ohio election"), "Democrats win the Ohio No");
+    // WZ6-8 / WZ7-4: a name too long for " No" after it takes "No: " in front and keeps its phrase whole
+    assert.equal(keepsNo("Ohio Senate and Governor Combo"), "No: Ohio Senate and Governor");
+    assert.equal(keepsNo("Democrats win the Ohio election"), "No: Democrats win Ohio election");
+    assert.doesNotMatch(keepsNo("Democrats win the Ohio election"), / the \w+ No$/, "the sixth pass's WZ6-8 check");
   });
   test("29-, 30-, 31- and 32-byte source names each keep a clear NO within the limit", () => {
     for (const src of ["Lakers win the West Final 26", "Lakers win the Western Final!", "Lakers win the Western Finals!", "Lakers win the Western Finals!!"].map((x, i) => x.padEnd(29 + i, "x").slice(0, 29 + i))) {
       assert.equal(utf8Bytes(src), src.length);
       keepsNo(src);
     }
-    for (const n of [29, 30, 31, 32]) { const src = "A".repeat(n); assert.equal(keepsNo(src), `${"A".repeat(NAME_MAX_BYTES - 3)} No`); }
+    assert.equal(keepsNo("A".repeat(29)), `${"A".repeat(29)} No`);
+    for (const n of [30, 31, 32]) { const src = "A".repeat(n); assert.equal(keepsNo(src), `No: ${"A".repeat(NAME_MAX_BYTES - 4)}`); }
   });
   test("multibyte names (emoji, accents) keep the marker too and never split a character", () => {
     for (const src of ["Équipe gagne la coupe 🏆🏆", "Señor Peña Gana Élection ñ", "🚀🚀🚀🚀🚀🚀🚀🚀", "Zoë"]) {
       const out = keepsNo(src);
       assert.ok(!out.includes("\uFFFD"));
-      assert.ok(src.startsWith(out.slice(0, -3)), "the base is a whole-character prefix of the source");
+      const base = out.startsWith("No: ") ? out.slice(4) : out.slice(0, -3);
+      assert.ok(src.startsWith(base), "the base is a whole-character prefix of the source");
     }
     assert.equal(noName("Zoë"), "Zoë No");
   });
@@ -101,7 +105,7 @@ describe("PROD-02: the launch page wiring", () => {
   test("the review's effect words the suggestion for the side on screen, and only while the name is automatic (a typed name is kept)", () => {
     assert.match(page, /const sideNow = ruleSide\(ruleShown\);/);
     assert.match(page, /const sug = suggestionFor\(srcSuggest, sideNow\);/);
-    assert.match(page, /const want0 = genTicker \?\? sug\.ticker \?\? text\.ticker, want = want0 \? fixGen\(want0\) : want0, wantName = sug\.name \?\? hazardNameFor\(text\);/);   // HB-30: a refused generated ticker maps to its free one; HB-117: a hazard name follows its swapped ticker
+    assert.match(page, /const want0 = genTicker \?\? sug\.ticker \?\? text\.ticker, want = want0 \? fixGen\(want0\) : want0;/); assert.match(page, /const wantName = sugSwap \? hazardNameFor\(\{ \.\.\.text, ticker: sug\.ticker!, name: sug\.name! \}\) : sug\.name \?\? hazardNameFor\(text\);/);   // HB-189: a swapped card ticker takes its own name   // HB-30: a refused generated ticker maps to its free one; HB-117: a hazard name follows its swapped ticker
     assert.match(page, /if \(nameAuto && wantName && wantName !== name && flow !== "pair"\) setName\(wantName\);/);
     assert.match(page, /if \(tickerAuto && want && want !== ticker\) setTicker\(want\);/);
     assert.match(page, /\}, \[text, step, tickerAuto, nameAuto, ticker, name, flow, genTicker, srcSuggest, sideNow, genFix\]\);/);

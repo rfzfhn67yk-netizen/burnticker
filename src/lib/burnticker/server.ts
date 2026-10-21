@@ -1,4 +1,5 @@
 import "server-only";
+import { readingsAfterLaunch } from "@/lib/burnticker/launchCut";
 import { ruleSideName } from "@/lib/burnticker/coinCard";
 import { coinLifecycleState } from "@/lib/burnticker/decidedWarning";
 import type { MintBankPort } from "@/lib/burnticker/mintBank";
@@ -101,6 +102,10 @@ export interface Platform {
 }
 
 let cached: Platform | null = null;
+/** How long after the platform is built (the web's first request, the start-up warm call) the race index is read (audit 7 OP7-4). */
+export const RACE_WARM_DELAY_MS = 30_000;
+/** How long after the platform is built every live coin's page is read into the shared coin-page memo (audit 7 B-10). */
+export const COIN_WARM_DELAY_MS = 15_000;
 
 /** A derby coin's page on a host whose platform carries no derby adapter: no market, no odds. */
 const derbyPageOracle: OracleAdapter = { id: "derby", searchSeries: async () => [], seriesInfo: async () => null, settledSince: async () => ({ events: [], awaitingFinal: 0, refusals: [], settlementSourceUrl: null }), impliedChance: async () => ({ chance: null, marketTicker: null, closeTime: null, basis: "Burn Derby: no market and no odds" }) };
@@ -181,6 +186,13 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   // HB-97 (hourly run 7): the sample receipts' verdicts are checked once when the web server builds its platform (its first request after
   // start), in the background, so the apex page's "Inspect the devnet receipt" answers from the kept verdict
   if (env.NODE_ENV === "production" && env.BURNTICKER_WARM_RECEIPTS !== "0") setTimeout(() => { void import("@/lib/burnticker/trustpack/api").then((m) => m.warmSampleReceipts()).catch(() => null); }, 0).unref?.();
+  // audit 7 OP7-4 (2026-10-20): the search's race index (19 Gamma pages, about 5 s through the client's one request queue) is read once
+  // RACE_WARM_DELAY_MS after the platform is built, so the first wizard search after a deploy does not wait for it. The delay keeps it
+  // behind the home and coins warm builds, whose polymarket coins share that queue.
+  // audit 7 B-10: every live coin's full page read into the shared coin-page memo (coinPageMemo.ts warmCoinPages), so the first creator
+  // page after a deploy lists each coin with its details instead of "Still loading this coin"
+  if (env.NODE_ENV === "production" && env.BURNTICKER_WARM_COIN_PAGES !== "0") { const p = cached; setTimeout(() => { void import("@/lib/burnticker/coinPageMemo").then((m) => m.warmCoinPages(p)).catch(() => null); }, COIN_WARM_DELAY_MS).unref?.(); }
+  if (env.NODE_ENV === "production" && env.BURNTICKER_WARM_RACES !== "0") { const p = cached; setTimeout(() => { void import("@/lib/burnticker/api/handlers").then((m) => m.warmRaces(p)).catch(() => null); }, RACE_WARM_DELAY_MS).unref?.(); }
   return cached;
 }
 
@@ -207,7 +219,7 @@ export type TokenPageOpts = { live?: boolean; lite?: boolean };
 /** Everything the token page needs, from the registry and the (fake or real) program. No odds are read (owner decision 2026-10-10). */
 export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(), opts: TokenPageOpts = {}): Promise<TokenPageInput> {
   const locked = p.registry.lockedRule(t);
-  const readings = p.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
+  const readings = readingsAfterLaunch(p.registry, t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
   const state = p.registry.state(t.mint);
   const oracle = locked.rule.oracle === "catalogue" ? p.oracles.catalogue : locked.rule.oracle === "polymarket" ? p.oracles.polymarket : locked.rule.oracle === "derby" ? p.oracles.derby ?? derbyPageOracle : p.oracles.kalshi;
   // live: false (the receipts-only API route) skips the two oracle calls; the receipts do not depend on them. Venue display reads

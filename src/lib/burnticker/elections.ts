@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { nameMatch } from "@/lib/burnticker/textMatch";
 import path from "node:path";
-import { parseEventsBody, type GammaEvent, type GammaMarket } from "@/lib/burnticker/oracle/polymarket";
+import { POLY_TTL_MS, parseEventsBody, type GammaEvent, type GammaMarket } from "@/lib/burnticker/oracle/polymarket";
 
 /**
  * ELECTIONS & POLITICS (2026-10-10, the owner's usability test: "If I wanted to add a coin for Abdul El-Sayed to win the Michigan Senate
@@ -96,21 +96,8 @@ export function outcomeCardTitle(r: Race, o: RaceOutcome): string {
  * event ("the Democratic Party wins control of the Senate in the 2026 election"), the name ("Democrats win the Senate") and the ticker
  * ($DEMSENATE, $REPHOUSE). Null for any other race, or an outcome that names neither party.
  */
-export interface ControlIdentity { party: "Democratic" | "Republican"; chamber: "Senate" | "House"; year: string | null; phrase: string; name: string; ticker: string }
-export function controlIdentity(r: Pick<Race, "type" | "title" | "settlesOn">, o: Pick<RaceOutcome, "label" | "question">): ControlIdentity | null {
-  if (r.type !== "control") return null;
-  const chamber = /\bSenate\b/i.test(r.title) ? "Senate" : /\bHouse\b/i.test(r.title) ? "House" : null;
-  const partyOf = (s: string) => (/\bDemocrat/i.test(s) ? "Democratic" : /\bRepublican/i.test(s) ? "Republican" : null);
-  const party = partyOf(o.label) ?? partyOf(o.question);
-  if (!chamber || !party) return null;
-  const year = /\b(20\d\d)\b/.exec(r.title)?.[1] ?? r.settlesOn?.slice(0, 4) ?? null;
-  return {
-    party, chamber, year,
-    phrase: `the ${party} Party wins control of the ${chamber}${year ? ` in the ${year} election` : ""}`,
-    name: `${party === "Democratic" ? "Democrats" : "Republicans"} win the ${chamber}`,
-    ticker: `${party === "Democratic" ? "DEM" : "REP"}${chamber.toUpperCase()}`,
-  };
-}
+export { controlIdentity, type ControlIdentity } from "@/lib/burnticker/controlIdentity";
+import { controlIdentity } from "@/lib/burnticker/controlIdentity";
 /** What the coin settles on, in plain words (a party market labelled with its nominee settles on the party). */
 export function outcomeSettlesNote(r: Race, o: RaceOutcome): string {
   if (r.type === "control") return `It settles on "${o.question}" resolving ${o.yes}.`;
@@ -165,6 +152,37 @@ export async function loadRaces(get: (url: string) => Promise<unknown>, refuse: 
   const key = (r: Race) => `${r.type}:${r.state}:${r.district}`, have = new Set(out.map(key));
   for (const r of individual) if (!have.has(key(r))) { have.add(key(r)); out.push(r); }
   return out;
+}
+
+/**
+ * THE PARSED RACE INDEX, KEPT (audit 7 OP7-4, 2026-10-20). The wizard search answered in 5 to 7 s on the host and about 5 s locally:
+ * every free-text search re-read the whole index, 19 Gamma pages of about 5 MB each, one after another 250 ms apart (the client's
+ * politeness gap), and parsed about 90 MB of JSON. The client's response cache could not keep them: its 64 MB weight cap
+ * (lru.ts POLY_CACHE_BYTES, HB-1) is smaller than the index, so each page pushed an earlier one out and the next search missed them all.
+ *
+ * Now the races themselves (a few hundred small objects) are kept per Polymarket client for RACES_FRESH_MS, the same 10 minutes as the
+ * Gamma cache, so a search's races are never older than before. Past that the kept index is still served for up to RACES_MAX_STALE_MS
+ * while one re-read runs behind the answer; older than that, or with nothing kept, the caller waits for the read as before (and sees
+ * its error). Concurrent callers share one read. A re-read that fails keeps the last index.
+ */
+export const RACES_FRESH_MS = POLY_TTL_MS, RACES_MAX_STALE_MS = 30 * 60_000;
+interface RacesMemo { at: number; races: Race[] | null; inflight: Promise<Race[]> | null }
+const racesMemo = new WeakMap<object, RacesMemo>();
+export function cachedRaces(owner: object, load: () => Promise<Race[]>, o: { now?: () => number } = {}): Promise<Race[]> {
+  const now = o.now ?? Date.now;
+  let m = racesMemo.get(owner);
+  if (!m) { m = { at: 0, races: null, inflight: null }; racesMemo.set(owner, m); }
+  const memo = m;
+  const age = memo.races ? now() - memo.at : Infinity;
+  if (memo.races && age < RACES_FRESH_MS) return Promise.resolve(memo.races);
+  if (!memo.inflight) {
+    const p = load().then((races) => { memo.races = races; memo.at = now(); return races; });
+    memo.inflight = p;
+    const clear = () => { if (memo.inflight === p) memo.inflight = null; };
+    p.then(clear, clear);
+  }
+  if (memo.races && age < RACES_MAX_STALE_MS) { memo.inflight.catch(() => { /* the kept index stays; the next caller tries again */ }); return Promise.resolve(memo.races); }
+  return memo.inflight;
 }
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();

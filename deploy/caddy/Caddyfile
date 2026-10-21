@@ -26,8 +26,13 @@
 # passes the PUBLIC Host through unchanged by default — keep it that way: never add `header_up Host {upstream_hostport}` (a loopback Host
 # is what a trusted-host check would trust), never widen the @app matcher to /api/* or /. The matcher is the second lock, not the only one.
 #
-# LOGGING: no access log is configured (Caddy's default) — client IPs are not recorded. Enable `log` under a site only if needed and
-# know that it records remote_ip in JSON. Caddy provisions TLS (ACME HTTP-01 / TLS-ALPN on 80/443); with Cloudflare in front, keep the
+# LOGGING (OP7-10, seventh pre-launch audit; OP6-4): the burnticker.com site keeps an access log WITHOUT visitors' addresses, so outages
+# and the 503 fallback answers can be counted. Every address field is deleted (remote_ip, client_ip, the port), every request and
+# response header is deleted (Cloudflare's CF-Connecting-IP and X-Forwarded-For, the user agent, the referrer, cookies), and in the
+# request path any query string and any base58 address (a wallet on /burnticker/creator/<wallet>, a mint) is replaced by "*". What is
+# left: the time, the method, the host, the masked path, the status, the size and the duration. The privacy page's sentence "This
+# site's own web server keeps no log of visitors' addresses" stays true. Other sites keep no access log. After an edit:
+# `caddy validate --config /etc/caddy/Caddyfile` before `systemctl reload caddy` (the filter syntax is Caddy 2's `format filter`). Caddy provisions TLS (ACME HTTP-01 / TLS-ALPN on 80/443); with Cloudflare in front, keep the
 # records DNS-only (grey cloud) until the first certificate is issued, then proxy them with SSL mode "Full (strict)".
 
 (security) {
@@ -85,7 +90,7 @@
 #   frames   none; nothing may frame it
 # connect-src is the lock that matters: even if a data source were spoofed, the page cannot read from or send to any other host.
 (deficit_csp) {
-	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://burnticker.com; img-src 'self' data: https://burnticker.com; connect-src 'self' https://burnticker.com https://api.fiscaldata.treasury.gov https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://burnticker.com; img-src 'self' data: https://burnticker.com; connect-src 'self' https://burnticker.com https://api.fiscaldata.treasury.gov https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://burnticker.com; object-src 'none'"
 }
 
 (static_site) {
@@ -104,6 +109,26 @@
 
 {$BURNTICKER_DOMAIN:burnticker.com} {
 	encode zstd gzip
+	# OP7-10: the access log without addresses (the header's LOGGING note)
+	log {
+		output file /var/log/caddy/burnticker-access.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				request>headers delete
+				request>tls delete
+				resp_headers delete
+				user_id delete
+				request>uri regexp "(\?.*$)|[1-9A-HJ-NP-Za-km-z]{32,44}" "*"
+			}
+		}
+	}
 	# Audit 2026-10-15 M3: a request body is cut at 8 MB. The app caps JSON at 6.5 MB (api/http.ts MAX_JSON_BODY, a rivalry pair's two
 	# 2 MB images as base64 fit under it), so this line only stops larger uploads before they reach the app. Keep it above MAX_JSON_BODY.
 	request_body {

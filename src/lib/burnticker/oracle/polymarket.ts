@@ -413,6 +413,8 @@ export class PolymarketClient implements OracleAdapter {
   // HB-1 (2026-10-19): and bounded by size (POLY_CACHE_BYTES of JSON): 1,000 whole Gamma answers outgrew the web's 2 GB heap
   private cache = new LruMap<string, { at: number; body: unknown }>(1_000, { maxWeight: POLY_CACHE_BYTES, weigh: bodyBytes });
   private chainCache = new LruMap<string, { at: number; r: ConditionResolution }>(5_000);
+  /** The Gamma request queued or in flight per URL (get): a second caller of the same URL joins it. */
+  private inflight = new Map<string, Promise<unknown>>();
   private chainTtl: number;
   /** One RPC read per condition at a time: concurrent callers share it. */
   private chainInflight = new Map<string, Promise<ConditionResolution>>();
@@ -451,11 +453,22 @@ export class PolymarketClient implements OracleAdapter {
     this.refuse = o.refuse ?? null;
   }
 
-  /** GET with the 10-minute cache; one request in flight at a time, spaced by minInterval. */
+  /**
+   * GET with the 10-minute cache; one request in flight at a time, spaced by minInterval.
+   *
+   * Audit 7 OP7-5 (2026-10-20): concurrent callers of one URL share one request. A cold start's home and coins builds read the same two
+   * markets from several places at once, and each caller queued its own request behind the others: 17 Gamma requests, 250 ms apart, for
+   * 4 distinct URLs (4.4 s of the cold build locally; on the host the polymarket coins then missed the build's deadline). A caller
+   * whose turn comes after the same URL was answered is served from the cache instead of sending it again.
+   */
   async get(url: string, ttlMs = this.ttl): Promise<unknown> {
     const hit = this.cache.get(url);
     if (hit && this.now() - hit.at < ttlMs) return hit.body;
+    const joined = this.inflight.get(url);
+    if (joined) return joined;
     const run = async (): Promise<unknown> => {
+      const again = this.cache.get(url);
+      if (again && this.now() - again.at < ttlMs) return again.body;
       const wait = this.lastAt + this.minInterval - this.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.lastAt = this.now();
@@ -472,6 +485,9 @@ export class PolymarketClient implements OracleAdapter {
     };
     const p = this.chain.then(run, run);
     this.chain = p.then(() => undefined, () => undefined);
+    this.inflight.set(url, p);
+    const clear = () => { if (this.inflight.get(url) === p) this.inflight.delete(url); };
+    p.then(clear, clear);
     return p;
   }
 

@@ -61,8 +61,21 @@ function distinctCodes(s: ElectionSideWords): ElectionSideWords {
 }
 
 /** The pair's side words, coin names and tickers ("Democrats vs Republicans", $DEMVREP and $REPVDEM). */
-export function electionPairIdentity(labelA: string, labelB: string): { words: { a: string; b: string }; names: { a: string; b: string }; tickers: { a: string; b: string } } {
+export function electionPairIdentity(labelA: string, labelB: string, raceTitle?: string | null): { words: { a: string; b: string }; names: { a: string; b: string }; tickers: { a: string; b: string } } {
   const s = electionSideWords(labelA, labelB);
   const names = pairNames(s.a.word, s.b.word, { a: s.a.code, b: s.b.code });
+  // WZ7-11 (seventh pass): the Senate and the House party-control pairs both came out "Democrats vs Republicans", $DEMVREP. A party pair
+  // whose race names a chamber says it: "Democrats vs Republicans, Senate", $DEMSENVREP.
+  const ch = partyOf(labelA) && partyOf(labelB) ? chamberOf(raceTitle ?? "") : null;
+  if (ch) {
+    const named = (x: string) => (new TextEncoder().encode(`${x}, ${ch.word}`).length <= 32 ? `${x}, ${ch.word}` : x);
+    return { words: { a: s.a.word, b: s.b.word }, names: { a: named(`${s.a.word} vs ${s.b.word}`), b: named(`${s.b.word} vs ${s.a.word}`) }, tickers: { a: `${s.a.code}${ch.code}V${s.b.code}`.slice(0, 10), b: `${s.b.code}${ch.code}V${s.a.code}`.slice(0, 10) } };
+  }
   return { words: { a: s.a.word, b: s.b.word }, names, tickers: { a: `${s.a.code}V${s.b.code}`.slice(0, 10), b: `${s.b.code}V${s.a.code}`.slice(0, 10) } };
+}
+/** The chamber a party-control race is about ("Which party will win the Senate in 2026?"), or null. */
+export function chamberOf(title: string): { word: string; code: string } | null {
+  if (/\bsenate\b/i.test(title)) return { word: "Senate", code: "SEN" };
+  if (/\bhouse\b/i.test(title)) return { word: "House", code: "HOU" };
+  return null;
 }

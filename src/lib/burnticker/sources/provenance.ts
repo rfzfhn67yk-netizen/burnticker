@@ -51,13 +51,13 @@ export function sportsProvenanceLine(): string {
 export const SINGLE_SOURCE_LINE = "A game with no Polymarket market and no league feed settles on TheSportsDB alone, once its final score has stood unchanged for 12 hours.";
 /**
  * Owner 2026-10-16: ONE burn schedule for every single-game coin (a game coin, and both coins of two teams in one game). The burn waits
- * until the official feed has marked the game final and a second check five minutes later agrees (owner 2026-10-20; gameSettle.ts gameSchedule); every source that answers must agree. The on-chain settlement counts as one source.
+ * until its final has been read and a second read five minutes later agrees (owner 2026-10-20; gameSettle.ts gameSchedule); every source that answers must agree. The on-chain settlement counts as one source.
  */
 export { GAME_AGREE_LINE, GAME_BURN_LINE } from "@/lib/burnticker/gameCoin";
 /** Where a game coin's result comes from, in the order the reading names them (gameSettle.ts: the first score read, the on-chain settlement last). */
 export const GAME_SETTLEMENT = "a licensed final score from TheSportsDB, the league's own feed where it has one, or the game's on-chain settlement where Polymarket lists a market";
 /** When a team coin's game is read and counts (owner 2026-10-20: no six-hour wait; a second check five minutes after the final). */
-export const GAME_TIMING_LINE = "Each game is read when the official feed marks it final, and it counts once a second check five minutes later agrees.";
+export const GAME_TIMING_LINE = "Each game is read when its final is posted, and it counts once a second read five minutes later agrees.";
 /** When a team coin's game counts and who must agree, in four sentences (a game coin's own schedule is said only on game coins: GAME_BURN_LINE). */
 export function sportsConfirmationLine(): string {
   return `${GAME_TIMING_LINE} Where a second source can read the game, such as ${list(OFFICIAL_FEEDS)}, it must agree. ${SPORTS_PROVENANCE.confirmationOther} ${SINGLE_SOURCE_LINE}`;

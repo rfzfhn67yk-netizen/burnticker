@@ -42,6 +42,14 @@ export function CurrentStatusSummary({ card, compact = false }: { card: string; 
       <p className="text-xs text-neutral-200">{s.lines[0] ?? s.host.line} <a className="underline" href="/burnticker/trust#current-status">The full current status is on the Trust page.</a></p>
     </section>
   );
+  return <CurrentStatusBody s={s} card={card} />;
+}
+
+/**
+ * TS7-3 (seventh pre-launch audit; HB-143): the full block as a pure component of the answer, so a test renders it with the public
+ * current-status answer (withoutRepoPaths drops `report`, `path` and `source`) and a render-time crash is caught before a deploy.
+ */
+export function CurrentStatusBody({ s, card }: { s: CurrentStatus; card: string }) {
   return (
     <section className={card} aria-label="Current status" id="current-status" data-current-status>
       <h2 className="font-medium">Current status <span className="text-xs font-normal text-neutral-500">Checked on {utcDateTime(s.checkedAt)}. Chain read on {utcDateTime(s.readAt)}.</span></h2>

@@ -191,6 +191,15 @@ the change keep the tier they pinned (tier 9 for most, tier 0 for the earliest),
 The platform admin changes the LaunchLab platform's `cpConfigId` in a separate signed step
 (`scripts/launchlab-platform-cp-config.mts`). Ids and rates: `src/lib/burnticker/cpmmTier.ts`; every page number derives from it.
 
+**Correction, 2026-10-20 (seventh audit B-17 / HB-167).** The paragraph above assumed a coin graduates into the tier it pinned. It does
+not: LaunchLab migrates a coin into the platform's `cpConfigId` at migration time, whatever the coin pinned (468 of 469 decoded mainnet
+migrations between 10-04 and 10-20 used the platform's then-current config). After the switch, every coin pinned to tier 9 would migrate
+into a tier-14 pool, and the deployed burn program refuses to register a pool on another tier than the pin, so none of them could
+register a pool. No coin was near its raise. The owner chose to fix the program rather than switch the platform back: `register_pool`
+accepts the pool LaunchLab actually made (the pool PDA of its own AmmConfig, once LaunchLab marks the coin migrated and the Fee Key
+names that pool), and keeps the strict check for `replace_pool`. The fix passed an isolated devnet rehearsal on 2026-10-20 and waits for
+the specialist review and the Squads upgrade. Until it is deployed, the platform switch back to tier 9 is the prepared fallback.
+
 | Per swap after graduation (CPMM tier 14) | bps of volume | goes to |
 |---|---|---|
 | LP fees (84 % of the 75 bps trade fee) | 63 | the locked LP's Fee Key, split by `claim_lock_fees`: 50.4 burn pool, 12.6 operator |

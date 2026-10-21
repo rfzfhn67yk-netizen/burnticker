@@ -9,7 +9,7 @@ import { hostIdHash, LeaderLock, roleConfigFromEnv, type FetchJson, type RoleDec
 import type { FenceReport } from "@/lib/burnticker/ops/readingFence";
 import { checkUploadBalance, latestSnapshot, snapshotIfDue } from "@/lib/burnticker/ops/snapshot";
 import path from "node:path";
-import { KEEPER_LOCK_TTL_MS, releaseTopUpLock, takeTopUpLock, TOP_UP_LOCK_FILE, type TopUpRunResult } from "@/lib/burnticker/ops/topUp";
+import { KEEPER_LOCK_TTL_MS, releaseTopUpLock, takeTopUpLock, topUpPaths, type TopUpRunResult } from "@/lib/burnticker/ops/topUp";
 import { buildOpsStatus, programStatuses, writeOpsStatus, type OpsStatusJson } from "@/lib/burnticker/ops/status";
 
 /**
@@ -41,7 +41,7 @@ export class KeeperOps {
     this.hostId = o.hostId ?? hostIdHash();
     let vb: VerifiedBuild | null = null;
     try { vb = loadVerifiedBuild(o.root); } catch { vb = null; }
-    this.o = { registry: o.registry, siteDir: o.siteDir, cluster: o.cluster, log: o.log, uploader: o.uploader, now, startedAt: now(), verifiedBuild: vb, snapshots: o.snapshots !== false, topUp: o.topUp ?? null, topUpLockFile: o.topUpLockFile ?? path.join(o.root ?? process.cwd(), TOP_UP_LOCK_FILE) };
+    this.o = { registry: o.registry, siteDir: o.siteDir, cluster: o.cluster, log: o.log, uploader: o.uploader, now, startedAt: now(), verifiedBuild: vb, snapshots: o.snapshots !== false, topUp: o.topUp ?? null, topUpLockFile: o.topUpLockFile ?? topUpPaths(o.root ?? process.cwd()).lock };
     this.lock = new LeaderLock(roleConfigFromEnv(o.env, o.root), { now, fetchImpl: o.fetchImpl, hostId: this.hostId, signer: o.signer ?? null, log: o.log });
   }
   /** The banner fragment for the keeper's start line. */

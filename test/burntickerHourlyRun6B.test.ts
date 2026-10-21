@@ -102,7 +102,7 @@ describe("HB-56: the lock is said by the coin's own state", () => {
   });
   test("the token page passes the coin's lock state to both", () => {
     const src = read("src/lib/burnticker/tokenPage.ts");
-    assert.match(src, /feeSplitSentence\(i\.chain\.cluster, i\.chain\.program\?\.config\?\.cpConfig, \{ tierUnread, graduated: lpLockedPct !== null \}\)/);
+    assert.match(src, /feeSplitSentence\(i\.chain\.cluster, null, \{ tierUnread, graduated: lpLockedPct !== null \}\)/);
     assert.match(src, /lp: \{ \.\.\.lp, line: lpPolicyLineFor\(lpLockedPct\) \}/);
   });
 });

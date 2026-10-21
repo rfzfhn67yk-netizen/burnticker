@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>$DEFICIT — burns when the debt rises</title>
-<meta name="description" content="$DEFICIT is a Solana memecoin whose supply burns when the U.S. national debt rises. Every $1,000,000,000 of new debt on Treasury's Debt to the Penny starts a buyback and burn. The token's own trading fees pay for it, and each burn leaves a receipt on chain.">
+<meta name="description" content="$DEFICIT is a Solana memecoin whose supply burns when the U.S. national debt rises. Each $1,000,000,000 of new debt on Treasury's Debt to the Penny is one unit, and the token's own trading fees pay for each burn. Until its curve fills and its pool is registered, units are queued and nothing burns. Each burn leaves a receipt on chain.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#e7e5df" media="(prefers-color-scheme: light)">
 <meta property="og:title" content="$DEFICIT — burns when the debt rises">
-<meta property="og:description" content="For every $1B the U.S. borrows, $DEFICIT's own trading fees buy back and burn the token. Each burn leaves a receipt on chain. It is a memecoin, and the rule says what supply does, not what price does.">
+<meta property="og:description" content="For every $1B the U.S. borrows, $DEFICIT's own trading fees pay to burn some of the token, once its curve fills and its pool is registered. Until then each $1B is queued and nothing burns. Each burn leaves a receipt on chain. It is a memecoin, and the rule says what supply does, not what price does.">
 <meta property="og:image" content="https://deficit.burnticker.com/og.png">
 <meta property="og:url" content="https://deficit.burnticker.com/">
 <meta name="twitter:image" content="https://deficit.burnticker.com/og.png">
@@ -417,8 +417,8 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
         <span class="stamp">A memecoin with a receipt for every burn.</span>
       </div>
     </div>
-    <p class="rule"><strong>The rule.</strong> Each business day, the Treasury publishes the national debt. Every full $1B it rose since the previous reading counts as one unit. Each unit spends 2% of the token's own burn pool, buying $DEFICIT on its Raydium pool. Over a day, the share spent is 1 − 0.98<sup>units</sup>. The figure is total public debt outstanding, so a day's change is new borrowing minus debt repaid. The on-chain program burns everything bought in the same instruction, and the burn leaves a receipt on chain.</p>
-    <p class="replay" data-spread>$DEFICIT's burns are not spread out this way. Its keeper runs one burn for each reading, up to the same 2% of the trading pool's SOL, and anything above that carries to its next run.</p>
+    <p class="rule"><strong>The rule.</strong> Each business day, the Treasury publishes the national debt. Every full $1B it rose since the previous reading counts as one unit. Each unit spends 2% of what is left in the token's own burn pool, swapping it for $DEFICIT on its Raydium pool. Over a day, the share spent is 1 − 0.98<sup>units</sup>. The figure is total public debt outstanding, so a day's change is new borrowing minus debt repaid. The on-chain program burns everything bought in the same instruction, and the burn leaves a receipt on chain.</p>
+    <p class="replay" data-spread>Creator coins on Burnticker spread a large burn into smaller pieces at least 20 minutes apart over six-hour windows. $DEFICIT burns each reading in one go: its keeper runs one burn for each reading, up to 2% of the trading pool's SOL, and anything above that carries to its next run.</p>
     <p class="replay">Why 2%: the number is a nod to the Federal Reserve's 2% inflation goal. That is only where the dial came from. The rule reads nothing from the Fed.</p>
     <div class="cta">
       <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trading not available until launch</a>
@@ -473,6 +473,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       </div>
     </div>
     <p class="notice" id="notice"></p>
+    <noscript><p class="notice show">JavaScript is off, so these figures are the ones the server wrote into the page when it was last published, about once a minute. A dash is a figure only the page's script fills in. The raw files are status.json and burns.json, next to this page.</p></noscript>
   </section>
 
   <section class="wrap" id="today">
@@ -534,7 +535,7 @@ burn  = every token the swap delivered</pre>
   <section class="wrap" id="money">
     <h2><span>§6</span>Who pays for the burn</h2>
     <div class="flow">
-      <div class="f"><div class="t">1. Trading fees</div><p>Every trade of $DEFICIT pays a creator fee on the launch venue. Eligible trading fees fund the coin's burn pool. On the curve, that is the creator fee. After graduation, it is Raydium's creator fee plus 80% of the SOL side of the locked pool's liquidity fees. In all, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.</p></div>
+      <div class="f"><div class="t">1. Trading fees</div><p>Every trade of $DEFICIT pays a creator fee on the launch venue. Eligible trading fees fund the coin's burn pool. On the curve, that is the creator fee. After graduation, it is Raydium's creator fee plus 80% of the SOL side of the locked pool's liquidity fees. In all, every swap pays 1.25% (Raydium fee tier 14): about 0.98% goes to the coin's burn pool and 0.13% to the operator, which is 20% of the locked pool's liquidity fees, and Raydium keeps 0.15%. $DEFICIT was made before 19 October 2026 and recorded tier 9 then, but it graduates into a tier 14 pool and pays 1.25% all the same.</p></div>
       <div class="f"><div class="t">2. The fee pool</div><p>Fees are claimed into the burn pool. The pool is an account of the on-chain program. No instruction pays it out to a person or to the operator: the program spends it only on buying $DEFICIT and burning what it bought, and it never sells. Any seed deposit is shown with its transaction. The program itself can still be upgraded through the operator's Squads vault, and the Burnticker trust page says who can approve an upgrade.</p><p class="addr" id="feeWallet"></p></div>
       <div class="f"><div class="t">3. The swap</div><p>On a day with units, the program spends 1 − 0.98<sup>units</sup> of the pool buying $DEFICIT on the token's Raydium CPMM pool. If that amount is under the floor of about $1, the program buys nothing and the pool keeps the money.</p></div>
       <div class="f"><div class="t">4. The burn</div><p>Every token received is burned in the same instruction, with the memo. Holders' balances are never touched. There is no delegate, no transfer hook and no mint authority.</p><p class="addr" id="mintAddr"></p></div>
@@ -574,7 +575,7 @@ burn  = every token the swap delivered</pre>
     <div class="sh-rule"></div>
     <dl class="sh-rows">
       <div><dt>OPERATOR</dt><dd><span data-operator-line>Operated by one independent operator (United States) — contact: contact@burnticker.com</span> <a href="https://burnticker.com/burnticker/trust">What the operator controls</a></dd></div>
-      <div><dt>DEV FEE</dt><dd><span data-fee-line>Burnticker takes 0.25% of curve volume. After graduation, coins created before 19 October 2026, 20:17 UTC pay 1% per swap: about 0.88% to the burn pool, 0.04% to the operator and 0.08% to Raydium. Coins created after that pay 1.25%: 0.98%, 0.13% and 0.15%. Coin-vs-coin pair pools use their own split, shown on the pair page.</span> <a href="https://burnticker.com/burnticker/fees/ledger">The fee ledger</a></dd></div>
+      <div><dt>DEV FEE</dt><dd><span data-fee-line>Burnticker takes 0.25% of curve volume. After graduation, every coin pays 1.25% per swap (Raydium fee tier 14): about 0.98% to the burn pool, 0.13% to the operator and 0.15% to Raydium. LaunchLab moves a graduating coin into a pool on the platform's current fee tier, which is 14; coins made before 19 October 2026 recorded tier 9 when they were created and pay 1.25% all the same. Coin-vs-coin pair pools use their own split, shown on the pair page.</span> <a href="https://burnticker.com/burnticker/fees/ledger">The fee ledger</a></dd></div>
       <div><dt>API</dt><dd><a href="https://burnticker.com/api/burnticker/v1">/api/burnticker/v1</a> · <a href="https://burnticker.com/burnticker/docs">Docs</a></dd></div>
     </dl>
     <div class="sh-rule"></div>
@@ -620,12 +621,18 @@ burn  = every token the swap delivered</pre>
   // a percent-encoded form, which URLSearchParams has already decoded) is dropped, so the page only ever reads its own files.
   var base = (new URLSearchParams(location.search).get("data") || "").replace(/^(?!sample\/?$)[\s\S]*$/, "");
   if (base && !/\/$/.test(base)) base += "/";
+  // eighth pass HB-194 / HS-77: the sample folder is not deployed, so on the official hosts ?data= is ignored and the live files load
+  if (base && /(^|\.)burnticker\.com$/i.test(location.hostname || "")) base = "";
 
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
   var fmtInt = function (s) { s = String(s).split(".")[0]; return s.replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
   var fmtT = function (amount, d) { return "$" + (Number(amount) / 1e12).toFixed(d == null ? 3 : d) + "T"; };
   var fmtB = function (delta) { var n = Number(delta); return (n >= 0 ? "+" : "−") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
+  // seventh pass AP7-5 / HS-68: one date format on the whole page, "20 October 2026, 13:38 UTC" (deficitFirstPaint.ts utcStamp), never the
+  // browser's raw locale string
+  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var fmtWhen = function (iso) { var d = new Date(iso); if (!isFinite(d.getTime())) return ""; var p2 = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() + ", " + p2(d.getUTCHours()) + ":" + p2(d.getUTCMinutes()) + " UTC"; };
   var fmtSol = function (s) { if (s == null) return "—"; var n = Number(s); return (n >= 100 ? n.toFixed(1) : n >= 1 ? n.toFixed(3) : n.toFixed(4)) + " SOL"; };
   var short = function (sig) { return sig ? sig.slice(0, 8) + "…" : "—"; };
   // B-18: a link built from a data file must be a plain https address; anything else (javascript:, data:, //host) is not linked
@@ -791,7 +798,7 @@ burn  = every token the swap delivered</pre>
     var gt = gc ? graduationLine(gc.threshold, gc.quote, s.buyback && s.buyback.funding && s.buyback.funding.seedSol) : null;
     if (gl) { gl.textContent = gt || ""; gl.hidden = !gt; }
     var rr = $("readyRead"), ra = s.curve && s.curve.readAt || s.generatedAt;
-    if (rr && ra && isFinite(Date.parse(ra))) { rr.textContent = "This page read the coin's state at " + new Date(ra).toISOString().slice(0, 10) + " " + new Date(ra).toISOString().slice(11, 16) + " UTC."; rr.hidden = false; }
+    if (rr && ra && isFinite(Date.parse(ra))) { rr.textContent = "This page read the coin's state at " + fmtWhen(ra) + "."; rr.hidden = false; }
     var isSample = !!s.sample || s.cluster === "replay";
     if (isSample || (s.cluster && !isMainnet(s.cluster))) {
       var b = $("banner"); b.classList.add("show");
@@ -812,8 +819,8 @@ burn  = every token the swap delivered</pre>
     var nReceipts = s.burned && s.burned.count ? s.burned.count : 0;
     var ok = s.health && !s.health.lastError && s.health.unverified === 0;
     $("health").innerHTML = '<span class="pulse' + (ok && nReceipts > 0 ? "" : " off") + '"></span>' + (ok ? (nReceipts > 0 ? "all receipts ✓" : "no receipts yet") : (s.health && s.health.unverified ? s.health.unverified + " unverified" : "error"));
-    $("healthSub").textContent = (s.feed.lastPollAt ? "Last feed check at " + new Date(s.feed.lastPollAt).toLocaleString() + "." : "No feed check yet.") + (s.feed.lastPollOutcome ? " The result was " + s.feed.lastPollOutcome + "." : "") + (s.health.lastError ? " The last error was " + s.health.lastError + "." : "");
-    $("gen").textContent = new Date(s.generatedAt).toLocaleString();
+    $("healthSub").textContent = (s.feed.lastPollAt ? "Last feed check at " + fmtWhen(s.feed.lastPollAt) + "." : "No feed check yet.") + (s.feed.lastPollOutcome ? " The result was " + s.feed.lastPollOutcome + "." : "") + (s.health.lastError ? " The last error was " + s.health.lastError + "." : "");
+    $("gen").textContent = fmtWhen(s.generatedAt);
     if (s.rules) { $("sha").textContent = "sha256: " + s.rules.sha256; $("statement").textContent = s.rules.statement; }
     if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "Fee pool address: " + (href(s.buyback.funding.feeWalletUrl) ? '<a href="' + esc(href(s.buyback.funding.feeWalletUrl)) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? ". The operator added " + (s.buyback.funding.seedSol ? esc(s.buyback.funding.seedSol) + " SOL" : "a seed") + (href(s.buyback.funding.seedTxUrl) ? '; <a href="' + esc(href(s.buyback.funding.seedTxUrl)) + '" target="_blank" rel="noopener">view the transaction</a>.' : ".") : ". Seed funding details have not been published here.");
     if (s.addresses && s.addresses.mint && isMainnet(s.cluster) && !isSample) {
@@ -838,7 +845,7 @@ burn  = every token the swap delivered</pre>
     }
     tick(); clock = setInterval(tick, 1000);
     var onCurve = !!(status && status.curve && status.curve.phase && status.curve.phase !== "graduated");
-    $("nextSub").textContent = "The next feed check is at " + new Date(at).toLocaleString(undefined, { timeZoneName: "short" }) + ". A burn needs a full $1B of new debt since " + (status && status.feed.lastRecordDate ? status.feed.lastRecordDate : "the last reading") + "." + (onCurve ? " Nothing can burn yet: the curve has to graduate and its pool has to be registered first." : "");
+    $("nextSub").textContent = "The next feed check is at " + fmtWhen(at) + ". A burn needs a full $1B of new debt since " + (status && status.feed.lastRecordDate ? status.feed.lastRecordDate : "the last reading") + "." + (onCurve ? " Nothing can burn yet: the curve has to graduate and its pool has to be registered first." : "");
   }
 
   // ------------------------------------------------------------------ receipts
@@ -895,6 +902,7 @@ burn  = every token the swap delivered</pre>
   /* @daily-post-begin — mirrors src/lib/launch/dailyPost.ts (dailyText / noBurnText / dayState); test/dailyPost.test.ts pins the two outputs equal. */
   var BurnDaily = (function () {
     var DISCLAIMER = "a memecoin — the rule says what supply does, not what price does";
+    var QUEUED_ROW = ["planned", "sending", "swap-sent", "swapped"];
     var WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     var fInt = function (s) { if (s == null) return "—"; return String(s).split(".")[0].replace(/^-/, "−").replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
     var fB = function (usd) { var n = Number(usd); return (n >= 0 ? "+" : "−") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
@@ -937,6 +945,7 @@ burn  = every token the swap delivered</pre>
       var n = receiptNo(burns, row), t = status.ticker, carry = Number(row.carryIn) > 0 ? " · " + fB(row.carryIn) + " carried" : "";
       var head = "Receipt #" + n + " · " + row.recordDate + "\nDebt to the Penny: $" + fInt(row.now) + " (" + fB(row.delta) + carry + ")";
       if (row.status === "skipped") return head + "\n" + plural(row.units, "unit") + ", but the day's spend would have been under $1 — nothing bought; the pool keeps it for the next burn day\nSupply unchanged at " + fInt(supplyAfter(status, burns, row)) + "\nverify: " + site + "/#r-" + n + "\n" + DISCLAIMER;
+      if (QUEUED_ROW.indexOf(row.status) >= 0) return "Queued reading · " + row.recordDate + "\nDebt to the Penny: $" + fInt(row.now) + " (" + fB(row.delta) + carry + ")\n" + plural(row.units, "unit") + " queued, with no burn yet. Queued units are spent once the pool is registered and the burn program runs.\nSupply unchanged at " + fInt(supplyAfter(status, burns, row)) + "\nverify: " + site + "/#r-" + n + "\n" + DISCLAIMER;
       return head + "\n" + plural(row.units, "unit") + " → " + fInt(row.burned) + " $" + t + " bought back and burned" + (row.spent != null ? " (" + fSol(row.spent) + ")" : "") + "\nSupply now " + fInt(supplyAfter(status, burns, row)) + "\nReceipt: " + (row.txUrl || "{TX}") + " · verify: " + site + "/#r-" + n + "\n" + DISCLAIMER;
     }
     function noBurnText(status, burns, state, site) {
@@ -1037,8 +1046,8 @@ burn  = every token the swap delivered</pre>
 
   // ------------------------------------------------------------------ load
   function getJson(name) { return fetch(base + name, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status + " " + name); return r.json(); }); }
-  // The four empty states (src/lib/burnticker/emptyState.ts headings, word for word): a missing status.json before launch is
-  // the not-launched heading; any other failure is "Data unavailable", with the diagnostic behind a details disclosure.
+  // The empty states (src/lib/burnticker/emptyState.ts headings, word for word): since the launch, every failure to load, a 404
+  // included, is "Data unavailable", with the diagnostic behind a details disclosure (seventh pass AP7-4).
   function offline(msg, detail) {
     var n = $("notice"); n.textContent = msg;
     if (detail) { var d = document.createElement("details"), sm = document.createElement("summary"), p = document.createElement("span"); sm.textContent = "Details"; p.textContent = " " + detail; d.appendChild(sm); d.appendChild(p); n.appendChild(d); }
@@ -1093,13 +1102,14 @@ burn  = every token the swap delivered</pre>
     if (deep && $("r-" + deep[1])) $("r-" + deep[1]).scrollIntoView();
     fetchTreasury(burns.length ? burns[0].prevDate : (status.feed && status.feed.lastRecordDate));
   }).catch(function (e) {
+    // seventh pass AP7-4: $DEFICIT has traded on mainnet since 2026-10-13, so a status file that answers 404 (a deploy swap, a root
+    // change, a write that is not atomic) means the data did not load, never that the coin has not launched
     var missing = /^404 /.test(String(e && e.message));
-    renderQueue(missing ? { state: "not-launched", ticker: "DEFICIT" } : null, null);
+    renderQueue(null, null);
     checkRules("8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9");
     if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
-    offline(missing ? "Not launched. $DEFICIT has not launched yet, so there are no readings or receipts to show. Everything above fills in from the first reading after launch."
+    offline(missing ? "Data unavailable. The keeper's status file could not be loaded just now, so no live figure is shown. $DEFICIT has launched, and this says nothing about the coin or its receipts. Try again later."
       : "Data unavailable. The live figures did not load just now. This says nothing about the coin or its receipts. Try again later.", String(e && e.message || e));
-    if (missing && $("prelaunchNote")) $("prelaunchNote").textContent = ""; // the summary above already says not launched
   });
 })();
 </script>

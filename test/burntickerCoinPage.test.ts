@@ -51,15 +51,15 @@ describe("coinPage.ts: the order and the small facts", () => {
     assert.equal(RULES_SCHEMA, BURNTICKER_RULES_SCHEMA); assert.equal(WIND_DOWN_DAYS, DEFAULT_WIND_DOWN_DAYS);
     assert.doesNotMatch(read("src/lib/burnticker/coinPage.ts"), /^import (?!type )[^\n]*"@\/lib\/burnticker\/rules"/m, "the client page cannot import rules.ts (node:fs)");
     const debt = ruleFacts(lockRule(DEBT_RULE).text);
-    assert.equal(debt.dial, "Each unit spends 5% of the burn pool on this coin and burns what it gets.");
+    assert.equal(debt.dial, "Each unit spends 5% of what is left in the burn pool on this coin and burns what it gets.");
     assert.equal(debt.window, PERPETUAL_SENTENCE); assert.match(debt.end, /no end/);
     const team = ruleFacts(lockRule(BRONCOS).text);
-    assert.equal(team.dial, "Each result that fires the rule spends 2% of the burn pool on this coin and burns what it gets.");
+    assert.equal(team.dial, "Each result that fires the rule spends 2% of what is left in the burn pool on this coin and burns what it gets.");
     const one = ruleFacts(lockRule(ONE_SHOT).text, true);
     assert.match(one.window, /resolves once/); assert.match(one.end, /burned down over 28 days, and then the coin retires/);
     // the operator's own rule files (burnkeeper.rules/v1): the buyback dial
     const reh = ruleFacts(read("config/burnkeeper/rehearsal.rules.json"));
-    assert.equal(reh.dial, "Each unit spends 2% of the burn pool on this coin and burns what it gets.");
+    assert.equal(reh.dial, "Each unit spends 2% of what is left in the burn pool on this coin and burns what it gets.");
     assert.equal(ruleFacts("not json").dial, null);
   });
   test("every sentence it writes passes the copy lint", () => {

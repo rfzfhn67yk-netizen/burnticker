@@ -1,12 +1,13 @@
 import { withoutDenials } from "@/lib/burnticker/denials";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { MAX_SPEND_RESERVE_BPS } from "@/lib/burnticker/burnMath";
+import { SPREAD_ONE_SHOT_LINE, SPREAD_REST_SENTENCE } from "@/lib/burnticker/spreadCopy";
 import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
 import { CANDIDATES_PAIR_SENTENCE, PARTIES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 import { hasNoBurnOutcome, oneShotFull } from "@/lib/burnticker/nextResult";
-import { LEAGUES, LIVE_NOW, gameSeries, isPairOutcome, leagueCannotTie, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, seasonLabel, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, LIVE_NOW, gameSeries, isPairOutcome, leagueCannotTie, meetingsPairSeries, noPlayoffs, outcomeWords, parseEspnSeries, seasonLabel, teamByAbbr, teamSeries, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 import { DESCRIPTION_MAX, descriptionRoomProblem, linkProblem } from "@/lib/burnticker/creatorProfile";
@@ -78,8 +79,8 @@ export const FOLLOW_CHOICES: readonly { id: FollowId; label: string; line: strin
 
 export type PatternId = "every" | "fade" | "once" | "winner";
 export const PATTERNS: Record<PatternId, { label: string; sentence: string }> = {
-  every: { label: "Every time it happens", sentence: "The coin spends a share of its pool each time the thing happens." },
-  fade: { label: "When it does not happen", sentence: "The coin spends a share of its pool on each day or reading where the thing does not happen." },
+  every: { label: "Every time it happens", sentence: "The coin spends a share of its pool each time the event its rule follows happens." },
+  fade: { label: "When it does not happen", sentence: "The coin spends a share of its pool on each day or reading where the event its rule follows does not happen." },
   once: { label: "Once, when it settles", sentence: "The coin spends a large share of its pool one time, when a market or a single result settles." },
   winner: { label: "Winner takes the burn", sentence: "Two coins are linked. When a result fires one coin's rule, that coin's own pool and the other coin's share for the result are both spent burning that coin. The winning coin's supply shrinks; the other coin's does not." },
 };
@@ -92,7 +93,7 @@ export const PATTERN_ORDER: readonly PatternId[] = ["every", "fade", "once", "wi
  */
 export const EVERY_SENTENCES = {
   scalar: "The coin spends a share of its pool for each step the figure moves, in the step size the rule sets.",
-  reading: "The coin spends a share of its pool on each day or reading where the thing happens.",
+  reading: "The coin spends a share of its pool on each day or reading where the event its rule follows happens.",
   team: "The coin spends a share of its pool after each game result its rule counts.",
 } as const;
 export function everySentenceFor(r: Pick<BurnRule, "kind" | "oracle" | "series"> | null | undefined, follow?: FollowId | null): string {
@@ -162,7 +163,7 @@ export function oneShotSentences(o: { share: number; happened: string; subject: 
   const what = o.share >= 1 ? "its whole pool" : `${pctLabel(o.share)} of its pool`;
   // sources-7 (QA walkthrough 11 M2): the NO side's other case is the market resolving YES, said as that ("If it does" read as the NO)
   const tail = o.no ? "If the market resolves YES instead, the rest goes to $DEFICIT's burn. A voided market is not a NO." : `If ${o.subject} ${o.subject === "they" ? "do" : "does"} not, the rest goes to $DEFICIT's burn.`;
-  return [`This coin burns ${what} once, when Polymarket's payout says ${o.happened}.`, "The burn lands in slices sized to the pool's liquidity.", tail];
+  return [`This coin burns ${what} once, when Polymarket's payout says ${o.happened}.`, SPREAD_ONE_SHOT_LINE, tail];
 }
 
 /** What blocks the launch while an image is being prepared, or after its preparation failed (intent audit 5 item 15). */
@@ -303,7 +304,7 @@ export function unitPhrase(unit: { label: string } | null | undefined, valueLabe
  * rest waits for the next run. A fade-side reading counts one unit at most. A one-shot spends its share once.
  */
 /**
- * HS-43 (hourly run 8): a whole-pool one-time burn said with its per-run slice, so "100%" and "at most 2%" do not read as a contradiction.
+ * HS-43 (hourly run 8): a whole-pool one-time burn said with its per-burn slice, so "100%" and "at most 2%" do not read as a contradiction.
  * The slice is the program's spend cap (burnMath.ts MAX_SPEND_RESERVE_BPS, 2% of the trading pool's SOL per run); the pool starts with
  * about the raise.
  */
@@ -313,7 +314,9 @@ export function wholePoolSliceLine(raiseSol: string | null | undefined): string 
   const pct = MAX_SPEND_RESERVE_BPS / 100;
   const raise = Number(raiseSol);
   const about = Number.isFinite(raise) && raise > 0 ? ` (about ${Math.round(raise * MAX_SPEND_RESERVE_BPS / 100) / 100} SOL on ${articleFor(raise)} ${raise} SOL raise)` : "";
-  return `The whole pool is spent, but not in one go: each daily run spends at most ${pct}% of the trading pool's SOL${about}, so a large burn lands over several days.`;
+  // reviewer finding (2026-10-20): there is no "daily run". The program's budget refills every 600 s and the keeper spreads the carried
+  // part in pieces at least 20 minutes apart inside six-hour windows (dispersal.ts), so the words come from spreadCopy.ts
+  return `The whole pool is spent, but not in one go: one burn spends at most ${pct}% of the trading pool's SOL${about}. ${SPREAD_REST_SENTENCE}`;
 }
 export function budgetCopy(rule: BurnRule, share: number, unit: string | null, o: { raiseSol?: string | null } = {}): { label: string; line: string; math: string | null } {
   const p = pctLabel(share);
@@ -323,7 +326,7 @@ export function budgetCopy(rule: BurnRule, share: number, unit: string | null, o
   const act = sym ? `swapping SOL for ${sym} and burning it` : "buying and burning this coin";
   if (isOneShotRule(rule)) {
     if (sym) return { label: "Share of the burn pool, once", line: `${share >= 1 ? "This coin spends its whole pool once" : `This coin spends ${p} of its pool once`}, when the result is in, ${act}. The burn lands in slices sized to the SOL in ${sym}'s pinned Raydium pool.`, math: null };
-    return { label: "Share of the burn pool, once", line: share >= 1 ? `This coin burns its whole pool once, when the result is in. ${wholePoolSliceLine(o.raiseSol)}` : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity. The rest of the pool moves on only after this share has been spent on this coin.`, math: null };
+    return { label: "Share of the burn pool, once", line: share >= 1 ? `This coin burns its whole pool once, when the result is in. ${wholePoolSliceLine(o.raiseSol)}` : `This coin burns ${p} of its pool once, when the result is in. ${SPREAD_ONE_SHOT_LINE} The rest of the pool moves on only after this share has been spent on this coin.`, math: null };
   }
   // QA pass 9 #18 and #20 (2026-10-13): the fade side is said for what the rule reads (a game day, a day with none of the events, or a
   // number that did not move), and a unit of one is a noun ("each earthquake", never "each 1 earthquake")
@@ -377,7 +380,7 @@ export function patternWords(id: PatternId, o: { follow: FollowId; subject?: str
   const s = o.subject;
   // HS-42 (hourly run 8): no tie or draw words in a league whose games cannot end tied (NHL, NBA, MLB)
   const noTie = leagueCannotTie(o.league ?? null);
-  if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "meetings" && id === "winner") return { label: PATTERNS.winner.label, sentence: MEETINGS_WINNER_LINE };
+  if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "meetings" && id === "winner") return { label: PATTERNS.winner.label, sentence: noTie ? MEETINGS_WINNER_LINE_NO_TIE : MEETINGS_WINNER_LINE };
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "game" && id === "winner") return { label: PATTERNS.winner.label, sentence: noTie ? GAME_PAIR_SENTENCE_NO_TIE : GAME_PAIR_SENTENCE };
   if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "winner") return { label: PATTERNS.winner.label, sentence: o.party ? PARTIES_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE };
   if (o.follow === "team" && s && isPairOutcome(o.outcome) && id === "every") {
@@ -660,7 +663,10 @@ export function endChoiceModel(rule0: BurnRule, o: { burnSol?: boolean; sinkPick
   // website-26 (WIRING-END-SINKS): a rule already on the incinerator end keeps the choice on screen, so the creator can pick again
   const offered = (sink === "flagship" || sink === "mint" || sink === "incinerator") && !rule.set && windowKindOf(rule) !== "perpetual";
   if (!offered) return { offered: false, winning: null, options: [] };
-  const winning = championPathRule(rule) ? `If ${o.team ?? "the team"} win the championship, the rest burns this coin.` : null;
+  // HB-189 (eighth pass): a coin reached from a search card has no team picked on the page, so the team is read from the rule itself
+  // ("If the Eagles win the championship", never "If the team win")
+  const ruleTeam = (() => { const e = rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null; const t = e ? teamByAbbr(e.league, e.abbr) : null; return t?.nickname ? `the ${t.nickname}` : t?.name ?? null; })();
+  const winning = championPathRule(rule) ? `If ${o.team ?? ruleTeam ?? "the team"} win the championship, the rest burns this coin.` : null;
   // owner decision 2026-10-19: a coin that spends its whole pool in one burn says what reaches the pool later (describe.ts ONE_SHOT_REST_*)
   const oneShot = !winning && !rule.pair && oneShotFull(rule);
   // HS-34 (hourly run 6): a market coin whose other answer burns nothing says the lose case on the radio too: that answer ends the rule
@@ -982,6 +988,8 @@ export const RIVALRY_SERIES_LABEL = "Every game between them this season";
 export const rivalrySeriesLabel = (season?: string | null): string => (season ? `Every game between them in the ${season} season` : RIVALRY_SERIES_LABEL);
 export const RIVALRY_SERIES_LINE = "A linked pair. Each game between them burns the coin of the team that won it, and at the end of the season the rest goes to the team that won more of them.";
 export const MEETINGS_WINNER_LINE = "After each game between the two teams, the coin of the team that won spends its own share and the other coin's share for that game, both burning the winning coin. A draw moves nothing.";
+/** HS-42 residue (seventh pass): the same line for a league whose games cannot end tied (NBA, NHL, MLB). */
+export const MEETINGS_WINNER_LINE_NO_TIE = MEETINGS_WINNER_LINE.replace(" A draw moves nothing.", "");
 export const MEETINGS_END_LABEL = "The rest goes to the series winner";
 export const MEETINGS_END_LINE = "When both seasons are over, the coin of the team that won fewer of their games sends what is left to the other coin's burn. If they won the same number, nothing moves and each coin burns down what is left on itself.";
 /** HS-10: the season a rivalry series rule follows (its league and season year), read from the rule's own series; null for any other rule. */

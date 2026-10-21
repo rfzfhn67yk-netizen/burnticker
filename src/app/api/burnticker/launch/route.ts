@@ -10,6 +10,7 @@ import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
 import { recordLaunchTimings } from "@/lib/burnticker/api/product";
 import { globalRefusal, typeRefusal } from "@/lib/burnticker/launchAvailability";
 import { lookupTablePins } from "@/lib/burnticker/networks";
+import { walletTxV1Enabled } from "@/lib/burnticker/walletTxVersion";
 import { matchesSuffix } from "@/lib/burnticker/mintSuffix";
 import { MINT_BANK_EMPTY_CODE, MINT_BANK_EMPTY_SENTENCE, webMintBank, type MintBankPort } from "@/lib/burnticker/mintBank";
 import { Keypair } from "@solana/web3.js";
@@ -29,7 +30,8 @@ const LAUNCHED_RECORD_MAX_BYTES = 64 * 1024;
  * pinning a table needs no code release; the browser still checks every entry of the table it finds there before anything is signed.
  */
 export async function GET() {
-  return NextResponse.json({ lookupTables: lookupTablePins(process.env) }, { headers: { "cache-control": "no-store" } });
+  // LA7 fix B: walletTxV1 is the host's BURNTICKER_WALLET_TX_V1 switch (off = every launch signs version 0)
+  return NextResponse.json({ lookupTables: lookupTablePins(process.env), walletTxV1: walletTxV1Enabled(process.env) }, { headers: { "cache-control": "no-store" } });
 }
 
 /**
@@ -94,7 +96,7 @@ export async function POST(req: Request) {
   if (body.action === "sent") {
     const rls = limiter.take(clientKey(req), "confirm");
     if (!rls.ok) return NextResponse.json({ error: `rate limited: ${RATE_LIMITS.confirm.human}; retry in ${rls.retryAfterSec}s`, code: "confirm-busy", retryAfterSec: rls.retryAfterSec }, { status: 429, headers: { "retry-after": String(rls.retryAfterSec) } });
-    const r = await markCreateSent(platform(), String(body.mint ?? ""), body.sentTx, Date.now());
+    const r = await markCreateSent(platform(), String(body.mint ?? ""), body.sentTx, Date.now(), { formatFallback: body.formatFallback });
     return edgeJson(r.body, r.status, { "cache-control": "no-store" });
   }
   // BURNTICKER_CREATOR_LAUNCHES_ENABLED off (the default): no creator launch — the operator's coins launch through the CLI. In preview

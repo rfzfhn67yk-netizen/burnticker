@@ -24,7 +24,7 @@ import { collectSnapshot, devFeeDelta, lamportsToSol, registryAlertRows, solStr,
  * registry exists. Nothing in ops.json is secret: public keys, on-chain balances, counts and the alert lines.
  */
 
-export interface CheckinAlertRow { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }
+export interface CheckinAlertRow { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean; /** OP7-7: what became of it on the phone (push.ts pushOutcome) */ push?: string | null }
 export interface CheckinInput {
   snapshot: BurntickerSnapshot | null; delta: ReturnType<typeof devFeeDelta> | null; alerts: CheckinAlertRow[] | null; firstLaunchAt: number | null; webhook?: WebhookState | null; why?: string;
   /** the request budget, one line per provider (apiBudget.ts budgetStatusLines) */ apiBudget?: string[] | null;
@@ -60,7 +60,6 @@ export interface HostFacts {
   /** B-3 / OPS-1 (2026-10-19): the off-box pull receipt (ops/unitHealth.ts offboxPullFact, data/offbox-pull.json): "pulled" under 12 hours
    *  old, "stale" older, "none" absent. backupDestConfigured stays its own fact (the pull needs no destination). Absent in older documents. */
   offBox?: OffboxPullFact["offBox"];
-  /** the last pull (= offBoxPulledAt), null when none */ lastOffBoxAt?: string | null;
   /** the receipt's method name (a fixed word; never a host or a path) */ offBoxMethod?: string | null;
   offBoxPulledAt?: string | null;
 }
@@ -122,7 +121,7 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
     out.push(`- bt- alerts last 24 h: ${al.length}`);
     // OP6-11: Telegram is not configured and `sent` is never set (alerts.ts), so the line drops the old Telegram suffix it printed on every
     // alert; phone pushes go through ntfy and are reported by the push lines
-    for (const a of al.slice(0, 12)) out.push(`    ${new Date(a.ts).toISOString().slice(0, 16)}Z [${a.kind}] ${a.text.slice(0, 150)}${a.seenAt ? "" : " · UNSEEN"}${a.sent ? " · sent to the alert webhook" : ""}`);
+    for (const a of al.slice(0, 12)) out.push(`    ${new Date(a.ts).toISOString().slice(0, 16)}Z [${a.kind}] ${a.text.slice(0, 150)}${a.push ? ` · ${a.push}` : a.seenAt ? "" : " · no push record"}${a.sent ? " · sent to the alert webhook" : ""}`);
   }
   if (i.apiBudget) out.push(...(i.apiBudget.length ? i.apiBudget.map((l) => `- ${l}`) : ["- api budget: no provider read yet today"]));
   return out;

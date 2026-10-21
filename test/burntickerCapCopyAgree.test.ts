@@ -32,7 +32,7 @@ describe("ACC-01: the cap reads the same on every surface, in every state", () =
       if (e) assert.equal(away, trust); else assert.equal(away, `${trust} The Trust page shows the cap in force.`);
       if (!e || e.capLamports !== null) { assert.match(trust, /48-hour wait/); assert.match(trust, /An audit is not required for either change\./); }
       if (e && e.capLamports === null) assert.match(held, /has ended, so it can be spent now/);
-      else assert.match(held, /until the cap rises or ends\. An audit is not required for either\./);
+      else { assert.match(held, /until the cap rises or ends\. The platform can raise the cap only after a public 48-hour wait, and the cap ends by .+ at the latest\. Neither change needs an audit\.$/); assert.doesNotMatch(held, /for either\./); }
     });
   }
   test("the unread sentence is the audit's suggested copy", () => {
@@ -43,7 +43,7 @@ describe("ACC-01: the cap reads the same on every surface, in every state", () =
   test("the launch review and the token page take the helper's words; no surface keeps an audit-gated cap", () => {
     const review = fs.readFileSync("src/lib/burnticker/launchReview.ts", "utf8");
     assert.match(review, /^\s+capSentenceAway\(null\),/m, "the review's prerequisites (shown under Other conditions in the wallet summary)");
-    assert.ok(PREREQUISITE_STATES.some((s) => /^Capped: .*An audit is not required for either\.$/.test(s)));
+    assert.ok(PREREQUISITE_STATES.some((s) => /^Capped: .*public 48-hour wait.*Neither change needs an audit\.$/.test(s))); assert.ok(!PREREQUISITE_STATES.some((s) => /for either\./.test(s)), "AP7-7: no either without its antecedent");
     const page = fs.readFileSync("src/lib/burnticker/tokenPage.ts", "utf8");
     assert.match(page, /capHeldSentence\(s\.pool\.queuedSol, null\)/);
     assert.match(page, /queuedNote: `\$\{capSentenceAway\(null\)\}/);

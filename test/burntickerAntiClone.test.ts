@@ -119,8 +119,10 @@ describe("lookalike refusal", () => {
   });
   test("allowed: different coins, short tickers that only differ by a letter, an expired draft's ticker, another window of the same team", () => {
     for (const [ticker, name] of [["EAGLES", "Eagles Win"], ["ABC", "Abc"], ["ABD", "Abd"], ["GONE", "Gone Coin"], ["DEBTX", "Debt Burn"]]) assert.equal(lookalikeRefusal({ ticker, name }, EX), null, ticker);
-    const rays27 = { ticker: "RAYS27", name: "Rays Win", rule: nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2027 })) };
-    assert.equal(lookalikeRefusal(rays27, EX), null, "a team's next-season coin is not a lookalike of its own last-season coin");
+    const rays27 = { ticker: "RAYS27", name: "Rays 2027 Wins", rule: nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2027 })) };
+    assert.equal(lookalikeRefusal(rays27, EX), null, "a team's next-season coin with its own name is not a lookalike of its last-season coin");
+    // HB-188 (eighth pass LA8-3): the exemption is for the ticker; the identical name on another window is still refused
+    assert.deepEqual(lookalikeHits({ ...rays27, name: "Rays Win" }, EX).map((h) => h.field), ["name"]);
     assert.ok(lookalikeRefusal({ ...rays27, rule: null }, EX), "the same ticker without the team rule is refused");
   });
   // prelaunch audit 2026-10-18 A-2: the exact same ticker is a hit too (the registry check it was left to was never called)

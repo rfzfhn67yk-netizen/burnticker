@@ -11,7 +11,7 @@ import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS 
 import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS } from "@/lib/burnticker/fees";
 import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT } from "@/lib/burnticker/fees";
-import { capSentenceAway } from "@/lib/burnticker/capInForce";
+import { capChangeSentence, capSentenceAway } from "@/lib/burnticker/capInForce";
 import { describeRule, endText, gamePairCannotTie, GAME_PAIR_SENTENCE_NO_TIE, settledPairSentence, type DescribeCtx } from "@/lib/burnticker/describe";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
@@ -21,7 +21,7 @@ import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
 import { lookalikeRefusalsByField, type LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
 import { linksProblems, withCreatorText } from "@/lib/burnticker/creatorProfile";
-import { meetingsMirror, noPlayoffs, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
+import { leagueCannotTie, meetingsMirror, noPlayoffs, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 import { PARTIES_PAIR_SENTENCE, isPartySubject, meetingsFundsFlow, settledPairFundsFlow, type FundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { settledPairInput, type SettledPairInput } from "@/lib/burnticker/launchPreflight";
 import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
@@ -205,7 +205,7 @@ function meetingsReview(rule: BurnRule, tickerA: string, tickerB: string, ctx: O
   if (e?.kind !== "team" || e.window.kind !== "meetings" || !mirror) return null;
   const a = teamByAbbr(e.league, e.abbr)?.nickname ?? e.abbr, b = teamByAbbr(e.league, e.window.opp)?.nickname ?? e.window.opp;
   const ruleB = { ...rule, series: mirror } as BurnRule;
-  return { flow: meetingsFundsFlow({ a: tickerA || "A", b: tickerB || "B" }, { a, b }, { playoffs: !noPlayoffs(e.league), fees: postGraduationFeesFor(cluster) }), descriptionB: describeRule(ruleB, { ...ctx, ticker: tickerB || "TICKER" }).paragraph };
+  return { flow: meetingsFundsFlow({ a: tickerA || "A", b: tickerB || "B" }, { a, b }, { playoffs: !noPlayoffs(e.league), fees: postGraduationFeesFor(cluster), cannotTie: leagueCannotTie(e.league) }), descriptionB: describeRule(ruleB, { ...ctx, ticker: tickerB || "TICKER" }).paragraph };
 }
 
 export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, PAIR_LINK_ACCOUNT_BYTES, PAIR_LINK_RENT_LABEL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
@@ -227,7 +227,7 @@ export const PREREQUISITE_STATES = [
   "Queued: a result is due, and the burn waits for the next run of the program.",
   "Delayed: the program held the burn, for example because the pool's price moved too far. The SOL stays in the burn pool.",
   "Below the floor: the amount due was smaller than the minimum spend fixed at launch, so nothing was bought.",
-  "Capped: each burn pool spends from at most the burn-pool cap, and anything above it waits until the cap rises or ends. An audit is not required for either.",
+  `Capped: each burn pool spends from at most the burn-pool cap, and anything above it waits until the cap rises or ends. ${capChangeSentence()}`,
 ];
 const solOf = (lamports: bigint): string => (Number(lamports) / 1e9).toLocaleString("en-US", { maximumFractionDigits: 3 });
 /**

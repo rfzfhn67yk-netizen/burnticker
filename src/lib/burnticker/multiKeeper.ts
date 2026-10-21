@@ -8,6 +8,7 @@ import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { isFirstSnowSeries, snowSeasonEnd, snowSeasonVoidFromMs } from "@/lib/burnticker/sources/nws";
 import { readingMatches, RevisedReadingError, selectorKeyOf, wideRule, type PairRole, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
+import { readingsAfterLaunch } from "@/lib/burnticker/launchCut";
 import { DECIMALS, endSinkOf, isSettledPairRule, isOneShot, settledPairShape, pairClause, pairMirrorRule, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitStep, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
@@ -29,7 +30,7 @@ import { parseTargetMemo } from "@/lib/burnReceipts/memo";
 import { DISPERSAL_STATE_KEY, runDispersal, type DispersalReport } from "@/lib/burnticker/dispersalKeeper";
 import { budgetPhase, isBudgetHold } from "@/lib/burnticker/apiBudget";
 import { FilterUnsupportedError, storedFilterProblem } from "@/lib/burnticker/safeRegex";
-import { dueNextAt, hasSettlementReceipt, selectorIdle, windowNextAt, type ReadWindow } from "@/lib/burnticker/readPlan";
+import { dueNextAt, hasSettlementReceipt, selectorIdle, windowFailureNextAt, windowNextAt, type ReadWindow } from "@/lib/burnticker/readPlan";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -55,6 +56,8 @@ import { dueNextAt, hasSettlementReceipt, selectorIdle, windowNextAt, type ReadW
  */
 
 export interface KeeperDeps {
+  /** Reviewer F: overrides FIRST_SNOW_HOLD_FROM_MS (tests drive a first snow drafted after the pin on a 2025 clock). */
+  firstSnowHoldFromMs?: number;
   registry: Registry;
   program: BurnProgramClient;
   /**
@@ -243,7 +246,7 @@ export function recordWindowEnd(d: Pick<KeeperDeps, "registry" | "dryRun" | "log
     // planned BEFORE the end is recorded (planToken skips a coin whose rule ended), so the end is dated at that reading and the pair's
     // season-end result exists for the program's pair-winner end sink (end.rs partner_won). A level series has no such reading.
     // Every reading of the series (each meeting too) is planned first, so a level series' end never skips its last meetings.
-    if (w.series !== undefined && d.registry.readings(t.selectorKey, t.baselineAt).some((x) => !d.registry.receipt(t.mint, x.id))) { d.log(`  [end] $${t.ticker}: the season series is over; its last results${w.series?.endDay ? `, the season-end result (${w.series.endDay}) included,` : ""} are planned first, then the end is recorded`); continue; }
+    if (w.series !== undefined && readingsAfterLaunch(d.registry, t.selectorKey, t.baselineAt).some((x) => !d.registry.receipt(t.mint, x.id))) { d.log(`  [end] $${t.ticker}: the season series is over; its last results${w.series?.endDay ? `, the season-end result (${w.series.endDay}) included,` : ""} are planned first, then the end is recorded`); continue; }
     // website-18 THE CHAMPION PATH (describe.ts championPathRule): the end waits until the source and the coin's own receipt agree on
     // whether the team won the championship; a champion's coin winds down on itself, any other end forwards the rest to the sink pinned at launch ($DEFICIT unless the coin named another)
     if (championPathRule(rule)) {
@@ -256,6 +259,27 @@ export function recordWindowEnd(d: Pick<KeeperDeps, "registry" | "dryRun" | "log
     out.push(t.mint);
   }
   return out;
+}
+
+/**
+ * THE READ-PLAN STAMP: which next_fetch_at values this read plan wrote (status `fetch.plan.<key>` = { v, at }). A stored time with no
+ * stamp, or a stamp of another version or another time, came from an older rule (or another writer) and is checked against the current
+ * rule once (fetchDue). Bump READ_PLAN_VERSION whenever the rule's schedule changes, so stored times from before are checked again.
+ */
+export const READ_PLAN_VERSION = 2;
+const planKey = (key: string) => `fetch.plan.${key}`;
+export function planStampOk(reg: Pick<Registry, "getStatus">, key: string, at: number): boolean {
+  try { const raw = reg.getStatus(planKey(key)); if (!raw) return false; const j = JSON.parse(raw) as { v?: number; at?: number }; return j.v === READ_PLAN_VERSION && j.at === at; } catch { return false; }
+}
+function stampPlan(reg: Pick<Registry, "setStatus">, key: string, at: number, now: number): void { reg.setStatus(planKey(key), { v: READ_PLAN_VERSION, at }, now); }
+/** The current rule's next read for a rule-paced selector (OracleAdapter.plannedReadAt), or undefined (not rule-paced, or unreadable now). */
+async function rulePlannedRead(d: KeeperDeps, rule: BurnRule, key: string, sinceKey: string | null, now: number): Promise<number | undefined> {
+  try {
+    const a = oracleFor(d, key) as Partial<Pick<OracleAdapter, "plannedReadAt">>;
+    if (!a.plannedReadAt) return undefined;
+    const t = await a.plannedReadAt(wideRule(rule), sinceKey, now);
+    return typeof t === "number" && Number.isFinite(t) ? t : undefined;
+  } catch { return undefined; }
 }
 
 /** Readings for the live tokens' keys, each key once per schedule. */
@@ -283,13 +307,6 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       if (!disputed && st.nextFetchAt !== null && st.failures === 0) d.registry.setFeedState({ ...st, nextFetchAt: null });
       out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue;
     }
-    const dueAt = st.failures > 0 && st.nextFetchAt !== null ? st.nextFetchAt
-      : idle ? need
-      : st.nextFetchAt === null ? null : need !== null && need < st.nextFetchAt ? need : st.nextFetchAt;
-    if (dueAt !== null && now < dueAt) {
-      if (dueAt !== st.nextFetchAt) d.registry.setFeedState({ ...st, nextFetchAt: dueAt });
-      out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue;
-    }
     const locked = d.registry.lockedRule(t);
     const rule = wideRule(locked.rule);
     const last = d.registry.lastReading(key);
@@ -303,6 +320,25 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
     const anchorObj = anchorRaw ? (JSON.parse(anchorRaw) as { since: string | null } | null) : null;
     const anchor = anchorObj ? anchorObj.since : undefined;
     const sinceKey = anchor === undefined ? sinceKey0 : anchor === null || sinceKey0 === null ? null : anchor < sinceKey0 ? anchor : sinceKey0;
+    // A STORED NEXT READ FROM AN OLDER RULE (publish 108, 2026-10-20): next_fetch_at written before the final-whistle timing (a game's
+    // start + 6 h) was kept as is, so no game was read before it. A rule-paced selector (sports: the adapter's plannedReadAt) whose stored
+    // time was not written by this read plan (planStampOk) is compared with what the current rule schedules now, and read at the EARLIER
+    // of the two, never later than the rule's own schedule. A budget-paced source (no plannedReadAt) keeps its stored time as its floor.
+    let stored = st.nextFetchAt;
+    if (stored !== null && st.failures === 0 && !idle && now < stored && !planStampOk(d.registry, key, stored)) {
+      const planned = await rulePlannedRead(d, locked.rule, key, sinceKey, now);
+      if (planned !== undefined) {
+        if (planned < stored) { d.log(`  [plan] ${key}: the stored next read (${new Date(stored).toISOString()}) is later than the current rule's (${new Date(planned).toISOString()}); read at the rule's`); stored = planned; }
+        stampPlan(d.registry, key, stored, now);
+      }
+    }
+    const dueAt = st.failures > 0 && st.nextFetchAt !== null ? st.nextFetchAt
+      : idle ? need
+      : stored === null ? null : need !== null && need < stored ? need : stored;
+    if (dueAt !== null && now < dueAt) {
+      if (dueAt !== st.nextFetchAt) { d.registry.setFeedState({ ...st, nextFetchAt: dueAt }); if (st.failures === 0) stampPlan(d.registry, key, dueAt, now); }
+      out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: true }); continue;
+    }
     // KALSHI FAILS CLOSED (owner decision 2026-10-10, after the ChatGPT/Codex review's C1): with BURNTICKER_KALSHI_ENABLED off, Kalshi is
     // not read at all — not even for coins registered with a Kalshi rule. Those coins are HELD (no readings, nothing planned or attested)
     // with a "venue disabled" alert; they resume when the venue is turned back on with written consent.
@@ -315,7 +351,9 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       continue;
     }
     try {
-      const r = await oracleFor(d, key).settledSince(rule, sinceKey);
+      // reviewer G: the earliest launch on this selector (a reading pinned by launch date, sources/espn.ts HB153_FROM_MS)
+      const launchedAtMs = Math.min(...onKey.map((x) => (typeof x.createdAt === "number" ? x.createdAt : Infinity)));
+      const r = await oracleFor(d, key).settledSince(rule, sinceKey, Number.isFinite(launchedAtMs) ? { launchedAtMs } : undefined);
       const written = d.registry.putReadings(locked.rule.oracle, key, r.events, { settlementSourceUrl: r.settlementSourceUrl, attestedBy: [d.attester] }, now);
       recordWindowEnd(d, tokens.filter((x) => x.selectorKey === key), r);
       if (r.awaitingFinal > 0 && anchor === undefined) d.registry.setStatus(anchorKey, { since: sinceKey }, now);
@@ -323,7 +361,9 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       // THE NEXT READ (readPlan.ts, owner 2026-10-19): the earliest moment a new result can exist, as the adapter says (a game shortly
       // after its start, then minutes apart until its final is confirmed by a second read 5 minutes later; a market's close; a team's next game), else the feed's publish window,
       // else the poll
-      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: await nextReadAt(d, locked.rule, key, r, now, written) });
+      const nextAt = await nextReadAt(d, locked.rule, key, r, now, written);
+      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: nextAt });
+      stampPlan(d.registry, key, nextAt, now);
       if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new ${written === 1 ? "reading" : "readings"}${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);
       out.push({ key, written, refusals: r.refusals, awaitingFinal: r.awaitingFinal, error: null, skipped: false });
     } catch (e) {
@@ -333,8 +373,11 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
         if (d.registry.recordAlert({ kind: "revised-reading", key: `revised-reading:${key}:${e.eventId}:${e.now}`, text, meta: { selectorKey: key, eventId: e.eventId, recorded: e.recorded, revised: e.now } }, now)) d.log(`  [held] ${text}`);
       }
       const failures = st.failures + 1;
-      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: st.lastOkAt, failures, lastError: msg, nextFetchAt: now + backoffMs(failures - 1) });
-      d.log(`  [feed] ${key}: ${msg} — retrying in ${Math.round(backoffMs(failures - 1) / 1000)} s`);
+      // CH7-3: a windowed feed (a once-a-day read) retries briefly, then hourly in its window, then in a late window (readPlan.ts)
+      const win = readWindowFor(locked.rule);
+      const retryAt = win ? windowFailureNextAt(win, now, failures, backoffMs) : now + backoffMs(failures - 1);
+      d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: st.lastOkAt, failures, lastError: msg, nextFetchAt: retryAt });
+      d.log(`  [feed] ${key}: ${msg} — retrying in ${Math.round((retryAt - now) / 1000)} s`);
       out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: msg, skipped: false });
     }
   }
@@ -367,10 +410,11 @@ export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: 
   const after = state.lastSettledAt ?? t.baselineAt;
   const carry = carryFor(locked.rule);
   const independent = independentReadings(locked.rule, carry);
-  const ahead = (r: { at: string; id: string }) => r.at > after || (r.at === after && state.lastEventId !== null && r.id > state.lastEventId);
+  // before the first processed reading, every reading after the launch is ahead (the launch-day cut decides which those are)
+  const ahead = (r: { at: string; id: string }) => state.lastSettledAt === null || r.at > after || (r.at === after && state.lastEventId !== null && r.id > state.lastEventId);
   // the first snow covers the season it was created in (nws.ts snowSeasonEnd): a later season's first snow is never planned
   const snowEnd = locked.rule.oracle === "catalogue" && isFirstSnowSeries(locked.rule.series) ? snowSeasonEnd(t.baselineAt) : null;
-  const unseen = d.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r) && !d.registry.receipt(t.mint, r.id) && (snowEnd === null || r.at.slice(0, 10) <= snowEnd));
+  const unseen = readingsAfterLaunch(d.registry, t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r) && !d.registry.receipt(t.mint, r.id) && (snowEnd === null || r.at.slice(0, 10) <= snowEnd));
   const fresh: SettledEvent[] = independent ? unseen : unseen.filter(ahead);
   if (!independent) for (const r of unseen.filter((x) => !ahead(x))) {
     const text = `$${t.ticker} ${r.id} (${r.at}) arrived behind the settlement cursor (${after}); this rule measures each value against the last processed one, so the change through ${r.id} is already inside the next processed delta and is not applied again`;
@@ -427,7 +471,7 @@ function planRace(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate
   if (!mine) return out;
   let otherRule: BurnRule | null = null;
   try { otherRule = reg.lockedRule(other).rule; } catch { otherRule = null; }
-  const theirs = reg.readings(other.selectorKey, other.baselineAt).find((r) => sidePayout(r) !== null && (!otherRule || readingMatches(otherRule, r))) ?? null;
+  const theirs = readingsAfterLaunch(reg, other.selectorKey, other.baselineAt).find((r) => sidePayout(r) !== null && (!otherRule || readingMatches(otherRule, r))) ?? null;
   const v = raceVerdict(sidePayout(mine), sidePayout(theirs), { me: t.ticker, other: other.ticker, shape });
   if (v.kind === "held") {
     d.log(`  [${what}] $${t.ticker}: held — ${v.why}`);
@@ -987,6 +1031,11 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
 }
 
 /**
+ * Reviewer F: first-snow coins drafted from this instant on finish their carried share on the coin before the end sink takes the rest
+ * (owedBeforeEnd). The instant this rule was written; coins drafted earlier keep the publish-102 end.
+ */
+export const FIRST_SNOW_HOLD_FROM_MS = Date.parse("2026-10-21T03:00:00Z");
+/**
  * REVIEW 10 F1 (2026-10-14): A ONE-SHOT UNDER 100 % FINISHES ITS SHARE ON THE COIN BEFORE THE END SINK TAKES THE REST. The result's
  * reading asks for f of the pool; one crank spends at most 2 % of the CPMM pool's SOL reserve and carries the rest
  * (carried_spend_lamports). On the round-4 program, recording a RESOLVED end (submit_rule_end) closed the coin to further spending
@@ -1013,8 +1062,13 @@ export async function owedBeforeEnd(d: KeeperDeps, t: TokenRow, locked: LockedRu
   // HB-164 (hourly run 15): a first snow under 100% is NOT held here. Its end is the publish-102 one exactly (detectRuleEnd's own
   // branch: a wind-down after the first snow, or the end sink takes the rest on a resolved end, whether burn dispersal runs or not);
   // coins launched at 2% before HB-147 keep that end. Only a 100% first snow changed: it drains after its first snow (detectRuleEnd).
-  if (end.mode !== "winddown" || t.status === "retired" || locked.mode !== "buyback" || !isOneShot(rule) || !endSinkOf(rule) || !d.program.endSink) return null;
-  const ev = d.registry.receipts(t.mint).filter((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair")[0];
+  // Reviewer F (publishes 102-105): that left a first snow's carried share unspent (under the end sink's minimum it stayed carried for
+  // good; above it the end sink took it after the grace). A first snow DRAFTED from FIRST_SNOW_HOLD_FROM_MS on is held like any other
+  // one-shot (REVIEW 10 F1): its share is finished on the coin first. Its result is its first day that burned, not its first reading.
+  // Coins drafted before keep the publish-102 end above.
+  const snowHeld = rule.oracle === "catalogue" && isFirstSnowSeries(rule.series) && typeof t.createdAt === "number" && t.createdAt >= (d.firstSnowHoldFromMs ?? FIRST_SNOW_HOLD_FROM_MS);
+  if (end.mode !== "winddown" || t.status === "retired" || locked.mode !== "buyback" || !(isOneShot(rule) || snowHeld) || !endSinkOf(rule) || !d.program.endSink) return null;
+  const ev = snowHeld ? d.registry.receipts(t.mint).find((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair" && b.units > 0) : d.registry.receipts(t.mint).filter((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair")[0];
   const f = ev?.mapping?.fractionOfPool ?? 0;
   if (!ev || !(ev.units > 0) || ev.status === "voided" || !(f > 0 && f < 1) || ev.pairRole === "lost") return null;
   const sinkPort = d.program.endSink.port(t.mint);

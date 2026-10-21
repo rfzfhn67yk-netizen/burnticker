@@ -254,9 +254,9 @@ describe("HB-157: a one-game pair states one settlement rule", () => {
     const final = flow.steps.find((s) => s.title === "When the game is final")!.text;
     assert.ok(final.startsWith(GAME_RESULT_COUNTS_LINE), final);
     for (const s of [final, GAME_PAIR_DETAIL]) assert.doesNotMatch(s, /a second source agrees(?! on the final, or)/, s);
-    // owner 2026-10-20: the official feed marks the game final, and a second check five minutes later agrees
-    assert.match(GAME_PAIR_DETAIL, /once the official feed has marked it final and a second check five minutes later agrees/);
-    assert.match(GAME_BURN_LINE, /once the official feed has marked the game final and a second check five minutes later agrees/);
+    // owner 2026-10-20: the official feed marks the game final, and a second read five minutes later agrees
+    assert.match(GAME_PAIR_DETAIL, /once its final has been read and a second read five minutes later agrees/);
+    assert.match(GAME_BURN_LINE, /once its final has been read and a second read five minutes later agrees/);
   });
 });
 

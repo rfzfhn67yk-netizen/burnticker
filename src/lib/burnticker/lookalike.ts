@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
+import { parseEspnSeries, canonicalEspnSeries } from "@/lib/burnticker/sources/espn";
 
 /**
  * LOOKALIKE REFUSAL (growth batch, owner-approved 2026-10-10). A new coin's ticker and name must not pass for an existing Burnticker
@@ -88,9 +88,15 @@ export const draftHeldSentence = (ticker: string): string => `$${ticker.toUpperC
  */
 export const nearDraftSentence = (ticker: string): string => `$${ticker.toUpperCase()} is too close to the ticker of another Burnticker coin that has not launched yet. If that unfinished launch is yours, go back to its own ticker to finish it.`;
 
-/** HB-170: two rules are one window when the oracle and the series are the same. */
+/**
+ * HB-170: two rules are one window when the oracle and the series are the same. HB-188 (eighth pass LA8-2): an ESPN series is compared by
+ * what it parses to (league, team, outcome, window; canonicalEspnSeries), not by its letters, so `nfl-ZZZ.21-…` is the Eagles' window.
+ */
+const seriesKey = (r: Pick<BurnRule, "oracle" | "series">): string | null => (r.oracle === "catalogue" ? canonicalEspnSeries(r.series) ?? r.series ?? null : r.series ?? null);
 const sameRuleOf = (a: Pick<BurnRule, "oracle" | "series"> | null | undefined, b: Pick<BurnRule, "oracle" | "series"> | null | undefined): boolean =>
-  !!(a && b && a.oracle === b.oracle && (a.series ?? null) === (b.series ?? null));
+  !!(a && b && a.oracle === b.oracle && seriesKey(a) === seriesKey(b));
+/** HB-188 (LA8-3): the same name, case and spaces aside. */
+const sameNameText = (a: string, b: string): boolean => a.trim().toLowerCase().replace(/\s+/g, " ") === b.trim().toLowerCase().replace(/\s+/g, " ");
 
 const teamOf = (r: Pick<BurnRule, "oracle" | "series"> | null | undefined): string | null => {
   const e = r && r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
@@ -154,7 +160,13 @@ export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<
     }
     // another window of the same team (RAYS26 / RAYS27) is exempt; HB-170 (seventh pass B-21): the SAME window is not, so a copycat on
     // the identical rule is compared like any other coin (its name above all: "Eagles 2026 Wins" twice on one rule)
-    if (!exact && team && teamOf(e.rule) === team && !sameRuleOf(cand.rule, e.rule)) continue;
+    // HB-188 (eighth pass LA8-3): the exemption is for the TICKER only; the identical name on another window of the same team is still
+    // refused against a launched coin (two live "Eagles 2026 Wins" a letter apart), while distinct names ("Rays 2026 Wins" / "Rays 2027
+    // Wins") stay exempt
+    if (!exact && team && teamOf(e.rule) === team && !sameRuleOf(cand.rule, e.rule)) {
+      if (e.status !== "draft" && sameNameText(cand.name, e.name) && skeleton(cand.name).length >= 4) hits.push({ field: "name", existing: e.name, how: "same-letters", reason: nameCloneSentence(cand, e, "same-letters") });
+      continue;
+    }
     const et = skeleton(e.ticker), en = skeleton(e.name);
     const t = exact ? null : compare(ct, et);
     // review of block M: a draft's ticker is never named (it is not public until the coin exists)

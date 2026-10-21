@@ -6,6 +6,7 @@ import type { FeedState, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker
 import { readAudit, type AuditSummary } from "@/lib/burnticker/trust";
 import { PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
 import { takeRpc } from "@/lib/burnticker/apiBudget";
+import { pushOutcome, readPushState } from "@/lib/burnticker/push";
 import { noticeMarkLamports, REFERENCE_IRYS_PRICES, SIGNER_FLOOR_LAMPORTS, signerSendLamports, TARGET_LABEL, topUpDaySummary } from "@/lib/burnticker/ops/topUp";
 
 /**
@@ -212,8 +213,11 @@ export function registryAlertSink(reg: Registry): AlertSink {
   return async (kind, key, text, meta, now) => reg.recordAlert({ kind, key, text, meta }, now);
 }
 /** The last day's alerts from the registry, in the shape the check-in block reads. */
-export function registryAlertRows(reg: Registry, now: number): { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }[] {
-  return reg.alertsSince(now - 86_400_000).map((a) => ({ ts: a.ts, kind: a.kind, text: a.text, seenAt: null, sent: false }));
+export function registryAlertRows(reg: Registry, now: number): { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean; push: string | null }[] {
+  // OP7-7: each row says what became of it on the phone (the push state), not "UNSEEN": nothing on this host marks an alert seen
+  let state: ReturnType<typeof readPushState> = null;
+  try { state = readPushState(reg); } catch { state = null; }
+  return reg.alertsSince(now - 86_400_000).map((a) => ({ ts: a.ts, kind: a.kind, text: a.text, seenAt: null, sent: false, push: pushOutcome(a.kind, a.ts, state) }));
 }
 
 /**

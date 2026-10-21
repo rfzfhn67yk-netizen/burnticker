@@ -8,7 +8,7 @@ import { Keypair } from "@solana/web3.js";
 import { prepareLaunch } from "@/lib/burnticker/api/handlers";
 import { FakePinUploader, pinCoin } from "@/lib/burnticker/pin";
 import { lockRule } from "@/lib/burnticker/rules";
-import { CREATOR, makeWorld, type World } from "./burntickerApiHelpers.ts";
+import { CREATOR, ageDraftsPastDedupe, makeWorld, type World } from "./burntickerApiHelpers.ts";
 import { BRONCOS } from "./burntickerHelpers.ts";
 
 const RULE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } }, pair: null };
@@ -58,6 +58,7 @@ describe("F09: every pinned metadata file links to its own mint", () => {
   test("two coins with the same ticker (different names): each file names its own mint, never the shared ticker", async () => {
     const w = await makeWorld(); const up = new FakePinUploader(); w.p.uploader = up;
     const a = okBundle(await prepareLaunch(w.p, single("MAPLE", "Maple One"), { register: true, mint: Keypair.generate().publicKey.toBase58() }));
+    ageDraftsPastDedupe(w.registry);   // LA7-5: a second unsent draft of a ticker only after the 30-minute window
     const b = okBundle(await prepareLaunch(w.p, single("MAPLE", "Maple Two"), { register: true, takeMintKeys: bankKeys }));
     assert.notEqual(a.bundle.mint, b.bundle.mint);
     assert.deepEqual(jsons(up).map((j) => j.external_url), [linkOf(a.bundle.mint), linkOf(b.bundle.mint)]);

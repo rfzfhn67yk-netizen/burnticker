@@ -10,7 +10,7 @@ import { FOOTER_COPY } from "@/lib/burnticker/siteNav.mjs";
  *   theme and watchlist in the browser only           _components/theme.ts, watchlist.ts (localStorage, never sent)
  *   the wallet adapter remembers the chosen wallet    _components/ShellWalletProviders.tsx (autoConnect; the adapter's own local key)
  *   this-tab memory of the launch form and signing    launch/page.tsx, signPlan.ts (sessionStorage), CoinsIndex.tsx (the selected tab)
- *   no access log of visitor addresses                deploy/caddy/Caddyfile ("no access log is configured")
+ *   no access log of visitor addresses                deploy/caddy/Caddyfile (OP7-10: the access log deletes every address and header)
  *   rate limits counted in memory per address         api/http.ts, api/clientIp.ts (the limiter is in memory on the one app process)
  *   anonymous search reports                          api/product.ts v1SearchMiss / logNoCardSearch (plain words + the UTC hour)
  *   a coin's details and image pinned on Arweave      api/handlers.ts (launches are refused when the pin fails)

@@ -55,7 +55,23 @@ const NO_STORE = { "cache-control": "no-store", "referrer-policy": "no-referrer"
 const refuse = (status: number, error: string): Response =>
   new Response(JSON.stringify({ ok: false, error }), { status, headers: { ...NO_STORE, "content-type": "application/json; charset=utf-8" } });
 
-/** The whole route: rate limit, check the venue and the coin, count once, answer 302 with no-store. */
+/**
+ * OP7-11 / AP7-9 (seventh pre-launch audit): any GET counted as a trade click, so a link preview, a prefetch, a crawler or a loop
+ * inflated the counts. A click is counted only for a browser's own top-level navigation (Sec-Fetch-Mode: navigate), never for a
+ * prefetch (Sec-Purpose or Purpose: prefetch), a HEAD, or a user agent that names itself a bot, crawler or link preview. Every request
+ * is still redirected; the counts are a lower bound now, not an upper one.
+ */
+export const BOT_UA_RE = /bot|crawl|spider|preview|facebookexternalhit|slackbot|twitterbot|whatsapp|discord|telegram|embedly|curl|wget|python|go-http|node-fetch|headless/i;
+export function isCountedClick(req: Request): boolean {
+  if (req.method !== "GET") return false;
+  const h = req.headers;
+  if (/prefetch|prerender/i.test(`${h.get("sec-purpose") ?? ""} ${h.get("purpose") ?? ""} ${h.get("x-purpose") ?? ""} ${h.get("x-moz") ?? ""}`)) return false;
+  if ((h.get("sec-fetch-mode") ?? "").toLowerCase() !== "navigate") return false;
+  const ua = h.get("user-agent") ?? "";
+  return ua.length > 0 && !BOT_UA_RE.test(ua);
+}
+
+/** The whole route: rate limit, check the venue and the coin, count once (a real click only), answer 302 with no-store. */
 export function goRedirect(req: Request, venue: string, deps: GoDeps): Response {
   const now = deps.now ?? Date.now();
   const limited = heavyRefusal(req, deps.limiter ?? goLimiter, now, "read");
@@ -68,6 +84,6 @@ export function goRedirect(req: Request, venue: string, deps: GoDeps): Response 
   const to = q.get("to") === "swap" ? "swap" : null;
   const dest = goDestination(venue, mint, to);
   if (!dest) return refuse(404, "This site has no trade link of that kind.");
-  try { deps.count(mint, venue as GoVenue, now); } catch { /* a counter that cannot be written never blocks the trade link */ }
+  if (isCountedClick(req)) { try { deps.count(mint, venue as GoVenue, now); } catch { /* a counter that cannot be written never blocks the trade link */ } }
   return new Response(null, { status: 302, headers: { ...NO_STORE, location: dest } });
 }

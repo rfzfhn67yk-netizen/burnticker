@@ -8,6 +8,8 @@ export const LAUNCH_BODY_FIELDS: readonly string[] = [
   // the record of a landed launch (the page route's action: "launched"), of a create about to be sent (action: "sent"; B-2),
   // and the plan record's launch-gate read (SEC-03)
   "action", "launchTx", "sentTx", "gate",
+  // LA7 fix B: the sign card's note that a version-1 dry run was refused and the create fell back to version 0 (ops log only)
+  "formatFallback",
   // the coin
   "creator", "mint", "ticker", "name", "description", "descCtx", "note", "imageUrl", "links", "rule", "firstBuySol", "raiseSol", "acknowledgements",
   // the creator's own profile (website-15 item 13)

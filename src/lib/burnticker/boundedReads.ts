@@ -20,11 +20,21 @@
  */
 export type BoundedRead<T> =
   | { state: "fresh"; value: T; at: number }
-  | { state: "earlier"; value: T; at: number; why: "late" | "failed"; error?: unknown }
+  | { state: "earlier"; value: T; at: number; why: "late" | "failed" | "joined"; error?: unknown }
   | { state: "failed"; error: unknown };
 
+/**
+ * Audit 7 review (2026-10-20): every read carries the time it was STARTED (its build's `now`, which the read closure computes with), not
+ * the time it landed. A read joined from an earlier build is served as "earlier" (why "joined") with that start time, never as fresh;
+ * and a kept read older than EARLIER_MAX_AGE_MS is retired: the coin counts as failed (ReadTooOldError), never "read 9 hours ago".
+ */
+export const EARLIER_MAX_AGE_MS = 6 * 3_600_000;
+export class ReadTooOldError extends Error {
+  constructor(ageMs: number) { super(`its last good read is ${Math.floor(ageMs / 3_600_000)} hours old, past the ${EARLIER_MAX_AGE_MS / 3_600_000} hour limit`); this.name = "ReadTooOldError"; }
+}
+
 interface Kept<T> { at: number; value: T }
-interface Store { good: Map<string, Kept<unknown>>; inflight: Map<string, Promise<unknown>>; tried: Map<string, number> }
+interface Store { good: Map<string, Kept<unknown>>; inflight: Map<string, { p: Promise<unknown>; at: number }>; tried: Map<string, number> }
 
 const KEY = Symbol.for("burnticker.boundedReads");
 const MAX_KEYS = 2_000;
@@ -82,26 +92,29 @@ export async function readCoinsBounded<T>(items: readonly { key: string; read: (
   const limitOf = (key: string) => (s.good.has(key) ? { d: warm, ms: o.deadlineMs } : { d: cold, ms: coldMs });
   const fallback = (key: string, why: "late" | "failed", error: unknown): BoundedRead<T> => {
     const k = s.good.get(key) as Kept<T> | undefined;
+    if (k && now() - k.at > EARLIER_MAX_AGE_MS) { s.good.delete(key); return { state: "failed", error: new ReadTooOldError(now() - k.at) }; }
     return k ? { state: "earlier", value: k.value, at: k.at, why, ...(why === "failed" ? { error } : {}) } : { state: "failed", error };
   };
-  const start = (key: string, read: () => Promise<T>): Promise<T> => {
-    const p = Promise.resolve().then(read);
-    s.inflight.set(key, p);
-    s.tried.set(key, now());
-    p.then((value) => { keep(s, key, { at: now(), value }); }, () => { /* a failed read keeps the last good one */ })
-      .finally(() => { if (s.inflight.get(key) === p) s.inflight.delete(key); });
-    return p;
+  const start = (key: string, read: () => Promise<T>): { p: Promise<T>; at: number } => {
+    const p = Promise.resolve().then(read), at = now();
+    const entry = { p, at };
+    s.inflight.set(key, entry);
+    s.tried.set(key, at);
+    p.then((value) => { keep(s, key, { at, value }); }, () => { /* a failed read keeps the last good one */ })
+      .finally(() => { if (s.inflight.get(key) === entry) s.inflight.delete(key); });
+    return entry;
   };
-  const settle = async (i: number, p: Promise<T>) => {
+  const settle = async (i: number, p: Promise<T>, startedAt: number, joinedRead: boolean) => {
     const key = items[i].key, lim = limitOf(key);
     try {
       const r = await Promise.race([p, lim.d.p]);
-      out[i] = r === "late" ? fallback(key, "late", new ReadLateError(lim.ms)) : { state: "fresh", value: r as T, at: now() };
+      out[i] = r === "late" ? fallback(key, "late", new ReadLateError(lim.ms)) : joinedRead ? { state: "earlier", value: r as T, at: startedAt, why: "joined" } : { state: "fresh", value: r as T, at: startedAt };
     } catch (e) { out[i] = fallback(key, "failed", e); }
   };
-  // coins with a read still running from an earlier build are joined first, outside the slots (they cost no new request)
+  // coins with a read still running from an earlier build are joined first, outside the slots (they cost no new request); the answer was
+  // computed for that build, so it is served as an earlier read with that build's time
   const joined: Promise<void>[] = [], fresh: number[] = [];
-  items.forEach((it, i) => { const p = s.inflight.get(it.key) as Promise<T> | undefined; if (p) joined.push(settle(i, p)); else fresh.push(i); });
+  items.forEach((it, i) => { const e = s.inflight.get(it.key) as { p: Promise<T>; at: number } | undefined; if (e) joined.push(settle(i, e.p, e.at, true)); else fresh.push(i); });
   // the coins tried longest ago go first, so a coin left unstarted by one build's deadline is read early in the next
   fresh.sort((a, b) => (s.tried.get(items[a].key) ?? 0) - (s.tried.get(items[b].key) ?? 0) || a - b);
   let next = 0;
@@ -109,7 +122,8 @@ export async function readCoinsBounded<T>(items: readonly { key: string; read: (
     while (next < fresh.length) {
       const i = fresh[next++], lim = limitOf(items[i].key);
       if (lim.d.expired) { out[i] = fallback(items[i].key, "late", new ReadLateError(lim.ms)); continue; }
-      await settle(i, start(items[i].key, items[i].read));
+      const e = start(items[i].key, items[i].read);
+      await settle(i, e.p, e.at, false);
     }
   };
   try { await Promise.all([...joined, ...Array.from({ length: Math.min(Math.max(1, o.concurrency), fresh.length) }, worker)]); }
@@ -143,7 +157,9 @@ export function earlierReadsNote(rows: readonly { ticker: string; r: BoundedRead
   const earlier = rows.filter((x) => x.r.state === "earlier");
   const failed = rows.filter((x) => x.r.state === "failed" && x.r.error instanceof ReadLateError);
   const parts: string[] = [];
-  if (earlier.length) parts.push(`${earlier.length} coin${earlier.length === 1 ? "" : "s"} from an earlier read (${earlier.map((x) => `${x.ticker} ${Math.round((nowMs - (x.r as { at: number }).at) / 60_000)} min${(x.r as { why: string }).why === "failed" ? ", read failed" : ""}`).join(", ")})`);
+  if (earlier.length) parts.push(`${earlier.length} coin${earlier.length === 1 ? "" : "s"} from an earlier read (${earlier.map((x) => `${x.ticker} ${Math.round((nowMs - (x.r as { at: number }).at) / 60_000)} min${(x.r as { why: string }).why === "failed" ? ", read failed" : (x.r as { why: string }).why === "joined" ? ", joined from the last build" : ""}`).join(", ")})`);
+  const old = rows.filter((x) => x.r.state === "failed" && x.r.error instanceof ReadTooOldError);
+  if (old.length) parts.push(`${old.length} coin${old.length === 1 ? "" : "s"} whose last good read was too old to serve (${old.map((x) => x.ticker).join(", ")})`);
   if (failed.length) parts.push(`${failed.length} coin${failed.length === 1 ? "" : "s"} late with no earlier read (${failed.map((x) => x.ticker).join(", ")})`);
   return parts.join("; ");
 }

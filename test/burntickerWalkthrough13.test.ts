@@ -132,7 +132,7 @@ describe("walkthrough 13: disclosures that said more than the code does", () => 
     const line = candidateMappingLine({ type: "control", stateName: null, district: null, state: null }, { label: "Democratic Party", question: "Will the Democratic Party control the Senate after the 2026 Midterm elections?", partyMarket: true }, "DEMVREP");
     assert.doesNotMatch(line, /nominee|named for/); assert.match(line, /^\$DEMVREP settles on the Democratic Party's market/); clean(line.replace(/“[^”]*”/, "the market"), "party line (the venue's own question aside)");
     assert.match(read("src/lib/burnticker/elections.ts"), /"each state's certified results from its election office"/);
-    assert.match(read("src/app/burnticker/launch/page.tsx"), /if \(flow === "pair" && elPick\) return electionPairIdentity\(elPick\.a\.label, elPick\.b\.label\)\.tickers\.a;/);
+    assert.match(read("src/app/burnticker/launch/page.tsx"), /if \(flow === "pair" && elPick\) return electionPairIdentity\(elPick\.a\.label, elPick\.b\.label, elPick\.race\.title\)\.tickers\.a;/);
   });
   test("the $DEFICIT site: the countdown is a feed check, and the fee pool paragraph names the upgrade path", () => {
     const d = read("site/deficit/index.html");
