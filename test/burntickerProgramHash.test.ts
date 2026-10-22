@@ -12,30 +12,33 @@ import { PUSH_KIND_OF_ALERT } from "@/lib/burnticker/push";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const R5 = "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821";
+/** The B-17 build, on mainnet since 2026-10-21 (vault transaction 4, slot 459823169): the record the trust page reads now. */
+const B17 = "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b";
 const R3 = "e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19";
 const PID = "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM";
 
 describe("the program hash on the trust page (A-4)", () => {
-  test("mainnet reads the round-5 record and slot; a stale env hash is ignored and logged once, by name only", () => {
+  test("mainnet reads the B-17 record and slot (2026-10-21); a stale env hash is ignored and logged once, by name only", () => {
     resetProgramHashWarning();
     const logs: string[] = [];
     const f = programHashFact({ BURNTICKER_CLUSTER: "mainnet", BURNTICKER_PROGRAM_HASH: R3 }, ROOT, { log: (s) => logs.push(s) });
-    assert.equal(f.hash, R5);
-    assert.equal(f.slot, 457461970);
+    assert.equal(f.hash, B17);
+    assert.equal(f.slot, 459823169);
     assert.equal(f.hostValue, "ignored");
     programHashFact({ BURNTICKER_CLUSTER: "mainnet", BURNTICKER_PROGRAM_HASH: R3 }, ROOT, { log: (s) => logs.push(s) });
     assert.equal(logs.length, 1, "logged once");
     assert.ok(!logs[0].includes(R3), "the env value is never printed");
-    assert.match(programHashSourceLine(f), /verified-build\.json \(mainnet, 152929ce…, slot 457461970\); BURNTICKER_PROGRAM_HASH on this host differs and is ignored/);
+    assert.match(programHashSourceLine(f), /verified-build\.json \(mainnet, b5b6e44f…, slot 459823169\); BURNTICKER_PROGRAM_HASH on this host differs and is ignored/);
   });
   test("an env hash equal to the record is reported as equal; unset is unset", () => {
-    assert.equal(programHashFact({ BURNTICKER_CLUSTER: "mainnet", BURNTICKER_PROGRAM_HASH: R5 }, ROOT).hostValue, "equal");
+    assert.equal(programHashFact({ BURNTICKER_CLUSTER: "mainnet", BURNTICKER_PROGRAM_HASH: B17 }, ROOT).hostValue, "equal");
+    assert.equal(programHashFact({ BURNTICKER_CLUSTER: "mainnet", BURNTICKER_PROGRAM_HASH: R5 }, ROOT).hostValue, "ignored", "the round-5 hash is stale since the B-17 upgrade");
     assert.equal(programHashFact({ BURNTICKER_CLUSTER: "mainnet" }, ROOT).hostValue, "unset");
   });
   test("programFacts prints the recorded hash, never the env one, and the verify steps use the executable hash", () => {
     resetProgramHashWarning();
     const p = programFacts({ BURNTICKER_CLUSTER: "mainnet", BURNTICKER_PROGRAM_ID: PID, BURNTICKER_PROGRAM_HASH: R3 }, ROOT);
-    assert.equal(p.buildHash, R5);
+    assert.equal(p.buildHash, B17);
     assert.ok(!JSON.stringify(p).includes(R3));
     assert.ok(p.verify.some((v) => v.startsWith(`solana-verify get-program-hash ${PID}`)));
     assert.ok(!p.verify.some((v) => /^sha256sum program\.so/.test(v)), "sha256 of a padded dump never equals the executable hash");

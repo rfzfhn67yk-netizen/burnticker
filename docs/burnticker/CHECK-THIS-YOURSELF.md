@@ -10,7 +10,7 @@ Nothing here asks you to take our word. Every line names the file or the account
 
 This table lists every instruction in both programs and the only place each one can move SOL or tokens. These keys cannot withdraw a burn pool to a personal wallet. A finished rule's remainder can be forwarded to its end sink (the winner or $DEFICIT) by the keeper's signed reading; reading signers decide qualifying results; the upgrade authority can replace the program.
 
-These 52 instructions are the published source's (the programs' registers, round 5). 8 of them are new in round 5. They belong to the burn program (burn_receipts), which runs round 5, so they are on the deployed program too. The deployed programs are the burn program (burn_receipts) at round 5, from commit 089024ff6a (a newer build, from commit 116ff5ad05, has not been deployed yet), and the pair program (pair_curve) at round 4, from commit 29f6f5de19. Section 5 checks both.
+These 52 instructions are the published source's (the programs' registers, round 5). 8 of them are new in round 5. They belong to the burn program (burn_receipts), which runs round 5, so they are on the deployed program too. The deployed programs are the burn program (burn_receipts) at round 5, from commit 116ff5ad05, and the pair program (pair_curve) at round 4, from commit 29f6f5de19. Section 5 checks both.
 
 | Program | Instruction | Who signs | Where money can go | The register's words |
 |---|---|---|---|---|
@@ -150,7 +150,7 @@ The build kind is **interim-local**. INTERIM: built with cargo build-sbf on the 
 
 | Program | Network | Features | Executable hash (this repository) | Deployed bytes on that network | Read | Evidence |
 |---|---|---|---|---|---|---|
-| burn_receipts | mainnet | default | `b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b` | `152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821` the earlier build: the upgrade to this build has not been deployed | 2026-10-16 | docs/burnkeeper/evidence/mainnet-round5/onchain-verify-after.log |
+| burn_receipts | mainnet | default | `b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b` | `b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b` same as the build | 2026-10-21T23:59:37Z | docs/burnkeeper/evidence/mainnet-b17/onchain-verify-after.log |
 | burn_receipts | devnet | devnet | `34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee` | `74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c` the earlier build: the upgrade to this build has not been deployed | 2026-10-16 | docs/burnkeeper/evidence/devnet-round5/u2/onchain-verify-after.log |
 | pair_curve | mainnet | default | `567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895` | `567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895` same as the build | 2026-10-12 | docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log |
 | pair_curve | devnet | devnet | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` same as the build | 2026-10-12 | docs/burnticker/VERIFIED-BUILD.md |

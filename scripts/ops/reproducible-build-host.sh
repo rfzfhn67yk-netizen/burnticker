@@ -38,14 +38,13 @@ done
 # What the table in config/burnticker/verified-build.json says for the mainnet builds. sha256 is the plain hash of the .so file; the executable
 # hash is solana-verify's (trailing zero bytes removed), the number get-program-hash prints for the chain. test/burntickerVerifiedBuild.test.ts
 # keeps these lines equal to the table. burn_receipts: the B-17 build (monorepo source 116ff5ad, built on the Mac 2026-10-21), built at
-# COMMIT. It is NOT deployed yet: mainnet still runs round 5 (source 089024ff, upgraded 2026-10-15 ~19:57 Denver), whose hash is
-# DEPLOYED[burn_receipts]; until the upgrade the comparison says PENDING for it. pair_curve: still round 4 (source 29f6f5de,
-# 2026-10-12), built at PAIR_CURVE_COMMIT (above).
+# COMMIT; deployed on mainnet 2026-10-21 17:57 Denver (Squads vault transaction 4, slot 459823169), so the comparison says MATCH.
+# pair_curve: still round 4 (source 29f6f5de, 2026-10-12), built at PAIR_CURVE_COMMIT (above). DEPLOYED[<lib>] names the earlier hash
+# mainnet runs while an upgrade to the table's build is pending (the comparison then says PENDING); no program has one now.
 declare -A ID SHA EXE DEPLOYED
 ID[burn_receipts]="AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"
 SHA[burn_receipts]="faf072925c169ede89788e17c66cd6ab446fa332d47ae0362fca46dbb1a4e4f8"
 EXE[burn_receipts]="b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b"
-DEPLOYED[burn_receipts]="152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821"
 ID[pair_curve]="2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
 SHA[pair_curve]="8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2"
 EXE[pair_curve]="567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895"

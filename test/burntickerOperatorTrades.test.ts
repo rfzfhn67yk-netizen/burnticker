@@ -33,6 +33,13 @@ const fixtureRpc = (answers: Record<string, unknown>, fail: RegExp | null = null
   },
 });
 const t = loadTransparency();
+// 2026-10-21 18:20 Denver: the owner wrote the reason down ("to check that trading through the site worked on a freshly created coin, in
+// and out"); the tests read whatever the file carries, so they hold before and after a reason is written
+const FILE_REASON = (t.operatorTrades?.[0]?.reason ?? "") as string;
+const SAID = FILE_REASON ? `The $SEAWIN test was made ${FILE_REASON}.` : MISSING;
+const SAID_PAGE = FILE_REASON ? `The test was made ${FILE_REASON}.` : MISSING;   // the coin page is already about $SEAWIN
+const blankProse = <T extends string | null | undefined>(x: T): T => (FILE_REASON && typeof x === "string" ? (x.split(SAID).join(MISSING) as T) : x);
+const tBlank = { ...t, operatorTrades: t.operatorTrades!.map((x) => ({ ...x, reason: "" })), wallets: t.wallets.map((w) => ({ ...w, description: blankProse(w.description) })), rehearsals: t.rehearsals.map((x) => ({ ...x, text: blankProse(x.text) })), policies: t.policies.map((p) => ({ ...p, text: blankProse(p.text) })) };
 const mints: TradesCheckMint[] = tradesCheckMints(FIXTURE.tokens, [...t.rehearsals.flatMap((r) => (r.mint ? [{ symbol: r.symbol, mint: r.mint }] : [])), { symbol: "DEFICIT", mint: "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj" }]);
 
 describe("B-26 / HS-95: the $SEAWIN round trip is listed once, with the owner's reason", () => {
@@ -43,12 +50,13 @@ describe("B-26 / HS-95: the $SEAWIN round trip is listed once, with the owner's 
     assert.equal(x.inSol, 0.1015); assert.equal(x.outTokens, "3484436.310353");
     assert.match(x.buyTx, /^2PWU1CBgJsxNFgvFwWbo/); assert.match(x.sellTx!, /^5ieZjtQ3pjBm5BEE79wt/);
     assert.equal(x.at, "2026-10-15T02:46:23Z");
-    assert.equal(x.reason, "", "no reason until the owner writes one down; no placeholder is published");
+    const why = x.reason ?? "";
+    assert.ok(why === "" || (/^to /.test(why) && !/\.$/.test(why)), "either no reason yet, or the owner's own sentence starting with \"to \" and no final full stop");
     assert.equal(OPERATOR_TRADE_REASON_MISSING, MISSING);
     assert.deepEqual(transparencyProblems(t), []);
   });
   test("the $SEAWIN coin page names the round trip; the other six keep 'has not traded it'; no coin given says only what is true of all", () => {
-    assert.equal(operatorCreatorLine(OPERATOR, SEAWIN), `Created by the operator's own wallet 8sJf…LvGbs during the soft launch. Four minutes after creating it, that wallet bought 0.10 SOL of it and sold all of it 24 seconds later, as a test; it has held none since. ${MISSING}`);
+    assert.equal(operatorCreatorLine(OPERATOR, SEAWIN), `Created by the operator's own wallet 8sJf…LvGbs during the soft launch. Four minutes after creating it, that wallet bought 0.10 SOL of it and sold all of it 24 seconds later, as a test; it has held none since. ${SAID_PAGE}`);
     for (const m of ["J45hvg6FYGzDMj3iYS3BJPU2pwqfoZhA7B8isnW4fin8", "EDNbkvZLKGQizGUDot1n41mF6FhXkdm6nZJFyTBzBURN", "33fGPWrMaLjfX69wsnd3ruaQtGVMU3kKcTsBTnE4ggid", "2j5CbcQ7uH2FKPUbFMbeWM66jwCgTEYj7c9jziA88Jwk", "DuaF9EE7eSFHiHVxUBgXye729VN1jj9AWD31AAJbburn", "5jtNbnTohb1YyVsSDzkWeoCMY7jAotA6qcnUxKg7burn"])
       assert.equal(operatorCreatorLine(OPERATOR, m), "Created by the operator's own wallet 8sJf…LvGbs during the soft launch. The operator holds none of it and has not traded it.");
     assert.equal(operatorCreatorLine(OPERATOR), "Created by the operator's own wallet 8sJf…LvGbs during the soft launch. The operator holds none of it.");
@@ -56,7 +64,7 @@ describe("B-26 / HS-95: the $SEAWIN round trip is listed once, with the owner's 
   });
   test("terms, press, use of fees, the guardrail and the JSON prose all name both tests and carry the reason sentence", () => {
     const reason = operatorTradeReason(OPERATOR_TRADES[0]);
-    assert.equal(reason, MISSING);
+    assert.equal(reason, SAID);
     assert.equal(disclosedTestsClause(), "two disclosed tests (0.1 SOL of $REHEARSAL at creation, and a 0.10 SOL purchase and immediate sale of $SEAWIN minutes after it was created)");
     assert.equal(NEVER_TRADES_SENTENCE, `Apart from two disclosed tests (0.1 SOL of $REHEARSAL at creation, and a 0.10 SOL purchase and immediate sale of $SEAWIN minutes after it was created), the platform never trades. ${reason}`);
     assert.ok(TERMS_SECTIONS.some((s) => s.paragraphs.some((p) => p.startsWith(`${NEVER_TRADES_SENTENCE} The platform never takes an order`))));
@@ -88,6 +96,7 @@ describe("B-26 / HS-95: the $SEAWIN round trip is listed once, with the owner's 
 });
 
 describe("an unwritten reason is optional and said plainly; writing one later is a JSON-only change", () => {
+  const t = tBlank;   // the file as it was before the owner wrote the reason
   const trade = t.operatorTrades![0];
   const REASON = "to check that a swap on a new coin's curve worked";
   const withReason = (reason: string) => {

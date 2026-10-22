@@ -798,12 +798,11 @@ are still a draft (see the status on 2026-10-19 above).
 - **Wallet list.** The transparency file (`config/burnticker/transparency.json`) names every role: operations, deployer, keeper,
   developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading-bot
   wallets on other machines. Their only trades in a platform coin are the 0.1 SOL of $REHEARSAL at its creation and the operator's own
-  wallet's 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15, which the same file discloses. The operator has not yet
-  written down why that test was made. The mainnet keys are set, and each one is listed there with its role.
+  wallet's 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15, which the same file discloses. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. The mainnet keys are set, and each one is listed there with its role.
 - **Policies.** Posts on X are not deleted, and corrections go in the same thread with the receipt. There is no paid promotion and no
   talk of what any coin trades at. Nothing is described as forthcoming. The platform buys no coin; the disclosed exceptions are the
   0.1 SOL test purchase of $REHEARSAL when it was created and the operator's own wallet's 0.10 SOL test purchase and immediate sale of
-  $SEAWIN on 2026-10-15. The operator has not yet written down why that test was made.
+  $SEAWIN on 2026-10-15. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out.
 - **The operator also runs trading bots.** Each bot refuses any platform coin by mint and by ticker. The check is in code and fails
   closed (`src/lib/ownTokens.ts`, which reads `config/own-tokens.json`). Both files are published.
 - **The operator.** Burnticker is run by one independent operator in the United States. The contact address is contact@burnticker.com,

@@ -274,8 +274,10 @@ describe("private review 9 F1: old ticker follows migrate only against the compl
     // and it names each program's deployed round and commit (pair_curve stays on round 4)
     assert.doesNotMatch(c.moneySource, /not on the deployed programs/);
     assert.match(c.moneySource, /8 of them are new in round 5\. They belong to the burn program \(burn_receipts\), which runs round 5, so they are on the deployed program too\./);
-    // B-17 (2026-10-21): the table's build is B-17 (116ff5ad), not deployed yet; the deployed burn program is still round 5 from 089024ff
-    assert.match(c.moneySource, new RegExp(`the burn program \\(burn_receipts\\) at round 5, from commit 089024ff6a \\(a newer build, from commit ${c.build.sourceCommit.slice(0, 10)}, has not been deployed yet\\), and the pair program \\(pair_curve\\) at round 4, from commit 29f6f5de19\\.`));
+    // B-17 (2026-10-21): the table's build is B-17 (116ff5ad), deployed on mainnet the same day (vault transaction 4), so the line names
+    // its commit and no longer says a newer build is waiting
+    assert.match(c.moneySource, new RegExp(`the burn program \\(burn_receipts\\) at round 5, from commit ${c.build.sourceCommit.slice(0, 10)}, and the pair program \\(pair_curve\\) at round 4, from commit 29f6f5de19\\.`));
+    assert.doesNotMatch(c.moneySource, /has not been deployed/);
     const { DEV_FEE_LINE, devFeeLineFor } = await import("@/lib/burnticker/fees");
     const { EARLIER_COINS_LINE } = await import("@/lib/burnticker/feeShareLine");
     // owner decision 2026-10-19: the shares are the new-coin tier; continuous audit run 2 (HB-13): the line names both tiers and the

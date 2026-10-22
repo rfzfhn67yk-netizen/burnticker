@@ -109,7 +109,7 @@ describe("I-1 mainnet bytes and authority are stated, not only devnet's", () => 
   });
   test("the summary line says both networks match, and the devnet authority is labelled devnet", () => {
     const s = buildCurrentStatus({ root: ROOT, env: {}, chain: {}, now: Date.parse("2026-10-19T12:00:00Z") });
-    // B-17 (2026-10-21): pair_curve's round-4 bytes are its build; burn_receipts waits for the B-17 upgrade (next test)
+    // B-17 (2026-10-21): pair_curve's round-4 bytes are its build; burn_receipts runs B-17 on mainnet and round 5 on devnet (next test)
     const pair = s.lines.find((l) => l.startsWith("The program that runs pair launches (pair_curve)"))!;
     assert.match(pair, /On both networks its bytes match this repository's recorded build\./);
     const p = s.programs.find((x) => x.name === "burn_receipts")!;
@@ -117,17 +117,16 @@ describe("I-1 mainnet bytes and authority are stated, not only devnet's", () => 
     assert.match(upgradeAuthorityText(p.devnet, "devnet"), /^The devnet upgrade authority is A8VV/);
     assert.equal(s.checkedAt, "2026-10-19", "the checked-on date is current");
   });
-  test("B-17 built, not deployed: current-status says a newer build exists and its upgrade has not been deployed, and never calls it verified", () => {
+  test("B-17 deployed on mainnet (2026-10-21), not on devnet: mainnet says the bytes match with no pending sentence; devnet says a newer build is not deployed and never calls it verified", () => {
     const s = buildCurrentStatus({ root: ROOT, env: {}, chain: {}, now: Date.parse("2026-10-21T12:00:00Z") });
     const burn = s.lines.find((l) => l.startsWith("The program that records burns (burn_receipts)"))!;
     const dev = "This repository has a newer build (34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee) whose upgrade has not been deployed on devnet, so the bytes there are still the earlier build (74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c). The newer build is not verified on chain until the bytes read back from devnet match it.";
-    const main = "This repository has a newer build (b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b) whose upgrade has not been deployed on mainnet, so the bytes there are still the earlier build (152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821). The newer build is not verified on chain until the bytes read back from mainnet match it.";
-    assert.equal(burn, `The program that records burns (burn_receipts) is deployed on devnet and on mainnet. ${dev} ${main}`);
-    assert.doesNotMatch(burn, /DO NOT match|bytes match/);
+    assert.equal(burn, `The program that records burns (burn_receipts) is deployed on devnet and on mainnet. On mainnet its bytes match this repository's recorded build. ${dev}`);
+    assert.doesNotMatch(burn, /DO NOT match|has not been deployed on mainnet/);
     const p = s.programs.find((x) => x.name === "burn_receipts")!;
     assert.equal(p.devnet.matchesBuild, false); assert.equal(p.devnet.upgradePending, dev);
-    assert.equal(p.mainnet.matchesBuild, false); assert.equal(p.mainnet.upgradePending, main);
-    assert.match(p.mainnet.line, /^It is deployed on mainnet\. This repository has a newer build \(b5b6e44f[0-9a-f]{56}\) whose upgrade has not been deployed on mainnet/);
+    assert.equal(p.mainnet.matchesBuild, true); assert.equal(p.mainnet.upgradePending, undefined);
+    assert.match(p.mainnet.line, /^It is deployed on mainnet\. Its bytes there match this repository's recorded build\. Its mainnet upgrade authority is 8zsH/);
     clean(burn); clean(p.mainnet.line);
     // a difference that is not a recorded pending upgrade still says DO NOT match
     const m = mainnetDeployment(true, undefined, "x", { matchesBuild: false, upgradeAuthority: "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", readAt: "2026-10-16", hash: "11".repeat(32) }, "22".repeat(32));

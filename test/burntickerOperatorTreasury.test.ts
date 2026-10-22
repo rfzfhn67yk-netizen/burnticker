@@ -84,9 +84,11 @@ test("R05: the build table has a Network column; each row's deployed bytes, read
   assert.match(md, /\| Program \| Network \| Features \| Executable hash \(this repository\) \| Deployed bytes on that network \| Read \| Evidence \|/);
   assert.doesNotMatch(md, /Deployed \(devnet\)/);
   // round 5 (2026-10-15): burn_receipts reads back in mainnet-round5; pair_curve (not upgraded) still in mainnet-round4
-  // B-17 (2026-10-21): burn_receipts' table build is the B-17 build, not deployed yet, so its row says the chain holds the earlier build
-  assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*`152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821` the earlier build: the upgrade to this build has not been deployed \| 2026-10-16 \| docs\/burnkeeper\/evidence\/mainnet-round5\/onchain-verify-after\.log \|/);
-  assert.doesNotMatch(md, /\| burn_receipts \| [a-z]+ \|[^\n]*same as the build/, "the B-17 build is not called the deployed bytes");
+  // B-17 (2026-10-21): burn_receipts' table build is the B-17 build, deployed on mainnet that evening (read back in mainnet-b17); devnet
+  // was not upgraded, so its row still says the chain holds the earlier build
+  assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*`b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b` same as the build \| 2026-10-21T23:59:37Z \| docs\/burnkeeper\/evidence\/mainnet-b17\/onchain-verify-after\.log \|/);
+  assert.match(md, /\| burn_receipts \| devnet \|[^\n]*`74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c` the earlier build: the upgrade to this build has not been deployed \| 2026-10-16 \|/);
+  assert.doesNotMatch(md, /\| burn_receipts \| devnet \|[^\n]*same as the build/, "the B-17 build is not called devnet's deployed bytes");
   assert.match(md, /\| pair_curve \| mainnet \|[^\n]*same as the build \| 2026-10-12 \| docs\/burnkeeper\/evidence\/mainnet-round4\/onchain-verify-after-pc\.log \|/);
   const page = fs.readFileSync("src/app/burnticker/check/CheckClient.tsx", "utf8");
   assert.doesNotMatch(page, /Deployed on devnet/);

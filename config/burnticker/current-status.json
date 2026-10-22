@@ -36,7 +36,7 @@
   },
   "phase": {
     "label": "soft launch ($DEFICIT created on mainnet)",
-    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. On 2026-10-15 the burn program (burn_receipts) was upgraded again, to round 5 (a coin may burn another coin's token, a finished rule's leftover may be burned as SOL, and a carried spend is bought in small pieces), through the same vault; the pair program (pair_curve) stays on round 4. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night by the operator's own wallet. $REHEARSAL is a test coin the operator made on Oct 11 to check fees and signing. It is kept off the coin list and shown on the Test coins page, linked from the Trust page, so you can see it exists, not so you trade it."
+    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. On 2026-10-15 the burn program (burn_receipts) was upgraded again, to round 5 (a coin may burn another coin's token, a finished rule's leftover may be burned as SOL, and a carried spend is bought in small pieces), through the same vault; the pair program (pair_curve) stays on round 4. On 2026-10-21 the burn program was upgraded through the vault once more, still round 5, so that it registers a coin's trading pool on the fee tier LaunchLab actually used. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night by the operator's own wallet. $REHEARSAL is a test coin the operator made on Oct 11 to check fees and signing. It is kept off the coin list and shown on the Test coins page, linked from the Trust page, so you can see it exists, not so you trade it."
   },
   "networks": {
     "devnet": {
@@ -56,24 +56,27 @@
     {
       "name": "burn_receipts",
       "version": "round 5 build (burning another token, the incinerator end sink, carried-spend pieces)",
-      "note": "the round 5 build: a coin can burn another coin's token (pinned at launch), a finished rule's leftover can be burned as SOL (the incinerator end sink), a carried spend is bought in small pieces without a new reading (crank_carried, with a per-coin budget), and initialize_token is retired for initialize_token_r5. It keeps everything round 4 had (end sinks, the pair-forward path). Deployed on mainnet on 2026-10-15 (about 19:57 Denver) through the Squads vault (vault transaction 3); the bytes on chain equal this build, built from source commit 089024ff. The independent re-check of rounds 4 and 5 is still open (see the plan below). Creator launches have been open since the evening of 2026-10-13.",
+      "note": "the round 5 build: a coin can burn another coin's token (pinned at launch), a finished rule's leftover can be burned as SOL (the incinerator end sink), a carried spend is bought in small pieces without a new reading (crank_carried, with a per-coin budget), and initialize_token is retired for initialize_token_r5. It keeps everything round 4 had (end sinks, the pair-forward path). Deployed on mainnet on 2026-10-15 (about 19:57 Denver) through the Squads vault (vault transaction 3), and upgraded on 2026-10-21 (17:57 Denver, vault transaction 4) so that register_fee_key accepts the pool on the fee tier LaunchLab actually used; the bytes on chain equal this build, built from source commit 116ff5ad. The independent re-check of rounds 4 and 5 is still open (see the plan below). Creator launches have been open since the evening of 2026-10-13.",
       "mainnetDeploy": {
-        "date": "2026-10-15",
-        "slot": 457461970,
-        "onChainExecutableHash": "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821",
-        "buildFileSha256": "cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290",
+        "date": "2026-10-21",
+        "slot": 459823169,
+        "onChainExecutableHash": "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b",
+        "buildFileSha256": "faf072925c169ede89788e17c66cd6ab446fa332d47ae0362fca46dbb1a4e4f8",
         "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
-        "sourceCommit": "089024ff6ab0cc92ae37899dee1509d52cb5e203",
-        "squadsVaultTransaction": 3,
-        "squadsExecuteSignature": "2u95GqT9W4pxg8GPmbfyWRUrpsjbrnH8ruKCussb9HMX9UkUjFibToW7Z8BmQ1BJzjiixri3R6y6uS2DuciAiFpR",
-        "evidence": "docs/burnkeeper/evidence/mainnet-round5/onchain-verify-after.log",
+        "sourceCommit": "116ff5ad054e25cd169a8ceeb3eebb16832a33e0",
+        "squadsVaultTransaction": 4,
+        "squadsExecuteSignature": "4PndF8edj8431dULAK4u8p5PpSio8P3KNXbqENguW6wkBhrc67cxxymW8RtbuUQxWSgc798HAt9dc9984PrCdrYp",
+        "evidence": "docs/burnkeeper/evidence/mainnet-b17/onchain-verify-after.log",
         "previous": {
-          "round": 4,
-          "date": "2026-10-12",
-          "slot": 456198354,
-          "evidence": "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log",
-          "buildFileSha256": "b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7",
-          "onChainExecutableHash": "d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae"
+          "round": 5,
+          "date": "2026-10-15",
+          "slot": 457461970,
+          "evidence": "docs/burnkeeper/evidence/mainnet-round5/onchain-verify-after.log",
+          "buildFileSha256": "cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290",
+          "onChainExecutableHash": "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821",
+          "sourceCommit": "089024ff6ab0cc92ae37899dee1509d52cb5e203",
+          "squadsVaultTransaction": 3,
+          "squadsExecuteSignature": "2u95GqT9W4pxg8GPmbfyWRUrpsjbrnH8ruKCussb9HMX9UkUjFibToW7Z8BmQ1BJzjiixri3R6y6uS2DuciAiFpR"
         },
         "hashNote": "onChainExecutableHash is solana-verify's hash of the program bytes read back from chain (trailing zero bytes removed); buildFileSha256 is the plain sha256 of the built .so file, which is not a hash of anything on chain."
       }
