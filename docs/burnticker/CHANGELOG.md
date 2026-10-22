@@ -2077,3 +2077,22 @@ commit is recorded against the later tag, and a release with no pins commit stay
 - allowlist sha256 (config/public-repo.allowlist): `2cf1eb7be18d7a378c8bd2175e8526939f01886408afd7701ae125d01bbedf17`
 - files published: 2593
 - public commit: `804e7537213e6d6d77f140c2a11a7bf9d7e8b581`
+
+## 2026-10-21 — mainnet deploy: burn_receipts upgraded (B-17, the fee tier LaunchLab used; no devnet change)
+
+- burn_receipts `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` on **mainnet** upgraded through the Squads vault on 2026-10-21 at
+  17:57 Denver: vault transaction 4, slot 459823169, executed `4PndF8edj843…drYp` (the full signature is in
+  docs/burnticker/VERIFIED-BUILD.md)
+- the bytes read back from chain hash to `b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b`, the B-17 build in
+  docs/burnticker/VERIFIED-BUILD.md; the build it replaced was `152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821`
+- the program now registers a coin's pool on the fee tier LaunchLab actually used when the coin moved to its trading pool
+- record: `docs/burnkeeper/evidence/mainnet-b17/`; devnet still runs the round-5 build, and pair_curve did not change
+
+## 2026-10-21 — publish from 7459ea298cc7
+
+- monorepo commit: `7459ea298cc74104892f7f3998fb803e7af20866` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `9fb580067b4701a21abf0fb07ffd64e1f215a77454eb155070cafae21e781834`
+- allowlist sha256 (config/public-repo.allowlist): `2cf1eb7be18d7a378c8bd2175e8526939f01886408afd7701ae125d01bbedf17`
+- files published: 2594
+- public commit: `5fd11c1ae862993b993421b58b8ed62e9d27da2f`

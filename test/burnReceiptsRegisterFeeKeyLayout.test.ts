@@ -46,21 +46,27 @@ describe("register_fee_key account list follows the deployed program (B-17)", ()
     assert.equal(await registerFeeKeyLaunchlabSlotOnChain({ accountBytes: async () => null }, PROGRAM.toBase58(), "mainnet", b58, { vb }), false);
     assert.equal(await registerFeeKeyLaunchlabSlotOnChain({ accountBytes: async () => { throw new Error("rpc down"); } }, PROGRAM.toBase58(), "mainnet", b58, { vb }), false);
   });
-  test("the checked-in verified-build table (round 5 deployed, B-17 built) sends the round-5 list now and the B-17 list once the chain holds the B-17 build", async () => {
-    // the real table (2026-10-21): builds are the B-17 hashes, deployed are still round 5's with the upgrade pending, so the keeper adds
-    // the account only when the bytes read from chain are the B-17 build
+  test("the checked-in verified-build table (B-17 deployed on mainnet 2026-10-21, devnet still round 5) sends the B-17 list on mainnet and the round-5 list on devnet", async () => {
+    // the real table (2026-10-21 after the mainnet execute, vault transaction 4, slot 459823169): mainnet's deployed hash is the B-17
+    // build, so the keeper adds the account there; devnet was not upgraded and still runs round 5, so it gets the round-5 list until
+    // the bytes read from devnet are the B-17 build
     const B17 = { mainnet: "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b", devnet: "34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee" } as const;
     const ROUND5 = { mainnet: ROUND5_MAINNET, devnet: "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c" } as const;
+    const { loadVerifiedBuild } = await import("../src/lib/burnticker/trustpack/verifiedBuild.ts");
+    const vb = loadVerifiedBuild(process.cwd());
+    const p = vb.programs.find((x) => x.library === "burn_receipts")!;
     for (const cluster of ["mainnet", "devnet"] as const) {
-      const { loadVerifiedBuild } = await import("../src/lib/burnticker/trustpack/verifiedBuild.ts");
-      const vb = loadVerifiedBuild(process.cwd());
-      const p = vb.programs.find((x) => x.library === "burn_receipts")!;
       assert.equal(p.builds[cluster].hash, B17[cluster], cluster);
-      assert.equal(p.deployed[cluster]!.hash, ROUND5[cluster], cluster);
-      assert.equal(p.deployed[cluster]!.matchesBuild, false, cluster);
       assert.ok(PRE_B17_PROGRAM_HASHES.has(ROUND5[cluster]) && !PRE_B17_PROGRAM_HASHES.has(B17[cluster]), cluster);
-      assert.equal(registerFeeKeyLaunchlabSlot(p.deployed[cluster]!.hash, cluster, vb), false, `${cluster}: round 5 on chain`);
-      assert.equal(registerFeeKeyLaunchlabSlot(B17[cluster], cluster, vb), true, `${cluster}: after the upgrade`);
+      assert.equal(registerFeeKeyLaunchlabSlot(ROUND5[cluster], cluster, vb), false, `${cluster}: round 5 on chain`);
+      assert.equal(registerFeeKeyLaunchlabSlot(B17[cluster], cluster, vb), true, `${cluster}: the B-17 build on chain`);
     }
+    assert.equal(p.deployed.mainnet!.hash, B17.mainnet);
+    assert.equal(p.deployed.mainnet!.matchesBuild, true);
+    assert.equal(p.deployed.mainnet!.slot, 459823169);
+    assert.equal(registerFeeKeyLaunchlabSlot(p.deployed.mainnet!.hash, "mainnet", vb), true, "mainnet: the recorded deployed bytes are B-17");
+    assert.equal(p.deployed.devnet!.hash, ROUND5.devnet);
+    assert.equal(p.deployed.devnet!.matchesBuild, false);
+    assert.equal(registerFeeKeyLaunchlabSlot(p.deployed.devnet!.hash, "devnet", vb), false, "devnet: still round 5");
   });
 });

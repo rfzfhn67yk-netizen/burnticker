@@ -204,7 +204,7 @@
       "label": "The operator's own wallet",
       "pubkey": "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs",
       "envVar": null,
-      "description": "The operator's own wallet (also the default owner of its Solana trading bot); it created seven soft-launch coins: $PHINFLWIN, $CLARITY, $PITWIN, $BALWIN, $SEAWIN, $DENWIN and $TWOCUTS. The operator holds none of them. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out), it has not traded them. The operator has not yet written down why that test was made. Each of those coin pages names this wallet as the operator's."
+      "description": "The operator's own wallet (also the default owner of its Solana trading bot); it created seven soft-launch coins: $PHINFLWIN, $CLARITY, $PITWIN, $BALWIN, $SEAWIN, $DENWIN and $TWOCUTS. The operator holds none of them. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out), it has not traded them. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. Each of those coin pages names this wallet as the operator's."
     },
     {
       "role": "trading-wallets",
@@ -230,7 +230,7 @@
       "at": "2026-10-15T02:46:23Z",
       "sellAt": "2026-10-15T02:46:47Z",
       "coinCreatedAt": "2026-10-15T02:42:01Z",
-      "reason": ""
+      "reason": "to check that trading through the site worked on a freshly created coin, in and out"
     }
   ],
   "rehearsals": [
@@ -240,7 +240,7 @@
       "createdAt": "2026-10-11T23:04:58Z",
       "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
       "status": "done 2026-10-11, first reading signed, no burn yet",
-      "text": "A test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. It was created on 2026-10-11 under the real mainnet platform settings (94x5qDDJ…EfYy9) to prove that fees go where they should and that signed readings work on mainnet. Its liquidity is locked forever only if its curve fills and it moves to a Raydium pool. The curve has not filled, so there is no pool and no lock yet. Its mint is FwXiFscF…pzkp. Its rules hash (sha256) is 2d109965…f99d, which is the $DEFICIT rule with the ticker changed. The operator bought 0.1 SOL of it at creation. The only other trade by an operator wallet in a platform coin was a 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15. The operator has not yet written down why that test was made. Unrelated wallets bought on its curve within seconds. It does not prove a mainnet burn, because nothing burns unless the curve fills to 85 SOL. The curve has not filled, so nothing has burned. The evidence is in docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json."
+      "text": "A test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. It was created on 2026-10-11 under the real mainnet platform settings (94x5qDDJ…EfYy9) to prove that fees go where they should and that signed readings work on mainnet. Its liquidity is locked forever only if its curve fills and it moves to a Raydium pool. The curve has not filled, so there is no pool and no lock yet. Its mint is FwXiFscF…pzkp. Its rules hash (sha256) is 2d109965…f99d, which is the $DEFICIT rule with the ticker changed. The operator bought 0.1 SOL of it at creation. The only other trade by an operator wallet in a platform coin was a 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. Unrelated wallets bought on its curve within seconds. It does not prove a mainnet burn, because nothing burns unless the curve fills to 85 SOL. The curve has not filled, so nothing has burned. The evidence is in docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json."
     }
   ],
   "limitations": [
@@ -359,7 +359,7 @@
     },
     {
       "id": "platform-never-buys",
-      "text": "The platform buys no coin, including its own, with two disclosed exceptions: the operator bought 0.1 SOL of $REHEARSAL, a test coin, when it was created on 2026-10-11, and the operator's own wallet bought 0.10 SOL of $SEAWIN on 2026-10-15 and sold all of it 24 seconds later. The operator has not yet written down why that test was made. A burn pool buys only through the program's buyback step (crank_buyback), as the rule says, and burns what it receives. The operator's trading bots refuse platform coins."
+      "text": "The platform buys no coin, including its own, with two disclosed exceptions: the operator bought 0.1 SOL of $REHEARSAL, a test coin, when it was created on 2026-10-11, and the operator's own wallet bought 0.10 SOL of $SEAWIN on 2026-10-15 and sold all of it 24 seconds later. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. A burn pool buys only through the program's buyback step (crank_buyback), as the rule says, and burns what it receives. The operator's trading bots refuse platform coins."
     },
     {
       "id": "nothing-coming-soon",

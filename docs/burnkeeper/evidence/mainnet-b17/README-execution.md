@@ -60,3 +60,6 @@ After execute, Claude reads the ProgramData hash on chain (must be `b5b6e44f…`
 ## Rollback
 The previous program (`152929ce…`) stays in the table as the prior build; a rollback is the same proposal with its buffer. Do not
 roll back while any coin with a pinned burn target holds fuel.
+
+## Executed (recorded 2026-10-21 17:59 Denver)
+Executed 2026-10-21 17:57:56 Denver (23:57:56Z) through the Squads vault: vault transaction 4, approvals `DLxT…6ZCJ` and `57ug…4crt`, execute signature `4PndF8edj8431dULAK4u8p5PpSio8P3KNXbqENguW6wkBhrc67cxxymW8RtbuUQxWSgc798HAt9dc9984PrCdrYp` (slot 459823169, finalized, no error; buffer `B8RHLReA2WrW5JjMoG5rxchJUBSiyVCD4JdR1cUQCme1`). Read back 23:59:37Z from ProgramData `CqKa66Tx…bKn`: last-deployed slot 459823169, upgrade authority still the vault, 1,030,897 code bytes, executable hash `b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b` = the build (previous `152929ce…0821`). `onchain-verify-after.log` has the read; `config/burnticker/verified-build.json` now records mainnet `matchesBuild` true. Devnet was not upgraded and still runs round 5 (`74659afd…785c`).

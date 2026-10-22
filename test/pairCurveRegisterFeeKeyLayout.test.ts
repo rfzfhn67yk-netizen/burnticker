@@ -5,8 +5,8 @@ import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
 import { eventAuthority } from "../src/lib/burnReceipts/instructions.ts";
 import { launchlabPoolPda } from "../src/lib/burnReceipts/pda.ts";
 import { LAUNCHLAB_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
-import { PROGRAM_DATA_HEADER } from "../src/lib/burnticker/programHash.ts";
-import { executableHash, type VerifiedBuild } from "../src/lib/burnticker/trustpack/verifiedBuild.ts";
+import { PROGRAM_DATA_HEADER, registerFeeKeyLaunchlabSlot } from "../src/lib/burnticker/programHash.ts";
+import { executableHash, loadVerifiedBuild, type VerifiedBuild } from "../src/lib/burnticker/trustpack/verifiedBuild.ts";
 import { registerSideFeeKeyIx, sideFeeKeyLaunchlabSlot } from "../src/lib/pairCurve/client.ts";
 import type { PairAccount } from "../src/lib/pairCurve/accounts.ts";
 
@@ -52,5 +52,12 @@ describe("pair side register_fee_key account list follows the deployed burn prog
     const throwing = { getAccountInfo: async () => { throw new Error("rpc down"); } } as never;
     assert.equal(await sideFeeKeyLaunchlabSlot({ connection: throwing, cluster: "mainnet", burnReceiptsProgramId: BR, verifiedBuild }), false);
     assert.equal(await sideFeeKeyLaunchlabSlot({ connection: throwing, cluster: "localnet", burnReceiptsProgramId: BR }), true);
+  });
+  test("the checked-in table: mainnet runs the B-17 build since 2026-10-21, so a pair side there sends the B-17 list; devnet still runs round 5", () => {
+    const vb = loadVerifiedBuild(process.cwd());
+    const d = vb.programs.find((p) => p.library === "burn_receipts")!.deployed;
+    assert.equal(d.mainnet!.hash, "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b");
+    assert.equal(registerFeeKeyLaunchlabSlot(d.mainnet!.hash, "mainnet", vb), true);
+    assert.equal(registerFeeKeyLaunchlabSlot(d.devnet!.hash, "devnet", vb), false);
   });
 });
