@@ -1,0 +1,150 @@
+{
+ "fetchedAt": "2026-10-10T02:00:00Z",
+ "url": "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt&sort=-record_date&page[size]=30",
+ "data": [
+  {
+   "record_date": "2026-10-08",
+   "tot_pub_debt_out_amt": "40305316210829.72"
+  },
+  {
+   "record_date": "2026-10-07",
+   "tot_pub_debt_out_amt": "40284036147367.19"
+  },
+  {
+   "record_date": "2026-10-06",
+   "tot_pub_debt_out_amt": "40273024579219.17"
+  },
+  {
+   "record_date": "2026-10-05",
+   "tot_pub_debt_out_amt": "40249104431078.48"
+  },
+  {
+   "record_date": "2026-10-02",
+   "tot_pub_debt_out_amt": "40242446619209.33"
+  },
+  {
+   "record_date": "2026-10-01",
+   "tot_pub_debt_out_amt": "40260641972390.03"
+  },
+  {
+   "record_date": "2026-09-30",
+   "tot_pub_debt_out_amt": "40171825101340.31"
+  },
+  {
+   "record_date": "2026-09-29",
+   "tot_pub_debt_out_amt": "40096954633566.68"
+  },
+  {
+   "record_date": "2026-09-28",
+   "tot_pub_debt_out_amt": "40102185696865.37"
+  },
+  {
+   "record_date": "2026-09-25",
+   "tot_pub_debt_out_amt": "40097178119750.91"
+  },
+  {
+   "record_date": "2026-09-24",
+   "tot_pub_debt_out_amt": "40068807991924.84"
+  },
+  {
+   "record_date": "2026-09-23",
+   "tot_pub_debt_out_amt": "40073558531201.68"
+  },
+  {
+   "record_date": "2026-09-22",
+   "tot_pub_debt_out_amt": "40097834028442.07"
+  },
+  {
+   "record_date": "2026-09-21",
+   "tot_pub_debt_out_amt": "40112118151111.92"
+  },
+  {
+   "record_date": "2026-09-18",
+   "tot_pub_debt_out_amt": "40101500516712.09"
+  },
+  {
+   "record_date": "2026-09-17",
+   "tot_pub_debt_out_amt": "40093343468150.50"
+  },
+  {
+   "record_date": "2026-09-16",
+   "tot_pub_debt_out_amt": "40094080427790.97"
+  },
+  {
+   "record_date": "2026-09-15",
+   "tot_pub_debt_out_amt": "40114445691166.84"
+  },
+  {
+   "record_date": "2026-09-14",
+   "tot_pub_debt_out_amt": "40054421967786.91"
+  },
+  {
+   "record_date": "2026-09-11",
+   "tot_pub_debt_out_amt": "40046178322792.78"
+  },
+  {
+   "record_date": "2026-09-10",
+   "tot_pub_debt_out_amt": "40047726949770.15"
+  },
+  {
+   "record_date": "2026-09-09",
+   "tot_pub_debt_out_amt": "40074284925786.50"
+  },
+  {
+   "record_date": "2026-09-08",
+   "tot_pub_debt_out_amt": "40084090785446.35"
+  },
+  {
+   "record_date": "2026-09-04",
+   "tot_pub_debt_out_amt": "40094590636301.70"
+  },
+  {
+   "record_date": "2026-09-03",
+   "tot_pub_debt_out_amt": "40102964278586.10"
+  },
+  {
+   "record_date": "2026-09-02",
+   "tot_pub_debt_out_amt": "40117045127072.57"
+  },
+  {
+   "record_date": "2026-09-01",
+   "tot_pub_debt_out_amt": "40112464593206.30"
+  },
+  {
+   "record_date": "2026-08-31",
+   "tot_pub_debt_out_amt": "40175641071634.14"
+  },
+  {
+   "record_date": "2026-08-28",
+   "tot_pub_debt_out_amt": "40104097482666.58"
+  },
+  {
+   "record_date": "2026-08-27",
+   "tot_pub_debt_out_amt": "40077529831942.94"
+  }
+ ],
+ "meta": {
+  "count": 30,
+  "labels": {
+   "record_date": "Record Date",
+   "tot_pub_debt_out_amt": "Total Public Debt Outstanding"
+  },
+  "dataTypes": {
+   "record_date": "DATE",
+   "tot_pub_debt_out_amt": "CURRENCY"
+  },
+  "dataFormats": {
+   "record_date": "YYYY-MM-DD",
+   "tot_pub_debt_out_amt": "$10.20"
+  },
+  "total-count": 8410,
+  "total-pages": 281
+ },
+ "links": {
+  "self": "&page%5Bnumber%5D=1&page%5Bsize%5D=30",
+  "first": "&page%5Bnumber%5D=1&page%5Bsize%5D=30",
+  "prev": null,
+  "next": "&page%5Bnumber%5D=2&page%5Bsize%5D=30",
+  "last": "&page%5Bnumber%5D=281&page%5Bsize%5D=30"
+ }
+}

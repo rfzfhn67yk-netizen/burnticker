@@ -1,0 +1,20 @@
+# TEST-ONLY generic multicall for the re-check after round 3 (R3-1): one top-level instruction that CPIs a list of instructions —
+# the reviewer's "CPI wrapper" that ran [CPMM swap, check_pool_health] inside ONE instruction. Loaded by the LiteSVM suite; the burn
+# program must refuse check_pool_health / replace_pool below stack height 1 (PoolTouchedInTransaction). Never deployed.
+[package]
+name = "multicall"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+anchor-lang = "=1.2.1"
+anchor-spl = "=1.2.1"
+
+[workspace]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("custom-heap", "custom-panic"))'] }

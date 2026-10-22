@@ -1,0 +1,99 @@
+/**
+ * HOW THE RULES BEHAVE AT THEIR EDGES (semantics-verify, website-20 Part 2 VERIFY items, 2026-10-12). One plain sentence per edge case,
+ * each stating what the code does today, for the pages and docs that explain a rule (the page owner wires them; WIRING-SEMANTICS.md maps
+ * item to page). Every sentence is pinned by test/burntickerSemantics.test.ts against the code it describes, is lint-clean under
+ * config/launch/copy-lint.json, and is plain English under test/burntickerPlainCopy.test.ts. Where a product decision is still open, the
+ * sentence says only what happens now. Client-safe, no imports.
+ */
+
+export interface EdgeCase { item: number; topic: string; sentence: string }
+
+export const RULE_EDGE_CASES: readonly EdgeCase[] = [
+  { item: 62, topic: "Weekly windows", sentence: "The launch page sets up daily windows and a 30-day run. Weekly comparisons are available through the API only, with windows from Monday 00:00 UTC to the next Monday." },
+  { item: 64, topic: "Dated examples", sentence: "Template examples name real teams, races and games only as illustrations. A template that depends on a date opens a search, and the search lists only markets that are still open, so a finished game or a closed market cannot be launched from it." },
+  { item: 66, topic: "A flippening that starts ahead", sentence: "A flippening checks sizes at the end of each day. If the first coin is already the larger one when you launch, the launch is refused, because there is nothing to flip." },
+  { item: 69, topic: "Ties in Coin vs Coin", sentence: "Each coin's change is worked out to six decimal places of a percentage point. A window is a tie only when both changes are equal to that precision, and any larger difference picks a winner." },
+  { item: 70, topic: "A missing last reading in a flippening", sentence: "If the last day of a flippening cannot be read, it is read again for 7 days. If it still cannot be read, the flippening ends void: neither coin burns for it, and each coin's own pool winds down." },
+  { item: 72, topic: "Drafts across midnight UTC", sentence: "A Coin vs Coin run starts at the first 00:00 UTC after launch. A draft prepared before midnight UTC and launched after it is refused, because its first day has already begun, and it needs to be prepared again." },
+  { item: 74, topic: "One coin under two names", sentence: "Two sides that read the same coin through different sources, for example one through Pyth and one through its pool or its second source, are the same coin, so the pair is refused." },
+  { item: 76, topic: "Pools that open at different times", sentence: "In a pair, a result that arrives before both coins have a trading pool waits. It burns, in order, once the second pool opens. If the second pool has not opened by the end of the pair's void date, the waiting burns are cancelled and both coins wind down." },
+  { item: 78, topic: "Draws and losses", sentence: "A draw is neither a win nor a loss. A coin that counts wins or losses burns nothing for a draw, and a coin that counts draws burns for each one. A cup tie decided on penalties counts as a win for the winner and a loss for the other side." },
+  { item: 79, topic: "Postponed games", sentence: "A postponed or suspended game counts for neither side on its listed date. When it is played later, it counts on the date it is played. A one-game coin whose game is cancelled, and not rescheduled, ends void: nothing burns for the game, and the coin's own pool winds down." },
+  { item: 80, topic: "Two games on one day", sentence: "Each game is matched to its sources by its own start time, so the second game of a doubleheader is never read as the first. A day is read once every game on it has a final result." },
+  { item: 82, topic: "When neither candidate wins", sentence: "Each candidate's coin burns only when its own market settles YES. If neither candidate wins, or a candidate withdraws, that market settles NO and the coin burns nothing. A market that settles 50-50 is void, and nothing burns." },
+  { item: 84, topic: "Revised figures", sentence: "Each period is recorded once. If a publisher later revises a period that was already recorded, the recorded value stands and the revision is never counted: the coin stops reading that source, and the operator is alerted with both values." },
+  { item: 85, topic: "The first reading", sentence: "A rule that measures change starts from the first reading after the coin launches. That first reading is recorded as the starting point and burns nothing, and nothing from before the launch is counted." },
+  { item: 86, topic: "Weather thresholds with decimals", sentence: "The climate report records the daily high in whole degrees Fahrenheit. A threshold with a decimal is turned into whole degrees before launch, so below 89.5 °F means 89 °F or colder." },
+  { item: 87, topic: "A missing reading", sentence: "A missing reading is not a zero. A day with no reported value has no reading, and it never counts as the condition failing." },
+  { item: 96, topic: "Swapping the two coins", sentence: "Side A's coin burns when the first coin you picked wins, and side B's coin burns when the second one wins. If you change which coin is first, the generated names follow the coins, and any names, images or descriptions you typed stay with the side, so check them again." },
+  // Part 3 (2026-10-12): the published-number sources
+  { item: 106, topic: "Flare points", sentence: "A flare point is how the solar flare source counts flares. An M-class flare is 1 point and an X-class flare is 10 points, counted on the UTC day of the flare's peak, and B-class and C-class flares count nothing. For example, a day with two M-class flares and one X-class flare is 12 points." },
+  { item: 107, topic: "What the FDA count counts", sentence: "The FDA source counts applications whose original submission was approved in the last 60 days, read once a day, and a coin counts each rise in that number. Supplements to older applications are not counted, one application counts once however many products it lists, and a day when new approvals and approvals leaving the 60-day window balance out counts nothing." },
+  { item: 109, topic: "Parts of a unit", sentence: "A move smaller than one unit burns nothing and is not saved up, unless the rule carries remainders. For example, with a unit of 10, readings of 100, 107 and 114 burn nothing, because each step is 7. A rule that carries remainders keeps the 7, so the second step counts 14, burns 1 unit and carries 4." },
+  { item: 110, topic: "Counters that reset", sentence: "When a counter drops, for example a yearly total that starts again from zero, the drop burns nothing and the next reading is measured from the new, lower value. The locked rule does not change. A drop that only one source reports is held until the second source agrees." },
+  { item: 111, topic: "What moved means", sentence: "A rule counts moves in one direction or in both. An up rule counts rises: readings of 100 then 103, with a unit of 1, burn 3 units, and 100 then 97 burn nothing. A down rule counts the falls instead. A rule that counts either direction burns 3 units in both cases." },
+  { item: 115, topic: "Finding a source", sentence: "The source filter ignores capital letters, spaces, apostrophes, periods, hyphens and accents, so “senate-race” finds Senate race. It only narrows the list and never puts a different source in place of the one you typed." },
+  { item: 117, topic: "When a provider changes its data", sentence: "If a provider changes the shape of its data or moves its address, the coin reads nothing until the source is fixed. The coin keeps the same source and rule, and nothing is read in a new way without a new launch." },
+  // Part 4 (2026-10-12): settlement and program semantics
+  { item: 162, topic: "The burn-pool cap", sentence: "Each burn pool spends from at most the burn-pool cap, 25 SOL unless the platform's multisig has raised it. The cap can only be raised, through a public 48-hour wait, and it ends on its own by October 1, 2027 at the latest. Publishing an audit does not change it by itself." },
+  { item: 164, topic: "Results below the minimum burn", sentence: "A result whose burn would be smaller than the coin's minimum burn buys nothing, and its share is not saved up as a debt: the SOL stays in the burn pool, where later results spend from it. If the 2% limit on one burn is what pushes it under the minimum, the whole amount is carried to the next burn instead, and spend already carried from an earlier burn stays owed." },
+  { item: 165, topic: "The minimum burn in dollars", sentence: "The minimum burn is set in dollars and turned into SOL once, at launch, at that moment's SOL to dollar rate. After that it is a fixed amount of SOL. If no sensible rate can be read at launch, the launch waits, and the minimum is never set to zero." },
+  { item: 166, topic: "Fees on buys and sells", sentence: "Fees per 1 SOL are illustrations at the rates in force. When SOL is traded for the coin in the Raydium pool, every fee is taken from the SOL paid in. When the coin is traded for SOL, the trading fee is taken from the coins sold and the burn pool's fee from the SOL the seller receives, so the same rates apply to the SOL value of the trade." },
+  { item: 167, topic: "Exact amounts", sentence: "Every amount is worked out in whole lamports, a billionth of a SOL. A figure shown rounded, for example to four decimal places, is rounded half up from the exact amount that is prepared." },
+  { item: 168, topic: "When the destination coin is not there", sentence: "If a coin's rule ends with a result and its leftover is meant for another coin, that coin needs a verified trading pool and a rule that has not ended when the leftover moves. If it was never created, has no verified pool, or has ended, the leftover goes to $DEFICIT instead. If $DEFICIT cannot take it yet, nothing moves until it can." },
+  { item: 174, topic: "The rule's fingerprint", sentence: "A coin's fingerprint is the SHA-256 of its rule written in one fixed form: keys in alphabetical order, settings that are off left out, and every value as written. The same rule gets the same fingerprint every time, in any order its settings were entered, but a decimal written as 1.00 is not the same text as 1." },
+  { item: 178, topic: "Split results", sentence: "A Polymarket result counts only when one outcome is settled on chain as the full winner. A split result, such as 50-50 or 75-25, is void, and nothing burns on either side." },
+  { item: 179, topic: "Not settled is not NO", sentence: "A market that has not settled on chain has no result yet, even if the market page shows it as closed or resolved. It is never read as a NO." },
+  { item: 180, topic: "Which market and which side", sentence: "A market is identified by its condition id, and YES is its first outcome slot on chain, so a list that shows the outcomes in a different order cannot change which result burns." },
+  // sources-4 audit batch (2026-10-12): sources and the catalogue, pinned by test/burntickerSources4Audit.test.ts
+  { item: 203, topic: "A rise smaller than one unit", sentence: "A rule that counts rises and a rule that counts falls leave a gap between them. A rise smaller than one unit burns nothing on the rising side, and because it is a rise it burns nothing on the falling side or on a coin that burns when the figure does not rise." },
+  { item: 216, topic: "Snapshots during the day", sentence: "A source that is read as a snapshot, such as a player count, gives one reading for each UTC day, and the first read of the day is the one recorded. A later read that day with a different figure is treated as a revision: the recorded value stands and the source is held until the operator acts." },
+  { item: 218, topic: "A source that stops for good", sentence: "If a publisher stops a source for good, the coin reads nothing more from it and burns nothing for it. The rule is locked, so no other source is put in its place. The coin's burn pool keeps what it holds, and nothing ends the rule on its own today." },
+  { item: 183, topic: "Switching launch types", sentence: "Only the settings of the launch type you finally choose are sent. Settings left behind on a type you switched away from are not included, and a single-coin launch never creates a second coin." },
+];
+
+/** A source that waits before a day counts (jpl.neo: 7 days), in the setup and first-result text (website-20 item 112). */
+export function finalDelaySentence(days: number): string | null {
+  if (!(days > 1)) return null;
+  return `Each day is read once it is ${days} days old, because late reports keep arriving until then. The first result can come no sooner than ${days} days after launch.`;
+}
+
+export const edgeCase =(item: number): string | null => RULE_EDGE_CASES.find((e) => e.item === item)?.sentence ?? null;
+/**
+ * Continuous audit run 4, HB-36: an edge case said for the rule in hand. Item 79's last sentence is about a one-game coin, so a season
+ * coin gets only the postponed-game part.
+ */
+/** HB-81 D5 (hourly run 5): item 218 on a one-time coin, which does end on its own (its one burn, or its deadline). */
+export const ITEM_218_ONE_SHOT_TAIL = "The coin's burn pool keeps what it holds until the rule ends on its own terms.";
+/**
+ * HB-103 (hourly run 8): in a linked candidates pair a 50-50 market is not a void. The keeper reads it as no single winner
+ * (pairForwardKeeper.ts raceVerdict "none"): nothing moves between the coins, and at the end each pool goes where the pair-winner end sends
+ * a pool with no winner, $DEFICIT's burn (rules.ts onEndText). The same words as the review's "When it ends" and RULE VERSION block.
+ */
+export const RACE_SPLIT_LINE = "In this pair, a market that settles 50-50 means there is no single winner: nothing moves between the two coins, and at the end each pool goes to $DEFICIT's burn.";
+export function edgeCaseFor(item: number, o: { oneGame?: boolean; oneShot?: boolean; racePair?: boolean } = {}): string | null {
+  const s = edgeCase(item);
+  if (s && item === 82 && o.racePair) return s.replace(/A market that settles 50-50 is void, and nothing burns\.$/, RACE_SPLIT_LINE);
+  if (s && item === 178 && o.racePair) return s.replace(/A split result, such as 50-50 or 75-25, is void, and nothing burns on either side\.$/, "In this pair, a split result, such as 50-50 or 75-25, means there is no single winner: nothing moves between the two coins, and at the end each pool goes to $DEFICIT's burn.");
+
+  if (s && item === 79 && !o.oneGame) return s.replace(/\s*A one-game coin whose game is cancelled[\s\S]*$/, "");
+  if (s && item === 218 && o.oneShot) return s.replace(/The coin's burn pool keeps what it holds, and nothing ends the rule on its own today\.$/, ITEM_218_ONE_SHOT_TAIL);
+  return s;
+}
+
+/**
+ * Continuous audit HB-33 (run 3): the review's general unusual cases, only where they can happen. The minimum-burn case (164, with its
+ * 2% limit on one burn) is about a share of the pool per result, so a one-shot that burns the whole pool once does not list it; the
+ * leftover-to-another-coin case (168) is listed only when the leftover can go to another coin (a linked pair, or an end that names a
+ * coin). The fingerprint (174) applies to every rule.
+ */
+export function reviewEdgeIds(o: { oneShotFull: boolean; otherCoin: boolean }): number[] {
+  return [...(o.oneShotFull ? [] : [164]), ...(o.otherCoin ? [168] : []), 174];
+}
+
+/**
+ * The Coin comparison reviews' "Unusual cases for this rule", by mode. HB-112b (hourly run 9): item 70 (a flippening's unreadable last
+ * day) is said only on a flippening, never on a daily race or a record close.
+ */
+export const COINVS_EDGE_IDS = { race: [69, 72, 74, 76, 174], flip: [66, 70, 74, 76, 174], single: [72, 174] } as const;
+export const coinvsEdgeNotes = (mode: keyof typeof COINVS_EDGE_IDS): string[] => COINVS_EDGE_IDS[mode].map((i) => edgeCase(i)).filter((x): x is string => !!x);

@@ -1,0 +1,32 @@
+{
+  "_source": "gamma-api.polymarket.com/markets/253591 (fetched 2026-10-09) + eth_call on Polygon ConditionalTokens 0x4D97DCd97eC945f40cF65F87097ACe5EA0476045 via https://1rpc.io/matic at block 0x5ad9aac (2026-10-09)",
+  "gamma": {
+    "id": "253591",
+    "question": "Will Donald Trump win the 2024 US Presidential Election?",
+    "slug": "will-donald-trump-win-the-2024-us-presidential-election",
+    "conditionId": "0xdd22472e552920b8438158ea7238bfadfa4f736aa4cee91a6b86c39ead110917",
+    "questionID": "0xe3b1bc389210504ebcb9cffe4b0ed06ccac50561e0f24abb6379984cec030f00",
+    "outcomes": ["Yes", "No"],
+    "outcomePrices": ["1", "0"],
+    "closed": true,
+    "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+    "umaResolutionStatus": "resolved",
+    "endDate": "2024-11-05T12:00:00Z",
+    "negRisk": true
+  },
+  "chain": {
+    "contract": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+    "blockNumber": "0x5ad9aac",
+    "calls": {
+      "getOutcomeSlotCount": { "data": "0xd42dc0c2dd22472e552920b8438158ea7238bfadfa4f736aa4cee91a6b86c39ead110917", "result": "0x0000000000000000000000000000000000000000000000000000000000000002" },
+      "payoutDenominator": { "data": "0xdd34de67dd22472e552920b8438158ea7238bfadfa4f736aa4cee91a6b86c39ead110917", "result": "0x0000000000000000000000000000000000000000000000000000000000000001" },
+      "payoutNumerators[0]": { "data": "0x0504c814dd22472e552920b8438158ea7238bfadfa4f736aa4cee91a6b86c39ead1109170000000000000000000000000000000000000000000000000000000000000000", "result": "0x0000000000000000000000000000000000000000000000000000000000000001" },
+      "payoutNumerators[1]": { "data": "0x0504c814dd22472e552920b8438158ea7238bfadfa4f736aa4cee91a6b86c39ead1109170000000000000000000000000000000000000000000000000000000000000001", "result": "0x0000000000000000000000000000000000000000000000000000000000000000" }
+    }
+  },
+  "second": {
+    "_note": "Will Kamala Harris win the 2024 US Presidential Election? (gamma id 253597): slots 2, numerators [0, 1] read the same day; the denominator call hit the RPC's paid-plan wall, so this one is numerators-only",
+    "conditionId": "0xc6485bb7ea46d7bb89beb9c91e7572ecfc72a6273789496f78bc5e989e4d1638",
+    "payoutNumerators": ["0", "1"]
+  }
+}

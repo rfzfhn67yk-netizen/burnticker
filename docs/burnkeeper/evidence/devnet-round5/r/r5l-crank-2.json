@@ -1,0 +1,9 @@
+{
+  "command": "crank",
+  "cluster": "devnet",
+  "mint": "GkLVz1vcJT3zYcFDH1PL95Qb358EMigJs2Z5MWTSq9Bn",
+  "plan": {
+    "status": "idle",
+    "cursor": 20261015
+  }
+}

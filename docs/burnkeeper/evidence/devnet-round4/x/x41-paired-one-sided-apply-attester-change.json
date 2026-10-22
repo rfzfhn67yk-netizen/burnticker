@@ -1,0 +1,34 @@
+{
+  "case": "x41-paired-one-sided-apply-attester-change",
+  "expected": "PairedAttesterChange",
+  "observed": "PairedAttesterChange",
+  "match": true,
+  "exitCode": 0,
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts apply-attesters --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L",
+  "simulationErr": "{\"InstructionError\":[1,{\"Custom\":6096}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/admin.rs:135. Error Code: PairedAttesterChange. Error Number: 6096. Error Message: apply_attester_change: the coin is paired; use apply_paired_attester_change with the partner's quorum co-signing.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d0"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "h.mts apply-attesters",
+    "cluster": "devnet",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "mint": "AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L",
+    "simulation": {
+      "err": "{\"InstructionError\":[1,{\"Custom\":6096}]}",
+      "unitsConsumed": 16123,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: ApplyAttesterChange",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/admin.rs:135. Error Code: PairedAttesterChange. Error Number: 6096. Error Message: apply_attester_change: the coin is paired; use apply_paired_attester_change with the partner's quorum co-signing.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 15973 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d0"
+      ]
+    }
+  }
+}

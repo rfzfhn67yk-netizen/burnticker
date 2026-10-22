@@ -1,0 +1,39 @@
+{
+  "command": "init-sink-coin",
+  "dryRun": false,
+  "mint": "6dgkpNcjztaaNpM55jn3m69koY3nWs2Dx4QrEapHpNF4",
+  "partner": null,
+  "partnerFirst": false,
+  "sinkMint": "ES1HxjArAP6e789g11qWESDrpeYPJWUwR7XCBEx2UHZe",
+  "step": "init-sink-coin",
+  "bytes": 838,
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 60835,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: InitializeTokenR5",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 351390 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 346539 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 60685 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "sent": {
+    "signature": "rmw6wBEBY2WqR3vSnQLYreW7QvbVM6Z7wxYtRdhdqRoKRGRuHpVQS95CUdCKT54kVZtZRmNAAuuNUCysfCqHpaL",
+    "err": null,
+    "explorer": "https://explorer.solana.com/tx/rmw6wBEBY2WqR3vSnQLYreW7QvbVM6Z7wxYtRdhdqRoKRGRuHpVQS95CUdCKT54kVZtZRmNAAuuNUCysfCqHpaL?cluster=devnet"
+  }
+}

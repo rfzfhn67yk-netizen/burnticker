@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B3 avatar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Courier+Prime:wght@400;700&display=block" rel="stylesheet">
+<style>
+  :root{--paper:#e8e7e1;--ink:#141414;--red:#d9301c}
+  html,body{margin:0;width:800px;height:800px;overflow:hidden;background:var(--paper)}
+  body{position:relative;color:var(--ink);font-family:'Courier Prime',monospace}
+  .grain{position:absolute;inset:0;opacity:.11;mix-blend-mode:multiply;pointer-events:none}
+  .tape{position:absolute;left:-20px;top:36px;width:840px;height:92px;background:#dedcd3;box-shadow:0 1px 0 rgba(0,0,0,.25), 0 -1px 0 rgba(0,0,0,.15)}
+  .tape svg{position:absolute;inset:0}
+  .mast{position:absolute;left:92px;top:176px;font-family:'Archivo Black',sans-serif;font-size:164px;line-height:.86;letter-spacing:-4px;filter:url(#typo)}
+  .mast span{display:block}
+  .rule{position:absolute;left:92px;width:616px;background:var(--ink)}
+  .dateline{position:absolute;left:92px;top:520px;font-size:23px;letter-spacing:4px;white-space:nowrap;filter:url(#typo)}
+  .dateline b{display:inline-block;background:var(--red);color:var(--paper);font-weight:700;padding:1px 10px 0;margin-left:14px;letter-spacing:5px}
+  .body{position:absolute;left:92px;top:566px;font-size:23px;letter-spacing:3px;line-height:36px;filter:url(#typo)}
+  .body s{text-decoration:none;position:relative;color:#5a5955}
+  .body s:after{content:"";position:absolute;left:-2px;right:-2px;top:52%;height:3px;background:var(--red)}
+  .end{position:absolute;left:92px;top:666px;font-size:22px;letter-spacing:6px;color:#5a5955}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="typo" x="-2%" y="-2%" width="104%" height="104%"><feTurbulence type="fractalNoise" baseFrequency=".95" numOctaves="2" seed="5" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"/></filter>
+  <filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="3" stitchTiles="stitch"/></filter>
+</svg>
+<svg class="grain" width="800" height="800"><rect width="800" height="800" filter="url(#g)"/></svg>
+<div class="tape"><svg id="tape" viewBox="0 0 840 92" width="840" height="92"></svg></div>
+<div class="mast"><span>BURN</span><span>TICKER</span></div>
+<div class="rule" style="top:488px;height:8px"></div>
+<div class="rule" style="top:502px;height:2px"></div>
+<div class="dateline">WIRE · 2026-10-08 · 16:31 ET<b>FLASH</b></div>
+<div class="body">TREASURY.DEBT +$21,284,113,007 · 21 UNITS<br>SUPPLY <s>1,000,000,000</s> 997,900,000<br>RECEIPT 5XQM7…KR7A · VERIFIED</div>
+<div class="end">— 30 —</div>
+<script src="wire.js"></script>
+<script>punchTape(document.getElementById('tape'),'BURNTICKER WIRE ',{pitch:24,r:6,sprocket:2.4,height:92});</script>
+</body></html>

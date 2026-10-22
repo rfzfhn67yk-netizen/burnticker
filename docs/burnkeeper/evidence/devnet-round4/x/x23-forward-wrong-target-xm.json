@@ -1,0 +1,60 @@
+{
+  "case": "x23-forward-wrong-target-xm",
+  "expected": "EndSinkMismatch",
+  "observed": "EndSinkMismatch",
+  "match": true,
+  "exitCode": 0,
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX --target HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6107}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:295. Error Code: EndSinkMismatch. Error Number: 6107. Error Message: forward_on_end: the target is not the coin's end sink (or the flagship when the sink is not live).",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17db"
+  ],
+  "stderr": [
+    "Server responded with 429 .  Retrying after 500ms delay..."
+  ],
+  "output": {
+    "command": "h.mts fwd",
+    "cluster": "devnet",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "mint": "EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX",
+    "target": "HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx",
+    "sinkMint": null,
+    "pair": null,
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":6107}]}",
+      "unitsConsumed": 74045,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+        "Program log: CreateIdempotent",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 394422 compute units",
+        "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: Initialize the associated token account",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 389333 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 229 of 386871 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 13512 of 399850 compute units",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: ForwardOnEnd",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:295. Error Code: EndSinkMismatch. Error Number: 6107. Error Message: forward_on_end: the target is not the coin's end sink (or the flagship when the sink is not live).",
+        "Program log: Left:",
+        "Program log: HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx",
+        "Program log: Right:",
+        "Program log: 4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 60383 of 386338 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17db"
+      ]
+    }
+  }
+}

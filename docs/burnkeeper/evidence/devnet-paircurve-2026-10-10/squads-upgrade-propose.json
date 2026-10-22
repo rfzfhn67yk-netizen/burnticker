@@ -1,0 +1,42 @@
+{
+  "cluster": "devnet",
+  "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
+  "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+  "timeLockSecs": 60,
+  "transactionIndex": "2",
+  "transaction": "DPrLC5YvCs1JTVMNsTM9Rh55279QvcBy27Ph5nw3LkDt",
+  "proposal": "2d9MpgG2rVY8j4k2Cy5hx8VoTC1HK4inwaySMsZxbuT5",
+  "upgrade": {
+    "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+    "buffer": "BywChbBwFjvNPjw7Wyrr1RXYYpt7RgG8uAQPBKPghC7U",
+    "spill": "ED2FxCzefc1pi2M2JxAAgYNAce2LcNVh1QPQ3aJzCBGR"
+  },
+  "innerMessageHex": "0100040887a4761a1769c0625e3d36f91d22bd1c168e6aa9baa6b27a7ab126f3ac9113a0afd16ec7a793fe80e63faef41e2d85bd6fc9a58cdcd956ff863ea85bee5ad17193263998caced1a44b8e3d92307751e3ebc7303068b6d04f9f556007ab0f3a84a32aae3f473776b356662af25dcf5b635fa99e642b7a2160cfad1cfd4f153af3c43c526aa1ea8b328470bea6e77deb36b44e2a0fe793e550475f052d7719110e06a7d517192c5c51218cc94c3d4af17f58daee089ba1fd44e3dbd98a0000000006a7d51718c774c928566398691d5eb68b5eb8a39b4b6d5c73555b210000000002a8f6914e88a1b0e210153ef763ae2b00c2b93d16c124d2c0537a10048000000107070102030405060004000300000000",
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 42194,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf invoke [1]",
+      "Program log: Instruction: VaultTransactionCreate",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: transaction index: 2",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf consumed 27365 of 199850 compute units",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf invoke [1]",
+      "Program log: Instruction: ProposalCreate",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf consumed 14679 of 172485 compute units",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf success"
+    ]
+  },
+  "signature": "2dZnDLtjmv4VZqoqqpcrrf8FZZgwbLYJRr7pNEsgFKKRT1dMgBgdRixW6nxSD7BBw5sJ2UNb7YyMDeenYmTLVL1L",
+  "next": [
+    "squads-multisig-cli proposal-vote --rpc-url https://api.devnet.solana.com --keypair <member> --multisig-pubkey GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w --transaction-index 2 --action Approve   (threshold members)",
+    "after 60 s: squads-multisig-cli vault-transaction-execute --rpc-url https://api.devnet.solana.com --keypair <member> --multisig-pubkey GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w --transaction-index 2"
+  ]
+}

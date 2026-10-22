@@ -1,0 +1,88 @@
+# PROPOSED — NOT IMPORTED BY deploy/caddy/Caddyfile (website audit 4, BT-19 + BT-23, 2026-10-11). The owner applies it on the host.
+#
+# How to apply (on the Burnticker VPS, after review):
+#   1. copy the two snippets below into /etc/caddy/Caddyfile (above the site blocks), or `import` this file from it;
+#   2. add `import csp_report_only_static` inside the {$BURNTICKER_DOMAIN}, {$DEFICIT_DOMAIN} and {$BURNTICKER_STATUS_DOMAIN} blocks'
+#      static handlers, and `import csp_report_only_app` inside `handle @app` (NOT inside `handle @embed`: the embed pages send their
+#      own CSP — src/lib/burnticker/embed.ts);
+#   3. replace `header Cache-Control "no-store"` in (static_site) with `import static_cache` (see BT-23 below);
+#   4. `caddy validate --config /etc/caddy/Caddyfile` then `systemctl reload caddy`.
+#
+# ---- BT-19: Content-Security-Policy, REPORT-ONLY first ----
+# Report-only changes nothing a visitor sees; the browser console lists what an enforced policy would block. Inventory (measured
+# 2026-10-11 from the code; test/burntickerCsp.test.ts re-checks it against the pages):
+#   scripts      same-origin bundles (/_next/static) + inline scripts (Next's flight payload, the static pages' own <script> blocks)
+#   styles       same-origin + inline <style>; Google Fonts CSS (the $DEFICIT page's Oswald) — static policy only: since website-8
+#                the app self-hosts Courier Prime and Space Grotesk through next/font, so the app policy needs no Google host
+#   fonts        fonts.gstatic.com (static policy); 'self' (app)
+#   connect      same origin and https://burnticker.com (the $DEFICIT site reads the current-status API cross-origin);
+#                api.fiscaldata.treasury.gov (receipt verifier + $DEFICIT curve); the public Solana RPCs (receipt verifier, wallet
+#                adapter fallback) incl. their websockets; arweave.net (+ subdomains) and gateway.irys.xyz (pinned-metadata check)
+#   images       same-origin, data:, arweave (coin art)
+#   frames       none may frame the site (frame-ancestors 'none' = the X-Frame-Options DENY already sent)
+# NOT covered and why it is report-only: (a) the receipt verifier lets a visitor type ANY RPC URL — an enforced connect-src blocks
+# hosts not listed; (b) the host's NEXT_PUBLIC_BURNTICKER_RPC_URL (the wallet adapter's RPC on /launch and /me) must be added as
+# {$BURNTICKER_PUBLIC_RPC_ORIGIN} (https + wss); (c) 'unsafe-inline' scripts stay until the app moves to per-request nonces (a Next
+# proxy that sets the nonce; every page then renders dynamically) and the static pages to sha256 hashes of their inline scripts.
+# REVIEW 2026-10-12 (ops-2) against the rebuilt site (public tree after website-12/13 and the shared static shell). Changes:
+#   app frames     the coin page (/burnticker/t/<TICKER>) and the pair page (/burnticker/p/<id>) embed the GeckoTerminal chart in an
+#                  iframe (src/lib/burnticker/market.ts, https://www.geckoterminal.com/solana/pools/<pool>?embed=1). default-src 'self'
+#                  would block it, so frame-src https://www.geckoterminal.com is added. frame-ancestors stays 'none' (who may frame US).
+#   app connect    the wallet adapter on /launch and /me also offers Solana Mobile Wallet Adapter on Android
+#                  (@solana-mobile/wallet-adapter-mobile, bundled by @solana/wallet-adapter-react), which talks to the wallet app over
+#                  ws://localhost:<port>/solana-wallet. ws://localhost:* is added; without it, Android wallet connections fail when
+#                  enforced. Browser-extension wallets (Wallet Standard) run in the extension and are not limited by the page's policy.
+#   app images     a creator image can be any https URL (CoinThumb, src/app/burnticker/_components/CoinCard.tsx), and it is shown with
+#                  no referrer. img-src is now 'self' data: blob: https: (an image cannot run code; listing hosts would only break
+#                  coin cards).
+#   app RPC        the host's NEXT_PUBLIC_BURNTICKER_RPC_URL is the public mainnet endpoint since the 2026-10-11 cutover (no Helius
+#                  key ships to visitors), so the placeholder's default is now https://api.mainnet-beta.solana.com. Set
+#                  BURNTICKER_PUBLIC_RPC_ORIGIN only if that changes.
+#   app fonts      next/font self-hosts Courier Prime and Space Grotesk under /_next/static/media ('self'). The wallet modal's own
+#                  stylesheet (@solana/wallet-adapter-react-ui/styles.css) starts with an @import of Google Fonts (DM Sans). It is NOT
+#                  allowed on purpose: the site self-hosts its fonts (site audit #19), and the modal falls back to Roboto, Helvetica or
+#                  Arial. Since 2026-10-18 (A-27) the app imports _components/walletAdapter.css, the same file without that @import.
+#   app scripts    still 'unsafe-inline': Next's flight payload and the theme boot script in the root layout are inline. The JSON-LD
+#                  blocks on league pages are data, not scripts, and CSP does not apply to them.
+#   static images  the status page (status.burnticker.com) and the $DEFICIT page (deficit.burnticker.com) load the mark from
+#                  https://burnticker.com/brand/favicon.png, another origin for them, so https://burnticker.com is added to img-src.
+#   static frames  frame-src 'none' (no static page embeds anything).
+#   Cloudflare     with the proxy on, keep Rocket Loader, Email Address Obfuscation and Web Analytics OFF in the dashboard: each one
+#                  injects a script (Rocket Loader rewrites every inline script) and would show as a violation, or break pages once
+#                  enforced (docs/burnticker/OPS-EDGE.md "Cloudflare cut-over").
+# Journeys to watch in the browser console during the report-only week: home → /burnticker/check?demo=1 → a coin page with a chart →
+# /burnticker/launch (open the wallet list) → /burnticker/me → status.burnticker.com → deficit.burnticker.com. Report-only sends no
+# reports anywhere (no report-uri is set): the console is where they show.
+# Enforce only after (b) is set and a week of report-only shows no violations on the main journeys (home → check?demo=1 → 10 checks).
+(csp_report_only_static) {
+	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://burnticker.com https://arweave.net https://*.arweave.net; connect-src 'self' https://burnticker.com https://api.fiscaldata.treasury.gov https://api.devnet.solana.com https://api.mainnet-beta.solana.com; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+}
+(csp_report_only_app) {
+	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.fiscaldata.treasury.gov https://api.devnet.solana.com wss://api.devnet.solana.com https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com https://arweave.net https://*.arweave.net https://gateway.irys.xyz https://*.datasprite-cdn.com https://devnet.irys.xyz ws://localhost:* {$BURNTICKER_PUBLIC_RPC_ORIGIN:https://api.mainnet-beta.solana.com}; frame-src https://www.geckoterminal.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+}
+#
+# ---- BT-23: caching that never serves a stale status ----
+# Measured 2026-10-11 (curl, one pass, Denver → Cloudflare → the box): / 53,989 B (15,836 B gzip, TTFB 0.23 s), /whitepaper.html
+# 97,168 B (32,603 B gzip), /burnticker/leagues/cfb/2026 265,953 B (31,339 B gzip; 170 KB of it is the RSC flight payload repeating
+# the ~765 rendered list items), mcbb/wcbb 2026-27 ~142 KB (19.4 KB gzip), every other league page ≤ 50 KB. All TTFB < 0.8 s. These are
+# transfer sizes, not Core Web Vitals; no performance claim is made from them.
+# Re-measured 2026-10-11 ~19:50 Denver (curl --compressed, three runs each, first vs repeat; raw output in the website-8 report):
+#   /                    no-store, cf DYNAMIC   17.0 KB gzip   TTFB 0.29-0.69 s on every run (no repeat-view saving: nothing is kept)
+#   /whitepaper.html     no-store, cf DYNAMIC   32.8 KB gzip   TTFB 0.28-0.32 s on every run
+#   /brand/og.png        no-store, cf BYPASS    603,362 B      total 0.44-1.33 s on every run (fetched by link previews, not by the home)
+#   /deficit-avatar.png  no-store, cf BYPASS    45,536 B       re-downloaded every run (the website-8 home no longer shows it)
+#   /burnticker/brand/mark.png   public, max-age=14400 (Next)  304 on revalidation
+#   /_next/static/*.js   public, max-age=31536000, immutable, cf HIT — the app's 194 KB (gzip) of JS/CSS is already cached
+#   /api/burnticker/v1/current-status   public, max-age=60, s-maxage=60 (the app's own header), 4.0 KB gzip
+# A conditional GET with the ETag the static file_server already sends returns 304 with 0 bytes (checked on /brand/og.png), so the
+# revalidate split below saves the body on repeat views; it does not change TTFB (each revalidation is still a round trip to the box).
+# Every static file is no-store today (the static_site snippet), so the whitepaper and brand images re-download on each visit. The
+# status JSON, the keeper's t/<ticker>/ pages and the $DEFICIT status/burns files must stay no-store (a page that says "no burn yet" an
+# hour late is wrong about the supply). Proposal: documents and images revalidate instead (ETag/Last-Modified from file_server → 304s),
+# everything else stays no-store.
+(static_cache) {
+	@revalidate path /whitepaper.html /brand/* /favicon.png /favicon.ico /deficit-avatar.png /avatar.png /header.png /og.png /robots.txt
+	header @revalidate Cache-Control "public, max-age=300, must-revalidate"
+	@fresh not path /whitepaper.html /brand/* /favicon.png /favicon.ico /deficit-avatar.png /avatar.png /header.png /og.png /robots.txt
+	header @fresh Cache-Control "no-store"
+}

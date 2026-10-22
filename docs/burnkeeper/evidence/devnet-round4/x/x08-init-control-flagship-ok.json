@@ -1,0 +1,42 @@
+{
+  "case": "x08-init-control-flagship-ok",
+  "expected": "none",
+  "observed": "none",
+  "match": true,
+  "exitCode": 0,
+  "command": "R /private/tmp/claude-501/<home>/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts init-kind --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint ~/.config/meme-coin-trader/devnet/r4x-xa-mint.json --rules config/burnkeeper/r4x-xa.rules.json --platform GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf --attester D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn --kind 0",
+  "simulationErr": null,
+  "errorLogLines": [],
+  "stderr": [],
+  "output": {
+    "command": "h.mts init-kind",
+    "cluster": "devnet",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "endSinkKind": 0,
+    "simulation": {
+      "err": null,
+      "unitsConsumed": 62718,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: InitializeToken",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 1853 of 348702 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 1853 of 344251 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 62568 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+      ]
+    }
+  }
+}

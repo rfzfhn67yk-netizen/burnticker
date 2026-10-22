@@ -1,0 +1,85 @@
+{
+ "fetchedAt": "2026-10-12T19:31:00Z",
+ "note": "Real response, captured read-only: the providers Launch Library 2 marks as featured. The adapter's provider table is this list.",
+ "url": "https://ll.thespacedevs.com/2.3.0/agencies/?featured=true&mode=list&limit=60",
+ "body": {
+  "count": 15,
+  "results": [
+   {
+    "id": 115,
+    "name": "Arianespace",
+    "abbrev": "ASA"
+   },
+   {
+    "id": 159,
+    "name": "Avio S.p.A",
+    "abbrev": "Avio"
+   },
+   {
+    "id": 141,
+    "name": "Blue Origin",
+    "abbrev": "BO"
+   },
+   {
+    "id": 88,
+    "name": "China Aerospace Science and Technology Corporation",
+    "abbrev": "CASC"
+   },
+   {
+    "id": 17,
+    "name": "China National Space Administration",
+    "abbrev": "CNSA"
+   },
+   {
+    "id": 265,
+    "name": "Firefly Aerospace",
+    "abbrev": "FA"
+   },
+   {
+    "id": 31,
+    "name": "Indian Space Research Organization",
+    "abbrev": "ISRO"
+   },
+   {
+    "id": 37,
+    "name": "Japan Aerospace Exploration Agency",
+    "abbrev": "JAXA"
+   },
+   {
+    "id": 96,
+    "name": "Khrunichev State Research and Production Space Center",
+    "abbrev": "KhSC"
+   },
+   {
+    "id": 44,
+    "name": "National Aeronautics and Space Administration",
+    "abbrev": "NASA"
+   },
+   {
+    "id": 257,
+    "name": "Northrop Grumman Space Systems",
+    "abbrev": "NGSS"
+   },
+   {
+    "id": 147,
+    "name": "Rocket Lab",
+    "abbrev": "RL"
+   },
+   {
+    "id": 63,
+    "name": "Russian Federal Space Agency (ROSCOSMOS)",
+    "abbrev": "RFSA"
+   },
+   {
+    "id": 121,
+    "name": "SpaceX",
+    "abbrev": "SpX"
+   },
+   {
+    "id": 124,
+    "name": "United Launch Alliance",
+    "abbrev": "ULA"
+   }
+  ]
+ }
+}

@@ -1,0 +1,127 @@
+{
+  "command": "init-pair",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": false,
+  "plan": {
+    "pair": "5etkAGzWxEsyUcVwWNA8hVCfH4cKcsqCBo6FiW7RRfGh",
+    "vault": "71yLtEPJDg8JbtZMDT5wSTcKFLaAgiCrH2TmJ8zkNKiw",
+    "mints": {
+      "a": "4ZVjkQrD8CYN2BR4xecJW7J85zEou9QzbS2xtT7nkogV",
+      "b": "5R5DZ4QCzkikXv1e8qUMti68bbHZMHTkSBKPbTLdMoPB"
+    },
+    "rulesSha256": {
+      "a": "33d3465b1f410b29b57e4df479a56d1b0f331bea34197b1a3920eaefa9b2f4f7",
+      "b": "345afddd0b4b0824e7cb6c4a87c5f9855dc8c2b0232d0dba0f57996ec664664a"
+    },
+    "pairId": "pca-vs-pcb-devnet-rehearsal-1",
+    "cpConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "createPoolFee": "150000000",
+    "sideCosts": "182258000",
+    "params": {
+      "virtualSolLamports": "300000000",
+      "virtualTokenAmount": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "targetRaiseLamports": "650000000",
+      "minSideShareBps": 3000,
+      "deadline": 1791760149
+    },
+    "burnPools": {
+      "a": "2ugbGdy541mGmzMknCtNNhPzErg2xkpM1pe6h9NKkGtZ",
+      "b": "7BntzppqSMGHhrY3aH5Q3W4eXXQT6fCHf2aB85qq2hG9"
+    }
+  },
+  "steps": {
+    "mintAndConfigA": {
+      "ok": true,
+      "signature": "MmH3Nw25T4zErS6rKfiMhX87xGBVc7LMdrg8GRgSC6UYcf8jxC2t9SUMGWs8YrxLXDAjCXKqpdzaokdyuSd32S3",
+      "error": null,
+      "unitsConsumed": 30248,
+      "txBytes": 881
+    },
+    "mintAndConfigB": {
+      "ok": true,
+      "signature": "285miG3pFDngLqZPxcGDQqciTB9qMAREamohrxYdyqvCGEokT3exZo7gmZ3RGUFsQENY8qSmmoX5YkyHT113y2cN",
+      "error": null,
+      "unitsConsumed": 33248,
+      "txBytes": 881
+    },
+    "initPair": {
+      "ok": true,
+      "signature": "4y7P4x92oc1va54BGkyFvPXwiYTiAT8XbhoKTCvZvnfpSUq3cX3TPR1c1LQXHdLNxvxQDpPP6hKtjRidfsEXB89i",
+      "error": null,
+      "unitsConsumed": 124767,
+      "txBytes": 756
+    }
+  },
+  "after": {
+    "pair": "5etkAGzWxEsyUcVwWNA8hVCfH4cKcsqCBo6FiW7RRfGh",
+    "exists": true,
+    "status": "open",
+    "phase": "open",
+    "deadline": "2026-10-11T23:09:09.000Z",
+    "vault": "71yLtEPJDg8JbtZMDT5wSTcKFLaAgiCrH2TmJ8zkNKiw",
+    "vaultLamports": 650240,
+    "devWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+    "sides": [
+      {
+        "side": "A",
+        "mint": "4ZVjkQrD8CYN2BR4xecJW7J85zEou9QzbS2xtT7nkogV",
+        "supplyRaw": "1000000000000000",
+        "sold": "0",
+        "sol": "0",
+        "burnPool": "2ugbGdy541mGmzMknCtNNhPzErg2xkpM1pe6h9NKkGtZ",
+        "burnPoolLamports": 20000000,
+        "burnFees": "0",
+        "devFees": "0",
+        "trades": 0,
+        "pool": "11111111111111111111111111111111",
+        "poolSol": "0",
+        "poolTokens": "0",
+        "lpSupplyAtCreation": "0",
+        "lpBurned": "0",
+        "tokensBurned": "0",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "11111111111111111111111111111111",
+          "poolVerified": false,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      },
+      {
+        "side": "B",
+        "mint": "5R5DZ4QCzkikXv1e8qUMti68bbHZMHTkSBKPbTLdMoPB",
+        "supplyRaw": "1000000000000000",
+        "sold": "0",
+        "sol": "0",
+        "burnPool": "7BntzppqSMGHhrY3aH5Q3W4eXXQT6fCHf2aB85qq2hG9",
+        "burnPoolLamports": 20000000,
+        "burnFees": "0",
+        "devFees": "0",
+        "trades": 0,
+        "pool": "11111111111111111111111111111111",
+        "poolSol": "0",
+        "poolTokens": "0",
+        "lpSupplyAtCreation": "0",
+        "lpBurned": "0",
+        "tokensBurned": "0",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "11111111111111111111111111111111",
+          "poolVerified": false,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      }
+    ],
+    "params": {
+      "virtualSol": "300000000",
+      "virtualToken": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "reserve": "206900000000000",
+      "targetRaise": "650000000",
+      "minSideShareBps": 3000
+    }
+  }
+}

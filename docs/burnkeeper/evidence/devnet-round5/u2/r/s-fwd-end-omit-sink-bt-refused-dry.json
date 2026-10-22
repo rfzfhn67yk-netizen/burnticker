@@ -1,0 +1,24 @@
+{
+  "command": "fwd-end",
+  "dryRun": true,
+  "omitted": "ES1HxjArAP6e789g11qWESDrpeYPJWUwR7XCBEx2UHZe",
+  "step": "fwd-end without ES1HxjArAP6e789g11qWESDrpeYPJWUwR7XCBEx2UHZe's BurnTarget",
+  "bytes": 728,
+  "simulation": {
+    "err": "{\"InstructionError\":[2,{\"Custom\":6143}]}",
+    "unitsConsumed": 63837,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+      "Program log: CreateIdempotent",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 4437 of 399850 compute units",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: ForwardOnEnd",
+      "Program log: AnchorError occurred. Error Code: BurnTargetAccountMissing. Error Number: 6143. Error Message: a target coin's BurnTarget account is required.",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 59250 of 395413 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17ff"
+    ]
+  }
+}

@@ -1,0 +1,167 @@
+# THE PUBLIC-REPO ALLOWLIST (the owner, 2026-10-09: "i dont want to hide anything" — and the trading code never leaves).
+#
+# One git pathspec per line (a file, a directory, or a glob git understands). scripts/ops/publish-public-repo.sh copies exactly the
+# TRACKED files these lines match into the public tree, at the same paths, and nothing else: ignored files (data/, .next/, builds,
+# local env files) can never be matched because git does not track them. This is an allowlist, never a denylist — a new private
+# directory is private by default; a new public file is published only when a line here names it.
+#
+# A line that matches no tracked file is reported as a warning (not an error), so a renamed directory is noticed.
+# config/public-repo.denypatterns is the second gate: every copied text file is scanned against it, and the check fails on a hit.
+
+# --- the on-chain program (Anchor) and its generator scripts ---
+programs/burn-receipts
+
+# --- the TypeScript client of the program ---
+src/lib/burnReceipts
+scripts/burnreceipts-*.mts
+
+# --- pair_curve (2026-10-10): its TypeScript client, admin CLI and the Squads v4 upgrade-proposal tool (the program itself is under
+#     programs/burn-receipts, the same Anchor workspace) ---
+src/lib/pairCurve
+scripts/paircurve-*.mts
+scripts/squads-program-upgrade.mts
+
+# --- the $DEFICIT keeper (single-token) ---
+src/lib/burnKeeper
+config/burnkeeper
+scripts/burn-keeper.mts
+scripts/burnkeeper-*.mts
+scripts/burnkeeper-keygen.mjs
+
+# --- the platform (multi-token keeper, registry, oracles, token pages, trust page, launch wizard, API routes) ---
+src/lib/burnticker
+src/app/burnticker
+src/app/api/burnticker
+# the one proxy: a malformed address answers 404, not 500 (prelaunch audit 2026-10-16 F-15)
+src/proxy.ts
+config/burnticker
+scripts/burnticker-*.mts
+# the operator statement's self-contained verifier (ops-2, 2026-10-12): no repository code, anyone can run it
+scripts/burnticker-verify-statement.mjs
+scripts/whitepaper-html.mjs
+
+# --- the public SDK for bots (@burnticker/sdk) and the manifest of the repo files it imports (kept current by test/burntickerSdkLeak.test.ts;
+#     every file it lists is covered by the src/lib/{burnticker,burnReceipts,burnKeeper} lines above) ---
+packages/burnticker-sdk
+packages/burnticker-sdk/public-closure.json
+# the bot starter kit (growth batch 2026-10-10): follow / launch-preview / post-queue samples on the SDK; imports only the SDK (through
+# its one line src/sdk.ts) and the public post generator + copy lint named below
+packages/burnticker-bot-starter
+
+# --- public launch content: the daily post and its copy lint (the token page and scripts/burnkeeper-post-draft.mts import them) and
+#     the lint's word list. Named file by file: the rest of src/lib/launch (drafts, other launchpads' tooling) uses the private database. ---
+src/lib/launch/dailyPost.ts
+src/lib/launch/copyLint.ts
+# the GTM post generator (scripts/burnticker-posts.mts, matched by the glob above, imports it; 2026-10-10) and its fixtures/tests
+src/lib/launch/postQueue.ts
+test/postQueue*.ts
+test/gtmDocs.test.ts
+config/launch
+
+# --- the two shared modules the public code imports (split out of the private app so nothing else is dragged along) ---
+src/lib/sameOrigin.ts
+src/lib/live/validateSwap.ts
+
+# --- the refuse list: the operator's trading bots read this and refuse every platform coin. Publishing it is the proof. ---
+src/lib/ownTokens.ts
+config/own-tokens.json
+
+# --- sites and brand ---
+site/deficit
+site/burnticker
+site/brand-concepts
+
+# --- docs ---
+docs/burnkeeper
+docs/burn-receipts
+docs/burnticker
+docs/launch/*.md
+
+# --- deploy: the Burnticker host runs THIS tree (2026-10-10, docs/burnticker/deploy.md "The host runs the public tree") — so every
+#     unit, entrypoint and ops script the box uses is published, and nothing of the trading app is on it ---
+deploy/caddy
+deploy/systemd/mct-burnkeeper.service
+deploy/systemd/mct-burnticker-*.service
+deploy/systemd/mct-burnticker-*.timer
+deploy/logrotate/burnticker
+scripts/load-env.sh
+scripts/service/run-burnticker-web.sh
+# L-5 (2026-10-19): the web's bounded SIGTERM drain, preloaded by run-burnticker-web.sh
+scripts/service/web-graceful.cjs
+# HB-138 (2026-10-20): the web's memo warm-up at start, preloaded by run-burnticker-web.sh
+scripts/service/web-warm.cjs
+# HB-145 (2026-10-20): the web's slow-request and event-loop log, preloaded by run-burnticker-web.sh
+scripts/service/web-slowlog.cjs
+scripts/service/run-burnkeeper.sh
+scripts/service/run-burnticker-keeper.sh
+scripts/service/run-burnticker-audit.sh
+scripts/service/run-burnticker-clonewatch.sh
+scripts/service/run-burnticker-signer.sh
+# the nightly synthetic creator on the box (2026-10-15): its runner, the script and its wallet (scripts/burnticker-*.mts above) are public on
+# purpose so the box has them; the deploy smoke (scripts/ops/burnticker-deploy-smoke.*) stays private (it runs on the Mac)
+scripts/service/run-burnticker-synth.sh
+scripts/service/run-burnticker-mintbank.sh
+# 2026-10-16 audit F-7 / F-32: the 6-hourly database backup's entrypoint and the synthetic creator's stale Playwright lock cleanup
+scripts/service/run-burnticker-backup.sh
+scripts/service/seed-logrotate-state.sh
+scripts/service/playwright-dirlock.sh
+# I-11 / B-4 (2026-10-19): the 5-minute external web check (Healthchecks.io ping); test/burntickerWebProbe.test.ts runs it
+scripts/service/burnticker-web-probe.sh
+scripts/ops/deploy-sites.sh
+scripts/ops/keeper-status-check.sh
+scripts/ops/probe-burnticker.sh
+scripts/ops/install-burnticker-units.sh
+scripts/ops/render-logrotate.mjs
+scripts/ops/request-keeper-restart.sh
+scripts/ops/swap-web-build.sh
+scripts/ops/loadtest.sh
+scripts/ops/loadtest.mjs
+# I-6 (2026-10-19): prints the ufw rules that admit only Cloudflare (applies nothing); docs/burnticker/runbook.md
+scripts/ops/cloudflare-ufw-rules.sh
+# automatic SOL top-ups (2026-10-19, src/lib/burnticker/ops/topUp.ts): the operator's --plan / --apply tool runs on the host, and the
+# public floors and fill levels it and the keeper read (also covered by the config/burnticker line above)
+scripts/ops/top-up.mts
+config/burnticker/top-up.json
+# NOT here, on purpose: scripts/ops/mac/ (HB-62, 2026-10-19: the operator's Mac pull script and restore drill). They name the host's
+# address, its paths and the keychain item that holds the backup passphrase, so they stay in the monorepo; the leak scan also refuses
+# that keychain item's name below. test/burntickerBackupSet.test.ts skips its Mac checks where the folder is absent.
+
+# --- tests and the fixtures they read ---
+test/burnKeeper*.ts
+test/burnReceipts*.ts
+test/pairCurve*.ts
+test/burnticker*.ts
+test/fixtures/treasury-debt-to-penny-2024-12-to-2026-10-08.json
+test/fixtures/polymarket-trump-2024-condition.json
+test/fixtures/reclaim-sample-proof.json
+test/fixtures/bom-weekend-2026W40-row1.html
+# the swap panel's saved devnet account states (swap-1, 2026-10-14; test/burntickerSwap.test.ts checks its math against the SDK on them)
+test/fixtures/burnticker-swap-devnet.json
+test/fixtures/burnticker/registry-rules-2026-10-19.json
+# the game clock's recorded SEA at DEN reads (2026-10-15; test/burntickerGameClock.test.ts replays them through the one game-coin schedule)
+test/fixtures/burnticker-gameclock/sea-den-2026-10-15.json
+
+# --- the carve-out itself, so the public can see how the public tree is cut ---
+config/public-repo.allowlist
+config/public-repo.denypatterns
+config/public-repo/overlay
+scripts/ops/publish-public-repo.sh
+scripts/ops/public-repo-lib.mjs
+scripts/ops/verify-evidence-signatures.mjs
+scripts/ops/verified-build.sh
+scripts/ops/reproducible-build-host.sh
+public/.well-known/burnticker.json
+test/fixtures/burnticker-trustpack/**
+# the version-1 transaction fixtures (Phantom v1 scope step 0, 2026-10-19; test/burntickerTxVersion1.test.ts replays them through every
+# launch-path reader that parses the RPC's JSON itself): a real devnet v1 read, the $DEFICIT receipt re-enveloped, a received coin
+test/fixtures/burnticker/v1-ledger-devnet.json
+test/fixtures/burnticker/v1-receipt-check-devnet.json
+test/fixtures/burnticker/v1-never-buys-devnet.json
+# hourly audit run 14 (2026-10-20): the public /v1/sports/teams?league=wnba and /v1/operator bodies the auditor saved (HB-153, HB-154)
+test/fixtures/burnticker/hourly-run14-wnba-teams.json
+test/fixtures/burnticker/hourly-run14-operator.json
+test/fixtures/burnticker-season/**
+test/fixtures/burnticker-ops/**
+scripts/ops/codex-setup.sh
+scripts/ops/burnticker-open-creator-launches.sh
+scripts/ops/deficit-first-paint.mts

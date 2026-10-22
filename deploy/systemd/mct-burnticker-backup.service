@@ -1,0 +1,18 @@
+[Unit]
+Description=Burnticker database backup (sqlite .backup of the registry, the $DEFICIT ledger and the mint key bank into data/backups, quick_check, keep 14, copy off the box to BURNTICKER_BACKUP_DEST) — fired every 6 hours by mct-burnticker-backup.timer
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/meme-coin-trader
+# scripts/service/run-burnticker-backup.sh: never reads an env or key file into the backup; from .env.local it reads only the
+# BURNTICKER_BACKUP_DEST line. A failed run exits 1: the unit shows failed (the keeper's unit check raises bt-unit-failed) and
+# data/backups/last-backup.json says why (bt-backup-failed).
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/run-burnticker-backup.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=TZ=America/Denver
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-backup.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-backup.log

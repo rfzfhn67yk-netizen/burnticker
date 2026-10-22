@@ -1,0 +1,33 @@
+{
+ "schema": "burnticker.ops-status/v1",
+ "generatedAt": "2026-10-12T15:00:00.000Z",
+ "keeper": {
+  "role": "leader", "active": true, "reason": "leader; the peer is standby and passive", "hostIdHash": "3f9a1c0e5b7d2a44", "cluster": "devnet",
+  "startedAt": "2026-10-12T09:00:00.000Z", "lastCycleAt": 1791817170000, "lastCycle": { "fetched": 3, "planned": 1, "executed": 1, "errors": 0 },
+  "paused": false, "heartbeatEverySec": 60, "missed": 0, "missedLimit": 5, "takeover": null,
+  "peer": { "url": "https://status-b.burnticker.com/status.json", "reachable": true, "role": "standby", "active": false, "lastCycleAt": 1791817150000, "hostIdHash": "b07e55d1c2aa9f10", "takeoverValid": false, "error": null, "checkedAt": 1791817195000 }
+ },
+ "feeds": [
+  { "selectorKey": "catalogue:treasury.debt", "tickers": ["DEFICIT"], "state": "ok", "why": "read cleanly", "lastOkAt": 1791816900000, "lastFetchAt": 1791816900000, "failures": 0, "lastError": null,
+    "crossRead": { "agreement": true, "basis": "the last read came back without a disagreement from the adapter's cross-read", "lastDisagreeAt": null },
+    "staleness": { "lastReadingId": "2026-10-09", "lastReadingAt": "2026-10-09", "ageMs": 284400000, "limitMs": 432000000, "stale": false } },
+  { "selectorKey": "catalogue:nws.high:DEN-90", "tickers": ["HOTDEN"], "state": "disagree", "why": "2026-10-11: NWS and the Iowa Environmental Mesonet disagree on 2026-10-11 at DEN: IEM ASOS max 93 °F vs NWS 90 °F (> 2 °F apart) — held", "lastOkAt": 1791816000000, "lastFetchAt": 1791816000000, "failures": 0, "lastError": null,
+    "crossRead": { "agreement": false, "basis": "the adapter's cross-read disagreed on the last read — withheld", "lastDisagreeAt": 1791816000000 },
+    "staleness": { "lastReadingId": "2026-10-10", "lastReadingAt": "2026-10-10", "ageMs": 198000000, "limitMs": 345600000, "stale": false } },
+  { "selectorKey": "catalogue:bls.eggs", "tickers": ["EGGS"], "state": "down", "why": "4 failed read(s) in a row: HTTP 503", "lastOkAt": 1791716000000, "lastFetchAt": 1791815000000, "failures": 4, "lastError": "HTTP 503",
+    "crossRead": { "agreement": true, "basis": "the last read came back without a disagreement from the adapter's cross-read", "lastDisagreeAt": null },
+    "staleness": { "lastReadingId": "2026-08", "lastReadingAt": "2026-08", "ageMs": 6105600000, "limitMs": 8640000000, "stale": false } },
+  { "selectorKey": "catalogue:noaa.flares", "tickers": ["FLARE"], "state": "stale", "why": "newest reading 2026-10-02 is 10 day(s) old (limit 5)", "lastOkAt": 1791816500000, "lastFetchAt": 1791816500000, "failures": 0, "lastError": null,
+    "crossRead": { "agreement": null, "basis": "no cross-read result recorded for this selector", "lastDisagreeAt": null },
+    "staleness": { "lastReadingId": "2026-10-02", "lastReadingAt": "2026-10-02", "ageMs": 889200000, "limitMs": 432000000, "stale": true } }
+ ],
+ "alerts": { "windowHours": 24, "open": 3, "kinds": { "bt-feed-down": 1, "bt-feed-disagree": 1, "bt-feed-stale": 1 } },
+ "retired": { "count": 1, "coins": [ { "ticker": "ONESHOT", "retiredAt": "2026-10-05T12:00:00.000Z", "lastSweepDate": "2026-10-11", "sweepThresholdLamports": 50000000 } ] },
+ "windDowns": { "pending": 1, "coins": [ { "ticker": "BRONCO", "mode": "winddown", "reason": "the coin's window ended: 2026 season over", "endedAt": "2026-10-08T00:00:00.000Z", "daysDone": 3, "windDownDays": 28, "receiptsPending": 1 } ] },
+ "snapshot": { "date": "2026-10-12", "sha256": "4c1f0b4a9e3d2c1b0a9f8e7d6c5b4a39281706f5e4d3c2b1a0918273645546a7", "arweaveTxId": "Zk3vJb9wQm2XcT7uYp4LsN8dRf6hGa1eEo5iKl0VqW", "url": "https://devnet.irys.xyz/Zk3vJb9wQm2XcT7uYp4LsN8dRf6hGa1eEo5iKl0VqW", "rowCounts": { "rules": 5, "readings": 182, "receipts": 61, "pairs": 0, "pair_outcomes": 0, "rule_ends": 2, "token_meta": 5 }, "capturedAt": "2026-10-12T00:15:30.000Z" },
+ "programs": [
+  { "name": "burn_receipts", "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM", "cluster": "devnet", "deployedHash": "5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d", "buildHash": "5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d", "verified": "matches", "buildKind": "interim-local", "readAt": "2026-10-10" },
+  { "name": "pair_curve", "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN", "cluster": "devnet", "deployedHash": "35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1", "buildHash": "35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1", "verified": "matches", "buildKind": "interim-local", "readAt": "2026-10-10" }
+ ],
+ "fence": { "held": [], "adopted": 0 }
+}

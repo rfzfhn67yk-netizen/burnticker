@@ -1,0 +1,62 @@
+# PROPOSED — NOT IMPORTED BY deploy/caddy/Caddyfile (website-10, 2026-10-12; the owner's review item 1). The owner applies host changes.
+#
+# What it does: the apex `/` is answered by the Next app's home (/burnticker: the one-line hero, How it works, the coin grid, Follow the
+# season) instead of the static landing page. Every other static path (/whitepaper.html, /brand/*, /status/, /tokens.html, /t/<ticker>/…,
+# /.well-known/…) keeps coming from /var/www/burnticker exactly as today.
+#
+# Why it is safe to apply later and not needed now: since website-10 the static site/burnticker/index.html is already a thin page in the
+# app's shell (same header, footer receipt, tab bar and activity line, generated from src/lib/burnticker/siteNav.mjs) that client-renders
+# the featured cards from GET /api/burnticker/home. Swapping `/` to the app only changes who renders the same page. When the app is down
+# or slow, `/` falls back to that static page, so the root never shows an error.
+#
+# How to apply (on the Burnticker VPS, after review):
+#   1. paste the `handle @home` block below into the {$BURNTICKER_DOMAIN:burnticker.com} site block of /etc/caddy/Caddyfile, ABOVE the
+#      `@app path /burnticker …` block (handle blocks with named matchers run in the order they appear);
+#   2. `caddy validate --config /etc/caddy/Caddyfile`, then `systemctl reload caddy`;
+#   3. check: `curl -sI https://burnticker.com/` answers 200 from the app (an `x-nextjs-*` header is present), and
+#      `curl -s https://burnticker.com/whitepaper.html | head -1` is still the static file.
+# To undo: delete the block and reload. Nothing else on the host changes.
+#
+# Notes for the reviewer:
+#   - The matcher is the exact path `/` (and `/index.html`, which some crawlers and old links request). It does NOT widen the @app matcher
+#     to `/` or `/*`; the security note at the top of the live Caddyfile still holds.
+#   - The public Host header passes through unchanged (no header_up Host), as in the live @app block.
+#   - The canonical URL of the home stays https://burnticker.com/ (the app's /burnticker page declares /burnticker as canonical today; when
+#     this proposal is applied, set `alternates.canonical` in src/app/burnticker/page.tsx to "/" in the same release).
+#   - Cache: the same Cache-Control rewrite as the @app pages (a CDN may keep the shell 60 s, then revalidate).
+
+@home path / /index.html
+handle @home {
+	import security
+	rewrite * /burnticker
+	reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
+		header_up X-Forwarded-Proto {scheme}
+		header_down Cache-Control "s-maxage=31536000" "public, max-age=0, s-maxage=60, stale-while-revalidate=300"
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 20s
+		}
+		# the app answering 5xx: serve the static home (the same shell, rendered client-side from the API) instead of an error page
+		@upstream_5xx status 5xx
+		handle_response @upstream_5xx {
+			root * /var/www/burnticker
+			rewrite * /index.html
+			header Cache-Control "no-store"
+			file_server
+		}
+	}
+}
+
+# And inside the existing `handle_errors` block, so an unreachable app (Caddy's own 502/504) also gets the static home at `/`:
+#
+#	@home_down {
+#		path / /index.html
+#		expression {err.status_code} >= 500
+#	}
+#	handle @home_down {
+#		import security
+#		root * /var/www/burnticker
+#		rewrite * /index.html
+#		header Cache-Control "no-store"
+#		file_server
+#	}

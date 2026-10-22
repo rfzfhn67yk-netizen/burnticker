@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en" class="prelaunch">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$DEFICIT — burns when the debt rises</title>
+<meta name="description" content="$DEFICIT is a Solana memecoin whose supply burns when the U.S. national debt rises. Each $1,000,000,000 of new debt on Treasury's Debt to the Penny is one unit, and the token's own trading fees pay for each burn. Until its curve fills and its pool is registered, units are queued and nothing burns. Each burn leaves a receipt on chain.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#e7e5df" media="(prefers-color-scheme: light)">
+<meta property="og:title" content="$DEFICIT — burns when the debt rises">
+<meta property="og:description" content="For every $1B the U.S. borrows, $DEFICIT's own trading fees pay to burn some of the token, once its curve fills and its pool is registered. Until then each $1B is queued and nothing burns. Each burn leaves a receipt on chain. It is a memecoin, and the rule says what supply does, not what price does.">
+<meta property="og:image" content="https://deficit.burnticker.com/og.png">
+<meta property="og:url" content="https://deficit.burnticker.com/">
+<meta name="twitter:image" content="https://deficit.burnticker.com/og.png">
+<link rel="canonical" href="https://deficit.burnticker.com/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@USA_DEFICIT">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+<link rel="apple-touch-icon" href="avatar.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&amp;display=swap">
+<style>
+/* D1 "Debt clock" (site/brand-concepts/d1-debt-clock): a black LED board in a dark housing, white Oswald marquee, red
+   seven-segment digits for what the U.S. borrowed, amber for what was burned. Dark-first. The light variant is the same board
+   UNLIT — the enamel housing and a pale face in daylight, segments printed in matte ink instead of glowing — not an inversion. */
+:root{
+  --bg:#0a0a0a;--panel:#0f0f0f;--panel2:#171717;--line:#262626;--ink:#f1eee6;--dim:#bdb9af;--muted:#8f8b82;
+  --red:#ff3b2e;--hot:#ff3b2e;--onred:#0a0a0a;--amber:#ffb000;--ok:#4cc38a;--warn:#ffb000;--stamp:rgba(255,59,46,.10);
+  --housing:linear-gradient(180deg,#161616,#0c0c0c 30%,#070707);--face:#030303;
+  --faceshadow:inset 0 0 0 2px #1c1c1c,inset 0 0 0 3px #000,inset 0 10px 24px rgba(0,0,0,.9);
+  --bolt:radial-gradient(circle at 35% 35%,#3a3a3a,#111 70%);
+  --seg-lit:#ff3b2e;--seg-dot:#ff6a5c;--seg-off:#2a100d;--seg-amber:#ffb000;--seg-amberdot:#ffd166;--seg-amberoff:#2a1e08;
+  --marquee:"Oswald","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){--bg:#e7e5df;--panel:#f2f1ec;--panel2:#e8e6e0;--line:#cac7be;--ink:#15130f;--dim:#3d3a34;--muted:#625e55;
+    --red:#b3261e;--hot:#b3261e;--onred:#ffffff;--amber:#8f5600;--ok:#1a6a40;--warn:#8f5600;--stamp:rgba(179,38,30,.08);
+    --housing:linear-gradient(180deg,#d4d1c9,#c8c5bc 30%,#bfbcb3);--face:#dddbd4;
+    --faceshadow:inset 0 0 0 1px #b4b0a7,inset 0 8px 18px rgba(0,0,0,.10);
+    --bolt:radial-gradient(circle at 35% 35%,#f6f5f1,#9e9a90 70%);
+    --seg-lit:#b3261e;--seg-dot:#c8463a;--seg-off:rgba(21,19,15,.075);--seg-amber:#8f5600;--seg-amberdot:#a86d12;--seg-amberoff:rgba(21,19,15,.075)}
+}
+:root[data-theme="light"]{--bg:#e7e5df;--panel:#f2f1ec;--panel2:#e8e6e0;--line:#cac7be;--ink:#15130f;--dim:#3d3a34;--muted:#625e55;
+  --red:#b3261e;--hot:#b3261e;--onred:#ffffff;--amber:#8f5600;--ok:#1a6a40;--warn:#8f5600;--stamp:rgba(179,38,30,.08);
+  --housing:linear-gradient(180deg,#d4d1c9,#c8c5bc 30%,#bfbcb3);--face:#dddbd4;
+  --faceshadow:inset 0 0 0 1px #b4b0a7,inset 0 8px 18px rgba(0,0,0,.10);
+  --bolt:radial-gradient(circle at 35% 35%,#f6f5f1,#9e9a90 70%);
+  --seg-lit:#b3261e;--seg-dot:#c8463a;--seg-off:rgba(21,19,15,.075);--seg-amber:#8f5600;--seg-amberdot:#a86d12;--seg-amberoff:rgba(21,19,15,.075)}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);}
+a{color:var(--hot);text-decoration:none}a:hover{text-decoration:underline}
+code,pre,.mono{font-family:var(--mono)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.dim{color:var(--dim)}
+h2{font:600 1.05rem/1.3 var(--marquee);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 16px}
+h2 span{color:var(--hot);margin-right:10px}
+section{padding:40px 0;border-top:1px solid var(--line)}
+section.wrap{padding:40px 16px}
+section.first{border-top:0}
+.intro{margin:0 0 14px}
+.gap{margin-top:12px}
+
+/* the shared Burnticker link set, a thin bar above the board (site audit #6) */
+.sitebar{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--line);font:500 .72rem/1.4 var(--marquee);letter-spacing:.1em;text-transform:uppercase}
+.sitebar a{color:var(--dim)}.sitebar a:hover{color:var(--ink);text-decoration:none}.sitebar a[aria-current="page"]{color:var(--ink)}
+.sitebar .sb-brand{color:var(--ink);font-weight:600;letter-spacing:.16em;margin-right:4px}
+.sitelinks{margin-bottom:10px}
+/* top bar: the marquee wordmark */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;flex-wrap:wrap}
+.wordmark{font:700 1.75rem/1 var(--marquee);letter-spacing:.07em;color:var(--ink)}
+.wordmark:hover{text-decoration:none}
+.nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.nav a{font:500 .8rem/1 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:8px 10px;border:1px solid var(--line);white-space:nowrap}
+.nav a:hover{text-decoration:none;border-color:var(--hot);color:var(--ink)}
+.nav a.primary{background:var(--red);border-color:var(--red);color:var(--onred);font-weight:600}
+
+/* hero: the board */
+section.hero{padding:8px 16px 32px;position:relative}
+.board{background:var(--housing);padding:clamp(8px,1.6vw,16px);margin:0 0 26px}
+.face{position:relative;background:var(--face);box-shadow:var(--faceshadow);padding:clamp(22px,4vw,44px) clamp(16px,4.4vw,52px) clamp(20px,3.4vw,36px);overflow:hidden}
+.bolt{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--bolt)}
+.bolt.tl{left:9px;top:9px}.bolt.tr{right:9px;top:9px}.bolt.bl{left:9px;bottom:9px}.bolt.br{right:9px;bottom:9px}
+.strap{margin:0 0 clamp(16px,3vw,26px);font:500 clamp(1rem,2.6vw,1.9rem)/1.15 var(--marquee);letter-spacing:.16em;color:var(--ink)}
+.label{font:500 clamp(.7rem,1.3vw,.95rem)/1.35 var(--marquee);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0}
+@media (max-width:480px){.label{letter-spacing:.12em}}
+.figred{--w:clamp(28px,7.4vw,76px);margin:2px 0 0}
+.figamber{--w:clamp(16px,3.4vw,34px);margin:2px 0 0}
+.figcap{margin:0 0 clamp(16px,3vw,26px);font:500 clamp(.82rem,1.4vw,1rem)/1.4 var(--marquee);letter-spacing:.08em;color:var(--dim)}
+.figcap b{color:var(--ink);font-weight:600}
+.hero h1{font:600 clamp(1.45rem,4vw,2.5rem)/1.18 var(--marquee);letter-spacing:.035em;text-transform:uppercase;margin:clamp(6px,1.4vw,12px) 0 clamp(14px,2.4vw,22px);max-width:30ch;color:var(--ink)}
+.hero h1 em{font-style:normal;color:var(--hot)}
+.rule{font-size:1.1rem;line-height:1.55;color:var(--dim);max-width:62ch;margin:0 0 20px}
+.rule strong{color:var(--ink)}
+.stamp{display:block;font:500 clamp(.72rem,1.2vw,.88rem)/1.4 var(--marquee);letter-spacing:.1em;color:var(--muted)}
+.hero .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.btn{display:inline-block;padding:11px 16px;border:1px solid var(--line);color:var(--ink);font:500 .92rem/1.2 var(--marquee);letter-spacing:.1em;text-transform:uppercase}
+.btn:hover{text-decoration:none;border-color:var(--hot)}
+.btn.red{background:var(--red);border-color:var(--red);color:var(--onred);font-weight:600}
+.btn.ghost{color:var(--dim)}
+.btn.off,.nav a.off{opacity:.55;cursor:not-allowed;border-style:dashed}.btn.off:hover,.nav a.off:hover{border-color:var(--line)}
+
+/* seven-segment component (from d1-debt-clock/seg.css, scoped under .seg7 and themed). Unlit segments stay faintly visible,
+   lit ones carry an LED dot matrix. --w sizes a digit; everything else derives from it. */
+.seg7{display:flex;align-items:flex-end;max-width:100%;overflow:hidden;--t:calc(var(--w) * .17);--gap:calc(var(--w) * .28);--h:calc(var(--w) * 1.8);
+  --lit:var(--seg-lit);--litdot:var(--seg-dot);--off:var(--seg-off);padding:calc(var(--t) * .7) 0 calc(var(--t) * 1.1)}
+.seg7.amber{--lit:var(--seg-amber);--litdot:var(--seg-amberdot);--off:var(--seg-amberoff)}
+.seg7 .fb{font:700 calc(var(--w) * 1.6)/1 var(--marquee);color:var(--lit);letter-spacing:.04em}
+.seg7 .d{display:block;position:relative;width:var(--w);height:var(--h);margin-right:var(--gap);flex:none}
+.seg7 .s{display:block;position:absolute;background:var(--off)}
+.seg7 .s.on{background:var(--lit);
+  background-image:radial-gradient(circle at 50% 50%, var(--litdot) 0 22%, var(--lit) 30% 46%, rgba(0,0,0,.25) 56%, transparent 60%);
+  background-size:calc(var(--t) * .55) calc(var(--t) * .55)}
+.seg7 .a,.seg7 .g,.seg7 .dd{left:calc(var(--t) * .55);right:calc(var(--t) * .55);height:var(--t);
+  clip-path:polygon(0 50%, calc(var(--t) * .5) 0, calc(100% - var(--t) * .5) 0, 100% 50%, calc(100% - var(--t) * .5) 100%, calc(var(--t) * .5) 100%)}
+.seg7 .a{top:0}.seg7 .g{top:calc(50% - var(--t) / 2)}.seg7 .dd{bottom:0}
+.seg7 .b,.seg7 .c,.seg7 .e,.seg7 .f{width:var(--t);height:calc(50% - var(--t) * .6);
+  clip-path:polygon(50% 0, 100% calc(var(--t) * .5), 100% calc(100% - var(--t) * .5), 50% 100%, 0 calc(100% - var(--t) * .5), 0 calc(var(--t) * .5))}
+.seg7 .f,.seg7 .b{top:calc(var(--t) * .55)}.seg7 .e,.seg7 .c{bottom:calc(var(--t) * .55)}
+.seg7 .f,.seg7 .e{left:0}.seg7 .b,.seg7 .c{right:0}
+.seg7 .d.comma{width:calc(var(--t) * .9)}
+.seg7 .d.comma .s{left:0;bottom:calc(var(--t) * -.9);width:calc(var(--t) * .9);height:calc(var(--t) * 1.5);clip-path:polygon(0 0,100% 0,100% 55%,30% 100%,0 100%)}
+.seg7 .d.dot{width:calc(var(--t) * .9)}
+.seg7 .d.dot .s{left:0;bottom:0;width:calc(var(--t) * .9);height:calc(var(--t) * .9)}
+.seg7 .bar{left:calc(50% - var(--t) * .18);top:calc(var(--t) * -.6);bottom:calc(var(--t) * -.6);width:calc(var(--t) * .36)}
+
+/* live strip */
+.strip{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line);border:1px solid var(--line);overflow:hidden}
+.cell{background:var(--panel);padding:16px 16px 14px;min-width:0}
+.cell .k{font:500 .74rem/1.3 var(--marquee);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.cell .v{font:600 1.85rem/1.1 var(--marquee);letter-spacing:.02em;word-break:break-word;font-variant-numeric:tabular-nums}
+.cell .v.mono{font:500 1.45rem/1.2 var(--marquee);letter-spacing:.04em}
+.cell .s{font-size:.8rem;color:var(--muted);margin-top:6px;line-height:1.35}
+.cell .s b{color:var(--dim);font-weight:600}
+#debtNow{color:var(--hot)}#burned{color:var(--amber)}
+.notice{margin-top:12px;font-size:.85rem;color:var(--warn);display:none}
+.notice.show{display:block}
+.banner{display:none;margin:0 0 16px;padding:10px 14px;border-left:3px solid var(--warn);background:var(--panel);font:500 .86rem/1.45 var(--marquee);letter-spacing:.05em;color:var(--dim)}
+.banner.show{display:block}
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:8px;vertical-align:3px}
+.pulse.off{background:var(--muted)}
+@media (min-width:640px){.strip{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:980px){.strip{grid-template-columns:repeat(4,1fr)}.cell:first-child,.cell:last-child{grid-column:span 2}.cell:first-child .v{font-size:2.7rem}}
+
+/* today */
+.today{margin:0;padding:16px 18px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--hot);font:1rem/1.55 var(--sans);white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+.today a{word-break:break-all}
+.todaysub{margin:10px 0 0;font-size:.85rem;color:var(--muted)}
+.todaysub button{font:500 .78rem/1 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);background:var(--panel2);border:1px solid var(--line);padding:6px 10px;cursor:pointer;margin-left:6px}
+tr:target td{background:var(--stamp)}
+
+/* table */
+.tablewrap{border:1px solid var(--line);overflow:auto;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:860px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:top}
+th{font:500 .72rem/1.3 var(--marquee);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);background:var(--panel2);position:sticky;top:0}
+td.r,th.r{text-align:right}
+td.units{font:600 1rem/1.2 var(--marquee);letter-spacing:.04em;color:var(--hot)}
+tr.detail td{white-space:normal;background:var(--panel2);padding:12px 14px 14px}
+tr.detail pre{margin:6px 0 10px;padding:9px 10px;background:var(--bg);border:1px solid var(--line);font-size:.76rem;line-height:1.45;white-space:pre-wrap;word-break:break-all;overflow-x:auto}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--hot);font-weight:700}
+.vbtn{font:500 .74rem/1 var(--marquee);letter-spacing:.14em;text-transform:uppercase;color:var(--hot);background:none;border:1px solid var(--line);padding:5px 9px;cursor:pointer}
+.vbtn:hover{border-color:var(--hot)}
+.tfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;font-size:.82rem;color:var(--muted);flex-wrap:wrap}
+.tfoot button{font:500 .8rem/1 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);background:var(--panel2);border:1px solid var(--line);padding:9px 12px;cursor:pointer}
+.empty{padding:28px 16px;color:var(--muted);font-size:.95rem;text-align:center}
+
+/* chart */
+.chartbox{border:1px solid var(--line);background:var(--panel);padding:12px 12px 8px}
+canvas{display:block;width:100%;height:280px;touch-action:pan-y}
+.legend{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);padding:8px 2px 2px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--amber);margin-right:6px;vertical-align:-1px}
+.legend .cap{color:var(--dim);font-family:var(--mono);font-size:.78rem}
+
+/* verify */
+.grid2{display:grid;grid-template-columns:1fr;gap:18px}.grid2>*{min-width:0}#shaCheck{overflow-wrap:anywhere}
+@media (min-width:860px){.grid2{grid-template-columns:1fr 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);padding:18px}
+.card h3{margin:0 0 10px;font:600 1.15rem/1.3 var(--marquee);letter-spacing:.06em;text-transform:uppercase}
+.card p{margin:0 0 10px;color:var(--dim);font-size:.95rem}
+.card pre{margin:8px 0;padding:10px 12px;background:var(--bg);border:1px solid var(--line);font-size:.78rem;line-height:1.5;white-space:pre-wrap;word-break:break-all;overflow-x:auto;color:var(--ink)}
+.hash{font-family:var(--mono);font-size:.78rem;word-break:break-all;color:var(--ink)}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{position:relative;padding-left:34px;margin:0 0 12px;color:var(--dim);font-size:.95rem}
+.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:1px;width:22px;height:22px;background:var(--red);color:var(--onred);font:600 .85rem/22px var(--marquee);text-align:center}
+.steps li b{color:var(--ink)}
+
+/* flow */
+.flow{display:grid;grid-template-columns:1fr;gap:8px}
+@media (min-width:760px){.flow{grid-template-columns:repeat(4,1fr)}}
+.flow .f{background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--amber);padding:14px;position:relative}
+.flow .f .t{font:600 .8rem/1.3 var(--marquee);letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin-bottom:6px}
+.flow .f p{margin:0;font-size:.9rem;color:var(--dim)}
+.flow .f p code{font-size:.75rem;word-break:break-all;color:var(--ink)}
+.addr{font-family:var(--mono);font-size:.76rem;word-break:break-all;color:var(--dim)}
+
+/* disclaimer */
+.disc{border:2px solid var(--hot);padding:18px 20px;background:var(--stamp)}
+.disc h3{margin:0 0 8px;font:600 1.3rem/1.25 var(--marquee);letter-spacing:.05em;text-transform:uppercase}
+.disc p{margin:0 0 8px;color:var(--ink)}
+.disc p:last-child{margin:0}
+
+/* footer */
+footer{padding:28px 0 48px;color:var(--muted);font-size:.84rem}
+footer .links{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spacing:.1em;text-transform:uppercase}
+/* audit 2026-10-15 V1: the footer's trade sentence ends in the full trade URL, which has no break point; at 320 and 390 px it pushed the page sideways */
+footer #trade,footer .gap,footer .links a{overflow-wrap:anywhere}
+.replay{margin-top:18px;font-size:.88rem;color:var(--muted)}
+.replay b{color:var(--dim)}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+/* UX report 3 item 8: before the first reading the empty Live / Today / Receipts / curve sections collapse into one summary */
+.prelaunch #live,.prelaunch #today,.prelaunch #receipts,.prelaunch #chart,.prelaunch .nav a[href="#today"],.prelaunch .nav a[href="#receipts"]{display:none}
+html:not(.prelaunch) #prelaunch{display:none}
+#prelaunch .pl{border:1px dashed var(--line);padding:14px 16px;max-width:72ch}#prelaunch .pl p{margin:0 0 8px}#prelaunch .pl p:last-child{margin:0}
+.ready{margin:14px 0 0;border:1px dashed var(--line);padding:12px 14px;max-width:72ch}.ready p{margin:0}.ready .rk{font:500 .72rem/1.3 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}.ready .rl{margin:4px 0;font-weight:600}.ready .rd{color:var(--dim);font-size:.9rem}
+.ready.ready-top{margin:0 0 16px}
+.queue{margin:0 0 16px;border:1px solid var(--line);padding:12px 14px;max-width:72ch}.queue p{margin:0}.queue .qk{font:500 .72rem/1.3 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}.queue .qh{margin:4px 0;font-weight:600}.queue .ql{color:var(--dim);font-size:.9rem;margin-top:4px}.queue .ql.stale{color:var(--amber,#ffb000)}
+  .defi{margin:.6rem 0 1rem;font-size:1.05rem;line-height:1.5;color:var(--muted,#c9c3b6);max-width:46rem}
+</style>
+<!-- site-shell:css:begin -->
+<style>@font-face{font-family:"Courier Prime";font-style:normal;font-weight:400;font-display:swap;src:url("https://burnticker.com/fonts/courier-prime-400-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Courier Prime";font-style:normal;font-weight:700;font-display:swap;src:url("https://burnticker.com/fonts/courier-prime-700-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:300 700;font-display:swap;src:url("https://burnticker.com/fonts/space-grotesk-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+
+:root{--sh-bg:#12100e;--sh-counter:#1b1815;--sh-line:#2d2925;--sh-ink:#f2eee4;--sh-dim:#aba395;--sh-paper:#f2eee4;--sh-paper-ink:#1b1916;--sh-paper-dim:#5a5248;--sh-stamp:#9b84e6;--sh-stamp-solid:#5b3fa3;--sh-scorch:#c8873a;
+  --sh-mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sh-sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif}
+:root[data-theme="light"]{--sh-bg:#f2eee4;--sh-counter:#e9e4d7;--sh-line:#d3ccbc;--sh-ink:#1b1916;--sh-dim:#4d473f;--sh-paper:#fbf9f4;--sh-stamp:#5b3fa3;--sh-scorch:#8a5a24}
+.sh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sh-skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--sh-paper);color:var(--sh-paper-ink);padding:6px 10px;font-family:var(--sh-mono)}.sh-skip:focus{left:8px}
+.sh-header{position:sticky;top:0;z-index:40;background:var(--sh-bg);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
+.sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px}
+.sh-brand{display:flex;align-items:center;gap:10px;color:var(--sh-ink);text-decoration:none;flex:0 0 auto}
+.sh-mark{width:34px;height:34px;border-radius:50%;display:block;box-shadow:0 0 0 1px var(--sh-line)}
+.sh-word{font:700 1.08rem/1 var(--sh-mono);letter-spacing:.16em}
+.sh-nav{display:none;align-items:center;gap:6px;margin-left:12px} /* private review 8: room between the wordmark, the links and Learn at 1440 */
+.sh-nav a,.sh-learn>summary{font:700 .8rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
+.sh-learn>summary::-webkit-details-marker{display:none}
+.sh-ext{font-size:.7em;margin-left:3px;opacity:.7}
+.sh-nav a:hover,.sh-learn>summary:hover{color:var(--sh-ink);background:var(--sh-counter)}
+.sh-nav a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 -2px 0 var(--sh-stamp);border-radius:0}
+.sh-learn{position:relative}
+.sh-learn-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:50;display:grid;min-width:210px;padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.sh-learn-menu a{text-transform:none;letter-spacing:.02em;font:600 .9rem/1.2 var(--sh-sans);padding:10px}
+.sh-search{flex:1 1 auto;min-width:0;display:none}
+.sh-search input{width:100%;max-width:26rem;font:.9rem var(--sh-sans);color:var(--sh-ink);background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:6px;padding:9px 12px}
+.sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.sh-launch{display:inline-block;font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
+.sh-wallet,.sh-ghost{font:700 .76rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
+.sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
+.sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
+.sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
+.sh-menu>summary::-webkit-details-marker{display:none}
+.sh-menu{position:relative}
+.sh-menu-links{position:absolute;right:0;top:calc(100% + 6px);z-index:50;display:grid;gap:2px;min-width:210px;max-width:calc(100vw - 32px);padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px}
+.sh-menu-links a{color:var(--sh-ink);text-decoration:none;padding:11px 10px;border-radius:6px;font:600 .92rem var(--sh-sans)}
+.sh-ticker{border-top:1px dashed var(--sh-line);font:.78rem/1.3 var(--sh-mono);color:var(--sh-dim);overflow-x:auto;white-space:nowrap;scrollbar-width:none;padding:7px 16px;min-height:31px}
+.sh-ticker::-webkit-scrollbar{display:none}
+.sh-ticker a{color:var(--sh-ink);text-decoration:none;margin-right:22px}.sh-ticker a:hover{text-decoration:underline}
+.sh-ticker .sh-net{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-scorch)}
+.sh-ticker-skel{display:inline-block;width:min(420px,70%);height:10px;border-radius:4px;background:var(--sh-line)}
+.sh-ticker .sh-kind{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-dim)}
+.sh-modal{max-width:min(28rem,calc(100vw - 32px));background:var(--sh-counter);color:var(--sh-ink);border:1px solid var(--sh-line);border-radius:10px;padding:20px;font-family:var(--sh-sans)}
+.sh-modal::backdrop{background:rgba(0,0,0,.6)}
+.sh-modal h2{font:700 1rem/1.3 var(--sh-mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
+.sh-modal-row{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+.sh-footer{margin-top:48px;padding:0 16px 40px;font-family:var(--sh-mono)}
+.sh-slip{position:relative;max-width:34rem;margin:0 auto;background:var(--sh-paper);color:var(--sh-paper-ink);font-size:.86rem;line-height:1.5;padding:26px 22px 22px;transform:rotate(-.6deg);box-shadow:0 10px 28px rgba(0,0,0,.35),0 1px 0 rgba(0,0,0,.25);background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px)}
+.sh-slip::before,.sh-slip::after{content:"";position:absolute;left:0;right:0;height:10px;background-repeat:repeat-x;background-size:14px 10px}
+.sh-slip::before{top:-10px;background-image:conic-gradient(from 135deg at 50% 0,var(--sh-paper) 90deg,transparent 0)}
+.sh-slip::after{bottom:-10px;background-image:conic-gradient(from -45deg at 50% 100%,var(--sh-paper) 90deg,transparent 0)}
+.sh-slip p{margin:0 0 8px}
+.sh-slip-title{text-align:center;font-weight:700;font-size:1.35rem;letter-spacing:.22em}
+.sh-slip-never{text-align:center;font-weight:700}
+.sh-slip-dim{color:var(--sh-paper-dim);font-size:.8rem}
+.sh-rows{margin:0;display:grid;gap:6px}.sh-rows>div{display:grid;grid-template-columns:6.5rem 1fr;gap:10px}.sh-rows dt{font-weight:700;letter-spacing:.08em}.sh-rows dd{margin:0;overflow-wrap:anywhere}
+.sh-rule{border-top:2px dashed color-mix(in srgb,var(--sh-paper-ink) 70%,transparent);margin:12px 0}
+.sh-slip a{color:var(--sh-paper-ink);text-decoration:underline;text-underline-offset:2px}.sh-slip a:hover{color:var(--sh-stamp-solid)}
+.sh-slip-links{display:flex;flex-wrap:wrap;gap:6px 14px}
+.sh-slip-end{margin:14px 0 0!important;text-align:center;font-size:.72rem;letter-spacing:.18em;color:var(--sh-paper-dim)}
+.sh-tabbar{display:none}
+a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--sh-stamp);outline-offset:2px}
+@media (min-width:640px){.sh-search{display:block}.sh-wallet{display:inline-block}}
+@media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}.sh-actions{margin-left:8px}}
+@media (max-width:899px){
+  body{padding-bottom:calc(62px + env(safe-area-inset-bottom) + 12px)}
+  .sh-tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--sh-bg);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
+  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;min-width:44px;font:700 12px/1 var(--sh-mono);letter-spacing:.03em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
+  .sh-tabbar a span:first-child{display:block;line-height:0}
+  .sh-icon{width:20px;height:20px;display:block}
+  .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
+}
+.sh-ticker.more-end{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent)}
+.sh-ticker.more-start{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px);mask-image:linear-gradient(90deg,transparent,#000 40px)}
+.sh-ticker.more-start.more-end{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent)}
+@media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
+@media (max-width:479px){.sh-word{display:none}}
+@media (max-width:480px){.sh-slip{transform:none;padding:24px 16px 18px}.sh-rows>div{grid-template-columns:1fr;gap:0}}
+@media (prefers-reduced-motion:reduce){.sh-slip{transform:none}} /* audit 7 item 18: the wordmark returns only where the header tools fit beside it (no overflow at 401 to 479 px) */
+</style>
+<!-- site-shell:css:end -->
+</head>
+<body>
+<!-- the one Burnticker shell (src/lib/burnticker/siteNav.mjs; scripts/burnticker-site-nav.mts fills it) -->
+<!-- site-shell:header:begin -->
+<a class="sh-skip" href="#main">Skip to content</a>
+<header class="sh-header">
+  <div class="sh-row">
+    <a class="sh-brand" href="https://burnticker.com/" aria-label="Burnticker home"><img src="https://burnticker.com/brand/favicon.png" width="34" height="34" alt="" class="sh-mark"><span class="sh-word">BURNTICKER</span></a>
+    <nav class="sh-nav" aria-label="Burnticker" data-site-nav="header">
+      <a href="https://burnticker.com/burnticker">Coins</a>
+      <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
+      <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch</a>
+      <details class="sh-learn"><summary>Learn<span aria-hidden="true" class="sh-ext">▾</span></summary>
+        <div class="sh-learn-menu" data-site-nav="learn">
+          <a href="https://burnticker.com/burnticker/about">How it works</a>
+          <a href="https://burnticker.com/burnticker/trust">Trust</a>
+          <a href="https://burnticker.com/burnticker/verify-yourself">Verify it yourself</a>
+          <a href="https://burnticker.com/burnticker/operator">Who runs this</a>
+          <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
+          <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
+          <a href="https://burnticker.com/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="https://burnticker.com/burnticker/changelog">Changelog</a>
+          <a href="https://burnticker.com/burnticker/incidents">Incidents</a>
+          <a href="https://burnticker.com/burnticker/bounty">Bounty</a>
+          <a href="https://burnticker.com/burnticker/terms">Terms</a>
+          <a href="https://burnticker.com/burnticker/privacy">Privacy</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+        </div>
+      </details>
+    </nav>
+    <form class="sh-search" role="search" action="https://burnticker.com/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
+    <div class="sh-actions">
+      <a class="sh-launch" href="https://burnticker.com/burnticker/launch" data-launch-button>Launch a coin</a>
+      <a class="sh-wallet" href="https://burnticker.com/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet</a>
+      <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
+      <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
+        <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
+          <a href="https://burnticker.com/burnticker">Coins</a>
+          <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
+          <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch</a>
+          <a href="https://burnticker.com/burnticker/about">How it works</a>
+          <a href="https://burnticker.com/burnticker/trust">Trust</a>
+          <a href="https://burnticker.com/burnticker/verify-yourself">Verify it yourself</a>
+          <a href="https://burnticker.com/burnticker/operator">Who runs this</a>
+          <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
+          <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
+          <a href="https://burnticker.com/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="https://burnticker.com/burnticker/changelog">Changelog</a>
+          <a href="https://burnticker.com/burnticker/incidents">Incidents</a>
+          <a href="https://burnticker.com/burnticker/bounty">Bounty</a>
+          <a href="https://burnticker.com/burnticker/terms">Terms</a>
+          <a href="https://burnticker.com/burnticker/privacy">Privacy</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+          <p class="sh-menu-wallet">A wallet is only needed for Your coins. <a href="https://burnticker.com/burnticker/me?connect=1" data-wallet-button>Connect wallet</a></p>
+        </nav>
+      </details>
+    </div>
+  </div>
+  <div class="sh-ticker" data-activity tabindex="0" aria-label="Latest activity on chain"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest activity.</span></div>
+</header>
+<dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
+  <h2 id="sh-launch-closed-h">Launching a coin</h2>
+  <p data-launch-sentence>Checking whether creator launches are open on this site.</p>
+  <p>You can still look through the coins and check a real receipt.</p>
+  <p class="sh-modal-row"><a class="sh-launch" href="https://burnticker.com/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
+</dialog>
+<!-- site-shell:header:end -->
+<header class="wrap">
+  <div class="top">
+    <a class="wordmark" href="./" aria-label="$DEFICIT, home">$DEFICIT</a>
+    <nav class="nav" aria-label="Links">
+      <a href="#today">Today</a>
+      <a href="#receipts">Receipts</a>
+      <a href="#verify">Verify</a>
+      <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>
+      <a class="primary off" id="tradeTop" aria-disabled="true" data-trade-unavailable title="Not available until launch">Trading not available</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero wrap first">
+    <h1>Every <em>$1,000,000,000</em> the U.S. borrows burns $DEFICIT.</h1>
+    <p class="defi" id="defiLine">Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt.</p>
+    <div class="ready ready-top" id="readiness" data-readiness="not-launched" aria-live="polite">
+      <p class="rk" id="readyStep">Step 0 of 6 toward a first burn</p>
+      <p class="rl" id="readyLabel">Not launched</p>
+      <!-- private review 8: one short sentence first; the full path stays one tap away -->
+      <p class="rd" id="readyDetail">Burns can begin only after the coin graduates, its pool is registered, and the Treasury reports a qualifying rise in debt.</p>
+      <p class="rd" id="gradLine" hidden></p>
+      <p class="rk" id="readyRead" hidden></p>
+      <details class="rd-more"><summary>How the first burn happens</summary><p class="rd">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once buyers have put in its raise, which this page reads from the coin's own pool after launch, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p></details>
+    </div>
+    <!-- the queued-units counter (website-14, LAUNCHPAD-PATH §73): filled in from status.json and burns.json by deficitQueueCore below -->
+    <div class="queue" id="queue" data-queue="loading" aria-live="polite">
+      <p class="qk">Readings waiting for the pool</p>
+      <p class="qh" id="queueHead">Reading the keeper's published files.</p>
+      <div id="queueLines"></div>
+    </div>
+    <div class="board">
+      <div class="face">
+        <span class="bolt tl"></span><span class="bolt tr"></span><span class="bolt bl"></span><span class="bolt br"></span>
+        <p class="strap">BURNS WHEN AMERICA BORROWS</p>
+        <p class="label" id="heroLabel">One burn unit per</p>
+        <div class="seg7 figred" id="heroFig" role="img" aria-label="$1B"><span class="fb">$1B</span></div>
+        <p class="figcap" id="heroCap">of new U.S. debt on Treasury's Debt to the Penny, counted each business day.</p>
+        <p class="label">$DEFICIT bought and burned to date</p>
+        <div class="seg7 amber figamber" id="heroBurn" role="img" aria-label="not published yet"><span class="fb">—</span></div>
+        <span class="stamp">A memecoin with a receipt for every burn.</span>
+      </div>
+    </div>
+    <p class="rule"><strong>The rule.</strong> Each business day, the Treasury publishes the national debt. Every full $1B it rose since the previous reading counts as one unit. Each unit spends 2% of what is left in the token's own burn pool, swapping it for $DEFICIT on its Raydium pool. Over a day, the share spent is 1 − 0.98<sup>units</sup>. The figure is total public debt outstanding, so a day's change is new borrowing minus debt repaid. The on-chain program burns everything bought in the same instruction, and the burn leaves a receipt on chain.</p>
+    <p class="replay" data-spread>Creator coins on Burnticker spread a large burn into smaller pieces at least 20 minutes apart over six-hour windows. $DEFICIT burns each reading in one go: its keeper runs one burn for each reading, up to 2% of the trading pool's SOL, and anything above that carries to its next run.</p>
+    <p class="replay">Why 2%: the number is a nod to the Federal Reserve's 2% inflation goal. That is only where the dial came from. The rule reads nothing from the Fed.</p>
+    <div class="cta">
+      <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trading not available until launch</a>
+      <a class="btn" id="receiptsCta" href="https://burnticker.com/burnticker/check?demo=1#verify" data-prelaunch-href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>
+      <a class="btn ghost" href="rules.json">Read the rule file</a>
+    </div>
+    <p class="replay" id="followLine" data-follow-feeds>Get the next result: <a href="https://burnticker.com/api/burnticker/feeds/coin/DEFICIT.rss" data-feed-rss>RSS</a> · <a href="https://burnticker.com/api/burnticker/v1/coins/DEFICIT/calendar.ics" data-feed-ics>Calendar</a></p>
+    <p class="replay">We replayed the rule over the Treasury's Debt to the Penny figures from January 2, 2025 to October 8, 2026, using a copy of the series fetched on 2026-10-09 (site/deficit/sample/treasury-fixture.json in the public repository) and the keeper's own unit, carry and reset logic. It would have counted <b>235 burn days</b> and <b>6,490 units</b>. The biggest day was <b>2025-07-07</b>, when the debt rose <b>$366.44B</b>, which counts as <b>366 units</b>. That was the next business day after the July 4, 2025 debt-limit increase. Units are what the rule counts. How much a burn would have bought depends on the burn pool, which this replay does not model, and it predicts nothing.</p>
+  </section>
+
+  <section class="wrap" id="prelaunch" data-prelaunch>
+    <div class="pl">
+      <p><b>$DEFICIT has not launched on this network.</b> There is no live reading, daily report or receipt for it yet. Those sections stay hidden until the first reading after launch. No launch date is announced.</p>
+      <p>The evidence that exists today comes from the devnet rehearsal. <a href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>. The rehearsal coin ran at 1% of the burn pool per $1B. The proposed mainnet rule above is 2% per $1B. Devnet is a practice network, and nothing on it has money value.</p>
+      <p class="dim" id="prelaunchNote"></p>
+    </div>
+  </section>
+
+  <section class="wrap" id="live">
+    <h2><span>§1</span>Live</h2>
+    <div class="banner" id="banner"></div>
+    <div class="strip" aria-live="polite">
+      <div class="cell">
+        <div class="k">U.S. total public debt outstanding</div>
+        <div class="v num" id="debtNow">—</div>
+        <div class="s"><span class="mono num" id="debtExact">Not launched, so there is no reading yet</span></div>
+      </div>
+      <div class="cell">
+        <div class="k">Last reading</div>
+        <div class="v mono num" id="lastDate">—</div>
+        <div class="s" id="lastDelta">The Treasury posts each business day's figure the next afternoon, Eastern Time.</div>
+      </div>
+      <div class="cell">
+        <div class="k" id="nextLabel">Next feed check</div>
+        <div class="v mono num" id="next">—</div>
+        <div class="s" id="nextSub">The keeper checks the feed at 16:30 and 20:00 ET. A burn needs a full $1B of new debt.</div>
+      </div>
+      <div class="cell">
+        <div class="k">Bought and burned</div>
+        <div class="v num" id="burned">—</div>
+        <div class="s" id="burnedSub">out of a supply of 1,000,000,000</div>
+      </div>
+      <div class="cell">
+        <div class="k">Fee pool</div>
+        <div class="v mono num" id="pool">—</div>
+        <div class="s" id="poolSub">SOL available for the next burn, after 0.02 SOL is kept back for fees</div>
+      </div>
+      <div class="cell">
+        <div class="k">Keeper</div>
+        <div class="v mono num" id="health"><span class="pulse off"></span>—</div>
+        <div class="s" id="healthSub">No feed check yet.</div>
+      </div>
+    </div>
+    <p class="notice" id="notice"></p>
+    <noscript><p class="notice show">JavaScript is off, so these figures are the ones the server wrote into the page when it was last published, about once a minute. A dash is a figure only the page's script fills in. The raw files are status.json and burns.json, next to this page.</p></noscript>
+  </section>
+
+  <section class="wrap" id="today">
+    <h2><span>§2</span>Today</h2>
+    <pre class="today" id="todayText">Not launched. The daily report starts with the first reading after launch.</pre>
+    <p class="todaysub">This is the day's report, in the same words as the post on <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>. It is filled in from status.json and burns.json and is never retyped. <button type="button" id="copyToday" hidden>copy</button></p>
+  </section>
+
+  <section class="wrap" id="receipts">
+    <h2><span>§3</span>Receipts</h2>
+    <p class="dim intro">Each row is one reading that counted units. A row is a receipt only once its burn has executed. Until then it is a queued reading, with no burn yet. The reading is the Treasury's number for that date. Units are what the rule counted. The swap bought the tokens, and the burn destroyed them. <b>Verify</b> opens the exact command that fetches the data, the arithmetic and the memo the burn carries on chain.</p>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr>
+          <th scope="col">Record date</th><th scope="col" class="r">Reading</th><th scope="col" class="r">Debt change</th><th scope="col" class="r">Units</th><th scope="col" class="r">Spent (SOL)</th><th scope="col" class="r">Bought</th><th scope="col" class="r">Burned</th><th scope="col">Swap tx</th><th scope="col">Burn tx</th><th scope="col">Check</th><th scope="col"></th>
+        </tr></thead>
+        <tbody id="rows"><tr><td colspan="11" class="empty">Not launched, so there are no receipts yet. The first reading after launch is the baseline. The first burn follows the first full $1B increase after it.</td></tr></tbody>
+      </table>
+      <div class="tfoot"><span id="count"></span><button type="button" id="more" hidden>Show every burn</button></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="chart">
+    <h2><span>§4</span>The debt curve</h2>
+    <div class="chartbox">
+      <canvas id="cv" width="1000" height="280" aria-label="U.S. total public debt outstanding over time, with a marker on each burn day" role="img"></canvas>
+      <div class="legend"><span><i></i>A burn day. A bigger dot means more units.</span><span class="cap" id="cap">Hover over or touch the line to see a reading.</span></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="verify">
+    <h2><span>§5</span>Verify it yourself</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>The rule file and its hash</h3>
+        <p>The rule is fixed at launch and published as <a href="rules.json">rules.json</a>. Its SHA-256 hash is written into every burn's memo. A receipt that cites a different hash is not using this rule.</p>
+        <div class="hash" id="sha">sha256: 8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9</div>
+        <p class="muted" id="shaCheck">To check it yourself, run <code>curl -s https://deficit.burnticker.com/rules.json | shasum -a 256</code>. This browser also hashes the served file again when the page loads.</p>
+        <p class="muted gap" id="statement"></p>
+      </div>
+      <div class="card">
+        <h3>Three steps you can run on any computer</h3>
+        <ol class="steps">
+          <li><b>Fetch the two Treasury rows a burn used.</b> The API is public and needs no key.
+            <pre id="curl">curl -s 'https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt&amp;filter=record_date:in:(PREV_DATE,RECORD_DATE)&amp;sort=record_date'</pre></li>
+          <li><b>Apply the rule.</b>
+            <pre>units = floor((now − prev + carry) / 1,000,000,000)
+spend = pool × (1 − 0.98^units)        # pool = the burn pool's SOL − 0.02 reserve
+burn  = every token the swap delivered</pre>
+            <span class="muted">Carry is the remainder under $1B from a run of rises in a row. Any flat or down day resets it to 0. This short recipe gives the planned spend. The program also applies an execution cap, the 0.02 SOL reserve, carried spend, a spend floor and rounding, so a burn can spend less than this or wait. The <a href="https://burnticker.com/burnticker/check">receipt checker</a> runs every one of those checks.</span></li>
+          <li><b>Read the memo on the burn transaction.</b> It carries the same numbers, in this order.
+            <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;pool12&gt;|rules=sha256:8e3e8b66748a|v2</pre>
+            In the memo, swap is the first 12 characters of the Raydium pool address the program bought on, or none when nothing was bought. The transaction that carries the memo is itself the swap and the burn. If the memo, the chain and the Treasury rows agree, the receipt is good. The keeper recomputes every burn from its recorded readings. It marks a burn <span class="ok">✓</span> only when they match. Anything else shows <span class="bad">!</span> with the reason.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="money">
+    <h2><span>§6</span>Who pays for the burn</h2>
+    <div class="flow">
+      <div class="f"><div class="t">1. Trading fees</div><p>Every trade of $DEFICIT pays a creator fee on the launch venue. Eligible trading fees fund the coin's burn pool. On the curve, that is the creator fee. After graduation, it is Raydium's creator fee plus 80% of the SOL side of the locked pool's liquidity fees. In all, every swap pays 1.25% (Raydium fee tier 14): about 0.98% goes to the coin's burn pool and 0.13% to the operator, which is 20% of the locked pool's liquidity fees, and Raydium keeps 0.15%. $DEFICIT was made before 19 October 2026 and recorded tier 9 then, but it graduates into a tier 14 pool and pays 1.25% all the same.</p></div>
+      <div class="f"><div class="t">2. The fee pool</div><p>Fees are claimed into the burn pool. The pool is an account of the on-chain program. No instruction pays it out to a person or to the operator: the program spends it only on buying $DEFICIT and burning what it bought, and it never sells. Any seed deposit is shown with its transaction. The program itself can still be upgraded through the operator's Squads vault, and the Burnticker trust page says who can approve an upgrade.</p><p class="addr" id="feeWallet"></p></div>
+      <div class="f"><div class="t">3. The swap</div><p>On a day with units, the program spends 1 − 0.98<sup>units</sup> of the pool buying $DEFICIT on the token's Raydium CPMM pool. If that amount is under the floor of about $1, the program buys nothing and the pool keeps the money.</p></div>
+      <div class="f"><div class="t">4. The burn</div><p>Every token received is burned in the same instruction, with the memo. Holders' balances are never touched. There is no delegate, no transfer hook and no mint authority.</p><p class="addr" id="mintAddr"></p></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="disclaimer">
+    <div class="disc">
+      <h3>What $DEFICIT is</h3>
+      <p>$DEFICIT has no product, no revenue share and no team promise beyond running the published rule. Burns draw on the accumulated budget. Trading adds funds; a burn can be delayed or skipped when the spendable amount is too small.</p>
+      <p>Everything on this page is recomputed from public data: the Treasury's API and the Solana chain. If a number here and a number on chain disagree, the chain is right and the page is wrong. The footer below carries the disclaimers.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <div class="links">
+    <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT on X</a>
+    <a id="tradeFoot" class="off" aria-disabled="true" data-trade-unavailable>Trading not available until launch</a>
+    <a href="status.json">status.json</a>
+    <a href="burns.json">burns.json</a>
+    <a href="rules.json">rules.json</a>
+  </div>
+  <div id="trade" class="muted">Trading is not available. $DEFICIT has not launched yet, so there is no trade link. Any link that claims to trade $DEFICIT before this page shows one is not ours.</div>
+  <div class="gap">The data comes from the U.S. Treasury’s Fiscal Data service, from its “Debt to the Penny” table. The page reads the total public debt outstanding field, <code>tot_pub_debt_out_amt</code>. The Treasury is not affiliated with this token and does not endorse it. $DEFICIT has no relation to any other debt-themed token. This page was generated at <span id="gen">—</span>.</div>
+</footer>
+<!-- site-shell:footer:begin -->
+<footer class="sh-footer" id="disclosure">
+  <div class="sh-slip">
+    <p class="sh-slip-title">BURNTICKER</p>
+    <div class="sh-rule"></div>
+    <p class="sh-slip-never">Nothing is ever won. Things are only burned.</p>
+    <p><b>*** NOT ADVICE ***</b> Memecoins are speculative and can go to zero. Burnticker coins pay nothing and promise nothing. A coin's rule says what its supply does when a public result settles, never what its price does. Nothing on this site is investment advice.</p>
+    <p>Burnticker and its coins are not affiliated with any team, league, candidate, agency or market. If a page and the chain disagree, the chain is right.</p>
+    <p class="sh-slip-dim">The rules read public sources such as the U.S. Treasury, BLS, the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia and Polymarket. None of them is affiliated with any coin or endorses one.</p>
+    <p data-legal-line>Read the <a href="https://burnticker.com/burnticker/terms">terms of use</a> and the <a href="https://burnticker.com/burnticker/privacy">privacy page</a>.</p>
+    <div class="sh-rule"></div>
+    <dl class="sh-rows">
+      <div><dt>OPERATOR</dt><dd><span data-operator-line>Operated by one independent operator (United States) — contact: contact@burnticker.com</span> <a href="https://burnticker.com/burnticker/trust">What the operator controls</a></dd></div>
+      <div><dt>DEV FEE</dt><dd><span data-fee-line>Burnticker takes 0.25% of curve volume. After graduation, every coin pays 1.25% per swap (Raydium fee tier 14): about 0.98% to the burn pool, 0.13% to the operator and 0.15% to Raydium. LaunchLab moves a graduating coin into a pool on the platform's current fee tier, which is 14; coins made before 19 October 2026 recorded tier 9 when they were created and pay 1.25% all the same. Coin-vs-coin pair pools use their own split, shown on the pair page.</span> <a href="https://burnticker.com/burnticker/fees/ledger">The fee ledger</a></dd></div>
+      <div><dt>API</dt><dd><a href="https://burnticker.com/api/burnticker/v1">/api/burnticker/v1</a> · <a href="https://burnticker.com/burnticker/docs">Docs</a></dd></div>
+    </dl>
+    <div class="sh-rule"></div>
+    <nav class="sh-slip-links" aria-label="Footer" data-site-nav="footer">
+      <a href="https://burnticker.com/burnticker">Coins</a>
+      <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
+      <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch</a>
+      <a href="https://burnticker.com/burnticker/about">How it works</a>
+      <a href="https://burnticker.com/burnticker/trust">Trust</a>
+      <a href="https://burnticker.com/burnticker/verify-yourself">Verify it yourself</a>
+      <a href="https://burnticker.com/burnticker/operator">Who runs this</a>
+      <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
+      <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
+      <a href="https://burnticker.com/burnticker/how-burns-settle">How burns are settled</a>
+      <a href="https://burnticker.com/burnticker/changelog">Changelog</a>
+      <a href="https://burnticker.com/burnticker/incidents">Incidents</a>
+      <a href="https://burnticker.com/burnticker/bounty">Bounty</a>
+      <a href="https://burnticker.com/burnticker/terms">Terms</a>
+      <a href="https://burnticker.com/burnticker/privacy">Privacy</a>
+      <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+    </nav>
+    <p class="sh-slip-end">— KEEP THIS RECEIPT —</p>
+  </div>
+</footer>
+<nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">
+  <a href="https://burnticker.com/burnticker" aria-label="Coins, the list of every coin"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h7v7H4z"/><path d="M13 4h7v7h-7z"/><path d="M4 13h7v7H4z"/><path d="M13 13h7v7h-7z"/></svg></span><span>Coins</span></a>
+  <a href="https://burnticker.com/burnticker#search" aria-label="Search coins"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z"/><path d="M15.5 15.5 20 20"/></svg></span><span>Search</span></a>
+  <a href="https://burnticker.com/burnticker/launch" aria-label="Launch a coin"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span><span>Launch</span></a>
+  <a href="https://burnticker.com/burnticker/leagues" aria-label="Seasons and league scoreboards"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 7h14"/><path d="M15 3l4 4-4 4"/><path d="M19 17H5"/><path d="M9 13l-4 4 4 4"/></svg></span><span>Seasons</span></a>
+  <a href="https://burnticker.com/burnticker/about" aria-label="Learn how it works"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span><span>Learn</span></a>
+</nav>
+<!-- site-shell:footer:end -->
+
+<script>
+(function () {
+  "use strict";
+  // ------------------------------------------------------------------ config the owner fills at launch
+  var LINKS = { trade: "" }; // e.g. the Raydium LaunchLab / pool URL. Empty = the Trade buttons point at the footer note.
+  var TREASURY = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt";
+  // `?data=sample/` previews the page against the committed replay sample; production reads ./status.json beside the page.
+  // B-18 (seventh audit): the only value accepted is the sample folder. Anything else (another host as //host/, a scheme, a backslash,
+  // a percent-encoded form, which URLSearchParams has already decoded) is dropped, so the page only ever reads its own files.
+  var base = (new URLSearchParams(location.search).get("data") || "").replace(/^(?!sample\/?$)[\s\S]*$/, "");
+  if (base && !/\/$/.test(base)) base += "/";
+  // eighth pass HB-194 / HS-77: the sample folder is not deployed, so on the official hosts ?data= is ignored and the live files load
+  if (base && /(^|\.)burnticker\.com$/i.test(location.hostname || "")) base = "";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var fmtInt = function (s) { s = String(s).split(".")[0]; return s.replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
+  var fmtT = function (amount, d) { return "$" + (Number(amount) / 1e12).toFixed(d == null ? 3 : d) + "T"; };
+  var fmtB = function (delta) { var n = Number(delta); return (n >= 0 ? "+" : "−") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
+  // seventh pass AP7-5 / HS-68: one date format on the whole page, "20 October 2026, 13:38 UTC" (deficitFirstPaint.ts utcStamp), never the
+  // browser's raw locale string
+  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var fmtWhen = function (iso) { var d = new Date(iso); if (!isFinite(d.getTime())) return ""; var p2 = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() + ", " + p2(d.getUTCHours()) + ":" + p2(d.getUTCMinutes()) + " UTC"; };
+  var fmtSol = function (s) { if (s == null) return "—"; var n = Number(s); return (n >= 100 ? n.toFixed(1) : n >= 1 ? n.toFixed(3) : n.toFixed(4)) + " SOL"; };
+  var short = function (sig) { return sig ? sig.slice(0, 8) + "…" : "—"; };
+  // B-18: a link built from a data file must be a plain https address; anything else (javascript:, data:, //host) is not linked
+  var href = function (u) { u = String(u == null ? "" : u); return /^https:\/\/[^\s"'<>\\]+$/i.test(u) ? u : ""; };
+  var link = function (url, sig, fallback) { var ok = /^https:\/\/[^\s"'<>\\]+$/i.test(String(url == null ? "" : url)); return ok && sig ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(short(sig)) + "</a>" : esc(fallback || "—"); };
+
+  // Until a trade link is known the three Trade controls are explicit "not available until launch" labels: no href, aria-disabled.
+  // Owner 2026-10-14 ("I don't see the $DEFICIT coin available to buy"): once the keeper's status.json carries the mainnet mint, the
+  // links are built from it, in the same URL forms as the app's builder (src/lib/burnticker/tradeLinks.ts, pinned by
+  // test/burntickerTradeLinks.test.ts): on the curve, Raydium's launchpad page for the mint; after graduation, Raydium's swap and Jupiter.
+  // LINKS.trade, when set by hand, still wins.
+  var isMainnet = function (c) { return c === "mainnet" || c === "mainnet-beta"; };
+  function tradeLinksFor(mint, phase) {
+    var m = encodeURIComponent(mint);
+    var primary = phase === "graduated" ? "https://raydium.io/swap/?inputMint=sol&outputMint=" + m : "https://raydium.io/launchpad/token/?mint=" + m;
+    return [
+      { id: "raydium", label: "Trade on Raydium", url: LINKS.trade || primary },
+      { id: "jupiter", label: "Swap on Jupiter", url: "https://jup.ag/swap/SOL-" + m },
+      { id: "dexscreener", label: "Chart on DexScreener", url: "https://dexscreener.com/solana/" + m },
+      { id: "solscan", label: "Mint on Solscan", url: "https://solscan.io/token/" + m }
+    ];
+  }
+  // campaign readiness item 5: the page links the counted redirect on Burnticker (src/lib/burnticker/tradeClicks.ts), which counts the
+  // click for the coin and the day and answers 302 to the same Raydium or Jupiter address; any other address (LINKS.trade set by hand,
+  // DexScreener, Solscan) is linked as is
+  var GO = "https://burnticker.com/burnticker/go";
+  /* @counted-begin */
+  function counted(url) {
+    var u = String(url || ""), m;
+    if ((m = /^https:\/\/raydium\.io\/launchpad\/token\/\?mint=([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(u))) return GO + "/raydium?mint=" + m[1];
+    if ((m = /^https:\/\/raydium\.io\/swap\/\?inputMint=sol&outputMint=([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(u))) return GO + "/raydium?mint=" + m[1] + "&to=swap";
+    if ((m = /^https:\/\/jup\.ag\/swap\/SOL-([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(u))) return GO + "/jupiter?mint=" + m[1];
+    return u;
+  }
+  /* @counted-end */
+  function enableTrade(url) {
+    ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); if (!a) return; a.href = counted(url); a.target = "_blank"; a.rel = "noopener"; a.classList.remove("off"); a.removeAttribute("aria-disabled"); a.removeAttribute("data-trade-unavailable"); a.removeAttribute("title"); a.setAttribute("data-trade-link", ""); a.textContent = id === "tradeTop" ? "Trade" : "Trade on Raydium"; });
+    $("trade").textContent = "$DEFICIT trades on Raydium. Burnticker never takes an order: each trade link opens Raydium, Jupiter, DexScreener or Solscan. The trade link is " + url;
+  }
+  if (LINKS.trade) enableTrade(LINKS.trade);
+  // the mint address line in "4. The burn": the address, a copy button and the four links
+  function renderMintLinks(mint, phase) {
+    var box = $("mintAddr"); if (!box) return;
+    var ls = tradeLinksFor(mint, phase);
+    box.innerHTML = "Mint address: <code>" + esc(mint) + '</code> <button type="button" id="copyMint" class="copy">Copy address</button><br>' + ls.map(function (l, i) { return '<a ' + (i === 0 ? 'class="btn red" ' : "") + 'href="' + esc(counted(l.url)) + '" target="_blank" rel="noopener" data-link="' + l.id + '">' + esc(l.label) + "</a>"; }).join(" ");
+    var c = $("copyMint"); if (c) c.addEventListener("click", function () { if (navigator.clipboard) navigator.clipboard.writeText(mint).then(function () { c.textContent = "Copied"; setTimeout(function () { c.textContent = "Copy address"; }, 1500); }).catch(function () {}); });
+  }
+
+  /* @lifecycle-begin (private review 10 F4: the empty-receipts, trade and footer lines come from the loaded lifecycle, never the static pre-launch text) */
+  // s: the loaded status.json; list: the loaded burns list, or null when burns.json did not load (unavailable, never zero).
+  var LIFECYCLE = {
+    prelaunch: "Not launched, so there are no receipts yet. The first reading after launch is the baseline. The first burn follows the first full $1B increase after it.",
+    onCurve: "No burns yet. The coin is trading on its curve; burns can begin after graduation and pool registration.",
+    graduated: "No burns yet. The curve has graduated. Burns can begin once its pool is registered and verified.",
+    registered: "No burns yet. The pool is registered, and no Treasury reading has qualified for a burn so far.",
+    unavailable: "The receipt history did not load just now, so no receipts are shown. This does not mean there have been no burns."
+  };
+  function deficitLifecycle(s, list) {
+    var explicitPrelaunch = !s || s.state === "not-launched" || /prelaunch/.test(String(s.schema || ""));
+    if (explicitPrelaunch) return { state: "prelaunch", receipts: LIFECYCLE.prelaunch, launched: false };
+    var r = s.readiness && s.readiness.state || null;
+    var launched = !!(s.addresses && s.addresses.mint) || !!(s.program && s.program.initialized) || (r !== null && r !== "not-launched");
+    if (!Array.isArray(list)) return { state: "unavailable", receipts: LIFECYCLE.unavailable, launched: launched };
+    var confirmed = list.filter(function (b) { return b && b.status === "confirmed"; }).length;
+    if (confirmed) return { state: "burned", receipts: null, launched: true, confirmed: confirmed };
+    if (list.length) return { state: "registered-no-burn", receipts: null, launched: true };
+    if (r === "awaiting-registration") return { state: "graduated", receipts: LIFECYCLE.graduated, launched: true };
+    if (r === "awaiting-event" || r === "below-floor" || r === "deferred" || r === "burned") return { state: "registered", receipts: LIFECYCLE.registered, launched: true };
+    if (launched) return { state: "on-curve", receipts: LIFECYCLE.onCurve, launched: true };
+    return { state: "prelaunch", receipts: LIFECYCLE.prelaunch, launched: false };
+  }
+  /* @lifecycle-end */
+  // a launched coin whose trade link this page cannot build (no mainnet mint in status.json) says so, never "until launch"
+  function launchedTradeLabels() {
+    var linked = false;
+    ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); if (!a) return; if (a.hasAttribute("data-trade-link")) { linked = true; return; } a.textContent = id === "tradeTop" ? "No trade link here" : "No trade link on this page yet"; a.removeAttribute("title"); });
+    if (!linked) $("trade").textContent = "$DEFICIT has launched, but this page has no trade link for it yet. Any link that claims to trade $DEFICIT before this page shows one is not ours.";
+  }
+  function setEmptyReceipts(text) { if (text) $("rows").innerHTML = '<tr><td colspan="11" class="empty">' + esc(text) + "</td></tr>"; }
+
+  var status = null, burns = [], readings = [];
+
+  // ------------------------------------------------------------------ the Last reading card (third prelaunch audit 2026-10-16 F08)
+  // One reading, never two records mixed: the date, the change and the units all come from the keeper's newest reading
+  // (status.json feed.lastReading). An older status file without it uses a burn row only when that row is the same day. The last
+  // reading that had units is a separate, labelled line. test/deficitLastReading.test.ts runs this block as it is.
+  /* @last-reading-begin */
+  function lastReadingView(s, burns) {
+    var B = function (usd) { var n = Number(usd); return (n >= 0 ? "+" : "\u2212") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
+    var U = function (n) { return n + " unit" + (n === 1 ? "" : "s"); };
+    var f = s && s.feed || {}, list = burns || [];
+    var r = f.lastReading && f.lastReading.recordDate ? { date: f.lastReading.recordDate, value: f.lastReading.amount, delta: f.lastReading.deltaUsd, units: f.lastReading.units, kind: f.lastReading.kind, prev: null } : null;
+    if (!r && f.lastRecordDate) {
+      var same = null;
+      for (var i = list.length - 1; i >= 0; i--) if (list[i] && list[i].recordDate === f.lastRecordDate) { same = list[i]; break; }
+      r = { date: f.lastRecordDate, value: f.lastAmount || null, delta: same ? same.delta : null, units: same ? same.units : null, kind: same ? "burn" : null, prev: same ? same.prevDate : null };
+    }
+    if (!r) return { date: "\u2014", value: null, line: "The Treasury posts each business day's figure the next afternoon, Eastern Time.", qualifying: null };
+    var since = r.prev ? "since " + r.prev : "since the reading before";
+    var line = r.kind === "baseline" ? "This is the first reading after launch. Nothing burns for it; later readings are counted from it."
+      : r.delta == null ? "This file does not say how much the debt changed on this reading."
+      : Number(r.delta) < 0 ? B(r.delta) + " " + since + ". The debt fell, so this reading has no units."
+      : r.units > 0 ? B(r.delta) + " " + since + ", which is " + U(r.units) + "."
+      : B(r.delta) + " " + since + ", which is less than one unit.";
+    var q = null;
+    for (var j = list.length - 1; j >= 0; j--) { var b = list[j]; if (b && b.units > 0) { q = b; break; } }
+    return { date: r.date, value: r.value, line: line, qualifying: q && q.recordDate !== r.date ? "The last reading with units was " + q.recordDate + ": " + B(q.delta) + ", " + U(q.units) + "." : null };
+  }
+  /* @last-reading-end */
+  function renderLastReading() { var v = lastReadingView(status, burns); $("lastDate").textContent = v.date; $("lastDelta").textContent = v.line + (v.qualifying ? " " + v.qualifying : ""); }
+
+  // ------------------------------------------------------------------ hero board (D1 seven-segment digits, from brand-concepts/d1-debt-clock/seg.js)
+  var SEG = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", "S": "afgcd", "b": "fgedc", " ": "" };
+  function seg7(el, text, label) {
+    el.innerHTML = String(text).split("").map(function (ch) {
+      if (ch === "," || ch === ".") return '<span class="d ' + (ch === "," ? "comma" : "dot") + '"><span class="s on"></span></span>';
+      var on = ch === "$" ? SEG.S : (SEG[ch] || "");
+      return '<span class="d">' + "abcdefg".split("").map(function (s) { return '<span class="s ' + (s === "d" ? "dd" : s) + (on.indexOf(s) >= 0 ? " on" : "") + '"></span>'; }).join("") + (ch === "$" ? '<span class="s bar on"></span>' : "") + "</span>";
+    }).join("");
+    el.setAttribute("aria-label", label);
+  }
+  /* @queued-begin (campaign readiness item 3: the same rule as src/lib/burnticker/queuedReading.ts) */
+  var QUEUED_READING = "Queued reading, no burn yet";
+  var QUEUED_STATUSES = ["planned", "sending", "swap-sent", "swapped"];
+  function isQueued(b) { return !!b && QUEUED_STATUSES.indexOf(b.status) >= 0; }
+  // the hero's caption under the latest reading: "receipt" only for a burn that executed
+  function heroCaption(last, ticker, n) {
+    var units = "That is <b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b>. ";
+    if (last.status === "skipped") return units + "Nothing was bought, because the spend was under the $1 floor." + ' <a href="#r-' + n + '">See the reading</a>.';
+    if (last.status === "confirmed") return units + "<b>" + fmtInt(last.burned || "0") + "</b> $" + esc(ticker) + " were bought and burned." + ' <a href="#r-' + n + '">See the receipt</a>.';
+    return units + QUEUED_READING + "." + ' <a href="#r-' + n + '">See the queued reading</a>.';
+  }
+  /* @queued-end */
+  // The red figure is the latest burn day's debt delta ("$1b", the unit, until a receipt exists); amber is what was burned.
+  function renderHero() {
+    var last = burns.length ? burns[burns.length - 1] : null;
+    if (last) {
+      seg7($("heroFig"), "$" + (Number(last.delta) / 1e9).toFixed(2) + "b", fmtB(last.delta) + " of new U.S. debt on " + last.recordDate);
+      $("heroLabel").textContent = "New U.S. debt on Debt to the Penny for " + last.recordDate;
+      $("heroCap").innerHTML = heroCaption(last, status && status.ticker || "DEFICIT", burns.length);
+    } else seg7($("heroFig"), "$1b", "$1B of new U.S. debt per burn unit");
+    if (status && status.burned) seg7($("heroBurn"), fmtInt(status.burned.total), fmtInt(status.burned.total) + " $DEFICIT bought and burned to date");
+    else seg7($("heroBurn"), "-------", "not published yet");
+  }
+  renderHero();
+
+  // ------------------------------------------------------------------ live strip
+  /* @graduation-begin (campaign readiness item 4: the same sentence as src/lib/burnticker/graduationLine.ts, from the coin's own raise and the disclosed seed) */
+  function graduationLine(threshold, quote, seed) {
+    var amt = function (x) { if (x == null || String(x).trim() === "") return null; var n = Number(x); return isFinite(n) && n > 0 ? String(Number(n.toFixed(4))) : null; };
+    var t = amt(threshold), q = quote || "SOL", sd = amt(seed);
+    if (!t) return null;
+    return sd ? "Graduation needs " + t + " " + q + " of net swapping into the coin on its curve. Swaps in count, swaps out subtract, and the " + sd + " " + q + " seed in the burn pool does not count."
+      : "Graduation needs " + t + " " + q + " of net swapping into the coin on its curve. Swaps in count, and swaps out subtract. A gift to the burn pool does not count.";
+  }
+  /* @graduation-end */
+  function renderStatus(s) {
+    // ONE readiness state (src/lib/burnticker/readiness.ts), derived by the keeper into status.json; the static default above is the pre-launch state (deploy-sites.sh renders the live one into the served page).
+    // website-15 item 6: the same six steps as the app's progress strip (src/lib/burnticker/progress.ts PROGRESS_DONE), never a seven-step count
+    var READY_DONE = { "not-launched": 0, "on-curve": 2, "awaiting-registration": 3, "awaiting-event": 4, "below-floor": 4, deferred: 5, burned: 6 };
+    if (s.readiness && s.readiness.label) { $("readiness").setAttribute("data-readiness", s.readiness.state); var more = document.querySelector(".rd-more"); if (more) more.hidden = s.readiness.state !== "not-launched"; $("readyStep").textContent = "Step " + (READY_DONE[s.readiness.state] != null ? READY_DONE[s.readiness.state] : "?") + " of 6 toward a first burn"; $("readyLabel").textContent = s.readiness.label; $("readyDetail").textContent = s.readiness.detail; }
+    var gl = $("gradLine"), gc = s.curve && s.curve.phase !== "graduated" && s.curve.phase !== "migrating" ? s.curve : null;
+    var gt = gc ? graduationLine(gc.threshold, gc.quote, s.buyback && s.buyback.funding && s.buyback.funding.seedSol) : null;
+    if (gl) { gl.textContent = gt || ""; gl.hidden = !gt; }
+    var rr = $("readyRead"), ra = s.curve && s.curve.readAt || s.generatedAt;
+    if (rr && ra && isFinite(Date.parse(ra))) { rr.textContent = "This page read the coin's state at " + fmtWhen(ra) + "."; rr.hidden = false; }
+    var isSample = !!s.sample || s.cluster === "replay";
+    if (isSample || (s.cluster && !isMainnet(s.cluster))) {
+      var b = $("banner"); b.classList.add("show");
+      b.textContent = isSample ? "Sample data. " + (s.sample || "This is a replayed series, and no transactions exist.") : "This page is showing " + s.cluster + ". This is not the mainnet token.";
+    }
+    if (s.feed && s.feed.lastAmount) {
+      $("debtNow").textContent = fmtT(s.feed.lastAmount);
+      $("debtExact").textContent = "$" + fmtInt(s.feed.lastAmount) + "." + (String(s.feed.lastAmount).split(".")[1] || "00") + " on " + s.feed.lastRecordDate;
+    }
+    renderLastReading();
+    $("burned").textContent = fmtInt(s.burned.total);
+    $("burnedSub").innerHTML = "<b>" + Number(s.burned.pctOfSupply).toFixed(2) + "%</b> of the " + fmtInt(s.supply.initial) + " supply, over " + s.burned.count + (s.burned.count === 1 ? " burn" : " burns") + ". " + fmtInt(s.burned.thisMonth) + " burned this month.";
+    if (s.buyback) {
+      $("pool").textContent = s.buyback.feePoolSol == null ? "—" : fmtSol(s.buyback.feePoolSol);
+      $("poolSub").innerHTML = "<b>" + fmtSol(s.buyback.spentSolMonth) + "</b> spent this month and " + fmtSol(s.buyback.spentSolTotal) + " in all." + (s.buyback.skippedDays ? " " + s.buyback.skippedDays + (s.buyback.skippedDays === 1 ? " day was" : " days were") + " under the $" + s.buyback.floorUsd + " floor." : "");
+    }
+    // walkthrough 13 (2026-10-14): "all receipts ✓" over zero receipts is vacuously true, so the tick waits for a first receipt
+    var nReceipts = s.burned && s.burned.count ? s.burned.count : 0;
+    var ok = s.health && !s.health.lastError && s.health.unverified === 0;
+    $("health").innerHTML = '<span class="pulse' + (ok && nReceipts > 0 ? "" : " off") + '"></span>' + (ok ? (nReceipts > 0 ? "all receipts ✓" : "no receipts yet") : (s.health && s.health.unverified ? s.health.unverified + " unverified" : "error"));
+    $("healthSub").textContent = (s.feed.lastPollAt ? "Last feed check at " + fmtWhen(s.feed.lastPollAt) + "." : "No feed check yet.") + (s.feed.lastPollOutcome ? " The result was " + s.feed.lastPollOutcome + "." : "") + (s.health.lastError ? " The last error was " + s.health.lastError + "." : "");
+    $("gen").textContent = fmtWhen(s.generatedAt);
+    if (s.rules) { $("sha").textContent = "sha256: " + s.rules.sha256; $("statement").textContent = s.rules.statement; }
+    if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "Fee pool address: " + (href(s.buyback.funding.feeWalletUrl) ? '<a href="' + esc(href(s.buyback.funding.feeWalletUrl)) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? ". The operator added " + (s.buyback.funding.seedSol ? esc(s.buyback.funding.seedSol) + " SOL" : "a seed") + (href(s.buyback.funding.seedTxUrl) ? '; <a href="' + esc(href(s.buyback.funding.seedTxUrl)) + '" target="_blank" rel="noopener">view the transaction</a>.' : ".") : ". Seed funding details have not been published here.");
+    if (s.addresses && s.addresses.mint && isMainnet(s.cluster) && !isSample) {
+      var phase = s.curve && s.curve.phase || null;
+      enableTrade(tradeLinksFor(s.addresses.mint, phase)[0].url);
+      renderMintLinks(s.addresses.mint, phase);
+    } else if (s.addresses && s.addresses.mint) $("mintAddr").innerHTML = "Mint address: " + (href(s.addresses.mintUrl) ? '<a href="' + esc(href(s.addresses.mintUrl)) + '" target="_blank" rel="noopener">' + esc(s.addresses.mint) + "</a>" : esc(s.addresses.mint));
+    startClock(s.feed && s.feed.nextPollAt);
+    renderHero();
+  }
+
+  var clock = null;
+  function startClock(iso) {
+    var at = iso ? Date.parse(iso) : NaN;
+    if (clock) clearInterval(clock);
+    if (!at) { $("next").textContent = "—"; return; }
+    function tick() {
+      var d = at - Date.now();
+      if (d <= 0) { $("next").textContent = "Checking now"; return; }
+      var h = Math.floor(d / 36e5), m = Math.floor(d % 36e5 / 6e4), s = Math.floor(d % 6e4 / 1e3);
+      $("next").textContent = (h ? h + "h " : "") + m + "m " + s + "s";
+    }
+    tick(); clock = setInterval(tick, 1000);
+    var onCurve = !!(status && status.curve && status.curve.phase && status.curve.phase !== "graduated");
+    $("nextSub").textContent = "The next feed check is at " + fmtWhen(at) + ". A burn needs a full $1B of new debt since " + (status && status.feed.lastRecordDate ? status.feed.lastRecordDate : "the last reading") + "." + (onCurve ? " Nothing can burn yet: the curve has to graduate and its pool has to be registered first." : "");
+  }
+
+  // ------------------------------------------------------------------ receipts
+  var LIMIT = 25, showAll = false;
+  function renderBurns() {
+    var rows = burns.slice().reverse();
+    var tb = $("rows");
+    if (!rows.length) { $("count").textContent = ""; return; }
+    var shown = showAll ? rows : rows.slice(0, LIMIT);
+    tb.innerHTML = shown.map(function (b, i) {
+      var skipped = b.status === "skipped", no = rows.length - i, queued = isQueued(b);
+      // campaign readiness item 3: a reading that has not burned is a queued reading, never a receipt (src/lib/burnticker/queuedReading.ts)
+      var check = b.verify && b.verify.verified ? '<span class="ok" title="Recomputed from the feed and the rule. It matches the memo.">✓</span>' : b.status === "confirmed" ? '<span class="bad" title="' + esc((b.verify && b.verify.checks || []).join("; ")) + '">!</span>' : '<span class="muted">' + esc(queued ? QUEUED_READING : b.status) + "</span>";
+      return '<tr id="r-' + no + '"' + (queued ? ' data-queued=""' : "") + ">" +
+        "<td class=\"mono\" title=\"" + (b.status === "confirmed" ? "receipt" : queued ? QUEUED_READING : esc(b.status)) + "\">" + esc(b.recordDate) + "</td>" +
+        "<td class=\"r num\" title=\"$" + esc(b.now) + "\">" + fmtT(b.now) + "</td>" +
+        "<td class=\"r num\">" + fmtB(b.delta) + (Number(b.carryIn) > 0 ? ' <span class="muted" title="Carried over from a run of rises in a row">+$' + (Number(b.carryIn) / 1e9).toFixed(2) + "B carried</span>" : "") + "</td>" +
+        "<td class=\"r units\">" + b.units + "</td>" +
+        "<td class=\"r num\">" + (skipped || queued ? "—" : b.spent == null ? "pending" : esc(Number(b.spent).toFixed(4))) + "</td>" +
+        "<td class=\"r num\">" + (b.got == null ? (skipped || queued ? "—" : "pending") : fmtInt(b.got)) + "</td>" +
+        "<td class=\"r num\">" + (skipped ? '<span class="muted" title="' + esc(b.skippedReason) + '">skipped</span>' : queued ? '<span class="muted">no burn yet</span>' : b.burned == null ? "pending" : "<b>" + fmtInt(b.burned) + "</b>") + "</td>" +
+        "<td>" + (b.swapSig ? link(b.swapUrl, b.swapSig, "—") : esc(skipped ? "—" : b.execution === "program" && b.signature ? "same transaction" : "—")) + "</td>" +
+        "<td>" + link(b.txUrl, b.signature, skipped ? "—" : b.signature ? "" : "—") + "</td>" +
+        "<td>" + check + "</td>" +
+        '<td><button type="button" class="vbtn" data-i="' + i + '" aria-expanded="false">verify</button></td>' +
+        "</tr>";
+    }).join("");
+    $("count").textContent = (showAll ? rows.length : Math.min(LIMIT, rows.length)) + " of " + rows.length + " rows";
+    var more = $("more"); more.hidden = showAll || rows.length <= LIMIT;
+    tb.onclick = function (e) {
+      var btn = e.target.closest ? e.target.closest("button.vbtn") : null; if (!btn) return;
+      var tr = btn.parentNode.parentNode, nxt = tr.nextElementSibling;
+      if (nxt && nxt.classList.contains("detail")) { nxt.remove(); btn.setAttribute("aria-expanded", "false"); return; }
+      var b = shown[Number(btn.getAttribute("data-i"))], d = document.createElement("tr"); d.className = "detail";
+      d.innerHTML = '<td colspan="11">' +
+        "<div><b>1.</b> Fetch the two Treasury rows this day used.</div><pre>" + esc(b.verify.curl) + "</pre>" +
+        "<div><b>2.</b> Apply the rule.</div><pre>" + esc(b.verify.formula) + "</pre>" +
+        (b.carryRunSince ? '<div class="muted">The carried $' + esc(b.carryIn) + " comes from the run of consecutive increases since " + esc(b.carryRunSince) + ".</div>" : "") +
+        "<div><b>3.</b> The expected result is " + esc(b.verify.expected) + "</div>" +
+        "<div style=\"margin-top:8px\"><b>4.</b> Read the memo on the burn transaction." + (href(b.txUrl) ? ' <a href="' + esc(href(b.txUrl)) + '" target="_blank" rel="noopener">Open the transaction</a>.' : "") + "</div><pre>" + esc(b.memo || (skippedText(b))) + "</pre>" +
+        "<div>" + (href(b.sourceUrl) ? '<a href="' + esc(href(b.sourceUrl)) + '" target="_blank" rel="noopener">Treasury source row for ' + esc(b.recordDate) + "</a>. " : "Treasury source row for " + esc(b.recordDate) + ". ") + (b.verify.checks && b.verify.checks.length ? '<span class="bad">Some checks did not pass: ' + esc(b.verify.checks.join("; ")) + ".</span>" : '<span class="ok">The recomputation matches.</span>') + "</div>" +
+        "</td>";
+      tr.parentNode.insertBefore(d, tr.nextSibling); btn.setAttribute("aria-expanded", "true");
+    };
+    renderLastReading();
+    var last = rows[0];
+    if (last) {
+      $("curl").textContent = b2curl(last);
+      if (last.memo) $("memo").textContent = last.memo;
+    }
+  }
+
+  // ------------------------------------------------------------------ today (the daily post, same words as the script)
+  /* @daily-post-begin — mirrors src/lib/launch/dailyPost.ts (dailyText / noBurnText / dayState); test/dailyPost.test.ts pins the two outputs equal. */
+  var BurnDaily = (function () {
+    var DISCLAIMER = "a memecoin — the rule says what supply does, not what price does";
+    var QUEUED_ROW = ["planned", "sending", "swap-sent", "swapped"];
+    var WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    var fInt = function (s) { if (s == null) return "—"; return String(s).split(".")[0].replace(/^-/, "−").replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
+    var fB = function (usd) { var n = Number(usd); return (n >= 0 ? "+" : "−") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
+    var fSol = function (s) { return s == null ? "—" : Number(s).toFixed(4) + " SOL"; };
+    var plural = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
+    var pad = function (n) { return String(n).length < 2 ? "0" + n : String(n); };
+    var wd = function (day) { return new Date(day + "T00:00:00Z").getUTCDay(); };
+    var addDays = function (day, n) { return new Date(Date.parse(day + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10); };
+    var nth = function (y, m, dow, n) { var first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(); var d = 1 + ((dow - first + 7) % 7) + (n - 1) * 7; return y + "-" + pad(m) + "-" + pad(d); };
+    var lastW = function (y, m, dow) { var last = new Date(Date.UTC(y, m, 0)); var d = last.getUTCDate() - ((last.getUTCDay() - dow + 7) % 7); return y + "-" + pad(m) + "-" + pad(d); };
+    var observed = function (day) { var w = wd(day); return w === 6 ? addDays(day, -1) : w === 0 ? addDays(day, 1) : day; };
+    function holidays(y) {
+      var h = {};
+      [[y + "-01-01", "New Year's Day"], [y + "-06-19", "Juneteenth"], [y + "-07-04", "Independence Day"], [y + "-11-11", "Veterans Day"], [y + "-12-25", "Christmas Day"]].forEach(function (x) { h[observed(x[0])] = x[1]; });
+      h[nth(y, 1, 1, 3)] = "Martin Luther King Jr. Day"; h[nth(y, 2, 1, 3)] = "Presidents' Day"; h[lastW(y, 5, 1)] = "Memorial Day";
+      h[nth(y, 9, 1, 1)] = "Labor Day"; h[nth(y, 10, 1, 2)] = "Columbus Day"; h[nth(y, 11, 4, 4)] = "Thanksgiving Day";
+      if (observed((y + 1) + "-01-01") === y + "-12-31") h[y + "-12-31"] = "New Year's Day (observed)";
+      return h;
+    }
+    var holiday = function (day) { return holidays(Number(day.slice(0, 4)))[day] || null; };
+    var biz = function (day) { var w = wd(day); return w !== 0 && w !== 6 && holiday(day) === null; };
+    var prevBiz = function (day) { var d = addDays(day, -1); while (!biz(d)) d = addDays(d, -1); return d; };
+    var nextBiz = function (day) { var d = addDays(day, 1); while (!biz(d)) d = addDays(d, 1); return d; };
+    function dateIn(ms, tz) { var p = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms)); var g = function (t) { for (var i = 0; i < p.length; i++) if (p[i].type === t) return p[i].value; }; return g("year") + "-" + g("month") + "-" + g("day"); }
+    function hhmmIn(ms, tz) { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms)); }
+    function dayState(status, burns, nowMs) {
+      var tz = "America/New_York", postDay = dateIn(nowMs, tz), w = wd(postDay), hol = holiday(postDay), last = status.feed.lastRecordDate, lastRow = burns.length ? burns[burns.length - 1] : null;
+      if (w === 0 || w === 6) { var np = nextBiz(postDay); return { postDay: postDay, expected: null, kind: "weekend", reason: "Treasury does not post Debt to the Penny on a " + WEEKDAY[w] + ". The next figure is " + prevBiz(np) + "'s, posted " + WEEKDAY[wd(np)] + " afternoon ET.", row: null }; }
+      if (hol) { var np2 = nextBiz(postDay); return { postDay: postDay, expected: null, kind: "holiday", reason: "Treasury does not post Debt to the Penny on " + hol + ". The next figure is " + prevBiz(np2) + "'s, posted " + WEEKDAY[wd(np2)] + " afternoon ET.", row: null }; }
+      var expected = prevBiz(postDay), row = null;
+      for (var i = 0; i < burns.length; i++) if (burns[i].recordDate === expected) { row = burns[i]; break; }
+      if (row) return { postDay: postDay, expected: expected, kind: "burn", reason: "", row: row };
+      if (last !== null && last >= expected) return { postDay: postDay, expected: expected, kind: "no-unit", reason: "Treasury's figure for " + expected + " did not add a full $1,000,000,000 over the previous reading, so the rule counted nothing. A rise under $1B carries into the next consecutive rise; a flat or down day resets the remainder to zero.", row: null };
+      if (hhmmIn(nowMs, tz) < "20:30") return { postDay: postDay, expected: expected, kind: "pending", reason: "Treasury's figure for " + expected + " is not posted yet (it usually appears mid-afternoon ET); the keeper reads the feed at 16:30 and 20:00 ET" + (lastRow ? ". Last reading on file: " + (last == null ? "none" : last) : "") + ".", row: null };
+      return { postDay: postDay, expected: expected, kind: "late", reason: "Treasury's figure for " + expected + " was not posted by 20:30 ET; the keeper keeps checking hourly and reads it, with the day's units, when it appears. Last reading on file: " + (last == null ? "none" : last) + ".", row: null };
+    }
+    function receiptNo(burns, row) { for (var i = 0; i < burns.length; i++) if (burns[i].recordDate === row.recordDate) return i + 1; return 0; }
+    function supplyAfter(status, burns, row) { var n = receiptNo(burns, row), burned = 0n; for (var i = 0; i < n; i++) if (burns[i].status === "confirmed" && burns[i].burned) burned += BigInt(String(burns[i].burned).split(".")[0]); return (BigInt(String(status.supply.initial).split(".")[0]) - burned).toString(); }
+    function dailyText(status, burns, row, site) {
+      var n = receiptNo(burns, row), t = status.ticker, carry = Number(row.carryIn) > 0 ? " · " + fB(row.carryIn) + " carried" : "";
+      var head = "Receipt #" + n + " · " + row.recordDate + "\nDebt to the Penny: $" + fInt(row.now) + " (" + fB(row.delta) + carry + ")";
+      if (row.status === "skipped") return head + "\n" + plural(row.units, "unit") + ", but the day's spend would have been under $1 — nothing bought; the pool keeps it for the next burn day\nSupply unchanged at " + fInt(supplyAfter(status, burns, row)) + "\nverify: " + site + "/#r-" + n + "\n" + DISCLAIMER;
+      if (QUEUED_ROW.indexOf(row.status) >= 0) return "Queued reading · " + row.recordDate + "\nDebt to the Penny: $" + fInt(row.now) + " (" + fB(row.delta) + carry + ")\n" + plural(row.units, "unit") + " queued, with no burn yet. Queued units are spent once the pool is registered and the burn program runs.\nSupply unchanged at " + fInt(supplyAfter(status, burns, row)) + "\nverify: " + site + "/#r-" + n + "\n" + DISCLAIMER;
+      return head + "\n" + plural(row.units, "unit") + " → " + fInt(row.burned) + " $" + t + " bought back and burned" + (row.spent != null ? " (" + fSol(row.spent) + ")" : "") + "\nSupply now " + fInt(supplyAfter(status, burns, row)) + "\nReceipt: " + (row.txUrl || "{TX}") + " · verify: " + site + "/#r-" + n + "\n" + DISCLAIMER;
+    }
+    function noBurnText(status, burns, state, site) {
+      var t = status.ticker, last = burns.length ? burns[burns.length - 1] : null;
+      // ninth pass HS-101 / AP9-2 (HB-185 residue): a queued last row is a reading, not a receipt, and nothing has burned for it
+      var lastLine = last && QUEUED_ROW.indexOf(last.status) >= 0 ? "Last reading: " + last.recordDate + ", " + fB(last.delta) + " → " + plural(last.units, "unit") + " queued, no burn yet" : last ? "Last receipt: #" + receiptNo(burns, last) + " · " + last.recordDate + " · " + fB(last.delta) + " → " + plural(last.units, "unit") + " → " + (last.status === "skipped" ? "nothing bought (under the $1 floor)" : fInt(last.burned) + " $" + t + " burned") : "No receipt yet: the first reading after launch is the baseline.";
+      var pool = status.buyback && status.buyback.feePoolSol != null ? " · fee pool " + fSol(status.buyback.feePoolSol) : "";
+      var label = state.kind === "weekend" ? "(" + WEEKDAY[wd(state.postDay)] + ")" : state.kind === "holiday" ? "(" + holiday(state.postDay) + ")" : state.expected ? "(figure for " + state.expected + ")" : "";
+      return "No burn today, " + state.postDay + " " + label + "\n" + state.reason + "\n" + lastLine + "\nSupply " + fInt(status.supply.current) + pool + "\nverify: " + site + "/#receipts\n" + DISCLAIMER;
+    }
+    function pick(status, burns, nowMs, site) { var st = dayState(status, burns, nowMs); return { state: st, text: st.kind === "burn" ? dailyText(status, burns, st.row, site) : noBurnText(status, burns, st, site) }; }
+    return { pick: pick, dayState: dayState, dailyText: dailyText, noBurnText: noBurnText, receiptNo: receiptNo };
+  })();
+  /* @daily-post-end */
+  function renderToday() {
+    if (!status) return;
+    var site = location.origin && location.origin !== "null" ? location.origin + location.pathname.replace(/\/[^/]*$/, "") : "{SITE_URL}";
+    var r = BurnDaily.pick(status, burns, Date.now(), site), el = $("todayText");
+    el.innerHTML = esc(r.text).replace(/(https?:\/\/[^\s]+)/g, function (u) { return '<a href="' + u + '" target="_blank" rel="noopener">' + u + "</a>"; });
+    var btn = $("copyToday");
+    if (navigator.clipboard) { btn.hidden = false; btn.onclick = function () { navigator.clipboard.writeText(r.text).then(function () { btn.textContent = "copied"; setTimeout(function () { btn.textContent = "copy"; }, 1500); }); }; }
+  }
+  function skippedText(b) { return b.status === "skipped" ? "No transaction. " + (b.skippedReason || "This day was skipped.") : "Not sent yet."; }
+  function b2curl(b) { return b.verify && b.verify.curl ? b.verify.curl : "curl -s '" + TREASURY + "&filter=record_date:in:(" + b.prevDate + "," + b.recordDate + ")&sort=record_date'"; }
+  $("more").onclick = function () { showAll = true; renderBurns(); };
+
+  // ------------------------------------------------------------------ chart (Canvas, no library)
+  var cv = $("cv"), ctx = cv.getContext("2d"), pts = [], marks = [], geom = null;
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function buildSeries() {
+    var m = {};
+    burns.forEach(function (b) { m[b.prevDate] = b.prev; m[b.recordDate] = b.now; });
+    readings.forEach(function (r) { m[r.recordDate] = r.amount; });
+    pts = Object.keys(m).sort().map(function (d) { return { d: d, t: Date.parse(d + "T00:00:00Z"), v: Number(m[d]) }; });
+    var byDate = {}; pts.forEach(function (p, i) { byDate[p.d] = i; });
+    marks = burns.filter(function (b) { return b.status === "confirmed" && byDate[b.recordDate] != null && Number(b.burned) > 0; }).map(function (b) { return { i: byDate[b.recordDate], units: b.units, b: b }; });
+  }
+  function draw(hoverI) {
+    var dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    var ink = css("--ink"), muted = css("--muted"), line = css("--line"), hot = css("--hot");
+    ctx.font = "11px " + css("--mono"); ctx.fillStyle = muted; ctx.textBaseline = "middle";
+    if (pts.length < 2) { ctx.textAlign = "center"; ctx.fillText("The curve appears once two readings are published.", W / 2, H / 2); return; }
+    var L = 58, R = 12, T = 14, B = 26;
+    var x0 = pts[0].t, x1 = pts[pts.length - 1].t, ys = pts.map(function (p) { return p.v; }), yMin = Math.min.apply(null, ys), yMax = Math.max.apply(null, ys), pad = (yMax - yMin) * 0.06 || 1e9;
+    var sx = function (t) { return L + ((t - x0) / Math.max(1, x1 - x0)) * (W - L - R); };
+    var sy = function (v) { return T + (1 - (v - (yMin - pad)) / (yMax - yMin + 2 * pad)) * (H - T - B); };
+    geom = { sx: sx, sy: sy, L: L, R: R, W: W };
+    ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.textAlign = "right";
+    [yMin, (yMin + yMax) / 2, yMax].forEach(function (v) { var y = sy(v); ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(W - R, y); ctx.stroke(); ctx.fillText("$" + (v / 1e12).toFixed(2) + "T", L - 6, y); });
+    ctx.textAlign = "left"; ctx.fillText(pts[0].d, L, H - 9); ctx.textAlign = "right"; ctx.fillText(pts[pts.length - 1].d, W - R, H - 9);
+    // area under the curve, faint
+    ctx.beginPath(); ctx.moveTo(sx(pts[0].t), sy(pts[0].v));
+    pts.forEach(function (p) { ctx.lineTo(sx(p.t), sy(p.v)); });
+    ctx.lineTo(sx(pts[pts.length - 1].t), H - B); ctx.lineTo(sx(pts[0].t), H - B); ctx.closePath();
+    ctx.fillStyle = hot; ctx.globalAlpha = 0.07; ctx.fill(); ctx.globalAlpha = 1;
+    // the line
+    ctx.beginPath(); pts.forEach(function (p, i) { i ? ctx.lineTo(sx(p.t), sy(p.v)) : ctx.moveTo(sx(p.t), sy(p.v)); });
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke();
+    // burn markers (amber: what was burned; the curve itself is what was borrowed)
+    ctx.fillStyle = css("--amber"); ctx.globalAlpha = 0.6;
+    var mscale = Math.min(1, W / 720); // smaller dots on a narrow screen so the line stays visible
+    marks.forEach(function (mk) { var p = pts[mk.i]; ctx.beginPath(); ctx.arc(sx(p.t), sy(p.v), (1.5 + Math.sqrt(mk.units) * 0.5) * mscale, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    if (hoverI != null) {
+      var p = pts[hoverI], x = sx(p.t), y = sy(p.v);
+      ctx.strokeStyle = muted; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, H - B); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function nearest(clientX) {
+    if (!geom || !pts.length) return null;
+    var x = clientX - cv.getBoundingClientRect().left, best = 0, bd = 1e9;
+    pts.forEach(function (p, i) { var d = Math.abs(geom.sx(p.t) - x); if (d < bd) { bd = d; best = i; } });
+    return best;
+  }
+  function hover(e) {
+    var cx = e.touches ? e.touches[0].clientX : e.clientX, i = nearest(cx); if (i == null) return;
+    draw(i);
+    var p = pts[i], mk = null; marks.forEach(function (m) { if (m.i === i) mk = m; });
+    $("cap").textContent = p.d + ": " + fmtT(p.v) + "." + (mk ? " The debt rose " + fmtB(mk.b.delta) + ", which is " + mk.units + (mk.units === 1 ? " unit" : " units") + ", and " + fmtInt(mk.b.burned) + " were burned." : "");
+  }
+  cv.addEventListener("mousemove", hover); cv.addEventListener("touchstart", hover, { passive: true }); cv.addEventListener("touchmove", hover, { passive: true });
+  cv.addEventListener("mouseleave", function () { draw(); $("cap").textContent = "Hover over or touch the line to see a reading."; });
+  window.addEventListener("resize", function () { draw(); });
+  if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { draw(); });
+
+  // Densify the curve from Treasury directly when online (fail-soft; the page is complete without it).
+  function fetchTreasury(fromDate) {
+    if (!fromDate || !window.fetch || (status && (status.sample || status.cluster === "replay"))) return;
+    var ctl = window.AbortController ? new AbortController() : null, timer = ctl && setTimeout(function () { ctl.abort(); }, 7000);
+    fetch(TREASURY + "&filter=record_date:gte:" + fromDate + "&sort=record_date&page[size]=1000", ctl ? { signal: ctl.signal } : {})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (!j || !j.data) return; readings = j.data.map(function (r) { return { recordDate: r.record_date, amount: r.tot_pub_debt_out_amt }; }); buildSeries(); draw(); })
+      .catch(function () { /* offline or blocked: keep the sparse curve */ })
+      .then(function () { if (timer) clearTimeout(timer); });
+  }
+
+  // ------------------------------------------------------------------ load
+  function getJson(name) { return fetch(base + name, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status + " " + name); return r.json(); }); }
+  // The empty states (src/lib/burnticker/emptyState.ts headings, word for word): since the launch, every failure to load, a 404
+  // included, is "Data unavailable", with the diagnostic behind a details disclosure (seventh pass AP7-4).
+  function offline(msg, detail) {
+    var n = $("notice"); n.textContent = msg;
+    if (detail) { var d = document.createElement("details"), sm = document.createElement("summary"), p = document.createElement("span"); sm.textContent = "Details"; p.textContent = " " + detail; d.appendChild(sm); d.appendChild(p); n.appendChild(d); }
+    n.classList.add("show"); var pn = $("prelaunchNote"); if (pn) pn.textContent = msg; draw();
+  }
+  if (!window.fetch) { offline("This browser cannot load the live figures. The receipts are in status.json and burns.json, next to this page."); return; }
+  // Audit 4 BT-03: re-hash the served rules.json in this browser and compare it with the hash printed above (and in status.json).
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ("0" + x.toString(16)).slice(-2); }).join(""); }
+  function checkRules(expected) {
+    var out = $("shaCheck"); if (!out || !window.crypto || !window.crypto.subtle) return;
+    fetch(base + "rules.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+      .then(function (b) { return window.crypto.subtle.digest("SHA-256", b); })
+      .then(function (d) { var h = hex(d); out.textContent = h === expected ? "✓ This browser just hashed the served rules.json and got " + h + ". That matches the hash above." : "✗ The served rules.json hashes to " + h + ". That does not match the hash above. Treat this page as wrong and check the repository."; out.className = h === expected ? "ok" : "bad"; })
+      .catch(function (e) { out.textContent = "Unable to check, because rules.json did not load just now (" + (e && e.message || e) + "). Try again, or run the command above."; });
+  }
+  // A pre-launch status.json (schema burnkeeper.status/prelaunch-v1) is an explicit state, not live data: the page stays in its pre-launch layout.
+  function prelaunchState(s) {
+    if (s.rules && s.rules.sha256) { $("sha").textContent = "sha256: " + s.rules.sha256; if (s.rules.status) $("statement").textContent = "The rule file's status is " + s.rules.status + "."; }
+    if (s.generatedAt) $("gen").textContent = new Date(s.generatedAt).toISOString().slice(0, 10) + ", from the pre-launch file";
+    checkRules(s.rules && s.rules.sha256);
+    if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
+  }
+  // the queued-units counter: the same function as the app (src/lib/burnticker/deficitQueueCore.mjs), on the same two files
+  function renderQueue(st, b) {
+    var box = $("queue"); if (!box || !window.deficitQueueCore) return;
+    var q = window.deficitQueueCore(st, b, Date.now());
+    box.setAttribute("data-queue", q.state); $("queueHead").textContent = q.headline;
+    var ls = $("queueLines"); ls.textContent = "";
+    q.lines.forEach(function (l) { var p = document.createElement("p"); p.className = "ql" + (/out of date/.test(l) ? " stale" : ""); p.textContent = l; ls.appendChild(p); });
+  }
+  getJson("status.json").then(function (s) {
+    if (s && (s.state === "not-launched" || /prelaunch/.test(String(s.schema)))) { status = null; prelaunchState(s); renderQueue(s, null); return "prelaunch"; }
+    status = s; renderStatus(s); document.documentElement.classList.remove("prelaunch");
+    if (deficitLifecycle(s, []).launched) { launchedTradeLabels(); if (!(s.feed && s.feed.lastAmount)) $("debtExact").textContent = "No reading yet"; }
+    var cta = $("receiptsCta"); if (cta) { cta.href = "#receipts"; cta.textContent = "Read the receipts"; }
+    if (s.rules && s.rules.sha256) checkRules(s.rules.sha256);
+    return getJson("burns.json").catch(function (e) { return { unreadable: String(e && e.message || e) }; });
+  }).then(function (b) {
+    if (b === "prelaunch") return;
+    // website-15 (code review 6 P2 1): a missing, unparsable or wrong-shape burns.json is unavailable, never an empty history
+    var list = Array.isArray(b) ? b : (b && Array.isArray(b.burns) ? b.burns : null);
+    if (!list || list.some(function (r) { return !r || typeof r !== "object" || typeof r.status !== "string"; })) {
+      setEmptyReceipts(deficitLifecycle(status, null).receipts); $("todayText").textContent = "The daily report is unavailable right now, because the list of readings and burns did not load.";
+      renderQueue(status, null); draw();
+      offline("Data unavailable. The keeper's list of readings and burns did not load just now, so no receipt or count is shown. Try again later.", b && b.unreadable ? b.unreadable : "burns.json is not a list of burn rows.");
+      return;
+    }
+    burns = list;
+    var deep = /^#r-(\d+)$/.exec(location.hash); if (deep && Number(deep[1]) <= burns.length - LIMIT) showAll = true;
+    renderBurns(); if (!burns.length) setEmptyReceipts(deficitLifecycle(status, burns).receipts);
+    renderHero(); renderToday(); buildSeries(); draw(); renderQueue(status, b);
+    if (deep && $("r-" + deep[1])) $("r-" + deep[1]).scrollIntoView();
+    fetchTreasury(burns.length ? burns[0].prevDate : (status.feed && status.feed.lastRecordDate));
+  }).catch(function (e) {
+    // seventh pass AP7-4: $DEFICIT has traded on mainnet since 2026-10-13, so a status file that answers 404 (a deploy swap, a root
+    // change, a write that is not atomic) means the data did not load, never that the coin has not launched
+    var missing = /^404 /.test(String(e && e.message));
+    renderQueue(null, null);
+    checkRules("8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9");
+    if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
+    offline(missing ? "Data unavailable. The keeper's status file could not be loaded just now, so no live figure is shown. $DEFICIT has launched, and this says nothing about the coin or its receipts. Try again later."
+      : "Data unavailable. The live figures did not load just now. This says nothing about the coin or its receipts. Try again later.", String(e && e.message || e));
+  });
+})();
+</script>
+<!-- site-shell:queue-core:begin -->
+<script>
+window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now, writtenAt) {
+  var PENDING = ["planned", "sending", "swap-sent", "swapped"], STALE = 60 * 60 * 1000;
+  var ticker = status && status.ticker ? String(status.ticker) : "DEFICIT";
+  function out(state, o) {
+    return { state: state, riseUsd: o.riseUsd == null ? null : o.riseUsd, units: o.units || 0, unsigned: o.unsigned || 0, sharePct: o.sharePct == null ? null : o.sharePct,
+      formula: o.formula || null, readingDate: o.readingDate || null, generatedAt: o.generatedAt || null, stale: !!o.stale, raiseSol: o.raiseSol || null,
+      headline: o.headline, lines: o.lines || [], card: o.card || null };
+  }
+  if (!status || typeof status !== "object") return out("unavailable", { headline: "The queue is unavailable, because the keeper's published status did not load.", card: null });
+  if (status.state === "not-launched" || /prelaunch/.test(String(status.schema || ""))) {
+    return out("not-launched", { headline: "$" + ticker + " is not created yet, so no reading has been recorded and nothing is queued.", generatedAt: status.generatedAt || null });
+  }
+  if (status.schema !== "burnkeeper.status/v1") return out("unavailable", { headline: "The queue is unavailable, because the keeper's status file is in a format this page does not read." });
+  // website-15 (code review 6, P2 1): a missing, unparsable or wrong-shape burns.json is unavailable, never an empty history
+  var rows = Array.isArray(burnsFile) ? burnsFile : burnsFile && typeof burnsFile === "object" && Array.isArray(burnsFile.burns) ? burnsFile.burns : null;
+  if (rows) for (var j = 0; j < rows.length; j++) if (!rows[j] || typeof rows[j] !== "object" || typeof rows[j].status !== "string") { rows = null; break; }
+  if (!rows) return out("unavailable", { headline: "The queue is unavailable, because the keeper's list of readings and burns did not load.", generatedAt: status.generatedAt || null });
+  var gen = writtenAt === undefined ? Date.parse(status.generatedAt) : writtenAt === null ? NaN : typeof writtenAt === "number" ? writtenAt : Date.parse(writtenAt);
+  var stale = isFinite(gen) && now - gen > STALE;
+  var feed = status.feed || {};
+  var prog = status.program || null;
+  var lastOnChain = prog && prog.queue ? prog.queue.lastOnChain : null;
+  var units = 0, unsigned = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (!r || PENDING.indexOf(r.status) < 0) continue;
+    var n = Number(r.units) || 0;
+    // a reading counts as queued once it is on chain; with no program block the keeper's own record is all there is
+    if (!prog || (lastOnChain && String(r.recordDate) <= String(lastOnChain))) units += n; else unsigned += n;
+  }
+  var riseUsd = null;
+  if (feed.baseline && feed.baseline.amount != null && feed.lastAmount != null) {
+    var rise = Number(feed.lastAmount) - Number(feed.baseline.amount);
+    if (isFinite(rise)) riseUsd = rise.toFixed(2);
+  }
+  var f = status.buyback && status.buyback.fractionPerUnit != null ? Number(status.buyback.fractionPerUnit) : NaN;
+  var keep = isFinite(f) ? Math.round((1 - f) * 10000) / 10000 : null;
+  var share = keep === null ? null : (1 - Math.pow(keep, units)) * 100;
+  var sharePct = share === null ? null : share.toFixed(2);
+  var formula = keep === null ? null : "1 − " + keep + "^" + units;
+  var curve = status.curve || null;
+  var raiseSol = curve && curve.threshold ? trimNum(curve.threshold) : null;
+  var poolOpen = !!(prog && prog.pool && prog.pool.registered);
+  var readingDate = feed.lastRecordDate || null;
+  var base = { riseUsd: riseUsd, units: units, unsigned: unsigned, sharePct: sharePct, formula: formula, readingDate: readingDate, generatedAt: status.generatedAt || null, stale: stale, raiseSol: raiseSol };
+  var lines = [];
+  // HB-90: the time the keeper wrote its status file; when that time is not known, no line at all
+  var freshness = isFinite(gen) ? "The keeper last wrote its status file at " + denver(gen) + " Denver time." + (stale ? " That was more than an hour ago, so it may be out of date." : "") : null;
+  if (!readingDate) {
+    base.headline = "The keeper has not published a reading since launch yet. The first reading is the baseline, and nothing is counted for it.";
+    base.lines = freshness ? [freshness] : [];
+    return out("no-reading", base);
+  }
+  // Hourly run 6 HB-90: units count every rise from one reading to the next, so a fall and its recovery both count, and the rise is
+  // measured from the baseline reading. The headline says both things as what they are, with the baseline's own date.
+  var baseDate = feed.baseline && feed.baseline.recordDate ? shortDate(String(feed.baseline.recordDate)) : null;
+  var since = baseDate ? "than on " + baseDate : "than at the first reading";
+  var riseText = riseUsd === null ? null : Number(riseUsd) >= 0 ? "The debt is " + usd(riseUsd) + " higher " + since + "." : "The debt is " + usd(String(-Number(riseUsd))) + " lower " + since + ".";
+  var sinceText = baseDate ? "since " + baseDate : "since the first reading";
+  var unitsText = units === 0 ? "No units are queued." : "Daily rises " + sinceText + " add up to " + (units === 1 ? "one queued unit" : groupInt(units) + " queued units") + " ($1B each).";
+  if (!poolOpen) {
+    base.headline = [unitsText, riseText].filter(Boolean).join(" ");
+    if (units > 0 && sharePct !== null) lines.push("When the curve fills" + (raiseSol ? " at " + raiseSol + " SOL" : "") + " and its pool is registered, the queued readings run in order and together spend " + formula + " of the burn pool, which is " + sharePct + "%. One burn run spends at most 2% of the trading pool's SOL, and the rest carries to the next run.");
+    else if (units === 0) lines.push("A unit is queued for each full $1B the debt rises from one business day to the next. Nothing burns before the curve fills and its pool is registered.");
+    if (riseUsd === null) lines.push("The rise since the first reading is not in the keeper's published file yet.");
+    if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");
+    lines.push("The latest reading is the Treasury figure for " + readingDate + "." + (freshness ? " " + freshness : ""));
+    base.lines = lines;
+    base.card = units > 0 ? "0 $" + ticker + ", " + (units === 1 ? "1 unit" : groupInt(units) + " units") + " queued" : null;
+    return out("queued", base);
+  }
+  base.headline = [riseText, units === 0 ? "The pool is registered, and no units are waiting." : "The pool is registered. " + (units === 1 ? "One unit is" : groupInt(units) + " units are") + " waiting for a burn run."].filter(Boolean).join(" ");
+  if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");
+  lines.push("The latest reading is the Treasury figure for " + readingDate + "." + (freshness ? " " + freshness : ""));
+  base.lines = lines;
+  return out("pool-open", base);
+
+  function groupInt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function shortDate(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+    if (!m) return null;
+    return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(m[2]) - 1] + " " + Number(m[3]);
+  }
+  function trimNum(s) { var t = String(s); return t.indexOf(".") >= 0 ? t.replace(/0+$/, "").replace(/\.$/, "") : t; }
+  function usd(s) {
+    var v = Number(s);
+    if (v >= 1e9) return "$" + (Math.round(v / 1e7) / 100).toFixed(2) + " billion";
+    if (v >= 1e6) return "$" + (Math.round(v / 1e4) / 100).toFixed(2) + " million";
+    return "$" + groupInt(Math.round(v));
+  }
+  function denver(ms) {
+    try { return new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms)); }
+    catch (e) { return new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC"; }
+  }
+};
+</script>
+<!-- site-shell:queue-core:end -->
+<!-- site-shell:script:begin -->
+<script>
+(function () {
+  // ONE THEME PREFERENCE: the same "bt-theme" key and switch as the app header; dark unless the visitor picked light
+  var root = document.documentElement, b = document.querySelector("[data-theme-toggle]");
+  function cur() { return root.dataset.theme === "light" ? "light" : "dark"; }
+  function label() { if (!b) return; var d = cur() === "dark"; b.textContent = d ? "\u2600" : "\u263E"; b.setAttribute("aria-label", d ? "Switch to light theme" : "Switch to dark theme"); b.title = d ? "Light theme" : "Dark theme"; }
+  if (b) b.addEventListener("click", function () { var n = cur() === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem("bt-theme", n); } catch (e) { /* private window */ } label(); });
+  label();
+})();
+(function () {
+  // the phone menu: Enter or Space opens it, focus moves to its first link, Tab and Shift+Tab stay inside, Escape closes it
+  var m = document.getElementById("menu"); if (!m) return;
+  var sum = m.querySelector("summary");
+  function links() { return Array.prototype.slice.call(m.querySelectorAll(".sh-menu-links a[href]")); }
+  // prelaunch audit 2026-10-18 A-29: aria-expanded follows the menu's real state, on the toggle event and right after each press
+  function sync() { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); }
+  m.addEventListener("toggle", function () { sync(); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
+  sum.addEventListener("click", function () { setTimeout(sync, 0); });
+  sync();
+  document.addEventListener("keydown", function (e) {
+    if (!m.open) return;
+    if (e.key === "Escape") { e.preventDefault(); m.open = false; sum.focus(); return; }
+    if (e.key !== "Tab") return;
+    var ring = [sum].concat(links()), i = ring.indexOf(document.activeElement);
+    e.preventDefault();
+    ring[i === -1 ? 0 : (e.shiftKey ? (i - 1 + ring.length) % ring.length : (i + 1) % ring.length)].focus();
+  });
+  document.addEventListener("click", function (e) {
+    if (m.open && !m.contains(e.target)) m.open = false;
+    var l = document.querySelector(".sh-learn"); if (l && l.open && !l.contains(e.target)) l.open = false;
+  });
+})();
+(function () {
+  // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
+  // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
+  var btns = Array.prototype.slice.call(document.querySelectorAll("[data-launch-button]")), dlg = document.getElementById("sh-launch-closed"), open = false;
+  var said = dlg && dlg.querySelector("[data-launch-sentence]");
+  window.btHome = window.btHome || fetch("https://burnticker.com/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open is unknown right now, so no launch controls are shown."; createPath(l || null); });
+  // audit 10 item 23: the home's create path, from the same record (siteNav.mjs createPathFor, written here as source)
+  function createPath(l) {
+    var TWO_PATHS = [{"id":"explore","label":"Explore coins","href":"/burnticker","text":"See every coin, its rule and its receipts, and follow coins in this browser without a wallet."},{"id":"create","label":"Launch a coin","href":"/burnticker/launch","text":"Pick a public result, lock one rule, then review every detail."}], CREATE_PREVIEW = {"label":"Preview a coin launch","text":"Walk through a launch and its review, with nothing signed."}, LAUNCH_CLOSED = {"unread":"Whether creator launches are open is unknown right now, so no launch controls are shown."};
+    var p = (function createPathFor(launch) {
+  const open = !!(launch && launch.canSign === true);
+  const create = TWO_PATHS[1];
+  const said = launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : null;
+  return { label: create.label, text: create.text, status: open ? said : (said || LAUNCH_CLOSED.unread) + " " + CREATE_PREVIEW.text, open: open };
+})(l), box = document.querySelector("[data-two-paths]"); if (!box) return;
+    var t = box.querySelector("[data-create-label]"), x = box.querySelector("[data-create-text]"), s = box.querySelector("[data-create-status]");
+    if (t) t.textContent = p.label; if (x) x.textContent = p.text; if (s) { s.textContent = p.status || ""; s.hidden = !p.status; }
+    box.setAttribute("data-create-open", p.open ? "true" : "false");
+  }
+  if (dlg && typeof dlg.showModal === "function") btns.forEach(function (btn) { btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); }); });
+  if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
+  if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
+})();
+(function () {
+  // THE ACTIVITY LINE (website-14): burns, signed readings, graduations and pool registrations from GET /api/burnticker/home, each
+  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. When the strip is wider
+  // than the screen it scrolls sideways, and the edge that still has more fades (ChatGPT audit 6 item 24, the app's useScrollEdges).
+  var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
+  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered","created":"Created","reserved":"Mint reserved"};
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function edge() { box.classList.toggle("more-start", box.scrollLeft > 4); box.classList.toggle("more-end", box.scrollLeft + box.clientWidth < box.scrollWidth - 4); }
+  box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
+  window.btHome.then(function (j) {
+    box.textContent = "";
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); return; }
+    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); edge(); return; }
+    j.events.forEach(function (ev) { var a = el("a", ""); a.href = (/^https?:/.test(ev.href) ? "" : "https://burnticker.com") + ev.href; a.setAttribute("data-kind", ev.kind || "burn"); a.appendChild(el("span", "sh-kind", KIND[ev.kind] || KIND.burn)); if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
+    edge();
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); });
+})();
+</script>
+<!-- site-shell:script:end -->
+</body>
+</html>

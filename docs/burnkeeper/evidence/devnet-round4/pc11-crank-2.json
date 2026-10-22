@@ -1,0 +1,15 @@
+  [pair-curve] EPKsftLQ… register(A): 2hrV1nXHVbAm… · 37958 CU
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 4000ms delay...
+<repo>/node_modules/@solana/web3.js/lib/index.cjs.js:5081
+        callback(new Error(`${res.status} ${res.statusText}: ${text}`));
+                 ^
+
+Error: 429 :  {"jsonrpc":"2.0","error":{"code": 429, "message":"Too many requests for a specific RPC call"}, "id": "6d82cb2e-8ef9-4735-83b6-eab82a89fa37" } 
+
+    at ClientBrowser.callServer (<repo>/node_modules/@solana/web3.js/lib/index.cjs.js:5081:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v26.8.2

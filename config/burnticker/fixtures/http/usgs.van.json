@@ -1,0 +1,67 @@
+{
+ "fetchedAt": "2026-10-13T00:12:38Z",
+ "note": "Real response, captured read-only: USGS HANS Volcano Activity Notices (VAN) of the last 30 days. Each notice trimmed to its send time, identifier and the three header lines the adapter reads (volcano and number, current alert level, previous alert level); the activity text is dropped.",
+ "url": "https://volcanoes.usgs.gov/hans-public/api/search/search",
+ "request": {
+  "obsAbbr": "",
+  "noticeTypeCd": "VAN",
+  "volcCd": "",
+  "startUnixtime": 1789258358,
+  "endUnixtime": "",
+  "searchText": "",
+  "pageIndex": 0
+ },
+ "body": {
+  "noticeTotal": 6,
+  "noticeData": [
+   {
+    "sentUtc": "2026-10-06 19:20:04",
+    "sentUnixtime": 1791314404,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-10-06T18:56:12+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WATCH"
+   },
+   {
+    "sentUtc": "2026-10-06 18:37:45",
+    "sentUnixtime": 1791311865,
+    "noticeTypeCd": "VAN",
+    "volcCds": "ak106",
+    "noticeIdentifier": "DOI-USGS-AVO-2026-10-05T19:48:42+00:00",
+    "noticeHtml": "Volcano: <b>Gareloi</b> (VNUM #311070)<br/>Current Volcano Alert Level: NORMAL<br/>Previous Volcano Alert Level: ADVISORY"
+   },
+   {
+    "sentUtc": "2026-10-01 16:42:52",
+    "sentUnixtime": 1790872972,
+    "noticeTypeCd": "VAN",
+    "volcCds": "ak106",
+    "noticeIdentifier": "DOI-USGS-AVO-2026-10-01T15:57:08+00:00",
+    "noticeHtml": "Volcano: <b>Gareloi</b> (VNUM #311070)<br/>Current Volcano Alert Level: ADVISORY<br/>Previous Volcano Alert Level: NORMAL"
+   },
+   {
+    "sentUtc": "2026-09-29 17:54:03",
+    "sentUnixtime": 1790704443,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-09-29T16:38:42+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WATCH"
+   },
+   {
+    "sentUtc": "2026-09-23 09:52:52",
+    "sentUnixtime": 1790157172,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-09-23T08:36:47+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WATCH"
+   },
+   {
+    "sentUtc": "2026-09-20 18:39:40",
+    "sentUnixtime": 1789929580,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-09-20T18:06:49+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WATCH"
+   }
+  ]
+ }
+}

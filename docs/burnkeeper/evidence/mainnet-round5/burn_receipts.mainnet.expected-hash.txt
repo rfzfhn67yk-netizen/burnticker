@@ -1,0 +1,9 @@
+burn_receipts round 5 (+ review fixes + R5-8 / R5-9), mainnet build (default features)
+program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM
+bytes 1028944
+executable_hash 152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821
+file_sha256 cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290
+program_source 089024ff6ab0cc92ae37899dee1509d52cb5e203 (worktree-agent-r5prog; built from merge a4e195a3 in worktree-agent-r5devnet, programs/ identical)
+staged_at <launch folder>/round5-build/local-mainnet/burn_receipts.so
+reproduce: OUT=<clean dir> bash scripts/ops/verified-build.sh --local
+superseded: 07b2b58f0a1ca77986a193159b101edc7c35080f6633e1f26a63fe4972c1b2f1 (1,020,528 B, source e9614fdd; staged copy under round5-build/superseded-e9614fdd/)

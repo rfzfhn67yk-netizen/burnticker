@@ -1,0 +1,62 @@
+{
+  "schema": "burnticker.mainnet-rehearsal-evidence/v1",
+  "date": "2026-10-11",
+  "cluster": "mainnet",
+  "coin": "REHEARSAL",
+  "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+  "rulesSha256": "2d1099653112dca6f34b2b4ca68cacc5886bcc3234d7ac1301debb6040a2f99d",
+  "note": "A disclosed throwaway coin under the real mainnet platform config (REHEARSAL-RUNSHEET §B). Proves: initialize_token with mainnet genesis binding, the LaunchLab create with creator = the program fee PDA, fee routing into the creator (burn pool) and platform vaults, immutable Arweave metadata, and a signed baseline reading. Does not prove a mainnet burn (the curve must fill to 85 SOL first). The 0.1 SOL first buy at creation was the operator's disclosed rehearsal buy; the pool was then bought by unrelated wallets within seconds (the vault balances below exceed the 0.1 SOL buy's fees).",
+  "steps": [
+    {
+      "step": "initialize_token",
+      "signature": "5WXQoVEXVHm3FLhcNkoGUMD6zY1fdjF4Gpvocj4LqiVrWCKFLtc336BdGZh556ZrWhj6vq3PmzS3gfXh9sn341fx",
+      "attester": "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6",
+      "quorum": 1,
+      "admin": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+      "launchlabPlatform": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9",
+      "feePda": "BXRrh2sd869jewSeKZn9SHAa1uj6uEvW8ZvwUy2CCG8h",
+      "config": "GdeRQpgc2eeeM4DeRXfhC76CiNjBfKYActVnBTkqmQ1E"
+    },
+    {
+      "step": "verify-platform-pins",
+      "result": "platform pins hold; 100 % of the LP locked to the fee-keys PDA; operator treasury 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5"
+    },
+    {
+      "step": "launchlab create",
+      "signature": "3fJdoqa2rP3c1RRvZdM57cF1fUemMxQDa8itoXGeLjuQMs5dJ6VEK9e4APnwg48nhkXDdKTgHnRnnYJCFxkSBnzF",
+      "slot": 455825866,
+      "poolId": "AAT9VJAhAJv7o5mZtm3EYLhSdcsxPZB7eTYbjd9phRgG",
+      "creator": "BXRrh2sd869jewSeKZn9SHAa1uj6uEvW8ZvwUy2CCG8h",
+      "creatorIsFeePda": true,
+      "creatorFeeVault": "BZwNxhajRfEA95xdrs8BxM9jCDVvsUshFmEiHuAX9P9M",
+      "platformFeeVault": "EcXnhWsJmc6vcart32M5ZXMmmCzXE3fiUz9qxqrWQKSn",
+      "raiseSol": 85,
+      "firstBuySol": 0.1,
+      "firstBuyFeeLamports": {
+        "protocol": 250000,
+        "platform": 250000,
+        "creatorToBurnPool": 500000
+      },
+      "metadataUri": "https://arweave.net/2cVkcswdBLs7FaNJYqvLEys4L9SJzn89UXCBHctySQ9R",
+      "imageUri": "https://arweave.net/8GbUjqR5vSeWs6ubPWN9GW3EqmTZgdipH9fKVi1ngTRA",
+      "launchGate": "is_mutable false; mint and freeze authority null; uri on Arweave"
+    },
+    {
+      "step": "fee routing read (gate 3), ~5 min after the create",
+      "creatorFeeVaultSol": 0.019125,
+      "platformFeeVaultSol": 0.0095625,
+      "note": "50:25 bps ratio holds; the amounts exceed the 0.1 SOL buy because unrelated wallets bought the new pool within 90 s (9 pool transactions)"
+    },
+    {
+      "step": "keeper --once (program mode, mainnet)",
+      "reading": {
+        "date": "2026-10-08",
+        "value": "40305316210829.72",
+        "units": 0,
+        "baseline": true
+      },
+      "signature": "4Pmfjpq79wyKXXSsitu9sMQeNhvh9Awye3pViNvEhX8DPcHXvSXsbQP1PZJD4MCHuJSsBGo42fjuYkj4ZSHm5ceM",
+      "rpc": "public mainnet RPC (the host has no mainnet Helius endpoint yet)"
+    }
+  ]
+}

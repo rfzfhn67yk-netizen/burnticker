@@ -1,0 +1,247 @@
+{
+ "fetchedAt": "2026-10-12T19:27:41Z",
+ "note": "Real response, captured read-only; each release trimmed to the fields the adapter reads. The keeper's URL asks for 100 per page; this capture asked for 30.",
+ "url": "https://api.github.com/repos/anza-xyz/agave/releases?per_page=30",
+ "body": [
+  {
+   "id": 407234929,
+   "tag_name": "v4.5.0-alpha.2",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-10-08T20:18:20Z",
+   "published_at": "2026-10-08T20:27:41Z"
+  },
+  {
+   "id": 402374245,
+   "tag_name": "v4.5.0-alpha.1",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-10-03T06:37:10Z",
+   "published_at": "2026-10-03T06:50:48Z"
+  },
+  {
+   "id": 398365753,
+   "tag_name": "v4.4.0-beta.0",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-09-28T15:05:22Z",
+   "published_at": "2026-09-28T15:10:04Z"
+  },
+  {
+   "id": 391586317,
+   "tag_name": "v4.4.0-alpha.5",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-09-18T15:17:57Z",
+   "published_at": "2026-09-18T15:32:23Z"
+  },
+  {
+   "id": 391449122,
+   "tag_name": "v4.3.0",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-09-18T12:13:05Z",
+   "published_at": "2026-09-18T12:15:17Z"
+  },
+  {
+   "id": 387110768,
+   "tag_name": "v4.3.0-rc.1",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-09-11T14:36:25Z",
+   "published_at": "2026-09-11T14:39:49Z"
+  },
+  {
+   "id": 386558418,
+   "tag_name": "v4.4.0-alpha.4",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-09-10T19:08:37Z",
+   "published_at": "2026-09-10T19:19:58Z"
+  },
+  {
+   "id": 382843691,
+   "tag_name": "v4.3.0-rc.0",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-09-04T15:40:10Z",
+   "published_at": "2026-09-04T15:46:13Z"
+  },
+  {
+   "id": 382274984,
+   "tag_name": "v4.4.0-alpha.3",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-09-03T18:51:18Z",
+   "published_at": "2026-09-03T19:20:57Z"
+  },
+  {
+   "id": 378289184,
+   "tag_name": "v4.4.0-alpha.2",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-08-28T05:17:28Z",
+   "published_at": "2026-08-28T06:07:28Z"
+  },
+  {
+   "id": 378699885,
+   "tag_name": "v4.3.0-beta.3",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-08-28T18:52:07Z",
+   "published_at": "2026-08-28T18:53:56Z"
+  },
+  {
+   "id": 378696832,
+   "tag_name": "v4.2.2",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-08-28T18:42:46Z",
+   "published_at": "2026-08-28T18:47:41Z"
+  },
+  {
+   "id": 374466878,
+   "tag_name": "v4.3.0-beta.2",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-08-21T14:31:10Z",
+   "published_at": "2026-08-21T14:34:51Z"
+  },
+  {
+   "id": 374395145,
+   "tag_name": "v4.3.0-beta.1",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-08-14T18:15:29Z",
+   "published_at": "2026-08-21T12:47:32Z"
+  },
+  {
+   "id": 370134603,
+   "tag_name": "v4.2.1",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-08-13T18:45:13Z",
+   "published_at": "2026-08-13T18:49:41Z"
+  },
+  {
+   "id": 370755210,
+   "tag_name": "v4.3.0-beta.0",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-08-12T15:30:39Z",
+   "published_at": "2026-08-14T18:34:44Z"
+  },
+  {
+   "id": 366992712,
+   "tag_name": "v4.2.0",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-08-07T20:20:12Z",
+   "published_at": "2026-08-07T20:29:04Z"
+  },
+  {
+   "id": 365773075,
+   "tag_name": "v4.3.0-alpha.3",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-08-05T19:22:40Z",
+   "published_at": "2026-08-05T19:35:39Z"
+  },
+  {
+   "id": 363151817,
+   "tag_name": "v4.2.0-rc.1",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-07-31T14:58:17Z",
+   "published_at": "2026-07-31T15:02:44Z"
+  },
+  {
+   "id": 359302272,
+   "tag_name": "v4.2.0-rc.0",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-07-24T12:24:06Z",
+   "published_at": "2026-07-24T12:47:31Z"
+  },
+  {
+   "id": 357382382,
+   "tag_name": "v4.3.0-alpha.2",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-07-21T00:09:19Z",
+   "published_at": "2026-07-21T13:50:13Z"
+  },
+  {
+   "id": 355868656,
+   "tag_name": "v4.2.0-beta.2",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-07-17T18:54:13Z",
+   "published_at": "2026-07-17T19:00:47Z"
+  },
+  {
+   "id": 353352515,
+   "tag_name": "v4.3.0-alpha.1",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-07-13T18:16:42Z",
+   "published_at": "2026-07-13T18:33:15Z"
+  },
+  {
+   "id": 352229395,
+   "tag_name": "v4.2.0-beta.1",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-07-10T17:08:08Z",
+   "published_at": "2026-07-10T17:10:49Z"
+  },
+  {
+   "id": 352161403,
+   "tag_name": "v4.1.2",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-07-10T14:45:12Z",
+   "published_at": "2026-07-10T14:51:39Z"
+  },
+  {
+   "id": 349630793,
+   "tag_name": "v4.2.0-beta.0",
+   "draft": false,
+   "prerelease": true,
+   "created_at": "2026-07-06T14:11:57Z",
+   "published_at": "2026-07-06T15:00:18Z"
+  },
+  {
+   "id": 348222481,
+   "tag_name": "v4.1.1",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-07-02T18:16:18Z",
+   "published_at": "2026-07-02T18:31:26Z"
+  },
+  {
+   "id": 345444792,
+   "tag_name": "v4.1.0",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-06-26T17:11:44Z",
+   "published_at": "2026-06-26T17:24:14Z"
+  },
+  {
+   "id": 340202215,
+   "tag_name": "v4.1.0-rc.1",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-06-16T13:29:34Z",
+   "published_at": "2026-06-16T14:25:33Z"
+  },
+  {
+   "id": 340172954,
+   "tag_name": "v4.0.3",
+   "draft": false,
+   "prerelease": false,
+   "created_at": "2026-06-16T13:36:11Z",
+   "published_at": "2026-06-16T13:38:56Z"
+  }
+ ]
+}

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily: rotate the Burnticker logs (03:40 UTC)
+
+[Timer]
+OnCalendar=*-*-* 03:40:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+Unit=mct-burnticker-logrotate.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,123 @@
+{
+  "forward_2026-10-11": {
+    "signature": "2Cg9ouyAtE29NEsZQ3NuQKJ5ZYrfKczVpcT9MbMnuUvbLWK3v6LrVxBpCrAAiP7Ym4PW1AmAgJTp6uAZV1PUiDeT",
+    "slot": 509957708,
+    "blockTime": 1791734964,
+    "err": null,
+    "computeUnits": 118660,
+    "memo": [
+      "Program log: Memo (len 85): \"PCLB|forward|from=6jxEWF78rtBs|to=7dNGQuvijwxF|period=2026-10-11|lamports=79306876|v1\""
+    ],
+    "events": [
+      {
+        "event": "ForwardedToWinner",
+        "data": {
+          "loser_mint": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+          "winner_mint": "7dNGQuvijwxFBw6PXUHnw2mfmTuRd2KmV6nBGrFxXb2T",
+          "record_date": 20261011,
+          "units": "17",
+          "pool_lamports": "504956626",
+          "lamports": "79306876",
+          "sol_lamports": "79306876",
+          "wsol_lamports": "0",
+          "cranker": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx"
+        }
+      }
+    ]
+  },
+  "forward_2026-10-10_below_floor": {
+    "signature": "4RFUhAB4vWgEC9J1ACC8agi9WyGuF1qgJryejBMKCAfvPueTwvZdNsX5Z1fuE4C3rap5DTwbk4ioExXWzK4kkY71",
+    "slot": 509957461,
+    "blockTime": 1791734905,
+    "err": null,
+    "computeUnits": 116016,
+    "memo": [
+      "Program log: Memo (len 78): \"PCLB|forward|from=6jxEWF78rtBs|to=7dNGQuvijwxF|period=2026-10-10|lamports=0|v1\""
+    ],
+    "events": [
+      {
+        "event": "ForwardedToWinner",
+        "data": {
+          "loser_mint": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+          "winner_mint": "7dNGQuvijwxFBw6PXUHnw2mfmTuRd2KmV6nBGrFxXb2T",
+          "record_date": 20261010,
+          "units": "13",
+          "pool_lamports": "4956626",
+          "lamports": "0",
+          "sol_lamports": "0",
+          "wsol_lamports": "0",
+          "cranker": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx"
+        }
+      }
+    ]
+  },
+  "link_pair": {
+    "signature": "5Gs6fZVnADg6npyGVJgVYpHZ3G4YF8djBHVBwMkwUQDtmQushdiPM7RXXkV58ggrr6tYJBtKBNiQYTh9WLQ5TYyJ",
+    "slot": 509957265,
+    "blockTime": 1791734858,
+    "err": null,
+    "computeUnits": 67282,
+    "memo": [],
+    "events": [
+      {
+        "event": "PairLinked",
+        "data": {
+          "mint": "7dNGQuvijwxFBw6PXUHnw2mfmTuRd2KmV6nBGrFxXb2T",
+          "pair_mint": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+          "paired": true,
+          "witness": 1,
+          "pairing_deadline": "0"
+        }
+      },
+      {
+        "event": "PairLinked",
+        "data": {
+          "mint": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+          "pair_mint": "7dNGQuvijwxFBw6PXUHnw2mfmTuRd2KmV6nBGrFxXb2T",
+          "paired": true,
+          "witness": 1,
+          "pairing_deadline": "0"
+        }
+      }
+    ]
+  },
+  "crank_A_2026-10-10": {
+    "signature": "3WohujuQ3nHH6828mxpDUeJgqgU8HqL4TB6YvDb53DZntem6x7r4iZKFMugmehN7udj8L87nkjaPGuEmsDBRsAhf",
+    "slot": 509957717,
+    "blockTime": 1791734966,
+    "err": null,
+    "computeUnits": 268240,
+    "memo": [
+      "Program log: Memo (len 246): \"PCLA|2026-10-10|src=fiscaldata.treasury.gov debt_to_penny|prev=40273000000000.00|now=40294000000000.00|delta=21000000000.00|units=21|pool=84711308|spent=1734235|got=2683394.875645|burn=2683394.875645|swap=7GRjCd6JjiHM|rules=sha256:9263c189340a|v2\""
+    ],
+    "events": [
+      {
+        "event": "SpendCapBound",
+        "data": {
+          "config": "QAHUpRFQzz9EkWgrGBMJ69svY55GaDB1XSmGg6SMEmx",
+          "record_date": 20261010,
+          "target_lamports": "16118202",
+          "spent_lamports": "1734235",
+          "reserve_cap_lamports": "1734235",
+          "carried_out_lamports": "14383967"
+        }
+      },
+      {
+        "event": "ReadingProcessed",
+        "data": {
+          "config": "QAHUpRFQzz9EkWgrGBMJ69svY55GaDB1XSmGg6SMEmx",
+          "record_date": 20261010,
+          "units": "21",
+          "outcome": 2,
+          "pool_lamports": "84711308",
+          "spent_lamports": "1734235",
+          "got": "2683394875645",
+          "burned": "2683394875645",
+          "owed": "0",
+          "shortfall": "0",
+          "cranker": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx"
+        }
+      }
+    ]
+  }
+}
