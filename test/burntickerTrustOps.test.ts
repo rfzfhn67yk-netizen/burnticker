@@ -244,7 +244,7 @@ describe("2 · feed health, status.json and the status page", () => {
     assert.equal(back.keeper.lastCycleAt, NOW - 30_000); assert.equal(back.keeper.active, true); assert.equal(back.keeper.role, "leader");
     // B-17 (2026-10-21): burn_receipts' recorded build is newer than the bytes on devnet and its upgrade is pending there; on mainnet it was
     // deployed that evening (vault transaction 4), so mainnet matches; pair_curve matches on both
-    assert.deepEqual(back.programs.map((p) => [p.name, p.verified]), [["burn_receipts", "upgrade-pending"], ["pair_curve", "matches"]]);
+    assert.deepEqual(back.programs.map((p) => [p.name, p.verified]), [["burn_receipts", "matches"], ["pair_curve", "matches"]]);
     assert.deepEqual(programStatuses(loadVerifiedBuild(ROOT), "mainnet").map((p) => p.verified), ["matches", "matches"]);
     // the standby reads it back as a heartbeat
     const fetchImpl: FetchJson = async () => ({ ok: true, status: 200, json: async () => back });

@@ -29,9 +29,8 @@
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": true,
-          "executableHash": "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c",
+          "executableHash": "34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee",
           "buildHash": "34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee",
-          "upgradePending": true,
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         },
         "pair_curve": {

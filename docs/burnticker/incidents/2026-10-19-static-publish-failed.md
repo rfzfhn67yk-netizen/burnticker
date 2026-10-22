@@ -55,5 +55,7 @@ compared the files a deploy-time script runs with the files the public tree hold
 ## Signed
 
 The operator, 2026-10-21.
-This file is not yet signed with the developer fee wallet. Until the operator adds that signature here, the git commit that adds this
-file is its only record.
+Document sha256 (of this file above the Signed heading): `e1f5ef97c451f8e19736773854aba461074f83ba54101c9ccf4fed2d6fa38c08`.
+Signature (developer fee wallet 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5, ed25519, base58) over
+"Burnticker postmortem 2026-10-19-static-publish-failed.md sha256 e1f5ef97c451f8e19736773854aba461074f83ba54101c9ccf4fed2d6fa38c08": `2UFi6Q81PHknH8Zm45KbGXBn3NpEyreQJQDfPMd2epBLXXNuP7cMREakRTPfBHKw4vRm1y8zv3D7kw2M9oPdFVny`.
+Signed in Phantom on 2026-10-21 and verified with ed25519 before this line was written.

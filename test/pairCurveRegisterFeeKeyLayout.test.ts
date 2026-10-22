@@ -53,11 +53,11 @@ describe("pair side register_fee_key account list follows the deployed burn prog
     assert.equal(await sideFeeKeyLaunchlabSlot({ connection: throwing, cluster: "mainnet", burnReceiptsProgramId: BR, verifiedBuild }), false);
     assert.equal(await sideFeeKeyLaunchlabSlot({ connection: throwing, cluster: "localnet", burnReceiptsProgramId: BR }), true);
   });
-  test("the checked-in table: mainnet runs the B-17 build since 2026-10-21, so a pair side there sends the B-17 list; devnet still runs round 5", () => {
+  test("the checked-in table: mainnet runs the B-17 build since 2026-10-21, so a pair side there sends the B-17 list; devnet too since the same evening", () => {
     const vb = loadVerifiedBuild(process.cwd());
     const d = vb.programs.find((p) => p.library === "burn_receipts")!.deployed;
     assert.equal(d.mainnet!.hash, "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b");
     assert.equal(registerFeeKeyLaunchlabSlot(d.mainnet!.hash, "mainnet", vb), true);
-    assert.equal(registerFeeKeyLaunchlabSlot(d.devnet!.hash, "devnet", vb), false);
+    assert.equal(registerFeeKeyLaunchlabSlot(d.devnet!.hash, "devnet", vb), true);
   });
 });

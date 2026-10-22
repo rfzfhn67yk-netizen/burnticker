@@ -66,5 +66,7 @@ registry and refused launches, as it is designed to.
 ## Signed
 
 The operator, 2026-10-21.
-This file is not yet signed with the developer fee wallet. Until the operator adds that signature here, the git commit that adds this
-file is its only record.
+Document sha256 (of this file above the Signed heading): `66a28dafb93aee1639fee2e19a305b6ad65cd7140ca7f1e1f679c9222672922b`.
+Signature (developer fee wallet 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5, ed25519, base58) over
+"Burnticker postmortem 2026-10-19-web-out-of-memory.md sha256 66a28dafb93aee1639fee2e19a305b6ad65cd7140ca7f1e1f679c9222672922b": `5Js23PDyF9A2KLZa7P1JKH9uFJRV1q2cBLdjQhpgP6Hv45tEJZ7UNf8gDJAtCCjYw4AbQmnHjnSSFndw1ssqrf2L`.
+Signed in Phantom on 2026-10-21 and verified with ed25519 before this line was written.

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { loadTransparency, TRANSPARENCY_FILE } from "@/lib/burnticker/trust";
 import { plainPower } from "@/lib/burnticker/powerPlain";
-import { DEPLOY_EVIDENCE, loadVerifiedBuild, VERIFIED_BUILD_FILE, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { DEPLOY_EVIDENCE, loadVerifiedBuild, VERIFIED_BUILD_FILE, withLiveDeployed, type BuildVariant, type LiveBytes, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { loadOperator, OPERATOR_FILE } from "@/lib/burnticker/trustpack/operator";
 import { CHECK_COPY, POWERS_SCOPE } from "@/lib/burnticker/trustpack/copy";
 
@@ -127,11 +127,17 @@ export function moneySourceLine(money: readonly Pick<MoneyRow, "sourceOnly" | "p
     : ` The deployed programs are the build of commit ${short(build.sourceCommit)}, checked in section 5.`;
   return head + five + deployed;
 }
-export function buildChecklist(root = process.cwd()): Checklist {
+/**
+ * `live` (HS-121): the served page passes each network's live ProgramData reads (currentStatus.ts liveDeployedReads), so the build
+ * table's "same bytes / the earlier build" follows the chain and says when it was read; a failed read keeps the record with "last read
+ * <time>". The static document (docs/burnticker/CHECK-THIS-YOURSELF.md, scripts/burnticker-trustpack.mts check-doc) passes nothing and
+ * states the record, so it lags a live upgrade until the record is updated and the document is written again.
+ */
+export function buildChecklist(root = process.cwd(), live: Partial<Record<BuildVariant, Record<string, LiveBytes | null>>> | null = null): Checklist {
   const regs = { burn_receipts: loadRegister(root, "burn_receipts"), pair_curve: loadRegister(root, "pair_curve") };
   const t = loadTransparency(root);
   const op = loadOperator(root);
-  const vb = loadVerifiedBuild(root);
+  const vb = withLiveDeployed(loadVerifiedBuild(root), live);
   // audit R05: each deployed record names its own evidence (mainnet deploy file / devnet verified-build doc)
   const build: VerifiedBuild = { ...vb, programs: vb.programs.map((p) => ({ ...p, deployed: { devnet: p.deployed.devnet ? { ...p.deployed.devnet, evidence: p.deployed.devnet.evidence ?? DEPLOY_EVIDENCE.devnet } : null, mainnet: p.deployed.mainnet ? { ...p.deployed.mainnet, evidence: p.deployed.mainnet.evidence ?? DEPLOY_EVIDENCE.mainnet } : null } })) };
   const money: MoneyRow[] = [], powers: PowerRow[] = [];

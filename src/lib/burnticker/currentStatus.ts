@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { bothTiersLineNow } from "@/lib/burnticker/feeShareLine";
-import { tierPinPendingFor } from "@/lib/burnticker/deployedTierPin";
+import { tierPinPendingLive } from "@/lib/burnticker/deployedTierPin";
 import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
 import path from "node:path";
 import { b58encode, base64ToBytes } from "@/lib/burnticker/trustpack/base58";
@@ -8,7 +8,8 @@ import { jsonRpc, type Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
 import { rpcUrlFor } from "@/lib/burnticker/networks";
 import { CURRENT_STATUS_FILE, readStatusFile } from "@/lib/burnticker/deficitPrelaunch";
 import type { AuthoritySource } from "@/lib/burnticker/currentStatusText";
-import { pendingUpgradeSentence } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { deployedNow, deployedReadSentence, executableHash, pendingUpgradeSentence, readTime, type Deployed, type DeployedNow } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { PROGRAM_DATA_HEADER, rememberLiveProgramHash, type LiveProgramHash } from "@/lib/burnticker/programHash";
 export { upgradeAuthorityText, upgradeDelaySummary, type AuthoritySource } from "@/lib/burnticker/currentStatusText";
 
 /**
@@ -65,7 +66,9 @@ async function accounts(rpc: Rpc, keys: string[]): Promise<(Acct | null)[]> {
  * "unavailable" and its `upgradeAuthority` carries no meaning.
  */
 export type AuthorityRead = "decoded" | "unavailable";
-export interface ProgramRead { deployed: boolean; upgradeAuthority: string | null; authorityRead: AuthorityRead }
+export interface ProgramRead { deployed: boolean; upgradeAuthority: string | null; authorityRead: AuthorityRead;
+  /** HS-121: the executable hash of the ProgramData bytes and their deploy slot, from the same read (absent: not decoded) */
+  hash?: string; slot?: number; programData?: string }
 export interface ChainFacts { cluster: Cluster; readAt: string; error: string | null; squads: SquadsRead | null; programs: Record<string, ProgramRead> }
 
 export async function readChainFacts(cluster: Cluster, rpc: Rpc, multisig: string | null, programIds: string[], now = Date.now()): Promise<ChainFacts> {
@@ -82,12 +85,31 @@ export async function readChainFacts(cluster: Cluster, rpc: Rpc, multisig: strin
       pd.forEach((x, i) => {
         const acc = b?.[i];
         // a missing account, a foreign owner or bytes that do not decode stay "unavailable" — never read as "no upgrade authority"
-        const auth = acc && acc.owner === UPGRADEABLE_LOADER && Array.isArray(acc.data) ? upgradeAuthorityOf(base64ToBytes(acc.data[0])) : undefined;
-        if (auth !== undefined) out.programs[x.id] = { deployed: true, upgradeAuthority: auth, authorityRead: "decoded" };
+        const bytes = acc && acc.owner === UPGRADEABLE_LOADER && Array.isArray(acc.data) ? base64ToBytes(acc.data[0]) : null;
+        const auth = bytes ? upgradeAuthorityOf(bytes) : undefined;
+        if (auth !== undefined && bytes) {
+          // HS-121: the same bytes give the live hash the pages' match / pending copy follows (programHash.ts readProgramDataHash's rule)
+          const live = bytes.length >= PROGRAM_DATA_HEADER ? { hash: executableHash(bytes.subarray(PROGRAM_DATA_HEADER)), slot: Number(new DataView(bytes.buffer, bytes.byteOffset + 4, 8).getBigUint64(0, true)) } : null;
+          out.programs[x.id] = { deployed: true, upgradeAuthority: auth, authorityRead: "decoded", ...(live ? { ...live, programData: x.pd } : {}) };
+        }
       });
     }
   } catch (e) { out.error = (e as Error).message.slice(0, 200); }
+  // HS-121: one live read for every page in this process (the trust page reads through programHash.ts liveProgramHash)
+  for (const id of programIds) rememberLiveProgramHash(cluster, id, liveOf(out, id), now);
   return out;
+}
+
+/** HS-121: one program's live bytes in a chain read (null: the read failed or did not decode the ProgramData). */
+export function liveOf(facts: ChainFacts, programId: string): LiveProgramHash | null {
+  const r = facts.programs[programId];
+  return r?.hash && typeof r.slot === "number" ? { hash: r.hash, slot: r.slot, programData: r.programData ?? "", readAt: readTime(Date.parse(facts.readAt)) } : null;
+}
+/** HS-121: the deployed record of one network as the pages state it: the live read when made, else the record (with a last-read note when the read failed). */
+export function deployedFromChain(d: Deployed | null | undefined, buildHash: string, facts: ChainFacts | undefined, programId: string): DeployedNow | null {
+  if (!facts) return deployedNow(d, buildHash, null, false);
+  const live = liveOf(facts, programId);
+  return deployedNow(d, buildHash, live, !live);
 }
 
 // ---- the joined status ----
@@ -143,10 +165,13 @@ export function mainnetDeployment(recorded: boolean, facts: ChainFacts | undefin
     // I-1 (audit 2026-10-19): the mainnet read-back is stated too (bytes and authority), never only devnet's
     const auth = live?.deployed && live.authorityRead === "decoded" ? (live.upgradeAuthority ? `Its mainnet upgrade authority is ${live.upgradeAuthority}, read from chain.` : "It has no mainnet upgrade authority, read from chain.")
       : build ? `Its mainnet upgrade authority is ${build.upgradeAuthority}, as recorded in verified-build.json${build.readAt ? ` on ${build.readAt}` : ""}.` : "";
+    // HS-121: the bytes are the live ProgramData read when one was made (deployedFromChain); the record only when it failed, with when it was last read
+    const d = build ? (buildHash ? deployedFromChain(build as Deployed, buildHash, facts, programId) : { ...(build as Deployed), source: "record" as const }) : null;
     // B-17 (2026-10-21): a newer build whose upgrade has not been deployed is said as that, and the newer build is not called verified
-    const pending = build && !build.matchesBuild && build.pendingUpgrade && build.hash && buildHash ? pendingUpgradeSentence("mainnet", buildHash, build.hash) : null;
-    const bytes = build ? (build.matchesBuild ? " Its bytes there match this repository's recorded build." : pending ? ` ${pending}` : " Its bytes there DO NOT match the recorded build.") : "";
-    return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: `It is deployed on mainnet.${bytes}${auth ? ` ${auth}` : ""}`, ...(build ? { matchesBuild: build.matchesBuild } : {}), ...(pending ? { upgradePending: pending } : {}) };
+    const pending = d && !d.matchesBuild && d.pendingUpgrade && d.hash && buildHash ? pendingUpgradeSentence("mainnet", buildHash, d.hash) : null;
+    const bytes = d ? (d.matchesBuild ? " Its bytes there match this repository's recorded build." : pending ? ` ${pending}` : " Its bytes there DO NOT match the recorded build.") : "";
+    const read = d ? deployedReadSentence(d) : "";
+    return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: `It is deployed on mainnet.${bytes}${read ? ` ${read}` : ""}${auth ? ` ${auth}` : ""}`, ...(d ? { matchesBuild: d.matchesBuild } : {}), ...(pending ? { upgradePending: pending } : {}) };
   }
   if (live) return { deployed: false, source: "chain", line: "It is not deployed on mainnet yet." };
   if (facts) return { deployed: null, source: "unavailable", line: "Its mainnet deployment is unknown because the chain read failed." };
@@ -193,14 +218,18 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   const host = { cluster, programIdWired: wired, creatorLaunchesOpen: open, canSign: launch.canSign, line: `This site is showing ${cluster}.${wired ? "" : " No program is connected on this site."} ${launch.sentence}` };
   const programs = vb.programs.map((p) => {
     const meta = st.programs.find((x) => x.name === p.library) ?? { version: "—", note: "" };
-    const dev = p.deployed.devnet, liveDev = i.chain.devnet?.programs[p.programId];
+    // HS-121: devnet's bytes from the live read too (the record when the read failed or was not made)
+    const dev = deployedFromChain(p.deployed.devnet as Deployed | null, p.builds.devnet.hash, i.chain.devnet, p.programId), liveDev = i.chain.devnet?.programs[p.programId];
     const devReadFailed = !!i.chain.devnet && !liveDev;
     return {
       name: p.library, programId: p.programId, version: meta.version, note: meta.note, verifiedBuild: vb.kind,
-      devnet: { deployed: liveDev ? liveDev.deployed : !!dev, matchesBuild: dev ? dev.matchesBuild : null, ...devnetAuthority(liveDev, dev?.upgradeAuthority, devReadFailed), recordedAt: dev?.readAt ?? null, recordedUpgradeAuthority: dev?.upgradeAuthority ?? null, ...(dev && !dev.matchesBuild && dev.pendingUpgrade ? { upgradePending: pendingUpgradeSentence("devnet", p.builds.devnet.hash, dev.hash) } : {}) },
+      devnet: { deployed: liveDev ? liveDev.deployed : !!dev, matchesBuild: dev ? dev.matchesBuild : null, ...devnetAuthority(liveDev, dev?.upgradeAuthority, devReadFailed), recordedAt: p.deployed.devnet?.readAt ?? null, recordedUpgradeAuthority: p.deployed.devnet?.upgradeAuthority ?? null, ...(dev && !dev.matchesBuild && dev.pendingUpgrade ? { upgradePending: pendingUpgradeSentence("devnet", p.builds.devnet.hash, dev.hash) } : {}) },
       mainnet: mainnetDeployment(!!p.deployed.mainnet, i.chain.mainnet, p.programId, p.deployed.mainnet, p.builds.mainnet.hash),
     };
   });
+  // HS-121: the tier-pin sentence follows mainnet's live burn-program hash (the stored record when the read failed or was not made)
+  const burnId = vb.programs.find((p) => p.library === "burn_receipts")?.programId;
+  const mainBurnLive = i.chain.mainnet && burnId ? liveOf(i.chain.mainnet, burnId)?.hash ?? null : null;
   const upgradeAuthority = (["mainnet", "devnet"] as Cluster[]).map((c) => {
     const sq = op.clusters[c].squads, plan = st.squads[c], live = i.chain[c]?.squads ?? null;
     return { cluster: c, vault: sq.vault, multisig: sq.multisig, threshold: live ? `${live.threshold} of ${live.members}` : sq.threshold, members: live?.members ?? null, timeLockSecs: live?.timeLockSecs ?? null, timeLockSource: (live ? "chain" : "unavailable") as "chain" | "unavailable", plannedTimeLockSecs: plan.plannedTimeLockSecs, plannedFrom: plan.plannedFrom, why: plan.why, line: timeLockLine(c, live?.timeLockSecs ?? null, plan.plannedTimeLockSecs, plan.plannedFrom) };
@@ -225,7 +254,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     st.attesters.line,
     // audit 4 BT-12: who can authorise an upgrade and how much notice there is, in the top-level summary (keys vs controllers)
     `The 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock, an approved upgrade executes at once, with no advance notice." : ""}`,
-    `The operator earns 0.25% of curve trading volume. ${bothTiersLineNow(tierPinPendingFor(vb))} The coin side of the liquidity fees is burned. Creators take no cash from fees.`,
+    `The operator earns 0.25% of curve trading volume. ${bothTiersLineNow(tierPinPendingLive(vb, mainBurnLive))} The coin side of the liquidity fees is burned. Creators take no cash from fees.`,
     `No security firm has audited the code. ${waiting === 1 ? "One fixed finding still waits" : `${countWord(waiting)} fixed findings still wait`} for an independent re-check.`,
     // eighth pass B-25 (owner 2026-10-21): the count of open release items is no longer a summary sentence; the list stays behind its disclosure
     // HB-82: while today's registry snapshot is not pinned, the summary says so
@@ -243,7 +272,8 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
 // ---- the served object (cached chain reads) ----
 
 let cache: { at: number; facts: Partial<Record<Cluster, ChainFacts>> } | null = null;
-export async function currentStatusLive(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), now = Date.now(), o: { registrySnapshot?: { date: string; pinned: boolean; line: string | null } | null } = {}): Promise<CurrentStatus> {
+/** Both networks' chain facts, read at most every five minutes (the Squads, authority and, since HS-121, the deployed-bytes reads). */
+export async function chainFactsCached(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), now = Date.now()): Promise<Partial<Record<Cluster, ChainFacts>>> {
   if (!cache || now - cache.at > 300_000) {
     const op = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "operator.json"), "utf8")) as OperatorFile;
     const vb = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "verified-build.json"), "utf8")) as VerifiedBuild;
@@ -252,7 +282,26 @@ export async function currentStatusLive(env: Readonly<Record<string, string | un
     const [devnet, mainnet] = await Promise.all((["devnet", "mainnet"] as Cluster[]).map((c) => { const ms = op.clusters[c].squads.multisig; return readChainFacts(c, jsonRpc(rpcUrl(c), fetch, { attempts: 2 }), isKey(ms) ? ms : null, ids, now); }));
     cache = { at: now, facts: { devnet, mainnet } };
   }
-  return buildCurrentStatus({ root, env, chain: cache.facts, now, ...(o.registrySnapshot !== undefined ? { registrySnapshot: o.registrySnapshot } : {}) });
+  return cache.facts;
+}
+export async function currentStatusLive(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), now = Date.now(), o: { registrySnapshot?: { date: string; pinned: boolean; line: string | null } | null } = {}): Promise<CurrentStatus> {
+  const chain = await chainFactsCached(env, root, now);
+  return buildCurrentStatus({ root, env, chain, now, ...(o.registrySnapshot !== undefined ? { registrySnapshot: o.registrySnapshot } : {}) });
+}
+
+/**
+ * HS-121: each network's live deployed-bytes read per program id, from the same five-minute read (null: the read failed), for the check
+ * and operator pages. A read that throws is a failed read for every program, so those pages fall back to the record with its time.
+ */
+export type LiveDeployedReads = Record<Cluster, Record<string, LiveProgramHash | null>>;
+export async function liveDeployedReads(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), now = Date.now()): Promise<LiveDeployedReads> {
+  const out: LiveDeployedReads = { devnet: {}, mainnet: {} };
+  let ids: string[] = [];
+  try { ids = (JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "verified-build.json"), "utf8")) as VerifiedBuild).programs.map((p) => p.programId); } catch { return out; }
+  let facts: Partial<Record<Cluster, ChainFacts>> = {};
+  try { facts = await chainFactsCached(env, root, now); } catch { facts = {}; }
+  for (const c of ["devnet", "mainnet"] as Cluster[]) for (const id of ids) { const f = facts[c]; out[c][id] = f ? liveOf(f, id) : null; }
+  return out;
 }
 
 /**

@@ -109,7 +109,7 @@ describe("I-1 mainnet bytes and authority are stated, not only devnet's", () => 
   });
   test("the summary line says both networks match, and the devnet authority is labelled devnet", () => {
     const s = buildCurrentStatus({ root: ROOT, env: {}, chain: {}, now: Date.parse("2026-10-19T12:00:00Z") });
-    // B-17 (2026-10-21): pair_curve's round-4 bytes are its build; burn_receipts runs B-17 on mainnet and round 5 on devnet (next test)
+    // B-17 (2026-10-21): pair_curve's round-4 bytes are its build; burn_receipts runs B-17 on both networks since 2026-10-21 (next test)
     const pair = s.lines.find((l) => l.startsWith("The program that runs pair launches (pair_curve)"))!;
     assert.match(pair, /On both networks its bytes match this repository's recorded build\./);
     const p = s.programs.find((x) => x.name === "burn_receipts")!;
@@ -117,14 +117,13 @@ describe("I-1 mainnet bytes and authority are stated, not only devnet's", () => 
     assert.match(upgradeAuthorityText(p.devnet, "devnet"), /^The devnet upgrade authority is A8VV/);
     assert.equal(s.checkedAt, "2026-10-19", "the checked-on date is current");
   });
-  test("B-17 deployed on mainnet (2026-10-21), not on devnet: mainnet says the bytes match with no pending sentence; devnet says a newer build is not deployed and never calls it verified", () => {
-    const s = buildCurrentStatus({ root: ROOT, env: {}, chain: {}, now: Date.parse("2026-10-21T12:00:00Z") });
+  test("B-17 deployed on mainnet and devnet (2026-10-21): both networks say the bytes match, no pending sentence anywhere", () => {
+    const s = buildCurrentStatus({ root: ROOT, env: {}, chain: {}, now: Date.parse("2026-10-22T01:00:00Z") });
     const burn = s.lines.find((l) => l.startsWith("The program that records burns (burn_receipts)"))!;
-    const dev = "This repository has a newer build (34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee) whose upgrade has not been deployed on devnet, so the bytes there are still the earlier build (74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c). The newer build is not verified on chain until the bytes read back from devnet match it.";
-    assert.equal(burn, `The program that records burns (burn_receipts) is deployed on devnet and on mainnet. On mainnet its bytes match this repository's recorded build. ${dev}`);
-    assert.doesNotMatch(burn, /DO NOT match|has not been deployed on mainnet/);
+    assert.equal(burn, "The program that records burns (burn_receipts) is deployed on devnet and on mainnet. On both networks its bytes match this repository's recorded build.");
+    assert.doesNotMatch(burn, /DO NOT match|has not been deployed/);
     const p = s.programs.find((x) => x.name === "burn_receipts")!;
-    assert.equal(p.devnet.matchesBuild, false); assert.equal(p.devnet.upgradePending, dev);
+    assert.equal(p.devnet.matchesBuild, true); assert.equal(p.devnet.upgradePending, undefined);
     assert.equal(p.mainnet.matchesBuild, true); assert.equal(p.mainnet.upgradePending, undefined);
     assert.match(p.mainnet.line, /^It is deployed on mainnet\. Its bytes there match this repository's recorded build\. Its mainnet upgrade authority is 8zsH/);
     clean(burn); clean(p.mainnet.line);
@@ -135,7 +134,7 @@ describe("I-1 mainnet bytes and authority are stated, not only devnet's", () => 
     assert.match(read("src/app/burnticker/_components/CurrentStatusSummary.tsx"), /p\.devnet\.upgradePending \? ` \$\{p\.devnet\.upgradePending\}` : ""/);
   });
   test("the trust page's chain facts name the mainnet match and its authority", () => {
-    assert.match(read("src/lib/burnticker/trust.ts"), /mainnet: p\.deployed\.mainnet \? `deployed \(read \$\{p\.deployed\.mainnet\.readAt\}\$\{bytes\(p\.deployed\.mainnet\)\}; upgrade authority \$\{p\.deployed\.mainnet\.upgradeAuthority\}\)`/);
+    assert.match(read("src/lib/burnticker/trust.ts"), /mainnet: main \? `deployed \(\$\{when\(main\)\}\$\{bytes\(main\)\}; upgrade authority \$\{main\.upgradeAuthority\}\)`/);
   });
 });
 

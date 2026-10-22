@@ -65,9 +65,9 @@ describe("HB-13: a coin's fee legs come from the tier it pinned; the site-wide c
   });
   test("footer, current-status, trust, fee ledger and the operator note all carry the one split", () => {
     assert.ok(DEV_FEE_LINE.includes("every coin pays 1.25% per swap (Raydium fee tier 14)") && !DEV_FEE_LINE.includes("0.88%"), DEV_FEE_LINE);
-    assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{bothTiersLineNow\(tierPinPendingFor\(vb\)\)\}/);   // HS-96: BOTH_TIERS_LINE plus the tier-pin sentence while pending
+    assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{bothTiersLineNow\(tierPinPendingLive\(vb, mainBurnLive\)\)\}/);   // HS-96: BOTH_TIERS_LINE plus the tier-pin sentence while pending
     // HB-50 (run 4): another network names its own tier; mainnet adds who decides the tier (eighth pass B-23)
-    assert.match(read("src/lib/burnticker/trust.ts"), /cluster === "mainnet" \? `\$\{BOTH_TIERS_LINE\} \$\{deployedTierPinLine\(root\) \? `\$\{DEPLOYED_TIER_PIN_LINE\} ` : ""\}\$\{FEE_TIER_DECIDER_LINE\}` : `\$\{postGraduationShareLine\(newCoinFees\)\} \$\{earlierCoinsLineFor\(cluster\)\}`/);
+    assert.match(read("src/lib/burnticker/trust.ts"), /cluster === "mainnet" \? `\$\{BOTH_TIERS_LINE\} \$\{tierPinPending \? `\$\{DEPLOYED_TIER_PIN_LINE\} ` : ""\}\$\{FEE_TIER_DECIDER_LINE\}` : `\$\{postGraduationShareLine\(newCoinFees\)\} \$\{earlierCoinsLineFor\(cluster\)\}`/);
     const ledger = lpFeeLine("mainnet", null).title;
     assert.match(ledger, /about 0\.13% of every swap .* on every coin, after graduation$/);
     assert.ok(OPERATOR_COPY.devFeeNote.includes("on every coin, whenever it was made"));
