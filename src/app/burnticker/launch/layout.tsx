@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const description = `${siteLaunchState(process.env).meta.description} The launch page explains what a coin is: one locked rule, a burn budget from the coin's own trading fees, and a receipt for every burn.`;
   return {
     title: "Launch", description, alternates: { canonical: "/burnticker/launch" },
-    openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker · Launch", description, url: "/burnticker/launch", images: [{ url: "https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+    openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker · Launch", description, url: "/burnticker/launch", images: [{ url: "https://burnticker.com/burnticker/brand/og-544200bcce.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
     twitter: { card: "summary_large_image", title: "Burnticker · Launch", description },
   };
 }

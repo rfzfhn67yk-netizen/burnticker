@@ -84,12 +84,14 @@ export const PREPARING_LAUNCH_LINE = "Preparing the launch: pinning the coin's d
 /** Under the review card's Launch button from the press until the wallet opens (owner, 2026-10-14: "people need to know the coin is
  * launching while it builds so they don't exit out"): the preparing line, then what to do meanwhile. */
 export const LAUNCHING_NOTICE = `${PREPARING_LAUNCH_LINE} Keep this tab open; your wallet opens when it is ready.`;
-export const CHAIN_CONFIRM_LINE = "Waiting for the chain to confirm. A few seconds.";
+export const CHAIN_CONFIRM_LINE = "Waiting for the chain to confirm this step. Usually under a minute, sometimes two. Keep this tab open.";
+/** Owner 2026-10-22 (watching the pair launch): while the wallet holds a step, say how long the whole thing takes so nobody closes the tab. */
+export const WALLET_SIGN_LINE = "Your wallet is asking you to sign this step. Each step takes a minute or two from signing to confirmation, and the site keeps working between them. Keep this tab open.";
 export const READ_BACK_LINE = "Writing the coin's accounts on chain. The coin page opens when they are read back.";
 /** The sign card's wait: the wallet has the transaction ("wallet"), the chain is confirming it ("chain"), the coin is being read back ("record"). */
 export type LaunchWaitPhase = "wallet" | "chain" | "record" | null;
-/** The line the sign card shows while it runs; none while the wallet itself is asking, and none when idle. */
-export const waitLineFor = (busy: boolean, phase: LaunchWaitPhase): string | null => (!busy ? null : phase === "chain" ? CHAIN_CONFIRM_LINE : phase === "record" ? READ_BACK_LINE : null);
+/** The line the sign card shows while it runs: the wallet wait, the chain wait, the read-back; none when idle or while a step is being built. */
+export const waitLineFor = (busy: boolean, phase: LaunchWaitPhase): string | null => (!busy ? null : phase === "wallet" ? WALLET_SIGN_LINE : phase === "chain" ? CHAIN_CONFIRM_LINE : phase === "record" ? READ_BACK_LINE : null);
 
 /** Above the Launch button when a launch signs more than one transaction (owner, 2026-10-14: say so before the wallet opens). */
 // HB-53 (sixth pass): `n` counts the sign-message request that proves the launch is the wallet's own. HB-92 residue (hourly run 8):

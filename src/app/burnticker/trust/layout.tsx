@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 const DESCRIPTION = "What the operator can and cannot do, in one place. It covers the deployment, the programs, who signs readings, who can approve an upgrade and how long it must wait, the reviews, the fees and every wallet, read from the chain where possible.";
 export const metadata: Metadata = {
   title: "Trust", description: DESCRIPTION, alternates: { canonical: "/burnticker/trust" },
-  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker · Trust", description: DESCRIPTION, url: "/burnticker/trust", images: [{ url: "https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker · Trust", description: DESCRIPTION, url: "/burnticker/trust", images: [{ url: "https://burnticker.com/burnticker/brand/og-544200bcce.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
 };
 
 export default function Layout({ children }: { children: ReactNode }) { return children; }

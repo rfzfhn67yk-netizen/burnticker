@@ -15,6 +15,7 @@ import { beforeUnloadGuard, holdPlan, planHoldsKeys } from "@/lib/burnticker/pla
 import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
 import { matchesSuffix } from "@/lib/burnticker/vanityMint";
 import { MINT_ADDRESS_NOTE, waitLineFor, type LaunchWaitPhase } from "@/lib/burnticker/mintAddressCopy";
+import { WALLET_SLOW_LINE, withWalletWatchdog } from "@/lib/burnticker/walletProof";
 import { LaunchedTrade } from "../_components/TradeLinks";
 import { withFlight } from "@/lib/burnticker/rpcProxy";
 import { retry429 } from "@/lib/burnticker/retry429";
@@ -174,7 +175,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
       };
       const std = standardWalletOf(wallet.wallet?.adapter), account = standardAccountFor(std, walletKey);
       const v0: Pick<V0SendDeps, "signTransaction" | "simulate" | "lookupTable"> = {
-        signTransaction: async (tx) => { setPhase("wallet"); const signed = await wallet.signTransaction!(tx); setPhase("chain"); return signed; },
+        signTransaction: async (tx) => { setPhase("wallet"); const signed = await withWalletWatchdog(wallet.signTransaction!(tx), () => setNotice(WALLET_SLOW_LINE)); setPhase("chain"); return signed; },
         // Phantom ticket 438485: dry-run each step before the wallet sees it (a transaction that fails on chain trips the wallet's warning)
         simulate: async (tx) => { const r = (await connection.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" })).value; return r.err ? simulationFailureText(r.err, r.logs) : null; },
         lookupTable: () => verifiedLookupTable(connection, network, pin),
@@ -190,7 +191,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         } : {}),
         // Phantom v1 (ticket 438485): the wallet signs the raw bytes through its wallet-standard feature; the dry run is raw base64 over
         // the same-origin proxy (the adapter's Connection carries the flight token), and it sizes the step (signPlanV1.ts)
-        format: v1Format({ signBytes: async (bytes) => { setPhase("wallet"); const signed = await signWithStandardWallet(std, account, chainIdOf(network ?? "devnet"), bytes); setPhase("chain"); return signed; }, simulate: (b64) => simulateBase64(connectionRpc(connection), b64) }, planRun),
+        format: v1Format({ signBytes: async (bytes) => { setPhase("wallet"); const signed = await withWalletWatchdog(signWithStandardWallet(std, account, chainIdOf(network ?? "devnet"), bytes), () => setNotice(WALLET_SLOW_LINE)); setPhase("chain"); return signed; }, simulate: (b64) => simulateBase64(connectionRpc(connection), b64) }, planRun),
       } : { ...common, ...v0 };
       const r = await signAndSendPlan(planRun, creator, deps, (i, sig) => setDone((d) => (d.length === i ? [...d, sig] : d)), done);
       setDone(r.signatures);
@@ -238,7 +239,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
           const st = states[i], sig = st === "confirmed" ? done[i] : stopped?.failedAt === i ? stopped.signature : undefined;
           return (
             <li key={`${i}-${t.label}`} className="flex flex-wrap items-baseline gap-2" data-step-state={st}>
-              <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] ${st === "confirmed" ? "border-emerald-400 text-emerald-400" : st === "sent" || (busy && i === done.length) ? "border-amber-400 text-amber-300" : st === "failed" || st === "abandoned" ? "border-red-400 text-red-400" : "border-neutral-600 text-neutral-400"}`}>{st === "confirmed" ? "✓" : i + 1}</span>
+              <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] ${st === "confirmed" ? "border-emerald-400 text-emerald-400" : st === "sent" || (busy && i === done.length) ? "border-amber-400 text-amber-300" : st === "failed" || st === "abandoned" ? "border-red-400 text-red-400" : "border-neutral-600 text-neutral-400"}`}>{st === "confirmed" ? "✓" : busy && i === done.length ? <span aria-hidden className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" data-step-spinner /> : i + 1}</span>
               <span className="text-neutral-200" title={t.label}>{stepName(t, i)}</span>
               <span className="text-neutral-500">signed by {t.signers.map(signerName).join(" + ")}</span>
               {st === "confirmed" && <span className="text-neutral-500">· {stepStatusText("confirmed", sig)}</span>}
@@ -277,6 +278,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         <div className="text-amber-400 text-xs"><p>Not signable here yet:</p><ul className="list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul>{pins === null && <button type="button" data-pin-retry className="mt-1 rounded border border-amber-400 px-2 py-1 text-amber-300" onClick={() => setPinTry((x) => x + 1)}>Read the setting again</button>}</div>
       ) : (
         <button type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-50" disabled={busy} onClick={go}>
+          {busy && <span aria-hidden className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-neutral-950 border-t-transparent align-[-2px]" data-launch-spinner />}
           {busy ? `Signing step ${Math.min(done.length + 1, n)} of ${n}…` : stopped?.state === "sent" ? `Check step ${(stopped.failedAt ?? 0) + 1} on chain and continue` : expired && unrecorded ? RECORD_LANDED_LABEL : done.length >= n ? "Record the launch again" : done.length ? `Continue from step ${done.length + 1} of ${n}` : `Sign in your wallet (${n} step${n === 1 ? "" : "s"})`}
         </button>
       )}

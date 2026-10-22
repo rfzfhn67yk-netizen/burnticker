@@ -49,10 +49,10 @@ export function parseWalletProof(message: string): ProofFields | null {
  * The launch page's side (A-3): asks the wallet to sign the request text for one Launch press. A wallet that cannot sign messages, or a
  * creator who declines, gives null and the press goes on unsigned (it then uses only the unsigned part of the day's uploads).
  */
-export async function signLaunchRequest(signMessage: ((m: Uint8Array) => Promise<Uint8Array>) | undefined, f: { creator: string; tickers: readonly string[]; mints: readonly string[]; /** the page's origin (window.location.origin); default the public site */ origin?: string }, encode58: (b: Uint8Array) => string, now = Date.now()): Promise<WalletProof | null> {
+export async function signLaunchRequest(signMessage: ((m: Uint8Array) => Promise<Uint8Array>) | undefined, f: { creator: string; tickers: readonly string[]; mints: readonly string[]; /** the page's origin (window.location.origin); default the public site */ origin?: string; /** HS-133: told once when the wallet has not answered for WALLET_WATCHDOG_MS */ onSlow?: () => void }, encode58: (b: Uint8Array) => string, now = Date.now()): Promise<WalletProof | null> {
   if (!signMessage || !f.creator) return null;
   const message = walletProofMessage({ origin: f.origin ?? DEFAULT_PROOF_ORIGIN, creator: f.creator, tickers: f.tickers, mints: f.mints.length ? f.mints : null, nonce: newProofNonce(), issuedAt: new Date(now).toISOString() });
-  try { return { message, signature: encode58(await signMessage(new TextEncoder().encode(message))) }; } catch { return null; }
+  try { const ask = signMessage(new TextEncoder().encode(message)); return { message, signature: encode58(await (f.onSlow ? withWalletWatchdog(ask, f.onSlow) : ask)) }; } catch { return null; }
 }
 
 /**
@@ -105,3 +105,14 @@ export async function sendWithProofFallback<T>(body: Record<string, unknown>, se
 /** Review of block M: the review's button for a creator whose own unfinished launch holds the ticker. */
 export const PROVE_TICKER_LABEL = "Is this ticker held by your own unfinished launch? Confirm it with your wallet.";
 
+/**
+ * HS-133 (2026-10-22): twice in one morning a Phantom request (the sign-message proof, then step 1's signature) never resolved and showed
+ * no prompt, and the page sat on "Building…" with nothing to say. Every wallet request now runs under this watchdog: after
+ * WALLET_WATCHDOG_MS without an answer, onSlow fires once (the page shows WALLET_SLOW_LINE) while the request is left to resolve.
+ */
+export const WALLET_WATCHDOG_MS = 60_000;
+export const WALLET_SLOW_LINE = "Your wallet has not answered for a minute. Open the Phantom extension to find the request, or reload this tab and press Launch again. Nothing was sent.";
+export function withWalletWatchdog<T>(p: Promise<T>, onSlow: () => void, ms = WALLET_WATCHDOG_MS): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | null = setTimeout(() => { t = null; try { onSlow(); } catch { /* a notice never changes the answer */ } }, ms);
+  return p.finally(() => { if (t) clearTimeout(t); });
+}

@@ -166,12 +166,12 @@ const page = `<!DOCTYPE html>
 <link rel="canonical" href="https://burnticker.com${opts.path}">
 <meta property="og:title" content="${esc(opts.title)}">
 <meta property="og:description" content="How a settled real-world result becomes a burn on Solana, what powers exist, and how anyone can recompute every receipt.">
-<meta property="og:image" content="https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg">
+<meta property="og:image" content="https://burnticker.com/burnticker/brand/og-544200bcce.jpg">
 <meta property="og:url" content="https://burnticker.com${opts.path}">
 <meta property="og:type" content="article">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@BurnTicker">
-<meta name="twitter:image" content="https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg">
+<meta name="twitter:image" content="https://burnticker.com/burnticker/brand/og-544200bcce.jpg">
 <link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
 <script>${THEME_BOOT_JS}</script>
 <style>${shellFontCss()}

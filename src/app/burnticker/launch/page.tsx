@@ -20,7 +20,7 @@ import { CoinVsCoinTile, CVC_STORE, type TileAnswers } from "./CoinVsCoinTile";
 import { LAUNCH_START_EVENT } from "@/lib/burnticker/launchStart";
 import { SignCard } from "./SignCard";
 import { MintAddressBlock, useMintPool } from "./MintSearch";
-import { parseWalletProof, PROOF_MAX_AGE_MS, requireLaunchProof, sendWithProofFallback, signLaunchRequest, walletPromptCount, type WalletProof } from "@/lib/burnticker/walletProof";
+import { parseWalletProof, PROOF_MAX_AGE_MS, requireLaunchProof, WALLET_SLOW_LINE, sendWithProofFallback, signLaunchRequest, walletPromptCount, type WalletProof } from "@/lib/burnticker/walletProof";
 import { base58, secretBase58, serverKeyFor, withLocalKey, withServerKey, MINT_MISMATCH_LINE, type GroundMint } from "@/lib/burnticker/vanityMint";
 import { dropsKeptMint, keptMintKey, keptMintText, PREPARED_MINT_STORE, withKeptMint } from "@/lib/burnticker/keptMintKey";
 import { launchlabPlan, pairCurvePlan, withPlanDeadline } from "@/lib/burnticker/signPlan";
@@ -1202,7 +1202,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       // prelaunch audit 2026-10-18 A-3: the wallet signs this press's request (no transaction, no fee), so the site's uploads and prepared
       // addresses are spent only for a wallet that asked; one signature covers every ticker and mint of the press
       // HB-53: a refused or failed proof stops here, before any prepare or send (requireLaunchProof throws PROOF_REJECTED_SENTENCE)
-      const walletProof = await requireLaunchProof(wallet.signMessage, { origin: window.location.origin, creator, tickers: pairOn && ruleB ? [sent.a, sent.b] : [sent.a], mints: [kA?.publicKey, kB?.publicKey].filter((m): m is string => !!m) }, base58);
+      const walletProof = await requireLaunchProof(wallet.signMessage, { origin: window.location.origin, creator, tickers: pairOn && ruleB ? [sent.a, sent.b] : [sent.a], mints: [kA?.publicKey, kB?.publicKey].filter((m): m is string => !!m), onSlow: () => setLaunchErr(WALLET_SLOW_LINE) }, base58);
       if (walletProof) { Object.assign(common, { walletProof }); keepReviewProof(walletProof); pressProof = walletProof; }
       if (pairOn && ruleB && !meetingsOn && !settledPick) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).

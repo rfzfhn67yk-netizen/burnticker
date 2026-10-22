@@ -32,8 +32,8 @@ export async function generateMetadata(): Promise<Metadata> {
     description,
     applicationName: "Burnticker",
     icons: { icon: [{ url: "/burnticker/brand/favicon.png", type: "image/png", sizes: "32x32" }], apple: "/burnticker/brand/apple-touch-icon.png" },
-    openGraph: { type: "website", siteName: "Burnticker", title: TITLE, description, url: "/burnticker", images: [{ url: "https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
-    twitter: { card: "summary_large_image", site: "@BurnTicker", title: TITLE, description, images: ["https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg"] },
+    openGraph: { type: "website", siteName: "Burnticker", title: TITLE, description, url: "/burnticker", images: [{ url: "https://burnticker.com/burnticker/brand/og-544200bcce.jpg", width: 1200, height: 630, alt: "Burnticker: a sample rule receipt, locked at launch, no burn yet" }] },
+    twitter: { card: "summary_large_image", site: "@BurnTicker", title: TITLE, description, images: ["https://burnticker.com/burnticker/brand/og-544200bcce.jpg"] },
     alternates: { types: {
       "application/rss+xml": [{ url: feedHref("receipts", "rss"), title: FEED_COPY.receiptsTitle }, { url: feedHref("next-results", "rss"), title: FEED_COPY.nextTitle }],
       "application/feed+json": [{ url: feedHref("receipts", "json"), title: FEED_COPY.receiptsTitle }, { url: feedHref("next-results", "json"), title: FEED_COPY.nextTitle }],

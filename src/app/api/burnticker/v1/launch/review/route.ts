@@ -1,5 +1,6 @@
 // Public API v1 (1.14.0): the read-only pre-wallet review (src/lib/burnticker/launchReview.ts; launch audit 5 L02 / L06).
 import { fail, ok, readJsonLimited, runV1, type ApiResult } from "@/lib/burnticker/api/http";
+import { ownDraftPairId } from "@/lib/burnticker/launchPending";
 import { reviewSlowLine, stageClock, type StageClock } from "@/lib/burnticker/buildStages";
 import { withLaunchFailureAlert } from "@/lib/burnticker/api/launchFailAlert";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
@@ -23,6 +24,15 @@ import { meetingsVerdictFor } from "@/lib/burnticker/meetingsLeft";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
 import { cachedTimeLockSecs, currentStatusLive } from "@/lib/burnticker/currentStatus";
 import { derbyStore } from "@/lib/burnticker/derby/store";
+
+
+/** HS-132: the creator's own unsent draft pair of these tickers keeps its id across a reload (launchPending.ownDraftPairId). */
+function ownPairId(body: unknown): string | null {
+  const b = body as { creator?: unknown; ticker?: unknown; pair?: { ticker?: unknown } | null };
+  const creator = typeof b.creator === "string" ? b.creator : null, tickerA = typeof b.ticker === "string" ? b.ticker : null, tickerB = typeof b.pair?.ticker === "string" ? b.pair.ticker : null;
+  if (!creator || !tickerA || !tickerB) return null;
+  try { return ownDraftPairId({ registry: platform().registry }, { creator, tickerA, tickerB }); } catch { return null; }
+}
 
 export const dynamic = "force-dynamic";
 
@@ -127,7 +137,7 @@ async function review(req: Request, clock: StageClock, seen: { rule?: unknown })
     try { const ds = derbyStore(platform().registry.db); derbyHistory = (feed) => ds.hasPoints(feed); } catch { derbyHistory = undefined; }
     // HB-41 widened (hourly run 14): the keeper's newest stored reading of the rule's feed, so the back-test says when the catalogue sample is behind
     const storedReading = (k: string) => { const x = platform().registry.lastReading(k); return x ? { at: x.at, fetchedAt: x.fetchedAt } : null; };
-    const build = () => buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, derbyHistory, storedReading, sourceNote, meetingsNote, meetingsRefusal });
+    const build = () => buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, pairVoidBy, pairIdPick: (base) => ownPairId(body) ?? platform().registry.freePairId(base), kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks, lastSeason, derbyHistory, storedReading, sourceNote, meetingsNote, meetingsRefusal });
     const r = clock.run("build", build);
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
