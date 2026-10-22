@@ -151,7 +151,7 @@ The build kind is **interim-local**. INTERIM: built with cargo build-sbf on the 
 | Program | Network | Features | Executable hash (this repository) | Deployed bytes on that network | Read | Evidence |
 |---|---|---|---|---|---|---|
 | burn_receipts | mainnet | default | `b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b` | `b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b` same as the build | 2026-10-21T23:59:37Z | docs/burnkeeper/evidence/mainnet-b17/onchain-verify-after.log |
-| burn_receipts | devnet | devnet | `34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee` | `74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c` the earlier build: the upgrade to this build has not been deployed | 2026-10-16 | docs/burnkeeper/evidence/devnet-round5/u2/onchain-verify-after.log |
+| burn_receipts | devnet | devnet | `34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee` | `34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee` same as the build | 2026-10-22T00:51:02Z | docs/burnkeeper/evidence/devnet-b17/README-execution.md |
 | pair_curve | mainnet | default | `567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895` | `567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895` same as the build | 2026-10-12 | docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log |
 | pair_curve | devnet | devnet | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` same as the build | 2026-10-12 | docs/burnticker/VERIFIED-BUILD.md |
 

@@ -21,7 +21,7 @@ describe("verified-build.json", () => {
     assert.deepEqual(table.programs.map((p) => p.library).sort(), ["burn_receipts", "pair_curve"]);
     // B-17 (2026-10-21): burn_receipts' table build is the B-17 build, deployed on mainnet that evening (vault transaction 4) and not on
     // devnet (pendingUpgrade there only); pair_curve's deployed round-4 bytes are its build
-    const devnetPending = new Set(["burn_receipts"]);
+    const devnetPending = new Set<string>(); // devnet upgraded to B-17 too on 2026-10-21 18:49 Denver (vault transaction 23)
     for (const p of table.programs) {
       assert.match(p.programId, /^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
       assert.equal(deployedBytesState(p.deployed.devnet!), devnetPending.has(p.library) ? "upgrade-pending" : "matches", `${p.library}: devnet`);
@@ -34,7 +34,7 @@ describe("verified-build.json", () => {
     assert.deepEqual(verifiedBuildProblems(flipped).length, 2);
     assert.match(verifiedBuildProblems({ ...table, kind: "laptop" as never })[0], /kind/);
   });
-  test("B-17 is deployed on mainnet (2026-10-21, vault transaction 4) and read back; devnet still runs round 5 with the upgrade pending; pair_curve keeps round 4", () => {
+  test("B-17 is deployed on mainnet (2026-10-21, vault transaction 4) and read back; devnet upgraded the same evening (vault transaction 23); pair_curve keeps round 4", () => {
     const br = table.programs.find((p) => p.library === "burn_receipts")!, pc = table.programs.find((p) => p.library === "pair_curve")!;
     assert.equal(table.sourceCommit, "116ff5ad054e25cd169a8ceeb3eebb16832a33e0");
     assert.equal(br.sourceCommit, "116ff5ad054e25cd169a8ceeb3eebb16832a33e0");
@@ -54,10 +54,12 @@ describe("verified-build.json", () => {
     assert.ok(sig.startsWith("4Pnd") && sig.endsWith("drYp"), "the B-17 execute signature");
     assert.ok(ev.includes(sig) && doc.includes(sig), "the evidence and the doc name the execute signature");
     assert.match(ev, /MATCH  mainnet burn_receipts \S+ b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b/);
-    // devnet: not upgraded, still round 5
-    assert.equal(br.deployed.devnet?.hash, "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c");
-    assert.equal(br.deployed.devnet?.matchesBuild, false);
-    assert.match(String(br.deployed.devnet?.pendingUpgrade), /has not been deployed/);
+    // devnet: upgraded at 00:49Z 10-22 (18:49 Denver 10-21), read back 00:51Z
+    assert.equal(br.deployed.devnet?.hash, br.builds.devnet.hash);
+    assert.equal(br.deployed.devnet?.matchesBuild, true);
+    assert.equal(br.deployed.devnet?.pendingUpgrade, undefined);
+    assert.equal(br.deployed.devnet?.slot, 513708808);
+    assert.ok(fs.existsSync(path.join(ROOT, br.deployed.devnet!.evidence!)), "devnet evidence");
     assert.equal(pc.sourceCommit, "29f6f5de19f1916945992fae711cefc36927d856");
     assert.equal(pc.builds.mainnet.hash, "567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895");
     assert.equal(pc.builds.devnet.hash, "364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf");
@@ -65,8 +67,8 @@ describe("verified-build.json", () => {
     const withBr = (f: (p: typeof br) => typeof br) => ({ ...table, programs: table.programs.map((p) => (p.library === "burn_receipts" ? f(p) : p)) });
     assert.match(verifiedBuildProblems(withBr((p) => ({ ...p, deployed: { ...p.deployed, mainnet: { ...p.deployed.mainnet!, pendingUpgrade: "a note" } } }))).join(";"), /pendingUpgrade/, "no pending note on a network that matches");
     assert.match(verifiedBuildProblems(withBr((p) => ({ ...p, deployedSourceCommit: "089024ff6ab0cc92ae37899dee1509d52cb5e203", deployed: { ...p.deployed, devnet: { ...p.deployed.devnet!, pendingUpgrade: undefined } } }))).join(";"), /deployedSourceCommit/);
-    const s = pendingUpgradeSentence("devnet", br.builds.devnet.hash, br.deployed.devnet!.hash);
-    assert.ok(s.includes(br.builds.devnet.hash) && s.includes(br.deployed.devnet!.hash));
+    const s = pendingUpgradeSentence("devnet", br.builds.devnet.hash, "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c");
+    assert.ok(s.includes(br.builds.devnet.hash) && s.includes("74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c"));
     assert.match(s, /has not been deployed on devnet/); assert.match(s, /not verified on chain until/);
   });
   test("the doc shows every hash, the program ids, the source commit, and says INTERIM while the table is not a Docker build", () => {

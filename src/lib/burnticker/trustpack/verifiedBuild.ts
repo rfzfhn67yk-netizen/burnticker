@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { PRE_B17_PROGRAM_HASHES, PRE_B17_SOURCE_COMMIT } from "@/lib/burnticker/deployedTierPin";
 
 /**
  * THE VERIFIED-BUILD TABLE (trust pack, 2026-10-10): config/burnticker/verified-build.json, written by scripts/ops/verified-build.sh.
@@ -17,7 +18,9 @@ export interface Deployed { hash: string; programData: string; upgradeAuthority:
    * (matchesBuild is then false, and `hash` is the earlier build that runs now). A plain note for the operator; the pages say it with
    * pendingUpgradeSentence. Absent when the bytes match, or when they differ for any other reason (then the pages say they DO NOT match).
    */
-  pendingUpgrade?: string }
+  pendingUpgrade?: string;
+  /** HS-121, in the served answers only (never in the file): where the bytes come from (deployedNow) and the read-time sentence */
+  source?: "chain" | "record" | "record-fallback"; readNote?: string }
 /**
  * Where each network's deployed-bytes read is recorded (audit R05, 2026-10-11): the check page's build table names it per row. The
  * table's own `deployed.<network>.evidence` wins (round 5, 2026-10-16: burn_receipts reads back in mainnet-round5, pair_curve still in
@@ -87,6 +90,58 @@ export type DeployedBytesState = "matches" | "upgrade-pending" | "differs";
 export function deployedBytesState(d: Pick<Deployed, "matchesBuild" | "pendingUpgrade">): DeployedBytesState {
   return d.matchesBuild ? "matches" : d.pendingUpgrade ? "upgrade-pending" : "differs";
 }
+
+/**
+ * HS-121 (ninth audit addendum, 2026-10-21): the deployed bytes as the pages state them. The stored record (deployed.<network>) is the
+ * record of what was verified and when; the pages say what the chain says now. With a live ProgramData read (programHash.ts
+ * liveProgramHash) the hash, slot and read time are the chain's, and the state is worked out from that hash: equal to the build →
+ * "matches"; a pre-B17 hash, or the earlier build the record names as pending → "upgrade-pending"; anything else → "differs". So a
+ * stale record never contradicts a live hash that equals the recorded build, and a record flipped too early never hides a pending
+ * upgrade. Without a live hash the record stands: `record-fallback` when a read was made and failed (the pages add "last read <time>"),
+ * `record` when no read was made (the static documents).
+ */
+export interface LiveBytes { hash: string; slot: number | null; readAt: string }
+export type DeployedSource = "chain" | "record" | "record-fallback";
+export type DeployedNow = Deployed & { source: DeployedSource };
+/**
+ * HS-121: a whole verified-build table with each network's deployed bytes as the pages state them (deployedNow), for the served check
+ * page. `live[network][programId]`: the live read, null when it failed; a network absent from `live` keeps the record with no note.
+ * deployedSourceCommit (mainnet's) follows the live mainnet read too: dropped when mainnet runs the build, round 5's commit when it runs pre-B17.
+ */
+export function withLiveDeployed(vb: VerifiedBuild, live: Partial<Record<BuildVariant, Record<string, LiveBytes | null>>> | null): VerifiedBuild {
+  if (!live) return vb;
+  return { ...vb, programs: vb.programs.map((p) => {
+    const one = (v: BuildVariant): Deployed | null => {
+      const reads = live[v];
+      const r = reads ? reads[p.programId] : undefined;
+      const d = deployedNow(p.deployed[v], p.builds[v].hash, r ?? null, reads !== undefined && !r);
+      if (!d) return null; const note = deployedReadSentence(d); return note ? { ...d, readNote: note } : d;
+    };
+    const deployed = { devnet: one("devnet"), mainnet: one("mainnet") };
+    // the deployed commit the check page names is mainnet's (the record dropped it at the mainnet flip while devnet still waits)
+    const m = deployed.mainnet, mainLive = !!m && m.source === "chain";
+    const { deployedSourceCommit, ...rest } = p;
+    const dsc = !mainLive ? deployedSourceCommit : !m?.pendingUpgrade ? undefined : PRE_B17_PROGRAM_HASHES.has(m.hash) ? PRE_B17_SOURCE_COMMIT : deployedSourceCommit;
+    return { ...rest, ...(dsc ? { deployedSourceCommit: dsc } : {}), deployed };
+  }) };
+}
+export const LIVE_PENDING_NOTE = "The bytes read from chain are an earlier build than this repository's newer build, whose upgrade has not been deployed yet.";
+export function deployedNow(d: Deployed | null | undefined, buildHash: string, live: LiveBytes | null | undefined, readFailed = false): DeployedNow | null {
+  if (!d) return null;
+  if (!live) return { ...d, source: readFailed ? "record-fallback" : "record" };
+  const { pendingUpgrade: _old, ...rest } = d;
+  const matches = live.hash === buildHash;
+  const earlier = !matches && (PRE_B17_PROGRAM_HASHES.has(live.hash) || (!!d.pendingUpgrade && d.hash === live.hash));
+  return { ...rest, hash: live.hash, slot: live.slot ?? d.slot, readAt: live.readAt, matchesBuild: matches, ...(earlier ? { pendingUpgrade: d.pendingUpgrade && d.hash === live.hash ? d.pendingUpgrade : LIVE_PENDING_NOTE } : {}), source: "chain" };
+}
+/** The read-time sentence after a deployed-bytes statement: read from chain now, the recorded read when the chain read failed, or nothing. */
+export function deployedReadSentence(d: Pick<DeployedNow, "source" | "readAt">): string {
+  if (d.source === "chain") return `Read from chain at ${d.readAt}.`;
+  if (d.source === "record-fallback") return `The chain could not be read just now, so this is the recorded read-back, last read ${d.readAt}.`;
+  return "";
+}
+/** An ISO time to the second, the way the pages print a live read. */
+export const readTime = (ms: number): string => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 
 export function loadVerifiedBuild(root = process.cwd()): VerifiedBuild {
   const t = JSON.parse(fs.readFileSync(path.join(root, VERIFIED_BUILD_FILE), "utf8")) as VerifiedBuild;

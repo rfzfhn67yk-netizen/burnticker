@@ -361,7 +361,8 @@ const rpcWith = (second: unknown | Error) => {
 describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'not deployed'", () => {
   test("decoded None → no upgrade authority (chain); decoded Some → the key", async () => {
     const none = await readChainFacts("devnet", rpcWith({ value: [programData("none")] }), null, [PROG], 0);
-    assert.deepEqual(none.programs[PROG], { deployed: true, upgradeAuthority: null, authorityRead: "decoded" });
+    const { deployed, upgradeAuthority, authorityRead } = none.programs[PROG];   // HS-121: the same read also carries the live hash and slot
+    assert.deepEqual({ deployed, upgradeAuthority, authorityRead }, { deployed: true, upgradeAuthority: null, authorityRead: "decoded" });
     const set = await readChainFacts("devnet", rpcWith({ value: [programData("set")] }), null, [PROG], 0);
     assert.equal(set.programs[PROG].authorityRead, "decoded"); assert.ok(set.programs[PROG].upgradeAuthority);
   });
@@ -423,7 +424,7 @@ describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'no
     for (const p of buildCurrentStatus({ env: {}, chain: { devnet: failed }, now: 0 }).programs) {
       assert.equal(p.devnet.authoritySource, "unavailable");
       // the record's own read date (burn_receipts re-read 2026-10-16 after its round-5 upgrade, pair_curve 2026-10-12)
-      assert.match(upgradeAuthorityText(p.devnet), /^The upgrade authority is unavailable because the chain read failed\. The last value recorded in verified-build\.json \(2026-10-1[26]\) is \w+/);
+      assert.match(upgradeAuthorityText(p.devnet), /^The upgrade authority is unavailable because the chain read failed\. The last value recorded in verified-build\.json \(2026-10-(12|22T00:51:02Z)\) is \w+/);
     }
   });
 });

@@ -1,4 +1,4 @@
-import { executableHash, loadVerifiedBuild, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { executableHash, loadVerifiedBuild, readTime, type LiveBytes, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import fs from "node:fs";
 import path from "node:path";
 import { dispersalDecision, type DispersalDecision } from "@/lib/burnticker/dispersal";
@@ -111,6 +111,48 @@ export async function readProgramDataHash(r: AccountBytesReader, programId: stri
   if (!pd || pd.length < PROGRAM_DATA_HEADER || readU32(pd, 0) !== 3) return null;
   const slot = Number(new DataView(pd.buffer, pd.byteOffset + 4, 8).getBigUint64(0, true));
   return { hash: executableHash(pd.subarray(PROGRAM_DATA_HEADER)), slot, programData };
+}
+
+// ---- the live read the public copy follows (HS-121) ----
+
+/**
+ * HS-121 (ninth audit addendum, 2026-10-21): the pages' deployed-bytes copy and the tier-pin sentence follow the ProgramData hash read
+ * live, like the keeper and pair client gates (registerFeeKeyLaunchlabSlotOnChain), not the stored record. One cache per program per
+ * cluster, a few minutes long, shared by every reader in this process: the current-status read (currentStatus.ts readChainFacts, which
+ * already fetches the ProgramData bytes for the upgrade authority) fills it, and the trust page reads through it. A failed read is
+ * remembered for a minute, so a down RPC is not asked on every request; the pages then use the stored record and say when it was read.
+ */
+export const LIVE_HASH_TTL_MS = 300_000;
+export const LIVE_HASH_FAIL_TTL_MS = 60_000;
+export interface LiveProgramHash extends LiveBytes { slot: number; programData: string }
+const liveHashes = new Map<string, { at: number; v: LiveProgramHash | null }>();
+const liveKey = (cluster: Cluster, programId: string) => `${cluster}:${programId}`;
+/** Test hook: forget every live read. */
+export function resetLiveProgramHashes(): void { liveHashes.clear(); }
+/** Records a read made elsewhere (null: the read failed). */
+export function rememberLiveProgramHash(cluster: Cluster, programId: string, v: LiveProgramHash | null, now = Date.now()): void { liveHashes.set(liveKey(cluster, programId), { at: now, v }); }
+/** A fresh cached read: the hash, null for a failed read, undefined when nothing fresh is cached. */
+export function cachedLiveProgramHash(cluster: Cluster, programId: string, now = Date.now()): LiveProgramHash | null | undefined {
+  const e = liveHashes.get(liveKey(cluster, programId));
+  if (!e || now - e.at > (e.v ? LIVE_HASH_TTL_MS : LIVE_HASH_FAIL_TTL_MS)) return undefined;
+  return e.v;
+}
+/** The program's executable hash on chain now, through the cache; null when there is no reader or the read failed. */
+export async function liveProgramHash(r: AccountBytesReader | null, cluster: Cluster, programId: string, toBase58: (b: Uint8Array) => string, now = Date.now()): Promise<LiveProgramHash | null> {
+  const hit = cachedLiveProgramHash(cluster, programId, now);
+  if (hit !== undefined) return hit;
+  if (!r) return null;
+  let v: LiveProgramHash | null = null;
+  try { const c = await readProgramDataHash(r, programId, toBase58); v = c ? { ...c, readAt: readTime(now) } : null; } catch { v = null; }
+  rememberLiveProgramHash(cluster, programId, v, now);
+  return v;
+}
+/** programHashFact with the burn program's live read beside it: `live` null and `readFailed` true when the chain could not be read. */
+export async function liveProgramHashFact(r: AccountBytesReader | null, toBase58: (b: Uint8Array) => string, env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), o: { vb?: VerifiedBuild | null; now?: number } = {}): Promise<{ fact: ProgramHashFact; live: LiveProgramHash | null; readFailed: boolean }> {
+  const fact = programHashFact(env, root, { vb: o.vb, log: () => {} });
+  if (!fact.programId) return { fact, live: null, readFailed: false };
+  const live = await liveProgramHash(r, fact.cluster, fact.programId, toBase58, o.now ?? Date.now());
+  return { fact, live, readFailed: !live && r !== null };
 }
 
 /**

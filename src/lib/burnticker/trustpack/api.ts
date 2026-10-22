@@ -10,7 +10,7 @@ import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, publicExpenses, readPublish
 import { loadOperator, pinnedDevFeeWallet, publicPlaceholders, signedMessageView, withoutPlaceholders, type Cluster } from "@/lib/burnticker/trustpack/operator";
 import { neverBuysScopeLine, readNeverBuys, type NeverBuysReport } from "@/lib/burnticker/trustpack/neverBuys";
 import { NEVER_BUYS_STATUS, placeholderSentence } from "@/lib/burnticker/trustpack/copy";
-import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { deployedNow, loadVerifiedBuild, type LiveBytes } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { explorerUrl, rpcUrlFor } from "@/lib/burnticker/networks";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,7 +31,8 @@ export const pageCluster = (p: Pick<Platform, "cluster">): Cluster => (p.cluster
  */
 export const serverRpcUrl = (cluster: Cluster, env: Readonly<Record<string, string | undefined>> = process.env): string => rpcUrlFor(cluster, env);
 
-export const v1Check = (root = process.cwd()): ApiResult => ok(buildChecklist(root));
+/** HS-121: `live` is each network's live deployed-bytes reads (currentStatus.ts liveDeployedReads); without it the record is served. */
+export const v1Check = (root = process.cwd(), live: Partial<Record<Cluster, Record<string, LiveBytes | null>>> | null = null): ApiResult => ok(buildChecklist(root, live));
 export const v1CheckReceipts = (root = process.cwd()): ApiResult => ok(publicSampleReceipts(sampleReceipts(root)));
 
 /**
@@ -180,11 +181,21 @@ async function feeLedgerInner(p: Pick<Platform, "cluster" | "publishDir">, o: { 
   }
 }
 
-/** Per network, per program: the deployed bytes recorded in verified-build.json (the operator page's program rows; audit 4 BT-02). */
-export function deploymentsOf(root = process.cwd()): Record<Cluster, Record<string, { readAt: string; matchesBuild: boolean; pendingUpgrade?: boolean } | null>> {
-  const vb = loadVerifiedBuild(root), out: Record<Cluster, Record<string, { readAt: string; matchesBuild: boolean; pendingUpgrade?: boolean } | null>> = { devnet: {}, mainnet: {} };
+/** One program row on the operator page: when the bytes were read, whether they match, and (HS-121) whether that read is live. */
+export interface DeploymentRow { readAt: string; matchesBuild: boolean; pendingUpgrade?: boolean; source?: "chain" | "record" | "record-fallback" }
+/**
+ * Per network, per program: the deployed bytes (the operator page's program rows; audit 4 BT-02). HS-121: with `live` (currentStatus.ts
+ * liveDeployedReads) the state is the live ProgramData read's; a failed read keeps the record (source "record-fallback"); without
+ * `live`, the record in verified-build.json.
+ */
+export function deploymentsOf(root = process.cwd(), live: Partial<Record<Cluster, Record<string, LiveBytes | null>>> | null = null): Record<Cluster, Record<string, DeploymentRow | null>> {
+  const vb = loadVerifiedBuild(root), out: Record<Cluster, Record<string, DeploymentRow | null>> = { devnet: {}, mainnet: {} };
   // B-17 (2026-10-21, additive): pendingUpgrade true when a newer build's upgrade has not been deployed on that network
-  for (const p of vb.programs) for (const c of ["devnet", "mainnet"] as Cluster[]) { const d = p.deployed?.[c]; out[c][p.library] = d ? { readAt: d.readAt, matchesBuild: d.matchesBuild, ...(d.pendingUpgrade ? { pendingUpgrade: true } : {}) } : null; }
+  for (const p of vb.programs) for (const c of ["devnet", "mainnet"] as Cluster[]) {
+    const reads = live?.[c], r = reads ? reads[p.programId] : undefined;
+    const d = deployedNow(p.deployed?.[c], p.builds[c].hash, r ?? null, reads !== undefined && !r);
+    out[c][p.library] = d ? { readAt: d.readAt, matchesBuild: d.matchesBuild, ...(d.pendingUpgrade ? { pendingUpgrade: true } : {}), ...(live ? { source: d.source } : {}) } : null;
+  }
   return out;
 }
 
@@ -202,7 +213,7 @@ export function neverBuysView(o: { rule: string; rehearsalNote: string }, nb: Ne
   return { rule: o.rule, rehearsalNote: o.rehearsalNote, report: nb, line: old ? NEVER_BUYS_STATUS.stale : nb.line, status: old ? "incomplete" as const : nb.status, scopeLine: neverBuysScopeLine(nb), stale };
 }
 
-export function v1Operator(p: Pick<Platform, "cluster" | "publishDir">, root = process.cwd()): ApiResult {
+export function v1Operator(p: Pick<Platform, "cluster" | "publishDir">, root = process.cwd(), live: Partial<Record<Cluster, Record<string, LiveBytes | null>>> | null = null): ApiResult {
   const op = loadOperator(root), cluster = pageCluster(p);
   const nb = readNeverBuys(p.publishDir);
   // HB-34/35 (run 3): no TODO_ string reaches the public answer; an unnamed value is null and the list says so in words
@@ -214,7 +225,7 @@ export function v1Operator(p: Pick<Platform, "cluster" | "publishDir">, root = p
     neverBuys: neverBuysView(op.neverBuys, nb),
     placeholders: publicPlaceholders(op, placeholderSentence),
     wellKnown: "/.well-known/burnticker.json",
-    deployments: deploymentsOf(root),
+    deployments: deploymentsOf(root, live),
   });
 }
 

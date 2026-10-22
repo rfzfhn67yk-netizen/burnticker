@@ -55,5 +55,7 @@ was not seen in time.
 ## Signed
 
 The operator, 2026-10-21.
-This file is not yet signed with the developer fee wallet. Until the operator adds that signature here, the git commit that adds this
-file is its only record.
+Document sha256 (of this file above the Signed heading): `dba26a807f0acb8cb6fdce35075ce4e1e4e69508b47f2a686ae3396863170353`.
+Signature (developer fee wallet 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5, ed25519, base58) over
+"Burnticker postmortem 2026-10-19-registry-snapshot-not-pinned.md sha256 dba26a807f0acb8cb6fdce35075ce4e1e4e69508b47f2a686ae3396863170353": `5kkuMZXEzr1W33a5Tw54AUuzWDCGWQ82tv8F6HaBTdp2xaSA8ZKLiRYbXoTfg2sTTQKUw2ML3Y8SZNvG4zmLfYZ7`.
+Signed in Phantom on 2026-10-21 and verified with ed25519 before this line was written.

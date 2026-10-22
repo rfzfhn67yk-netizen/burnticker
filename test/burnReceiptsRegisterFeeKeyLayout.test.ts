@@ -46,7 +46,7 @@ describe("register_fee_key account list follows the deployed program (B-17)", ()
     assert.equal(await registerFeeKeyLaunchlabSlotOnChain({ accountBytes: async () => null }, PROGRAM.toBase58(), "mainnet", b58, { vb }), false);
     assert.equal(await registerFeeKeyLaunchlabSlotOnChain({ accountBytes: async () => { throw new Error("rpc down"); } }, PROGRAM.toBase58(), "mainnet", b58, { vb }), false);
   });
-  test("the checked-in verified-build table (B-17 deployed on mainnet 2026-10-21, devnet still round 5) sends the B-17 list on mainnet and the round-5 list on devnet", async () => {
+  test("the checked-in verified-build table (B-17 deployed on mainnet and devnet 2026-10-21) sends the B-17 list on both", async () => {
     // the real table (2026-10-21 after the mainnet execute, vault transaction 4, slot 459823169): mainnet's deployed hash is the B-17
     // build, so the keeper adds the account there; devnet was not upgraded and still runs round 5, so it gets the round-5 list until
     // the bytes read from devnet are the B-17 build
@@ -65,8 +65,9 @@ describe("register_fee_key account list follows the deployed program (B-17)", ()
     assert.equal(p.deployed.mainnet!.matchesBuild, true);
     assert.equal(p.deployed.mainnet!.slot, 459823169);
     assert.equal(registerFeeKeyLaunchlabSlot(p.deployed.mainnet!.hash, "mainnet", vb), true, "mainnet: the recorded deployed bytes are B-17");
-    assert.equal(p.deployed.devnet!.hash, ROUND5.devnet);
-    assert.equal(p.deployed.devnet!.matchesBuild, false);
-    assert.equal(registerFeeKeyLaunchlabSlot(p.deployed.devnet!.hash, "devnet", vb), false, "devnet: still round 5");
+    assert.equal(p.deployed.devnet!.hash, B17.devnet);
+    assert.equal(p.deployed.devnet!.matchesBuild, true);
+    assert.equal(p.deployed.devnet!.slot, 513708808);
+    assert.equal(registerFeeKeyLaunchlabSlot(p.deployed.devnet!.hash, "devnet", vb), true, "devnet: the recorded deployed bytes are B-17 (vault transaction 23)");
   });
 });

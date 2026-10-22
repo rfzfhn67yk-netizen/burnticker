@@ -166,7 +166,7 @@ describe("B-16: honest copy", () => {
     // hourly run 5, HS-26: the trust page prints the server's fee line (the footer's shape), BOTH_TIERS_LINE when the JSON has none
     assert.match(read("src/app/burnticker/trust/page.tsx"), /\{t\.feeTiersLine \?\? BOTH_TIERS_LINE\}/);
     assert.doesNotMatch(read("src/app/burnticker/trust/page.tsx"), /postGraduationShareLine\(t\.designedFees\.postGraduation\)/);
-    assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{bothTiersLineNow\(tierPinPendingFor\(vb\)\)\}/);   // HS-96: BOTH_TIERS_LINE plus the tier-pin sentence while pending
+    assert.match(read("src/lib/burnticker/currentStatus.ts"), /\$\{bothTiersLineNow\(tierPinPendingLive\(vb, mainBurnLive\)\)\}/);   // HS-96: BOTH_TIERS_LINE plus the tier-pin sentence while pending
     assert.ok(Object.values(GUARDRAIL_DETAIL).some((d) => d.text.includes(BOTH_TIERS_LINE)));
   });
   test("(d) which sources settle alone, and the one-source rule for games", () => {

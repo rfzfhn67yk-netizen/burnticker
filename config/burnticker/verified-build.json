@@ -37,19 +37,18 @@
           "bytes": 1030888,
           "hash": "34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee",
           "sha256": "9dde1f9f5d5990b354166f6d2b13845202cd10a9c9ec7fe94b3b39c1f97e0a6f",
-          "status": "built 2026-10-21 from 116ff5ad (B-17), twice from clean target directories with the same bytes (1,030,873 code bytes). NOT deployed: devnet still runs round 5 (74659afd…785c, slot 511540317). sha256 is the .so file's"
+          "status": "built 2026-10-21 from 116ff5ad (B-17), twice from clean target directories with the same bytes (1,030,873 code bytes). Deployed on devnet 2026-10-21 18:49 Denver (B-17 upgrade, devnet Squads vault transaction 23, slot 513708808); on-chain bytes read back and equal to this build. Before that devnet ran round 5 (74659afd…785c, slot 511540317). sha256 is the .so file's"
         }
       },
       "deployed": {
         "devnet": {
-          "hash": "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c",
+          "hash": "34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee",
           "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
-          "readAt": "2026-10-16",
-          "matchesBuild": false,
-          "slot": 511540317,
-          "evidence": "docs/burnkeeper/evidence/devnet-round5/u2/onchain-verify-after.log",
-          "pendingUpgrade": "The B-17 build above is newer than the bytes on devnet, and its upgrade has not been deployed yet. The hash here is the round-5 build that runs now (read back 2026-10-16)."
+          "readAt": "2026-10-22T00:51:02Z",
+          "matchesBuild": true,
+          "slot": 513708808,
+          "evidence": "docs/burnkeeper/evidence/devnet-b17/README-execution.md"
         },
         "mainnet": {
           "hash": "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b",

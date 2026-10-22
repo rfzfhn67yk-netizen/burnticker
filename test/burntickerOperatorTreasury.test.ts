@@ -85,10 +85,9 @@ test("R05: the build table has a Network column; each row's deployed bytes, read
   assert.doesNotMatch(md, /Deployed \(devnet\)/);
   // round 5 (2026-10-15): burn_receipts reads back in mainnet-round5; pair_curve (not upgraded) still in mainnet-round4
   // B-17 (2026-10-21): burn_receipts' table build is the B-17 build, deployed on mainnet that evening (read back in mainnet-b17); devnet
-  // was not upgraded, so its row still says the chain holds the earlier build
+  // was upgraded the same evening (vault transaction 23, read back 2026-10-22T00:51:02Z)
   assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*`b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b` same as the build \| 2026-10-21T23:59:37Z \| docs\/burnkeeper\/evidence\/mainnet-b17\/onchain-verify-after\.log \|/);
-  assert.match(md, /\| burn_receipts \| devnet \|[^\n]*`74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c` the earlier build: the upgrade to this build has not been deployed \| 2026-10-16 \|/);
-  assert.doesNotMatch(md, /\| burn_receipts \| devnet \|[^\n]*same as the build/, "the B-17 build is not called devnet's deployed bytes");
+  assert.match(md, /\| burn_receipts \| devnet \|[^\n]*`34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee` same as the build \| 2026-10-22T00:51:02Z \| docs\/burnkeeper\/evidence\/devnet-b17\/README-execution\.md \|/);
   assert.match(md, /\| pair_curve \| mainnet \|[^\n]*same as the build \| 2026-10-12 \| docs\/burnkeeper\/evidence\/mainnet-round4\/onchain-verify-after-pc\.log \|/);
   const page = fs.readFileSync("src/app/burnticker/check/CheckClient.tsx", "utf8");
   assert.doesNotMatch(page, /Deployed on devnet/);

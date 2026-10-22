@@ -67,5 +67,7 @@ The 500 answers came from a new route for unknown coin pages in publish 103.
 ## Signed
 
 The operator, 2026-10-21.
-This file is not yet signed with the developer fee wallet. Until the operator adds that signature here, the git commit that adds this
-file is its only record.
+Document sha256 (of this file above the Signed heading): `605ea2642c80b116a8ae23fc88af33fd42799576f1ed1a903c7cec00d69b1df3`.
+Signature (developer fee wallet 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5, ed25519, base58) over
+"Burnticker postmortem 2026-10-20-web-stalls-and-500s.md sha256 605ea2642c80b116a8ae23fc88af33fd42799576f1ed1a903c7cec00d69b1df3": `649E6CSrwuP66AkLqDeLVQ11DwidrDNfeWvwBptDmMeBrtxbee229Jr6hZiZNUpndxqjS5cXUJVnJAF2znPQPpqj`.
+Signed in Phantom on 2026-10-21 and verified with ed25519 before this line was written.

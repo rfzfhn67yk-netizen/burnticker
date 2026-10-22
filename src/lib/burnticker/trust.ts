@@ -7,9 +7,9 @@ import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodePlatformConfig } from "@/lib/burnReceipts/accounts";
 import { platformPda } from "@/lib/burnReceipts/pda";
 import { CAP_ENFORCED_SENTENCE, capSentence, effectiveCap, type EffectiveCap } from "@/lib/burnticker/capInForce";
-import { deployedBytesState, loadVerifiedBuild, pendingUpgradeSentence, type Deployed } from "@/lib/burnticker/trustpack/verifiedBuild";
-import { programHashFact } from "@/lib/burnticker/programHash";
-import { tierPinPendingFor } from "@/lib/burnticker/deployedTierPin";
+import { deployedBytesState, deployedNow, loadVerifiedBuild, pendingUpgradeSentence, type DeployedNow } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { liveProgramHash, programHashFact, type LiveProgramHash } from "@/lib/burnticker/programHash";
+import { tierPinPendingLive } from "@/lib/burnticker/deployedTierPin";
 import { publicChangelogMarkdown } from "@/lib/burnticker/changelogPublic";
 import { loadOperator, type OperatorWallet } from "@/lib/burnticker/trustpack/operator";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
@@ -322,14 +322,21 @@ export function transparencyProblems(j: Partial<TransparencyConfig> | null): str
 }
 
 /**
- * HS-96: true while the mainnet burn program recorded as deployed (config/burnticker/verified-build.json burn_receipts deployed.mainnet)
- * is a pre-B17 build, so the trust page says a graduated coin does not burn yet. An unreadable record keeps the sentence (the cautious side).
+ * HS-96: true while the mainnet burn program is a pre-B17 build, so the trust page says a graduated coin does not burn yet. HS-121: the
+ * hash read live from mainnet's ProgramData decides (deployedTierPin.ts tierPinPendingLive); without it, the build recorded as deployed
+ * in config/burnticker/verified-build.json does. An unreadable record keeps the sentence (the cautious side).
  */
-export function deployedTierPinLine(root = process.cwd()): boolean {
-  try {
-    return tierPinPendingFor(loadVerifiedBuild(root));
-  } catch { return true; }
+export function deployedTierPinLine(root = process.cwd(), liveMainnetHash: string | null = null): boolean {
+  let vb: unknown = null;
+  try { vb = loadVerifiedBuild(root); } catch { vb = null; }
+  return tierPinPendingLive(vb, liveMainnetHash);
 }
+
+/**
+ * HS-121: the host cluster's live ProgramData reads, per program id (null: the read failed). The trust page reads only the cluster it
+ * has a reader for; the other network's rows keep the stored record.
+ */
+export interface HostLiveReads { cluster: "mainnet" | "devnet"; byProgramId: Record<string, LiveProgramHash | null> }
 
 const SIG_RE = /^[1-9A-HJ-NP-Za-km-z]{86,88}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -420,15 +427,22 @@ export function buildTransparency(root = process.cwd(), env: Readonly<Record<str
  */
 export interface ProgramChainFact { library: string; programId: string; devnet: string; mainnet: string; /** B-17 (2026-10-21): one sentence per network whose newer build is not deployed yet (pendingUpgradeSentence); absent when none */ pending?: string[] }
 export interface ProgramFacts { programId: string | null; deployed: boolean; buildHash: string | null; verify: string[]; hostWiring: string; chain: ProgramChainFact[]; compiled: string }
-export function programFacts(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd()): ProgramFacts {
+export function programFacts(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), live: HostLiveReads | null = null): ProgramFacts {
   const id = (env.BURNTICKER_PROGRAM_ID ?? "").trim();
   const deployed = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(id);
+  const fact = programHashFact(env, root);
+  // HS-121: when the live read of the cluster's bytes equals this repository's recorded build, that is the hash to compare against,
+  // even before the record's deployed entry is updated; otherwise the recorded read-back stays (a live hash nobody verified is not shown
+  // as the build hash)
+  const liveHash = fact.programId && live?.cluster === fact.cluster ? live.byProgramId[fact.programId]?.hash ?? null : null;
+  let builtHash: string | null = null;
+  try { builtHash = loadVerifiedBuild(root).programs.find((p) => p.library === "burn_receipts")?.builds[fact.cluster]?.hash ?? null; } catch { builtHash = null; }
   const out: ProgramFacts = {
     // prelaunch audit 2026-10-18 A-4: the hash comes from config/burnticker/verified-build.json for the cluster (the read-back of the
     // deployed bytes); BURNTICKER_PROGRAM_HASH is shown only when it equals that record, otherwise ignored and logged once
-    programId: deployed ? id : null, deployed, buildHash: programHashFact(env, root).hash,
+    programId: deployed ? id : null, deployed, buildHash: liveHash && liveHash === builtHash ? liveHash : fact.hash,
     hostWiring: deployed ? `This site reads the burn program (burn_receipts) at ${id}.` : "This site is not connected to a burn program. Its pages use a stand-in that runs in memory and sends nothing to the chain.",
-    chain: chainFacts(root),
+    chain: chainFacts(root, live),
     compiled: `The burn program's address, compiled into the program and its interface file (IDL), is ${BURN_RECEIPTS_IDL.address}.`,
     verify: deployed
       ? [`solana-verify get-program-hash ${id}   # must equal the build hash above (sha256 of the program bytes, trailing zero bytes removed)`, `solana program dump ${id} program.so && solana-verify get-executable-hash program.so   # the same number from a local copy`, `solana-verify verify-from-repo   # rebuilds the tagged public source and compares; the steps are at ${repoUrl("docs/burnticker/VERIFIED-BUILD.md")}`, `solana program show ${id}   # the upgrade authority must match the register`]
@@ -440,17 +454,24 @@ export function programFacts(env: Readonly<Record<string, string | undefined>> =
   return out;
 }
 
-/** Where each program is deployed, from the verified-build read-back (never from this host's environment). */
-function chainFacts(root: string): ProgramChainFact[] {
+/**
+ * Where each program is deployed, from the verified-build read-back (never from this host's environment). HS-121: on the host's cluster
+ * the bytes are the live ProgramData read when there is one (verifiedBuild.ts deployedNow), so the match / newer-build-not-deployed
+ * wording follows the chain; when that read failed the record is said with "last read <time>".
+ */
+export function chainFacts(root: string, live: HostLiveReads | null = null): ProgramChainFact[] {
   // B-17 (2026-10-21): a newer build whose upgrade has not been deployed is said as that, never as "DO NOT match" and never as verified
-  const bytes = (d: Deployed): string => ({ matches: ", and the bytes match the recorded build", "upgrade-pending": ", and the bytes are the earlier build because the upgrade to this repository's newer build has not been deployed", differs: ", and the bytes DO NOT match the recorded build" })[deployedBytesState(d)];
+  const bytes = (d: DeployedNow): string => ({ matches: ", and the bytes match the recorded build", "upgrade-pending": ", and the bytes are the earlier build because the upgrade to this repository's newer build has not been deployed", differs: ", and the bytes DO NOT match the recorded build" })[deployedBytesState(d)];
+  const when = (d: DeployedNow): string => (d.source === "chain" ? `read from chain at ${d.readAt}` : d.source === "record-fallback" ? `last read ${d.readAt}, because the chain could not be read just now` : `read ${d.readAt}`);
   try {
     return loadVerifiedBuild(root).programs.map((p) => {
-      const pending = (["devnet", "mainnet"] as const).flatMap((c) => { const d = p.deployed[c]; return d && deployedBytesState(d) === "upgrade-pending" ? [pendingUpgradeSentence(c, p.builds[c].hash, d.hash)] : []; });
+      const now = (c: "devnet" | "mainnet") => { const r = live?.cluster === c ? live.byProgramId[p.programId] : undefined; return deployedNow(p.deployed[c], p.builds[c].hash, r ?? null, r === null); };
+      const dev = now("devnet"), main = now("mainnet");
+      const pending = ([["devnet", dev], ["mainnet", main]] as const).flatMap(([c, d]) => (d && deployedBytesState(d) === "upgrade-pending" ? [pendingUpgradeSentence(c, p.builds[c].hash, d.hash)] : []));
       return { library: p.library, programId: p.programId,
-        devnet: p.deployed.devnet ? `deployed (read ${p.deployed.devnet.readAt}${bytes(p.deployed.devnet)})` : "not deployed",
+        devnet: dev ? `deployed (${when(dev)}${bytes(dev)})` : "not deployed",
         // I-1 (audit 2026-10-19): the mainnet read-back says whether the bytes match, like devnet's, and names mainnet's own authority
-        mainnet: p.deployed.mainnet ? `deployed (read ${p.deployed.mainnet.readAt}${bytes(p.deployed.mainnet)}; upgrade authority ${p.deployed.mainnet.upgradeAuthority})` : "not deployed",
+        mainnet: main ? `deployed (${when(main)}${bytes(main)}; upgrade authority ${main.upgradeAuthority})` : "not deployed",
         ...(pending.length ? { pending } : {}) };
     });
   } catch { return []; }
@@ -526,11 +547,15 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
   // tier); without a read it is the code's new-coin tier. A coin created earlier keeps its own pin, stated on its own page.
   const liveCp = livePlatform.view ? String(livePlatform.view.cpConfigId) : null;
   const newCoinFees = postGraduationFeesFor(cluster, liveNewCoinTier(liveCp) ? liveCp : null);
+  // HS-121: the deployed bytes of each program on this cluster, read live (cached a few minutes, programHash.ts liveProgramHash); the
+  // match / pending copy and the tier-pin sentence follow them, and fall back to the stored record only when the read fails
+  const live = await hostLiveReads(i.reader, cluster, root, now);
+  const tierPinPending = deployedTierPinLine(root, live?.cluster === "mainnet" ? liveBurnProgramHash(live, root) : null);
   return {
     generatedAt: new Date(now).toISOString(), cluster,
     // HS-26 (hourly run 5): the trust page's fee line, the footer's shape, with "(every coin live today)" computed from the registry
     // ninth pass HS-96: the trust page prints this line too, so the pre-upgrade tier pin is said on the page and not only in the API
-    feeTiersLine: cluster === "mainnet" ? feeTiersLine({ tier14Live: i.tier14Live ?? null, tierPinPending: deployedTierPinLine(root) }) : null,
+    feeTiersLine: cluster === "mainnet" ? feeTiersLine({ tier14Live: i.tier14Live ?? null, tierPinPending }) : null,
     operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: feesUseWithReasons(USE_OF_FEES), attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), secondSigner: SECOND_SIGNER_LINE, preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
     powers, operator: operatorPowersSummary(powers),
     livePlatform,
@@ -538,11 +563,11 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     lpLock: lpLockPolicyJson(cluster, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null),
     // skipFeeLedger: the public API's /v1/trust does not serve the ledger, so it does not read it (C2)
     feeLedger: i.skipFeeLedger ? { wallet: devFeeWallet(env), entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "Not read for this answer." } : await readFeeLedger(i.reader, devFeeWallet(env), 200, { deltaCache: i.deltaCache }),
-    team: teamWallets(env, root), attesters: i.attesters, program: programFacts(env, root), incidents: readIncidents(root), audit: readAudit(i.siteDir),
+    team: teamWallets(env, root), attesters: i.attesters, program: programFacts(env, root, live), incidents: readIncidents(root), audit: readAudit(i.siteDir),
     transparency,
     statements: [
       `At graduation, ${LP_LOCKED_PCT}% of the LP is locked forever with Raydium's LP lock and can never be withdrawn. A creator cannot change this. The platform settings that do it are platformScale 1,000,000, creatorScale 0 and burnScale 0. The Fee Key belongs to the burn program's fee-keys account. Anyone can call the fee claim (claim_lock_fees), which splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury. That split is fixed in code, and the coin side is burned. The program also sets a minimum share of locked LP for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
-      `${cluster === "mainnet" ? `${BOTH_TIERS_LINE} ${deployedTierPinLine(root) ? `${DEPLOYED_TIER_PIN_LINE} ` : ""}${FEE_TIER_DECIDER_LINE}` : `${postGraduationShareLine(newCoinFees)} ${earlierCoinsLineFor(cluster)}`} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No setting or admin key changes how the liquidity fees are split. ${UPGRADE_CAVEAT}`,
+      `${cluster === "mainnet" ? `${BOTH_TIERS_LINE} ${tierPinPending ? `${DEPLOYED_TIER_PIN_LINE} ` : ""}${FEE_TIER_DECIDER_LINE}` : `${postGraduationShareLine(newCoinFees)} ${earlierCoinsLineFor(cluster)}`} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No setting or admin key changes how the liquidity fees are split. ${UPGRADE_CAVEAT}`,
       "Creators get no cash from fees. The creator-fee slot pays 100% to the coin's burn pool.",
       "There is no team allocation. There is no presale, no private round and no airdrop to insiders. The platform holds no tokens at launch.",
       "Rules, readings and receipts are append-only. Database triggers refuse any update or delete. Changing a rule means launching a new token.",
@@ -559,6 +584,21 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
       ...GATE_POLICY_IDS.map((id) => transparency.policies.find((p) => p.id === id)?.text).filter((t): t is string => !!t),
     ],
   };
+}
+
+/** HS-121: every recorded program's live ProgramData read on the host's cluster, through the shared cache; null without a reader or a known cluster. */
+export async function hostLiveReads(reader: ChainReader | null, cluster: string, root: string, now = Date.now()): Promise<HostLiveReads | null> {
+  if (!reader || (cluster !== "mainnet" && cluster !== "devnet")) return null;
+  let ids: string[] = [];
+  try { ids = loadVerifiedBuild(root).programs.map((p) => p.programId); } catch { return null; }
+  const r = { accountBytes: (a: string) => reader.accountData(a) };
+  const toBase58 = (b: Uint8Array) => new PublicKey(b).toBase58();
+  const reads = await Promise.all(ids.map((id) => liveProgramHash(r, cluster, id, toBase58, now)));
+  return { cluster, byProgramId: Object.fromEntries(ids.map((id, n) => [id, reads[n]])) };
+}
+/** The burn program's live hash in a set of reads (null: not read, or the read failed). */
+function liveBurnProgramHash(live: HostLiveReads, root: string): string | null {
+  try { const id = loadVerifiedBuild(root).programs.find((p) => p.library === "burn_receipts")?.programId; return id ? live.byProgramId[id]?.hash ?? null : null; } catch { return null; }
 }
 
 /** A ChainReader over @solana/web3.js, built lazily by the route when an RPC URL is configured (never in tests). */
