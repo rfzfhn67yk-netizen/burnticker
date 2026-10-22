@@ -15,99 +15,9 @@
   },
   "howBuilt": {
     "aiAssisted": true,
-    "statement": "The program, the keeper, the platform and this page were written with AI help (Claude Code). The operator directed and reviewed the work. Three independent blind Claude reviews of the burn program (burn_receipts) and one re-check were done on 2026-10-09 and 2026-10-10. Two blind Claude reviews of the pair program (pair_curve) were done on 2026-10-10; their High findings were fixed and re-checked the same day. The pair-forward and LP-lock releases had their own blind reviews and a re-check on 2026-10-11. Four ChatGPT Codex review rounds of the public pull request were done on 2026-10-10 and 2026-10-11, each with a response to every finding. Every one of these is published in full. No security firm has audited any of it.",
+    "statement": "The program, the keeper, the platform and this page were written with AI help (Claude Code). The operator directed and reviewed the work.",
     "firmAudit": false,
-    "firmAuditStatement": "No security firm has audited it. The burn program has had three independent blind AI reviews and one re-check. The pair program has had two blind AI reviews. Two adversarial ChatGPT Codex reviews were also done. Every review is published, and each ChatGPT review is published with its response. A bounty wallet for security reports is funded, and its terms are still a draft; the bounty page shows both.",
-    "reviews": [
-      {
-        "id": "claude-blind-1",
-        "reviewer": "Blind review 1, by a new Claude agent that saw only the code and none of the builder's conclusions. It found 2 High, 4 Medium, 7 Low and 6 Info issues. Each one is fixed or documented in docs/burn-receipts/CHANGELOG.md.",
-        "status": "completed 2026-10-09",
-        "reportPath": "docs/burnticker/reviews/2026-10-09-claude-blind-1.md"
-      },
-      {
-        "id": "claude-blind-2",
-        "reviewer": "Blind review 2, by a new Claude agent that had not seen the code before. It read the earlier reports only after writing its own findings. It found 5 Medium, 4 Low and 8 Info issues.",
-        "status": "completed 2026-10-10",
-        "reportPath": "docs/burnticker/reviews/2026-10-10-claude-blind-2.md"
-      },
-      {
-        "id": "claude-blind-3",
-        "reviewer": "Blind review 3, by a new Claude agent that had not seen the code before. It found 3 Medium, 6 Low and 6 Info issues. The same report holds its re-check of the round-3 fixes, which found 4 Low and 2 Info issues.",
-        "status": "completed 2026-10-10, review and re-check",
-        "reportPath": "docs/burnticker/reviews/2026-10-10-claude-blind-3.md"
-      },
-      {
-        "id": "paircurve-blind-1",
-        "reviewer": "Pair review 1, by a new Claude agent that reviewed the pair program (pair_curve) blind, against a checklist written in advance. It found 2 High, 2 Medium, 3 Low and 3 Info issues. The exploit tests are committed. The fixes have not landed yet.",
-        "status": "completed 2026-10-10, findings open",
-        "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-blind-1.md"
-      },
-      {
-        "id": "paircurve-blind-2",
-        "reviewer": "Pair review 2, by a second new Claude agent that reviewed the pair program blind. It looked hardest at the economics, at griefing and at whether the program keeps running. It found 3 High, 2 Medium, 4 Low and 5 Info issues. The exploit tests are committed. The fixes have not landed yet.",
-        "status": "completed 2026-10-10, findings open",
-        "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-blind-2.md"
-      },
-      {
-        "id": "paircurve-recheck",
-        "reviewer": "A re-check by a new Claude agent of the fixes for the pair program's blind reviews (commit 4eda2e3d). Every High is fixed. R2 M-1 is only partly fixed: a curve sell after the deadline and before void_pair is still possible. It found one new Low. Tests for what is left are committed (review_pc3.rs). This report was missing from this list until review 2 counted the report files on 2026-10-11 and found ten.",
-        "status": "completed 2026-10-10",
-        "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-recheck.md"
-      },
-      {
-        "id": "lp-lock-blind",
-        "reviewer": "A blind review of the locked-liquidity release by a new Claude agent. It covered register_fee_key, claim_lock_fees and lock_lp in both programs, with the real Raydium lock program loaded in place of the mock. It found no Critical or High issues, 2 Medium, 3 Low and 8 Info. The exploit tests are committed and set to be skipped. Fixes are in progress.",
-        "status": "completed 2026-10-11, findings open",
-        "reportPath": "docs/burnticker/reviews/2026-10-11-lp-lock-blind.md"
-      },
-      {
-        "id": "pair-forward-blind",
-        "reviewer": "A blind review of the winner-takes-the-burn release by a new Claude agent. It covered link_pair, submit_pair_result, forward_to_winner and the paired crank gate. It found 1 High: a losing coin's queue can get stuck when the conditions for the forward can never be met. It also found 2 Medium, 4 Low and 7 Info issues. The exploit tests are committed and set to be skipped. Fixes are in progress.",
-        "status": "completed 2026-10-11, findings open",
-        "reportPath": "docs/burnticker/reviews/2026-10-11-pair-forward-blind.md"
-      },
-      {
-        "id": "pair-forward-recheck",
-        "reviewer": "A re-check by a new Claude agent of the pair-forward round-2 fixes. H-1 and the Lows are closed. Part of M-1 is still open: a losing side's attesters can hold back its losses. It found one new High: the 30-day unlink evidence could unlink a healthy open pair. It also found one new Medium. The exploit tests are committed and set to be skipped. Round 3 is in progress.",
-        "status": "completed 2026-10-11, findings open",
-        "reportPath": "docs/burnticker/reviews/2026-10-11-pair-forward-recheck.md"
-      },
-      {
-        "id": "chatgpt-adversarial",
-        "reviewer": "An adversarial review of a pull request by ChatGPT Codex, against the same checklist written in advance. It reviewed public commit 58d43eae. It found 2 High and 5 Medium new issues. It also found places where the checklist did not match the code, and issues left over in the pair program. Each one is answered in docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md.",
-        "status": "completed 2026-10-10",
-        "reportPath": "docs/burnticker/reviews/2026-10-10-chatgpt-pr-review.md"
-      },
-      {
-        "id": "chatgpt-adversarial-2",
-        "reviewer": "A second adversarial code review by ChatGPT Codex, with a review of the live site, against the same checklist. It reviewed public commit 07b7b4f5. It found three P1 issues. F1 is the order of the keeper's fence. F2 is that old unlocked pairs dropped out of the scan. F5 is the same as the pair-forward issues RN-1 and RN-2. It found three P2 issues: F3 on the launch confirmation, F4 on recovering from a failed signing, and F6 on reversed pair wording. It also suggested cuts to the site and found ten explanations that did not match. Each one is answered in docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2-response.md. F5 is handled in pair round 3.",
-        "status": "completed 2026-10-11",
-        "reportPath": "docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2.md"
-      },
-      {
-        "id": "chatgpt-adversarial-3",
-        "reviewer": "A third code review by ChatGPT Codex, of the changes from 782e31ec to 191d3b3b (public commit 191d3b3b). It found one P2, F1. When the program data account could not be read, the page showed 'upgrade authority none (chain)'. When a mainnet lookup failed, it showed 'not deployed'. The answer is in docs/burnticker/reviews/2026-10-11-chatgpt-review-3-response.md.",
-        "status": "completed 2026-10-11, F1 fixed with regression tests",
-        "reportPath": "docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-3.md"
-      },
-      {
-        "id": "chatgpt-ux-3",
-        "reviewer": "A third review by ChatGPT of how the live public site works and reads, checked against public commit 191d3b3b. It suggested ten practical changes, and nine are done. The launch summary shown before a wallet connects is on hold while creator launches stay closed. The answer is in docs/burnticker/reviews/2026-10-11-chatgpt-review-3-response.md.",
-        "status": "completed 2026-10-11",
-        "reportPath": "docs/burnticker/reviews/2026-10-11-chatgpt-ux-review-3.md"
-      }
-    ],
-    "tooling": [
-      "cargo-audit",
-      "clippy pedantic",
-      "anchor verify and solana-verify",
-      "Trident fuzzing where feasible",
-      "Sec3 X-ray free tier"
-    ],
-    "toolingStatus": "Partly run. Clippy, run on all targets with warnings treated as errors, was clean in blind review 3's re-check. cargo-audit, anchor verify or solana-verify against a deployment, Trident and Sec3 X-ray have not been run yet.",
-    "reviewsDir": "docs/burnticker/reviews",
-    "reviewsRule": "Every report is published in full in docs/burnticker/reviews/ as it was delivered, with every finding. Nothing is edited out. The fixes, and the tests that show each one is closed, are in docs/burn-receipts/CHANGELOG.md.",
+    "firmAuditStatement": "No security firm has audited the code.",
     "bounty": {
       "status": "funded 2026-10-11",
       "recordedFunding": { "sol": 5, "date": "2026-10-11", "transaction": null, "evidence": "docs/burnkeeper/evidence/bounty-2026-10-11/funding.json", "source": "owner statement 2026-10-11; the funding transaction (5 SOL, 2026-10-11 20:00 UTC) was read back from mainnet into the evidence file, which the API serves" },
@@ -204,7 +114,7 @@
       "label": "The operator's own wallet",
       "pubkey": "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs",
       "envVar": null,
-      "description": "The operator's own wallet (also the default owner of its Solana trading bot); it created eight soft-launch coins: $PHINFLWIN, $CLARITY, $PITWIN, $BALWIN, $SEAWIN, $DENWIN, $TWOCUTS and $COLNHLWIN. The operator holds none of them. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out), it has not traded them. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. Each of those coin pages names this wallet as the operator's."
+      "description": "The operator's own wallet (also the default owner of its Solana trading bot); it created ten soft-launch coins: $PHINFLWIN, $CLARITY, $PITWIN, $BALWIN, $SEAWIN, $DENWIN, $TWOCUTS, $COLNHLWIN, $BREWERS26 and $RAYS26. The operator holds none of them. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out), it has not traded them. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. Each of those coin pages names this wallet as the operator's."
     },
     {
       "role": "trading-wallets",
@@ -328,11 +238,6 @@
       "id": "signed-operator-message",
       "status": "done 2026-10-21",
       "text": "The operator's statement was signed on 2026-10-21 by the mainnet developer fee wallet (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5), after its text changed to name both keeper keys and both disclosed test trades. The statement and its signature are on /burnticker/operator, which checks the signature with ed25519 each time and shows the result and the time of the check."
-    },
-    {
-      "id": "paircurve-findings-open",
-      "status": "not done",
-      "text": "The two reviews of the pair program (pair_curve) on 2026-10-10 found High-severity issues. Closing a pair (close_pair) could strand the burn pool's registration. A pool vault funded in advance, or a token account created in advance, could block graduation or the start of a pair (init_pair). A developer wallet that is an executable account could freeze trades. All findings are fixed or accepted in writing (docs/burn-receipts/CHANGELOG.md, code fa8627a4). The reviewers' exploit tests now check that each attack fails, and the fixed program was rehearsed again on devnet (docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md §R2). An independent re-check confirmed the fixes and found five issues left over. They were a race on a curve sell after the deadline, a stuck-side lock with no AmmConfig signal, a close blocked by an executable developer wallet, the hash check in the upgrade script, and a WSOL donation that was not synced. All five are fixed in fcda14eb and spot-checked on devnet (§R3). The pair-forward release was then reviewed blind and re-checked on 2026-10-11, and the two issues that re-check raised (a healthy pair could be unlinked after 30 days) were fixed in round 3. The operator ran every program test suite on 2026-10-11 (202 passed). As of 2026-10-11, round 3 had not had an independent re-check of its own. Round 4 replaced it on mainnet on 2026-10-12, and the independent re-check of round 4 is still open. Pair launches are on: the host flag has been on since creator launches opened on the evening of 2026-10-13, and pairs are live on mainnet."
     },
     {
       "id": "operator-treasury-mainnet",

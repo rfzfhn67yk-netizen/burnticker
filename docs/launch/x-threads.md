@@ -83,7 +83,7 @@ Every post below passes the copy lint (test/burntickerCopy.test.ts lints this se
 > Nothing is ever won here. Things are only burned. One scoreboard per league; when its season ends, the coin with the most receipts is its champion: a stat, not a prize.
 
 **5/6 — the guardrails**
-> Settled on primary sources · signed readings (one operator attester; no independent second attester is live) · program-run burns · receipts anyone can recompute · open source · three blind AI reviews, not a firm audit · creators earn nothing · no team buy · the platform buys no coin except one test coin · LP locked forever, its fees fund the burn · rules locked at launch.
+> Settled on primary sources · signed readings (one operator attester; no independent second attester is live) · program-run burns · receipts anyone can recompute · open source · creators earn nothing · no team buy · the platform buys no coin except one test coin · LP locked forever, its fees fund the burn · rules locked at launch.
 
 **6/6 — the first coin, and the line**
 > First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it. Nothing burns until the curve fills and the debt rises.

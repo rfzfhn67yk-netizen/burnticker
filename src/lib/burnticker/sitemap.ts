@@ -45,7 +45,6 @@ export const STATIC_PAGES: { path: string; changefreq: SitemapEntry["changefreq"
   { path: "/burnticker/changelog", changefreq: "daily", priority: 0.4 },
   { path: "/burnticker/incidents", changefreq: "weekly", priority: 0.4 },
   { path: "/burnticker/bounty", changefreq: "weekly", priority: 0.4 },
-  { path: "/burnticker/press", changefreq: "monthly", priority: 0.3 },
 ];
 // audit 7 item 27: pages only (the OpenAPI document is JSON, linked from the docs page, not a page to index)
 export const DOC_PAGES: string[] = ["/burnticker/docs", "/whitepaper.html", "/burnticker/templates"];

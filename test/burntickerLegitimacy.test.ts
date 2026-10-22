@@ -1,13 +1,13 @@
 // website-16 (2026-10-12): THE LEGITIMACY PASS. The owner: "what can we do to make this website look legitimate and not something that was
 // baked up in an afternoon?" Plain pages built from the repository's own files (the changelog, the incident log, the bounty, the press kit,
-// the verify-it-yourself walk-through, the History and reviews page), security.txt, one icon set, the receipt mark in every empty state,
+// the verify-it-yourself walk-through, the History page), security.txt, one icon set, the receipt mark in every empty state,
 // the type/spacing/motion tokens and measured contrast. Placement (owner): history is available, not on display.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { parseChangelog, readReleases, historyCounts, publishedReviews, readIncidentLog, verifyReceipt, verifyCommands, RELEASES_SINCE } from "@/lib/burnticker/history";
-import { RELEASE_LINES, CHANGELOG_COPY, INCIDENTS_COPY, CAUGHT_EARLY, BOUNTY_COPY, PRESS_COPY, PRESS_FILES, VERIFY_YOURSELF_COPY, HISTORY_COPY, historyCountsLine, SECURITY_CONTACT } from "@/lib/burnticker/historyCopy";
+import { parseChangelog, readReleases, historyCounts, readIncidentLog, verifyReceipt, verifyCommands, RELEASES_SINCE } from "@/lib/burnticker/history";
+import { RELEASE_LINES, CHANGELOG_COPY, INCIDENTS_COPY, CAUGHT_EARLY, BOUNTY_COPY, VERIFY_YOURSELF_COPY, HISTORY_COPY, historyCountsLine, SECURITY_CONTACT } from "@/lib/burnticker/historyCopy";
 import { LEARN_NAV, SITE_TABS, SITE_ICONS, HERO } from "@/lib/burnticker/siteNav.mjs";
 import { STATIC_PAGES } from "@/lib/burnticker/sitemap";
 import { PUBLIC_REPO_URL } from "@/lib/burnticker/currentStatusLinks";
@@ -46,14 +46,14 @@ describe("item 1: the changelog page is built from docs/burnticker/CHANGELOG.md"
   });
   test("the home status line carries the dated counts; the Trust page shows the latest three and the one history link", () => {
     const c = historyCounts(ROOT);
-    assert.equal(c.reviews, publishedReviews(ROOT).length); assert.ok(c.releases! > 0);
-    assert.equal(historyCountsLine({ reviews: 13, releases: 68 }), "13 review reports by AI agents are published, and there have been 68 releases since Oct 10. No security firm has audited the code.");
-    assert.equal(historyCountsLine({ reviews: null, releases: 68 }), "There have been 68 releases since Oct 10.");
-    assert.equal(historyCountsLine({ reviews: null, releases: null }), null);
+    assert.ok(c.releases! > 0); assert.deepEqual(Object.keys(c), ["releases"], "owner 2026-10-22: no review count");
+    assert.equal(historyCountsLine({ releases: 68 }), "There have been 68 releases since Oct 10.");
+    assert.equal(historyCountsLine({ releases: 1 }), "There has been 1 release since Oct 10.");
+    assert.equal(historyCountsLine({ releases: null }), null);
     clean(historyCountsLine(c)!, "home counts");
     assert.equal(RELEASES_SINCE, "2026-10-10");
     const trust = read("src/app/burnticker/trust/page.tsx");
-    assert.equal((trust.match(/href="\/burnticker\/history"/g) ?? []).length, 1, "one History and reviews link");
+    assert.equal((trust.match(/href="\/burnticker\/history"/g) ?? []).length, 1, "one History link");
     assert.match(trust, /data-latest-releases/); assert.match(read("src/app/api/burnticker/trust/route.ts"), /readReleases\(\)\?\.slice\(-3\)\.reverse\(\)/);
   });
 });
@@ -88,13 +88,11 @@ describe("item 3: security.txt and the bounty page", () => {
   });
 });
 
-describe("items 6 and 7: the press kit and the verify-it-yourself walk-through", () => {
-  test("press: every file is served from /burnticker/brand/, the boilerplate is lint-clean and the headline is the live one", () => {
-    for (const g of PRESS_FILES) for (const f of g.files) { assert.match(f.href, /^\/burnticker\/brand\//); assert.ok(fs.existsSync(path.join(ROOT, "config/public-repo/overlay/public", f.href)), f.href); }
-    for (const v of ["dark", "light"]) for (const k of ["SVG", "PNG"]) assert.ok(PRESS_FILES.find((g) => g.id === "mark")!.files.some((f) => f.kind === k && f.href.includes(v)), `${v} ${k}`);
-    for (const s of strings(PRESS_COPY)) clean(s, "press");
-    assert.equal(PRESS_COPY.not.length, 3);
-    assert.match(read("src/app/burnticker/press/page.tsx"), /\$\{HERO\.title\} \$\{HERO\.sub\}/); assert.ok(HERO.title);
+describe("item 7: the verify-it-yourself walk-through (item 6, the press kit, left the site on 2026-10-22)", () => {
+  test("press: no page, no nav entry, no sitemap entry", () => {
+    assert.ok(!fs.existsSync(path.join(ROOT, "src/app/burnticker/press")));
+    assert.ok(!LEARN_NAV.some((l) => l.href === "/burnticker/press")); assert.ok(!STATIC_PAGES.some((p) => p.path === "/burnticker/press"));
+    assert.ok(HERO.title);
   });
   test("verify: the commands and expected outputs come from the featured receipt's evidence row and rules file", () => {
     const v = verifyReceipt(ROOT);
@@ -114,9 +112,9 @@ describe("items 6 and 7: the press kit and the verify-it-yourself walk-through",
 describe("item 8 and placement: nav, footer, sitemap; history two clicks deep, never on the home, coins or coin pages", () => {
   test("the Learn menu (and so the footer) lists the five pages; the sitemap lists every new page", () => {
     const learn = LEARN_NAV.map((l) => l.href);
-    for (const h of ["/burnticker/changelog", "/burnticker/incidents", "/burnticker/bounty", "/burnticker/press", "/burnticker/verify-yourself"]) { assert.ok(learn.includes(h), h); assert.ok(fs.existsSync(path.join(ROOT, `src/app${h}/page.tsx`)), h); }
-    for (const h of ["/burnticker/changelog", "/burnticker/incidents", "/burnticker/bounty", "/burnticker/press", "/burnticker/verify-yourself", "/burnticker/history"]) assert.ok(STATIC_PAGES.some((p) => p.path === h), h);
-    assert.ok(!learn.includes("/burnticker/history"), "History and reviews sits behind the Trust page's link");
+    for (const h of ["/burnticker/changelog", "/burnticker/incidents", "/burnticker/bounty", "/burnticker/verify-yourself"]) { assert.ok(learn.includes(h), h); assert.ok(fs.existsSync(path.join(ROOT, `src/app${h}/page.tsx`)), h); }
+    for (const h of ["/burnticker/changelog", "/burnticker/incidents", "/burnticker/bounty", "/burnticker/verify-yourself", "/burnticker/history"]) assert.ok(STATIC_PAGES.some((p) => p.path === h), h);
+    assert.ok(!learn.includes("/burnticker/history"), "History sits behind the Trust page's link");
   });
   test("the home, coins and coin pages carry no history block or link", () => {
     for (const f of ["src/app/burnticker/page.tsx", "src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/lib/burnticker/home.ts"])

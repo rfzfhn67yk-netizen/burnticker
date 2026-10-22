@@ -16,14 +16,13 @@ import { operatorTradeReasons } from "@/lib/burnticker/operatorCreators";
  */
 export const REHEARSAL_BUY_EXCEPTION = `There are two disclosed exceptions. The operator bought 0.1 SOL of $REHEARSAL, a disclosed test coin, when it was created on Oct 11. The operator's own wallet bought 0.10 SOL of $SEAWIN on Oct 15 and sold all of it 24 seconds later.${operatorTradeReasons() ? ` ${operatorTradeReasons()}` : ""}`;
 
-/** The eleven guardrails, in order (the old homepage strip). */
+/** The ten guardrails, in order (the old homepage strip). Owner decision 2026-10-22: the review guardrail left; the trust page says once that no security firm has audited the code. */
 export const GUARDRAILS = [
   "settled on primary sources",
   "signed readings (one operator attester; no independent second attester is live)",
   "program-run burns",
   "receipts anyone can recompute",
   "open source",
-  "three blind AI reviews, not a firm audit",
   "creators earn nothing",
   "no team buy",
   "the platform buys no coin except one test coin",
@@ -54,7 +53,6 @@ export function guardrailDetail(tierPinPending: boolean = DEPLOYED_TIER_PIN_PEND
   "program-run burns": { kind: "enforced", text: "In the current program, a burn is one program step that buys and burns in the same transaction. Nobody picks the amount." },
   "receipts anyone can recompute": { kind: "observed", text: "Every burn's memo, transaction and source reading are public, and the check page recomputes them in your browser." },
   "open source": { kind: "observed", text: "The code is in a public repository at a pinned commit." },
-  "three blind AI reviews, not a firm audit": { kind: "observed", text: "The program had three blind AI reviews and later AI code reviews. These are AI reviews. They are not a professional security audit, and no security firm has audited the code." },
   "creators earn nothing": { kind: "enforced", text: "Creators receive no trading-fee revenue. The platform settings send the creator's share of the curve fees to the coin's burn pool. A creator can still hold or trade the coin like anyone else." },
   // walkthrough 13: the one disclosed exception (the Test coins page: "The operator bought 0.1 SOL of it at creation") is named here too
   // HB-59 (hourly run 6): the $REHEARSAL exception is said once, in the next line, not here as well
@@ -65,7 +63,7 @@ export function guardrailDetail(tierPinPending: boolean = DEPLOYED_TIER_PIN_PEND
   };
 }
 export const GUARDRAIL_DETAIL = guardrailDetail();
-export const GUARDRAIL_SUMMARY = "Each coin has one rule, and the rule is locked at launch. A program spends the coin's own fee pool on each burn, and nobody chooses the amount. Today one operator signs every reading. The program has had AI reviews, and no security firm has audited it.";
+export const GUARDRAIL_SUMMARY = "Each coin has one rule, and the rule is locked at launch. A program spends the coin's own fee pool on each burn, and nobody chooses the amount. Today one operator signs every reading.";
 
 /** What protects a burn. The current values (signers, upgrade authority, time lock) are in the current-status summary, so they are not repeated here. */
 export const SAFEGUARDS: { id: string; title: string; text: string }[] = [

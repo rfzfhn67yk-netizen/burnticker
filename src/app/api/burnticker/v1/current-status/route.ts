@@ -7,7 +7,7 @@ import { registrySnapshotView } from "@/lib/burnticker/ops/snapshot";
 
 export const dynamic = "force-dynamic";
 
-/** Network and deployment, programs, attesters and quorum, upgrade authority with the time lock read from chain, settlement, reviews, open requirements. */
+/** Network and deployment, programs, attesters and quorum, upgrade authority with the time lock read from chain, settlement, open requirements. */
 export async function GET(req: Request) {
   return runV1("getCurrentStatus", req, async () => {
     // HB-82 (hourly run 6): whether today's registry snapshot is pinned, from this host's registry (one read-only query; null when unreadable)

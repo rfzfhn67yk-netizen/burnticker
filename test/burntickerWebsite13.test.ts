@@ -207,7 +207,7 @@ describe("website-12's site launch record, consumed (coordinator, 2026-10-12)", 
   });
   test("Claude 2e: the summary's counted lines link to their own lists; Claude 3: the steps say the coin's own trading fees nowhere", () => {
     const c = read("src/app/burnticker/_components/CurrentStatusSummary.tsx");
-    assert.match(c, /<details id="cs-findings"/); assert.match(c, /<details id="cs-open"/); assert.match(c, /\{s\.lines\.map\(\(l\) => <SummaryLine key=\{l\} l=\{l\} \/>\)\}/);
+    assert.doesNotMatch(c, /cs-findings|Review findings/); assert.match(c, /<details id="cs-open"/); assert.match(c, /\{s\.lines\.map\(\(l\) => <SummaryLine key=\{l\} l=\{l\} \/>\)\}/);
     assert.doesNotMatch(read("src/lib/burnticker/siteNav.mjs"), /coin's own trading fees/);
   });
   test("the static deploy copies the whole site/burnticker folder, so the archived whitepaper ships", () => {

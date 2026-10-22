@@ -220,7 +220,6 @@ export function readIncidents(root = process.cwd()): { markdown: string; entries
 
 export const TRANSPARENCY_FILE = path.join("config", "burnticker", "transparency.json");
 export interface TransparencyWallet { role: string; label: string; pubkey: string | null; envVar: string | null; description: string }
-export interface TransparencyReview { id: string; reviewer: string; status: string; reportPath: string | null }
 /** `createdAt`: the exact time of the coin's create transaction (its block time), when recorded; cards count the age from it (audit 7 item 23) */
 export interface TransparencyRehearsal { symbol: string; date: string | null; createdAt?: string | null; mint: string | null; status: string; text: string }
 /** The two sentences the launch runbook's go/no-go gates look for on the page (policies by id; rendered among the standing facts too). */
@@ -229,7 +228,8 @@ export interface TransparencyConfig {
   schema: "burnticker.transparency/v1"; updatedAt: string;
   publicRepo: { url: string | null; todo?: string; whatIsPublished: string };
   whoRunsThis: { alsoRuns: string; refusal: string; refuseListCode: string; refuseListConfig: string; holdingsRule: string };
-  howBuilt: { aiAssisted: boolean; statement: string; firmAudit: boolean; firmAuditStatement: string; reviews: TransparencyReview[]; tooling: string[]; toolingStatus: string; reviewsDir: string; reviewsRule: string; bounty: TransparencyBounty };
+  /** owner decision 2026-10-22: no review list, tooling status or reviews rule; firmAuditStatement is the one audit sentence */
+  howBuilt: { aiAssisted: boolean; statement: string; firmAudit: boolean; firmAuditStatement: string; bounty: TransparencyBounty };
   wallets: TransparencyWallet[];
   /**
    * Eighth pass B-24 / HS-72 (owner confirmed 2026-10-21): wallets the operator owns that created coins through the site. Each is also
@@ -282,7 +282,7 @@ export function transparencyProblems(j: Partial<TransparencyConfig> | null): str
   if (j.schema !== "burnticker.transparency/v1") out.push("schema must be burnticker.transparency/v1");
   if (!j.publicRepo || typeof j.publicRepo.whatIsPublished !== "string") out.push("publicRepo.whatIsPublished missing");
   if (!j.whoRunsThis || typeof j.whoRunsThis.refusal !== "string" || typeof j.whoRunsThis.refuseListCode !== "string") out.push("whoRunsThis.refusal / refuseListCode missing");
-  if (!j.howBuilt || typeof j.howBuilt.aiAssisted !== "boolean" || typeof j.howBuilt.firmAudit !== "boolean" || !Array.isArray(j.howBuilt.reviews)) out.push("howBuilt.aiAssisted / firmAudit / reviews missing");
+  if (!j.howBuilt || typeof j.howBuilt.aiAssisted !== "boolean" || typeof j.howBuilt.firmAudit !== "boolean" || typeof j.howBuilt.firmAuditStatement !== "string") out.push("howBuilt needs aiAssisted, firmAudit and firmAuditStatement");
   const bw = j.howBuilt?.bounty?.wallet;
   if (bw !== undefined && bw !== null && !PUBKEY_RE.test(String(bw))) out.push("howBuilt.bounty.wallet must be a base58 public key, or null until the vault exists");
   if (!Array.isArray(j.wallets) || j.wallets.length === 0) out.push("wallets must be a non-empty array");
@@ -397,7 +397,7 @@ export interface TransparencySection {
   updatedAt: string; file: string; fileUrl: string;
   publicRepo: TransparencyConfig["publicRepo"];
   whoRunsThis: TransparencyConfig["whoRunsThis"] & { operatorLine: string; refuseListPresent: boolean; refuseListConfigUrl: string };
-  howBuilt: TransparencyConfig["howBuilt"] & { reviewsReadmePresent: boolean; reportsPresent: { id: string; present: boolean }[] };
+  howBuilt: TransparencyConfig["howBuilt"];
   wallets: WalletRow[]; walletsTodo: number; rehearsals: TransparencyRehearsal[];
   limitations: TransparencyConfig["limitations"]; policies: TransparencyConfig["policies"];
   decisions: MarkdownLog; changelog: MarkdownLog;
@@ -411,7 +411,7 @@ export function buildTransparency(root = process.cwd(), env: Readonly<Record<str
     // HB-46 (hourly run 6): public words in the answer; each file name only on its public-repository link
     updatedAt: cfg.updatedAt, file: TRANSPARENCY_FILE_WORDS, fileUrl: repoUrl(TRANSPARENCY_FILE.split(path.sep).join("/")), publicRepo: cfg.publicRepo,
     whoRunsThis: { ...cfg.whoRunsThis, refuseListConfig: REFUSE_LIST_WORDS, refuseListConfigUrl: repoUrl(cfg.whoRunsThis.refuseListConfig), operatorLine: OPERATOR_LINE, refuseListPresent: fs.existsSync(path.join(root, cfg.whoRunsThis.refuseListCode)) && fs.existsSync(path.join(root, cfg.whoRunsThis.refuseListConfig)) },
-    howBuilt: { ...cfg.howBuilt, reviewsReadmePresent: fs.existsSync(path.join(root, cfg.howBuilt.reviewsDir, "README.md")), reportsPresent: cfg.howBuilt.reviews.map((r) => ({ id: r.id, present: !!r.reportPath && fs.existsSync(path.join(root, r.reportPath)) })) },
+    howBuilt: cfg.howBuilt,
     wallets, walletsTodo: wallets.filter((w) => w.source === "todo").length, rehearsals: cfg.rehearsals,
     limitations: cfg.limitations, policies: cfg.policies,
     decisions: readMarkdownLog(root, DECISIONS_FILE), changelog: publicChangelog(readMarkdownLog(root, CHANGELOG_FILE)),

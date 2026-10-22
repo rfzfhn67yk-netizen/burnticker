@@ -20,9 +20,9 @@ describe("transparency.json", () => {
     const roles = cfg.wallets.map((w) => w.role);
     for (const r of ["ops", "deployer", "keeper", "dev-fee", "squads-vault", "squads-member-1", "squads-member-2", "squads-member-3", "mint-deficit"]) assert.ok(roles.includes(r), `wallet role ${r}`);
     assert.ok(cfg.howBuilt.aiAssisted && !cfg.howBuilt.firmAudit, "written with AI assistance; not audited by a firm — both stated");
-    assert.equal(cfg.howBuilt.reviews.length, 13, "ten report files (review 2 counted them: three blind burn_receipts reviews, the third with an embedded re-check; two blind pair_curve reviews and their re-check; the LP-lock blind review; the pair-forward blind review and its re-check; the first ChatGPT/Codex review) + the second ChatGPT/Codex review + the third ChatGPT/Codex code review and its live UX review (2026-10-11)");
-    assert.deepEqual(cfg.howBuilt.reviews.filter((r) => r.reportPath).map((r) => r.id), ["claude-blind-1", "claude-blind-2", "claude-blind-3", "paircurve-blind-1", "paircurve-blind-2", "paircurve-recheck", "lp-lock-blind", "pair-forward-blind", "pair-forward-recheck", "chatgpt-adversarial", "chatgpt-adversarial-2", "chatgpt-adversarial-3", "chatgpt-ux-3"]);
-    assert.match(cfg.howBuilt.reviews.find((r) => r.id === "chatgpt-adversarial")?.status ?? "", /^completed 2026-10-10/, "the ChatGPT/Codex report was delivered 2026-10-10 and is published as delivered");
+    // owner decision 2026-10-22: the audit status is one sentence; no review list, tooling status or reviews rule
+    assert.equal(cfg.howBuilt.firmAuditStatement, "No security firm has audited the code.");
+    for (const k of ["reviews", "tooling", "toolingStatus", "reviewsDir", "reviewsRule"]) assert.ok(!(k in cfg.howBuilt), k);
     const keeper = cfg.wallets.find((w) => w.role === "keeper")!;
     assert.ok(/recorded creator is the program's fee PDA/.test(keeper.description) && !/is LaunchLab's recorded creator/.test(keeper.description), "review H-2: the fee PDA, not the keeper, is the LaunchLab creator");
     const admin = cfg.wallets.find((w) => w.role === "platform-admin")!;
@@ -91,13 +91,12 @@ describe("decision log and changelog", () => {
 });
 
 describe("buildTransparency / buildTrustPage", () => {
-  test("the section carries the operator's real name, the refuse-list presence, the reviews' presence and the TODO count", () => {
+  test("the section carries the operator's real name, the refuse-list presence and the TODO count", () => {
     const t = buildTransparency(ROOT, {});
     assert.equal(t.whoRunsThis.operatorLine, OPERATOR_LINE);
     assert.ok(t.whoRunsThis.operatorLine.includes("contact@burnticker.com")); assert.ok(!/Shane|Cassidy|Colorado/.test(t.whoRunsThis.operatorLine));
     assert.equal(t.whoRunsThis.refuseListPresent, true);
-    assert.equal(t.howBuilt.reviewsReadmePresent, true);
-    assert.deepEqual(t.howBuilt.reportsPresent.map((r) => r.present), Array(13).fill(true), "the nine Claude reports and the four ChatGPT/Codex reports all exist");
+    assert.ok(!("reviewsReadmePresent" in t.howBuilt) && !("reportsPresent" in t.howBuilt), "owner 2026-10-22: no review presence on the page");
     // prelaunch audit 2026-10-18 A-6: one record. The addresses come from operator.json for the cluster (the operator page's record), so
     // nothing the operator page lists reads "not set" here; a role that record does not list is "unlisted", not unset
     assert.equal(t.walletsTodo, 0, "no wallet the operator record lists is shown as not set");
@@ -120,7 +119,6 @@ describe("buildTransparency / buildTrustPage", () => {
     fs.copyFileSync(path.join(ROOT, TRANSPARENCY_FILE), path.join(tmp, TRANSPARENCY_FILE));
     const t = buildTransparency(tmp, {});
     assert.equal(t.whoRunsThis.refuseListPresent, false);
-    assert.equal(t.howBuilt.reviewsReadmePresent, false);
     assert.equal(t.decisions.present, false);
     const page = await buildTrustPage({ reader: null, env: { BURNTICKER_KEEPER_PUBKEY: KEEPER }, root: tmp, siteDir: tmp, attesters: [], now: Date.parse("2026-10-10T00:00:00Z") });
     assert.equal(page.transparency.wallets.find((w) => w.role === "keeper")!.resolved, KEEPER);

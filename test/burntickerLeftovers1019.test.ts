@@ -183,9 +183,10 @@ describe("HB-46 residues", () => {
     assert.doesNotMatch(pg, /<RepoText text=\{c\.source\} \/>/);
     clean(INCIDENTS_COPY.sourceLink);
   });
-  test("current-status names mainnet for the round 4 and 5 findings and serves no path; whitepaper keys; one sunset date", () => {
-    const cs = JSON.parse(read("config/burnticker/current-status.json")) as { reviews: { findings: { deployed: string }[] }[] };
-    for (const r of cs.reviews) for (const f of r.findings) assert.match(f.deployed, /^mainnet/, f.deployed);
+  test("current-status lists no review findings and serves no path; whitepaper keys; one sunset date", () => {
+    // owner decision 2026-10-22: the review findings left the public current-status file
+    const cs = JSON.parse(read("config/burnticker/current-status.json")) as Record<string, unknown>;
+    assert.ok(!("reviews" in cs));
     assert.match(read("src/app/api/burnticker/v1/current-status/route.ts"), /withoutRepoPaths\(/);
     assert.match(read("docs/burnticker/WHITEPAPER.md"), /The mainnet keys are set/);
     assert.doesNotMatch(read("site/burnticker/whitepaper.html"), /every public key is a placeholder/);

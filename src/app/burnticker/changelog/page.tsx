@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { collapseRepublishes, publicRelease, readReleases, RELEASES_SINCE } from "@/lib/burnticker/history";
-import { CHANGELOG_COPY } from "@/lib/burnticker/historyCopy";
+import { CHANGELOG_COPY, HISTORY_COPY } from "@/lib/burnticker/historyCopy";
 import { longDay } from "@/lib/burnticker/cardView";
 import { CHANGELOG_FILE } from "@/lib/burnticker/trust";
 import { EmptyState } from "../_components/EmptyState";
@@ -41,7 +41,7 @@ export default function ChangelogPage() {
           ))}
         </ol>
       )}
-      <p className="bt-meta">{CHANGELOG_COPY.fileLine} <RepoText text={CHANGELOG_FILE} />. <Link className="underline" href="/burnticker/history">History and reviews</Link></p>
+      <p className="bt-meta">{CHANGELOG_COPY.fileLine} <RepoText text={CHANGELOG_FILE} />. <Link className="underline" href="/burnticker/history">{HISTORY_COPY.trustLink}</Link></p>
     </Page>
   );
 }

@@ -308,11 +308,11 @@ describe("A1 / A4 on About, Templates and the launch meta: every open / closed s
 import { GUARDRAILS, GUARDRAIL_DETAIL, WHO_GETS_WHAT, SAFEGUARDS } from "@/lib/burnticker/safeguards";
 
 describe("A9 on Trust: each guardrail names its kind and its scope", () => {
-  test("every guardrail has a kind and a full sentence; AI reviews are called AI reviews; policies are not shown as enforced", () => {
+  test("every guardrail has a kind and a full sentence; no guardrail counts reviews; policies are not shown as enforced", () => {
     for (const g of GUARDRAILS) { const d = GUARDRAIL_DETAIL[g]; assert.ok(d && d.text.length > 20, g); lintOk(d.text, g); }
     assert.equal(GUARDRAIL_DETAIL["the platform buys no coin except one test coin"].kind, "policy");
     assert.match(GUARDRAIL_DETAIL["the platform buys no coin except one test coin"].text, /separate from each coin's program-run buyback/);
-    assert.match(GUARDRAIL_DETAIL["three blind AI reviews, not a firm audit"].text, /These are AI reviews\. They are not a professional security audit/);
+    for (const g of GUARDRAILS) assert.doesNotMatch(`${g} ${GUARDRAIL_DETAIL[g].text}`, /blind|AI review|re-check/i, g); // owner 2026-10-22
     assert.match(GUARDRAIL_DETAIL["creators earn nothing"].text, /^Creators receive no trading-fee revenue\./);
     assert.match(GUARDRAIL_DETAIL["rules locked at launch"].text, /current program/); assert.match(GUARDRAIL_DETAIL["rules locked at launch"].text, /can still be upgraded/);
     assert.match(SAFEGUARDS.find((s) => s.id === "holders")!.text, /^No instruction in the current program can/);

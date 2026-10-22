@@ -1,4 +1,4 @@
-// The ChatGPT/Codex adversarial review (docs/burnticker/reviews/2026-10-10-chatgpt-pr-review.md) found four places where published
+// The ChatGPT/Codex adversarial review (docs-private/reviews/2026-10-10-chatgpt-pr-review.md) found four places where published
 // copy did not match the source: the LP floor (checklist item 8: the general register_pool floor is 50 %, the fallback pool's 90 %),
 // the burn_receipts entrypoint count (item 1: 24, not 23), the "no market cap anywhere" UI rule (Burn Derby compares OTHER coins'
 // market caps as a rule input), and the devnet evidence's 2026-10-08 row (item 16: planned, not executed). These tests pin the copy to
@@ -21,7 +21,10 @@ import { BONK, SHIB, WIF, coinvsRule, fixtureFetch, launchSingle } from "./burnt
 const ROOT = path.resolve(import.meta.dirname, "..");
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const BR = "programs/burn-receipts/programs/burn_receipts/src";
-const CHECKLIST = "docs/burnticker/reviews/checklist.md";
+// owner decision 2026-10-22: the review reports, this checklist among them, moved out of the public tree into docs-private/reviews/; the
+// public copy of this file skips the checklist tests, because the checklist is not published.
+const CHECKLIST = "docs-private/reviews/checklist.md";
+const NO_CHECKLIST = fs.existsSync(path.join(ROOT, CHECKLIST)) ? false : "the review checklist is private (docs-private/reviews/)";
 const ERRATUM = "## Erratum 2026-10-10 (after the ChatGPT/Codex review)";
 /** Every dated erratum, in the order they were appended (each one after the last; the pre-registered text before the first never changes). */
 const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)", "## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)", "## Erratum 2026-10-11 (pair-forward round-2 re-check, RI-2 wording)", "## Erratum 2026-10-11 (pair-forward round 3, after the re-check)", "## Erratum 2026-10-12 (market cap on coin cards, owner decision)", "## Erratum 2026-10-12 (end sinks, LAUNCHPAD-PATH §45, program round 4)", "## Erratum 2026-10-13 (external burn targets, program round 5)", "## Erratum 2026-10-13 (end-sink options, program round 5)", "## Erratum 2026-10-13 (burn dispersal, program round 5)", "## Erratum 2026-10-14 (round-5 blind review fixes)", "## Erratum 2026-10-15 (round-5 R5-8 and R5-9, owner decision)", "## Erratum 2026-10-15 (R5-8 / R5-9 after their blind review)"];
@@ -46,7 +49,7 @@ function erratumSection(heading = ERRATUM): string {
   return text.slice(i, next ?? text.length);
 }
 
-describe("checklist: pre-registered text is immutable, corrections go in the erratum", () => {
+describe("checklist: pre-registered text is immutable, corrections go in the erratum", { skip: NO_CHECKLIST }, () => {
   test("everything before the erratum is byte-identical to the pre-registered checklist", () => {
     const text = read(CHECKLIST);
     const i = text.indexOf(ERRATUM);
@@ -140,7 +143,7 @@ describe("LP floor copy matches the program constants (review item 8)", () => {
     assert.equal(bps("MIN_LOCKED_LP_BPS"), 5_000);
     assert.equal(bps("FALLBACK_MIN_LOCKED_LP_BPS"), 9_000);
   });
-  test("the checklist erratum states 50 % / 90 %", () => {
+  test("the checklist erratum states 50 % / 90 %", { skip: NO_CHECKLIST }, () => {
     const e = erratumSection();
     assert.match(e, /50 %/);
     assert.match(e, /90 %/);
@@ -195,7 +198,7 @@ describe("burn_receipts entrypoint count matches the copy (review item 1)", () =
     const rows = section.split("\n").filter((l) => /^\| `[a-z_0-9]+` \|/.test(l));
     assert.equal(rows.length, n);
   });
-  test("the latest checklist erratum states the real count", () => {
+  test("the latest checklist erratum states the real count", { skip: NO_CHECKLIST }, () => {
     assert.match(erratumSection(ERRATA[ERRATA.length - 1]), new RegExp(`\\b${n} entrypoints\\b`));
   });
 });

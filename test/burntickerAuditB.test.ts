@@ -260,12 +260,11 @@ describe("V1 and the check page's standing limitations", () => {
     assert.equal(c.notDone.some((n) => n.id === "signed-operator-message"), !signedNow, "a signed statement is not a standing limitation; an unsigned one is");
     if (signedNow) assert.doesNotMatch(text, /statement is not signed yet/i);
     assert.doesNotMatch(text, /pair launches stay off/i);
-    const pair = c.notDone.find((n) => n.id === "paircurve-findings-open");
-    assert.match(pair?.text ?? "", /As of 2026-10-11, round 3 had not had an independent re-check of its own\./);
-    assert.match(pair?.text ?? "", /Pair launches are on/);
+    // owner decision 2026-10-22: the pair-review limitation (re-check wording) left the public checklist
+    assert.ok(!c.notDone.some((n) => n.id === "paircurve-findings-open")); assert.doesNotMatch(text, /independent re-check|blind review/i);
     const { lintCopy } = await import("@/lib/launch/copyLint");
     const t = JSON.parse(read("config/burnticker/transparency.json")) as { limitations: { id: string; text: string }[] };
-    for (const id of ["signed-operator-message", "paircurve-findings-open"]) assert.deepEqual(lintCopy(t.limitations.find((l) => l.id === id)!.text).hits, [], id);
+    for (const id of ["signed-operator-message"]) assert.deepEqual(lintCopy(t.limitations.find((l) => l.id === id)!.text).hits, [], id);
     assert.doesNotMatch(read("docs/burnticker/CHECK-THIS-YOURSELF.md"), /statement is not signed yet|pair launches stay off/);
   });
 });

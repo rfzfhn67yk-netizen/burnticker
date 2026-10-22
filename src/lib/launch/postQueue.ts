@@ -20,11 +20,11 @@ import { DISCLAIMER, SHORT_DISCLAIMER, allLeaguesLine, dailyText, fmtInt, fmtPct
  *   season-card    one coin's rule, its window (only what status.json says), receipts so far, the locked hash
  *   explainer      how a burn happens · what a receipt is · why LP is locked · why creators earn nothing (numbers from fees.ts)
  *   launch-thread  $DEFICIT (from its rule file), the platform (guardrails derived from transparency.json), or any coin
- *   teaser         pre-launch, true today: the devnet receipt, the $DEFICIT rule, the reviews, open source, settlement coverage
+ *   teaser         pre-launch, true today: the devnet receipt, the $DEFICIT rule, open source, settlement coverage
  *
  * Every post runs through the copy lint (config/launch/copy-lint.json) and is REFUSED — never queued — on any hit, on an unfilled
  * {PLACEHOLDER}, on more than 280 X-characters (links count 23), or on a thread longer than THREAD_MAX. Claims that depend on the
- * state of the world (how many reviews are published, whether the bounty is live, which leagues are read, the coverage counts) are
+ * state of the world (whether the bounty is live, whether a firm audit exists, which leagues are read, the coverage counts) are
  * read from the files that record that state, so a post cannot get ahead of the code.
  */
 
@@ -37,7 +37,6 @@ export const THREAD_MAX = 8;
 export { SHORT_DISCLAIMER };
 export const PUBLIC_REPO = "https://github.com/rfzfhn67yk-netizen/burnticker";
 const REPO_FILE = (p: string) => `${PUBLIC_REPO}/blob/main/${p}`;
-const REPO_TREE = (p: string) => `${PUBLIC_REPO}/tree/main/${p}`;
 
 /** Cheap-features item 8 (2026-10-13): the daily digest post, built from a saved GET /v1/digest answer (digest.ts digestDraft); outside the six fixed formats because it needs that input. */
 export const DIGEST_FORMAT = "digest" as const;
@@ -257,25 +256,16 @@ export function deficitLaunchThread(f: DeficitRuleFacts, site: string, launchTxU
   };
 }
 
-/** What transparency.json says about the reviews and the bounty — the only source for the "reviewed" claim in any post. */
-export interface ReviewFacts { blindDone: number; chatgptDone: boolean; bountyPublished: boolean; firmAudit: boolean }
-export function reviewFacts(t: { howBuilt: { firmAudit: boolean; reviews: { id: string; status: string }[]; bounty: { status: string } } }): ReviewFacts {
-  const done = (s: string) => /^completed/i.test(s);
-  return {
-    blindDone: t.howBuilt.reviews.filter((r) => r.id.startsWith("claude-blind") && done(r.status)).length,
-    chatgptDone: t.howBuilt.reviews.some((r) => r.id.startsWith("chatgpt") && done(r.status)),
-    bountyPublished: /^published/i.test(t.howBuilt.bounty.status), firmAudit: t.howBuilt.firmAudit,
-  };
+/**
+ * What transparency.json says about the firm audit and the bounty, the only source for the audit sentence in any post. Owner decision
+ * 2026-10-22: posts no longer count or describe reviews; they say only that no security firm has audited the code.
+ */
+export interface ReviewFacts { bountyPublished: boolean; firmAudit: boolean }
+export function reviewFacts(t: { howBuilt: { firmAudit: boolean; bounty: { status: string } } }): ReviewFacts {
+  return { bountyPublished: /^published/i.test(t.howBuilt.bounty.status), firmAudit: t.howBuilt.firmAudit };
 }
-const NUM = ["no", "one", "two", "three", "four", "five", "six"];
-/** "three blind AI reviews published in full, the adversarial ChatGPT review pending, the public bounty not published" — status words only, never "audit", never a date. */
-export function reviewLine(r: ReviewFacts): string {
-  return [
-    `${NUM[r.blindDone] ?? r.blindDone} blind AI ${r.blindDone === 1 ? "review" : "reviews"} published in full`,
-    r.chatgptDone ? "an adversarial ChatGPT review published" : "the adversarial ChatGPT review pending",
-    r.bountyPublished ? "a public bounty" : "the public bounty not published",
-  ].join(", ");
-}
+/** The one audit sentence (transparency.json howBuilt.firmAuditStatement says the same). */
+export const FIRM_AUDIT_SENTENCE = "No security firm has audited the code.";
 
 /** The @BurnTicker announcement thread: the sentence, the engine, the receipt, the show (leagues the code reads), the guardrails, $DEFICIT. */
 export function platformLaunchThread(rf: ReviewFacts, site: string): Draft {
@@ -290,7 +280,7 @@ export function platformLaunchThread(rf: ReviewFacts, site: string): Draft {
       `When the result settles on its primary source and an independent publisher agrees, the reading is signed on chain and the program spends the coin's own fees buying it on its own pool and burning all of it. The memo is the receipt.`,
       `Follow the season: team coins across ${lg.map((x) => x.label).join(", ")} (${lg.map((x) => x.team).join(", ")}), scored in receipts. Nothing is won here. Things are only burned.`,
       `Guardrails: creators earn nothing · zero team allocation · the platform buys no coin except one test coin · LP locked forever, its fees fund the burn · rules locked at launch · every receipt recomputable from its public source.`,
-      `Open source: ${PUBLIC_REPO}\nReviewed: ${reviewLine(rf)}. Not audited by a security firm.`,
+      `Open source: ${PUBLIC_REPO}${rf.firmAudit ? "" : `\n${FIRM_AUDIT_SENTENCE}`}`,
       `First coin: $DEFICIT (@USA_DEFICIT): each $1B the U.S. debt rises, its fees buy it back and burn it. ${NOTHING_BURNS_LINE}.\n\nRun by one independent operator.\nMemecoins: the rule says what supply does, not what price does. ${S}`,
     ],
   };
@@ -323,7 +313,7 @@ export function devnetReceipt(rows: readonly BurnJson[]): DevnetReceipt {
   return { date: r.recordDate, units: r.units, spentSol: Number(r.spent).toFixed(4), burned: String(r.burned), txUrl: r.txUrl!, log: REPO_FILE("docs/burnkeeper/devnet-run.md") };
 }
 
-export const TEASER_TOPICS = ["devnet-receipt", "the-rule", "reviews", "open-source", "coverage"] as const;
+export const TEASER_TOPICS = ["devnet-receipt", "the-rule", "open-source", "coverage"] as const;
 export type TeaserTopic = (typeof TEASER_TOPICS)[number];
 export interface TeaserContext { site: string; reviews?: ReviewFacts; deficit?: DeficitRuleFacts; coverage?: { settleable: number; adjudicatedOnly: number; uncovered: number }; devnet?: DevnetReceipt }
 
@@ -339,7 +329,6 @@ export function teaserDraft(topic: TeaserTopic, c: TeaserContext): Draft {
   const text: Record<TeaserTopic, () => { account: Account; posts: string[] }> = {
     "devnet-receipt": () => { const d = need(c.devnet, "the devnet evidence file"); return { account: "@BurnTicker", posts: [`Devnet rehearsal, ${d.date}: Treasury's debt figure counted ${d.units} units. The burn_receipts program spent ${d.spentSol} SOL of a test coin's fee pool, bought ${fmtInt(d.burned)} test $DEFICIT on its own pool and burned all of it, memo on chain.\n${d.txUrl}\nLog: ${d.log}`] }; },
     "the-rule": () => { const f = need(c.deficit, "the $DEFICIT rule file"); return { account: "@USA_DEFICIT", posts: [`$${f.ticker}'s rule: every full ${dollarsB(f.unitUsd)} added to Treasury's Debt to the Penny is one unit; each unit spends ${pctOf(f.fractionPerUnit)} of the burn pool buying $${f.ticker} on its own pool, and the program burns all of it.\nRule file sha256:${f.sha256.slice(0, 12)}\n${SHORT_DISCLAIMER}`] }; },
-    reviews: () => { const r = need(c.reviews, "transparency.json review facts"); return { account: "@BurnTicker", posts: [`Burnticker's program and keeper: ${reviewLine(r)}. Every finding is in the reports with its fix. Not audited by a security firm.\n\n${REPO_TREE("docs/burnticker/reviews")}`] }; },
     "open-source": () => ({ account: "@BurnTicker", posts: [`Everything Burnticker runs is public: the on-chain program, the keeper, the pages, the tests. The operator's trading bots refuse every platform coin, in code, and that file is public too.\n\nOperated by one independent operator.\n${PUBLIC_REPO}`] }),
     coverage: () => { const k = need(c.coverage, "the coverage counts"); return { account: "@BurnTicker", posts: [`What Burnticker can settle today, category by category, with the primary source and its independent cross-read: ${k.settleable} settleable · ${k.adjudicatedOnly} on an on-chain payout only · ${k.uncovered} uncovered.\n\n${REPO_FILE("docs/burnticker/SETTLEMENT-COVERAGE.md")}\n${S}/burnticker/trust`] }; },
   };

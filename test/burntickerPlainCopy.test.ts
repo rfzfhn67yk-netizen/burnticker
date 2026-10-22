@@ -190,7 +190,7 @@ describe("plain-English copy: no shorthand on any page (website-9)", () => {
       checkProse(s.host.line, "current-status host line");
       for (const u of s.upgradeAuthority) { checkProse(u.line, "time-lock line"); checkProse(u.why, "time-lock why"); }
       for (const p of s.programs) { checkProse(upgradeAuthorityText(p.devnet), "upgrade authority"); checkProse(p.mainnet.line, "mainnet line"); }
-      for (const t of proseFields({ settlement: s.settlement, reviews: s.reviews, releaseRequirements: s.releaseRequirements, design: s.design, attesters: s.attesters, phase: s.phase })) checkProse(t, "current-status.json");
+      for (const t of proseFields({ settlement: s.settlement, releaseRequirements: s.releaseRequirements, design: s.design, attesters: s.attesters, phase: s.phase })) checkProse(t, "current-status.json");
     }
     for (const tl of [null, 0, 172800]) checkProse(upgradeDelaySummary(tl), "upgrade delay");
     const op = loadOperator(ROOT);

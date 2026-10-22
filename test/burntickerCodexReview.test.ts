@@ -1,6 +1,6 @@
-// THE CHATGPT/CODEX ADVERSARIAL PR REVIEW (2026-10-10; docs/burnticker/reviews/2026-10-10-chatgpt-pr-review.md): one regression test per
+// THE CHATGPT/CODEX ADVERSARIAL PR REVIEW (2026-10-10; docs-private/reviews/2026-10-10-chatgpt-pr-review.md): one regression test per
 // finding, written to fail on the code the review read and pass on the fix. The response (finding → disposition → test → commit) is
-// docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md.
+// docs-private/reviews/2026-10-10-chatgpt-pr-review-response.md.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { AddressLookupTableAccount, Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction, TransactionMessage, VersionedMessage, VersionedTransaction } from "@solana/web3.js";
@@ -558,7 +558,7 @@ describe("No odds for any coin (owner decision 2026-10-10): the market-implied c
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// THE SECOND CHATGPT/CODEX REVIEW (2026-10-11; docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2.md), finding F3.
+// THE SECOND CHATGPT/CODEX REVIEW (2026-10-11; docs-private/reviews/2026-10-11-chatgpt-pr-review-2.md), finding F3.
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 describe("F3 (review 2) — a launch confirmation authenticates initialize_token, the on-chain TokenConfig and the venue, not account-key presence", () => {

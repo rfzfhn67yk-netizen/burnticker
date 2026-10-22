@@ -21,15 +21,14 @@ describe("mission statement", () => {
     assert.ok(MISSION_BIO.length <= 160, `${MISSION_BIO.length}`);
     assert.doesNotMatch(MISSION_BIO, /\b(will|payouts?|price|buy|bet|odds|wager|jackpot|win|gambl\w*|prize)\b/i);
   });
-  test("the About page and the press page read the constant", () => {
-    for (const p of ["src/app/burnticker/about/page.tsx", "src/app/burnticker/press/page.tsx"]) {
+  test("the About page reads the constant (the press page left the site on 2026-10-22)", () => {
+    for (const p of ["src/app/burnticker/about/page.tsx"]) {
       const s = read(p);
       const importLine = s.split("\n").find((l) => l.startsWith("import") && l.includes("MISSION_STATEMENT"));
       assert.ok(importLine?.endsWith(["", "lib", "burnticker", "mission\";"].join("/")), p);
       assert.match(s, /\{MISSION_STATEMENT\}/, p);
     }
-    assert.match(read("src/app/burnticker/press/page.tsx"), /PRESS_COPY\.missionTitle/);
-    assert.match(read("src/lib/burnticker/historyCopy.ts"), /missionTitle: "In one paragraph"/);
+    assert.doesNotMatch(read("src/lib/burnticker/historyCopy.ts"), /PRESS_COPY/);
   });
   test("the whitepaper opens with the statement, in the Markdown and the generated page", () => {
     const md = read("docs/burnticker/WHITEPAPER.md").split("\n");

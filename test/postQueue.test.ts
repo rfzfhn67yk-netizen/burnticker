@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { lintCopy, loadCopyLintConfig, xLength } from "@/lib/launch/copyLint";
 import {
   EXPLAINER_TOPICS, POST_FORMATS, PostRefused, QUEUE_SCHEMA, TEASER_TOPICS, THREAD_MAX, appendQueue, asThread, checkDraft, coinLaunchThread, deficitLaunchThread,
-  deficitReceiptDraft, draftId, explainerDraft, pairScoreboardDraft, platformLaunchThread, readLeagues, readQueue, receiptDraft, reviewLine, scoreboardDraft, scoreboardDrafts,
+  deficitReceiptDraft, draftId, explainerDraft, pairScoreboardDraft, platformLaunchThread, readLeagues, readQueue, receiptDraft, reviewFacts, FIRM_AUDIT_SENTENCE, scoreboardDraft, scoreboardDrafts,
   seasonCardDraft, teaserDraft, type Draft,
 } from "@/lib/launch/postQueue";
 import * as F from "./postQueueFixtures.ts";
@@ -50,15 +50,16 @@ describe("every format from the fixtures", () => {
   test("the hard copy rules hold across every post: never Kalshi, never 'audit' as a claim, no league list led by the NFL", () => {
     const all = drafts.flatMap((d) => d.posts).join("\n\n");
     assert.doesNotMatch(all, /kalshi/i);
-    assert.doesNotMatch(all.replace(/not audited by a security firm/gi, ""), /\baudit(ed)?\b/i);
+    assert.doesNotMatch(all.replace(/not audited by a security firm|no security firm has audited the code\./gi, ""), /\baudit(ed)?\b/i);
     for (const m of all.matchAll(/team coins across ([^(]+)\(/g)) assert.doesNotMatch(m[1], /^NFL/);
     assert.notEqual(readLeagues()[0].league, "nfl");
   });
-  test("the platform thread names the operator, says 'not audited', and its review line comes from transparency.json", () => {
+  test("the platform thread names the operator and says the one audit sentence, with no review count (owner 2026-10-22)", () => {
     const t = platformLaunchThread(facts.reviews, site).posts.join("\n");
-    assert.match(t, /one independent operator/); assert.doesNotMatch(t, /Shane|Cassidy|Colorado/); assert.match(t, /Not audited by a security firm/); assert.ok(t.includes(reviewLine(facts.reviews)));
-    assert.match(reviewLine({ blindDone: 3, chatgptDone: false, bountyPublished: false, firmAudit: false }), /^three blind AI reviews published in full, the adversarial ChatGPT review pending, the public bounty not published$/);
-    assert.match(reviewLine({ blindDone: 3, chatgptDone: true, bountyPublished: true, firmAudit: false }), /an adversarial ChatGPT review published, a public bounty$/);
+    assert.match(t, /one independent operator/); assert.doesNotMatch(t, /Shane|Cassidy|Colorado/);
+    assert.equal(t.split(FIRM_AUDIT_SENTENCE).length - 1, 1); assert.doesNotMatch(t, /blind|AI review|ChatGPT review|re-check/i);
+    assert.ok(!(TEASER_TOPICS as readonly string[]).includes("reviews"));
+    assert.deepEqual(reviewFacts({ howBuilt: { firmAudit: false, bounty: { status: "funded 2026-10-11" } } }), { bountyPublished: false, firmAudit: false });
   });
   test("the devnet teaser reads its numbers and transaction from the rehearsal's evidence file", () => {
     const t = teaserDraft("devnet-receipt", { site, devnet: facts.devnet }).posts[0];
