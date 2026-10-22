@@ -204,7 +204,7 @@
       "label": "The operator's own wallet",
       "pubkey": "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs",
       "envVar": null,
-      "description": "The operator's own wallet (also the default owner of its Solana trading bot); it created seven soft-launch coins: $PHINFLWIN, $CLARITY, $PITWIN, $BALWIN, $SEAWIN, $DENWIN and $TWOCUTS. The operator holds none of them. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out), it has not traded them. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. Each of those coin pages names this wallet as the operator's."
+      "description": "The operator's own wallet (also the default owner of its Solana trading bot); it created eight soft-launch coins: $PHINFLWIN, $CLARITY, $PITWIN, $BALWIN, $SEAWIN, $DENWIN, $TWOCUTS and $COLNHLWIN. The operator holds none of them. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out), it has not traded them. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. Each of those coin pages names this wallet as the operator's."
     },
     {
       "role": "trading-wallets",
