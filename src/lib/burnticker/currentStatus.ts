@@ -114,7 +114,6 @@ export function deployedFromChain(d: Deployed | null | undefined, buildHash: str
 
 // ---- the joined status ----
 
-interface Finding { id: string; severity: string; title: string; fix: string; recheck: string; deployed: string }
 interface StatusFileFull {
   checkedAt: string; phase: { label: string; line: string };
   networks: Record<Cluster, { role: string; deployment: string; since: string | null; evidence: string | null }>;
@@ -122,7 +121,6 @@ interface StatusFileFull {
   squads: Record<Cluster, { plannedTimeLockSecs: number; plannedFrom: string | null; why: string; keyControl?: string }>;
   attesters: { quorum: number; active: { label: string; independent: boolean }[]; line: string };
   settlement: { category: string; primary: string; check: string; status: string }[];
-  reviews: { id: string; report: string; label: string; findings: Finding[] }[];
   releaseRequirements: { id: string; text: string; status: "open" | "done"; derivedFromChain?: string }[];
   design: string[]; historical: { label: string; path: string }[];
   deficit: { firstBurnPath: { doc: string; line: string } };
@@ -137,7 +135,7 @@ export interface CurrentStatus {
   networks: { cluster: Cluster; role: string; deployment: string; since: string | null }[];
   programs: { name: string; programId: string; version: string; note: string; verifiedBuild: string; devnet: { deployed: boolean; matchesBuild: boolean | null; upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt: string | null; recordedUpgradeAuthority: string | null; /** B-17 (2026-10-21): pendingUpgradeSentence when a newer build is not deployed on devnet yet */ upgradePending?: string }; mainnet: { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string; matchesBuild?: boolean | null; upgradePending?: string } }[];
   upgradeAuthority: { cluster: Cluster; vault: string; multisig: string; threshold: string; members: number | null; timeLockSecs: number | null; timeLockSource: "chain" | "unavailable"; plannedTimeLockSecs: number; plannedFrom: string | null; why: string; line: string }[];
-  attesters: StatusFileFull["attesters"]; settlement: StatusFileFull["settlement"]; reviews: StatusFileFull["reviews"];
+  attesters: StatusFileFull["attesters"]; settlement: StatusFileFull["settlement"];
   releaseRequirements: StatusFileFull["releaseRequirements"]; design: string[]; historical: StatusFileFull["historical"];
   /** the $DEFICIT prerequisite chain (docs/burnticker/FIRST-BURN-PATH.md) and its one line */
   firstBurnPath: { doc: string; line: string };
@@ -243,7 +241,6 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     if (r.derivedFromChain === "mainnet-deployment" && (allMain || noneMainKnown)) return { ...r, status: (allMain ? "done" : "open") as "open" | "done" };
     return r;
   });
-  const waiting = st.reviews.reduce((n, r) => n + r.findings.filter((f) => /not done|not re-checked/.test(f.recheck)).length, 0);
   const lines = [
     st.phase.line,
     st.deficit.firstBurnPath.line,
@@ -255,7 +252,8 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     // audit 4 BT-12: who can authorise an upgrade and how much notice there is, in the top-level summary (keys vs controllers)
     `The 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock, an approved upgrade executes at once, with no advance notice." : ""}`,
     `The operator earns 0.25% of curve trading volume. ${bothTiersLineNow(tierPinPendingLive(vb, mainBurnLive))} The coin side of the liquidity fees is burned. Creators take no cash from fees.`,
-    `No security firm has audited the code. ${waiting === 1 ? "One fixed finding still waits" : `${countWord(waiting)} fixed findings still wait`} for an independent re-check.`,
+    // owner decision 2026-10-22: the one audit sentence, with no count of findings or re-checks
+    "No security firm has audited the code.",
     // eighth pass B-25 (owner 2026-10-21): the count of open release items is no longer a summary sentence; the list stays behind its disclosure
     // HB-82: while today's registry snapshot is not pinned, the summary says so
     ...(i.registrySnapshot && !i.registrySnapshot.pinned && i.registrySnapshot.line ? [i.registrySnapshot.line] : []),
@@ -264,7 +262,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   return {
     schema: "burnticker.current-status/v1", checkedAt: st.checkedAt, readAt, source: CURRENT_STATUS_FILE, phase: st.phase, host,
     networks: (["devnet", "mainnet"] as Cluster[]).map((c) => ({ cluster: c, role: st.networks[c].role, deployment: c === "mainnet" && anyMain ? "deployed" : c === "mainnet" && mainUnknown ? "unknown, because the chain read failed" : st.networks[c].deployment, since: st.networks[c].since })),
-    programs, upgradeAuthority, attesters: st.attesters, settlement: st.settlement, reviews: st.reviews, releaseRequirements, design: st.design, historical: st.historical, firstBurnPath: st.deficit.firstBurnPath, lines,
+    programs, upgradeAuthority, attesters: st.attesters, settlement: st.settlement, releaseRequirements, design: st.design, historical: st.historical, firstBurnPath: st.deficit.firstBurnPath, lines,
     ...(i.registrySnapshot !== undefined ? { registrySnapshot: i.registrySnapshot } : {}),
   };
 }

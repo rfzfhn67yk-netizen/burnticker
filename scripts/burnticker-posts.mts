@@ -9,7 +9,7 @@
  *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-posts.mts <format|all> [flags]
  *
  *   all --fixtures --print                      every format from the fixtures (the dry run the owner reads first)
- *   teaser [--topic=devnet-receipt|the-rule|reviews|open-source|coverage]   pre-launch posts that are true today
+ *   teaser [--topic=devnet-receipt|the-rule|open-source|coverage]   pre-launch posts that are true today
  *   explainer [--topic=how-a-burn-happens|what-a-receipt-is|why-lp-is-locked|why-creators-earn-nothing]
  *   launch-thread --kind=deficit|platform|coin [--ticker=T] [--launch-tx=URL]
  *   receipt [--ticker=T|--deficit] [--day=YYYY-MM-DD] [--all]   confirmed burns only (default: the day before --now, UTC)

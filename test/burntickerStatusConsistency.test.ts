@@ -66,10 +66,10 @@ test("nothing in the current object calls deployed round-4 functionality unbuilt
   for (const s of current) {
     assert.doesNotMatch(s, /not built|designed but not built|round 3 build/i, s);
   }
-  // the end sink is the round-4 feature the contradiction was about: its requirement is done, its re-check is a separate open item
+  // the end sink is the round-4 feature the contradiction was about: its requirement is done (owner 2026-10-22: no re-check item on the site)
   const sink = st.releaseRequirements.find((r) => r.id === "end-sink");
   assert.equal(sink?.status, "done");
-  assert.ok(st.releaseRequirements.some((r) => r.id === "r4-recheck" && r.status === "open"), "the independent re-check of round 4 stays open until there is evidence");
+  assert.ok(!st.releaseRequirements.some((r) => r.id === "r4-recheck"), "no review re-check item in the public status");
   assert.ok(st.design.some((l) => /sink/.test(l) && /devnet and mainnet/.test(l)), "the design line about the sink states where the program carries it");
 });
 

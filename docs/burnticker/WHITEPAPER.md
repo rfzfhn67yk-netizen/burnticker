@@ -7,7 +7,7 @@ Memecoins got boring. Burnticker ties every coin to something that actually happ
 > of 2026-10-11, such as the winner-takes-the-burn rule for pairs in section 5.5 and the locked-liquidity fees in section 6. Live
 > deployment and readiness are not part of this paper. They are on [the trust page](https://burnticker.com/burnticker/trust) and at
 > [/api/burnticker/v1/current-status](https://burnticker.com/api/burnticker/v1/current-status). Where a section states a status, such as
-> the status table below or sections 9 to 11 on governance, reviews and the bounty, that status is as of 2026-10-10 and is kept for the
+> the status table below or sections 9 to 11 on governance, security and the bounty, that status is as of 2026-10-10 and is kept for the
 > record. The first draft, as it stood at the end of 2026-10-10, is archived unchanged at
 > [whitepaper-2026-10-10.html](https://burnticker.com/whitepaper-2026-10-10.html).
 
@@ -522,7 +522,7 @@ on, pairs launch on two LaunchLab curves under the rules-level "both or neither"
   with ≥ 90 % of the creation LP burned or locked (section 4.7).
 - **Powers.** The pair program has no powers over funds. It has no admin, no parameter update and no withdraw. Its upgrade authority is
   the same Squads vault as the settlement program's, which holds it on mainnet today
-  (`docs/burn-receipts/pair-curve-powers-register.md`). Two blind reviews on 2026-10-10 found five High issues in the first version. All
+  (`docs/burn-receipts/pair-curve-powers-register.md`). Five High issues were found in the first version. All
   of them are fixed and were re-run on devnet (`docs/burn-receipts/CHANGELOG.md`).
 
 ### 5.5 Winner takes the burn
@@ -734,31 +734,18 @@ match, and the trust page says so.
   authority or any listed key. It lapses 90 days after `initialize_platform` or at the cap sunset, whichever comes first. Readings, vault
   cranks, claims and health checks stay permissionless.
 
-## 10. Security review history
+## 10. Security
 
-Burnticker is **not audited by a security firm**. On 2026-10-09 the owner decided against a paid audit, in favor of independent AI
-reviews, free tooling and a public bounty. Reports are published as delivered:
+No security firm has audited the code. Every fix and its closing test is in `docs/burn-receipts/CHANGELOG.md`.
 
-| Round | Report | Findings | Outcome |
-|---|---|---|---|
-| Blind review 1 (2026-10-09) | [2026-10-09-claude-blind-1.md](reviews/2026-10-09-claude-blind-1.md) | 2 High, 4 Medium, 7 Low, 6 Info | no extraction path found; sandwich budget (H-1) and the fee-inflow routing (H-2) fixed |
-| Blind review 2 (2026-10-10) | [2026-10-10-claude-blind-2.md](reviews/2026-10-10-claude-blind-2.md) | 5 Medium, 4 Low, 8 Info | sandwich bound via TWAP quote, attester takeover, stray-lamport wedge, quorum-2 transaction size, pool squatting fixed |
-| Blind review 3 and re-check (2026-10-10) | [2026-10-10-claude-blind-3.md](reviews/2026-10-10-claude-blind-3.md) | 3 Medium, 6 Low, 6 Info; re-check 4 Low, 2 Info | callee signer abuse (M-1) closed; LP griefing, LaunchLab pinning and iterated attester takeover partly closed by design |
-
-Each reviewer was a fresh Claude agent given the code. It read earlier reports only after writing its own findings. Every fix and its
-closing test is in `docs/burn-receipts/CHANGELOG.md`. Review 3 found that no path that moves funds was added, and it found no Critical
-or High issue.
-
-**Open or accepted after the re-check.** LP-ratio griefing is still possible through a deposit larger than the whole migrated liquidity.
+**Known open issues.** LP-ratio griefing is still possible through a deposit larger than the whole migrated liquidity.
 The LaunchLab platform admin can still make changes between init and migration, which the launch gate and the stranding switch cover.
 Attester proposals still need no consent from current attesters. They are bounded by 48 hours, then 7 days, then 48 hours, all in
 public. The Jito-bundle gap in pool-health observations remains. So does the multi-block TWAP hold once the allowlist lapses.
 Informational items I-3 to I-6 are also open (`docs/burn-receipts/README.md` section 8).
 
-**Not done.** The ChatGPT review named in the decision log is not done. Neither are cargo-audit, Trident fuzzing and Sec3 X-ray. Review 3
-ran clippy with `-D warnings`, and the result was clean. The bounty was not done on 2026-10-10. Since 2026-10-11 it is live: its wallet
-holds 5 SOL from the developer fee (a pool of 5 to 10 SOL), the bounty page shows its funding and balance, and its terms in `SECURITY.md`
-are still a draft (see the status on 2026-10-19 above).
+**Bounty.** Since 2026-10-11 it is live: the bounty wallet holds 5 SOL from the developer fee (a pool of 5 to 10 SOL), the bounty page
+shows its funding and balance, and its terms in `SECURITY.md` are still a draft (see the status on 2026-10-19 above).
 
 ## 11. Limitations and risks
 
@@ -794,7 +781,7 @@ are still a draft (see the status on 2026-10-19 above).
   assets excluded. Every publish adds the commit, program hash, IDL hash and allowlist hash to `docs/burnticker/CHANGELOG.md`.
 - **Powers Register.** It is generated from the IDL and published as `docs/burn-receipts/powers-register.{md,json}`.
 - **Logs.** The decision log (`docs/burnticker/decisions.md`) is append-only. The incident log (`docs/burnticker/incidents/LOG.md`) lists five
-  incidents; see [/burnticker/incidents](https://burnticker.com/burnticker/incidents). Review reports are in `docs/burnticker/reviews/`.
+  incidents; see [/burnticker/incidents](https://burnticker.com/burnticker/incidents).
 - **Wallet list.** The transparency file (`config/burnticker/transparency.json`) names every role: operations, deployer, keeper,
   developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading-bot
   wallets on other machines. Their only trades in a platform coin are the 0.1 SOL of $REHEARSAL at its creation and the operator's own
@@ -897,7 +884,7 @@ PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, 
 RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, RuleEnded, SolBurnedOnEnd, SpendCapBound, SpendCarried,
 TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned, TargetReleased, TokenInitialized. Error codes: 144. (Round 5, a coin that
 burns another token: docs/burnticker/EXTERNAL-BURN.md; the incinerator end sink and the r5 create: docs/burnticker/END-SINK.md; burn dispersal
-(`crank_carried`, the CarriedSpent event and five errors): the checklist erratum of 2026-10-13; the round-5 blind review fixes
+(`crank_carried`, the CarriedSpent event and five errors): the checklist erratum of 2026-10-13; the round-5 fixes
 (`release_target`, the TargetReleased event, five errors, the retired `initialize_token`): the checklist erratum of 2026-10-14; the
 carried-piece pace and the liveness of a coin that burns another token (R5-8, R5-9: three errors, the CarriedPace account): the checklist
 erratum of 2026-10-15; deployed on devnet and mainnet on 2026-10-15.)

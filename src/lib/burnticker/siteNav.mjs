@@ -31,11 +31,10 @@ export const LEARN_NAV = [
   { label: "Whitepaper", href: "/whitepaper.html", kind: "static" },
   { label: "Docs and API", href: "/burnticker/docs", kind: "app" },
   { label: "How burns are settled", href: "/burnticker/how-burns-settle", kind: "app" },   // owner, 2026-10-12
-  // legitimacy pass items 1, 2, 3, 6 (owner, 2026-10-12: history is available, not on display; two clicks deep, never on the home page)
+  // legitimacy pass items 1, 2, 3 (owner 2026-10-22: the press kit left the site; owner, 2026-10-12: history is available, not on display; two clicks deep, never on the home page)
   { label: "Changelog", href: "/burnticker/changelog", kind: "app" },
   { label: "Incidents", href: "/burnticker/incidents", kind: "app" },
   { label: "Bounty", href: "/burnticker/bounty", kind: "app" },
-  { label: "Press", href: "/burnticker/press", kind: "app" },
   { label: "Terms", href: "/burnticker/terms", kind: "app" },
   { label: "Privacy", href: "/burnticker/privacy", kind: "app" },
   { label: "X", href: "https://x.com/BurnTicker", kind: "external" },

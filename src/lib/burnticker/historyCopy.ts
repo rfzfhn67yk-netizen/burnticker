@@ -1,8 +1,7 @@
-import { disclosedTestsClause, operatorTradeReasons } from "@/lib/burnticker/operatorCreators";
 
 /**
- * THE WORDS OF THE HISTORY PAGES (legitimacy pass, website-16, 2026-10-12): the changelog, the incident log, the bounty, the press kit,
- * the verify-it-yourself walk-through and the "History and reviews" page that gathers them. Plain English, US spelling, no price talk,
+ * THE WORDS OF THE HISTORY PAGES (legitimacy pass, website-16, 2026-10-12): the changelog, the incident log, the bounty,
+ * the verify-it-yourself walk-through and the "History" page that gathers them. Plain English, US spelling, no price talk,
  * no promised dates; every sentence here passes the copy lint and test/burntickerPlainCopy.test.ts (this module is in its list). The
  * numbers on these pages are read from the repository's files by history.ts, never typed here.
  */
@@ -75,8 +74,6 @@ export const CAUGHT_EARLY: { id: string; date: string; title: string; happened: 
 
 /** The address security reports go to (SECURITY.md, transparency.json howBuilt.bounty.contact, site/burnticker/.well-known/security.txt). */
 export const SECURITY_CONTACT = "security@burnticker.com";
-/** The press contact (the operator line's address). */
-export const PRESS_CONTACT = "contact@burnticker.com";
 
 export const BOUNTY_COPY = {
   title: "Security bounty",
@@ -113,56 +110,10 @@ export const BOUNTY_COPY = {
   how: [
     "Write to the address below with the steps to reproduce the problem, what it affects, and the address you want to be paid at.",
     "Please report privately first. We do not take legal action against good-faith research that respects people's funds and data.",
-    "The report and the fix, or the reason for not fixing it, are published in the reviews folder of the public repository once it is safe to do so.",
+    "Once it is safe to do so, the fix, or the reason for not fixing it, is published in the public repository.",
   ],
   termsLink: "Read SECURITY.md",
 };
-
-export const PRESS_COPY = {
-  title: "Press kit",
-  description: "Burnticker's logo files, the $DEFICIT mark, the receipt artwork, a short description and the contact address.",
-  missionTitle: "In one paragraph",
-  boilerplateTitle: "About Burnticker",
-  boilerplate: "Burnticker is a launchpad for Solana memecoins that burn on real-world results. Each coin locks one rule that names a public result, such as a game score or the national debt figure. When the result is published, fees from trading the coin buy back some of it from its pool, and everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it against the source.",
-  notTitle: "What Burnticker is not",
-  not: [
-    // sixth pass B-16e / HB-59: the one disclosed test purchase is named where "never trades" is said; ninth pass B-26 / HS-95: and the
-    // operator's own wallet's $SEAWIN test, with the owner's reason (transparency.json operatorTrades)
-    `Burnticker is not an exchange, and it never takes an order. Apart from ${disclosedTestsClause()}, it never trades a coin.${operatorTradeReasons() ? ` ${operatorTradeReasons()}` : ""}`,
-    "Burnticker coins are not an investment. They pay nothing and promise nothing.",
-    "Burnticker is not affiliated with any team, league, candidate, agency or market whose results its coins read.",
-  ],
-  filesTitle: "Files",
-  filesIntro: "Every file is served from this site. The marks come as SVG and PNG, one for dark backgrounds and one for light ones.",
-  operatorTitle: "Who runs it",
-  contactTitle: "Contact",
-  moreTitle: "More",
-  changelogLink: "The changelog",
-  reviewsLink: "The published reviews",
-};
-
-/** The press kit's files (served from /burnticker/brand/; config/public-repo/overlay/public/burnticker/brand in the public tree). */
-export const PRESS_FILES: { id: string; label: string; files: { href: string; kind: "SVG" | "PNG"; note: string }[] }[] = [
-  { id: "mark", label: "The Burnticker mark", files: [
-    { href: "/burnticker/brand/burnticker-mark-dark.svg", kind: "SVG", note: "for dark backgrounds" },
-    { href: "/burnticker/brand/burnticker-mark-dark.png", kind: "PNG", note: "for dark backgrounds, 512 pixels square" },
-    { href: "/burnticker/brand/burnticker-mark-light.svg", kind: "SVG", note: "for light backgrounds" },
-    { href: "/burnticker/brand/burnticker-mark-light.png", kind: "PNG", note: "for light backgrounds, 512 pixels square" },
-  ] },
-  { id: "wordmark", label: "The Burnticker wordmark", files: [
-    { href: "/burnticker/brand/burnticker-wordmark-dark.svg", kind: "SVG", note: "for dark backgrounds" },
-    { href: "/burnticker/brand/burnticker-wordmark-dark.png", kind: "PNG", note: "for dark backgrounds, 1200 pixels wide" },
-    { href: "/burnticker/brand/burnticker-wordmark-light.svg", kind: "SVG", note: "for light backgrounds" },
-    { href: "/burnticker/brand/burnticker-wordmark-light.png", kind: "PNG", note: "for light backgrounds, 1200 pixels wide" },
-  ] },
-  { id: "receipt", label: "The receipt artwork", files: [
-    { href: "/burnticker/brand/burnticker-receipt.png", kind: "PNG", note: "800 pixels square, the profile image" },
-  ] },
-  { id: "deficit", label: "The $DEFICIT mark", files: [
-    { href: "/burnticker/brand/deficit.png", kind: "PNG", note: "400 pixels square" },
-    { href: "/burnticker/brand/deficit-badged.png", kind: "PNG", note: "400 pixels square, with the receipt badge, the image pinned for the coin" },
-  ] },
-];
 
 export const VERIFY_YOURSELF_COPY = {
   title: "Verify a receipt yourself",
@@ -195,36 +146,27 @@ export const VERIFY_YOURSELF_COPY = {
 };
 
 export const HISTORY_COPY = {
-  title: "History and reviews",
-  description: "Burnticker's release history, incident log, published reviews, bounty and press kit in one place.",
+  title: "History",
+  description: "Burnticker's release history, incident log and bounty in one place.",
   intro: "The record of how this was built and run, kept in the public repository and shown here.",
   links: [
     { href: "/burnticker/changelog", label: "Changelog", text: "Every public release of the source code." },
     { href: "/burnticker/incidents", label: "Incident log", text: "Every recorded incident, and the problems caught before they mattered." },
     { href: "/burnticker/bounty", label: "Security bounty", text: "How to report a problem, the wallet and every decided report." },
     { href: "/burnticker/verify-yourself", label: "Verify a receipt yourself", text: "Recompute a real receipt in a terminal." },
-    { href: "/burnticker/press", label: "Press kit", text: "Logo files, a short description and the contact address." },
     // owner decision 2026-10-12: the devnet practice coins left the public pages; their one page is linked here and from the Trust page
     { href: "/burnticker/devnet", label: "Devnet practice runs", text: "The test coins and burns from the practice runs on devnet." },
   ],
-  reviewsTitle: "Published reviews",
-  reviewsIntro: "Every review is published in full in the public repository, with the response to it where there is one. None of them is an audit by a security firm.",
-  reviewsNone: "No review report is in the repository on this site.",
   /** the Trust page's one link and the latest releases under How this was built */
-  trustLink: "History and reviews",
+  trustLink: "History",
   trustLatest: "The latest releases",
 };
 
 /**
- * The home status line's dated counts (home.ts homeStatusLine): "13 review reports by AI agents are published, and there have been 69
- * releases since Oct 10. No security firm has audited the code." Seventh pass AP7-7: the count is of report files (transparency.json
- * howBuilt.reviews with a report in the repository), not of the review groups the current-status page lists, and every one is by an AI agent.
+ * The home status line's dated count (home.ts homeStatusLine): "There have been 69 releases since Oct 10." Owner decision 2026-10-22: the
+ * site no longer counts or lists reviews, so the line carries the release count only. Null when the changelog cannot be read.
  */
-export function historyCountsLine(c: { reviews: number | null; releases: number | null }): string | null {
-  const parts: string[] = [];
-  if (c.reviews !== null) parts.push(`${c.reviews} ${c.reviews === 1 ? "review report by an AI agent is" : "review reports by AI agents are"} published`);
-  if (c.releases !== null) parts.push(`there ${c.releases === 1 ? "has been 1 release" : `have been ${c.releases} releases`} since Oct 10`);
-  if (!parts.length) return null;
-  const s = parts.join(", and ");
-  return `${s[0].toUpperCase()}${s.slice(1)}.${c.reviews !== null ? " No security firm has audited the code." : ""}`;
+export function historyCountsLine(c: { releases: number | null }): string | null {
+  if (c.releases === null) return null;
+  return c.releases === 1 ? "There has been 1 release since Oct 10." : `There have been ${c.releases} releases since Oct 10.`;
 }

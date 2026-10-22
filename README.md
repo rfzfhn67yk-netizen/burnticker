@@ -18,15 +18,14 @@ recipient. The token page recomputes every receipt from the
 source. The audit script does it for every token and exits non-zero on a mismatch, and the trust page shows the result.
 
 **Guardrails.** Settled on primary sources · signed readings (one operator attester; no independent second attester is live) · program-run burns · receipts anyone can recompute · open source ·
-three blind AI reviews, not a firm audit · creators earn nothing · no team buy · the platform buys no coin except one test coin · LP locked forever, its fees fund the burn · rules locked at launch.
+creators earn nothing · no team buy · the platform buys no coin except one test coin · LP locked forever, its fees fund the burn · rules locked at launch.
 
 **Operated by one independent operator (United States); contact@burnticker.com.** This repository is the public, buildable copy of everything the platform runs: the on-chain
 program, the keeper, the platform, the sites, the deploy files, the docs, the tests. It is carved out of a private monorepo by an
 explicit allowlist (`config/public-repo.allowlist`); the operator's unrelated trading software never leaves that monorepo, and the
 scan that enforces it is here too (`config/public-repo.denypatterns`, `scripts/ops/publish-public-repo.sh`). The trust page
 (`/burnticker/trust`, data in `config/burnticker/transparency.json`) lists every wallet, every power, the decision log, the incident
-log, the changelog, the known limitations — and that this code was written with AI assistance and reviewed by AI tooling and a
-public bounty, **not audited by a security firm**.
+log, the changelog, the known limitations — and that this code was written with AI assistance. No security firm has audited the code.
 
 Nothing here is investment advice. A memecoin can go to zero. The rule says what supply does, not what price does.
 
@@ -54,7 +53,7 @@ scripts/                    burnticker-keeper.mts, burnticker-audit.mts, burntic
 site/                       the static sites and brand assets (see Licence)
 deploy/                     the Caddyfile and the systemd unit for the $DEFICIT keeper
 docs/                       burn-receipts/ (program + powers register), burnkeeper/ (fees, attestation, devnet), burnticker/
-                            (README, deploy, incidents, decisions, CHANGELOG, reviews/, transparency), launch/ (X drafts)
+                            (README, deploy, incidents, decisions, CHANGELOG, transparency), launch/ (X drafts)
 test/                       node:test suites on real fixtures; nothing touches a network
 ```
 
@@ -113,7 +112,7 @@ repository with `solana-verify` / `anchor verify`; `CHANGELOG.md` records the co
   US prediction exchange's adapter in `oracle/` is not used — its terms do not permit it — and stays behind a flag that is off; tests in
   `test/burntickerOracle.test.ts`). The registry refuses updates and deletes at the SQL level (`src/lib/burnticker/registry.ts`).
 - **Operator**: `config/burnticker/transparency.json` and `docs/burnticker/decisions.md`.
-- **Reviews and bounty**: `docs/burnticker/reviews/` and `SECURITY.md`.
+- **Bounty**: `SECURITY.md`.
 
 ## Licence
 

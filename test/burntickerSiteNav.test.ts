@@ -13,7 +13,7 @@ import { renderWhitepaper, WHITEPAPER_MD } from "../scripts/whitepaper-html.mjs"
 
 const read = (f: string) => fs.readFileSync(f, "utf8");
 const PRIMARY = ["Coins", "Seasons", "Launch"];
-const LEARN_LABELS = ["How it works", "Trust", "Verify it yourself", "Who runs this", "Whitepaper", "Docs and API", "How burns are settled", "Changelog", "Incidents", "Bounty", "Press", "Terms", "Privacy", "X"];
+const LEARN_LABELS = ["How it works", "Trust", "Verify it yourself", "Who runs this", "Whitepaper", "Docs and API", "How burns are settled", "Changelog", "Incidents", "Bounty", "Terms", "Privacy", "X"];
 /** The anchors inside one `data-site-nav="name"` element, as [text, href] (the ↗ mark and tags stripped). */
 function navLinks(html: string, name: string): [string, string][] {
   const m = new RegExp(`data-site-nav="${name}"[^>]*>([\\s\\S]*?)</${name === "learn" ? "div" : "nav"}>`).exec(html);

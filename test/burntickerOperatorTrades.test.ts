@@ -11,7 +11,6 @@ import { OPERATOR_TRADES, OPERATOR_TRADE_REASON_MISSING, disclosedTestsClause, o
 import { runOperatorTradesCheck, tradesCheckMints, associatedTokenAccount, type TradesCheckMint } from "@/lib/burnticker/operatorTradesCheck";
 import { loadTransparency, transparencyProblems } from "@/lib/burnticker/trust";
 import { NEVER_TRADES_SENTENCE, TERMS_SECTIONS } from "@/lib/burnticker/legalCopy";
-import { PRESS_COPY } from "@/lib/burnticker/historyCopy";
 import { USE_OF_FEES } from "@/lib/burnticker/fees";
 import { REHEARSAL_BUY_EXCEPTION } from "@/lib/burnticker/safeguards";
 import type { Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
@@ -62,13 +61,12 @@ describe("B-26 / HS-95: the $SEAWIN round trip is listed once, with the owner's 
     assert.equal(operatorCreatorLine(OPERATOR), "Created by the operator's own wallet 8sJf…LvGbs during the soft launch. The operator holds none of it.");
     clean(operatorCreatorLine(OPERATOR, SEAWIN)!);
   });
-  test("terms, press, use of fees, the guardrail and the JSON prose all name both tests and carry the reason sentence", () => {
+  test("terms, use of fees, the guardrail and the JSON prose all name both tests and carry the reason sentence", () => {
     const reason = operatorTradeReason(OPERATOR_TRADES[0]);
     assert.equal(reason, SAID);
     assert.equal(disclosedTestsClause(), "two disclosed tests (0.1 SOL of $REHEARSAL at creation, and a 0.10 SOL purchase and immediate sale of $SEAWIN minutes after it was created)");
     assert.equal(NEVER_TRADES_SENTENCE, `Apart from two disclosed tests (0.1 SOL of $REHEARSAL at creation, and a 0.10 SOL purchase and immediate sale of $SEAWIN minutes after it was created), the platform never trades. ${reason}`);
     assert.ok(TERMS_SECTIONS.some((s) => s.paragraphs.some((p) => p.startsWith(`${NEVER_TRADES_SENTENCE} The platform never takes an order`))));
-    assert.ok(PRESS_COPY.not.includes(`Burnticker is not an exchange, and it never takes an order. Apart from two disclosed tests (0.1 SOL of $REHEARSAL at creation, and a 0.10 SOL purchase and immediate sale of $SEAWIN minutes after it was created), it never trades a coin. ${reason}`));
     assert.ok(USE_OF_FEES.includes("The operator's wallets never trade a coin launched here, apart from the two disclosed tests on the test-coins page. The only buybacks"));
     assert.ok(feesUseWithReasons(USE_OF_FEES).includes(`The operator's wallets never trade a coin launched here, apart from the two disclosed tests on the test-coins page. ${reason} The only buybacks`));
     assert.doesNotMatch(USE_OF_FEES, /never trade any coin/);
@@ -81,7 +79,7 @@ describe("B-26 / HS-95: the $SEAWIN round trip is listed once, with the owner's 
       assert.ok(s.includes(reason), `${f} carries the reason sentence`);
       assert.doesNotMatch(s, /only trade from the operator's own wallets|holds none of them and has not traded them|never trades any coin|one disclosed exception/, f);
     }
-    for (const s of [NEVER_TRADES_SENTENCE, feesUseWithReasons(USE_OF_FEES), REHEARSAL_BUY_EXCEPTION, own, t.rehearsals[0].text, t.policies.find((p) => p.id === "platform-never-buys")!.text, ...PRESS_COPY.not]) clean(s);
+    for (const s of [NEVER_TRADES_SENTENCE, feesUseWithReasons(USE_OF_FEES), REHEARSAL_BUY_EXCEPTION, own, t.rehearsals[0].text, t.policies.find((p) => p.id === "platform-never-buys")!.text]) clean(s);
   });
   test("a changed reason that the prose does not carry is a transparency problem", () => {
     const changed = { ...t, operatorTrades: [{ ...t.operatorTrades![0], reason: "to try the swap panel" }] };

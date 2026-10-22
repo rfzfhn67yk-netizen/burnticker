@@ -111,7 +111,7 @@ export default function AboutPage() {
         <dl className="space-y-2">{Object.values(GLOSSARY).map((g) => <div key={g.term}><dt className="font-medium text-neutral-100">{g.term.charAt(0).toUpperCase() + g.term.slice(1)}</dt><dd className="text-neutral-300">{g.short}</dd></div>)}</dl>
       </section>
 
-      <p className="text-neutral-400">The <Link className="underline" href="/burnticker/trust">Trust page</Link> has the full status, the safeguards and limits, the reviews and every wallet. The <a className="underline" href="/whitepaper.html">whitepaper</a> has the design in detail.</p>
+      <p className="text-neutral-400">The <Link className="underline" href="/burnticker/trust">Trust page</Link> has the full status, the safeguards and limits, and every wallet. The <a className="underline" href="/whitepaper.html">whitepaper</a> has the design in detail.</p>
     </main>
   );
 }

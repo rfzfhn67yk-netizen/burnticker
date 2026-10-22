@@ -1,9 +1,7 @@
 # Security policy and bug bounty
 
-Burnticker is **not audited by a security firm** (owner decision, 2026-10-09). It is reviewed by three blind AI reviews of the
-burn_receipts program and one re-check (published), two blind AI reviews of the pair_curve program (in progress), an adversarial
-ChatGPT/Codex PR review (published 2026-10-10 with a per-finding response) and this public bounty. Every report is published in full under `docs/burnticker/reviews/` as it is
-delivered. The program runs behind a 25 SOL per-burn-pool cap (with a dated sunset) for exactly this reason.
+No security firm has audited the code. The program runs behind a 25 SOL per-burn-pool cap (with a dated sunset) for exactly this
+reason, and this public bounty pays for valid reports.
 
 ## Bounty — PLACEHOLDER TERMS (the owner finalises every TODO before launch)
 
@@ -18,7 +16,7 @@ delivered. The program runs behind a 25 SOL per-burn-pool cap (with a dated suns
 ### How a valid report is paid
 
 1. The report is acknowledged and reproduced; the reporter is told the severity we assign and why.
-2. The fix (or the decision not to fix, with the reason) is published, with the report, under `docs/burnticker/reviews/`.
+2. The fix (or the decision not to fix, with the reason) is published in this repository once it is safe to do so.
 3. The amount for the severity is sent by the operator from the bounty wallet to the address the reporter names, with the transaction signature posted in the report thread.
 4. Duplicates: the first complete report is the one paid. A report about something the Powers Register or the known-limitations list
    already states as a power or a gap is acknowledged and not paid.

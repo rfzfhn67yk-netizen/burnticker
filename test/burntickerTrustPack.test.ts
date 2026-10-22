@@ -73,9 +73,10 @@ describe("check: where money can go, who can do what", () => {
     assert.deepEqual(c.programs.map((p) => [p.name, p.privileged, p.overFunds]), [["burn_receipts", 13, "none"], ["pair_curve", 0, "none"]]);
     assert.ok(c.powers.every((p) => /^None\.?$/.test(p.funds)));
   });
-  test("what is not done names every gap the owner listed: one attester, upgrade authority, no firm review, third signer, bounty wallet, entity, interim build, the open pair_curve findings, the mainnet rehearsal", () => {
+  test("what is not done names every gap the owner listed: one attester, upgrade authority, no firm review, third signer, bounty wallet, entity, interim build, the mainnet rehearsal", () => {
     const ids = c.notDone.map((n) => n.id);
-    for (const id of ["one-attester", "upgrade-authority", "no-firm-review", "third-signer", "bounty-wallet", "entity", "verified-build", "paircurve-findings-open"]) assert.ok(ids.includes(id), id);
+    for (const id of ["one-attester", "upgrade-authority", "no-firm-review", "third-signer", "bounty-wallet", "entity", "verified-build"]) assert.ok(ids.includes(id), id);
+    assert.equal(c.notDone.find((n) => n.id === "no-firm-review")!.text, "No security firm has audited the code.");
     assert.ok(!ids.includes("rehearsal-rehearsal"), "the mainnet rehearsal (2026-10-11) is done, not open");
     assert.ok(!ids.includes("devnet-rehearsal") && !ids.includes("contact-todo") && !ids.includes("public-repo-not-created"), "done items are not listed as open (cold read T1–T3)");
     assert.equal(c.locked.find((l) => l.id === "metadata")?.status, loadTransparency(ROOT).trustPack?.metadataUri?.status);
@@ -259,7 +260,6 @@ describe("transparency.json: the cold-read corrections and the trust-pack blocks
     // audit 4 BT-02: both programs deployed on mainnet 2026-10-11; deployed is not launched (the limitation keeps its id, its status says so)
     assert.equal(lim["program-not-deployed"].status, "deployed on devnet and mainnet"); assert.match(lim["program-not-deployed"].text, /AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM/);
     assert.match(lim["program-not-deployed"].text, /Deployed is not launched/); assert.doesNotMatch(JSON.stringify(t.limitations), /Neither is deployed on mainnet|mainnet wallet does not exist|vault cannot be created/);
-    assert.equal(lim["paircurve-findings-open"].status, "not done");
     for (const id of ["verified-build-interim", "bounty-wallet", "entity", "third-signer", "signed-operator-message"]) assert.ok(lim[id], id);
     assert.equal(t.howBuilt.bounty.wallet, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u"); assert.match(t.howBuilt.bounty.walletTodo!, /developer fee/); assert.equal(t.howBuilt.bounty.status, "funded 2026-10-11");
     assert.deepEqual(t.trustPack?.pages.map((p) => p.path), ["/burnticker/check", "/burnticker/fees/ledger", "/burnticker/operator"]);

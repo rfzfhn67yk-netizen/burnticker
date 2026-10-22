@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BOUNTY_COPY, SECURITY_CONTACT } from "@/lib/burnticker/historyCopy";
+import { BOUNTY_COPY, HISTORY_COPY, SECURITY_CONTACT } from "@/lib/burnticker/historyCopy";
 import { loadTransparency } from "@/lib/burnticker/trust";
 import { PUBLIC_REPO_URL, PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
 import { Page, PageHeader, Panel } from "../_components/Panel";
@@ -39,7 +39,7 @@ export default function BountyPage() {
         <p className="bt-body-text">{BOUNTY_COPY.walletLine} {BOUNTY_COPY.paidRule}</p>
         <BountyWallet />
       </Panel>
-      <p className="bt-meta"><Link className="underline" href="/burnticker/history">History and reviews</Link></p>
+      <p className="bt-meta"><Link className="underline" href="/burnticker/history">{HISTORY_COPY.trustLink}</Link></p>
     </Page>
   );
 }

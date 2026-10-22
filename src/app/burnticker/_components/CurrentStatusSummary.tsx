@@ -11,7 +11,7 @@ import { PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
 /**
  * THE CURRENT-STATUS SUMMARY (website brief 2026-10-11 §4), at the top of the trust and operator pages: one object from
  * GET /api/burnticker/v1/current-status. Deployed facts first (network, programs, signing, upgrade authority with the time lock READ
- * FROM CHAIN beside the plan), then the per-finding review status and the open release requirements, then the intended design and the
+ * FROM CHAIN beside the plan), then the open release requirements, then the intended design and the
  * append-only historical logs — three separate labelled blocks, the details behind disclosures.
  */
 /**
@@ -19,7 +19,6 @@ import { PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
  * open when followed.
  */
 const LINE_LINKS: { re: RegExp; target: string }[] = [
-  { re: /fixed findings? still waits?/, target: "cs-findings" },
 ];
 function openList(id: string) { const d = document.getElementById(id); if (d instanceof HTMLDetailsElement) d.open = true; }
 function SummaryLine({ l }: { l: string }) {
@@ -60,10 +59,6 @@ export function CurrentStatusBody({ s, card }: { s: CurrentStatus; card: string 
       </details>
       <details className="mt-1 text-xs"><summary className="cursor-pointer text-neutral-300">Where each kind of result comes from</summary>
         <ul className="mt-1 space-y-1">{s.settlement.map((x) => <li key={x.category}><b>{x.category}.</b> The main source is {x.primary}. It is checked against {x.check}. <span className="text-neutral-400">Status: {x.status}.</span></li>)}</ul>
-      </details>
-      <details id="cs-findings" className="mt-1 text-xs scroll-mt-24"><summary className="cursor-pointer text-neutral-300">Review findings: what was fixed, what was re-checked, what is deployed</summary>
-        <div className="overflow-x-auto"><table className="mt-1 w-full"><thead className="text-left text-neutral-400"><tr><th className="p-1">Review</th><th className="p-1">Finding</th><th className="p-1">Fix</th><th className="p-1">Re-check</th><th className="p-1">Deployed</th></tr></thead>
-          <tbody>{s.reviews.flatMap((r) => r.findings.map((f) => <tr key={r.id + f.id} className="border-t border-neutral-800 align-top"><td className="p-1">{r.label} <RepoText className="block text-neutral-500" text={r.report} /></td><td className="p-1">{f.id} ({f.severity}) {f.title}</td><td className="p-1">{f.fix}</td><td className={`p-1 ${/not/.test(f.recheck) ? "text-amber-300" : ""}`}>{f.recheck}</td><td className="p-1">{f.deployed}</td></tr>))}</tbody></table></div>
       </details>
       <details id="cs-open" className="mt-1 text-xs scroll-mt-24"><summary className="cursor-pointer text-neutral-300">What is still open before release</summary>
         <ul className="mt-1 space-y-0.5">{s.releaseRequirements.map((r) => <li key={r.id}><span className={`mr-1 rounded px-1 ${r.status === "open" ? "bg-amber-900 text-amber-200" : "bg-neutral-800 text-neutral-300"}`}>{r.status}</span>{r.text}</li>)}</ul>

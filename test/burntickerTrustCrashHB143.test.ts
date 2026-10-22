@@ -21,7 +21,8 @@ describe("HB-143: the trust page survives the public current-status answer", () 
   test("the public answer really drops the fields the summary reads, so the summary must not assume them", () => {
     const raw = JSON.parse(fs.readFileSync(path.join(ROOT, "config/burnticker/current-status.json"), "utf8")) as { reviews?: { report?: string }[]; historical?: { path?: string }[]; source?: string };
     const pub = withoutRepoPaths(raw);
-    assert.ok((raw.reviews ?? []).some((r) => typeof r.report === "string"), "the file names a report path");
+    // owner decision 2026-10-22: the file lists no reviews; the historical log paths are the repository paths the answer drops
+    assert.ok(raw.reviews === undefined, "the file lists no reviews"); assert.ok((raw.historical ?? []).some((h) => typeof h.path === "string"), "the file names a log path");
     assert.ok((pub.reviews ?? []).every((r) => r.report === undefined || !/^(docs|config|src)\//.test(r.report)), "the public answer has no repo path in report");
     assert.ok((pub.historical ?? []).every((h) => h.path === undefined || !/^(docs|config|src)\//.test(h.path)), "the public answer has no repo path in historical");
   });

@@ -17,15 +17,15 @@ const read = (p: string) => fs.readFileSync(p, "utf8");
 const NOW = Date.parse("2026-10-21T12:00:00Z");
 // the address the owner confirmed on 2026-10-21 (the Solana trading bot's default owner, in the operator's private trading code)
 const OPERATOR = "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs";
-const SEVEN = ["PHINFLWIN", "CLARITY", "PITWIN", "BALWIN", "SEAWIN", "DENWIN", "TWOCUTS", "COLNHLWIN"]; // eight since $COLNHLWIN (2026-10-21 18:19 Denver), HB-225
+const SEVEN = ["PHINFLWIN", "CLARITY", "PITWIN", "BALWIN", "SEAWIN", "DENWIN", "TWOCUTS", "COLNHLWIN", "BREWERS26", "RAYS26"]; // ten since the World Series pair (2026-10-22 evening Denver); eight since $COLNHLWIN (2026-10-21 18:19 Denver), HB-225
 const LINE = "Created by the operator's own wallet 8sJf…LvGbs during the soft launch. The operator holds none of it and has not traded it.";
 
 describe("B-24 / HS-72: the operator's own wallet in transparency.json", () => {
   const t = loadTransparency();
-  test("listed with its address, its role and the eight coins it created; it is the one operator creator wallet", () => {
+  test("listed with its address, its role and the ten coins it created; it is the one operator creator wallet", () => {
     const w = t.wallets.find((x) => x.role === "operator-own")!;
     assert.equal(w.pubkey, OPERATOR);
-    assert.match(w.description, /^The operator's own wallet \(also the default owner of its Solana trading bot\); it created eight soft-launch coins: /);
+    assert.match(w.description, /^The operator's own wallet \(also the default owner of its Solana trading bot\); it created ten soft-launch coins: /);
     for (const tk of SEVEN) assert.ok(w.description.includes(`$${tk}`), tk);
     assert.deepEqual(t.operatorCreatorWallets, [OPERATOR]);
     assert.ok(OPERATOR_CREATOR_WALLETS.has(OPERATOR));

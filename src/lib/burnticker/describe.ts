@@ -22,6 +22,7 @@ import { FLIP_REST_LINE, derbyReadOnlySentence, raceEnd, raceEndOf } from "@/lib
 import { coinvsTickers, fightName } from "@/lib/burnticker/derby/tile";
 import { paramName } from "@/lib/burnticker/paramNames";
 import { fitName } from "@/lib/burnticker/launchFields";
+import { creatorSafeName } from "@/lib/burnticker/generatedName";
 
 /**
  * THE AUTO-GENERATED COIN TEXT (2026-10-10, the owner thinks in sentences): from the LOCKED RULE, by deterministic templates — no model —
@@ -446,6 +447,15 @@ export const FEED_SHORT_TICKERS: Readonly<Record<string, string>> = {
   "us.debt.total-public-outstanding": "USDEBT", "bls.eggs": "EGGS", "usda.eggs": "EGGS", "bls.APU0000708111": "EGGS", "fred.APU0000708111": "EGGS", "eia.gasoline": "GAS", "bea.gdp": "GDP",
 };
 /**
+ * BT-FADE-GENERATED-NAME-01 (2026-10-22): the subject a published-data coin's suggested NAME uses, for a catalogue title the name field
+ * would refuse ("U.S. egg price": the creator-scope lint refuses "price"). The rule text keeps the catalogue's own title; only the name
+ * suggestion reads this. Any other title passes through creatorSafeName (generatedName.ts) on the way out of describeRule.
+ */
+export const FEED_NAME_SUBJECTS: Readonly<Record<string, string>> = {
+  "bls.eggs": "U.S. Eggs", "bls.APU0000708111": "U.S. Eggs", "fred.APU0000708111": "U.S. Eggs", "usda.eggs": "Wholesale Eggs",
+};
+export const feedNameSubject = (series: string, title: string): string => FEED_NAME_SUBJECTS[series] ?? FEED_NAME_SUBJECTS[series.split(":")[0]] ?? title;
+/**
  * HS-35: a published-data coin's ticker base, never a word cut in half ($UNEMPLOYME): the catalogue short name, else the series code when
  * it is a short upper-case code (fred.UNRATE → UNRATE), else whole words of the title that fit in `room`, else the title's initials.
  */
@@ -638,8 +648,18 @@ export function fadeName(series: string | null, subject: string, zeroCount: bool
   return fitName(known ?? `Days Without ${subject}`);
 }
 
-/** The coin's name, ticker, one-liner and paragraph from its rule. `ctx.ticker` is the ticker the text names (the suggestion when empty). */
+/**
+ * The coin's name, ticker, one-liner and paragraph from its rule. `ctx.ticker` is the ticker the text names (the suggestion when empty).
+ * BT-FADE-GENERATED-NAME-01 (2026-10-22): the suggested name is placed in
+ * the creator's name field, so it always passes that field's check (the creator-scope copy lint): a word the lint refuses is dropped.
+ */
 export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
+  const t = describeRuleText(r, ctx);
+  const name = creatorSafeName(t.name);
+  return name === t.name ? t : { ...t, name };
+}
+
+function describeRuleText(r: BurnRule, ctx: DescribeCtx): CoinText {
   const series = r.oracle === "catalogue" ? r.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;
   if (e) { const t0 = espnText(r, e, { ...ctx, ticker: ctx.ticker || "TICKER" }); return ctx.ticker ? t0 : espnText(r, e, { ...ctx, ticker: t0.ticker }); }
@@ -707,7 +727,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const unitWords = f.unitLabel.replace(/\s*\([^)]*\)\s*$/, "").replace(/\s+(added|moved|move)$/, "").replace(/-point\b/, " point");
     const gap = both ? ` A move smaller than ${unitWords} burns neither this coin nor the coin that burns for each full ${unitWords.replace(/^1\s+(?=\D)/, "")}.` : "";
     const sub = paramSubject(series), what = sub ? sub.name : title;
-    return build(fadeName(series, sub ? sub.name : title, r.scalar?.baseline === 0), (sub ? tickerFrom(`NO${sub.ticker}`) : `NO${feedTickerBase(series, f.title, 8)}`), `burns on every reading of ${what} that ${not}`,
+    return build(fadeName(series, sub ? sub.name : feedNameSubject(series, title), r.scalar?.baseline === 0), (sub ? tickerFrom(`NO${sub.ticker}`) : `NO${feedTickerBase(series, f.title, 8)}`), `burns on every reading of ${what} that ${not}`,
       (t) => `For every reading of ${what} that ${not}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}.${sub ? ` Each reading is ${sub.window}.` : ""} A reading that ${did}, by any amount, burns nothing.${gap}`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "catalogue" && ctx.feed) {
@@ -720,7 +740,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
         (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel} ${sub.what}`}, ${spends(r, t)}, with a receipt on chain. ${feedResultSentence(f)} Each reading is ${sub.window}. Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
     }
     const title0 = f.title.split(/[(—,]/)[0].trim(), ch = changePhrase(r, f.unitLabel, title0, false);
-    return build(title0, feedTickerBase(series, f.title), ch ? `burns for ${ch}` : `burns for every ${f.unitLabel} (${title0})`,
+    return build(feedNameSubject(series, title0), feedTickerBase(series, f.title), ch ? `burns for ${ch}` : `burns for every ${f.unitLabel} (${title0})`,
       (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel}`}, ${spends(r, t)}, with a receipt on chain. ${feedResultSentence(f)} Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "polymarket" && r.market && r.binary && !r.binary.onYes && r.binary.onNo) {

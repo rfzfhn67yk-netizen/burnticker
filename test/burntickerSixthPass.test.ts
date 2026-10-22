@@ -24,7 +24,6 @@ import { GAME_CONFIRM_GAP_MINUTES, SETTLEMENT_SOURCES_SENTENCE } from "@/lib/bur
 import { GAME_CONFIRM_GAP_MS } from "@/lib/burnticker/sources/gameSettle";
 import { ADMISSION_RULES, GUARDRAIL_DETAIL } from "@/lib/burnticker/safeguards";
 import { NEVER_TRADES_SENTENCE, PRIVACY_HELD_SWAP_BROWSER, PRIVACY_HELD_SWAP_SERVER, PRIVACY_SECTIONS, TERMS_SECTIONS } from "@/lib/burnticker/legalCopy";
-import { PRESS_COPY } from "@/lib/burnticker/historyCopy";
 import { RECORD_TTL_MS } from "@/lib/burnticker/swap/pendingServer";
 import type { BurnRule } from "@/lib/burnticker/rules";
 
@@ -176,13 +175,10 @@ describe("B-16: honest copy", () => {
     assert.ok(ADMISSION_RULES.includes(SETTLEMENT_SOURCES_SENTENCE));
     assert.doesNotMatch(ADMISSION_RULES, /second, independent publisher confirms/);
   });
-  test("(e) 'never trades' carries the disclosed test purchase in the terms, the press page and the fee ledger note", () => {
+  test("(e) 'never trades' carries the disclosed test purchase in the terms and the fee ledger note (the press page left the site on 2026-10-22)", () => {
     clean(NEVER_TRADES_SENTENCE);
     assert.match(NEVER_TRADES_SENTENCE, /^Apart from two disclosed tests \(0\.1 SOL of \$REHEARSAL at creation, and a 0\.10 SOL purchase and immediate sale of \$SEAWIN minutes after it was created\), the platform never trades\. (?:The \$SEAWIN test was made |The operator has not yet written down why that test was made\.)/);   // ninth pass B-26 / HS-95
     assert.ok(TERMS_SECTIONS.some((s) => s.paragraphs.some((p) => p.startsWith(NEVER_TRADES_SENTENCE))));
-    const press = PRESS_COPY.not.find((x) => /exchange/.test(x))!;
-    clean(press);
-    assert.match(press, /^Burnticker is not an exchange, and it never takes an order\. Apart from two disclosed tests \(0\.1 SOL of \$REHEARSAL at creation, and a 0\.10 SOL purchase and immediate sale of \$SEAWIN minutes after it was created\), it never trades a coin\. (?:The \$SEAWIN test was made |The operator has not yet written down why that test was made\.)/);
     const ledger = read("config/burnticker/expenses.json");
     assert.match(ledger, /Apart from two disclosed tests \(0\.1 SOL of \$REHEARSAL at creation, and a 0\.10 SOL purchase and immediate sale of \$SEAWIN on 2026-10-15\), the operator never trades a coin launched here\. (?:The \$SEAWIN test was made |The operator has not yet written down why that test was made\.)/);
     assert.doesNotMatch(ledger, /never buys any coin/);

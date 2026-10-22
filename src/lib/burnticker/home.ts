@@ -403,7 +403,7 @@ export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(
   const out = publicHomeData({
     schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: sortEvents([...activityEvents(tokens ?? [], samples, 40, keeper), ...records], 12), noEvents: NO_EVENTS_LINE,
     raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming: upcoming ?? upcomingSet([], [], tokens === null ? null : tokens.length), stats: withDevnet(homeStats(index?.totals ?? null, index?.audit ?? null, host ?? null), samples),
-    // legitimacy pass: the one surface hint of the history pages, the dated counts (reviews published, releases since Oct 10)
+    // legitimacy pass: the one surface hint of the history pages, the release count since Oct 10 (owner 2026-10-22: no review count)
     statusLine: [homeStatusLine(rec), historyCountsLine(historyCounts(root)), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,
   }, host);
   // after the devnet filter, so the count and the empty labels describe the cards this host serves

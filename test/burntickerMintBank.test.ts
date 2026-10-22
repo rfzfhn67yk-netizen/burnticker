@@ -261,7 +261,7 @@ describe("the disclosure: every page that says what the site controls", () => {
   });
   test("the whitepaper's custody section, in the Markdown and the rendered page", () => {
     const md = read("docs/burnticker/WHITEPAPER.md");
-    const sec = md.slice(md.indexOf("## 9. Governance and custody"), md.indexOf("## 10. Security review history"));
+    const sec = md.slice(md.indexOf("## 9. Governance and custody"), md.indexOf("## 10. Security"));
     assert.ok(sec.replace(/\s+/g, " ").includes(MINT_KEY_DISCLOSURE), "the paragraph, word for word");
     assert.ok(read("site/burnticker/whitepaper.html").replace(/\s+/g, " ").includes(MINT_KEY_DISCLOSURE.replace(/'/g, "&#39;")) || read("site/burnticker/whitepaper.html").replace(/\s+/g, " ").includes(MINT_KEY_DISCLOSURE), "rendered");
   });

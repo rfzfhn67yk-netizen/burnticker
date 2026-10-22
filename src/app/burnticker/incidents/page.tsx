@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { readIncidentLog } from "@/lib/burnticker/history";
-import { CAUGHT_EARLY, INCIDENTS_COPY } from "@/lib/burnticker/historyCopy";
+import { CAUGHT_EARLY, HISTORY_COPY, INCIDENTS_COPY } from "@/lib/burnticker/historyCopy";
 import { longDay } from "@/lib/burnticker/cardView";
 import { INCIDENTS_FILE } from "@/lib/burnticker/trust";
 import { repoUrl } from "@/lib/burnticker/currentStatusLinks";
@@ -48,7 +48,7 @@ export default function IncidentsPage() {
           ))}
         </ol>
       </Panel>
-      <p className="bt-meta"><Link className="underline" href="/burnticker/history">History and reviews</Link></p>
+      <p className="bt-meta"><Link className="underline" href="/burnticker/history">{HISTORY_COPY.trustLink}</Link></p>
     </Page>
   );
 }

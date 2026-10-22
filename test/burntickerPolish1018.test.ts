@@ -188,7 +188,7 @@ describe("the trust page's tables scroll sideways inside their cards on a phone"
         assert.match(wrap, /tabIndex=\{0\} role="region" data-scroll-table aria-label=/, `${f}: keyboard users can scroll it`);
       }
     }
-    assert.ok(n >= 7, `the trust page's tables (${n})`);
+    assert.ok(n >= 6, `the trust page's tables (${n})`); // the reviews table left on 2026-10-22
     assert.match(read("config/public-repo/overlay/src/app/globals.css"), /:where\([^)]*\[tabindex\][^)]*\):focus-visible \{ outline: 2px solid/);
     assert.match(read("config/public-repo/overlay/src/app/globals.css"), /\.bt-table-wrap \{ overflow-x: auto; \}/);
   });

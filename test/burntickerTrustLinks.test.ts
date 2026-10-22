@@ -16,7 +16,7 @@ const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 test("BT-14: repository paths become links pinned to a 40-hex public commit (folders open the tree view)", () => {
   assert.match(PUBLIC_REPO_COMMIT, /^[0-9a-f]{40}$/);
   assert.equal(repoUrl("docs/burnticker/decisions.md"), `${PUBLIC_REPO_URL}/blob/${PUBLIC_REPO_COMMIT}/docs/burnticker/decisions.md`);
-  assert.equal(repoUrl("docs/burnticker/reviews/"), `${PUBLIC_REPO_URL}/tree/${PUBLIC_REPO_COMMIT}/docs/burnticker/reviews`);
+  assert.equal(repoUrl("docs/burnticker/incidents/"), `${PUBLIC_REPO_URL}/tree/${PUBLIC_REPO_COMMIT}/docs/burnticker/incidents`);
   const parts = splitRepoPaths("Records: docs/burnkeeper/devnet-run.md and config/burnticker/transparency.json → limitations.");
   assert.deepEqual(parts.filter((p) => p.path).map((p) => p.path), ["docs/burnkeeper/devnet-run.md", "config/burnticker/transparency.json"]);
   assert.equal(parts.map((p) => p.text).join(""), "Records: docs/burnkeeper/devnet-run.md and config/burnticker/transparency.json → limitations.");

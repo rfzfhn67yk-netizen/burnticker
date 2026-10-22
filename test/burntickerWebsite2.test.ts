@@ -159,7 +159,7 @@ describe("one current-status source (website brief §4)", () => {
     assert.equal(s.networks.find((n) => n.cluster === "mainnet")!.deployment, "deployed");
     assert.equal(s.host.line, `This site is showing devnet. No program is connected on this site. ${(await import("@/lib/burnticker/launchAvailability")).siteLaunchState({ BURNTICKER_CLUSTER: "devnet" }).sentence}`);   // website-12: the one record's sentence
     assert.ok(s.design.length && s.historical.length && s.historical.every((h) => fs.existsSync(h.path.replace(/\/$/, ""))), "history links point at files that exist");
-    assert.ok(s.reviews.every((r) => r.findings.every((f) => f.fix && f.recheck && f.deployed)), "every finding has fix, re-check and deployed statuses");
+    assert.ok(!("reviews" in s), "owner 2026-10-22: the current status lists no review findings");
     assert.ok(s.settlement.some((x) => /GFDEBTN/.test(x.check) && /quarter/.test(x.check)), "the FRED comparison is stated as quarterly");
     assert.ok(s.settlement.every((x) => !/ESPN/.test(x.primary)), "no ESPN reads");
     for (const l of s.lines) clean(l, "status line");

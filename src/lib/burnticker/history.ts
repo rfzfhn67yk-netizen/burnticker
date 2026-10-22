@@ -1,15 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CHANGELOG_FILE, INCIDENTS_FILE, loadTransparency } from "@/lib/burnticker/trust";
+import { CHANGELOG_FILE, INCIDENTS_FILE } from "@/lib/burnticker/trust";
 import { PUBLIC_REPO_URL } from "@/lib/burnticker/currentStatusLinks";
 import { readStatusFile } from "@/lib/burnticker/deficitPrelaunch";
 import { RELEASE_LINES } from "@/lib/burnticker/historyCopy";
 
 /**
- * THE HISTORY PAGES' DATA (legitimacy pass, website-16, 2026-10-12): the changelog, the incident log, the reviews index and the receipt
+ * THE HISTORY PAGES' DATA (legitimacy pass, website-16, 2026-10-12): the changelog, the incident log and the receipt
  * the verify-it-yourself walk-through recomputes. Everything is read from the repository's own files at request time, so a page never
  * drifts from its file: docs/burnticker/CHANGELOG.md (every publish of the public repository), docs/burnticker/incidents/LOG.md,
- * config/burnticker/transparency.json (the reviews and the bounty) and the evidence rows under docs/burnkeeper/evidence. The sentences
+ * and the evidence rows under docs/burnkeeper/evidence. The sentences
  * live in historyCopy.ts.
  */
 
@@ -105,21 +105,10 @@ export function readReleases(root = process.cwd()): Release[] | null {
 /** The first day releases are counted from (the first publish of the public repository). */
 export const RELEASES_SINCE = "2026-10-10";
 
-/** The home status line's dated counts: the reviews published and the releases since Oct 10. Null parts when a file cannot be read. */
-export function historyCounts(root = process.cwd()): { reviews: number | null; releases: number | null } {
-  let reviews: number | null = null;
-  try { reviews = publishedReviews(root).length; } catch { reviews = null; }
+/** The home status line's dated count: the releases since Oct 10. Null when the changelog cannot be read. */
+export function historyCounts(root = process.cwd()): { releases: number | null } {
   const rel = readReleases(root);
-  return { reviews, releases: rel ? rel.filter((r) => r.date >= RELEASES_SINCE).length : null };
-}
-
-// ---- reviews (config/burnticker/transparency.json howBuilt.reviews; a review counts once its report file is in the repository) ----
-
-export interface ReviewRow { id: string; reviewer: string; status: string; reportPath: string }
-export function publishedReviews(root = process.cwd()): ReviewRow[] {
-  const t = loadTransparency(root);
-  return t.howBuilt.reviews.filter((r): r is typeof r & { reportPath: string } => !!r.reportPath && fs.existsSync(path.join(root, r.reportPath)))
-    .map((r) => ({ id: r.id, reviewer: r.reviewer, status: r.status, reportPath: r.reportPath }));
+  return { releases: rel ? rel.filter((r) => r.date >= RELEASES_SINCE).length : null };
 }
 
 // ---- the incident log (docs/burnticker/incidents/LOG.md): one "## " heading per incident ----

@@ -1,4 +1,4 @@
-// LAUNCH WIZARD PRODUCT-LOGIC AUDIT (2026-10-19; docs/burnticker/audits/launch-wizard-audit-2026-10-19.md). Each test reproduces one
+// LAUNCH WIZARD PRODUCT-LOGIC AUDIT (2026-10-19; docs-private/audits/launch-wizard-audit-2026-10-19.md). Each test reproduces one
 // finding. Where the code is wrong today, the test ASSERTS THE CURRENT WRONG BEHAVIOUR (marked "CURRENT (wrong)") so the suite stays
 // green; flip the assertion when the fix lands. The wanted behaviour is a test.todo beside it. Two tests are guards that pass today.
 // The describe titles carry the first draft's numbers; each test names the audit table's finding (F1 to F5, F8 to F11, F13 to F16 FIXED,

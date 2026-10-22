@@ -14,6 +14,10 @@
  *   counts as failed. The next read starts a new one instead
  *   of waiting on it, and a newer version no longer queues behind it. A late landing of the abandoned build never overwrites an answer
  *   a later build already wrote.
+ *
+ * 2026-10-22 external audit BT-SWR-EVICTION-RACE-01: an abandoned build that landed after a newer answer AND an eviction of its key found
+ * no bookkeeping left and wrote its old answer back as an age-zero hit. Now an abandoned build never writes (it is marked by its own
+ * sequence number when dropped), and a key's write bookkeeping outlives eviction while any build for it is pending.
  */
 export type SwrState = "hit" | "cold" | "version" | "stale-version" | "stale";
 interface Entry<T> { at: number; version: string; value: T }
@@ -23,16 +27,30 @@ export interface KeyedSwrOptions { freshMs: number; coldWaitMs: number; maxKeys?
 
 export class KeyedSwr<T> {
   private memo = new Map<string, Entry<T>>();
-  private inflight = new Map<string, { version: string; p: Promise<Settled>; startedAt: number }>();
-  /** the sequence number of the build that last wrote each key: an older build that lands late never overwrites a newer answer */
+  private inflight = new Map<string, { version: string; p: Promise<Settled>; startedAt: number; seq: number }>();
+  /** BT-SWR-EVICTION-RACE-01: builds dropped past buildTimeoutMs, by sequence number; such a build never writes when it lands */
+  private abandoned = new Set<number>();
+  /**
+   * the sequence number of the build (or put) that last wrote each key: an older build that lands late never overwrites a newer answer.
+   * BT-SWR-EVICTION-RACE-01 (2026-10-22 external audit): this bookkeeping used to be dropped with the answer when `maxKeys` evicted the
+   * key, so an abandoned older build that landed after a newer answer AND an eviction saw no entry, took that as "I am current" and wrote
+   * its old answer back as an age-zero hit. An entry now outlives eviction while any build for its key is still pending (`pending`), and is
+   * dropped only once the key has neither an answer nor a build that could land.
+   */
   private written = new Map<string, number>();
+  /** builds started and not yet settled, per key (a build abandoned past buildTimeoutMs still counts until it lands or fails) */
+  private pending = new Map<string, number>();
   private seq = 0;
   private o: KeyedSwrOptions;
   private clock: () => number;
   constructor(o: KeyedSwrOptions, clock: () => number = Date.now) { this.o = o; this.clock = clock; }
 
   /** For tests and for a caller that knows a key changed. */
-  clear(key?: string): void { if (key === undefined) { this.memo.clear(); this.written.clear(); } else { this.memo.delete(key); this.written.delete(key); } }
+  clear(key?: string): void {
+    // a build still in flight for a cleared key must not write its answer back afterwards: its key keeps a sequence number above it
+    const forget = (k: string) => { this.memo.delete(k); if (this.pending.has(k)) this.written.set(k, ++this.seq); else this.written.delete(k); };
+    if (key === undefined) for (const k of new Set([...this.memo.keys(), ...this.written.keys()])) forget(k); else forget(key);
+  }
   size(): number { return this.memo.size; }
   /**
    * HB-35 (2026-10-20): another reader's look at a kept answer, without starting a build: the value when its version matches and it is
@@ -47,13 +65,25 @@ export class KeyedSwr<T> {
    * memo had built it. It never replaces an answer a build in flight wrote later (the sequence numbers), and it respects `maxKeys`.
    */
   put(key: string, version: string, value: T): void {
-    const mine = ++this.seq;
-    if ((this.written.get(key) ?? 0) > mine) return;
+    this.write(key, ++this.seq, version, value);
+  }
+
+  /** Writes `value` as build/put `mine`, unless a later one already wrote the key; evicts past `maxKeys`. True when it wrote. */
+  private write(key: string, mine: number, version: string, value: T): boolean {
+    if ((this.written.get(key) ?? 0) > mine) return false;
     this.written.set(key, mine);
     this.memo.delete(key);
     this.memo.set(key, { at: this.clock(), version, value });
     const max = this.o.maxKeys ?? 256;
-    while (this.memo.size > max) { const old = this.memo.keys().next().value as string; this.memo.delete(old); this.written.delete(old); }
+    while (this.memo.size > max) { const old = this.memo.keys().next().value as string; this.memo.delete(old); if (!this.pending.has(old)) this.written.delete(old); }
+    return true;
+  }
+  private settle(key: string): void {
+    const n = (this.pending.get(key) ?? 1) - 1;
+    if (n > 0) { this.pending.set(key, n); return; }
+    this.pending.delete(key);
+    // nothing left that could land for this key: its bookkeeping goes when its answer is gone too (bounded by maxKeys + pending keys)
+    if (!this.memo.has(key)) this.written.delete(key);
   }
 
   private refresh(key: string, version: string, build: () => Promise<T>): Promise<Settled> {
@@ -63,25 +93,26 @@ export class KeyedSwr<T> {
     if (f && bound !== undefined && this.clock() - f.startedAt >= bound) {
       this.o.log?.(key, new Error(`a refresh has been in flight for more than ${Math.round(bound / 1000)} s; starting another`));
       this.inflight.delete(key);
+      this.abandoned.add(f.seq);
       f = undefined;
     }
     if (f && f.version === version) return f.p;
     // one refresh in flight per key: a newer version waits for the older build to land, then builds itself
     const mine = ++this.seq;
+    this.pending.set(key, (this.pending.get(key) ?? 0) + 1);
     const run = async (): Promise<Settled> => {
       try {
+        if (this.abandoned.has(mine)) return { ok: true };   // dropped before its turn in the queue: never started
         const value = await build();
-        if ((this.written.get(key) ?? 0) > mine) return { ok: true };
-        this.written.set(key, mine);
-        this.memo.delete(key);
-        this.memo.set(key, { at: this.clock(), version, value });
-        const max = this.o.maxKeys ?? 256;
-        while (this.memo.size > max) { const old = this.memo.keys().next().value as string; this.memo.delete(old); this.written.delete(old); }
+        // an abandoned build no longer owns the key: whatever it brings back is dropped, whether or not a newer answer has landed
+        if (!this.abandoned.has(mine)) this.write(key, mine, version, value);
         return { ok: true };
       } catch (error) { this.o.log?.(key, error); return { ok: false, error }; }
     };
-    const p: Promise<Settled> = (f ? f.p.then(run) : run()).finally(() => { if (this.inflight.get(key)?.p === p) this.inflight.delete(key); });
-    this.inflight.set(key, { version, p, startedAt: this.clock() });
+    const chained = f ? f.p.then(run) : run();
+    void chained.finally(() => { this.abandoned.delete(mine); this.settle(key); });
+    const p: Promise<Settled> = chained.finally(() => { if (this.inflight.get(key)?.p === p) this.inflight.delete(key); });
+    this.inflight.set(key, { version, p, startedAt: this.clock(), seq: mine });
     return p;
   }
 
