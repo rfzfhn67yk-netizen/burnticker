@@ -113,6 +113,28 @@ export function tradesCheckMints(tokens: readonly { ticker: string; mint: string
   return [...out.values()];
 }
 
+/**
+ * HB-225 (ninth-pass re-check, 2026-10-21): the transparency entry for an operator wallet names the coins that wallet created. The
+ * list goes stale the moment the operator launches another coin ($COLNHLWIN made it eight after the entry said seven), so the release
+ * check compares the public tokens list with each operator-own entry: every mainnet coin whose creator is that wallet must be named
+ * as $TICKER in the entry's description. Returns one line per missing coin; empty when every created coin is named.
+ */
+export function operatorCreatedCoinsProblems(
+  tokens: readonly { ticker: string; creator?: string | null; cluster?: string; status?: string }[],
+  wallets: readonly { pubkey?: string | null; role?: string; description?: string }[],
+): string[] {
+  const out: string[] = [];
+  for (const w of wallets) {
+    if (!w.pubkey || w.role !== "operator-own") continue;
+    const named = new Set([...(w.description ?? "").matchAll(/\$([A-Z0-9]{2,16})\b/g)].map((m) => m[1]));
+    for (const c of tokens) {
+      if (c.creator !== w.pubkey || (c.cluster ?? "mainnet") !== "mainnet" || c.status === "draft") continue;
+      if (!named.has(c.ticker)) out.push(`$${c.ticker} was created by ${w.pubkey.slice(0, 4)}…${w.pubkey.slice(-5)} but that wallet's transparency entry does not name it`);
+    }
+  }
+  return out;
+}
+
 /** The lines the script prints: one per trade found, then the verdict. */
 export function tradesCheckReport(r: TradesCheckResult): string[] {
   const lines = r.trades.map((t) => `${t.listed ? "listed  " : "UNLISTED"} ${t.side} $${t.symbol} ${t.amountRaw} raw by ${t.wallet.slice(0, 4)}…${t.wallet.slice(-5)} at ${t.at ?? "?"} (${t.signature.slice(0, 12)}…)`);

@@ -1,7 +1,7 @@
 import TRANSPARENCY from "../../../config/burnticker/transparency.json" with { type: "json" };
 
 /**
- * Eighth pre-launch audit B-24 / HB-186 / HS-72 (owner confirmed 2026-10-21): the operator's own wallet created seven soft-launch coins
+ * Eighth pre-launch audit B-24 / HB-186 / HS-72 (owner confirmed 2026-10-21): the operator's own wallet created the soft-launch coins its transparency entry names (eight as of 2026-10-21; the release check keeps the list honest, HB-225)
  * through the site. The wallets come from config/burnticker/transparency.json `operatorCreatorWallets` (each also listed in `wallets`),
  * and any coin whose creator is one of them carries the sentence below on its page, so a later coin by the same wallet gets it too.
  *

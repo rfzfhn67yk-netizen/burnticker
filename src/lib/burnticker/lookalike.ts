@@ -98,6 +98,21 @@ const sameRuleOf = (a: Pick<BurnRule, "oracle" | "series"> | null | undefined, b
 /** HB-188 (LA8-3): the same name, case and spaces aside. */
 const sameNameText = (a: string, b: string): boolean => a.trim().toLowerCase().replace(/\s+/g, " ") === b.trim().toLowerCase().replace(/\s+/g, " ");
 
+/**
+ * HB-214 (ninth pass LA9-2): the name compared across windows of one team. Letters go through the same skeleton as everywhere else
+ * (so "Eag1es", "Eagles!" and "Eagles" read alike), but a run of digits is kept as written, because the year is what tells "Rays 2026
+ * Wins" from "Rays 2027 Wins" and those two must stay exempt. Punctuation and spaces are dropped.
+ */
+export function windowNameKey(s: string): { letters: string; digits: string } {
+  const words = s.normalize("NFKC").split(/[^0-9A-Za-z]+/).filter(Boolean);
+  return { letters: words.filter((w) => !/^\d+$/.test(w)).map(skeleton).join(""), digits: words.filter((w) => /^\d+$/.test(w)).join(" ") };
+}
+/** The cross-window verdict: the same digit runs (the year, the game number) and letters that read alike; different digits are exempt. */
+export function compareWindowNames(a: string, b: string): LookalikeHow | null {
+  const ka = windowNameKey(a), kb = windowNameKey(b);
+  return ka.digits === kb.digits ? compare(ka.letters, kb.letters) : null;
+}
+
 const teamOf = (r: Pick<BurnRule, "oracle" | "series"> | null | undefined): string | null => {
   const e = r && r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
   return e ? `${e.league}:${e.abbr}` : null;
@@ -164,7 +179,12 @@ export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<
     // refused against a launched coin (two live "Eagles 2026 Wins" a letter apart), while distinct names ("Rays 2026 Wins" / "Rays 2027
     // Wins") stay exempt
     if (!exact && team && teamOf(e.rule) === team && !sameRuleOf(cand.rule, e.rule)) {
-      if (e.status !== "draft" && sameNameText(cand.name, e.name) && skeleton(cand.name).length >= 4) hits.push({ field: "name", existing: e.name, how: "same-letters", reason: nameCloneSentence(cand, e, "same-letters") });
+      // HB-214 (ninth pass LA9-2): "Eag1es 2026 Wins" or "Eagles 2026 Wins!" on another window read as the live name too; the year keeps
+      // "Rays 2026 Wins" and "Rays 2027 Wins" apart (windowNameKey)
+      if (e.status !== "draft" && skeleton(cand.name).length >= 4) {
+        const how = sameNameText(cand.name, e.name) ? "same-letters" : compareWindowNames(cand.name, e.name);
+        if (how) hits.push({ field: "name", existing: e.name, how, reason: nameCloneSentence(cand, e, how) });
+      }
       continue;
     }
     const et = skeleton(e.ticker), en = skeleton(e.name);
