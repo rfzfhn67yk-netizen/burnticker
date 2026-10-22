@@ -232,3 +232,30 @@ export async function launchPendingRefusal(d: PendingDeps, c: { creator: string;
   }
   return null;
 }
+
+/**
+ * HS-132 (2026-10-22, the owner's World Series pair): after a reload between the review and the signing, the review asked
+ * registry.freePairId for a pair id, saw the first attempt's pair row and answered the next free id, while the launch replayed the
+ * first attempt's bundle with the original id; the pre-signing check then refused both coins for the length of the dedupe window.
+ * The creator's OWN unsent draft pair of these two tickers (same creator, both sides drafts, inside OWN_DRAFT_DEDUPE_MS, proven, not
+ * sent) is the pair the launch reuses, so the review answers that pair's id. Anything else: null, and the caller picks a free id.
+ */
+export function ownDraftPairId(d: { registry: Pick<Registry, "tokens"> & Partial<Pick<Registry, "unprovenDraftMints" | "pairOf">> }, c: { creator: string; tickerA: string; tickerB: string }, now = Date.now()): string | null {
+  const norm = (s: string) => s.trim().replace(/^\$/, "").toUpperCase();
+  const a = norm(c.tickerA), b = norm(c.tickerB);
+  if (!c.creator || !a || !b || a === b || !d.registry.pairOf) return null;
+  let unproven: Set<string>;
+  try { unproven = d.registry.unprovenDraftMints?.() ?? new Set(); } catch { unproven = new Set(); }
+  const own = (t: TokenRow, ticker: string): boolean => t.creator === c.creator && t.ticker.toUpperCase() === ticker && t.status === "draft" && !t.launchTx && !unproven.has(t.mint) && now - t.createdAt >= 0 && now - t.createdAt < OWN_DRAFT_DEDUPE_MS;
+  let rows: TokenRow[];
+  try { rows = d.registry.tokens(); } catch { return null; }
+  const byMint = new Map(rows.map((t) => [t.mint, t] as const));
+  for (const t of rows.filter((r) => own(r, a)).sort((x, y) => y.createdAt - x.createdAt)) {
+    let pair: ReturnType<NonNullable<Registry["pairOf"]>>;
+    try { pair = d.registry.pairOf(t.mint); } catch { continue; }
+    if (!pair) continue;
+    const other = byMint.get(pair.mintA === t.mint ? pair.mintB : pair.mintA);
+    if (other && own(other, b)) return pair.pairId;
+  }
+  return null;
+}

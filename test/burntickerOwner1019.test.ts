@@ -27,7 +27,7 @@ import { END_CHOICE_LABEL_ENDS, END_CHOICE_LABEL_ONE_SHOT, END_CHOICE_LINES, end
 import { INCINERATOR_END_RESULT, ONE_SHOT_NO_BURN_LINE, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, describeRule, endText } from "@/lib/burnticker/describe";
 import { hasNoBurnOutcome, isOneShot, oneShotFull } from "@/lib/burnticker/nextResult";
 import { plainSentence } from "@/lib/burnticker/coinCard";
-import { CHAIN_CONFIRM_LINE, LAUNCHING_NOTICE, PREPARING_LAUNCH_LINE, READ_BACK_LINE, waitLineFor } from "@/lib/burnticker/mintAddressCopy";
+import { CHAIN_CONFIRM_LINE, LAUNCHING_NOTICE, PREPARING_LAUNCH_LINE, READ_BACK_LINE, WALLET_SIGN_LINE, waitLineFor } from "@/lib/burnticker/mintAddressCopy";
 import { prepareLaunch } from "@/lib/burnticker/api/handlers";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { BRONCOS, DEBT_RULE } from "./burntickerHelpers.ts";
@@ -246,7 +246,7 @@ describe("3. a one-shot that spends 100 % says what reaches its pool after the o
 describe("4. the waiting lines", () => {
   test("the three sentences, word for word, lint-clean, no \"will\"", () => {
     assert.equal(PREPARING_LAUNCH_LINE, "Preparing the launch: pinning the coin's details and building its transactions. This takes a few seconds.");
-    assert.equal(CHAIN_CONFIRM_LINE, "Waiting for the chain to confirm. A few seconds.");
+    assert.equal(CHAIN_CONFIRM_LINE, "Waiting for the chain to confirm this step. Usually under a minute, sometimes two. Keep this tab open.");
     assert.equal(READ_BACK_LINE, "Writing the coin's accounts on chain. The coin page opens when they are read back.");
     for (const t of [PREPARING_LAUNCH_LINE, CHAIN_CONFIRM_LINE, READ_BACK_LINE, LAUNCHING_NOTICE]) plain(t);
     assert.ok(LAUNCHING_NOTICE.startsWith(PREPARING_LAUNCH_LINE));
@@ -254,17 +254,18 @@ describe("4. the waiting lines", () => {
   test("the sign card's busy states: nothing idle or while the wallet asks; the chain line while confirming; the read-back line after the last confirmation", () => {
     assert.equal(waitLineFor(false, "chain"), null);
     assert.equal(waitLineFor(true, null), null);
-    assert.equal(waitLineFor(true, "wallet"), null);
+    assert.equal(waitLineFor(true, "wallet"), WALLET_SIGN_LINE); plain(WALLET_SIGN_LINE);
     assert.equal(waitLineFor(true, "chain"), CHAIN_CONFIRM_LINE);
     assert.equal(waitLineFor(true, "record"), READ_BACK_LINE);
   });
   test("the wiring: the review card shows the preparing line while the prepare runs; the sign card sets each phase around the wallet, the confirmation and the record", () => {
     const card = read("src/app/burnticker/launch/ReviewCard.tsx"), sign = read("src/app/burnticker/launch/SignCard.tsx");
     assert.match(card, /\{p\.busy && <p [^>]*data-launching>\{LAUNCHING_NOTICE\}<\/p>\}/);
-    assert.match(sign, /signTransaction: async \(tx\) => \{ setPhase\("wallet"\); const signed = await wallet\.signTransaction!\(tx\); setPhase\("chain"\); return signed; \}/);
+    assert.match(sign, /signTransaction: async \(tx\) => \{ setPhase\("wallet"\); const signed = await withWalletWatchdog\(wallet\.signTransaction!\(tx\), \(\) => setNotice\(WALLET_SLOW_LINE\)\); setPhase\("chain"\); return signed; \}/); // HS-133: the watchdog wraps the wallet
     assert.match(sign, /confirm: async \(sig, bh\) => \{ setPhase\("chain"\);/);
     assert.equal((sign.match(/setPhase\("record"\);\s*const c = await confirmPlan\(/g) ?? []).length, 2, "both record paths say the read-back");
     assert.match(sign, /\{waitLineFor\(busy, phase\) && <p [^>]*role="status"[^>]*data-launch-wait=\{phase \?\? ""\}>\{waitLineFor\(busy, phase\)\}<\/p>\}/);
+    assert.match(sign, /data-launch-spinner/); assert.match(sign, /data-step-spinner/);
     assert.match(sign, /setBusy\(false\); setPhase\(null\);/);
   });
 });

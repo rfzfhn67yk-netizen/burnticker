@@ -20,7 +20,7 @@ import { MISSION_STATEMENT } from "@/lib/burnticker/mission";
 const DESCRIPTION = "How Burnticker works: one locked rule per coin, a public result that settles it, a program that burns what the coin's own fees bought back, and a receipt anyone can check.";
 export const metadata: Metadata = {
   title: "How it works", description: DESCRIPTION, alternates: { canonical: "/burnticker/about" },
-  openGraph: { type: "website", siteName: "Burnticker", title: "How Burnticker works", description: DESCRIPTION, url: "/burnticker/about", images: [{ url: "https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+  openGraph: { type: "website", siteName: "Burnticker", title: "How Burnticker works", description: DESCRIPTION, url: "/burnticker/about", images: [{ url: "https://burnticker.com/burnticker/brand/og-544200bcce.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
 };
 export const dynamic = "force-dynamic";
 

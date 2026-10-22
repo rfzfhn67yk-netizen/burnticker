@@ -101,7 +101,7 @@ describe("a second attempt at the same matchup gets a free pair id (2026-10-14)"
     const src = fs.readFileSync(new URL("../src/lib/burnticker/api/handlers.ts", import.meta.url), "utf8");
     assert.equal((src.match(/pairIdPick: \(base\) => p\.registry\.freePairId\(base\)/g) ?? []).length, 2, "both pair builds in the handler pick a free id");
     const route = fs.readFileSync(new URL("../src/app/api/burnticker/v1/launch/review/route.ts", import.meta.url), "utf8");
-    assert.match(route, /pairIdPick: \(base\) => platform\(\)\.registry\.freePairId\(base\)/, "the review shows the same id the launch uses");
+    assert.match(route, /pairIdPick: \(base\) => ownPairId\(body\) \?\? platform\(\)\.registry\.freePairId\(base\)/, "the review shows the same id the launch uses (HS-132: the creator's own unsent draft pair first)");
   });
 });
 

@@ -11,7 +11,7 @@ import type { Metadata } from "next";
  * generic title and description. withShareCard builds a page's openGraph and twitter blocks from its own title, description and
  * canonical address, so a shared link shows that page.
  */
-export const OG_IMAGE_FILE = "og-27fc26b4e9.jpg";
+export const OG_IMAGE_FILE = "og-544200bcce.jpg";
 export const OG_IMAGE_PATH = `/burnticker/brand/${OG_IMAGE_FILE}`;
 export const OG_IMAGE = { url: `https://burnticker.com${OG_IMAGE_PATH}`, width: 1200, height: 630, type: "image/jpeg", alt: "Burnticker: a thermal receipt with the burned amount scorched out of it" } as const;
 /** The hashed image never changes under its name: a year, immutable. */

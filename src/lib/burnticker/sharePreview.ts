@@ -7,7 +7,7 @@ import { groupDigits, pctOfSupply, shortDay } from "@/lib/burnticker/cardView";
  * receipt's arithmetic was checked. Pure; sharePreviewServe.ts reads the registry, the evidence and the keeper's files.
  */
 export interface SharePreview { title: string; description: string; imageUrl: string; imageAlt: string }
-export const DEFAULT_OG = { url: "https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg", alt: "Burnticker: a thermal receipt with the burned amount scorched out of it" } as const;
+export const DEFAULT_OG = { url: "https://burnticker.com/burnticker/brand/og-544200bcce.jpg", alt: "Burnticker: a sample rule receipt, locked at launch, no burn yet" } as const;
 
 const net = (cluster: string) => (cluster === "mainnet" ? "Solana mainnet" : cluster === "devnet" ? "Solana devnet, a practice network where tokens have no money value" : cluster);
 const sentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUpperCase()); return /[.!?]$/.test(t) ? t : `${t}.`; };

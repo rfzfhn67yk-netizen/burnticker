@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const DESCRIPTION = "Burnticker covers leagues in baseball, basketball, football, hockey and soccer. Each league has one page per season, with its team coins, their receipts and the games they settled. Leagues are never ranked against each other.";
 export const metadata: Metadata = {
   title: "Leagues", description: DESCRIPTION, alternates: { canonical: "/burnticker/leagues" },
-  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker seasons by league", description: DESCRIPTION, url: "/burnticker/leagues", images: [{ url: "https://burnticker.com/burnticker/brand/og-27fc26b4e9.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker seasons by league", description: DESCRIPTION, url: "/burnticker/leagues", images: [{ url: "https://burnticker.com/burnticker/brand/og-544200bcce.jpg", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
 };
 
 /**
