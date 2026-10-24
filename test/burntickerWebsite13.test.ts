@@ -202,7 +202,7 @@ describe("website-12's site launch record, consumed (coordinator, 2026-10-12)", 
   test("the home strip's step 2 carries the first-burn prerequisite with the creator's raise choices (website-14, §75: no typed 85)", () => {
     const home = read("site/burnticker/index.html");
     assert.ok(home.includes(`<p class="how-x how-pre" data-prerequisite>${prerequisiteLineFor("launchlab")}</p>`));
-    assert.match(prerequisiteLineFor("launchlab"), /the amount its creator chose \(40, 60 or 85 SOL\)/);
+    assert.match(prerequisiteLineFor("launchlab"), /the amount its creator chose \(10, 40, 60 or 85 SOL\)/);
     clean(prerequisiteLineFor("launchlab"), "prerequisite");
   });
   test("Claude 2e: the summary's counted lines link to their own lists; Claude 3: the steps say the coin's own trading fees nowhere", () => {

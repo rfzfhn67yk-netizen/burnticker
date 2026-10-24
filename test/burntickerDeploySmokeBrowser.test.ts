@@ -62,7 +62,7 @@ function fakePage(o: { snaps: Snap[]; console?: Msg[]; errors?: string[]; status
 const snap = (p: Partial<Snap> = {}): Snap => ({ title: "Trust · Burnticker", text: "", headings: [], boundary: false, gridState: null, ...p });
 
 describe("HB-143: the browser step judges what a real browser shows", { skip }, () => {
-  test("Trust: the crash (error boundary after the status fetch) fails; the rendered page with Review findings passes", async () => {
+  test("Trust: the crash (error boundary after the status fetch) fails; the rendered page with No security firm has audited the code passes", async () => {
     const b = await browser();
     const trust = b.browserPages().find((p) => p.name === "trust")!;
     // the HB-143 shape: the shell renders, then the client render throws and the boundary replaces it
@@ -71,16 +71,16 @@ describe("HB-143: the browser step judges what a real browser shows", { skip }, 
     assert.equal(bad.ok, false);
     assert.match(bad.line, /error boundary/);
     assert.ok(bad.saw.some((l) => /console error: \[burnticker\] page error/.test(l)), "it prints what it saw");
-    const good = fakePage({ snaps: [snap({ text: "Trust Loading" }), snap({ text: "Current status ... Review findings: what was fixed" })] });
+    const good = fakePage({ snaps: [snap({ text: "Trust Loading" }), snap({ text: "Current status ... No security firm has audited the code: what was fixed" })] });
     const ok = await b.checkPage(good.page as never, ORIGIN, trust, { now: good.now });
     assert.equal(ok.ok, true, ok.line);
-    assert.ok(ok.saw.some((l) => /landmark "Review findings": found/.test(l)));
+    assert.ok(ok.saw.some((l) => /landmark "No security firm has audited the code": found/.test(l)));
   });
 
   test("a page that waits past its settle time still catches a crash after the landmark appeared", async () => {
     const b = await browser();
     const trust = b.browserPages()[0];
-    const late = fakePage({ snaps: [snap({ text: "Review findings" }), snap({ text: "Review findings" }), snap({ text: "This page could not be shown.", boundary: true })] });
+    const late = fakePage({ snaps: [snap({ text: "No security firm has audited the code" }), snap({ text: "No security firm has audited the code" }), snap({ text: "This page could not be shown.", boundary: true })] });
     const r = await b.checkPage(late.page as never, ORIGIN, trust, { now: late.now, settleMs: 1_000, pollMs: 500 });
     assert.equal(r.ok, false);
     assert.match(r.line, /error boundary/);
@@ -154,7 +154,7 @@ describe("HB-143: the browser step judges what a real browser shows", { skip }, 
     const launches: unknown[] = [];
     let contexts = 0;
     const pages = b.browserPages();
-    const snapsFor: Record<string, Snap> = { trust: snap({ text: "Review findings" }), home: snap({ gridState: "results" }), launch: snap({ headings: ["Launch a coin"] }), coin: snap({ headings: ["$DEFICIT"] }) };
+    const snapsFor: Record<string, Snap> = { trust: snap({ text: "No security firm has audited the code" }), home: snap({ gridState: "results" }), launch: snap({ headings: ["Launch a coin"] }), coin: snap({ headings: ["$DEFICIT"] }) };
     let n = 0;
     const chromium = { launch: async (o: unknown) => { launches.push(o); return { newContext: async () => { contexts++; const name = pages[n++].name; const f = fakePage({ snaps: [name === "launch" ? snap({ text: "This page could not be shown.", boundary: true }) : snapsFor[name]] }); return { newPage: async () => f.page, close: async () => {} }; }, close: async () => {} }; } };
     const r = await b.runBrowserCheck(ORIGIN, { env: {}, load: () => ({ chromium }) as never, pageOpts: { settleMs: 0 } });

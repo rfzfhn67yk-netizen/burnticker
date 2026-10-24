@@ -125,7 +125,7 @@ test("TEST A: review ↔ bundle parity over ≥ 5,000 setups", { timeout: 600_00
   const w = await makeWorld();
   const p = w.p;
   const t0 = Date.now();
-  const RAISES = ["40", "60", "85"];
+  const RAISES = ["10", "40", "60", "85"];
   const SHARES = [0.01, 0.02, 0.05, 0.1], ONE_SHOT = [0.5, 1];
 
   // ---- 1. every league × 3 teams × every burn mode × shares × raises -------------------------------------------------------------

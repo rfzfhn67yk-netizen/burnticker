@@ -50,7 +50,7 @@ export interface HomeStats {
 }
 export interface HomeData {
   schema: "burnticker.home/v1"; generatedAt: string; featured: CardView[]; events: ActivityEvent[]; noEvents: string;
-  /** The raises a creator may choose (40, 60 or 85 SOL; LAUNCHPAD-PATH §75). A coin's own raise is read from its pool, never from here. */
+  /** The raises a creator may choose (10, 40, 60 or 85 SOL; LAUNCHPAD-PATH §75). A coin's own raise is read from its pool, never from here. */
   raisePresetsSol: readonly string[];
   /** The $DEFICIT queued-units counter (deficitQueue.ts), from the keeper's published files; state "unavailable" when they were not read. */
   deficitQueue: DeficitQueue;
