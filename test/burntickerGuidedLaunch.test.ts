@@ -232,7 +232,7 @@ describe("one-shots, budgets and the end before graduation", () => {
   test("graduation explained beside the raise, with the presets and fee rates from the launch constants; on the templates page too", () => {
     const g = graduationLines("mainnet");
     assert.equal(g[0], "Graduation: a new coin starts on a bonding curve. When buyers have put in the raise you pick, the curve closes, the SOL and the coin move into a Raydium pool whose liquidity is locked forever, and the burn pool starts spending.");
-    assert.match(g[2], /^The raise is 40, 60 or 85 SOL\. On the curve each trade pays [\d.]+% in fees, [\d.]+% of it to the coin's burn pool\. In the Raydium pool each trade pays [\d.]+%\.$/);
+    assert.match(g[2], /^The raise is 10, 40, 60 or 85 SOL\. On the curve each trade pays [\d.]+% in fees, [\d.]+% of it to the coin's burn pool\. In the Raydium pool each trade pays [\d.]+%\.$/);
     for (const x of g) clean(x);
     assert.deepEqual(graduationExplainer({ raises: ["40", "60", "85"], curveFeePct: "1%", curveBurnPoolPct: "0.5%", poolFeePct: "1%" }).length, 3);
     assert.match(card, /<summary className="cursor-pointer text-neutral-300">\{GRADUATION_LABEL\}<\/summary>/); assert.match(card, /How burns are settled/);

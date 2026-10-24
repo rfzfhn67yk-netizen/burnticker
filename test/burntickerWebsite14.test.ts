@@ -340,14 +340,14 @@ describe("item 10: share previews for coin and receipt links", () => {
 
 describe("item 11: the graduation preset, 40 / 60 / 85 SOL (§75)", () => {
   test("presets and sentences; default 85; mainnet refuses anything else; devnet takes a small raise as the CLI does", () => {
-    assert.deepEqual([...RAISE_PRESETS_SOL], ["40", "60", "85"]); assert.equal(DEFAULT_RAISE_SOL, "85");
+    assert.deepEqual([...RAISE_PRESETS_SOL], ["10", "40", "60", "85"]); assert.equal(DEFAULT_RAISE_SOL, "85");
     assert.equal(raiseLamportsOf(undefined), LAUNCHLAB_RAISE_LAMPORTS); assert.equal(raiseLamportsOf("40"), BigInt(40_000_000_000));
-    assert.equal(raiseProblem("40", "mainnet"), null); assert.equal(raiseProblem("50", "mainnet"), "The graduation raise must be 40, 60 or 85 SOL on mainnet.");
+    assert.equal(raiseProblem("40", "mainnet"), null); assert.equal(raiseProblem("50", "mainnet"), "The graduation raise must be 10, 40, 60 or 85 SOL on mainnet.");
     assert.equal(raiseProblem("1", "devnet"), null); assert.match(raiseProblem("100", "devnet")!, /0\.1 to 85/);
     for (const t of [...Object.values(RAISE_PRESET_TEXT), RAISE_PRESET_SHARED]) clean(t, t);
     assert.match(RAISE_PRESET_SHARED, /at most 2% of the pool's SOL/);
     const base = { creator: CREATOR, ticker: "ZQXJ", name: "Zqxj coin", description: "", imageUrl: null, links: [], rule: {}, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true } };
-    assert.ok(launchProblems({ ...base, cluster: "mainnet", raiseSol: "70" }).includes("The graduation raise must be 40, 60 or 85 SOL on mainnet."));
+    assert.ok(launchProblems({ ...base, cluster: "mainnet", raiseSol: "70" }).includes("The graduation raise must be 10, 40, 60 or 85 SOL on mainnet."));
   });
   test("the server refuses a non-preset mainnet raise before anything else; the bundle passes the chosen raise to LaunchLab", async () => {
     const w = await makeWorld();
@@ -372,7 +372,7 @@ describe("item 11: the graduation preset, 40 / 60 / 85 SOL (§75)", () => {
     assert.equal(r.review.raise!.line, "The curve is complete once buyers have put in 60 SOL, and the coin moves to its Raydium pool, which starts with roughly 60 SOL.");
     assert.equal(r.review.prerequisiteLine, prerequisiteLineFor("launchlab", "60")); assert.match(r.review.prerequisiteLine, /must raise 60 SOL/);
     const bad = buildLaunchReview({ rule, ticker: "DEBTX", name: "Debt X", raiseSol: "70" }, { env });
-    assert.ok("review" in bad); assert.ok(bad.review.problems.includes("The graduation raise must be 40, 60 or 85 SOL on mainnet.")); assert.equal(bad.review.signable, false);
+    assert.ok("review" in bad); assert.ok(bad.review.problems.includes("The graduation raise must be 10, 40, 60 or 85 SOL on mainnet.")); assert.equal(bad.review.signable, false);
     const dflt = buildLaunchReview({ rule, ticker: "DEBTX", name: "Debt X" }, { env });
     assert.ok("review" in dflt); assert.equal(dflt.review.raise!.sol, "85"); assert.equal(dflt.review.costs.totalSol, launchLabCostSol("0.02"));
     clean(r.review.raise!.line, "raise line"); clean(prerequisiteLineFor("launchlab"), "prereq");
