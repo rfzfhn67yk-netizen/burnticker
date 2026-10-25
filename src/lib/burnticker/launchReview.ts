@@ -413,7 +413,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // audit 12 item 1: a linked one-shot pair's row is 100 % only; a share off it is refused by ruleRefusals, so it is not repeated here
   const linkedOneShot = !!pair && shareShapeOf(locked.rule, { linked: true }) === "linkedOneShot";
   const pp = linkedOneShot ? null : presetProblem(locked.rule, { dispersal: webDispersalOn(env, o.root) });
-  // website-14 (§75): the graduation raise, server-enforced: 10, 40, 60 or 85 SOL on mainnet; 85 when the request names none
+  // website-14 (§75): the graduation raise, server-enforced: 24, 40, 60 or 85 SOL on mainnet; 85 when the request names none
   const raiseSol = body.raiseSol === undefined || body.raiseSol === null ? DEFAULT_RAISE_SOL : String(body.raiseSol);
   const rp = raiseProblem(raiseSol, cluster);
   if (rp) problems.push(rp);

@@ -188,7 +188,7 @@ describe("B-1 fallback: a draft prepared before the create's arguments were stor
     assert.equal(fb.supply, HONEST_CREATE.supply); assert.equal(fb.totalSellA, HONEST_CREATE.totalSellA); assert.equal(fb.totalLockedAmount, "0");
     assert.equal(fb.poolId, POOL.toBase58()); assert.equal(fb.platform, PLATFORM.toBase58());
     assert.equal(fb.totalFundRaisingB, null, "the raise is not on the draft row");
-    assert.deepEqual(fb.raise?.presetsLamports, ["10000000000", "40000000000", "60000000000", "85000000000"], "on mainnet only the presets");
+    assert.deepEqual(fb.raise?.presetsLamports, ["24000000000", "40000000000", "60000000000", "85000000000"], "on mainnet only the presets");
     assert.equal(fallbackExpectedCreate({ name: "x", ticker: "X", poolId: null, platformId: null, cluster: "devnet" }, LOCKED, { metadataUri: "https://h", hosted: true }).uri, null, "a hosted devnet file is not compared");
   });
   test("the honest launch goes live (no expectation stored, and with only the TokenConfig's stored)", async () => {

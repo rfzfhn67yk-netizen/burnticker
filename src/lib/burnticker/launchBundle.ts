@@ -34,7 +34,7 @@ import { PIN_IX_LABEL_PREFIX, createAfterPinText, incineratorStepText, lockRuleS
 export const LAUNCHLAB_RAISE_LAMPORTS: bigint = STANDARD_RAISE_LAMPORTS; // one source: src/lib/burnKeeper/launch.ts
 
 /**
- * THE GRADUATION RAISE (website-14, LAUNCHPAD-PATH §75): the coin's own totalFundRaisingB. On mainnet only the presets 10, 40, 60 and 85 SOL
+ * THE GRADUATION RAISE (website-14, LAUNCHPAD-PATH §75): the coin's own totalFundRaisingB. On mainnet only the presets 24, 40, 60 and 85 SOL
  * (launchPresets.ts RAISE_PRESETS_SOL); elsewhere any amount from 0.1 to 85 SOL (devnet rehearsals use small raises, as the CLI's
  * --raise-sol does). Absent = 85. The review and the bundle read the same function, so they cannot disagree.
  */
