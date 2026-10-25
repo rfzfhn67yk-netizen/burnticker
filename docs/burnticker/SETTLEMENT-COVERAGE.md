@@ -4,7 +4,7 @@
 
 **The rule.** A coin settles on a primary source, checked by an independent second source for the same fact. The second source must be run by another operator on another domain. A coin can also settle on an adjudicated Polymarket market, read from its on-chain payout on Polygon. Prediction markets help people find events, and they can serve as an extra check where their terms allow it. Kalshi's terms allow neither use, so Kalshi is never an input.
 
-Mode: offline (frozen fixtures, data as of 2026-10-13). Taxonomy: `config/burnticker/categories.json` (11 categories). The same matrix is served as JSON at `GET /api/burnticker/v1/coverage` and drawn on the trust page.
+Mode: offline (frozen fixtures, data as of 2026-10-25). Taxonomy: `config/burnticker/categories.json` (11 categories). The same matrix is served as JSON at `GET /api/burnticker/v1/coverage` and drawn on the trust page.
 
 A **primary** is a first-party source adapter: kind attested-http or on-chain, tier 4 or better, launchable, not an aggregator, not declared cross-read-only, never Kalshi. An **independent cross-read** reads the same fact (`fact` in `config/burnticker/sources.json`) from another operator on another registrable domain. **Hit rate** = readings the source's schedule expected in the 90-day window that one read produced; **latency** = first sighting by the keeper minus the end of the period; **disagreement** = shared periods where the primary and its cross-read differ beyond the fact's tolerance.
 
@@ -17,7 +17,7 @@ A **primary** is a first-party source adapter: kind attested-http or on-chain, t
 | Natural disasters | **settleable** | `usgs.quakes`, `usgs.quakenext`, `nhc.storms`, `nhc.hurricanes`, `nhc.next`, `spc.tornadoes`, `spc.tornadoday`, `nifc.acres`, `nifc.firesize`, `usgs.volcanoraise`, `usgs.volcanowarning` | none | weather, climate-science |
 | Sports | **settleable** | `polymarket.gamepayout`, `thesportsdb.v2` | `thesportsdb.v2` (of `polymarket.gamepayout`), `nhl.score` (of `polymarket.gamepayout`), `mlb.statsapi` (of `polymarket.gamepayout`), `apisports.games` (of `polymarket.gamepayout`), `polymarket.gamepayout` (of `thesportsdb.v2`), `nhl.score` (of `thesportsdb.v2`), `mlb.statsapi` (of `thesportsdb.v2`), `apisports.games` (of `thesportsdb.v2`) | sports |
 | Elections & Politics | adjudicated-only (Polymarket) | `fedreg.finalRules`, `fedreg.eo`, `fec.reports` | none | elections, politics |
-| Economics | **settleable** | `treasury.debt`, `fred.UNRATE`, `fred.CPIAUCSL`, `fred.GFDEBTN`, `bls.eggs` | `fred.GFDEBTN` (of `treasury.debt`), `bls.LNS14000000` (of `fred.UNRATE`), `bls.CUSR0000SA0` (of `fred.CPIAUCSL`), `treasury.debt` (of `fred.GFDEBTN`), `fred.APU0000708111` (of `bls.eggs`) | economy |
+| Economics | **settleable** | `treasury.debt`, `fred.UNRATE`, `fred.CPIAUCSL`, `fred.GFDEBTN`, `bls.eggs`, `eia.gasoline` | `fred.GFDEBTN` (of `treasury.debt`), `bls.LNS14000000` (of `fred.UNRATE`), `bls.CUSR0000SA0` (of `fred.CPIAUCSL`), `treasury.debt` (of `fred.GFDEBTN`), `fred.APU0000708111` (of `bls.eggs`), `fred.GASREGW` (of `eia.gasoline`) | economy |
 | Financial markets | **settleable** | `pyth.equity`, `pyth.fx`, `pyth.metal`, `pyth.commodity`, `pyth.rates` | `redstone.equity` (of `pyth.equity`), `redstone.fx` (of `pyth.fx`), `redstone.metal` (of `pyth.metal`), `redstone.commodity` (of `pyth.commodity`) | finance |
 | Science, Space & Weather | **settleable** | `ll2.launches`, `ll2.provider`, `ll2.launch`, `noaa.flares`, `jpl.neo`, `nws.cli` | `iem.asos` (of `nws.cli`) | space, tech |
 | Entertainment & Culture | adjudicated-only (Polymarket) | `wiki.views`, `steam.players` | none | pop-culture |
@@ -95,7 +95,7 @@ Kalshi categories mapped here (Elections, Politics) are discovery only: never a 
 
 ## Economics — settleable
 
-A primary source is checked by an independent second source. The pairs are treasury.debt with fred.GFDEBTN, fred.UNRATE with bls.LNS14000000, fred.CPIAUCSL with bls.CUSR0000SA0, bls.eggs with fred.APU0000708111.
+A primary source is checked by an independent second source. The pairs are treasury.debt with fred.GFDEBTN, fred.UNRATE with bls.LNS14000000, fred.CPIAUCSL with bls.CUSR0000SA0, bls.eggs with fred.APU0000708111, eia.gasoline with fred.GASREGW.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
@@ -104,15 +104,17 @@ A primary source is checked by an independent second source. The pairs are treas
 | `fred.CPIAUCSL` | primary | Federal Reserve Bank of St. Louis (FRED) | stlouisfed.org | 4 | `bls.CUSR0000SA0` | 100% (3/3) | n/a | 0% (0 of 2 shared periods vs bls.CUSR0000SA0) |
 | `fred.GFDEBTN` | primary; cross-read of `treasury.debt` | Federal Reserve Bank of St. Louis (FRED) | stlouisfed.org | 4 | `us.debt.total-public-outstanding` | 100% (1/1) | n/a | n/a (no period shared with treasury.debt in the window) |
 | `bls.eggs` | primary | U.S. Bureau of Labor Statistics | bls.gov | 4 | `bls.APU0000708111` | 100% (3/3) | n/a | 0% (0 of 2 shared periods vs fred.APU0000708111) |
+| `eia.gasoline` | primary | U.S. Energy Information Administration | eia.gov | 4 | `eia.EMM_EPMR_PTE_NUS_DPG` | 100% (13/13) | n/a | 0% (0 of 13 shared periods vs fred.GASREGW) |
 | `bls.LNS14000000` | cross-read of `fred.UNRATE` | U.S. Bureau of Labor Statistics | bls.gov | 4 | `bls.LNS14000000` | 100% (3/3) | n/a | n/a |
 | `bls.CUSR0000SA0` | cross-read of `fred.CPIAUCSL` | U.S. Bureau of Labor Statistics | bls.gov | 4 | `bls.CUSR0000SA0` | 100% (3/3) | n/a | n/a |
 | `fred.APU0000708111` | cross-read of `bls.eggs` | Federal Reserve Bank of St. Louis (FRED) | stlouisfed.org | 4 | `bls.APU0000708111` | 100% (3/3) | n/a | n/a |
+| `fred.GASREGW` | cross-read of `eia.gasoline` | Federal Reserve Bank of St. Louis (FRED) | stlouisfed.org | 4 | `eia.EMM_EPMR_PTE_NUS_DPG` | 100% (13/13) | n/a | n/a |
 
-Mapped here but not a primary: `bea.gdp` (not launchable: needs a key: BEA_API_KEY (free registration)); `eia.gasoline` (not launchable: needs a key: EIA_API_KEY (free registration; the keyless call returned API_KEY_MISSING — that response is the fixture)); `usda.eggs` (not launchable: needs a key: USDA MARS API key (free)); `census.tradeBalance` (not launchable: needs a key: CENSUS_API_KEY (the keyless call returned 'Missing Key'; that page is the fixture)).
+Mapped here but not a primary: `bea.gdp` (not launchable: needs a key: BEA_API_KEY (free registration)); `usda.eggs` (not launchable: needs a key: USDA MARS API key (free)); `census.tradeBalance` (not launchable: needs a key: CENSUS_API_KEY (the keyless call returned 'Missing Key'; that page is the fixture)).
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced, with our own feed (`scalar`) | **settleable** | A primary source is checked by an independent second source. The pairs are treasury.debt with fred.GFDEBTN, fred.UNRATE with bls.LNS14000000, fred.CPIAUCSL with bls.CUSR0000SA0, bls.eggs with fred.APU0000708111. |
+| Advanced, with our own feed (`scalar`) | **settleable** | A primary source is checked by an independent second source. The pairs are treasury.debt with fred.GFDEBTN, fred.UNRATE with bls.LNS14000000, fred.CPIAUCSL with bls.CUSR0000SA0, bls.eggs with fred.APU0000708111, eia.gasoline with fred.GASREGW. |
 | Any market, using a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tag economy. No primary source here gives a yes-or-no result. |
 | Any market, using one market (`one-shot`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tag economy. No primary source here gives a yes-or-no result. |
 
