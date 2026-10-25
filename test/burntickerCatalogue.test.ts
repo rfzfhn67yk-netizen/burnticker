@@ -71,7 +71,7 @@ describe("sources.json: every configured source", () => {
     assert.equal(feedById("treasury.debt:x"), null, "plain sources take none");
   });
   test("key-required, page-scraped and disaster-adjacent sources are present but not launchable, with the reason", () => {
-    for (const id of ["bea.gdp", "eia.gasoline", "usda.eggs", "census.tradeBalance", "congress.lawsSigned", "youtube.views"]) { const f = feedById(id)!; assert.equal(f.launchable.ok, false, id); assert.match(f.launchable.why!, /needs a key/); }
+    for (const id of ["bea.gdp", "usda.eggs", "census.tradeBalance", "congress.lawsSigned", "youtube.views"]) { const f = feedById(id)!; assert.equal(f.launchable.ok, false, id); assert.match(f.launchable.why!, /needs a key/); }
     assert.equal(feedById("usgs.quakes6")!.launchable.ok, false); assert.match(feedById("usgs.quakes6")!.flags.join(" "), /disaster-adjacent: OWNER TO CONFIRM/);
     assert.equal(feedById("billboard.hot100")!.tier, 5); assert.equal(feedById("bom.weekendGross")!.tier, 5); assert.equal(feedById("spotify.charts")!.launchable.ok, false);
     assert.equal(feedById("espn.nfl"), null, "no ESPN source in the catalogue (owner, 2026-10-10: no ESPN reads)");
@@ -94,7 +94,7 @@ describe("sources.json: every configured source", () => {
     const r = await a.settledSince(validateRule(DEBT_RULE), "2026-10-05");
     assert.deepEqual(r.events.map((e) => e.id), ["2026-10-06", "2026-10-07", "2026-10-08"]);
     assert.equal((await a.impliedChance()).chance, null);
-    await assert.rejects(a.settledSince(validateRule({ ...DEBT_RULE, series: "eia.gasoline", scalar: { unit: 0.05, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" } }), null), /Coins cannot launch on "U\.S\. regular gasoline retail price, weekly \(EIA\)" yet, because the publisher requires an access key/);
+    await assert.rejects(a.settledSince(validateRule({ ...DEBT_RULE, series: "usda.eggs", scalar: { unit: 0.05, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" } }), null), /Coins cannot launch on "USDA weekly national egg price \(AMS Egg Markets Overview\)" yet, because the publisher requires an access key/);
     assert.equal((await a.searchSeries("egg"))[0].ticker, "bls.eggs");
   });
 });
