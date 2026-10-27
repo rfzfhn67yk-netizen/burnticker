@@ -9,8 +9,8 @@ import type { BurntickerEvent, ProgramEvent, ReceiptJson, Receipts } from "./typ
 /**
  * EVENTS. burn_receipts emits an Anchor event for every state change through `emit_cpi!` — a self-CPI whose instruction data is the
  * 8-byte event tag, the event's discriminator and the borsh fields (inner-instruction data, which logs cannot truncate): TokenInitialized,
- * PoolRegistered, ReadingSubmitted, ReadingProcessed (a burn, a below-floor skip, a vault burn…), BurnPoolCapBound, the attester and
- * cap governance events — and, from "Program data:" log lines, the one plain `emit!` event, PairResultSubmitted (2026-10-11). subscribe()
+ * PoolRegistered, ReadingSubmitted, ReadingProcessed (a burn, a below-floor skip, a vault burn…), BurnPoolCapBound (never emitted since
+ * the owner decision of 2026-10-25 removed the cap; decoded for old transactions), the attester and governance events — and, from "Program data:" log lines, the one plain `emit!` event, PairResultSubmitted (2026-10-11). subscribe()
  * watches one mint's TokenConfig address:
  *
  *   chain mode   (a connection + the program id) — every new confirmed transaction touching the config is fetched and its events decoded

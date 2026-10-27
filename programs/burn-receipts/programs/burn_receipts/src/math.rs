@@ -119,20 +119,6 @@ pub fn min_amount_out(amount_in: u64, reserve_in: u64, reserve_out: u64, fee_rat
     u64::try_from(after_slip).map_err(|_| MathError::Overflow)
 }
 
-/// The most one crank may spend: `bps` of the pool's WSOL reserve (review H-1; 200 bps keeps price impact under ~4 %).
-pub fn reserve_spend_cap(reserve_wsol: u64, bps: u64) -> u64 {
-    ((reserve_wsol as u128) * (bps as u128) / BPS_DENOMINATOR) as u64
-}
-
-/// Round-5 review R5-8: crank_carried's budget now — `stored` (left after the last piece) refilled by `cap` per
-/// CARRIED_BUDGET_WINDOW_SECS since then, never above one `cap`. `cap` is the per-crank cap now (2 % of the pool's WSOL reserve).
-pub fn carried_budget(stored: u64, cap: u64, elapsed_secs: i64) -> u64 {
-    let w = crate::constants::CARRIED_BUDGET_WINDOW_SECS;
-    let e = elapsed_secs.clamp(0, w) as u128;
-    let refill = (cap as u128 * e / w as u128) as u64;
-    stored.saturating_add(refill).min(cap)
-}
-
 /// Q32 price of SOL in tokens (token raw units per lamport × 2^32) from reserves — the high-precision side for a memecoin.
 pub fn sol_price_x32(reserve_sol: u64, reserve_token: u64) -> Result<u128, MathError> {
     if reserve_sol == 0 {
@@ -288,18 +274,6 @@ pub fn hex12(bytes: &[u8; 32]) -> String {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn the_carried_budget_refills_one_cap_per_window_and_never_above_it() {
-        use super::carried_budget;
-        assert_eq!(carried_budget(0, 600, 0), 0);
-        assert_eq!(carried_budget(0, 600, 300), 300);
-        assert_eq!(carried_budget(0, 600, 600), 600);
-        assert_eq!(carried_budget(0, 600, 10_000), 600);
-        assert_eq!(carried_budget(590, 600, 30), 600, "a dust piece used only a dust budget");
-        assert_eq!(carried_budget(900, 600, 0), 600, "a cap that shrank bounds the stored budget");
-        assert_eq!(carried_budget(5, 600, -3), 5, "a clock that went back refills nothing");
-    }
-
     #[test]
     fn buyback_min_out_is_the_larger_quote() {
         // 100 SOL / 1e15 raw tokens pool; TWAP = spot → both quotes equal.

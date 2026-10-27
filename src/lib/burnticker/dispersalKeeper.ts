@@ -1,7 +1,5 @@
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
-import { CARRIED_BUDGET_WINDOW_SECS } from "@/lib/burnReceipts/constants";
-import { carriedBudgetReadySec } from "@/lib/burnReceipts/math";
-import { addReading, behind, debtLine, keepReceipts, markChunk, nextDueAt, PROGRAM_CAP_BPS, reconcile, seedOf, stateFromJson, stateToJson, step, type Debt, type DispersalState } from "@/lib/burnticker/dispersal";
+import { addReading, behind, debtLine, keepReceipts, reconcile, stateFromJson, stateToJson, step, type Debt, type DispersalState } from "@/lib/burnticker/dispersal";
 
 /**
  * BURN DISPERSAL — THE KEEPER STEP (owner decision 2026-10-13 night; the pure plan is dispersal.ts). One call per coin per keeper wake,
@@ -16,47 +14,33 @@ import { addReading, behind, debtLine, keepReceipts, markChunk, nextDueAt, PROGR
  *      Fourth prelaunch audit F10: a receipt's amount comes ONLY from its own transaction's memo, clamped to the piece's requested
  *      maximum. While the memo cannot be read the receipt is pending with no amount, and later wakes read it again (a few per wake).
  *      The change in the coin's carried balance is never a piece's spend: another cranker, a new reading or the rule's end path can
- *      move it in between. That balance still drives the debts and the plan (step 2 and the window), which follow the chain.
+ *      move it in between. That balance still drives the debts and the next piece (steps 2 and 4), which follow the chain.
  *   2. ACCOUNT: a new crank cursor means a reading's crank landed; its Reading account says what it spent and carried, and the debts
  *      (one per reading not fully spent) drain oldest-first down to the chain's carried amount. The chain is the record.
  *   3. ALERT once per reading (bt-burn-behind) when it is not fully spent 24 hours after it landed.
- *   4. STEP the scheduler: a due piece is planned (crank_carried), simulated, written ahead, sent (the port's send: the private route when
- *      BURNTICKER_PRIVATE_SEND_URL is set), confirmed, and recorded. A "not now" refusal (TWAP, pool) waits ten minutes; any other
- *      refusal gives the piece up (what it would have spent stays carried and rolls into the plan).
- *      Round-5 review R5-8: the program spends carried pieces from a per-coin budget (one per-crank cap per CARRIED_BUDGET_WINDOW_SECS,
- *      up to one cap; one piece per second; CarriedPace). The keeper reads the budget (anyone's pieces spend it: cranking is
- *      permissionless) on the CHAIN's clock and WAITS until its piece fits — before planning, on the port's "too-soon" answer, and on a
- *      CarriedTooSoon refusal in simulation or on chain (a race with another cranker; then never sooner than 30 s) — so a piece is never
- *      given up for the budget. A dust piece by someone else takes only a dust budget: the keeper's piece waits seconds, not a window.
+ *   4. STEP (owner decision 2026-10-25: no per-run bound, no carried budget, so no windows): when the queue is empty and something is
+ *      carried, ONE crank_carried piece for the whole carried amount (max_spend = the carried amount) is planned, simulated, written
+ *      ahead, sent (the port's send: the private route when BURNTICKER_PRIVATE_SEND_URL is set), confirmed, and recorded. A "not now"
+ *      refusal (TWAP, pool) is retried after RETRY_MS; any other refusal after REFUSED_RETRY_MS (the amount stays carried either way).
+ *      The program's only pacing left is one piece per coin per second (CarriedTooSoon, a race with another cranker): the keeper then
+ *      waits TOO_SOON_MIN_RETRY_MS.
  *
  * State lives in the caller's status table (registry / ledger `dispersal:<mint>`), JSON with bigints as strings.
  */
 
 export const DISPERSAL_STATE_KEY = (mint: string): string => `dispersal:${mint}`;
 const WAIT_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch", "ReadingPending"]);
-const RETRY_MS = 10 * 60_000;
+export const RETRY_MS = 10 * 60_000;
+/** After a refusal that is not "not now" (e.g. BelowFloor when the pool holds less than the floor and less than the carry), try again after this. */
+export const REFUSED_RETRY_MS = 60 * 60_000;
 /** The program's "nothing is carried" refusal: the carry was spent by another cranker or cleared by the rule's end path (after the grace). */
 const NOTHING_CARRIED = /NothingCarried/;
 /** What a refused or failed piece leaves behind, in the log's words (never "stays carried" when the chain says nothing is). */
 const afterRefusal = (err: string): string => NOTHING_CARRIED.test(err) ? "nothing is carried on chain any more (spent by another cranker, or cleared by the rule's end path); there is nothing left to spend" : "the amount stays carried";
-/** Round-5 review R5-8: the program's refusal of a piece inside the interval (Anchor error 6141). */
+/** The program's refusal of a second piece in the same second as the coin's last one (Anchor error 6141). */
 const TOO_SOON = /CarriedTooSoon|\b6141\b|0x17fd/;
 /** After a CarriedTooSoon refusal, the next try is no sooner than this (a lagging cluster clock must not make the keeper retry every second). */
 export const TOO_SOON_MIN_RETRY_MS = 30_000;
-/** The program's per-crank cap on this reserve (MAX_SPEND_RESERVE_BPS, 2 %): the budget's refill rate per window. */
-const capOf = (reserve: bigint): bigint => (reserve * BigInt(PROGRAM_CAP_BPS)) / BigInt(10_000);
-/**
- * How long until a piece of `lamports` fits the coin's carried budget (ms; 0 = now), measured on the chain's clock and turned into a wait
- * on the local one; null when the port cannot tell (the plan's "too-soon" and the program's refusal tell then).
- */
-async function budgetWaitMs(port: ProgramPort, lamports: bigint, reserve: bigint, now: number): Promise<number | null> {
-  if (!port.carriedPace) return null;
-  const p = await port.carriedPace().catch(() => null);
-  if (!p) return null;
-  const chainNow = p.chainNowSec ?? Math.floor(now / 1000);
-  const ready = carriedBudgetReadySec(p.lastCarriedAt, p.budgetLamports, capOf(reserve), lamports, chainNow);
-  return ready === null ? null : (ready - chainNow) * 1000;
-}
 const Z = BigInt(0);
 
 export interface DispersalDeps {
@@ -75,17 +59,17 @@ export interface DispersalDeps {
 /**
  * The dispersal step's phone alerts: bt-burn-behind (a reading not fully spent a day after it landed), bt-dispersal-receipt (a
  * piece's receipt the keeper cannot settle from its own transaction: its memo unread after three days, or naming more than the piece
- * asked for) and bt-dispersal-stuck (no piece the program accepts fits the pool: the rule's floor is above the per-crank cap and more
- * than the cap is carried; dispersal.ts stuckWhy). All reach the phone through push.ts.
+ * asked for). Both reach the phone through push.ts. (bt-dispersal-stuck, raised when no piece fitted a small pool under the old
+ * per-run bound, was removed with that bound: owner decision 2026-10-25.)
  */
-export interface DispersalAlert { kind: "bt-burn-behind" | "bt-dispersal-receipt" | "bt-dispersal-stuck"; key: string; text: string; meta: Record<string, unknown> | null }
+export interface DispersalAlert { kind: "bt-burn-behind" | "bt-dispersal-receipt"; key: string; text: string; meta: Record<string, unknown> | null }
 
 export interface DispersalReport {
   action: "off" | "idle" | "wait" | "sent" | "landed" | "refused" | "dry-run";
   why?: string;
   signature?: string;
   spentLamports?: bigint;
-  /** When the next wake is useful (the next piece's time, a retry, or the window's end); null when nothing is carried. */
+  /** When the next wake is useful (a retry, or a look after a waiting reading); null when nothing is waiting on a time. */
   nextDueAt: number | null;
   lines: string[];
   behind: Debt | null;
@@ -125,7 +109,7 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
   let st: DispersalState = stateFromJson(d.load());
   const out = (r: Omit<DispersalReport, "lines" | "behind" | "nextDueAt"> & { nextDueAt?: number | null }): DispersalReport => {
     d.save(stateToJson(st));
-    const due = r.nextDueAt !== undefined ? r.nextDueAt : nextDueAt(st.window);
+    const due = r.nextDueAt !== undefined ? r.nextDueAt : null;
     return { ...r, nextDueAt: due, lines: st.debts.map(debtLine), behind: behind(st.debts, now) };
   };
   const port = d.port;
@@ -134,7 +118,7 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
     if (!p.clamped) return;
     raise({ kind: "bt-dispersal-receipt", key: `${d.mint}:${signature}:clamped`, text: `$${d.ticker}: the burn dispersal piece ${signature} has a memo that names more than the piece asked for (${sol(requested)} SOL). Its receipt is recorded at the requested amount and marked for a look. The program should never allow this, so either the program or the memo the keeper read is wrong.`, meta: { mint: d.mint, signature, requestedLamports: requested.toString(), memo: p.memo, reason: "clamped" } });
   };
-  if (!port.planCarried || !port.poolSolReserve) return out({ action: "off", why: "this program client has no crank_carried" });
+  if (!port.planCarried) return out({ action: "off", why: "this program client has no crank_carried" });
   const cfg = await port.config();
 
   // 1. RESOLVE the piece in flight — FIRST, before any lifecycle answer (third prelaunch audit F01): a piece signed before the rule
@@ -147,11 +131,10 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
       // F10: the amount is the transaction's own (its memo), never f.carriedBefore − the carried balance now: another cranker, a new
       // reading or the end path may have moved that balance since the write-ahead. Unread memo → a pending receipt, read again later.
       const p = await provenSpend(port, f.signature, f.lamports);
-      st = landed(st, f.signature, p, s.slot, now, f.chunkIndex, f.lamports);
+      st = landed(st, f.signature, p, s.slot, now, f.lamports);
       clampAlert(f.signature, f.lamports, p);
       d.log(`  [dispersal] $${d.ticker}: a piece landed after a restart: ${p.spent !== null ? `${sol(p.spent)} SOL` : `${NOT_READ} (its transaction's memo is not readable yet; the piece asked for at most ${sol(f.lamports)} SOL); it is read again on later wakes`}${clampNote(p, f.lamports)} · ${f.signature}`);
     } else if (s && s.err) {
-      if (st.window && st.window.done === f.chunkIndex) st = { ...st, window: markChunk(st.window, Z) };
       st = { ...st, inflight: null };
       d.log(`  [dispersal] $${d.ticker}: the piece ${f.signature.slice(0, 12)}… failed on chain (${s.err.slice(0, 80)}); ${afterRefusal(s.err)}`);
     } else if ((await port.blockHeight()) > f.lastValidBlockHeight) {
@@ -184,10 +167,9 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
   // LIFECYCLE. An ENDED rule is NOT a reason to stop (round-5 review R5-3 / R5-4, the program deployed on mainnet 2026-10-15):
   // crank_carried drains the carried spend after a VOID end (the wind-down's carry) and after a RESOLVED end, for which forward_on_end /
   // burn_sol_on_end leave the carry on the coin for 30 days. The keeper keeps accounting, alerting and spending pieces through the
-  // normal budget / TWAP / reserve checks until the chain shows nothing carried — drained here, or disposed by the end path after the
+  // normal TWAP / reserve checks until the chain shows nothing carried — drained here, or disposed by the end path after the
   // grace (the carry then reads 0 and the debts reconcile away).
   if (!cfg || cfg.mode !== "buyback" || cfg.burnsTarget || !cfg.poolRegistered) {
-    st = { ...st, window: null };
     return out({ action: "idle", why: !cfg ? "no program config" : cfg.mode !== "buyback" ? "not a buyback coin" : cfg.burnsTarget ? "a coin with a burn target" : "no pool registered" });
   }
 
@@ -211,37 +193,23 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
     st = { ...st, alerted: late.readingDate };
   }
 
-  // 4. STEP.
-  const reserve = await port.poolSolReserve();
-  if (reserve === null) return out({ action: "idle", why: "the pool's reserve cannot be read" });
+  // 4. STEP: the whole carried amount in one piece.
   const queueEmpty = !cfg.hasBaseline || cfg.crankCursor === cfg.lastRecordDate;
-  const s = step(st.window, { now, carriedLamports: cfg.carriedSpendLamports, reserveLamports: reserve, queueEmpty, floorLamports: cfg.floorLamports, seed: seedOf(`${d.mint}:${now}`) });
-  st = { ...st, window: s.window };
-  if (s.action.kind === "idle") return out({ action: "idle", why: s.action.why });
-  if (s.action.kind === "wait" && s.action.stuck) {
-    // the registry dedupes per key per day: one alert a day while the coin stays stuck
-    const text = `$${d.ticker}: the burn dispersal is ${s.action.why}.`;
-    if (d.alert) d.alert({ kind: "bt-dispersal-stuck", key: `${d.mint}:stuck`, text, meta: { mint: d.mint, carriedLamports: cfg.carriedSpendLamports.toString(), reserveLamports: reserve.toString(), floorLamports: cfg.floorLamports.toString() } });
-    d.log(`  [dispersal] $${d.ticker}: ${s.action.why}`);
-    return out({ action: "wait", why: s.action.why, nextDueAt: s.action.untilMs });
-  }
-  if (s.action.kind === "wait") return out({ action: "wait", why: s.action.why, nextDueAt: s.action.untilMs });
-  if (st.retryAt && now < st.retryAt) return out({ action: "wait", why: "a piece was deferred by the program; retrying", nextDueAt: st.retryAt });
-  const lamports = s.action.lamports, idx = s.action.chunkIndex;
-  // R5-8: the piece must fit the coin's carried budget (earlier pieces, this keeper's or anyone's, spent from it): wait until it does.
-  const wait = await budgetWaitMs(port, lamports, reserve, now);
-  if (wait !== null && wait > 0) return out({ action: "wait", why: "the program's carried budget refills (one cap per 600 s)", nextDueAt: now + wait });
-  if (d.dryRun) return out({ action: "dry-run", why: `would spend ${sol(lamports)} SOL of the carried ${sol(cfg.carriedSpendLamports)} SOL (crank_carried)`, nextDueAt: now + 60_000 });
+  const a = step({ now, carriedLamports: cfg.carriedSpendLamports, queueEmpty });
+  if (a.kind === "idle") { st = { ...st, retryAt: null }; return out({ action: "idle", why: a.why }); }
+  if (a.kind === "wait") return out({ action: "wait", why: a.why, nextDueAt: a.untilMs });
+  if (st.retryAt && now < st.retryAt) return out({ action: "wait", why: "the last piece was refused by the program; retrying", nextDueAt: st.retryAt });
+  const lamports = a.lamports;
+  if (d.dryRun) return out({ action: "dry-run", why: `would spend the carried ${sol(lamports)} SOL in one piece (crank_carried)`, nextDueAt: now + 60_000 });
   const plan = await port.planCarried(lamports);
   if ("status" in plan) return out({ action: "wait", why: plan.status, nextDueAt: plan.status === "too-soon" ? Math.max(plan.nextAtMs, now + 1_000) : now + RETRY_MS });
-  const tooSoonRetry = async (): Promise<number> => now + Math.max(TOO_SOON_MIN_RETRY_MS, (await budgetWaitMs(port, lamports, reserve, now)) ?? CARRIED_BUDGET_WINDOW_SECS * 1000);
   const tx = await plan.build();
   const sim = await port.simulate(tx.raw);
   if (sim.err) {
     if (TOO_SOON.test(sim.err)) {
-      // another piece landed since the budget was read (or the cluster clock lags): wait for the budget, never sooner than 30 s
-      st = { ...st, retryAt: await tooSoonRetry() };
-      d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece waits for the program's carried budget (another piece spent it); retrying then`);
+      // another piece landed in this second (a race with another cranker, or the cluster clock lags): never sooner than 30 s
+      st = { ...st, retryAt: now + TOO_SOON_MIN_RETRY_MS };
+      d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece refused in simulation: another piece ran this second; retrying in 30 s`);
       return out({ action: "wait", why: "CarriedTooSoon", nextDueAt: st.retryAt });
     }
     if (WAIT_ERRORS.has(sim.err) || port.retryableErrors?.has(sim.err)) {
@@ -250,16 +218,15 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
       return out({ action: "wait", why: sim.err, nextDueAt: now + RETRY_MS });
     }
     if (NOTHING_CARRIED.test(sim.err)) {
-      st = { ...st, window: null };
       d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece refused in simulation (${sim.err}): ${afterRefusal(sim.err)}`);
       return out({ action: "refused", why: sim.err, nextDueAt: null });
     }
-    if (st.window) st = { ...st, window: markChunk(st.window, Z) };
-    d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece refused in simulation (${sim.err}); it stays carried and the plan moves on`);
-    return out({ action: "refused", why: sim.err });
+    st = { ...st, retryAt: now + REFUSED_RETRY_MS };
+    d.log(`  [dispersal] $${d.ticker}: a ${sol(lamports)} SOL piece refused in simulation (${sim.err}); it stays carried and is tried again in an hour`);
+    return out({ action: "refused", why: sim.err, nextDueAt: st.retryAt });
   }
   // write-ahead: the signature is on record before the send
-  st = { ...st, retryAt: null, inflight: { signature: tx.signature, lastValidBlockHeight: tx.lastValidBlockHeight, lamports, carriedBefore: cfg.carriedSpendLamports, sentAt: now, chunkIndex: idx } };
+  st = { ...st, retryAt: null, inflight: { signature: tx.signature, lastValidBlockHeight: tx.lastValidBlockHeight, lamports, carriedBefore: cfg.carriedSpendLamports, sentAt: now } };
   d.save(stateToJson(st));
   try { await port.send(tx.raw); } catch (e) { d.log(`  [dispersal] $${d.ticker}: send raised ${(e as Error).message.slice(0, 120)}; the signature is on record and will be resolved`); }
   const c = await port.confirm(tx);
@@ -267,41 +234,38 @@ export async function runDispersal(d: DispersalDeps): Promise<DispersalReport> {
   if (c.status === "failed") {
     st = { ...st, inflight: null };
     if (TOO_SOON.test(c.err)) {
-      // R5-8: lost a race to another cranker's piece; the piece is not given up, it waits for the budget (never sooner than 30 s)
-      st = { ...st, retryAt: await tooSoonRetry() };
-      d.log(`  [dispersal] $${d.ticker}: the piece was refused on chain over the program's carried budget; retrying then`);
+      // lost a race to another cranker's piece in the same second; the piece is not given up (never sooner than 30 s)
+      st = { ...st, retryAt: now + TOO_SOON_MIN_RETRY_MS };
+      d.log(`  [dispersal] $${d.ticker}: the piece was refused on chain: another piece ran this second; retrying in 30 s`);
       return out({ action: "wait", why: "CarriedTooSoon", signature: tx.signature, nextDueAt: st.retryAt });
     }
-    if (st.window) st = { ...st, window: markChunk(st.window, Z) };
-    if (NOTHING_CARRIED.test(c.err)) st = { ...st, window: null };
+    const nothing = NOTHING_CARRIED.test(c.err);
+    if (!nothing) st = { ...st, retryAt: now + (WAIT_ERRORS.has(c.err) || port.retryableErrors?.has(c.err) ? RETRY_MS : REFUSED_RETRY_MS) };
     d.log(`  [dispersal] $${d.ticker}: the piece failed on chain (${c.err.slice(0, 80)}); ${afterRefusal(c.err)}`);
-    return out({ action: "refused", why: c.err, signature: tx.signature });
+    return out({ action: "refused", why: c.err, signature: tx.signature, nextDueAt: nothing ? null : st.retryAt });
   }
   // F10: the receipt's amount is the memo's (clamped to the request); the carried balance after only reconciles the debts (aggregate)
   const p = await provenSpend(port, tx.signature, lamports);
   const after = await port.config();
-  st = landed(st, tx.signature, p, c.slot, now, idx, lamports);
+  st = landed(st, tx.signature, p, c.slot, now, lamports);
   clampAlert(tx.signature, lamports, p);
   if (after) st = { ...st, debts: reconcile(st.debts, after.carriedSpendLamports, after.crankCursor, now) };
   const what = p.spent !== null ? `spent ${sol(p.spent)} SOL of the carried amount` : `a piece of at most ${sol(lamports)} SOL landed; ${NOT_READ} (its transaction's memo is not readable yet; it is read again on later wakes)`;
-  d.log(`  [dispersal] $${d.ticker}: ${what}${clampNote(p, lamports)} (piece ${idx + 1} of ${st.window?.chunks.length ?? "?"} this window) · ${tx.signature}${p.memo ? ` · ${p.memo}` : ""}`);
-  return out({ action: "landed", signature: tx.signature, ...(p.spent !== null ? { spentLamports: p.spent } : { why: NOT_READ }) });
+  d.log(`  [dispersal] $${d.ticker}: ${what}${clampNote(p, lamports)} (one piece for the whole carried amount) · ${tx.signature}${p.memo ? ` · ${p.memo}` : ""}`);
+  // the piece spends min(carried, max, pool): a remainder only when the pool held less than the carry; look again after the retry delay
+  const left = after ? after.carriedSpendLamports : Z;
+  return out({ action: "landed", signature: tx.signature, ...(p.spent !== null ? { spentLamports: p.spent } : { why: NOT_READ }), nextDueAt: left > Z ? now + RETRY_MS : null });
 }
 
 const clampNote = (p: { clamped: boolean }, requested: bigint): string => (p.clamped ? ` (its memo named more than the piece asked for; recorded at the requested ${sol(requested)} SOL)` : "");
 
-/**
- * Records a landed piece. `spent` is the transaction's proven amount, or null (a pending receipt). The window is a plan, not a record:
- * an unread piece advances it by its requested size, and the next step re-plans against the chain's carried amount if that differs.
- */
-function landed(st: DispersalState, signature: string, p: { spent: bigint | null; memo: string | null; clamped: boolean }, slot: number | null, now: number, chunkIndex: number, requested: bigint): DispersalState {
+/** Records a landed piece. `spent` is the transaction's proven amount, or null (a pending receipt read again on later wakes). */
+function landed(st: DispersalState, signature: string, p: { spent: bigint | null; memo: string | null; clamped: boolean }, slot: number | null, now: number, requested: bigint): DispersalState {
   const { spent, memo } = p;
-  const planned = spent ?? requested;
-  const window = st.window && st.window.done === chunkIndex ? markChunk(st.window, planned, now) : st.window ? { ...st.window, expectedCarried: st.window.expectedCarried - planned, lastAtMs: now } : null;
   const receipt = spent !== null
     ? { signature, at: now, spentLamports: spent, status: "landed" as const, requestedLamports: requested, ...(p.clamped ? { clamped: true } : {}), throughDate: st.cursor, memo, slot }
     : { signature, at: now, spentLamports: null, status: "pending" as const, requestedLamports: requested, checkedAt: now, tries: 1, throughDate: st.cursor, memo, slot };
-  return { ...st, window, inflight: null, receipts: keepReceipts([...st.receipts.filter((r) => r.signature !== signature), receipt]) };
+  return { ...st, inflight: null, receipts: keepReceipts([...st.receipts.filter((r) => r.signature !== signature), receipt]) };
 }
 
 const sol = (l: bigint): string => (Number(l) / 1e9).toFixed(4);

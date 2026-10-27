@@ -58,7 +58,7 @@ export interface ReadingAccount {
   value: bigint; prev_value: bigint; delta: bigint; carry_in: bigint; carry_out: bigint; units: bigint;
   signers_mask: number; source_url_hash: Uint8Array; proof_hash: Uint8Array; submitted_at: bigint;
   outcome: number; processed_at: bigint; pool_lamports: bigint; spent_lamports: bigint; got: bigint; burned: bigint; owed: bigint; shortfall: bigint;
-  /** The whole spendable pool before the crank; > pool_lamports when the platform cap bound. */
+  /** The whole spendable pool before the crank; equals pool_lamports since the burn-pool cap was removed (owner decision 2026-10-25). */
   pool_actual_lamports: bigint;
   rule_spend_lamports: bigint; carried_in_lamports: bigint; carried_out_lamports: bigint;
   /** Review-2 F9: the CPMM pool this reading was processed against (default when none). */
@@ -68,7 +68,8 @@ export interface ReadingAccount {
 export interface PlatformConfigAccount {
   version: number; bump: number; authority: PublicKey; burn_pool_cap_lamports: bigint; cap_sunset_ts: bigint;
   pending_cap_lamports: bigint; pending_cap_eta: bigint; created_at: bigint;
-  /** Review-3 L-4: the cranker allowlist (first `cranker_count`), in force only while the cap is. */
+  /** The legacy cranker allowlist (first `cranker_count`). Layout unchanged; the program no longer reads it (owner decision 2026-10-25),
+   *  and a PlatformConfig written since then stores it empty with burn_pool_cap_lamports 0. */
   crankers: PublicKey[]; cranker_count: number;
 }
 
@@ -104,7 +105,8 @@ export function decodeLockedLiquidity(data: Buffer | Uint8Array): LockedLiquidit
  * Round-5 review R5-8: CarriedPace ["carried_pace", mint], written only by crank_carried. Not in the IDL's account list (the program reads
  * and writes it at fixed offsets, so no instruction names its type), so it is decoded here at the same offsets as state.rs's layout:
  * discriminator sha256("account:CarriedPace")[..8] · version u8 @8 (1; the program refuses any other) · bump u8 @9 · mint @10 ·
- * last_carried_at i64 @42 · pieces u32 @50 · spent_lamports u64 @54 · budget_lamports u64 @62 (the budget left after the last piece) ·
+ * last_carried_at i64 @42 · pieces u32 @50 · spent_lamports u64 @54 · budget_lamports u64 @62 (written 0 since the owner decision of
+ * 2026-10-25 removed the carried budget; older accounts may still hold a stale value the program no longer reads) ·
  * reserved [u8; 24] @70 (94 bytes).
  */
 export interface CarriedPaceAccount { version: number; bump: number; mint: PublicKey; last_carried_at: bigint; pieces: number; spent_lamports: bigint; budget_lamports: bigint }

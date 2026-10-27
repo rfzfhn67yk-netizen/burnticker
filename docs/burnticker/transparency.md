@@ -27,7 +27,7 @@ is either public already (in the monorepo paths named, and in the public reposit
 | Keeper redundancy (leader / standby, signed takeover notes) and what it does not guarantee | `src/lib/burnticker/ops/leaderLock.ts`, `readingFence.ts`, `docs/burnticker/runbook.md` | same paths | "Keepers — which one is active" |
 | Bring-your-own-attester guide and tools | `docs/burnticker/ATTESTERS.md`, `scripts/burnticker-attester.mts` | same paths | "Attesters per coin" |
 | The launch-day load test, its numbers, and the caching plan | `docs/burnticker/LOADTEST.md`, `scripts/ops/loadtest.sh` | same paths | — |
-| Known limitations (quorum 1, Switchboard shutdown, Kalshi off-chain read, one-shot markets, 25 SOL cap, devnet rehearsal not done, program not deployed, …) | `config/burnticker/transparency.json` → `limitations` | same path | "Known limitations" |
+| Known limitations (quorum 1, Switchboard shutdown, Kalshi off-chain read, one-shot markets, no burn-pool cap (since 2026-10-25), devnet rehearsal not done, program not deployed, …) | `config/burnticker/transparency.json` → `limitations` | same path | "Known limitations" |
 | Policies (no deletions on X, corrections in-thread with the receipt, no paid promotion, the platform buys no coin except one test coin, nothing announced as coming later, …) | `config/burnticker/transparency.json` → `policies` | same path | "Policies" |
 | The public audit (every receipt recomputed) | `scripts/burnticker-audit.mts` → `audit.json` in the site dir | same script | "Public audit" |
 | Sites and brand | `site/deficit`, `site/burnticker`, `site/brand-concepts` | same paths (brand assets published, not licensed for reuse) | — |

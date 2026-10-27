@@ -1,5 +1,5 @@
 import { pollMsFor } from "@/lib/burnticker/multiKeeper";
-import { MAX_SPEND_RESERVE_BPS, MAX_TWAP_WINDOW_SECS, MIN_TWAP_WINDOW_SECS } from "@/lib/burnReceipts/constants";
+import { MAX_TWAP_WINDOW_SECS, MIN_TWAP_WINDOW_SECS } from "@/lib/burnReceipts/constants";
 import { UMA_DEFAULT_LIVENESS_S } from "@/lib/burnticker/sources/polyStated";
 import { deficitRuleSchedule } from "@/lib/burnticker/deficitQueue";
 import type { BurnRule } from "@/lib/burnticker/rules";
@@ -18,7 +18,7 @@ export function settlementFacts(root = process.cwd()): SettlementFacts {
   return {
     marketPollMin: market / 60_000, feedPollMin: feed / 60_000,
     guardMinMin: MIN_TWAP_WINDOW_SECS / 60, guardMaxMin: MAX_TWAP_WINDOW_SECS / 60,
-    spendCapPct: MAX_SPEND_RESERVE_BPS / 100, umaHours: UMA_DEFAULT_LIVENESS_S / 3600,
+    umaHours: UMA_DEFAULT_LIVENESS_S / 3600,
     deficitReads: sched.polls, deficitZone: sched.timeZone,
   };
 }

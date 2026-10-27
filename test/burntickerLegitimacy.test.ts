@@ -164,11 +164,12 @@ describe("How burns are settled (owner, 2026-10-12): every number derived from t
   test("the facts come from pollMsFor, the program constants, UMA's window and the $DEFICIT rules file", async () => {
     const { settlementFacts } = await import("@/lib/burnticker/settlement");
     const { settlementSections, SETTLEMENT_LINK, SETTLEMENT_PATH, clockWords } = await import("@/lib/burnticker/settlementCopy");
-    const { MIN_TWAP_WINDOW_SECS, MAX_TWAP_WINDOW_SECS, MAX_SPEND_RESERVE_BPS } = await import("@/lib/burnReceipts/constants");
+    const { MIN_TWAP_WINDOW_SECS, MAX_TWAP_WINDOW_SECS } = await import("@/lib/burnReceipts/constants");
     const { UMA_DEFAULT_LIVENESS_S } = await import("@/lib/burnticker/sources/polyStated");
     const f = settlementFacts(ROOT);
     assert.deepEqual([f.marketPollMin, f.feedPollMin], [5, 60]);
-    assert.deepEqual([f.guardMinMin, f.guardMaxMin, f.spendCapPct, f.umaHours], [MIN_TWAP_WINDOW_SECS / 60, MAX_TWAP_WINDOW_SECS / 60, MAX_SPEND_RESERVE_BPS / 100, UMA_DEFAULT_LIVENESS_S / 3600]);
+    assert.deepEqual([f.guardMinMin, f.guardMaxMin, f.umaHours], [MIN_TWAP_WINDOW_SECS / 60, MAX_TWAP_WINDOW_SECS / 60, UMA_DEFAULT_LIVENESS_S / 3600]);
+    assert.equal((f as unknown as Record<string, unknown>).spendCapPct, undefined, "owner decision 2026-10-25: no per-run bound, so no spend cap figure");
     const rules = JSON.parse(read("config/burnkeeper/deficit.rules.json")) as { schedule: { polls: string[]; timeZone: string } };
     assert.deepEqual(f.deficitReads, rules.schedule.polls); assert.equal(clockWords("16:30"), "4:30 p.m."); assert.equal(clockWords("09:05"), "9:05 a.m.");
     const c = settlementSections(f);
@@ -176,7 +177,7 @@ describe("How burns are settled (owner, 2026-10-12): every number derived from t
     assert.doesNotMatch(JSON.stringify(c), /\bwill\b|\bprice/i);
     assert.match(JSON.stringify(c), /about 5 to 25 minutes/);
     const wp = read("docs/burnticker/WHITEPAPER.md"); const sec = wp.slice(wp.indexOf("### 3.5 How burns are settled"), wp.indexOf("## 4. Settlement on chain"));
-    for (const n of [`every ${f.marketPollMin} minutes`, `every ${f.feedPollMin} minutes`, `${f.guardMinMin} to ${f.guardMaxMin} minutes`, `${f.spendCapPct}% of the trading pool's SOL`, `about ${f.umaHours} hours`, "4:30 p.m. and 8:00 p.m."]) assert.ok(sec.includes(n), n);
+    for (const n of [`every ${f.marketPollMin} minutes`, `every ${f.feedPollMin} minutes`, `${f.guardMinMin} to ${f.guardMaxMin} minutes`, "spends the rule's full share of the burn pool in one run", `about ${f.umaHours} hours`, "4:30 p.m. and 8:00 p.m."]) assert.ok(sec.includes(n), n);
     assert.ok(sec.includes(`https://burnticker.com${SETTLEMENT_PATH}`)); assert.match(read("site/burnticker/whitepaper.html"), /3\.5 How burns are settled/);
     assert.ok(LEARN_NAV.findIndex((l) => l.href === SETTLEMENT_PATH) === LEARN_NAV.findIndex((l) => l.label === "Docs and API") + 1);
     assert.match(read("src/app/burnticker/t/[ticker]/page.tsx"), /label: nextRow\.label[^\n]*more: SETTLEMENT_LINK \}/); assert.equal(SETTLEMENT_LINK.href, SETTLEMENT_PATH);

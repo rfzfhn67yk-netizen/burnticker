@@ -632,7 +632,7 @@ fn graduation_needs_target_and_minimum_share_then_creates_both_pools_and_burns_a
 fn both_pools_register_in_burn_receipts_and_the_buyback_crank_runs_on_one() {
     let mut env = new_env();
     let auth = Pubkey::new_unique();
-    env.init_platform(&auth, DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    env.init_platform(&auth, LEGACY_CAP_ARG);
     let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
     let cranker = trader(&mut env, SOL);
     let (ba, bb) = fill(&mut env, &p, 50 * SOL, 40 * SOL);
@@ -707,7 +707,7 @@ fn both_pools_register_in_burn_receipts_and_the_buyback_crank_runs_on_one() {
     let rule_b = env.config(&config_pda(&mint_b)).rule;
     let units_b = env.reading(&reading_pda(&config_pda(&mint_b), P2)).unwrap().units;
     let (fa0, fb0) = (env.lamports(&fee), env.lamports(&fee_b));
-    let basis = (fb0 - rule_b.reserve_lamports).min(DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    let basis = fb0 - rule_b.reserve_lamports; // no burn-pool cap since 2026-10-25
     let expect = burn_receipts::math::buyback_spend(basis, units_b, rule_b.fraction_per_unit_bps).unwrap();
     let meta = env.ok(&[ix_forward_to_winner(&cranker.pubkey(), &mint_b, &mint, P2)], &[&cranker]);
     println!("forward_to_winner CU: {}; {} lamports for {} units", meta.compute_units_consumed, expect, units_b);

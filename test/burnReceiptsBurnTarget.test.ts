@@ -9,10 +9,10 @@ import assert from "node:assert/strict";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { AMM_V4_PROGRAM_ID, applyTargetPoolIx, BURN_TARGET_EXTERNAL, burnTargetPda, crankTargetBurnIx, judgeTargetAdmission, pinBurnTargetIx, PRICE_UPDATE_V2_DISCRIMINATOR, proposeTargetPoolIx, PYTH_RECEIVER_PROGRAM_ID, PYTH_SOL_USD_FEED_ID, quoteTargetCrank, sponsoredPriceAccount, TARGET_MIN_WSOL_RESERVE_LAMPORTS, TARGET_POOL_AMM_V4, TARGET_POOL_HELD_ERRORS, vetoTargetPoolIx, type BurnTargetAccount } from "@/lib/burnReceipts/burnTarget";
 import { MEMO_V3_MAX_BYTES } from "@/lib/burnReceipts/memoV3";
-import { MEMO_MAX_BYTES, CPMM_PROGRAM_ID, MAX_SPEND_RESERVE_BPS, NATIVE_MINT, QUEUE_UNBLOCK_SECS, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { MEMO_MAX_BYTES, CPMM_PROGRAM_ID, NATIVE_MINT, QUEUE_UNBLOCK_SECS, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { burnedMintOf, formatTargetMemo, memoFromChain, parseBuybackMemo, parseTargetMemo, type TargetMemo } from "@/lib/burnReceipts/memo";
-import { reserveSpendCap } from "@/lib/burnReceipts/math";
+import { minAmountOut } from "@/lib/burnReceipts/math";
 import { configPda, feePda } from "@/lib/burnReceipts/pda";
 import { DEFERRABLE_ERRORS } from "@/lib/burnReceipts/crank";
 import { FakeProgram } from "@/lib/burnKeeper/fakeProgram";
@@ -179,12 +179,17 @@ describe("admission of an AMM v4 pool and the Pyth check (the program's checks)"
 });
 
 describe("the crank's arithmetic", () => {
-  test("the spend is capped at 2 % of the TARGET pool's SOL reserve; the rest is carried", () => {
+  test("no per-run bound (owner decision 2026-10-25): a target far above 2 % of the TARGET pool's SOL reserve is spent in one run, nothing carried", () => {
     const twap = (BigInt(1e14) << BigInt(32)) / (BigInt(85) * SOL);
     const q = quoteTargetCrank({ target: BigInt(10) * SOL, poolBefore: BigInt(25) * SOL, floor: BigInt(1_000_000), wsolReserve: BigInt(85) * SOL, tokenReserve: BigInt(1e14), twapX32: twap, feePpm: BigInt(10_000), slippageBps: 300 });
-    assert.equal(q.cap, reserveSpendCap(BigInt(85) * SOL, Number(MAX_SPEND_RESERVE_BPS)));
-    assert.equal(q.spend, q.cap); assert.equal(q.capBound, true); assert.equal(q.carried, BigInt(10) * SOL - q.cap);
+    assert.ok(BigInt(10) * SOL > (BigInt(85) * SOL * BigInt(200)) / BigInt(10_000), "10 SOL is about 12 % of the 85 SOL reserve, six times the old bound");
+    assert.equal(q.spend, BigInt(10) * SOL); assert.equal(q.carried, BigInt(0));
+    assert.equal("cap" in q || "capBound" in q, false, "the quote has no cap fields any more");
     assert.ok(q.minOut > BigInt(0) && q.minOut <= q.expectedOut);
+    // the minimum output is still the constant-product quote, so a large spend accepts fewer tokens per SOL (the trade's own impact)
+    assert.equal(q.expectedOut, minAmountOut(BigInt(10) * SOL, BigInt(85) * SOL, BigInt(1e14), BigInt(10_000), 0));
+    const pool = quoteTargetCrank({ target: BigInt(30) * SOL, poolBefore: BigInt(25) * SOL, floor: BigInt(1_000_000), wsolReserve: BigInt(85) * SOL, tokenReserve: BigInt(1e14), twapX32: twap, feePpm: BigInt(10_000), slippageBps: 300 });
+    assert.deepEqual([pool.spend, pool.carried], [BigInt(25) * SOL, BigInt(0)], "a target above the rule's pool spends the whole pool and carries nothing");
     const small = quoteTargetCrank({ target: BigInt(500_000), poolBefore: SOL, floor: BigInt(1_000_000), wsolReserve: BigInt(85) * SOL, tokenReserve: BigInt(1e14), twapX32: twap, feePpm: BigInt(10_000), slippageBps: 300 });
     assert.deepEqual([small.spend, small.carried], [BigInt(0), BigInt(500_000)], "under the floor: nothing spent");
   });

@@ -337,8 +337,8 @@ export const SCHEMAS: Record<string, Schema> = {
     generatedAt: str, cluster: str, powers: { type: "object" }, operator: { type: "object" },
     fees: obj({ designed: obj({ curve: ref("FeeSplit"), postGraduation: ref("FeeSplit"), devFeeBps: num, lpBurnedPct: { ...num, description: "0 since 1.8.0 (LP locked forever)" }, lpLockedPct: { ...num, description: "since 1.8.0" }, lpFeeSplit: { type: "object", description: "since 1.8.0: { burnPoolBps 16.8, operatorBps 4.2, ofLpBps { burnPool 8000, operator 2000 } }" }, creatorCashBps: { const: 0 }, teamAllocationPct: { const: 0 } }, ["curve", "postGraduation", "devFeeBps"]), live: { type: "object" } }, ["designed", "live"]),
     lpLock: { ...ref("LpLockPolicy"), description: "since 1.8.0" },
-    program: { type: "object" }, attesters: arr({ type: "object" }), audit: {}, statements: arr(str), operatorLine: str, useOfFees: str, preAuditCapSol: num, cannot: arr(str), rpcConfigured: bool, stubs: arr(str),
-    effectiveCap: { description: "The burn-pool cap the program applies today (capInForce.ts EffectiveCap: source platform-config or program-default, capLamports as a decimal string or null once the cap has ended, sunsetTs, pending raise { capLamports, etaTs } or null, authorityRenounced), read from the PlatformConfig account; null when this host did not read it. Since website-20 item 162." },
+    program: { type: "object" }, attesters: arr({ type: "object" }), audit: {}, statements: arr(str), operatorLine: str, useOfFees: str, preAuditCapSol: { ...num, description: "Deprecated since 2026-10-25 (owner decision: both burn caps removed from the program). Always 0, which means there is no burn-pool cap. Kept because a v1 field is never removed." }, cannot: arr(str), rpcConfigured: bool, stubs: arr(str),
+    effectiveCap: { description: "Deprecated since 2026-10-25 (owner decision: both burn caps removed from the program). Always null: there is no burn-pool cap to read. Kept because a v1 field is never removed. Since website-20 item 162." },
   }, ["powers", "fees", "program", "statements"]),
 };
 

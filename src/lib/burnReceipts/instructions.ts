@@ -338,9 +338,10 @@ export function crankBuybackIx(o: { programId: PublicKey; cranker: PublicKey; mi
 
 /**
  * crank_carried (burn dispersal, 2026-10-13): spend a piece of at most `maxSpendLamports` of the config's carried spend without a
- * reading — same pool accounts as crank_buyback, no Reading. The program refuses a piece above 2 % of the pool's WSOL reserve
- * (SpendAboveCap), with nothing carried (NothingCarried), while a reading waits for its own crank (ReadingPending) and (round-5 review
- * R5-8) within MIN_CARRIED_INTERVAL_SECS of the coin's last piece (CarriedTooSoon).
+ * reading — same pool accounts as crank_buyback, no Reading. It spends min(carried, maxSpendLamports, pool) (owner decision 2026-10-25:
+ * no per-run bound, no carried budget; SpendAboveCap is never raised). The program refuses with nothing carried (NothingCarried), while a
+ * reading waits for its own crank (ReadingPending), a piece under the floor that is not the whole remainder (BelowFloor), and a second
+ * piece in the same second as the coin's last one (CarriedTooSoon).
  */
 export function crankCarriedIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; pool: BuybackPoolAccounts; cluster: Cluster; maxSpendLamports: bigint }): TransactionInstruction {
   return build(o.programId, "crank_carried", {
@@ -396,12 +397,14 @@ export function createAtaIdempotentIx(o: { payer: PublicKey; owner: PublicKey; m
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// PlatformConfig: the temporary, pre-audit burn-pool cap (owner, 2026-10-09)
+// PlatformConfig. The burn-pool cap and the cranker allowlist were removed (owner decision 2026-10-25). The builders below stay because
+// the IDL keeps the entry points; the cap-raise ones are NOT a working power: the program always refuses them with CapRemoved (6144).
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 /**
- * Once, signed by the program's upgrade authority. The cap must EQUAL the default (review-3 I-2); `capSunsetTs` ≤ now + 365 days and
- * ≤ 2027-10-01; `crankers` (≤ 3, review-3 L-4) restrict crank_buyback while the cap is in force (empty = permissionless).
+ * Once, signed by the program's upgrade authority. The program keeps the signature but ignores `burnPoolCapLamports` and `crankers`
+ * (it stores 0 / empty); `capSunsetTs` must be in the future, ≤ now + 365 days and ≤ 2027-10-01, and now only closes the
+ * registration-policy switch.
  */
 export function initializePlatformIx(o: { programId: PublicKey; payer: PublicKey; upgradeAuthority: PublicKey; authority: PublicKey; burnPoolCapLamports: bigint; capSunsetTs: bigint; crankers?: PublicKey[] }): TransactionInstruction {
   return build(o.programId, "initialize_platform", {
@@ -412,20 +415,22 @@ export function initializePlatformIx(o: { programId: PublicKey; payer: PublicKey
     system_program: SystemProgram.programId,
   }, { authority: o.authority, burn_pool_cap_lamports: o.burnPoolCapLamports, cap_sunset_ts: o.capSunsetTs, crankers: o.crankers ?? [] });
 }
-/** Review-3 L-4: the platform authority returns crank_buyback to permissionless. */
-/** Re-check R3-4: the platform authority OR any allowlisted key (`caller`) clears the cranker allowlist. */
+/** Clears the (legacy) cranker allowlist. Still accepted by the program; it has no effect on cranking since 2026-10-25. */
 export function clearCrankerAllowlistIx(o: { programId: PublicKey; caller: PublicKey }): TransactionInstruction {
   return build(o.programId, "clear_cranker_allowlist", { caller: o.caller }, {});
 }
+/** @deprecated the program refuses it with CapRemoved (6144) since the owner decision of 2026-10-25. */
 export function proposeCapRaiseIx(o: { programId: PublicKey; authority: PublicKey; newCapLamports: bigint }): TransactionInstruction {
   return build(o.programId, "propose_cap_raise", { authority: o.authority }, { new_cap_lamports: o.newCapLamports });
 }
+/** @deprecated the program refuses it with CapRemoved (6144) since the owner decision of 2026-10-25. */
 export function cancelCapRaiseIx(o: { programId: PublicKey; authority: PublicKey }): TransactionInstruction {
   return build(o.programId, "cancel_cap_raise", { authority: o.authority }, {});
 }
 export function renouncePlatformAuthorityIx(o: { programId: PublicKey; authority: PublicKey }): TransactionInstruction {
   return build(o.programId, "renounce_platform_authority", { authority: o.authority }, {});
 }
+/** @deprecated the program refuses it with CapRemoved (6144) since the owner decision of 2026-10-25. */
 export function applyCapRaiseIx(o: { programId: PublicKey; caller: PublicKey }): TransactionInstruction {
   return build(o.programId, "apply_cap_raise", { caller: o.caller }, {});
 }

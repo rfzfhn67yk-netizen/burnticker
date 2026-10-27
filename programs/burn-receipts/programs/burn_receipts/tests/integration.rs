@@ -450,10 +450,10 @@ struct Market {
 
 /// init (before the mint exists) → mint → pool with creator = fee PDA → register → fee PDA ATAs → trades for an oracle history.
 fn market(env: &mut Env, rule: burn_receipts::state::RuleParams) -> Market {
-    // The platform cap at its 25 SOL default (these pools are smaller); the cap has its own tests in platform.rs.
+    // A PlatformConfig exists (the cap argument is ignored since 2026-10-25: there is no burn-pool cap; platform.rs pins that).
     if env.svm.get_account(&platform_pda()).map(|a| a.data.is_empty()).unwrap_or(true) {
         let auth = Pubkey::new_unique();
-        env.init_platform(&auth, DEFAULT_BURN_POOL_CAP_LAMPORTS);
+        env.init_platform(&auth, LEGACY_CAP_ARG);
     }
     let t = new_token(1);
     init(env, &t, rule, 1).unwrap();
@@ -545,10 +545,10 @@ fn buyback_crank_swaps_on_cpmm_and_burns_everything_received() {
     let pool_before = fee_before - buyback_rule().reserve_lamports + wsol_before;
     let rule_spend = math::buyback_spend(pool_before, 21, 500).unwrap();
     let (r_sol, r_tok) = cpmm::reserves(&env, &m.pool);
-    // Review H-1: one crank spends at most 2 % of the pool's WSOL reserve; the rest of the rule's spend is carried.
-    let reserve_cap = math::reserve_spend_cap(r_sol, MAX_SPEND_RESERVE_BPS);
-    let spend = rule_spend.min(reserve_cap).min(pool_before);
-    assert!(spend < rule_spend, "this market is set up so the reserve cap binds");
+    // Owner decision 2026-10-25: no per-crank bound — the rule's whole spend (≈ 7 SOL, far above 2 % of the ≈ 85 SOL reserve, where
+    // the removed bound would have stopped at ≈ 1.7 SOL) goes in this one crank.
+    let spend = rule_spend;
+    assert!(spend > r_sol / 50, "the spend is above the old 2 % bound");
     let min_out = math::min_amount_out(spend, r_sol, r_tok, cpmm::TRADE_FEE_RATE + cpmm::CREATOR_FEE_RATE, 300).unwrap();
     let supply_before = env.mint_supply(&mint);
 
@@ -568,11 +568,9 @@ fn buyback_crank_swaps_on_cpmm_and_burns_everything_received() {
     assert!(env.lamports(&fee) >= buyback_rule().reserve_lamports);
     let c = env.config(&cfg);
     assert_eq!((c.total_spent_lamports, c.total_burned, c.crank_cursor), (spend, r.burned, D2));
-    assert_eq!((r.rule_spend_lamports, r.carried_in_lamports, r.carried_out_lamports), (rule_spend, 0, rule_spend - spend));
-    assert_eq!(c.carried_spend_lamports, rule_spend - spend);
-    let ev = events(&meta).into_iter().find(|(d, _)| d[..] == <burn_receipts::events::SpendCapBound as anchor_lang::Discriminator>::DISCRIMINATOR[..]).expect("SpendCapBound");
-    let b = <burn_receipts::events::SpendCapBound as anchor_lang::AnchorDeserialize>::try_from_slice(&ev.1).unwrap();
-    assert_eq!((b.target_lamports, b.spent_lamports, b.reserve_cap_lamports, b.carried_out_lamports), (rule_spend, spend, reserve_cap, rule_spend - spend));
+    assert_eq!((r.rule_spend_lamports, r.carried_in_lamports, r.carried_out_lamports), (rule_spend, 0, 0));
+    assert_eq!(c.carried_spend_lamports, 0);
+    assert!(!events(&meta).into_iter().any(|(d, _)| d[..] == <burn_receipts::events::SpendCapBound as anchor_lang::Discriminator>::DISCRIMINATOR[..]), "no SpendCapBound");
 
     let memo = burn_receipts::memo::format_v2(
         &burn_receipts::memo::MemoHead {
@@ -599,21 +597,20 @@ fn buyback_crank_swaps_on_cpmm_and_burns_everything_received() {
     // Idempotent.
     expect_anchor_err(env.send(&[cpmm::ix_crank_buyback(&cranker.pubkey(), &mint, &m.pool, D2)], &[&cranker]), "AlreadyProcessed");
 
-    // The next burn day's target = its own rule spend + the carried remainder; again capped, again carried.
+    // The next burn day: a carry left by the program before 2026-10-25 joins the target, and the whole target is spent in one run.
     env.set_time(env.now() + 86_400);
-    let carried = rule_spend - spend;
+    let carried = 2 * SOL;
+    set_legacy_carry(&mut env, &mint, carried);
     submit(&mut env, &mint, D3, V1 + 22 * UNIT + 12_345, &[a]).unwrap();
     let fee_before = env.lamports(&fee);
     let wsol_before = env.token_amount(&fee_wsol);
     let pool2 = fee_before - buyback_rule().reserve_lamports + wsol_before;
     let rule2 = math::buyback_spend(pool2, 1, 500).unwrap();
-    let (r_sol2, _) = cpmm::reserves(&env, &m.pool);
-    let cap2 = math::reserve_spend_cap(r_sol2, MAX_SPEND_RESERVE_BPS);
     let target2 = (rule2 + carried).min(pool2);
-    let spend2 = target2.min(cap2).min(pool2);
     env.ok(&[cpmm::ix_crank_buyback(&cranker.pubkey(), &mint, &m.pool, D3)], &[&cranker]);
     let r3 = env.reading(&reading_pda(&cfg, D3)).unwrap();
-    assert_eq!((r3.carried_in_lamports, r3.spent_lamports, r3.carried_out_lamports), (carried, spend2, target2 - spend2));
+    assert_eq!((r3.carried_in_lamports, r3.spent_lamports, r3.carried_out_lamports), (carried, target2, 0));
+    assert_eq!(env.config(&cfg).carried_spend_lamports, 0);
 }
 
 #[test]

@@ -93,7 +93,6 @@ as `[alert] …`. The morning block (`## Burnticker` in the check-in, `https://b
 | `bt-top-up` | information: the keeper refilled an operations wallet (amount, wallet, transaction) | Nothing. ops.json shows "Top-ups: N today, X SOL; signer covers about D days." |
 | `bt-top-up-failed` | a top-up of one wallet failed twice in a row | Read the error in the alert and `grep top-up logs/burnticker-keeper.log`. See the plan with `scripts/ops/top-up.mts --plan --env .env.local` (reads only). Kill switch: `BURNTICKER_TOP_UP=off` and a keeper restart between cycles. deploy.md "Which wallets hold SOL and who refills them". |
 | `bt-top-up-draining` | one wallet needed a top-up 3 times in 6 hours, so the keeper stopped refilling it (HB-108) | Find why it loses SOL (a leaked key, a bug) before anything else: check its transactions on an explorer. The stop lifts by itself 6 hours after the last top-up; to lift it sooner run `scripts/ops/top-up.mts --clear-drain <target> --env .env.local`. |
-| `bt-cap-binding` | a burn pool holds more than the 25 SOL pre-audit cap | Expected while the cap stands; the excess is queued and shown on the token page. It lifts with the audit decision (fees.ts `PRE_AUDIT_POOL_CAP_SOL`, a reviewed change + a register entry). |
 | `bt-keeper-stale` | no cycle for 10 min, not paused | `systemctl --user status mct-burnticker-keeper`; `journalctl --user -u mct-burnticker-keeper -n 50`; restart. |
 | `bt-daily-summary` | the one line a day | Read it. "pools X SOL" rising with no burns = check the feed; "dev fees unknown" = `BURNTICKER_RPC_URL`/`BURNTICKER_FEE_WALLET` unset. |
 | `bt-feed-down` | a source failed ≥ 3 reads in a row (trust ops; `src/lib/burnticker/ops/feedHealth.ts`) | The reading is withheld, nothing burns; the status page shows the selector "down". Check the source by hand; it resumes by itself. Over a day: an incident only if it changed an outcome (INCIDENTS.md §7). |
@@ -554,8 +553,8 @@ public status.json>`. Tunables: `BURNTICKER_TAKEOVER_MISSED` (default 5), `BURNT
   keys than the new quorum — ATTESTERS.md §4), and then BOTH keys must sign every reading, which defeats redundancy. So the choice is:
   (A) the standby holds a copy of the same keeper key (full takeover; the key now lives on two hosts — twice the exposure), or (B) the
   standby holds only its own fee-payer key: after a takeover it publishes, runs the pair-curve cranks and cranks readings the leader
-  already attested (cranking is permissionless — while the pre-audit cap is in force its key must be on the platform's cranker
-  allowlist), and NEW readings wait (quorum-short) until the leader's key is back. Today's default is (B); (A) is the owner's call.
+  already attested (cranking is permissionless; there is no cranker allowlist since the owner decision of 2026-10-25), and NEW
+  readings wait (quorum-short) until the leader's key is back. Today's default is (B); (A) is the owner's call.
 
 **What this design does NOT guarantee (said plainly):**
 

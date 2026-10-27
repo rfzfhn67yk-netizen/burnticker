@@ -102,17 +102,17 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
     assert.match(p.hostWiring, /^This site is not connected to a burn program\./);
     const br = p.chain.find((c) => c.library === "burn_receipts")!;
     // B-17 (2026-10-21): the table's burn_receipts build is the B-17 build. Mainnet was upgraded to it that evening (vault transaction 4,
-    // read back 2026-10-21T23:59:37Z), so mainnet matches and has no pending sentence; devnet was upgraded the same evening (vault transaction 23) and matches too; round 5
-    assert.match(br.devnet, /^deployed \(read 2026-10-22T00:51:02Z, and the bytes match the recorded build\)$/);
-    assert.match(br.mainnet, /^deployed \(read 2026-10-21T23:59:37Z, and the bytes match the recorded build; upgrade authority 8zsH/);
+    // read back 2026-10-25T22:11:49Z), so mainnet matches and has no pending sentence; devnet was upgraded the same evening (vault transaction 23) and matches too; round 5
+    assert.match(br.devnet, /^deployed \(read 2026-10-25T20:57:02Z, and the bytes match the recorded build\)$/);
+    assert.match(br.mainnet, /^deployed \(read 2026-10-25T22:11:49Z, and the bytes match the recorded build; upgrade authority 8zsH/);
     assert.doesNotMatch(`${br.devnet} ${br.mainnet}`, /DO NOT match/);
     assert.doesNotMatch(br.mainnet, /earlier build|has not been deployed/);
     assert.ok(!br.pending || br.pending.length === 0, "no pending sentence once both networks hold the build (devnet upgraded 2026-10-21 18:49 Denver, vault transaction 23)");
     for (const t of [br.devnet, br.mainnet, ...(br.pending ?? [])]) assert.deepEqual(lint(t), [], t);
     const pc = p.chain.find((c) => c.library === "pair_curve")!;
-    assert.match(pc.mainnet, /^deployed \(read 2026-10-12, and the bytes match the recorded build; upgrade authority 8zsH/); assert.equal(pc.pending, undefined);
+    assert.match(pc.mainnet, /^deployed \(read 2026-10-25T22:16:11Z, and the bytes match the recorded build; upgrade authority 8zsH/); assert.equal(pc.pending, undefined);
     // the page's build hash is the bytes on chain for the cluster (devnet: the B-17 build since 2026-10-21), never a build the chain does not hold
-    assert.equal(p.buildHash, "34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee"); // devnet by default: programHashFact reads deployed.devnet.hash
+    assert.equal(p.buildHash, "e52d27fcfa14f75148bfc00a298f061d3e522321370e6cb99f0f41dcdf8e13d1"); // devnet by default: programHashFact reads deployed.devnet.hash
     assert.match(read("src/app/burnticker/trust/page.tsx"), /c\.pending\?\.map\(\(t\) => <span key=\{t\} className="block text-amber-300" data-upgrade-pending>/);
     assert.match(p.compiled, /^The burn program's address, compiled into the program and its interface file \(IDL\), is AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM\.$/);
     assert.ok(!p.verify.some((v) => /not deployed yet/.test(v)), "no 'not deployed' line on a host that is merely not wired");

@@ -11,7 +11,7 @@ import type { BudgetLine } from "@/lib/burnticker/apiBudget";
  * selectors with 20–21 failures in a row were published as `conditions: []`. The newer per-source health (ops/feedHealth.ts: down /
  * stale / disagree / withheld) was computed for status.json and the alerts but left out of the summary. Now:
  *
- *   keeper conditions   evaluateAlerts(snapshot) without the daily summary line (stall, crank failures, audit, balance, cap, keeper)
+ *   keeper conditions   evaluateAlerts(snapshot) without the daily summary line (stall, crank failures, audit, balance, keeper)
  *   feed conditions     one per source from computeFeedHealth: down (≥ FEED_DOWN_FAILURES failed reads in a row, the alert's own
  *                       threshold), stale, disagree, withheld (a reading held back; shown, never alerted)
  *   ops conditions      (second audit 2026-10-18 A-7) the keeper's unit check (a failed or stopped unit, a failed or missing backup, no

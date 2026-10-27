@@ -80,7 +80,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         {
           "name": "caller",
           "docs": [
-            "Anyone (recorded in the event)."
+            "Anyone."
           ],
           "signer": true
         },
@@ -1620,7 +1620,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         {
           "name": "platform",
           "docs": [
-            "hard-coded default applies (review M-1) — so this account can never be missing in a way that wedges buybacks."
+            "2026-10-25); kept so the instruction's accounts are unchanged for clients."
           ],
           "pda": {
             "seeds": [
@@ -6627,12 +6627,12 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "code": 6038,
       "name": "InvalidSunset",
-      "msg": "the cap sunset must be in the future, at most 365 days away and no later than the default sunset (2027-10-01)"
+      "msg": "the platform sunset must be in the future, at most 365 days away and no later than the default sunset (2027-10-01)"
     },
     {
       "code": 6039,
       "name": "CapNotRaised",
-      "msg": "the burn-pool cap can only be raised"
+      "msg": "retired 2026-10-25 (the burn-pool cap was removed); never raised"
     },
     {
       "code": 6040,
@@ -6742,17 +6742,17 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "code": 6061,
       "name": "CrankerNotAllowed",
-      "msg": "only a key on the platform's cranker allowlist may crank buybacks while the pre-audit cap is in force"
+      "msg": "retired 2026-10-25 (the cranker allowlist was removed: every crank is permissionless); never raised"
     },
     {
       "code": 6062,
       "name": "PolicySwitchNotAllowed",
-      "msg": "the registration-policy switch is not allowed now (pool working, cap sunset passed, or nothing pending)"
+      "msg": "the registration-policy switch is not allowed now (pool working, platform sunset passed, or nothing pending)"
     },
     {
       "code": 6063,
       "name": "CapNotDefault",
-      "msg": "the burn-pool cap at initialize_platform must equal the default (raise only afterwards)"
+      "msg": "retired 2026-10-25 (the burn-pool cap was removed); never raised"
     },
     {
       "code": 6064,
@@ -7102,7 +7102,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "code": 6133,
       "name": "SpendAboveCap",
-      "msg": "crank_carried: the requested piece is above the per-crank cap (2 % of the pool's WSOL reserve)"
+      "msg": "retired 2026-10-25 (the per-crank spend bound was removed); never raised"
     },
     {
       "code": 6134,
@@ -7142,7 +7142,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "code": 6141,
       "name": "CarriedTooSoon",
-      "msg": "crank_carried: over the carried budget"
+      "msg": "crank_carried: a piece for this coin already ran this second"
     },
     {
       "code": 6142,
@@ -7153,6 +7153,11 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6143,
       "name": "BurnTargetAccountMissing",
       "msg": "a target coin's BurnTarget account is required"
+    },
+    {
+      "code": 6144,
+      "name": "CapRemoved",
+      "msg": "the burn-pool cap was removed (owner decision 2026-10-25): there is no cap to raise, cancel or apply"
     }
   ],
   "types": [
@@ -7314,7 +7319,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "name": "BurnPoolCapBound",
       "docs": [
-        "Emitted by crank_buyback whenever the platform cap made the rule spend on less than the whole pool."
+        "RETIRED 2026-10-25 (the platform cap was removed): never emitted again; kept so earlier events still decode."
       ],
       "type": {
         "kind": "struct",
@@ -7697,8 +7702,8 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "piece",
             "docs": [
-              "Round-5 review R5-8: this piece's number (CarriedPace.pieces after it) and the coin's carried budget left after it (it refills at",
-              "one per-crank cap per CARRIED_BUDGET_WINDOW_SECS)."
+              "Round-5 review R5-8: this piece's number (CarriedPace.pieces after it). `reserve_cap_lamports` and `budget_left_lamports` are",
+              "always 0 since 2026-10-25 (the per-crank bound and the carried budget were removed)."
             ],
             "type": "u32"
           },
@@ -8575,7 +8580,9 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "name": "PlatformConfig",
       "docs": [
-        "The program-wide PlatformConfig ([\"platform\"]): the temporary pre-audit burn-pool cap and its authority (instructions/platform.rs)."
+        "The program-wide PlatformConfig ([\"platform\"]). Owner decision 2026-10-25: the burn-pool cap and the cranker allowlist are REMOVED;",
+        "the account keeps its exact layout so the deployed state still deserialises. Only `cap_sunset_ts` is still read: it closes the",
+        "stranding-recovery registration-policy switch. Every cap and cranker field is unused (reserved)."
       ],
       "type": {
         "kind": "struct",
@@ -8591,32 +8598,36 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "authority",
             "docs": [
-              "May propose cap RAISES (48 h timelock) and renounce. Pubkey::default() once renounced. Intended: the Squads 2-of-3 vault."
+              "Holds no cap power any more (propose_cap_raise / apply_cap_raise refuse with CapRemoved); it may still renounce and clear the",
+              "unused cranker list. Pubkey::default() once renounced."
             ],
             "type": "pubkey"
           },
           {
             "name": "burn_pool_cap_lamports",
             "docs": [
-              "While now < cap_sunset_ts, a token's buyback spend is computed on min(pool, cap)."
+              "Unused since 2026-10-25 (was the burn-pool cap). Reserved: never read."
             ],
             "type": "u64"
           },
           {
             "name": "cap_sunset_ts",
             "docs": [
-              "After this unix time the cap no longer applies. Fixed at init; never extendable."
+              "The platform sunset: the stranding-recovery registration-policy switch is allowed only before it. Fixed at init."
             ],
             "type": "i64"
           },
           {
             "name": "pending_cap_lamports",
+            "docs": [
+              "Unused since 2026-10-25 (was a pending cap raise). Reserved: never read."
+            ],
             "type": "u64"
           },
           {
             "name": "pending_cap_eta",
             "docs": [
-              "0 = nothing pending."
+              "Unused since 2026-10-25 (was the pending raise's eta). Reserved."
             ],
             "type": "i64"
           },
@@ -8627,9 +8638,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "crankers",
             "docs": [
-              "Review-3 L-4: while the cap is in force, only these keys may crank_buyback (empty = permissionless). Set at initialize_platform,",
-              "can only be CLEARED afterwards (clear_cranker_allowlist — by the platform authority or any allowlisted key, re-check R3-4), and",
-              "stops applying at the cap's sunset or 90 days after initialize_platform, whichever is first."
+              "Unused since 2026-10-25 (was the cranker allowlist, which applied only while the cap was in force). Cranking is permissionless."
             ],
             "type": {
               "array": [
@@ -8682,7 +8691,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "crankers",
             "docs": [
-              "Review-3 L-4: the cranker allowlist (empty = permissionless), in force only while the cap is."
+              "Review-3 L-4: the cranker allowlist. Since 2026-10-25 always empty (and burn_pool_cap_lamports 0): both were removed."
             ],
             "type": {
               "vec": "pubkey"
@@ -9529,7 +9538,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "name": "SpendCapBound",
       "docs": [
-        "crank_buyback spent less than its target — the 2 % reserve cap and/or the platform basis bound bound; the rest is carried."
+        "RETIRED 2026-10-25 (the 2 % per-crank bound was removed): never emitted again; kept so earlier events still decode."
       ],
       "type": {
         "kind": "struct",
@@ -10310,20 +10319,10 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "value": "0"
     },
     {
-      "name": "CARRIED_BUDGET_WINDOW_SECS",
-      "docs": [
-        "The carried-spend budget refills at one per-crank cap (2 % of the pool's WSOL reserve) per this many seconds (half the 1,200 s TWAP",
-        "window), up to one cap. A piece spends its own lamports from it, so a dust piece uses only a dust budget; at most one piece per coin",
-        "per second (two in one transaction are refused). Anyone may crank; nobody can drain carried spend faster than one cap per window."
-      ],
-      "type": "i64",
-      "value": "600"
-    },
-    {
       "name": "CARRIED_PACE_SEED",
       "docs": [
-        "CarriedPace [\"carried_pace\", mint]: the coin's carried-spend budget (what is left of it and when it was last spent) and its piece",
-        "count. A separate account because TokenConfig has no spare bytes left (round 5 used the last one for burn_target_kind); TokenConfig's",
+        "CarriedPace [\"carried_pace\", mint]: the coin's carried-piece count and when it was last spent (its budget field is unused since the",
+        "per-crank bound was removed, owner decision 2026-10-25). A separate account because TokenConfig has no spare bytes left (round 5 used the last one for burn_target_kind); TokenConfig's",
         "size and layout are unchanged."
       ],
       "type": "bytes",

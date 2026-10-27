@@ -55,8 +55,10 @@
 //   apply-target-pool          --mint <pubkey>   (after 48 h, within 14 days; the proposed pool passes the same admission)
 //   release-target             --mint <pubkey> [--flagship <mint>]   (round-5 review R5-6, permissionless: a stalled target coin's carried
 //                              spend to the flagship's fee PDA; the program refuses it while the target still burns)
-//   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date> [--cranker <pubkey>]...
-//                              (the cap is always the 25 SOL default at creation; ≤ 3 crankers, enforced only while the cap is in force)
+//   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date>
+//                              (owner decision 2026-10-25: there is no burn-pool cap and no cranker allowlist; the program ignores the
+//                              cap and crankers arguments and stores 0 / empty, and --cranker is refused here; the sunset only closes the
+//                              registration-policy switch)
 //   set-registration-policy    --mint <pubkey> --admin <keypath|pubkey> --policy 0|1 [--pool <pubkey>]   (48 h timelock; stranding recovery)
 //   cancel-registration-policy --mint <pubkey> --admin <keypath|pubkey>
 //   apply-registration-policy  --mint <pubkey> [--pool <pubkey>] [--launchlab-platform]
@@ -490,8 +492,8 @@ if (CMD === "initialize-platform") {
   const authority = pubkeyOf(opt("authority"), "--authority") ?? die("--authority <pubkey> is required (the Squads vault PDA)");
   const s = opt("sunset") ?? die("--sunset <unix seconds|ISO date> is required (≤ 365 days out and ≤ 2027-10-01)");
   const sunset = /^\d+$/.test(s) ? BigInt(s) : BigInt(Math.floor(Date.parse(s) / 1000));
-  const crankers = opts("cranker").map((c) => pubkeyOf(c, "--cranker")!);
-  const ix = initializePlatformIx({ programId, payer: payer.publicKey, upgradeAuthority: ua.publicKey, authority, burnPoolCapLamports: BigInt(25_000_000_000), capSunsetTs: sunset, crankers });
+  if (opts("cranker").length) die("--cranker: the cranker allowlist was removed (owner decision 2026-10-25); every crank is permissionless");
+  const ix = initializePlatformIx({ programId, payer: payer.publicKey, upgradeAuthority: ua.publicKey, authority, burnPoolCapLamports: BigInt(0), capSunsetTs: sunset, crankers: [] });
   await run([ix], payer, [ua], [{ address: platformPda(programId), kind: "PlatformConfig" }]);
 }
 if (CMD === "set-registration-policy" || CMD === "cancel-registration-policy") {

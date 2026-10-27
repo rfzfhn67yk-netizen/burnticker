@@ -411,9 +411,8 @@ const fractionText = (r: BurnRule): string => {
   const m = (r.kind === "binary" ? (r.binary?.onYes ?? r.binary?.onNo) : r.scalar?.perUnit) as { fractionOfPool?: number; tokens?: number } | null | undefined;
   return m?.tokens !== undefined ? `${m.tokens.toLocaleString("en-US")} tokens from its vault` : `${Math.round((m?.fractionOfPool ?? 0) * 1000) / 10}%`;
 };
-// owner, 2026-10-12: above 5 % a burn is said to land in slices (one burn run buys with at most 2 % of the pool's SOL)
-const sliced = (r: BurnRule): boolean => { const m = (r.kind === "binary" ? (r.binary?.onYes ?? r.binary?.onNo) : r.scalar?.perUnit) as { fractionOfPool?: number } | null | undefined; return (m?.fractionOfPool ?? 0) > 0.05; };
-const spends = (r: BurnRule, t: string) => { const p = fractionText(r); return p.endsWith("vault") ? `the coin burns ${p}` : `the burn pool spends ${p} buying $${t} on Raydium${sliced(r) ? " in slices sized to the pool's liquidity" : ""} and burns it`; };
+// owner decision 2026-10-25: a burn spends its full share in one run, so no share is said to land in slices any more
+const spends = (r: BurnRule, t: string) => { const p = fractionText(r); return p.endsWith("vault") ? `the coin burns ${p}` : `the burn pool spends ${p} buying $${t} on Raydium and burns it`; };
 /** "The result comes from X, cross-checked against Y." / "MLB's official feed confirms it." — the settlement sentences. */
 const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
 /**
@@ -559,7 +558,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
       // the champion path: every win through the postseason, then the rest burns here (champion) or goes to $DEFICIT's burn
       const L = seasonLabel(s.league, w.year);
       return mk(`${nick} ${L} ${Noun}`, tk("season"), oneLiner,
-        `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the ${L} postseason. ${sliced(r) ? `Each burn buys $${t} on Raydium in slices sized to the pool's liquidity.` : `Each burn buys $${t} on Raydium, with a receipt on chain.`} ${settle}`,
+        `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the ${L} postseason. Each burn buys $${t} on Raydium, with a receipt on chain. ${settle}`,
         `This coin covers the ${L} season only. ${championEndSentences(ref, sinkTickerOf(r)).join(" ")}`, "season", "recurring");
     }
     if (w.kind === "season") {
@@ -621,7 +620,7 @@ function meetingsText(r: BurnRule, league: LeagueId, abbr: string, w: Extract<Wi
   const oppNick = oppTeam?.nickname ?? w.opp, oref = teamRef(league, oppNick), L = seasonLabel(league, w.year), t = c.ticker;
   const scope = `in the ${L} season${noPlayoffs(league) ? "" : ", playoffs included"}`;
   // no "buy" in this copy (the brief's plain-English rule): the share is spent on the coin in its own pool and every token is burned
-  const spend = `${fractionText(r)} of the burn pool is spent on this coin in its Raydium pool${sliced(r) ? ", in slices sized to the pool's liquidity," : ""} and every token it gets is burned`;
+  const spend = `${fractionText(r)} of the burn pool is spent on this coin in its Raydium pool and every token it gets is burned`;
   const check = CROSS[league] ? " The league's own feed confirms it." : "";
   // sources-7 (QA walkthrough 11 H2: Arsenal vs Tottenham Hotspur came to 1,527 characters with no creator text): the series paragraph
   // says each fact once. The other coin is "the other coin" after its first naming, the level series and a void end share one sentence

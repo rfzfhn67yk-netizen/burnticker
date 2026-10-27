@@ -26,8 +26,9 @@ import { DISPERSAL_STATE_KEY, dispersalLines, runDispersal, type DispersalAlert,
  *      the ledger row records (pool, rule spend, carried spend, spent, got, burned, owed, shortfall, outcome) together with the memo
  *      the program wrote. The keeper never invents a number.
  *   4. WAIT, DON'T FAIL — TwapUnavailable / TwapDeviation / PoolNotTradable / EmptyReserves and "no pool registered" leave the day
- *      pending with a wait reason (retried every 10 min); SpendCapBound and BurnPoolCapBound are PARTIAL days the program already
- *      handled (carried spend / capped basis), shown on the status page from the Reading's own fields.
+ *      pending with a wait reason (retried every 10 min). Since the owner decision of 2026-10-25 there is no per-run bound and no
+ *      burn-pool cap: a crank spends the whole target in one run, so a burned day carries nothing. A Reading processed before then may
+ *      still show a carried remainder or a pool basis under the whole pool; the log names it from the Reading's own fields.
  *   5. check_pool_health once per cycle (buyback, pool registered).
  *
  * Same discipline as the legacy cycle (cycle.ts): every transaction's signature is on the ledger before it is sent; a signature that
@@ -368,8 +369,9 @@ function record(ctx: KeeperCtx, port: ProgramPort, cfg: ProgramConfigView, D: st
     gotRaw: rd.got, burnRaw: rd.burned, owedRaw: rd.owed, shortfallRaw: rd.shortfall, swapPool: rd.spentLamports > BigInt(0) ? rd.pool ?? cfg.pool : null, skippedReason,
   }, ctx.now());
   const partial = [
-    rd.spentLamports > BigInt(0) && rd.carriedOutLamports > BigInt(0) ? `SpendCapBound: spent ${rd.spentLamports} of a ${rd.ruleSpendLamports + rd.carriedInLamports} lamport target, ${rd.carriedOutLamports} carried into the next crank` : null,
-    rd.poolActualLamports > rd.poolLamports ? `BurnPoolCapBound: the rule applied to ${rawToTokens(rd.poolLamports, 9)} of ${rawToTokens(rd.poolActualLamports, 9)} SOL` : null,
+    // only a Reading processed before the caps were removed (owner decision 2026-10-25) can show either of these
+    rd.spentLamports > BigInt(0) && rd.carriedOutLamports > BigInt(0) ? `spent ${rd.spentLamports} of a ${rd.ruleSpendLamports + rd.carriedInLamports} lamport target, ${rd.carriedOutLamports} carried into the next crank (processed under the old per-run bound)` : null,
+    rd.poolActualLamports > rd.poolLamports ? `the rule applied to ${rawToTokens(rd.poolLamports, 9)} of ${rawToTokens(rd.poolActualLamports, 9)} SOL (processed under the old burn-pool cap)` : null,
   ].filter(Boolean).join("; ");
   ctx.log(`  [program] ${D}: ${adopted ? "already processed on chain — adopted" : "CRANKED"} · ${rd.outcome} · ${loaded.rules.mode === "buyback" ? `spent ${rd.spentLamports} lamports, got ${rawToTokens(rd.got, dec)}, ` : ""}burned ${rawToTokens(rd.burned, dec)}${rd.shortfall > BigInt(0) ? `, short ${rawToTokens(rd.shortfall, dec)}` : ""}${partial ? ` · PARTIAL — ${partial}` : ""} · ${tx.signature}${tx.memo ? ` · ${tx.memo}` : ""}`);
   void port;

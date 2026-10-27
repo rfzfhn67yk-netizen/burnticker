@@ -53,8 +53,9 @@ export interface FundingDisclosure { creatorFeeSource: string | null; seedTx: st
 
 /**
  * PROGRAM EXECUTION (2026-10-10): what the status page shows about the burn_receipts program — attestation (attester keys, quorum,
- * the last reading's transaction), the queue (readings not yet on chain, cranks waiting on TWAP / a pool, spend carried by the 2 %
- * cap, burn-pool cap binds) and pool health. All read from the TokenConfig and the ledger's program rows; null in legacy mode.
+ * the last reading's transaction), the queue (readings not yet on chain, cranks waiting on TWAP / a pool, spend carried under the floor
+ * or past an untradeable spell) and pool health. Since the owner decision of 2026-10-25 there is no per-run bound and no burn-pool cap;
+ * a row processed before then may still carry a remainder after a burn, and the page names it without the old limits. All read from the TokenConfig and the ledger's program rows; null in legacy mode.
  */
 export interface ProgramStatusInput {
   programId: string; configAddress: string; feePda: string;
@@ -122,7 +123,8 @@ export interface BurnJson {
   execution: "program" | "legacy";
   /** Why the crank waits (TWAP history, no pool, pool not tradable) — not an error. */
   waitReason: string | null;
-  /** A day the program handled in part: spend carried by the 2 %-of-reserve cap, or the burn-pool cap bound. */
+  /** A day the program handled in part (only rows processed before the limits were removed on 2026-10-25 can be): a remainder carried
+   *  after a burn, or the rule applied to less than the whole pool. */
   partial: string | null;
   verify: { curl: string; formula: string; expected: string; checks: string[]; verified: boolean };
 }
@@ -229,8 +231,9 @@ export function buildBurnsJson(i: StatusInput): BurnJson[] {
     let expectedSpend: bigint | null = null;
     const bps = Math.round(Number(rules.buyback.fractionPerUnit) * 10_000);
     if (buyback && prog && b.poolLamports !== null && b.ruleSpendLamports !== null) {
-      // The program's own fixed-point rule spend (src/lib/burnReceipts/math.ts mirrors math.rs); the crank then spends at most 2 % of
-      // the pool's reserve and carries the rest — so the check is the rule spend, and spent + carried out ≤ rule spend + carried in.
+      // The program's own fixed-point rule spend (src/lib/burnReceipts/math.ts mirrors math.rs); the crank then spends the rule spend plus
+      // what was carried in (within the pool) in one run — so the check is the rule spend, and spent + carried out ≤ rule spend + carried in
+      // (an inequality, not an equality: rows from before 2026-10-25 and below-floor days carry).
       expectedSpend = programBuybackSpend(b.poolLamports, BigInt(b.chainUnits ?? b.units), bps);
       if (expectedSpend !== b.ruleSpendLamports) checks.push(`rule spend: recomputed ${expectedSpend} lamports, the program recorded ${b.ruleSpendLamports}`);
       if (b.spendLamports !== null && b.carriedInLamports !== null && b.carriedOutLamports !== null && b.spendLamports + b.carriedOutLamports > b.ruleSpendLamports + b.carriedInLamports) checks.push("spent + carried out > rule spend + carried in");
@@ -272,12 +275,12 @@ export function buildBurnsJson(i: StatusInput): BurnJson[] {
       swapSig: b.swapSig, swapUrl: b.swapSig ? explorerUrl(i.chain.cluster, b.swapSig) : null, skippedReason: b.skippedReason,
       execution: prog ? "program" : "legacy", waitReason: b.waitReason,
       partial: [
-        prog && (b.spendLamports ?? ZERO) > ZERO && (b.carriedOutLamports ?? ZERO) > ZERO ? `spend cap bound (2% of the pool's reserve): ${sol(b.spendLamports)} SOL spent, ${sol(b.carriedOutLamports)} SOL carried into the next crank` : null,
-        prog && b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports ? `burn-pool cap bound: the rule applied to ${sol(b.poolLamports)} of ${sol(b.poolActualLamports)} SOL` : null,
+        prog && (b.spendLamports ?? ZERO) > ZERO && (b.carriedOutLamports ?? ZERO) > ZERO ? `${sol(b.spendLamports)} SOL spent, ${sol(b.carriedOutLamports)} SOL carried into the next crank (a limit the program no longer has)` : null,
+        prog && b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports ? `the rule applied to ${sol(b.poolLamports)} of ${sol(b.poolActualLamports)} SOL (a limit the program no longer has)` : null,
       ].filter(Boolean).join("; ") || null,
       verify: buyback && prog ? {
         curl: `curl -s '${pairUrl(b.prevDate, b.recordDate)}'`,
-        formula: `units = floor((${centsToUsd(b.nowCents)} − ${centsToUsd(b.prevCents)}${carryTxt}) / ${rules.rule.unitUsd}) = ${b.chainUnits ?? b.units}; rule spend = pool × (1 − (1 − ${bps}/10000)^units)${b.poolLamports !== null ? ` = ${b.poolLamports} × … = ${expectedSpend} lamports` : ""}; the program spends min(rule spend + ${sol(b.carriedInLamports) ?? "0"} SOL carried, 2% of the pool's SOL reserve) and carries the rest`,
+        formula: `units = floor((${centsToUsd(b.nowCents)} − ${centsToUsd(b.prevCents)}${carryTxt}) / ${rules.rule.unitUsd}) = ${b.chainUnits ?? b.units}; rule spend = pool × (1 − (1 − ${bps}/10000)^units)${b.poolLamports !== null ? ` = ${b.poolLamports} × … = ${expectedSpend} lamports` : ""}; the program spends min(rule spend + ${sol(b.carriedInLamports) ?? "0"} SOL carried, the pool) in one run`,
         expected: b.status === "skipped" ? `nothing bought — ${b.skippedReason ?? "skipped"}` : b.waitReason ? `pending — ${b.waitReason}` : `rule spend ${expectedSpend ?? "?"} lamports; spent ${b.spendLamports ?? "pending"}; every token the fee PDA held burned (${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, dec)})`,
         checks, verified,
       } : buyback ? {
@@ -393,7 +396,7 @@ export function buildProgramStatus(p: ProgramStatusInput, burns: readonly BurnRo
       carriedSpendSol: sol(c?.carriedSpendLamports ?? ZERO) ?? "0", carriedRemainderUsd: centsToUsd(c?.carry ?? ZERO),
       waits: pendingRows.filter((b) => b.waitReason).map((b) => ({ recordDate: b.recordDate, reason: b.waitReason! })),
       partials: burns.filter((b) => b.execution === "program" && (((b.spendLamports ?? ZERO) > ZERO && (b.carriedOutLamports ?? ZERO) > ZERO) || (b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports)))
-        .map((b) => ({ recordDate: b.recordDate, note: [(b.carriedOutLamports ?? ZERO) > ZERO && (b.spendLamports ?? ZERO) > ZERO ? `${sol(b.carriedOutLamports)} SOL carried (2% reserve cap)` : null, b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports ? `burn-pool cap: ${sol(b.poolLamports)} of ${sol(b.poolActualLamports)} SOL` : null].filter(Boolean).join("; ") })),
+        .map((b) => ({ recordDate: b.recordDate, note: [(b.carriedOutLamports ?? ZERO) > ZERO && (b.spendLamports ?? ZERO) > ZERO ? `${sol(b.carriedOutLamports)} SOL carried` : null, b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports ? `the rule applied to ${sol(b.poolLamports)} of ${sol(b.poolActualLamports)} SOL` : null].filter(Boolean).join("; ") })),
       ...(p.dispersal && p.dispersal.length ? { dispersal: [...p.dispersal] } : {}),
     },
     pool: { registered: !!c?.poolRegistered, address: c?.pool ?? null, url: c?.pool ? addr(c.pool) : null, untradeableSince: c?.poolUntradeableSince ? new Date(c.poolUntradeableSince * 1000).toISOString() : null, lastCheck: p.lastHealth ?? null },
@@ -416,7 +419,7 @@ export function renderProgramHtml(p: ProgramStatusJson | null): string {
 <p>Last reading on chain: ${a.lastReading ? `${esc(a.lastReading.recordDate)} — $${esc(a.lastReading.value)}${a.lastReading.units !== null ? `, ${a.lastReading.units} unit(s)` : ""} · ${link(a.lastReading.txUrl, a.lastReading.signature ? `${a.lastReading.signature.slice(0, 12)}…` : null)}` : "none yet"}.${a.held ? ` <span class="bad">${esc(a.held.recordDate)} is held (${esc(a.held.status)}): ${esc(a.held.why)}</span>` : ""}</p>
 <h3>Queue</h3>
 <p>Last reading on chain ${esc(q.lastOnChain ?? "—")} · processed through ${esc(q.crankCursor ?? "—")} · ${q.readingsNotOnChain} burn day(s) not yet attested · ${q.awaitingCrank} attested and waiting for a crank · spend carried into the next crank: ${esc(q.carriedSpendSol)} SOL · remainder carried toward the next unit: $${esc(q.carriedRemainderUsd)}.</p>
-${q.waits.length ? `<ul>${q.waits.map((w) => `<li>${esc(w.recordDate)}: ${esc(w.reason)}</li>`).join("")}</ul>` : ""}${q.partials.length ? `<p class="muted">Partial days (the program carried the rest): ${q.partials.map((x) => `${esc(x.recordDate)} — ${esc(x.note)}`).join("; ")}.</p>` : ""}${q.dispersal?.length ? `<p class="muted">The carried spending is bought in small pieces at random times over six-hour windows, so no single purchase moves the pool much. ${q.dispersal.map((l) => `${esc(l.charAt(0).toUpperCase() + l.slice(1))}.`).join(" ")}</p>` : ""}
+${q.waits.length ? `<ul>${q.waits.map((w) => `<li>${esc(w.recordDate)}: ${esc(w.reason)}</li>`).join("")}</ul>` : ""}${q.partials.length ? `<p class="muted">Partial days (processed before the program spent the whole share in one run; the rest was carried): ${q.partials.map((x) => `${esc(x.recordDate)} — ${esc(x.note)}`).join("; ")}.</p>` : ""}${q.dispersal?.length ? `<p class="muted">Spending carried from earlier days goes out in one burn once the pool's guards allow it. ${q.dispersal.map((l) => `${esc(l.charAt(0).toUpperCase() + l.slice(1))}.`).join(" ")}</p>` : ""}
 <h3>Pool</h3>
 <p>${p.pool.registered ? `Registered CPMM pool ${link(p.pool.url, p.pool.address)} — ${p.pool.untradeableSince ? `<span class="bad">untradeable since ${esc(p.pool.untradeableSince)}</span> (anyone may replace_pool 7 days after)` : "tradeable"}${p.pool.lastCheck ? ` · last check: ${esc(p.pool.lastCheck)}` : ""}.` : "No pool registered yet: the token trades on its LaunchLab curve; after graduation anyone calls register_pool with the migrated CPMM pool (its creator must be the fee PDA)."}</p>
 <p class="muted">Program totals: ${esc(p.totals.readings)} readings, ${esc(p.totals.burns)} burns, ${fmtTokens(p.totals.burned)} burned, ${esc(p.totals.spentSol)} SOL spent${p.totals.shortfall !== "0" ? `, shortfall ${fmtTokens(p.totals.shortfall)}` : ""}.</p>`;
@@ -526,7 +529,7 @@ ${s.program ? "" : fundingLine}
 ${renderProgramHtml(s.program)}
 <h2>Addresses</h2>
 <ul class="addr">${addrLine("Mint", s.addresses.mint, s.addresses.mintUrl)}${s.program ? `${addrLine("Fee PDA (the burn pool; the program spends it, nobody withdraws it)", s.program.feePda, s.program.feePdaUrl)}${addrLine("Keeper (attests readings, pays transaction fees; holds no funds)", s.addresses.keeper, s.addresses.keeperUrl)}` : `${addrLine(bb ? "Keeper's token account (burned from; empty between days)" : "Burn vault (token account)", s.addresses.vault, s.addresses.vaultUrl)}${addrLine(bb ? "Keeper (the fee pool wallet; the only signer)" : "Keeper (the vault's only authority)", s.addresses.keeper, s.addresses.keeperUrl)}`}</ul>
-<p class="muted">${bb ? (s.program ? `Mechanic: buyback and burn by the burn_receipts program — each day with units, one crank spends 1 − (1 − ${esc(bb.fractionPerUnit)})^units of the fee PDA's pool (at most 2% of the pool's reserve per crank; the rest carried) on the registered pool and burns everything received, in one instruction.` : `Mechanic: buyback and burn — each day with units spends 1 − (1 − ${esc(bb.fractionPerUnit)})^units of the fee pool at market, then burns everything received.`) : `Vault: ${esc(s.vault.vesting.kind)}${s.vault.vesting.kind === "vesting" ? `, ${s.vault.vesting.vestDays}-day linear release after a ${s.vault.vesting.cliffDays}-day cliff` : ""}.`} Holders' balances are never touched: there is no delegate, no transfer hook and no mint authority.</p>
+<p class="muted">${bb ? (s.program ? `Mechanic: buyback and burn by the burn_receipts program — each day with units, one crank spends 1 − (1 − ${esc(bb.fractionPerUnit)})^units of the fee PDA's pool (the whole share in one run, with no cap) on the registered pool and burns everything received, in one instruction.` : `Mechanic: buyback and burn — each day with units spends 1 − (1 − ${esc(bb.fractionPerUnit)})^units of the fee pool at market, then burns everything received.`) : `Vault: ${esc(s.vault.vesting.kind)}${s.vault.vesting.kind === "vesting" ? `, ${s.vault.vesting.vestDays}-day linear release after a ${s.vault.vesting.cliffDays}-day cliff` : ""}.`} Holders' balances are never touched: there is no delegate, no transfer hook and no mint authority.</p>
 <footer>This page reports what a published rule did, from public data. It is not a forecast and says nothing about what the token's price will do. Health: ${s.health.pending} pending${s.health.waiting ? ` (${s.health.waiting} waiting)` : ""}, ${s.health.unverified} unverified${s.health.lastError ? ` · last error: ${esc(s.health.lastError)}` : ""}.</footer>
 </main>
 <script>

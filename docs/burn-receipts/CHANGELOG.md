@@ -1,5 +1,22 @@
 # burn_receipts — changelog
 
+## 2026-10-25 — owner decision: both burn caps removed (burn_receipts source; not deployed by this entry)
+
+The owner removed both burn caps from burn_receipts. Account layouts are unchanged (the PlatformConfig cap, pending-raise and cranker
+fields keep their bytes, unused).
+
+| Change | Where | Effect |
+|---|---|---|
+| No burn-pool cap (was the 25 SOL pre-audit cap, raise-only behind a 48 h timelock, with a sunset) | state.rs (`active_cap`, `default_active_cap` gone; `recovery_open`, `default_recovery_open` added), crank_common.rs | every burn path uses the whole spendable pool; `BurnPoolCapBound` never emitted |
+| No per-run 2 % bound | crank_buyback.rs, burn_target.rs, crank_carried.rs, math.rs (`reserve_spend_cap`, `carried_budget` gone) | one crank spends the rule's full share in one run; `crank_carried` may drain the whole carry in one piece (one piece per coin per second); `SpendCapBound` never emitted |
+| No cranker allowlist | crank_common.rs, platform.rs | every crank is permissionless; `clear_cranker_allowlist` only tidies the unused bytes |
+| Cap raises refused | platform.rs, error.rs | `propose_cap_raise`, `cancel_cap_raise`, `apply_cap_raise` always refuse with `CapRemoved` (6144); the platform authority holds no cap power and can still renounce |
+| `initialize_platform` | platform.rs | ignores the cap and cranker arguments; its sunset only closes the stranding-recovery switch (the same window, at the latest 2027-10-01) |
+| Constants removed | constants.rs | `DEFAULT_BURN_POOL_CAP_LAMPORTS`, `MIN_BURN_POOL_CAP_LAMPORTS`, `MAX_CRANKERS`, `CRANKER_ALLOWLIST_MAX_SECS`, `CAP_TIMELOCK_SECS`, `MAX_SPEND_RESERVE_BPS`, `CARRIED_BUDGET_WINDOW_SECS` |
+
+Still in force: the floor, the TWAP and Pyth guards, the minimum output and the pool-health checks; spend under the floor or past a dead
+pool is carried. Powers Register, CHECK-THIS-YOURSELF, the whitepaper and the public copy regenerated or rewritten to match.
+
 ## 2026-10-10 (night) — pair_curve round 2: the re-check's residuals and the PR review's Low
 
 Inputs: `docs/burnticker/reviews/2026-10-10-pair-curve-recheck.md` (re-check of `4eda2e3d`; tests `pair_curve/tests/review_pc3.rs`) and

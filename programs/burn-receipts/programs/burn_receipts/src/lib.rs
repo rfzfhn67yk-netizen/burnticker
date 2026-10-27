@@ -3,6 +3,14 @@
 //! The formula and the money live here; the data arrives as an attested reading; anyone can crank; nobody custodies the creator's
 //! fees. See docs/burn-receipts/README.md for the architecture, the trust model and the audit checklist.
 //!
+//! OWNER DECISION 2026-10-25 (reaffirmed twice): BOTH BURN CAPS ARE REMOVED. (1) The 25 SOL pre-audit burn-pool cap, its raise-only
+//! timelock and the cranker allowlist that applied only while it was in force: a burn pool spends what the rule says, with no per-day
+//! platform cap, and every crank is permissionless. (2) The 2 %-of-reserve per-crank spend bound and the carry of the bound-out spend:
+//! one crank spends the rule's whole amount (still behind the floor, the TWAP / Pyth guards, the min-out and the pool-health checks;
+//! spend under the floor or past an untradeable pool is still carried). Account layouts are unchanged (PlatformConfig's cap and
+//! cranker fields and CarriedPace.budget_lamports are reserved); propose_cap_raise / cancel_cap_raise / apply_cap_raise keep their
+//! entry points and refuse with CapRemoved; BurnPoolCapBound and SpendCapBound are never emitted again.
+//!
 //! Instruction set (there is deliberately NO withdraw / close / sweep instruction for the fee PDA or the vault):
 //!   initialize_token       RETIRED in every deployable build (round-5 review R5-5: InitializeTokenRetired); the round-4 create
 //!   initialize_token_r5    mint-signed, once per mint: rule, attesters, quorum, the end sink a buyback coin must pin; funds the
@@ -20,9 +28,9 @@
 //!                          witness; or both initialize_token calls name each other), attest a period's winner (quorum of each
 //!                          coin's attesters), move the loser's fuel for that period to the winner's fee PDA (a side is live with
 //!                          its own verified pool or a pinned burn target, round-5 review R5-9)
-//!   crank_carried          permissionless, buyback (burn dispersal): a piece (≤ the 2 % cap, caller-chosen) of the carried spend →
-//!                          the same swap and guards → burn all held → `carried` memo; only while no reading waits for its crank,
-//!                          within the coin's carried budget, one per-crank cap per 600 s (round-5 review R5-8, CarriedPace)
+//!   crank_carried          permissionless, buyback: a piece (caller-chosen, up to the whole carry) of the carried spend → the same
+//!                          swap and guards → burn all held → `carried` memo; only while no reading waits for its crank, one piece
+//!                          per coin per second (round-5 review R5-8, CarriedPace)
 //!   crank_vault            permissionless: burn from the vault (shortfall carried) → memo v1
 //!   crank_no_units         permissionless: process a zero-unit reading that is next in line
 //!   propose_attesters / cancel_attester_change / renounce_admin    admin only (48 h timelock on proposals)
@@ -31,16 +39,17 @@
 //!   submit_rule_end        permissionless; a quorum of the coin's attesters ends its rule (resolved | void) — coins with an end sink
 //!   forward_on_end         permissionless after a RESOLVED end: the remaining fuel (and later trickle) → the end sink's fee PDA
 //!   burn_sol_on_end        permissionless after a RESOLVED end, incinerator sink only: the remaining SOL → Solana's incinerator
-//!   initialize_platform    upgrade-authority-signed, once: the program-wide pre-audit burn-pool cap (sunsets automatically)
-//!   propose_cap_raise / cancel_cap_raise / renounce_platform_authority    platform authority (48 h timelock; raise only)
-//!   apply_cap_raise        permissionless after the timelock
+//!   initialize_platform    upgrade-authority-signed, once: the platform authority and the platform sunset (it closes the
+//!                          stranding-recovery switch below); no cap (removed 2026-10-25)
+//!   propose_cap_raise / cancel_cap_raise / apply_cap_raise    always refuse (CapRemoved): there is no cap since 2026-10-25
+//!   renounce_platform_authority    platform authority
 //!   set_registration_policy / cancel_registration_policy   admin (48 h timelock): stranding recovery between policy 0 and a
-//!                          fixed pool that passes the creator + LP checks; only while no pool works, and only until the cap sunset
+//!                          fixed pool that passes the creator + LP checks; only while no pool works, and only until the platform sunset
 //!   apply_registration_policy   permissionless after the timelock and within 14 days of the proposal; a fallback FIXED pool needs
 //!                          ≥ 90 % of its LP burned/locked or must be the pool PDA of a LaunchLab-known AmmConfig
 //!   veto_registration_policy    any current attester: kill a pending registration-policy proposal
-//!   clear_cranker_allowlist     platform authority or any allowlisted key: return crank_buyback to permissionless (the allowlist
-//!                          stops applying at the cap sunset or 90 days after initialize_platform)
+//!   clear_cranker_allowlist     platform authority or any listed key: clears the stored list, which has no effect since 2026-10-25
+//!                          (every crank is permissionless)
 //!   pin_burn_target        round 5, mint-signed, once, only before the coin's mint exists: the coin burns another SPL token (target
 //!                          mint immutable; its WSOL CPMM pool pinned after admission checks)
 //!   crank_target_burn      round 5, permissionless: crank_buyback's spend and guards on the pinned target pool → burn the target →

@@ -467,14 +467,13 @@ describe("HS-42 · leagues whose games cannot end tied say nothing about ties", 
   });
 });
 
-describe("HS-43 · the whole-pool burn says its per-run slice in numbers", () => {
-  test("85 SOL raise: about 1.7 SOL a run", () => {
-    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent, but not in one go: one burn spends at most 2% of the trading pool's SOL (about 1.7 SOL on an 85 SOL raise). The rest is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart, and a new window starts if any is left, so a large burn is usually finished within a day.");
-    assert.doesNotMatch(wholePoolSliceLine("85"), /daily run|several days/, "the budget refills every 600 s and the keeper spreads the rest over hours (dispersal.ts)");
-    assert.match(wholePoolSliceLine("85"), /six-hour window, at least 20 minutes apart/, "spreadCopy.ts wording");
-    assert.match(wholePoolSliceLine("40"), /about 0\.8 SOL on a 40 SOL raise/);
+describe("HS-43 · the whole-pool burn (owner decision 2026-10-25: spent in one run, no per-run slice)", () => {
+  test("the whole pool is spent in one run, whatever the raise", () => {
+    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent in one run. There is no platform cap on a burn. The burn pool spends what the rule says.");
+    assert.equal(wholePoolSliceLine("40"), wholePoolSliceLine("85"), "the raise no longer changes the words");
+    assert.doesNotMatch(wholePoolSliceLine("85"), /daily run|several days|at most 2%|six-hour|smaller pieces/);
     plain(wholePoolSliceLine("85"));
-    assert.match(budgetCopy(candidatesPairRule(CID_A) as BurnRule, 1, null, { raiseSol: "60" }).line, /^This coin burns its whole pool once, when the result is in\. The whole pool is spent, but not in one go: .*about 1\.2 SOL on a 60 SOL raise/);
+    assert.match(budgetCopy(candidatesPairRule(CID_A) as BurnRule, 1, null, { raiseSol: "60" }).line, /^This coin burns its whole pool once, when the result is in\. The whole pool is spent in one run\./);
   });
 });
 

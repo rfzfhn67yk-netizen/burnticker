@@ -166,3 +166,18 @@ describe("burnReceipts math — rule params from the keeper's rules.json", () =>
     assert.throws(() => ruleParamsFromKeeperRules({ ...deficit, buyback: { ...deficit.buyback, fractionPerUnit: "0.00005" } }, { floorLamports: B(0), maxTwapDeviationBps: 0, twapWindowSecs: 0 }));
   });
 });
+
+describe("the mirror tracks math.rs after the caps were removed (owner decision 2026-10-25)", () => {
+  test("math.rs has no reserve_spend_cap / carried_budget, and the TS mirror has no budget helpers", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const rs = fs.readFileSync(path.join(import.meta.dirname, "..", "programs", "burn-receipts", "programs", "burn_receipts", "src", "math.rs"), "utf8");
+    assert.doesNotMatch(rs, /fn reserve_spend_cap|fn carried_budget/);
+    const ts = await import("../src/lib/burnReceipts/math.ts");
+    for (const name of ["carriedBudget", "carriedBudgetNow", "carriedBudgetReadySec"]) assert.equal(name in ts, false, name);
+    // reserveSpendCap survives only as a deprecated shim for public-copy modules; nothing in the client, keeper or dispersal imports it
+    for (const f of ["src/lib/burnReceipts/crank.ts", "src/lib/burnReceipts/burnTarget.ts", "src/lib/burnKeeper/fakeProgram.ts", "src/lib/burnticker/dispersal.ts", "src/lib/burnticker/dispersalKeeper.ts"]) {
+      assert.doesNotMatch(fs.readFileSync(path.join(import.meta.dirname, "..", f), "utf8"), /reserveSpendCap|MAX_SPEND_RESERVE_BPS|carriedBudget/, f);
+    }
+  });
+});

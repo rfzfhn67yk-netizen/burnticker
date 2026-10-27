@@ -39,30 +39,30 @@ describe("verified-build.json", () => {
     assert.equal(table.sourceCommit, "116ff5ad054e25cd169a8ceeb3eebb16832a33e0");
     assert.equal(br.sourceCommit, "116ff5ad054e25cd169a8ceeb3eebb16832a33e0");
     assert.equal(br.deployedSourceCommit, undefined, "the mainnet bytes are this build's; the old commit lives in the notes");
-    assert.equal(br.builds.mainnet.hash, "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b");
-    assert.equal(br.builds.mainnet.bytes, 1030912);
-    assert.equal((br.builds.mainnet as { sha256?: string }).sha256, "faf072925c169ede89788e17c66cd6ab446fa332d47ae0362fca46dbb1a4e4f8");
-    assert.equal(br.builds.devnet.hash, "34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee");
+    assert.equal(br.builds.mainnet.hash, "1aff5fbfe243ea8233c360bfae6809b0dd411e2298600831d10be5ea97c99e17");
+    assert.equal(br.builds.mainnet.bytes, 1011440);
+    assert.equal((br.builds.mainnet as { sha256?: string }).sha256, "c753fc2763f794df665b60a23591397e6526567b0c81c86d76533394d30bb4d7");
+    assert.equal(br.builds.devnet.hash, "e52d27fcfa14f75148bfc00a298f061d3e522321370e6cb99f0f41dcdf8e13d1");
     // mainnet: the B-17 bytes, read back from the ProgramData account after the execute
     assert.equal(br.deployed.mainnet?.hash, br.builds.mainnet.hash);
     assert.equal(br.deployed.mainnet?.matchesBuild, true);
     assert.equal(br.deployed.mainnet?.pendingUpgrade, undefined);
-    assert.equal(br.deployed.mainnet?.slot, 459823169);
-    assert.match(String(br.deployed.mainnet?.readAt), /^2026-10-21T\d{2}:\d{2}:\d{2}Z$/);
+    assert.equal(br.deployed.mainnet?.slot, 461421913);
+    assert.match(String(br.deployed.mainnet?.readAt), /^2026-10-25T\d{2}:\d{2}:\d{2}Z$/);
     const ev = fs.readFileSync(path.join(ROOT, br.deployed.mainnet!.evidence!), "utf8");
     const sig = (JSON.parse(fs.readFileSync(path.join(ROOT, "config", "burnticker", "current-status.json"), "utf8")) as { programs: { name: string; mainnetDeploy: { squadsExecuteSignature: string } }[] }).programs.find((p) => p.name === "burn_receipts")!.mainnetDeploy.squadsExecuteSignature;
-    assert.ok(sig.startsWith("4Pnd") && sig.endsWith("drYp"), "the B-17 execute signature");
+    assert.ok(sig.startsWith("3S8o") && sig.endsWith("Fkgs"), "the caps-removal execute signature");
     assert.ok(ev.includes(sig) && doc.includes(sig), "the evidence and the doc name the execute signature");
-    assert.match(ev, /MATCH  mainnet burn_receipts \S+ b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b/);
+    assert.match(ev, /MATCH  mainnet burn_receipts \S+ 1aff5fbfe243ea8233c360bfae6809b0dd411e2298600831d10be5ea97c99e17/);
     // devnet: upgraded at 00:49Z 10-22 (18:49 Denver 10-21), read back 00:51Z
     assert.equal(br.deployed.devnet?.hash, br.builds.devnet.hash);
     assert.equal(br.deployed.devnet?.matchesBuild, true);
     assert.equal(br.deployed.devnet?.pendingUpgrade, undefined);
-    assert.equal(br.deployed.devnet?.slot, 513708808);
+    assert.equal(br.deployed.devnet?.slot, 515097580);
     assert.ok(fs.existsSync(path.join(ROOT, br.deployed.devnet!.evidence!)), "devnet evidence");
     assert.equal(pc.sourceCommit, "29f6f5de19f1916945992fae711cefc36927d856");
-    assert.equal(pc.builds.mainnet.hash, "567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895");
-    assert.equal(pc.builds.devnet.hash, "364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf");
+    assert.equal(pc.builds.mainnet.hash, "8d21ff603670000ac7e1f492aea842fc37891c26197df88b5b7135656373f1e3");
+    assert.equal(pc.builds.devnet.hash, "c2c8d16808824645ef5d938482e57f666decb2fff070a9b7700ebece6237a62a");
     // pendingUpgrade is a note set only while the bytes differ; deployedSourceCommit only while an upgrade is pending
     const withBr = (f: (p: typeof br) => typeof br) => ({ ...table, programs: table.programs.map((p) => (p.library === "burn_receipts" ? f(p) : p)) });
     assert.match(verifiedBuildProblems(withBr((p) => ({ ...p, deployed: { ...p.deployed, mainnet: { ...p.deployed.mainnet!, pendingUpgrade: "a note" } } }))).join(";"), /pendingUpgrade/, "no pending note on a network that matches");
@@ -114,13 +114,13 @@ describe("scripts/ops/reproducible-build-host.sh", () => {
       assert.equal(val("EXE", p.library), p.builds.mainnet.hash, p.library);
       assert.equal(val("SHA", p.library), (p.builds.mainnet as { sha256?: string }).sha256, p.library);
     }
-    assert.equal(val("SHA", "burn_receipts"), "faf072925c169ede89788e17c66cd6ab446fa332d47ae0362fca46dbb1a4e4f8"); // B-17 build (116ff5ad), deployed on mainnet 2026-10-21
+    assert.equal(val("SHA", "burn_receipts"), "c753fc2763f794df665b60a23591397e6526567b0c81c86d76533394d30bb4d7"); // B-17 build (116ff5ad), deployed on mainnet 2026-10-21
     // DEPLOYED[<lib>] names an earlier hash only while that program's mainnet upgrade is pending; none is now, so the comparison says MATCH
     for (const p of table.programs) {
       if (p.deployed.mainnet?.pendingUpgrade) assert.equal(val("DEPLOYED", p.library), p.deployed.mainnet.hash, `${p.library}: the bytes mainnet runs until the upgrade`);
       else assert.equal(val("DEPLOYED", p.library), undefined, `${p.library}: no pending mainnet upgrade`);
     }
-    assert.equal(val("SHA", "pair_curve"), "8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2");
+    assert.equal(val("SHA", "pair_curve"), "9205de80b377a3fc3c4c8b3de93b66c8a49e8120a78b082e3e5ed850d142088d");
   });
   test("it builds the commit the site pins, compares with mainnet read-only, and the page explains it", async () => {
     const { PUBLIC_REPO_COMMIT } = await import("@/lib/burnticker/currentStatusLinks");

@@ -2097,8 +2097,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           : text ? (teamPath ? `${text.lead} ${text.windowSentence.replace(/^This coin covers [^.]*\.\s*/, "")}` : text.lead) : plainSentence(rule, ticker, ownPick ? pick?.title ?? null : bt?.seriesTitle ?? null);
         // website-22 (audit 10 item 7): the trigger fact is built from its parts, never cut at the first full stop ("U.S." broke it)
         const trigger = triggerText({ pair: pairOn && sideA && sideB && text && textB ? { a: ticker, b: tickerB, oneA: text.oneLiner, oneB: textB.oneLiner } : null, oneShot: oneShotParts?.[0] ?? null, lead: pairOn ? null : text?.lead ?? null, fallback: sentence0 });
-        // owner, 2026-10-12: above 5 % a recurring burn lands in slices (one burn run buys with at most 2 % of the pool's SOL); said once
-        const sentence = !oneShotRule && shareValue > SLICED_ABOVE && !/in slices sized/.test(sentence0) ? `${sentence0} The burn lands in slices sized to the pool's liquidity.` : sentence0;
+        // owner decision 2026-10-25: a burn spends its full share in one run, so the sentence no longer adds a slices clause
+        const sentence = sentence0;
         const problems = btFresh ? [...(bt?.refusals ?? []), ...(pairOn ? btB?.refusals ?? [] : [])].map((r) => r.reason) : [];
         // intent audit item 5: two sides a reader could not tell apart (same ticker or name, any case or spacing) cannot launch
         const identity = pairOn && ruleB ? pairIdentityProblems({ ticker, name }, { ticker: tickerB, name: nameB }) : [];
@@ -2119,8 +2119,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const realOneList = fieldOne ? [{ ticker: ticker.toUpperCase(), symbol: fieldOne.symbol }] : [];
         notes.push(...realReviewNotes(realOneList));
         if (imageGone && !profile.image && !profileB.image) notes.push(IMAGE_NOT_KEPT);
-        // owner 2026-10-20: how a burn above the per-burn cap is spread out, said when this host runs burn dispersal (spreadCopy.ts)
-        if (site.dispersal.available) notes.push(SPREAD_REVIEW_LINE);
+        // owner decision 2026-10-25: how a burn runs (the rule's full share in one run, no cap), said on every host (spreadCopy.ts)
+        notes.push(SPREAD_REVIEW_LINE);
         const timing = reviewCurrent ? (shownReview.review as (LaunchReview & { timing?: { dueLabel: string | null; warning: string | null; unplayed: string | null } | null }) | null)?.timing ?? null : null;
         if (timing?.dueLabel) notes.push(timing.dueLabel);
         if (timing?.unplayed) notes.push(timing.unplayed);
@@ -2314,7 +2314,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           ...espnCases, ...(pairOn && !separatePair && (!elPick || settledPick) ? [76] : []), ...(elPick ? [82] : []),
           ...changeRuleEdgeIds(rule), ...(rule.oracle === "catalogue" && /^nws\./.test(rule.series ?? "") ? [86, 87] : []),
           // WIRING-SEMANTICS-2: the floor, the end's destination, the fingerprint, and Polymarket's split and unresolved payouts
-          // HB-33: the minimum-burn (2% limit) and leftover-to-another-coin cases only where the rule can meet them
+          // HB-33: the minimum-burn and leftover-to-another-coin cases only where the rule can meet them
           ...reviewEdgeIds({ oneShotFull: oneShotFull(rule), otherCoin: (pairOn && !separatePair) || endA.kind === "coin" || endB.kind === "coin" }), ...(rule.oracle === "polymarket" ? [178, 179, 180] : []), ...(rule.oracle === "catalogue" ? [218] : []),
         ];
         // HB-81 D5: item 218 on a one-time coin does not say that nothing ends the rule (its one burn or its deadline does)

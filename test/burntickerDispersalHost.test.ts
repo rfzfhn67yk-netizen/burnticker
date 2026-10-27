@@ -51,7 +51,7 @@ describe("the host reads the round from verified-build.json", () => {
 });
 
 describe("ops.json names the five host facts (names and yes/no only)", () => {
-  const facts: HostFacts = { dispersal: { on: true, line: "burn dispersal: on (BURNTICKER_DISPERSAL=1): carried amounts are spent in crank_carried pieces over 6-hour windows" }, webhookConfigured: false, pushConfigured: true, heartbeatConfigured: true, backupDestConfigured: false, programHashSource: "program hash: from config/burnticker/verified-build.json (mainnet, 152929ce…, slot 457461970)" };
+  const facts: HostFacts = { dispersal: { on: true, line: "burn dispersal: on (BURNTICKER_DISPERSAL=1): a carried amount is spent in one crank_carried piece" }, webhookConfigured: false, pushConfigured: true, heartbeatConfigured: true, backupDestConfigured: false, programHashSource: "program hash: from config/burnticker/verified-build.json (mainnet, 152929ce…, slot 457461970)" };
   test("lines and the document field", () => {
     const lines = hostFactLines(facts);
     assert.match(lines[0], /burn dispersal: on/);

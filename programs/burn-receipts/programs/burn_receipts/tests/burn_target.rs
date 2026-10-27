@@ -498,7 +498,7 @@ fn a_target_coin_swaps_sol_for_the_target_on_the_pinned_pool_and_burns_it() {
     let spend = math::buyback_spend(10 * SOL, 3, 500).unwrap();
     assert_eq!(rd.outcome, OUTCOME_BURNED);
     assert_eq!(rd.spent_lamports, spend);
-    assert!(spend < math::reserve_spend_cap(r_wsol, MAX_SPEND_RESERVE_BPS));
+    assert!(r_wsol > 0);
     assert!(rd.got > 0 && rd.burned == rd.got);
     assert_eq!(rd.pool, w.pool.pool);
     assert_eq!(rd.owed, 1_234 * TOKEN, "a target reading records the coin's own burned tokens in `owed`");
@@ -543,24 +543,28 @@ fn crank_buyback_refuses_a_coin_with_a_target() {
     expect_anchor_err(env.send(&[cpmm::ix_crank_buyback(&c.pubkey(), &mint, &fake, D2)], &[&c]), "BurnTargetSet");
 }
 
+/// Owner decision 2026-10-25: no burn-pool cap and no 2 % per-crank bound — the target coin's crank spends the rule's whole share of
+/// its 40 SOL pool (≈ 16 SOL, far above both the old 25 SOL basis cap and 2 % of the ≈ 85 SOL target pool) in one run, carrying nothing.
 #[test]
-fn the_per_crank_spend_is_capped_at_two_percent_of_the_target_pools_sol_reserve() {
+fn the_whole_rule_spend_goes_in_one_crank_with_no_cap_and_no_two_percent_bound() {
     let mut env = Env::new();
     let w = world(&mut env);
     let (mint, _) = coin_with_target(&mut env, &w);
-    // 25 SOL basis (the default platform cap) at 10 units ≈ 10 SOL wanted; 2 % of ≈ 85 SOL ≈ 1.7 SOL allowed
     read_and_fund(&mut env, &w, &mint, 10, 40 * SOL);
     let (r_wsol, _) = cpmm::reserves(&env, &w.pool);
     let c = cranker(&mut env);
     refresh(&mut env, &w.pool);
-    env.ok(&[ix_crank_target(&c.pubkey(), &mint, &w.target, &w.pool, D2)], &[&c]);
+    let meta = env.ok(&[ix_crank_target(&c.pubkey(), &mint, &w.target, &w.pool, D2)], &[&c]);
     let rd = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
-    let cap = math::reserve_spend_cap(r_wsol, MAX_SPEND_RESERVE_BPS);
-    let want = math::buyback_spend(DEFAULT_BURN_POOL_CAP_LAMPORTS, 10, 500).unwrap();
-    assert_eq!(rd.pool_lamports, DEFAULT_BURN_POOL_CAP_LAMPORTS);
-    assert_eq!(rd.spent_lamports, cap);
-    assert_eq!(rd.carried_out_lamports, want - cap);
-    assert_eq!(env.config(&config_pda(&mint)).carried_spend_lamports, want - cap);
+    assert_eq!(rd.outcome, OUTCOME_BURNED);
+    assert!(rd.pool_actual_lamports > LEGACY_CAP_ARG, "the basis is above the old 25 SOL cap");
+    assert_eq!(rd.pool_lamports, rd.pool_actual_lamports, "no cap: the rule applies to the whole pool");
+    let want = math::buyback_spend(rd.pool_actual_lamports, 10, 500).unwrap();
+    assert!(want > r_wsol / 50, "the spend is far above the old 2 % bound");
+    assert_eq!((rd.rule_spend_lamports, rd.spent_lamports, rd.carried_out_lamports), (want, want, 0));
+    assert_eq!(env.config(&config_pda(&mint)).carried_spend_lamports, 0);
+    let names = event_names(&meta);
+    assert!(!names.iter().any(|n| *n == "SpendCapBound" || *n == "BurnPoolCapBound"), "{names:?}");
 }
 
 #[test]
@@ -883,7 +887,6 @@ fn an_amm_v4_target_burns_through_swap_base_in_v2_with_the_pyth_floor_on_its_out
     let rd = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
     let spend = math::buyback_spend(10 * SOL, 3, 500).unwrap();
     assert_eq!((rd.outcome, rd.spent_lamports, rd.pool), (OUTCOME_BURNED, spend, amm.pool));
-    assert!(spend <= math::reserve_spend_cap(r_wsol, MAX_SPEND_RESERVE_BPS));
     let ev = event::<TargetBurned>(&meta).expect("TargetBurned");
     let floor = math::buyback_min_out(spend, r_wsol, r_tok, ev.reference_x32, 2_500, 300).unwrap();
     assert!(rd.got >= floor && floor > 0, "got {} vs the Pyth floor {floor}", rd.got);
@@ -932,29 +935,28 @@ fn a_jito_style_push_crank_push_back_is_refused_by_the_pyth_guard() {
 }
 
 #[test]
-fn after_the_platform_cap_sunsets_a_crank_spends_two_percent_of_the_pool_and_a_push_is_still_refused() {
+fn with_no_caps_a_crank_spends_the_whole_rule_share_on_a_deep_pool_and_a_push_is_still_refused() {
     let mut env = Env::new();
     let w = world(&mut env);
-    // a deep AMM v4 pool: 5,000 SOL (the 2 % cap is then 100 SOL a crank)
+    // a deep AMM v4 pool: 5,000 SOL (owner decision 2026-10-25: no platform cap and no 2 % per-crank bound)
     let amm = amm_pool_with(&mut env, &w.target, 5_000 * SOL, 47_058_823_529 * TOKEN, 25, 10_000, 0, 6);
     let (mint, _) = coin_with_target_on(&mut env, &w, &amm);
-    env.set_time(DEFAULT_CAP_SUNSET_TS + 60); // no PlatformConfig: the default 25 SOL cap is gone
     read_and_fund(&mut env, &w, &mint, 20, 200 * SOL);
     refresh(&mut env, &amm);
     let c = cranker(&mut env);
-    // a push of ≈ 6 % in front of a 100 SOL crank is refused (the gain such a push could take grows with the crank; the guard does not)
+    // a push of ≈ 6 % in front of a ≈ 128 SOL crank is refused (the gain such a push could take grows with the crank; the guard does not)
     env.ok(&[amm_swap_ix(&w.trader.pubkey(), &amm, &w.target, true, 150 * SOL)], &[&w.trader]);
     expect_anchor_err(env.send(&[ix_crank_target(&c.pubkey(), &mint, &w.target, &amm, D2)], &[&c]), "TargetPriceDeviation");
     refresh(&mut env, &amm); // the market moved for real (Pyth follows): the crank proceeds at the new price
     let (r_wsol, r_tok) = reserves_of(&env, &amm);
     let meta = env.ok(&[ix_crank_target(&c.pubkey(), &mint, &w.target, &amm, D2)], &[&c]);
     let rd = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
-    let cap = math::reserve_spend_cap(r_wsol, MAX_SPEND_RESERVE_BPS);
-    assert_eq!(rd.pool_lamports, rd.pool_actual_lamports, "no platform cap after the sunset");
-    assert_eq!(rd.spent_lamports, cap, "the 2 % reserve cap is the bound");
-    assert!(cap > 25 * SOL);
+    let want = math::buyback_spend(rd.pool_actual_lamports, 20, 500).unwrap();
+    assert_eq!(rd.pool_lamports, rd.pool_actual_lamports, "no platform cap");
+    assert_eq!((rd.spent_lamports, rd.carried_out_lamports), (want, 0), "the whole rule share in one crank");
+    assert!(want > LEGACY_CAP_ARG && want > r_wsol / 50, "above both old caps");
     let ev = event::<TargetBurned>(&meta).unwrap();
-    assert!(rd.got >= math::buyback_min_out(cap, r_wsol, r_tok, ev.reference_x32, 2_500, 300).unwrap());
+    assert!(rd.got >= math::buyback_min_out(want, r_wsol, r_tok, ev.reference_x32, 2_500, 300).unwrap());
 }
 
 // =================================================================================================================================
@@ -1243,12 +1245,13 @@ fn r5_6_a_target_that_burns_is_never_released() {
     let w = world(&mut env);
     live_flagship(&mut env, &w);
     let (mint, _) = coin_with_target(&mut env, &w);
-    // a cap-bound crank leaves a carry; the target is healthy
+    // the crank burns its whole target (no cap since 2026-10-25); a carry left from before the decision remains; the target is healthy
     read_and_fund(&mut env, &w, &mint, 10, 40 * SOL);
     refresh(&mut env, &w.pool);
     let k = cranker(&mut env);
     env.ok(&[ix_crank_target(&k.pubkey(), &mint, &w.target, &w.pool, D2)], &[&k]);
-    assert!(env.config(&config_pda(&mint)).carried_spend_lamports > 0);
+    assert_eq!(env.config(&config_pda(&mint)).carried_spend_lamports, 0);
+    set_legacy_carry(&mut env, &mint, SOL);
     env.set_time(env.now() + 2 * QUEUE_UNBLOCK_SECS);
     expect_anchor_err(env.send(&[ix_release(&k.pubkey(), &mint)], &[&k]), "TargetNotStalled");
 }

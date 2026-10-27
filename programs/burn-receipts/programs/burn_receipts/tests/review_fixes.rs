@@ -50,8 +50,10 @@ fn market_without_platform(env: &mut Env) -> Mkt {
     Mkt { mint, att, pool, launcher }
 }
 
+/// Review M-1 (cap removed 2026-10-25): with no PlatformConfig a crank never wedges, and since the owner removed the burn-pool cap
+/// there is no default cap either: the rule applies to the whole pool and no BurnPoolCapBound is emitted.
 #[test]
-fn m1_missing_platform_config_applies_the_default_cap_never_a_wedge() {
+fn m1_missing_platform_config_never_wedges_and_applies_no_cap() {
     let mut env = Env::new();
     let m = market_without_platform(&mut env);
     assert!(env.svm.get_account(&platform_pda()).map(|a| a.data.is_empty()).unwrap_or(true), "no PlatformConfig exists");
@@ -62,15 +64,9 @@ fn m1_missing_platform_config_applies_the_default_cap_never_a_wedge() {
     let meta = env.ok(&[cpmm::ix_crank_buyback(&payer, &m.mint, &m.pool, D2)], &[]);
     let r = env.reading(&reading_pda(&config_pda(&m.mint), D2)).unwrap();
     assert_eq!(r.outcome, OUTCOME_BURNED);
-    assert_eq!(r.pool_lamports, DEFAULT_BURN_POOL_CAP_LAMPORTS, "the default 25 SOL cap applied without any PlatformConfig");
-    let ev = events(&meta).into_iter().find(|(d, _)| d[..] == BurnPoolCapBound::DISCRIMINATOR[..]).unwrap();
-    assert_eq!(BurnPoolCapBound::try_from_slice(&ev.1).unwrap().cap_lamports, DEFAULT_BURN_POOL_CAP_LAMPORTS);
-    // After the hard-coded default sunset the cap is gone too.
-    env.set_time(DEFAULT_CAP_SUNSET_TS + 1);
-    submit(&mut env, &m.mint, 20270930, V1 + 3 * UNIT, &[&m.att]).unwrap();
-    env.ok(&[cpmm::ix_crank_buyback(&payer, &m.mint, &m.pool, 20270930)], &[]);
-    let r = env.reading(&reading_pda(&config_pda(&m.mint), 20270930)).unwrap();
-    assert_eq!(r.pool_lamports, r.pool_actual_lamports);
+    assert!(r.pool_actual_lamports > LEGACY_CAP_ARG);
+    assert_eq!(r.pool_lamports, r.pool_actual_lamports, "no default 25 SOL cap without a PlatformConfig");
+    assert!(!events(&meta).into_iter().any(|(d, _)| d[..] == BurnPoolCapBound::DISCRIMINATOR[..]));
 }
 
 #[test]

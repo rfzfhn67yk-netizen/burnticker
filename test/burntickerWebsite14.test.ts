@@ -73,7 +73,9 @@ describe("item 1: the queued-units counter (LAUNCHPAD-PATH §73), from the keepe
     // hourly run 6 HB-90: the headline says what the two numbers are, from the baseline's own date
     assert.equal(q.headline, "Daily rises since Oct 14 add up to 15 queued units ($1B each). The debt is $22.35 billion higher than on Oct 14.");
     assert.ok(q.lines.some((l) => l.startsWith(`When the curve fills at 85 SOL and its pool is registered, the queued readings run in order and together spend 1 − 0.98^15 of the burn pool, which is ${q.sharePct}%.`)), "the raise is the one the keeper read from the pool");
-    assert.ok(q.lines.some((l) => /One burn run spends at most 2% of the trading pool's SOL/.test(l)));
+    // owner decision 2026-10-25 (deficitQueueCore.mjs): no per-run bound, so the line says each run spends its whole share
+    assert.ok(q.lines.some((l) => /Each run spends its whole share at once, with no cap on the size of a burn\./.test(l)));
+    assert.ok(!q.lines.some((l) => /at most 2% of the trading pool/.test(l)));
     assert.ok(q.lines.some((l) => /^2 more units are recorded by the keeper and not yet signed on chain\.$/.test(l)));
     assert.ok(q.lines.some((l) => /^The latest reading is the Treasury figure for 2026-10-19\. The keeper last wrote its status file at Oct 20, 3:50 PM Denver time\.$/.test(l)));
     assert.equal(q.stale, false); assert.equal(q.card, "0 $DEFICIT, 15 units queued");
@@ -345,7 +347,7 @@ describe("item 11: the graduation preset, 40 / 60 / 85 SOL (§75)", () => {
     assert.equal(raiseProblem("40", "mainnet"), null); assert.equal(raiseProblem("50", "mainnet"), "The graduation raise must be 24, 40, 60 or 85 SOL on mainnet.");
     assert.equal(raiseProblem("1", "devnet"), null); assert.match(raiseProblem("100", "devnet")!, /0\.1 to 85/);
     for (const t of [...Object.values(RAISE_PRESET_TEXT), RAISE_PRESET_SHARED]) clean(t, t);
-    assert.match(RAISE_PRESET_SHARED, /at most 2% of the pool's SOL/);
+    assert.match(RAISE_PRESET_SHARED, /one burn run spends the rule's full share of the burn pool/); assert.doesNotMatch(RAISE_PRESET_SHARED, /at most 2%/);
     const base = { creator: CREATOR, ticker: "ZQXJ", name: "Zqxj coin", description: "", imageUrl: null, links: [], rule: {}, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true } };
     assert.ok(launchProblems({ ...base, cluster: "mainnet", raiseSol: "70" }).includes("The graduation raise must be 24, 40, 60 or 85 SOL on mainnet."));
   });

@@ -14,8 +14,10 @@ import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthI
 import { buybackPoolAccounts, decodeCpmmPool, POOL_STATE_DISCRIMINATOR } from "../src/lib/burnReceipts/cpmm.ts";
 import { anchorErrorName, assertClusterAllowed, buildSizedTransaction, DEFERRABLE_ERRORS, memoFromLogs, memoFromTransaction, readingLookupTableAddresses, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { checkPlatformPins } from "../src/lib/burnReceipts/platformPins.ts";
-import { assertSignableGenesis, BURN_RECEIPTS_LOCALNET_PROGRAM_ID, CPMM_PROGRAM_ID, DEFAULT_BURN_POOL_CAP_LAMPORTS, GENESIS_HASH, LOCALNET_GENESIS_TAG, LAUNCHLAB_PROGRAM_ID, LOCK_CP_AUTHORITY_SEED, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, MAX_QUORUM, OPERATOR_TREASURY, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, PACKET_DATA_SIZE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
-import { carriedBudget, carriedBudgetNow, carriedBudgetReadySec, ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
+import { assertSignableGenesis, BURN_RECEIPTS_LOCALNET_PROGRAM_ID, CPMM_PROGRAM_ID, GENESIS_HASH, LOCALNET_GENESIS_TAG, LAUNCHLAB_PROGRAM_ID, LOCK_CP_AUTHORITY_SEED, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, MAX_QUORUM, OPERATOR_TREASURY, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, PACKET_DATA_SIZE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
+import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
+import * as mathMirror from "../src/lib/burnReceipts/math.ts";
+import * as constantsMirror from "../src/lib/burnReceipts/constants.ts";
 
 const PID = BURN_RECEIPTS_LOCALNET_PROGRAM_ID;
 const G = GENESIS_HASH.mainnet;
@@ -273,13 +275,14 @@ describe("burnReceipts client — instructions", () => {
     const v2 = Buffer.from(d); v2[8] = 2;
     assert.throws(() => decodeCarriedPace(v2), /version 2/, "an unknown version is refused, as the program refuses it");
     assert.ok(carriedPacePda(PID, MINT).equals(PublicKey.findProgramAddressSync([Buffer.from("carried_pace"), MINT.toBuffer()], PID)[0]));
-    const idlConst = BURN_RECEIPTS_IDL.constants?.find((c: { name: string }) => c.name === "CARRIED_BUDGET_WINDOW_SECS") as { value: string } | undefined;
-    assert.equal(idlConst?.value, "600", "the IDL carries the program's budget window");
-    // the budget (math.rs carried_budget / crank_carried.rs carried_budget_now): one cap per 600 s, up to one cap, one piece per second
-    const cap = BigInt(600);
-    assert.deepEqual([carriedBudget(BigInt(0), cap, 300), carriedBudget(BigInt(590), cap, 30), carriedBudget(BigInt(900), cap, 0), carriedBudget(BigInt(5), cap, -3)], [BigInt(300), cap, cap, BigInt(5)]);
-    assert.deepEqual([carriedBudgetNow(0, BigInt(0), cap, 5), carriedBudgetNow(100, BigInt(0), cap, 100), carriedBudgetNow(100, BigInt(0), cap, 101)], [cap, null, BigInt(1)]);
-    assert.deepEqual([carriedBudgetReadySec(100, BigInt(0), cap, cap, 50), carriedBudgetReadySec(100, BigInt(0), cap, BigInt(300), 120), carriedBudgetReadySec(100, BigInt(590), cap, BigInt(300), 100), carriedBudgetReadySec(0, BigInt(0), cap, cap, 7), carriedBudgetReadySec(100, BigInt(0), cap, cap + BigInt(1), 120)], [700, 400, 101, 7, null]);
+    // owner decision 2026-10-25: no carried budget. The layout keeps budget_lamports (the program writes 0); the budget window constant
+    // and math.rs carried_budget are gone from the program, so the TS mirror has no budget helpers either. (The committed IDL may still
+    // list CARRIED_BUDGET_WINDOW_SECS until it is regenerated from the new build; nothing in the client reads it.)
+    const rs = (f: string) => fs.readFileSync(path.join(import.meta.dirname, "..", "programs", "burn-receipts", "programs", "burn_receipts", "src", f), "utf8");
+    assert.doesNotMatch(rs("constants.rs"), /CARRIED_BUDGET_WINDOW_SECS/);
+    assert.doesNotMatch(rs("math.rs"), /fn carried_budget|fn reserve_spend_cap/);
+    for (const name of ["carriedBudget", "carriedBudgetNow", "carriedBudgetReadySec"]) assert.equal(name in mathMirror, false, name);
+    assert.equal("CARRIED_BUDGET_WINDOW_SECS" in constantsMirror, false);
   });
   test("crank_buyback resolves the pool's accounts WSOL → token and pins the cluster's CPMM id", () => {
     const pool = Keypair.generate().publicKey;
@@ -297,14 +300,14 @@ describe("burnReceipts client — instructions", () => {
     assert.throws(() => buybackPoolAccounts(view, Keypair.generate().publicKey, CPMM_PROGRAM_ID.mainnet));
     const ix = crankBuybackIx({ programId: PID, cranker: MINT, mint: MINT, recordDate: 20261008, pool: acc, cluster: "devnet" });
     assert.equal(ix.keys.length, 23, "21 + the two optional pair accounts (program id when unpaired)");
-    assert.ok(ix.keys.some((k) => k.pubkey.equals(platformPda(PID))), "the platform config (burn-pool cap) rides along");
+    assert.ok(ix.keys.some((k) => k.pubkey.equals(platformPda(PID))), "the platform config rides along (the account list is unchanged; the program no longer reads a cap from it)");
     assert.ok(ix.keys[15].pubkey.equals(CPMM_PROGRAM_ID.devnet));
     assert.ok(ix.keys[9].pubkey.equals(pool) && ix.keys[9].isWritable);
     // burn dispersal (2026-10-13): crank_carried - the same pool accounts, no Reading, the piece's ceiling as a u64 argument
     const cc = crankCarriedIx({ programId: PID, cranker: MINT, mint: MINT, pool: acc, cluster: "devnet", maxSpendLamports: BigInt(1_043_000_000) });
     assert.equal(cc.data.length, 16);
     assert.equal(cc.data.readBigUInt64LE(8), BigInt(1_043_000_000));
-    assert.ok(cc.keys.some((k) => k.pubkey.equals(platformPda(PID))), "the platform cap rides along");
+    assert.ok(cc.keys.some((k) => k.pubkey.equals(platformPda(PID))), "the platform config rides along (unchanged account list)");
     assert.ok(cc.keys.some((k) => k.pubkey.equals(pool) && k.isWritable));
     assert.ok(cc.keys.some((k) => k.pubkey.equals(CPMM_PROGRAM_ID.devnet)));
     assert.equal(cc.keys.length, 21, "crank_buyback's accounts without the reading and the two pair accounts, plus the coin's CarriedPace");
@@ -323,13 +326,22 @@ describe("burnReceipts client — attesters", () => {
   });
 });
 
-describe("burnReceipts client — platform cap", () => {
-  test("initialize_platform carries the ProgramData account so only the upgrade authority can sign it", () => {
+describe("burnReceipts client — platform config (no cap since the owner decision of 2026-10-25)", () => {
+  test("initialize_platform keeps its signature and carries the ProgramData account so only the upgrade authority can sign it", () => {
     const ua = Keypair.generate().publicKey;
-    const ix = initializePlatformIx({ programId: PID, payer: ua, upgradeAuthority: ua, authority: ua, burnPoolCapLamports: DEFAULT_BURN_POOL_CAP_LAMPORTS, capSunsetTs: BigInt(1_800_000_000) });
+    const ix = initializePlatformIx({ programId: PID, payer: ua, upgradeAuthority: ua, authority: ua, burnPoolCapLamports: BigInt(0), capSunsetTs: BigInt(1_800_000_000) });
     assert.ok(ix.keys.some((k) => k.pubkey.equals(programDataAddress(PID))));
     assert.ok(ix.keys.some((k) => k.pubkey.equals(platformPda(PID)) && k.isWritable));
-    assert.equal(ix.data.readBigUInt64LE(8 + 32), BigInt(25_000_000_000));
+    assert.equal(ix.data.readBigUInt64LE(8 + 32), BigInt(0), "the cap argument is still encoded (the program ignores it)");
+  });
+  test("the client mirrors carry no cap constants: the removed Rust constants are gone or kept only as deprecated copy shims", () => {
+    for (const name of ["MIN_BURN_POOL_CAP_LAMPORTS", "MAX_CRANKERS", "CRANKER_ALLOWLIST_MAX_SECS", "CARRIED_BUDGET_WINDOW_SECS"]) assert.equal(name in constantsMirror, false, name);
+    assert.equal(constantsMirror.PLATFORM_CRANKER_SLOTS, 3, "the PlatformConfig layout keeps three cranker slots");
+    const rs = fs.readFileSync(path.join(import.meta.dirname, "..", "programs", "burn-receipts", "programs", "burn_receipts", "src", "constants.rs"), "utf8");
+    for (const name of ["DEFAULT_BURN_POOL_CAP_LAMPORTS", "MIN_BURN_POOL_CAP_LAMPORTS", "MAX_CRANKERS", "CRANKER_ALLOWLIST_MAX_SECS", "CAP_TIMELOCK_SECS", "MAX_SPEND_RESERVE_BPS"]) assert.doesNotMatch(rs, new RegExp(`pub const ${name}\\b`), name);
+    assert.match(rs, /pub const PLATFORM_CRANKER_SLOTS: usize = 3;/);
+    assert.match(rs, /pub const MAX_CAP_SUNSET_SECS: i64 = 365 \* 24 \* 60 \* 60;/);
+    assert.equal(constantsMirror.MAX_CAP_SUNSET_SECS, 365 * 24 * 60 * 60);
   });
 });
 
@@ -431,8 +443,8 @@ describe("burnReceipts client — review 2", () => {
     assert.deepEqual(clearCrankerAllowlistIx({ programId: PID, caller: payer.publicKey }).data.subarray(0, 8), anchorDisc("global", "clear_cranker_allowlist"));
     const health = checkPoolHealthIx({ programId: PID, caller: payer.publicKey, mint: MINT, pool, wsolVault: pool });
     assert.ok(health.keys.some((k) => k.pubkey.equals(new PublicKey("Sysvar1nstructions1111111111111111111111111"))));
-    const plat = initializePlatformIx({ programId: PID, payer: payer.publicKey, upgradeAuthority: payer.publicKey, authority: payer.publicKey, burnPoolCapLamports: DEFAULT_BURN_POOL_CAP_LAMPORTS, capSunsetTs: BigInt(1_800_000_000), crankers: [pool] });
-    assert.equal(plat.data.readUInt32LE(8 + 32 + 8 + 8), 1, "one cranker");
+    const plat = initializePlatformIx({ programId: PID, payer: payer.publicKey, upgradeAuthority: payer.publicKey, authority: payer.publicKey, burnPoolCapLamports: BigInt(0), capSunsetTs: BigInt(1_800_000_000), crankers: [pool] });
+    assert.equal(plat.data.readUInt32LE(8 + 32 + 8 + 8), 1, "one cranker (still encoded: the instruction's signature is unchanged; the program ignores it)");
   });
   test("review-3 I-1: a mainnet-bound message is never signed off mainnet; devnet/mainnet need the RPC's genesis", () => {
     assert.throws(() => assertSignableGenesis(GENESIS_HASH.mainnet, "localnet", "x"), /refusing to sign a mainnet-bound message on localnet/);

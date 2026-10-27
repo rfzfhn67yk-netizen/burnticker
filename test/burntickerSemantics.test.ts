@@ -7,9 +7,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import BN from "bn.js";
-import { PublicKey } from "@solana/web3.js";
 import { CurveCalculator } from "@raydium-io/raydium-sdk-v2";
-import { capSentence, effectiveCap } from "@/lib/burnticker/capInForce";
+import { BURN_RUNS_SENTENCE, NO_BURN_CAP_SENTENCE } from "@/lib/burnticker/spreadCopy";
 import { simulateCrank } from "@/lib/burnticker/burnMath";
 import { assertSolUsd, belowFloor, solToLamports } from "@/lib/burnKeeper/rules";
 import { decimalSolToLamports, lamportsText, launchLabCostLamports } from "@/lib/burnticker/launchCost";
@@ -520,35 +519,27 @@ describe("owner decisions 2026-10-12", () => {
 // ---- Part 4 (items 162–183, settlement and program semantics) ----
 
 describe("Part 4: settlement and program semantics", () => {
-  test("every Part 4 sentence is lint-clean, and so are the cap sentences", () => {
+  test("every Part 4 sentence is lint-clean, and so are the no-cap sentences", () => {
     const p4 = RULE_EDGE_CASES.filter((e) => e.item >= 150 && e.item < 200);
     assert.deepEqual(p4.map((e) => e.item), [162, 164, 165, 166, 167, 168, 174, 178, 179, 180, 183]);
     for (const e of p4) assert.deepEqual(lint(e.sentence), [], `${e.item}: ${e.sentence}`);
-    for (const s of [capSentence(null), capSentence(effectiveCap(null, 1_790_000_000)), capSentence(effectiveCap(null, 1_900_000_000))]) assert.deepEqual(lint(s), [], s);
+    for (const s of [NO_BURN_CAP_SENTENCE, BURN_RUNS_SENTENCE]) assert.deepEqual(lint(s), [], s);
   });
 
-  test("162 (fixed copy): the cap in force mirrors the program: the platform's settings, else the 25 SOL default, none after the sunset", () => {
-    const now = Date.UTC(2026, 9, 12) / 1000;
-    const none = effectiveCap(null, now);
-    assert.deepEqual([none.source, none.capLamports, none.sunsetTs], ["program-default", "25000000000", 1_822_348_800]);
-    assert.equal(effectiveCap(null, 1_822_348_800).capLamports, null);
-    const vault = new PublicKey(Buffer.alloc(32, 9));
-    const cfg = { burn_pool_cap_lamports: BigInt("1000000000000"), cap_sunset_ts: BigInt(now + 86_400), pending_cap_lamports: BigInt(0), pending_cap_eta: BigInt(0), authority: vault };
-    const raised = effectiveCap(cfg, now);
-    assert.deepEqual([raised.source, raised.capLamports, raised.pending, raised.authorityRenounced], ["platform-config", "1000000000000", null, false]);
-    assert.match(capSentence(raised), /at most 1,000 SOL today \(read from the platform's settings on chain\)/);
-    assert.equal(effectiveCap(cfg, now + 86_400).capLamports, null);
-    assert.match(capSentence(effectiveCap({ ...cfg, pending_cap_lamports: BigInt("2000000000000"), pending_cap_eta: BigInt(now + 3600) }, now)), /A raise to 2,000 SOL is waiting/);
-    // the copy no longer says an audit releases anything
-    for (const s of [capSentence(null), edgeCase(162)!]) { assert.doesNotMatch(s, /after the audit|until the program is audited/); assert.match(s, /48-hour wait/); }
-    // the program's rule, read from its source: config cap while before its sunset; default 25 SOL before the hard-coded sunset
+  test("162 (owner decision 2026-10-25): the program has no cap in force, and the pages say there is no cap", () => {
+    // the program's rule, read from its source: no active_cap, no default cap; the sunset only closes the recovery switch
     const state = fs.readFileSync(path.join(ROOT, "programs/burn-receipts/programs/burn_receipts/src/state.rs"), "utf8");
-    assert.match(state, /if now < self\.cap_sunset_ts \{\s*Some\(self\.burn_pool_cap_lamports\)/);
-    assert.match(state, /if now < DEFAULT_CAP_SUNSET_TS \{\s*Some\(DEFAULT_BURN_POOL_CAP_LAMPORTS\)/);
+    assert.doesNotMatch(state, /fn active_cap|fn default_active_cap|DEFAULT_BURN_POOL_CAP_LAMPORTS/);
+    assert.match(state, /pub fn recovery_open\(&self, now: i64\) -> bool \{\s*now < self\.cap_sunset_ts/);
+    // the copy: no cap, no 48-hour raise, no audit release
+    const e162 = edgeCase(162)!;
+    assert.match(e162, /^There is no platform cap on a burn\. The burn pool spends what the rule says/);
+    for (const s of [e162, NO_BURN_CAP_SENTENCE, BURN_RUNS_SENTENCE]) { assert.doesNotMatch(s, /after the audit|until the program is audited|48-hour wait|25 SOL|at most 2/); }
+    for (const f of ["src/lib/burnticker/launchReview.ts", "src/lib/burnticker/tokenPage.ts", "src/lib/burnticker/trust.ts", "src/app/burnticker/trust/page.tsx"]) assert.match(fs.readFileSync(path.join(ROOT, f), "utf8"), /NO_BURN_CAP_SENTENCE|SPREAD_LINES/, f);
   });
 
-  test("164: consecutive results below the floor buy nothing and owe nothing; a reserve-capped spend under the floor carries all of it", () => {
-    const base = { prev: BigInt(0), now: BigInt(1), carryIn: BigInt(0), unit: BigInt(1), carry: "none" as const, fractionBps: 100, capLamports: null, floorLamports: BigInt(10_000_000), reserveSolLamports: BigInt(1_000_000_000_000) };
+  test("164: consecutive results below the floor buy nothing and owe nothing; a spend over the floor is spent whole in one run", () => {
+    const base = { prev: BigInt(0), now: BigInt(1), carryIn: BigInt(0), unit: BigInt(1), carry: "none" as const, fractionBps: 100, floorLamports: BigInt(10_000_000), reserveSolLamports: BigInt(1_000_000_000_000) };
     let pool = BigInt(500_000_000), carried = BigInt(0);   // 0.5 SOL pool, 1% per result = 0.005 SOL < the 0.01 SOL floor
     for (let i = 0; i < 3; i++) {
       const s = simulateCrank({ ...base, poolLamports: pool, carriedInLamports: carried });
@@ -559,12 +550,14 @@ describe("Part 4: settlement and program semantics", () => {
     // a bigger pool later spends 1% of everything that stayed
     pool = BigInt(2_000_000_000);
     assert.equal(simulateCrank({ ...base, poolLamports: pool, carriedInLamports: carried }).spend, BigInt(20_000_000));
-    // the 2% reserve cap pushes a spend under the floor: the whole target is carried (owed)
+    // owner decision 2026-10-25: no per-run bound, so a shallow trading pool no longer pushes the spend under the floor
     const r = simulateCrank({ ...base, poolLamports: BigInt(2_000_000_000), carriedInLamports: BigInt(0), reserveSolLamports: BigInt(400_000_000) });
-    assert.equal(r.spend, BigInt(0)); assert.equal(r.carriedOut, BigInt(20_000_000));
-    // the program: below-floor targets keep only carried spend; a reserve-capped spend under the floor carries the whole target
+    assert.equal(r.spend, BigInt(20_000_000)); assert.equal(r.carriedOut, BigInt(0));
+    // the program: below-floor targets keep only carried spend; the whole target is spent (let spend = target), and a spend that cannot
+    // buy a raw token is below the floor and carries the whole target
     const crank = fs.readFileSync(path.join(ROOT, "programs/burn-receipts/programs/burn_receipts/src/instructions/crank_buyback.rs"), "utf8");
     assert.match(crank, /if target == 0 \|\| target < rule\.floor_lamports \{[\s\S]{0,200}carried_in\.min\(pool_actual\)\)/);
+    assert.match(crank, /let spend = target;/);
     assert.match(crank, /if spend == 0 \|\| spend < rule\.floor_lamports \|\| min_out == 0 \{\s*\(0u64, 0u64, OUTCOME_BELOW_FLOOR, String::from\("none"\), target\)/);
   });
 

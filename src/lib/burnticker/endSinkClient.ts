@@ -16,7 +16,7 @@ export const INCINERATOR_MIN_LAMPORTS = BigInt(890_880);
  *   EndSink   pinned at initialize_token, never changed: flagship ($DEFICIT, compiled per cluster) / a named coin / the pair winner.
  *   RuleEnd   submit_rule_end: a quorum of the coin's attesters signs the end (date, resolved | void). Once per coin.
  *   forward   forward_on_end (permissionless): after a RESOLVED end, once every reading inside the window is processed, the fee PDA's
- *             spendable SOL + WSOL (under the burn-pool cap) moves to the destination the PROGRAM picks (the named coin while it is
+ *             spendable SOL + WSOL (all of it: no burn-pool cap since the owner decision of 2026-10-25) moves to the destination the PROGRAM picks (the named coin while it is
  *             live; for a pair winner only when the end date's PairResult names it; else the flagship), never under the EndSink's
  *             minimum. Callable again for the later fee trickle. A VOID end keeps the coin's own wind-down.
  */
@@ -35,7 +35,7 @@ export interface EndSinkPort {
   endSink(): Promise<EndSinkView | null>;
   ruleEnd(): Promise<RuleEndView | null>;
   /** The fee PDA's SOL above the reserve plus its WSOL, less the carry held on the coin in the 30-day grace after a RESOLVED end (round-5
-   *  R5-4) — what a forward would move before the program's cap. */
+   *  R5-4) — what a forward moves (there is no burn-pool cap since 2026-10-25). */
   spendableLamports(): Promise<bigint>;
   /** submit_rule_end, quorum-signed by the client's attester keys (Ed25519SigVerify + the instruction). Signed, not sent. */
   buildRuleEnd(o: { recordDate: number; outcome: EndOutcome; sourceUrl: string; proofHash?: Uint8Array }): Promise<SignedTx & { message: string }>;
@@ -79,7 +79,7 @@ type EndPayload = { kind: "end"; recordDate: number; outcome: EndOutcome; keys: 
  * checks what end.rs checks (an EndSink, once, a valid date not in the future and on or after the last reading, the quorum) and sets the
  * coin's FakeProgram endState (readings and cranks after a resolved end are refused there). forward_on_end mirrors handle_forward_on_end:
  * resolved, readings processed (or no pool), the destination (named coin live, pair winner by `partnerWon`, else the flagship, which
- * must be live), min(spendable, cap) ≥ the minimum, SOL first then WSOL, carried spend cleared, the memo written.
+ * must be live), the whole spendable amount ≥ the minimum (no cap since 2026-10-25), SOL first then WSOL, carried spend cleared, the memo written.
  */
 export class FakeEndSinkPort implements EndSinkPort {
   readonly mint: string;
@@ -157,11 +157,11 @@ export class FakeEndSinkPort implements EndSinkPort {
     // the grace they move everything and clear it (nothing can strand).
     const heldBack = this.heldBack();
     if (this.pinned!.kind === "incinerator") {
-      // burn_sol_on_end: the WSOL unwrapped into the fee PDA first, then the SOL above the reserve (under the cap) to the incinerator,
+      // burn_sol_on_end: the WSOL unwrapped into the fee PDA first, then the SOL above the reserve (all of it; no cap) to the incinerator,
       // never under the rent-exempt minimum of an empty account (the runtime refuses a smaller credit to the incinerator)
       const above = (f.feeLamports + f.wsol) > f.cfg.reserveLamports ? f.feeLamports + f.wsol - f.cfg.reserveLamports : Z;
       const solAll = above > heldBack ? above - heldBack : Z;
-      const amt = f.capLamports !== null && solAll > f.capLamports ? f.capLamports : solAll;
+      const amt = solAll;
       if (amt === Z || (amt < this.pinned!.minForwardLamports && this.rule!.forwards > 0) || amt < INCINERATOR_MIN_LAMPORTS) return { err: "NothingToForward" };
       if (!commit) return { memo: null };
       f.feeLamports += f.wsol; f.wsol = Z; f.feeLamports -= amt;
@@ -173,7 +173,7 @@ export class FakeEndSinkPort implements EndSinkPort {
     }
     const solAvail = f.feeLamports > f.cfg.reserveLamports ? f.feeLamports - f.cfg.reserveLamports : Z;
     const actual = solAvail + f.wsol > heldBack ? solAvail + f.wsol - heldBack : Z;
-    const amount = f.capLamports !== null && actual > f.capLamports ? f.capLamports : actual;
+    const amount = actual;
     if (amount === Z || (amount < this.pinned!.minForwardLamports && this.rule!.forwards > 0)) return { err: "NothingToForward" };
     if (!commit) return { memo: null };
     const sol = amount < solAvail ? amount : solAvail;

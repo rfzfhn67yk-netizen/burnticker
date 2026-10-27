@@ -320,7 +320,7 @@ describe("two independent sources agreeing (owner, 2026-10-16, second decision; 
   test("the two-source words and every new public sentence pass the copy lint (no promises, no arrows, no payout)", () => {
     const cfg = loadCopyLintConfig();
     const two = `SEA 14 @ DEN 17 final (DEN win) · settled on a licensed final score · confirmed by the game's on-chain settlement · ${GAME_TWO_SOURCE_WORDS} · see this game on ESPN → https://www.espn.com/nfl/scoreboard/_/date/20261016`;
-    const f = { marketPollMin: 5, feedPollMin: 60, guardMinMin: 5, guardMaxMin: 20, spendCapPct: 2, umaHours: 2, deficitReads: ["16:30"], deficitZone: "America/New_York" };
+    const f = { marketPollMin: 5, feedPollMin: 60, guardMinMin: 5, guardMaxMin: 20, umaHours: 2, deficitReads: ["16:30"], deficitZone: "America/New_York" };
     const said = [GAME_TWO_SOURCE_WORDS, GAME_TWICE_WORDS, GAME_SCHEDULE_WORDS, GAME_BURN_LINE, GAME_AGREE_LINE, GAME_COIN_NOTE, GAME_SETTLEMENT_WORDS, GAME_CROSS_WORDS,
       TEMPLATES.find((t) => t.id === "matchup")!.settles, settledLine(two), gamesFromTitle("nfl", "2026-10-16", two)[0].source,
       ...settlementSections(f).sections.flatMap((s) => s.paragraphs).filter((p) => /game coin/i.test(p)),
@@ -543,7 +543,7 @@ describe("the copy says it plainly", () => {
     const cfg = loadCopyLintConfig();
     const rule = nativeRule(gameSeries("nfl", G.eventId, "DEN", "win"), { fractionOfPool: 1 });
     const text = describeRule(rule, { ticker: "DENWIN", game: { opponent: "Seahawks", home: true, startsAt: G.startsAt } } as never);
-    const f = { marketPollMin: 5, feedPollMin: 60, guardMinMin: 5, guardMaxMin: 20, spendCapPct: 2, umaHours: 2, deficitReads: ["16:30"], deficitZone: "America/New_York" };
+    const f = { marketPollMin: 5, feedPollMin: 60, guardMinMin: 5, guardMaxMin: 20, umaHours: 2, deficitReads: ["16:30"], deficitZone: "America/New_York" };
     const settle = settlementSections(f).sections.flatMap((s) => s.paragraphs).filter((p) => /game coin/i.test(p));
     assert.equal(settle.length, 2);
     const mine = [GAME_BURN_LINE, GAME_AGREE_LINE, GAME_COIN_NOTE, coinSourceNote("catalogue", `catalogue:${gameSeries("nfl", G.eventId, "DEN", "win")}`), ruleFacts(JSON.stringify(rule), true).window, ...settle];

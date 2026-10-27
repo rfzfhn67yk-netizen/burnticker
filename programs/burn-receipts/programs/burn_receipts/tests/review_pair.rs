@@ -42,7 +42,7 @@ struct Coin {
 fn platform(env: &mut Env) {
     if env.svm.get_account(&platform_pda()).map(|a| a.data.is_empty()).unwrap_or(true) {
         let auth = Pubkey::new_unique();
-        env.init_platform(&auth, DEFAULT_BURN_POOL_CAP_LAMPORTS);
+        env.init_platform(&auth, LEGACY_CAP_ARG);
     }
 }
 

@@ -1,6 +1,6 @@
 // BURN KEEPER — PROGRAM EXECUTION (2026-10-10): the keeper driving the burn_receipts program (programChain.ts) against the in-memory
 // program (fakeProgram.ts): readings attested and submitted in order, quorum short, the crank waiting on a pool / on TWAP history,
-// spend-cap and burn-pool-cap partial days, vault mode with shortfall, no-units readings, pool health, best-effort claims, the
+// no per-run bound and no burn-pool cap (owner decision 2026-10-25: the whole target in one run, no partial days), vault mode with shortfall, no-units readings, pool health, best-effort claims, the
 // write-ahead crank surviving a dropped send, a stranger's crank adopted, dry run, refusals, and the status page built from it.
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -157,34 +157,50 @@ describe("program execution, buyback", () => {
     assert.equal(b.waitReason, null); assert.equal(b.status, "confirmed");
   });
 
-  test("SPEND CAP BOUND: one crank spends ≤ 2% of the pool's reserve; the rest is carried (a PARTIAL day) and spent by the next crank", async () => {
-    prog.registerPool(); prog.deposit(BigInt(5) * SOL); prog.poolReserveWsol = BigInt(20) * SOL; // cap = 0.4 SOL
+  test("NO PER-RUN BOUND (owner decision 2026-10-25): one crank spends the whole rule spend, far above 2 % of the pool's reserve; nothing is carried", async () => {
+    prog.registerPool(); prog.deposit(BigInt(5) * SOL); prog.poolReserveWsol = BigInt(20) * SOL; // the old bound would have been 0.4 SOL
     ingest(ctx, V(D7, D8));
     await executeProgramPending(ctx, prog);
     const b = ledger.burn(T, F, "2026-10-08")!;
     assert.equal(b.status, "confirmed");
-    assert.equal(b.spendLamports, BigInt(400_000_000));
-    assert.equal(b.carriedOutLamports, b.ruleSpendLamports! - BigInt(400_000_000));
-    assert.equal(prog.cfg.carriedSpendLamports, b.carriedOutLamports);
-    const { burns, s } = status();
-    assert.match(burns[0].partial!, /spend cap bound/); assert.equal(burns[0].verify.verified, true, burns[0].verify.checks.join("; "));
-    assert.equal(s.program!.queue.partials.length, 1); assert.notEqual(s.program!.queue.carriedSpendSol, "0");
-    assert.match(lines.join("\n"), /PARTIAL — SpendCapBound/);
-    // The next unit day carries it in.
+    assert.ok(b.spendLamports! > BigInt(400_000_000), `${b.spendLamports}`);
+    assert.equal(b.spendLamports, b.ruleSpendLamports);
+    assert.equal(b.carriedOutLamports, BigInt(0));
+    assert.equal(prog.cfg.carriedSpendLamports, BigInt(0));
+    const { burns, s, html } = status();
+    assert.equal(burns[0].partial, null); assert.equal(burns[0].verify.verified, true, burns[0].verify.checks.join("; "));
+    assert.equal(s.program!.queue.partials.length, 0); assert.equal(s.program!.queue.carriedSpendSol, "0");
+    assert.doesNotMatch(lines.join("\n"), /PARTIAL|SpendCapBound|BurnPoolCapBound/);
+    assert.doesNotMatch(html, /2% of the pool|cap bound|burn-pool cap/);
+    assert.match(burns[0].verify.formula, /the program spends min\(rule spend \+ .* SOL carried, the pool\) in one run$/);
+    // the next unit day carries nothing in
     ingest(ctx, V(R("2026-10-09", "40310316210829.72")));
     await executeProgramPending(ctx, prog);
-    const b9 = ledger.burn(T, F, "2026-10-09")!;
-    assert.equal(b9.carriedInLamports, b.carriedOutLamports);
+    assert.equal(ledger.burn(T, F, "2026-10-09")!.carriedInLamports, BigInt(0));
   });
 
-  test("BURN-POOL CAP BOUND: above 25 SOL the rule applies to the cap; the excess stays in the fee PDA; recorded as partial", async () => {
+  test("NO BURN-POOL CAP: above 25 SOL the rule applies to the whole pool (pool = pool actual); not a partial day", async () => {
     prog.registerPool(); prog.deposit(BigInt(40) * SOL); prog.poolReserveWsol = BigInt(100_000) * SOL;
     ingest(ctx, V(D7, D8));
     await executeProgramPending(ctx, prog);
     const b = ledger.burn(T, F, "2026-10-08")!;
-    assert.equal(b.poolLamports, BigInt(25) * SOL); assert.equal(b.poolActualLamports, BigInt(40) * SOL);
-    assert.equal(b.ruleSpendLamports, programSpend(BigInt(25) * SOL, BigInt(21), 200));
-    assert.match(status().burns[0].partial!, /burn-pool cap bound: the rule applied to 25 of 40 SOL/);
+    assert.equal(b.poolLamports, BigInt(40) * SOL); assert.equal(b.poolActualLamports, BigInt(40) * SOL);
+    assert.equal(b.ruleSpendLamports, programSpend(BigInt(40) * SOL, BigInt(21), 200));
+    assert.equal(status().burns[0].partial, null);
+  });
+
+  test("a row processed before 2026-10-25 (a remainder carried after a burn, a capped pool basis) is still shown, without the old limits' names", async () => {
+    prog.registerPool(); prog.deposit(BigInt(40) * SOL);
+    ingest(ctx, V(D7, D8));
+    await executeProgramPending(ctx, prog);
+    const rd = prog.readings.get(20261008)!;
+    // rewrite the ledger row as the old program recorded it: rule applied to 25 of 40 SOL, 0.4 SOL spent, the rest carried
+    const old = { ...ledger.burn(T, F, "2026-10-08")! };
+    ledger.markProgramProcessed(T, F, "2026-10-08", { signature: old.signature!, slot: 1, outcome: "burned", units: rd.units, memo: old.memo, poolLamports: BigInt(25) * SOL, poolActualLamports: BigInt(40) * SOL, spentLamports: BigInt(400_000_000), ruleSpendLamports: programSpend(BigInt(25) * SOL, BigInt(21), 200), carriedInLamports: BigInt(0), carriedOutLamports: programSpend(BigInt(25) * SOL, BigInt(21), 200) - BigInt(400_000_000), gotRaw: rd.got, burnRaw: rd.burned, owedRaw: BigInt(0), shortfallRaw: BigInt(0), swapPool: null, skippedReason: null }, clock);
+    const { burns, html } = status();
+    assert.match(burns[0].partial!, /SOL carried into the next crank \(a limit the program no longer has\)/);
+    assert.match(burns[0].partial!, /the rule applied to 25 of 40 SOL \(a limit the program no longer has\)/);
+    assert.doesNotMatch(html, /2% of the pool|cap bound|reserve cap/);
   });
 
   test("BELOW THE FLOOR: the program buys nothing — the row is skipped with the program's reason, still verified", async () => {

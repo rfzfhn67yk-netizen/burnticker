@@ -39,7 +39,7 @@ function fakeSink(status = 200) {
 describe("the plan (pure)", () => {
   // SECOND 2026-10-18 AUDIT A-7: the most serious recorded kinds never reached the phone
   test("A-7: audit mismatch, low keeper balance, reading conflict, foreign reading, takeover and the other serious kinds are pushed", () => {
-    const serious = ["bt-audit-mismatch", "bt-audit-stale", "bt-keeper-balance-low", "bt-reading-conflict", "bt-reading-implausible", "bt-foreign-reading", "bt-keeper-takeover", "bt-feed-stale", "bt-feed-disagree", "derby-withheld", "bt-cap-binding", "bt-pin-orphan"];
+    const serious = ["bt-audit-mismatch", "bt-audit-stale", "bt-keeper-balance-low", "bt-reading-conflict", "bt-reading-implausible", "bt-foreign-reading", "bt-keeper-takeover", "bt-feed-stale", "bt-feed-disagree", "derby-withheld", "bt-pin-orphan"];
     for (const k of serious) assert.ok(PUSH_KIND_OF_ALERT[k], `${k} is not pushed`);
     const r = planPushes({ now: DAWN, state: settled(DAWN), alerts: serious.map((k, i) => alert(DAWN - 60_000 + i, k)) });
     // six per hour in all: the first six go now and the rest are held, except an urgent kind (the takeover), which the cap never holds
@@ -47,10 +47,15 @@ describe("the plan (pure)", () => {
     assert.deepEqual(r.messages.map((m) => m.title), ["Burnticker audit found a receipt that does not add up", "Burnticker audit not running", "Burnticker keeper key running low on SOL", "Burnticker source changed a recorded result", "Burnticker reading refused", "Burnticker keeper holding its sends", "Burnticker standby keeper took over"]);
     for (const m of r.messages) { assert.equal(m.priority, "high"); assert.doesNotMatch(`${m.title} ${m.body}`, /→|\bwill\b|\d{4}-\d{2}-\d{2}/); }
     const later = planPushes({ now: DAWN + 2 * H, state: { ...settled(DAWN), cursor: DAWN - 120_000 }, alerts: serious.slice(6).map((k, i) => alert(DAWN - 60_000 + i, k)) });
-    assert.deepEqual(later.messages.filter((m) => m.kind !== "daily").map((m) => [m.kind, m.priority]), [["keeper-takeover", "high"], ["feed-stale", "high"], ["feed-disagree", "high"], ["derby-withheld", "high"], ["cap-binding", "low"], ["pin-orphan", "low"]]);
+    assert.deepEqual(later.messages.filter((m) => m.kind !== "daily").map((m) => [m.kind, m.priority]), [["keeper-takeover", "high"], ["feed-stale", "high"], ["feed-disagree", "high"], ["derby-withheld", "high"], ["pin-orphan", "low"]]);
+    // owner decision 2026-10-25: there is no burn-pool cap, so bt-cap-binding (and bt-dispersal-stuck) are no longer pushed kinds; an old
+    // registry row of either stays in the registry only
+    assert.equal(PUSH_KIND_OF_ALERT["bt-cap-binding"], undefined);
+    assert.equal(PUSH_KIND_OF_ALERT["bt-dispersal-stuck"], undefined);
+    assert.deepEqual(planPushes({ now: DAWN, state: settled(DAWN), alerts: [alert(DAWN - 60_000, "bt-cap-binding"), alert(DAWN - 50_000, "bt-dispersal-stuck")] }).messages, []);
   });
   test("the five states map to pushes; everything else stays in the registry only", () => {
-    assert.deepEqual(Object.values(PUSH_KIND_OF_ALERT).sort(), ["api-budget","audit-mismatch","audit-stale","backup-failed","backup-offbox","burn-behind","cap-binding","config-mismatch","crank-refused","crank-refused","derby-withheld","dispersal-off","dispersal-receipt","dispersal-stuck","feed-disagree","feed-down","feed-overdue","feed-stale","foreign-reading","keeper-balance-low","keeper-refused","keeper-takeover","late-reading","launch-admitted-after-closure","launch-after-closure","launch-failed","launch-late","mint-bank-low","never-buys-red","pair-forward","pair-forward","pair-link","pair-link","pair-result","pair-result","pair-result","pair-result","pin-budget","pin-budget","pin-failed","pin-failed","pin-orphan","race-held","reading-conflict","reading-conflict","reading-implausible","reading-unresolved","registry-newer","revival-ticker-held","signer-disagree","single-source","synthetic-failed","ticker-live","top-up-ceiling","top-up-draining","top-up-failed","twap-empty","unit-failed","unit-restarted"]);
+    assert.deepEqual(Object.values(PUSH_KIND_OF_ALERT).sort(), ["api-budget","audit-mismatch","audit-stale","backup-failed","backup-offbox","burn-behind","config-mismatch","crank-refused","crank-refused","derby-withheld","dispersal-off","dispersal-receipt","feed-disagree","feed-down","feed-overdue","feed-stale","foreign-reading","keeper-balance-low","keeper-refused","keeper-takeover","late-reading","launch-admitted-after-closure","launch-after-closure","launch-failed","launch-late","mint-bank-low","never-buys-red","pair-forward","pair-forward","pair-link","pair-link","pair-result","pair-result","pair-result","pair-result","pin-budget","pin-budget","pin-failed","pin-failed","pin-orphan","race-held","reading-conflict","reading-conflict","reading-implausible","reading-unresolved","registry-newer","revival-ticker-held","signer-disagree","single-source","synthetic-failed","ticker-live","top-up-ceiling","top-up-draining","top-up-failed","twap-empty","unit-failed","unit-restarted"]);
     const { messages } = planPushes({ now: DAWN, state: settled(DAWN), alerts: [alert(DAWN - 60_000, "cosigner-disagree"), alert(DAWN - 50_000, "bt-feed-stall"), alert(DAWN - 40_000, "bt-daily-summary")] });
     assert.deepEqual(messages.map((m) => m.kind), ["signer-disagree"]);
     assert.equal(messages[0].priority, "high");

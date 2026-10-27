@@ -1,4 +1,5 @@
-//! The platform's pre-audit burn-pool cap (owner, 2026-10-09) and "no team allocation, no mint authority": LiteSVM.
+//! The platform config and "no team allocation, no mint authority": LiteSVM. The pre-audit burn-pool cap (owner, 2026-10-09) was
+//! REMOVED by owner decision 2026-10-25: these tests pin its absence (no cap binds, every cap raise is refused with CapRemoved).
 
 // LiteSVM's FailedTransactionMetadata is large by design; test helpers take many accounts.
 #![allow(clippy::result_large_err, clippy::too_many_arguments)]
@@ -6,7 +7,7 @@
 mod common;
 
 use anchor_lang::prelude::Pubkey;
-use anchor_lang::{AccountDeserialize, AnchorDeserialize, Discriminator};
+use anchor_lang::{AccountDeserialize, Discriminator};
 use burn_receipts::constants::*;
 use burn_receipts::events::BurnPoolCapBound;
 use burn_receipts::state::PlatformConfig;
@@ -23,7 +24,7 @@ fn platform(env: &Env) -> PlatformConfig {
     PlatformConfig::try_deserialize(&mut env.svm.get_account(&platform_pda()).unwrap().data.as_slice()).unwrap()
 }
 
-/// A buyback-ready token (with ≈ 900 s of trades for the mandatory TWAP guard) under a platform cap of `cap`.
+/// A buyback-ready token (with ≈ 900 s of trades for the mandatory TWAP guard) with a PlatformConfig (`cap` is ignored since 2026-10-25).
 fn capped_market(env: &mut Env, cap: u64, platform_authority: &Pubkey) -> (Keypair, Keypair, cpmm::Pool) {
     let ua = env.upgrade_authority.insecure_clone();
     let payer = env.payer.pubkey();
@@ -55,25 +56,27 @@ fn platform_config_only_by_the_upgrade_authority_once_with_a_bounded_sunset() {
     let stranger = Keypair::new();
     env.fund(&stranger.pubkey(), SOL);
     let a = Pubkey::new_unique();
-    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &stranger.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 86_400)], &[&stranger]), "NotUpgradeAuthority");
+    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &stranger.pubkey(), &a, LEGACY_CAP_ARG, NOW + 86_400)], &[&stranger]), "NotUpgradeAuthority");
     let ua = env.upgrade_authority.insecure_clone();
-    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW - 1)], &[&ua]), "InvalidSunset");
-    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + MAX_CAP_SUNSET_SECS + 1)], &[&ua]), "InvalidSunset");
-    let meta = env.ok(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 90 * 86_400)], &[&ua]);
+    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, LEGACY_CAP_ARG, NOW - 1)], &[&ua]), "InvalidSunset");
+    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, LEGACY_CAP_ARG, NOW + MAX_CAP_SUNSET_SECS + 1)], &[&ua]), "InvalidSunset");
+    let meta = env.ok(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, LEGACY_CAP_ARG, NOW + 90 * 86_400)], &[&ua]);
     assert_eq!(event_names(&meta), vec!["PlatformInitialized"]);
-    expect_fail(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 86_400)], &[&ua]));
+    expect_fail(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, LEGACY_CAP_ARG, NOW + 86_400)], &[&ua]));
     let pc = platform(&env);
-    assert_eq!((pc.authority, pc.burn_pool_cap_lamports, pc.cap_sunset_ts), (a, 25 * SOL, NOW + 90 * 86_400));
+    // Owner decision 2026-10-25: the cap argument is ignored (stored 0) and no crankers are stored; the sunset is kept (it closes the
+    // stranding-recovery registration-policy switch).
+    assert_eq!((pc.authority, pc.burn_pool_cap_lamports, pc.cap_sunset_ts, pc.cranker_count), (a, 0, NOW + 90 * 86_400, 0));
 }
 
 #[test]
 fn the_platform_account_must_be_the_platform_pda() {
     // Review-2 F17(c): replaces the stale `buyback_needs_the_platform_config` (a missing PlatformConfig is no longer an error —
     // review_fixes.rs::m1_* covers the default). What must hold: the crank's platform account is the ["platform"] PDA and nothing
-    // else, so a cranker cannot point the cap lookup at an account of its choosing.
+    // else (the account is unused since the cap was removed on 2026-10-25, but the seeds check stays).
     let mut env = Env::new();
     let pa = Keypair::new();
-    let (mint, att, pool) = capped_market(&mut env, DEFAULT_BURN_POOL_CAP_LAMPORTS, &pa.pubkey());
+    let (mint, att, pool) = capped_market(&mut env, LEGACY_CAP_ARG, &pa.pubkey());
     let m = mint.pubkey();
     env.transfer_sol(&fee_pda(&m), 10 * SOL);
     submit(&mut env, &m, D1, V1, &[&att]).unwrap();
@@ -86,14 +89,15 @@ fn the_platform_account_must_be_the_platform_pda() {
     env.ok(&[cpmm::ix_crank_buyback(&payer, &m, &pool, D2)], &[]);
 }
 
+/// Owner decision 2026-10-25: no burn-pool cap. A 40 SOL pool (above the old 25 SOL default) is the rule's basis in full; nothing
+/// stays behind for a cap, no BurnPoolCapBound is emitted, and the memo's pool= is the whole pool.
 #[test]
-fn the_cap_binds_spend_on_min_pool_cap_keeps_the_excess_and_says_so() {
+fn no_cap_binds_the_rule_spends_on_the_whole_pool() {
     let mut env = Env::new();
     let pa = Keypair::new();
-    let (mint, att, pool) = capped_market(&mut env, DEFAULT_BURN_POOL_CAP_LAMPORTS, &pa.pubkey());
+    let (mint, att, pool) = capped_market(&mut env, LEGACY_CAP_ARG, &pa.pubkey());
     let m = mint.pubkey();
     let fee = fee_pda(&m);
-    // Review-3 I-2: the cap is always the 25 SOL default at creation, so the pool must exceed it to bind.
     env.transfer_sol(&fee, 40 * SOL);
     submit(&mut env, &m, D1, V1, &[&att]).unwrap();
     submit(&mut env, &m, D2, V1 + UNIT, &[&att]).unwrap();
@@ -102,57 +106,39 @@ fn the_cap_binds_spend_on_min_pool_cap_keeps_the_excess_and_says_so() {
     let meta = env.ok(&[cpmm::ix_crank_buyback(&payer, &m, &pool, D2)], &[]);
     let r = env.reading(&reading_pda(&config_pda(&m), D2)).unwrap();
     let pool_actual = before - buyback_rule().reserve_lamports;
-    let cap = DEFAULT_BURN_POOL_CAP_LAMPORTS;
-    assert_eq!((r.pool_lamports, r.pool_actual_lamports), (cap, pool_actual));
-    assert_eq!(r.spent_lamports, burn_receipts::math::buyback_spend(cap, 1, 500).unwrap());
-    assert_eq!(before - env.lamports(&fee), r.spent_lamports, "only the capped spend left; the rest stays in the fee PDA");
-    assert!(event_names(&meta).contains(&"BurnPoolCapBound"));
-    let ev = events(&meta).into_iter().find(|(d, _)| d[..] == BurnPoolCapBound::DISCRIMINATOR[..]).unwrap();
-    let b = BurnPoolCapBound::try_from_slice(&ev.1).unwrap();
-    assert_eq!((b.pool_actual_lamports, b.cap_lamports, b.spent_lamports, b.record_date), (pool_actual, cap, r.spent_lamports, D2));
-    // The memo's pool= is the basis the rule used, so spent = pool × (1 − 0.95^units) stays checkable from the memo alone.
-    assert!(meta.logs.iter().any(|l| l.contains(&format!("|pool={}|spent={}|", cap, r.spent_lamports))));
+    assert!(pool_actual > LEGACY_CAP_ARG);
+    assert_eq!((r.pool_lamports, r.pool_actual_lamports), (pool_actual, pool_actual));
+    assert_eq!(r.spent_lamports, burn_receipts::math::buyback_spend(pool_actual, 1, 500).unwrap());
+    assert_eq!(before - env.lamports(&fee), r.spent_lamports);
+    assert_eq!(r.carried_out_lamports, 0);
+    let names = event_names(&meta);
+    assert!(!names.contains(&"BurnPoolCapBound") && !names.contains(&"SpendCapBound"), "{names:?}");
+    assert!(!events(&meta).into_iter().any(|(d, _)| d[..] == BurnPoolCapBound::DISCRIMINATOR[..]));
+    assert!(meta.logs.iter().any(|l| l.contains(&format!("|pool={}|spent={}|", pool_actual, r.spent_lamports))));
 }
 
+/// Owner decision 2026-10-25: the platform authority holds no cap power. propose / cancel / apply keep their entry points and refuse
+/// with CapRemoved for everyone (the authority included) and change nothing; renounce still works.
 #[test]
-fn the_cap_only_rises_through_the_48h_timelock_and_sunsets_by_itself() {
+fn every_cap_raise_is_refused_and_the_authority_can_still_renounce() {
     let mut env = Env::new();
     let pa = Keypair::new();
     env.fund(&pa.pubkey(), SOL);
-    let (mint, att, pool) = capped_market(&mut env, DEFAULT_BURN_POOL_CAP_LAMPORTS, &pa.pubkey());
+    let (_mint, _att, _pool) = capped_market(&mut env, LEGACY_CAP_ARG, &pa.pubkey());
     let payer = env.payer.pubkey();
     let stranger = Keypair::new();
     env.fund(&stranger.pubkey(), SOL);
-    expect_anchor_err(env.send(&[ix_platform("propose", &stranger.pubkey(), 30 * SOL)], &[&stranger]), "NotAdmin");
-    expect_anchor_err(env.send(&[ix_platform("propose", &pa.pubkey(), SOL)], &[&pa]), "CapNotRaised");
-    expect_anchor_err(env.send(&[ix_platform("propose", &pa.pubkey(), 25 * SOL)], &[&pa]), "CapNotRaised");
-    let meta = env.ok(&[ix_platform("propose", &pa.pubkey(), 30 * SOL)], &[&pa]);
-    assert_eq!(event_names(&meta), vec!["CapRaiseProposed"]);
-    let now = env.now();
-    expect_anchor_err(env.send(&[ix_apply_cap(&payer)], &[]), "TimelockNotElapsed");
-    env.set_time(now + CAP_TIMELOCK_SECS - 1);
-    expect_anchor_err(env.send(&[ix_apply_cap(&payer)], &[]), "TimelockNotElapsed");
-    env.set_time(now + CAP_TIMELOCK_SECS);
-    assert_eq!(event_names(&env.ok(&[ix_apply_cap(&payer)], &[])), vec!["CapRaised"]);
-    assert_eq!(platform(&env).burn_pool_cap_lamports, 30 * SOL);
-    // Cancel works while pending; renounce ends the power …
-    env.ok(&[ix_platform("propose", &pa.pubkey(), 40 * SOL)], &[&pa]);
-    assert_eq!(event_names(&env.ok(&[ix_platform("cancel", &pa.pubkey(), 0)], &[&pa])), vec!["CapRaiseCancelled"]);
+    let before = env.svm.get_account(&platform_pda()).unwrap().data;
+    expect_anchor_err(env.send(&[ix_platform("propose", &pa.pubkey(), 30 * SOL)], &[&pa]), "CapRemoved");
+    expect_anchor_err(env.send(&[ix_platform("propose", &stranger.pubkey(), 1_000 * SOL)], &[&stranger]), "CapRemoved");
+    expect_anchor_err(env.send(&[ix_platform("cancel", &pa.pubkey(), 0)], &[&pa]), "CapRemoved");
+    expect_anchor_err(env.send(&[ix_apply_cap(&payer)], &[]), "CapRemoved");
+    env.set_time(env.now() + 3 * 86_400);
+    expect_anchor_err(env.send(&[ix_apply_cap(&payer)], &[]), "CapRemoved");
+    assert_eq!(env.svm.get_account(&platform_pda()).unwrap().data, before, "a refused raise changes nothing");
     assert_eq!(event_names(&env.ok(&[ix_platform("renounce", &pa.pubkey(), 0)], &[&pa])), vec!["PlatformAuthorityRenounced"]);
-    expect_anchor_err(env.send(&[ix_platform("propose", &pa.pubkey(), 40 * SOL)], &[&pa]), "AdminRenounced");
-    // … and after the sunset the cap no longer applies at all: the rule spends on the whole pool.
-    let m = mint.pubkey();
-    let fee = fee_pda(&m);
-    env.transfer_sol(&fee, 10 * SOL);
-    env.set_time(NOW + 30 * 86_400);
-    submit(&mut env, &m, D1, V1, &[&att]).unwrap();
-    submit(&mut env, &m, D2, V1 + 3 * UNIT, &[&att]).unwrap();
-    let before = env.lamports(&fee);
-    let meta = env.ok(&[cpmm::ix_crank_buyback(&payer, &m, &pool, D2)], &[]);
-    assert!(!event_names(&meta).contains(&"BurnPoolCapBound"));
-    let r = env.reading(&reading_pda(&config_pda(&m), D2)).unwrap();
-    assert_eq!(r.pool_lamports, before - buyback_rule().reserve_lamports);
-    assert_eq!(r.pool_lamports, r.pool_actual_lamports);
+    assert_eq!(platform(&env).authority, Pubkey::default());
+    expect_anchor_err(env.send(&[ix_platform("propose", &pa.pubkey(), 40 * SOL)], &[&pa]), "CapRemoved");
 }
 
 /// (program id, first data byte, stack height) of every inner instruction of the last transaction.
@@ -198,7 +184,7 @@ fn buyback_token_calls_are_only_sync_native_and_burn_from_the_program() {
     use anchor_spl::token::spl_token;
     let mut env = Env::new();
     let pa = Keypair::new();
-    let (mint, att, pool) = capped_market(&mut env, DEFAULT_BURN_POOL_CAP_LAMPORTS, &pa.pubkey());
+    let (mint, att, pool) = capped_market(&mut env, LEGACY_CAP_ARG, &pa.pubkey());
     let m = mint.pubkey();
     env.transfer_sol(&fee_pda(&m), 4 * SOL);
     submit(&mut env, &m, D1, V1, &[&att]).unwrap();

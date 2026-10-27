@@ -39,7 +39,7 @@ struct Coin {
 fn platform(env: &mut Env) {
     if env.svm.get_account(&platform_pda()).map(|a| a.data.is_empty()).unwrap_or(true) {
         let auth = Pubkey::new_unique();
-        env.init_platform(&auth, DEFAULT_BURN_POOL_CAP_LAMPORTS);
+        env.init_platform(&auth, LEGACY_CAP_ARG);
     }
 }
 
@@ -129,7 +129,7 @@ fn event<T: AnchorDeserialize + Discriminator>(meta: &litesvm::types::Transactio
     events(meta).into_iter().find(|(d, _)| d[..] == T::DISCRIMINATOR[..]).map(|(_, p)| T::try_from_slice(&p).unwrap())
 }
 
-/// What forward_to_winner must move: the loser's buyback_spend on min(SOL above reserve + WSOL − its carried spend (r3 RI-4), cap);
+/// What forward_to_winner must move: the loser's buyback_spend on SOL above reserve + WSOL − its carried spend (r3 RI-4) (no cap since 2026-10-25);
 /// 0 under the floor.
 fn expected_forward(env: &Env, loser: &Pubkey, date: u32) -> u64 {
     let cfg = env.config(&config_pda(loser));
@@ -137,7 +137,7 @@ fn expected_forward(env: &Env, loser: &Pubkey, date: u32) -> u64 {
     let units = env.reading(&reading_pda(&config_pda(loser), date)).unwrap().units;
     let fee = fee_pda(loser);
     let wsol = env.svm.get_account(&get_associated_token_address(&fee, &NATIVE_MINT)).map(|_| env.token_amount(&get_associated_token_address(&fee, &NATIVE_MINT))).unwrap_or(0);
-    let basis = (env.lamports(&fee).saturating_sub(rule.reserve_lamports) + wsol).saturating_sub(cfg.carried_spend_lamports).min(DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    let basis = (env.lamports(&fee).saturating_sub(rule.reserve_lamports) + wsol).saturating_sub(cfg.carried_spend_lamports);
     let spend = math::buyback_spend(basis, units, rule.fraction_per_unit_bps).unwrap();
     if spend < rule.floor_lamports { 0 } else { spend }
 }
@@ -555,7 +555,7 @@ fn the_forward_takes_sol_above_the_reserve_first_then_wsol() {
 }
 
 #[test]
-fn a_one_shot_forwards_at_most_the_burn_pool_cap() {
+fn a_one_shot_forwards_its_whole_basis_with_no_burn_pool_cap() {
     let mut env = Env::new();
     let att = Keypair::new();
     let mut one_shot = buyback_rule();
@@ -568,10 +568,11 @@ fn a_one_shot_forwards_at_most_the_burn_pool_cap() {
     let k = cranker(&mut env);
     let fb0 = env.lamports(&fee_pda(&b.mint));
     env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
-    assert_eq!(fb0 - env.lamports(&fee_pda(&b.mint)), DEFAULT_BURN_POOL_CAP_LAMPORTS, "the 25 SOL cap bounds the basis");
+    // Owner decision 2026-10-25: no burn-pool cap — the one-shot loser forwards its whole basis, far above the old 25 SOL cap.
     let rb = env.reading(&reading_pda(&config_pda(&b.mint), D2)).unwrap();
-    assert_eq!((rb.pool_lamports, rb.rule_spend_lamports), (DEFAULT_BURN_POOL_CAP_LAMPORTS, DEFAULT_BURN_POOL_CAP_LAMPORTS));
-    assert!(rb.pool_actual_lamports > DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    assert!(rb.pool_actual_lamports > LEGACY_CAP_ARG);
+    assert_eq!(fb0 - env.lamports(&fee_pda(&b.mint)), rb.pool_actual_lamports, "no cap bounds the basis");
+    assert_eq!((rb.pool_lamports, rb.rule_spend_lamports), (rb.pool_actual_lamports, rb.pool_actual_lamports));
 }
 
 /// H-1(b): a side whose pool is not verified (switched away after the result, voided, never registered) forwards NOTHING — and the

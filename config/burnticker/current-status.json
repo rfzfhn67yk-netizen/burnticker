@@ -32,11 +32,11 @@
     "ticker": "DEFICIT",
     "recordDate": "2026-10-06",
     "evidence": "docs/burnkeeper/evidence/devnet-2026-10-10/burns.json",
-    "summary": "Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06, which is 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool. One crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT. Every token bought was burned in the same transaction, and the rest carried over to the next crank."
+    "summary": "Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06, which is 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool. At the time the program still limited how much one crank could spend, so 0.0201 SOL bought 4,010,874.87 $DEFICIT. Every token bought was burned in the same transaction, and the rest carried over to the next crank. That limit is gone now: one crank spends the rule's full share in one run."
   },
   "phase": {
     "label": "soft launch ($DEFICIT created on mainnet)",
-    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. On 2026-10-15 the burn program (burn_receipts) was upgraded again, to round 5 (a coin may burn another coin's token, a finished rule's leftover may be burned as SOL, and a carried spend is bought in small pieces), through the same vault; the pair program (pair_curve) stays on round 4. On 2026-10-21 the burn program was upgraded through the vault once more, still round 5, so that it registers a coin's trading pool on the fee tier LaunchLab actually used. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night by the operator's own wallet. $REHEARSAL is a test coin the operator made on Oct 11 to check fees and signing. It is kept off the coin list and shown on the Test coins page, linked from the Trust page, so you can see it exists, not so you trade it."
+    "line": "Burnticker is in soft launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority. On 2026-10-15 the burn program (burn_receipts) was upgraded again, to round 5 (a coin may burn another coin's token, a finished rule's leftover may be burned as SOL, and a carried spend can be bought without a new reading), through the same vault; the pair program (pair_curve) stays on round 4. On 2026-10-21 the burn program was upgraded through the vault once more, still round 5, so that it registers a coin's trading pool on the fee tier LaunchLab actually used. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13 and is on its curve; its keeper signs each Treasury reading. Creator launches opened the same evening, and the first coin made through the site, $PHINFLWIN, was created that night by the operator's own wallet. $REHEARSAL is a test coin the operator made on Oct 11 to check fees and signing. It is kept off the coin list and shown on the Test coins page, linked from the Trust page, so you can see it exists, not so you trade it. On 2026-10-25 both programs were upgraded again through the vault: the burn program (burn_receipts), still round 5, no longer limits what one burn spends, so a burn spends the rule's full share of its pool in one run, and the pair program (pair_curve), still round 4, was rebuilt against it."
   },
   "networks": {
     "devnet": {
@@ -55,43 +55,45 @@
   "programs": [
     {
       "name": "burn_receipts",
-      "version": "round 5 build (burning another token, the incinerator end sink, carried-spend pieces)",
-      "note": "the round 5 build: a coin can burn another coin's token (pinned at launch), a finished rule's leftover can be burned as SOL (the incinerator end sink), a carried spend is bought in small pieces without a new reading (crank_carried, with a per-coin budget), and initialize_token is retired for initialize_token_r5. It keeps everything round 4 had (end sinks, the pair-forward path). Deployed on mainnet on 2026-10-15 (about 19:57 Denver) through the Squads vault (vault transaction 3), and upgraded on 2026-10-21 (17:57 Denver, vault transaction 4) so that register_fee_key accepts the pool on the fee tier LaunchLab actually used; the bytes on chain equal this build, built from source commit 116ff5ad. Creator launches have been open since the evening of 2026-10-13.",
+      "version": "round 5 build (burning another token, the incinerator end sink; since 2026-10-25 no burn-pool cap and no per-run spend bound)",
+      "note": "the round 5 build: a coin can burn another coin's token (pinned at launch), a finished rule's leftover can be burned as SOL (the incinerator end sink), a carried spend is bought without a new reading (crank_carried; this build still limited each piece, a limit the owner removed from the program on 2026-10-25), and initialize_token is retired for initialize_token_r5. It keeps everything round 4 had (end sinks, the pair-forward path). Deployed on mainnet on 2026-10-15 (about 19:57 Denver) through the Squads vault (vault transaction 3), and upgraded on 2026-10-21 (17:57 Denver, vault transaction 4) so that register_fee_key accepts the pool on the fee tier LaunchLab actually used; the bytes on chain equal this build, built from source commit 116ff5ad. Creator launches have been open since the evening of 2026-10-13.",
       "mainnetDeploy": {
-        "date": "2026-10-21",
-        "slot": 459823169,
-        "onChainExecutableHash": "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b",
-        "buildFileSha256": "faf072925c169ede89788e17c66cd6ab446fa332d47ae0362fca46dbb1a4e4f8",
+        "date": "2026-10-25",
+        "slot": 461421913,
+        "onChainExecutableHash": "1aff5fbfe243ea8233c360bfae6809b0dd411e2298600831d10be5ea97c99e17",
+        "buildFileSha256": "c753fc2763f794df665b60a23591397e6526567b0c81c86d76533394d30bb4d7",
         "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
-        "sourceCommit": "116ff5ad054e25cd169a8ceeb3eebb16832a33e0",
-        "squadsVaultTransaction": 4,
-        "squadsExecuteSignature": "4PndF8edj8431dULAK4u8p5PpSio8P3KNXbqENguW6wkBhrc67cxxymW8RtbuUQxWSgc798HAt9dc9984PrCdrYp",
-        "evidence": "docs/burnkeeper/evidence/mainnet-b17/onchain-verify-after.log",
+        "sourceCommit": "94241647",
+        "squadsVaultTransaction": 5,
+        "squadsExecuteSignature": "3S8o216anWPUx2Exen3JLMUwP8CbheYVo8B1oYWsQ9RSsTQmrVWpYkPjrDweheyfJ8AWPBBjZNZqts5tbGD9Fkgs",
+        "evidence": "docs/burnkeeper/evidence/mainnet-caps/onchain-verify-after.log",
         "previous": {
-          "round": 5,
-          "date": "2026-10-15",
-          "slot": 457461970,
-          "evidence": "docs/burnkeeper/evidence/mainnet-round5/onchain-verify-after.log",
-          "buildFileSha256": "cd0146726962ce586cce2004a5141309f921dba2908dea7146f7872e6bfed290",
-          "onChainExecutableHash": "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821",
-          "sourceCommit": "089024ff6ab0cc92ae37899dee1509d52cb5e203",
-          "squadsVaultTransaction": 3,
-          "squadsExecuteSignature": "2u95GqT9W4pxg8GPmbfyWRUrpsjbrnH8ruKCussb9HMX9UkUjFibToW7Z8BmQ1BJzjiixri3R6y6uS2DuciAiFpR"
+          "round": "B-17",
+          "date": "2026-10-21",
+          "slot": 459823169,
+          "evidence": "docs/burnkeeper/evidence/mainnet-b17/onchain-verify-after.log",
+          "buildFileSha256": "faf072925c169ede89788e17c66cd6ab446fa332d47ae0362fca46dbb1a4e4f8",
+          "onChainExecutableHash": "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b",
+          "sourceCommit": "116ff5ad054e25cd169a8ceeb3eebb16832a33e0",
+          "squadsVaultTransaction": 4,
+          "squadsExecuteSignature": "4PndF8edj8431dULAK4u8p5PpSio8P3KNXbqENguW6wkBhrc67cxxymW8RtbuUQxWSgc798HAt9dc9984PrCdrYp"
         },
         "hashNote": "onChainExecutableHash is solana-verify's hash of the program bytes read back from chain (trailing zero bytes removed); buildFileSha256 is the plain sha256 of the built .so file, which is not a hash of anything on chain."
       }
     },
     {
       "name": "pair_curve",
-      "version": "round 4 build (end sinks and pairs)",
+      "version": "round 4 build (end sinks and pairs; relinked 2026-10-25 against the caps-removed burn program)",
       "note": "the round 4 build: link_pair runs inside init_pair, so a pair is registered when it is created. Deployed on mainnet on 2026-10-12 through the Squads vault; the bytes on chain equal this build, built from source commit 29f6f5de. It was not upgraded in round 5. The host flag for pair launches is on, and creator launches have been open since the evening of 2026-10-13.",
       "mainnetDeploy": {
-        "date": "2026-10-12",
-        "slot": 456201604,
-        "onChainExecutableHash": "567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895",
-        "buildFileSha256": "8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2",
+        "date": "2026-10-25",
+        "slot": 461423192,
+        "onChainExecutableHash": "8d21ff603670000ac7e1f492aea842fc37891c26197df88b5b7135656373f1e3",
+        "buildFileSha256": "9205de80b377a3fc3c4c8b3de93b66c8a49e8120a78b082e3e5ed850d142088d",
         "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
-        "evidence": "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log",
+        "squadsVaultTransaction": 6,
+        "squadsExecuteSignature": "46RRG147iD6CU7ti6wTv1kzWCZFbqxQSCa8Poz8yxfvweYWi6YJCXcSyoUYu4ZhLvKysaUMK52HDgJ5dEBcWqmjg",
+        "evidence": "docs/burnkeeper/evidence/mainnet-caps/onchain-verify-after.log",
         "hashNote": "onChainExecutableHash is solana-verify's hash of the program bytes read back from chain (trailing zero bytes removed); buildFileSha256 is the plain sha256 of the built .so file, which is not a hash of anything on chain."
       }
     }
@@ -216,7 +218,7 @@
     "Rules are locked at launch; a different rule is a different coin.",
     "In a pair, the winner takes the burn. Fees from both coins burn the winner's supply. The round 4 program carries this on devnet and mainnet; the host flag for pair launches is on, and creator launches have been open since the evening of 2026-10-13.",
     "When a rule ends and resolves, its leftover burn pool goes to a sink, which is the contest's winner or else $DEFICIT. The round 4 program brought this to devnet and mainnet, and round 5 keeps it; it has run on devnet (the devnet round 4 evidence folder), and no mainnet rule has ended yet.",
-    "A carried spend (what one crank could not buy under its 2% cap) is bought in small pieces without a new reading, by crank_carried, from round 5 on (deployed on devnet and mainnet since 2026-10-15). After a rule ends, the carried spend is still bought on the coin: for 30 days after a resolved end the end paths leave it in place, and only after that do they move it on.",
+    "There is no burn-pool cap and no limit on how much one burn spends: by owner decision on 2026-10-25 both burn caps were removed from the program, so one crank spends the rule's full share in one run, and the platform authority no longer holds a cap-raise power. A carried spend (a spend under the floor, or one that met a pool that could not trade) is bought in one piece without a new reading, by crank_carried. After a rule ends, the carried spend is still bought on the coin: for 30 days after a resolved end the end paths leave it in place, and only after that do they move it on.",
     "The Squads 2-of-3 vault holds the upgrade authority. As the last step it is to be set to none, which is not done yet."
   ],
   "historical": [

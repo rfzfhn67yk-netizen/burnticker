@@ -316,9 +316,11 @@ export async function checkReceiptTx(o: CheckOptions): Promise<ReceiptCheckResul
     const ok = rs === R.rule_spend_lamports && rs + R.carried_in_lamports < C.rule.floor_lamports && R.spent_lamports === B(0) && R.got === B(0) && R.burned === B(0);
     add("spend", ok, `${formula}; under the spend floor fixed at launch (${C.rule.floor_lamports} lamports): nothing bought, the pool keeps the SOL${ok ? "" : " — but the Reading does not show that"}`);
   } else {
-    const balanced = R.spent_lamports + R.carried_out_lamports === rs + R.carried_in_lamports;
+    // spent + carried out = rule spend + carried in, or (the target is clamped to the pool) the whole pool spent with nothing carried
+    const balanced = R.spent_lamports + R.carried_out_lamports === rs + R.carried_in_lamports
+      || (R.carried_out_lamports === B(0) && R.spent_lamports === R.pool_lamports && R.spent_lamports < rs + R.carried_in_lamports);
     const spOk = rs === R.rule_spend_lamports && balanced && R.spent_lamports <= R.pool_lamports;
-    add("spend", spOk, `${formula}; spent ${R.spent_lamports} + carried out ${R.carried_out_lamports} ${balanced ? "=" : "≠"} rule ${rs} + carried in ${R.carried_in_lamports}${R.carried_out_lamports > B(0) ? " (one crank spends at most 2% of the pool's SOL reserve and carries the rest)" : ""}`);
+    add("spend", spOk, `${formula}; spent ${R.spent_lamports} + carried out ${R.carried_out_lamports} ${balanced ? "=" : "≠"} rule ${rs} + carried in ${R.carried_in_lamports}${R.carried_out_lamports > B(0) ? " (a reading processed before the program spent the whole share in one run: it carried the rest)" : ""}`);
   }
 
   // burn: the token program's Burn (8) / BurnChecked (15) inner instructions under the burn program, summed

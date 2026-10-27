@@ -22,7 +22,7 @@ import { dialsFor } from "@/lib/burnticker/dials";
 export const SHARE_PRESETS = { recurring: [0.01, 0.02, 0.05, 0.1, 0.25], oneShot: [1], linkedOneShot: [1], oneShotDispersal: [1, 0.5] } as const;
 /** The recurring presets on the main row; the rest sit behind "More". */
 export const MAIN_RECURRING = [0.01, 0.02, 0.05] as const;
-/** Above this share a recurring burn is said to land in slices (one burn run buys with at most 2 % of the pool's SOL). */
+/** Above this share a recurring burn shows the drain line on the launch page (how fast repeated burns empty the pool). */
 export const SLICED_ABOVE = 0.05;
 export const DEFAULT_SHARE = { recurring: 0.02, oneShot: 1, linkedOneShot: 1, oneShotDispersal: 1 } as const;
 export type ShareShape = keyof typeof SHARE_PRESETS;

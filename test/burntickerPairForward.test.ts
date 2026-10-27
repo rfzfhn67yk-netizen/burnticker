@@ -51,18 +51,19 @@ const BRONCOS_LOSE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool
 const B = (n: number | string) => BigInt(n);
 
 describe("the forward amount (the program's rule)", () => {
-  test("buyback_spend(min(fee − reserve + WSOL, cap), units, fraction) — exact lamports, the reserve stays", () => {
-    const a = forwardAmount({ feeLamports: B(5_000_000_000), reserveLamports: B(20_000_000), wsolLamports: B(7), capLamports: B(25_000_000_000), units: 1, fractionBps: 200, floorLamports: B(6_666_667) });
+  test("buyback_spend(fee − reserve + WSOL, units, fraction) — exact lamports, the reserve stays (no platform cap since 2026-10-25)", () => {
+    const a = forwardAmount({ feeLamports: B(5_000_000_000), reserveLamports: B(20_000_000), wsolLamports: B(7), units: 1, fractionBps: 200, floorLamports: B(6_666_667) });
     assert.equal(a.pool, B(4_980_000_007));
     assert.equal(a.lamports, buybackSpend(B(4_980_000_007), B(1), 200));
     assert.ok(a.lamports > B(99_600_000) && a.lamports < B(99_600_002), "≈ 2 % of the pool, the program's fixed-point rounding");
-    const two = forwardAmount({ feeLamports: B(5_000_000_000), reserveLamports: B(20_000_000), wsolLamports: B(0), capLamports: null, units: 2, fractionBps: 200, floorLamports: B(0) });
+    const two = forwardAmount({ feeLamports: B(5_000_000_000), reserveLamports: B(20_000_000), wsolLamports: B(0), units: 2, fractionBps: 200, floorLamports: B(0) });
     assert.equal(two.lamports, buybackSpend(B(4_980_000_000), B(2), 200), "pool × (1 − 0.98²)");
   });
-  test("one-shot pairs move all of it (100 %); under the floor nothing moves; the platform cap bounds the pool", () => {
-    assert.equal(forwardAmount({ feeLamports: B(3_000_000_001), reserveLamports: B(1), wsolLamports: B(0), capLamports: null, units: 1, fractionBps: 10_000, floorLamports: B(0) }).lamports, B(3_000_000_000));
-    assert.equal(forwardAmount({ feeLamports: B(100_000_000), reserveLamports: B(0), wsolLamports: B(0), capLamports: null, units: 1, fractionBps: 200, floorLamports: B(6_666_667) }).lamports, B(0), "2 % of 0.1 SOL is under a $1 floor");
-    assert.equal(forwardAmount({ feeLamports: B(40_000_000_000), reserveLamports: B(0), wsolLamports: B(0), capLamports: B(25_000_000_000), units: 1, fractionBps: 10_000, floorLamports: B(0) }).lamports, B(25_000_000_000));
+  test("one-shot pairs move all of it (100 %); under the floor nothing moves; no platform cap bounds the pool (owner decision 2026-10-25)", () => {
+    assert.equal(forwardAmount({ feeLamports: B(3_000_000_001), reserveLamports: B(1), wsolLamports: B(0), units: 1, fractionBps: 10_000, floorLamports: B(0) }).lamports, B(3_000_000_000));
+    assert.equal(forwardAmount({ feeLamports: B(100_000_000), reserveLamports: B(0), wsolLamports: B(0), units: 1, fractionBps: 200, floorLamports: B(6_666_667) }).lamports, B(0), "2 % of 0.1 SOL is under a $1 floor");
+    const big = forwardAmount({ feeLamports: B(40_000_000_000), reserveLamports: B(0), wsolLamports: B(0), units: 1, fractionBps: 10_000, floorLamports: B(0) });
+    assert.deepEqual([big.pool, big.lamports], [B(40_000_000_000), B(40_000_000_000)], "40 SOL forwards whole: there is no 25 SOL cap");
   });
   test("memo, line, mint order, plain-word errors", () => {
     const loser = "So11111111111111111111111111111111111111112", winner = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -423,7 +424,7 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     const tx = await port.buildForward({ loserMint: a.mint, recordDate: D });
     assert.equal((await port.simulate(tx.raw)).err, "ForwardWindowClosed");
     assert.match(pairErrorSentence("ForwardWindowClosed"), /burns as a plain period/);
-    const base = { feeLamports: B(5_000_000_000), reserveLamports: B(20_000_000), wsolLamports: B(0), capLamports: null, units: 1, fractionBps: 200, floorLamports: B(0) };
+    const base = { feeLamports: B(5_000_000_000), reserveLamports: B(20_000_000), wsolLamports: B(0), units: 1, fractionBps: 200, floorLamports: B(0) };
     assert.equal(forwardAmount({ ...base, carriedSpendLamports: B(980_000_000) }).pool, B(4_000_000_000), "spendable 4.98 SOL − 0.98 SOL carried");
     assert.deepEqual(Object.keys(UNLINK_REASON_TEXT).map(Number), [0, 1, 3], "terminal evidence only: no reason 2");
   });
@@ -491,8 +492,9 @@ describe("a one-shot loser's end-of-rule days forward to the live winner", () =>
   test("the flippening loser forwards its pool at the result, retires, and its sweep forwards too while the winner still drains; a flat winner reading when the winner has nothing that day", async () => {
     const spec: CoinVsSpec = { selector: "coinvs", a: WIF, b: BONK, window: "daily", measure: "mcap", season: { start: "2026-10-05", days: 5 }, flip: true };
     const w = await derbyWorld(spec, { tickers: ["TEAMWIF", "TEAMBONK"], hermes: null });
-    // side A (the winner) drains under the 2 %-of-reserve cap: 1 SOL a crank from a pool of ~10 SOL → live for days
-    w.program.fake(w.a.mint).poolReserveWsol = BigInt(50) * BigInt(1_000_000_000);
+    // side A (the winner) stays live: its cranks wait on its TWAP guard (until 2026-10-25 the 2 % per-crank bound kept it draining for
+    // days; with no bound a winner's drain finishes in one crank, so the guard is what holds it here)
+    w.program.fake(w.a.mint).twap = "deviation";
     const snap = (feed: string, b: number, value: string) => w.adapter.store.putSample({ key: `pyth:${feed}`, kind: "pyth", ts: b + 60_000, slot: 1, value, detail: { source: "pyth-solana", publishTime: b / 1000 + 5 } });
     const sup = (mint: string, b: number, v: string) => w.adapter.store.putSample({ key: `supply:${mint}`, kind: "supply", ts: b + 60_000, slot: 1, value: v, detail: {} });
     for (const [b, wv] of [[DAYMS(6), "0.2"], [DAYMS(7), "0.25"]] as const) { snap(WIF_FEED, b, wv); snap(BONK_FEED, b, "0.0000025"); sup(WIF_MINT, b, "999000000"); sup(BONK_MINT, b, "88000000000000"); seedCross(w, WIF, b, wv); seedCross(w, BONK, b, "0.0000025"); }

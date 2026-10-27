@@ -2,7 +2,7 @@
 // collapsed evidence paragraph. The three visible fee paragraphs (the current-status fee line, the footer's fee row, the guardrails
 // LP-lock item) now print it after "pay 1.25% all the same." while config/burnticker/verified-build.json records a pre-B17 burn program
 // as deployed on mainnet, and drop it once the table names the B-17 build. Since 2026-10-21 (mainnet execute, vault transaction 4, slot
-// 459823169) the table names the B-17 build, so the sentence is absent today; a fixture table with the round-5 hash brings it back.
+// 461421913) the table names the B-17 build, so the sentence is absent today; a fixture table with the round-5 hash brings it back.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -32,7 +32,7 @@ const LP_ROW = "LP locked forever, its fees fund the burn";
 
 test("the pending flag is one data fact read from the verified-build table", () => {
   const deployed = vb.programs.find((x: { library: string }) => x.library === "burn_receipts").deployed.mainnet.hash;
-  assert.equal(deployed, "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b", "today's table records the B-17 build on mainnet");
+  assert.equal(deployed, "1aff5fbfe243ea8233c360bfae6809b0dd411e2298600831d10be5ea97c99e17", "today's table records the B-17 build on mainnet");
   assert.ok(!PRE_B17_PROGRAM_HASHES.has(deployed));
   assert.equal(DEPLOYED_TIER_PIN_PENDING, false);
   assert.equal(tierPinPendingFor(vb), false);

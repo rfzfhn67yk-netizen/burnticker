@@ -196,7 +196,7 @@ York time on business days. A result counts only when it is final: a game when i
 its on-chain payout is recorded, which follows UMA's dispute window of about 2 hours (longer if a proposal is disputed), and a scheduled
 publisher's number when it is posted. The cycle that sees a final result submits the reading and runs the burn in the same pass. Before
 it swaps, the program checks the pool's current rate against its average over the last 10 to 20 minutes, which a trading pool already
-has. When a reading settles, the keeper runs the burn right away. One burn may spend at most 2% of the trading pool's SOL, and anything above that is carried. On creator coins, the carried amount is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart. Each piece is small enough to move the pool's rate by less than about 2.5%. If some is still left when the window ends, a new six-hour window starts, and this repeats until all of it is burned. The random times come from a fixed seed, so restarting the keeper does not change them. $DEFICIT's burns are not spread out this way. Its keeper runs one burn for each reading, up to the same 2% of the trading pool's SOL, and anything above that carries to its next run.
+has. When a reading settles, the burn runs right away and spends the rule's full share of the burn pool in one run. There is no platform cap on a burn. The burn pool spends what the rule says. A burn waits only when its share is under the spend floor fixed at launch, or when the trading pool has stopped trading. What waits is spent in one piece by the next run that can trade. $DEFICIT's burns run the same way. Its keeper runs one burn for each reading, and each run spends its whole share at once, with no cap on the size of a burn. (Both burn caps, the 25 SOL burn-pool cap and the per-run 2 % bound with its six-hour windows of smaller pieces, were removed from the program by owner decision on 2026-10-25.)
 Typical times after the event are about 5 to 25 minutes for sports results and scheduled data, and about 2 hours plus a few minutes for
 Polymarket markets. When the transaction confirms, the receipt appears on the coin's page. The page
 [How burns are settled](https://burnticker.com/burnticker/how-burns-settle) states the same facts, each number read from the code.
@@ -214,7 +214,7 @@ All accounts are program-derived addresses (PDAs) of the program, keyed by the m
 | fee PDA | `["fee", mint]` | a system-owned account with no data: the burn pool. It is LaunchLab's recorded creator, so creator fees land here. Its WSOL and token ATAs are the buyback's working accounts |
 | `Reading` | `["reading", config, record_date u32 LE]` | one attested reading (value, prev, delta, carry in/out, units, signer mask, source and proof hashes) and its crank outcome (pool basis, rule spend, carried spend, spent, received, burned, the pool traded on). Never closed |
 | vault (vault mode) | ATA(config PDA, mint) | tokens to burn; authority is the config PDA |
-| `PlatformConfig` | `["platform"]`, one per program | the pre-audit burn-pool cap, its sunset, its authority, a pending raise, an optional cranker allowlist |
+| `PlatformConfig` | `["platform"]`, one per program | its authority and the platform sunset (which closes the stranding-recovery switch); the old cap, pending-raise and cranker-allowlist fields keep their bytes but are unused since 2026-10-25 |
 
 ### 4.2 Lifecycle
 
@@ -231,7 +231,7 @@ collect_creator_fee_permissionless (Raydium, anyone)   CPMM creator fee -> fee P
         |
 event settles -> attesters sign -> submit_reading (anyone + quorum)   Reading PDA, units by the carry rule
         |
-crank_buyback (anyone; allowlist only while the cap stands)
+crank_buyback (anyone)
         fee PDA SOL -> WSOL -> CPMM swap -> fee PDA token ATA -> BURN 100 % -> Memo CPI      one instruction
 ```
 
@@ -284,25 +284,25 @@ express a rule that pays different fractions for different outcomes, and the lau
 `crank_buyback(record_date)` processes the next reading in line, which is the one where `prev_date == crank_cursor`. The cranker
 supplies no amount, pool, rate or recipient. The steps run in this order (`src/instructions/crank_buyback.rs`):
 
-1. **Pool.** The pool is `pool = fee PDA lamports − reserve + WSOL already held` (`spendable_pool`). While the pre-audit cap is in
-   force, the rule is applied to `min(pool, cap)`. When the cap binds, `BurnPoolCapBound` is emitted, and the Reading keeps both the
-   basis and the actual pool.
+1. **Pool.** The pool is `pool = fee PDA lamports − reserve + WSOL already held` (`spendable_pool`). The rule is applied to the whole
+   spendable pool: there is no burn-pool cap since the owner decision of 2026-10-25, and `BurnPoolCapBound` is never emitted.
 2. **Rule spend.** The spend is `spend = pool × (1 − (1 − f)^units)`, where `f = fraction_per_unit_bps / 10,000`. It is computed in u128
    fixed point as `keep = floor(pool × pow_floor(1 − f, units) / 1e18)` and `spend = pool − keep`, so the spend never exceeds the pool.
    It agrees with the keeper's exact rational result to within one lamport for pools under 10^15 lamports, and a test pins this. The
    amount due is the rule spend plus any spend carried from earlier cranks.
 3. **Spend floor.** Under `floor_lamports`, nothing is bought. The reading is processed with the memo `swap=none`, and the pool keeps
    the SOL.
-4. **Per-crank cap.** One crank spends at most 2 % of the pool's WSOL reserve. The rest is carried (`carried_spend_lamports`,
-   `SpendCapBound`). Small, frequent swaps limit trade impact and leave less room for a sandwich.
+4. **One run.** The crank spends the whole amount due in one run. There is no per-crank bound since 2026-10-25 (it was 2 % of the
+   pool's WSOL reserve), and `SpendCapBound` is never emitted. Spend is carried (`carried_spend_lamports`) only under the floor, past a
+   30-day untradeable pool, or when the minimum output is 0; `crank_carried` then spends the whole carry in one piece.
 5. **TWAP guard.** Initialisation enforces `max_twap_deviation_bps` ≤ 300 and a `twap_window_secs` of 600 to 1,200. The spot exchange
    rate (tokens per SOL) may not sit more than the deviation below the CPMM oracle's time-weighted average. The oracle records the rate
    before each swap, and only across distinct seconds, so a front-run in the same block cannot move it. A refused crank defers the burn
    day. The burn is late, not lost.
 6. **Minimum output.** `min_out` is the larger of two quotes. Each quote is the constant-product output, less the pool's whole fee and
    less `slippage_bps` (≤ 300). One quote uses the live reserves. The other uses a pool of the same SOL depth at the TWAP rate. A push
-   inside the same transaction lowers the first quote but not the second. So a sandwich can take at most `slippage_bps` of a spend, and
-   that spend is itself at most 2 % of the reserve.
+   inside the same transaction lowers the first quote but not the second. So a sandwich can take at most `slippage_bps` of a spend.
+   Both quotes are constant-product on the pool's depth, so they include the full trade's own impact.
 7. **Swap.** A system transfer moves SOL from the fee PDA to its WSOL account. Then a CPI calls Raydium CPMM `swap_base_input` on the
    registered, verified pool. The CPMM program id is hard-coded. The vaults, `amm_config` and the observation account are checked
    against the pool.
@@ -352,7 +352,7 @@ for the devnet rehearsal.
 **Stranding recovery.** If no pool can be registered, or if the registered one stays untradeable for 7 days in a row, the token's admin
 may propose `set_registration_policy` to a fixed pool that passes the same creator and LP checks, plus either 90 % of LP burned or locked
 or the pool PDA of a LaunchLab-known `AmmConfig`. The proposal waits 48 hours and expires after 14 days. Any one current attester can
-veto it. The power ends at the pre-audit cap's sunset or at `renounce_admin`.
+veto it. The power ends at the platform sunset or at `renounce_admin`.
 
 ### 4.8 Post-CPI guards
 
@@ -379,24 +379,25 @@ on any instruction or signer that has no description.
 | Power | Holder | Limit | Timelock | Sunset |
 |---|---|---|---|---|
 | Propose attester changes | token admin (intended: the Squads vault) | quorum never lowered, never above 3; set never smaller than quorum; one proposal keeps ≥ quorum current keys and adds fewer new keys than the new quorum; kept keys vouch for added keys only after 7 days in the set | 48 h, applied by anyone | `renounce_admin` |
-| Raise the burn-pool cap | platform authority (intended: the Squads vault) | raise only | 48 h, applied by anyone | cap sunset, set once at `initialize_platform`, ≤ 365 days and ≤ 2027-10-01 |
-| Clear the cranker allowlist | platform authority or any listed key | clear only, never add | none | allowlist lapses at the cap sunset or 90 days after `initialize_platform` |
-| Registration-policy switch | token admin | stranding only (§4.7) | 48 h, 14-day expiry, attester veto | cap sunset; `renounce_admin` |
+| Raise the burn-pool cap | removed (owner decision 2026-10-25) | the platform authority no longer holds a cap-raise power; `propose_cap_raise`, `cancel_cap_raise` and `apply_cap_raise` refuse every call (`CapRemoved`) | none | none |
+| Cranker allowlist | removed (owner decision 2026-10-25) | every crank is permissionless; `clear_cranker_allowlist` only tidies the unused bytes | none | none |
+| Registration-policy switch | token admin | stranding only (§4.7) | 48 h, 14-day expiry, attester veto | the platform sunset (at the latest 2027-10-01); `renounce_admin` |
 | Program upgrade | upgrade authority: the Squads 2-of-3 vault | can replace all code | **0** today; no date set yet | set to none after review (§9) |
 | LaunchLab platform admin (outside the program) | the key that created the platform | fee rates, wallets, `cpConfigId`, `platformCpCreator`, LP scales for launches not yet migrated | **none** | none: the admin cannot be transferred |
 
 **What has no instruction.** There is no withdraw, sweep, transfer, close or set-recipient instruction for the fee PDA, its token
 accounts, the vault or any program account. There is no mint, no pause or freeze, and no rule update. Nothing changes the feed, the
 memo, the rules hash, the mint, the creator or the registered pool. Nothing edits or deletes a reading. There is no fee change, because
-the program charges no fee. No account is ever closed, so no rent is refunded. Without a `PlatformConfig`, the hard-coded default cap
-applies, which is 25 SOL until 2027-10-01T00:00Z. So a lost or finalised upgrade authority cannot wedge buybacks.
+the program charges no fee. No account is ever closed, so no rent is refunded. There is no burn-pool cap, with or without a
+`PlatformConfig`, so a lost or finalised upgrade authority cannot wedge buybacks.
 
-### 4.11 The pre-audit cap
+### 4.11 No burn cap
 
-While the cap is in force, each crank's basis is `min(pool, 25 SOL)`. SOL above the cap stays in the fee PDA. Only the upgrade authority
-can call `initialize_platform`, and only once. It must set exactly the default, so the cap is never lowered. The cap can only be raised,
-through the 48-hour timelock, and it disappears at its sunset. It protects against program bugs. It does not protect against the
-operator, whose multisig can replace the code until the upgrade authority is finalised.
+There is no burn-pool cap and no limit on how much one burn spends. Each burn spends the rule's full share of the burn pool in one run.
+The owner removed both caps on 2026-10-25: the 25 SOL burn-pool cap (raise-only behind a 48-hour timelock, with a sunset) and the per-run
+2 % bound. The platform authority no longer holds a cap-raise power. The program refuses every cap raise (`CapRemoved`). The spend floor, the
+TWAP and Pyth guards, the minimum output and the pool-health checks still apply. `initialize_platform` ignores its cap and cranker
+arguments; its sunset now only closes the stranding-recovery registration-policy switch.
 
 Every state change emits an event through `emit_cpi!`. Those events are inner-instruction data, which cannot be truncated the way logs
 can, so an indexer can rebuild state. There are 34 event types, listed in section 13.3. The one exception is `PairResultSubmitted`. It
@@ -473,11 +474,11 @@ Every rule created since 2026-10-10 carries `onEnd: { windDownDays: 28, sweepThr
 - **The wind-down.** A rule can end for several reasons: a one-shot resolved NO or void, a pair voided, a derby season over, a bracket
   coin knocked out, or a team's season over. When it ends, the keeper attests a daily reading from a date-based clock whose proof is
   sha256("clock|<date>|<rules sha256>"). Each day counts the smallest number of units n of the rule's own fraction f for which
-  (1 − f)^(28n) ≤ 1 %. At 1 % that is 17 units a day. So at least 99 % of the pool is spent within 28 days. The 2 % per-crank cap
-  carries the rest forward, and the $1 floor ends the tail. Then the coin retires.
+  (1 − f)^(28n) ≤ 1 %. At 1 % that is 17 units a day. So at least 99 % of the pool is spent within 28 days. Each day's share is spent
+  in one run, and the $1 floor ends the tail. Then the coin retires.
 - **A one-shot at 100 %.** A one-shot mapping may spend the whole pool. Recurring rules stay at 25 % or less per unit (`rules.ts` RULE_BOUNDS). The program already
-  accepts 10,000 basis points. A crank spends at most 2 % of the pool's reserve and needs a reading with units. So after the YES, the
-  keeper attests one drain unit a day until the program carries nothing more. Each drain unit's rule spend is exactly the whole pool.
+  accepts 10,000 basis points, and a crank spends the whole pool in one run once a reading with units arrives. After the YES the keeper
+  attests one drain unit; its rule spend is exactly the whole pool.
 - **The sweep.** A retired coin's burn pool keeps receiving the post-graduation creator fee. When its spendable balance passes the
   threshold, the keeper attests one full-spend reading, at most once a week. A permissionless instruction that lets anyone do this
   without the keeper is queued for the next program review (`PROGRAM-UPGRADE-QUEUE.md`). Forwarding a losing coin's leftover to an end
@@ -553,7 +554,7 @@ Pairs made before then keep their bytes.
   call fails with `PairResultNotServable`. There is no pool condition. When the winner had nothing to read that day, the keeper first
   attests a flat 0-unit reading for it. A draw is posted only for a true draw and needs both quorums. The loser's `crank_buyback` for
   that period refuses (`ForwardRequired`). Anyone can then call `forward_to_winner`. It moves exactly what the loser's own rule would
-  have spent, which is `buyback_spend(min(spendable pool − the loser's carried spend, cap), units, f)` with the loser's units and
+  have spent, which is `buyback_spend(spendable pool − the loser's carried spend, units, f)` with the loser's units and
   fraction. The amount moves from the loser's burn pool into the winner's. Nothing below the rule's minimum spend moves. A one-shot pair
   maps 100 %, so all of it moves. The instruction writes a memo in every case, in the form
   `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<date>|lamports=N|v1`. If either coin is not live (no verified pool of its own; a coin that
@@ -677,8 +678,8 @@ is also an increase.
 
 **Step 4, the spend.** Take `f = 1 %` and a pool basis of 1 SOL (1,000,000,000 lamports). The program's fixed-point arithmetic gives
 `spend = 1,000,000,000 × (1 − 0.99^21) = 190,272,132` lamports, and `buybackSpend` in `src/lib/burnReceipts/math.ts` gives the same.
-Then apply the per-crank cap. If 2 % of the CPMM pool's WSOL reserve is smaller, the crank spends that, and the Reading's
-`carried_out_lamports` holds the rest. The memo's `pool=` is the basis actually used, so the arithmetic checks against the memo itself.
+The crank spends that whole amount in one run (there is no per-crank bound since 2026-10-25). The memo's `pool=` is the basis actually
+used, so the arithmetic checks against the memo itself.
 
 **Step 5, the swap and the burn.** The crank transaction is itself the swap and the burn. Its inner instructions hold three steps. The
 first is the CPMM `swap_base_input` from the fee PDA's WSOL account. The second is the SPL Token `Burn` from the fee PDA's token account,
@@ -729,10 +730,8 @@ match, and the trust page says so.
   later if that launch does not happen. Until the coin is created the key only decides the address; it cannot move anything. The
   creator's wallet still signs the launch, and the key is never used for anything but creating that one mint. When no prepared key is
   ready, the creator's browser finds one instead, and that key never leaves the browser. Other launchpads prepare addresses the same way.
-- **Cranker allowlist during the cap.** `initialize_platform` may name up to 3 keys that are allowed to call `crank_buyback` while the
-  cap is in force. This guards against an outside cranker timing a multi-block TWAP hold. The list can only be cleared, by the platform
-  authority or any listed key. It lapses 90 days after `initialize_platform` or at the cap sunset, whichever comes first. Readings, vault
-  cranks, claims and health checks stay permissionless.
+- **No cranker allowlist.** Every crank is permissionless. The allowlist that applied only while the burn-pool cap was in force was
+  removed with the cap by owner decision on 2026-10-25.
 
 ## 10. Security
 
@@ -741,7 +740,7 @@ No security firm has audited the code. Every fix and its closing test is in `doc
 **Known open issues.** LP-ratio griefing is still possible through a deposit larger than the whole migrated liquidity.
 The LaunchLab platform admin can still make changes between init and migration, which the launch gate and the stranding switch cover.
 Attester proposals still need no consent from current attesters. They are bounded by 48 hours, then 7 days, then 48 hours, all in
-public. The Jito-bundle gap in pool-health observations remains. So does the multi-block TWAP hold once the allowlist lapses.
+public. The Jito-bundle gap in pool-health observations remains. So does the multi-block TWAP hold, now that every crank is permissionless.
 Informational items I-3 to I-6 are also open (`docs/burn-receipts/README.md` section 8).
 
 **Bounty.** Since 2026-10-11 it is live: the bounty wallet holds 5 SOL from the developer fee (a pool of 5 to 10 SOL), the bounty page
@@ -756,10 +755,12 @@ shows its funding and balance, and its terms in `SECURITY.md` are still a draft 
   create and the curve's fee routing have run on LaunchLab mainnet since 2026-10-11, first with the $REHEARSAL coin and then with the
   creator coins. The migration to a pool, its address, `pool_creator` and the LP lock at graduation have been tested only on devnet and
   against a stand-in, because no mainnet coin's curve has filled yet.
-- **Sandwich bound.** A sandwich can take up to `slippage_bps` (≤ 3 %) of each crank's spend, and that spend is at most 2 % of the
-  reserve. Once the allowlist lapses, a manipulator who holds the rate up for a full TWAP window can still shift a crank.
+- **Sandwich bound.** A sandwich can take up to `slippage_bps` (≤ 3 %) of each crank's spend, and a crank now spends the rule's full
+  share in one run, so a large share is one large trade. A manipulator who holds the rate up for a full TWAP window can still shift a
+  crank.
 - **Quorum 1 at launch.** The operator's key alone signs readings. A false reading is permanent and public, but it would size a burn.
-- **Pre-audit cap.** Each crank's basis is capped at 25 SOL until the sunset, so larger pools burn more slowly.
+- **No burn cap.** There is no burn-pool cap and no per-run bound (owner decision 2026-10-25), so a large pool's share is spent in one
+  trade and moves the pool's rate further.
 - **Upgradeable until finalised.** The upgrade authority can replace every property in this paper until it is set to none.
 - **Oracle voids and late data.** A late source means no burn until it posts. A missed Treasury date cannot be inserted later, and the
   next delta absorbs it.
@@ -806,11 +807,11 @@ shows its funding and balance, and its terms in `SECURITY.md` are still a draft 
 | reading | one attested value for one UTC date (`Reading` account) |
 | unit | the rule's step: $1B of debt, one settlement, one scalar unit |
 | crank | the permissionless instruction that processes the next reading |
-| carry | a sub-unit remainder, or spend left over by a cap |
+| carry | a sub-unit remainder, or spend left over under the floor or on a pool that cannot trade |
 | TWAP | time-weighted average exchange rate from the CPMM oracle ring |
 | attester | an ed25519 key whose signature counts toward the quorum |
 | graduation | LaunchLab's migration of a filled curve to a CPMM pool |
-| pre-audit cap | the 25 SOL per-crank basis limit with a sunset |
+| platform sunset | the date (at the latest 2027-10-01) after which the stranding-recovery switch closes; no burn cap since 2026-10-25 |
 
 ### 13.2 Account layouts (summary, from the IDL)
 
@@ -825,8 +826,8 @@ shows its funding and balance, and its terms in `SECURITY.md` are still a draft 
   `units`, `signers_mask`, `source_url_hash`, `proof_hash`, `submitted_at`, `outcome`, `processed_at`, `pool_lamports`,
   `spent_lamports`, `got`, `burned`, `owed`, `shortfall`, `pool_actual_lamports`, `rule_spend_lamports`, `carried_in_lamports`,
   `carried_out_lamports`, `pool`.
-- **PlatformConfig:** `authority`, `burn_pool_cap_lamports`, `cap_sunset_ts`, `pending_cap_lamports`, `pending_cap_eta`, `created_at`,
-  `crankers[3]`, `cranker_count`, reserved.
+- **PlatformConfig:** `authority`, `burn_pool_cap_lamports` (unused since 2026-10-25), `cap_sunset_ts` (the platform sunset),
+  `pending_cap_lamports` and `pending_cap_eta` (unused), `created_at`, `crankers[3]` and `cranker_count` (unused), reserved.
 
 ### 13.3 Instructions (43, generated from `src/lib/burnReceipts/idl.ts`)
 
@@ -834,7 +835,7 @@ shows its funding and balance, and its terms in `SECURITY.md` are still a draft 
 |---|---|---|---|
 | `initialize_token` | args | payer, creator, mint | creation (retired: every deployable build refuses it, `InitializeTokenRetired`) |
 | `initialize_token_r5` | args | payer, creator, mint | creation |
-| `initialize_platform` | authority, burn_pool_cap_lamports, cap_sunset_ts, crankers | payer, upgrade_authority | creation |
+| `initialize_platform` | authority, burn_pool_cap_lamports (ignored), cap_sunset_ts, crankers (ignored) | payer, upgrade_authority | creation |
 | `submit_reading` | record_date, value, source_url_hash, proof_hash | payer (+ quorum via Ed25519) | permissionless |
 | `crank_buyback` | record_date | cranker | permissionless |
 | `crank_carried` | max_spend_lamports | cranker | permissionless |
@@ -843,7 +844,7 @@ shows its funding and balance, and its terms in `SECURITY.md` are still a draft 
 | `pin_burn_target` | target_feed_id | payer, mint (before the mint exists) | creation |
 | `crank_target_burn` | record_date | cranker | permissionless |
 | `apply_target_pool` | — | caller | permissionless |
-| `release_target` | — | cranker (allowlist while the cap is in force) | permissionless |
+| `release_target` | — | cranker | permissionless |
 | `claim_launchlab_creator_fee` | — | payer | permissionless |
 | `register_pool` | — | registrar | permissionless |
 | `register_pair_pool` | — | registrar | permissionless |
@@ -853,14 +854,14 @@ shows its funding and balance, and its terms in `SECURITY.md` are still a draft 
 | `unlink_pair` | — | cranker | permissionless |
 | `apply_paired_attester_change` | — | caller (+ the partner's quorum via Ed25519) | permissionless |
 | `submit_rule_end` | record_date, outcome, source_url_hash, proof_hash | payer (+ quorum via Ed25519) | permissionless |
-| `forward_on_end` | — | cranker (allowlist while the cap is in force) | permissionless |
-| `burn_sol_on_end` | — | cranker (allowlist while the cap is in force) | permissionless |
+| `forward_on_end` | — | cranker | permissionless |
+| `burn_sol_on_end` | — | cranker | permissionless |
 | `register_fee_key` | — | payer | permissionless |
-| `claim_lock_fees` | — | cranker (allowlist while the cap is in force) | permissionless |
+| `claim_lock_fees` | — | cranker | permissionless |
 | `check_pool_health` | — | caller | permissionless |
 | `replace_pool` | — | caller | permissionless |
 | `apply_attester_change` | — | caller | permissionless |
-| `apply_cap_raise` | — | caller | permissionless |
+| `apply_cap_raise` | — | caller | refused (`CapRemoved`) |
 | `apply_registration_policy` | — | caller | permissionless |
 | `propose_attesters` | attesters, quorum | admin | privileged |
 | `cancel_attester_change` | — | admin | privileged |
@@ -871,10 +872,10 @@ shows its funding and balance, and its terms in `SECURITY.md` are still a draft 
 | `propose_target_pool` | pool | admin | privileged |
 | `cancel_target_pool` | — | admin | privileged |
 | `veto_target_pool` | — | attester | privileged |
-| `propose_cap_raise` | new_cap_lamports | authority | privileged |
-| `cancel_cap_raise` | — | authority | privileged |
+| `propose_cap_raise` | new_cap_lamports | authority | refused (`CapRemoved`) |
+| `cancel_cap_raise` | — | authority | refused (`CapRemoved`) |
 | `renounce_platform_authority` | — | authority | privileged |
-| `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged |
+| `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged (tidies unused bytes only) |
 
 The program has 45 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
 BurnPoolCapBound, BurnTargetPinned, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CarriedSpent, CrankerAllowlistCleared, EndSinkPinned,
@@ -882,7 +883,7 @@ FeeKeyRegistered, ForwardedOnEnd, ForwardedToWinner, LaunchLabCreatorFeeClaimed,
 PairResultMissing, PairResultSubmitted (plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered,
 PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted,
 RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, RuleEnded, SolBurnedOnEnd, SpendCapBound, SpendCarried,
-TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned, TargetReleased, TokenInitialized. Error codes: 144. (Round 5, a coin that
+TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned, TargetReleased, TokenInitialized. Error codes: 145 (the last, CapRemoved, refuses every cap raise now that the burn caps are gone). (Round 5, a coin that
 burns another token: docs/burnticker/EXTERNAL-BURN.md; the incinerator end sink and the r5 create: docs/burnticker/END-SINK.md; burn dispersal
 (`crank_carried`, the CarriedSpent event and five errors): the checklist erratum of 2026-10-13; the round-5 fixes
 (`release_target`, the TargetReleased event, five errors, the retired `initialize_token`): the checklist erratum of 2026-10-14; the

@@ -24,24 +24,22 @@ export const SEED_FEE = Buffer.from("fee", "utf8");
 export const SEED_READING = Buffer.from("reading", "utf8");
 export const SEED_PLATFORM = Buffer.from("platform", "utf8");
 export const BPF_LOADER_UPGRADEABLE_ID = new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111");
-/** The owner's pre-audit burn-pool cap default (25 SOL); raised only through a 48 h timelock; sunsets at PlatformConfig.cap_sunset_ts. */
-export const DEFAULT_BURN_POOL_CAP_LAMPORTS = BigInt(25_000_000_000);
-export const CAP_TIMELOCK_SECS = 48 * 60 * 60;
-/** The default cap applies when no PlatformConfig exists, until this hard-coded sunset (2027-10-01T00:00:00Z) (review M-1). */
+/** BURN CAPS REMOVED (owner decision 2026-10-25): no burn-pool cap, no cranker allowlist, no per-run 2 % bound; the Rust constants
+ *  DEFAULT_BURN_POOL_CAP_LAMPORTS, MIN_BURN_POOL_CAP_LAMPORTS, MAX_CRANKERS, CRANKER_ALLOWLIST_MAX_SECS, CAP_TIMELOCK_SECS, MAX_SPEND_RESERVE_BPS and
+ *  CARRIED_BUDGET_WINDOW_SECS are gone, and so are their TS mirrors. */
+/** The hard-coded platform sunset (2027-10-01T00:00:00Z, review M-1; since 2026-10-25 it only closes the registration-policy switch). */
 export const DEFAULT_CAP_SUNSET_TS = 1_822_348_800;
-/** The initial PlatformConfig cap is at least 1 SOL and its sunset no later than DEFAULT_CAP_SUNSET_TS (review-2 F8). */
-export const MIN_BURN_POOL_CAP_LAMPORTS = BigInt(1_000_000_000);
-/**
- * Buyback swap safety (review H-1/L-7, review-2 F1): mandatory TWAP guard ≤ 300 bps over 600–1,200 s; min-out = the larger of the
- * spot and TWAP quotes less slippage (≤ 300 bps); deviation and slippage each ≥ 150,000 / window bps (the oracle's 15 s bucket
- * margin); one crank ≤ 2 % of the WSOL reserve.
- */
+export const MAX_CAP_SUNSET_SECS = 365 * 24 * 60 * 60;
+/** PlatformConfig keeps three cranker slots in its unchanged layout (program PLATFORM_CRANKER_SLOTS); the program writes them empty. */
+export const PLATFORM_CRANKER_SLOTS = 3;
+/** Buyback swap safety (review H-1/L-7, review-2 F1): mandatory TWAP guard ≤ 300 bps over 600–1,200 s; min-out = the larger of the spot and
+ *  TWAP constant-product quotes (so they include the trade's own impact) less slippage (≤ 300 bps); deviation and slippage each ≥ 150,000 /
+ *  window bps (the oracle's 15 s bucket margin). */
 export const MAX_TWAP_DEVIATION_BPS = 300;
 export const MAX_SLIPPAGE_BPS = 300;
 export const TWAP_BUCKET_TOLERANCE_BPS_SECS = 150_000;
 export const MIN_TWAP_WINDOW_SECS = 600;
 export const MAX_TWAP_WINDOW_SECS = 1_200;
-export const MAX_SPEND_RESERVE_BPS = 200;
 /** A dead pool can be replaced after 7 days of CONTINUOUS recorded untradeability (review M-4, review-2 F6: observations ≤ 24 h apart). */
 export const POOL_REPLACEMENT_DELAY_SECS = 7 * 24 * 60 * 60;
 export const UNTRADEABLE_MAX_GAP_SECS = 24 * 60 * 60;
@@ -49,8 +47,6 @@ export const UNTRADEABLE_MAX_GAP_SECS = 24 * 60 * 60;
 export const UNTRADEABLE_CONFIRM_SECS = 60 * 60;
 /** Review-3 L-2: a kept key counts towards ADDING keys only after 7 days of membership. */
 export const ATTESTER_SENIORITY_SECS = 7 * 24 * 60 * 60;
-/** Review-3 L-4: at most 3 keys on the PlatformConfig's cranker allowlist (applies only while the cap is in force). */
-export const MAX_CRANKERS = 3;
 /** After 30 days of continuous untradeability a buyback reading is processed below-floor with its target carried (review-2 F7). */
 export const QUEUE_UNBLOCK_SECS = 30 * 24 * 60 * 60;
 /** register_pool: ≥ 50 % of the pool's LIVE LP burned or held by Raydium's LP lock — a floor under the provenance proof (review-3 M-2). */
@@ -61,8 +57,6 @@ export const MIN_LL_LOCK_SCALE_PPM = 500_000;
 export const FALLBACK_MIN_LOCKED_LP_BPS = 9_000;
 /** Re-check R3-2: a registration-policy proposal can be applied until 14 days after it was proposed. */
 export const POLICY_PROPOSAL_TTL_SECS = 14 * 24 * 60 * 60;
-/** Re-check R3-4: the cranker allowlist stops applying 90 days after initialize_platform (or at the cap sunset, if earlier). */
-export const CRANKER_ALLOWLIST_MAX_SECS = 90 * 24 * 60 * 60;
 
 /** v3 (review-2 F12): `BURNRECEIPTS-v3|<cluster genesis>|<program>|<mint>|<feed>|prev=…|<date>|<value>|src=…|proof=…`. */
 export const ATTESTATION_DOMAIN = "BURNRECEIPTS-v3";
@@ -215,9 +209,9 @@ export function assertSignableGenesis(configGenesis: string, cluster: Cluster, r
 
 /** Round-5 review R5-8: CarriedPace ["carried_pace", mint] — crank_carried's per-coin pace and piece counter (accounts.ts). */
 export const SEED_CARRIED_PACE = Buffer.from("carried_pace", "utf8");
-/** Round-5 review R5-8: crank_carried's budget refills at one per-crank cap (2 % of the pool's WSOL reserve) per this many seconds, up to
- *  one cap; a piece above the budget, or a second piece in the same second, is refused (CarriedTooSoon). math.ts carriedBudget*. */
-export const CARRIED_BUDGET_WINDOW_SECS = 600;
+/** crank_carried's only pacing since the owner decision of 2026-10-25: one piece per coin per second (a second piece in the same second
+ *  is refused with CarriedTooSoon, 6141). There is no carried budget; CarriedPace.budget_lamports is written 0. */
+export const CARRIED_MIN_INTERVAL_SECS = 1;
 
 /** The LaunchLab pool's status byte (SDK LaunchpadPool "status", the program's LL_POOL_STATUS; LL_POOL_PLATFORM_ID is above) and its migrated value. */
 export const LL_POOL_STATUS = 17;

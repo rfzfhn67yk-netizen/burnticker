@@ -14,8 +14,6 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *   burn-behind       a reading's spend is not fully spent 24 hours after it landed (burn dispersal: dispersalKeeper.ts bt-burn-behind)
  *   dispersal-receipt a burn dispersal piece's receipt cannot be settled from its own transaction: its memo was not read in three days,
  *                     or it named more than the piece asked for (dispersalKeeper.ts bt-dispersal-receipt; audit F10 review)
- *   dispersal-stuck   no burn piece the program accepts fits a coin's small pool (its floor is above the 2% per-crank cap) and more
- *                     than one cap is carried, so the carried amount cannot be spent (dispersalKeeper.ts bt-dispersal-stuck; once a day)
  *   api-budget        a provider passed 80% of a process's day budget or was put on hold (apiBudget.ts bt-api-budget)
  *   single-source     measure only: a coin's game settled on TheSportsDB alone after the 12-hour hold, the first time for that coin
  *                     (gameSettle.ts; the keeper records bt-single-source once per coin)
@@ -38,7 +36,8 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
  *                     started (ops/unitHealth.ts from data/backups/last-backup.json)
  *   and (second audit 2026-10-18 A-7) the serious kinds that used to stay in the registry only: audit-mismatch, audit-stale,
  *   keeper-balance-low, reading-conflict, reading-implausible, foreign-reading, keeper-takeover, feed-stale, feed-disagree,
- *   derby-withheld, and at low priority cap-binding and pin-orphan (alerts.ts, ops/keeperOps.ts, ops/feedHealth.ts, derby, api)
+ *   derby-withheld, and at low priority pin-orphan (alerts.ts, ops/keeperOps.ts, ops/feedHealth.ts, derby, api). (cap-binding and
+ *   dispersal-stuck were removed with the burn caps, owner decision 2026-10-25: nothing can raise them any more.)
  *   dispersal-off     the keeper runs with BURNTICKER_DISPERSAL=0 on a program that has crank_carried (allowed; once a Denver day; A-1)
  *   never-buys-red    the keeper's daily never-buys run found an operator wallet that received a platform coin outside any rehearsal (A-6)
  *   and (second audit 2026-10-19 I-11) the keeper's reading and pair alerts: reading-unresolved, race-held, late-reading (low),
@@ -66,7 +65,7 @@ import { denverDate, denverHour } from "@/lib/burnticker/alerts";
 export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "crank-refused" | "launch-failed" | "burn-behind" | "api-budget" | "single-source" | "mint-bank-low" | "synthetic-failed" | "feed-down" | "unit-failed" | "backup-failed" | "backup-offbox" | "launch-late"
   // A-7 (second audit 2026-10-18): serious kinds that were recorded but never pushed
   | "audit-mismatch" | "audit-stale" | "keeper-balance-low" | "reading-conflict" | "reading-implausible" | "foreign-reading" | "keeper-takeover"
-  | "feed-stale" | "feed-disagree" | "derby-withheld" | "cap-binding" | "pin-orphan"
+  | "feed-stale" | "feed-disagree" | "derby-withheld" | "pin-orphan"
   // merged from the main branch
   | "dispersal-receipt" | "dispersal-off" | "never-buys-red" | "pin-budget" | "launch-after-closure" | "launch-admitted-after-closure"
   // second audit 2026-10-19 I-11 / I-15 / I-16: recorded but never pushed until now
@@ -84,9 +83,7 @@ export type PushKind = "keeper-refused" | "signer-disagree" | "pin-failed" | "cr
   // HB-180 (seventh pre-launch audit): the daily ceiling on the keeper key's top-ups stopped every top-up until 00:00 UTC
   | "top-up-ceiling"
   // devnet e2e 2026-10-20 (twapEmpty.ts): a burn waits because the coin's pool has never traded, so it has no price history
-  | "twap-empty"
-  // devnet 2026-10-20 (dispersal.ts stuckWhy): no burn piece the program accepts fits a coin's small pool, so its carried amount cannot be spent
-  | "dispersal-stuck";
+  | "twap-empty";
 export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-keeper-refused": "keeper-refused",
   "cosigner-disagree": "signer-disagree",
@@ -98,7 +95,6 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-launch-failed": "launch-failed",
   "bt-burn-behind": "burn-behind",
   "bt-dispersal-receipt": "dispersal-receipt",
-  "bt-dispersal-stuck": "dispersal-stuck",
   "bt-api-budget": "api-budget",
   "bt-single-source": "single-source",
   "bt-mint-bank-low": "mint-bank-low",
@@ -142,7 +138,6 @@ export const PUSH_KIND_OF_ALERT: Record<string, PushKind> = {
   "bt-top-up-draining": "top-up-draining",
   "bt-top-up-ceiling": "top-up-ceiling",
   "derby-withheld": "derby-withheld",
-  "bt-cap-binding": "cap-binding",
   "bt-pin-orphan": "pin-orphan",
   // prelaunch audit 2026-10-18 A-1: BURNTICKER_DISPERSAL=0 on a program with crank_carried (allowed; once a Denver day)
   "bt-dispersal-off": "dispersal-off",
@@ -180,7 +175,6 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "launch-failed": "Burnticker launch failed",
   "burn-behind": "Burnticker burn behind",
   "dispersal-receipt": "Burnticker burn piece needs a look",
-  "dispersal-stuck": "Burnticker burn pieces cannot be spent",
   "api-budget": "Burnticker data budget running low",
   "single-source": "Burnticker game settled on one source",
   "mint-bank-low": "Burnticker prepared addresses running low",
@@ -206,7 +200,6 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "top-up-ceiling": "Burnticker top-ups stopped for the day",
   "feed-disagree": "Burnticker sources disagree",
   "derby-withheld": "Burnticker Derby result withheld",
-  "cap-binding": "Burnticker burn pool above its cap",
   "pin-orphan": "Burnticker upload saved for nothing",
   "dispersal-off": "Burnticker burn dispersal is off",
   "never-buys-red": "Burnticker operator wallet traded for a platform coin",
@@ -225,7 +218,7 @@ export const PUSH_TITLE: Record<PushKind, string> = {
   "ticker-live": "Burnticker second coin on a live ticker",
 };
 /** Kinds pushed at low priority: a note, not trouble that needs someone now. */
-export const PUSH_LOW_PRIORITY: ReadonlySet<PushKind> = new Set(["backup-offbox", "cap-binding", "pin-orphan", "late-reading", "twap-empty"]);
+export const PUSH_LOW_PRIORITY: ReadonlySet<PushKind> = new Set(["backup-offbox", "pin-orphan", "late-reading", "twap-empty"]);
 export const PUSH_LEAD: Record<PushKind, string> = {
   "keeper-refused": "The keeper stopped before its first cycle. Nothing is read or burned until it starts again.",
   "signer-disagree": "A reading is held because the second signer did not agree with the keeper. Nothing burns for it until someone looks.",
@@ -234,7 +227,6 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "launch-failed": "Someone's launch request failed on the site with a server error, a pin failure or a launch-check refusal. The sentence below is what they saw.",
   "burn-behind": "A reading's burn is not fully spent a day after it landed. The keeper keeps spending the rest in small pieces; the line below says how much is left.",
   "dispersal-receipt": "The keeper could not settle how much one small burn piece spent from that piece's own transaction. Either its record could not be read for three days, or it named more than the piece asked for, which the program should never allow. The coin's carried total still matches the chain; only this piece's receipt is in doubt. The line below names the coin and the transaction.",
-  "dispersal-stuck": "A coin's carried burn cannot be spent in pieces: its trading pool is so small that the program's per-burn cap (2% of the pool's SOL) is below the rule's smallest allowed burn, and more than one cap is carried. The amount stays carried, nothing is lost, and it goes out once the pool grows. The line below names the coin and the amounts.",
   "api-budget": "One of the outside services the keeper or the site reads from has used most of its daily allowance, or all of it. When it is all used, reads from that service stop until midnight UTC and start again on their own.",
   "mint-bank-low": "The site has had few prepared coin addresses for more than an hour. Launches still work, but each creator's browser has to find its own address, which takes about a minute. Check that the mint key bank service is running and has its key.",
   "synthetic-failed": "Last night's test creator could not finish every launch on the devnet copy of the site. A real creator may hit the same problem. The lines below name each check that failed and what the page said.",
@@ -259,7 +251,6 @@ export const PUSH_LEAD: Record<PushKind, string> = {
   "top-up-ceiling": "The keeper key sent as much SOL to the operations wallets today as the daily ceiling allows, so the keeper stopped every top-up until 00:00 UTC. Normal spending is far below the ceiling, so this points to a leaked key or a bug. The line below gives the amounts.",
   "feed-disagree": "The second source for a feed disagrees with the first. The reading is held back, and nothing burns until the two agree.",
   "derby-withheld": "A Burn Derby or record-close result was withheld because it could not be settled cleanly. The line below says why.",
-  "cap-binding": "A burn pool holds more than the pre-audit cap allows. The excess is queued, not spent. This is a notice; nothing is lost.",
   "pin-orphan": "Files were saved on Arweave for a draft that another request registered first. They are not used, and the fee for them is spent.",
   "dispersal-off": "The keeper runs with burn dispersal turned off on purpose. A finished rule's carried amount then goes to its end sink after 30 days instead of burning the coin.",
   "never-buys-red": "The daily check of the operator wallets found one that traded for a platform coin outside any recorded rehearsal (a coin only sent to it is listed, not pushed). The operator and trust pages now show this in red. The line below names the wallet and the transaction.",

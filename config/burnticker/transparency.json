@@ -79,7 +79,7 @@
       "label": "Squads 2-of-3 vault",
       "pubkey": null,
       "envVar": "BURNTICKER_UPGRADE_AUTHORITY",
-      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 today, by owner decision on 2026-10-11. The 48-hour time lock has no date set yet. This page reads the live value from the chain. The second is the platform authority, which can only raise the pre-audit burn-pool cap, behind a 48 h time lock. The third is each token's config authority. Behind a 48 h time lock, it can change the attester set, propose a new pool for a coin's pinned token (the token and its feed never change), and switch a coin's registration policy, which is allowed only while the pre-audit cap is in force and no pool of the coin works. It can also give up the config authority for good (renounce), which takes effect at once."
+      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 today, by owner decision on 2026-10-11. The 48-hour time lock has no date set yet. This page reads the live value from the chain. The second is the platform authority. The platform authority no longer holds a cap-raise power. The program refuses every cap raise. It can still give itself up for good. The third is each token's config authority. Behind a 48 h time lock, it can change the attester set, propose a new pool for a coin's pinned token (the token and its feed never change), and switch a coin's registration policy, which is allowed only until the platform sunset and only while no pool of the coin works. It can also give up the config authority for good (renounce), which takes effect at once."
     },
     {
       "role": "squads-member-1",
@@ -172,12 +172,12 @@
     {
       "id": "one-shot",
       "status": "live design",
-      "text": "One-shot markets are allowed. A coin tied to a single market resolves once, when that market closes. What happens after that follows the onEnd schedule in its rule. A YES at 100% drains the burn pool one unit a day, under the spend cap. For any other ending, it depends on how the market resolved. A resolved ending on a coin with an end sink sends what is left in the pool to that end sink (the flagship, a named coin, the pair winner, or Solana's incinerator, as the rule says). A void ending, or a coin without an end sink, winds the pool down on the coin itself over 28 days, with enough daily units to spend at least 99%. Then the coin retires. When new fees for a retired coin pass the sweep threshold, its pool is swept again, at most once a week. The token page shows the schedule."
+      "text": "One-shot markets are allowed. A coin tied to a single market resolves once, when that market closes. What happens after that follows the onEnd schedule in its rule. A YES at 100% spends the whole burn pool in one run. For any other ending, it depends on how the market resolved. A resolved ending on a coin with an end sink sends what is left in the pool to that end sink (the flagship, a named coin, the pair winner, or Solana's incinerator, as the rule says). A void ending, or a coin without an end sink, winds the pool down on the coin itself over 28 days, with enough daily units to spend at least 99%. Then the coin retires. When new fees for a retired coin pass the sweep threshold, its pool is swept again, at most once a week. The token page shows the schedule."
     },
     {
-      "id": "cap-25",
+      "id": "no-burn-cap",
       "status": "live design",
-      "text": "The default burn-pool cap is 25 SOL: each burn pool spends from at most 25 SOL per burn day, and SOL above the cap stays in the fee account until the cap allows it. In the program, the cap is part of the platform settings (PlatformConfig) and ends after at most 365 days. The platform authority can raise it only through a public 48 h time lock. An audit is not required for a raise or for the end. The keeper applies the same cap. On a network where the program's platform settings account does not exist yet, the program still enforces its built-in default of 25 SOL until 2027-10-01 (state.rs default_active_cap)."
+      "text": "There is no burn-pool cap and no limit on how much one burn spends. Each burn spends the rule's full share of the burn pool in one run. The program still checks the spend floor fixed at launch, the TWAP and Pyth guards on the swap rate, the minimum output and the pool's health; a spend under the floor, or one that meets a dead pool, is carried and spent later in one piece. The owner removed both burn caps from the program on 2026-10-25, and the platform authority no longer holds a cap-raise power."
     },
     {
       "id": "devnet-rehearsal",

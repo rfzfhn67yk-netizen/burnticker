@@ -4,7 +4,7 @@
     "name": "burn_receipts",
     "version": "0.1.0",
     "address_in_idl": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
-    "idl_sha256": "19af88a2f8677a1833e4fc6a48bb286facf2dfd1db0215f0f5640305343c4c92"
+    "idl_sha256": "90c4db2ea7b25137ea8341db6680ae187018c6c4b6882829dcddb77b6e94203f"
   },
   "roles": {
     "anyone": "Anyone with a funded wallet. Pays only the transaction fee (and rent where noted); chooses no amounts.",
@@ -13,9 +13,9 @@
     "config_authority": "TokenConfig.admin — initially the creator; can be renounced forever (renounce_admin). Powers: attester set only.",
     "attesters": "The quorum (N of M) of attester ed25519 keys named in the TokenConfig — kind-tagged operator / zktls-relayer / oracle (informational). Each signs (feed, period, value, sha256 of the source URL, zkTLS proof locator); the program verifies only signatures and the quorum.",
     "upgrade_authority": "The program's upgrade authority (BPF Upgradeable Loader). At launch: the Squads 2-of-3 vault; its time lock is 0 during launch week (owner decision 2026-10-11) and 48 h is planned from around 2026-10-23 — the live value is read from chain on /burnticker/trust; set to none after the audit.",
-    "platform_authority": "PlatformConfig.authority — intended: the Squads 2-of-3 vault. Power: RAISE the temporary burn-pool cap (48 h timelock). Renounceable; the cap sunsets by itself.",
+    "platform_authority": "PlatformConfig.authority — intended: the Squads 2-of-3 vault. The platform authority no longer holds a cap-raise power. The program refuses every cap raise (CapRemoved; owner decision 2026-10-25: the burn-pool cap is removed). It can still renounce, and clear the unused cranker list.",
     "attester_key": "Any ONE key of the token's CURRENT attester set, signing a transaction by itself (no quorum). Power: veto (clear) a pending registration-policy proposal — nothing else (re-check R3-2).",
-    "platform_authority_or_listed_cranker": "PlatformConfig.authority (while not renounced) OR any key on the PlatformConfig's cranker allowlist (re-check R3-4). Power: clear the allowlist (back to permissionless) — never add a key."
+    "platform_authority_or_listed_cranker": "PlatformConfig.authority (while not renounced) OR any key on the PlatformConfig's (unused) cranker list (re-check R3-4). Since the owner decision of 2026-10-25 the cranker allowlist is removed and every crank is permissionless; this role can only clear the unused stored list — never add a key."
   },
   "instructions": [
     {
@@ -45,10 +45,10 @@
         }
       ],
       "gated_by": null,
-      "can": "Apply a pending cap raise after its 48-hour timelock.",
-      "cannot": "Apply early; apply anything but a raise (re-checked).",
-      "timelock": "Executable only after the proposal's ETA.",
-      "sunset": "None.",
+      "can": "Nothing: refused (CapRemoved). Owner decision 2026-10-25: there is no cap raise to apply.",
+      "cannot": "Anything (always refused with CapRemoved).",
+      "timelock": null,
+      "sunset": "Removed (owner decision 2026-10-25): always refused.",
       "funds": "None.",
       "temporary": false
     },
@@ -80,9 +80,9 @@
       ],
       "gated_by": null,
       "can": "Apply a pending registration-policy switch after its 48-hour timelock and before it expires (14 days after the proposal), re-checking the window and (fixed pool) the creator + LP checks and the 90 %-or-LaunchLab-config rule.",
-      "cannot": "Apply early, after expiry, after the cap sunset, while a pool works, or a pool that fails the checks.",
+      "cannot": "Apply early, after expiry, after the platform sunset, while a pool works, or a pool that fails the checks.",
       "timelock": "Executable only after the proposal's ETA.",
-      "sunset": "The pre-audit cap's sunset.",
+      "sunset": "Until the platform sunset.",
       "funds": "None.",
       "temporary": false
     },
@@ -113,7 +113,7 @@
         }
       ],
       "gated_by": null,
-      "can": "Round 5, the incinerator end sink (EndSink kind INCINERATOR, pinned at creation): after a RESOLVED end, once the coin's readings inside its window are processed (or it burns itself and never registered a pool: round-5 review R5-1), unwrap the fee PDA's WSOL into the fee PDA (its WSOL account closed and created again, the cranker's rent refunded from it) and send min(the fee PDA's SOL above the reserve, less a self coin's carried spend for 30 days after the end (R5-4), the burn-pool cap while in force) to Solana's incinerator (1nc1nerator11111111111111111111111111111111, address-checked; nobody holds its key and the runtime burns what it receives). Memo endburn, event SolBurnedOnEnd. Callable again for the later trickle above the end sink's minimum.",
+      "can": "Round 5, the incinerator end sink (EndSink kind INCINERATOR, pinned at creation): after a RESOLVED end, once the coin's readings inside its window are processed (or it burns itself and never registered a pool: round-5 review R5-1), unwrap the fee PDA's WSOL into the fee PDA (its WSOL account closed and created again, the cranker's rent refunded from it) and send min(the fee PDA's SOL above the reserve, less a self coin's carried spend for 30 days after the end (R5-4)) to Solana's incinerator (1nc1nerator11111111111111111111111111111111, address-checked; nobody holds its key and the runtime burns what it receives). Memo endburn, event SolBurnedOnEnd. Callable again for the later trickle above the end sink's minimum.",
       "cannot": "Send to any address but the incinerator; run for a coin whose end sink is another kind (forward_on_end refuses the incinerator kind, so the two never overlap); choose the amount; run before a resolved end, below the reserve, under the minimum after the first send, under an empty account's rent-exempt minimum, or while the coin's window readings are unprocessed.",
       "timelock": null,
       "sunset": "None.",
@@ -147,10 +147,10 @@
         }
       ],
       "gated_by": null,
-      "can": "Withdraw a pending cap raise.",
-      "cannot": "Anything else.",
+      "can": "Nothing: refused (CapRemoved). Owner decision 2026-10-25: there is no cap raise to cancel.",
+      "cannot": "Anything (always refused with CapRemoved).",
       "timelock": null,
-      "sunset": "Gone once renounce_platform_authority runs.",
+      "sunset": "Removed (owner decision 2026-10-25): always refused.",
       "funds": "None.",
       "temporary": true
     },
@@ -233,7 +233,7 @@
       ],
       "gated_by": null,
       "can": "LAUNCHPAD-PATH §35: collect ALL the recorded position's accrued fees (no caller-chosen amount: lp-lock blind review L-3; against the FeeKeyRecord's pool, so a pool replacement cannot strand them: L-1) from Raydium's CPMM lock program (collect_cp_fees, signed by the FEE_KEYS PDA, into FEE_KEYS's own WSOL and token accounts) and split them by compiled constants: the SOL side 80 % (LOCK_FEE_BURN_BPS) to the coin's fee PDA (its burn pool) and 20 % (LOCK_FEE_OPERATOR_BPS) to the compiled OPERATOR_TREASURY; burn the coin side in the same instruction; write a receipt memo (v2: with the operator share delivered and still pending) when SOL was claimed or delivered; FEE_KEYS's transient accounts are closed with their rent back to the cranker who created them (a pre-existing account's rent goes to the fee PDA).",
-      "cannot": "Choose the split, the treasury or any recipient (the treasury is compiled per cluster; the mainnet placeholder refuses every claim); claim another coin's position or pool; touch the LP principal (the lock program pays only accrued fees) or the Fee Key (re-checked after the CPI, hard error); let the lock program change FEE_KEYS's owner, data or lamports or its accounts' owner, mint, delegate or close authority; claim while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+      "cannot": "Choose the split, the treasury or any recipient (the treasury is compiled per cluster; the mainnet placeholder refuses every claim); claim another coin's position or pool; touch the LP principal (the lock program pays only accrued fees) or the Fee Key (re-checked after the CPI, hard error); let the lock program change FEE_KEYS's owner, data or lamports or its accounts' owner, mint, delegate or close authority.",
       "timelock": null,
       "sunset": "None.",
       "funds": "Raydium lock (accrued LP fees) → FEE_KEYS → fee PDA (80 % of the SOL) and OPERATOR_TREASURY (20 %); the coin side is burned.",
@@ -249,10 +249,10 @@
         }
       ],
       "gated_by": null,
-      "can": "Return crank_buyback to permissionless (clear the PlatformConfig's cranker allowlist). Re-check R3-4: the platform authority OR any allowlisted key may do it, so lost keys plus a renounced authority never pin cranking to the list.",
-      "cannot": "Add or change crankers; touch the cap, any token or any funds; be done by a key that is neither the authority nor on the list.",
+      "can": "Clear the PlatformConfig's stored cranker list. Owner decision 2026-10-25: the cranker allowlist is removed and has no effect on cranking (every crank is permissionless), so this only tidies the unused bytes. Re-check R3-4: the platform authority OR any listed key may do it.",
+      "cannot": "Add or change crankers; restrict who may crank; touch any token or any funds; be done by a key that is neither the authority nor on the list.",
       "timelock": null,
-      "sunset": "Pointless once the allowlist stops applying (cap sunset or 90 days after initialize_platform, whichever is first).",
+      "sunset": "Removed in effect (owner decision 2026-10-25): the list no longer applies.",
       "funds": "None.",
       "temporary": true
     },
@@ -266,8 +266,8 @@
         }
       ],
       "gated_by": null,
-      "can": "Process the next reading in line (buyback mode): target = pool × (1 − (1 − f)^units) + carried spend; spend at most 2 % of the pool's WSOL reserve (rest carried); swap on the registered, provenance-checked CPMM pool behind a mandatory TWAP guard (≤ 3 % over 600–1,200 s) with a minimum output of max(spot quote, TWAP quote) less ≤ 3 % slippage; burn EVERY token the fee PDA holds; write memo v2. After 30 days of continuous pool untradeability, process the reading below-floor with its target carried. A PAIRED coin (LAUNCHPAD-PATH §40) cranks only with the period's pair result: won or draw → as above; no result, or lost with no forward landed (pair-forward blind review H-1) → only 72 h after the reading, then as an unpaired coin.",
-      "cannot": "Choose the amount, the pool, the price or the recipient; skip a reading; process one twice; send SOL or tokens anywhere except the pool (SOL→token) and the burn; let the CPMM call change the fee PDA's or its token accounts' owner, delegate or close authority (hard error); crank while the pre-audit cap is in force if a PlatformConfig cranker allowlist exists and the cranker is not on it; burn for a paired coin that LOST the period within 72 h of its reading (its fuel goes to the winner through forward_to_winner).",
+      "can": "Process the next reading in line (buyback mode): target = pool × (1 − (1 − f)^units) + carried spend; spend it all in this one crank (owner decision 2026-10-25: no burn-pool cap and no per-crank bound; spend is carried only under the floor, past a 30-day untradeable pool, or when the minimum output is 0); swap on the registered, provenance-checked CPMM pool behind a mandatory TWAP guard (≤ 3 % over 600–1,200 s) with a minimum output of max(spot quote, TWAP quote) less ≤ 3 % slippage; burn EVERY token the fee PDA holds; write memo v2. After 30 days of continuous pool untradeability, process the reading below-floor with its target carried. A PAIRED coin (LAUNCHPAD-PATH §40) cranks only with the period's pair result: won or draw → as above; no result, or lost with no forward landed (pair-forward blind review H-1) → only 72 h after the reading, then as an unpaired coin.",
+      "cannot": "Choose the amount, the pool, the price or the recipient; skip a reading; process one twice; send SOL or tokens anywhere except the pool (SOL→token) and the burn; let the CPMM call change the fee PDA's or its token accounts' owner, delegate or close authority (hard error); burn for a paired coin that LOST the period within 72 h of its reading (its fuel goes to the winner through forward_to_winner).",
       "timelock": null,
       "sunset": "None.",
       "funds": "Fee PDA SOL → its WSOL account → CPMM pool vault; tokens received → burned (supply reduced).",
@@ -283,8 +283,8 @@
         }
       ],
       "gated_by": null,
-      "can": "Round 5 (burn dispersal, owner decision 2026-10-13; deployed on devnet and mainnet on 2026-10-15): spend a PIECE of the spend earlier cranks carried (TokenConfig.carried_spend_lamports), without a new reading: spend = min(carried, the caller's max_spend_lamports, the platform basis); also after the rule ended (round-5 review R5-3 / R5-4: after a VOID end it drains what the wind-down carried; after a RESOLVED end it drains the spend owed by readings inside the window, which forward_on_end / burn_sol_on_end leave in place for 30 days); the request must be at most 2 % of the pool's WSOL reserve (a larger one is refused, never clamped) and the piece at least the rule's floor unless it is the whole remainder; swap on the registered, provenance-checked CPMM pool behind the same mandatory TWAP guard and minimum output as crank_buyback; burn EVERY token the fee PDA holds; write the `carried` memo naming the last processed reading (through=) and the coin's piece count (piece=). Round-5 review R5-8 (owner, 2026-10-15; budget model after the blind review): every piece spends from the coin's carried budget, which refills at one per-crank cap per 600 seconds (CARRIED_BUDGET_WINDOW_SECS, half the TWAP window) up to one cap, so nobody drains faster than one cap per window and a dust piece takes only a dust budget; one piece per coin per second. The budget lives in the coin's CarriedPace account (created by its first piece; the cranker pays that account's rent), which also counts the pieces; TokenConfig.burns counts reading cranks only.",
-      "cannot": "Run while any submitted reading waits for its own crank (crank_cursor must equal last_record_date), so a reading's crank always runs first with the whole carried amount in its target; touch a Reading or move the crank cursor; spend more than is carried or more than 2 % of the reserve in one call; spend more than the coin's carried budget, or run a second piece for the same coin in the same second or transaction (CarriedTooSoon); pass another account as the coin's CarriedPace, or one of an unknown version (InvalidCarriedPace); run for a coin that burns another token or on an untradeable pool; send SOL or tokens anywhere except the pool (SOL→token) and the burn; crank while the pre-audit cap is in force if a PlatformConfig cranker allowlist exists and the cranker is not on it.",
+      "can": "Round 5 (burn dispersal, owner decision 2026-10-13; deployed on devnet and mainnet on 2026-10-15): spend a PIECE of the spend earlier cranks carried (TokenConfig.carried_spend_lamports), without a new reading: spend = min(carried, the caller's max_spend_lamports, the spendable pool), so one call may spend the whole carried amount (owner decision 2026-10-25: no per-crank bound and no carried budget); also after the rule ended (round-5 review R5-3 / R5-4: after a VOID end it drains what the wind-down carried; after a RESOLVED end it drains the spend owed by readings inside the window, which forward_on_end / burn_sol_on_end leave in place for 30 days); the piece must be at least the rule's floor unless it is the whole remainder; swap on the registered, provenance-checked CPMM pool behind the same mandatory TWAP guard and minimum output as crank_buyback; burn EVERY token the fee PDA holds; write the `carried` memo naming the last processed reading (through=) and the coin's piece count (piece=). One piece per coin per second. The coin's CarriedPace account (created by its first piece; the cranker pays that account's rent) counts the pieces; its budget field is unused since 2026-10-25 (the carried budget and CARRIED_BUDGET_WINDOW_SECS were removed with the per-crank bound); TokenConfig.burns counts reading cranks only.",
+      "cannot": "Run while any submitted reading waits for its own crank (crank_cursor must equal last_record_date), so a reading's crank always runs first with the whole carried amount in its target; touch a Reading or move the crank cursor; spend more than is carried; run a second piece for the same coin in the same second or transaction (CarriedTooSoon); pass another account as the coin's CarriedPace, or one of an unknown version (InvalidCarriedPace); run for a coin that burns another token or on an untradeable pool; send SOL or tokens anywhere except the pool (SOL→token) and the burn.",
       "timelock": null,
       "sunset": "None.",
       "funds": "Fee PDA SOL → its WSOL account → CPMM pool vault; tokens received → burned (supply reduced).",
@@ -317,8 +317,8 @@
         }
       ],
       "gated_by": null,
-      "can": "Round 5: for a coin that burns another token, the next reading in line: crank_buyback's spend (the rule on min(pool, cap), carried spend, floor) and guards on the PINNED pool only (address-checked; its program, mints, config or vault authority, fee and vaults re-read every time): the Pyth guard (both prices fully verified, at most 60 s old, confidence at most 1 %, the pool's price within the rule's deviation of the Pyth ratio both ways), for a CPMM pool its TWAP as well, min-out = the larger of the spot, Pyth and TWAP quotes less fee and slippage, at most 2 % of that pool's SOL reserve per crank, the post-CPI integrity checks; swap SOL (CPMM swap_base_input or AMM v4 swap_base_in_v2) for the other token into the fee PDA's own account for it and burn everything in that account, burn any of the coin's own tokens the fee PDA holds, write memo v3 naming the burned mint. A pool that is gone, switched off, changed, above the 1 % fee or under the SOL floor, a stale or wide Pyth price, SOL/USD and target updates published more than 60 s apart, a pool away from Pyth or under the Pyth minimum output, or a CPMM TWAP that is unavailable or away from spot refuses (the SOL is held); 30 days after the reading it is processed below-floor with its spend carried. A Pyth update older than the last one the coin accepted is refused (round-5 review R5-7). The two price accounts must be the feeds' sponsored push-oracle accounts (address-checked), never a caller-chosen snapshot.",
-      "cannot": "Use any other pool or token; choose an amount; send SOL or tokens anywhere but the pinned pool (for the other token, then burned); run for a coin that burns itself (crank_buyback is refused for a coin that burns another token); run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+      "can": "Round 5: for a coin that burns another token, the next reading in line: crank_buyback's spend (the rule on the whole spendable pool, carried spend, floor; no platform cap since 2026-10-25) and guards on the PINNED pool only (address-checked; its program, mints, config or vault authority, fee and vaults re-read every time): the Pyth guard (both prices fully verified, at most 60 s old, confidence at most 1 %, the pool's price within the rule's deviation of the Pyth ratio both ways), for a CPMM pool its TWAP as well, min-out = the larger of the spot, Pyth and TWAP quotes less fee and slippage, the whole spend in one crank (no per-crank bound since 2026-10-25), the post-CPI integrity checks; swap SOL (CPMM swap_base_input or AMM v4 swap_base_in_v2) for the other token into the fee PDA's own account for it and burn everything in that account, burn any of the coin's own tokens the fee PDA holds, write memo v3 naming the burned mint. A pool that is gone, switched off, changed, above the 1 % fee or under the SOL floor, a stale or wide Pyth price, SOL/USD and target updates published more than 60 s apart, a pool away from Pyth or under the Pyth minimum output, or a CPMM TWAP that is unavailable or away from spot refuses (the SOL is held); 30 days after the reading it is processed below-floor with its spend carried. A Pyth update older than the last one the coin accepted is refused (round-5 review R5-7). The two price accounts must be the feeds' sponsored push-oracle accounts (address-checked), never a caller-chosen snapshot.",
+      "cannot": "Use any other pool or token; choose an amount; send SOL or tokens anywhere but the pinned pool (for the other token, then burned); run for a coin that burns itself (crank_buyback is refused for a coin that burns another token).",
       "timelock": null,
       "sunset": "None.",
       "funds": "Fee PDA SOL / WSOL → the pinned pool's WSOL vault, in exchange for the other token, burned in the same instruction.",
@@ -351,8 +351,8 @@
         }
       ],
       "gated_by": null,
-      "can": "LAUNCHPAD-PATH §45: after a RESOLVED end, once the coin's readings inside its window are processed (or it burns itself and never registered a pool: round-5 review R5-1), move min(the fee PDA's SOL above the reserve + its WSOL, less a self coin's carried spend for 30 days after the end (round-5 review R5-4: crank_carried burns it on the coin first), the burn-pool cap while in force) to the destination's fee PDA — SOL first, then WSOL into the destination fee PDA's WSOL account — if at least the end sink's minimum; write memo `<PREFIX>|endfwd|to=…|lamports=N|v1`. The program chooses the destination: the flagship; a named coin while it is live (a verified pool, or (round-5 review R5-9) a pinned, not stalled BurnTarget for a coin that burns another token; its own rule not ended), else the flagship; the pair partner only if the end date's pair result names it winner and it is live and still paired, else the flagship. Callable again for later fee income.",
-      "cannot": "Choose the amount or the destination (only a burn_receipts fee PDA, which spends only through crank_buyback); run before a resolved end, under the minimum, below the reserve, or while the coin's window readings are unprocessed; send to a sink that is not live, or to a flagship without a verified pool (then nothing moves); leave out the BurnTarget account of a named target coin to divert the fuel to the flagship (BurnTargetAccountMissing); run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+      "can": "LAUNCHPAD-PATH §45: after a RESOLVED end, once the coin's readings inside its window are processed (or it burns itself and never registered a pool: round-5 review R5-1), move min(the fee PDA's SOL above the reserve + its WSOL, less a self coin's carried spend for 30 days after the end (round-5 review R5-4: crank_carried burns it on the coin first)) to the destination's fee PDA — SOL first, then WSOL into the destination fee PDA's WSOL account — if at least the end sink's minimum; write memo `<PREFIX>|endfwd|to=…|lamports=N|v1`. The program chooses the destination: the flagship; a named coin while it is live (a verified pool, or (round-5 review R5-9) a pinned, not stalled BurnTarget for a coin that burns another token; its own rule not ended), else the flagship; the pair partner only if the end date's pair result names it winner and it is live and still paired, else the flagship. Callable again for later fee income.",
+      "cannot": "Choose the amount or the destination (only a burn_receipts fee PDA, which spends only through crank_buyback); run before a resolved end, under the minimum, below the reserve, or while the coin's window readings are unprocessed; send to a sink that is not live, or to a flagship without a verified pool (then nothing moves); leave out the BurnTarget account of a named target coin to divert the fuel to the flagship (BurnTargetAccountMissing).",
       "timelock": null,
       "sunset": "None.",
       "funds": "Resolved coin's fee PDA SOL / WSOL → the end sink's (or the flagship's) fee PDA SOL / WSOL account (then burned by that coin's cranks).",
@@ -368,8 +368,8 @@
         }
       ],
       "gated_by": null,
-      "can": "LAUNCHPAD-PATH §40: for a period whose result names a winner, within 72 h of the loser's reading (pair-forward r3 RI-1), process the LOSER's reading by moving exactly what its own rule would have spent had it won — pool × (1 − (1 − f)^units) on min(spendable incl. synced WSOL − the spend it still owes earlier periods (r3 RI-4), the burn-pool cap), nothing under its floor, nothing when either coin is not live (pair-forward blind review H-1: the reading is still processed, lamports=0; live = its own pool verified, or (round-5 review R5-9) a coin that burns another token whose BurnTarget is pinned and not stalled (no 30-day unblock since its last target burn), read from the BurnTarget account itself) — from the loser's fee PDA to the winner's fee PDA (SOL above the reserve first, then WSOL into the winner fee PDA's WSOL account); mark the reading forwarded, record the forward on the result, write memo `<PREFIX>|forward|…|v1` (always, lamports=0 included). A second call is a no-op.",
-      "cannot": "Choose the amount or the recipient (only the winner's fee PDA, which spends only through crank_buyback); forward on a draw, to the losing coin, out of the loser's reading order, after the 72 h time-out, or below the loser's reserve; take lamports the loser owes its earlier periods; leave out the BurnTarget account of a target coin without its own pool to make it look dead (BurnTargetAccountMissing); touch either coin's supply; run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+      "can": "LAUNCHPAD-PATH §40: for a period whose result names a winner, within 72 h of the loser's reading (pair-forward r3 RI-1), process the LOSER's reading by moving exactly what its own rule would have spent had it won — pool × (1 − (1 − f)^units) on min(spendable incl. synced WSOL − the spend it still owes earlier periods (r3 RI-4)) (no burn-pool cap since 2026-10-25), nothing under its floor, nothing when either coin is not live (pair-forward blind review H-1: the reading is still processed, lamports=0; live = its own pool verified, or (round-5 review R5-9) a coin that burns another token whose BurnTarget is pinned and not stalled (no 30-day unblock since its last target burn), read from the BurnTarget account itself) — from the loser's fee PDA to the winner's fee PDA (SOL above the reserve first, then WSOL into the winner fee PDA's WSOL account); mark the reading forwarded, record the forward on the result, write memo `<PREFIX>|forward|…|v1` (always, lamports=0 included). A second call is a no-op.",
+      "cannot": "Choose the amount or the recipient (only the winner's fee PDA, which spends only through crank_buyback); forward on a draw, to the losing coin, out of the loser's reading order, after the 72 h time-out, or below the loser's reserve; take lamports the loser owes its earlier periods; leave out the BurnTarget account of a target coin without its own pool to make it look dead (BurnTargetAccountMissing); touch either coin's supply.",
       "timelock": null,
       "sunset": "None.",
       "funds": "Loser fee PDA SOL / WSOL → winner fee PDA SOL / WSOL account (then burned by the winner's cranks).",
@@ -389,8 +389,8 @@
         }
       ],
       "gated_by": null,
-      "can": "Create the ONE PlatformConfig: the platform authority, the burn-pool cap (exactly the 25 SOL default), the cap's sunset time (at most 365 days out and no later than the default sunset, 2027-10-01) and an optional cranker allowlist (≤ 3 keys, applies only while the cap is in force and for at most 90 days).",
-      "cannot": "Run twice; be run by anyone but the program's upgrade authority; set any cap but the default (it can only be raised afterwards); set a sunset in the past, beyond 365 days or after 2027-10-01; add crankers later.",
+      "can": "Create the ONE PlatformConfig: the platform authority and the platform sunset (at most 365 days out and no later than 2027-10-01), which now only closes the stranding-recovery registration-policy switch. Owner decision 2026-10-25: the cap and cranker arguments are accepted for a stable interface and ignored (never stored); there is no burn-pool cap and no cranker allowlist.",
+      "cannot": "Run twice; be run by anyone but the program's upgrade authority; set a cap or a cranker allowlist (both removed); set a sunset in the past, beyond 365 days or after 2027-10-01.",
       "timelock": null,
       "sunset": "Single use.",
       "funds": "Payer pays the PlatformConfig's rent.",
@@ -511,10 +511,10 @@
         }
       ],
       "gated_by": null,
-      "can": "Propose RAISING the burn-pool cap (the rule then spends on min(pool, new cap)).",
-      "cannot": "Lower the cap or keep it equal; take effect before 48 hours; extend the sunset; touch any token's rule, readings, fee PDA, vault or pool; move funds.",
-      "timelock": "48 hours (CAP_TIMELOCK_SECS = 172,800), public: emits CapRaiseProposed.",
-      "sunset": "Pointless after the cap's sunset (the cap no longer applies); gone once renounce_platform_authority runs.",
+      "can": "Nothing: refused (CapRemoved). Owner decision 2026-10-25: there is no burn-pool cap, so the platform authority no longer holds a cap-raise power. The entry point stays so the IDL is stable.",
+      "cannot": "Propose any cap raise (always refused with CapRemoved); touch any token's rule, readings, fee PDA, vault or pool; move funds.",
+      "timelock": null,
+      "sunset": "Removed (owner decision 2026-10-25): always refused.",
       "funds": "None.",
       "temporary": true
     },
@@ -596,8 +596,8 @@
         }
       ],
       "gated_by": null,
-      "can": "Round-5 review R5-6, the liveness escape for a coin that burns another token: when its target is stalled (its last target event is a 30-day unblock, no target burn since, and 30 days since its last burn or its pin) and no reading waits for its crank, move its CARRIED spend, and only that, min(carried, the fee PDA's SOL above the reserve + its WSOL, the burn-pool cap while in force), to the flagship's fee PDA (BURNTICKER_FLAGSHIP, compiled; it must be live), SOL first, then WSOL; memo `<PREFIX>|release|to=…|lamports=N|left=N|v1`, event TargetReleased. No admin or attester takes part, so none can block it.",
-      "cannot": "Choose the amount or the destination; move more than the carried spend; run for a coin that burns itself, for a target that burned since its last unblock, before 30 days without a burn, while a reading waits, to a flagship without a verified pool, below the reserve; run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+      "can": "Round-5 review R5-6, the liveness escape for a coin that burns another token: when its target is stalled (its last target event is a 30-day unblock, no target burn since, and 30 days since its last burn or its pin) and no reading waits for its crank, move its CARRIED spend, and only that, min(carried, the fee PDA's SOL above the reserve + its WSOL), to the flagship's fee PDA (BURNTICKER_FLAGSHIP, compiled; it must be live), SOL first, then WSOL; memo `<PREFIX>|release|to=…|lamports=N|left=N|v1`, event TargetReleased. No admin or attester takes part, so none can block it.",
+      "cannot": "Choose the amount or the destination; move more than the carried spend; run for a coin that burns itself, for a target that burned since its last unblock, before 30 days without a burn, while a reading waits, to a flagship without a verified pool, below the reserve.",
       "timelock": null,
       "sunset": "None.",
       "funds": "Stalled target coin's fee PDA SOL / WSOL (its carried spend) → the flagship's fee PDA SOL / WSOL account (then burned by the flagship's cranks).",
@@ -630,7 +630,7 @@
         }
       ],
       "gated_by": null,
-      "can": "Give up the platform authority forever (cancels a pending raise). The cap stays as it is until its sunset.",
+      "can": "Give up the platform authority forever. Since 2026-10-25 the authority holds no cap power, so this only gives up clearing the unused cranker list.",
       "cannot": "Be undone.",
       "timelock": null,
       "sunset": "Single use.",
@@ -665,9 +665,9 @@
       ],
       "gated_by": null,
       "can": "STRANDING RECOVERY: propose switching the token's registration policy — to a fixed pool that must pass register_pool's creator + LP checks AND (re-check R3-2) have ≥ 90 % of its live LP burned/locked or be the pool PDA of a LaunchLab-known AmmConfig (the pinned cpConfigId or the pinned platform's current one) when applied, or back to LaunchLab's migration pool (policy 0, needs the pinned platform).",
-      "cannot": "Act while a pool works (only with no verified pool, or the registered one continuously untradeable ≥ 7 days); act after the pre-audit cap's sunset; pick a pool whose pool_creator is not the fee PDA, whose LP is < 50 % burned/locked, or (< 90 % locked) that sits on an AmmConfig LaunchLab does not name; take effect before 48 hours or after 14 days (the proposal expires); survive a veto by any one current attester; touch the rule, readings, fee PDA or vault.",
+      "cannot": "Act while a pool works (only with no verified pool, or the registered one continuously untradeable ≥ 7 days); act after the platform sunset; pick a pool whose pool_creator is not the fee PDA, whose LP is < 50 % burned/locked, or (< 90 % locked) that sits on an AmmConfig LaunchLab does not name; take effect before 48 hours or after 14 days (the proposal expires); survive a veto by any one current attester; touch the rule, readings, fee PDA or vault.",
       "timelock": "48 hours (ATTESTER_TIMELOCK_SECS), public: emits RegistrationPolicyProposed (eta, expires_at = proposal + 14 days); any current attester can veto it (veto_registration_policy).",
-      "sunset": "The pre-audit cap's sunset (PlatformConfig.cap_sunset_ts, or 2027-10-01 without one); gone once renounce_admin runs.",
+      "sunset": "Until the platform sunset (PlatformConfig.cap_sunset_ts, or 2027-10-01 without one; the same window as before the cap was removed); gone once renounce_admin runs.",
       "funds": "None.",
       "temporary": true
     },
@@ -752,7 +752,7 @@
       "can": "VETO: clear a pending registration-policy proposal (re-check R3-2 — the cheap veto by the parties a pool switch would bypass).",
       "cannot": "Propose, apply or change any policy; touch the attester set, readings, rule or funds; act without a pending proposal. (The admin can propose again at once — a fresh, public 48 h.)",
       "timelock": null,
-      "sunset": "Pointless once the switch window closes (cap sunset) or renounce_admin runs.",
+      "sunset": "Pointless once the switch window closes (the platform sunset) or renounce_admin runs.",
       "funds": "None.",
       "temporary": true
     },
@@ -791,30 +791,12 @@
   ],
   "temporary_powers": [
     {
-      "power": "Platform burn-pool cap",
-      "holder": "platform_authority (the Squads 2-of-3 vault)",
-      "effect": "While in force, each token's buyback spend is computed on min(pool, cap); SOL above the cap stays in the fee PDA and a BurnPoolCapBound event is emitted every time the cap binds.",
-      "default": "25 SOL (25,000,000,000 lamports)",
-      "can_change": "Raise only, through propose_cap_raise → 48 h → apply_cap_raise.",
-      "sunset": "PlatformConfig.cap_sunset_ts — set once at initialize_platform (at most 365 days out and no later than 2027-10-01), never extendable; after it the program ignores the cap. Also ends early in effect if the authority raises it to u64::MAX.",
-      "why": "A pre-audit limit on how much SOL any single burn day can push through an unaudited program (owner decision, 2026-10-09)."
-    },
-    {
-      "power": "Cranker allowlist (review-3 L-4)",
-      "holder": "set once by the upgrade authority at initialize_platform; clearable (never extendable) by platform_authority or by any listed key",
-      "effect": "While the cap is in force and the list is non-empty, only listed keys (≤ 3) may crank_buyback — against an outside cranker timing a multi-block TWAP hold. Readings, vault cranks, claims and health checks stay permissionless.",
-      "default": "Empty (permissionless).",
-      "can_change": "clear_cranker_allowlist only (back to permissionless), by the platform authority or any listed key.",
-      "sunset": "PlatformConfig.cap_sunset_ts or PlatformConfig.created_at + 90 days, whichever is first (re-check R3-4); afterwards crank_buyback is permissionless whatever the list says.",
-      "why": "Against a multi-block TWAP hold timed by an outside cranker while the program is unaudited. If every listed key is lost and the authority renounced, buy-back cranks wait at most 90 days from initialize_platform (no funds move in the meantime)."
-    },
-    {
       "power": "Registration-policy switch — stranding recovery (review-3 M-3)",
       "holder": "config_authority (TokenConfig.admin, the Squads vault)",
       "effect": "Switch a token whose LaunchLab migration cannot be registered (or whose pool died) to a fixed pool passing the creator + LP checks, or back to policy 0.",
       "default": "Unused.",
       "can_change": "set_registration_policy → 48 h → apply_registration_policy (anyone) within 14 days of the proposal; cancel_registration_policy (admin); veto_registration_policy (any one current attester). A fallback fixed pool needs ≥ 90 % LP burned/locked or a LaunchLab-known AmmConfig (re-check R3-2).",
-      "sunset": "The pre-audit cap's sunset (PlatformConfig.cap_sunset_ts, or 2027-10-01 without one); also gone at renounce_admin.",
+      "sunset": "Until the platform sunset (PlatformConfig.cap_sunset_ts, or 2027-10-01 without one; the same window as before the cap was removed); also gone at renounce_admin.",
       "why": "LaunchLab is closed source; its platform admin can change cpConfigId / platformCpCreator / lock scales before migration. Real LaunchLab behaviour remains a devnet-rehearsal gate."
     }
   ],
@@ -822,15 +804,16 @@
     "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback and crank_carried (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses) and inside burn_sol_on_end (round 5: only for a coin whose pinned end sink is the incinerator, only after a quorum-signed RESOLVED end, only to Solana's incinerator, address-checked) and inside crank_target_burn (round 5: only into the PINNED pool's WSOL vault, for the other token, burned in the same instruction) and inside release_target (round-5 review R5-6: only a stalled target coin's carried spend, only to the compiled flagship's fee PDA); tokens leave only by burn.",
     "Round 5: no instruction changes the other token a coin burns; only the pool it is swapped on can be re-pinned (propose_target_pool → 48 h, any attester can veto → apply_target_pool, the same checks).",
     "No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them); and, in burn_sol_on_end (round 5, the incinerator end sink), the fee PDA's own WSOL account, closed into the fee PDA to unwrap its WSOL and created again in the same instruction at the same address, the cranker's rent refunded from it.",
-    "No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.",
+    "No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). There is no burn-pool cap and no per-crank bound (owner decision 2026-10-25): a burn spends the rule's full share in one run.",
     "No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.",
     "No fee is charged by the program, so there is no fee to change. The LP-fee split of claim_lock_fees (80 % burn pool / 20 % operator) and the operator treasury are compiled constants: no instruction, config field or key changes them (LAUNCHPAD-PATH §35).",
     "No instruction moves the locked LP principal or the Fee Key NFT: the lock is Raydium's permanent lock, and FEE_KEYS signs only collect_cp_fees inside claim_lock_fees.",
     "No instruction updates the burn rule (RuleParams), the feed id, the memo text, the rules hash, the mint, the creator record or the registered pool.",
     "No instruction edits or deletes a reading; readings are append-only and quorum-checked.",
     "The quorum can never be lowered (nor exceed 3), the attester set can never be smaller than the quorum, and one proposal must keep at least `quorum` of the current keys and add fewer new keys than the new quorum; keys are added only on the strength of kept keys ≥ 7 days old.",
-    "No instruction changes the pinned LaunchLab platform / cpConfigId; the registration policy changes only through set_registration_policy (48 h, stranding only, until the cap sunset), which can never select policy 2 (pair curve) — that policy is chosen at initialize_token or not at all.",
-    "No PlatformConfig is required: without one, the hard-coded default cap (25 SOL until 2027-10-01) applies, so a lost or finalised upgrade authority cannot wedge buybacks."
+    "No instruction changes the pinned LaunchLab platform / cpConfigId; the registration policy changes only through set_registration_policy (48 h, stranding only, until the platform sunset), which can never select policy 2 (pair curve) — that policy is chosen at initialize_token or not at all.",
+    "No PlatformConfig is required: there is no burn-pool cap with or without one (owner decision 2026-10-25), so a lost or finalised upgrade authority cannot wedge buybacks. Without one, the stranding-recovery switch stays open until 2027-10-01.",
+    "No cap raise exists: propose_cap_raise, cancel_cap_raise and apply_cap_raise always refuse (CapRemoved). The platform authority no longer holds a cap-raise power."
   ],
   "upgrade_authority": {
     "power": "Program upgrade authority (BPF Upgradeable Loader) — outside the IDL, the one power that could change everything above.",
@@ -844,7 +827,7 @@
       "holder": "the key that created the LaunchLab platform — not transferable (no admin-change instruction; the platform PDA is seeded by the admin key)",
       "timelock": "none (untimelocked key)",
       "can": "updatePlatformConfig: fee rate and wallets — including platformLockNftWallet, which receives every migration's Fee Key (LAUNCHPAD-PATH §35: burn_receipts' FEE_KEYS PDA) — cpConfigId, platformCpCreator, LP lock/burn scales (migrateCpLockNftScale; Burnticker: 1,000,000 / 0 / 0, all LP locked), vesting, curve rules — for launches that have not migrated yet.",
-      "effect_on_burn_receipts": "Pinned at initialize_token (review-3 M-3): a later cpConfigId change cannot redirect register_pool (only replace_pool uses the platform's current cpConfigId, after 7 continuous days of a dead pool); platformCpCreator / scales and (LAUNCHPAD-PATH §35) platformLockNftWallet = FEE_KEYS with scales 1,000,000/0/0 are checked at init. Changing them between a token's init and its migration can still strand the registration (recovered with set_registration_policy, 48 h, until the cap sunset) or send that migration's Fee Key — and so its LP fees — to another wallet (the LP itself stays locked; the fees then never reach the burn pool). Since lp-lock blind review r2 (RL-3) such a coin fails closed: register_pool requires the FEE_KEYS-held migration position to be recorded, so its pool is never verified and no buyback runs on it; and initialize_token pins only the operator's compiled BURNTICKER_PLATFORM, whose admin key is the operator's (to move under the Squads vault). LAUNCH GATE (re-check R3-3): immediately before LaunchLab's create the launcher re-reads platformCpCreator, the scales, platformLockNftWallet and cpConfigId and refuses on any difference (`burnreceipts-admin.mts verify-platform-pins --mint`)."
+      "effect_on_burn_receipts": "Pinned at initialize_token (review-3 M-3): a later cpConfigId change cannot redirect register_pool (only replace_pool uses the platform's current cpConfigId, after 7 continuous days of a dead pool); platformCpCreator / scales and (LAUNCHPAD-PATH §35) platformLockNftWallet = FEE_KEYS with scales 1,000,000/0/0 are checked at init. Changing them between a token's init and its migration can still strand the registration (recovered with set_registration_policy, 48 h, until the platform sunset) or send that migration's Fee Key — and so its LP fees — to another wallet (the LP itself stays locked; the fees then never reach the burn pool). Since lp-lock blind review r2 (RL-3) such a coin fails closed: register_pool requires the FEE_KEYS-held migration position to be recorded, so its pool is never verified and no buyback runs on it; and initialize_token pins only the operator's compiled BURNTICKER_PLATFORM, whose admin key is the operator's (to move under the Squads vault). LAUNCH GATE (re-check R3-3): immediately before LaunchLab's create the launcher re-reads platformCpCreator, the scales, platformLockNftWallet and cpConfigId and refuses on any difference (`burnreceipts-admin.mts verify-platform-pins --mint`)."
     }
   ]
 }

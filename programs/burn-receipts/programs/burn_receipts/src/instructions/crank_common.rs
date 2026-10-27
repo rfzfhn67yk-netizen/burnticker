@@ -4,7 +4,7 @@ use anchor_spl::token::Mint;
 
 use crate::error::BurnError;
 use crate::memo::MemoHead;
-use crate::state::{default_active_cap, PlatformConfig, Reading, TokenConfig};
+use crate::state::{default_recovery_open, PlatformConfig, Reading, TokenConfig};
 
 /// Readings are processed strictly in submission order: the reading must be the successor of the last processed one.
 pub fn require_next_in_line(c: &TokenConfig, r: &Reading) -> Result<()> {
@@ -34,26 +34,16 @@ pub fn require_fixed_supply(mint: &Mint) -> Result<()> {
     Ok(())
 }
 
-/// The burn-pool cap in force (review M-1). The account passed is always the platform PDA (seeds-checked by the caller); if it
-/// holds a PlatformConfig, that config rules; if it was never created, the hard-coded default (25 SOL until
-/// DEFAULT_CAP_SUNSET_TS) applies — so a missing PlatformConfig can never wedge buybacks.
-/// Review-3 L-4 + re-check R3-4: the cranker allowlist in force — the PlatformConfig's keys while its cap is in force and for at most
-/// 90 days after initialize_platform; empty (permissionless) otherwise, and always when no PlatformConfig exists.
-pub fn crankers_in_force(platform: &AccountInfo, now: i64) -> Result<Vec<Pubkey>> {
+/// Owner decision 2026-10-25: there is no burn-pool cap and no cranker allowlist any more; the crank instructions still take the
+/// platform PDA (the IDL is unchanged) but never read it. Only the stranding-recovery registration-policy switch reads it: open before
+/// the platform sunset — the PlatformConfig's `cap_sunset_ts` if one lives there (seeds-checked by the caller), the hard-coded
+/// DEFAULT_CAP_SUNSET_TS if it was never created (review M-1).
+pub fn recovery_open(platform: &AccountInfo, now: i64) -> Result<bool> {
     if platform.owner == &crate::ID && !platform.data_is_empty() {
         let data = platform.try_borrow_data()?;
         let p = PlatformConfig::try_deserialize(&mut &data[..])?;
-        return Ok(p.crankers_in_force(now).to_vec());
-    }
-    Ok(Vec::new())
-}
-
-pub fn active_cap(platform: &AccountInfo, now: i64) -> Result<Option<u64>> {
-    if platform.owner == &crate::ID && !platform.data_is_empty() {
-        let data = platform.try_borrow_data()?;
-        let p = PlatformConfig::try_deserialize(&mut &data[..])?;
-        Ok(p.active_cap(now))
+        Ok(p.recovery_open(now))
     } else {
-        Ok(default_active_cap(now))
+        Ok(default_recovery_open(now))
     }
 }

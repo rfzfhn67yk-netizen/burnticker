@@ -23,7 +23,6 @@ use crate::cpmm::{self, PoolView};
 use crate::error::BurnError;
 use crate::events::{FeeKeyRegistered, LockFeesClaimed};
 use crate::guards::{require_fee_pda_intact, require_fee_token_account_intact};
-use crate::instructions::crank_common::crankers_in_force;
 use crate::memo;
 use crate::state::{FeeKeyRecord, TokenConfig};
 
@@ -192,7 +191,7 @@ pub fn handle_register_fee_key(ctx: Context<RegisterFeeKey>) -> Result<()> {
     Ok(())
 }
 
-/// PERMISSIONLESS (the cranker allowlist of crank_buyback applies while the pre-audit cap is in force). collect_cp_fees on the coin's
+/// PERMISSIONLESS. collect_cp_fees on the coin's
 /// RECORDED lock position (lp-lock blind review L-1: against fee_key.pool, which the lock state pins forever — not config.cpmm_pool,
 /// which replace_pool / apply_registration_policy can move), always for everything accrued (L-3: lp_fee_amount = u64::MAX, no caller
 /// choice), signed by FEE_KEYS, into FEE_KEYS's own WSOL and token accounts; then, in this instruction:
@@ -215,7 +214,7 @@ pub fn handle_register_fee_key(ctx: Context<RegisterFeeKey>) -> Result<()> {
 pub struct ClaimLockFees<'info> {
     #[account(mut)]
     pub cranker: Signer<'info>,
-    /// CHECK: the platform PDA (seeds-checked) — its cranker allowlist, as for crank_buyback.
+    /// CHECK: the platform PDA (seeds-checked); unused since the cranker allowlist was removed (2026-10-25).
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
     #[account(seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
@@ -287,8 +286,6 @@ pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>) -> Result<()> {
     require!(OPERATOR_TREASURY != Pubkey::default(), BurnError::TreasuryNotPinned);
     let now = Clock::get()?.unix_timestamp;
     let a = &ctx.accounts;
-    let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
-    require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     let c = &a.config;
     require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
     // L-1: no pool_verified / config.cpmm_pool check — the record was verified at register_fee_key and its pool is immutable in the

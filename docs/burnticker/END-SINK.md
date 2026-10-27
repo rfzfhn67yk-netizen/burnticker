@@ -10,8 +10,8 @@ A coin launched with `onEnd.endSink` in its hashed rule (every new launch: `rule
 
 - **with a result** (a season over, a one-shot settled YES or NO, a derby season over): the keeper records a quorum-signed RuleEnd
   (`submit_rule_end`, outcome resolved) once nothing is left to attest or crank. No reading dated later is accepted or cranked. Anyone
-  can then call `forward_on_end`: the program moves the fee PDA's spendable SOL and WSOL (above the reserve, under the burn-pool cap, at
-  least the EndSink's minimum) to the sink it picks, and that coin's own cranks burn it. The coin retires. Later fee income is forwarded
+  can then call `forward_on_end`: the program moves the fee PDA's spendable SOL and WSOL (above the reserve, at least the EndSink's
+  minimum; there is no burn-pool cap since 2026-10-25) to the sink it picks, and that coin's own cranks burn it. The coin retires. Later fee income is forwarded
   again whenever it passes the minimum, at most once a week (the retired sweep follows the sink).
 - **void** (a voided market, a pair that voided, a cancelled season): the RuleEnd is recorded void and the coin keeps the 28-day
   wind-down on itself, then the self-burn sweep.
@@ -43,8 +43,8 @@ the drain path.
 What the program allows: `crank_buyback` refuses a reading with 0 units (`NoUnits`), and a new reading with a unit on a one-shot would
 spend another 50 % of the pool, so a round-4 program cannot spend a carried amount without breaking the rule. `crank_carried` (round 5)
 spends it without a reading, but only while the rule is live (`RuleNotLive` once `submit_rule_end` has landed). (Round-5 review R5-3 /
-R5-4 later lifted that refusal; round-5 review R5-8 limits `crank_carried` to a per-coin budget of one per-crank cap per 600 seconds,
-which the keeper waits for.)
+R5-4 later lifted that refusal; round-5 review R5-8 limited `crank_carried` to a per-coin budget of one per-crank cap per 600 seconds;
+the owner decision of 2026-10-25 removed that budget with the per-crank bound, so one call now spends the whole carry.)
 
 The policy (keeper, `multiKeeper.owedBeforeEnd`): for a coin with an EndSink whose one-shot settled RESOLVED with units at a share
 under 100 %, the end is not recorded and nothing is forwarded while the chain shows a carried amount after the result's crank.
@@ -70,7 +70,7 @@ row say the share is spent on the coin before the rest moves on. Tests: `test/bu
 `sink_mint = 1nc1nerator11111111111111111111111111111111`, Solana's incinerator (`solana_program::incinerator::ID`: nobody holds its
 key, and the runtime destroys the lamports it is credited at the end of each block). After a quorum-signed RESOLVED end, anyone calls
 `burn_sol_on_end`: the fee PDA's WSOL is unwrapped into the fee PDA (its WSOL account closed and created again in the same instruction,
-the cranker's rent refunded), then min(the SOL above the reserve, the burn-pool cap) goes to the incinerator. No swap, no price impact,
+the cranker's rent refunded), then the SOL above the reserve goes to the incinerator (no burn-pool cap since 2026-10-25). No swap, no price impact,
 the reserve stays. Memo `<PREFIX>|endburn|to=1nc1nerator1|lamports=N|v1`, event `SolBurnedOnEnd`; later fee income goes the same way
 (the minimum and the weekly keeper sweep as for other sinks; a send under an empty account's rent-exempt minimum, 890,880 lamports,
 waits). The incinerator account is address-checked, and `forward_on_end` refuses this kind, so the SOL has no other way out. A VOID end

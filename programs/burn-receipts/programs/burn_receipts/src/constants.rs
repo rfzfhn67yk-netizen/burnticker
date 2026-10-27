@@ -10,26 +10,22 @@ pub const READING_SEED: &[u8] = b"reading";
 /// The one PlatformConfig of the program.
 pub const PLATFORM_SEED: &[u8] = b"platform";
 
-/// The owner's pre-audit burn-pool cap default (25 SOL), raised only through CAP_TIMELOCK_SECS, sunset at most a year out.
-pub const DEFAULT_BURN_POOL_CAP_LAMPORTS: u64 = 25_000_000_000;
-/// Review-2 F8: the initial cap is at least 1 SOL (a mis-click guard: a 1-lamport cap would stall every burn until the sunset).
-/// Review-3 I-2: initialize_platform now requires the cap to EQUAL the default (it can only be raised afterwards), so this floor is
-/// implied; kept for the client's constants.
-pub const MIN_BURN_POOL_CAP_LAMPORTS: u64 = 1_000_000_000;
-/// Review-3 L-4: at most this many keys in the PlatformConfig's cranker allowlist (enforced only while the pre-audit cap is in force).
-pub const MAX_CRANKERS: usize = 3;
-/// Re-check R3-4: the cranker allowlist stops applying this long after initialize_platform even while the cap is still in force, so
-/// lost allowlisted keys plus a renounced platform authority can stall cranking for at most 90 days (not until the sunset).
-pub const CRANKER_ALLOWLIST_MAX_SECS: i64 = 90 * 24 * 60 * 60;
-pub const CAP_TIMELOCK_SECS: i64 = 48 * 60 * 60;
+/// Owner decision 2026-10-25: the pre-audit burn-pool cap (25 SOL, raise-only behind a 48 h timelock) and the cranker allowlist that
+/// applied only while it was in force are REMOVED. A burn pool spends what the rule says, with no per-day platform cap, and any key may
+/// crank. PlatformConfig keeps its fields (mainnet layout); the cap fields are unused. The platform SUNSET survives for one purpose
+/// only: it closes the stranding-recovery registration-policy switch (admin.rs require_policy_switch_window).
+/// The number of cranker slots in PlatformConfig's layout (unused since 2026-10-25; kept so existing accounts deserialise).
+pub const PLATFORM_CRANKER_SLOTS: usize = 3;
+/// initialize_platform: the platform sunset is at most this far out.
 pub const MAX_CAP_SUNSET_SECS: i64 = 365 * 24 * 60 * 60;
-/// When no PlatformConfig exists (review M-1), crank_buyback applies the default cap until this hard-coded sunset
-/// (2027-10-01T00:00:00Z) — so a lost or finalised upgrade authority can never wedge buybacks.
+/// When no PlatformConfig exists (review M-1), the stranding-recovery registration switch stays open until this hard-coded sunset
+/// (2027-10-01T00:00:00Z).
 pub const DEFAULT_CAP_SUNSET_TS: i64 = 1_822_348_800;
 
 /// Buyback swap safety (review H-1/L-7, review-2 F1): the TWAP guard is mandatory, at most 3 % deviation over a 600–1,200 s window;
 /// the swap's minimum output is the larger of the spot-reserve quote and the TWAP-price quote, both less the pool fee and
-/// `slippage_bps` (≤ 3 %); one crank may spend at most 2 % of the pool's WSOL reserve (price impact under ~4 %), the rest is carried.
+/// `slippage_bps` (≤ 3 %). Owner decision 2026-10-25: there is no per-crank spend bound any more (it was 2 % of the pool's WSOL
+/// reserve); one crank spends the rule's whole amount, still behind the floor, the TWAP guard, the min-out and the pool-health checks.
 pub const MAX_TWAP_DEVIATION_BPS: u16 = 300;
 pub const MAX_SLIPPAGE_BPS: u16 = 300;
 /// The oracle read is conservative by up to 14 s of its window (cpmm::effective_obs_time: the TWAP can read HIGH by ≤ 14/window,
@@ -39,7 +35,6 @@ pub const MAX_SLIPPAGE_BPS: u16 = 300;
 pub const TWAP_BUCKET_TOLERANCE_BPS_SECS: u32 = 15 * 10_000;
 pub const MIN_TWAP_WINDOW_SECS: u32 = 600;
 pub const MAX_TWAP_WINDOW_SECS: u32 = 1_200;
-pub const MAX_SPEND_RESERVE_BPS: u64 = 200;
 
 /// Pool replacement (review M-4): the registered pool must have been observed untradeable continuously for 7 days.
 pub const POOL_REPLACEMENT_DELAY_SECS: i64 = 7 * 24 * 60 * 60;
@@ -493,13 +488,8 @@ pub const PYTH_MAX_FUTURE_SECS: i64 = 5;
 // Round-5 review R5-8 (owner, 2026-10-15 "fix both now"): crank_carried pacing
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/// CarriedPace ["carried_pace", mint]: the coin's carried-spend budget (what is left of it and when it was last spent) and its piece
-/// count. A separate account because TokenConfig has no spare bytes left (round 5 used the last one for burn_target_kind); TokenConfig's
+/// CarriedPace ["carried_pace", mint]: the coin's carried-piece count and when it was last spent (its budget field is unused since the
+/// per-crank bound was removed, owner decision 2026-10-25). A separate account because TokenConfig has no spare bytes left (round 5 used the last one for burn_target_kind); TokenConfig's
 /// size and layout are unchanged.
 #[constant]
 pub const CARRIED_PACE_SEED: &[u8] = b"carried_pace";
-/// The carried-spend budget refills at one per-crank cap (2 % of the pool's WSOL reserve) per this many seconds (half the 1,200 s TWAP
-/// window), up to one cap. A piece spends its own lamports from it, so a dust piece uses only a dust budget; at most one piece per coin
-/// per second (two in one transaction are refused). Anyone may crank; nobody can drain carried spend faster than one cap per window.
-#[constant]
-pub const CARRIED_BUDGET_WINDOW_SECS: i64 = 600;

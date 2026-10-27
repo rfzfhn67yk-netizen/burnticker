@@ -112,8 +112,9 @@ export function verifyReceiptCore(i: { ticker: string; rulesText: string; receip
     } catch (e) { checks.push({ id: "units", ok: false, detail: `recomputation failed: ${(e as Error).message}` }); }
   }
   if (mode === "buyback" && pm && "spent" in pm && r.mapping?.fractionOfPool !== undefined) {
-    // The program's own fixed-point rule spend over the reading's units; one crank spends at most 2 % of the pool's reserve and
-    // carries the rest, so a spend below the rule's is "carried" (not checkable from the memo alone), above it is carried-in spend.
+    // The program's own fixed-point rule spend over the reading's units. Since the owner decision of 2026-10-25 one crank spends the
+    // whole target; a spend below the rule's is "carried" (under the floor, an untradeable pool, or a receipt from before 2026-10-25,
+    // when one crank was bounded), not checkable from the memo alone; above it is carried-in spend.
     const bps = Math.round(r.mapping.fractionOfPool * 10_000);
     spend = programBuybackSpend(BigInt(pm.pool), BigInt(pm.units), bps);
     const spent = BigInt(pm.spent);
@@ -121,7 +122,7 @@ export function verifyReceiptCore(i: { ticker: string; rulesText: string; receip
     else if (spent > BigInt(pm.pool)) checks.push({ id: "spend", ok: false, detail: `spent ${pm.spent} > pool ${pm.pool}` });
     else if (pm.burn !== pm.got && Number(pm.burn) < Number(pm.got)) checks.push({ id: "spend", ok: false, detail: `burned ${pm.burn} < bought ${pm.got}` });
     else if (spent === spend) checks.push({ id: "spend", ok: true, detail: `rule spend = ${pm.pool} × (1 − (1 − ${bps}/10000)^${pm.units}) = ${spend} lamports (the program's fixed point), spent in full; every token the fee PDA held was burned` });
-    else checks.push({ id: "spend", ok: null, detail: `rule spend ${spend} lamports, spent ${pm.spent}: the program caps one crank at 2% of the pool's reserve and carries the difference (see the Reading account's carried_in/out)` });
+    else checks.push({ id: "spend", ok: null, detail: `rule spend ${spend} lamports, spent ${pm.spent}: the difference was carried, because the spend was under the floor, the pool could not trade, or the receipt is older than the removal of the per-run bound (see the Reading account's carried_in/out)` });
   } else if (mode === "buyback" && m && r.mapping?.fractionOfPool !== undefined) {
     spend = buybackSpend(BigInt(m.pool), r.units, fracStr(r.mapping.fractionOfPool));
     const bad: string[] = [];

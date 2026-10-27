@@ -1,55 +1,55 @@
-// CONTINUOUS AUDIT 2026-10-19 ACC-01: THE LAUNCH SCREEN PROMISED AN AUDIT-GATED CAP. The launch review's "Other conditions" said "Until
-// the program is audited, each burn pool spends from at most 25 SOL", and the static token page held queued SOL "until the audit". The
-// program's authority can raise the cap after a public 48-hour wait, and it ends at its sunset; no audit is needed for either. Every
-// surface now takes its cap words from capInForce.ts, and they agree in every cap state: unread, the default, raised, a raise waiting,
-// and ended.
+// CONTINUOUS AUDIT 2026-10-19 ACC-01 (the cap read the same on every surface), REWORKED FOR THE OWNER DECISION OF 2026-10-25: both burn
+// caps (the 25 SOL burn-pool cap with its raise-only 48-hour timelock, and the per-run 2% bound) were removed from the burn_receipts
+// program. capInForce.ts is retired. This guard now pins that the copy and the program agree there is no cap: the program source has no
+// active_cap, no cap constants and refuses every cap raise with CapRemoved; every surface that showed the cap says there is none, in the
+// same words (spreadCopy.ts).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { PublicKey } from "@solana/web3.js";
-import { capHeldSentence, capSentence, capSentenceAway, effectiveCap, type EffectiveCap } from "@/lib/burnticker/capInForce";
 import { PREREQUISITE_STATES } from "@/lib/burnticker/launchReview";
+import { BURN_RUNS_SENTENCE, NO_BURN_CAP_SENTENCE, NO_CAP_TRANSPARENCY_SENTENCE, PLATFORM_AUTHORITY_NO_CAP_SENTENCE } from "@/lib/burnticker/spreadCopy";
 import { lintCopy } from "@/lib/launch/copyLint";
 
-const now = Date.UTC(2026, 9, 19) / 1000;
-const vault = new PublicKey(Buffer.alloc(32, 9));
-const cfg = { burn_pool_cap_lamports: BigInt("1000000000000"), cap_sunset_ts: BigInt(now + 86_400 * 30), pending_cap_lamports: BigInt(0), pending_cap_eta: BigInt(0), authority: vault };
-const STATES: [string, EffectiveCap | null][] = [
-  ["unread", null],
-  ["the default", effectiveCap(null, now)],
-  ["raised", effectiveCap(cfg, now)],
-  ["a raise waiting", effectiveCap({ ...cfg, pending_cap_lamports: BigInt("2000000000000"), pending_cap_eta: BigInt(now + 3_600) }, now)],
-  ["ended", effectiveCap(cfg, now + 86_400 * 31)],
-];
-const AUDIT_GATED = /until the (program is )?audit|after the audit|before the audit|released after|audit decision/i;
+const read = (f: string) => fs.readFileSync(f, "utf8");
+const RS = "programs/burn-receipts/programs/burn_receipts/src";
 
-describe("ACC-01: the cap reads the same on every surface, in every state", () => {
-  for (const [name, e] of STATES) {
-    test(`${name}: Trust, the launch review, the wallet summary and the token pages say it the same way`, () => {
-      const trust = capSentence(e), away = capSentenceAway(e), held = capHeldSentence("3.5", e);
-      for (const s of [trust, away, held]) { assert.doesNotMatch(s, AUDIT_GATED, s); assert.deepEqual(lintCopy(s).hits, [], s); }
-      // a read cap is said identically everywhere; an unread one is the default, pointing to Trust for the cap in force
-      if (e) assert.equal(away, trust); else assert.equal(away, `${trust} The Trust page shows the cap in force.`);
-      if (!e || e.capLamports !== null) { assert.match(trust, /48-hour wait/); assert.match(trust, /An audit is not required for either change\./); }
-      if (e && e.capLamports === null) assert.match(held, /has ended, so it can be spent now/);
-      else { assert.match(held, /until the cap rises or ends\. The platform can raise the cap only after a public 48-hour wait, and the cap ends by .+ at the latest\. Neither change needs an audit\.$/); assert.doesNotMatch(held, /for either\./); }
-    });
-  }
-  test("the unread sentence is the audit's suggested copy", () => {
-    assert.match(capSentence(null), /^The default burn-pool cap is 25 SOL\. The platform authority can raise the cap after a public 48-hour wait, and it expires by October 1, 2027 at the latest\. An audit is not required for either change\./);
-    assert.match(capHeldSentence("3.5", effectiveCap(cfg, now)), /the 1,000 SOL burn-pool cap/);
-    assert.match(capHeldSentence("3.5", null), /the default 25 SOL burn-pool cap/);
+describe("no burn cap: the program and the copy agree", () => {
+  test("the program has no cap in force: no active_cap, no cap constants, every cap raise refused with CapRemoved", () => {
+    const state = read(`${RS}/state.rs`), constants = read(`${RS}/constants.rs`), err = read(`${RS}/error.rs`);
+    assert.doesNotMatch(state, /fn active_cap|fn default_active_cap|fn crankers_in_force/);
+    assert.match(state, /pub fn recovery_open\(&self, now: i64\) -> bool/);
+    assert.match(state, /pub fn default_recovery_open\(now: i64\) -> bool/);
+    for (const c of ["DEFAULT_BURN_POOL_CAP_LAMPORTS", "MIN_BURN_POOL_CAP_LAMPORTS", "CAP_TIMELOCK_SECS", "MAX_SPEND_RESERVE_BPS", "CARRIED_BUDGET_WINDOW_SECS", "MAX_CRANKERS", "CRANKER_ALLOWLIST_MAX_SECS"]) assert.doesNotMatch(constants, new RegExp(`pub const ${c}\\b`), c);
+    assert.match(err, /CapRemoved/);
   });
-  test("the launch review and the token page take the helper's words; no surface keeps an audit-gated cap", () => {
-    const review = fs.readFileSync("src/lib/burnticker/launchReview.ts", "utf8");
-    assert.match(review, /^\s+capSentenceAway\(null\),/m, "the review's prerequisites (shown under Other conditions in the wallet summary)");
-    assert.ok(PREREQUISITE_STATES.some((s) => /^Capped: .*public 48-hour wait.*Neither change needs an audit\.$/.test(s))); assert.ok(!PREREQUISITE_STATES.some((s) => /for either\./.test(s)), "AP7-7: no either without its antecedent");
-    const page = fs.readFileSync("src/lib/burnticker/tokenPage.ts", "utf8");
-    assert.match(page, /capHeldSentence\(s\.pool\.queuedSol, null\)/);
-    assert.match(page, /queuedNote: `\$\{capSentenceAway\(null\)\}/);
-    for (const f of ["src/lib/burnticker/launchReview.ts", "src/lib/burnticker/tokenPage.ts", "src/app/burnticker/launch/PreWalletSummary.tsx", "src/app/burnticker/_components/BurnMath.tsx", "src/app/burnticker/trust/page.tsx"]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /Until the program is audited|until the audit|pre-audit cap of/i, f);
-    const t = JSON.parse(fs.readFileSync("config/burnticker/transparency.json", "utf8")) as { limitations: { id: string; text: string }[] };
-    const cap = t.limitations.find((l) => l.id === "cap-25")!;
-    assert.doesNotMatch(cap.text, AUDIT_GATED); assert.match(cap.text, /An audit is not required/);
+  test("the TS mirrors carry no cap: the deprecated shims are deleted and capInForce.ts is gone", async () => {
+    assert.equal(fs.existsSync("src/lib/burnticker/capInForce.ts"), false);
+    const constants = await import("@/lib/burnReceipts/constants"), math = await import("@/lib/burnReceipts/math"), dispersal = await import("@/lib/burnticker/dispersal"), fees = await import("@/lib/burnticker/fees"), burnMath = await import("@/lib/burnticker/burnMath");
+    for (const n of ["DEFAULT_BURN_POOL_CAP_LAMPORTS", "CAP_TIMELOCK_SECS", "MAX_SPEND_RESERVE_BPS"]) assert.equal(n in constants, false, n);
+    assert.equal("reserveSpendCap" in math, false);
+    for (const n of ["DISPERSAL_WINDOW_MS", "DISPERSAL_MIN_GAP_MS", "PROGRAM_CAP_BPS", "DEPTH_PPM"]) assert.equal(n in dispersal, false, n);
+    for (const n of ["PRE_AUDIT_POOL_CAP_SOL", "PRE_AUDIT_POOL_CAP_LAMPORTS", "capPool"]) assert.equal(n in fees, false, n);
+    for (const n of ["MAX_SPEND_RESERVE_BPS", "DEFAULT_CAP_LAMPORTS"]) assert.equal(n in burnMath, false, n);
+  });
+  test("the canonical sentences are plain and lint-clean", () => {
+    assert.equal(BURN_RUNS_SENTENCE, "When a reading settles, the burn runs right away and spends the rule's full share of the burn pool in one run.");
+    assert.equal(NO_BURN_CAP_SENTENCE, "There is no platform cap on a burn. The burn pool spends what the rule says.");
+    assert.equal(NO_CAP_TRANSPARENCY_SENTENCE, "There is no burn-pool cap and no limit on how much one burn spends. Each burn spends the rule's full share of the burn pool in one run.");
+    assert.equal(PLATFORM_AUTHORITY_NO_CAP_SENTENCE, "The platform authority no longer holds a cap-raise power. The program refuses every cap raise.");
+    for (const s of [BURN_RUNS_SENTENCE, NO_BURN_CAP_SENTENCE, NO_CAP_TRANSPARENCY_SENTENCE, PLATFORM_AUTHORITY_NO_CAP_SENTENCE]) assert.deepEqual(lintCopy(s).hits, [], s);
+  });
+  test("every surface that showed the cap says there is none", () => {
+    const review = read("src/lib/burnticker/launchReview.ts");
+    assert.match(review, /^\s+`\$\{BURN_RUNS_SENTENCE\} \$\{NO_BURN_CAP_SENTENCE\}`,/m, "the review's prerequisites (shown under Other conditions in the wallet summary)");
+    assert.ok(!PREREQUISITE_STATES.some((s) => /^Capped/.test(s)), "no Capped burn state");
+    const page = read("src/lib/burnticker/tokenPage.ts");
+    assert.match(page, /noCapNote: NO_BURN_CAP_SENTENCE/);
+    assert.doesNotMatch(page, /capHeldSentence|capSentenceAway|queuedNote|capPool/);
+    const trust = read("src/app/burnticker/trust/page.tsx");
+    assert.match(trust, /data-no-burn-cap/); assert.doesNotMatch(trust, /data-effective-cap|The burn-pool cap in force/);
+    for (const f of ["src/lib/burnticker/launchReview.ts", "src/lib/burnticker/tokenPage.ts", "src/app/burnticker/launch/PreWalletSummary.tsx", "src/app/burnticker/_components/BurnMath.tsx", "src/app/burnticker/trust/page.tsx", "src/lib/burnticker/trust.ts", "src/lib/burnticker/guidedLaunch.ts"]) assert.doesNotMatch(read(f), /capInForce|Until the program is audited|until the audit|pre-audit cap of|default burn-pool cap/i, f);
+    const t = JSON.parse(read("config/burnticker/transparency.json")) as { limitations: { id: string; text: string }[] };
+    assert.equal(t.limitations.some((l) => l.id === "cap-25"), false);
+    assert.ok(t.limitations.find((l) => l.id === "no-burn-cap")!.text.startsWith(NO_CAP_TRANSPARENCY_SENTENCE));
   });
 });

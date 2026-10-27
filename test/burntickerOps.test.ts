@@ -141,7 +141,7 @@ describe("evaluateAlerts on a fake registry", () => {
     assert.deepEqual(kinds(a), ["bt-audit-mismatch"]);
     assert.match(a[0].text, /AUDIT MISMATCH .*1 receipt does not recompute — \$BRONCO KXNFLGAME-26OCT04DENSF-DEN: units: row 2 ≠ recomputed 1/);
   });
-  test("the keeper key under 0.1 SOL, the pre-audit cap binding (from the published status.json), a stale keeper", () => {
+  test("the keeper key under 0.1 SOL, a stale keeper; a pool above 25 SOL raises nothing (no burn-pool cap since the owner decision of 2026-10-25)", () => {
     launch(BRONCOS, "BRONCO", MINT_A, NIGHT - DAY);
     writeAudit(true, NIGHT - HOUR);
     reg.setFeedState({ selectorKey: "kalshi:KXNFLGAME:binary", lastFetchAt: NIGHT - 60_000, lastOkAt: NIGHT - 60_000, failures: 0, lastError: null, nextFetchAt: NIGHT + 60_000 });
@@ -149,9 +149,8 @@ describe("evaluateAlerts on a fake registry", () => {
     assert.deepEqual(evaluateAlerts(snap(NIGHT, { balances: { at: NIGHT, keeperLamports: KEEPER_MIN_LAMPORTS, devFeeLamports: null } })), [], "exactly 0.1 is fine");
     let a = evaluateAlerts(snap(NIGHT, { balances: { at: NIGHT, keeperLamports: KEEPER_MIN_LAMPORTS - BigInt(1), devFeeLamports: null } }));
     assert.deepEqual(kinds(a), ["bt-keeper-balance-low"]); assert.match(a[0].text, /holds 0\.100 SOL \(< 0\.1\)\. Send about 0\.41 SOL/);
-    writeStatus("BRONCO", { feePdaSol: "27.5", queuedSol: "2.48" });
-    a = evaluateAlerts(snap(NIGHT));
-    assert.deepEqual(kinds(a), ["bt-cap-binding"]); assert.match(a[0].text, /2\.48 SOL above the 25 SOL pre-audit cap is queued \(pool 27\.5 SOL\)/);
+    writeStatus("BRONCO", { feePdaSol: "27.5", queuedSol: "2.48" });   // an old status.json that still names a queued amount
+    assert.deepEqual(evaluateAlerts(snap(NIGHT)), [], "bt-cap-binding is gone");
     writeStatus("BRONCO", { feePdaSol: "3.1", queuedSol: "0" });
     assert.deepEqual(evaluateAlerts(snap(NIGHT)), []);
     reg.setStatus("lastCycle", { at: NIGHT - 11 * 60_000, errors: [], refusals: [] });
@@ -249,13 +248,13 @@ describe("the morning check's Burnticker block", () => {
     assert.match(text, /^- tokens: 1 live \(\$BRONCO\) · 0 draft · 0 paused\/retired$/m);
     assert.match(text, /^- burns last 24 h: 0 \(0\.0000 SOL spent\) · all time 0 · per token: \$BRONCO 0\/0$/m);
     assert.match(text, /^- cranks: 1 pending · 1 failing — \$BRONCO KXNFLGAME-26OCT04DENSF-DEN ×2 \(RPC\/program error: timeout\)$/m);
-    assert.match(text, /^- pools: 26\.000 SOL across 1 fee PDA\(s\) · queued above the pre-audit cap: \$BRONCO 1\.0 SOL$/m);
+    assert.match(text, /^- pools: 26\.000 SOL across 1 fee PDA\(s\)$/m, "no queued-above-the-cap part: there is no cap");
     assert.match(text, /^- attesters: \$BRONCO 1 active \(0 independent\) quorum 1 · One operator attester is configured; no independent second attester is live\. Quorum 1\. \(owner check: a second attester was due by 2026-10-21\)$/m);
     assert.match(text, /^- audit badge: OK — every recorded receipt recomputes · 1 receipt\(s\)(, \d+ executed on chain)? · source only · ran 30 min ago$/m);
     assert.match(text, /^- dev fee wallet: 2\.750 SOL \(sampled 0 min ago\) · Δ \+0\.7500 SOL since 2026-10-08T15:00Z$/m);
     assert.match(text, /^- keeper: last cycle 1 min ago · errors: \$BRONCO: execute: timeout · key balance 0\.250 SOL$/m);
     assert.match(text, /^- feeds: kalshi:KXNFLGAME:binary ok 2 min ago$/m);
-    assert.match(text, /^- conditions now: bt-cap-binding$/m);
+    assert.match(text, /^- conditions now: none$/m, "a queued amount above the old cap is no longer a condition (owner decision 2026-10-25)");
     assert.match(text, /^- bt- alerts last 24 h: 2$/m, "the non-bt alert is left to the Money section; the old bt- row is outside the window the caller passed");
     assert.match(text, /\[bt-cap-binding\] Burnticker \$BRONCO: 1\.0 SOL above the cap · no push record$/m, "OP7-7: never UNSEEN (nothing marks an alert seen)");
   });

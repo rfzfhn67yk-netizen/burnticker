@@ -14,7 +14,7 @@ use crate::constants::*;
 use crate::error::BurnError;
 use crate::events::{AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed};
 use crate::cpmm::{launchlab_platform_cp_config, pool_pda};
-use crate::instructions::crank_common::{active_cap, require_fixed_supply};
+use crate::instructions::crank_common::{recovery_open, require_fixed_supply};
 use crate::instructions::pool_health::{clear_untradeable, continuous_untradeable_secs};
 use crate::instructions::register_pool::verify_pool_provenance;
 use anchor_spl::token::Mint;
@@ -223,7 +223,7 @@ pub fn handle_apply_paired_attester_change(ctx: Context<ApplyPairedAttesterChang
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// Review-3 M-3 — the stranding-recovery switch of the registration policy (48 h timelock, sunsets with the pre-audit cap)
+// Review-3 M-3 — the stranding-recovery switch of the registration policy (48 h timelock, closes at the platform sunset)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 fn clear_pending_policy(c: &mut TokenConfig) {
@@ -237,10 +237,10 @@ pub fn policy_expires_at(eta: i64) -> i64 {
     eta.saturating_sub(ATTESTER_TIMELOCK_SECS).saturating_add(POLICY_PROPOSAL_TTL_SECS)
 }
 
-/// The switch is a STRANDING-RECOVERY power: allowed only while the pre-audit cap is in force (PlatformConfig sunset, or the default
-/// 2027-10-01 without one) and only while no pool works — none verified yet, or the registered one continuously untradeable ≥ 7 days.
+/// The switch is a STRANDING-RECOVERY power: allowed only before the platform sunset (PlatformConfig.cap_sunset_ts, or the default
+/// 2027-10-01 without one; the burn-pool cap that once shared this sunset was removed on 2026-10-25) and only while no pool works — none verified yet, or the registered one continuously untradeable ≥ 7 days.
 fn require_policy_switch_window(c: &TokenConfig, platform: &AccountInfo, now: i64) -> Result<()> {
-    require!(active_cap(platform, now)?.is_some(), BurnError::PolicySwitchNotAllowed);
+    require!(recovery_open(platform, now)?, BurnError::PolicySwitchNotAllowed);
     require!(!c.own_pool_verified() || continuous_untradeable_secs(c, now) >= POOL_REPLACEMENT_DELAY_SECS, BurnError::PolicySwitchNotAllowed);
     Ok(())
 }
@@ -251,7 +251,7 @@ pub struct RegistrationPolicyAdmin<'info> {
     pub admin: Signer<'info>,
     #[account(mut, seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
     pub config: Box<Account<'info, TokenConfig>>,
-    /// CHECK: the platform PDA (seeds-checked); a missing PlatformConfig means the default cap and sunset.
+    /// CHECK: the platform PDA (seeds-checked); a missing PlatformConfig means the default sunset.
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
 }

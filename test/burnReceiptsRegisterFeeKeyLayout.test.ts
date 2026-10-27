@@ -47,10 +47,10 @@ describe("register_fee_key account list follows the deployed program (B-17)", ()
     assert.equal(await registerFeeKeyLaunchlabSlotOnChain({ accountBytes: async () => { throw new Error("rpc down"); } }, PROGRAM.toBase58(), "mainnet", b58, { vb }), false);
   });
   test("the checked-in verified-build table (B-17 deployed on mainnet and devnet 2026-10-21) sends the B-17 list on both", async () => {
-    // the real table (2026-10-21 after the mainnet execute, vault transaction 4, slot 459823169): mainnet's deployed hash is the B-17
+    // the real table (2026-10-21 after the mainnet execute, vault transaction 4, slot 461421913): mainnet's deployed hash is the B-17
     // build, so the keeper adds the account there; devnet was not upgraded and still runs round 5, so it gets the round-5 list until
     // the bytes read from devnet are the B-17 build
-    const B17 = { mainnet: "b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b", devnet: "34d7b68e21dbb3b9629d437bb309767019be406eb55352ee95915061aa0ae4ee" } as const;
+    const B17 = { mainnet: "1aff5fbfe243ea8233c360bfae6809b0dd411e2298600831d10be5ea97c99e17", devnet: "e52d27fcfa14f75148bfc00a298f061d3e522321370e6cb99f0f41dcdf8e13d1" } as const;
     const ROUND5 = { mainnet: ROUND5_MAINNET, devnet: "74659afdbb5f63fd0fb79a3366302bd68f7a8e84eea5cf9a6d9cdab97f36785c" } as const;
     const { loadVerifiedBuild } = await import("../src/lib/burnticker/trustpack/verifiedBuild.ts");
     const vb = loadVerifiedBuild(process.cwd());
@@ -63,11 +63,11 @@ describe("register_fee_key account list follows the deployed program (B-17)", ()
     }
     assert.equal(p.deployed.mainnet!.hash, B17.mainnet);
     assert.equal(p.deployed.mainnet!.matchesBuild, true);
-    assert.equal(p.deployed.mainnet!.slot, 459823169);
+    assert.equal(p.deployed.mainnet!.slot, 461421913);
     assert.equal(registerFeeKeyLaunchlabSlot(p.deployed.mainnet!.hash, "mainnet", vb), true, "mainnet: the recorded deployed bytes are B-17");
     assert.equal(p.deployed.devnet!.hash, B17.devnet);
     assert.equal(p.deployed.devnet!.matchesBuild, true);
-    assert.equal(p.deployed.devnet!.slot, 513708808);
+    assert.equal(p.deployed.devnet!.slot, 515097580);
     assert.equal(registerFeeKeyLaunchlabSlot(p.deployed.devnet!.hash, "devnet", vb), true, "devnet: the recorded deployed bytes are B-17 (vault transaction 23)");
   });
 });

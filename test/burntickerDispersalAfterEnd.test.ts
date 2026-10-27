@@ -2,9 +2,10 @@
 // on mainnet 2026-10-15) runs crank_carried after any end (crank_carried.rs R5-3 / R5-4) and, for 30 days after a RESOLVED end, keeps
 // the carried spend on the coin in forward_on_end / burn_sol_on_end (end.rs carry_held_back). The keeper (dispersalKeeper.ts), the
 // client planner (crank.ts planCarriedCrank) and the test doubles (FakeProgram, FakeEndSinkPort) used to stop at an ended rule, so a
-// carry left by the last reading stayed owed forever (or was forwarded off the coin). Repro: a 2 % event on a 5 SOL pool with a 2 SOL
-// trading reserve spends 40,000,000 lamports and carries 60,000,000; 72 five-minute cycles drain it in three pieces while live, and must
-// do the same after a RESOLVED or VOID end, across a restart and a lost confirmation, with exact pool / burn / end totals.
+// carry left by the last reading stayed owed forever (or was forwarded off the coin). Repro (since the owner decision of 2026-10-25 a
+// crank spends its whole target in one run, so the carry comes from a 30-day untradeable pool): a 2 % event on a 5 SOL pool carries its
+// whole 100,000,000 lamports; once the pool trades again, five-minute cycles drain it in ONE piece while live, and must do the same after
+// a RESOLVED or VOID end, across a restart and a lost confirmation, with exact pool / burn / end totals.
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair, PublicKey, type Connection } from "@solana/web3.js";
@@ -30,7 +31,7 @@ const ATTESTER = "KeeperDataKey1111111111111111111111111111111";
 const SOL = BigInt(1_000_000_000);
 const Z = BigInt(0);
 const H = 3_600_000;
-const SPENT = BigInt(40_000_000), CARRIED = BigInt(60_000_000), EVENT = SPENT + CARRIED;
+const SPENT = Z, CARRIED = BigInt(100_000_000), EVENT = SPENT + CARRIED;
 const table = {
   [settledMarketsUrl("KXNFLGAME")]: fx("kalshi/KXNFLGAME.settled.json"), [seriesApiUrl("KXNFLGAME")]: fx("kalshi/series.KXNFLGAME.json"), [openMarketsUrl("KXNFLGAME")]: { cursor: "", markets: [] },
 };
@@ -42,7 +43,7 @@ beforeEach(() => {
   deps = { registry: reg, program, oracles: { kalshi: new KalshiClient({ fetchImpl: fixtureFetch(table), now: () => clock, minIntervalMs: 0 }), catalogue: new CatalogueAdapter({ fetchImpl: treasuryAndCrossFetch(treasuryBody), now: () => clock }) }, attester: ATTESTER, log: (s) => lines.push(s), now: () => clock, dryRun: false, dispersal: true };
 });
 
-/** The repro coin: a Broncos YES day asks 2 % of 5 SOL (0.1 SOL) against a 2 SOL trading reserve (cap 0.04): spends 0.04, carries 0.06. */
+/** The repro coin: a Broncos YES day asks 2 % of 5 SOL (0.1 SOL) on a pool untradeable for 31 days: the whole 0.1 SOL is carried. */
 async function carriedCoin() {
   const b = await buildLaunchBundle({ creator: CREATOR, ticker: "BRONCO", name: "BRONCO coin", description: "a test", imageUrl: null, links: [], rule: BRONCOS, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
   const t = reg.register({ mint: b.mint, ticker: "BRONCO", name: b.name, creator: CREATOR, description: b.description, imageUrl: null, links: [], rulesText: b.rules.text, feePda: b.addresses.feePda, vault: b.addresses.vault, tokenConfig: b.addresses.tokenConfig, poolId: b.addresses.poolId, launchTx: null, cluster: "devnet", platformId: b.addresses.platformId, baselineAt: "2026-09-01T00:00:00Z", status: "draft" }, clock);
@@ -52,10 +53,13 @@ async function carriedCoin() {
   program.deposit(t.mint, BigInt(5) * SOL);
   const f = program.fake(t.mint);
   f.poolReserveWsol = BigInt(2) * SOL;
-  const first = await runCycle(deps);
-  assert.equal(first.executed[0].outcome, "confirmed");
-  assert.equal(f.cfg.totalSpentLamports, SPENT, "the event's crank spent 2 % of the 2 SOL reserve");
-  assert.equal(f.cfg.carriedSpendLamports, CARRIED, "and carried the rest of its 0.1 SOL");
+  const s0 = Math.floor(clock / 1000);
+  f.poolTradable = false;
+  f.cfg = { ...f.cfg, poolUntradeableSince: s0 - 31 * 86_400, poolUntradeableLastSeen: s0 - 3_600 };
+  await runCycle(deps);
+  f.poolTradable = true;
+  assert.equal(f.cfg.totalSpentLamports, SPENT, "the event's crank spent nothing on the dead pool");
+  assert.equal(f.cfg.carriedSpendLamports, CARRIED, "and carried its whole 0.1 SOL");
   const above0 = f.feeLamports + f.wsol - f.cfg.reserveLamports;
   assert.equal(above0, BigInt(5) * SOL - SPENT);
   return { mint: t.mint, f };
@@ -88,10 +92,10 @@ async function endOnChain(mint: string, outcome: "resolved" | "void", kind: "inc
 }
 
 describe("F01: a carried burn obligation drains after the rule ends (round-5 program lifecycle)", () => {
-  test("control, live rule: 72 five-minute cycles drain the 60,000,000 carried lamports in three pieces", async () => {
+  test("control, live rule: five-minute cycles drain the 100,000,000 carried lamports in one piece", async () => {
     const { mint, f } = await carriedCoin();
     const { pieces } = await cycles(f, mint);
-    assert.equal(pieces.length, 3);
+    assert.equal(pieces.length, 1);
     assert.equal(sum(pieces), CARRIED);
     assert.equal(f.cfg.totalSpentLamports, EVENT);
   });
@@ -101,8 +105,8 @@ describe("F01: a carried burn obligation drains after the rule ends (round-5 pro
     f.endState = { state: "resolved", date: f.cfg.lastRecordDate };   // the end lands right after the season's last crank
     const { pieces, actions } = await cycles(f, mint);
     assert.ok(!actions.every((a) => a === "idle"), `not 72 idle outcomes: ${actions.slice(0, 5).join(",")}`);
-    assert.equal(pieces.length, 3, actions.join(","));
-    assert.equal(sum(pieces), CARRIED, "exactly the carried 60,000,000 lamports");
+    assert.equal(pieces.length, 1, actions.join(","));
+    assert.equal(sum(pieces), CARRIED, "exactly the carried 100,000,000 lamports");
     assert.equal(f.cfg.carriedSpendLamports, Z);
     assert.equal(f.cfg.totalSpentLamports, EVENT, "the event's whole 0.1 SOL was spent on the coin");
     assert.equal(state(mint).debts.length, 0);
@@ -165,21 +169,19 @@ describe("F01: a carried burn obligation drains after the rule ends (round-5 pro
     assert.equal(f.cfg.totalSpentLamports, EVENT);
   });
 
-  test("restart mid-drain after the end with the dispersal state lost: the chain's carried amount still decides; totals exact", async () => {
+  test("restart after the end with the dispersal state lost: the chain's carried amount still decides; totals exact", async () => {
     const { mint, f } = await carriedCoin();
     f.endState = { state: "resolved", date: f.cfg.lastRecordDate };
-    let guard = 0;
-    while (f.cfg.totalSpentLamports === SPENT && guard++ < 72) { clock += 5 * 60_000; await runCycle(deps, { fetch: false }); }
-    assert.ok(f.cfg.carriedSpendLamports > Z && f.cfg.carriedSpendLamports < CARRIED, `mid-drain: ${f.cfg.carriedSpendLamports}`);
+    clock += 5 * 60_000; await runCycle(deps, { fetch: false });
     reg.setStatus(DISPERSAL_STATE_KEY(mint), "", clock);               // the keeper restarts with no dispersal state
-    await cycles(f, mint, 144);                                         // a fresh 6-hour window from the restart
+    await cycles(f, mint, 144);
     assert.equal(f.cfg.carriedSpendLamports, Z);
     assert.equal(f.cfg.totalSpentLamports, EVENT);
   });
 });
 
 describe("F01: the end paths keep the carry on the coin for 30 days (end.rs carry_held_back) and the keeper drains it first", () => {
-  test("RESOLVED end, incinerator sink: the first forward moves only the fuel above the carry; dispersal then burns the 0.06 SOL on the coin", async () => {
+  test("RESOLVED end, incinerator sink: the first forward moves only the fuel above the carry; dispersal then burns the 0.1 SOL on the coin", async () => {
     const { mint, f } = await carriedCoin();
     const port = await endOnChain(mint, "resolved");
     const above = f.feeLamports + f.wsol - f.cfg.reserveLamports;
@@ -187,11 +189,11 @@ describe("F01: the end paths keep the carry on the coin for 30 days (end.rs carr
     const tx = await port.buildForward();
     await port.send(tx.raw);
     assert.equal((await port.confirm(tx)).status, "confirmed");
-    assert.equal(port.incinerated, BigInt(5) * SOL - EVENT, "4.9 SOL burned as SOL; the 0.06 SOL owed stays on the coin");
+    assert.equal(port.incinerated, BigInt(5) * SOL - EVENT, "4.9 SOL burned as SOL; the 0.1 SOL owed stays on the coin");
     assert.equal(f.cfg.carriedSpendLamports, CARRIED, "the carry is not cleared inside the grace");
     // the keeper restarts with its dispersal state lost, after the end and the forward
     reg.setStatus(DISPERSAL_STATE_KEY(mint), "", clock);
-    const { pieces } = await cycles(f, mint, 144);                      // a fresh 6-hour window from the restart
+    const { pieces } = await cycles(f, mint, 144);
     assert.equal(sum(pieces), CARRIED);
     assert.equal(f.cfg.carriedSpendLamports, Z);
     assert.equal(f.cfg.totalSpentLamports, EVENT, "pool 5 SOL = 0.1 SOL burned on the coin + 4.9 SOL to the incinerator");
@@ -279,6 +281,6 @@ describe("F01 follow-ups (review of the branch): the chain's clock and the refus
     const line = lines.find((l) => /NothingCarried/.test(l))!;
     assert.match(line, /nothing is carried on chain any more \(spent by another cranker, or cleared by the rule's end path\)/);
     assert.doesNotMatch(line, /stays carried/);
-    assert.equal(state(mint).window, null, "no plan is kept for an amount that is gone");
+    assert.equal("window" in state(mint), false, "no plan is kept (there are no windows any more)");
   });
 });

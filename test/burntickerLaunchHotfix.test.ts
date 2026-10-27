@@ -70,12 +70,12 @@ describe("the owner: recurring rules up to 25 %", () => {
     assert.equal(dialsFor(season()).bounds.max, 0.25);
     assert.match(card, /data-share-more>\{showMore \? "Less" : "More"\}<\/button>/);
   });
-  test("above 5 % the rule says the burn lands in slices; the review accepts 10 and 25 % and the pinned fraction is 1000 and 2500 bps", () => {
-    assert.equal(SLICED_ABOVE, 0.05);
+  test("no share says the burn lands in slices (owner decision 2026-10-25: one run, no cap); the review accepts 10 and 25 % and the pinned fraction is 1000 and 2500 bps", () => {
+    assert.equal(SLICED_ABOVE, 0.05, "still the threshold for the drain line");
     const ten = describeRule(firstPartyRule(nwsSeries("high", "DEN", 90), 0.1), { ticker: "DENHOT" });
-    assert.match(ten.lead, /in slices sized to the pool's liquidity/); clean(ten.paragraph);
+    assert.doesNotMatch(ten.lead, /slices/); clean(ten.paragraph);
     assert.doesNotMatch(describeRule(firstPartyRule(nwsSeries("high", "DEN", 90), 0.05), { ticker: "DENHOT" }).lead, /slices/);
-    assert.match(describeRule(season(0.25), { ticker: "LAD" }).ruleBlock, /Each burn buys \$LAD on Raydium in slices sized to the pool's liquidity\./);
+    assert.match(describeRule(season(0.25), { ticker: "LAD" }).ruleBlock, /Each burn buys \$LAD on Raydium, with a receipt on chain\./);
     for (const [f, bps] of [[0.1, 1000], [0.25, 2500]] as const) {
       const r = { ...firstPartyRule(nwsSeries("high", "DEN", 90), f), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
       assert.equal(presetProblem(r), null);
@@ -83,7 +83,8 @@ describe("the owner: recurring rules up to 25 %", () => {
       assert.ok("review" in v); assert.equal(v.review.problems.length, 0, v.review.problems.join(" | "));
       assert.equal(counterRule(lockRule(r).rule, "DENHOT", "nws.high:DEN-90", { floorLamports: BigInt(0) }).rule.fraction_per_unit_bps, bps);
     }
-    assert.match(page, /shareValue > SLICED_ABOVE && !\/in slices sized\/\.test\(sentence0\)/);
+    assert.doesNotMatch(page, /in slices sized/);
+    assert.match(page, /const sentence = sentence0;/);
   });
 });
 

@@ -16,7 +16,7 @@ Powers Register entries `register_fee_key` / `claim_lock_fees`.
 
 Not queued for a later round: both went into the round-5 program before its mainnet upgrade (checklist erratum of 2026-10-15).
 
-- **R5-8, `crank_carried` budget.** Each piece spends from a per-coin carried budget that refills at one per-crank cap per 600 seconds
+- **R5-8, `crank_carried` budget** (removed again by the owner decision of 2026-10-25 with the per-crank bound: one call may now spend the whole carry). Each piece spends from a per-coin carried budget that refills at one per-crank cap per 600 seconds
   (`CARRIED_BUDGET_WINDOW_SECS`, half the 1,200 s TWAP window) up to one cap; a piece above it, or a second piece in the same second, is
   refused (`CarriedTooSoon`), so a dust piece by anyone takes only a dust budget (the first version's fixed 600 s gap let floor-size pieces
   hold the slot; the blind review of that version). The budget, the last piece's time and the piece count live in a new PDA,
@@ -39,12 +39,12 @@ needs the swap-and-burn core of `crank_buyback` factored out, so it waits for a 
 
 **Why.** A retired coin's fee PDA keeps receiving the post-graduation creator fee from Raydium trading (47.5 bps on mainnet CPMM tier 14 for new coins, 71.25 bps on tier 9, 4.75 bps on tier 0, by the tier each coin pinned), so its burn pool
 refills slowly. Today the keeper sweeps it (`src/lib/burnticker/multiKeeper.ts` planRuleEnd: when the spendable balance minus the reserve
-passes `onEnd.sweepThresholdLamports`, one quorum-signed `clock` reading of full-spend units, cranked across days under the per-crank cap,
+passes `onEnd.sweepThresholdLamports`, one quorum-signed `clock` reading of full-spend units, spent in one crank (no per-crank bound since 2026-10-25),
 at most once a week; receipt kind `sweep`). That still needs the keeper and its attester signature.
 
 **Design.** Once a token's rule has ENDED on chain (a recorded end reading / end flag in the TokenConfig), anyone may call
 `sweep_retired(mint)`: a 100 % spend of the fee PDA's spendable balance, under the SAME guards as `crank_buyback` — the TWAP guard, the
-2 %-of-reserve per-crank cap (the rest carried to the next call), the floor, the platform's pre-audit cap — and NO attester signature
+floor and the minimum output (no per-crank bound and no burn-pool cap since the owner decision of 2026-10-25), and NO attester signature
 (the end is already attested). The memo and event are those of a buyback crank with outcome `sweep`. Retired coins then stay burnable
 without the keeper.
 

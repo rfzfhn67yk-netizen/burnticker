@@ -237,59 +237,42 @@ impl FeeKeyRecord {
     }
 }
 
-/// The program-wide PlatformConfig (["platform"]): the temporary pre-audit burn-pool cap and its authority (instructions/platform.rs).
+/// The program-wide PlatformConfig (["platform"]). Owner decision 2026-10-25: the burn-pool cap and the cranker allowlist are REMOVED;
+/// the account keeps its exact layout so the deployed state still deserialises. Only `cap_sunset_ts` is still read: it closes the
+/// stranding-recovery registration-policy switch. Every cap and cranker field is unused (reserved).
 #[account]
 #[derive(InitSpace)]
 pub struct PlatformConfig {
     pub version: u8,
     pub bump: u8,
-    /// May propose cap RAISES (48 h timelock) and renounce. Pubkey::default() once renounced. Intended: the Squads 2-of-3 vault.
+    /// Holds no cap power any more (propose_cap_raise / apply_cap_raise refuse with CapRemoved); it may still renounce and clear the
+    /// unused cranker list. Pubkey::default() once renounced.
     pub authority: Pubkey,
-    /// While now < cap_sunset_ts, a token's buyback spend is computed on min(pool, cap).
+    /// Unused since 2026-10-25 (was the burn-pool cap). Reserved: never read.
     pub burn_pool_cap_lamports: u64,
-    /// After this unix time the cap no longer applies. Fixed at init; never extendable.
+    /// The platform sunset: the stranding-recovery registration-policy switch is allowed only before it. Fixed at init.
     pub cap_sunset_ts: i64,
+    /// Unused since 2026-10-25 (was a pending cap raise). Reserved: never read.
     pub pending_cap_lamports: u64,
-    /// 0 = nothing pending.
+    /// Unused since 2026-10-25 (was the pending raise's eta). Reserved.
     pub pending_cap_eta: i64,
     pub created_at: i64,
-    /// Review-3 L-4: while the cap is in force, only these keys may crank_buyback (empty = permissionless). Set at initialize_platform,
-    /// can only be CLEARED afterwards (clear_cranker_allowlist — by the platform authority or any allowlisted key, re-check R3-4), and
-    /// stops applying at the cap's sunset or 90 days after initialize_platform, whichever is first.
-    pub crankers: [Pubkey; MAX_CRANKERS],
+    /// Unused since 2026-10-25 (was the cranker allowlist, which applied only while the cap was in force). Cranking is permissionless.
+    pub crankers: [Pubkey; PLATFORM_CRANKER_SLOTS],
     pub cranker_count: u8,
     pub reserved: [u8; 64],
 }
 
 impl PlatformConfig {
-    /// The cap in force at `now`, or None once sunset.
-    pub fn active_cap(&self, now: i64) -> Option<u64> {
-        if now < self.cap_sunset_ts {
-            Some(self.burn_pool_cap_lamports)
-        } else {
-            None
-        }
-    }
-
-    /// Review-3 L-4 + re-check R3-4: the cranker allowlist applies while the cap is in force AND for at most 90 days after
-    /// initialize_platform; empty (permissionless) otherwise.
-    pub fn crankers_in_force(&self, now: i64) -> &[Pubkey] {
-        let fresh = now < self.created_at.saturating_add(crate::constants::CRANKER_ALLOWLIST_MAX_SECS);
-        if self.active_cap(now).is_some() && fresh {
-            &self.crankers[..self.cranker_count as usize]
-        } else {
-            &[]
-        }
+    /// Whether the stranding-recovery registration-policy switch is still open at `now` (before the platform sunset).
+    pub fn recovery_open(&self, now: i64) -> bool {
+        now < self.cap_sunset_ts
     }
 }
 
-/// The cap in force when no PlatformConfig exists (review M-1): the default 25 SOL until DEFAULT_CAP_SUNSET_TS.
-pub fn default_active_cap(now: i64) -> Option<u64> {
-    if now < DEFAULT_CAP_SUNSET_TS {
-        Some(DEFAULT_BURN_POOL_CAP_LAMPORTS)
-    } else {
-        None
-    }
+/// The stranding-recovery window when no PlatformConfig exists (review M-1): open until DEFAULT_CAP_SUNSET_TS.
+pub fn default_recovery_open(now: i64) -> bool {
+    now < DEFAULT_CAP_SUNSET_TS
 }
 
 #[account]
@@ -524,11 +507,11 @@ pub struct BurnTarget {
     pub last_unblocked_at: i64,
 }
 
-/// Round-5 review R5-8: crank_carried's per-coin budget. ["carried_pace", mint]. Created by the coin's first crank_carried (the cranker
-/// pays its rent, about 0.0013 SOL); only crank_carried writes it. Budget now = min(cap, budget_lamports + cap × min(now −
-/// last_carried_at, CARRIED_BUDGET_WINDOW_SECS) / CARRIED_BUDGET_WINDOW_SECS), cap = the per-crank cap (2 % of the pool's WSOL reserve)
-/// now; a coin without the account has a full cap. Read at fixed offsets (crank_carried.rs); a version other than 1 is refused. TokenConfig is not touched: it has no spare bytes, and keeping its
-/// size and offsets fixed keeps every earlier program and decoder reading it unchanged.
+/// Round-5 review R5-8: crank_carried's per-coin record. ["carried_pace", mint]. Created by the coin's first crank_carried (the cranker
+/// pays its rent, about 0.0013 SOL); only crank_carried writes it. Owner decision 2026-10-25: the budget that paced pieces at one
+/// per-crank cap per 600 s is gone with the per-crank bound; `budget_lamports` is unused (written 0) and only the one-piece-per-second
+/// rule and the counters remain. Read at fixed offsets (crank_carried.rs); a version other than 1 is refused. TokenConfig is not
+/// touched: it has no spare bytes, and keeping its size and offsets fixed keeps every earlier program and decoder reading it unchanged.
 #[account]
 #[derive(InitSpace)]
 pub struct CarriedPace {
@@ -536,13 +519,13 @@ pub struct CarriedPace {
     pub bump: u8,
     /// The coin.
     pub mint: Pubkey,
-    /// Unix time of the coin's last carried piece (the budget's reference time); the next piece runs in a later second.
+    /// Unix time of the coin's last carried piece; the next piece runs in a later second.
     pub last_carried_at: i64,
     /// Carried pieces run (crank_carried). Counted here, not in TokenConfig.burns, which counts reading cranks only.
     pub pieces: u32,
     /// Lamports the carried pieces spent (also inside TokenConfig.total_spent_lamports).
     pub spent_lamports: u64,
-    /// The budget left right after the last piece (lamports); it refills from `last_carried_at`.
+    /// Unused since 2026-10-25 (was the carried budget left after the last piece); written 0.
     pub budget_lamports: u64,
     pub reserved: [u8; 24],
 }

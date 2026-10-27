@@ -209,3 +209,21 @@ the specialist review and the Squads upgrade. Until it is deployed, the platform
 | **Traders pay** | **125** | (100 on tier 9) |
 | **To the burn pool, per swap** | **97.90** | (about 88.05 on tier 9) |
 | Operator / Raydium | 12.6 / 14.50 | (4.2 / 7.75 on tier 9) |
+
+## 2026-10-25 — Both burn caps removed from the burn program (reaffirmed twice)
+
+The owner removed both burn caps from burn_receipts and from everything that mirrors them:
+
+- **No burn-pool cap.** The 25 SOL cap (raise-only behind a 48-hour timelock, with a sunset) is gone. Every burn path uses the whole
+  spendable pool. This supersedes the 2026-10-09 "pre-audit cap 25 SOL per burn pool" decision and the 2026-10-12 plan to raise it to
+  1,000 SOL (docs/burnticker/CAP-RAISE.md, now retired).
+- **No per-run bound.** One crank no longer stops at 2 % of the pool's WSOL reserve: it spends the rule's full share in one run. The
+  floor, the TWAP and Pyth guards, the minimum output and the pool-health checks still apply; spend under the floor or past a dead pool
+  is still carried, and crank_carried spends the whole carry in one piece. The keeper's six-hour dispersal windows are gone.
+- **No cranker allowlist.** It applied only while the cap was in force; every crank is permissionless.
+- **No cap-raise power.** The platform authority no longer holds a cap-raise power. The program refuses every cap raise
+  (`CapRemoved`). The platform authority can still renounce. The platform sunset now only closes the stranding-recovery
+  registration-policy switch, in exactly its old window (at the latest 2027-10-01).
+
+Public copy: "When a reading settles, the burn runs right away and spends the rule's full share of the burn pool in one run." and
+"There is no platform cap on a burn. The burn pool spends what the rule says."

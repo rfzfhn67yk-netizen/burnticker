@@ -113,7 +113,8 @@ export interface KeeperDeps {
   fence?: boolean;
   /**
    * BURN DISPERSAL (owner decision 2026-10-13; dispersal.ts / dispersalKeeper.ts): BURNTICKER_DISPERSAL=1. After each coin's cranks, the
-   * carried spend is bought in small crank_carried pieces at random times over 6-hour windows until it is zero; a reading not fully
+   * carried spend is drained in one crank_carried piece as soon as the program accepts it (owner decision 2026-10-25: no per-run bound,
+   * so no six-hour windows); "not now" refusals are retried; a reading not fully
    * spent 24 h after it landed raises bt-burn-behind. Off (undefined/false) until crank_carried is deployed.
    */
   dispersal?: boolean;
@@ -919,7 +920,8 @@ function recordCrank(d: KeeperDeps, t: TokenRow, cfg: ProgramConfigView, D: numb
   const coinBurn = cfg.burnsTarget ? rd.owed : rd.burned;
   reg.markProgramOutcome(mint, D, { signature: tx.signature, slot: tx.slot, outcome: rd.outcome, memo: tx.memo, poolLamports: rd.poolLamports, poolActualLamports: rd.poolActualLamports, spentLamports: rd.spentLamports, ruleSpendLamports: rd.ruleSpendLamports, carriedInLamports: rd.carriedInLamports, carriedOutLamports: rd.carriedOutLamports, gotRaw: cfg.burnsTarget ? BigInt(0) : rd.got, burnRaw: coinBurn > BigInt(0) ? coinBurn : BigInt(0), shortfallRaw: rd.shortfall, skippedReason }, d.now());
   const burnedText = cfg.burnsTarget ? `${target ? `${target.burn} of the target ${target.target}` : `${rd.burned} raw units of the target`} (and ${rawToTokens(rd.owed, DECIMALS)} of the coin's own)` : rawToTokens(rd.burned, DECIMALS);
-  const partial = [rd.spentLamports > BigInt(0) && rd.carriedOutLamports > BigInt(0) ? `SpendCapBound: ${rd.carriedOutLamports} lamports carried into the next crank` : null, rd.poolActualLamports > rd.poolLamports ? `BurnPoolCapBound: the rule applied to ${rawToTokens(rd.poolLamports, 9)} of ${rawToTokens(rd.poolActualLamports, 9)} SOL` : null].filter(Boolean).join("; ");
+  // only a Reading processed before the caps were removed (owner decision 2026-10-25) can show either of these
+  const partial = [rd.spentLamports > BigInt(0) && rd.carriedOutLamports > BigInt(0) ? `${rd.carriedOutLamports} lamports carried into the next crank (processed under the old per-run bound)` : null, rd.poolActualLamports > rd.poolLamports ? `the rule applied to ${rawToTokens(rd.poolLamports, 9)} of ${rawToTokens(rd.poolActualLamports, 9)} SOL (processed under the old burn-pool cap)` : null].filter(Boolean).join("; ");
   d.log(`  [crank] $${t.ticker} ${formatDate(D)}: ${adopted ? "already processed on chain — adopted" : "CRANKED"} · ${rd.outcome} · ${rd.units} ${rd.units === 1 ? "unit" : "units"} for ${rows.length} ${rows.length === 1 ? "receipt" : "receipts"} · spent ${rd.spentLamports} lamports, burned ${burnedText}${partial ? ` · PARTIAL — ${partial}` : ""} · ${tx.signature}`);
   rows.forEach((b, k) => {
     if (rd.outcome === "exhausted") out.push({ mint, eventId: b.eventId, outcome: "exhausted", why: "allocation used up" });
@@ -1042,15 +1044,16 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
 export const FIRST_SNOW_HOLD_FROM_MS = Date.parse("2026-10-21T03:00:00Z");
 /**
  * REVIEW 10 F1 (2026-10-14): A ONE-SHOT UNDER 100 % FINISHES ITS SHARE ON THE COIN BEFORE THE END SINK TAKES THE REST. The result's
- * reading asks for f of the pool; one crank spends at most 2 % of the CPMM pool's SOL reserve and carries the rest
- * (carried_spend_lamports). On the round-4 program, recording a RESOLVED end (submit_rule_end) closed the coin to further spending
+ * reading asks for f of the pool. Since the owner decision of 2026-10-25 one crank spends that share in one run; it is carried
+ * (carried_spend_lamports) only when it is under the floor, past a 30-day untradeable pool, or the swap's minimum output is 0 (before
+ * then the per-run 2 % bound carried the rest of any large share). On the round-4 program, recording a RESOLVED end (submit_rule_end) closed the coin to further spending
  * (crank_carried refused with RuleNotLive) and forward_on_end moved the whole spendable pool and cleared the carried amount. The round-5
  * program (deployed on mainnet 2026-10-15) lifted that (R5-3 / R5-4): crank_carried runs after any end, and for 30 days after a RESOLVED
  * end the end paths leave the carry on the coin. The keeper still waits while the result's own spend is carried (the simplest order:
  * the share is finished before the end is recorded, on either program):
  *   · the owed amount is the chain's carried amount after the result's crank (a one-shot has no other reading that carries);
  *   · with burn dispersal on and a program that has crank_carried (round 5), the dispersal step later in the same cycle spends it in
- *     pieces; once the chain shows nothing carried, the end is recorded and only what is left over moves to the sink;
+ *     one piece; once the chain shows nothing carried, the end is recorded and only what is left over moves to the sink;
  *   · on a program without crank_carried (round 4), nothing can spend the carried amount without a new reading, and a new reading on a
  *     one-shot would spend another f of the pool (crank_buyback refuses a reading with 0 units). The end then waits, an alert says so
  *     once a day, and nothing is forwarded. The launch preflight refuses a share under 100 % on such a host (launchPreflight.ts
@@ -1089,8 +1092,8 @@ export async function owedBeforeEnd(d: KeeperDeps, t: TokenRow, locked: LockedRu
 function holdEndForOwed(d: KeeperDeps, t: TokenRow, o: { owedLamports: bigint; canSpend: boolean; readingDate: number | null }): void {
   const sol = rawToTokens(o.owedLamports, 9);
   const line = o.canSpend
-    ? `$${t.ticker}: the result's share is not fully spent yet (${sol} SOL still owed on this coin). It is being spent in pieces, and the end is recorded and the rest moves to the end sink after that.`
-    : `$${t.ticker}: the result's share is not fully spent yet (${sol} SOL still owed on this coin). It can only be spent in pieces by burn dispersal, which is not running for this coin, so the end waits and nothing moves to the end sink.`;
+    ? `$${t.ticker}: the result's share is not fully spent yet (${sol} SOL still owed on this coin). It is being spent on this coin first, and the end is recorded and the rest moves to the end sink after that.`
+    : `$${t.ticker}: the result's share is not fully spent yet (${sol} SOL still owed on this coin). It can only be spent by burn dispersal, which is not running for this coin, so the end waits and nothing moves to the end sink.`;
   d.log(`  [end] ${line}`);
   if (d.dryRun) return;
   d.registry.setStatus(`rule.endowed.${t.mint}`, JSON.stringify({ owedLamports: o.owedLamports.toString(), dispersal: o.canSpend, readingDate: o.readingDate, at: d.now() }), d.now());
@@ -1102,9 +1105,10 @@ function holdEndForOwed(d: KeeperDeps, t: TokenRow, o: { owedLamports: bigint; c
  *   drain     one "drain-<date>" unit a day from the day after the YES (each unit's rule spend is the whole pool) while the program's last
  *             crank carried spend forward and nothing is pending; done when a crank carries nothing more or falls under the floor.
  *   winddown  "winddown-<date>" for each of the `windDownDays` days from the first day after the end, windDownUnits(f, days) units each;
- *             then (cap-bound tail) one more day at a time while the last crank still carried spend; done when it carries nothing.
+ *             then (carry tail) one more day at a time while the last crank still carried spend; done when it carries nothing (since
+ *             2026-10-25 a burned crank carries nothing, so the tail is only for below-floor or untradeable days).
  *   sweep     a RETIRED coin whose fee PDA (minus the reserve) passed onEnd.sweepThresholdLamports: "sweep-<date>" of full-spend units,
- *             continued day by day while the cap carries spend; at most one sweep START per SWEEP_EVERY_DAYS.
+ *             continued day by day while a crank carries spend; at most one sweep START per SWEEP_EVERY_DAYS.
  * Buyback mode only (a vault rule has no pool to spend). Every amount is the program's, on the receipts.
  */
 export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null, pairCtx: PairCtx | null = null): Promise<{ mint: string; eventId: string; status: string }[]> {

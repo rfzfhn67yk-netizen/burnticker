@@ -249,13 +249,13 @@ export const pairClause = (r: Pick<BurnRule, "pair">): { voidBy: string } | null
  * resolved NO or void, a pair voided, a derby season over or a bracket coin knocked out, a team coin's season over, a nominee replaced)
  * the remaining burn pool burns down on a daily clock: each day a normal quorum-signed reading counts `windDownUnits(f, days)` units of
  * the rule's own fraction — the geometric schedule that spends ≥ 99 % of the pool within `windDownDays` (28 by default) — the
- * program's 2 %-of-reserve per-crank cap carries the rest to the next day, the $1 floor stops the tail, then the coin retires
+ * crank spends each day's full share in one run (no per-crank bound since 2026-10-25), the $1 floor stops the tail, then the coin retires
  * (src/lib/burnticker/units.ts windDown*, multiKeeper.ts planRuleEnd). Absent on rules created before the clause (their canonical bytes
  * are unchanged); every new launch carries it (api/handlers.ts prepareLaunch).
  *
  * ONE-SHOT 100 %. A one-shot's mapping may spend up to the WHOLE pool (`fractionOfPool` ≤ 1.00; recurring rules stay ≤ 0.10). The
  * program accepts fraction_per_unit_bps up to 10,000 (programs/burn-receipts initialize_token validate_rule: 1 ≤ bps ≤ BPS_DENOMINATOR)
- * and spends min(target, 2 % of the pool's WSOL reserve) per crank, carrying the rest; a crank needs a reading with units, so after a
+ * and spends the whole target in one crank (owner decision 2026-10-25: no per-crank bound, no platform cap); a crank needs a reading with units, so after a
  * YES the keeper attests one "drain" unit per day — each one's rule spend is the whole pool, exactly (1 − (1 − 1)^1 = 1) — until a
  * crank carries nothing more or falls under the floor. Every amount is the program's, on the receipts.
  */
@@ -263,7 +263,7 @@ export const DEFAULT_WIND_DOWN_DAYS = 28;
 /**
  * RETIRED-COIN SWEEP (owner addendum, 2026-10-10): a retired coin's fee PDA keeps receiving the post-graduation creator fee, so the
  * keeper sweeps it — when the spendable balance (minus the reserve) exceeds `onEnd.sweepThresholdLamports` (0.05 SOL by default), one
- * "sweep" reading of full-spend units, cranked across days under the per-crank cap — at most one sweep start per coin per 7 days.
+ * "sweep" reading of full-spend units, spent in one crank (no per-crank bound since 2026-10-25) — at most one sweep start per coin per 7 days.
  */
 export const DEFAULT_SWEEP_THRESHOLD_LAMPORTS = 50_000_000;
 export const SWEEP_EVERY_DAYS = 7;
@@ -324,7 +324,7 @@ export { isOneShot } from "@/lib/burnticker/nextResult";
 export const shareLimitsText = (): string => `A rule that repeats spends ${Math.round(RULE_BOUNDS.fractionOfPool.min * 100)}% to ${Math.round(RULE_BOUNDS.fractionOfPool.max * 100)}% of the burn pool per unit (fractionOfPool ${RULE_BOUNDS.fractionOfPool.min} to ${RULE_BOUNDS.fractionOfPool.max}). A rule that resolves once (one market, a named launch, a milestone, the flippening) may spend up to ${Math.round(ONE_SHOT_MAX_FRACTION * 100)}% (up to ${ONE_SHOT_MAX_FRACTION.toFixed(2)}). A single game and the first snow are not drained at once, so they keep the repeating limits.`;
 export const RULE_BOUNDS = {
   /** Recurring rules: 1–25 % of the pool per unit. A one-shot may go to 100 % (ONE_SHOT_MAX_FRACTION; see "ONE-SHOT 100 %" above). */
-  // owner, 2026-10-12: a recurring rule may spend up to 25 % per unit (the program allows up to 100 %; one burn run stays capped at 2 % of the pool's SOL)
+  // owner, 2026-10-12: a recurring rule may spend up to 25 % per unit (the program allows up to 100 %; since 2026-10-25 one burn run spends the rule's full share)
   fractionOfPool: { min: 0.01, max: 0.25 },
   vaultShare: { min: 0.10, max: 0.30 },
   tokens: { min: 1, max: 100_000_000 },
@@ -668,7 +668,7 @@ export function rulesFromText(text: string): LockedRule {
 }
 
 const pctOf = (f: number) => `${(f * 100).toFixed(f * 100 % 1 === 0 ? 0 : 2)}%`;
-const mapText = (m: BurnMapping, what: string) => (m.fractionOfPool !== undefined ? (m.fractionOfPool >= 1 ? `spends the whole fee pool (100%) buying the token at market ${what} — one burn at most 2% of the pool's reserve, the rest in smaller pieces, usually finished within a day — and burns everything received` : `spends ${pctOf(m.fractionOfPool)} of the fee pool buying the token at market and burns everything received ${what}`) : `burns ${m.tokens!.toLocaleString("en-US")} tokens from the vault ${what}`);
+const mapText = (m: BurnMapping, what: string) => (m.fractionOfPool !== undefined ? (m.fractionOfPool >= 1 ? `spends the whole fee pool (100%) buying the token at market ${what} in one run, and burns everything received` : `spends ${pctOf(m.fractionOfPool)} of the fee pool buying the token at market and burns everything received ${what}`) : `burns ${m.tokens!.toLocaleString("en-US")} tokens from the vault ${what}`);
 
 /** The rule in one plain paragraph for the review step and the token page. States the rule; says nothing about price. */
 /** A Polymarket selector in words ("every binary Polymarket market tagged nfl of type moneyline whose event slug matches nfl-*den-*"). */

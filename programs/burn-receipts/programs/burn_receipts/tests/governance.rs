@@ -180,7 +180,7 @@ fn every_state_change_emits_an_event() {
     let pool = cpmm::create_pool(&mut env, &launcher, &amm, &m, &fee_pda(&m), 85 * SOL, 800_000_000 * TOKEN, &lt);
     let pa = Keypair::new();
     let ua = env.upgrade_authority.insecure_clone();
-    let meta = env.ok(&[ix_initialize_platform(&payer, &ua.pubkey(), &pa.pubkey(), DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 86_400)], &[&ua]);
+    let meta = env.ok(&[ix_initialize_platform(&payer, &ua.pubkey(), &pa.pubkey(), LEGACY_CAP_ARG, NOW + 86_400)], &[&ua]);
     assert_eq!(event_names(&meta), vec!["PlatformInitialized"]);
     cpmm::launchlab_migrated(&mut env, &m, &pool);
     let meta = env.ok(&[ix_register_pool(&payer, &m, &pool.pool)], &[]);

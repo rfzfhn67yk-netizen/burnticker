@@ -11,7 +11,7 @@ import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS 
 import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS } from "@/lib/burnticker/fees";
 import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT } from "@/lib/burnticker/fees";
-import { capChangeSentence, capSentenceAway } from "@/lib/burnticker/capInForce";
+import { BURN_RUNS_SENTENCE, NO_BURN_CAP_SENTENCE } from "@/lib/burnticker/spreadCopy";
 import { describeRule, endText, gamePairCannotTie, GAME_PAIR_SENTENCE_NO_TIE, settledPairSentence, type DescribeCtx } from "@/lib/burnticker/describe";
 import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
@@ -54,7 +54,7 @@ import { END_SINK_ACCOUNT_BYTES, LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_S
  *   network, launch type and whether this host takes it · the canonical rule text, its sha256 and statement · names and tickers ·
  *   the generated description · allocation · the fee split per 1 SOL traded (curve and after graduation) · the transactions the bundle
  *   will hold and who signs each · estimated SOL (rent, the reserve moved into the burn pool, network fees) · the prerequisites
- *   before any burn (graduation, the pre-audit cap) · how the rule ends (the deployed 28-day self-burn wind-down) · who can change what
+ *   before any burn (graduation; there is no burn cap since 2026-10-25) · how the rule ends (the deployed 28-day self-burn wind-down) · who can change what
  *   (the rule hash is pinned per coin; the programs are upgradeable by the Squads vault) · the operator line · every problem found.
  *
  * Nothing here is a promise about price or return. The estimate is an estimate: the wallet shows the exact amount before approval.
@@ -227,7 +227,6 @@ export const PREREQUISITE_STATES = [
   "Queued: a result is due, and the burn waits for the next run of the program.",
   "Delayed: the program held the burn, for example because the pool's price moved too far. The SOL stays in the burn pool.",
   "Below the floor: the amount due was smaller than the minimum spend fixed at launch, so nothing was bought.",
-  `Capped: each burn pool spends from at most the burn-pool cap, and anything above it waits until the cap rises or ends. ${capChangeSentence()}`,
 ];
 const solOf = (lamports: bigint): string => (Number(lamports) / 1e9).toLocaleString("en-US", { maximumFractionDigits: 3 });
 /**
@@ -620,7 +619,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     costs: { lines, totalSol: sol(total), note: costNote },
     prerequisites: [
       prerequisiteLineFor(venue, venue === "launchlab" ? raiseSol : null),
-      capSentenceAway(null),   // continuous audit 2026-10-19 ACC-01: the cap helper's words (this line used to promise an audit-gated cap)
+      `${BURN_RUNS_SENTENCE} ${NO_BURN_CAP_SENTENCE}`,   // owner decision 2026-10-25: both burn caps removed; a burn spends the rule's full share in one run
       "Every burn needs a reading that the operator's keeper signs. Today one signature is enough, and the operator holds it.",
     ],
     venue,

@@ -48,7 +48,8 @@ const Z = BigInt(0);
 const stub: OracleAdapter = { id: "stub", searchSeries: async () => [], seriesInfo: async () => null, settledSince: async () => ({ events: [], awaitingFinal: 0, refusals: [], settlementSourceUrl: null }), impliedChance: async () => ({ chance: null, marketTicker: null, closeTime: null, basis: "stub" }) };
 const D = (iso: string) => Date.parse(iso);
 
-/** One Denver first-snow coin with an end sink ($DEFICIT), the burn pool and the swap pool's SOL reserve as given (2% of it per crank). */
+/** One Denver first-snow coin with an end sink ($DEFICIT), the burn pool and the swap pool's SOL reserve as given (since the owner decision
+ *  of 2026-10-25 a crank spends its whole share in one run, whatever the reserve). */
 async function snowWorld(o: { fraction: number; dispersal?: boolean; poolLamports?: bigint; reserveWsol?: bigint }) {
   const registry = openRegistry(":memory:"), program = new FakeBurnProgram("devnet");
   program.autoRegisterPool = true; program.pinEndSinks = true;
@@ -81,13 +82,15 @@ async function snowWorld(o: { fraction: number; dispersal?: boolean; poolLamport
 describe("HB-164: a first snow under 100% keeps its publish-102 end; only a 100% first snow drains after its first snow", () => {
   for (const order of ["zero day first", "snow day first"] as const) {
     const days: [string, "0" | "1"][] = order === "zero day first" ? [["2025-11-01", "0"], ["2025-11-03", "1"]] : [["2025-11-03", "1"], ["2025-11-04", "0"]];
-    test(`a 2% first snow, carried spend > 0, dispersal off, reaches its end sink (${order})`, async () => {
-      // a 0.2 SOL crank cap (10 SOL reserve) against 2% of a 50 SOL pool (1 SOL): the result's crank spends 0.2 SOL and carries 0.8 SOL
+    test(`a 2% first snow, its share spent in one run (nothing carried), dispersal off, reaches its end sink (${order})`, async () => {
+      // 2% of a 50 SOL pool (1 SOL) against a 10 SOL reserve: with no per-run bound (owner decision 2026-10-25) the result's crank spends
+      // the whole 1 SOL in one run (until then it spent 0.2 SOL and carried 0.8 SOL)
       const w = await snowWorld({ fraction: 0.02, poolLamports: BigInt(50) * SOL, reserveWsol: BigInt(10) * SOL });
       w.readings(days);
-      let carried = Z, guard = 0;
-      while (carried === Z && guard++ < 200) { await runCycle(w.deps, { fetch: false }); carried = w.coin.cfg.carriedSpendLamports; w.clock.now += 3 * 3600_000; }
-      assert.ok(carried > Z, `the first snow's crank carried spend\n${w.logs.slice(-10).join("\n")}`);
+      let guard = 0;
+      while (w.spentOnCoin() === Z && guard++ < 200) { await runCycle(w.deps, { fetch: false }); w.clock.now += 3 * 3600_000; }
+      assert.equal(w.spentOnCoin(), SOL, `the first snow's crank spent its whole 1 SOL share\n${w.logs.slice(-10).join("\n")}`);
+      assert.equal(w.coin.cfg.carriedSpendLamports, Z, "nothing carried");
       await w.run(D("2025-11-20T00:00:00Z"));
       const end = w.registry.ruleEnd(w.mint);
       assert.equal(end?.mode, "winddown", "a share under 100% ends as on publish 102");
@@ -105,7 +108,9 @@ describe("HB-164: a first snow under 100% keeps its publish-102 end; only a 100%
       assert.equal(end?.mode, "drain", w.logs.slice(-10).join("\n"));
       assert.equal(end?.reason, "the first snow of the season fell (2025-11-03) at 100 % of the pool");
       assert.equal(w.spentOnCoin(), BigInt(5) * SOL, "the whole pool was spent on the coin");
-      assert.ok(w.registry.receipts(w.mint).filter((r) => r.kind === "drain").length >= 4, "one capped drain crank a day");
+      // no per-run bound (owner decision 2026-10-25): the 100% result spends the whole pool in its own crank, so no daily drain cranks
+      // are needed to finish it (until then one capped drain crank ran a day)
+      assert.ok(w.registry.receipts(w.mint).filter((r) => r.kind === "drain").length <= 1, "at most the one drain check that finds nothing carried");
       assert.equal(await w.forwarded(), Z);
     });
   }
@@ -304,7 +309,8 @@ describe("HB-162: the copy batch", () => {
   test("(a) 'an 85 SOL raise'", () => {
     assert.equal(articleFor(85), "an"); assert.equal(articleFor(8), "an"); assert.equal(articleFor(18), "an"); assert.equal(articleFor(11), "an");
     assert.equal(articleFor(75), "a"); assert.equal(articleFor(180), "a"); assert.equal(articleFor(1), "a");
-    assert.match(wholePoolSliceLine("85"), /on an 85 SOL raise/);
+    // owner decision 2026-10-25: the whole-pool line no longer names a per-run slice of the raise (no per-run bound)
+    assert.equal(wholePoolSliceLine("85"), "The whole pool is spent in one run. There is no platform cap on a burn. The burn pool spends what the rule says.");
   });
   test("(b) the RAYS26 example only on a season coin's ticker", () => {
     assert.doesNotMatch(FIELD_HELP.ticker.what + FIELD_HELP.ticker.does, /RAYS26/);

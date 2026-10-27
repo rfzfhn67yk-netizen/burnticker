@@ -16,7 +16,7 @@
 # Exit 0 = every built program's executable hash equals the deployed program's hash on mainnet. Exit 1 = a difference (the table says
 # which). Exit 2 = it could not run (wrong architecture, a failed install, a failed build).
 set -euo pipefail
-COMMIT="df334b4df8afae50ec18c58d9ac4e455aec37723"
+COMMIT="3a9cca2a529e668753efe93f81b0ef89717977fd"
 # pair_curve runs round 4 (it was not upgraded in round 5). It links the burn_receipts crate (its constants, the CPMM pool reader and the
 # TokenConfig type), so building it from a round-5 tree gives other bytes without any change of its own. Public commit 7e7bab58 (2026-10-12)
 # carries exactly the program tree of monorepo 29f6f5de, the source of pair_curve's deployed bytes; pair_curve is built there.
@@ -43,11 +43,11 @@ done
 # mainnet runs while an upgrade to the table's build is pending (the comparison then says PENDING); no program has one now.
 declare -A ID SHA EXE DEPLOYED
 ID[burn_receipts]="AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"
-SHA[burn_receipts]="faf072925c169ede89788e17c66cd6ab446fa332d47ae0362fca46dbb1a4e4f8"
-EXE[burn_receipts]="b5b6e44f7c58531c9e0a62b00e42c7a359c1ae3d660aeb3465cbc1b7ea29978b"
+SHA[burn_receipts]="c753fc2763f794df665b60a23591397e6526567b0c81c86d76533394d30bb4d7"
+EXE[burn_receipts]="1aff5fbfe243ea8233c360bfae6809b0dd411e2298600831d10be5ea97c99e17"
 ID[pair_curve]="2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
-SHA[pair_curve]="8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2"
-EXE[pair_curve]="567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895"
+SHA[pair_curve]="9205de80b377a3fc3c4c8b3de93b66c8a49e8120a78b082e3e5ed850d142088d"
+EXE[pair_curve]="8d21ff603670000ac7e1f492aea842fc37891c26197df88b5b7135656373f1e3"
 LIBS=(burn_receipts pair_curve)
 WS="programs/burn-receipts"
 say() { printf '[%s] %s\n' "$(date -u '+%H:%M:%SZ')" "$*"; }
