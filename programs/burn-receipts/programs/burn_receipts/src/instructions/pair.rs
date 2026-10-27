@@ -12,14 +12,14 @@
 //!                  Pubkey::default() for a draw. Append-only.
 //!   unlink         unlink_pair on terminal evidence only (Pair voided, a side refunding, a LaunchLab voidBy ended without both pools).
 //!   forward        forward_to_winner: processes the LOSER's reading for that period (next in its queue) by moving
-//!                  buyback_spend(min(spendable, cap), units, f) from its fee PDA to the winner's (SOL first, then WSOL), marks the
+//!                  buyback_spend(spendable, units, f) from its fee PDA to the winner's (SOL first, then WSOL), marks the
 //!                  reading OUTCOME_FORWARDED and records the forward on the PairResult. Idempotent. Only inside the 72 h window (r3).
 //!   crank gate     crank_buyback on a paired coin needs the period's PairResult: LOST refuses (ForwardRequired), WON / DRAW proceed;
 //!                  no result yet refuses (PairResultPending) until PAIR_RESULT_GRACE_SECS after the reading, then it burns as an
 //!                  unpaired coin would (a missing result never wedges the queue; that period can no longer be forwarded).
 //!
 //! The winner's own crank for the period is never blocked by the forward: the forwarded lamports simply join its fee PDA and later
-//! cranks spend them under the usual guards (cap, TWAP, 2 % reserve cap, floor).
+//! cranks spend them under the usual guards (TWAP, min-out, floor).
 
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
@@ -31,7 +31,7 @@ use crate::constants::*;
 use crate::error::BurnError;
 use crate::events::{ForwardedToWinner, PairLinked, PairResultSubmitted, PairUnlinked};
 use crate::guards::require_fee_token_account_intact;
-use crate::instructions::crank_common::{active_cap, crankers_in_force, require_next_in_line};
+use crate::instructions::crank_common::require_next_in_line;
 use crate::math;
 use crate::memo;
 use crate::pair_curve::PairView;
@@ -463,10 +463,10 @@ pub fn crank_pair_gate(c: &TokenConfig, r: &Reading, link: Option<&AccountInfo>,
 // forward_to_winner
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/// PERMISSIONLESS (the cranker allowlist of crank_buyback applies while the pre-audit cap is in force). For the period
+/// PERMISSIONLESS. For the period
 /// `record_date` whose PairResult names `winner_config` the winner:
 ///   pool   = loser fee PDA lamports − reserve + the loser fee PDA's WSOL (synced: lamports − rent, like the crank — L-4), minus the
-///            spend it still owes earlier periods (carried_spend_lamports, r3 RI-4), capped at the burn-pool cap while in force
+///            spend it still owes earlier periods (carried_spend_lamports, r3 RI-4); no platform cap (owner decision 2026-10-25)
 ///   amount = pool × (1 − (1 − f)^units)   (the loser's own rule and its reading's units: what it would have spent had it won;
 ///            0 if under its floor; a one-shot rule with f = 100 % forwards the whole pool basis)
 ///            and 0 when either coin is not live (pair-forward blind review H-1(b): a voided / unregistered / switched-away side
@@ -482,7 +482,7 @@ pub fn crank_pair_gate(c: &TokenConfig, r: &Reading, link: Option<&AccountInfo>,
 #[instruction(record_date: u32)]
 pub struct ForwardToWinner<'info> {
     pub cranker: Signer<'info>,
-    /// CHECK: the platform PDA (seeds-checked) — its cap and cranker allowlist, as for crank_buyback.
+    /// CHECK: the platform PDA (seeds-checked); unused since the cap and the cranker allowlist were removed (2026-10-25).
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
     #[account(mut, seeds = [CONFIG_SEED, loser_config.mint.as_ref()], bump = loser_config.bump)]
@@ -548,8 +548,6 @@ pub fn handle_forward_to_winner(ctx: Context<ForwardToWinner>, record_date: u32)
     require_next_in_line(&a.loser_config, &a.loser_reading)?;
     // r3 RI-1: the 72 h time-out ends the forward window — from then on the period belongs to the loser's own crank (no race).
     require!(now < a.loser_reading.submitted_at.saturating_add(PAIR_RESULT_GRACE_SECS), BurnError::ForwardWindowClosed);
-    let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
-    require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     // H-1(b): a side without a verified pool forwards nothing — the reading is still processed. (Unlinked: refused above, P3-I1.)
     // Round-5 review R5-9: a target coin with a pinned BurnTarget is live before its own pool is verified.
     let live = side_live(&a.loser_config, a.loser_burn_target.as_ref().map(|x| x.as_ref()))?
@@ -569,11 +567,8 @@ pub fn handle_forward_to_winner(ctx: Context<ForwardToWinner>, record_date: u32)
     // r3 RI-4: lamports the loser still owes its own earlier periods (carried_spend_lamports, review H-1) are not this period's fuel —
     // they stay in its fee PDA for the crank that owes them.
     let basis = pool_actual.saturating_sub(a.loser_config.carried_spend_lamports);
-    let cap = active_cap(&a.platform.to_account_info(), now)?;
-    let pool_before = match cap {
-        Some(c) if basis > c => c,
-        _ => basis,
-    };
+    // Owner decision 2026-10-25: no platform cap; the rule applies to the whole basis.
+    let pool_before = basis;
     let rule_spend = math::buyback_spend(pool_before, units, rule.fraction_per_unit_bps).map_err(|_| BurnError::MathOverflow)?;
     let amount = if !live || rule_spend < rule.floor_lamports { 0 } else { rule_spend };
     let sol_part = amount.min(sol_avail);

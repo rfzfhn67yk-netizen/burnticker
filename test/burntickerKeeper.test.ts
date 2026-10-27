@@ -390,7 +390,7 @@ describe("the token page", () => {
     assert.equal(receipts.length, 2);
     for (const r of receipts) assert.equal(r.verify.verified, true, `${r.eventId}: ${r.verify.checks.join("; ")}`);
     assert.match(receipts[0].verify.curl, /^curl -s 'https:\/\/api\.elections\.kalshi\.com\/trade-api\/v2\/markets\/KXNFLGAME-26SEP27LARDEN-DEN'/);
-    assert.match(receipts[0].verify.formula, /result = yes, so spend 2% of the pool; counted into program reading 2026-09-28 \(1 unit from 1 receipt\)\. The program spends min\(pool × \(1 − \(1 − 200\/10000\)\^1\) \+ carried spend, 2% of the pool's SOL reserve\) = rule spend \d+ lamports/);
+    assert.match(receipts[0].verify.formula, /result = yes, so spend 2% of the pool; counted into program reading 2026-09-28 \(1 unit from 1 receipt\)\. The program spends pool × \(1 − \(1 − 200\/10000\)\^1\) \+ carried spend = rule spend \d+ lamports/);
     assert.equal(s.health.unverified, 0);
     const tampered = buildReceiptsJson({ ...input, receipts: input.receipts.map((x, k) => (k === 0 ? { ...x, ruleSpendLamports: x.ruleSpendLamports! + BigInt(1) } : x)) });
     assert.equal(tampered[0].verify.verified, false); assert.ok(tampered[0].verify.checks.some((c) => /^rule spend: recomputed/.test(c)));

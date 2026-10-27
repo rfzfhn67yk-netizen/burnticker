@@ -1,4 +1,4 @@
-import { CARRIED_BUDGET_WINDOW_SECS, CARRY_CONSECUTIVE, CARRY_NONE, KIND_DOWN, KIND_FLAT, KIND_INCREASE, MODE_BUYBACK, MODE_VAULT, POOL_POLICY_CREATOR_IS_FEE_PDA } from "@/lib/burnReceipts/constants";
+import { CARRY_CONSECUTIVE, CARRY_NONE, KIND_DOWN, KIND_FLAT, KIND_INCREASE, MODE_BUYBACK, MODE_VAULT, POOL_POLICY_CREATOR_IS_FEE_PDA } from "@/lib/burnReceipts/constants";
 
 /**
  * The burn rule's arithmetic, mirrored line for line from programs/burn-receipts/programs/burn_receipts/src/math.rs (the program
@@ -102,33 +102,6 @@ export function buybackMinOut(amountIn: bigint, reserveSol: bigint, reserveToken
   if (twapTok === ZERO) return spot;
   const twap = minAmountOut(amountIn, reserveSol, twapTok, feeRatePpm, slippageBps);
   return spot > twap ? spot : twap;
-}
-
-/** The most one crank may spend: `bps` of the pool's WSOL reserve (math::reserve_spend_cap; review H-1). */
-export const reserveSpendCap = (reserveWsol: bigint, bps: number): bigint => (reserveWsol * B(bps)) / BPS;
-
-/** Round-5 review R5-8 (math.rs carried_budget): `stored` refilled by `cap` per CARRIED_BUDGET_WINDOW_SECS since then, never above `cap`. */
-export function carriedBudget(stored: bigint, cap: bigint, elapsedSecs: number): bigint {
-  const e = Math.min(Math.max(elapsedSecs, 0), CARRIED_BUDGET_WINDOW_SECS);
-  const b = stored + (cap * B(e)) / B(CARRIED_BUDGET_WINDOW_SECS);
-  return b < cap ? b : cap;
-}
-/** crank_carried.rs carried_budget_now: the budget a piece may spend at `nowSec`, or null in the second of the last piece (or earlier).
- *  `lastCarriedAt` 0 = the coin never ran a piece (a full cap). */
-export function carriedBudgetNow(lastCarriedAt: number, stored: bigint, cap: bigint, nowSec: number): bigint | null {
-  if (lastCarriedAt === 0) return cap;
-  if (nowSec <= lastCarriedAt) return null;
-  return carriedBudget(stored, cap, nowSec - lastCarriedAt);
-}
-/** The first second ≥ `nowSec` at which a piece of `need` lamports fits the budget, or null when it never does (above the cap). */
-export function carriedBudgetReadySec(lastCarriedAt: number, stored: bigint, cap: bigint, need: bigint, nowSec: number): number | null {
-  if (need > cap) return null;
-  if (lastCarriedAt === 0) return nowSec;
-  let t = Math.max(nowSec, lastCarriedAt + 1);
-  if ((carriedBudgetNow(lastCarriedAt, stored, cap, t) ?? B(-1)) >= need) return t;
-  if (cap > B(0)) t = Math.max(t, lastCarriedAt + Number(((need - stored) * B(CARRIED_BUDGET_WINDOW_SECS) + cap - B(1)) / cap));
-  while ((carriedBudgetNow(lastCarriedAt, stored, cap, t) ?? B(-1)) < need) t++;
-  return t;
 }
 
 export const solPriceX32 = (reserveSol: bigint, reserveToken: bigint): bigint => (reserveToken << B(32)) / reserveSol;

@@ -206,12 +206,16 @@ describe("item 25: the host notes become visitor sentences", () => {
   });
 });
 
-describe("WIRING-SEMANTICS-2 item 162: the trust page shows the cap in force", () => {
-  test("the page prints capSentence(effectiveCap) and the trust schema lists the field", () => {
+describe("WIRING-SEMANTICS-2 item 162 (owner decision 2026-10-25): the trust page says there is no cap", () => {
+  test("the page prints the no-cap card; the v1 schema keeps the old fields as deprecated, always 0 and null", () => {
     const p = read("src/app/burnticker/trust/page.tsx");
-    assert.match(p, /<section className=\{card\} data-effective-cap><h2 className="font-medium">The burn-pool cap in force<\/h2><p className="text-xs">\{capSentence\(t\.effectiveCap \?\? null\)\}<\/p>/);
-    assert.match(read("src/lib/burnticker/api/spec.ts"), /effectiveCap: \{ description: "The burn-pool cap the program applies today/);
-    assert.match(read("src/lib/burnticker/trust.ts"), /effectiveCap: EffectiveCap \| null;/);
+    assert.match(p, /<section className=\{card\} data-no-burn-cap><h2 className="font-medium">How much one burn spends<\/h2><p className="text-xs">\{NO_BURN_CAP_SENTENCE\} \{NO_CAP_TRANSPARENCY_SENTENCE\}<\/p><p className="text-xs text-neutral-400 mt-1">\{PLATFORM_AUTHORITY_NO_CAP_SENTENCE\}<\/p><\/section>/);
+    assert.doesNotMatch(p, /capSentence|data-effective-cap/);
+    const spec = read("src/lib/burnticker/api/spec.ts");
+    assert.match(spec, /effectiveCap: \{ description: "Deprecated since 2026-10-25 \(owner decision: both burn caps removed from the program\)\. Always null/);
+    assert.match(spec, /preAuditCapSol: \{ \.\.\.num, description: "Deprecated since 2026-10-25/);
+    const trust = read("src/lib/burnticker/trust.ts");
+    assert.match(trust, /effectiveCap: null;/); assert.match(trust, /preAuditCapSol: 0, effectiveCap: null,/);
   });
 });
 

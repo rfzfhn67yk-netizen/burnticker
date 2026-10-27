@@ -136,9 +136,10 @@ checked here, e.g. no RPC was given, or the source no longer serves that period)
 4. **units.** The published rule is applied to that settled result, with the previous value and carried remainder the receipt
    states, by the platform's own unit engine.
 5. **spend.** For buyback coins, `spend = pool × (1 − (1 − f)^units)` using the keeper's exact integer formula must equal the memo's
-   `spent`, and `burn` must equal `got`. Program receipts use the program's own fixed-point rule spend over the reading's units; a crank
-   spends at most 2% of the pool's reserve and carries the rest, so a smaller `spent` is reported `null` (carried — see the Reading
-   account), never a pass.
+   `spent`, and `burn` must equal `got`. Program receipts use the program's own fixed-point rule spend over the reading's units. Since the owner
+   decision of 2026-10-25 a crank spends the rule's full share in one run (no per-run bound, no burn-pool cap); a smaller `spent` (under
+   the floor, an untradeable pool, or a receipt from before that decision) is reported `null` (carried, see the Reading account), never
+   a pass.
 6. **chain.** With a `connection` AND the deployed `programId` and the coin's `mint` (the client passes both when it has them), the transaction at the receipt's signature exists, succeeded, and the burn program itself wrote exactly this memo (a Memo CPI inside a top-level burn_receipts instruction on the mint), burned the mint inside that instruction, and its Reading account for the receipt's reading is program-owned, processed and records the same burned amount. A memo on its own is never a burn: a Memo-only transaction fails, and without `programId` + `mint` the check is `null` (not checked), never a pass (ChatGPT/Codex review N3, 2026-10-10).
 
 `verified` is true when nothing failed and the rules and units checks passed. The receipt announcer example
@@ -156,7 +157,7 @@ with one of `DEFERRABLE_ERRORS` (TWAP deviation, pool not tradable), retry later
 
 With `connection` + `programId`, `subscribe()` watches the coin's `TokenConfig` address. Every new confirmed transaction is fetched
 and its `burn_receipts` events are decoded from the inner instructions (`TokenInitialized`, `PoolRegistered`, `ReadingSubmitted`,
-`ReadingProcessed`, `BurnPoolCapBound`, governance events). With `websocket: true`, a logs subscription triggers the fetch
+`ReadingProcessed`, `BurnPoolCapBound` (never emitted since 2026-10-25, decoded for old transactions), governance events). With `websocket: true`, a logs subscription triggers the fetch
 immediately, and polling stays on as the fallback. Without a connection it polls the API's receipts and emits `ReceiptNew` /
 `ReceiptUpdated`. `since: "now"` (the default) skips history; `since: "recent"` replays first.
 

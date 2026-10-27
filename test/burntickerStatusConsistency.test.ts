@@ -43,22 +43,20 @@ test("the phase line, the program entries and the verified-build table name the 
   assert.match(st.phase.line, /On 2026-10-21 the burn program was upgraded through the vault once more, still round 5/);
 });
 
-test("the deployed bytes are the ones the mainnet evidence expects: B-17 now (execution sheet, read-back), round 5 before it (round-5 sheet, the Squads proposal check, the read-back)", () => {
+test("the deployed bytes are the ones the mainnet evidence expects: the caps-removed build now (execution sheet, read-back), B-17 before it (B-17 sheet, the read-back)", () => {
   const br = (vb as unknown as { programs: { library: string; deployed: { mainnet: { hash: string } } }[] }).programs.find((x) => x.library === "burn_receipts")!;
-  // B-17 (2026-10-21, vault transaction 4): the execution sheet names the hash the chain must show, and the read-back found it
-  const sheet = readFileSync("docs/burnkeeper/evidence/mainnet-b17/README-execution.md", "utf8");
-  const b17 = /executable hash \(what the chain shows[^\n]*\n\s*`([0-9a-f]{64})`/.exec(sheet)![1];
-  assert.equal(br.deployed.mainnet.hash, b17);
-  assert.match(readFileSync("docs/burnkeeper/evidence/mainnet-b17/onchain-verify-after.log", "utf8"), new RegExp(`MATCH  mainnet burn_receipts \\S+ ${b17}`));
+  // 2026-10-25 (vault transaction 5): the execution sheet names the hash the chain must show, and the read-back found it
+  const sheet = readFileSync("docs/burnkeeper/evidence/mainnet-caps/README-execution.md", "utf8");
+  const caps = /burn_receipts \(mainnet features\): executable hash\s*`([0-9a-f]{64})`/.exec(sheet)![1];
+  assert.equal(br.deployed.mainnet.hash, caps);
+  assert.match(readFileSync("docs/burnkeeper/evidence/mainnet-caps/onchain-verify-after.log", "utf8"), new RegExp(`MATCH  mainnet burn_receipts \\S+ ${caps}`));
   const cur = st.programs.find((p) => p.name === "burn_receipts")!.mainnetDeploy as unknown as { squadsExecuteSignature: string; previous: { onChainExecutableHash: string } };
   assert.ok(sheet.includes(cur.squadsExecuteSignature), "the execution sheet records the execute signature");
-  // the round-5 bytes it replaced
-  const expected = /executable_hash ([0-9a-f]{64})/.exec(readFileSync("docs/burnkeeper/evidence/mainnet-round5/burn_receipts.mainnet.expected-hash.txt", "utf8"))![1];
-  const proposal = JSON.parse(readFileSync("docs/burnkeeper/evidence/mainnet-round5/br-proposal-verify.json", "utf8")) as { verdict: string; instructions: { bufferExecutableHash: string }[] };
-  assert.equal(cur.previous.onChainExecutableHash, expected);
-  assert.equal(proposal.verdict, "matches");
-  assert.equal(proposal.instructions[0].bufferExecutableHash, expected);
-  assert.match(readFileSync("docs/burnkeeper/evidence/mainnet-round5/onchain-verify-after.log", "utf8"), new RegExp(`MATCH  mainnet burn_receipts \\S+ ${expected}`));
+  // the B-17 bytes it replaced
+  const b17sheet = readFileSync("docs/burnkeeper/evidence/mainnet-b17/README-execution.md", "utf8");
+  const b17 = /executable hash \(what the chain shows[^\n]*\n\s*`([0-9a-f]{64})`/.exec(b17sheet)![1];
+  assert.equal(cur.previous.onChainExecutableHash, b17);
+  assert.match(readFileSync("docs/burnkeeper/evidence/mainnet-b17/onchain-verify-after.log", "utf8"), new RegExp(`MATCH  mainnet burn_receipts \\S+ ${b17}`));
 });
 
 test("nothing in the current object calls deployed round-4 functionality unbuilt or round 3", () => {

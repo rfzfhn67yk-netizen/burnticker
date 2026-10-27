@@ -326,48 +326,27 @@ fn l3_pool_health_cannot_be_forged_inside_a_swap_transaction() {
     assert_eq!(env.config(&config_pda(&m.mint)).pool_untradeable_since, t0);
 }
 
-/// L-4: while the pre-audit cap is in force a PlatformConfig may restrict crank_buyback to ≤ 3 keys; the authority can only clear the
-/// list; at the cap's sunset cranking is permissionless again.
+/// L-4 (allowlist removed 2026-10-25): initialize_platform accepts any cranker list (even more than three keys) and stores none;
+/// the event says so; crank_buyback is permissionless from the start; clearing an empty list is refused (nothing to clear).
 #[test]
-fn l4_cranker_allowlist_applies_only_while_the_cap_does() {
+fn l4_the_cranker_allowlist_is_gone_and_cranking_is_permissionless() {
     let mut env = Env::new();
     let (payer, ua) = (env.payer.pubkey(), env.upgrade_authority.insecure_clone());
-    let (pa, keeper, outsider) = (Keypair::new(), Keypair::new(), Keypair::new());
-    for k in [&pa, &keeper, &outsider] {
+    let (pa, outsider) = (Keypair::new(), Keypair::new());
+    for k in [&pa, &outsider] {
         env.fund(&k.pubkey(), SOL);
     }
     let four: Vec<Pubkey> = (0..4).map(|_| Pubkey::new_unique()).collect();
-    expect_anchor_err(env.send(&[ix_initialize_platform_with(&payer, &ua.pubkey(), &pa.pubkey(), DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 30 * 86_400, four)], &[&ua]), "InvalidAttesters");
-    let meta = env.ok(&[ix_initialize_platform_with(&payer, &ua.pubkey(), &pa.pubkey(), DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 30 * 86_400, vec![keeper.pubkey()])], &[&ua]);
-    assert_eq!(find_event::<PlatformInitialized>(&meta).unwrap().crankers, vec![keeper.pubkey()]);
+    let meta = env.ok(&[ix_initialize_platform_with(&payer, &ua.pubkey(), &pa.pubkey(), LEGACY_CAP_ARG, NOW + 30 * 86_400, four)], &[&ua]);
+    let ev = find_event::<PlatformInitialized>(&meta).unwrap();
+    assert_eq!((ev.crankers, ev.burn_pool_cap_lamports), (vec![], 0));
     let m = unregistered(&mut env, buyback_rule());
     ready(&mut env, &m);
     env.transfer_sol(&fee_pda(&m.mint), 10 * SOL);
     submit(&mut env, &m.mint, D1, V1, &[&m.att]).unwrap();
     submit(&mut env, &m.mint, D2, V1 + UNIT, &[&m.att]).unwrap();
-    submit(&mut env, &m.mint, D3, V1 + 2 * UNIT, &[&m.att]).unwrap();
-    let crank = |env: &mut Env, who: &Keypair, d: u32| env.send(&[cpmm::ix_crank_buyback(&who.pubkey(), &m.mint, &m.pool, d)], &[who]);
-    expect_anchor_err(crank(&mut env, &outsider, D2), "CrankerNotAllowed");
-    crank(&mut env, &keeper, D2).unwrap();
-    // The platform authority (or an allowlisted key — recheck3.rs) clears it; an outsider cannot; then anyone cranks.
-    expect_anchor_err(env.send(&[ix_platform_clear(&outsider.pubkey())], &[&outsider]), "NotAdmin");
-    assert_eq!(event_names(&env.ok(&[ix_platform_clear(&pa.pubkey())], &[&pa])), vec!["CrankerAllowlistCleared"]);
-    env.set_time(env.now() + 1_200);
-    crank(&mut env, &outsider, D3).unwrap();
-
-    // A list that is never cleared stops applying at the cap's sunset.
-    let mut env = Env::new();
-    let (payer, ua) = (env.payer.pubkey(), env.upgrade_authority.insecure_clone());
-    env.fund(&outsider.pubkey(), SOL);
-    env.ok(&[ix_initialize_platform_with(&payer, &ua.pubkey(), &pa.pubkey(), DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 30 * 86_400, vec![keeper.pubkey()])], &[&ua]);
-    let m = unregistered(&mut env, buyback_rule());
-    ready(&mut env, &m);
-    env.transfer_sol(&fee_pda(&m.mint), 10 * SOL);
-    submit(&mut env, &m.mint, D1, V1, &[&m.att]).unwrap();
-    submit(&mut env, &m.mint, D2, V1 + UNIT, &[&m.att]).unwrap();
-    expect_anchor_err(env.send(&[cpmm::ix_crank_buyback(&outsider.pubkey(), &m.mint, &m.pool, D2)], &[&outsider]), "CrankerNotAllowed");
-    env.set_time(NOW + 30 * 86_400);
     env.ok(&[cpmm::ix_crank_buyback(&outsider.pubkey(), &m.mint, &m.pool, D2)], &[&outsider]);
+    expect_anchor_err(env.send(&[ix_platform_clear(&pa.pubkey())], &[&pa]), "NoPendingChange");
 }
 
 fn ix_platform_clear(authority: &Pubkey) -> Instruction {

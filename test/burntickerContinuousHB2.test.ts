@@ -10,7 +10,7 @@ import { lintCopy, loadCopyLintConfig, formatHits } from "@/lib/launch/copyLint"
 import { CPMM_MAINNET_TIER_14, CPMM_MAINNET_TIER_9, CPMM_TIER_14_SINCE } from "@/lib/burnticker/cpmmTier";
 import { EARLIER_COINS_LINE, EARLIER_OPERATOR_CLAUSE, TIER_14_CUTOVER_WORDS, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { DEV_FEE_LINE, postGraduationFeesFor } from "@/lib/burnticker/fees";
-import { CAP_ENFORCED_SENTENCE } from "@/lib/burnticker/capInForce";
+import { NO_BURN_CAP_SENTENCE } from "@/lib/burnticker/spreadCopy";
 import { buildReceiptsJson, buildTokenStatus, DECIDED_LINE, LIVE_LINE, VOIDED_LINE, feeFlowLine, lifecycleLineFor } from "@/lib/burnticker/tokenPage";
 import { tokenPageInput } from "@/lib/burnticker/server";
 import { lpFeeLine } from "@/lib/burnticker/trustpack/ledger";
@@ -75,14 +75,14 @@ describe("HB-13: a coin's fee legs come from the tier it pinned; the site-wide c
   });
 });
 
-describe("HB-14: one cap sentence, the program enforces it", () => {
-  test("the token pool note and the trust page use CAP_ENFORCED_SENTENCE; no source says the keeper enforces the cap today", () => {
-    assert.equal(CAP_ENFORCED_SENTENCE, "The burn program enforces this cap on chain.");
-    assert.match(read("src/lib/burnticker/tokenPage.ts"), /queuedNote: `\$\{capSentenceAway\(null\)\} \$\{CAP_ENFORCED_SENTENCE\}`/);
-    assert.match(read("src/lib/burnticker/trust.ts"), /`\$\{capSentence\(effective\)\} \$\{CAP_ENFORCED_SENTENCE\}`/);
+describe("HB-14 (reworked for the owner decision of 2026-10-25): no cap sentence; the pages say there is no cap", () => {
+  test("the token pool note says there is no cap; the trust page says how a burn runs; no source says anyone enforces a cap", () => {
+    assert.equal(NO_BURN_CAP_SENTENCE, "There is no platform cap on a burn. The burn pool spends what the rule says.");
+    assert.match(read("src/lib/burnticker/tokenPage.ts"), /noCapNote: NO_BURN_CAP_SENTENCE/);
+    assert.match(read("src/lib/burnticker/trust.ts"), /SPREAD_LINES\.join\(" "\),\s*PLATFORM_AUTHORITY_NO_CAP_SENTENCE,/);
     const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : /\.(ts|tsx|mjs)$/.test(e.name) ? [`${d}/${e.name}`] : []));
-    for (const f of walk("src")) assert.doesNotMatch(read(f), /keeper enforces this cap|enforces it once it is deployed/, f);
-    clean(CAP_ENFORCED_SENTENCE);
+    for (const f of walk("src")) assert.doesNotMatch(read(f), /keeper enforces this cap|enforces it once it is deployed|program enforces this cap/, f);
+    clean(NO_BURN_CAP_SENTENCE);
   });
 });
 

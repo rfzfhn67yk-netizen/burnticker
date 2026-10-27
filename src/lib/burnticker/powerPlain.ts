@@ -5,9 +5,9 @@
  * line into words a holder can read. The register itself, and the trust page's full table with its sources, are unchanged. Pure.
  *
  * Block G review L2 left the deeper rewrite for later. Still in reviewer terms on the coin page today: crank_buyback and the
- * PlatformConfig's cranker allowlist; "CPMM pool"; register_pool's creator + LP checks, the pool PDA, AmmConfig and cpConfigId in the
- * stranding-recovery lines; `quorum` in backticks; renounce_admin; pool_creator and the fee PDA; "min(pool, new cap)"; "the pre-audit
- * cap's sunset"; and the two lowercase "cannot" lines trust.ts adds (no full stop).
+ * "CPMM pool"; register_pool's creator + LP checks, the pool PDA, AmmConfig and cpConfigId in the stranding-recovery lines; `quorum`
+ * in backticks; renounce_admin; pool_creator and the fee PDA; "the platform sunset"; and the two lowercase "cannot" lines trust.ts adds
+ * (no full stop). The cap and cranker-allowlist rows say they were removed (owner decision 2026-10-25).
  */
 const LAUNCHLAB_ADMIN_PLAIN = "Change the LaunchLab platform's settings for coins still on their curve: the fee rate, the fee wallets (including the one that receives each graduating coin's Fee Key), the pool settings, the liquidity-lock shares, vesting and curve rules.";
 

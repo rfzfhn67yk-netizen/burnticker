@@ -45,7 +45,7 @@ export interface ProgramConfigView {
   cpConfig?: string;
 }
 
-/** planCarried's "not now" answers. "too-soon" (round-5 review R5-8): the piece fits the coin's carried budget at `nextAtMs`. */
+/** planCarried's "not now" answers. "too-soon": a piece already ran this second; the program accepts the next one at `nextAtMs`. */
 export type CarriedPlanStatus = { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" } | { status: "too-soon"; nextAtMs: number };
 
 /** One Reading account. `outcome` by name (pending / no-units / burned / below-floor / short / exhausted). */
@@ -102,13 +102,12 @@ export interface ProgramPort {
    */
   planCarried?(maxSpendLamports: bigint): Promise<{ build: () => Promise<SignedTx> } | CarriedPlanStatus>;
   /**
-   * Round-5 review R5-8: the coin's carried budget as the program judges it — the last piece's time (unix s; 0 = never, a full cap), the
-   * budget left after it, and the chain's clock (latest block time; null when unknown). The budget refills at one per-crank cap per
-   * CARRIED_BUDGET_WINDOW_SECS up to one cap (math.ts carriedBudget*). Read only before a piece is planned. Optional: a port without it
-   * relies on planCarried's "too-soon" and the CarriedTooSoon refusal.
+   * The coin's CarriedPace as the program judges it: the last piece's time (unix s; 0 = never) and the chain's clock (latest block time;
+   * null when unknown). Since the owner decision of 2026-10-25 the only pacing is one piece per coin per second and budgetLamports is
+   * always 0 (no carried budget). Optional: a port without it relies on planCarried's "too-soon" and the CarriedTooSoon refusal.
    */
   carriedPace?(): Promise<{ lastCarriedAt: number; budgetLamports: bigint; chainNowSec: number | null } | null>;
-  /** The registered CPMM pool's WSOL reserve net of owed fees (the per-crank cap and the price move are measured on it), or null. */
+  /** The registered CPMM pool's WSOL reserve net of owed fees (what the price move is measured on), or null. */
   poolSolReserve?(): Promise<bigint | null>;
   /**
    * The registered CPMM pool's price-history ring (burnReceipts/cpmm.ts ObservationRing), or null when unreadable. Read only when a crank

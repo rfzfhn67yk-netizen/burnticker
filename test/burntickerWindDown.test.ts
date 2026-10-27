@@ -75,11 +75,11 @@ describe("the schedules", () => {
 });
 
 describe("through the keeper and the program", () => {
-  test("a one-shot YES at 100 %: the pool drains across daily cranks under the 2 %-of-reserve cap, then the coin retires; the clock days' proof= is the date + rules sha", async () => {
+  test("a one-shot YES at 100 %: the result's crank spends the whole pool in one run (no per-run bound since 2026-10-25), so no drain days follow and the coin retires", async () => {
     const spec: CoinVsSpec = { selector: "coinvs", a: WIF, b: BONK, window: "daily", measure: "mcap", season: { start: "2026-10-05", days: 5 }, flip: true };
     const rule = lockRule({ ...coinvsRule(spec, 1), onEnd: WIND_DOWN_ON_END }).rule;
     const w = await derbyWorld(spec, { rule, tickers: ["TEAMWIF", "TEAMBONK"], hermes: null });
-    // 50 SOL of WSOL reserve → one crank spends at most 1 SOL; the pool holds 5 SOL.
+    // 50 SOL of WSOL reserve: the old 2 % bound would have let one crank spend 1 SOL of the pool; there is no bound now.
     w.program.fake(w.a.mint).poolReserveWsol = BigInt(50) * BigInt(1_000_000_000);
     const snap = (feed: string, b: number, value: string) => w.adapter.store.putSample({ key: `pyth:${feed}`, kind: "pyth", ts: b + 60_000, slot: 1, value, detail: { source: "pyth-solana", publishTime: b / 1000 + 5 } });
     const sup = (mint: string, b: number, v: string) => w.adapter.store.putSample({ key: `supply:${mint}`, kind: "supply", ts: b + 60_000, slot: 1, value: v, detail: {} });
@@ -87,21 +87,18 @@ describe("through the keeper and the program", () => {
     w.clock.now = B(6) + 3 * 3600_000;
     await runCycle(w.deps); await runCycle(w.deps);
     const yes = w.registry.receipts(w.a.mint)[0];
-    assert.equal(yes.status, "confirmed"); assert.equal(yes.spendLamports, BigInt(1_000_000_000), "capped at 2 % of the reserve");
-    assert.ok((yes.carriedOutLamports ?? BigInt(0)) > BigInt(0), "the rest is carried");
+    const pool0 = w.program.fake(w.a.mint).cfg.totalSpentLamports;
+    assert.equal(yes.status, "confirmed");
+    assert.ok(yes.spendLamports! > BigInt(1_000_000_000), `the whole pool in one run, far above the old 1 SOL bound: ${yes.spendLamports}`);
+    assert.equal(yes.carriedOutLamports ?? BigInt(0), BigInt(0), "nothing is carried");
     assert.equal(w.registry.ruleEnd(w.a.mint)!.mode, "drain");
     for (let d = 7; d <= 14; d++) { w.clock.now = B(d) + 3 * 3600_000; await runCycle(w.deps); await runCycle(w.deps); }
-    const drains = w.registry.receipts(w.a.mint).filter((r) => r.kind === "drain");
-    assert.ok(drains.length >= 4, `${drains.length} drain days`);
-    assert.ok(drains.every((r) => r.units === 1 && (r.status === "confirmed" || r.status === "skipped")));
-    const spent = w.registry.receipts(w.a.mint).reduce((a, r) => a + (r.spendLamports ?? BigInt(0)), BigInt(0));
+    assert.equal(w.registry.receipts(w.a.mint).filter((r) => r.kind === "drain").length, 0, "no drain days: nothing was carried");
+    assert.equal(w.program.fake(w.a.mint).cfg.totalSpentLamports, pool0, "nothing more to spend");
     const feeLeft = w.program.fake(w.a.mint).feeLamports;
-    assert.ok(spent >= BigInt(4_900_000_000), `spent ${spent}`); assert.ok(feeLeft <= BigInt(100_000_000), `left ${feeLeft}`);
+    assert.ok(feeLeft <= BigInt(100_000_000), `left ${feeLeft}`);
     assert.equal(w.registry.token(w.a.mint)!.status, "retired");
     assert.match(lifecycleFrom(w.registry, w.registry.token(w.a.mint)!, rule).line, /^This coin is retired\./);
-    // A drain day's attestation commits to sha256("clock|<date>|<rules sha256>").
-    const sig = w.registry.signatures(w.a.mint, `reading:${drains[0].eventId.slice(6)}`)[0];
-    assert.ok(JSON.parse(sig.memo).message.endsWith(`proof=${clockProofHex(drains[0].eventId.slice(6), w.a.rulesSha)}`));
   });
 
   test("the retired-coin sweep: fee income above the threshold is swept and burned; below it, nothing; at most one sweep a week", async () => {
@@ -122,6 +119,9 @@ describe("through the keeper and the program", () => {
     w.program.deposit(w.a.mint, BigInt(200_000_000));
     await runCycle(w.deps); await runCycle(w.deps);
     assert.equal(sweeps().length, 1); assert.equal(sweeps()[0].units, 459); assert.equal(sweeps()[0].status, "confirmed");
+    // A clock day's attestation (the sweep, like the wind-down and drain days) commits to sha256("clock|<date>|<rules sha256>").
+    const sig = w.registry.signatures(w.a.mint, `reading:${sweeps()[0].eventId.slice(6)}`)[0];
+    assert.ok(JSON.parse(sig.memo).message.endsWith(`proof=${clockProofHex(sweeps()[0].eventId.slice(6), w.a.rulesSha)}`));
     assert.match(lifecycleFrom(w.registry, w.registry.token(w.a.mint)!, w.registry.lockedRule(w.a).rule).line, /^This coin is retired\. Its pool was last swept on \d{4}-\d{2}-\d{2}/);
     // Another refill the next day: no second sweep within the week…
     w.clock.now += 86_400_000;

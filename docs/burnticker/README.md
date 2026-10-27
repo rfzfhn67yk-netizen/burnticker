@@ -45,7 +45,7 @@ burns exactly one side; the receipts are the scoreboard.
   its hash. When a rule ends for any reason (one-shot NO / void, pair voided, derby season over, bracket loser, an adapter's
   `markRuleEnded`), the keeper attests a daily `clock` reading of `windDownUnits(f, 28)` units (≥ 99 % of the pool in 28 days; proof =
   sha256("clock|date|rules sha")) until the pool is spent, then retires the coin; a one-shot may spend 100 % (the program allows 10,000
-  bps) and DRAINS across daily cranks under the 2 %-of-reserve cap; a retired coin's later fee income is swept above the threshold, at
+  bps) and spends it in one crank (no per-crank bound and no burn-pool cap since the owner decision of 2026-10-25); a retired coin's later fee income is swept above the threshold, at
   most weekly. Outcome sets (`set: { id, outcome, forwardBps }`, opt-in) are in the schema; their `forward_to_winner` instruction and a
   permissionless `sweep_retired` are queued (PROGRAM-UPGRADE-QUEUE.md). Design: DERBY.md §6a.
 
@@ -396,7 +396,7 @@ src/lib/burnticker/
   launchBundle.ts     buildLaunchBundle(): initialize_token + LaunchLab create (FakeLaunchLab now; SdkLaunchLab over src/lib/burnKeeper/launch.ts)
   multiKeeper.ts      one loop over every token: fetch due selectors → plan → crank (write-ahead, chain-is-final-word) → publish
   tokenPage.ts        status.json / receipts.json / index.html per token (§6) + the platform index; shares the $DEFICIT CSS and chart
-  fees.ts             the fee split (designed numbers from docs/burnkeeper/fees.md), the 25 SOL pre-audit cap, operator lines
+  fees.ts             the fee split (designed numbers from docs/burnkeeper/fees.md), operator lines (no burn-pool cap since 2026-10-25)
   trust.ts            the Powers Register, live PlatformConfig vs designed, fee ledger from chain, team wallets, incidents, audit
   audit.ts            recompute every receipt of every token (source + rule, and the memo on chain when a client exists)
   server.ts           the app's wiring (registry, oracles, program/LaunchLab clients — fakes until the program and RPC exist)
@@ -571,8 +571,8 @@ slot → burn pool, 100 %, 50 bps cap); graduation LP 100 % locked forever since
 The Fee Key is owned by the burn program and
 claim_lock_fees pays 80 % of the LP fees to the burn pool and 20 % to the operator (fixed in code), plus Raydium's fixed CPMM
 creator fee to the burn pool (CPMM tier 14 for new coins since the 2026-10-19 decision: 50 bps, 47.5 bps/SOL to the burn pool after Raydium's 5 %,
-with a 75 bps trade fee; tier 9 before it: 75 bps creator fee, 71.25 bps/SOL; tier 0 before that: 4.75 bps; a coin keeps the tier it pinned at initialize_token); no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";
-keeper-enforced today, program-enforced later — that seam is open); refuse list as above with elections allowed; anonymous creators
+with a 75 bps trade fee; tier 9 before it: 75 bps creator fee, 71.25 bps/SOL; tier 0 before that: 4.75 bps; a coin keeps the tier it pinned at initialize_token); no team allocation; no burn-pool cap and no per-run bound (the owner removed both from the program on 2026-10-25:
+a burn spends the rule's full share in one run, and the platform authority no longer holds a cap-raise power); refuse list as above with elections allowed; anonymous creators
 allowed, wallet always shown; one-shot markets allowed; hosting on one VPS behind Caddy.
 
 ## 10. Open items / stubbed pending other work

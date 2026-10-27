@@ -128,14 +128,14 @@ post says "Pair live" or "Pair voided — both pools wind down over four weeks".
   void, a pair voided, a derby season over, a flippening settled, a bracket coin knocked out, or an adapter's explicit mark
   (`registry.markRuleEnded`: a team's season over, a nominee replaced) — the keeper records it once (`rule_ends`) and, from the first day
   after the end, attests a daily `clock` reading of `windDownUnits(f, 28)` units of the rule's own fraction: the smallest n with
-  (1 − f)^(28n) ≤ 1 % (17 units a day at 1 %, 2 at 10 %, 1 at 100 %), so ≥ 99 % of the pool is spent in 28 days before the per-crank cap;
-  the 2 %-of-reserve cap carries the rest day by day and the $1 floor stops the tail; then the coin retires. Each clock day's
+  (1 − f)^(28n) ≤ 1 % (17 units a day at 1 %, 2 at 10 %, 1 at 100 %), so ≥ 99 % of the pool is spent in 28 days;
+  each day's share is spent in one crank (no per-crank bound since 2026-10-25) and the $1 floor stops the tail; then the coin retires. Each clock day's
   attestation carries `proof = sha256("clock|<YYYY-MM-DD>|<rules sha256>")` — date-based and recomputable by anyone. Receipts: kind
   `winddown`.
 - **One-shot YES → 100 %.** A one-shot mapping may be `fractionOfPool` ≤ 1.00 (recurring rules stay ≤ 0.10). The program accepts
   `fraction_per_unit_bps` up to 10,000 (`initialize_token` validate_rule: 1 ≤ bps ≤ BPS_DENOMINATOR) — no program change. A crank needs a
-  reading with units and spends at most 2 % of the pool's WSOL reserve, carrying the rest, so after the YES the keeper attests one `drain`
-  unit a day (each one's rule spend is exactly the whole pool: 1 − (1 − 1)^1 = 1) while the program's last crank still carried spend;
+  reading with units and, since the owner decision of 2026-10-25, spends the whole target in one run (no per-crank bound), so after the
+  YES the keeper attests one `drain` unit (its rule spend is exactly the whole pool: 1 − (1 − 1)^1 = 1);
   then the coin retires. Every amount is the program's, on the receipts.
 - **Retired-coin sweep.** A retired coin's fee PDA keeps receiving the post-graduation creator fee (47.5 bps on mainnet CPMM tier 14 for coins created since 2026-10-19, 71.25 bps on tier 9, 4.75 bps on tier 0, by the tier each coin pinned; and 80 % of its locked LP's fees, by claim_lock_fees); when its spendable balance
   passes `sweepThresholdLamports` the keeper attests one `sweep` reading of full-spend units (≥ 99 % in one reading), continued daily while

@@ -278,7 +278,7 @@ export interface LockFeesPort {
   buildRegisterFeeKey(): Promise<SignedTx>;
   /** Signs register_pool with the FeeKeyRecord as its last account (policy 0, round 2: after register_fee_key). Signed, not sent. */
   buildRegisterPool(): Promise<SignedTx>;
-  /** Signs claim_lock_fees(u64::MAX) (the keeper pays the fee; permissionless — the cranker allowlist applies during the cap). Signed, not sent. */
+  /** Signs claim_lock_fees(u64::MAX) (the keeper pays the fee; permissionless). Signed, not sent. */
   buildClaim(): Promise<SignedTx>;
   simulate(raw: Uint8Array): Promise<{ err: string | null; logs: string[] }>;
   send(raw: Uint8Array): Promise<void>;

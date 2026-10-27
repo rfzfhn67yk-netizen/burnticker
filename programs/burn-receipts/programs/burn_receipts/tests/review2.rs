@@ -269,7 +269,7 @@ fn poc_crank_buyback_worst_case_cu() {
     let mut env = Env::new();
     let rule = RuleParams { unit_value: 1, max_abs_delta: i64::MAX as u64, twap_window_secs: 1_200, ..buyback_rule() };
     let auth = Pubkey::new_unique();
-    env.init_platform(&auth, DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    env.init_platform(&auth, LEGACY_CAP_ARG);
     let m = mkt(&mut env, rule);
     // fill the ring: 110 balanced swaps 16 s apart
     let mut now = env.now();
@@ -297,7 +297,7 @@ fn poc_crank_buyback_worst_case_cu() {
 fn poc_crank_tx_size_client_shape() {
     let mut env = Env::new();
     let auth = Pubkey::new_unique();
-    env.init_platform(&auth, DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    env.init_platform(&auth, LEGACY_CAP_ARG);
     let m = mkt(&mut env, buyback_rule());
     let fee = fee_pda(&m.mint);
     let payer = env.payer.pubkey();
@@ -565,7 +565,7 @@ fn f7_the_queue_unblocks_after_30_days_of_continuous_untradeability() {
     let r3 = env.reading(&reading_pda(&cfg, D3)).unwrap();
     assert_eq!(r3.outcome, OUTCOME_BELOW_FLOOR);
     assert_eq!(r3.carried_in_lamports, r.carried_out_lamports);
-    // Trading resumes: the carried target is spent (within the 2 % cap) and the spell is cleared.
+    // Trading resumes: the carried target is spent in full (no per-crank bound since 2026-10-25) and the spell is cleared.
     set_pool_status(&mut env, &m.pool.pool, 0);
     cpmm::seed_history(&mut env, &m.pool, &m.mint);
     submit(&mut env, &m.mint, D4, V1 + 3 * UNIT, &[&m.att]).unwrap();
@@ -576,11 +576,12 @@ fn f7_the_queue_unblocks_after_30_days_of_continuous_untradeability() {
     assert_eq!(env.config(&cfg).pool_untradeable_since, 0);
 }
 
-/// F15: the reserve cap pushing the spend under the floor carries the whole target with its own event (nothing spent).
+/// F15 (bound removed 2026-10-25): the case that used to carry everything — a floor of 2 SOL above 2 % of the 85 SOL reserve
+/// (1.7 SOL), so the bound always pushed the spend under the floor — now burns the whole ≈ 2.85 SOL in one run. A target that is
+/// genuinely under the floor still carries what was owed with its own SpendCarried event (reason BELOW_FLOOR, nothing spent).
 #[test]
-fn f15_a_carry_with_nothing_spent_emits_spend_carried() {
+fn f15_the_old_floor_trap_burns_and_a_carry_under_the_floor_emits_spend_carried() {
     let mut env = Env::new();
-    // floor 2 SOL > 2 % of the 85 SOL reserve (1.7 SOL): the capped spend is always under the floor.
     let m = mkt(&mut env, RuleParams { floor_lamports: 2 * SOL, ..buyback_rule() });
     env.transfer_sol(&fee_pda(&m.mint), 20 * SOL);
     submit(&mut env, &m.mint, D1, V1, &[&m.att]).unwrap();
@@ -588,26 +589,38 @@ fn f15_a_carry_with_nothing_spent_emits_spend_carried() {
     let payer = env.payer.pubkey();
     let meta = env.ok(&[cpmm::ix_crank_buyback(&payer, &m.mint, &m.pool, D2)], &[]);
     let r = env.reading(&reading_pda(&config_pda(&m.mint), D2)).unwrap();
-    assert_eq!((r.outcome, r.spent_lamports), (OUTCOME_BELOW_FLOOR, 0));
+    assert_eq!((r.outcome, r.spent_lamports, r.carried_out_lamports), (OUTCOME_BURNED, r.rule_spend_lamports, 0));
+    assert!(r.spent_lamports > 2 * SOL);
+    assert!(find_event::<SpendCapBound>(&meta).is_none() && find_event::<SpendCarried>(&meta).is_none());
+
+    // Under the floor: a 1 SOL carry (left by the program before 2026-10-25) plus a 1-unit spend stays under a 20 SOL floor.
+    let mut env = Env::new();
+    let m = mkt(&mut env, RuleParams { floor_lamports: 20 * SOL, ..buyback_rule() });
+    env.transfer_sol(&fee_pda(&m.mint), 20 * SOL);
+    set_legacy_carry(&mut env, &m.mint, SOL);
+    submit(&mut env, &m.mint, D1, V1, &[&m.att]).unwrap();
+    submit(&mut env, &m.mint, D2, V1 + UNIT, &[&m.att]).unwrap();
+    let payer = env.payer.pubkey();
+    let meta = env.ok(&[cpmm::ix_crank_buyback(&payer, &m.mint, &m.pool, D2)], &[]);
+    let r = env.reading(&reading_pda(&config_pda(&m.mint), D2)).unwrap();
+    assert_eq!((r.outcome, r.spent_lamports, r.carried_out_lamports), (OUTCOME_BELOW_FLOOR, 0, SOL));
     let sc = find_event::<SpendCarried>(&meta).unwrap();
-    assert_eq!((sc.record_date, sc.carried_out_lamports, sc.reason), (D2, r.carried_out_lamports, burn_receipts::instructions::crank_buyback::CARRY_REASON_BELOW_FLOOR));
-    assert!(sc.carried_out_lamports >= 2 * SOL);
+    assert_eq!((sc.record_date, sc.carried_in_lamports, sc.carried_out_lamports, sc.reason), (D2, SOL, SOL, burn_receipts::instructions::crank_buyback::CARRY_REASON_BELOW_FLOOR));
     assert!(find_event::<SpendCapBound>(&meta).is_none());
 }
 
-/// F8 + review-3 I-2: the PlatformConfig's initial cap EQUALS the default (it cannot lower the cap in force) and its sunset is never
-/// later than the hard-coded default sunset.
+/// F8 (cap removed 2026-10-25): initialize_platform ignores its cap argument (any value, stored 0: there is no burn-pool cap) and its
+/// sunset is still never later than the hard-coded default sunset (the sunset now only closes the stranding-recovery switch).
 #[test]
-fn f8_platform_cap_floor_and_sunset_bound() {
+fn f8_platform_cap_argument_ignored_and_sunset_bound() {
     let mut env = Env::new();
     let (payer, ua) = (env.payer.pubkey(), env.upgrade_authority.insecure_clone());
     let a = Pubkey::new_unique();
-    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, MIN_BURN_POOL_CAP_LAMPORTS, NOW + 86_400)], &[&ua]), "CapNotDefault");
-    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS - 1, NOW + 86_400)], &[&ua]), "CapNotDefault");
-    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS + 1, NOW + 86_400)], &[&ua]), "CapNotDefault");
     // DEFAULT_CAP_SUNSET_TS + 1 is inside the 365-day bound from NOW, so only the default-sunset bound refuses it.
-    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS, DEFAULT_CAP_SUNSET_TS + 1)], &[&ua]), "InvalidSunset");
-    env.ok(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, DEFAULT_BURN_POOL_CAP_LAMPORTS, DEFAULT_CAP_SUNSET_TS)], &[&ua]);
+    expect_anchor_err(env.send(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, 1, DEFAULT_CAP_SUNSET_TS + 1)], &[&ua]), "InvalidSunset");
+    env.ok(&[ix_initialize_platform(&payer, &ua.pubkey(), &a, u64::MAX, DEFAULT_CAP_SUNSET_TS)], &[&ua]);
+    let pc = <burn_receipts::state::PlatformConfig as anchor_lang::AccountDeserialize>::try_deserialize(&mut env.svm.get_account(&platform_pda()).unwrap().data.as_slice()).unwrap();
+    assert_eq!((pc.burn_pool_cap_lamports, pc.cap_sunset_ts), (0, DEFAULT_CAP_SUNSET_TS));
 }
 
 /// F11 + F12: the init event carries the admin, a governance hash and the cluster genesis; the config stores the genesis; a

@@ -4,7 +4,8 @@
 //   · the debts and the plan reconcile to the chain's carried balance (an aggregate; any account change may move them);
 //   · a piece's receipt says only what its own transaction's memo says (clamped to the piece's requested maximum). Until that memo is
 //     read the receipt is pending with no amount, and the keeper reads it again on later wakes.
-// The fixture: one coin with 0.06 SOL carried, a piece signed and sent but its confirmation lost (a restart), then the chain changes.
+// The fixture: one coin with 0.1 SOL carried, ONE piece for all of it (owner decision 2026-10-25: no per-run bound, so a piece asks for the
+// whole carry) signed and sent but its confirmation lost (a restart), then the chain changes.
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { openRegistry, type Registry } from "@/lib/burnticker/registry";
@@ -41,8 +42,9 @@ const port = (f: FakeProgram, over: Partial<Record<keyof ProgramPort, unknown>>)
 const sec = (ms: number) => Math.floor(ms / 1000);
 
 /**
- * A Broncos coin with 0.06 SOL carried; the keeper's piece is signed and sent at its time but the send is dropped, so the piece is
- * on record in flight (the write-ahead), exactly as a restart finds it. Returns the harness and the piece's signature and size.
+ * A Broncos coin with 0.1 SOL carried (its pool was untradeable for 30 days, so the reading was processed with its whole target carried;
+ * the pool trades again); the keeper's piece for the whole carry is signed and sent but the send is dropped, so the piece is on record in
+ * flight (the write-ahead), exactly as a restart finds it. Returns the harness and the piece's signature and size.
  */
 async function inFlight() {
   const b = await buildLaunchBundle({ creator: CREATOR, ticker: "BRONCO", name: "BRONCO coin", description: "a test", imageUrl: null, links: [], rule: BRONCOS, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
@@ -53,48 +55,49 @@ async function inFlight() {
   program.deposit(t.mint, BigInt(5) * SOL);
   const f = program.fake(t.mint);
   f.poolReserveWsol = BigInt(2) * SOL;
-  await runCycle(deps);                                   // the reading cranks: 0.04 SOL spent, 0.06 carried
+  const s0 = sec(clock);
+  f.poolTradable = false;
+  f.cfg = { ...f.cfg, poolUntradeableSince: s0 - 31 * 86_400, poolUntradeableLastSeen: s0 - 3_600 };
+  await runCycle(deps);                                   // the reading is processed with its whole 0.1 SOL target carried
+  f.poolTradable = true;
   const carried = f.cfg.carriedSpendLamports;
-  assert.ok(carried > Z);
+  assert.equal(carried, SOL / BigInt(10));
   let json: string | null = null;
   const log: string[] = [];
   const alerts: DispersalAlert[] = [];
   const run = (p: ProgramPort = f, dryRun = false) => runDispersal({ port: p, mint: f.mint, ticker: "BRONCO", load: () => json, save: (j) => { json = j; }, log: (l) => log.push(l), now: () => clock, dryRun, alert: (a) => { alerts.push(a); } } satisfies DispersalDeps);
   const state = (): DispersalState => stateFromJson(json);
-  const plan = await run();
-  assert.equal(plan.action, "wait");
-  clock = state().window!.chunks[0].atMs;
   f.dropSends = true;
   const sent = await run();
   assert.equal(sent.action, "sent", sent.why);
   const fl = state().inflight!;
   assert.ok(fl, "the piece is on record in flight");
+  assert.equal(fl.lamports, carried, "one piece asks for the whole carry");
   f.dropSends = false;
   return { t, f, run, state, log, alerts, carried, sig: fl.signature, lamports: fl.lamports, setState: (s: DispersalState) => { json = stateToJson(s); } };
 }
 
-/** Someone else's crank_carried piece (permissionless), with the budget refilled first so the program takes it. */
-function foreignPiece(f: FakeProgram): string {
-  const cap = (f.poolReserveWsol * BigInt(200)) / BigInt(10_000);
-  const maxSpend = f.cfg.carriedSpendLamports < cap ? f.cfg.carriedSpendLamports : cap;
-  f.lastCarriedAt = sec(clock) - 100_000;
-  f.carriedBudgetLamports = Z;
+/** Someone else's crank_carried piece of at most `maxSpend` (permissionless), in an earlier second than the last piece. */
+function foreignPiece(f: FakeProgram, maxSpend: bigint): string {
+  f.lastCarriedAt = sec(clock) - 100;
   const before = f.cfg.carriedSpendLamports;
   const tx = (f as unknown as { mk(p: unknown): SignedTx }).mk({ kind: "carried", maxSpend });
   f.land(tx.signature);
   assert.ok(f.cfg.carriedSpendLamports < before, "the foreign piece landed");
+  clock += 1_000;   // the program takes one piece per coin per second
   return tx.signature;
 }
 
+/** The part of the 0.1 SOL carry another cranker spends first. */
+const PART = BigInt(40_000_000);
 const noMemo = (f: FakeProgram) => port(f, { memoOf: async () => null });
 const debtLeft = (s: DispersalState) => s.debts.reduce((a, d) => a + d.remainingLamports, Z);
 
 describe("audit F10: a piece's receipt never takes the whole carried-balance change as its own spend", () => {
   test("missing memo + a foreign crank in between: the receipt is pending with no amount; the debts still reconcile to the chain", async () => {
     const h = await inFlight();
-    h.f.land(h.sig);                                       // our piece lands after all
-    assert.equal(h.f.cfg.carriedSpendLamports, h.carried - h.lamports);
-    foreignPiece(h.f);                          // another cranker drains the rest
+    foreignPiece(h.f, PART);                               // another cranker spends part of the carry first
+    h.f.land(h.sig);                                       // our piece lands after all: it spends what was left
     assert.equal(h.f.cfg.carriedSpendLamports, Z);
     clock += 5 * 60_000;
     await h.run(noMemo(h.f));                              // the restart's resolve, with the transaction not readable yet
@@ -113,8 +116,8 @@ describe("audit F10: a piece's receipt never takes the whole carried-balance cha
 
   test("the memo arrives on a later wake: the same receipt is completed with the transaction's exact amount", async () => {
     const h = await inFlight();
+    foreignPiece(h.f, PART);
     h.f.land(h.sig);
-    foreignPiece(h.f);
     clock += 5 * 60_000;
     await h.run(noMemo(h.f));
     assert.equal(h.state().receipts.find((x) => x.signature === h.sig)!.status, "pending");
@@ -125,8 +128,10 @@ describe("audit F10: a piece's receipt never takes the whole carried-balance cha
     await h.run();                                         // the RPC has the parsed transaction now
     const r = h.state().receipts.find((x) => x.signature === h.sig)!;
     assert.equal(r.status, "landed");
-    assert.equal(r.spentLamports, h.lamports, "exactly the piece's own spend, from its memo");
-    assert.match(r.memo!, new RegExp(`\\|carried\\|.*\\|spent=${h.lamports}\\|`));
+    const own = h.carried - PART;
+    assert.equal(r.spentLamports, own, "exactly the piece's own spend, from its memo (not the request, not the balance change)");
+    assert.notEqual(own, h.lamports);
+    assert.match(r.memo!, new RegExp(`\\|carried\\|.*\\|spent=${own}\\|`));
     assert.equal(h.state().receipts.filter((x) => x.signature === h.sig).length, 1, "one receipt per signature");
     assert.ok(h.log.some((l) => /spend is now read: 0\.\d{4} SOL/.test(l)), h.log.join("\n"));
   });
@@ -134,12 +139,16 @@ describe("audit F10: a piece's receipt never takes the whole carried-balance cha
   test("a new reading adds carry between the write-ahead snapshot and the reconcile: the receipt is pending, never zero or the delta", async () => {
     const h = await inFlight();
     h.f.land(h.sig);
-    // a stranger submits and cranks a further unit day: the carried balance grows past the snapshot
+    // a stranger submits and cranks a further unit day on a pool that is untradeable again: the carried balance moves up from zero
+    const s1 = sec(clock);
+    h.f.poolTradable = false;
+    h.f.cfg = { ...h.f.cfg, poolUntradeableSince: s1 - 31 * 86_400, poolUntradeableLastSeen: s1 - 3_600 };
     const prev = h.f.cfg.lastRecordDate, value = h.f.cfg.lastValue;
     const tx = await h.f.buildReading({ recordDate: 20260929, prevDate: prev, value: value + BigInt(1), sourceUrl: "burnticker://BRONCO/units/2026-09-29", feedId: h.f.cfg.feedId, valueDecimals: h.f.cfg.valueDecimals });
     await h.f.send(tx.raw);
     assert.ok(h.f.strangerCrank());
-    assert.ok(h.f.cfg.carriedSpendLamports > h.carried, "more carried now than when the piece was written ahead");
+    assert.ok(h.f.cfg.carriedSpendLamports > Z, "carried again after our piece emptied it");
+    assert.notEqual(h.carried - h.f.cfg.carriedSpendLamports, h.lamports, "the balance change is not the piece's spend");
     clock += 5 * 60_000;
     await h.run(noMemo(h.f));
     const st = h.state();
@@ -234,8 +243,6 @@ describe("audit F10: a piece's receipt never takes the whole carried-balance cha
     assert.equal(lookups, 0);
     assert.equal(h.state().receipts.find((x) => x.signature === h.sig)!.tries, 1, "the dry run left the receipt as it was");
     await h.run(counting);
-    // the window planner places pieces at random times, so another piece may land in this same wake and read its own memo too:
-    // the assertion is that THIS receipt was read once more, not that nothing else was
     assert.ok(lookups >= 1, "the live wake reads it");
     assert.equal(h.state().receipts.find((x) => x.signature === h.sig)!.tries, 2, "the live wake counted one more try on the pending receipt");
   });
@@ -245,13 +252,12 @@ describe("audit F10: a piece's receipt never takes the whole carried-balance cha
     // a fresh piece: drop the in-flight one by expiring it, then let the next one confirm while its memo is unreadable
     h.f.height = h.state().inflight!.lastValidBlockHeight + 1;
     clock += 5 * 60_000;
-    await h.run();
+    // the same wake releases the expired piece and sends a fresh one for the whole carry, which confirms at once
+    const r = await h.run(noMemo(h.f));
     assert.equal(h.state().inflight, null);
-    let r = null as Awaited<ReturnType<typeof h.run>> | null;
-    for (let i = 0; i < 200 && r?.action !== "landed"; i++) { clock += 5 * 60_000; h.f.lastCarriedAt = 0; r = await h.run(noMemo(h.f)); }
-    assert.equal(r!.action, "landed", r!.why);
-    assert.equal(r!.spentLamports, undefined, "the report names no amount it has not read");
-    const rc = h.state().receipts.find((x) => x.signature === r!.signature)!;
+    assert.equal(r.action, "landed", r.why);
+    assert.equal(r.spentLamports, undefined, "the report names no amount it has not read");
+    const rc = h.state().receipts.find((x) => x.signature === r.signature)!;
     assert.equal(rc.status, "pending");
     assert.equal(rc.spentLamports, null);
     assert.ok(h.log.some((l) => /spend not yet read/.test(l)), h.log.join("\n"));

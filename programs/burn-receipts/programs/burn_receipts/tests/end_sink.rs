@@ -37,7 +37,7 @@ struct Coin {
 fn platform(env: &mut Env) {
     if env.svm.get_account(&platform_pda()).map(|a| a.data.is_empty()).unwrap_or(true) {
         let auth = Pubkey::new_unique();
-        env.init_platform(&auth, DEFAULT_BURN_POOL_CAP_LAMPORTS);
+        env.init_platform(&auth, LEGACY_CAP_ARG);
     }
 }
 
@@ -127,7 +127,7 @@ fn event<T: AnchorDeserialize + Discriminator>(meta: &litesvm::types::Transactio
     events(meta).into_iter().find(|(d, _)| d[..] == T::DISCRIMINATOR[..]).map(|(_, p)| T::try_from_slice(&p).unwrap())
 }
 
-/// What forward_to_winner must move: the loser's buyback_spend on min(SOL above reserve + WSOL − its carried spend (r3 RI-4), cap);
+/// What forward_to_winner must move: the loser's buyback_spend on SOL above reserve + WSOL − its carried spend (r3 RI-4) (no cap since 2026-10-25);
 /// 0 under the floor.
 fn expected_forward(env: &Env, loser: &Pubkey, date: u32) -> u64 {
     let cfg = env.config(&config_pda(loser));
@@ -135,7 +135,7 @@ fn expected_forward(env: &Env, loser: &Pubkey, date: u32) -> u64 {
     let units = env.reading(&reading_pda(&config_pda(loser), date)).unwrap().units;
     let fee = fee_pda(loser);
     let wsol = env.svm.get_account(&get_associated_token_address(&fee, &NATIVE_MINT)).map(|_| env.token_amount(&get_associated_token_address(&fee, &NATIVE_MINT))).unwrap_or(0);
-    let basis = (env.lamports(&fee).saturating_sub(rule.reserve_lamports) + wsol).saturating_sub(cfg.carried_spend_lamports).min(DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    let basis = (env.lamports(&fee).saturating_sub(rule.reserve_lamports) + wsol).saturating_sub(cfg.carried_spend_lamports);
     let spend = math::buyback_spend(basis, units, rule.fraction_per_unit_bps).unwrap();
     if spend < rule.floor_lamports { 0 } else { spend }
 }
@@ -348,10 +348,10 @@ fn a_resolved_coin_forwards_its_remaining_fuel_and_later_trickle_to_the_flagship
     assert!(env.mint_supply(&f.mint) < supply, "the flagship burned");
 }
 
-/// The burn-pool cap bounds one forward; the carried spend waits 30 days for crank_carried (R5-4), then is cleared; a reading dated
-/// after the end never cranks.
+/// No burn-pool cap since 2026-10-25: one forward moves everything above the carry; the carried spend waits 30 days for crank_carried
+/// (R5-4), then is cleared; a reading dated after the end never cranks.
 #[test]
-fn a_forward_on_end_is_capped_and_a_reading_after_a_resolved_end_never_cranks() {
+fn a_forward_on_end_moves_all_above_the_carry_and_a_reading_after_a_resolved_end_never_cranks() {
     let mut env = Env::new();
     let att = Keypair::new();
     let f = flagship(&mut env, &att);
@@ -364,18 +364,20 @@ fn a_forward_on_end_is_capped_and_a_reading_after_a_resolved_end_never_cranks() 
     expect_anchor_err(crank(&mut env, &k, &c, D2), "ForwardOnEndRequired");
     patch_config(&mut env, &c.mint, |x| x.end_date = D2);
     crank(&mut env, &k, &c, D2).unwrap();
-    let owed = env.config(&config_pda(&c.mint)).carried_spend_lamports;
-    assert!(owed > 0, "the capped crank left a carry");
+    assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, 0, "the crank spent its whole target (the 1 SOL carry included)");
+    // a carry left from before 2026-10-25 (when the 2 % bound still carried part of a spend)
+    let owed = 2 * SOL;
+    set_legacy_carry(&mut env, &c.mint, owed);
+    env.transfer_sol(&fee_pda(&c.mint), 10 * SOL); // later fees: the coin now holds more than the old 25 SOL cap above its carry
     let before = env.lamports(&fee_pda(&c.mint));
+    let above = spendable(&env, &c.mint) - owed;
+    assert!(above > LEGACY_CAP_ARG, "more than the old 25 SOL cap is above the carry");
     let meta = env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]);
     let ev: ForwardedOnEnd = event(&meta).unwrap();
-    assert_eq!(ev.lamports, DEFAULT_BURN_POOL_CAP_LAMPORTS);
-    assert_eq!(before - env.lamports(&fee_pda(&c.mint)), DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    assert_eq!(ev.lamports, above, "one forward moves everything above the carry: no cap");
+    assert!(before - env.lamports(&fee_pda(&c.mint)) <= above);
     // round-5 review R5-4: the carry owed by readings inside the window stays for crank_carried (30 days after the end)
     assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, owed);
-    // the rest (above the carry) goes on the next call
-    env.set_time(env.now() + 1);
-    env.ok(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]);
     assert_eq!(spendable(&env, &c.mint), owed);
     // 30 days after the end the end path takes the carry too and clears it (nothing can strand)
     env.set_time(rule_end(&env, &c.mint).unwrap().submitted_at + QUEUE_UNBLOCK_SECS);
@@ -824,20 +826,23 @@ fn an_r5_coin_keeps_self_on_the_won_path() {
 // round-5 blind review fixes (2026-10-14)
 // =================================================================================================================================
 
-/// A coin whose result reading (D2) cranks cap-bound and carries a spend; returns (coin, carried).
+/// A coin whose result reading (D2) cranked (its whole target: no cap) and then holds a carry left from before 2026-10-25; returns
+/// (coin, carried).
 fn carrying_coin(env: &mut Env, att: &Keypair, k: &Keypair) -> (Coin, u64) {
     let c = ending_coin(env, att, END_SINK_FLAGSHIP, Pubkey::default(), 30 * SOL, 21);
     crank(env, k, &c, D2).unwrap();
-    let owed = env.config(&config_pda(&c.mint)).carried_spend_lamports;
-    assert!(owed > 0, "the result reading carried a spend");
+    assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, 0, "the crank spent its whole target");
+    let owed = 3 * SOL;
+    assert!(spendable(env, &c.mint) > owed);
+    set_legacy_carry(env, &c.mint, owed);
     (c, owed)
 }
 
+/// One crank_carried piece of the whole carry (no per-crank bound since 2026-10-25).
 fn piece(env: &mut Env, k: &Keypair, c: &Coin) -> TxResult {
-    env.set_time(env.now() + 601);
-    let (r_sol, _) = cpmm::reserves(env, &c.pool);
-    let cap = math::reserve_spend_cap(r_sol, MAX_SPEND_RESERVE_BPS);
-    env.send(&[cpmm::ix_crank_carried(&k.pubkey(), &c.mint, &c.pool, cap)], &[k])
+    env.set_time(env.now() + 1_201);
+    let carried = env.config(&config_pda(&c.mint)).carried_spend_lamports;
+    env.send(&[cpmm::ix_crank_carried(&k.pubkey(), &c.mint, &c.pool, carried)], &[k])
 }
 
 /// R5-3: after a VOID end (the champion path) the coin's carried spend is still dispersed by crank_carried.
@@ -875,9 +880,10 @@ fn r5_4_a_resolved_end_forwards_only_the_fuel_above_the_carry_while_crank_carrie
     assert_eq!(spendable(&env, &c.mint), owed, "the carry stays in the fee PDA");
     assert_eq!(env.config(&config_pda(&c.mint)).carried_spend_lamports, owed);
     expect_anchor_err(env.send(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]), "NothingToForward");
-    // crank_carried runs after the RESOLVED end and burns the coin with it
+    // crank_carried runs after the RESOLVED end and burns the coin with it (half the carry here, so some is left for the end path)
     let supply = env.mint_supply(&c.mint);
-    piece(&mut env, &k, &c).unwrap();
+    env.set_time(env.now() + 1_201); // the pool's TWAP catches up with the result reading's whole-target buy
+    env.ok(&[cpmm::ix_crank_carried(&k.pubkey(), &c.mint, &c.pool, owed / 2)], &[&k]);
     let left = env.config(&config_pda(&c.mint)).carried_spend_lamports;
     assert!(left < owed && env.mint_supply(&c.mint) < supply);
     // 30 days after the end, the end path takes what is still carried and clears it

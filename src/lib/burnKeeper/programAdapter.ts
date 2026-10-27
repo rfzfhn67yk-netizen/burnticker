@@ -143,7 +143,7 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
       const r = await fetchTokenConfig(c, o.programId, o.mint);
       return r ? configView(o.programId, o.mint, r.config) : null;
     },
-    // round-5 review R5-8: the carried budget lives in its own account (CarriedPace); read only when a piece is about to be planned
+    // the coin's CarriedPace (its last piece; no carried budget since the owner decision of 2026-10-25)
     async carriedPace() { return carriedPaceView(ctx); },
     async reading(recordDate) {
       const r = await fetchReading(c, o.programId, config, recordDate);

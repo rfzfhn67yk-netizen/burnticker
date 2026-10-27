@@ -18,7 +18,7 @@
 //!                                canonical_end_message) — date and outcome resolved | void. Only a coin with an EndSink can end;
 //!                                coins launched before §45 keep their hashed wind-down.
 //!   forward_on_end               permissionless, after a RESOLVED end once every reading inside the window is processed:
-//!                                min(spendable SOL above the reserve + synced WSOL, the burn-pool cap) → the destination fee PDA
+//!                                spendable SOL above the reserve + synced WSOL → the destination fee PDA
 //!                                (SOL first, then WSOL); refused under the EndSink's minimum. Callable again whenever the trickle
 //!                                passes the minimum. Memo `<PREFIX>|endfwd|to=<12>|lamports=N|v1`.
 //! After a RESOLVED end no reading dated later than the end can be submitted (submit_reading → RuleEnded) and crank_buyback refuses
@@ -34,7 +34,6 @@ use crate::constants::*;
 use crate::error::BurnError;
 use crate::events::{EndSinkPinned, ForwardedOnEnd, RuleEnded, SolBurnedOnEnd};
 use crate::guards::require_fee_token_account_intact;
-use crate::instructions::crank_common::{active_cap, crankers_in_force};
 use crate::instructions::pair::{create_pda, read_link, wsol_synced_or_zero};
 use crate::math;
 use crate::memo;
@@ -177,10 +176,10 @@ pub fn reading_allowed_after_end(c: &TokenConfig, record_date: u32) -> bool {
 // forward_on_end
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/// PERMISSIONLESS (the cranker allowlist applies while the pre-audit cap is in force). For a coin whose rule ended RESOLVED and whose
+/// PERMISSIONLESS. For a coin whose rule ended RESOLVED and whose
 /// readings inside the window are all processed (crank_cursor == last_record_date; not required of a coin that never registered a pool,
 /// which can never crank them): moves min(fee PDA SOL above the reserve + its
-/// synced WSOL, the burn-pool cap) to the destination's fee PDA — SOL first, then WSOL into the destination fee PDA's WSOL account —
+/// synced WSOL, less any carry still held back) to the destination's fee PDA — SOL first, then WSOL into the destination fee PDA's WSOL account —
 /// if it is at least EndSink.min_forward_lamports. The destination (`target_config`) is decided here, never by the caller:
 ///   FLAGSHIP → the flagship; MINT → the named coin if live, else the flagship; PAIR_WINNER → the partner if the end date's
 ///   PairResult names it winner and it is live and still paired, else the flagship.
@@ -191,7 +190,7 @@ pub fn reading_allowed_after_end(c: &TokenConfig, record_date: u32) -> bool {
 #[derive(Accounts)]
 pub struct ForwardOnEnd<'info> {
     pub cranker: Signer<'info>,
-    /// CHECK: the platform PDA (seeds-checked) — its cap and cranker allowlist, as for crank_buyback.
+    /// CHECK: the platform PDA (seeds-checked); unused since the cap and the cranker allowlist were removed (2026-10-25).
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
     #[account(mut, seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
@@ -291,8 +290,6 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
     // has no verified pool, whose readings can never crank (a one-shot that never graduated): its fuel goes to the sink regardless.
     // Blind review L-3: the exception is a coin that never registered a pool (not one whose pool is mid-verification).
     require!(end_readings_done(c), BurnError::EndReadingsPending);
-    let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
-    require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     require!(BURNTICKER_FLAGSHIP != Pubkey::default(), BurnError::FlagshipNotPinned);
 
     // ----- the destination -----
@@ -336,7 +333,7 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
         require!(live(&a.target_config), BurnError::FlagshipNotLive);
     }
 
-    // ----- the amount: what is spendable, under the cap -----
+    // ----- the amount: what is spendable (owner decision 2026-10-25: no platform cap) -----
     let reserve = c.rule.reserve_lamports;
     let mint = c.mint;
     let fee_bump = c.fee_bump;
@@ -349,10 +346,7 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
     let sol_avail = a.fee_vault.lamports().saturating_sub(reserve);
     let held_back = carry_held_back(c, &a.rule_end, now);
     let pool_actual = sol_avail.checked_add(wsol_avail).ok_or(BurnError::MathOverflow)?.saturating_sub(held_back);
-    let amount = match active_cap(&a.platform.to_account_info(), now)? {
-        Some(cap) if pool_actual > cap => cap,
-        _ => pool_actual,
-    };
+    let amount = pool_actual;
     // Blind review M-3: the first forward moves whatever is there (a small coin's remainder is never stranded under the minimum); the
     // minimum gates the later trickle.
     require!(amount > 0 && (amount >= a.end_sink.min_forward_lamports || a.rule_end.forwards == 0), BurnError::NothingToForward);
@@ -410,10 +404,10 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
 // burn_sol_on_end (the incinerator end sink, owner 2026-10-13)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/// PERMISSIONLESS (the cranker allowlist applies while the pre-audit cap is in force), for a coin whose EndSink kind is INCINERATOR and
+/// PERMISSIONLESS, for a coin whose EndSink kind is INCINERATOR and
 /// whose rule ended RESOLVED with every reading inside the window processed (the same gates as forward_on_end). The fee PDA's WSOL is
 /// unwrapped first (its account closed into the fee PDA and created again at the cranker's cost, refunded from the account's own
-/// rent), then min(fee PDA SOL above the reserve, the burn-pool cap) is transferred to Solana's incinerator — the account is
+/// rent), then the fee PDA's SOL above the reserve is transferred to Solana's incinerator — the account is
 /// address-checked, so no other destination can be passed. No swap, no price impact. The reserve stays. Memo
 /// `<PREFIX>|endburn|to=1nc1nerator1|lamports=N|v1`, event SolBurnedOnEnd. Callable again for the later trickle (minimum as for
 /// forward_on_end). forward_on_end refuses this kind (InvalidEndSink), so the SOL can only ever reach the incinerator.
@@ -422,7 +416,7 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
 pub struct BurnSolOnEnd<'info> {
     #[account(mut)]
     pub cranker: Signer<'info>,
-    /// CHECK: the platform PDA (seeds-checked) — its cap and cranker allowlist, as for crank_buyback.
+    /// CHECK: the platform PDA (seeds-checked); unused since the cap and the cranker allowlist were removed (2026-10-25).
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
     #[account(mut, seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
@@ -458,8 +452,6 @@ pub fn handle_burn_sol_on_end(ctx: Context<BurnSolOnEnd>) -> Result<()> {
     require!(c.end_state == END_STATE_RESOLVED, BurnError::NotEndedResolved);
     require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
     require!(end_readings_done(c), BurnError::EndReadingsPending);
-    let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
-    require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     let held_back = carry_held_back(c, &a.rule_end, now);
 
     let reserve = c.rule.reserve_lamports;
@@ -504,12 +496,8 @@ pub fn handle_burn_sol_on_end(ctx: Context<BurnSolOnEnd>) -> Result<()> {
         require_fee_token_account_intact(&wsol_acc, &fee.key(), &NATIVE_MINT, false)?;
     }
 
-    // ----- the amount: the SOL above the reserve, under the cap -----
-    let sol_avail = fee.lamports().saturating_sub(reserve).saturating_sub(held_back);
-    let amount = match active_cap(&a.platform.to_account_info(), now)? {
-        Some(cap) if sol_avail > cap => cap,
-        _ => sol_avail,
-    };
+    // ----- the amount: the SOL above the reserve (owner decision 2026-10-25: no platform cap) -----
+    let amount = fee.lamports().saturating_sub(reserve).saturating_sub(held_back);
     require!(amount > 0 && (amount >= a.end_sink.min_forward_lamports || a.rule_end.forwards == 0), BurnError::NothingToForward);
     // the incinerator holds nothing between blocks (the runtime burns what it is credited), so each transfer must itself reach the
     // rent-exempt minimum of an empty account, or the runtime refuses it; a smaller remainder waits for the trickle

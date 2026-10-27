@@ -1,6 +1,6 @@
-import { ATTESTATION_DOMAIN, CARRY_CONSECUTIVE, GENESIS_HASH, KIND_BASELINE, KIND_RESET, MAX_QUORUM, MAX_SPEND_RESERVE_BPS, PACKET_DATA_SIZE, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
+import { ATTESTATION_DOMAIN, CARRY_CONSECUTIVE, GENESIS_HASH, KIND_BASELINE, KIND_RESET, MAX_QUORUM, PACKET_DATA_SIZE, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
 import { formatBuybackMemo, formatDebtMemo, formatTargetMemo } from "@/lib/burnReceipts/memo";
-import { buybackSpend, carriedBudgetNow, carriedBudgetReadySec, deltaPlausible, formatDate, formatFixed, formatSignedFixed, rawToTokens, reserveSpendCap, settleVault, spendablePool, step } from "@/lib/burnReceipts/math";
+import { buybackSpend, deltaPlausible, formatDate, formatFixed, formatSignedFixed, rawToTokens, settleVault, spendablePool, step } from "@/lib/burnReceipts/math";
 import type { CarriedPlanStatus, ConfirmOutcome, Cosignature, CrankPlan, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
 import { PublicKey } from "@solana/web3.js";
 import { sourceUrlHash, verifyAttestation } from "@/lib/burnReceipts/attestation";
@@ -8,19 +8,24 @@ import { sourceUrlHash, verifyAttestation } from "@/lib/burnReceipts/attestation
 /**
  * THE burn_receipts PROGRAM IN MEMORY (2026-10-10) — a ProgramPort that behaves like the deployed program for the keeper's purposes,
  * so every branch of the program path runs without a validator: submit_reading (quorum, order, the unit rule with carry, the
- * out-of-bound RESET, zero-unit auto-processing), crank_buyback (pool = fee − reserve + WSOL, the platform cap, the rule spend,
- * the carried spend, the 2 %-of-reserve cap, the floor, TWAP / tradability refusals, burn everything the fee PDA holds, memo v2),
+ * out-of-bound RESET, zero-unit auto-processing), crank_buyback (pool = fee − reserve + WSOL, the rule spend, the carried spend,
+ * the whole target in one run, the floor, TWAP / tradability refusals, burn everything the fee PDA holds, memo v2),
  * crank_vault (settle with shortfall, exhaustion, memo v1), crank_no_units, check_pool_health, and the creator-fee claim as a knob.
  * The arithmetic is src/lib/burnReceipts/math.ts — the program's own mirror — so the numbers are the program's, not a re-guess.
  *
  * Knobs: dropSends (the RPC swallows a send), simErr (the next simulations refuse with this name), twap ("ok" | "unavailable" |
- * "deviation"), poolTradable, poolReserveWsol (the 2 % cap's base), capLamports (null = no cap), claim (what claimCreatorFees does),
+ * "deviation"), poolTradable, poolReserveWsol (the pool's WSOL reserve, read by the keeper), claim (what claimCreatorFees does),
  * strayWsolLamports (lamports sent to the fee PDA's WSOL account without a sync — the crank syncs them in, review-2 F3).
  * Client v3 rules mirrored (second blind review): quorum ≤ 3 at init; one SHARED-message Ed25519 instruction per reading whose
  * legacy size is modelled exactly as the client builds it (`readingTxBytes`; > 1,232 bytes is refused unless `lookupTable`); the
  * signed message v3 carries the cluster genesis; readings record the pool they traded on; untradeable spells are continuous only
  * while observations are ≤ 24 h apart, and after 30 days the crank processes the reading below-floor with its target carried.
  * `strangerCrank(date)` processes a reading as someone else would (cranking is permissionless).
+ *
+ * NO CAPS (owner decision 2026-10-25), exactly as the program: no burn-pool cap (Reading.pool_lamports = pool_actual_lamports;
+ * BurnPoolCapBound is never emitted), no per-run 2 % bound (a crank spends min(rule spend + carried in, pool) in one run and carries 0
+ * after a burn; SpendCapBound is never emitted), no carried budget (crank_carried spends min(carried, max, pool), one piece per coin per
+ * second; SpendAboveCap is never raised), and the cap-raise entry points refuse with CapRemoved (`platformInstruction`).
  */
 
 export interface FakeProgramInit {
@@ -80,7 +85,6 @@ export class FakeProgram implements ProgramPort {
   supply = big(1_000_000_000) * big(1_000_000);
   poolReserveWsol = big(1_000) * big(1_000_000_000);
   tokensPerSol = big(1_000_000) * big(1_000_000);
-  capLamports: bigint | null = big(25_000_000_000);
   twap: "ok" | "unavailable" | "deviation" = "ok";
   /** The pool price-history ring observationRing() reports: "empty" (never traded), "recent" (too short), null (unreadable). */
   ring: "empty" | "recent" | null = null;
@@ -115,8 +119,8 @@ export class FakeProgram implements ProgramPort {
    */
   endState: { state: "live" | "resolved" | "void"; date: number } = { state: "live", date: 0 };
   /**
-   * ROUND 5 (a coin with a burn target): the pinned target pool's state ("ok", or the program's two hold refusals), its SOL reserve (the
-   * 2 % cap's base), the target tokens one SOL buys, and the target's supply (what the burns take out of).
+   * ROUND 5 (a coin with a burn target): the pinned target pool's state ("ok", or the program's two hold refusals), its SOL reserve, the
+   * target tokens one SOL buys, and the target's supply (what the burns take out of).
    */
   burnTarget: { mint: string; pool: string; decimals: number } | null = null;
   targetPool: "ok" | "unhealthy" | "below-floor" = "ok";
@@ -289,7 +293,7 @@ export class FakeProgram implements ProgramPort {
     // Review-2 F3: the program measures the synced WSOL balance (stray lamports included) and syncs before the swap.
     if (commit && this.strayWsolLamports > Z) { this.wsol += this.strayWsolLamports; this.strayWsolLamports = Z; }
     const poolActual = spendablePool(this.feeLamports, this.cfg.reserveLamports, this.wsol + this.strayWsolLamports);
-    const basis = this.capLamports !== null && poolActual > this.capLamports ? this.capLamports : poolActual;
+    const basis = poolActual; // no burn-pool cap (owner decision 2026-10-25)
     const ruleSpend = buybackSpend(basis, big(r.units), this.cfg.fractionPerUnitBps);
     const carriedIn = this.cfg.carriedSpendLamports;
     const t = ruleSpend + carriedIn;
@@ -303,11 +307,8 @@ export class FakeProgram implements ProgramPort {
       if (!this.poolTradable) return { err: "PoolNotTradable" };
       if (this.twap === "unavailable") return { err: "TwapUnavailable" };
       if (this.twap === "deviation") return { err: "TwapDeviation" };
-      const cap = reserveSpendCap(this.poolReserveWsol, MAX_SPEND_RESERVE_BPS);
-      let spend = target < cap ? target : cap;
-      if (basis < spend) spend = basis;
-      if (spend === Z || spend < this.cfg.floorLamports) carriedOut = target;
-      else { spent = spend; got = (spend * this.tokensPerSol) / big(1_000_000_000); outcome = "burned"; carriedOut = target - spend; }
+      // the whole target in one run (no per-run bound since 2026-10-25); nothing is carried after a burn
+      spent = target; got = (target * this.tokensPerSol) / big(1_000_000_000); outcome = "burned"; carriedOut = Z;
     }
     if (!commit) return { memo: null };
     if (spent > Z) {
@@ -325,8 +326,9 @@ export class FakeProgram implements ProgramPort {
 
   /**
    * crank_carried (burn dispersal) as the program runs it (round 5: before AND after the rule's end): refuses while a reading waits (ReadingPending), with nothing carried or a zero
-   * piece (NothingCarried), above 2 % of the reserve (SpendAboveCap), under the floor unless it is the whole remainder (BelowFloor);
-   * TWAP / tradability as crank_buyback. Spends min(carried, max, basis), burns everything held, writes the `carried` memo.
+   * piece (NothingCarried), under the floor unless it is the whole remainder (BelowFloor), a second piece in the same second
+   * (CarriedTooSoon); TWAP / tradability as crank_buyback. Spends min(carried, max, pool), burns everything held, writes the `carried`
+   * memo. No SpendAboveCap and no carried budget since the owner decision of 2026-10-25.
    * `poolMovesOnBuy` (off by default) adds each spend to the pool's WSOL reserve, as a real constant-product pool would.
    */
   poolMovesOnBuy = false;
@@ -341,21 +343,16 @@ export class FakeProgram implements ProgramPort {
     if (c.carriedSpendLamports <= Z || maxSpend <= Z) return { err: "NothingCarried" };
     const nowSec = Math.floor(this.now() / 1000);
     if (!this.poolTradable) return { err: "PoolNotTradable" };
-    const cap = reserveSpendCap(this.poolReserveWsol, MAX_SPEND_RESERVE_BPS);
-    if (maxSpend > cap) return { err: "SpendAboveCap" };
-    const poolActual = spendablePool(this.feeLamports, c.reserveLamports, this.wsol + this.strayWsolLamports);
-    const basis = this.capLamports !== null && poolActual > this.capLamports ? this.capLamports : poolActual;
+    const basis = spendablePool(this.feeLamports, c.reserveLamports, this.wsol + this.strayWsolLamports);
     let spend = c.carriedSpendLamports < maxSpend ? c.carriedSpendLamports : maxSpend;
     if (basis < spend) spend = basis;
     if (spend <= Z) return { err: "NothingCarried" };
     if (spend < c.floorLamports && spend !== c.carriedSpendLamports) return { err: "BelowFloor" };
-    // round-5 review R5-8: the piece fits the coin's carried budget (one cap per 600 s, up to one cap; one piece per second)
-    const budget = carriedBudgetNow(this.lastCarriedAt, this.carriedBudgetLamports, cap, nowSec);
-    if (budget === null || spend > budget) return { err: "CarriedTooSoon" };
+    // the only pacing left (2026-10-25): one piece per coin per second
+    if (this.lastCarriedAt !== 0 && nowSec <= this.lastCarriedAt) return { err: "CarriedTooSoon" };
     if (this.twap === "unavailable") return { err: "TwapUnavailable" };
     if (this.twap === "deviation") return { err: "TwapDeviation" };
     if (!commit) return { memo: null };
-    this.carriedBudgetLamports = budget - spend;
     if (this.strayWsolLamports > Z) { this.wsol += this.strayWsolLamports; this.strayWsolLamports = Z; }
     const got = (spend * this.tokensPerSol) / big(1_000_000_000);
     const fromLamports = spend > this.wsol ? spend - this.wsol : Z;
@@ -378,9 +375,7 @@ export class FakeProgram implements ProgramPort {
     if (c.hasBaseline && c.crankCursor !== c.lastRecordDate) return { status: "reading-pending" };
     if (c.carriedSpendLamports <= Z) return { status: "nothing-carried" };
     const nowSec = Math.floor(this.now() / 1000);
-    const need = maxSpendLamports < c.carriedSpendLamports ? maxSpendLamports : c.carriedSpendLamports;
-    const ready = carriedBudgetReadySec(this.lastCarriedAt, this.carriedBudgetLamports, reserveSpendCap(this.poolReserveWsol, MAX_SPEND_RESERVE_BPS), need, nowSec);
-    if (ready !== null && ready > nowSec) return { status: "too-soon", nextAtMs: this.now() + (ready - nowSec) * 1000 };
+    if (this.lastCarriedAt !== 0 && nowSec <= this.lastCarriedAt) return { status: "too-soon", nextAtMs: this.now() + (this.lastCarriedAt + 1 - nowSec) * 1000 };
     return { build: async () => this.mk({ kind: "carried", maxSpend: maxSpendLamports }) };
   }
   async observationRing(): Promise<{ newestTs: number; lastUpdate: number; filled: number; empty: boolean } | null> {
@@ -389,13 +384,20 @@ export class FakeProgram implements ProgramPort {
     return this.ring === "empty" ? { newestTs: 0, lastUpdate: 0, filled: 0, empty: true } : { newestTs: t, lastUpdate: t, filled: 1, empty: false };
   }
   async poolSolReserve(): Promise<bigint | null> { return this.cfg.poolRegistered ? this.poolReserveWsol : null; }
-  /** Round-5 review R5-8 (CarriedPace): the last carried piece (unix seconds; 0 = never), the budget left after it, and the piece count
-   *  (never in cfg.burns). */
+  /** CarriedPace: the last carried piece (unix seconds; 0 = never) and the piece count (never in cfg.burns). budget_lamports is written 0
+   *  since the owner decision of 2026-10-25 (no carried budget). */
   lastCarriedAt = 0;
-  carriedBudgetLamports = Z;
   carriedPieces = 0;
   async carriedPace(): Promise<{ lastCarriedAt: number; budgetLamports: bigint; chainNowSec: number | null }> {
-    return { lastCarriedAt: this.lastCarriedAt, budgetLamports: this.carriedBudgetLamports, chainNowSec: Math.floor(this.now() / 1000) };
+    return { lastCarriedAt: this.lastCarriedAt, budgetLamports: Z, chainNowSec: Math.floor(this.now() / 1000) };
+  }
+  /**
+   * The PlatformConfig entry points as the program answers them since the owner decision of 2026-10-25: the three cap-raise
+   * instructions always refuse with CapRemoved (6144); renounce_platform_authority and clear_cranker_allowlist still succeed (the latter
+   * has no effect on cranking, which is permissionless).
+   */
+  platformInstruction(name: "propose_cap_raise" | "cancel_cap_raise" | "apply_cap_raise" | "renounce_platform_authority" | "clear_cranker_allowlist"): { err: "CapRemoved"; code: 6144 } | { ok: true } {
+    return name === "propose_cap_raise" || name === "cancel_cap_raise" || name === "apply_cap_raise" ? { err: "CapRemoved", code: 6144 } : { ok: true };
   }
   /** Round-5 review R5-9 (blind review): the coin's pinned target STALLED (last_unblocked_at > last_burn_at) — it is then not live for
    *  pair forwarding or as a named end sink. */
@@ -413,7 +415,7 @@ export class FakeProgram implements ProgramPort {
     if (commit && (g === "forward-missing" || g === "missing")) this.pairEvents.push({ name: g === "missing" ? "PairResultMissing" : "PairForwardMissing", recordDate: D });
     if (commit && this.strayWsolLamports > Z) { this.wsol += this.strayWsolLamports; this.strayWsolLamports = Z; }
     const poolActual = spendablePool(this.feeLamports, this.cfg.reserveLamports, this.wsol + this.strayWsolLamports);
-    const basis = this.capLamports !== null && poolActual > this.capLamports ? this.capLamports : poolActual;
+    const basis = poolActual; // no burn-pool cap (owner decision 2026-10-25)
     const ruleSpend = buybackSpend(basis, big(r.units), this.cfg.fractionPerUnitBps);
     const carriedIn = this.cfg.carriedSpendLamports;
     const t = ruleSpend + carriedIn;
@@ -427,11 +429,7 @@ export class FakeProgram implements ProgramPort {
     } else {
       if (this.twap === "unavailable") return { err: "TwapUnavailable" };
       if (this.twap === "deviation") return { err: "TwapDeviation" };
-      const cap = reserveSpendCap(this.targetPoolReserveWsol, MAX_SPEND_RESERVE_BPS);
-      let spend = target < cap ? target : cap;
-      if (basis < spend) spend = basis;
-      if (spend === Z || spend < this.cfg.floorLamports) carriedOut = target;
-      else { spent = spend; got = (spend * this.targetTokensPerSol) / big(1_000_000_000); outcome = "burned"; carriedOut = target - spend; }
+      spent = target; got = (target * this.targetTokensPerSol) / big(1_000_000_000); outcome = "burned"; carriedOut = Z;
     }
     if (!commit) return { memo: null };
     if (spent > Z) {

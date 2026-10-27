@@ -416,7 +416,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       </div>
     </div>
     <p class="rule"><strong>The rule.</strong> Each business day, the Treasury publishes the national debt. Every full $1B it rose since the previous reading counts as one unit. Each unit spends 2% of what is left in the token's own burn pool, swapping it for $DEFICIT on its Raydium pool. Over a day, the share spent is 1 − 0.98<sup>units</sup>. The figure is total public debt outstanding, so a day's change is new borrowing minus debt repaid. The on-chain program burns everything bought in the same instruction, and the burn leaves a receipt on chain.</p>
-    <p class="replay" data-spread>Creator coins on Burnticker spread a large burn into smaller pieces at least 20 minutes apart over six-hour windows. $DEFICIT burns each reading in one go: its keeper runs one burn for each reading, up to 2% of the trading pool's SOL, and anything above that carries to its next run.</p>
+    <p class="replay" data-spread>$DEFICIT's keeper runs one burn for each reading. Each run spends its whole share at once, with no cap on the size of a burn.</p>
     <p class="replay">Why 2%: the number is a nod to the Federal Reserve's 2% inflation goal. That is only where the dial came from. The rule reads nothing from the Fed.</p>
     <div class="cta">
       <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trading not available until launch</a>
@@ -1175,7 +1175,7 @@ window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now, writ
   var unitsText = units === 0 ? "No units are queued." : "Daily rises " + sinceText + " add up to " + (units === 1 ? "one queued unit" : groupInt(units) + " queued units") + " ($1B each).";
   if (!poolOpen) {
     base.headline = [unitsText, riseText].filter(Boolean).join(" ");
-    if (units > 0 && sharePct !== null) lines.push("When the curve fills" + (raiseSol ? " at " + raiseSol + " SOL" : "") + " and its pool is registered, the queued readings run in order and together spend " + formula + " of the burn pool, which is " + sharePct + "%. One burn run spends at most 2% of the trading pool's SOL, and the rest carries to the next run.");
+    if (units > 0 && sharePct !== null) lines.push("When the curve fills" + (raiseSol ? " at " + raiseSol + " SOL" : "") + " and its pool is registered, the queued readings run in order and together spend " + formula + " of the burn pool, which is " + sharePct + "%. Each run spends its whole share at once, with no cap on the size of a burn.");
     else if (units === 0) lines.push("A unit is queued for each full $1B the debt rises from one business day to the next. Nothing burns before the curve fills and its pool is registered.");
     if (riseUsd === null) lines.push("The rise since the first reading is not in the keeper's published file yet.");
     if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");

@@ -6,12 +6,12 @@ use crate::constants::*;
 use crate::cpmm::{self, AmmConfigView, PoolView, SwapAccounts};
 use crate::error::BurnError;
 use crate::guards::{require_fee_pda_intact, require_fee_token_account_intact};
-use crate::events::{BurnPoolCapBound, BuybackQueueUnblocked, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, SpendCapBound, SpendCarried};
-use crate::instructions::crank_common::{active_cap, crankers_in_force, memo_head, require_fixed_supply, require_next_in_line};
+use crate::events::{BuybackQueueUnblocked, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, SpendCarried};
+use crate::instructions::crank_common::{memo_head, require_fixed_supply, require_next_in_line};
 use crate::instructions::pool_health::{clear_untradeable, continuous_untradeable_secs, observe_untradeable, UNTRADEABLE_POOL_ACCOUNT, UNTRADEABLE_RESERVE, UNTRADEABLE_SWAPS_DISABLED};
 
-/// SpendCarried.reason: the spend was under the floor (or the reserve cap pushed it there) / the 2 % cap bound a partial spend /
-/// the pool has been untradeable for QUEUE_UNBLOCK_SECS (review-2 F7).
+/// SpendCarried.reason: 0 = the spend was under the floor; 2 = the pool has been untradeable for QUEUE_UNBLOCK_SECS (review-2 F7).
+/// Code 1 (the 2 %-of-reserve per-crank bound) is retired with the bound (owner decision 2026-10-25) and never emitted again.
 pub const CARRY_REASON_BELOW_FLOOR: u8 = 0;
 
 /// The amount of a pool vault (an SPL Token account; key equality with the pool's vault is checked by the caller).
@@ -21,18 +21,16 @@ fn vault_amount(acc: &AccountInfo) -> Result<u64> {
     let d = acc.try_borrow_data()?;
     Ok(anchor_spl::token::spl_token::state::Account::unpack(&d).map_err(|_| BurnError::InvalidCpmmAccount)?.amount)
 }
-pub const CARRY_REASON_RESERVE_CAP: u8 = 1;
 pub const CARRY_REASON_POOL_UNTRADEABLE: u8 = 2;
 use crate::math;
 use crate::memo;
 use crate::state::{Reading, TokenConfig};
 
 /// PERMISSIONLESS (BUYBACK MODE, primary). For the next burn day in line:
-///   pool  = fee PDA lamports − reserve + WSOL already in the fee PDA's WSOL account, capped at the platform's burn-pool cap while
-///           that pre-audit cap is in force (the excess stays in the fee PDA; BurnPoolCapBound is emitted)
+///   pool  = fee PDA lamports − reserve + WSOL already in the fee PDA's WSOL account (owner decision 2026-10-25: no platform cap)
 ///   spend = pool × (1 − (1 − f)^units)                                  (math::buyback_spend)
-///           + spend carried from earlier capped cranks, capped at 2 % of the pool's WSOL reserve and at the platform basis;
-///           the remainder is carried to the next crank (SpendCapBound)
+///           + spend carried from earlier cranks (under the floor, or an untradeable pool), never more than the pool; spent in full in
+///           this one crank (owner decision 2026-10-25: the 2 %-of-reserve per-crank bound is removed)
 ///   if spend ≥ floor: wrap `spend` → swap WSOL → token on the registered Raydium CPMM pool (swap_base_input; min-out = the larger of
 ///   the spot-reserve and TWAP-price quotes less fee and slippage; TWAP guard against a same-block push), then burn EVERY token the
 ///   fee PDA holds (what the swap delivered plus any creator-fee tokens already there), and write memo v2 — all in this one
@@ -49,8 +47,8 @@ pub struct CrankBuyback<'info> {
     pub config: Box<Account<'info, TokenConfig>>,
     #[account(mut, seeds = [READING_SEED, config.key().as_ref(), &record_date.to_le_bytes()], bump = reading.bump)]
     pub reading: Box<Account<'info, Reading>>,
-    /// CHECK: the platform PDA (seeds-checked). If a PlatformConfig lives there its cap rules; if it was never created the
-    /// hard-coded default applies (review M-1) — so this account can never be missing in a way that wedges buybacks.
+    /// CHECK: the platform PDA (seeds-checked). Unused since the burn-pool cap and the cranker allowlist were removed (owner decision
+    /// 2026-10-25); kept so the instruction's accounts are unchanged for clients.
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
     #[account(mut, address = config.mint, mint::token_program = token_program)]
@@ -144,23 +142,14 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
 
     // ----- the rule -----
     let now = Clock::get()?.unix_timestamp;
-    // Review-3 L-4: while the pre-audit cap is in force a PlatformConfig may restrict who cranks (≤ 3 keys); permissionless otherwise.
-    let crankers = crankers_in_force(&ctx.accounts.platform.to_account_info(), now)?;
-    require!(crankers.is_empty() || crankers.contains(&ctx.accounts.cranker.key()), BurnError::CrankerNotAllowed);
+    // Owner decision 2026-10-25: permissionless (no cranker allowlist) and no platform cap — the rule applies to the whole pool.
     let pool_actual = math::spendable_pool(ctx.accounts.fee_vault.lamports(), rule.reserve_lamports, wsol_balance).map_err(|_| BurnError::MathOverflow)?;
-    // The platform's pre-audit cap: while in force, the rule applies to min(pool, cap); the excess simply stays in the fee PDA.
-    let cap = active_cap(&ctx.accounts.platform.to_account_info(), now)?;
-    let pool_before = match cap {
-        Some(c) if pool_actual > c => c,
-        _ => pool_actual,
-    };
-    let cap_bound = pool_before < pool_actual;
+    let pool_before = pool_actual;
     let rule_spend = math::buyback_spend(pool_before, units, rule.fraction_per_unit_bps).map_err(|_| BurnError::MathOverflow)?;
-    // Review H-1: spend carried from earlier capped cranks joins this crank's target (never more than the pool holds).
+    // Review H-1: spend carried from earlier cranks joins this crank's target (never more than the pool holds).
     let carried_in = ctx.accounts.config.carried_spend_lamports;
     let target = rule_spend.saturating_add(carried_in).min(pool_actual);
     let tokens_before = ctx.accounts.fee_tokens.amount;
-    let mut reserve_cap = 0u64;
     let mut carry_reason = CARRY_REASON_BELOW_FLOOR;
     let mut unblocked_since: Option<i64> = None;
     let mut unblocked_reason = UNTRADEABLE_SWAPS_DISABLED;
@@ -214,10 +203,9 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
                 .ok_or(BurnError::TwapUnavailable)?;
             require!(math::twap_ok(spot, twap, rule.max_twap_deviation_bps).map_err(|_| BurnError::MathOverflow)?, BurnError::TwapDeviation);
 
-            // Review H-1: one crank spends at most 2 % of the pool's WSOL reserve (price impact < ~4 %), and never more than the
-            // platform basis; the rest of the target is carried to the next crank.
-            reserve_cap = math::reserve_spend_cap(r_wsol, MAX_SPEND_RESERVE_BPS);
-            let spend = target.min(reserve_cap).min(pool_before);
+            // Owner decision 2026-10-25: the whole target is spent in this crank (no per-crank bound); the min-out below still
+            // prices the full trade's impact (both quotes are constant-product on the pool's depth).
+            let spend = target;
             let cfg = AmmConfigView::load(&ctx.accounts.amm_config.to_account_info())?;
             let fee_ppm = cfg.trade_fee_rate.checked_add(if pool.enable_creator_fee { cfg.creator_fee_rate } else { 0 }).ok_or(BurnError::MathOverflow)?;
             // Review-2 F1: the minimum output is the larger of the spot-reserve quote and the TWAP-price quote (both less the fee and
@@ -297,8 +285,7 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
                 require!(got >= min_out, BurnError::ZeroOutput);
                 // ... and the pool's output vault paid exactly what the fee PDA received (review-3 M-1).
                 require!(token_vault_before.checked_sub(vault_amount(&ctx.accounts.token_vault)?) == Some(got), BurnError::SwapOutputMismatch);
-                carry_reason = CARRY_REASON_RESERVE_CAP;
-                (spend, got, OUTCOME_BURNED, memo::swap_ref(&pool_key), target - spend)
+                (spend, got, OUTCOME_BURNED, memo::swap_ref(&pool_key), 0)
             }
         }
     };
@@ -364,7 +351,7 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
         emit_cpi!(PoolUntradeableFlagged { config: config_key, pool: pool_key, since, observed_at: now, restarted, reason: unblocked_reason, candidate_at });
         emit_cpi!(BuybackQueueUnblocked { config: config_key, record_date: r.record_date, untradeable_since: prev_since, carried_out_lamports: carried_out });
     }
-    // Review-2 F15: a carry with nothing spent gets its own event (SpendCapBound below covers a partial spend).
+    // Review-2 F15: a carry with nothing spent gets its own event (a crank that spends now spends its whole target).
     if spent == 0 && carried_out > 0 {
         emit_cpi!(SpendCarried {
             config: config_key,
@@ -373,25 +360,6 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
             carried_in_lamports: carried_in,
             carried_out_lamports: carried_out,
             reason: carry_reason,
-        });
-    }
-    if spent > 0 && spent < target {
-        emit_cpi!(SpendCapBound {
-            config: config_key,
-            record_date: r.record_date,
-            target_lamports: target,
-            spent_lamports: spent,
-            reserve_cap_lamports: reserve_cap,
-            carried_out_lamports: carried_out,
-        });
-    }
-    if cap_bound {
-        emit_cpi!(BurnPoolCapBound {
-            config: config_key,
-            record_date: r.record_date,
-            pool_actual_lamports: pool_actual,
-            cap_lamports: cap.unwrap_or(0),
-            spent_lamports: spent,
         });
     }
     match pair_gate {

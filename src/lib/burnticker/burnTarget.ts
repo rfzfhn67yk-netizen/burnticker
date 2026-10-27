@@ -78,7 +78,8 @@ export function targetTrustCopy(symbol: string): { can: string[]; cannot: string
   return {
     can: [
       `Swap SOL from this coin's burn pool for ${symbol} on one pinned Raydium pool, and burn every ${symbol} it receives in the same step.`,
-      "Spend at most 2% of that pool's SOL in one step, so one burn moves that pool only a little; the rest waits for the next step.",
+      // owner decision 2026-10-25: no per-step cap; the program's swap guards are unchanged
+      `Spend the rule's whole share of the burn pool in one step, with no cap on the size of one burn. A step waits when that pool has moved too far from its recent average, or when the swap would get fewer ${symbol} than the guard allows.`,
       `Write a receipt for every step that names ${symbol}'s mint and the amount burned.`,
       "Hold the SOL, untouched, while the pinned pool is gone, switched off or holds less SOL than the minimum such a pool needs.",
       "Move to another pool for the same token, only after a public 48-hour wait that any attester can stop.",

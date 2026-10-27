@@ -1,10 +1,10 @@
 import { type Connection, PublicKey, SystemProgram, type TransactionInstruction } from "@solana/web3.js";
-import { type Cluster, CPMM_PROGRAM_ID, MAX_SPEND_RESERVE_BPS, MEMO_PROGRAM_ID, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { type Cluster, CPMM_PROGRAM_ID, MEMO_PROGRAM_ID, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { type BuybackPoolAccounts, type CpmmPool, decodeCpmmPool } from "@/lib/burnReceipts/cpmm";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeAccount } from "@/lib/burnReceipts/idlCoder";
 import { buildIx } from "@/lib/burnReceipts/instructions";
-import { buybackMinOut, minAmountOut, reserveSpendCap } from "@/lib/burnReceipts/math";
+import { buybackMinOut, minAmountOut } from "@/lib/burnReceipts/math";
 import { associatedTokenAddress, configPda, cpmmAuthority, endSinkPda, feePda, feeTokenAddress, feeWsolAddress, pairLinkPda, pairResultPda, platformPda, readingPda } from "@/lib/burnReceipts/pda";
 
 /**
@@ -15,7 +15,8 @@ import { associatedTokenAddress, configPda, cpmmAuthority, endSinkPda, feePda, f
  * refuses such a coin. The price guard is Pyth's target/SOL ratio for both pool kinds (and a CPMM pool's own TWAP as well).
  *
  * Everything here mirrors the program exactly: the admission checks (so the launch review can refuse what the program would refuse,
- * read from chain), the Pyth check, the per-crank cap (2 % of the pinned pool's SOL reserve), the minimum output, the account lists.
+ * read from chain), the Pyth check, the spend (the whole target in one run: the per-run 2 % bound was removed by the owner decision of
+ * 2026-10-25), the minimum output, the account lists.
  */
 
 /** TokenConfig.burn_target_kind (the byte that was `reserved`; 0 on every config created before round 5). */
@@ -333,21 +334,20 @@ export async function checkTargetAdmission(connection: Connection, o: { cluster:
 // The crank's quote (what crank_target_burn will spend and the least it accepts)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-export interface TargetQuote { spend: bigint; cap: bigint; capBound: boolean; carried: bigint; expectedOut: bigint; minOut: bigint }
+export interface TargetQuote { spend: bigint; carried: bigint; expectedOut: bigint; minOut: bigint }
 
 /**
- * The program's arithmetic for one target crank: spend = min(target, 2 % of the pinned pool's SOL reserve, the rule's pool); the rest is
- * carried. `minOut` is the larger of the spot quote and the reference quote (Pyth; for CPMM the program also takes the TWAP quote and
- * keeps the larger) less the pool fee and slippage (0 when the spend is under the floor).
+ * The program's arithmetic for one target crank: spend = min(target, the rule's pool), in ONE run (owner decision 2026-10-25: no per-run
+ * bound and no burn-pool cap); after a burn nothing is carried. The whole target is carried only when the spend is under the floor or the
+ * minimum output is 0. `minOut` is the larger of the spot quote and the reference quote (Pyth; for CPMM the program also takes the TWAP
+ * quote and keeps the larger) less the pool fee and slippage; both are constant-product quotes, so they include the trade's own impact.
  */
 export function quoteTargetCrank(o: { target: bigint; poolBefore: bigint; floor: bigint; wsolReserve: bigint; tokenReserve: bigint; twapX32: bigint; feePpm: bigint; slippageBps: number }): TargetQuote {
-  const cap = reserveSpendCap(o.wsolReserve, Number(MAX_SPEND_RESERVE_BPS));
-  let spend = o.target < cap ? o.target : cap;
-  if (spend > o.poolBefore) spend = o.poolBefore;
+  const spend = o.target < o.poolBefore ? o.target : o.poolBefore;
   const below = spend === BigInt(0) || spend < o.floor;
   const minOut = below ? BigInt(0) : buybackMinOut(spend, o.wsolReserve, o.tokenReserve, o.twapX32, o.feePpm, o.slippageBps);
-  if (below || minOut === BigInt(0)) return { spend: BigInt(0), cap, capBound: false, carried: o.target, expectedOut: BigInt(0), minOut: BigInt(0) };
-  return { spend, cap, capBound: spend < o.target, carried: o.target - spend, expectedOut: minAmountOut(spend, o.wsolReserve, o.tokenReserve, o.feePpm, 0), minOut };
+  if (below || minOut === BigInt(0)) return { spend: BigInt(0), carried: o.target, expectedOut: BigInt(0), minOut: BigInt(0) };
+  return { spend, carried: BigInt(0), expectedOut: minAmountOut(spend, o.wsolReserve, o.tokenReserve, o.feePpm, 0), minOut };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------

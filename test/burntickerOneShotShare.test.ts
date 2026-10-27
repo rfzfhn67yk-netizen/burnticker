@@ -1,9 +1,10 @@
-// REVIEW 10 F1 (2026-10-14, P1): a single one-shot coin at 50 % with an end sink. With a 5 SOL burn pool and a 50 SOL swap reserve (a
-// 1 SOL per-crank cap), the result's reading asks for 2.5 SOL, spends 1 SOL and carries 1.5 SOL. The keeper used to record the end and
-// forward all 4 SOL left to $DEFICIT in the same cycle (forward_on_end clears the carried amount), so the promised 50 % never finished
-// on the coin. Now the end waits until the chain shows nothing carried: with burn dispersal (crank_carried, round 5) the 1.5 SOL is
-// spent in pieces first and only the 2.5 SOL left over moves; without it (round 4) nothing moves and an alert says why. The launch
-// preflight refuses a single one-shot under 100 % on a host without dispersal. No network: the fake program and the NBA fakes.
+// REVIEW 10 F1 (2026-10-14, P1): a single one-shot coin at 50 % with an end sink. Until the owner decision of 2026-10-25 a 1 SOL
+// per-crank cap made the result's crank spend 1 of its 2.5 SOL and carry 1.5 SOL, and the keeper used to record the end and forward
+// everything left in the same cycle, so the promised 50 % never finished on the coin. With no per-run bound the result's crank spends
+// its whole 2.5 SOL in one run and nothing is held. The end still waits whenever the chain shows something carried (here: a pool
+// untradeable for 30 days, which processes the reading with its whole target carried): with burn dispersal (crank_carried, round 5) the
+// carry is spent in one piece first and only the 2.5 SOL left over moves; without it nothing moves and an alert says why. No network:
+// the fake program and the NBA fakes.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair } from "@solana/web3.js";
@@ -28,7 +29,7 @@ const stub: OracleAdapter = { id: "stub", searchSeries: async () => [], seriesIn
 const START = "2025-11-03T23:00:00Z";
 const LOSS = (id: string) => gameSeries("nba", id, "PHI", "loss");
 
-/** One PHI-loss game coin with an end sink, the pool `poolLamports` above the reserve, the swap pool's SOL reserve 50 SOL (1 SOL cap). */
+/** One PHI-loss game coin with an end sink, the pool `poolLamports` above the reserve, the swap pool's SOL reserve 50 SOL. */
 async function world(o: { fraction: number; poolLamports?: bigint; dispersal?: boolean; reserveWsol?: bigint }) {
   const registry = openRegistry(":memory:"), program = new FakeBurnProgram("devnet");
   program.autoRegisterPool = true; program.pinEndSinks = true;
@@ -44,7 +45,7 @@ async function world(o: { fraction: number; poolLamports?: bigint; dispersal?: b
   registry.addAttester({ mint: t0.mint, pubkey: ATTESTER, role: "data-key", addedAt: 0, timelockUntil: null });
   program.supplies.set(t0.mint, BigInt("1000000000000000"));
   const coin = program.fake(t0.mint);
-  coin.poolReserveWsol = o.reserveWsol ?? BigInt(50) * SOL;          // 2 % of 50 SOL: 1 SOL per crank
+  coin.poolReserveWsol = o.reserveWsol ?? BigInt(50) * SOL;
   program.deposit(t0.mint, o.poolLamports ?? BigInt(5) * SOL);      // the burn pool above the reserve
   const flagship = Keypair.generate().publicKey.toBase58();
   await program.initializeToken({ mint: flagship, creator: CREATOR, ticker: "DEFICIT", rulesSha256: "ab".repeat(32), selectorKey: "flagship", mode: "buyback", attesters: [ATTESTER], quorum: 1, vault: null, rule: lockRule({ ...nativeRule("nws.high:DEN-90"), onEnd: WIND_DOWN_ON_END }).rule });
@@ -64,56 +65,78 @@ async function world(o: { fraction: number; poolLamports?: bigint; dispersal?: b
       clock.now += stepMs;
     }
   };
-  return { registry, program, clock, mint, coin, sink, deps, logs, run, spentOnCoin, forwarded, flagship };
+  /** The swap pool untradeable for 31 days (seen an hour ago): the result's crank is processed with its whole target carried. */
+  const deadPool = () => { const s = Math.floor(clock.now / 1000); coin.poolTradable = false; coin.cfg = { ...coin.cfg, poolUntradeableSince: s - 31 * 86_400, poolUntradeableLastSeen: s - 3_600 }; };
+  /** Cycles until the result's crank carried its target, then the pool trades again. */
+  const carryThenReopen = async (dd: KeeperDeps = deps) => {
+    let guard = 0;
+    // (the spell is re-stated each cycle: registering the pool at graduation starts the TokenConfig with no spell)
+    while (coin.cfg.carriedSpendLamports === Z && guard++ < 600) { deadPool(); await runCycle(dd); clock.now += 20 * 60_000; }
+    assert.ok(coin.cfg.carriedSpendLamports > Z, `the result's target was carried\n${logs.slice(-8).join("\n")}`);
+    coin.poolTradable = true;
+  };
+  return { registry, program, clock, mint, coin, sink, deps, logs, run, spentOnCoin, forwarded, flagship, deadPool, carryThenReopen };
 }
 const D = (iso: string) => Date.parse(iso);
 
 describe("review 10 F1: a 50 % one-shot finishes its share on the coin before the end sink takes the rest", () => {
-  test("cap-bound, dispersal on: 2.5 SOL is spent on the coin (1 SOL by the result's crank, 1.5 SOL in carried pieces), then only 2.5 SOL moves to the end sink", async () => {
+  test("no per-run bound (owner decision 2026-10-25): the result's crank spends the whole 2.5 SOL in one run, nothing is carried or held, then 2.5 SOL moves to the end sink", async () => {
     const w = await world({ fraction: 0.5, dispersal: true });
     const half = (BigInt(5) * SOL) / BigInt(2);
     await w.run(D("2025-11-14T00:00:00Z"), 3 * 3600_000, w.deps, half);
     const ev = w.registry.receipts(w.mint).find((x) => !["winddown", "drain", "sweep"].includes(x.kind))!;
     assert.equal(ev.units, 1);
     const rd = await w.coin.reading(20251103);
-    assert.deepEqual({ rule: rd?.ruleSpendLamports, spent: rd?.spentLamports, carried: rd?.carriedOutLamports }, { rule: half, spent: SOL, carried: half - SOL }, "the result's crank: 2.5 SOL asked, 1 SOL spent, 1.5 SOL carried");
+    assert.deepEqual({ rule: rd?.ruleSpendLamports, spent: rd?.spentLamports, carried: rd?.carriedOutLamports }, { rule: half, spent: half, carried: Z }, "the result's crank: 2.5 SOL asked, 2.5 SOL spent (5 % of the 50 SOL reserve), nothing carried");
     assert.equal(w.spentOnCoin(), half, "the whole 50 % was spent on the coin");
-    assert.equal(w.coin.cfg.carriedSpendLamports, Z);
     assert.equal(await w.forwarded(), half, "only the 2.5 SOL left over moved to the end sink, never all 5");
     assert.equal(w.registry.token(w.mint)!.status, "retired");
-    assert.ok(w.logs.some((l) => /the result's share is not fully spent yet \(1\.5 SOL still owed on this coin\)\. It is being spent in pieces/.test(l)), w.logs.join("\n"));
-    assert.ok(w.logs.some((l) => /\[dispersal\] \$PHIGM: spent/.test(l)));
+    assert.ok(!w.logs.some((l) => /not fully spent yet/.test(l)), "nothing held the end");
+    assert.ok(!w.logs.some((l) => /\[dispersal\] \$PHIGM: spent/.test(l)), "no carried piece was needed");
+  });
+
+  test("a carried share (dead pool), dispersal on: the end waits, one carried piece spends the 2.5 SOL on the coin, then only 2.5 SOL moves", async () => {
+    const w = await world({ fraction: 0.5, dispersal: true });
+    const half = (BigInt(5) * SOL) / BigInt(2);
+    w.deadPool();
+    await w.carryThenReopen();
+    assert.equal(w.coin.cfg.carriedSpendLamports, half);
+    await w.run(D("2025-11-14T00:00:00Z"), 3 * 3600_000, w.deps, half);
+    assert.equal(w.spentOnCoin(), half);
+    assert.equal(w.coin.cfg.carriedSpendLamports, Z);
+    assert.equal(await w.forwarded(), half);
+    assert.equal(w.registry.token(w.mint)!.status, "retired");
+    assert.ok(w.logs.some((l) => /the result's share is not fully spent yet \(2\.5 SOL still owed on this coin\)\. It is being spent on this coin first/.test(l)), w.logs.join("\n"));
+    assert.equal(w.logs.filter((l) => /\[dispersal\] \$PHIGM: spent/.test(l)).length, 1, "one piece");
     assert.ok(!w.logs.some((l) => /\[dispersal\].*RuleNotLive/.test(l)), "no piece was ever sent after the end");
   });
 
-  test("dispersal off (the round-4 program has no crank_carried): the end waits, nothing moves to the end sink and an alert says why; turning dispersal on later finishes the share, then forwards", async () => {
+  test("dispersal off: a carried share holds the end, nothing moves to the end sink and an alert says why; turning dispersal on later finishes the share, then forwards", async () => {
     const w = await world({ fraction: 0.5 });
     const flag0 = w.program.fake(w.flagship).feeLamports;
+    const half = (BigInt(5) * SOL) / BigInt(2);
+    w.deadPool();
+    await w.carryThenReopen();
     await w.run(D("2025-11-14T00:00:00Z"));
-    assert.equal(w.spentOnCoin(), SOL, "the result's crank spent its 1 SOL");
-    assert.equal(w.coin.cfg.carriedSpendLamports, BigInt(15) * SOL / BigInt(10), "1.5 SOL still owed");
+    assert.equal(w.spentOnCoin(), Z, "nothing spent on the dead pool");
+    assert.equal(w.coin.cfg.carriedSpendLamports, half, "2.5 SOL still owed");
     assert.equal(await w.sink.ruleEnd(), null, "the end is not recorded on chain");
     assert.equal(w.program.fake(w.flagship).feeLamports, flag0, "nothing reached $DEFICIT");
     assert.equal(w.registry.token(w.mint)!.status, "live");
     assert.ok(w.registry.ruleEnd(w.mint), "the registry knows the result ended the rule");
     const alerts = w.registry.alertsSince(0).filter((a) => a.key === `${w.mint}:end-owed`);
     assert.ok(alerts.length >= 1, "the owner is told");
-    assert.match(alerts[0].text, /can only be spent in pieces by burn dispersal, which is not running for this coin, so the end waits and nothing moves to the end sink/);
-    // round 5 lands: the keeper is restarted with dispersal on
-    const half = (BigInt(5) * SOL) / BigInt(2);
+    assert.match(alerts[0].text, /can only be spent by burn dispersal, which is not running for this coin, so the end waits and nothing moves to the end sink/);
     await w.run(D("2025-11-24T00:00:00Z"), 3 * 3600_000, { ...w.deps, dispersal: true }, half);
     assert.equal(w.spentOnCoin(), half);
     assert.equal(await w.forwarded(), half);
   });
 
-  test("restart and adoption mid-drain: another cranker spends a piece and the keeper's dispersal state is lost; the chain's carried amount still decides, and the totals hold", async () => {
+  test("restart and adoption: another cranker spends part of the carry and the keeper's dispersal state is lost; the chain's carried amount still decides, and the totals hold", async () => {
     const w = await world({ fraction: 0.5, dispersal: true });
     const half = (BigInt(5) * SOL) / BigInt(2);
-    // up to the result's crank and the first carried piece
-    let guard = 0;
-    // owner 2026-10-16: the game is read 6 h after its start and the coin burns 12 h after that first read, so the loop runs past both
-    while (w.spentOnCoin() <= SOL && guard++ < 600) { await runCycle(w.deps); w.clock.now += 20 * 60_000; }
-    assert.ok(w.spentOnCoin() > SOL && w.spentOnCoin() < half, `mid-drain: ${w.spentOnCoin()}`);
+    w.deadPool();
+    await w.carryThenReopen({ ...w.deps, dispersal: false });
     assert.equal(await w.sink.ruleEnd(), null);
     // another cranker (crank_carried is permissionless) spends a 0.1 SOL piece the keeper never sent
     const plan = await w.coin.planCarried(SOL / BigInt(10));
@@ -121,10 +144,11 @@ describe("review 10 F1: a 50 % one-shot finishes its share on the coin before th
     const tx = await plan.build();
     assert.equal((await w.coin.simulate(tx.raw)).err, null);
     await w.coin.send(tx.raw);
+    assert.equal(w.coin.cfg.carriedSpendLamports, half - SOL / BigInt(10));
     // the keeper restarts with no dispersal state
     w.registry.setStatus(DISPERSAL_STATE_KEY(w.mint), "", w.clock.now);
-    const restarted: KeeperDeps = { ...w.deps };
-    await w.run(D("2025-11-14T00:00:00Z"), 3 * 3600_000, restarted, half);
+    w.clock.now += 1_000;
+    await w.run(D("2025-11-14T00:00:00Z"), 3 * 3600_000, { ...w.deps }, half);
     assert.equal(w.spentOnCoin(), half);
     assert.equal(await w.forwarded(), half);
   });
@@ -136,7 +160,7 @@ describe("review 10 F1: a 50 % one-shot finishes its share on the coin before th
     assert.equal(a.spentOnCoin(), Z);
     assert.equal(a.coin.cfg.carriedSpendLamports, Z);
     assert.equal(await a.forwarded(), SOL / BigInt(100), "the pool moved to the end sink (nothing was owed)");
-    // (b) 50 % of 2.0133 SOL = 1.00665 SOL: 1 SOL spent, 0.00665 SOL carried, under the floor; crank_carried takes a whole remainder under it
+    // (b) 50 % of 2.0133 SOL = 1.00665 SOL: spent in one run (no per-run bound), nothing carried; the end follows
     const pool = BigInt(2_013_300_000), owed = pool / BigInt(2);
     const b = await world({ fraction: 0.5, poolLamports: pool, dispersal: true });
     await b.run(D("2025-11-10T00:00:00Z"), 3 * 3600_000, b.deps, owed);
@@ -144,12 +168,12 @@ describe("review 10 F1: a 50 % one-shot finishes its share on the coin before th
     assert.equal(await b.forwarded(), pool - owed);
   });
 
-  test("the 100 % control: the drain path spends all 5 SOL on the coin, one capped crank a day, and nothing is left to forward", async () => {
+  test("the 100 % control: the result's crank spends all 5 SOL on the coin in one run (no daily capped drain cranks), and nothing is left to forward", async () => {
     const w = await world({ fraction: 1 });
     await w.run(D("2025-11-14T00:00:00Z"));
     assert.equal(w.registry.ruleEnd(w.mint)!.mode, "drain");
     assert.equal(w.spentOnCoin(), BigInt(5) * SOL);
-    assert.ok(w.registry.receipts(w.mint).filter((r) => r.kind === "drain").length >= 4, "the 1 SOL cap spreads the drain over days");
+    assert.ok(w.registry.receipts(w.mint).filter((r) => r.kind === "drain").length <= 1, "no cap spreads the drain over days any more");
     assert.equal(await w.forwarded(), Z);
     assert.equal(w.registry.token(w.mint)!.status, "retired");
   });
@@ -177,7 +201,7 @@ describe("review 10 F1: what the launcher offers and says", () => {
   });
   test("the budget row for a share under 100 % says the share is spent on the coin before the rest moves", () => {
     const line = budgetCopy(rule(0.5).rule, 0.5, null).line;
-    assert.match(line, /This coin burns 50% of its pool once, when the result is in\. One burn spends at most 2% of the trading pool's SOL\. The rest is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart/);
+    assert.match(line, /This coin burns 50% of its pool once, when the result is in\. The burn spends its whole share in one run\. There is no platform cap on a burn\./);
     assert.match(line, /The rest of the pool moves on only after this share has been spent on this coin\./);
     assert.doesNotMatch(budgetCopy(rule(1).rule, 1, null).line, /moves on only after/);
   });

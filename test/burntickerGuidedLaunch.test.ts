@@ -203,9 +203,9 @@ describe("one-shots, budgets and the end before graduation", () => {
     assert.equal(dialsFor(firstPartyRule(gameSeries("mlb", "401999999", "LAD", "loss"), 0.02) as BurnRule).bounds.max, 1, "QA pass 9 #3: a single game is a one-shot (the keeper drains it after its result)");
     // WIRING-AUDIT12 P1-1: the flippening is a linked pair, so its row is 100 % only (a single one-shot keeps 100 / 50)
     assert.match(tile, /const shareRow = flip \? SHARE_PRESETS\.linkedOneShot : SHARE_PRESETS\.recurring;/); assert.match(tile, /shares=\{\{ options: \[\.\.\.shareRow\]/);
-    assert.deepEqual(oneShotSentences({ share: 1, happened: "the Dodgers won the World Series", subject: "they" }), ["This coin burns its whole pool once, when Polymarket's payout says the Dodgers won the World Series.", "One burn spends at most 2% of the trading pool's SOL. The rest is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart, and a new window starts if any is left, so a large burn is usually finished within a day.", "If they do not, the rest goes to $DEFICIT's burn."]);
+    assert.deepEqual(oneShotSentences({ share: 1, happened: "the Dodgers won the World Series", subject: "they" }), ["This coin burns its whole pool once, when Polymarket's payout says the Dodgers won the World Series.", "The burn spends its whole share in one run. There is no platform cap on a burn. The burn pool spends what the rule says.", "If they do not, the rest goes to $DEFICIT's burn."]);
     assert.equal(oneShotSentences({ share: 0.5, happened: "x", subject: "it" })[0], "This coin burns 50% of its pool once, when Polymarket's payout says x.");
-    assert.equal(budgetCopy(poly(), 1, null).line, "This coin burns its whole pool once, when the result is in. The whole pool is spent, but not in one go: one burn spends at most 2% of the trading pool's SOL. The rest is burned in smaller pieces at random times over a six-hour window, at least 20 minutes apart, and a new window starts if any is left, so a large burn is usually finished within a day."); // HS-43 (hourly run 8)
+    assert.equal(budgetCopy(poly(), 1, null).line, "This coin burns its whole pool once, when the result is in. The whole pool is spent in one run. There is no platform cap on a burn. The burn pool spends what the rule says."); // HS-43 (hourly run 8), owner decision 2026-10-25
   });
 
   test("intent audit item 6 and snag 13: the budget row names the unit and says how several units compound, as the program does", () => {
@@ -215,7 +215,7 @@ describe("one-shots, budgets and the end before graduation", () => {
     // website-20 (audit 6 item 17, pass B items 14 and 16): one term, the burn pool; the compounding arithmetic behind a tap
     assert.equal(d.label, "Share of the burn pool per $1B added");
     assert.equal(d.line, "Each $1B added spends 2% of what is left in the burn pool buying and burning this coin.");
-    assert.equal(d.math, "A reading with several units compounds, so 3 units spend about 5.88%, not 6%. One burn run buys with at most 2% of the SOL in the coin's Raydium pool; the rest is burned in smaller pieces and is usually finished within a day.");
+    assert.equal(d.math, "A reading with several units compounds, so 3 units spend about 5.88%, not 6%. One burn run spends the rule's full share in one go. There is no platform cap on a burn. The burn pool spends what the rule says.");
     assert.ok(Math.abs((1 - 0.98 ** 3) * 100 - 5.88) < 0.01, "compounding as burnReceipts/math.ts buybackSpend");
     assert.match(budgetCopy(applyDial(debt(), "inverse", "on"), 0.02, "$1B added").line, /counts once at most/);
     for (const x of [d.line, budgetCopy(poly(), 0.5, null).line]) clean(x);

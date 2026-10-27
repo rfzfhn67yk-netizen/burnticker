@@ -204,7 +204,7 @@ describe("5: last season's count for team coins", () => {
 });
 
 describe("6: the result simulator", () => {
-  test("one coin: the result spends its share (compounding, capped per run), the other cases burn nothing", () => {
+  test("one coin: the result spends its share (compounding, in one run, no cap), the other cases burn nothing", () => {
     const s = simulateResults(lockRule(BRONCOS).rule, { poolSol: "1", ticker: "BRONCO" });
     assert.deepEqual(s.rows.map((x) => x.case), [...SIM_CASES]);
     const res = s.rows[0].coins[0];
@@ -212,9 +212,11 @@ describe("6: the result simulator", () => {
     for (const row of s.rows.slice(1)) assert.ok(row.coins.every((c) => !c.burns && c.spendSol === "0"), row.case);
     for (const row of s.rows) { plain(row.line.replace(/\$[A-Z0-9]+/g, "coin"), row.case); plain(row.label, "label"); }
     plain(s.note, "note");
-    const capped = simulateResults(lockRule(BRONCOS).rule, { poolSol: "100", tradingPoolSol: "10" });
-    assert.equal(capped.rows[0].coins[0].spendSol, "0.2", "2% of a 10 SOL trading pool per run");
-    assert.equal(capped.rows[0].coins[0].waitsSol, "0.3", "2% of the 25 SOL cap is 0.5; the rest waits");
+    // owner decision 2026-10-25: no burn-pool cap and no per-run bound, so a 100 SOL pool spends its whole 2% share in one run
+    const big = simulateResults(lockRule(BRONCOS).rule, { poolSol: "100", tradingPoolSol: "10" });
+    assert.equal(big.rows[0].coins[0].spendSol, "2", "2% of the whole 100 SOL pool, however shallow the trading pool");
+    assert.equal(big.rows[0].coins[0].waitsSol, "0", "nothing waits for a later run");
+    assert.doesNotMatch(big.rows[0].line, /waits for the next run|at most 2%/);
     assert.equal(simulateResults(lockRule(BRONCOS).rule, { poolSol: "abc" }).available, false);
   });
   test("a draw coin burns on a tie; a winner-takes-the-burn pair moves the loser's share to the winner", () => {

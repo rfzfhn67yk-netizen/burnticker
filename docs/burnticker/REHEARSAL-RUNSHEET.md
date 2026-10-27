@@ -1,5 +1,9 @@
 # $DEFICIT run-sheet: devnet rehearsal, mainnet rehearsal coin, launch day
 
+> **Note (owner decision 2026-10-25):** the burn caps this sheet describes (the program's 25 SOL default cap in D-6 and A6, and the
+> 2 % per-crank cap behind the partial backfill days) were removed from the program. There is no burn-pool cap and no per-run bound;
+> one crank spends the rule's full share. The sheet is otherwise kept as written on 2026-10-10.
+
 Written 2026-10-10 on branch `agent/RUNSHEET-2026-10-10` (base `a96f845`). One ordered list for the owner and Claude to work
 through in one sitting. It replaces reading five docs, but it does not replace them as the record. Nothing in this file has been run. Every
 command was checked against the scripts at `a96f845`. The flags that could not be checked are listed in §E.

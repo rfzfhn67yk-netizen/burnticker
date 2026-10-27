@@ -1,7 +1,7 @@
 # Security policy and bug bounty
 
-No security firm has audited the code. The program runs behind a 25 SOL per-burn-pool cap (with a dated sunset) for exactly this
-reason, and this public bounty pays for valid reports.
+No security firm has audited the code. The program has no burn-pool cap and no per-run bound (both were removed by owner decision on
+2026-10-25), so this public bounty, which pays for valid reports, matters all the more.
 
 ## Bounty — PLACEHOLDER TERMS (the owner finalises every TODO before launch)
 
@@ -33,13 +33,13 @@ trust page), each with the date, the severity, the decision and the transaction 
 ### In scope
 
 - `programs/burn-receipts/` — anything that lets SOL or tokens leave a fee PDA, a vault or a pool other than through `crank_buyback`'s
-  swap-and-burn; a reading written without a valid quorum; a rule, reading or receipt changed after the fact; a cap raise or
-  attester change applied before its 48 h timelock; a quorum lowered; any instruction the Powers Register does not describe.
+  swap-and-burn; a reading written without a valid quorum; a rule, reading or receipt changed after the fact; any cap raise that
+  does not refuse (`CapRemoved`); an attester change applied before its 48 h timelock; a quorum lowered; any instruction the Powers Register does not describe.
 - `programs/burn-receipts/programs/pair_curve/` — any way to move a pair's SOL or tokens other than by the curve formula to the
   recorded recipients; a privileged signer after `init_pair`; LP not burned at graduation.
 - `src/lib/burnReceipts/`, `src/lib/burnKeeper/`, `src/lib/burnticker/` — the keeper signing a transaction the validator should
   have refused; a market price reaching a rule; a void or unsettled market burning; the registry accepting an update or a delete;
-  the audit passing on a tampered receipt; the pre-audit cap not binding; the receipt verifier on `/burnticker/check` showing ✓ for
+  the audit passing on a tampered receipt; a burn spending more than the rule's share; the receipt verifier on `/burnticker/check` showing ✓ for
   a receipt that does not match the chain or the source.
 - `src/app/api/burnticker/` — a cross-site request mutating anything; a route leaking a value it says it never reads.
 - `scripts/ops/publish-public-repo.sh` — a way to make the public tree carry a file the allowlist does not name, or to pass the

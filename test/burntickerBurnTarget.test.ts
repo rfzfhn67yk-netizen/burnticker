@@ -83,9 +83,11 @@ describe("the budget row follows the pinned token (WIRING-ROUND5 item 6)", () =>
     assert.equal(r.line, "Each result that fires the rule spends 5% of the burn pool swapping SOL for BONK and burning it. The amount of BONK each swap gets varies.");
     const sc = budgetCopy(scalar, 0.02, "1 touchdown");
     assert.match(sc.line, /swapping SOL for BONK and burning it\.$/);
-    assert.match(sc.math ?? "", /at most 2% of the SOL in BONK's pinned Raydium pool/);
+    // owner decision 2026-10-25: no per-run bound, so the math line says the share is spent in one go with no cap
+    assert.match(sc.math ?? "", /One burn run spends the rule's full share in one go\. There is no platform cap on a burn\./);
+    assert.doesNotMatch(sc.math ?? "", /at most 2%/);
     const o = budgetCopy(once, 1, null);
-    assert.match(o.line, /swapping SOL for BONK and burning it\. The burn lands in slices sized to the SOL in BONK's pinned Raydium pool\.$/);
+    assert.match(o.line, /swapping SOL for BONK and burning it\. The burn spends that share in one run, swapping in BONK's pinned Raydium pool\.$/);
     for (const x of [r, sc, o]) { clean(x.line); if (x.math) clean(x.math); clean(x.label); }
   });
 });

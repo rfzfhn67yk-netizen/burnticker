@@ -1,5 +1,6 @@
 // HB-164 FOLLOW-UP (2026-10-20): the first snow's end, pinned across the whole matrix the Codex auditor asked for (fractions 2%, 50%,
-// 100%; carried spend 0 and 1,000,000 lamports; burn dispersal off and on; a void reading; an already-ended rule; readings in both
+// 100%; carried spend 0 and 1,000,000 lamports (since the owner decision of 2026-10-25 the program spends a crank's whole target in one
+// run, so a carry after a burn exists only on a reading processed by the earlier program: the matrix keeps it as that legacy case); burn dispersal off and on; a void reading; an already-ended rule; readings in both
 // orders). The matrix pins publish 102's end for a share under 100% and the HB-147 drain at 100% for coins drafted before
 // FIRST_SNOW_HOLD_FROM_MS; reviewer F (publishes 102-105) adds the hold for coins drafted after it (its own describe below). Driven by runCycle on the same fake world as test/burntickerHourlyRun15.test.ts, with owedBeforeEnd and
 // detectRuleEnd called directly where that is simpler.
@@ -22,6 +23,7 @@ import { DEFAULT_ON_END, isOneShot, lockRule, WIND_DOWN_ON_END, type BurnRule } 
 import { nativeRule } from "@/lib/burnticker/sources/native";
 import { nwsSeries } from "@/lib/burnticker/sources/nws";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
+import type { FakeProgram } from "@/lib/burnKeeper/fakeProgram";
 import { ATTESTER, CREATOR } from "./burntickerRivalrySeriesHelpers.ts";
 
 const SOL = BigInt(1_000_000_000);
@@ -35,16 +37,29 @@ const stub: OracleAdapter = { id: "stub", searchSeries: async () => [], seriesIn
 type Day = [string, "0" | "1" | "void"];
 
 /**
- * The swap pool's SOL reserve that makes the first snow's crank carry exactly `carry` lamports: one crank spends at most 2% of that
- * reserve (MAX_SPEND_RESERVE_BPS), and the result asks for f of the 5 SOL burn pool. Carry 0: a reserve big enough for any share.
+ * A carry of exactly `carry` lamports on the first burned crank, as a reading processed by the program before 2026-10-25 (its per-run
+ * 2 % bound) left it: the crank spent `carry` less than its target and carried that remainder. The current program never does this
+ * (it spends the whole target in one run), so the test sets it on the fake after that one crank lands; every later step is the current
+ * program's. Carry 0: nothing is changed.
  */
-const reserveFor = (fraction: number, carry: bigint): bigint => {
-  if (carry === Z) return BigInt(1_000) * SOL;
-  const ask = (POOL * BigInt(Math.round(fraction * 10_000))) / BigInt(10_000);
-  return (ask - carry) * BigInt(50);
-};
+function legacyCarry(coin: FakeProgram, carry: bigint): void {
+  if (carry === Z) return;
+  const land = coin.land.bind(coin);
+  let done = false;
+  coin.land = (sig: string) => {
+    const before = coin.cfg.totalSpentLamports;
+    land(sig);
+    const l = coin.landed.get(sig);
+    if (done || !l || l.err || l.payload.kind !== "crank" || coin.cfg.totalSpentLamports - before <= carry) return;
+    done = true;
+    const rd = coin.readings.get(l.payload.recordDate)!;
+    coin.readings.set(rd.recordDate, { ...rd, spentLamports: rd.spentLamports - carry, carriedOutLamports: carry });
+    coin.cfg = { ...coin.cfg, totalSpentLamports: coin.cfg.totalSpentLamports - carry, carriedSpendLamports: carry };
+    coin.feeLamports += carry;
+  };
+}
 
-/** One Denver first-snow coin with an end sink ($DEFICIT); a 5 SOL burn pool; the reserve set for the carry asked. */
+/** One Denver first-snow coin with an end sink ($DEFICIT); a 5 SOL burn pool; the first burned crank carries `carry` (legacyCarry). */
 async function snowWorld(o: { fraction: number; carry: bigint; dispersal: boolean; /** reviewer F: a coin drafted after FIRST_SNOW_HOLD_FROM_MS */ held?: boolean }) {
   const registry = openRegistry(":memory:"), program = new FakeBurnProgram("devnet");
   program.autoRegisterPool = true; program.pinEndSinks = true;
@@ -57,7 +72,8 @@ async function snowWorld(o: { fraction: number; carry: bigint; dispersal: boolea
   registry.addAttester({ mint: t0.mint, pubkey: ATTESTER, role: "data-key", addedAt: 0, timelockUntil: null });
   program.supplies.set(t0.mint, BigInt("1000000000000000"));
   const coin = program.fake(t0.mint);
-  coin.poolReserveWsol = reserveFor(o.fraction, o.carry);
+  coin.poolReserveWsol = BigInt(1_000) * SOL;
+  legacyCarry(coin, o.carry);
   program.deposit(t0.mint, POOL);
   const flagship = Keypair.generate().publicKey.toBase58();
   await program.initializeToken({ mint: flagship, creator: CREATOR, ticker: "DEFICIT", rulesSha256: "ab".repeat(32), selectorKey: "flagship", mode: "buyback", attesters: [ATTESTER], quorum: 1, vault: null, rule: lockRule({ ...nativeRule("nws.high:DEN-90"), onEnd: WIND_DOWN_ON_END }).rule });
@@ -119,7 +135,7 @@ describe("HB-164 matrix: fraction x carried spend x dispersal x reading order (r
       const t = w.registry.token(w.mint)!;
       const locked = w.registry.lockedRule(t);
       assert.equal(isOneShot(locked.rule), false, "a first snow is not a one-shot");
-      // the first snow's crank carried exactly what the reserve allows (100% at carry 0: the whole pool in one crank, nothing carried)
+      // the first snow's crank carried exactly the legacy carry (carry 0: the whole share in one crank, nothing carried)
       assert.equal(firstSnowCarry(w), carry, `the first snow's crank carried ${carry}\n${tail}`);
       // held: never, at any cycle
       assert.deepEqual(w.holds, [], "owedBeforeEnd never holds a first snow");
@@ -301,7 +317,10 @@ describe("reviewer F: a first snow drafted after the pin finishes its share on t
       await w.run(HORIZON, 12 * H);
       const tail = w.logs.slice(-12).join("\n");
       const share = (POOL * BigInt(Math.round(fraction * 10_000))) / BigInt(10_000);
-      assert.ok(w.holds.length > 0, `held while the share is carried\n${tail}`);
+      // with dispersal off the end is held while the share is carried; with dispersal on the one carried piece (the whole carry, no
+      // per-run bound) lands in the same cycle as the crank, before the end step looks, so there may be no cycle that sees a hold
+      if (!dispersal) assert.ok(w.holds.length > 0, `held while the share is carried\n${tail}`);
+      else assert.ok(w.logs.some((l) => /\[dispersal\] \$DENSNOW: spent 0\.0010 SOL of the carried amount \(one piece/.test(l)), `the carry went in one piece\n${tail}`);
       const l = await w.ledger();
       assert.equal(l.spent + l.forwarded + l.kept, l.start, "no lamport created or lost");
       if (dispersal) {

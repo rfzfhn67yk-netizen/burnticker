@@ -233,7 +233,7 @@ export function submitPairResultIx(o: { programId: PublicKey; payer: PublicKey; 
 }
 
 /**
- * forward_to_winner — the loser's fuel for `recordDate` → the winner's fee PDA. Permissionless (cranker allowlist during the cap).
+ * forward_to_winner — the loser's fuel for `recordDate` → the winner's fee PDA. Permissionless (the cranker allowlist was removed 2026-10-25).
  * r3: refused (ForwardWindowClosed) once PAIR_RESULT_GRACE_SECS have passed since the loser's reading was submitted — the period then
  * belongs to the loser's own crank; the basis leaves the loser's carried_spend_lamports.
  */

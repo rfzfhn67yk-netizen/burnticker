@@ -78,9 +78,9 @@ pub enum BurnError {
     QuorumLowered,
     #[msg("only the program's upgrade authority may create the platform config")]
     NotUpgradeAuthority,
-    #[msg("the cap sunset must be in the future, at most 365 days away and no later than the default sunset (2027-10-01)")]
+    #[msg("the platform sunset must be in the future, at most 365 days away and no later than the default sunset (2027-10-01)")]
     InvalidSunset,
-    #[msg("the burn-pool cap can only be raised")]
+    #[msg("retired 2026-10-25 (the burn-pool cap was removed); never raised")]
     CapNotRaised,
     #[msg("a proposed attester set must keep at least `quorum` current keys (≥ 7 days old when it adds keys) and add fewer new keys than the new quorum")]
     TooManyAttestersReplaced,
@@ -124,11 +124,11 @@ pub enum BurnError {
     PlatformNotAllowed,
     #[msg("check_pool_health / replace_pool must be top-level and may not share a transaction with an instruction touching the pool, its vaults or its observation account")]
     PoolTouchedInTransaction,
-    #[msg("only a key on the platform's cranker allowlist may crank buybacks while the pre-audit cap is in force")]
+    #[msg("retired 2026-10-25 (the cranker allowlist was removed: every crank is permissionless); never raised")]
     CrankerNotAllowed,
-    #[msg("the registration-policy switch is not allowed now (pool working, cap sunset passed, or nothing pending)")]
+    #[msg("the registration-policy switch is not allowed now (pool working, platform sunset passed, or nothing pending)")]
     PolicySwitchNotAllowed,
-    #[msg("the burn-pool cap at initialize_platform must equal the default (raise only afterwards)")]
+    #[msg("retired 2026-10-25 (the burn-pool cap was removed); never raised")]
     CapNotDefault,
     #[msg("the pending registration-policy proposal expired (14 days after it was proposed); propose again")]
     PolicyProposalExpired,
@@ -269,7 +269,7 @@ pub enum BurnError {
     ReadingPending,
     #[msg("crank_carried: nothing is carried (or the requested piece is zero)")]
     NothingCarried,
-    #[msg("crank_carried: the requested piece is above the per-crank cap (2 % of the pool's WSOL reserve)")]
+    #[msg("retired 2026-10-25 (the per-crank spend bound was removed); never raised")]
     SpendAboveCap,
     #[msg("crank_carried: the piece is under the rule's floor and is not the whole remainder")]
     BelowFloor,
@@ -287,10 +287,13 @@ pub enum BurnError {
     #[msg("burn target: the target mint has more than 18 decimals")]
     TargetDecimalsTooLarge,
     // ----- round-5 review R5-8 / R5-9 (owner, 2026-10-15) -----
-    #[msg("crank_carried: over the carried budget")]
+    #[msg("crank_carried: a piece for this coin already ran this second")]
     CarriedTooSoon,
     #[msg("crank_carried: not this coin's CarriedPace")]
     InvalidCarriedPace,
     #[msg("a target coin's BurnTarget account is required")]
     BurnTargetAccountMissing,
+    // ----- owner decision 2026-10-25: both burn caps removed -----
+    #[msg("the burn-pool cap was removed (owner decision 2026-10-25): there is no cap to raise, cancel or apply")]
+    CapRemoved,
 }

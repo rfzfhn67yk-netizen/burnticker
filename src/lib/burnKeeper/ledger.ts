@@ -42,9 +42,10 @@ export type BurnStatus = "planned" | "swap-sent" | "swapped" | "sending" | "conf
  * burn_receipts program did, read back from its Reading account after the crank landed — never computed by the keeper:
  *   chainOutcome  the Reading's outcome (burned / short / below-floor / exhausted / no-units)
  *   chainUnits    the units the PROGRAM counted (normally = units; a difference is logged and the chain wins)
- *   ruleSpend / carriedIn / carriedOut  the rule's spend and the spend carried across cranks when the 2 %-of-reserve cap bound
- *                 (SpendCapBound — a PARTIAL day: the rest is spent by the next crank)
- *   poolActual    the whole spendable pool; > poolLamports when the platform's burn-pool cap bound (BurnPoolCapBound)
+ *   ruleSpend / carriedIn / carriedOut  the rule's spend and the spend carried across cranks (only under the floor, past a 30-day
+ *                 untradeable pool, or with a zero minimum output; the per-run 2 % bound was removed by the owner decision of 2026-10-25,
+ *                 so rows from before then may show a remainder carried after a burn)
+ *   poolActual    the whole spendable pool; equals poolLamports since the burn-pool cap was removed (rows from before may differ)
  *   swapPool      the CPMM pool the program swapped on (the v2 memo's swap= field is its first 12 characters)
  *   waitReason    why the crank is waiting (TWAP history, no pool registered, pool not tradable) — a WAIT, not an error
  */

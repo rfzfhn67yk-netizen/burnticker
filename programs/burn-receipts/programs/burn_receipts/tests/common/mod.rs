@@ -378,9 +378,28 @@ pub fn ix_apply_cap(caller: &Pubkey) -> Instruction {
     )
 }
 
+/// The old 25 SOL default some tests still pass as initialize_platform's cap argument. Since the owner decision of 2026-10-25 the
+/// program ignores it (there is no burn-pool cap); it stays in the instruction for a stable interface.
+pub const LEGACY_CAP_ARG: u64 = 25_000_000_000;
+
+/// A carry left in a TokenConfig by the program before 2026-10-25 (when the 2 % per-crank bound still carried part of a spend).
+/// The current program creates a burn-sized carry only after 30 days of an untradeable pool; tests that exercise the carry paths
+/// (crank_carried, the end paths, release_target) start from such a legacy carry, exactly as a mainnet coin upgraded mid-carry would.
+pub fn set_legacy_carry(env: &mut Env, mint: &Pubkey, lamports: u64) {
+    let key = config_pda(mint);
+    let mut cfg = env.config(&key);
+    cfg.carried_spend_lamports = lamports;
+    let mut acc = env.svm.get_account(&key).unwrap();
+    let mut data = Vec::new();
+    anchor_lang::AccountSerialize::try_serialize(&cfg, &mut data).unwrap();
+    acc.data[..data.len()].copy_from_slice(&data);
+    env.svm.set_account(key, acc).unwrap();
+}
+
 impl Env {
-    /// The platform config with `cap` (lamports), sunset a year out, authority = `authority`.
+    /// The platform config (the cap argument is ignored since 2026-10-25), sunset 300 days out, authority = `authority`.
     pub fn init_platform(&mut self, authority: &Pubkey, cap: u64) {
+        // `cap` is ignored by the program since 2026-10-25 (kept so callers read as before).
         let (payer, ua) = (self.payer.pubkey(), self.upgrade_authority.insecure_clone());
         let ix = ix_initialize_platform(&payer, &ua.pubkey(), authority, cap, NOW + 300 * 86_400);
         self.ok(&[ix], &[&ua]);

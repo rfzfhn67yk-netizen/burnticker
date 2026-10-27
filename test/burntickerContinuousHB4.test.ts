@@ -32,7 +32,7 @@ import { pairMatchupWords, pairSeed } from "@/lib/burnticker/pairPageMeta";
 import { backtest } from "@/lib/burnticker/oracle/backtest";
 import { withoutRepoPaths, markdownLinkParts, sentenceWithoutRepoPaths } from "@/lib/burnticker/publicPaths";
 import { publicExpenses, NOT_RECORDED_NOTE, type Expenses } from "@/lib/burnticker/trustpack/ledger";
-import { capSentence } from "@/lib/burnticker/capInForce";
+import { SPREAD_LINES } from "@/lib/burnticker/spreadCopy";
 import { LaunchProofRejected, PROOF_REJECTED_SENTENCE, requireLaunchProof, walletPromptCount } from "@/lib/burnticker/walletProof";
 import { signsLine } from "@/lib/burnticker/mintAddressCopy";
 import { NONE_LISTED_LINE } from "@/lib/burnticker/seasonOver";
@@ -268,10 +268,10 @@ describe("HB-46: no placeholders or repository paths in public answers", () => {
     assert.doesNotMatch(read("config/burnticker/expenses.json"), /TODO-OWNER\.md/);
     for (const r of ["src/app/api/burnticker/v1/current-status/route.ts", "src/app/api/burnticker/v1/operator/route.ts"]) assert.match(read(r), /withoutRepoPaths\(/);
   });
-  test("the trust cap statement gives the end date once; the whitepaper says the keys are set", () => {
-    const s = capSentence({ capLamports: "25000000000", sunsetTs: 1_822_435_200, source: "default", pending: null } as never);
-    assert.equal((s.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}/g) ?? []).length, 1, s);
-    assert.doesNotMatch(s, /expires by/);
+  test("the trust page's burn statement (no cap since 2026-10-25) carries no date; the whitepaper says the keys are set", () => {
+    const s = SPREAD_LINES.join(" ");
+    assert.equal((s.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}/g) ?? []).length, 0, s);
+    assert.doesNotMatch(s, /expires by|cap ends/);
     assert.match(read("docs/burnticker/WHITEPAPER.md"), /The mainnet keys are set/);
     assert.doesNotMatch(read("site/burnticker/whitepaper.html"), /every public key is a placeholder/);
   });

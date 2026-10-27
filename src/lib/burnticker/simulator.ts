@@ -1,5 +1,5 @@
-import { buybackSpend, reserveSpendCap } from "@/lib/burnReceipts/math";
-import { DEFAULT_CAP_LAMPORTS, LAMPORTS, MAX_SPEND_RESERVE_BPS } from "@/lib/burnticker/burnMath";
+import { buybackSpend } from "@/lib/burnReceipts/math";
+import { LAMPORTS } from "@/lib/burnticker/burnMath";
 import { outcomeResults, outcomeWords, parseEspnSeries, seriesCannotTie } from "@/lib/burnticker/sources/espn";
 
 import type { BurnRule } from "@/lib/burnticker/rules";
@@ -28,7 +28,8 @@ export const simOneShotVoidLine = (days: number | null | undefined): string => `
 /**
  * THE RESULT SIMULATOR'S MATH (cheap-features pass item 6, owner 2026-10-13). What one result does to a coin's burn pool, for a
  * HYPOTHETICAL amount of SOL in the pool, through the program's own arithmetic (burnReceipts/math buybackSpend: the compounding share;
- * reserveSpendCap: at most 2% of the trading pool's SOL per run; the pre-audit cap from burnMath). Five cases, always in this order:
+ * no per-run bound and no platform cap since the owner decision of 2026-10-25: one run spends the rule's full share). Five cases, always in
+ * this order:
  *
  *   result          the result the rule burns on (a win for a win coin, YES for a YES coin, one unit for a number source)
  *   tie             a level game (a draw coin burns on it; every other coin does not)
@@ -62,7 +63,7 @@ export interface SimCoin {
   /** SOL spent from this coin's own pool on this case (decimal string, 9 places max) */ spendSol: string;
   /** SOL this coin's pool receives from the other side (winner takes the burn), or "0" */ receivedSol: string;
   /** SOL this coin sends to the other side's pool (winner takes the burn), or "0" */ sentSol: string;
-  /** SOL that waits for the next run because of the 2% per-run limit */ waitsSol: string;
+  /** SOL that waits for the next run: always "0" since 2026-10-25 (one run spends the rule's full share); kept for the API shape */ waitsSol: string;
   /** SOL left in this coin's pool afterwards */ poolAfterSol: string;
   burns: boolean; line: string;
 }
@@ -103,7 +104,7 @@ export function firingOf(rule: BurnRule): { share: number | null; firesOn: strin
 
 export interface SimOptions {
   /** hypothetical SOL in each coin's burn pool (default 1) */ poolSol?: string;
-  /** hypothetical SOL in the trading pool, for the 2% per-run limit (default 85) */ tradingPoolSol?: string;
+  /** hypothetical SOL in the trading pool (default 85); echoed back, no longer bounds a run (2026-10-25) */ tradingPoolSol?: string;
   /** a second coin: its ticker, and whether the two are a winner-takes-the-burn pair */ pair?: { tickerA: string; tickerB: string; winnerTakesBurn: boolean } | null;
   ticker?: string;
 }
@@ -113,24 +114,23 @@ export function simulateResults(rule: BurnRule, o: SimOptions = {}): Simulation 
   const poolSol = o.poolSol ?? SIM_DEFAULT_POOL_SOL, tradingPoolSol = o.tradingPoolSol ?? SIM_DEFAULT_TRADING_POOL_SOL;
   const pairKind: Simulation["pair"] = o.pair ? (o.pair.winnerTakesBurn ? "winner-takes-the-burn" : "separate") : null;
   const base = { poolSol, tradingPoolSol, pair: pairKind, note: "These are hypothetical amounts of SOL. How many tokens a spend burns depends on the trading pool at the moment of the run, so no token amount is shown." };
-  let pool: bigint, reserve: bigint;
-  try { pool = toLamports(poolSol); reserve = toLamports(tradingPoolSol); } catch (e) { return { ...base, available: false, reason: `${(e as Error).message}. Use a plain number such as 1 or 0.5.`, share: null, shareLabel: null, firesOn: null, rows: [] }; }
+  let pool: bigint;
+  try { pool = toLamports(poolSol); toLamports(tradingPoolSol); } catch (e) { return { ...base, available: false, reason: `${(e as Error).message}. Use a plain number such as 1 or 0.5.`, share: null, shareLabel: null, firesOn: null, rows: [] }; }
   const f = firingOf(rule);
   if (f.share === null) return { ...base, available: false, reason: "This rule moves a fixed number of tokens from a vault, so there is no share of a pool to work out.", share: null, shareLabel: null, firesOn: f.firesOn, rows: [] };
   const bps = Math.round(f.share * 10_000);
-  const budget = pool > DEFAULT_CAP_LAMPORTS ? DEFAULT_CAP_LAMPORTS : pool;
+  const budget = pool;
   const ruleSpend = buybackSpend(budget, BigInt(1), bps);
-  const runCap = reserveSpendCap(reserve, MAX_SPEND_RESERVE_BPS);
   const zero = BigInt(0);
-  /** One coin's own run: the spend capped at 2% of the trading pool, the rest waiting. */
-  const run = (planned: bigint) => { const spend = planned < runCap ? planned : runCap; return { spend, waits: planned - spend }; };
+  /** One coin's own run: the whole planned spend in one run (no per-run bound, no platform cap). */
+  const run = (planned: bigint) => ({ spend: planned, waits: zero });
   const tA = o.pair?.tickerA ?? o.ticker ?? "A", tB = o.pair?.tickerB ?? "B";
   const idle = (side: "A" | "B", ticker: string, line: string): SimCoin => ({ side, ticker, spendSol: "0", receivedSol: "0", sentSol: "0", waitsSol: "0", poolAfterSol: lamportsToSol(pool), burns: false, line });
   const burning = (side: "A" | "B", ticker: string, received: bigint): SimCoin => {
     const r = run(ruleSpend + received);
     const line = received > zero
-      ? `$${ticker} spends ${lamportsToSol(r.spend)} SOL, its own ${pctLabel(f.share!)} plus the ${lamportsToSol(received)} SOL sent by the other coin, and burns the tokens that SOL gets.${r.waits > zero ? ` ${lamportsToSol(r.waits)} SOL waits for the next run, because one run spends at most 2% of the trading pool's SOL.` : ""}`
-      : `$${ticker} spends ${lamportsToSol(r.spend)} SOL (${pctLabel(f.share!)} of ${lamportsToSol(budget)} SOL) and burns the tokens that SOL gets.${r.waits > zero ? ` ${lamportsToSol(r.waits)} SOL waits for the next run, because one run spends at most 2% of the trading pool's SOL.` : ""}`;
+      ? `$${ticker} spends ${lamportsToSol(r.spend)} SOL, its own ${pctLabel(f.share!)} plus the ${lamportsToSol(received)} SOL sent by the other coin, and burns the tokens that SOL gets.`
+      : `$${ticker} spends ${lamportsToSol(r.spend)} SOL (${pctLabel(f.share!)} of ${lamportsToSol(budget)} SOL) and burns the tokens that SOL gets.`;
     return { side, ticker, spendSol: lamportsToSol(r.spend), receivedSol: lamportsToSol(received), sentSol: "0", waitsSol: lamportsToSol(r.waits), poolAfterSol: lamportsToSol(pool + received - r.spend), burns: true, line };
   };
   const rows: SimRow[] = [];

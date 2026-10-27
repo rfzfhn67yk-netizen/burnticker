@@ -6,8 +6,8 @@ import { OUTCOME_FORWARDED as PROGRAM_OUTCOME_FORWARDED, PAIR_ATTESTATION_DOMAIN
 
 /**
  * WINNER TAKES THE BURN (owner decision 2026-10-11, LAUNCHPAD-PATH §40): "the fees for both the winner and loser should burn the
- * winner's supply." For every pair, at each result the LOSER's fuel for that result — buyback_spend(min(its fee PDA − reserve + its
- * WSOL, the platform cap), its units for the result, its fraction) = exactly what it would have burned had it won; 0 under its floor;
+ * winner's supply." For every pair, at each result the LOSER's fuel for that result — buyback_spend(its fee PDA − reserve + its WSOL
+ * (no platform cap since the owner decision of 2026-10-25), its units for the result, its fraction) = exactly what it would have burned had it won; 0 under its floor;
  * a one-shot pair (fraction 100 %) moves everything — goes to the WINNER's burn pool through burn_receipts `forward_to_winner`, and the
  * winner's normal cranks buy and burn the winner's coin. The loser's supply is untouched, nobody is paid, a draw forwards nothing.
  *
@@ -132,11 +132,10 @@ function lamportsToSol(l: bigint): string {
 }
 
 /** What a forward moves, by the program's rule (the fake's arithmetic; the pages recompute receipts with it). */
-export function forwardAmount(i: { feeLamports: bigint; reserveLamports: bigint; wsolLamports: bigint; capLamports: bigint | null; units: number; fractionBps: number; floorLamports: bigint; carriedSpendLamports?: bigint }): { pool: bigint; lamports: bigint } {
-  // r3 RI-4: the basis leaves the loser's carried spend (owed to its earlier periods), then the cap
+export function forwardAmount(i: { feeLamports: bigint; reserveLamports: bigint; wsolLamports: bigint; units: number; fractionBps: number; floorLamports: bigint; carriedSpendLamports?: bigint }): { pool: bigint; lamports: bigint } {
+  // r3 RI-4: the basis leaves the loser's carried spend (owed to its earlier periods); no burn-pool cap since 2026-10-25
   const spendable = spendablePool(i.feeLamports, i.reserveLamports, i.wsolLamports), carried = i.carriedSpendLamports ?? BigInt(0);
-  const actual = spendable > carried ? spendable - carried : BigInt(0);
-  const pool = i.capLamports !== null && actual > i.capLamports ? i.capLamports : actual;
+  const pool = spendable > carried ? spendable - carried : BigInt(0);
   const amt = buybackSpend(pool, BigInt(i.units), i.fractionBps);
   return { pool, lamports: amt < i.floorLamports ? BigInt(0) : amt };
 }
@@ -320,7 +319,7 @@ export class FakePairForwardPort implements PairForwardPort {
     // 0 lamports — the reading is still processed
     const [va, vb] = this.live();
     const dead = !va || !vb || !this.winnerLive || !this.paired;
-    const a0 = forwardAmount({ feeLamports: loser.feeLamports, reserveLamports: loser.cfg.reserveLamports, wsolLamports: loser.wsol, capLamports: loser.capLamports, units: rd.units, fractionBps: loser.cfg.fractionPerUnitBps, floorLamports: loser.cfg.floorLamports, carriedSpendLamports: loser.cfg.carriedSpendLamports });
+    const a0 = forwardAmount({ feeLamports: loser.feeLamports, reserveLamports: loser.cfg.reserveLamports, wsolLamports: loser.wsol, units: rd.units, fractionBps: loser.cfg.fractionPerUnitBps, floorLamports: loser.cfg.floorLamports, carriedSpendLamports: loser.cfg.carriedSpendLamports });
     const a = dead ? { pool: a0.pool, lamports: BigInt(0) } : a0;
     const avail = loser.feeLamports > loser.cfg.reserveLamports ? loser.feeLamports - loser.cfg.reserveLamports : BigInt(0);
     const sol = a.lamports < avail ? a.lamports : avail, wsol = a.lamports - sol;

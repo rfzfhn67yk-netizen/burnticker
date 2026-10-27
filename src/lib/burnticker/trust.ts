@@ -4,9 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { PublicKey } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
-import { decodePlatformConfig } from "@/lib/burnReceipts/accounts";
-import { platformPda } from "@/lib/burnReceipts/pda";
-import { CAP_ENFORCED_SENTENCE, capSentence, effectiveCap, type EffectiveCap } from "@/lib/burnticker/capInForce";
 import { deployedBytesState, deployedNow, loadVerifiedBuild, pendingUpgradeSentence, type DeployedNow } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { liveProgramHash, programHashFact, type LiveProgramHash } from "@/lib/burnticker/programHash";
 import { tierPinPendingLive } from "@/lib/burnticker/deployedTierPin";
@@ -17,9 +14,9 @@ import { fmtSecs, operatorAloneUpgradeLine, timeLockPlanSentence, upgradeDelaySu
 import { repoUrl } from "@/lib/burnticker/currentStatusLinks";
 import { BOTH_TIERS_LINE, DEPLOYED_TIER_PIN_LINE, FEE_TIER_DECIDER_LINE, earlierCoinsLineFor, feeTiersLine, postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { lpLockPolicyJson, operatorTreasuryRecord, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
-import { compareLivePlatform, liveNewCoinTier, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, SECOND_SIGNER_LINE, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
+import { compareLivePlatform, liveNewCoinTier, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, SECOND_SIGNER_LINE, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
 import { budgetedRpcConfig } from "@/lib/burnticker/apiBudget";
-import { SPREAD_DEFICIT_LINE, SPREAD_LINES } from "@/lib/burnticker/spreadCopy";
+import { PLATFORM_AUTHORITY_NO_CAP_SENTENCE, SPREAD_DEFICIT_LINE, SPREAD_LINES } from "@/lib/burnticker/spreadCopy";
 import { counterpartyOf } from "@/lib/burnticker/trustpack/ledger";
 import { hasOperatorTradeReason, operatorTradeReason, feesUseWithReasons, type OperatorTrade } from "@/lib/burnticker/operatorCreators";
 
@@ -504,18 +501,11 @@ export interface TrustPage {
   program: ProgramFacts; incidents: { markdown: string; entries: number }; audit: AuditSummary | null;
   transparency: TransparencySection;
   statements: string[];
-  operatorLine: string; contactIsTodo: boolean; useOfFees: string; attesterStatus: { line: string; dueBy: string | null }; /** HB-69: what the second signer really does */ secondSigner: string; preAuditCapSol: number;
-  /** website-20 item 162: the burn-pool cap the program applies, read from chain (null: not read on this host). */
-  effectiveCap: EffectiveCap | null;
-}
-
-/** The PlatformConfig PDA read through the trust page's chain reader: the cap in force, or null when there is no reader or program id. */
-export async function readEffectiveCap(reader: ChainReader | null, programId: string | null, nowMs: number): Promise<EffectiveCap | null> {
-  if (!reader || !programId) return null;
-  try {
-    const data = await reader.accountData(platformPda(new PublicKey(programId)).toBase58());
-    return effectiveCap(data ? decodePlatformConfig(data) : null, Math.floor(nowMs / 1000));
-  } catch { return null; }
+  operatorLine: string; contactIsTodo: boolean; useOfFees: string; attesterStatus: { line: string; dueBy: string | null }; /** HB-69: what the second signer really does */ secondSigner: string;
+  /** Owner decision 2026-10-25: there is no burn-pool cap. Kept because /v1 never removes a field: always 0, which means no cap. */
+  preAuditCapSol: 0;
+  /** Owner decision 2026-10-25: there is no burn-pool cap to read. Kept because /v1 never removes a field: always null. */
+  effectiveCap: null;
 }
 
 /**
@@ -541,7 +531,6 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
   const transparency = buildTransparency(root, env);
   const platformId = (env.BURNTICKER_PLATFORM_ID ?? "").trim() || null;
   const cluster = i.cluster ?? ((env.BURNTICKER_CLUSTER ?? "").trim() || "devnet");
-  const effective = await readEffectiveCap(i.reader, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null, now);
   const livePlatform = await readLivePlatform(i.reader, platformId, env, now, cluster);
   // owner decision 2026-10-19: the per-swap split this page states for NEW coins is the tier the LIVE platform names (when it is a listed
   // tier); without a read it is the code's new-coin tier. A coin created earlier keeps its own pin, stated on its own page.
@@ -556,7 +545,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     // HS-26 (hourly run 5): the trust page's fee line, the footer's shape, with "(every coin live today)" computed from the registry
     // ninth pass HS-96: the trust page prints this line too, so the pre-upgrade tier pin is said on the page and not only in the API
     feeTiersLine: cluster === "mainnet" ? feeTiersLine({ tier14Live: i.tier14Live ?? null, tierPinPending }) : null,
-    operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: feesUseWithReasons(USE_OF_FEES), attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), secondSigner: SECOND_SIGNER_LINE, preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
+    operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: feesUseWithReasons(USE_OF_FEES), attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), secondSigner: SECOND_SIGNER_LINE, preAuditCapSol: 0, effectiveCap: null,
     powers, operator: operatorPowersSummary(powers),
     livePlatform,
     designedFees: { curve: CURVE_FEES, postGraduation: newCoinFees, devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: newCoinFees.legs.find((l) => l.label === "burn pool (LP fees)")?.bps ?? LP_FEES_TO_BURN_POOL_BPS, operatorBps: newCoinFees.legs.find((l) => l.label === "Burnticker (operator, LP fees)")?.bps ?? LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
@@ -574,10 +563,9 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
       "The launch wizard has no referral codes, fee discounts or hidden settings. Every setting is in the coin's rules file (rules.json).",
       "Only settled results are shown. The site shows no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence. For example, a Burn Derby rule reads the settled moves of two outside coins, and derby admission refuses a Burnticker coin as an input. No page shows a market-implied chance for any coin, since that was removed on 2026-10-10. A coin page names only its venue and the next market's ticker and close time.",
       `Coins settle on first-party primary sources, each with an independent cross-read. These include Treasury, BLS, FRED, NWS, EDGAR and on-chain data. A sports game settles on the game's on-chain payout when a Polymarket moneyline market exists. Otherwise it settles on a licensed final score from TheSportsDB, under a commercial license. The league's official feed confirms that score (MLB's official feed or the NHL's official scores), or a second licensed provider, API-Sports, does. A coin on a single game, or two teams in one game, burns once its final has been read and a second read five minutes later agrees. ${GAME_FINAL_SOURCES_LINE} Every source that answers must agree, and the game's on-chain settlement counts as one source. The coverage table below has the details. A coin can also settle on an on-chain Polymarket payout. That result is read from the payout vector of the Conditional Tokens contract on Polygon, and it counts only once the payout is on chain. Polymarket's Gamma API is used only to find markets, and no prices are shown. Kalshi is not a settlement input. Its Developer Agreement and Data Terms, reviewed on 2026-10-10, do not allow settling products on its data or sharing that data. The Kalshi adapter is for discovery only and is off by default, and the launch check refuses any Kalshi rule.`,
-      // prelaunch audit 2026-10-18 A-6: the program is deployed and enforces the cap; the old "once the program is deployed" line is retired
-      `${capSentence(effective)} ${CAP_ENFORCED_SENTENCE}`,
-      // owner 2026-10-20: how a burn above the per-burn cap is spread out on creator coins, and $DEFICIT's own wording (spreadCopy.ts)
+      // owner decision 2026-10-25: both burn caps are removed; how a burn runs, and the authority's former cap power (spreadCopy.ts)
       SPREAD_LINES.join(" "),
+      PLATFORM_AUTHORITY_NO_CAP_SENTENCE,
       SPREAD_DEFICIT_LINE,
       "Anonymous creators are allowed, and the creator's wallet is always shown. One-shot markets are allowed, and their pages say 'resolves once on <date>'. Elections are allowed. Deaths, violence, terror, casualty counts and named private individuals are refused.",
       feesUseWithReasons(USE_OF_FEES),

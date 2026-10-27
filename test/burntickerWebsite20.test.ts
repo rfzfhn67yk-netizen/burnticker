@@ -100,9 +100,10 @@ describe("the FIX sentences and the new copy, each lint-clean", () => {
     const all = [...auth, g.PERPETUAL_END_LINE, g.PATTERN_REASON.derbyFade, ...g.upfrontLines(["40", "60", "85"]), g.NOTE_LABEL, g.NOTE_HELP, g.NOTE_VS_DESCRIPTION, g.RIVALRY_GAME_LINE, g.RIVALRY_SEASON_LINE, g.RIVALRY_SCOPE_LINE, g.SCHEDULE_UNAVAILABLE_LINE, g.NO_LISTED_MEETING_LINE, g.RIVAL_SAME_TEAM, g.scheduleCoverageLine(0), g.scheduleCoverageLine(1), g.scheduleCoverageLine(3), g.shareExample(0.02), g.derbyShareLine(0.02, 1), g.costLine("0.0569", 1), g.costLine(null, 2), g.whichCoinLine("LAD", null), g.whichCoinLine("A", "B"), g.walletAddressProblem("not-a-wallet")!, g.walletAddressProblem("")!, g.DRAFT_ROUTE_LINE, g.LOOKUP_LABEL];
     for (const s of all) clean(s);
     for (const s of g.upfrontLines(["40", "60", "85"])) assert.doesNotMatch(s, /\b20\d\d\b/, "no dates");
-    // the cap line agrees with the program's constants (capInForce.ts)
-    const { DEFAULT_BURN_POOL_CAP_LAMPORTS, CAP_TIMELOCK_SECS } = await import("@/lib/burnReceipts/constants");
-    assert.equal(BigInt(g.PRE_AUDIT_CAP_SOL_TEXT) * BigInt(1_000_000_000), BigInt(DEFAULT_BURN_POOL_CAP_LAMPORTS)); assert.equal(CAP_TIMELOCK_SECS, 48 * 3600);
+    // owner decision 2026-10-25: no burn-pool cap, so "what to know first" says there is none, and the program constants are gone
+    const constants = await import("@/lib/burnReceipts/constants");
+    assert.equal("DEFAULT_BURN_POOL_CAP_LAMPORTS" in constants, false); assert.equal("CAP_TIMELOCK_SECS" in constants, false); assert.equal("PRE_AUDIT_CAP_SOL_TEXT" in g, false);
+    assert.ok(g.upfrontLines(["40", "60", "85"]).includes("There is no platform cap on a burn. The burn pool spends what the rule says."));
     assert.equal(g.NOTE_VS_DESCRIPTION.includes("280"), true); const { DESCRIPTION_MAX } = await import("@/lib/burnticker/creatorProfile"); assert.equal(DESCRIPTION_MAX, 280);
   });
   test("item 103: the lookup checks the address and says what it expects", async () => {

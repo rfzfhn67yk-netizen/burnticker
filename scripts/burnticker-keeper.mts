@@ -22,7 +22,7 @@
 // data/own-tokens.generated.json when the registry's token set changed — the arms' refuse list for platform coins (src/lib/ownTokens.ts
 // merges it with config/own-tokens.json; the arms never open this database), and (b) every ALERT_EVERY_MS runs the ops alert check
 // (src/lib/burnticker/alerts.ts → the registry's alerts table, then the operator's alert webhook): feed stalls, refused readings, cranks failing
-// 3× in a row, audit mismatches, the keeper key under 0.1 SOL, the pre-audit cap binding, a daily one-line summary. Balances come
+// 3× in a row, audit mismatches, the keeper key under 0.1 SOL, a daily one-line summary. Balances come
 // from BURNTICKER_RPC_URL (plain getBalance on BURNTICKER_KEEPER_PUBKEY and BURNTICKER_FEE_WALLET, public keys); without it they
 // are "unknown", never a false alarm. --once skips the alert check unless --alerts is given (a smoke run must not page the owner).
 import fs from "node:fs";

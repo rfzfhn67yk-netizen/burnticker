@@ -23,8 +23,6 @@ export interface SettlementFacts {
   feedPollMin: number;
   /** the program's swap guard window, minutes (MIN_TWAP_WINDOW_SECS to MAX_TWAP_WINDOW_SECS) */
   guardMinMin: number; guardMaxMin: number;
-  /** the most one burn may spend, percent of the pool's SOL reserve (MAX_SPEND_RESERVE_BPS) */
-  spendCapPct: number;
   /** UMA's default dispute window before a Polymarket payout, hours (UMA_DEFAULT_LIVENESS_S) */
   umaHours: number;
   /** $DEFICIT's reads of the Treasury figure, as clock times, and the time zone they are in (its rules file) */

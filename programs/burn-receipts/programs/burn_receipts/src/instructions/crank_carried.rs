@@ -7,19 +7,19 @@ use crate::cpmm::{self, AmmConfigView, PoolView, SwapAccounts};
 use crate::error::BurnError;
 use crate::events::CarriedSpent;
 use crate::guards::{require_fee_pda_intact, require_fee_token_account_intact};
-use crate::instructions::crank_common::{active_cap, crankers_in_force, require_fixed_supply};
+use crate::instructions::crank_common::require_fixed_supply;
 use crate::instructions::pool_health::clear_untradeable;
 use crate::math;
 use crate::memo;
 use crate::instructions::pair::create_pda;
 use crate::state::{carried_pace_address, CarriedPace, TokenConfig};
 
-/// PERMISSIONLESS (BUYBACK MODE, burn dispersal 2026-10-13). Spends part of the SOL the rule already owes from earlier capped cranks
-/// (`carried_spend_lamports`, review H-1) WITHOUT a new reading, so a large owed spend can be bought in small pieces spread over time
-/// instead of one 2 %-of-reserve piece per reading:
-///   spend = min(carried_spend_lamports, max_spend_lamports, the platform basis (pool capped while the pre-audit cap is in force))
-///   max_spend_lamports must be > 0 and ≤ the per-crank cap (2 % of the pool's WSOL reserve) — a larger request is REFUSED
-///   (SpendAboveCap), never silently clamped, so the cranker always gets exactly the piece it asked for or nothing.
+/// PERMISSIONLESS (BUYBACK MODE, burn dispersal 2026-10-13). Spends the SOL the rule already owes from earlier cranks
+/// (`carried_spend_lamports`, review H-1: spend carried under the floor or past an untradeable pool, and any carry left from before the
+/// per-crank bound was removed) WITHOUT a new reading:
+///   spend = min(carried_spend_lamports, max_spend_lamports, the spendable pool)
+///   max_spend_lamports must be > 0. Owner decision 2026-10-25: there is no per-crank bound (it was 2 % of the pool's WSOL reserve)
+///   and no carried budget any more, so one call may spend the whole carried amount. SpendAboveCap is never raised again.
 ///   The swap is crank_buyback's: same registered + verified pool, same TWAP guard (mandatory), same min-out (the larger of the
 ///   spot and TWAP quotes less fee and slippage), same post-swap integrity checks; then EVERY token the fee PDA holds is burned and
 ///   a `carried` memo is written: <prefix>|carried|through=<YYYYMMDD>|spent=…|got=…|burn=…|left=<lamports>|swap=<12>|rules=sha256:<12>|v1
@@ -38,13 +38,10 @@ use crate::state::{carried_pace_address, CarriedPace, TokenConfig};
 ///     later reading can exist); forward_on_end / burn_sol_on_end leave it in place for 30 days after the end (end::carry_held_back)
 ///     so this instruction drains it first, then take whatever is left and zero it. (RuleNotLive stays in the error list, unused.)
 ///   · while the pool is untradeable / empty (PoolNotTradable / EmptyReserves: no 30-day unblock path here, nothing is owed by date);
-///   · by the cranker allowlist while it is in force (CrankerNotAllowed), as crank_buyback;
-///   · round-5 review R5-8: when the piece is above the coin's carried budget (CarriedTooSoon). The budget refills at one per-crank cap
-///     per CARRIED_BUDGET_WINDOW_SECS (600 s, half the TWAP window), up to one cap, and each piece spends its own lamports from it, so
-///     nobody drains faster than one cap per window and a dust piece takes only a dust budget; one piece per coin per second (two in
-///     one transaction are refused). The budget lives in CarriedPace ["carried_pace", mint] (created by the first piece, the cranker
-///     paying its rent), which also counts the pieces: a carried piece no longer adds to TokenConfig.burns (that counts reading cranks);
-///     the memo carries `piece=<n>`.
+///   · round-5 review R5-8: a second piece for the coin in the same second (CarriedTooSoon: two in one transaction are refused).
+///     CarriedPace ["carried_pace", mint] (created by the first piece, the cranker paying its rent) records the time and counts the
+///     pieces: a carried piece does not add to TokenConfig.burns (that counts reading cranks); the memo carries `piece=<n>`. Its budget
+///     field is unused since 2026-10-25 (written 0).
 /// Draining the carried amount between readings also means the next reading's basis no longer includes lamports that were already
 /// owed (the same basis the pair forward uses since r3 RI-4) — the rule's own fraction is applied to fuel that is not yet promised.
 #[event_cpi]
@@ -136,16 +133,9 @@ fn load_pace<'info>(acc: &AccountInfo<'info>, payer: &AccountInfo<'info>, system
     Ok((0, 0, 0, 0))
 }
 
-/// Round-5 review R5-8: the budget a piece may spend now (lamports), or None when no piece may run this second (two pieces in one
-/// transaction or one second). A coin that never ran a piece has a full cap.
-pub fn carried_budget_now(last_carried_at: i64, stored: u64, cap: u64, now: i64) -> Option<u64> {
-    if last_carried_at == 0 {
-        return Some(cap);
-    }
-    if now <= last_carried_at {
-        return None;
-    }
-    Some(math::carried_budget(stored, cap, now - last_carried_at))
+/// Round-5 review R5-8: at most one piece per coin per second (two in one transaction are refused). A coin that never ran a piece may.
+pub fn piece_allowed_now(last_carried_at: i64, now: i64) -> bool {
+    last_carried_at == 0 || now > last_carried_at
 }
 
 fn vault_amount(acc: &AccountInfo) -> Result<u64> {
@@ -175,10 +165,8 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
     require_fixed_supply(&ctx.accounts.mint)?;
     let fee_seeds: &[&[u8]] = &[FEE_SEED, mint_key.as_ref(), &[fee_bump]];
     let now = Clock::get()?.unix_timestamp;
-    let crankers = crankers_in_force(&ctx.accounts.platform.to_account_info(), now)?;
-    require!(crankers.is_empty() || crankers.contains(&ctx.accounts.cranker.key()), BurnError::CrankerNotAllowed);
-    // Round-5 review R5-8: the coin's carried budget (checked against the piece below, once the cap is known).
-    let (last_at, pieces, pace_spent, stored_budget) = load_pace(
+    // Round-5 review R5-8: the coin's pace record (one piece per second).
+    let (last_at, pieces, pace_spent, _unused_budget) = load_pace(
         &ctx.accounts.carried_pace.to_account_info(),
         &ctx.accounts.cranker.to_account_info(),
         &ctx.accounts.system_program.to_account_info(),
@@ -191,10 +179,7 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
     let wsol_balance = ctx.accounts.fee_wsol.to_account_info().lamports().checked_sub(wsol_reserve).ok_or(BurnError::MathOverflow)?;
     let wsol_unsynced = wsol_balance != ctx.accounts.fee_wsol.amount;
     let pool_actual = math::spendable_pool(ctx.accounts.fee_vault.lamports(), rule.reserve_lamports, wsol_balance).map_err(|_| BurnError::MathOverflow)?;
-    let pool_before = match active_cap(&ctx.accounts.platform.to_account_info(), now)? {
-        Some(c) if pool_actual > c => c,
-        _ => pool_actual,
-    };
+    let pool_before = pool_actual;
 
     // ----- the pool: tradeable now, or refuse -----
     let pool = PoolView::try_load(&ctx.accounts.pool_state.to_account_info()).ok_or(BurnError::PoolNotTradable)?;
@@ -211,17 +196,12 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
     let r_tok = vault_amount(&ctx.accounts.token_vault)?.checked_sub(token_fees).ok_or(BurnError::EmptyReserves)?;
     require!(r_wsol > 0 && r_tok > 0, BurnError::EmptyReserves);
 
-    // The per-crank cap is a ceiling on the REQUEST: asking for more is refused, never clamped.
-    let reserve_cap = math::reserve_spend_cap(r_wsol, MAX_SPEND_RESERVE_BPS);
-    require!(max_spend_lamports <= reserve_cap, BurnError::SpendAboveCap);
+    // Owner decision 2026-10-25: no per-crank bound on the request.
     let spend = carried_in.min(max_spend_lamports).min(pool_before);
     require!(spend > 0, BurnError::NothingCarried);
     // A piece under the floor only when it is the whole remainder (a remainder never sticks under the floor).
     require!(spend >= rule.floor_lamports || spend == carried_in, BurnError::BelowFloor);
-    // Round-5 review R5-8: the piece fits the coin's budget (refused, never clamped, like the cap).
-    let budget = carried_budget_now(last_at, stored_budget, reserve_cap, now).ok_or(BurnError::CarriedTooSoon)?;
-    require!(spend <= budget, BurnError::CarriedTooSoon);
-    let budget_left = budget - spend;
+    require!(piece_allowed_now(last_at, now), BurnError::CarriedTooSoon);
 
     // TWAP guard (mandatory, review H-1) and min-out (review-2 F1), exactly as crank_buyback.
     let spot = math::sol_price_x32(r_wsol, r_tok).map_err(|_| BurnError::EmptyReserves)?;
@@ -313,7 +293,7 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
         d[PACE_AT..PACE_AT + 8].copy_from_slice(&now.to_le_bytes());
         d[PIECES_AT..PIECES_AT + 4].copy_from_slice(&piece.to_le_bytes());
         d[SPENT_AT..SPENT_AT + 8].copy_from_slice(&pace_spent.saturating_add(spend).to_le_bytes());
-        d[BUDGET_AT..BUDGET_AT + 8].copy_from_slice(&budget_left.to_le_bytes());
+        d[BUDGET_AT..BUDGET_AT + 8].copy_from_slice(&0u64.to_le_bytes());
     }
     let m = memo::format_carried(
         ctx.accounts.config.memo_prefix_str(),
@@ -342,7 +322,8 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
         config: config_key,
         through_date: through,
         max_spend_lamports,
-        reserve_cap_lamports: reserve_cap,
+        // Unused since 2026-10-25 (the per-crank bound and the carried budget are gone); kept so the event decodes unchanged.
+        reserve_cap_lamports: 0,
         carried_in_lamports: carried_in,
         spent_lamports: spend,
         got,
@@ -350,7 +331,7 @@ pub fn handle_crank_carried(ctx: Context<CrankCarried>, max_spend_lamports: u64)
         carried_out_lamports: carried_out,
         cranker: ctx.accounts.cranker.key(),
         piece,
-        budget_left_lamports: budget_left,
+        budget_left_lamports: 0,
     });
     Ok(())
 }
@@ -374,13 +355,12 @@ mod tests {
         assert_eq!(u64::from_le_bytes(d[BUDGET_AT..BUDGET_AT + 8].try_into().unwrap()), 11);
     }
 
-    /// R5-8: the first piece has a full cap; later pieces the refilled budget; never two in one second.
+    /// R5-8 (budget removed 2026-10-25): the first piece may run; later pieces in a later second only.
     #[test]
-    fn the_budget_now() {
-        assert_eq!(carried_budget_now(0, 0, 600, 5), Some(600));
-        assert_eq!(carried_budget_now(100, 0, 600, 100), None);
-        assert_eq!(carried_budget_now(100, 0, 600, 99), None);
-        assert_eq!(carried_budget_now(100, 0, 600, 101), Some(1));
-        assert_eq!(carried_budget_now(100, 0, 600, 700), Some(600));
+    fn one_piece_per_second() {
+        assert!(piece_allowed_now(0, 5));
+        assert!(!piece_allowed_now(100, 100));
+        assert!(!piece_allowed_now(100, 99));
+        assert!(piece_allowed_now(100, 101));
     }
 }

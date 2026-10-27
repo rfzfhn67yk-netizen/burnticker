@@ -44,13 +44,13 @@ data arrives as an attested reading, anyone can crank, and nobody custodies the 
 | fee PDA | `["fee", mint]` | a **system-owned** account (no data) — the creator-fee recipient. SOL. Its ATAs (WSOL, token) are the buyback's working accounts; Raydium CPMM pays creator fees into them. |
 | `Reading` | `["reading", config, record_date u32 LE]` | one attested reading: value, prev, delta, carry in/out, units, voters bitmask, then the crank outcome (pool basis, spent, got, burned / owed, shortfall, carried spend, and the CPMM pool it traded on). Never closed. |
 | vault (vault mode) | ATA(config PDA, mint) | tokens to burn; authority = the config PDA |
-| `PlatformConfig` | `["platform"]` (one per program) | the temporary pre-audit **burn-pool cap** (default 25 SOL), its sunset time, its authority and a pending raise |
+| `PlatformConfig` | `["platform"]` (one per program) | its authority and the platform sunset, which now only closes the stranding-recovery switch. The cap, pending-raise and cranker fields keep their bytes but are unused: the owner removed the burn-pool cap and the cranker allowlist on 2026-10-25 |
 
 **Instructions** (full table with signers and limits: `powers-register.md`):
 `initialize_token` (mint-signed, once) · `register_pool` · `submit_reading` · `crank_buyback` · `crank_vault` · `crank_no_units` ·
 `propose_attesters` / `cancel_attester_change` / `renounce_admin` (config authority) · `apply_attester_change` ·
-`initialize_platform` (upgrade-authority-signed, once) · `propose_cap_raise` / `cancel_cap_raise` / `renounce_platform_authority`
-(platform authority) · `apply_cap_raise`. **There is no withdraw, sweep, close, set-recipient, pause, mint or rule-update
+`initialize_platform` (upgrade-authority-signed, once) · `renounce_platform_authority` (platform authority) · `propose_cap_raise` /
+`cancel_cap_raise` / `apply_cap_raise` (kept for a stable IDL; they always refuse with `CapRemoved` since 2026-10-25). **There is no withdraw, sweep, close, set-recipient, pause, mint or rule-update
 instruction.**
 
 ### The rule (fixed at init; `src/math.rs`, mirrored in `src/lib/burnReceipts/math.ts`)
@@ -63,9 +63,10 @@ instruction.**
   (pinned by test). The crank's **target** is the rule spend plus any spend **carried** from earlier cranks; under `floor_lamports`
   nothing is bought (the pool keeps the SOL; the reading is still processed and memo'd `swap=none`).
 - **Swap safety (review H-1 / L-7):** the cranker chooses nothing.
-  - **Per-crank size cap:** one crank spends at most **2 % of the pool's WSOL reserve** (price impact under ~4 %) and at most the
-    platform basis; the rest of the target is carried (`TokenConfig.carried_spend_lamports`, `Reading.carried_in/out_lamports`) and a
-    `SpendCapBound` event is emitted. Small, frequent buys are the structural defence against sandwiching.
+  - **No per-crank size cap (owner decision 2026-10-25):** one crank spends the whole target in one run (it was at most 2 % of the
+    pool's WSOL reserve). Spend is carried (`TokenConfig.carried_spend_lamports`, `Reading.carried_in/out_lamports`) only under the
+    floor, past a 30-day dead pool, or when the minimum output is 0; `SpendCapBound` is never emitted. The TWAP guard and `min_out`
+    below price the full trade's own impact.
   - **Mandatory TWAP guard:** `max_twap_deviation_bps` ≤ 300 and `twap_window_secs` 600–1,200 (enforced at init; the window
     fits CPMM's 100-entry oracle ring). The spot SOL price (in tokens) may not sit more than the deviation below the CPMM oracle's
     time-weighted average — the oracle records prices *before* each swap and only across distinct seconds, so a same-block front-run
@@ -74,7 +75,7 @@ instruction.**
     burn day (late, never lost).
   - **`min_out` (review-2 F1)** = the larger of two quotes, each the constant-product output minus the pool's whole fee minus
     `slippage_bps` (≤ 300): one on the live reserves, one on a pool of the same SOL depth priced at the TWAP. A same-transaction push
-    lowers the first, not the second, so a sandwich can take at most `slippage_bps` of a spend that is itself ≤ 2 % of the reserve.
+    lowers the first, not the second, so a sandwich can take at most `slippage_bps` of a spend.
   - **The oracle's 15-second buckets (review-2 F1):** an older observation's cumulative is exact at its bucket's last swap, up to 14 s
     after its timestamp. The program dates it at the latest possible moment, so the TWAP can read HIGH by up to 14/window (never low):
     the guard and the TWAP quote are only ever stricter. Both tolerances must therefore cover 15 s of the window
@@ -82,14 +83,11 @@ instruction.**
     $DEFICIT: window 1,200 s, deviation 300, slippage 300** — in a quiet pool that leaves ≈ 1.8 % of headroom against a recent rise.
   - **Dead pool (review-2 F7):** after 30 days of *continuous* untradeability (observations ≤ 24 h apart, see §3) a buyback reading is
     processed below-floor with its whole target carried, so the queue never wedges; the carry is spent once the pool trades again.
-- **Platform burn-pool cap (temporary, pre-audit — owner decision 2026-10-09):** while `now < PlatformConfig.cap_sunset_ts`, the
-  rule is applied to `min(pool, cap)` instead of the whole pool (default cap 25 SOL). SOL above the cap simply stays in the fee PDA;
-  every time the cap binds, `BurnPoolCapBound` is emitted and the reading records both `pool_lamports` (the basis used — also the
-  memo's `pool=`, so the memo's arithmetic still checks) and `pool_actual_lamports`. The cap can only be **raised** (48 h timelock,
-  anyone applies), the sunset is fixed at creation (≤ 365 days, never extendable), the authority can renounce, and only the program's
-  upgrade authority can create the PlatformConfig (with an initial cap ≤ 25 SOL). **If no PlatformConfig exists, the hard-coded default
-  applies (25 SOL until 2027-10-01T00:00Z)** — review M-1: a lost or finalised upgrade authority can never wedge buybacks. The cap
-  bounds each crank's basis, not a cumulative total.
+- **No platform burn-pool cap (owner decision 2026-10-25):** the rule is applied to the whole spendable pool on every burn path.
+  The 25 SOL pre-audit cap (owner decision 2026-10-09: raise-only behind a 48 h timelock, with a sunset ≤ 365 days, and a hard-coded
+  25 SOL default until 2027-10-01 without a PlatformConfig) is removed; `BurnPoolCapBound` is never emitted, and `pool_lamports`
+  equals `pool_actual_lamports` on new readings. The platform authority no longer holds a cap-raise power: `propose_cap_raise`,
+  `cancel_cap_raise` and `apply_cap_raise` always refuse with `CapRemoved` (6144).
 - **Burn:** every token the fee PDA holds is burned — what the swap delivered plus any creator-fee tokens Raydium paid in.
 - **Vault (alternative):** `owed = min(units × tokens_per_unit + shortfall_in, allocation_left)`, `burn = min(owed, vault)`,
   `shortfall = owed − burn` (public, carried) — the keeper's `settleBurn`.
@@ -132,9 +130,9 @@ self-burn wind-down applies. Never a refund or a payout. (`src/instructions/end.
   2 void) and `end_date`.
 - After a **resolved** end, `submit_reading` refuses any date later than the end (`RuleEnded`) and `crank_buyback` refuses such a reading
   (`ForwardOnEndRequired`); the result reading that ended the rule (dated on or before the end) cranks normally.
-- **forward_on_end** — permissionless (cranker allowlist while the cap is in force), after a resolved end once every reading inside the
-  window is processed (not required of a coin without a verified pool, whose readings can never crank): min(fee PDA SOL above the
-  reserve + synced WSOL, the burn-pool cap) → the destination's fee PDA (SOL first, then WSOL), refused under the minimum
+- **forward_on_end** — permissionless, after a resolved end once every reading inside the
+  window is processed (not required of a coin without a verified pool, whose readings can never crank): fee PDA SOL above the
+  reserve + synced WSOL (no burn-pool cap since 2026-10-25) → the destination's fee PDA (SOL first, then WSOL), refused under the minimum
   (`NothingToForward`); callable again for the later trickle; clears the coin's carried spend; memo `<PREFIX>|endfwd|to=<12>|lamports=N|v1`
   and event `ForwardedOnEnd`; RuleEnd keeps the totals. The program decides the destination: FLAGSHIP → the flagship; MINT → the named
   coin while live (a verified pool, its own rule not ended, buyback), else the flagship; PAIR_WINNER → the partner only if the PairResult
@@ -182,8 +180,8 @@ Owner decisions of the same evening:
 
 | Decision | Status | Test(s) |
 |---|---|---|
-| Per-token burn-pool cap, default 25 SOL, a PlatformConfig-level parameter only the timelocked authority can raise; excess stays in the fee PDA; event when it binds; in the register with a sunset | **Met** (+ an automatic on-chain sunset ≤ 365 days, and raise-only). | `platform.rs::platform_config_only_by_the_upgrade_authority…`, `the_cap_binds_spend_on_min_pool_cap…`, `the_cap_only_rises_through_the_48h_timelock_and_sunsets_by_itself`; register `temporary_powers` |
-| 48 h timelock for every privileged change | **Met:** attester changes and cap raises are both 48 h; there is no fee and no other privileged change. | as above |
+| Per-token burn-pool cap, default 25 SOL, a PlatformConfig-level parameter only the timelocked authority can raise; excess stays in the fee PDA; event when it binds; in the register with a sunset | **Superseded (owner decision 2026-10-25):** the cap is removed; cap raises refuse with `CapRemoved`. Was met (+ an automatic on-chain sunset ≤ 365 days, and raise-only). | `platform.rs::platform_config_only_by_the_upgrade_authority…`, `the_cap_binds_spend_on_min_pool_cap…`, `the_cap_only_rises_through_the_48h_timelock_and_sunsets_by_itself`; register `temporary_powers` |
+| 48 h timelock for every privileged change | **Met:** attester changes are 48 h; cap raises no longer exist (refused since 2026-10-25); there is no fee and no other privileged change. | as above |
 | Squads 2-of-3 as the upgrade / config authority, exact setup commands | **Documented** in §5.2 (commands verified against the `squads-multisig-cli` 0.1.7 source). `initialize_token` takes an explicit `admin` (the Squads vault); `initialize_platform` takes the platform authority (the Squads vault). | — |
 | No team allocation / no mint authority; init never mints or sends tokens to an operator | **Met:** the program has no mint path at all; `initialize_token` takes no token program or token account; through a vault cycle and a buyback the program's only token instructions are Burn and SyncNative. | `platform.rs::init_never_mints_or_moves_tokens_and_no_flow_ever_mints`, `buyback_token_calls_are_only_sync_native_and_burn_from_the_program` |
 
@@ -233,7 +231,7 @@ non-signer (Raydium SDK 0.2.74-alpha `instrument.ts`), so the launchpad passes `
   `register_pool` (fee-PDA `pool_creator`, ≥ 50 % LP burned/locked) before the first buyback (`pool_verified`); it can never be replaced.
 - *Stranding recovery (review-3 M-3):* `set_registration_policy` (the token's admin, 48 h timelock, `apply_registration_policy` by
   anyone) switches the token to a fixed pool that passes the same creator + LP checks, or back to policy 0. It is available only while
-  no pool works (none verified, or the registered one continuously untradeable ≥ 7 days) and only until the pre-audit cap's sunset; it is
+  no pool works (none verified, or the registered one continuously untradeable ≥ 7 days) and only until the platform sunset; it is
   in the Powers Register as a temporary power. The rule itself stays immutable (`TokenConfig.registration_policy` is the policy in force).
   Re-check R3-2 narrows it further: the fallback pool must have **≥ 90 % of its live LP burned or locked**, or be **the CPMM pool PDA of a
   LaunchLab-known AmmConfig** (the cpConfigId pinned at init, or the pinned platform's current one — pass `launchlab_platform`), so a
@@ -390,12 +388,12 @@ squads-multisig-cli display-vault --multisig-address <MULTISIG> --vault-index 0
 
 That vault address becomes: the program's **upgrade authority** (next step), the **platform authority** (`initialize_platform`'s
 `authority` argument) and each token's **config authority** (`initialize_token`'s `admin` argument). Every action it takes is a Squads
-proposal that needs 2 of 3 approvals and waits 48 h; the program's own 48 h timelocks (attester changes, cap raises) come on top.
+proposal that needs 2 of 3 approvals and waits 48 h; the program's own 48 h timelocks (attester changes) come on top.
 
-Platform config (optional since review M-1 — without one the default 25 SOL cap applies until 2027-10-01; create it to pick an
-earlier sunset or to be able to raise the cap; once, signed by the deployer while it is still the upgrade authority):
+Platform config (optional; since the owner decision of 2026-10-25 there is no burn-pool cap with or without one, and its sunset only
+closes the stranding-recovery switch earlier than 2027-10-01; once, signed by the deployer while it is still the upgrade authority):
 `initializePlatformIx({ programId, payer, upgradeAuthority: deployer, authority: <SQUADS_VAULT_PDA>, burnPoolCapLamports:
-25_000_000_000n, capSunsetTs: <unix time ≤ 365 days out> })`.
+0n, capSunsetTs: <unix time ≤ 365 days out> })` (the program ignores the cap and cranker arguments).
 
 Transfer the upgrade authority to the vault:
 
@@ -423,7 +421,7 @@ deployed hash equals the published verifiable hash (§5.4); the status page stat
 
 ```bash
 solana program show <PROGRAM_ID>                         # the authority is the Squads vault; note the slot
-solana account <PLATFORM_PDA>                            # PlatformConfig exists with the intended cap/sunset — or accept the default
+solana account <PLATFORM_PDA>                            # PlatformConfig exists with the intended sunset — or accept the default
 # crank one real reading on this cluster first: proves the compiled CPMM / LaunchLab program ids match the cluster (devnet build ≠ mainnet)
 solana-verify get-program-hash <PROGRAM_ID>              # equals the recorded verifiable hash (§5.4)
 ```
@@ -569,8 +567,8 @@ address). Do not "fix" it by syncing to the random key; before a real deployment
   date); the next reading's delta absorbs it.
 - `Reading.signers_mask` is a slot mask: after an attester rotation the same bit means a different key — indexers join it with the
   `AttesterChangeApplied` history (review I-6).
-- Until §5.3 runs, the upgrade authority (the Squads vault) can change everything; the cap protects against bugs, not the operator
-  (review I-5). Full list of review findings and how each was closed: `CHANGELOG.md`.
+- Until §5.3 runs, the upgrade authority (the Squads vault) can change everything; nothing in the program protects against the operator
+  (review I-5; the burn-pool cap that limited a bug's reach was removed on 2026-10-25). Full list of review findings and how each was closed: `CHANGELOG.md`.
 - zkTLS: the program stores and signs `proof_hash` but does not verify proofs; choosing a zkTLS provider and publishing a verifier
   script for the status page is open (attestation.md).
 - A Switchboard On-Demand attester was built and then removed on 2026-10-09 after the coordinator reported that Switchboard ended
@@ -578,7 +576,7 @@ address). Do not "fix" it by syncing to the random key; before a real deployment
   f94089c5 if it is ever wanted again.
 - The Squads CLI commands are taken from its 0.1.7 source; `vault-transaction-create` wants a serialized transaction message, so
   the finalize step is easier in the Squads app's transaction builder.
-- The platform cap is enforced only in `crank_buyback` (vault mode burns tokens, not SOL, and is not capped).
+- There is no platform cap on any burn path since 2026-10-25 (vault mode burns tokens up to the allocation, as before).
 - Review 3 informational items: **I-3** the minimum TWAP/slippage tolerances (150,000 bps·s) clear the worst-case bucket margin by only
   ~17 bps at 600 s and ~7 bps at 1,200 s — a liveness edge, not a safety one (use 300/300 at 1,200 s); **I-4** `replace_pool` can only
   reach a pool on a different AmmConfig, i.e. after the LaunchLab platform admin changes cpConfigId — that admin picks the replacement's
@@ -595,6 +593,6 @@ address). Do not "fix" it by syncing to the random key; before a real deployment
   pool, its vaults or its observation account) but not across a Jito bundle of separate transactions — accepted: clearing a spell that
   way costs a tip and both legs, forging one still needs two observations ≥ 1 h apart, and the reach is `replace_pool`'s 7-day clock.
   Judging reserves on oracle data instead would remove it at the cost of another dependency.
-- Cranker allowlist (review-3 L-4, re-check R3-4): applies only while the cap is in force AND for at most 90 days after
-  `initialize_platform`; the platform authority or any listed key can clear it. After that, the multi-block TWAP-hold timing (L-4) is
-  open to any cranker again — the one-window hold cost (L-1) is the remaining protection.
+- Cranker allowlist (review-3 L-4, re-check R3-4): removed with the cap by the owner decision of 2026-10-25; every crank is
+  permissionless, so the multi-block TWAP-hold timing (L-4) is open to any cranker; the one-window hold cost (L-1) is the remaining
+  protection.

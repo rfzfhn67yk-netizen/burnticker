@@ -153,8 +153,9 @@ const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatu
   "feeShareLine.ts",
   // semantics-verify (2026-10-12): the rules' edge cases, one sentence per website-20 VERIFY item
   "ruleEdgeCases.ts",
-  // semantics-verify Part 4 (2026-10-12): the burn-pool cap in force
-  "capInForce.ts",
+  // semantics-verify Part 4 (2026-10-12): the burn-pool cap in force; capInForce.ts retired with the cap (owner decision 2026-10-25),
+  // its no-cap sentences now live in spreadCopy.ts
+  "spreadCopy.ts",
   // launch-media-recovery (2026-10-12): the image pick, the signing card's and the recovery notice's sentences, the coin picker's lines
   "profileImagePick.ts", "signPlan.ts", "launchRecovery.ts", "coinPicker.ts", "preparedLaunch.ts",
   // site polish (ChatGPT audit 6 items 21 to 25): the visitor-facing host gaps and the one card age

@@ -21,7 +21,7 @@ import { lintCopy } from "@/lib/launch/copyLint";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const REAL = loadVerifiedBuild(ROOT);
 const BR = REAL.programs.find((p) => p.library === "burn_receipts")!;
-const BUILD = BR.builds.mainnet.hash;                                                       // b5b6e44f… (B-17)
+const BUILD = BR.builds.mainnet.hash;                                                       // 1aff5fbf… (B-17)
 const PRE = "152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821";             // round 5, before B-17
 const LIVE_AT = Date.parse("2026-10-22T01:00:00Z");
 const clean = (s: string) => assert.equal(lintCopy(s).hits.length, 0, `${s}\n${JSON.stringify(lintCopy(s).hits)}`);
@@ -44,7 +44,7 @@ function rootWith(vb: VerifiedBuild): string {
 const STALE_ROOT = rootWith(staleRecord(REAL));
 /** A mainnet chain read whose burn program bytes hash to `hash` (null: the read failed before the program). */
 const mainnetRead = (hash: string | null): ChainFacts => ({ cluster: "mainnet", readAt: new Date(LIVE_AT).toISOString(), error: hash ? null : "fetch failed", squads: null,
-  programs: hash ? { [BR.programId]: { deployed: true, upgradeAuthority: "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", authorityRead: "decoded", hash, slot: 459823169, programData: "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn" } } : {} });
+  programs: hash ? { [BR.programId]: { deployed: true, upgradeAuthority: "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", authorityRead: "decoded", hash, slot: 461421913, programData: "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn" } } : {} });
 const burnRow = (s: ReturnType<typeof buildCurrentStatus>) => s.programs.find((p) => p.name === "burn_receipts")!;
 const PENDING_MAINNET = pendingUpgradeSentence("mainnet", BUILD, PRE);
 
@@ -54,7 +54,7 @@ describe("HS-121 the deployed-bytes state follows the live hash", () => {
   test("deployedNow: live = build → matches over a stale record; live = pre-B17 → pending over a flipped record; no live hash → the record", () => {
     const stale = staleRecord(REAL).programs.find((p) => p.library === "burn_receipts")!.deployed.mainnet!;
     const flipped = BR.deployed.mainnet!;
-    const a = deployedNow(stale, BUILD, { hash: BUILD, slot: 459823169, readAt: "2026-10-22T01:00:00Z" })!;
+    const a = deployedNow(stale, BUILD, { hash: BUILD, slot: 461421913, readAt: "2026-10-22T01:00:00Z" })!;
     assert.equal(deployedBytesState(a), "matches"); assert.equal(a.pendingUpgrade, undefined); assert.equal(a.source, "chain"); assert.equal(a.readAt, "2026-10-22T01:00:00Z");
     const b = deployedNow(flipped, BUILD, { hash: PRE, slot: 457461970, readAt: "2026-10-22T01:00:00Z" })!;
     assert.equal(deployedBytesState(b), "upgrade-pending"); assert.equal(b.hash, PRE);
@@ -104,7 +104,7 @@ describe("HS-121 current status (the /v1/current-status object, the summary on h
 });
 
 describe("HS-121 trust page", () => {
-  const live = (hash: string | null) => ({ cluster: "mainnet" as const, byProgramId: { [BR.programId]: hash ? { hash, slot: 459823169, programData: "", readAt: "2026-10-22T01:00:00Z" } : null } });
+  const live = (hash: string | null) => ({ cluster: "mainnet" as const, byProgramId: { [BR.programId]: hash ? { hash, slot: 461421913, programData: "", readAt: "2026-10-22T01:00:00Z" } : null } });
   test("chain facts: matches with a stale record, pending with a flipped record, last read on a failed read", () => {
     const a = chainFacts(STALE_ROOT, live(BUILD)).find((c) => c.library === "burn_receipts")!;
     assert.equal(a.mainnet, "deployed (read from chain at 2026-10-22T01:00:00Z, and the bytes match the recorded build; upgrade authority 8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV)");
@@ -124,7 +124,7 @@ describe("HS-121 trust page", () => {
     const root = rootWith(staleRecord(REAL, h));
     const pd = new PublicKey("CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn");
     const prog = new Uint8Array(36); new DataView(prog.buffer).setUint32(0, 2, true); prog.set(pd.toBytes(), 4);
-    const pdBytes = new Uint8Array(45 + code.length); const v = new DataView(pdBytes.buffer); v.setUint32(0, 3, true); v.setBigUint64(4, BigInt(459823169), true); pdBytes.set(code, 45);
+    const pdBytes = new Uint8Array(45 + code.length); const v = new DataView(pdBytes.buffer); v.setUint32(0, 3, true); v.setBigUint64(4, BigInt(461421913), true); pdBytes.set(code, 45);
     let up = true;
     const reader: ChainReader = { accountData: async (k) => { if (!up) throw new Error("rpc down"); return k === BR.programId ? prog : k === pd.toBase58() ? pdBytes : null; }, signaturesFor: async () => [], lamportsDelta: async () => null };
     const env = { BURNTICKER_CLUSTER: "mainnet" };

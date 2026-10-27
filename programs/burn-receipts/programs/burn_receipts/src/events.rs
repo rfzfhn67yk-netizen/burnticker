@@ -114,7 +114,7 @@ pub struct PlatformInitialized {
     pub burn_pool_cap_lamports: u64,
     pub cap_sunset_ts: i64,
     pub initialized_by: Pubkey,
-    /// Review-3 L-4: the cranker allowlist (empty = permissionless), in force only while the cap is.
+    /// Review-3 L-4: the cranker allowlist. Since 2026-10-25 always empty (and burn_pool_cap_lamports 0): both were removed.
     pub crankers: Vec<Pubkey>,
 }
 
@@ -147,7 +147,7 @@ pub struct PlatformAuthorityRenounced {
     pub former_authority: Pubkey,
 }
 
-/// Emitted by crank_buyback whenever the platform cap made the rule spend on less than the whole pool.
+/// RETIRED 2026-10-25 (the platform cap was removed): never emitted again; kept so earlier events still decode.
 #[event]
 pub struct BurnPoolCapBound {
     pub config: Pubkey,
@@ -168,7 +168,7 @@ pub struct ReadingReset {
     pub max_abs_delta: u64,
 }
 
-/// crank_buyback spent less than its target — the 2 % reserve cap and/or the platform basis bound bound; the rest is carried.
+/// RETIRED 2026-10-25 (the 2 % per-crank bound was removed): never emitted again; kept so earlier events still decode.
 #[event]
 pub struct SpendCapBound {
     pub config: Pubkey,
@@ -193,8 +193,8 @@ pub struct CarriedSpent {
     pub burned: u64,
     pub carried_out_lamports: u64,
     pub cranker: Pubkey,
-    /// Round-5 review R5-8: this piece's number (CarriedPace.pieces after it) and the coin's carried budget left after it (it refills at
-    /// one per-crank cap per CARRIED_BUDGET_WINDOW_SECS).
+    /// Round-5 review R5-8: this piece's number (CarriedPace.pieces after it). `reserve_cap_lamports` and `budget_left_lamports` are
+    /// always 0 since 2026-10-25 (the per-crank bound and the carried budget were removed).
     pub piece: u32,
     pub budget_left_lamports: u64,
 }

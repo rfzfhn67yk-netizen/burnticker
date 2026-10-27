@@ -4,7 +4,6 @@ import { cadenceMsFor, type CycleReport } from "@/lib/burnticker/multiKeeper";
 import { hasSettlementReceipt, oneShotDecided, selectorIdle } from "@/lib/burnticker/readPlan";
 import type { FeedState, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
 import { readAudit, type AuditSummary } from "@/lib/burnticker/trust";
-import { PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
 import { takeRpc } from "@/lib/burnticker/apiBudget";
 import { pushOutcome, readPushState } from "@/lib/burnticker/push";
 import { noticeMarkLamports, REFERENCE_IRYS_PRICES, SIGNER_FLOOR_LAMPORTS, signerSendLamports, TARGET_LABEL, topUpDaySummary } from "@/lib/burnticker/ops/topUp";
@@ -31,7 +30,7 @@ import { noticeMarkLamports, REFERENCE_IRYS_PRICES, SIGNER_FLOOR_LAMPORTS, signe
  *   bt-audit-mismatch        audit.json says a receipt does not recompute; bt-audit-stale: the hourly audit has not run for > 3 h
  *   bt-keeper-balance-low    the keeper's data key holds < 0.1 SOL (it pays the crank fees and refills the other operations wallets,
  *                            ops/topUp.ts); the text says how much to send
- *   bt-cap-binding           a burn pool holds more than the 25 SOL pre-audit cap: the excess is queued, not spent
+ *   (bt-cap-binding, "a burn pool holds more than the pre-audit cap", was removed with the burn-pool cap: owner decision 2026-10-25)
  *   bt-keeper-stale          no cycle recorded for > 10 min while not paused (the keeper is down or wedged)
  *   bt-twap-empty            (raised by the keeper, twapEmpty.ts) a burn waits because the coin's pool has never traded: no price history
  *                            for the TWAP guard until its first swap; once per coin per 6 h
@@ -188,9 +187,9 @@ export function evaluateAlerts(s: BurntickerSnapshot): BurntickerAlert[] {
   // The public audit.
   if (s.audit && !s.audit.ok) out.push({ kind: "bt-audit-mismatch", key: `bt-audit-mismatch:${s.audit.ranAt}`, text: `Burnticker AUDIT MISMATCH (${s.audit.ranAt}): ${s.audit.mismatches.length} ${s.audit.mismatches.length === 1 ? "receipt does" : "receipts do"} not recompute — ${s.audit.mismatches.slice(0, 3).map((m) => `$${m.ticker} ${m.eventId}: ${m.checks[0]}`).join(" | ")}`, meta: { mismatches: s.audit.mismatches.length } });
   if (live.length && (!s.audit || s.now - Date.parse(s.audit.ranAt) > AUDIT_STALE_MS)) out.push({ kind: "bt-audit-stale", key: `bt-audit-stale:${day}`, text: `Burnticker audit ${s.audit ? `last ran ${Math.round((s.now - Date.parse(s.audit.ranAt)) / 3_600_000)} h ago` : "has never run"} — the hourly mct-burnticker-audit.timer is not running`, meta: null });
-  // The keeper's key and the pre-audit cap.
+  // The keeper's key.
   if (s.balances?.keeperLamports !== null && s.balances?.keeperLamports !== undefined && s.balances.keeperLamports < KEEPER_MIN_LAMPORTS) out.push({ kind: "bt-keeper-balance-low", key: `bt-keeper-balance-low:${day}`, text: `Burnticker keeper key holds ${solStr(s.balances.keeperLamports)} SOL (< 0.1). Send about ${lamportsToSol(signerSendLamports(s.balances.keeperLamports)).replace(/0+$/, "").replace(/\.$/, "")} SOL to it. It pays the burn fees and refills the other operations wallets, and refills none of them until it is above its floor.`, meta: { lamports: s.balances.keeperLamports.toString(), sendLamports: signerSendLamports(s.balances.keeperLamports).toString() } });
-  for (const t of live) if (t.mode === "buyback" && solOf(t.queuedSol) > 0) out.push({ kind: "bt-cap-binding", key: `bt-cap-binding:${t.mint}:${day}`, text: `Burnticker $${t.ticker}: ${t.queuedSol} SOL above the ${PRE_AUDIT_POOL_CAP_SOL} SOL pre-audit cap is queued (pool ${t.feePdaSol ?? "?"} SOL), spent once the cap rises or ends`, meta: { mint: t.mint, queuedSol: t.queuedSol } });
+  // (no burn-pool cap since the owner decision of 2026-10-25, so there is nothing queued above one to alert on)
   // The keeper itself.
   if (live.length && !s.paused && s.lastCycle && s.now - s.lastCycle.at > KEEPER_STALE_MS) out.push({ kind: "bt-keeper-stale", key: `bt-keeper-stale:${day}T${String(denverHour(s.now)).padStart(2, "0")}`, text: `Burnticker keeper: no cycle for ${Math.round((s.now - s.lastCycle.at) / 60_000)} min — mct-burnticker-keeper is down or wedged`, meta: null });
   // The daily line.

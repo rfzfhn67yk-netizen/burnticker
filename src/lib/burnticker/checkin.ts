@@ -98,9 +98,8 @@ export function burntickerCheckinLines(i: CheckinInput): string[] {
   const failed = live.flatMap((t) => t.pending.filter((p) => p.lastError).map((p) => ({ t, p })));
   const pending = live.reduce((a, t) => a + t.pending.length, 0);
   out.push(`- cranks: ${pending} pending · ${failed.length} failing${failed.length ? ` — ${failed.slice(0, 4).map(({ t, p }) => `$${t.ticker} ${p.eventId} ×${Math.max(p.attempts, s.crankStreaks[`${t.mint}:${p.eventId}`] ?? 0)} (${(p.lastError ?? "").slice(0, 60)})`).join("; ")}` : ""}`);
-  const queued = live.filter((t) => t.mode === "buyback" && Number(t.queuedSol ?? 0) > 0);
   const pools = live.reduce((a, t) => a + (Number(t.feePdaSol ?? 0) || 0), 0);
-  out.push(`- pools: ${pools.toFixed(3)} SOL across ${live.length} fee PDA(s) · queued above the pre-audit cap: ${queued.length ? queued.map((t) => `$${t.ticker} ${t.queuedSol} SOL`).join(", ") : "none"}${live.some((t) => t.feePdaSol === null) ? " · (some pools unpublished: keeper has not written status.json yet)" : ""}`);
+  out.push(`- pools: ${pools.toFixed(3)} SOL across ${live.length} fee PDA(s)${live.some((t) => t.feePdaSol === null) ? " · (some pools unpublished: keeper has not written status.json yet)" : ""}`);
   const att = attesterStatusLine(i.firstLaunchAt);
   out.push(`- attesters: ${live.length ? live.map((t) => `$${t.ticker} ${t.attesters.active} active (${t.attesters.independent} independent) quorum 1`).join(", ") : "no live token"} · ${att.line}${att.dueBy ? ` (owner check: a second attester was due by ${att.dueBy})` : ""}`);
   out.push(`- audit badge: ${s.audit ? `${s.audit.ok ? "OK — every recorded receipt recomputes" : `${s.audit.mismatches.length} MISMATCH(ES)`} · ${s.audit.receipts} receipt(s)${typeof (s.audit as { executed?: number }).executed === "number" ? `, ${(s.audit as { executed?: number }).executed} executed on chain` : ""} · ${s.audit.chainChecked ? "source + chain" : "source only"} · ran ${ago(now, Date.parse(s.audit.ranAt))}` : "not run yet (mct-burnticker-audit.timer writes audit.json hourly)"}`);

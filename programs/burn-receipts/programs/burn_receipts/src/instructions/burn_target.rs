@@ -3,7 +3,7 @@
 //! A coin may name a burn target at creation: an existing plain SPL token (WIF, BONK, ...), its Pyth price feed, and ONE pool of it against
 //! WSOL — a Raydium CPMM pool or a Raydium AMM v4 pool (swap-only). The coin's burn pool (its fee SOL) is then spent on the target instead
 //! of on itself: each crank swaps SOL for the target on the PINNED pool and burns everything it received from the fee PDA's own token
-//! account for the target, in the same instruction, with a memo naming the target mint. The rule, the share, the platform cap, the slices,
+//! account for the target, in the same instruction, with a memo naming the target mint. The rule, the share, the carried spend,
 //! pair forwarding and end sinks are SOL-level and unchanged.
 //!
 //!   pin_burn_target     MINT-SIGNED, once, and only while the coin's mint account does not exist yet (before LaunchLab or pair_curve
@@ -14,10 +14,10 @@
 //!                       rule's deviation of the Pyth target/SOL ratio NOW (so a wrong feed cannot be pinned). The pool's LP need not be
 //!                       locked (it is not ours). Sets TokenConfig.burn_target_kind = EXTERNAL (the byte that was `reserved`).
 //!   crank_target_burn   PERMISSIONLESS, the target coin's crank (crank_buyback refuses a target coin). The same spend as
-//!                       crank_buyback (rule, carried spend, platform cap). The price guard is PYTH for both pool kinds: the pool's spot
+//!                       crank_buyback (rule, carried spend; no platform cap since 2026-10-25). The price guard is PYTH for both pool kinds: the pool's spot
 //!                       must be within the rule's deviation of the Pyth ratio (two-sided), and the minimum output is the larger of the
-//!                       spot and Pyth quotes less fee and slippage; a CPMM pool's own TWAP is checked as well. At most 2 % of the
-//!                       pinned pool's SOL reserve per crank; post-CPI integrity checks. A pool that is gone, disabled, changed, above
+//!                       spot and Pyth quotes less fee and slippage; a CPMM pool's own TWAP is checked as well. The whole spend in one crank
+//!                       (the 2 % per-crank bound was removed on 2026-10-25); post-CPI integrity checks. A pool that is gone, disabled, changed, above
 //!                       the fee bound or under the floor, a stale or wide Pyth price, or a pool price away from Pyth refuses the crank
 //!                       (the SOL is held, not lost); once the reading is 30 days old it is processed below-floor with its whole spend
 //!                       carried, so the queue never wedges.
@@ -34,10 +34,10 @@ use crate::amm_v4::{self, AmmV4SwapAccounts, AmmV4View, AMM_STATUS_SWAP_ONLY};
 use crate::constants::*;
 use crate::cpmm::{self, AmmConfigView, PoolView, SwapAccounts};
 use crate::error::BurnError;
-use crate::events::{BurnPoolCapBound, BurnTargetPinned, ReadingProcessed, SpendCapBound, SpendCarried, TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned};
+use crate::events::{BurnTargetPinned, ReadingProcessed, SpendCarried, TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned};
 use crate::guards::{require_fee_pda_intact, require_fee_token_account_intact};
-use crate::instructions::crank_buyback::{CARRY_REASON_BELOW_FLOOR, CARRY_REASON_POOL_UNTRADEABLE, CARRY_REASON_RESERVE_CAP};
-use crate::instructions::crank_common::{active_cap, crankers_in_force, memo_head, require_fixed_supply, require_next_in_line};
+use crate::instructions::crank_buyback::{CARRY_REASON_BELOW_FLOOR, CARRY_REASON_POOL_UNTRADEABLE};
+use crate::instructions::crank_common::{memo_head, require_fixed_supply, require_next_in_line};
 use crate::math;
 use crate::memo;
 use crate::pyth;
@@ -323,7 +323,7 @@ pub struct CrankTargetBurn<'info> {
     pub config: Box<Account<'info, TokenConfig>>,
     #[account(mut, seeds = [READING_SEED, config.key().as_ref(), &record_date.to_le_bytes()], bump = reading.bump)]
     pub reading: Box<Account<'info, Reading>>,
-    /// CHECK: the platform PDA (seeds-checked); its cap and cranker allowlist apply exactly as in crank_buyback.
+    /// CHECK: the platform PDA (seeds-checked); unused since the cap and the cranker allowlist were removed (2026-10-25).
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
     #[account(mut, seeds = [BURN_TARGET_SEED, config.mint.as_ref()], bump = burn_target.bump)]
@@ -517,21 +517,13 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
     let wsol_balance = ctx.accounts.fee_wsol.to_account_info().lamports().checked_sub(wsol_reserve).ok_or(BurnError::MathOverflow)?;
     let wsol_unsynced = wsol_balance != ctx.accounts.fee_wsol.amount;
 
-    // ----- the rule: identical to crank_buyback -----
-    let crankers = crankers_in_force(&ctx.accounts.platform.to_account_info(), now)?;
-    require!(crankers.is_empty() || crankers.contains(&ctx.accounts.cranker.key()), BurnError::CrankerNotAllowed);
+    // ----- the rule: identical to crank_buyback (owner decision 2026-10-25: no platform cap, no cranker allowlist) -----
     let pool_actual = math::spendable_pool(ctx.accounts.fee_vault.lamports(), rule.reserve_lamports, wsol_balance).map_err(|_| BurnError::MathOverflow)?;
-    let cap = active_cap(&ctx.accounts.platform.to_account_info(), now)?;
-    let pool_before = match cap {
-        Some(c) if pool_actual > c => c,
-        _ => pool_actual,
-    };
-    let cap_bound = pool_before < pool_actual;
+    let pool_before = pool_actual;
     let rule_spend = math::buyback_spend(pool_before, units, rule.fraction_per_unit_bps).map_err(|_| BurnError::MathOverflow)?;
     let carried_in = ctx.accounts.config.carried_spend_lamports;
     let target = rule_spend.saturating_add(carried_in).min(pool_actual);
     let targets_before = ctx.accounts.target_tokens.amount;
-    let mut reserve_cap = 0u64;
     let mut carry_reason = CARRY_REASON_BELOW_FLOOR;
     let mut reference_x32 = 0u128;
     let reading_age = now.saturating_sub(ctx.accounts.reading.submitted_at);
@@ -565,9 +557,8 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
         None => (0u64, 0u64, OUTCOME_BELOW_FLOOR, String::from("none"), target),
         Some(q) => {
             reference_x32 = q.reference;
-            // The per-crank cap is 2 % of the pinned pool's SOL reserve (after the platform cap's sunset this is the only bound).
-            reserve_cap = math::reserve_spend_cap(q.r_wsol, MAX_SPEND_RESERVE_BPS);
-            let spend = target.min(reserve_cap).min(pool_before);
+            // Owner decision 2026-10-25: the whole target is spent in this crank (the 2 %-of-reserve per-crank bound is removed).
+            let spend = target;
             // min-out: the larger of the spot and the PYTH quotes (and, CPMM, the TWAP quote), each less the fee and slippage_bps.
             // Second review (C): a quote that cannot be computed (an overflow on extreme reserves or reference) is a hold as well.
             let quotes = if spend == 0 || spend < rule.floor_lamports {
@@ -675,8 +666,7 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
                 let got = ctx.accounts.target_tokens.amount.checked_sub(targets_before).ok_or(BurnError::MathOverflow)?;
                 require!(got >= min_out, BurnError::ZeroOutput);
                 require!(target_vault_before.checked_sub(spl_amount(&ctx.accounts.target_vault)?) == Some(got), BurnError::SwapOutputMismatch);
-                carry_reason = CARRY_REASON_RESERVE_CAP;
-                (spend, got, OUTCOME_BURNED, memo::swap_ref(&pool_key), target - spend)
+                (spend, got, OUTCOME_BURNED, memo::swap_ref(&pool_key), 0)
                 }
             }
         }
@@ -766,12 +756,6 @@ pub fn handle_crank_target_burn(ctx: Context<CrankTargetBurn>, _record_date: u32
 
     if spent == 0 && carried_out > 0 {
         emit_cpi!(SpendCarried { config: config_key, record_date, target_lamports: target, carried_in_lamports: carried_in, carried_out_lamports: carried_out, reason: carry_reason });
-    }
-    if spent > 0 && spent < target {
-        emit_cpi!(SpendCapBound { config: config_key, record_date, target_lamports: target, spent_lamports: spent, reserve_cap_lamports: reserve_cap, carried_out_lamports: carried_out });
-    }
-    if cap_bound {
-        emit_cpi!(BurnPoolCapBound { config: config_key, record_date, pool_actual_lamports: pool_actual, cap_lamports: cap.unwrap_or(0), spent_lamports: spent });
     }
     match pair_gate {
         crate::instructions::pair::PairGate::ResultMissing => emit_cpi!(crate::events::PairResultMissing { mint: mint_key, record_date }),
@@ -927,7 +911,7 @@ pub fn handle_apply_target_pool(ctx: Context<ApplyTargetPool>) -> Result<()> {
 // release_target (round-5 review R5-6: the liveness escape for a target whose pool or feed is dead)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/// PERMISSIONLESS (the cranker allowlist applies while the pre-audit cap is in force). A target coin whose pinned pool or Pyth feed
+/// PERMISSIONLESS. A target coin whose pinned pool or Pyth feed
 /// stopped working only carries its spend: each reading is held, processed after 30 days with its whole spend carried, and the carry is
 /// re-offered to the next reading, which holds again. A re-pin needs an active admin and any one attester can veto it. This moves the
 /// CARRIED spend (only that: never more than the rule already owed) to the flagship's fee PDA, where $DEFICIT's own cranks burn it:
@@ -935,14 +919,14 @@ pub fn handle_apply_target_pool(ctx: Context<ApplyTargetPool>) -> Result<()> {
 ///   · the last event of the target is a 30-day unblock (BurnTarget.last_unblocked_at > last_burn_at) and 30 days have passed since the
 ///     last target burn (or the pin): a target that burned since is not stalled (TargetNotStalled);
 ///   · the flagship is live (verified pool, rule not ended, buyback).
-/// Amount = min(carried_spend_lamports, SOL above the reserve + synced WSOL, the burn-pool cap); SOL first, then WSOL into the
+/// Amount = min(carried_spend_lamports, SOL above the reserve + synced WSOL); SOL first, then WSOL into the
 /// flagship fee PDA's WSOL account. carried_spend_lamports drops by the amount. Memo `<PREFIX>|release|to=<12>|lamports=N|left=N|v1`,
 /// event TargetReleased. No attester or admin takes part, so neither can block it. Callable again while the conditions hold.
 #[event_cpi]
 #[derive(Accounts)]
 pub struct ReleaseTarget<'info> {
     pub cranker: Signer<'info>,
-    /// CHECK: the platform PDA (seeds-checked) — its cap and cranker allowlist.
+    /// CHECK: the platform PDA (seeds-checked); unused since the cap and the cranker allowlist were removed (2026-10-25).
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
     #[account(mut, seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
@@ -1016,8 +1000,6 @@ pub fn handle_release_target(ctx: Context<ReleaseTarget>) -> Result<()> {
     require!(c.burns_target(), BurnError::NoBurnTarget);
     require!(crate::instructions::crank_carried::queue_empty(c), BurnError::ReadingPending);
     require!(c.carried_spend_lamports > 0 && target_stalled(&a.burn_target, now), BurnError::TargetNotStalled);
-    let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
-    require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     require!(BURNTICKER_FLAGSHIP != Pubkey::default(), BurnError::FlagshipNotPinned);
     require!(crate::instructions::end::live(&a.flagship_config), BurnError::FlagshipNotLive);
 
@@ -1033,10 +1015,7 @@ pub fn handle_release_target(ctx: Context<ReleaseTarget>) -> Result<()> {
     }
     let sol_avail = a.fee_vault.lamports().saturating_sub(reserve);
     let pool_actual = sol_avail.checked_add(wsol_avail).ok_or(BurnError::MathOverflow)?;
-    let mut amount = carried_in.min(pool_actual);
-    if let Some(cap) = active_cap(&a.platform.to_account_info(), now)? {
-        amount = amount.min(cap);
-    }
+    let amount = carried_in.min(pool_actual);
     require!(amount > 0, BurnError::NothingToForward);
     let sol_part = amount.min(sol_avail);
     let wsol_part = amount - sol_part;

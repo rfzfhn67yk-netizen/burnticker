@@ -1,3 +1,10 @@
+> **RETIRED (owner decision 2026-10-25).** The burn-pool cap was removed from the burn_receipts program, together with the per-run
+> 2 % bound and the cranker allowlist. There is no burn-pool cap and no limit on how much one burn spends: each burn spends the
+> rule's full share of the burn pool in one run. The platform authority no longer holds a cap-raise power. The program refuses every
+> cap raise (`propose_cap_raise`, `cancel_cap_raise` and `apply_cap_raise` always refuse with `CapRemoved`), and
+> `scripts/burnreceipts-cap.mts` now refuses too. Nothing on this page can be run any more. The page is kept below unchanged as the
+> history of the 2026-10-12 raise plan.
+
 # Raising the burn-pool cap
 
 The owner decided on 2026-10-12 to raise the burn-pool cap from 25 SOL to 1,000 SOL. This page says what the cap is, how the raise

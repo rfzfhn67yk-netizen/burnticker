@@ -343,45 +343,60 @@ fn cranking_token(env: &mut Env) -> (Pubkey, Pool) {
     (mint, pool)
 }
 
-/// R3-4: the allowlist stops applying 90 days after initialize_platform even though the cap (sunset 200 days out) is still in force.
+/// R3-4 (allowlist removed 2026-10-25): a cranker list passed to initialize_platform is not stored and never applies — an outsider
+/// cranks at once, well inside the old 90-day window.
 #[test]
-fn r3_4_a_cranker_allowlist_expires_ninety_days_after_platform_init() {
+fn r3_4_a_a_cranker_list_at_platform_init_is_ignored() {
     let mut env = Env::new();
     let (payer, ua) = (env.payer.pubkey(), env.upgrade_authority.insecure_clone());
     let (pa, keeper, outsider) = (Keypair::new(), Keypair::new(), Keypair::new());
     env.fund(&outsider.pubkey(), SOL);
-    let created = env.now();
-    env.ok(&[ix_initialize_platform_with(&payer, &ua.pubkey(), &pa.pubkey(), DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 200 * 86_400, vec![keeper.pubkey()])], &[&ua]);
+    env.ok(&[ix_initialize_platform_with(&payer, &ua.pubkey(), &pa.pubkey(), LEGACY_CAP_ARG, NOW + 200 * 86_400, vec![keeper.pubkey()])], &[&ua]);
+    let p = PlatformConfig::try_deserialize(&mut env.svm.get_account(&platform_pda()).unwrap().data.as_slice()).unwrap();
+    assert_eq!((p.cranker_count, p.crankers), (0, [Pubkey::default(); PLATFORM_CRANKER_SLOTS]));
     let (mint, pool) = cranking_token(&mut env);
-    let crank = cpmm::ix_crank_buyback(&outsider.pubkey(), &mint, &pool, D2);
-    expect_anchor_err(env.send(std::slice::from_ref(&crank), &[&outsider]), "CrankerNotAllowed");
-    env.set_time(created + CRANKER_ALLOWLIST_MAX_SECS - 1);
-    expect_anchor_err(env.send(std::slice::from_ref(&crank), &[&outsider]), "CrankerNotAllowed");
-    env.set_time(created + CRANKER_ALLOWLIST_MAX_SECS);
-    env.ok(std::slice::from_ref(&crank), &[&outsider]);
+    env.ok(&[cpmm::ix_crank_buyback(&outsider.pubkey(), &mint, &pool, D2)], &[&outsider]);
     assert_eq!(env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap().outcome, OUTCOME_BURNED);
 }
 
-/// R3-4: any allowlisted key can clear the list — including after the platform authority renounced, so lost keys plus a renounced
-/// authority no longer pin cranking to the list; an outsider never can.
+/// R3-4 (allowlist removed 2026-10-25): a PlatformConfig written by the old program WITH a stored list (the mainnet layout) still
+/// deserialises; the list never applies (an outsider cranks); a listed key or the authority can still clear the stored bytes.
 #[test]
-fn r3_4_b_an_allowlisted_key_can_clear_the_list() {
+fn r3_4_b_a_legacy_stored_list_never_applies_and_can_still_be_cleared() {
     let mut env = Env::new();
     let (payer, ua) = (env.payer.pubkey(), env.upgrade_authority.insecure_clone());
     let (pa, keeper, lost, outsider) = (Keypair::new(), Keypair::new(), Keypair::new(), Keypair::new());
     env.fund(&pa.pubkey(), SOL);
     env.fund(&outsider.pubkey(), SOL);
-    env.ok(&[ix_initialize_platform_with(&payer, &ua.pubkey(), &pa.pubkey(), DEFAULT_BURN_POOL_CAP_LAMPORTS, NOW + 200 * 86_400, vec![lost.pubkey(), keeper.pubkey()])], &[&ua]);
-    expect_anchor_err(env.send(&[ix_clear(&outsider.pubkey())], &[&outsider]), "NotAdmin");
-    env.ok(&[ix_platform("renounce", &pa.pubkey(), 0)], &[&pa]);
-    expect_anchor_err(env.send(&[ix_clear(&outsider.pubkey())], &[&outsider]), "AdminRenounced");
-    let meta = env.ok(&[ix_clear(&keeper.pubkey())], &[&keeper]);
-    let ev = find_event::<CrankerAllowlistCleared>(&meta).unwrap();
-    assert_eq!(ev.cleared_by, keeper.pubkey());
-    let p = PlatformConfig::try_deserialize(&mut env.svm.get_account(&platform_pda()).unwrap().data.as_slice()).unwrap();
-    assert_eq!((p.cranker_count, p.crankers), (0, [Pubkey::default(); MAX_CRANKERS]));
-    // cleared means cleared: the former key is an outsider now
-    expect_anchor_err(env.send(&[ix_clear(&keeper.pubkey())], &[&keeper]), "AdminRenounced");
+    env.ok(&[ix_initialize_platform_with(&payer, &ua.pubkey(), &pa.pubkey(), LEGACY_CAP_ARG, NOW + 200 * 86_400, vec![])], &[&ua]);
+    // Write the old program's state into the account: a 25 SOL cap, a pending raise and two listed crankers.
+    let key = platform_pda();
+    let mut acc = env.svm.get_account(&key).unwrap();
+    let mut p = PlatformConfig::try_deserialize(&mut acc.data.as_slice()).unwrap();
+    p.burn_pool_cap_lamports = LEGACY_CAP_ARG;
+    p.pending_cap_lamports = 1_000 * SOL;
+    p.pending_cap_eta = NOW + 2 * 86_400;
+    p.crankers[0] = lost.pubkey();
+    p.crankers[1] = keeper.pubkey();
+    p.cranker_count = 2;
+    let mut data = Vec::new();
+    anchor_lang::AccountSerialize::try_serialize(&p, &mut data).unwrap();
+    assert_eq!(data.len(), acc.data.len(), "the layout is unchanged");
+    acc.data.copy_from_slice(&data);
+    env.svm.set_account(key, acc).unwrap();
+    // The stored list never applies and the stored cap never binds: an outsider cranks the whole pool.
     let (mint, pool) = cranking_token(&mut env);
     env.ok(&[cpmm::ix_crank_buyback(&outsider.pubkey(), &mint, &pool, D2)], &[&outsider]);
+    let r = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
+    assert_eq!((r.outcome, r.pool_lamports), (OUTCOME_BURNED, r.pool_actual_lamports));
+    // The pending raise can never be applied.
+    env.set_time(NOW + 3 * 86_400);
+    expect_anchor_err(env.send(&[ix_apply_cap(&payer)], &[]), "CapRemoved");
+    // Clearing still works for a listed key (an outsider cannot); the authority renounced first.
+    expect_anchor_err(env.send(&[ix_clear(&outsider.pubkey())], &[&outsider]), "NotAdmin");
+    env.ok(&[ix_platform("renounce", &pa.pubkey(), 0)], &[&pa]);
+    let meta = env.ok(&[ix_clear(&keeper.pubkey())], &[&keeper]);
+    assert_eq!(find_event::<CrankerAllowlistCleared>(&meta).unwrap().cleared_by, keeper.pubkey());
+    let p = PlatformConfig::try_deserialize(&mut env.svm.get_account(&platform_pda()).unwrap().data.as_slice()).unwrap();
+    assert_eq!((p.cranker_count, p.crankers), (0, [Pubkey::default(); PLATFORM_CRANKER_SLOTS]));
 }

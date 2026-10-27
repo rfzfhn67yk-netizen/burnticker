@@ -27,7 +27,7 @@ Coin vs Coin: each side may choose "Burn the real BONK" (per side). $TEAMBONK th
 | `CarriedPace` `["carried_pace", mint]` (round-5 review R5-8) | Not a target-coin account (crank_carried refuses target coins), listed here because it is round 5's other new account. 94 bytes: Anchor discriminator (8) · `version` u8 @8 (1; any other refused, `InvalidCarriedPace`) · `bump` u8 @9 · `mint` @10 · `last_carried_at` i64 @42 · `pieces` u32 @50 · `spent_lamports` u64 @54 · `budget_lamports` u64 @62 (the carried budget left after the last piece) · `reserved` [u8; 24] @70. Created by a coin's first `crank_carried` (the cranker pays the rent; an address someone pre-funded is topped up and taken over). The budget now = min(cap, `budget_lamports` + cap × min(now − `last_carried_at`, 600) / 600), cap = the per-crank cap now (2 % of the pool's WSOL reserve); a coin with no pace has a full cap. A piece above the budget, or a second piece in the same second, is refused (`CarriedTooSoon`): a dust piece takes only a dust budget. Read and written at those fixed offsets (state.rs, crank_carried.rs); the TS decoder is `accounts.ts decodeCarriedPace`. TokenConfig is untouched: it has no spare bytes left. |
 | `BurnTarget` `["burn_target", mint]` | `target_mint`, `target_decimals`, `target_feed_id` (immutable), `pool_kind` (0 CPMM / 1 AMM v4), the pinned `pool`, `amm_config` (CPMM AmmConfig / AMM v4 vault authority), both vaults, `observation` (CPMM observation / the AMM v4 pool itself), orientation, totals, a pending re-pin. |
 | `pin_burn_target(target_feed_id)` | Signed by the coin's MINT keypair, once, only while the mint account does not exist, buyback mode, no readings / burns / verified pool. Admission below, the Pyth check, records what it read. Launch order (launchBundle.ts launchTransactions): on LaunchLab, [initialize_token, pin_burn_target] as v0 against the lookup table (at most about 1,020 B), then the LaunchLab create in the next transaction (init + pin + create is over 1,232 B; a coin that burns itself is split the same way since 2026-10-15, [initialize_token] then the create); on the pair curve, the side's one transaction runs initialize_token, the pin, then the mint creation. |
-| `crank_target_burn(record_date)` | Permissionless. The same spend as `crank_buyback`; the Pyth guard; at most 2 % of the pinned pool's SOL reserve; the swap (CPMM `swap_base_input` / AMM v4 `swap_base_in_v2`); post-CPI integrity of the fee PDA and its three token accounts; burns the target, then the coin's own fee tokens; memo v3. |
+| `crank_target_burn(record_date)` | Permissionless. The same spend as `crank_buyback`; the Pyth guard; the whole spend in one run (no per-crank bound since 2026-10-25); the swap (CPMM `swap_base_input` / AMM v4 `swap_base_in_v2`); post-CPI integrity of the fee PDA and its three token accounts; burns the target, then the coin's own fee tokens; memo v3. |
 | `release_target` (round-5 review R5-6) | Permissionless. A stalled target coin (last target event a 30-day unblock, no burn since, 30 days since its last burn or pin, no reading waiting) moves its carried spend, and only that, to the flagship's fee PDA. |
 | `propose_target_pool` / `cancel_target_pool` (admin), `veto_target_pool` (any attester), `apply_target_pool` (anyone) | Re-pin the POOL (either kind) for the same token and feed: 48 h, until 14 days after the proposal, the same admission and Pyth check. |
 | `crank_buyback` | One added check: `burn_target_kind == SELF` (else `BurnTargetSet`). |
@@ -63,8 +63,10 @@ leaves the fee PDA; after the push back the same Pyth price burns at the market.
 
 ### The cap
 
-At most **2 % of the pinned pool's SOL reserve** per crank (`MAX_SPEND_RESERVE_BPS`); the rest is carried. After the platform cap's sunset
-this is the only bound: tested on a 5,000 SOL AMM v4 pool (100 SOL per crank), with a pushed pool refused at that size.
+**Removed (owner decision 2026-10-25).** There is no burn-pool cap and no per-crank bound: one `crank_target_burn` spends the rule's
+full share on the pinned pool in one run. Before that decision it was at most 2 % of the pinned pool's SOL reserve per crank
+(`MAX_SPEND_RESERVE_BPS`, tested on a 5,000 SOL AMM v4 pool at 100 SOL per crank). The Pyth guard, the minimum output (which prices
+the full trade's impact) and the post-CPI checks still apply.
 
 ### Held, never lost
 
@@ -175,8 +177,8 @@ unchanged, 373 bytes; no BurnTarget exists on chain yet). New errors: `Initializ
 
 ### Still open from the review
 
-R5-8 and R5-9 are fixed in round 5 (owner, 2026-10-15; the two checklist errata of 2026-10-15): `crank_carried` spends from a per-coin
-carried budget, one per-crank cap per 600 seconds up to one cap, one piece per second (the `CarriedPace` account, a separate account
+R5-8 and R5-9 are fixed in round 5 (owner, 2026-10-15; the two checklist errata of 2026-10-15): `crank_carried` spent from a per-coin
+carried budget, one per-crank cap per 600 seconds up to one cap (removed with the per-crank bound by the owner decision of 2026-10-25), one piece per second (the `CarriedPace` account, a separate account
 because TokenConfig has no spare bytes after `burn_target_kind`; pieces counted apart from `burns`), and a target coin whose BurnTarget is
 pinned and not stalled (no 30-day unblock since its last target burn) is live for pair forwarding and as a named end sink before its own
 pool is verified. Still open: R5-11 (rehearse `burn_sol_on_end`'s close and re-create of the WSOL account against the real Token program),

@@ -1,29 +1,32 @@
 import crypto from "node:crypto";
 import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
-import { CAP_TIMELOCK_SECS, DEFAULT_BURN_POOL_CAP_LAMPORTS, DEFAULT_CAP_SUNSET_TS, MAX_CRANKERS } from "@/lib/burnReceipts/constants";
+import { DEFAULT_CAP_SUNSET_TS, MAX_CAP_SUNSET_SECS, PLATFORM_CRANKER_SLOTS } from "@/lib/burnReceipts/constants";
 import type { PlatformConfigAccount } from "@/lib/burnReceipts/accounts";
-import { initializePlatformIx, proposeCapRaiseIx } from "@/lib/burnReceipts/instructions";
 
 /**
- * THE BURN-POOL CAP RAISE through the Squads v4 vault (owner, 2026-10-12: 25 SOL → 1,000 SOL). Pure helpers for
- * scripts/burnreceipts-cap.mts and its tests: the program's own limits as client-side refusals, the vault's inner message in the
- * Squads v4 `TransactionMessage` layout (the same bytes scripts/squads-program-upgrade.mts writes by hand for one instruction), and
- * the two Squads instructions' data.
+ * THE BURN-POOL CAP RAISE IS RETIRED (owner decision 2026-10-25). The program no longer has a burn-pool cap: propose_cap_raise,
+ * cancel_cap_raise and apply_cap_raise keep their entry points but always refuse with CapRemoved (6144). scripts/burnreceipts-cap.mts is
+ * a refusing stub so an old runbook fails loudly.
  *
- * Who pays the PlatformConfig rent: the VAULT. Inside a vault transaction the only signers are the vault PDA (Squads signs for it with
- * invoke_signed at execution) and ephemeral PDAs; a member's key is not part of the inner message, so it cannot be initialize_platform's
- * `payer`. The vault is a system-owned account with no data, so it can fund the account from its own SOL balance. The member pays the
- * Squads transaction and proposal rent and the fee of each outer transaction.
+ * What stays here: the Squads v4 vault-message helpers (the `TransactionMessage` layout scripts/squads-program-upgrade.mts writes by hand
+ * for one instruction, and the two Squads instructions' data), initialize_platform's remaining client-side check (the sunset window; the
+ * cap and crankers arguments are ignored by the program and stored as 0 / empty), and a readable PlatformConfig for operators.
  */
 
 export const SQUADS_V4_PROGRAM_ID = new PublicKey("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf");
-/** 8-byte Anchor discriminator + PlatformConfig::INIT_SPACE (u8 u8 pubkey u64 i64 u64 i64 i64 [pubkey;3] u8 [u8;64]). */
-export const PLATFORM_CONFIG_SPACE = 8 + 1 + 1 + 32 + 8 * 5 + 32 * MAX_CRANKERS + 1 + 64;
-export const MAX_CAP_SUNSET_SECS = 365 * 24 * 60 * 60;
+/** 8-byte Anchor discriminator + PlatformConfig::INIT_SPACE (u8 u8 pubkey u64 i64 u64 i64 i64 [pubkey;3] u8 [u8;64]); layout unchanged. */
+export const PLATFORM_CONFIG_SPACE = 8 + 1 + 1 + 32 + 8 * 5 + 32 * PLATFORM_CRANKER_SLOTS + 1 + 64;
+export { MAX_CAP_SUNSET_SECS };
 export const LAMPORTS_PER_SOL_BIG = BigInt(1_000_000_000);
+/** The program's CapRemoved error (6144), appended 2026-10-25. */
+export const CAP_REMOVED_CODE = 6144;
+/** The refusal every retired cap command prints (operator text, not public copy). */
+export const CAP_REMOVED_MESSAGE = "the burn-pool cap was removed by owner decision 2026-10-25: there is no cap to raise, cancel or apply, and every crank is permissionless. The program refuses propose_cap_raise, cancel_cap_raise and apply_cap_raise with CapRemoved (6144).";
 
 export class CapRefusal extends Error {}
 function refuse(s: string): never { throw new CapRefusal(s); }
+/** Every retired cap-raise path ends here. */
+export function refuseCapRemoved(): never { refuse(CAP_REMOVED_MESSAGE); }
 
 /** "1000" / "1000.5" SOL → lamports, exactly (no float). */
 export function solToLamports(sol: string): bigint {
@@ -39,39 +42,14 @@ export function parseSunset(v: string): bigint {
   return BigInt(Math.floor(ms / 1000));
 }
 
-/** initialize_platform's own checks (platform.rs), so a proposal that would fail at execution is never created. */
-export function checkInitializePlatform(o: { capLamports: bigint; sunsetTs: bigint; nowTs: bigint; crankers: PublicKey[] }): void {
-  if (o.capLamports !== DEFAULT_BURN_POOL_CAP_LAMPORTS) refuse(`the initial cap must equal the program's default ${DEFAULT_BURN_POOL_CAP_LAMPORTS} lamports (25 SOL), not ${o.capLamports}; anything higher goes through propose_cap_raise`);
-  if (o.crankers.length > MAX_CRANKERS) refuse(`at most ${MAX_CRANKERS} crankers (got ${o.crankers.length}); none = anyone may crank`);
-  o.crankers.forEach((k, i) => {
-    if (k.equals(PublicKey.default)) refuse("a cranker cannot be the all-zero key");
-    if (o.crankers.slice(0, i).some((x) => x.equals(k))) refuse(`cranker ${k.toBase58()} is listed twice`);
-  });
+/**
+ * initialize_platform's remaining checks (platform.rs): the sunset is in the future, at most 365 days ahead and not after the hard-coded
+ * DEFAULT_CAP_SUNSET_TS. Since 2026-10-25 the program ignores the cap and crankers arguments (it stores 0 / empty), so they are not checked.
+ */
+export function checkInitializePlatform(o: { sunsetTs: bigint; nowTs: bigint }): void {
   if (o.sunsetTs <= o.nowTs) refuse(`the sunset ${isoUtc(o.sunsetTs)} is not in the future (chain time ${isoUtc(o.nowTs)})`);
   if (o.sunsetTs > o.nowTs + BigInt(MAX_CAP_SUNSET_SECS)) refuse(`the sunset ${isoUtc(o.sunsetTs)} is more than 365 days after chain time ${isoUtc(o.nowTs)}`);
   if (o.sunsetTs > BigInt(DEFAULT_CAP_SUNSET_TS)) refuse(`the sunset ${isoUtc(o.sunsetTs)} is after the program's hard-coded sunset ${isoUtc(BigInt(DEFAULT_CAP_SUNSET_TS))}`);
-}
-
-/** propose_cap_raise's checks against an existing PlatformConfig signed by `vault`. */
-export function checkProposeCapRaise(o: { platform: PlatformConfigAccount; vault: PublicKey; newCapLamports: bigint; replacePending: boolean }): void {
-  if (o.platform.authority.equals(PublicKey.default)) refuse("the platform authority is renounced: the cap can never be raised again");
-  if (!o.platform.authority.equals(o.vault)) refuse(`the platform authority is ${o.platform.authority.toBase58()}, not the vault ${o.vault.toBase58()}`);
-  if (o.newCapLamports <= o.platform.burn_pool_cap_lamports) refuse(`the new cap ${o.newCapLamports} must be above the current ${o.platform.burn_pool_cap_lamports} (the cap can only be raised)`);
-  if (o.platform.pending_cap_eta !== BigInt(0) && !o.replacePending) refuse(`a raise to ${o.platform.pending_cap_lamports} lamports is already pending (eta ${isoUtc(o.platform.pending_cap_eta)}); proposing again replaces it and restarts the 48 h — pass --replace-pending to do that`);
-}
-
-/** apply_cap_raise's checks (permissionless once the timelock has elapsed). */
-export function checkApplyCapRaise(platform: PlatformConfigAccount | null, nowTs: bigint): void {
-  if (!platform) refuse("no PlatformConfig: there is no pending raise (the default 25 SOL cap applies)");
-  if (platform.pending_cap_eta === BigInt(0)) refuse("no raise is pending");
-  if (nowTs < platform.pending_cap_eta) refuse(`the 48 h timelock has not elapsed: ${formatDuration(platform.pending_cap_eta - nowTs)} left (eta ${whenBoth(platform.pending_cap_eta)})`);
-  if (platform.pending_cap_lamports <= platform.burn_pool_cap_lamports) refuse("the pending cap is not above the current cap");
-}
-
-/** The vault transaction's inner instructions: initialize_platform (only when no PlatformConfig exists) then propose_cap_raise. */
-export function capRaiseInstructions(o: { programId: PublicKey; vault: PublicKey; platformExists: boolean; sunsetTs: bigint; crankers: PublicKey[]; newCapLamports: bigint }): TransactionInstruction[] {
-  const init = o.platformExists ? [] : [initializePlatformIx({ programId: o.programId, payer: o.vault, upgradeAuthority: o.vault, authority: o.vault, burnPoolCapLamports: DEFAULT_BURN_POOL_CAP_LAMPORTS, capSunsetTs: o.sunsetTs, crankers: o.crankers })];
-  return [...init, proposeCapRaiseIx({ programId: o.programId, authority: o.vault, newCapLamports: o.newCapLamports })];
 }
 
 export function vaultPda(multisig: PublicKey, vaultIndex = 0): PublicKey {
@@ -128,17 +106,6 @@ export function vaultTransactionCreateData(vaultIndex: number, message: Buffer, 
 /** proposal_create args: transaction_index u64, draft bool (false). */
 export const proposalCreateData = (index: bigint) => Buffer.concat([anchorDisc("proposal_create"), u64le(index), Buffer.from([0])]);
 
-/** Refusal for apply --send: every cluster needs the flag; mainnet also needs BURNKEEPER_MAINNET=1. */
-export function checkApplySend(o: { cluster: string; send: boolean; understood: boolean; mainnetEnv: string | undefined }): void {
-  if (!o.send) return;
-  if (!o.understood) refuse("--send also needs --i-understand-this-raises-the-cap");
-  if (o.cluster === "mainnet" && o.mainnetEnv !== "1") refuse("--send on mainnet also needs BURNKEEPER_MAINNET=1 in the environment");
-}
-/** Refusal for propose-vault --send: never on mainnet (the bytes are printed for the owner's own signing tool). */
-export function checkProposeSend(o: { cluster: string; send: boolean }): void {
-  if (o.send && o.cluster === "mainnet") refuse("propose-vault never sends on mainnet: take the printed bytes to the owner's signing tool");
-}
-
 export const isoUtc = (ts: bigint | number) => new Date(Number(ts) * 1000).toISOString().replace(".000Z", "Z");
 export function denver(ts: bigint | number): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZoneName: "short" }).format(new Date(Number(ts) * 1000));
@@ -151,22 +118,22 @@ export function formatDuration(secs: bigint): string {
 }
 export const solString = (lamports: bigint) => `${lamports / LAMPORTS_PER_SOL_BIG}${lamports % LAMPORTS_PER_SOL_BIG ? `.${(lamports % LAMPORTS_PER_SOL_BIG).toString().padStart(9, "0").replace(/0+$/, "")}` : ""} SOL`;
 
-/** A readable PlatformConfig for `show` and the dry runs. */
+/**
+ * A readable PlatformConfig. There is no cap since the owner decision of 2026-10-25: an account written before then still shows its old
+ * cap and crankers fields, which the program no longer reads; the sunset now only closes the registration-policy switch.
+ */
 export function describePlatform(p: PlatformConfigAccount | null, nowTs: bigint): Record<string, unknown> {
-  if (!p) return { platformConfig: "none", summary: `none: default 25 SOL cap until ${whenBoth(DEFAULT_CAP_SUNSET_TS)}`, capLamports: DEFAULT_BURN_POOL_CAP_LAMPORTS.toString(), sunset: whenBoth(DEFAULT_CAP_SUNSET_TS) };
+  const cap = "none: the burn-pool cap was removed (owner decision 2026-10-25); every crank is permissionless";
+  if (!p) return { platformConfig: "none", cap, sunset: whenBoth(DEFAULT_CAP_SUNSET_TS), summary: `none: no cap; the registration-policy switch closes ${whenBoth(DEFAULT_CAP_SUNSET_TS)}` };
   const sunsetPassed = nowTs >= p.cap_sunset_ts;
   return {
     platformConfig: "exists",
-    cap: `${solString(p.burn_pool_cap_lamports)} (${p.burn_pool_cap_lamports} lamports)${sunsetPassed ? " — sunset passed, no cap applies" : ""}`,
-    sunset: whenBoth(p.cap_sunset_ts),
-    pending: p.pending_cap_eta === BigInt(0) ? "none" : {
-      cap: `${solString(p.pending_cap_lamports)} (${p.pending_cap_lamports} lamports)`,
-      eta: whenBoth(p.pending_cap_eta),
-      appliable: nowTs >= p.pending_cap_eta ? "now (anyone may run apply)" : `in ${formatDuration(p.pending_cap_eta - nowTs)}`,
-    },
+    cap,
+    sunset: `${whenBoth(p.cap_sunset_ts)} (closes the registration-policy switch${sunsetPassed ? "; passed" : ""})`,
     authority: p.authority.equals(PublicKey.default) ? "renounced" : p.authority.toBase58(),
-    crankers: p.cranker_count === 0 ? "none (anyone may crank)" : p.crankers.slice(0, p.cranker_count).map((k) => k.toBase58()),
+    ...(p.burn_pool_cap_lamports !== BigInt(0) || p.cranker_count !== 0 || p.pending_cap_eta !== BigInt(0)
+      ? { legacyFields: { burnPoolCapLamports: p.burn_pool_cap_lamports.toString(), pendingCapLamports: p.pending_cap_lamports.toString(), pendingCapEta: p.pending_cap_eta.toString(), crankers: p.crankers.slice(0, p.cranker_count).map((k) => k.toBase58()), note: "written before 2026-10-25; the program no longer reads them" } }
+      : {}),
     createdAt: whenBoth(p.created_at),
-    timelockSecs: CAP_TIMELOCK_SECS,
   };
 }

@@ -270,26 +270,29 @@ describe("layout, navigation and sharing metadata (website brief §8)", () => {
 });
 
 describe("burn arithmetic (website brief §6)", () => {
-  test("simulateCrank reproduces the real 2026-10-06 devnet receipt: 23 units, rule spend 104,345,230, 2 % reserve cap → spent 20,132,384, carried 84,212,846", async () => {
-    const { simulateCrank, DEFAULT_CAP_LAMPORTS } = await import("@/lib/burnticker/burnMath");
+  test("simulateCrank on the real 2026-10-06 devnet receipt: 23 units, rule spend 104,345,230; since 2026-10-25 the whole spend in one run (the receipt, under the old 2 % bound, spent 20,132,384 and carried 84,212,846)", async () => {
+    const { simulateCrank } = await import("@/lib/burnticker/burnMath");
     const ev = (JSON.parse(fs.readFileSync("docs/burnkeeper/evidence/devnet-2026-10-10/burns.json", "utf8")) as { recordDate: string; prev: string; now: string; units: number; memo: string; partial: string }[]).find((r) => r.recordDate === "2026-10-06")!;
     const cents = (x: string) => BigInt(x.replace(".", ""));
     const pool = BigInt(/\|pool=(\d+)\|/.exec(ev.memo)![1]), spent = BigInt(/\|spent=(\d+)\|/.exec(ev.memo)![1]);
-    const o = simulateCrank({ prev: cents(ev.prev), now: cents(ev.now), carryIn: BigInt(0), unit: BigInt(100_000_000_000), carry: "consecutive", fractionBps: 100, poolLamports: pool, capLamports: DEFAULT_CAP_LAMPORTS, carriedInLamports: BigInt(0), floorLamports: BigInt(5_000_000), reserveSolLamports: BigInt(1_006_619_200) });
-    assert.equal(o.units, BigInt(ev.units)); assert.equal(o.ruleSpend, BigInt(104_345_230)); assert.equal(o.spend, spent); assert.equal(o.carriedOut, BigInt(84_212_846));
+    const o = simulateCrank({ prev: cents(ev.prev), now: cents(ev.now), carryIn: BigInt(0), unit: BigInt(100_000_000_000), carry: "consecutive", fractionBps: 100, poolLamports: pool, carriedInLamports: BigInt(0), floorLamports: BigInt(5_000_000), reserveSolLamports: BigInt(1_006_619_200) });
+    assert.equal(o.units, BigInt(ev.units)); assert.equal(o.ruleSpend, BigInt(104_345_230)); assert.equal(o.spend, BigInt(104_345_230)); assert.equal(o.carriedOut, BigInt(0));
+    // the historical receipt itself: the old per-run bound spent less and carried the rest
+    assert.equal(spent, BigInt(20_132_384)); assert.match(ev.partial, /0\.084212846 SOL carried/);
     assert.ok(o.naiveSpend > o.ruleSpend, "compounding spends less than units × f"); assert.equal(o.estimatedTokensRaw, null, "no token amount without stated reserves");
-    assert.match(ev.partial, /0\.084212846 SOL carried/);
+    const c = fs.readFileSync("src/app/burnticker/_components/BurnMath.tsx", "utf8");
+    assert.match(c, /That run happened while the program still limited each run/, "the calculator says why its first result differs from the receipt");
   });
-  test("cap, floor, carry and the reserve-based estimate", async () => {
+  test("no cap, floor, carry and the reserve-based estimate", async () => {
     const { simulateCrank, LAMPORTS } = await import("@/lib/burnticker/burnMath");
     const base = { prev: BigInt(0), now: BigInt(300_000_000_000), carryIn: BigInt(0), unit: BigInt(100_000_000_000), carry: "consecutive" as const, fractionBps: 200, carriedInLamports: BigInt(0), floorLamports: LAMPORTS / BigInt(200), reserveSolLamports: BigInt(100) * LAMPORTS };
-    const capped = simulateCrank({ ...base, poolLamports: BigInt(40) * LAMPORTS, capLamports: BigInt(25) * LAMPORTS });
-    assert.equal(capped.budget, BigInt(25) * LAMPORTS); assert.equal(capped.capBound, true);
-    const tiny = simulateCrank({ ...base, poolLamports: BigInt(10_000_000), capLamports: null });
+    const big = simulateCrank({ ...base, poolLamports: BigInt(40) * LAMPORTS });
+    assert.equal(big.budget, BigInt(40) * LAMPORTS, "no burn-pool cap: the whole pool is the budget"); assert.equal("capBound" in big, false); assert.equal(big.spend, big.planned);
+    const tiny = simulateCrank({ ...base, poolLamports: BigInt(10_000_000) });
     assert.equal(tiny.belowFloor, true); assert.equal(tiny.spend, BigInt(0));
-    const carry = simulateCrank({ ...base, now: BigInt(250_000_000_000), poolLamports: LAMPORTS, capLamports: null });
+    const carry = simulateCrank({ ...base, now: BigInt(250_000_000_000), poolLamports: LAMPORTS });
     assert.equal(carry.units, BigInt(2)); assert.equal(carry.carryOut, BigInt(50_000_000_000));
-    const est = simulateCrank({ ...base, poolLamports: LAMPORTS, capLamports: null, assumedReserveTokenRaw: BigInt(1_000_000_000_000) });
+    const est = simulateCrank({ ...base, poolLamports: LAMPORTS, assumedReserveTokenRaw: BigInt(1_000_000_000_000) });
     assert.ok(est.estimatedTokensRaw !== null && est.estimatedTokensRaw > BigInt(0));
   });
   test("the calculator is on the check page and the $DEFICIT pre-launch page, labels hypothetical inputs and estimates, and keeps 'holders' balances are never touched' beside it", () => {
@@ -424,7 +427,7 @@ describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'no
     for (const p of buildCurrentStatus({ env: {}, chain: { devnet: failed }, now: 0 }).programs) {
       assert.equal(p.devnet.authoritySource, "unavailable");
       // the record's own read date (burn_receipts re-read 2026-10-16 after its round-5 upgrade, pair_curve 2026-10-12)
-      assert.match(upgradeAuthorityText(p.devnet), /^The upgrade authority is unavailable because the chain read failed\. The last value recorded in verified-build\.json \(2026-10-(12|22T00:51:02Z)\) is \w+/);
+      assert.match(upgradeAuthorityText(p.devnet), /^The upgrade authority is unavailable because the chain read failed\. The last value recorded in verified-build\.json \(2026-10-25T\d{2}:\d{2}:\d{2}Z\) is \w+/);
     }
   });
 });

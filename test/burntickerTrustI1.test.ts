@@ -25,17 +25,23 @@ const textOf = (id: string): string => {
 const clean = (s: string) => assert.equal(lintCopy(s).hits.length, 0, JSON.stringify(lintCopy(s).hits));
 
 describe("I-1 transparency.json statements match the program", () => {
-  test("the pool cap: the program enforces its 25 SOL default without a platform account, not only the keeper", () => {
-    const t = textOf("cap-25");
-    assert.doesNotMatch(t, /only the keeper enforces/);
-    assert.match(t, /the program still enforces its built-in default of 25 SOL until 2027-10-01/);
-    assert.match(read("programs/burn-receipts/programs/burn_receipts/src/state.rs"), /pub fn default_active_cap/);
+  test("no pool cap (owner decision 2026-10-25): the statement says there is none, and the program has no cap in force", () => {
+    assert.equal(all.includes('"id": "cap-25"') || all.includes('"id":"cap-25"'), false, "the old cap-25 statement is gone");
+    const t = textOf("no-burn-cap");
+    assert.match(t, /^There is no burn-pool cap and no limit on how much one burn spends\. Each burn spends the rule's full share of the burn pool in one run\./);
+    assert.doesNotMatch(t, /25 SOL|default_active_cap|48 h time lock/);
+    const state = read("programs/burn-receipts/programs/burn_receipts/src/state.rs");
+    assert.doesNotMatch(state, /pub fn default_active_cap|pub fn active_cap/);
+    assert.match(state, /pub fn default_recovery_open/);
     clean(t);
   });
   test("the Squads vault's config authority is listed with every power the program gives it", () => {
     const d = (T.wallets as { role: string; description: string }[] | undefined)?.find((w) => w.role === "squads-vault")?.description ?? all.match(/"role": ?"squads-vault"[^}]*"description": ?"([^"]*)"/)?.[1] ?? "";
     assert.doesNotMatch(d, /can only change the attester set/);
     for (const re of [/change the attester set/, /propose a new pool for a coin's pinned token/, /switch a coin's registration policy/, /renounce/]) assert.match(d, re);
+    // owner decision 2026-10-25: the platform authority holds no cap power any more
+    assert.match(d, /The platform authority no longer holds a cap-raise power\. The program refuses every cap raise\./);
+    assert.doesNotMatch(d, /raise the pre-audit|pre-audit cap is in force/);
     const admin = read("programs/burn-receipts/programs/burn_receipts/src/instructions/admin.rs") + read("programs/burn-receipts/programs/burn_receipts/src/instructions/burn_target.rs");
     for (const fn of ["handle_propose_attesters", "handle_set_registration_policy", "handle_renounce_admin", "handle_propose_target_pool"]) assert.match(admin, new RegExp(`pub fn ${fn}`));
     clean(d);
@@ -55,8 +61,8 @@ describe("I-1 transparency.json statements match the program", () => {
     assert.match(GUARDRAIL_DETAIL[g].text, /\$REHEARSAL/);
     clean(g);
   });
-  test("the 25 SOL cap number is unchanged", () => {
-    assert.match(textOf("cap-25"), /at most 25 SOL per burn day/);
+  test("no 25 SOL cap number is left in the statements", () => {
+    assert.doesNotMatch(all, /25 SOL per burn day|burn-pool cap is 25 SOL/);
   });
 });
 

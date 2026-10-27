@@ -2175,3 +2175,19 @@ commit is recorded against the later tag, and a release with no pins commit stay
 - allowlist sha256 (config/public-repo.allowlist): `2cf1eb7be18d7a378c8bd2175e8526939f01886408afd7701ae125d01bbedf17`
 - files published: 2582
 - public commit: `df334b4df8afae50ec18c58d9ac4e455aec37723`
+
+## 2026-10-25 (owner decision): both burn caps removed (program source and copy; no publish, no deploy)
+
+- Owner decision (decisions.md): the burn_receipts program has no burn-pool cap any more (the 25 SOL cap, raise-only behind a 48-hour timelock, with a sunset) and no per-run bound (one crank spent at most 2 % of the pool's WSOL reserve). One burn spends the rule's full share of the burn pool in one run. The floor, the TWAP and Pyth guards, the minimum output and the pool-health checks still apply; spend under the floor or past a dead pool is still carried, and crank_carried spends the whole carry in one piece.
+- The cranker allowlist, which applied only while the cap was in force, is gone: every crank is permissionless. `BurnPoolCapBound` and `SpendCapBound` are never emitted.
+- The platform authority no longer holds a cap-raise power. The program refuses every cap raise: `propose_cap_raise`, `cancel_cap_raise` and `apply_cap_raise` keep their entry points and always refuse with `CapRemoved` (6144). The platform sunset now only closes the stranding-recovery registration-policy switch (the same window, at the latest 2027-10-01).
+- The keeper's burn dispersal no longer uses six-hour windows of small pieces. Every public page, the Powers Register, the whitepaper, the trust page, the transparency statements and the launch review say the new rule: "When a reading settles, the burn runs right away and spends the rule's full share of the burn pool in one run."
+- This entry records the source change. The program upgrade that carries it to devnet and mainnet is a separate deploy entry.
+
+## 2026-10-27 — publish from b2bc288ccb1e
+
+- monorepo commit: `b2bc288ccb1ee78b98c7bc708bd3fd1d23a26e3a` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `4a43b44de1faca072b6e6c35fe96381a7bd5a767bb8021bcf37a6fc3e29f71bd`
+- allowlist sha256 (config/public-repo.allowlist): `2cf1eb7be18d7a378c8bd2175e8526939f01886408afd7701ae125d01bbedf17`
+- files published: 2608

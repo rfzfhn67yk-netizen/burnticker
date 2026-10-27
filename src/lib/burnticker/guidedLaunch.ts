@@ -1,7 +1,6 @@
 import { withoutDenials } from "@/lib/burnticker/denials";
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { MAX_SPEND_RESERVE_BPS } from "@/lib/burnticker/burnMath";
-import { SPREAD_ONE_SHOT_LINE, SPREAD_REST_SENTENCE } from "@/lib/burnticker/spreadCopy";
+import { NO_BURN_CAP_SENTENCE, SPREAD_ONE_SHOT_LINE } from "@/lib/burnticker/spreadCopy";
 import { pairFormCopy } from "@/lib/burnticker/pairForms";
 import { dialsFor } from "@/lib/burnticker/dials";
 import { CANDIDATES_PAIR_SENTENCE, PARTIES_PAIR_SENTENCE, CHAMPION_EXPLAINER_LINE, GAME_PAIR_SENTENCE, GAME_PAIR_SENTENCE_NO_TIE, INCINERATOR_WORDS, ONE_SHOT_REST_DEFICIT, ONE_SHOT_REST_INCINERATOR, namedSinkFallback, sinkTickerOf, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
@@ -300,32 +299,26 @@ export function unitPhrase(unit: { label: string } | null | undefined, valueLabe
 /**
  * THE BUDGET ROW, FROM THE RULE (ChatGPT launch-intent audit item 6): its label and one sentence on what a reading spends, from the
  * program's own arithmetic (burnMath.ts simulateCrank, burnReceipts/math.ts buybackSpend): units compound, each one spending its share of
- * what the one before left, so 3 units at 2 % spend about 5.9 %; one burn run buys with at most 2 % of the trading pool's SOL, and the
- * rest is burned in smaller pieces, usually finished within a day (HB-205; a pinned-token coin's rest waits for its next run). A fade-side reading counts one unit at most. A one-shot spends its share once.
+ * what the one before left, so 3 units at 2 % spend about 5.9 %; one burn run spends the rule's full share (owner decision 2026-10-25:
+ * no per-run bound, no platform cap). A fade-side reading counts one unit at most. A one-shot spends its share once.
  */
 /**
- * HS-43 (hourly run 8): a whole-pool one-time burn said with its per-burn slice, so "100%" and "at most 2%" do not read as a contradiction.
- * The slice is the program's spend cap (burnMath.ts MAX_SPEND_RESERVE_BPS, 2% of the trading pool's SOL per run); the pool starts with
- * about the raise.
+ * HS-43 (hourly run 8), rewritten 2026-10-25: a whole-pool one-time burn. Since the owner decision of 2026-10-25 removed the per-run bound,
+ * the whole pool is spent in one run; `raiseSol` is kept for the callers and no longer changes the words.
  */
 /** HB-162 (a) (hourly run 15): "an 85 SOL raise", "an 18 SOL raise", "a 75 SOL raise": the article a number takes when read aloud. */
 export const articleFor = (n: number): "a" | "an" => (/^(8|1[18](?!\d)|1[18]\d\d(?!\d))/.test(String(n)) ? "an" : "a");
-export function wholePoolSliceLine(raiseSol: string | null | undefined): string {
-  const pct = MAX_SPEND_RESERVE_BPS / 100;
-  const raise = Number(raiseSol);
-  const about = Number.isFinite(raise) && raise > 0 ? ` (about ${Math.round(raise * MAX_SPEND_RESERVE_BPS / 100) / 100} SOL on ${articleFor(raise)} ${raise} SOL raise)` : "";
-  // reviewer finding (2026-10-20): there is no "daily run". The program's budget refills every 600 s and the keeper spreads the carried
-  // part in pieces at least 20 minutes apart inside six-hour windows (dispersal.ts), so the words come from spreadCopy.ts
-  return `The whole pool is spent, but not in one go: one burn spends at most ${pct}% of the trading pool's SOL${about}. ${SPREAD_REST_SENTENCE}`;
+export function wholePoolSliceLine(_raiseSol?: string | null): string {
+  return `The whole pool is spent in one run. ${NO_BURN_CAP_SENTENCE}`;
 }
 export function budgetCopy(rule: BurnRule, share: number, unit: string | null, o: { raiseSol?: string | null } = {}): { label: string; line: string; math: string | null } {
   const p = pctLabel(share);
   // Round 5 (WIRING-ROUND5 item 6): a coin with a pinned token (rules.ts burnTarget) swaps SOL for that token and burns it; the words
-  // follow the token, and its cap is 2% of the SOL in that token's pinned pool (crank_target_burn), not the coin's own pool
+  // follow the token (crank_target_burn spends the full share in one run, like the coin's own burn, since 2026-10-25)
   const sym = rule.burnTarget?.symbol ?? null;
   const act = sym ? `swapping SOL for ${sym} and burning it` : "buying and burning this coin";
   if (isOneShotRule(rule)) {
-    if (sym) return { label: "Share of the burn pool, once", line: `${share >= 1 ? "This coin spends its whole pool once" : `This coin spends ${p} of its pool once`}, when the result is in, ${act}. The burn lands in slices sized to the SOL in ${sym}'s pinned Raydium pool.`, math: null };
+    if (sym) return { label: "Share of the burn pool, once", line: `${share >= 1 ? "This coin spends its whole pool once" : `This coin spends ${p} of its pool once`}, when the result is in, ${act}. The burn spends that share in one run, swapping in ${sym}'s pinned Raydium pool.`, math: null };
     return { label: "Share of the burn pool, once", line: share >= 1 ? `This coin burns its whole pool once, when the result is in. ${wholePoolSliceLine(o.raiseSol)}` : `This coin burns ${p} of its pool once, when the result is in. ${SPREAD_ONE_SHOT_LINE} The rest of the pool moves on only after this share has been spent on this coin.`, math: null };
   }
   // QA pass 9 #18 and #20 (2026-10-13): the fade side is said for what the rule reads (a game day, a day with none of the events, or a
@@ -338,7 +331,7 @@ export function budgetCopy(rule: BurnRule, share: number, unit: string | null, o
     const dirOf = rule.scalar?.direction;
     return { label: "Share of the burn pool per reading", line: `Each reading where the number ${dirOf === "up" ? "does not rise" : dirOf === "down" ? "does not fall" : "is the same as the previous reading"} spends ${p} of the burn pool ${act}. A reading counts once at most, however flat it was.`, math: null };
   }
-  const cap = sym ? `One burn run spends at most 2% of the SOL in ${sym}'s pinned Raydium pool, and the rest waits for the next run.` : "One burn run buys with at most 2% of the SOL in the coin's Raydium pool; the rest is burned in smaller pieces and is usually finished within a day.";
+  const cap = `One burn run spends the rule's full share in one go. ${NO_BURN_CAP_SENTENCE}`;
   if (rule.kind === "scalar" && unit) {
     const three = Math.round((1 - (1 - share) ** 3) * 10000) / 100;
     const u = unit.replace(/^1\s+(?=\D)/, "");
@@ -492,8 +485,6 @@ export function recordCloseAvailability(o: { keyed: boolean }): { available: boo
     : { available: false, line: RECORD_CLOSE_OFF_LINE, alternative: "Two coins raced on their daily feeds, or the flippening, work today." };
 }
 
-/** The burn-pool cap in force by default (capInForce.ts; the test pins it to the program's constant and its 48-hour wait). */
-export const PRE_AUDIT_CAP_SOL_TEXT = "25";
 /**
  * WHAT TO KNOW BEFORE YOU START (audit 6 item 14, pass B item 20): said at step 1 and again on the review, in plain words.
  */
@@ -520,7 +511,7 @@ export function upfrontLines(raises: readonly string[], o?: { team?: boolean; en
   return [
     "Creators earn no fee revenue. The creator's share of the fees goes to the coin's own burn pool.",
     `Nothing burns until the coin graduates: buyers on its curve have to put in the raise you pick, ${list}, and then its pool is registered. A result that comes first is recorded and waits.`,
-    `For now a burn pool spends from at most ${PRE_AUDIT_CAP_SOL_TEXT} SOL. Only the platform's multisig can raise that cap, after a public 48-hour wait, and SOL above it stays in the coin's pool.`,
+    NO_BURN_CAP_SENTENCE,
     upfrontEndLine(o),
     "Creating a coin costs a small amount of SOL from your wallet. The review shows the estimate before you sign.",
   ];

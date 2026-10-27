@@ -113,16 +113,7 @@ export function postGraduationFeesFor(cluster: string, cpConfig?: string | null)
 /** The mainnet split for new coins (what the generic pages state; a coin's page passes its pin, the trust page the live platform's tier). */
 export const POST_GRADUATION_FEES: FeeSplit = postGraduationFeesFor("mainnet");
 
-/**
- * PRE-AUDIT CAP (the owner, 2026-10-09): until the program is audited, a burn pool spends from at most 25 SOL; fee income above the cap
- * QUEUES and is shown on the token page as "queued, released after audit". The keeper models it when it fixes a spend (pool = min(
- * spendable, cap)); the on-chain enforcement is the Receipts program's — that seam is noted in the README and on the trust page.
- */
-export const PRE_AUDIT_POOL_CAP_SOL = 25;
-export const PRE_AUDIT_POOL_CAP_LAMPORTS = BigInt(PRE_AUDIT_POOL_CAP_SOL) * BigInt(1_000_000_000);
-export function capPool(spendableLamports: bigint, capLamports: bigint = PRE_AUDIT_POOL_CAP_LAMPORTS): { pool: bigint; queued: bigint } {
-  return spendableLamports > capLamports ? { pool: capLamports, queued: spendableLamports - capLamports } : { pool: spendableLamports, queued: BigInt(0) };
-}
+/** Owner decision 2026-10-25: there is no burn-pool cap any more (the 25 SOL cap, PRE_AUDIT_POOL_CAP_SOL and capPool are gone). */
 
 /** Operator identity and the use of the developer fee (the owner, 2026-10-09). The contact address is a TODO the owner fills in. */
 // the line itself lives in the client-safe copy module so the operator page can render it without this file's chain imports

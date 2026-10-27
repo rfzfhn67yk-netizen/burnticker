@@ -91,7 +91,7 @@ export function deficitQueueCore(status, burnsFile, now, writtenAt) {
   var unitsText = units === 0 ? "No units are queued." : "Daily rises " + sinceText + " add up to " + (units === 1 ? "one queued unit" : groupInt(units) + " queued units") + " ($1B each).";
   if (!poolOpen) {
     base.headline = [unitsText, riseText].filter(Boolean).join(" ");
-    if (units > 0 && sharePct !== null) lines.push("When the curve fills" + (raiseSol ? " at " + raiseSol + " SOL" : "") + " and its pool is registered, the queued readings run in order and together spend " + formula + " of the burn pool, which is " + sharePct + "%. One burn run spends at most 2% of the trading pool's SOL, and the rest carries to the next run.");
+    if (units > 0 && sharePct !== null) lines.push("When the curve fills" + (raiseSol ? " at " + raiseSol + " SOL" : "") + " and its pool is registered, the queued readings run in order and together spend " + formula + " of the burn pool, which is " + sharePct + "%. Each run spends its whole share at once, with no cap on the size of a burn.");
     else if (units === 0) lines.push("A unit is queued for each full $1B the debt rises from one business day to the next. Nothing burns before the curve fills and its pool is registered.");
     if (riseUsd === null) lines.push("The rise since the first reading is not in the keeper's published file yet.");
     if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");

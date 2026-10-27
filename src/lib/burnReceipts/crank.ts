@@ -1,9 +1,9 @@
 import { type AddressLookupTableAccount, AddressLookupTableProgram, ComputeBudgetProgram, type Connection, type Keypair, type ParsedTransactionWithMeta, PublicKey, SystemProgram, type TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { attestReading, sourceUrlHash } from "@/lib/burnReceipts/attestation";
 import { bs58, fetchCarriedPace, fetchNextReadingInLine, fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
-import { assertSignableGenesis, CPMM_PROGRAM_ID, MAX_SPEND_RESERVE_BPS, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LL_POOL_PLATFORM_ID, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, OUTCOME_NAMES, PACKET_DATA_SIZE, POOL_POLICY_CREATOR_IS_FEE_PDA, SYSVAR_INSTRUCTIONS_ID } from "@/lib/burnReceipts/constants";
+import { assertSignableGenesis, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LL_POOL_PLATFORM_ID, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, OUTCOME_NAMES, PACKET_DATA_SIZE, POOL_POLICY_CREATOR_IS_FEE_PDA, SYSVAR_INSTRUCTIONS_ID } from "@/lib/burnReceipts/constants";
 import { type BuybackPoolAccounts, buybackPoolAccounts, decodeCpmmPool, decodeObservationRing, fetchCpmmPool, type ObservationRing } from "@/lib/burnReceipts/cpmm";
-import { carriedBudgetReadySec, formatDate, reserveSpendCap } from "@/lib/burnReceipts/math";
+import { formatDate } from "@/lib/burnReceipts/math";
 import { fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_RESULT_GRACE_SECS, PAIR_RESULT_LOST, PAIR_STATE_PAIRED, pairResultFor } from "@/lib/burnReceipts/pairs";
 import { checkPoolHealthIx, claimLaunchlabCreatorFeeIx, crankBuybackIx, crankCarriedIx, crankNoUnitsIx, crankVaultIx, createAtaIdempotentIx, eventAuthority, registerPoolIx, submitReadingIx, syncNativeIx } from "@/lib/burnReceipts/instructions";
 import { configPda, cpmmAuthority, feePda, feeTokenAddress, feeWsolAddress, launchlabPoolPda, vaultAddress } from "@/lib/burnReceipts/pda";
@@ -359,8 +359,8 @@ export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promis
 }
 
 /**
- * BURN DISPERSAL (2026-10-13): the pool's WSOL reserve net of the fees owed out of the vault (what the program's 2 % per-crank cap and
- * the constant-product move are measured on), or null when the config has no readable CPMM pool.
+ * The pool's WSOL reserve net of the fees owed out of the vault (what the constant-product move is measured on), or null when the
+ * config has no readable CPMM pool. (Until the owner decision of 2026-10-25 the program also bounded one crank to 2 % of it; no longer.)
  */
 export async function poolSolReserve(ctx: ProgramContext): Promise<bigint | null> {
   const cfg = await fetchTokenConfig(ctx.connection, ctx.programId, ctx.mint);
@@ -397,12 +397,13 @@ export async function poolObservationRing(ctx: ProgramContext): Promise<Observat
 /**
  * The crank_carried transaction's instructions for a piece of at most `maxSpendLamports` (the fee PDA's ATAs first, SyncNative as for
  * crank_buyback), or why there is none: no carried spend, a reading still waiting for its own crank, a coin that is not a self-burn
- * buyback, no pool, or (round-5 review R5-8) the piece does not fit the coin's carried budget yet (one per-crank cap per 600 s, up to one
- * cap, less what earlier pieces spent; one piece per second) — "too-soon" carries the time (ms, local clock) the program will accept it,
- * computed against the CHAIN's clock (the latest block time) so a lagging or leading local clock does not make the keeper retry early.
+ * buyback, no pool, or a piece already ran this second (the program's only pacing left after the owner decision of 2026-10-25: one
+ * piece per coin per second; there is no carried budget and no per-run bound) — "too-soon" carries the time (ms, local clock) the program
+ * will accept it, computed against the CHAIN's clock (the latest block time) so a lagging or leading local clock does not make the keeper
+ * retry early.
  * An ENDED rule is not a refusal (round-5 review R5-3 / R5-4, deployed on mainnet 2026-10-15): crank_carried runs after a VOID end (the
  * wind-down's carry) and after a RESOLVED end (the 30-day grace in which forward_on_end / burn_sol_on_end leave the carry on the coin), so
- * the plan is the same as for a live rule — the budget, TWAP, pool and reserve checks are the program's either way.
+ * the plan is the same as for a live rule — the TWAP, pool and reserve checks are the program's either way.
  */
 export async function planCarriedCrank(ctx: ProgramContext, cranker: PublicKey, maxSpendLamports: bigint, nowMs: number = Date.now()): Promise<{ instructions: TransactionInstruction[]; carriedLamports: bigint; throughDate: number } | { status: "nothing-carried" | "reading-pending" | "not-buyback" | "waiting-for-pool" } | { status: "too-soon"; nextAtMs: number }> {
   const cfg = await fetchTokenConfig(ctx.connection, ctx.programId, ctx.mint);
@@ -414,13 +415,8 @@ export async function planCarriedCrank(ctx: ProgramContext, cranker: PublicKey, 
   if (c.carried_spend_lamports <= BigInt(0)) return { status: "nothing-carried" };
   const pace = await carriedPaceView(ctx);
   if (pace && pace.lastCarriedAt > 0) {
-    const reserve = await poolSolReserve(ctx);
-    if (reserve !== null) {
-      const need = maxSpendLamports < c.carried_spend_lamports ? maxSpendLamports : c.carried_spend_lamports;
-      const chainNow = pace.chainNowSec ?? Math.floor(nowMs / 1000);
-      const ready = carriedBudgetReadySec(pace.lastCarriedAt, pace.budgetLamports, reserveSpendCap(reserve, MAX_SPEND_RESERVE_BPS), need, chainNow);
-      if (ready !== null && ready > chainNow) return { status: "too-soon", nextAtMs: nowMs + (ready - chainNow) * 1000 };
-    }
+    const chainNow = pace.chainNowSec ?? Math.floor(nowMs / 1000);
+    if (chainNow <= pace.lastCarriedAt) return { status: "too-soon", nextAtMs: nowMs + (pace.lastCarriedAt + 1 - chainNow) * 1000 };
   }
   const pool = await poolAccountsOrStandIns(ctx, c.cpmm_pool);
   const fee = feePda(ctx.programId, ctx.mint);
@@ -442,7 +438,8 @@ export async function chainNowSec(connection: Connection): Promise<number | null
   try { return await connection.getBlockTime(await connection.getSlot("confirmed")); } catch { return null; }
 }
 
-/** Round-5 review R5-8: the coin's carried budget as the program will judge it (CarriedPace; lastCarriedAt 0 = never ran a piece). */
+/** The coin's CarriedPace as the program judges it (lastCarriedAt 0 = never ran a piece). budgetLamports is always 0 since the owner
+ *  decision of 2026-10-25 (the program writes 0; the field stays for the unchanged layout). */
 export async function carriedPaceView(ctx: ProgramContext): Promise<{ lastCarriedAt: number; budgetLamports: bigint; chainNowSec: number | null }> {
   const pace = await fetchCarriedPace(ctx.connection, ctx.programId, ctx.mint);
   return { lastCarriedAt: pace ? Number(pace.last_carried_at) : 0, budgetLamports: pace?.budget_lamports ?? BigInt(0), chainNowSec: pace ? await chainNowSec(ctx.connection) : null };

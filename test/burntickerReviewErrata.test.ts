@@ -116,16 +116,19 @@ describe("checklist: pre-registered text is immutable, corrections go in the err
     const e = erratumSection(ERRATA[13]);
     for (const re of [/\*\*43 entrypoints\*\*/, /\*\*144 error codes\*\*/, /45 event types/, /CarriedTooSoon/, /InvalidCarriedPace/, /BurnTargetAccountMissing/, /MIN_CARRIED_INTERVAL_SECS/, /CarriedPace/, /piece=<n>/, /TokenConfig's size\s+and layout do not change/, /BurnTarget` is pinned/, /stays dead/, /seven places/]) assert.match(e, re);
     assert.equal(BURN_RECEIPTS_IDL.instructions.length, 43);
-    assert.equal(BURN_RECEIPTS_IDL.errors.length, 144);
+    // owner decision 2026-10-25: one error appended (CapRemoved, 6144); the codes before it are unchanged
+    assert.equal(BURN_RECEIPTS_IDL.errors.length, 145);
+    assert.deepEqual(BURN_RECEIPTS_IDL.errors.at(-1) && { code: BURN_RECEIPTS_IDL.errors.at(-1)!.code, name: BURN_RECEIPTS_IDL.errors.at(-1)!.name }, { code: 6144, name: "CapRemoved" });
     assert.equal(BURN_RECEIPTS_IDL.events.length, 45);
     for (const n of ["CarriedTooSoon", "InvalidCarriedPace", "BurnTargetAccountMissing"]) assert.ok(BURN_RECEIPTS_IDL.errors.some((x) => x.name === n), n);
-    assert.match(read("docs/burnticker/WHITEPAPER.md"), /Error codes: 144\./);
+    assert.match(read("docs/burnticker/WHITEPAPER.md"), /Error codes: 145 \(the last, CapRemoved/);
     assert.match(read("docs/burnticker/WHITEPAPER.md"), /The program has 45 event types:/);
   });
   test("the R5-8 / R5-9 blind-review erratum states the budget, the version check and the stalled target", () => {
     const e = erratumSection(ERRATA[14]);
     for (const re of [/43 entrypoints, 45 event types, 144 error codes/, /CARRIED_BUDGET_WINDOW_SECS/, /dust budget/, /budget_lamports/, /CarriedTooSoon/, /InvalidCarriedPace/, /budget_left_lamports/, /last_unblocked_at >\s+last_burn_at/, /release_target/, /seven places/]) assert.match(e, re);
-    assert.ok(BURN_RECEIPTS_IDL.constants?.some((c) => c.name === "CARRIED_BUDGET_WINDOW_SECS" && c.value === "600"));
+    // owner decision 2026-10-25: the carried budget went with the per-run bound, so the regenerated IDL no longer lists its window
+    assert.ok(!BURN_RECEIPTS_IDL.constants?.some((c) => c.name === "CARRIED_BUDGET_WINDOW_SECS"), "CARRIED_BUDGET_WINDOW_SECS is removed from the program and its IDL");
     assert.ok(!BURN_RECEIPTS_IDL.constants?.some((c) => c.name === "MIN_CARRIED_INTERVAL_SECS"));
     const ev = BURN_RECEIPTS_IDL.types?.find((t) => t.name === "CarriedSpent") as { type: { fields: { name: string }[] } } | undefined;
     assert.ok(ev?.type.fields.some((f) => f.name === "budget_left_lamports") && !ev.type.fields.some((f) => f.name === "next_piece_at"));
