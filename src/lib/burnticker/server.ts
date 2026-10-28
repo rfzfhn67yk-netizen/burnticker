@@ -16,6 +16,7 @@ import { openRegistry, readingMatches, REGISTRY_FILE, type Registry, type TokenM
 import { hasImageCopy, imageCopyHref } from "@/lib/burnticker/imageStore";
 import { KalshiClient } from "@/lib/burnticker/oracle/kalshi";
 import { PolymarketClient, type TitleRefuser } from "@/lib/burnticker/oracle/polymarket";
+import { polygonRpcUrlsFromEnv } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 import { loadRefuseList, refusalsFor } from "@/lib/burnticker/oracle/refuse";
 import { CatalogueAdapter, feedById } from "@/lib/burnticker/catalogue";
 import { Connection, PublicKey } from "@solana/web3.js";
@@ -115,9 +116,11 @@ const derbyPageOracle: OracleAdapter = { id: "derby", searchSeries: async () => 
 /** The refuse list (config/burnticker/refuse.json) as the Polymarket client's title check: the reasons a title is refused, or []. */
 export const refuseTitles: TitleRefuser = (titles) => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))];
 
+const rpcWarned = new Set<string>();
 /** The Polymarket client the app and the keeper use: Gamma for discovery, the Polygon CTF for results, the refuse list over every question. */
 export function polymarketClient(env: Readonly<Record<string, string | undefined>> = process.env): PolymarketClient {
-  const rpcUrls = (env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
+  // 2026-10-27: an entry that is not an https URL is skipped with a warning, once per process
+  const rpcUrls = polygonRpcUrlsFromEnv(env.BURNTICKER_POLYGON_RPC_URLS, (l) => { if (!rpcWarned.has(l)) { rpcWarned.add(l); console.warn(`[burnticker] ${l}`); } });
   return new PolymarketClient({ refuse: refuseTitles, ...(rpcUrls.length ? { rpcUrls } : {}) });
 }
 

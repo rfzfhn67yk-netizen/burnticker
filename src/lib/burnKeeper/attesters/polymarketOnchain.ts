@@ -29,6 +29,23 @@ export const SEL_OUTCOME_SLOT_COUNT = "0xd42dc0c2";
  */
 export const DEFAULT_POLYGON_RPCS = ["https://polygon-bor.publicnode.com", "https://1rpc.io/matic", "https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"];
 
+/**
+ * BURNTICKER_POLYGON_RPC_URLS, comma-separated, as the list of RPCs to try (2026-10-27: the host's list started with a placeholder, which
+ * was dropped without a word, so every read went to the public RPCs). An entry that is not an https URL is skipped with one plain warning
+ * naming its position; the warning shows only its first four characters and its length, never the value (an RPC URL can carry a key).
+ */
+export function polygonRpcUrlsFromEnv(raw: string | undefined, warn: (line: string) => void = (l) => console.warn(l)): string[] {
+  const out: string[] = [];
+  const entries = (raw ?? "").split(",").map((x) => x.trim()).filter((x) => x.length > 0);
+  entries.forEach((x, i) => {
+    let ok = false;
+    try { const u = new URL(x); ok = u.protocol === "https:" && u.hostname.length > 0; } catch { ok = false; }
+    if (ok) { out.push(x); return; }
+    warn(`BURNTICKER_POLYGON_RPC_URLS entry ${i + 1} of ${entries.length} is not an https URL (it starts "${x.slice(0, 4)}…", ${x.length} characters), so it is skipped. ${out.length || entries.slice(i + 1).length ? "The other entries are used." : "No entry is left, so the public Polygon RPCs are used."}`);
+  });
+  return out;
+}
+
 export interface ConditionResolution {
   conditionId: string;
   chainId: number;

@@ -12,7 +12,8 @@ import { readingsAfterLaunch } from "@/lib/burnticker/launchCut";
  *           shortly after its start every few minutes until the schedule marks it final, then once more at least five minutes
  *           later to confirm the final (owner 2026-10-20; sources/gameSettle.ts gameDueAt, finalCheck, gameSchedule); a team
  *           or rivalry coin at its next listed game; a market at its stated close (Kalshi close_time; Polymarket's Gamma end date, with
- *           Gamma's own closed flag checked hourly before it and no Polygon read until it closes). Honoured whether it is sooner or later
+ *           Gamma's own closed flag checked hourly before it and no Polygon read until it closes, apart from one liveness read a day,
+ *           polymarket.ts POLYGON_LIVENESS_MS). Honoured whether it is sooner or later
  *           than the selector's poll, never sooner than READ_PLAN_MIN_GAP_MS and never later than READ_PLAN_MAX_IDLE_MS (the schedule is
  *           looked at again at least weekly).
  *   WINDOW  a published feed whose record states when it publishes (sources.json `readWindow`): read at its poll inside the window

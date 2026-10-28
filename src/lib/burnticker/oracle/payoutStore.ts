@@ -12,6 +12,12 @@ import { interpretPayouts, isConditionId, POLYGON_CHAIN_ID, POLYMARKET_CTF, type
  */
 
 export const PAYOUT_STATUS_PREFIX = "polygon.payout.";
+/**
+ * THE LAST POLYGON CHECK per condition (2026-10-27): when the payout vector was last read from the RPC, resolved or not, so the daily
+ * liveness read of a one-market coin (PolymarketClient POLYGON_LIVENESS_MS) survives a restart instead of firing on every start.
+ * Value: { at } in ms. Only a time is kept here, never a result.
+ */
+export const PAYOUT_CHECKED_PREFIX = "polygon.checked.";
 
 export interface StoredPayout { r: ConditionResolution; readAt: number; role: string; proof: string }
 
@@ -20,6 +26,10 @@ export interface PayoutStore {
   get(conditionId: string): StoredPayout | null;
   /** Stores a REPORTED vector the first time it is read (an unresolved one, or a condition already stored, is ignored). */
   put(r: ConditionResolution, o: { readAt: number; proof: string }): void;
+  /** When the condition was last read from the RPC (resolved or not), or null. Optional: a store without it keeps the time in memory only. */
+  checkedAt?(conditionId: string): number | null;
+  /** Records a read from the RPC (any answer). */
+  noteChecked?(conditionId: string, at: number): void;
 }
 
 interface Row { conditionId: string; chainId: number; contract: string; rpcUrl: string; blockNumber: number | null; outcomeSlotCount: number; payoutDenominator: string; payoutNumerators: string[]; proof: string; readAt: number; role: string }
@@ -59,6 +69,16 @@ export function statusPayoutStore(reg: { getStatus(key: string): string | null; 
       const key = PAYOUT_STATUS_PREFIX + r.conditionId.toLowerCase();
       if (rowToStored(reg.getStatus(key), r.conditionId)) return;   // immutable: the first reported read stands
       try { reg.setStatus(key, toRow(r, o, role), o.readAt); } catch { /* a failed write only costs a later re-read */ }
+    },
+    checkedAt: (cid) => {
+      if (!isConditionId(cid)) return null;
+      const raw = reg.getStatus(PAYOUT_CHECKED_PREFIX + cid.toLowerCase());
+      if (!raw) return null;
+      try { const at = Number((JSON.parse(raw) as { at?: unknown }).at); return Number.isFinite(at) && at > 0 ? at : null; } catch { return null; }
+    },
+    noteChecked: (cid, at) => {
+      if (!isConditionId(cid)) return;
+      try { reg.setStatus(PAYOUT_CHECKED_PREFIX + cid.toLowerCase(), { at }, at); } catch { /* a failed write only costs one more liveness read */ }
     },
   };
 }

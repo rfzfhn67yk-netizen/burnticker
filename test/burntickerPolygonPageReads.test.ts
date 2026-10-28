@@ -10,7 +10,7 @@ import fs from "node:fs";
 import { CREATOR, ATTESTER, makeWorld, type World } from "./burntickerApiHelpers.ts";
 import { BUCS_CID, CHAIN, EAGLES_CID, GAMMA_TABLE, PM_BUCS, PM_NFL_MONEYLINE, PM_NOW } from "./burntickerPolyHelpers.ts";
 import { CHAIN_UNRESOLVED_TTL_MS, PolymarketClient, gammaFixtureFetch, rpcFixtureFetch, proofOf } from "@/lib/burnticker/oracle/polymarket";
-import { memoryPayoutStore, PAYOUT_STATUS_PREFIX, rowToStored, statusPayoutStore } from "@/lib/burnticker/oracle/payoutStore";
+import { memoryPayoutStore, PAYOUT_CHECKED_PREFIX, PAYOUT_STATUS_PREFIX, rowToStored, statusPayoutStore } from "@/lib/burnticker/oracle/payoutStore";
 import { apiBudget, configureApiBudget, memoryStore, resetApiBudget, sourceForUrl } from "@/lib/burnticker/apiBudget";
 import { buildLaunchBundle, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
 import { tokenPageData } from "@/lib/burnticker/server";
@@ -65,7 +65,8 @@ describe("the payout store: a reported vector is read from Polygon once, by any 
     const a = countingClient({ store, clock });
     const [x, y] = await Promise.all([a.c.readChain(EAGLES_CID), a.c.readChain(EAGLES_CID)]);
     assert.deepEqual([x.resolved, y.resolved, a.c.chainReads.length], [false, false, 1], "one read for two callers");
-    assert.equal(store.rows.size, 0, "an unresolved vector can still change: not stored");
+    assert.equal([...store.rows.keys()].filter((k) => k.startsWith(PAYOUT_STATUS_PREFIX)).length, 0, "an unresolved vector can still change: not stored");
+    assert.deepEqual([...store.rows.keys()], [PAYOUT_CHECKED_PREFIX + EAGLES_CID], "only the time of the check is kept (the liveness read's clock), never the unresolved answer");
     await a.c.readChain(EAGLES_CID);
     clock.now += CHAIN_UNRESOLVED_TTL_MS - 1;
     await a.c.readChain(EAGLES_CID);

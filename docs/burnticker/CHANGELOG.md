@@ -2210,3 +2210,11 @@ commit is recorded against the later tag, and a release with no pins commit stay
 - allowlist sha256 (config/public-repo.allowlist): `8a09a719965a93dffa90bc105d65bd51baaf19c6f994c645f848773d8ac0bf37`
 - files published: 2613
 - public commit: `95d09799f4a9d43d618a3091cf22050003238d4a`
+
+## 2026-10-27 — publish from c5037c92d568
+
+- monorepo commit: `c5037c92d568ba96a25d1ddeb298c32bac9279e6` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `4a43b44de1faca072b6e6c35fe96381a7bd5a767bb8021bcf37a6fc3e29f71bd`
+- allowlist sha256 (config/public-repo.allowlist): `8a09a719965a93dffa90bc105d65bd51baaf19c6f994c645f848773d8ac0bf37`
+- files published: 2614

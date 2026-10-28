@@ -89,11 +89,14 @@ describe("games: from shortly after kickoff, minutes apart while the final is co
 });
 
 describe("markets: not before the stated close", () => {
-  test("Polymarket, one market still open: Gamma's closed flag only (hourly, or the end date if sooner), no Polygon read", async () => {
+  test("Polymarket, one market still open: Gamma's closed flag (hourly, or the end date if sooner), and Polygon only for the daily liveness read", async () => {
     const pm = polyClient();
     const r = await pm.settledSince(validateRule({ ...PM_BUCS, market: EAGLES_CID }) as BurnRule, null);
-    assert.equal(pm.chainReads.length, 0, "no payout read before the market closes");
+    assert.equal(pm.chainReads.length, 1, "the first read ever is the daily liveness read (2026-10-27)");
+    assert.equal(r.events.length, 0, "an open market's read settles nothing");
     assert.equal(r.dueAt, PM_NOW + POLY_PRECLOSE_CHECK_MS);
+    await pm.settledSince(validateRule({ ...PM_BUCS, market: EAGLES_CID }) as BurnRule, null);
+    assert.equal(pm.chainReads.length, 1, "no other payout read before the market closes, inside the day");
     const near = polyClient({ now: () => Date.parse("2026-10-11T13:00:00Z") });
     const r2 = await near.settledSince(validateRule({ ...PM_BUCS, market: EAGLES_CID }) as BurnRule, null);
     assert.equal(r2.dueAt, Date.parse("2026-10-11T13:30:00Z"), "the end date, when it comes before the hourly check");

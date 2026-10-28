@@ -56,6 +56,20 @@ export const BACKGROUND_BUDGET_SHARE = 0.5;
 export const BACKGROUND_READS_PER_WINDOW = 8;
 /** Before a one-market coin's stated close, Gamma's closed flag is checked this often (no Polygon read until it closes). */
 export const POLY_PRECLOSE_CHECK_MS = 3_600_000;
+/**
+ * THE GAMMA GATE AND THE DAILY LIVENESS READ (2026-10-27). A one-market coin's payout vector is read on Polygon only when there is a
+ * reason to: Gamma reports the market closed or resolved (gammaSaysResolved: every cycle until the vector is on chain), the market's
+ * end date has passed (at most hourly, POLY_PRECLOSE_CHECK_MS), or the condition was last read from the RPC more than this long ago
+ * (N = 24 hours). The last case is the liveness read: one cheap read a coin a day, so a Gamma that is down or wrong can delay a reading
+ * but never hide a resolution for good. 24 hours because the hourly Gamma check already catches an early resolution within the hour;
+ * the liveness read only covers Gamma failing, and a day bounds that delay at 5 requests a coin a day. Gamma never settles anything:
+ * until the payout vector is on chain the reading stays pending, and a vector the liveness read finds while Gamma still lists the
+ * market open with its end ahead is stored and waits for Gamma's close time (resolvePolymarket).
+ */
+export const POLYGON_LIVENESS_MS = 24 * 3_600_000;
+/** Gamma says the market is decided: closed, or UMA's status (now or in its history) is "resolved". A reason to read the chain, never a result. */
+export const gammaSaysResolved = (m: Pick<GammaMarket, "closed" | "umaResolutionStatus" | "umaStatuses">): boolean =>
+  m.closed || m.umaResolutionStatus === "resolved" || (m.umaStatuses ?? []).includes("resolved");
 
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const num = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null);
@@ -244,7 +258,7 @@ export const settledAtOf = (m: GammaMarket): string | null => m.closedTime ?? m.
  * when its payout vector is on chain; a market Gamma calls closed whose vector is not (yet) reported is AWAITING FINAL. The refuse list
  * applies to every market's question (a refused market is never read). `sinceIso` keeps settlements strictly after it.
  */
-export function resolvePolymarket(rule: BurnRule, candidates: readonly PolyCandidate[], opts: { sinceIso: string | null; refuse?: TitleRefuser | null }): ResolvedSelector {
+export function resolvePolymarket(rule: BurnRule, candidates: readonly PolyCandidate[], opts: { sinceIso: string | null; refuse?: TitleRefuser | null; /** the reader's clock: a settlement time still ahead of it is not a settlement time */ nowIso?: string | null }): ResolvedSelector {
   const refusals: string[] = [];
   const events: SettledEvent[] = [];
   let awaitingFinal = 0;
@@ -263,6 +277,9 @@ export function resolvePolymarket(rule: BurnRule, candidates: readonly PolyCandi
     if (g !== null && g !== result) refusals.push(`${m.conditionId}: Gamma reports ${g}, the CTF payout vector says ${result} — the chain is the record`);
     const at = settledAtOf(m);
     if (!at) { refusals.push(`${m.conditionId}: resolved on chain but Gamma gives no time — held`); continue; }
+    // the liveness read found a vector while Gamma still lists the market open with only its scheduled end, still ahead, as a time: the
+    // vector is stored (readChain), and the reading waits for Gamma's close time rather than being dated in the future
+    if (opts.nowIso && !gammaSaysResolved(m) && at > opts.nowIso) { awaitingFinal++; refusals.push(`${m.conditionId}: resolved on chain, but Gamma still lists the market open with its end date ahead, so the reading waits for Gamma's close time`); continue; }
     if (opts.sinceIso !== null && !(at > opts.sinceIso)) continue;
     const { yes, no } = sideLabels(m);
     events.push({ id: m.conditionId, at, result, value: null, title: m.question, sourceUrl: settledMarketUrl(m.conditionId), method: `ctf-payout: [${chain.payouts.join(", ")}] → ${result} (YES = "${yes}", NO = "${no}")`, proof: proofOf(chain) });
@@ -420,6 +437,8 @@ export class PolymarketClient implements OracleAdapter {
   private chainInflight = new Map<string, Promise<ConditionResolution>>();
   /** When a background read (peekOrSchedule) last started per condition, so a page build schedules at most one per CHAIN_UNRESOLVED_TTL_MS. */
   private backgroundAt = new LruMap<string, number>(5_000);
+  /** When each condition was last read from the RPC (any answer), for the liveness read when the store keeps no time. */
+  private checkedAt = new LruMap<string, number>(5_000);
   private backgroundStarts: number[] = [];
   /** Reported payout vectors (payoutStore.ts): the server and the keeper set the registry's store; null in pure tests. */
   payoutStore: PayoutStore | null;
@@ -510,6 +529,8 @@ export class PolymarketClient implements OracleAdapter {
       this.rpcUrls = [r.rpcUrl, ...this.rpcUrls.filter((u) => u !== r.rpcUrl)];   // the RPC that answered goes first next time
       const at = this.now();
       this.chainCache.set(conditionId, { at, r });
+      this.checkedAt.set(cid, at);
+      try { this.payoutStore?.noteChecked?.(cid, at); } catch { /* the memory copy above still counts */ }
       if (r.resolved) this.payoutStore?.put(r, { readAt: at, proof: proofOf(r) });
       return r;
     })();
@@ -558,6 +579,21 @@ export class PolymarketClient implements OracleAdapter {
     const hit = this.chainCache.get(conditionId);
     if (hit && !hit.r.resolved && this.now() - hit.at < maxAgeMs) return hit.r;
     return this.readChain(conditionId);
+  }
+
+  /** When the condition was last read from the RPC (this process or, through the store, any role and any earlier run), or null. */
+  lastChainCheckAt(conditionId: string): number | null {
+    const cid = conditionId.toLowerCase();
+    let stored: number | null = null;
+    try { stored = this.payoutStore?.checkedAt?.(cid) ?? null; } catch { stored = null; }
+    const mem = this.checkedAt.get(cid) ?? null;
+    return mem === null ? stored : stored === null ? mem : Math.max(mem, stored);
+  }
+
+  /** The daily liveness read is due: never read, or last read from the RPC POLYGON_LIVENESS_MS ago or more. */
+  livenessDue(conditionId: string): boolean {
+    const at = this.lastChainCheckAt(conditionId);
+    return at === null || this.now() - at >= POLYGON_LIVENESS_MS;
   }
 
   /** When the payout vector held for a condition was read from the RPC (this client's clock), or null. */
@@ -640,17 +676,30 @@ export class PolymarketClient implements OracleAdapter {
    * keeper backs off instead of recording nothing.
    */
   async settledSince(rule: BurnRule, sinceIso: string | null, opts: { limitPages?: number; /** at most this many chain reads, the NEWEST closed markets (the launch check: proof the reader works, not a backlog) */ chainCap?: number } = {}): Promise<ResolvedSelector> {
-    const scan = await this.candidates(rule, { closed: true, sinceIso, pages: opts.limitPages });
-    // NOT BEFORE THE STATED CLOSE (owner 2026-10-19): one market that Gamma lists open with its end date still ahead has no payout to read
-    // yet, so Polygon is not asked; the next read is the end date, or Gamma's own closed flag an hour later (an early resolution is
-    // still seen within the hour, from Gamma alone)
+    let scan: TagScan;
+    try { scan = await this.candidates(rule, { closed: true, sinceIso, pages: opts.limitPages }); }
+    catch (e) {
+      // GAMMA DOWN (2026-10-27): a one-market coin still gets its daily liveness read, so a resolution during an outage is on record
+      // (stored) the moment it is on chain and settles on Gamma's first answer after; the read itself settles nothing, and the Gamma
+      // error is still thrown so the keeper backs off as before
+      if (rule.market && this.livenessDue(rule.market) && !this.peekChain(rule.market)?.resolved) await this.readChain(rule.market).catch(() => undefined);
+      throw e;
+    }
+    // THE GAMMA GATE (owner 2026-10-19, extended 2026-10-27): one market that Gamma lists open and unresolved, with its end date still
+    // ahead, has no payout to read yet, so Polygon is not asked, except for the daily liveness read (POLYGON_LIVENESS_MS); the next read
+    // is the end date, or Gamma's own closed flag an hour later (an early resolution is still seen within the hour, from Gamma alone)
     const now = this.now();
     let notBefore: number | null = null;
+    const liveness = new Set<string>();
     const wanted = scan.markets.filter((m) => {
       if (!polySelectorMatches(rule, m)) return false;
-      if (rule.market !== null && !m.closed) {
+      if (rule.market !== null && !gammaSaysResolved(m)) {
         const end = m.endDate ? Date.parse(m.endDate) : NaN;
-        if (Number.isFinite(end) && end > now) { notBefore = Math.min(end, now + POLY_PRECLOSE_CHECK_MS); return false; }
+        if (Number.isFinite(end) && end > now && !this.peekChain(m.conditionId)?.resolved) {
+          if (!this.livenessDue(m.conditionId)) { notBefore = Math.min(end, now + POLY_PRECLOSE_CHECK_MS); return false; }
+          liveness.add(m.conditionId);
+          notBefore = Math.min(end, now + POLY_PRECLOSE_CHECK_MS);
+        }
       }
       return (rule.market !== null || m.closed) && (sinceIso === null || (settledAtOf(m) ?? "9") > sinceIso);
     }).sort((a, b) => (settledAtOf(a) ?? "9").localeCompare(settledAtOf(b) ?? "9"));
@@ -661,10 +710,13 @@ export class PolymarketClient implements OracleAdapter {
       if (this.refuse?.([m.question, ...(m.eventTitle ? [m.eventTitle] : [])]).length) { cands.push({ market: m, chain: null }); continue; }
       // past its end date but not closed on Gamma (UMA has not resolved it yet, or a dispute runs for days): the chain is asked at most
       // hourly, Gamma's closed flag at the market cadence; once Gamma closes it, every cycle until the payout vector is on chain
-      try { cands.push({ market: m, chain: await this.readChainAtMost(m.conditionId, rule.market !== null && !m.closed ? POLY_PRECLOSE_CHECK_MS : this.chainTtl) }); } catch (e) { failed++; cands.push({ market: m, chain: null, chainError: (e as Error).message }); }
+      // the liveness read: one read, then not again for POLYGON_LIVENESS_MS (a failed one is retried at the next read, as any read)
+      const maxAge = liveness.has(m.conditionId) ? POLYGON_LIVENESS_MS : rule.market !== null && !gammaSaysResolved(m) ? POLY_PRECLOSE_CHECK_MS : this.chainTtl;
+      try { cands.push({ market: m, chain: await this.readChainAtMost(m.conditionId, maxAge) }); } catch (e) { failed++; cands.push({ market: m, chain: null, chainError: (e as Error).message }); }
     }
-    if (toRead.length > 0 && failed === toRead.length) throw new Error(`polymarket: every on-chain read failed (${cands[0].chainError?.slice(0, 160)})`);
-    const r = resolvePolymarket(rule, cands, { sinceIso, refuse: this.refuse });
+    // a failed liveness read alone is not a failed cycle: the market is open on Gamma, so nothing was due (the next read retries it)
+    if (toRead.length > 0 && failed === toRead.length && !toRead.every((m) => liveness.has(m.conditionId))) throw new Error(`polymarket: every on-chain read failed (${cands[0].chainError?.slice(0, 160)})`);
+    const r = resolvePolymarket(rule, cands, { sinceIso, refuse: this.refuse, nowIso: new Date(now).toISOString() });
     if (rule.market && this.gameGate && r.events.length && toRead[0]) {
       const kept: SettledEvent[] = [];
       for (const ev of r.events) {
