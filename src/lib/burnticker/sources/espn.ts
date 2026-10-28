@@ -6,7 +6,7 @@ import { TEAM_IDS } from "@/lib/burnticker/sources/teamColors";
 import { PROVIDER_TEAM_IDS } from "@/lib/burnticker/sources/providerTeams";
 import { FBS_TEAM_IDS } from "@/lib/burnticker/sources/fbs";
 import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { type: "json" };
-import { sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
+import { budgetPhaseNow, sourceForUrl, takeOrThrow } from "@/lib/burnticker/apiBudget";
 import { LruMap, SPORTS_CACHE_BYTES, bodyBytes, logRequest } from "@/lib/burnticker/lru";
 
 /**
@@ -849,6 +849,22 @@ export function apiSportsGames(league: LeagueId, body: unknown, year: number): G
  *        is read first and the cdn only when TheSportsDB cannot be read (nbaSchedule)
  *   every other league     TheSportsDB v2 league schedule (BURNTICKER_THESPORTSDB_KEY) — without the key: ScheduleUnavailable
  */
+/**
+ * THE ENDPOINT A SPORTS READ HIT, for the keeper's per-cycle count (2026-10-27): the path with every date, id, key and name pair replaced
+ * by a placeholder, and the query's parameter names without their values (the constant filters sportId, gameType and timezone left out).
+ * "v1/schedule?date" is an MLB Stats API day page, "v2/lookup/event/:id" a TheSportsDB event lookup. Never carries a key.
+ */
+const CONSTANT_PARAMS = new Set(["sportId", "gameType", "timezone"]);
+export function sportsEndpointOf(url: string): string {
+  let u: URL;
+  try { u = new URL(url); } catch { return "unparsed"; }
+  const segs = u.pathname.split("/").filter(Boolean), tsdbV1 = /(^|\.)thesportsdb\.com$/.test(u.hostname) && segs[1] === "v1";
+  const path = segs.map((x, i) => (tsdbV1 && segs[i - 1] === "json" ? ":key" : /^\d{4}-\d{2}-\d{2}$/.test(x) ? ":date" : /^\d+$/.test(x) ? ":id" : /_vs_/i.test(x) ? ":names" : x))
+    .filter((x) => x !== "api" && x !== "json" && x !== ":key").join("/");
+  const keys = [...new Set(u.searchParams.keys())].filter((k) => !CONSTANT_PARAMS.has(k)).sort();
+  return keys.length ? `${path}?${keys.join("&")}` : path;
+}
+
 export class EspnClient {
   private fetchImpl: FetchLike; private now: () => number; private minInterval: number; private ttl: number; readonly tsdbKey: string | null;
   private timeoutMs: number; private scheduleTimeoutMs: number; private failBase: number; private failMax: number;
@@ -907,6 +923,19 @@ export class EspnClient {
     if (out.completed) this.liveFinals.set(k, { game: out, at: this.now() });
     return out;
   }
+  /**
+   * THE KEEPER'S CYCLE (2026-10-27). The keeper calls beginCycle() at the top of each cycle; until it does (the web, a test) nothing below
+   * applies. Inside a cycle a FRESH read (a confirming read, gameSettle.ts) is answered by any fetch of the same URL made since the cycle
+   * began, so both sides of a pair, and every game on one MLB day page, share one fetch; the fetch keeps its own time, so the five-minute
+   * gap between a final's two reads is measured exactly as before (a body fetched too early this cycle simply does not confirm). A live
+   * day listing is read at most once a cycle as well as at most once a minute, so a cycle slowed past a minute does not read it again.
+   * Every request is counted by its budget phase, source and endpoint (sportsEndpointOf) for the keeper's [live-schedule] line.
+   */
+  private cycleStart: number | null = null; private cycleReads = new Map<string, number>();
+  beginCycle(): void { this.cycleStart = this.now(); }
+  private fetchedThisCycle(h: { at: number }): boolean { return this.cycleStart !== null && h.at >= this.cycleStart; }
+  /** The requests sent since the last call, by "phase:source endpoint", largest first. */
+  takeCycleReads(): [string, number][] { const out = [...this.cycleReads.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])); this.cycleReads.clear(); return out; }
   /** THE LIVE SCHEDULE READ (above): per league, until when its free official schedule is kept LIVE_SCHEDULE_TTL_MS; and the reads taken so. */
   private liveUntil = new Map<LeagueId, number>(); private liveReads = new Map<LeagueId, number>(); private liveDay = new Map<LeagueId, { day: string; n: number }>();
   /** The live day-listing reads taken today (UTC) for a league (LIVE_READS_PER_DAY). */
@@ -950,6 +979,8 @@ export class EspnClient {
     // THE LIVE SCHEDULE READ: a free official feed of a league marked live is kept at most LIVE_SCHEDULE_TTL_MS
     const live = !!o.live && !!o.league;
     if (hit && !o.fresh && this.now() - hit.at < (live ? o.liveTtlMs ?? LIVE_SCHEDULE_TTL_MS : hit.ttl ?? this.ttl)) return hit.body;
+    // THE KEEPER'S CYCLE (above): a fresh read, or a live listing, already fetched since this cycle began
+    if (hit && (o.fresh || live) && this.fetchedThisCycle(hit)) return hit.body;
     // H1: a recent failure is answered from memory (with its own words) until its backoff ends
     const failed = this.failures.get(url);
     if (failed && this.now() < failed.until) throw new Error(failed.message);
@@ -960,8 +991,10 @@ export class EspnClient {
     let refusedBody = false;
     const run = async () => {
       const wait = (this.lastAt.get(source) ?? 0) + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      await takeOrThrow(source);   // the request budget (apiBudget.ts): waits for its bucket; a spent day budget skips the read
+      const endpoint = sportsEndpointOf(url);
+      await takeOrThrow(source, { methods: { [endpoint]: 1 } });   // the request budget (apiBudget.ts): waits for its bucket; a spent day budget skips the read
       this.lastAt.set(source, this.now()); logRequest(this.requests, redactKey(url));
+      { const phase = budgetPhaseNow(), k = `${phase ? `${phase}:` : ""}${source} ${endpoint}`; this.cycleReads.set(k, (this.cycleReads.get(k) ?? 0) + 1); }
       if (live && o.league) { this.liveReads.set(o.league, (this.liveReads.get(o.league) ?? 0) + 1); this.liveDay.set(o.league, { day: new Date(this.now()).toISOString().slice(0, 10), n: this.liveReadsToday(o.league) + 1 }); }
       try {
         const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers }, signal: AbortSignal.timeout(limitMs) });

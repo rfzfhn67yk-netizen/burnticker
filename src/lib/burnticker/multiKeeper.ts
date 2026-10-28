@@ -1,3 +1,4 @@
+import { periodLike, periodStartMs, periodStartDay } from "@/lib/burnticker/periodStart";
 import { backoffMs } from "@/lib/burnKeeper/schedule";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
@@ -312,9 +313,9 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
     const locked = d.registry.lockedRule(t);
     const rule = wideRule(locked.rule);
     const last = d.registry.lastReading(key);
-    const since = last ? new Date(Math.max(0, Date.parse(/^\d{4}-\d{2}(-\d{2})?$/.test(last.at) ? `${last.at.length === 7 ? `${last.at}-01` : last.at}T00:00:00Z` : last.at) - (d.overlapMs ?? 7 * 86_400_000))).toISOString() : null;
+    const since = last ? new Date(Math.max(0, (periodStartMs(last.at) || 0) - (d.overlapMs ?? 7 * 86_400_000))).toISOString() : null;
     // Feeds key readings by period strings ("2026-10-08"); compare in that space. Kalshi keys by ISO times.
-    const sinceKey0 = since && key.startsWith("catalogue:") ? (last!.at.length === 7 ? since.slice(0, 7) : since.slice(0, 10)) : since;
+    const sinceKey0 = since && key.startsWith("catalogue:") ? periodLike(since.slice(0, 10), last!.at) : since;   // the period kind of the last reading (day, month, week, quarter)
     // THE AWAITING ANCHOR (review N7): while the adapter reports events that closed but are not final yet, the read window does not move
     // past where it stood when they were first seen — a market that resolves weeks after a later one settled is still read when it does.
     const anchorKey = `fetch.awaiting-anchor.${key}`;
@@ -477,7 +478,7 @@ function planRace(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate
   const v = raceVerdict(sidePayout(mine), sidePayout(theirs), { me: t.ticker, other: other.ticker, shape });
   if (v.kind === "held") {
     d.log(`  [${what}] $${t.ticker}: held — ${v.why}`);
-    const since = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(mine.at) ? `${mine.at}T00:00:00Z` : mine.at);
+    const since = periodStartMs(mine.at);
     if (Number.isFinite(since) && d.now() - since >= RACE_HELD_ALERT_MS) {
       const text = `$${t.ticker} / $${other.ticker}: $${t.ticker}'s result has been final since ${mine.at} and $${other.ticker}'s is not; neither coin burns or forwards until both are final`;
       if (reg.recordAlert({ kind: "race-held", key: `race-held:${t.mint}`, text, meta: { mint: t.mint, other: other.mint } }, d.now())) d.log(`  [alert] race-held: ${text}`);
@@ -536,13 +537,11 @@ export function sendableWork(pending: readonly Pick<ReceiptRow, "readingDate" | 
   return { sendable: dates.size > 0, dates: [...dates].sort((a, b) => a - b).slice(0, 10) };   // the OLDEST ten: the oldest cranks first
 }
 
-/** The UTC day (YYYYMMDD) a settlement belongs to: an ISO time's UTC date, a feed period's date ("2026-10-08"), a month's first day ("2026-08"). */
+/** The UTC day (YYYYMMDD) a settlement belongs to: an ISO time's UTC date, a feed period's date ("2026-10-08"), a month's ("2026-08"), week's ("2026-W10") or quarter's ("2026-Q3") first day. */
 export function receiptDay(settledAt: string): number {
-  if (/^\d{4}-\d{2}$/.test(settledAt)) return Number(settledAt.replace("-", "")) * 100 + 1;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(settledAt)) return Number(settledAt.replace(/-/g, ""));
-  const ms = Date.parse(settledAt);
-  if (Number.isNaN(ms)) throw new Error(`not a settlement time: ${settledAt}`);
-  return ymd(ms);
+  const day = periodStartDay(settledAt);   // a week under its Monday, a quarter under its first day (2026-10-28: $GASCAT's weekly feed)
+  if (day === null) throw new Error(`not a settlement time: ${settledAt}`);
+  return Number(day.replace(/-/g, ""));
 }
 
 /** A Kalshi day is read into the program once it is over (UTC) plus this grace AND the selector was fetched after it ended. */

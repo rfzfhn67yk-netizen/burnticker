@@ -272,7 +272,7 @@ export function statusFirstReadStore(reg: { getStatus(key: string): string | nul
  * gameKeyOf(game), with when it was read. `at` is the keeper's clock on that read, so every body that read used was fetched at or before
  * it. A game coin keeps its own record (FirstRead, gameSchedule).
  */
-export interface FinalCheck { winner: "home" | "away" | "tie"; home: number | null; away: number | null; at: number; startsAt?: string }
+export interface FinalCheck { winner: "home" | "away" | "tie"; home: number | null; away: number | null; at: number; startsAt?: string; /** set once the second agreeing read confirmed it (CONFIRMED FINALS below): the verdict it settled on and when */ confirmed?: Extract<GameVerdict, { kind: "settled" }>; confirmedAt?: number }
 export interface FinalCheckStore { get(key: string): FinalCheck | null; set(key: string, m: FinalCheck | null): void }
 /** An in-memory final-check store (tests). */
 export function memoryFinalCheckStore(): FinalCheckStore & { marks: Map<string, FinalCheck> } {
@@ -357,8 +357,9 @@ export function finalCheck(store: FinalCheckStore, g: Game, v: GameVerdict, io: 
     if (m) noteCheck(d, g, `the final changed from${resultWords(m)} to${resultWords(res)} between two reads, so the count starts again`);
     return { kind: "awaiting", dueAt: now + GAME_CONFIRM_GAP_MS, why: m ? `the final changed from${resultWords(m)} to${resultWords(res)}; it settles once a read at least five minutes from now shows the same final` : `the final${resultWords(res)} was first read now; it settles once a read at least five minutes from now shows the same final` };
   }
+  if (m.confirmed) return { ...v, finalFirstReadAt: m.at };   // read again through the cache after it was confirmed (CONFIRMED FINALS): the same final
   const newest = Math.min(now, io.fetchedAt.length ? Math.max(...io.fetchedAt) : now);
-  if (newest - m.at >= GAME_CONFIRM_GAP_MS) return { ...v, finalFirstReadAt: m.at };
+  if (newest - m.at >= GAME_CONFIRM_GAP_MS) { const out = { ...v, finalFirstReadAt: m.at }; store.set(k, { ...m, confirmed: out, confirmedAt: now }); return out; }
   return { kind: "awaiting", dueAt: Math.max(m.at + GAME_CONFIRM_GAP_MS, now + 60_000), why: `the final${resultWords(res)} was first read at ${iso(m.at)}; it settles once a read at least five minutes after that shows the same final` };
 }
 const scoreWords = (f: { home: number | null; away: number | null }): string => (f.home === null || f.away === null ? "" : ` ${f.away}–${f.home} (away–home)`);
@@ -943,9 +944,28 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps, o: { 
   // the first (finalCheck). The confirming cycle reads every source fresh, so a cached answer is never taken for the second read.
   const store = d.finalChecks ?? null, nowMs = (d.now ?? Date.now)();
   const first = store?.get(gameKeyOf(g)) ?? null;
-  const io: TeamReadIo = { fresh: !!first && nowMs - first.at >= GAME_CONFIRM_GAP_MS, notFinal: [], fetchedAt: [] };
+  const kept = confirmedFinal(first, g);
+  if (kept) return kept;
+  // a record already confirmed is never read fresh again: its final was confirmed, and the listing changed only (CONFIRMED FINALS)
+  const io: TeamReadIo = { fresh: !!first && !first.confirmed && nowMs - first.at >= GAME_CONFIRM_GAP_MS, notFinal: [], fetchedAt: [] };
   const v = await settleGameReads(client, g, d, false, io);
   return store ? finalCheck(store, g, v, io, nowMs, d) : v;
+}
+/**
+ * CONFIRMED FINALS (2026-10-27, the World Series Game 4 incident). A rivalry series settles every meeting of its season on each read, and
+ * while one meeting is in play that read comes every minute, for both sides of the pair. Until now a team, season or rivalry coin's FINAL
+ * CHECK record stayed after its second agreeing read, so every later read of that game skipped the cache ("fresh") on every source: with
+ * six meetings settled, about 22 MLB Stats API day pages, 44 TheSportsDB requests and 12 on-chain payout reads a cycle, and at the keeper's
+ * MLB rate (3.6 a minute) a 6.5-minute cycle. Now the record keeps the verdict its second read confirmed, and a later read of the game
+ * returns it unread while the schedule still lists the game at the same start with the same final score. A listing that changes (another
+ * score, a moved start, a game no longer final) reads every source as before. How a game is first confirmed is unchanged: the first
+ * agreeing read, then a second one fetched at least GAME_CONFIRM_GAP_MS later that agrees.
+ */
+export function confirmedFinal(m: FinalCheck | null | undefined, g: Pick<Game, "startsAt" | "completed" | "home" | "away">): Extract<GameVerdict, { kind: "settled" }> | null {
+  const v = m?.confirmed;
+  if (!m || !v || v.kind !== "settled" || !g.completed || m.startsAt !== g.startsAt) return null;
+  if (m.home === null || m.away === null || g.home.score !== m.home || g.away.score !== m.away) return null;
+  return v;
 }
 /** What a team coin's game read tells its FINAL CHECK: whether to read fresh, the sources that answered "not final", and the fetch times. */
 interface TeamReadIo { fresh: boolean; notFinal: string[]; fetchedAt: number[] }

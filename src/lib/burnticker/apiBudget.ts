@@ -404,6 +404,8 @@ export class ApiBudget {
   /** A log line through this budget's logger (the keeper's log). */
   note(line: string): void { try { this.log(line); } catch { /* logging never stops a read */ } }
   setPhase(phase: string): string { const was = this.phase; this.phase = phase; return was; }
+  /** The phase the next calls are counted under ("" before any is named). */
+  phaseNow(): string { return this.phase; }
   private loadMethods(source: string, day: string): Record<string, number> {
     if (!this.store) return {};
     try { const j = JSON.parse(this.store.get(this.methodsKey(source)) ?? "{}") as { day?: string; counts?: Record<string, number> }; return j.day === day && j.counts ? { ...j.counts } : {}; } catch { return {}; }
@@ -671,6 +673,8 @@ export function configureApiBudget(o: ApiBudgetOpts): ApiBudget { current?.flush
 export function resetApiBudget(): void { current = null; }
 /** Names the phase this process's next calls are counted under (ApiBudget.setPhase); returns the previous one. */
 export function budgetPhase(phase: string): string { return apiBudget().setPhase(phase); }
+/** The phase this process's next calls are counted under ("" when none is named). */
+export function budgetPhaseNow(): string { return apiBudget().phaseNow(); }
 
 /** Takes from the process's budget; throws BudgetHoldError on "hold" or "busy" (the caller's read fails like any network error). */
 export async function takeOrThrow(source: string, o: { units?: number; requests?: number; essential?: boolean; methods?: Record<string, number>; lane?: BudgetLane } = {}): Promise<void> {

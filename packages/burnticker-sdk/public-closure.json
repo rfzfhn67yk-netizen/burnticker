@@ -60,6 +60,7 @@
     "src/lib/burnticker/oracle/types.ts",
     "src/lib/burnticker/pageTypes.ts",
     "src/lib/burnticker/pairForward.ts",
+    "src/lib/burnticker/periodStart.ts",
     "src/lib/burnticker/program.ts",
     "src/lib/burnticker/raisePresets.ts",
     "src/lib/burnticker/readPlan.ts",

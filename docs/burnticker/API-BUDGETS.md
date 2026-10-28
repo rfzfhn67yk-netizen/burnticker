@@ -133,6 +133,28 @@ These fall back to the house default (`established: false` in the code):
 
 ## Findings
 
+- **A rivalry pair in play no longer re-reads its settled meetings every cycle (2026-10-27).** From 01:29Z, while World Series
+  Game 4 was played for $BREWERS26/$RAYS26, keeper cycles took 6.5 minutes. A rivalry pair settles every meeting of the season on
+  each read, and while a meeting is in play that read comes every minute for both sides. After a meeting's final was confirmed, its
+  first-read record stayed, so every later read of that game skipped every cache. Each cycle then fetched the MLB Stats API day
+  pages, TheSportsDB's day listings and lookups, and the on-chain payout of every settled meeting, twice. The keeper's MLB share is
+  3.6 requests a minute with a burst of 2, so about 23 requests waited about 6 minutes. Now the record keeps the verdict its second
+  read confirmed. A later read returns it unread while the schedule lists the game at the same start with the same final score, and
+  any change to the listing reads every source as before. Inside one keeper cycle a fresh read is shared by every coin, and the
+  live day listing is read at most once. How a game is confirmed does not change: two agreeing reads, the second fetched at least
+  five minutes after the first. The keeper's `[live-schedule]` line now counts every sports request of the cycle by endpoint.
+  Measured with six settled meetings and one in play (`test/burntickerMlbCycleReads.test.ts`):
+
+  | Per keeper cycle | Before | After |
+  |---|---|---|
+  | MLB Stats API requests | 23 (25 when the season files refresh) | 1 (3 when the season files refresh) |
+  | TheSportsDB requests | 44 | 0 |
+  | On-chain payout reads (fresh) | 12 | 0 |
+  | Wait for the MLB budget | about 350 s | 0 (17 s when the season files refresh) |
+
+  The first cycle after deploy reads each settled meeting fresh once more, shared by both sides, to stamp the older records: 10 MLB
+  requests, about 2 minutes.
+
 - **The Polygon reader is gated on Gamma, with one liveness read a coin a day (2026-10-27).** The keeper's public-RPC share was
   used up by about 03:42Z every day from 10-24, and the reader was then held until 00:00 UTC. A one-market Polymarket coin now
   reads its payout vector on Polygon only when Gamma lists the market as closed or resolved (`closed`, `umaResolutionStatus`,
