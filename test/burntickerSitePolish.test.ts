@@ -2,6 +2,7 @@
 // above the bar; the home counts its featured cards from data and never says "no coin" under listed coins; the step lines show in full;
 // empty card fields say what they mean; one age function; one $DEFICIT image; "Next: graduation"; a curve market cap says it is
 // curve-implied; sideways rows fade the edge with more; the host notes become visitor sentences. Every new sentence passes the copy lint.
+import { imageSources } from "@/lib/burnticker/imageChain";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -159,8 +160,9 @@ describe("item 23: card fields", () => {
     assert.doesNotMatch(read("site/burnticker/index.html"), /Next: graduated/);
   });
   test("one $DEFICIT image: the app shows a same-origin brand image instead of generated initials", () => {
-    const card = read("src/app/burnticker/_components/CoinCard.tsx");
-    assert.match(card, /\/\^\\\/burnticker\\\/\(img\|brand\)\\\/\[\\w\.-\]\+\$\/\.test\(src\) \? src/);
+    // 2026-10-27: CoinThumb walks imageChain.ts imageSources; a same-origin brand or generated image is still shown as is, first
+    assert.match(read("src/app/burnticker/_components/CoinCard.tsx"), /imageSources\(\{ src, mirror, ticker, generated, preview \}\)/);
+    assert.deepEqual(imageSources({ src: "/burnticker/brand/deficit.png", ticker: "DEFICIT" }), ["/burnticker/brand/deficit.png"]);
   });
 });
 

@@ -37,6 +37,7 @@ import { seasonOverFor, seasonStatus } from "@/lib/burnticker/seasonOver";
 import { meetingsRefusal, meetingsVerdict, meetingsVerdictFor } from "@/lib/burnticker/meetingsLeft";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, sha256Hex, uploadMayHaveCompleted, type PinHooks, type PinnedCoin } from "@/lib/burnticker/pin";
+import { keepImageCopy } from "@/lib/burnticker/imageStore";
 import { checkWalletProof, provenReviewCreator, spendProof } from "@/lib/burnticker/walletProofCheck";
 import { safeErrorText } from "@/lib/burnticker/api/errorText";
 import { BudgetHoldError, isBudgetHold } from "@/lib/burnticker/apiBudget";
@@ -1109,6 +1110,9 @@ async function prepareLaunchUnlocked(p: Platform, body: Record<string, unknown>,
         if (!rideHeld) chargeSide();
       },
       failed: (_kind, e) => { if (uploadMayHaveCompleted(e)) { chargeSide(); bumpStatus(`pin.unknown.${day}`, 1); } },
+      // 2026-10-27: the host keeps the uploaded bytes under their sha256 (imageStore.ts), so GET /burnticker/img/<MINT> can serve them
+      // when the Arweave gateway cannot; pinCoin swallows a throw here, and the Arweave upload above is unchanged
+      kept: (bytes, _sha, contentType) => { keepImageCopy(bytes, contentType); },
     };
     try {
       if (!uploader) throw new Error("this site has no Arweave uploader set up");

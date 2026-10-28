@@ -37,3 +37,13 @@ export const imageUrlSent = (v: unknown): boolean => v !== undefined && v !== nu
 /** The review card's Image row: what is pinned with the coin's details (the page only uploads files, so both are pinned). */
 export const REVIEW_IMAGE_UPLOADED = "Your image, pinned with the coin's details";
 export const REVIEW_IMAGE_GENERATED = "The generated receipt art, pinned with the coin's details";
+
+/**
+ * THE SITE'S COPY OF A PINNED IMAGE (2026-10-27, imageStore.ts). The Arweave copy is the permanent record; this site may also keep the
+ * same bytes and serve them at /burnticker/img/<MINT> when the gateway cannot. The pinned check reads that copy, hashes it in the
+ * browser and compares it with the hash recorded at launch, and says which it is in plain words. Client-safe.
+ */
+export const IMAGE_MIRROR_OK_LINE = "This site also keeps a copy of the image, and it hashes to the recorded value. The Arweave copy is the permanent record; the copy on this site is a mirror of it.";
+export const IMAGE_MIRROR_MISMATCH_LINE = "This site keeps a copy of the image, but it does not hash to the recorded value. The Arweave copy is the permanent record; treat the copy on this site as unverified.";
+export const IMAGE_MIRROR_NONE_LINE = "This site keeps no copy of the image of its own. The Arweave copy is the permanent record.";
+export const IMAGE_MIRROR_UNREAD_LINE = "This site keeps a copy of the image, but this page could not read it just now. The Arweave copy is the permanent record.";

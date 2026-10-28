@@ -14,7 +14,7 @@ import { operatorTradeReasons } from "@/lib/burnticker/operatorCreators";
  * Walkthrough 13: the disclosed exception to "the operator never buys" (transparency.json rehearsals: 0.1 SOL of $REHEARSAL at creation).
  * Ninth pass B-26 / HS-95: there are two; the second is the operator's own wallet's $SEAWIN test (transparency.json operatorTrades).
  */
-export const REHEARSAL_BUY_EXCEPTION = `There are two disclosed exceptions. The operator bought 0.1 SOL of $REHEARSAL, a disclosed test coin, when it was created on Oct 11. The operator's own wallet bought 0.10 SOL of $SEAWIN on Oct 15 and sold all of it 24 seconds later.${operatorTradeReasons() ? ` ${operatorTradeReasons()}` : ""}`;
+export const REHEARSAL_BUY_EXCEPTION = `There are three disclosed exceptions. The operator bought 0.1 SOL of $REHEARSAL, a disclosed test coin, when it was created on Oct 11. The operator's own wallet bought 0.10 SOL of $SEAWIN on Oct 15 and sold all of it 24 seconds later. On Oct 28 the same wallet put 5.00 SOL into $GASCAT's curve as a seed and holds what it bought.${operatorTradeReasons() ? ` ${operatorTradeReasons()}` : ""}`;
 
 /** The ten guardrails, in order (the old homepage strip). Owner decision 2026-10-22: the review guardrail left; the trust page says once that no security firm has audited the code. */
 export const GUARDRAILS = [
@@ -83,5 +83,5 @@ export const ADMISSION_RULES = `A rule settles on a public result. Its input is 
 export const WHO_GETS_WHAT: { who: string; text: string }[] = [
   { who: "The coin", text: "Its share of the trading fees goes to its burn pool, which is its burn budget. Burns draw on the accumulated budget. Trading adds funds, and a burn can be delayed or skipped when the spendable amount is too small. There is no team allocation, and the team buys nothing at launch." },
   { who: "The creator", text: "The creator pays the venue's creation cost and the network fee. The creator earns no cash from fees, because the creator's share is fixed at zero. What the creator gets is a coin whose burns are paid for by its own trading." },
-  { who: "Burnticker", text: `Burnticker takes 25 basis points of trading volume on the launch curve. That rate is set in the LaunchLab platform settings, and this page reads it live below. After a coin moves to its trading pool, the liquidity is locked forever. ${bothTiersLineNow(DEPLOYED_TIER_PIN_PENDING)} Nothing is ever taken from a burn pool. The operator never trades a coin launched here. ${REHEARSAL_BUY_EXCEPTION} Apart from that, the only purchases are the program's own buybacks, and everything bought is burned.` },
+  { who: "Burnticker", text: `Burnticker takes 25 basis points of trading volume on the launch curve. That rate is set in the LaunchLab platform settings, and this page reads it live below. After a coin moves to its trading pool, the liquidity is locked forever. ${bothTiersLineNow(DEPLOYED_TIER_PIN_PENDING)} Nothing is ever taken from a burn pool. The operator never trades a coin launched here. ${REHEARSAL_BUY_EXCEPTION} Apart from those, the only purchases are the program's own buybacks, and everything bought is burned.` },
 ];

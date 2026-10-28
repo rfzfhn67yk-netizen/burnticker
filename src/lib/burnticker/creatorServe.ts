@@ -55,7 +55,7 @@ export interface CreatorCoinView extends CreatorCoinBase {
   available: boolean;
   /** sixth pass B-10: true while this coin's first page read is still running (registry facts only; refresh in a few seconds) */
   loading: boolean;
-  imageUrl: string | null; rule: string; creatorText: string | null; links: { label: string; url: string }[];
+  imageUrl: string | null; /** 2026-10-27: this site's copy of the uploaded image, when it has one (imageStore.ts) */ imageMirror?: string | null; rule: string; creatorText: string | null; links: { label: string; url: string }[];
   lastBurnAt: string | null;
   /** the next RESULT (null for a decided or voided one-shot), never the keeper's next poll of the source (audit 7 F08) */
   nextAt: string | null;
@@ -148,7 +148,7 @@ function viewOf(c: Ctx, t: TokenRow, d: Awaited<ReturnType<CoinDetail>>): Creato
   const receipts = c.burnsBy.get(s.mint)?.length ?? d.receipts.filter((r) => r.status === "confirmed" && Number(r.burned ?? 0) > 0).length;
   return {
     ...base, receipts, available: true, loading: false,
-    imageUrl: s.profile?.imageUrl ?? null, rule: sentence(s.profile?.oneLiner ?? ruleLine(c, t, s.seriesTitle)), creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [],
+    imageUrl: s.profile?.imageUrl ?? null, imageMirror: s.profile?.imageMirror ?? null, rule: sentence(s.profile?.oneLiner ?? ruleLine(c, t, s.seriesTitle)), creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [],
     lastBurnAt: s.burned.lastAt ?? null, ...creatorNextFields(s, d.receipts, c.now, liveFeed(c, t)),
   };
 }

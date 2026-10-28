@@ -34,7 +34,7 @@ function CoinItem({ c, rankLine }: { c: CreatorCoinView; rankLine: string | null
   return (
     <li className={card + " min-w-0 space-y-2"} data-creator-coin={c.ticker} data-available={c.available ? "yes" : c.loading ? "loading" : "no"}>
       <div className="flex gap-3">
-        <Link href={c.page} tabIndex={-1} aria-label={`${c.name} $${c.ticker}, coin page`}><CoinThumb src={c.imageUrl} ticker={c.ticker} size={56} generated /></Link>
+        <Link href={c.page} tabIndex={-1} aria-label={`${c.name} $${c.ticker}, coin page`}><CoinThumb src={c.imageUrl} mirror={c.imageMirror ?? null} ticker={c.ticker} size={56} generated /></Link>
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold leading-tight"><Link className="underline" href={c.page}>{c.name} <span className="font-mono text-sm text-neutral-400">${c.ticker}</span></Link></h2>
           <p className="mt-1 text-neutral-200" data-rule>{c.rule}</p>

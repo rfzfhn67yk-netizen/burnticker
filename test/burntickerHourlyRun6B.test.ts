@@ -85,7 +85,7 @@ describe("HB-91: the whitepaper's Limitations describe the mainnet facts, and th
     assert.ok(md.includes(r.mint) && md.includes(`on ${r.date} under the real platform settings`), "the row matches the transparency file");
   });
   test("HB-59: the wallet list names the trading-bot wallets with their one disclosed trade", () => {
-    assert.match(md, /trading-bot\s+wallets on other machines\. Their only trades in a platform coin are the 0\.1 SOL of \$REHEARSAL at its creation and the operator's own\s+wallet's 0\.10 SOL test purchase and immediate sale of \$SEAWIN/);
+    assert.match(md, /trading-bot\s+wallets on other machines\. Their only trades in a platform coin are the 0\.1 SOL of \$REHEARSAL at its creation, the operator's own\s+wallet's 0\.10 SOL test purchase and immediate sale of \$SEAWIN on 2026-10-15, and that wallet's 5\.00 SOL seed purchase of \$GASCAT/);
   });
 });
 

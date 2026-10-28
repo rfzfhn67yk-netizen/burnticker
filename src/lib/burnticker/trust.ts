@@ -351,6 +351,7 @@ export function operatorTradesProblems(j: Partial<TransparencyConfig>): string[]
   for (const t of j.operatorTrades) {
     const id = `operatorTrades ${t?.ticker ?? "?"}`;
     if (!t || typeof t.ticker !== "string" || !/^[A-Z0-9]{1,12}$/.test(t.ticker)) { out.push("every operator trade needs a ticker"); continue; }
+    if (t.kind !== undefined && t.kind !== "test" && t.kind !== "seed") out.push(`${id}: kind must be "test", "seed" or absent`);
     if (!PUBKEY_RE.test(String(t.mint))) out.push(`${id}: mint is not a base58 public key`);
     if (!PUBKEY_RE.test(String(t.wallet))) out.push(`${id}: wallet is not a base58 public key`);
     else if (!Array.isArray(j.wallets) || !j.wallets.some((w) => w && w.pubkey === t.wallet)) out.push(`${id}: wallet ${t.wallet} must also be listed in wallets`);

@@ -12,7 +12,8 @@ import { statusPayoutStore } from "@/lib/burnticker/oracle/payoutStore";
 import { allowHostedMetadata, customImagesEnabled, uploaderFromEnv, type PinUploader } from "@/lib/burnticker/pin";
 import fs from "node:fs";
 import path from "node:path";
-import { openRegistry, readingMatches, REGISTRY_FILE, type Registry, type TokenRow } from "@/lib/burnticker/registry";
+import { openRegistry, readingMatches, REGISTRY_FILE, type Registry, type TokenMeta, type TokenRow } from "@/lib/burnticker/registry";
+import { hasImageCopy, imageCopyHref } from "@/lib/burnticker/imageStore";
 import { KalshiClient } from "@/lib/burnticker/oracle/kalshi";
 import { PolymarketClient, type TitleRefuser } from "@/lib/burnticker/oracle/polymarket";
 import { loadRefuseList, refusalsFor } from "@/lib/burnticker/oracle/refuse";
@@ -198,6 +199,15 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
 }
 
 /** Whether the operator took a creator's image down (config/burnticker/image-takedowns.json `mints`); false when the file is unreadable. */
+/**
+ * 2026-10-27: the coin's launch pins and, when the registry's recorded image hash has a file in this host's image directory
+ * (imageStore.ts), the same-origin address of that copy. One cheap existence check per coin read, memoised in the store.
+ */
+function metaAndMirror(registry: Pick<Registry, "tokenMeta">, mint: string): { meta: TokenMeta | null; imageMirror: string | null } {
+  const meta = registry.tokenMeta(mint);
+  return { meta, imageMirror: meta?.imageSha256 && hasImageCopy(meta.imageSha256) ? imageCopyHref(mint) : null };
+}
+
 export function imageTakenDown(mint: string, root = process.cwd()): boolean {
   try { return ((JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "image-takedowns.json"), "utf8")) as { mints?: unknown[] }).mints ?? []).includes(mint); }
   catch { return false; }
@@ -257,7 +267,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     const [implied, info] = await impliedInfo();
     return {
       market: null, cpmm: null, holders: null, dates: null, stated: info && "stated" in info && info.stated ? info.stated : null, pair: null,
-      lifecycle: lifecycleFrom(p.registry, t, locked.rule, null), meta: p.registry.tokenMeta(t.mint),
+      lifecycle: lifecycleFrom(p.registry, t, locked.rule, null), ...metaAndMirror(p.registry, t.mint),
       token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
       chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw: null, feePdaLamports: null, vaultRaw: null, program: null },
       now, nextCheckAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
@@ -272,7 +282,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     const dates = await datesRead(market, registeredOf(programBlock));
     return {
       market, cpmm: null, holders, dates, stated: info && "stated" in info && info.stated ? info.stated : null, pair: null,
-      lifecycle: lifecycleFrom(p.registry, t, locked.rule, null), meta: p.registry.tokenMeta(t.mint),
+      lifecycle: lifecycleFrom(p.registry, t, locked.rule, null), ...metaAndMirror(p.registry, t.mint),
       token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
       chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports: null, vaultRaw: null, program: programBlock },
       now, nextCheckAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
@@ -302,7 +312,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     lp: await lpP,
     pair: await pairP,
     lifecycle: lifecycleFrom(p.registry, t, locked.rule, feePdaLamports),
-    meta: p.registry.tokenMeta(t.mint),
+    ...metaAndMirror(p.registry, t.mint),
     token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
     chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports, vaultRaw, program: programBlock },
     now, nextCheckAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,

@@ -4,6 +4,7 @@ import { heavyRefusal, pinCheckLimiter } from "@/lib/burnticker/api/http";
 import { verifyPinnedMetadata } from "@/lib/burnticker/verify";
 import { badgeFromText } from "@/lib/burnticker/describe";
 import { LruMap } from "@/lib/burnticker/lru";
+import { imageCopyHref, readImageCopy } from "@/lib/burnticker/imageStore";
 
 export const dynamic = "force-dynamic";
 
@@ -71,5 +72,10 @@ export async function GET(req: Request) {
   const r = await verifyPinnedMetadata({ metadataUri: meta.metadataUri, metadataSha256: meta.metadataSha256, hosted: meta.hosted, expectedDescription }, (u) => fetch(u, { redirect: "follow", cache: "no-store", signal: AbortSignal.timeout(15_000) }));
   // review of A-22 item 6: only a passing verdict may be kept (ten minutes); a failure or an unread pin (a gateway hiccup) is asked
   // again next time, never served from a cache
-  return NextResponse.json(r, { headers: { "cache-control": r.ok === true ? "public, max-age=600" : "no-store" } });
+  // 2026-10-27: whether this host has its own copy of the uploaded image (imageStore.ts): "ok" when the file named by the recorded
+  // hash is on disk and hashes to it (the store refuses one that does not), "none" when there is no recorded hash or no sound file.
+  // The Arweave copy stays the permanent record; this reports the mirror only.
+  const copy = meta.imageSha256 ? readImageCopy(meta.imageSha256) : null;
+  const image: { mirror: "ok" | "none"; href: string | null } = copy ? { mirror: "ok", href: imageCopyHref(mint) } : { mirror: "none", href: null };
+  return NextResponse.json({ ...r, image }, { headers: { "cache-control": r.ok === true ? "public, max-age=600" : "no-store" } });
 }

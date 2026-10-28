@@ -106,7 +106,7 @@ describe("walkthrough 13: disclosures that said more than the code does", () => 
     assert.doesNotMatch(GUARDRAIL_DETAIL["no team buy"].text, /REHEARSAL/);
     assert.ok(GUARDRAIL_DETAIL["the platform buys no coin except one test coin"].text.includes(REHEARSAL_BUY_EXCEPTION));
     assert.ok(WHO_GETS_WHAT.find((w) => w.who === "Burnticker")!.text.includes(REHEARSAL_BUY_EXCEPTION));
-    assert.match(USE_OF_FEES, /apart from the two disclosed tests on the test-coins page/);   // ninth pass B-26 / HS-95
+    assert.match(USE_OF_FEES, /apart from the disclosed tests and seeds on the test-coins page/);   // ninth pass B-26 / HS-95; seeds since the $GASCAT seed (2026-10-28)
     assert.match(read("config/burnticker/transparency.json"), /The operator bought 0\.1 SOL of it at creation/);
   });
   test("'no withdraw' names where a pool can go, and natural-hazard readings are not called refused", () => {

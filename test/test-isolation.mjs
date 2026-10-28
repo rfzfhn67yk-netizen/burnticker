@@ -31,6 +31,7 @@ export const ISOLATED_PATHS = Object.freeze({
   BURNTICKER_DB: "burnticker.db",
   BURNTICKER_MINT_BANK_PATH: "burnticker-mintbank.db",
   BURNTICKER_PUBLISH_DIR: "burnticker-site",
+  BURNTICKER_IMAGE_DIR: "burnticker-images",
   BURNTICKER_SYNTH_DB: "burnticker-synth.db",
   BURNKEEPER_DB: "burnkeeper.db",
   BURNKEEPER_PUBLISH_DIR: "burnkeeper-site",

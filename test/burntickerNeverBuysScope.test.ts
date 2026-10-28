@@ -119,7 +119,7 @@ describe("ACC-02: the monitor says what it checked, and never 'clear' on partial
     assert.match(fs.readFileSync("scripts/burnticker-trustpack.mts", "utf8"), /const wallets = neverBuysWallets\(cl\.wallets, exceptions\);/);
   });
   test("the keeper reads the exception from transparency.json; Trust shows the scope; a stale report is not shown as current", async () => {
-    assert.deepEqual(neverBuysExceptions().map((x) => [x.symbol, x.mint]), [["REHEARSAL", REHEARSAL], ["SEAWIN", SEAWIN]]);
+    assert.deepEqual(neverBuysExceptions().map((x) => [x.symbol, x.mint]), [["REHEARSAL", REHEARSAL], ["SEAWIN", SEAWIN], ["GASCAT", "2L3bZbzkYgJ4eU64ed7YvchrxEnzQXQt2gvxq1CLburn"]]);
     const keeper = fs.readFileSync("scripts/burnticker-keeper.mts", "utf8");
     assert.match(keeper, /const exceptions = cluster === "mainnet" \? neverBuysExceptions\(process\.cwd\(\)\) : \[\];/);
     const r = await runNeverBuys({ ...base, wallets: [{ role: "keeper", pubkey: OP }], rpc: rpc({}) });
