@@ -71,6 +71,8 @@ export interface TokenPageInput {
   pair: PairCounterpart | null;
   /** The launch pins (registry.token_meta): the creator's note and the Arweave copies. */
   meta?: TokenMeta | null;
+  /** 2026-10-27: the same-origin address of this site's copy of the uploaded image (imageStore.ts), when the recorded hash has a file; null or absent otherwise */
+  imageMirror?: string | null;
   /** No burn pool is ever left behind: the end of the rule and the sweep, from the registry (lifecycleFrom). */
   lifecycle?: LifecycleJson | null;
   /** The LaunchLab pool and top holders as read this cycle (market.ts readMarket); absent/null on a host without an RPC → the page shows "—". */
@@ -469,8 +471,8 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     // HB-56 (hourly run 6): the policy line says "locks at graduation" until the coin's lock is known, from the same lpLockedPct
     lp: { ...lp, line: lpPolicyLineFor(lpLockedPct) },
     program,
-    profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLinerFor(rule, i.seriesTitle, t.description, t.ticker), sideName: ruleSideName(rule), readingDirection: ruleReadingDirection(rule), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
-    pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
+    profile: { imageUrl: t.imageUrl, imageMirror: i.imageMirror ?? null, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLinerFor(rule, i.seriesTitle, t.description, t.ticker), sideName: ruleSideName(rule), readingDirection: ruleReadingDirection(rule), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
+    pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, imageMirror: i.imageMirror ?? null, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
     market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market, cpmm: i.cpmm, holders: i.holders, dates: i.dates }),
     lifecycle: i.lifecycle ? { ...i.lifecycle, line: lifecycleLineFor(i.lifecycle.line, times.result), fees: feeFlowLine(postGraduation, lpLockedPct, tierUnread) } : null,
     stated: i.stated && rule.oracle === "polymarket" && rule.market ? { phrase: i.stated.resolutionSource.phrase, text: i.stated.resolutionSource.text, crossRead: i.stated.resolutionSource.crossRead ? { text: i.stated.resolutionSource.crossRead.text } : null, finalAfter: { text: i.stated.finalAfter.text, ifDisputed: i.stated.finalAfter.ifDisputed } } : null,
@@ -652,7 +654,7 @@ tick();setInterval(tick,1000);})();
 /** One coin on the platform index — the launchpad card's fields (2026-10-10: image, one-liner, curve progress, last burn, next result). */
 export interface PlatformIndexToken {
   ticker: string; name: string; mint: string; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; status: string; launchedAt: string | null; burned: string; burns: number; pctOfSupply: number; impliedChance: number | null; nextCheckAt: string | null; pairId: string | null;
-  imageUrl: string | null; oneLiner: string; lastBurnAt: string | null; nextMarket: string | null; nextCloseTime: string | null; oneShot: boolean; badge?: string | null;
+  imageUrl: string | null; imageMirror?: string | null; oneLiner: string; lastBurnAt: string | null; nextMarket: string | null; nextCloseTime: string | null; oneShot: boolean; badge?: string | null;
   /** website-15 item 13: the creator's own text and links, shown on the card under the rule */
   creatorText?: string | null; links?: { label: string; url: string }[];
   /** null = the curve was not read (no RPC on the host, or not launched): the card shows "—", never a guess. */
@@ -694,7 +696,7 @@ export function indexToken(s: TokenStatusJson): PlatformIndexToken {
   const c = s.market?.curve ?? null;
   return {
     ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: null, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null,
-    imageUrl: s.profile?.imageUrl ?? null, creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [], oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot, badge: s.profile?.badge ?? null,
+    imageUrl: s.profile?.imageUrl ?? null, imageMirror: s.profile?.imageMirror ?? null, creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [], oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot, badge: s.profile?.badge ?? null,
     phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null, raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null,
     marketCap: c?.marketCap ?? s.market?.pool?.marketCap ?? null, holders: walletHolders(s.market?.holders),
     holdersNote: s.market && s.market.holders.count === null ? s.market.holders.countNote || null : null, poolNote: s.market?.poolNote ?? null,

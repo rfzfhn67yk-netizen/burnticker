@@ -55,7 +55,7 @@ describe("I-1 transparency.json statements match the program", () => {
   });
   test("the platform's buy policy names the disclosed test buy", () => {
     assert.doesNotMatch(all, /The platform never buys any coin/);
-    assert.match(all, /with two disclosed exceptions: the operator bought 0\.1 SOL of \$REHEARSAL, a test coin, when it was created on 2026-10-11, and the operator's own wallet bought 0\.10 SOL of \$SEAWIN/);
+    assert.match(all, /with three disclosed exceptions: the operator bought 0\.1 SOL of \$REHEARSAL, a test coin, when it was created on 2026-10-11, the operator's own wallet bought 0\.10 SOL of \$SEAWIN/);
     assert.ok(!GUARDRAILS.some((g) => g === ("the platform never buys any coin" as string)));
     const g = GUARDRAILS.find((x) => x.startsWith("the platform buys no coin"))!;
     assert.match(GUARDRAIL_DETAIL[g].text, /\$REHEARSAL/);

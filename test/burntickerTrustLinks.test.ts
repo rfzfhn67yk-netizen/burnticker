@@ -42,7 +42,7 @@ test("BT-12: the summary line names key control and notice (owner holds two of t
 
 test("BT-18: categorical claims carry their actor and scope", () => {
   // ninth pass B-26: not "any coin" (the disclosed wallet owns a trading bot that trades other memecoins)
-  assert.match(USE_OF_FEES, /The operator's wallets never trade a coin launched here, apart from the two disclosed tests on the test-coins page\./); assert.match(USE_OF_FEES, /program-run burn-pool purchases/);
+  assert.match(USE_OF_FEES, /The operator's wallets never trade a coin launched here, apart from the disclosed tests and seeds on the test-coins page\./); assert.match(USE_OF_FEES, /program-run burn-pool purchases/);
   assert.doesNotMatch(USE_OF_FEES, /The platform never buys back any coin/);
   // private review 10: specific, not absolute: no withdrawal to a personal wallet, the end-sink forward, reading signers, the upgrade authority
   assert.match(CHECK_COPY.powersIntro, /cannot withdraw a burn pool to a personal wallet/); assert.match(CHECK_COPY.powersIntro, /upgrade authority can replace the program/);

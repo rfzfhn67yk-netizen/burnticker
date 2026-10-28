@@ -149,6 +149,12 @@ export interface PinHooks {
   recall?(sha256: string, contentType: string): { id: string; url: string } | null;
   uploaded?(kind: "image" | "metadata", up: { id: string; url: string }, sha256: string, contentType: string): void;
   failed?(kind: "image" | "metadata", error: unknown): void;
+  /**
+   * 2026-10-27 (the $GASCAT launch during the Irys gateway outage): hears of the creator's uploaded image once its Arweave upload is
+   * done (or a retry recalled it), with the exact bytes whose sha256 the registry records, so the host can keep its own copy
+   * (imageStore.ts keepImageCopy). A throw here is swallowed: the Arweave copy is the record, and the mirror never refuses a launch.
+   */
+  kept?(bytes: Uint8Array, sha256: string, contentType: string): void;
 }
 
 /** Renders the receipt art (PNG through sharp), uploads it, then uploads the metadata JSON naming it. Throws on any failure. */
@@ -170,6 +176,8 @@ export async function pinCoin(uploader: PinUploader, i: PinCoinInput, hooks: Pin
   if (i.image) {
     const up = await put("image", i.image.bytes, i.image.contentType);
     imageUri = up.url; imageTx = up.id; imageSha256 = sha256Hex(i.image.bytes); imageType = i.image.contentType;
+    // the site's own copy of the uploaded bytes, after the upload and never instead of it (see PinHooks.kept)
+    try { hooks.kept?.(i.image.bytes, imageSha256, imageType); } catch (e) { console.error("[burnticker/pin] the image copy could not be kept on this host:", e instanceof Error ? e.message : String(e)); }
   } else {   // no image by web address (owner decision 2026-10-19, imagePin.ts IMAGE_URL_REFUSED): uploaded bytes or the receipt art
     const svg = renderCoinSvg({ ticker: i.ticker, oneLiner: i.oneLiner, rule: i.rule, sha256: i.rulesSha256 });
     const sharp = (await import("sharp")).default;

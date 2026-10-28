@@ -785,12 +785,13 @@ shows its funding and balance, and its terms in `SECURITY.md` are still a draft 
   incidents; see [/burnticker/incidents](https://burnticker.com/burnticker/incidents).
 - **Wallet list.** The transparency file (`config/burnticker/transparency.json`) names every role: operations, deployer, keeper,
   developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading-bot
-  wallets on other machines. Their only trades in a platform coin are the 0.1 SOL of $REHEARSAL at its creation and the operator's own
-  wallet's 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15, which the same file discloses. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. The mainnet keys are set, and each one is listed there with its role.
+  wallets on other machines. Their only trades in a platform coin are the 0.1 SOL of $REHEARSAL at its creation, the operator's own
+  wallet's 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15, and that wallet's 5.00 SOL seed purchase of $GASCAT on
+  2026-10-28, which it holds; the same file discloses all three. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. The $GASCAT seed was made to put SOL into Gas Cat's curve on launch day; the operator intends to burn every token this bought if the coin graduates. The mainnet keys are set, and each one is listed there with its role.
 - **Policies.** Posts on X are not deleted, and corrections go in the same thread with the receipt. There is no paid promotion and no
   talk of what any coin trades at. Nothing is described as forthcoming. The platform buys no coin; the disclosed exceptions are the
-  0.1 SOL test purchase of $REHEARSAL when it was created and the operator's own wallet's 0.10 SOL test purchase and immediate sale of
-  $SEAWIN on 2026-10-15. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out.
+  0.1 SOL test purchase of $REHEARSAL when it was created, the operator's own wallet's 0.10 SOL test purchase and immediate sale of
+  $SEAWIN on 2026-10-15, and that wallet's 5.00 SOL seed purchase of $GASCAT on 2026-10-28, which it holds. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. The $GASCAT seed was made to put SOL into Gas Cat's curve on launch day; the operator intends to burn every token this bought if the coin graduates.
 - **The operator also runs trading bots.** Each bot refuses any platform coin by mint and by ticker. The check is in code and fails
   closed (`src/lib/ownTokens.ts`, which reads `config/own-tokens.json`). Both files are published.
 - **The operator.** Burnticker is run by one independent operator in the United States. The contact address is contact@burnticker.com,

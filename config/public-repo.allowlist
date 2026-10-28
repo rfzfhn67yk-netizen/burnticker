@@ -121,6 +121,8 @@ scripts/ops/cloudflare-ufw-rules.sh
 # automatic SOL top-ups (2026-10-19, src/lib/burnticker/ops/topUp.ts): the operator's --plan / --apply tool runs on the host, and the
 # public floors and fill levels it and the keeper read (also covered by the config/burnticker line above)
 scripts/ops/top-up.mts
+# 2026-10-27: stores the site's copy of a pinned image after checking its recorded sha256 (docs/burnticker/IMAGES.md); no secrets, no registry
+scripts/ops/image-copy-backfill.mts
 config/burnticker/top-up.json
 # NOT here, on purpose: scripts/ops/mac/ (HB-62, 2026-10-19: the operator's Mac pull script and restore drill). They name the host's
 # address, its paths and the keychain item that holds the backup passphrase, so they stay in the monorepo; the leak scan also refuses

@@ -16,9 +16,14 @@ import TRANSPARENCY from "../../../config/burnticker/transparency.json" with { t
  */
 export const OPERATOR_CREATOR_WALLETS: ReadonlySet<string> = new Set((TRANSPARENCY as { operatorCreatorWallets?: string[] }).operatorCreatorWallets ?? []);
 
-/** One trade by an operator wallet in a platform coin: a test purchase and, when it was sold, the sale (transparency.json `operatorTrades`). */
+/**
+ * One trade by an operator wallet in a platform coin (transparency.json `operatorTrades`): a test purchase and, when it was sold, the
+ * sale; or, since 2026-10-28 ($GASCAT), a seed: SOL the operator put into a coin's curve on purpose and holds (`kind: "seed"`).
+ */
 export interface OperatorTrade {
   mint: string; ticker: string; wallet: string;
+  /** "test" (the default) or "seed"; the word every sentence uses for it */
+  kind?: "test" | "seed";
   /** SOL the wallet paid for the purchase, and SOL it got back from the sale (null when not sold) */
   inSol: number; outSol: number | null;
   /** the coins the purchase returned, as a decimal string */
@@ -33,15 +38,18 @@ export interface OperatorTrade {
   reason: string | null;
 }
 
+/** "test" unless the row says "seed". */
+export const operatorTradeKind = (t: Pick<OperatorTrade, "kind">): "test" | "seed" => (t.kind === "seed" ? "seed" : "test");
+
 export const OPERATOR_TRADES: readonly OperatorTrade[] = ((TRANSPARENCY as { operatorTrades?: OperatorTrade[] }).operatorTrades ?? []);
 
 const sol = (n: number, places: number) => n.toFixed(places);
 const WORDS = ["zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 const secondsBetween = (a: string | null, b: string | null): number | null => (a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 1000) : null);
 
-/** "a 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15" (a purchase never sold says "test purchase of …"). */
+/** "a 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15" (a purchase never sold says "test purchase of …"; a seed says "seed purchase of …"). */
 export function operatorTradePhrase(t: OperatorTrade): string {
-  return `a ${sol(t.inSol, 2)} SOL test purchase${t.sellTx ? " and immediate sale" : ""} of $${t.ticker} on ${t.at.slice(0, 10)}`;
+  return `a ${sol(t.inSol, 2)} SOL ${operatorTradeKind(t)} purchase${t.sellTx ? " and immediate sale" : ""} of $${t.ticker} on ${t.at.slice(0, 10)}`;
 }
 /**
  * What every surface prints in place of the reason sentence while a listed trade's `reason` is "" or null: the trade is disclosed, the
@@ -49,11 +57,14 @@ export function operatorTradePhrase(t: OperatorTrade): string {
  * fields that operatorTradesProblems checks word for word).
  */
 export const OPERATOR_TRADE_REASON_MISSING = "The operator has not yet written down why that test was made.";
+/** The same, for a seed. */
+export const OPERATOR_SEED_REASON_MISSING = "The operator has not yet written down why that seed was made.";
+const reasonMissing = (t: OperatorTrade): string => (operatorTradeKind(t) === "seed" ? OPERATOR_SEED_REASON_MISSING : OPERATOR_TRADE_REASON_MISSING);
 /** True when the trade carries an owner-written reason ("" and null mean none yet). */
 export const hasOperatorTradeReason = (t: OperatorTrade): boolean => typeof t.reason === "string" && t.reason.trim() !== "";
-/** "The $SEAWIN test was made <reason>." The owner's reason, as written in transparency.json, or OPERATOR_TRADE_REASON_MISSING. */
+/** "The $SEAWIN test was made <reason>." or "The $GASCAT seed was made <reason>.": the owner's reason as written in transparency.json, or the missing-reason sentence. */
 export function operatorTradeReason(t: OperatorTrade): string {
-  return hasOperatorTradeReason(t) ? `The $${t.ticker} test was made ${t.reason}.` : OPERATOR_TRADE_REASON_MISSING;
+  return hasOperatorTradeReason(t) ? `The $${t.ticker} ${operatorTradeKind(t)} was made ${t.reason}.` : reasonMissing(t);
 }
 /** "(0.10 SOL in, 0.098 SOL out)" */
 export function operatorTradeAmounts(t: OperatorTrade): string {
@@ -79,6 +90,7 @@ export function operatorCreatorLine(creator: string | null | undefined, mint: st
   const mine = trades.filter((t) => t.mint === mint);
   if (!mine.length) return `${lead} The operator holds none of it and has not traded it.`;
   const parts = mine.map((t) => {
+    if (operatorTradeKind(t) === "seed") return `On ${t.at.slice(0, 10)}, ${t.wallet === creator ? "that wallet" : `the operator's wallet ${operatorWalletShort(t.wallet)}`} put ${sol(t.inSol, 2)} SOL into its curve${t.sellTx ? "" : " and holds what it bought"}. ${hasOperatorTradeReason(t) ? `The seed was made ${t.reason}.` : OPERATOR_SEED_REASON_MISSING}`;
     const after = secondsBetween(t.coinCreatedAt, t.at), held = secondsBetween(t.at, t.sellAt);
     const minutes = after !== null ? Math.round(after / 60) : null;
     const when = minutes !== null && minutes >= 1 && minutes <= 10 ? `${WORDS[minutes]} minute${minutes === 1 ? "" : "s"} after creating it, that wallet` : `On ${t.at.slice(0, 10)}, ${t.wallet === creator ? "that wallet" : `the operator's wallet ${operatorWalletShort(t.wallet)}`}`;
@@ -95,9 +107,11 @@ export function operatorCreatorLine(creator: string | null | undefined, mint: st
  */
 export function disclosedTestsClause(trades: readonly OperatorTrade[] = OPERATOR_TRADES): string {
   const when = (t: OperatorTrade) => { const s = secondsBetween(t.coinCreatedAt, t.at); return s !== null && s < 3_600 ? "minutes after it was created" : "after it was created"; };
-  const items = ["0.1 SOL of $REHEARSAL at creation", ...trades.map((t) => `a ${sol(t.inSol, 2)} SOL purchase${t.sellTx ? " and immediate sale" : ""} of $${t.ticker} ${when(t)}`)];
+  const items = ["0.1 SOL of $REHEARSAL at creation", ...trades.map((t) => (operatorTradeKind(t) === "seed" ? `a ${sol(t.inSol, 2)} SOL seed purchase of $${t.ticker} on its launch day${t.sellTx ? "" : ", held"}` : `a ${sol(t.inSol, 2)} SOL purchase${t.sellTx ? " and immediate sale" : ""} of $${t.ticker} ${when(t)}`))];
   const n = items.length;
-  const count = n === 1 ? "one disclosed test" : `${WORDS[n]?.toLowerCase() ?? n} disclosed tests`;
+  const tests = 1 + trades.filter((t) => operatorTradeKind(t) !== "seed").length, seeds = trades.filter((t) => operatorTradeKind(t) === "seed").length;
+  const word = (k: number) => WORDS[k]?.toLowerCase() ?? String(k);
+  const count = `${word(tests)} disclosed test${tests === 1 ? "" : "s"}${seeds ? ` and ${word(seeds)} disclosed seed${seeds === 1 ? "" : "s"}` : ""}`;
   const list = n === 1 ? items[0] : `${items.slice(0, -1).join(", ")}, and ${items[n - 1]}`;
   return `${count} (${list})`;
 }
@@ -107,6 +121,6 @@ export function disclosedTestsClause(trades: readonly OperatorTrade[] = OPERATOR
  * sentence that points at the disclosed tests. Unchanged when no trade is listed or the anchor sentence is absent.
  */
 export function feesUseWithReasons(useOfFees: string, trades: readonly OperatorTrade[] = OPERATOR_TRADES): string {
-  const reasons = operatorTradeReasons(trades), anchor = "apart from the two disclosed tests on the test-coins page.";
+  const reasons = operatorTradeReasons(trades), anchor = "apart from the disclosed tests and seeds on the test-coins page.";
   return reasons && useOfFees.includes(anchor) ? useOfFees.replace(anchor, `${anchor} ${reasons}`) : useOfFees;
 }

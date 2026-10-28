@@ -37,14 +37,21 @@ const t = loadTransparency();
 const FILE_REASON = (t.operatorTrades?.[0]?.reason ?? "") as string;
 const SAID = FILE_REASON ? `The $SEAWIN test was made ${FILE_REASON}.` : MISSING;
 const SAID_PAGE = FILE_REASON ? `The test was made ${FILE_REASON}.` : MISSING;   // the coin page is already about $SEAWIN
+// the $GASCAT seed (2026-10-28): the operator put 5 SOL into the curve on launch day and holds it; its sentences say "seed", never "test"
+const GASCAT = "2L3bZbzkYgJ4eU64ed7YvchrxEnzQXQt2gvxq1CLburn";
+const SEED_REASON = (t.operatorTrades?.[1]?.reason ?? "") as string;
+const SEED_SAID = SEED_REASON ? `The $GASCAT seed was made ${SEED_REASON}.` : "The operator has not yet written down why that seed was made.";
+const SEED_PAGE = SEED_REASON ? `The seed was made ${SEED_REASON}.` : "The operator has not yet written down why that seed was made.";
 const blankProse = <T extends string | null | undefined>(x: T): T => (FILE_REASON && typeof x === "string" ? (x.split(SAID).join(MISSING) as T) : x);
 const tBlank = { ...t, operatorTrades: t.operatorTrades!.map((x) => ({ ...x, reason: "" })), wallets: t.wallets.map((w) => ({ ...w, description: blankProse(w.description) })), rehearsals: t.rehearsals.map((x) => ({ ...x, text: blankProse(x.text) })), policies: t.policies.map((p) => ({ ...p, text: blankProse(p.text) })) };
 const mints: TradesCheckMint[] = tradesCheckMints(FIXTURE.tokens, [...t.rehearsals.flatMap((r) => (r.mint ? [{ symbol: r.symbol, mint: r.mint }] : [])), { symbol: "DEFICIT", mint: "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj" }]);
 
 describe("B-26 / HS-95: the $SEAWIN round trip is listed once, with the owner's reason", () => {
   test("transparency.json operatorTrades holds the two mainnet transactions and one reason string", () => {
-    assert.equal(OPERATOR_TRADES.length, 1);
-    const [x] = OPERATOR_TRADES;
+    assert.equal(OPERATOR_TRADES.length, 2);
+    const [x, g] = OPERATOR_TRADES;
+    assert.equal(g.ticker, "GASCAT"); assert.equal(g.mint, GASCAT); assert.equal(g.kind, "seed"); assert.equal(g.sellTx, null); assert.equal(g.outSol, null);
+    assert.equal(g.inSol, 5.003); assert.equal(g.outTokens, "151969874.816749"); assert.match(g.buyTx, /^23gjy8snf8i9vMSb/); assert.equal(g.at, "2026-10-28T00:48:44Z");
     assert.equal(x.ticker, "SEAWIN"); assert.equal(x.mint, SEAWIN); assert.equal(x.wallet, OPERATOR);
     assert.equal(x.inSol, 0.1015); assert.equal(x.outTokens, "3484436.310353");
     assert.match(x.buyTx, /^2PWU1CBgJsxNFgvFwWbo/); assert.match(x.sellTx!, /^5ieZjtQ3pjBm5BEE79wt/);
@@ -59,21 +66,25 @@ describe("B-26 / HS-95: the $SEAWIN round trip is listed once, with the owner's 
     for (const m of ["J45hvg6FYGzDMj3iYS3BJPU2pwqfoZhA7B8isnW4fin8", "EDNbkvZLKGQizGUDot1n41mF6FhXkdm6nZJFyTBzBURN", "33fGPWrMaLjfX69wsnd3ruaQtGVMU3kKcTsBTnE4ggid", "2j5CbcQ7uH2FKPUbFMbeWM66jwCgTEYj7c9jziA88Jwk", "DuaF9EE7eSFHiHVxUBgXye729VN1jj9AWD31AAJbburn", "5jtNbnTohb1YyVsSDzkWeoCMY7jAotA6qcnUxKg7burn"])
       assert.equal(operatorCreatorLine(OPERATOR, m), "Created by the operator's own wallet 8sJf…LvGbs during the soft launch. The operator holds none of it and has not traded it.");
     assert.equal(operatorCreatorLine(OPERATOR), "Created by the operator's own wallet 8sJf…LvGbs during the soft launch. The operator holds none of it.");
-    clean(operatorCreatorLine(OPERATOR, SEAWIN)!);
+    assert.equal(operatorCreatorLine(OPERATOR, GASCAT), `Created by the operator's own wallet 8sJf…LvGbs during the soft launch. On 2026-10-28, that wallet put 5.00 SOL into its curve and holds what it bought. ${SEED_PAGE}`);
+    clean(operatorCreatorLine(OPERATOR, SEAWIN)!); clean(operatorCreatorLine(OPERATOR, GASCAT)!);
   });
   test("terms, use of fees, the guardrail and the JSON prose all name both tests and carry the reason sentence", () => {
     const reason = operatorTradeReason(OPERATOR_TRADES[0]);
     assert.equal(reason, SAID);
-    assert.equal(disclosedTestsClause(), "two disclosed tests (0.1 SOL of $REHEARSAL at creation, and a 0.10 SOL purchase and immediate sale of $SEAWIN minutes after it was created)");
-    assert.equal(NEVER_TRADES_SENTENCE, `Apart from two disclosed tests (0.1 SOL of $REHEARSAL at creation, and a 0.10 SOL purchase and immediate sale of $SEAWIN minutes after it was created), the platform never trades. ${reason}`);
+    assert.equal(operatorTradeReason(OPERATOR_TRADES[1]), SEED_SAID);
+    const CLAUSE = "two disclosed tests and one disclosed seed (0.1 SOL of $REHEARSAL at creation, a 0.10 SOL purchase and immediate sale of $SEAWIN minutes after it was created, and a 5.00 SOL seed purchase of $GASCAT on its launch day, held)";
+    assert.equal(disclosedTestsClause(), CLAUSE);
+    assert.equal(NEVER_TRADES_SENTENCE, `Apart from ${CLAUSE}, the platform never trades. ${reason} ${SEED_SAID}`);
     assert.ok(TERMS_SECTIONS.some((s) => s.paragraphs.some((p) => p.startsWith(`${NEVER_TRADES_SENTENCE} The platform never takes an order`))));
-    assert.ok(USE_OF_FEES.includes("The operator's wallets never trade a coin launched here, apart from the two disclosed tests on the test-coins page. The only buybacks"));
-    assert.ok(feesUseWithReasons(USE_OF_FEES).includes(`The operator's wallets never trade a coin launched here, apart from the two disclosed tests on the test-coins page. ${reason} The only buybacks`));
+    assert.ok(USE_OF_FEES.includes("The operator's wallets never trade a coin launched here, apart from the disclosed tests and seeds on the test-coins page. The only buybacks"));
+    assert.ok(feesUseWithReasons(USE_OF_FEES).includes(`The operator's wallets never trade a coin launched here, apart from the disclosed tests and seeds on the test-coins page. ${reason} ${SEED_SAID} The only buybacks`));
     assert.doesNotMatch(USE_OF_FEES, /never trade any coin/);
-    assert.ok(REHEARSAL_BUY_EXCEPTION.endsWith(reason));
+    assert.ok(REHEARSAL_BUY_EXCEPTION.endsWith(`${reason} ${SEED_SAID}`));
     const own = t.wallets.find((w) => w.role === "operator-own")!.description;
-    assert.ok(own.includes("The operator holds none of them. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out), it has not traded them."));
-    assert.ok(t.rehearsals[0].text.includes("The only other trade by an operator wallet in a platform coin was a 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15."));
+    assert.ok(own.includes("The operator holds the $GASCAT it seeded and none of the others. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out) and one 5.00 SOL seed purchase of $GASCAT on 2026-10-28, which it holds, it has not traded them."));
+    assert.ok(own.includes(SEED_SAID));
+    assert.ok(t.rehearsals[0].text.includes("The only other trades by an operator wallet in a platform coin were a 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15 and a 5.00 SOL seed purchase of $GASCAT on 2026-10-28, which that wallet holds."));
     const read = (p: string) => fs.readFileSync(p, "utf8");
     for (const [f, s] of [["config/burnticker/transparency.json", read("config/burnticker/transparency.json")], ["config/burnticker/expenses.json", read("config/burnticker/expenses.json")], ["config/burnticker/operator.json", read("config/burnticker/operator.json")], ["site/burnticker/whitepaper.html", read("site/burnticker/whitepaper.html")]] as const) {
       assert.ok(s.includes(reason), `${f} carries the reason sentence`);
@@ -125,7 +136,7 @@ describe("HS-104: the release check reads each operator wallet's history in ever
     assert.equal(associatedTokenAccount(OPERATOR, SEAWIN, "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), "8tyrqprxWB9wfoLmXq81ihhKaLLU4kSXZgmRAidRU7iw");
   });
   test("mainnet fixture with the listed trade: passes, two trades found, both listed, the other coins have no history", async () => {
-    const r = await runOperatorTradesCheck({ rpc: fixtureRpc(FIXTURE.rpc), wallets: [OPERATOR], mints, trades: OPERATOR_TRADES, pauseMs: 0 });
+    const r = await runOperatorTradesCheck({ rpc: fixtureRpc(FIXTURE.rpc), wallets: [OPERATOR], mints, trades: OPERATOR_TRADES.filter((x) => x.ticker === "SEAWIN"), pauseMs: 0 });   // the fixture predates the $GASCAT seed
     assert.equal(r.ok, true, JSON.stringify(r.errors));
     assert.deepEqual(r.trades.map((x) => [x.symbol, x.side, x.amountRaw, x.listed]).sort(), [["SEAWIN", "buy", "3484436310353", true], ["SEAWIN", "sale", "3484436310353", true]]);
     assert.deepEqual(r.unlisted, []); assert.deepEqual(r.listedNotFound, []);

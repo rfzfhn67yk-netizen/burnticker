@@ -1,6 +1,7 @@
 // WEBSITE-22 (2026-10-13): QA pass 9 (the owner's walk of six coin types on publishes 24 to 26) and audit 10 (publish 22), the launch
 // pages' items. Pure pieces are tested directly (guidedLaunch.ts, projection.ts, hazards.ts); the page wiring is pinned by its source;
 // every new sentence passes the copy lint, says no "will", "buy" or "price", carries no date and never names ESPN.
+import { imageSources } from "@/lib/burnticker/imageChain";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -129,7 +130,9 @@ describe("QA 9 item 3 (owner): one game between two teams starts at the one-shot
 
 describe("QA 9 items 7, 13 and 14, audit 10 item 19: the image and the public profile", () => {
   test("a picked image shows in the name step's preview and on the review", () => {
-    assert.match(coinCard, /const url = preview && src && \/\^data:image\\\/\(png\|jpeg\|gif\|webp\);base64,\/\.test\(src\) \? src :/);
+    // 2026-10-27: the data: preview is the first source imageChain.ts gives a preview thumb (and none outside a preview)
+    assert.match(coinCard, /imageSources\(\{ src, mirror, ticker, generated, preview \}\)/);
+    assert.deepEqual(imageSources({ src: "data:image/png;base64,AAAA", ticker: "X", preview: true }), ["data:image/png;base64,AAAA"]);
     assert.match(coinCard, /<CoinThumb src=\{c\.imageUrl\} ticker=\{c\.ticker\} size=\{64\} generated=\{!!href\} preview \/>/);
     assert.match(card, /<img src=\{c\.image\} alt=\{`The image of \$\$\{c\.ticker \|\| "TICKER"\}`\}/);
   });

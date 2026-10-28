@@ -6,6 +6,7 @@ import { ProgressStrip } from "./ProgressStrip";
 import { FollowButton } from "./FollowButton";
 import { Why } from "./Why";
 import { TradeButtons } from "./TradeLinks";
+import { imageSources } from "@/lib/burnticker/imageChain";
 
 /**
  * THE COIN CARD (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md; the full field set since website-13, 2026-10-12,
@@ -66,16 +67,17 @@ export function ReceiptThumb({ ticker, size = 88 }: { ticker: string; size?: num
   );
 }
 
-export function CoinThumb({ src, ticker, size = 88, generated = false, preview = false }: { src: string | null; ticker: string; size?: number; generated?: boolean; /** website-22 (QA 9 item 7): a launch preview also shows the image file the creator just picked (a data: image) */ preview?: boolean }) {
-  const [broken, setBroken] = useState(false);
-  // no image of its own: the coin's generated image (coinArt.ts, GET /burnticker/img/<TICKER>.png) when it is registered; else the receipt
-  // ChatGPT audit 6 item 23: a same-origin image (/burnticker/img/…, /burnticker/brand/…, $DEFICIT's art) is shown as is, so the app and
-  // the static home print the one image a card names, never the generated initials instead
-  const url = preview && src && /^data:image\/(png|jpeg|gif|webp);base64,/.test(src) ? src : src && /^https:\/\//.test(src) ? src : src && /^\/burnticker\/(img|brand)\/[\w.-]+$/.test(src) ? src : generated && /^[A-Z0-9]{2,10}$/.test(ticker) ? `/burnticker/img/${ticker}.svg` : null;
-  if (!url || broken) return <ReceiptThumb ticker={ticker} size={size} />;
-  src = url;
+export function CoinThumb({ src, mirror = null, ticker, size = 88, generated = false, preview = false }: { src: string | null; /** 2026-10-27: this site's copy of the uploaded image (imageStore.ts), tried first when the server says it has one */ mirror?: string | null; ticker: string; size?: number; generated?: boolean; /** website-22 (QA 9 item 7): a launch preview also shows the image file the creator just picked (a data: image) */ preview?: boolean }) {
+  // 2026-10-27 (the $GASCAT launch during the Irys gateway outage): the image has a list of honest sources (imageChain.ts), first to last:
+  // this site's copy of the uploaded bytes, the address the registry shows, the Irys gateway and arweave.net for the same transaction, the
+  // generated art of a registered coin; a load error moves to the next, and past the last the receipt-style initials are drawn.
+  // ChatGPT audit 6 item 23 still holds: a same-origin image (/burnticker/img/…, /burnticker/brand/…, $DEFICIT's art) is shown as is.
+  const sources = imageSources({ src, mirror, ticker, generated, preview });
+  const [failed, setFailed] = useState(0);
+  const url = sources[failed] ?? null;
+  if (!url) return <ReceiptThumb ticker={ticker} size={size} />;
   // eslint-disable-next-line @next/next/no-img-element -- creator images are arbitrary https URLs; no optimiser, no referrer
-  return <img src={src} alt="" width={size} height={size} loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="shrink-0 rounded-md object-cover bg-neutral-900" style={{ width: size, height: size }} />;
+  return <img key={url} src={url} alt="" width={size} height={size} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed((n) => n + 1)} data-image-source={failed} className="shrink-0 rounded-md object-cover bg-neutral-900" style={{ width: size, height: size }} />;
 }
 
 export function VenueChip({ oracle }: { oracle: string }) {
@@ -134,7 +136,7 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
   return (
     <article className={`bt-coin-card${v.tags.some((x) => x.tone === "featured") ? " is-featured" : ""}`} data-card={v.id} data-group={v.group}>
       <div className="flex gap-3">
-        <div data-row="image">{v.href ? <a href={v.href} tabIndex={-1} aria-label={`${v.name} $${v.ticker}, coin page`}><CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} /></a> : <CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} />}</div>
+        <div data-row="image">{v.href ? <a href={v.href} tabIndex={-1} aria-label={`${v.name} $${v.ticker}, coin page`}><CoinThumb src={v.imageUrl} mirror={v.imageMirror ?? null} ticker={v.ticker} size={64} /></a> : <CoinThumb src={v.imageUrl} mirror={v.imageMirror ?? null} ticker={v.ticker} size={64} />}</div>
         <div className="min-w-0 flex-1">
           <H className="text-base font-semibold leading-tight">
             {v.href

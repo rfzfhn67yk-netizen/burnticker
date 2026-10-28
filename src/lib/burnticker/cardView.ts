@@ -38,6 +38,8 @@ export interface CardView {
   ticker: string;
   name: string;
   imageUrl: string | null;
+  /** 2026-10-27: the same-origin copy of the uploaded image, tried before the Arweave addresses (imageChain.ts); null or absent when this site has none */
+  imageMirror?: string | null;
   group: CardGroup;
   /** the badge row: featured, rehearsal, network, phase, window */
   tags: CardTag[];
@@ -323,7 +325,7 @@ export function featuredLine(cards: readonly Pick<CardView, "id" | "tags">[]): s
 
 /** What the coins index (GET /api/burnticker/tokens) says about one registered coin. */
 export interface IndexCoin {
-  ticker: string; name: string; mint: string; oneLiner: string; status: string; imageUrl: string | null; burned: string; burns: number;
+  ticker: string; name: string; mint: string; oneLiner: string; status: string; imageUrl: string | null; /** 2026-10-27: this site's copy of the uploaded image (imageStore.ts), when it has one */ imageMirror?: string | null; burned: string; burns: number;
   /** website-15 item 13 */ creatorText?: string | null; links?: { label: string; url: string }[];
   nextCheckAt: string | null; nextCloseTime: string | null; lastBurnAt: string | null; launchedAt: string | null; pairId: string | null; badge?: string | null;
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null;
@@ -378,7 +380,7 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
   const mcap: CardCell = mcapCell({ cap: t.marketCap, quote: t.quote, phase: t.phase, raised: t.raised }, NOT_READ.mcapNotRead, t.poolNote ?? null);
   const pct = typeof t.pctOfSupply === "number" ? t.pctOfSupply : null;
   return {
-    id: t.mint, watchKey: coinWatchKey(cluster, t.mint), ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
+    id: t.mint, watchKey: coinWatchKey(cluster, t.mint), ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, imageMirror: t.imageMirror ?? null, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
     rule: t.oneLiner.replace(/^./, (c) => c.toUpperCase()), creatorText: t.creatorText ?? null, links: t.links ?? [],
     stated: t.stated ? statedSentences(t.stated, t.stated.finalAfter) : null,
     rank: t.rank ?? null,
